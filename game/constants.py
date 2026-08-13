@@ -40,11 +40,15 @@ def element_label(element: str) -> str:
 
     return f"{get_emoji(ELEMENT_EMOJI_KEYS[element])} {ELEMENT_WORDS[element]}"
 
+# Persian names, because the whole bot speaks Persian and the old transliterated
+# English ones ("Hydrolarva", "Boulderkin") were unreadable at a glance. The name
+# is also the fusion identity key — two creatures only fuse if these match — so
+# keeping a small, memorable set per element matters for gameplay, not just flavor.
 SPECIES_NAMES = {
-    "fire": ["Emberling", "Cindrax", "Pyrofang"],
-    "water": ["Hydrolarva", "Tidewhelp", "Aquafin"],
-    "earth": ["Stoneback", "Terrapup", "Boulderkin"],
-    "electric": ["Voltling", "Sparkjaw", "Thundrix"],
+    "fire": ["آتش‌دم", "شعله‌تاز", "اخگر", "دودچنگ", "کوره‌زاد"],
+    "water": ["موج‌سوار", "آبچر", "نیلگون", "غرقاب", "صدف‌پوش"],
+    "earth": ["سنگ‌پشته", "خاک‌چنگ", "کوهزاد", "غارنشین", "ریشه‌دار"],
+    "electric": ["رعدپا", "برق‌رو", "آذرخش", "جرقه‌ساز", "توفنده"],
 }
 
 STRONG_MULTIPLIER = 1.3
@@ -177,6 +181,13 @@ MISSION_DEFS = {
         "dna": 5,
     },
     "hunt_3": {"action": "hunt", "target": 3, "label": "۳ بار شکار انفرادی کن", "coins": 45, "dna": 3},
+    "arena_attack_3": {
+        "action": "arena_attack",
+        "target": 3,
+        "label": "۳ بار توی آرنا حمله کن",
+        "coins": 70,
+        "dna": 5,
+    },
 }
 
 STARTING_COINS = 200
@@ -253,9 +264,10 @@ HEIST_COOLDOWN_HOURS = 6
 HEIST_DAILY_ATTEMPTS = 3
 ENERGY_CAPS["heist"] = HEIST_DAILY_ATTEMPTS
 
-# ── Star prestige — a fusion "generation" counter, never player-set directly.
-# Fusing two creatures gives the child max(parent stars) + 1, up to STAR_MAX, and
-# each star beyond the first adds a small flat stat bonus on top of rarity. ─────
+# ── Star prestige — never player-set directly; the only source is fusion, and
+# fusion now demands two creatures of the SAME species name at the SAME star, so
+# climbing 1★→5★ is a deliberate collection goal rather than a side effect of
+# fusing whatever happened to be lying around. The child keeps both parents' XP. ─
 STAR_MAX = 5
 STAR_STAT_BONUS_PCT = 0.05
 
@@ -333,6 +345,61 @@ DIAMOND_BOX_TIERS = {
         "weights": {"common": 5, "rare": 15, "epic": 30, "legendary": 35, "mythic": 15},
     },
 }
+
+# ── Blacksmith: levels equipment with pure gold, no duplicate needed (that's what
+# game.equipment.upgrade_item is for). The tradeoff is risk — past a safe floor the
+# attempt can fail and only burn the gold, so duplicates stay the reliable path. ──
+FORGE_BASE_GOLD_COST = 60  # scaled by the item's current level
+FORGE_RARITY_COST_MULT = {"common": 1.0, "rare": 1.3, "epic": 1.7, "legendary": 2.2, "mythic": 3.0}
+FORGE_SAFE_LEVEL = 3  # attempts up to this target level never fail
+FORGE_FAIL_CHANCE_PER_LEVEL = 0.08  # each level past the safe floor adds this much failure chance
+FORGE_MAX_FAIL_CHANCE = 0.45
+
+# ── Cup arena (PvP raiding): matchmaking is by cup, loot is a slice of the
+# defender's gold, and a fresh defender gets a shield so they can't be farmed.
+# The soft cap below is the important bit — see game/arena.py's cup_delta(). ─────
+ARENA_LOOT_PERCENT = 0.10
+ARENA_LOOT_MIN = 10  # a raid on a broke player still pays something, so raiding stays worth doing
+ARENA_SHIELD_HOURS = 8
+ARENA_ATTACK_ENERGY_COST = 1
+ARENA_CUP_WIN_BASE = 22
+ARENA_CUP_LOSS_BASE = 14
+ARENA_CUP_MIN_DELTA = 4  # never award/deduct less than this, so every fight moves the needle
+ARENA_CUP_MAX_DELTA = 40
+ARENA_MATCH_CUP_BAND = 120  # real opponents within +/- this cup range are eligible
+ARENA_STARTING_CUP = 0
+
+# A player's cup is soft-capped by their actual creature power: past the ceiling
+# implied by their power, wins award steeply less. Without this a weak player could
+# ride a lucky streak into a bracket that then farms them forever.
+ARENA_CUP_PER_POWER = 2.2
+ARENA_OVERCAP_DAMPING = 0.25  # cup gain multiplier once you're above your deserved cup
+
+# Fake opponents shown when no real player sits in the cup band — their lab names
+# are obviously flavored so the roster never looks empty on a small player base.
+ARENA_FAKE_LAB_NAMES = [
+    "آزمایشگاه سایه",
+    "کارگاه زیستی نور",
+    "پایگاه متروکه",
+    "لانه‌ی سرد",
+    "مرکز ژنتیک آبی",
+    "پناهگاه شماره ۷",
+    "ایستگاه دورافتاده",
+    "آشیانه‌ی زنگاری",
+    "قرارگاه مه‌آلود",
+    "کندوی فولادی",
+]
+ARENA_FAKE_LOOT_RANGE = (40, 260)  # deliberately swingy, so bot raids still feel like a gamble
+
+
+def forge_cost(item_level: int, rarity: str) -> int:
+    return round(FORGE_BASE_GOLD_COST * item_level * FORGE_RARITY_COST_MULT.get(rarity, 1.0))
+
+
+def forge_fail_chance(target_level: int) -> float:
+    if target_level <= FORGE_SAFE_LEVEL:
+        return 0.0
+    return min(FORGE_MAX_FAIL_CHANCE, (target_level - FORGE_SAFE_LEVEL) * FORGE_FAIL_CHANCE_PER_LEVEL)
 
 
 def upgrade_cost(current_level: int) -> int:

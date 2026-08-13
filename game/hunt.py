@@ -42,25 +42,23 @@ def spawn_wild_creature(player_creature: Creature, tier: str = "normal", seed: i
     )
 
 
-def scout_targets(player_creature: Creature) -> list[dict]:
-    """Three previewable opponents, one per tier. Each carries the seed used to
-    generate it so resolve_hunt can rebuild the exact same creature on commit."""
-    targets = []
-    for tier in HUNT_TIERS:
-        seed = random.randrange(1_000_000)
-        wild = spawn_wild_creature(player_creature, tier, seed)
-        wild_stats = effective_stats(wild)
-        targets.append(
-            {
-                "tier": tier,
-                "seed": seed,
-                "name": wild.name,
-                "element": wild.element,
-                "power": wild_stats["hp"] + wild_stats["atk"] + wild_stats["def"] + wild_stats["spd"],
-                "reward_mult": HUNT_TIERS[tier]["reward_mult"],
-            }
-        )
-    return targets
+def scout_one(player_creature: Creature) -> dict:
+    """A single previewable opponent — the player searches again ("بعدی") until
+    they like what they see, and only then spend energy. Carries the seed used to
+    generate it so resolve_hunt can rebuild the exact same creature on commit;
+    without that the previewed opponent wouldn't be the one actually fought."""
+    tier = random.choice(list(HUNT_TIERS))
+    seed = random.randrange(1_000_000)
+    wild = spawn_wild_creature(player_creature, tier, seed)
+    wild_stats = effective_stats(wild)
+    return {
+        "tier": tier,
+        "seed": seed,
+        "name": wild.name,
+        "element": wild.element,
+        "power": round(wild_stats["hp"] + wild_stats["atk"] + wild_stats["def"] + wild_stats["spd"]),
+        "reward_mult": HUNT_TIERS[tier]["reward_mult"],
+    }
 
 
 def estimated_reward(tier: str) -> tuple[int, int]:

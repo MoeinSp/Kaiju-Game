@@ -20,6 +20,9 @@ class User(models.Model):
     login_streak = models.IntegerField(default=0)
     last_login_day = models.CharField(max_length=10, null=True, blank=True)  # "YYYY-MM-DD" (UTC)
 
+    cup = models.IntegerField(default=0)  # arena rating; drives PvP matchmaking
+    shield_until = models.DateTimeField(null=True, blank=True)  # anti-farm grace after being raided
+
     alliance = models.ForeignKey(
         "Alliance", null=True, blank=True, on_delete=models.SET_NULL, related_name="members"
     )
@@ -249,6 +252,26 @@ class DuelLog(models.Model):
     wager_gold = models.IntegerField(default=0)
     log_text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class AttackLog(models.Model):
+    """One arena raid. `defender` is null for a bot opponent — those exist so the
+    arena still works on a small player base, and `defender_label` keeps the fake
+    lab name that was shown so the defender's raid history reads consistently."""
+
+    attacker = models.ForeignKey(User, on_delete=models.CASCADE, related_name="attacks_made")
+    defender = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.CASCADE, related_name="attacks_received"
+    )
+    defender_label = models.CharField(max_length=64)  # lab name shown at raid time (real or fake)
+    is_fake_defender = models.BooleanField(default=False)
+    attacker_won = models.BooleanField()
+    loot_gold = models.IntegerField(default=0)
+    cup_delta = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"{self.attacker_id} -> {self.defender_label} ({'W' if self.attacker_won else 'L'})"
 
 
 class EmojiOverride(models.Model):

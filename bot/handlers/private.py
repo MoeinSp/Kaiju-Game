@@ -3,8 +3,9 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Alliance, Creature
 from bio_lab.repository import display_name, get_active_creature, get_or_create_user
+from bot.handlers.arena import arena_panel
 from bot.handlers.buildings import buildings_panel
-from bot.handlers.inventory import inventory_cmd
+from bot.handlers.inventory import blacksmith_panel, inventory_cmd
 from bot.handlers.lootbox import biocrate_cmd, diamond_box_panel
 from bot.handlers.owner import admin_cmd
 from bot.handlers.wheel import wheel_cmd
@@ -36,7 +37,7 @@ from game.emoji import get_emoji
 from game.energy import spend_energy, sync_energy
 from game.equipment import get_equipped_items
 from game.fusion import fuse
-from game.hunt import HUNT_TIERS, estimated_reward, resolve_hunt, scout_targets
+from game.hunt import HUNT_TIERS, estimated_reward, resolve_hunt, scout_one
 
 
 def _mission_lines(completed: list[dict]) -> str:
@@ -104,43 +105,99 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None) -> st
     return "\n".join(lines)
 
 
-def upgrade_panel_keyboard() -> InlineKeyboardMarkup:
+def upgrade_panel_keyboard(creature_id: int) -> InlineKeyboardMarkup:
+    """Every action carries the creature id, so upgrading a non-active creature
+    doesn't silently swap which creature is active for hunting/arena."""
     rows = [
         [
-            InlineKeyboardButton("🍖 تغذیه", callback_data="feed"),
-            InlineKeyboardButton("🏋️ تمرین", callback_data="train"),
+            InlineKeyboardButton("🍖 تغذیه", callback_data=f"lab:feed:{creature_id}"),
+            InlineKeyboardButton("🏋️ تمرین", callback_data=f"lab:train:{creature_id}"),
         ],
         [
-            InlineKeyboardButton("🦋 بال", callback_data="upgrade:wings"),
-            InlineKeyboardButton("🛡 زره", callback_data="upgrade:armor"),
+            InlineKeyboardButton("🦋 بال", callback_data=f"lab:up_wings:{creature_id}"),
+            InlineKeyboardButton("🛡 زره", callback_data=f"lab:up_armor:{creature_id}"),
         ],
         [
-            InlineKeyboardButton("🦷 نیش", callback_data="upgrade:fangs"),
-            InlineKeyboardButton("☠️ زهر", callback_data="upgrade:poison"),
+            InlineKeyboardButton("🦷 نیش", callback_data=f"lab:up_fangs:{creature_id}"),
+            InlineKeyboardButton("☠️ زهر", callback_data=f"lab:up_poison:{creature_id}"),
         ],
-        [InlineKeyboardButton("◀️ بازگشت", callback_data="menu:me")],
+        [InlineKeyboardButton("◀️ لیست هیولاها", callback_data="menu:upgrade")],
     ]
     return InlineKeyboardMarkup(rows)
 
 
-def _upgrade_panel_sync(tg_user):
+def _creature_power(creature, equipped_items: list | None = None) -> int:
+    stats = effective_stats(creature, equipped_items)
+    return round(stats["hp"] + stats["atk"] + stats["def"] + stats["spd"])
+
+
+def _upgrade_list_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
-    creature = get_active_creature(user)
-    if creature is None:
+    creatures = list_creatures(user)
+    if not creatures:
         raise GameError("اول /start رو بزن تا موجودت رو بگیری.")
-    return user, creature, get_equipped_items(creature)
+    ranked = sorted(
+        ((c, _creature_power(c, get_equipped_items(c))) for c in creatures),
+        key=lambda pair: pair[1],
+        reverse=True,
+    )
+    return user, ranked
 
 
 async def upgrade_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Creature picker, strongest first — the player chooses who to invest in
+    rather than the panel silently assuming the active creature."""
     try:
-        user, creature, equipped_items = await run_db(_upgrade_panel_sync, update.effective_user)
+        user, ranked = await run_db(_upgrade_list_sync, update.effective_user)
     except GameError as exc:
         await update.effective_message.reply_text(str(exc))
         return
+
+    rows = []
+    for creature, power in ranked:
+        active_tag = "🟢 " if creature.is_active else ""
+        stars = "⭐" * creature.star_level
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    f"{active_tag}{creature.name} {stars} · Lv{creature.level} · 💪{power}",
+                    callback_data=f"upg_pick:{creature.id}",
+                )
+            ]
+        )
+    rows.append([InlineKeyboardButton("◀️ بازگشت", callback_data="menu:me")])
+
     await update.effective_message.reply_text(
+        f"🔧 <b>ارتقا و پرورش</b>\n"
+        f"هیولاهات به ترتیب قدرت مرتب شدن — کدوم رو می‌خوای قوی‌تر کنی؟\n\n{wallet_line(user)}",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+def _upgrade_pick_sync(tg_user, creature_id):
+    user, _ = get_or_create_user(tg_user)
+    try:
+        creature = Creature.objects.get(id=creature_id, owner=user)
+    except Creature.DoesNotExist:
+        raise GameError("این موجود توی کلکسیون تو نیست.")
+    return user, creature, get_equipped_items(creature)
+
+
+async def upgrade_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    creature_id = int(query.data.split(":")[1])
+    try:
+        user, creature, equipped_items = await run_db(_upgrade_pick_sync, update.effective_user, creature_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    await safe_edit_message_text(
+        query,
         upgrade_panel_text(user, creature, equipped_items),
         parse_mode="HTML",
-        reply_markup=upgrade_panel_keyboard(),
+        reply_markup=upgrade_panel_keyboard(creature.id),
     )
 
 
@@ -157,7 +214,11 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
             InlineKeyboardButton("🏹 شکار انفرادی", callback_data="menu:hunt"),
         ],
         [
+            InlineKeyboardButton("🏆 آرنا (کاپ)", callback_data="menu:arena"),
             InlineKeyboardButton("🎒 تجهیزات", callback_data="menu:inventory"),
+        ],
+        [
+            InlineKeyboardButton("⚒ آهنگری", callback_data="menu:blacksmith"),
             InlineKeyboardButton("📦 باکس ژنتیکی", callback_data="menu:biocrate"),
         ],
         [
@@ -261,11 +322,12 @@ async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
-def _lab_action_sync(tg_user, action):
+def _lab_action_sync(tg_user, action, creature_id):
     user, _ = get_or_create_user(tg_user)
-    creature = get_active_creature(user)
-    if creature is None:
-        raise GameError("اول /start رو بزن تا موجودت رو بگیری.")
+    try:
+        creature = Creature.objects.get(id=creature_id, owner=user)
+    except Creature.DoesNotExist:
+        raise GameError("این موجود توی کلکسیون تو نیست.")
 
     completed_missions: list[dict] = []
     if action == "feed":
@@ -284,8 +346,8 @@ def _lab_action_sync(tg_user, action):
         note = "🏋️ <b>تمرین کرد!</b>" + (
             f" {get_emoji('celebrate')} رسید به سطح {creature.level}!" if levels else ""
         )
-    elif action.startswith("upgrade:"):
-        part = action.split(":", 1)[1]
+    elif action.startswith("up_"):
+        part = action[len("up_") :]
         new_level = upgrade_part(user, creature, part)
         note = f"{constants.BODY_PARTS[part]['label']} به سطح {new_level} ارتقا یافت! ✨"
     else:
@@ -298,7 +360,12 @@ def _lab_action_sync(tg_user, action):
 async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     try:
-        result = await run_db(_lab_action_sync, update.effective_user, query.data)
+        _, action, creature_id = query.data.split(":")
+    except ValueError:
+        await query.answer()
+        return
+    try:
+        result = await run_db(_lab_action_sync, update.effective_user, action, int(creature_id))
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
@@ -308,12 +375,12 @@ async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     user, creature, note, equipped_items = result
     await query.answer()
-    # feed/train/upgrade:* are all reachable only from the upgrade panel now, so
-    # re-render that rather than bouncing the player back to the creature card
+    # every lab action is reachable only from the upgrade panel now, so re-render
+    # that rather than bouncing the player back to the creature card
     await safe_edit_message_text(query,
         note + "\n\n" + upgrade_panel_text(user, creature, equipped_items),
         parse_mode="HTML",
-        reply_markup=upgrade_panel_keyboard(),
+        reply_markup=upgrade_panel_keyboard(creature.id),
     )
 
 
@@ -553,50 +620,69 @@ def _hunt_scout_sync(tg_user):
     if creature is None:
         raise GameError("اول /start رو بزن تا موجودت رو بگیری.")
     my_stats = effective_stats(creature, get_equipped_items(creature))
-    my_power = my_stats["hp"] + my_stats["atk"] + my_stats["def"] + my_stats["spd"]
-    return creature, my_power, scout_targets(creature), sync_energy(user)
+    my_power = round(my_stats["hp"] + my_stats["atk"] + my_stats["def"] + my_stats["spd"])
+    return creature, my_power, scout_one(creature), sync_energy(user)
+
+
+def _hunt_scout_text(creature, my_power, target, energy) -> str:
+    tier_label = HUNT_TIERS[target["tier"]]["label"]
+    lo, hi = estimated_reward(target["tier"])
+    diff = target["power"] - my_power
+    odds = "🟢 شانس بالا" if diff < -15 else ("🔴 خطرناک" if diff > 15 else "🟡 سرتاسری")
+    return "\n".join(
+        [
+            f"{get_emoji('hunt')} <b>شکار انفرادی</b>",
+            f"موجودت: <b>{creature.name}</b> · 💪 {my_power}",
+            f"{get_emoji('energy')} {energy}/{constants.MAX_ENERGY}\n",
+            "🔍 <b>یه حریف پیدا شد:</b>\n",
+            f"{tier_label} <b>{target['name']}</b> {constants.element_label(target['element'])}",
+            f"💪 قدرت: <b>{target['power']}</b>  ({odds})",
+            f"{get_emoji('coin')} غنیمت: {lo}–{hi}",
+            f"\n<blockquote>حمله {constants.HUNT_ENERGY_COST} انرژی می‌بره. "
+            "جستجوی دوباره رایگانه — تا وقتی حریف دلخواهت رو پیدا نکردی «بعدی» بزن.</blockquote>",
+        ]
+    )
+
+
+def _hunt_scout_keyboard(target) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("⚔️ حمله!", callback_data=f"hunt_go:{target['tier']}:{target['seed']}")],
+            [InlineKeyboardButton("🔍 بعدی", callback_data="hunt_next")],
+            [InlineKeyboardButton("◀️ بازگشت", callback_data="menu:me")],
+        ]
+    )
 
 
 async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Scouting step: shows three opponents with their power and payout so the
-    player can judge the risk *before* any energy is spent. The fight itself only
-    happens once they pick one (hunt_go_callback)."""
+    """Scouting step: shows ONE opponent at a time with its power and payout so the
+    player can judge the risk *before* any energy is spent. Searching again is free
+    ("بعدی"); only committing to a fight costs energy."""
     try:
-        creature, my_power, targets, energy = await run_db(_hunt_scout_sync, update.effective_user)
+        creature, my_power, target, energy = await run_db(_hunt_scout_sync, update.effective_user)
     except GameError as exc:
         await update.effective_message.reply_text(str(exc))
         return
-
-    lines = [
-        f"{get_emoji('hunt')} <b>شکار انفرادی</b>",
-        f"موجودت: <b>{creature.name}</b> · 💪 قدرت {my_power}",
-        f"{get_emoji('energy')} {energy}/{constants.MAX_ENERGY} — هر شکار {constants.HUNT_ENERGY_COST} انرژی\n",
-        "سه حریف پیدا شد. قدرتشون رو با خودت بسنج و یکی رو انتخاب کن:",
-        "",
-    ]
-    rows = []
-    for t in targets:
-        tier_label = HUNT_TIERS[t["tier"]]["label"]
-        lo, hi = estimated_reward(t["tier"])
-        diff = t["power"] - my_power
-        odds = "🟢 راحت" if diff < -15 else ("🔴 خطرناک" if diff > 15 else "🟡 نزدیک")
-        lines.append(
-            f"{tier_label} <b>{t['name']}</b> {constants.element_label(t['element'])}\n"
-            f"   💪 {t['power']} ({odds}) · غنیمت {lo}–{hi} {get_emoji('coin')}"
-        )
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    f"{tier_label} {t['name']} (💪{t['power']})",
-                    callback_data=f"hunt_go:{t['tier']}:{t['seed']}",
-                )
-            ]
-        )
-    rows.append([InlineKeyboardButton("🔄 حریف‌های دیگه", callback_data="menu:hunt")])
-    rows.append([InlineKeyboardButton("◀️ بازگشت", callback_data="menu:me")])
-
     await update.effective_message.reply_text(
-        "\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows)
+        _hunt_scout_text(creature, my_power, target, energy),
+        parse_mode="HTML",
+        reply_markup=_hunt_scout_keyboard(target),
+    )
+
+
+async def hunt_next_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    try:
+        creature, my_power, target, energy = await run_db(_hunt_scout_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("🔍 جستجوی دوباره…")
+    await safe_edit_message_text(
+        query,
+        _hunt_scout_text(creature, my_power, target, energy),
+        parse_mode="HTML",
+        reply_markup=_hunt_scout_keyboard(target),
     )
 
 
@@ -640,7 +726,7 @@ async def hunt_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     keyboard = InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("🏹 شکار دوباره", callback_data="menu:hunt")],
+            [InlineKeyboardButton("🏹 شکار دوباره", callback_data="hunt_next")],
             [InlineKeyboardButton("◀️ بازگشت", callback_data="menu:me")],
         ]
     )
@@ -1131,7 +1217,11 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton("🎡 گردونه‌ی شانس", callback_data="menu:wheel"),
             ],
             [
+                InlineKeyboardButton("🏆 آرنا (کاپ)", callback_data="menu:arena"),
                 InlineKeyboardButton("🎒 تجهیزات", callback_data="menu:inventory"),
+            ],
+            [
+                InlineKeyboardButton("⚒ آهنگری", callback_data="menu:blacksmith"),
                 InlineKeyboardButton("📦 باکس ژنتیکی", callback_data="menu:biocrate"),
             ],
             [
@@ -1162,6 +1252,8 @@ _MENU_ACTIONS = {
     "biocrate": biocrate_cmd,
     "diamond_box": diamond_box_panel,
     "upgrade": upgrade_panel,
+    "arena": arena_panel,
+    "blacksmith": blacksmith_panel,
     "buildings": buildings_panel,
     "wheel": wheel_cmd,
     "alliance_info": alliance_info_cmd,
@@ -1200,7 +1292,9 @@ def register(application) -> None:
     application.add_handler(CommandHandler("profile", profile, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("menu", menu, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^menu:"))
+    application.add_handler(CallbackQueryHandler(upgrade_pick_callback, pattern=r"^upg_pick:"))
     application.add_handler(CallbackQueryHandler(hunt_go_callback, pattern=r"^hunt_go:"))
+    application.add_handler(CallbackQueryHandler(hunt_next_callback, pattern=r"^hunt_next$"))
     application.add_handler(CallbackQueryHandler(collection_pick_callback, pattern=r"^coll_pick:"))
     application.add_handler(CallbackQueryHandler(collection_select_callback, pattern=r"^coll_select:"))
     application.add_handler(CallbackQueryHandler(fusion_pick_a_callback, pattern=r"^fus_a:"))

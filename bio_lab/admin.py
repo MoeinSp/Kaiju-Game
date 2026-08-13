@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from bio_lab.models import (
     Alliance,
+    AttackLog,
     Building,
     BuildingUpgrade,
     ChannelJoinClaim,
@@ -33,6 +34,7 @@ class UserAdmin(admin.ModelAdmin):
         "coins",
         "dna_fragments",
         "diamonds",
+        "cup",
         "energy",
         "login_streak",
         "alliance",
@@ -88,6 +90,22 @@ class BuildingUpgradeAdmin(admin.ModelAdmin):
 class SpeedupCardAdmin(admin.ModelAdmin):
     list_display = ("id", "owner", "minutes", "count")
     list_filter = ("minutes",)
+
+
+@admin.register(AttackLog)
+class AttackLogAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "attacker",
+        "defender_label",
+        "is_fake_defender",
+        "attacker_won",
+        "loot_gold",
+        "cup_delta",
+        "created_at",
+    )
+    list_filter = ("attacker_won", "is_fake_defender")
+    ordering = ("-created_at",)
 
 
 @admin.register(Group)

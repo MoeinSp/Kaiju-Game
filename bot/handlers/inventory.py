@@ -5,6 +5,7 @@ from bio_lab.models import Equipment
 from bio_lab.repository import get_active_creature, get_or_create_user
 from bot.utils import run_db, safe_edit_message_text
 from game import constants
+from game.blacksmith import forge, forge_preview, forgeable_items
 from game.creature import GameError
 from game.emoji import get_emoji
 from game.equipment import equip_item, list_inventory, unequip_item, upgrade_item
@@ -230,8 +231,125 @@ async def upgrade_item_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.message.reply_text(f"✨ {item.name} به <b>+{item.level}</b> ارتقا یافت!", parse_mode="HTML")
 
 
+def _forge_list_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    return user, forgeable_items(user)
+
+
+async def blacksmith_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user, items = await run_db(_forge_list_sync, update.effective_user)
+    if not items:
+        await update.effective_message.reply_text(
+            "⚒ <b>آهنگری</b>\n\nهیچ تجهیزاتی برای ارتقا نداری (یا همه به سقف رسیدن).",
+            parse_mode="HTML",
+        )
+        return
+    rows = [
+        [
+            InlineKeyboardButton(
+                f"{constants.EQUIPMENT_SLOT_LABELS[i.slot]} {i.name} +{i.level}",
+                callback_data=f"forge_pick:{i.id}",
+            )
+        ]
+        for i in items
+    ]
+    rows.append([InlineKeyboardButton("◀️ بازگشت", callback_data="menu:me")])
+    await update.effective_message.reply_text(
+        f"⚒ <b>آهنگری</b>\n"
+        f"اینجا با <b>طلا</b> سطح تجهیزات رو بالا می‌بری، بدون نیاز به نمونه‌ی تکراری — "
+        f"ولی از سطح +{constants.FORGE_SAFE_LEVEL} به بالا شانس شکست داره.\n\n"
+        f"{get_emoji('coin')} طلای تو: <b>{user.coins}</b>\n\nکدوم تجهیزات؟",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+def _forge_detail_sync(tg_user, item_id):
+    user, _ = get_or_create_user(tg_user)
+    try:
+        item = Equipment.objects.get(id=item_id, owner=user)
+    except Equipment.DoesNotExist:
+        raise GameError("این تجهیزات پیدا نشد.")
+    return user, item, forge_preview(item)
+
+
+def _forge_detail_text(user, item, preview) -> str:
+    fail_pct = round(preview["fail_chance"] * 100)
+    risk = "بدون ریسک ✅" if fail_pct == 0 else f"شانس شکست: <b>{fail_pct}٪</b> ⚠️"
+    return (
+        f"⚒ <b>آهنگری</b>\n\n"
+        f"{_item_line(item)}\n\n"
+        f"🎯 ارتقا به <b>+{preview['target_level']}</b>\n"
+        f"{get_emoji('coin')} هزینه: <b>{preview['cost']}</b> (موجودی تو: {user.coins})\n"
+        f"{risk}\n\n"
+        "<blockquote>در صورت شکست، طلا خرج می‌شه ولی سطح بالا نمی‌ره. "
+        "راه بی‌ریسک، ارتقا با نمونه‌ی تکراری از «🎒 تجهیزات» ـه.</blockquote>"
+    )
+
+
+def _forge_detail_keyboard(item_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("🔨 بزن!", callback_data=f"forge_do:{item_id}")],
+            [InlineKeyboardButton("◀️ بازگشت به آهنگری", callback_data="menu:blacksmith")],
+        ]
+    )
+
+
+async def forge_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    item_id = int(query.data.split(":")[1])
+    try:
+        user, item, preview = await run_db(_forge_detail_sync, update.effective_user, item_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        _forge_detail_text(user, item, preview),
+        parse_mode="HTML",
+        reply_markup=_forge_detail_keyboard(item_id),
+    )
+
+
+def _forge_do_sync(tg_user, item_id):
+    user, _ = get_or_create_user(tg_user)
+    result = forge(user, item_id)
+    user.refresh_from_db()
+    return user, result, forge_preview(result["item"])
+
+
+async def forge_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    item_id = int(query.data.split(":")[1])
+    try:
+        user, result, preview = await run_db(_forge_do_sync, update.effective_user, item_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+
+    item = result["item"]
+    if result["success"]:
+        header = f"✨ <b>موفق!</b> {item.name} رسید به <b>+{item.level}</b>"
+        await query.answer("✨ موفق!")
+    else:
+        header = f"💥 <b>شکست خورد!</b> {result['cost']} طلا سوخت و سطح تغییر نکرد."
+        await query.answer("💥 شکست خورد.")
+
+    await safe_edit_message_text(
+        query,
+        f"{header}\n\n" + _forge_detail_text(user, item, preview),
+        parse_mode="HTML",
+        reply_markup=_forge_detail_keyboard(item.id),
+    )
+
+
 def register(application) -> None:
     application.add_handler(CommandHandler("inventory", inventory_cmd, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("blacksmith", blacksmith_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CallbackQueryHandler(forge_pick_callback, pattern=r"^forge_pick:"))
+    application.add_handler(CallbackQueryHandler(forge_do_callback, pattern=r"^forge_do:"))
     application.add_handler(CommandHandler("equip", equip_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("unequip", unequip_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("upgrade_item", upgrade_item_cmd, filters.ChatType.PRIVATE))

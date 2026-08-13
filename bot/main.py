@@ -10,7 +10,19 @@ from telegram import Update  # noqa: E402
 from telegram.ext import Application, CallbackQueryHandler, ContextTypes, MessageHandler, filters  # noqa: E402
 
 from bot import middleware  # noqa: E402
-from bot.handlers import battle, buildings, group, inventory, lootbox, misc, owner, private, welcome, wheel  # noqa: E402
+from bot.handlers import (  # noqa: E402
+    arena,
+    battle,
+    buildings,
+    group,
+    inventory,
+    lootbox,
+    misc,
+    owner,
+    private,
+    welcome,
+    wheel,
+)
 from config import BOT_TOKEN  # noqa: E402
 from game.emoji import refresh_cache  # noqa: E402
 
@@ -41,13 +53,14 @@ def main() -> None:
     lootbox.register(application)
     buildings.register(application)
     wheel.register(application)
+    arena.register(application)
     group.register(application)
     battle.register(application)
     misc.register(application)
     owner.register(application)
     welcome.register(application)
-    # scoped to the lab's own callback_data values so it doesn't swallow battle.py's/private.py's callbacks
-    application.add_handler(CallbackQueryHandler(private.lab_action_callback, pattern=r"^(feed|train|upgrade:)"))
+    # scoped to the lab's own callback_data prefix so it doesn't swallow battle.py's/private.py's callbacks
+    application.add_handler(CallbackQueryHandler(private.lab_action_callback, pattern=r"^lab:"))
     application.add_handler(
         MessageHandler(filters.ChatType.PRIVATE & ~filters.COMMAND, _capture_private_text_reply)
     )
