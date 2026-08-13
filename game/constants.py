@@ -100,7 +100,11 @@ ELEMENT_SKILLS = {
 ENERGY_CAPS = {
     "feed": 8,
     "raid_attack": 12,
+    "guardian_stipend": 1,
 }
+
+GUARDIAN_STIPEND_COINS = 25
+GUARDIAN_STIPEND_DNA = 3
 
 # key -> {action, target, label, coins, dna}
 MISSION_DEFS = {

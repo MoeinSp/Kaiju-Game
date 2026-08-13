@@ -60,6 +60,7 @@ class Group(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)  # telegram chat id
     title: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    guardian_creature_id: Mapped[int | None] = mapped_column(ForeignKey("creatures.id"), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow)
 
 

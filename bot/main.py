@@ -2,7 +2,7 @@ import logging
 
 from telegram.ext import Application, CallbackQueryHandler
 
-from bot.handlers import battle, group, private
+from bot.handlers import battle, group, misc, private
 from config import BOT_TOKEN
 from db.session import init_db
 
@@ -20,6 +20,7 @@ def main() -> None:
     private.register(application)
     group.register(application)
     battle.register(application)
+    misc.register(application)
     # scoped to the lab's own callback_data values so it doesn't swallow battle.py's callbacks
     application.add_handler(CallbackQueryHandler(private.lab_action_callback, pattern=r"^(feed|train|upgrade:)"))
 
