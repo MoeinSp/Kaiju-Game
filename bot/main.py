@@ -1,10 +1,15 @@
 import logging
+import os
 
-from telegram.ext import Application, CallbackQueryHandler
+import django
 
-from bot.handlers import battle, group, misc, private
-from config import BOT_TOKEN
-from db.session import init_db
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "telgame_site.settings")
+django.setup()
+
+from telegram.ext import Application, CallbackQueryHandler  # noqa: E402
+
+from bot.handlers import battle, group, misc, private  # noqa: E402
+from config import BOT_TOKEN  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -12,8 +17,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 def main() -> None:
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN تنظیم نشده. فایل .env رو بر اساس .env.example بساز.")
-
-    init_db()
 
     application = Application.builder().token(BOT_TOKEN).build()
 

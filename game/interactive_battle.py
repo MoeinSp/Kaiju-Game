@@ -1,6 +1,6 @@
 import random
 
-from db.models import Creature, InteractiveBattle
+from bio_lab.models import Creature, InteractiveBattle
 from game import constants
 from game.creature import GameError, effective_stats
 

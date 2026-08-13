@@ -1,10 +1,10 @@
-from sqlalchemy import and_, or_, select
+from django.db.models import Q
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
-from db.models import InteractiveBattle, User
-from db.repository import display_name, get_active_creature, get_or_create_group, get_or_create_user, touch_membership
-from db.session import get_session
+from bio_lab.models import InteractiveBattle, User
+from bio_lab.repository import display_name, get_active_creature, get_or_create_group, get_or_create_user, touch_membership
+from bot.utils import run_db
 from game import constants
 from game.creature import GameError, add_xp, effective_stats
 from game.daily import check_missions, record_action
@@ -20,6 +20,45 @@ def _battle_keyboard(battle: InteractiveBattle) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([buttons])
 
 
+def _battle_cmd_sync(chat, challenger_tg, opponent_tg):
+    group = get_or_create_group(chat)
+    challenger_user, _ = get_or_create_user(challenger_tg)
+    opponent_user, _ = get_or_create_user(opponent_tg)
+    touch_membership(group, challenger_user)
+    touch_membership(group, opponent_user)
+
+    challenger_creature = get_active_creature(challenger_user)
+    opponent_creature = get_active_creature(opponent_user)
+    if challenger_creature is None:
+        raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
+    if opponent_creature is None:
+        raise GameError(f"{opponent_tg.first_name} هنوز موجودی نداره (باید /start بزنه).")
+
+    existing = (
+        InteractiveBattle.objects.filter(group_id=group.id, status__in=["pending", "active"])
+        .filter(
+            Q(player_a_id=challenger_user.id, player_b_id=opponent_user.id)
+            | Q(player_a_id=opponent_user.id, player_b_id=challenger_user.id)
+        )
+        .first()
+    )
+    if existing is not None:
+        raise GameError("شما دو نفر همین الان یه نبرد باز دارید!")
+
+    battle = InteractiveBattle.objects.create(
+        group_id=group.id,
+        player_a_id=challenger_user.id,
+        player_b_id=opponent_user.id,
+        creature_a_id=challenger_creature.id,
+        creature_b_id=opponent_creature.id,
+        hp_a=effective_stats(challenger_creature)["hp"],
+        hp_b=effective_stats(opponent_creature)["hp"],
+        turn="a",
+        status="pending",
+    )
+    return battle, challenger_user, challenger_creature, opponent_user
+
+
 async def battle_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message.reply_to_message is None:
         await update.message.reply_text("برای نبرد تعاملی، روی پیام حریف ریپلای کن و بنویس /battle")
@@ -31,120 +70,133 @@ async def battle_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text("نمی‌تونی با خودت یا با یه بات نبرد کنی!")
         return
 
-    session = get_session()
     try:
-        group = get_or_create_group(session, update.effective_chat)
-        challenger_user, _ = get_or_create_user(session, challenger_tg)
-        opponent_user, _ = get_or_create_user(session, opponent_tg)
-        touch_membership(session, group, challenger_user)
-        touch_membership(session, group, opponent_user)
-
-        challenger_creature = get_active_creature(session, challenger_user)
-        opponent_creature = get_active_creature(session, opponent_user)
-        if challenger_creature is None:
-            await update.message.reply_text("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
-            return
-        if opponent_creature is None:
-            await update.message.reply_text(f"{opponent_tg.first_name} هنوز موجودی نداره (باید /start بزنه).")
-            return
-
-        existing = session.execute(
-            select(InteractiveBattle).where(
-                InteractiveBattle.group_id == group.id,
-                InteractiveBattle.status.in_(["pending", "active"]),
-                or_(
-                    and_(
-                        InteractiveBattle.player_a_id == challenger_user.id,
-                        InteractiveBattle.player_b_id == opponent_user.id,
-                    ),
-                    and_(
-                        InteractiveBattle.player_a_id == opponent_user.id,
-                        InteractiveBattle.player_b_id == challenger_user.id,
-                    ),
-                ),
-            )
-        ).scalar_one_or_none()
-        if existing is not None:
-            await update.message.reply_text("شما دو نفر همین الان یه نبرد باز دارید!")
-            return
-
-        battle = InteractiveBattle(
-            group_id=group.id,
-            player_a_id=challenger_user.id,
-            player_b_id=opponent_user.id,
-            creature_a_id=challenger_creature.id,
-            creature_b_id=opponent_creature.id,
-            hp_a=effective_stats(challenger_creature)["hp"],
-            hp_b=effective_stats(opponent_creature)["hp"],
-            turn="a",
-            status="pending",
+        battle, challenger_user, challenger_creature, opponent_user = await run_db(
+            _battle_cmd_sync, update.effective_chat, challenger_tg, opponent_tg
         )
-        session.add(battle)
-        session.commit()
+    except GameError as exc:
+        await update.message.reply_text(str(exc))
+        return
 
-        keyboard = InlineKeyboardMarkup(
+    keyboard = InlineKeyboardMarkup(
+        [
             [
-                [
-                    InlineKeyboardButton("✅ قبول می‌کنم", callback_data=f"battle_accept:{battle.id}"),
-                    InlineKeyboardButton("❌ رد می‌کنم", callback_data=f"battle_decline:{battle.id}"),
-                ]
+                InlineKeyboardButton("✅ قبول می‌کنم", callback_data=f"battle_accept:{battle.id}"),
+                InlineKeyboardButton("❌ رد می‌کنم", callback_data=f"battle_decline:{battle.id}"),
             ]
-        )
-        await update.message.reply_text(
-            f"⚔️ {display_name(challenger_user)} با {challenger_creature.name} به "
-            f"{display_name(opponent_user)} پیشنهاد نبرد تعاملی داد! قبول می‌کنی؟",
-            reply_markup=keyboard,
-        )
-    finally:
-        session.close()
+        ]
+    )
+    await update.message.reply_text(
+        f"⚔️ {display_name(challenger_user)} با {challenger_creature.name} به "
+        f"{display_name(opponent_user)} پیشنهاد نبرد تعاملی داد! قبول می‌کنی؟",
+        reply_markup=keyboard,
+    )
+
+
+def _battle_accept_sync(battle_id, acceptor_id):
+    try:
+        battle = InteractiveBattle.objects.get(id=battle_id)
+    except InteractiveBattle.DoesNotExist:
+        raise GameError("این پیشنهاد دیگه معتبر نیست.")
+    if battle.status != "pending":
+        raise GameError("این پیشنهاد دیگه معتبر نیست.")
+    if acceptor_id != battle.player_b_id:
+        raise GameError("فقط طرف مقابل می‌تونه قبول کنه.")
+
+    battle.turn = pick_first_turn(battle.creature_a, battle.creature_b)
+    battle.status = "active"
+    battle.save(update_fields=["turn", "status"])
+    return battle
 
 
 async def battle_accept_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     battle_id = int(query.data.split(":")[1])
-
-    session = get_session()
     try:
-        battle = session.get(InteractiveBattle, battle_id)
-        if battle is None or battle.status != "pending":
-            await query.answer("این پیشنهاد دیگه معتبر نیست.", show_alert=True)
-            return
-        if update.effective_user.id != battle.player_b_id:
-            await query.answer("فقط طرف مقابل می‌تونه قبول کنه.", show_alert=True)
-            return
+        battle = await run_db(_battle_accept_sync, battle_id, update.effective_user.id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    await query.edit_message_text(
+        render_battle_card(battle), parse_mode="HTML", reply_markup=_battle_keyboard(battle)
+    )
 
-        await query.answer()
-        battle.turn = pick_first_turn(battle.creature_a, battle.creature_b)
-        battle.status = "active"
-        session.commit()
 
-        await query.edit_message_text(
-            render_battle_card(battle), parse_mode="HTML", reply_markup=_battle_keyboard(battle)
-        )
-    finally:
-        session.close()
+def _battle_decline_sync(battle_id, decliner_id):
+    try:
+        battle = InteractiveBattle.objects.get(id=battle_id)
+    except InteractiveBattle.DoesNotExist:
+        raise GameError("این پیشنهاد دیگه معتبر نیست.")
+    if battle.status != "pending":
+        raise GameError("این پیشنهاد دیگه معتبر نیست.")
+    if decliner_id != battle.player_b_id:
+        raise GameError("فقط طرف مقابل می‌تونه رد کنه.")
+    battle.status = "declined"
+    battle.save(update_fields=["status"])
 
 
 async def battle_decline_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     battle_id = int(query.data.split(":")[1])
-
-    session = get_session()
     try:
-        battle = session.get(InteractiveBattle, battle_id)
-        if battle is None or battle.status != "pending":
-            await query.answer("این پیشنهاد دیگه معتبر نیست.", show_alert=True)
-            return
-        if update.effective_user.id != battle.player_b_id:
-            await query.answer("فقط طرف مقابل می‌تونه رد کنه.", show_alert=True)
-            return
+        await run_db(_battle_decline_sync, battle_id, update.effective_user.id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    await query.edit_message_text("❌ پیشنهاد نبرد رد شد.")
 
-        battle.status = "declined"
-        session.commit()
-        await query.answer()
-        await query.edit_message_text("❌ پیشنهاد نبرد رد شد.")
-    finally:
-        session.close()
+
+def _battle_action_sync(battle_id, actor_tg_id, action):
+    try:
+        battle = InteractiveBattle.objects.get(id=battle_id)
+    except InteractiveBattle.DoesNotExist:
+        raise GameError("این نبرد دیگه فعال نیست.")
+    if battle.status != "active":
+        raise GameError("این نبرد دیگه فعال نیست.")
+
+    expected_user_id = battle.player_a_id if battle.turn == "a" else battle.player_b_id
+    if actor_tg_id != expected_user_id:
+        raise GameError("نوبت تو نیست!")
+
+    actor_side = battle.turn
+    action_logs = perform_action(battle, actor_side, action)
+
+    finished, winner_side = is_finished(battle)
+    turn_logs = [] if finished else advance_turn(battle)
+    battle.log = "\n".join(line for line in [battle.log, *action_logs, *turn_logs] if line)
+
+    reward_lines: list[str] = []
+    if finished:
+        battle.status = "finished"
+        winner_user_id = battle.player_a_id if winner_side == "a" else battle.player_b_id
+        winner_creature = battle.creature_a if winner_side == "a" else battle.creature_b
+        loser_creature = battle.creature_b if winner_side == "a" else battle.creature_a
+        winner_user = User.objects.get(id=winner_user_id)
+
+        winner_user.coins += constants.DUEL_WIN_COINS
+        winner_levels = add_xp(winner_creature, constants.DUEL_WIN_XP)
+        add_xp(loser_creature, constants.DUEL_LOSE_XP)
+        winner_user.save(update_fields=["coins"])
+        winner_creature.save()
+        loser_creature.save()
+
+        record_action(winner_user, "duel_win")
+        completed_missions = check_missions(winner_user, "duel_win")
+
+        reward_lines.append(
+            f"💰 {winner_creature.name} +{constants.DUEL_WIN_COINS} سکه, +{constants.DUEL_WIN_XP} XP"
+            + (f" 🎉 سطح {winner_creature.level} شد!" if winner_levels else "")
+        )
+        for m in completed_missions:
+            reward_lines.append(
+                f"🎯 ماموریت «{m['label']}» کامل شد! +{m['coins']} سکه"
+                + (f", +{m['dna']} DNA" if m["dna"] else "")
+            )
+
+    battle.save()
+    return battle, finished, reward_lines
 
 
 async def battle_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -152,64 +204,20 @@ async def battle_action_callback(update: Update, context: ContextTypes.DEFAULT_T
     _, battle_id_str, action = query.data.split(":")
     battle_id = int(battle_id_str)
 
-    session = get_session()
     try:
-        battle = session.get(InteractiveBattle, battle_id)
-        if battle is None or battle.status != "active":
-            await query.answer("این نبرد دیگه فعال نیست.", show_alert=True)
-            return
+        battle, finished, reward_lines = await run_db(
+            _battle_action_sync, battle_id, update.effective_user.id, action
+        )
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
 
-        expected_user_id = battle.player_a_id if battle.turn == "a" else battle.player_b_id
-        if update.effective_user.id != expected_user_id:
-            await query.answer("نوبت تو نیست!", show_alert=True)
-            return
-
-        actor_side = battle.turn
-        try:
-            action_logs = perform_action(battle, actor_side, action)
-        except GameError as exc:
-            await query.answer(str(exc), show_alert=True)
-            return
-        await query.answer()
-
-        finished, winner_side = is_finished(battle)
-        turn_logs = [] if finished else advance_turn(battle)
-        battle.log = "\n".join(line for line in [battle.log, *action_logs, *turn_logs] if line)
-
-        reward_lines: list[str] = []
-        if finished:
-            battle.status = "finished"
-            winner_user_id = battle.player_a_id if winner_side == "a" else battle.player_b_id
-            winner_creature = battle.creature_a if winner_side == "a" else battle.creature_b
-            loser_creature = battle.creature_b if winner_side == "a" else battle.creature_a
-            winner_user = session.get(User, winner_user_id)
-
-            winner_user.coins += constants.DUEL_WIN_COINS
-            winner_levels = add_xp(winner_creature, constants.DUEL_WIN_XP)
-            add_xp(loser_creature, constants.DUEL_LOSE_XP)
-            record_action(session, winner_user, "duel_win")
-            completed_missions = check_missions(session, winner_user, "duel_win")
-
-            reward_lines.append(
-                f"💰 {winner_creature.name} +{constants.DUEL_WIN_COINS} سکه, +{constants.DUEL_WIN_XP} XP"
-                + (f" 🎉 سطح {winner_creature.level} شد!" if winner_levels else "")
-            )
-            for m in completed_missions:
-                reward_lines.append(
-                    f"🎯 ماموریت «{m['label']}» کامل شد! +{m['coins']} سکه"
-                    + (f", +{m['dna']} DNA" if m["dna"] else "")
-                )
-
-        session.commit()
-
-        card_text = render_battle_card(battle)
-        if reward_lines:
-            card_text += "\n\n" + "\n".join(reward_lines)
-        keyboard = None if finished else _battle_keyboard(battle)
-
-        await query.edit_message_text(card_text, parse_mode="HTML", reply_markup=keyboard)
-    finally:
-        session.close()
+    await query.answer()
+    card_text = render_battle_card(battle)
+    if reward_lines:
+        card_text += "\n\n" + "\n".join(reward_lines)
+    keyboard = None if finished else _battle_keyboard(battle)
+    await query.edit_message_text(card_text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def register(application) -> None:

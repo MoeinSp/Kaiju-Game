@@ -1,105 +1,80 @@
-import datetime
+from django.utils import timezone
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
-from db.models import DailyActionLog, Group, GroupEventLog, MissionClaim, User
+from bio_lab.models import DailyActionLog, Group, GroupEventLog, MissionClaim, User
 from game import constants
 from game.creature import GameError
 
 
 def today_str() -> str:
-    return datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    return timezone.now().strftime("%Y-%m-%d")
 
 
-def _get_or_create_log(session: Session, user: User, action: str) -> DailyActionLog:
-    day = today_str()
-    stmt = select(DailyActionLog).where(
-        DailyActionLog.user_id == user.id, DailyActionLog.action == action, DailyActionLog.day == day
+def _get_or_create_log(user: User, action: str) -> DailyActionLog:
+    log, _ = DailyActionLog.objects.get_or_create(
+        user=user, action=action, day=today_str(), defaults={"count": 0}
     )
-    log = session.execute(stmt).scalar_one_or_none()
-    if log is None:
-        log = DailyActionLog(user_id=user.id, action=action, day=day, count=0)
-        session.add(log)
-        session.flush()
     return log
 
 
-def record_action(session: Session, user: User, action: str) -> int:
+def record_action(user: User, action: str) -> int:
     """Increments today's counter for `action` with no cap. Returns the new count."""
-    log = _get_or_create_log(session, user, action)
+    log = _get_or_create_log(user, action)
     log.count += 1
-    session.commit()
+    log.save(update_fields=["count"])
     return log.count
 
 
-def assert_energy_available(session: Session, user: User, action: str) -> None:
+def assert_energy_available(user: User, action: str) -> None:
     """Raises GameError if `action`'s daily cap is already reached. Does not consume anything —
     call record_action() after the action actually succeeds."""
     cap = constants.ENERGY_CAPS.get(action)
     if cap is None:
         return
-    if get_daily_count(session, user, action) >= cap:
+    if get_daily_count(user, action) >= cap:
         raise GameError(f"برای امروز انرژیت برای این کار تموم شده ({cap} بار در روز). فردا دوباره تلاش کن.")
 
 
-def get_daily_count(session: Session, user: User, action: str) -> int:
-    return _get_or_create_log(session, user, action).count
+def get_daily_count(user: User, action: str) -> int:
+    return _get_or_create_log(user, action).count
 
 
-def check_missions(session: Session, user: User, action: str) -> list[dict]:
+def check_missions(user: User, action: str) -> list[dict]:
     """Call right after record_action() for the same action. Grants rewards for any mission just completed."""
     day = today_str()
     completed = []
     for key, defn in constants.MISSION_DEFS.items():
         if defn["action"] != action:
             continue
-        already = session.execute(
-            select(MissionClaim).where(
-                MissionClaim.user_id == user.id, MissionClaim.mission_key == key, MissionClaim.day == day
-            )
-        ).scalar_one_or_none()
-        if already is not None:
+        already = MissionClaim.objects.filter(user=user, mission_key=key, day=day).exists()
+        if already:
             continue
-        if get_daily_count(session, user, action) >= defn["target"]:
-            session.add(MissionClaim(user_id=user.id, mission_key=key, day=day))
+        if get_daily_count(user, action) >= defn["target"]:
+            MissionClaim.objects.create(user=user, mission_key=key, day=day)
             user.coins += defn["coins"]
             user.dna_fragments += defn["dna"]
             completed.append({**defn, "key": key})
-    session.commit()
+    if completed:
+        user.save(update_fields=["coins", "dna_fragments"])
     return completed
 
 
-def group_event_available(session: Session, group: Group, event_key: str) -> bool:
+def group_event_available(group: Group, event_key: str) -> bool:
+    return not GroupEventLog.objects.filter(group=group, event_key=event_key, day=today_str()).exists()
+
+
+def mark_group_event(group: Group, event_key: str) -> None:
+    GroupEventLog.objects.create(group=group, event_key=event_key, day=today_str())
+
+
+def mission_status(user: User) -> list[dict]:
     day = today_str()
-    stmt = select(GroupEventLog).where(
-        GroupEventLog.group_id == group.id, GroupEventLog.event_key == event_key, GroupEventLog.day == day
+    claimed_keys = set(
+        MissionClaim.objects.filter(user=user, day=day).values_list("mission_key", flat=True)
     )
-    return session.execute(stmt).scalar_one_or_none() is None
-
-
-def mark_group_event(session: Session, group: Group, event_key: str) -> None:
-    session.add(GroupEventLog(group_id=group.id, event_key=event_key, day=today_str()))
-    session.commit()
-
-
-def mission_status(session: Session, user: User) -> list[dict]:
-    day = today_str()
-    claimed_keys = {
-        row.mission_key
-        for row in session.execute(
-            select(MissionClaim).where(MissionClaim.user_id == user.id, MissionClaim.day == day)
-        ).scalars()
-    }
     status = []
     for key, defn in constants.MISSION_DEFS.items():
-        count = get_daily_count(session, user, defn["action"])
+        count = get_daily_count(user, defn["action"])
         status.append(
-            {
-                **defn,
-                "key": key,
-                "progress": min(count, defn["target"]),
-                "done": key in claimed_keys,
-            }
+            {**defn, "key": key, "progress": min(count, defn["target"]), "done": key in claimed_keys}
         )
     return status

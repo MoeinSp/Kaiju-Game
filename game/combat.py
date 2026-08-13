@@ -1,7 +1,7 @@
 import random
 from dataclasses import dataclass
 
-from db.models import Creature
+from bio_lab.models import Creature
 from game import constants
 from game.creature import effective_stats
 

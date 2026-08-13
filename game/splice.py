@@ -1,13 +1,14 @@
 import random
 
-from sqlalchemy.orm import Session
+from django.db import transaction
 
-from db.models import Creature, User
+from bio_lab.models import Creature, User
 from game import constants
 from game.creature import GameError
 
 
-def splice(session: Session, user: User, parent_a: Creature, parent_b: Creature) -> Creature:
+@transaction.atomic
+def splice(user: User, parent_a: Creature, parent_b: Creature) -> Creature:
     if parent_a.owner_id != user.id or parent_b.owner_id != user.id:
         raise GameError("هر دو موجود باید مال خودت باشن.")
     if parent_a.id == parent_b.id:
@@ -16,6 +17,7 @@ def splice(session: Session, user: User, parent_a: Creature, parent_b: Creature)
         raise GameError(f"DNA کافی نداری! ترکیب {constants.SPLICE_DNA_COST} DNA Fragment هزینه داره.")
 
     user.dna_fragments -= constants.SPLICE_DNA_COST
+    user.save(update_fields=["dna_fragments"])
 
     base_rarity = constants.higher_rarity(parent_a.rarity, parent_b.rarity)
     new_rarity = base_rarity
@@ -25,8 +27,8 @@ def splice(session: Session, user: User, parent_a: Creature, parent_b: Creature)
     mult = constants.RARITY_STAT_MULTIPLIER[new_rarity]
     avg_level = (parent_a.level + parent_b.level) / 2
 
-    child = Creature(
-        owner_id=user.id,
+    child = Creature.objects.create(
+        owner=user,
         name=_fuse_name(parent_a.name, parent_b.name),
         element=random.choice([parent_a.element, parent_b.element]),
         rarity=new_rarity,
@@ -34,16 +36,14 @@ def splice(session: Session, user: User, parent_a: Creature, parent_b: Creature)
         base_atk=round((constants.STARTER_BASE_ATK + avg_level * 1.0) * mult),
         base_def=round((constants.STARTER_BASE_DEF + avg_level * 1.0) * mult),
         base_spd=round((constants.STARTER_BASE_SPD + avg_level * 0.6) * mult),
-        is_active=False,
+        is_active=True,
     )
-    session.add(child)
 
     parent_a.is_active = False
+    parent_a.save(update_fields=["is_active"])
     parent_b.is_active = False
+    parent_b.save(update_fields=["is_active"])
 
-    session.flush()
-    child.is_active = True
-    session.commit()
     return child
 
 

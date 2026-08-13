@@ -1,10 +1,9 @@
 import datetime
 import random
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from django.utils import timezone
 
-from db.models import Creature, User
+from bio_lab.models import Creature, User
 from game import constants
 
 
@@ -22,20 +21,17 @@ def effective_stats(creature: Creature) -> dict[str, int]:
     }
 
 
-def create_starter_creature(session: Session, owner: User) -> Creature:
+def create_starter_creature(owner: User) -> Creature:
     element = constants.random_element()
-    creature = Creature(
-        owner_id=owner.id,
+    return Creature.objects.create(
+        owner=owner,
         name=constants.random_species_name(element),
         element=element,
     )
-    session.add(creature)
-    session.flush()
-    return creature
 
 
 def add_xp(creature: Creature, amount: int) -> int:
-    """Adds xp and applies level-ups in place. Returns number of levels gained."""
+    """Adds xp and applies level-ups in place. Caller is responsible for saving `creature`."""
     creature.xp += amount
     levels_gained = 0
     while creature.xp >= constants.XP_PER_LEVEL:
@@ -49,17 +45,18 @@ def add_xp(creature: Creature, amount: int) -> int:
     return levels_gained
 
 
-def feed(session: Session, user: User, creature: Creature) -> int:
+def feed(user: User, creature: Creature) -> int:
     if user.coins < constants.FEED_COST_COINS:
         raise GameError(f"سکه کافی نداری! هزینه تغذیه {constants.FEED_COST_COINS} سکه است.")
     user.coins -= constants.FEED_COST_COINS
     levels_gained = add_xp(creature, constants.FEED_XP_GAIN)
-    session.commit()
+    user.save(update_fields=["coins"])
+    creature.save()
     return levels_gained
 
 
-def train(session: Session, creature: Creature) -> int:
-    now = datetime.datetime.utcnow()
+def train(creature: Creature) -> int:
+    now = timezone.now()
     if creature.last_trained_at is not None:
         elapsed = now - creature.last_trained_at
         cooldown = datetime.timedelta(hours=constants.TRAIN_COOLDOWN_HOURS)
@@ -70,7 +67,7 @@ def train(session: Session, creature: Creature) -> int:
             raise GameError(f"هیولات هنوز خسته‌ست، {hours} ساعت و {minutes} دقیقه دیگه صبر کن.")
     creature.last_trained_at = now
     levels_gained = add_xp(creature, constants.TRAIN_XP_GAIN)
-    session.commit()
+    creature.save()
     return levels_gained
 
 
@@ -82,25 +79,28 @@ def apply_random_mutation(creature: Creature) -> tuple[str, int]:
     )
     bonus = random.randint(lo, hi)
     setattr(creature, stat, getattr(creature, stat) + bonus)
+    creature.save(update_fields=[stat])
     return stat, bonus
 
 
-def list_creatures(session: Session, user: User) -> list[Creature]:
-    stmt = select(Creature).where(Creature.owner_id == user.id).order_by(Creature.id)
-    return list(session.execute(stmt).scalars().all())
+def list_creatures(user: User) -> list[Creature]:
+    return list(Creature.objects.filter(owner=user).order_by("id"))
 
 
-def set_active_creature(session: Session, user: User, creature_id: int) -> Creature:
-    target = session.get(Creature, creature_id)
-    if target is None or target.owner_id != user.id:
+def set_active_creature(user: User, creature_id: int) -> Creature:
+    try:
+        target = Creature.objects.get(id=creature_id)
+    except Creature.DoesNotExist:
         raise GameError("این موجود توی کلکسیون تو نیست.")
-    for creature in list_creatures(session, user):
-        creature.is_active = creature.id == creature_id
-    session.commit()
+    if target.owner_id != user.id:
+        raise GameError("این موجود توی کلکسیون تو نیست.")
+    Creature.objects.filter(owner=user).exclude(id=creature_id).update(is_active=False)
+    target.is_active = True
+    target.save(update_fields=["is_active"])
     return target
 
 
-def upgrade_part(session: Session, user: User, creature: Creature, part: str) -> int:
+def upgrade_part(user: User, creature: Creature, part: str) -> int:
     if part not in constants.BODY_PARTS:
         raise GameError("این عضو وجود نداره.")
     current_level = getattr(creature, f"{part}_lvl")
@@ -109,5 +109,6 @@ def upgrade_part(session: Session, user: User, creature: Creature, part: str) ->
         raise GameError(f"سکه کافی نداری! ارتقای این عضو {cost} سکه هزینه داره.")
     user.coins -= cost
     setattr(creature, f"{part}_lvl", current_level + 1)
-    session.commit()
+    user.save(update_fields=["coins"])
+    creature.save()
     return current_level + 1
