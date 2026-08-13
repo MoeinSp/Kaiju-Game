@@ -15,6 +15,7 @@ from game import constants
 from game.combat import resolve_duel
 from game.creature import GameError, add_xp, apply_random_mutation
 from game.daily import assert_energy_available, check_missions, group_event_available, mark_group_event, record_action
+from game.emoji import get_emoji
 from game.energy import spend_energy
 from game.guardian import challenge_guardian, ensure_guardian, get_guardian
 from game.raid import RaidError, attack_boss, distribute_rewards, get_active_boss, spawn_boss
@@ -26,9 +27,9 @@ def _mission_lines(completed: list[dict]) -> str:
         return ""
     lines = []
     for m in completed:
-        reward = f"+{m['coins']} 💰"
+        reward = f"+{m['coins']} {get_emoji('coin', '💰')}"
         if m["dna"]:
-            reward += f" +{m['dna']} 🧬"
+            reward += f" +{m['dna']} {get_emoji('dna', '🧬')}"
         lines.append(f"🎯 ماموریت «{m['label']}» تکمیل شد! {reward}")
     return "\n" + "\n".join(lines)
 

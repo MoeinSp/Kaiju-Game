@@ -113,6 +113,7 @@ MAX_ENERGY = 20
 ENERGY_REGEN_MINUTES = 12  # empty -> full in 4 hours
 FEED_ENERGY_COST = 1
 RAID_ATTACK_ENERGY_COST = 1
+HUNT_ENERGY_COST = 1
 
 # consecutive daily /start streak — resets if a day is missed, capped so late-game
 # players don't snowball into absurd payouts
@@ -139,6 +140,7 @@ MISSION_DEFS = {
         "coins": 50,
         "dna": 5,
     },
+    "hunt_3": {"action": "hunt", "target": 3, "label": "۳ بار شکار انفرادی کن", "coins": 45, "dna": 3},
 }
 
 STARTING_COINS = 200

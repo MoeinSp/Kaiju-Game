@@ -18,10 +18,23 @@ class User(models.Model):
     login_streak = models.IntegerField(default=0)
     last_login_day = models.CharField(max_length=10, null=True, blank=True)  # "YYYY-MM-DD" (UTC)
 
+    alliance = models.ForeignKey(
+        "Alliance", null=True, blank=True, on_delete=models.SET_NULL, related_name="members"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:
         return self.username or self.first_name or f"Player {self.id}"
+
+
+class Alliance(models.Model):
+    name = models.CharField(max_length=64, unique=True)
+    leader = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class Creature(models.Model):
@@ -156,3 +169,18 @@ class DuelLog(models.Model):
     winner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
     log_text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class EmojiOverride(models.Model):
+    """Maps a semantic key (e.g. "coin") to a Telegram Premium custom emoji, set by
+    the bot owner via /set_emoji. Rendered with <tg-emoji emoji-id="..."> in HTML
+    messages; falls back to `placeholder` for everyone else (non-Premium viewers
+    still see `placeholder` too — Premium is what unlocks the custom graphic)."""
+
+    key = models.CharField(max_length=32, unique=True)
+    custom_emoji_id = models.CharField(max_length=64)
+    placeholder = models.CharField(max_length=16)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"{self.key} -> {self.placeholder}"

@@ -1,9 +1,11 @@
 from django.contrib import admin
 
 from bio_lab.models import (
+    Alliance,
     Creature,
     DailyActionLog,
     DuelLog,
+    EmojiOverride,
     Group,
     GroupEventLog,
     GroupMembership,
@@ -25,10 +27,27 @@ class UserAdmin(admin.ModelAdmin):
         "dna_fragments",
         "energy",
         "login_streak",
+        "alliance",
         "created_at",
     )
+    list_filter = ("alliance",)
     search_fields = ("username", "first_name", "id")
     ordering = ("-created_at",)
+
+
+@admin.register(Alliance)
+class AllianceAdmin(admin.ModelAdmin):
+    list_display = ("id", "name", "leader", "member_count", "created_at")
+    search_fields = ("name",)
+
+    @admin.display(description="اعضا")
+    def member_count(self, obj: Alliance) -> int:
+        return obj.members.count()
+
+
+@admin.register(EmojiOverride)
+class EmojiOverrideAdmin(admin.ModelAdmin):
+    list_display = ("key", "placeholder", "custom_emoji_id", "updated_at")
 
 
 @admin.register(Creature)
