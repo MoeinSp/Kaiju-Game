@@ -25,8 +25,8 @@ def resolve_duel(creature_a: Creature, creature_b: Creature) -> tuple[Creature, 
     fb.hp = fb.stats["hp"]
 
     log = [
-        f"⚔️ {fa.creature.name} ({constants.ELEMENT_LABELS[fa.creature.element]}) "
-        f"در برابر {fb.creature.name} ({constants.ELEMENT_LABELS[fb.creature.element]})"
+        f"⚔️ <b>{fa.creature.name}</b> ({constants.ELEMENT_LABELS[fa.creature.element]}) "
+        f"در برابر <b>{fb.creature.name}</b> ({constants.ELEMENT_LABELS[fb.creature.element]})\n"
     ]
 
     round_num = 0
@@ -37,10 +37,10 @@ def resolve_duel(creature_a: Creature, creature_b: Creature) -> tuple[Creature, 
             if attacker.hp <= 0 or defender.hp <= 0:
                 continue
             _attack(attacker, defender, log)
-        log.append(f"— راند {round_num}: {fa.creature.name} {max(fa.hp, 0)}HP | {fb.creature.name} {max(fb.hp, 0)}HP")
+        log.append(f"<i>— راند {round_num}: {fa.creature.name} {max(fa.hp, 0)}HP | {fb.creature.name} {max(fb.hp, 0)}HP</i>")
 
     winner = _decide_winner(fa, fb)
-    log.append(f"🏆 برنده: {winner.creature.name}!")
+    log.append(f"\n🏆 <b>برنده: {winner.creature.name}!</b>")
     return winner.creature, "\n".join(log)
 
 

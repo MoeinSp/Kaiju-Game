@@ -104,18 +104,16 @@ def is_finished(battle: InteractiveBattle) -> tuple[bool, str | None]:
 
 
 def render_hp_bar(current: int, total: int, width: int = 10) -> str:
-    total = max(total, 1)
-    filled = round(width * max(current, 0) / total)
-    filled = min(width, max(0, filled))
-    return "▓" * filled + "░" * (width - filled) + f" {max(current, 0)}/{total}"
+    return constants.render_bar(current, total, width) + f" {max(current, 0)}/{total}"
 
 
 def render_battle_card(battle: InteractiveBattle) -> str:
     stats_a = effective_stats(battle.creature_a)
     stats_b = effective_stats(battle.creature_b)
     lines = [
-        f"⚔️ <b>{battle.creature_a.name}</b> {render_hp_bar(battle.hp_a, stats_a['hp'])}",
-        f"🆚 <b>{battle.creature_b.name}</b> {render_hp_bar(battle.hp_b, stats_b['hp'])}",
+        "⚔️ <b>نبرد زنده</b>",
+        f"{battle.creature_a.name}  {render_hp_bar(battle.hp_a, stats_a['hp'])}",
+        f"{battle.creature_b.name}  {render_hp_bar(battle.hp_b, stats_b['hp'])}",
         "",
     ]
 
@@ -127,10 +125,10 @@ def render_battle_card(battle: InteractiveBattle) -> str:
     if battle.status == "active":
         actor = _creature(battle, battle.turn)
         skill_uses = battle.skill_uses_a if battle.turn == "a" else battle.skill_uses_b
-        lines.append(f"نوبت: <b>{actor.name}</b> (اسکیل باقی‌مانده: {skill_uses})")
+        lines.append(f"⏳ نوبت: <b>{actor.name}</b>  (اسکیل باقی‌مانده: {skill_uses})")
     elif battle.status == "finished":
         winner_side = "a" if battle.hp_b <= 0 else "b"
         winner = _creature(battle, winner_side)
-        lines.append(f"🏆 برنده: <b>{winner.name}</b>!")
+        lines.append(f"🏆 <b>برنده: {winner.name}!</b>")
 
     return "\n".join(lines)

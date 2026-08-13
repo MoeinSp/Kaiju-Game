@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 
 class User(models.Model):
@@ -10,6 +11,13 @@ class User(models.Model):
     first_name = models.CharField(max_length=128, null=True, blank=True)
     coins = models.IntegerField(default=200)
     dna_fragments = models.IntegerField(default=0)
+
+    energy = models.IntegerField(default=20)  # keep in sync with game.constants.MAX_ENERGY
+    energy_updated_at = models.DateTimeField(default=timezone.now)
+
+    login_streak = models.IntegerField(default=0)
+    last_login_day = models.CharField(max_length=10, null=True, blank=True)  # "YYYY-MM-DD" (UTC)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:

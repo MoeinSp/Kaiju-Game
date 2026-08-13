@@ -61,13 +61,13 @@ def _battle_cmd_sync(chat, challenger_tg, opponent_tg):
 
 async def battle_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message.reply_to_message is None:
-        await update.message.reply_text("برای نبرد تعاملی، روی پیام حریف ریپلای کن و بنویس /battle")
+        await update.message.reply_text("⚔️ برای نبرد تعاملی، روی پیام حریف ریپلای کن و بنویس /battle")
         return
 
     opponent_tg = update.message.reply_to_message.from_user
     challenger_tg = update.effective_user
     if opponent_tg.id == challenger_tg.id or opponent_tg.is_bot:
-        await update.message.reply_text("نمی‌تونی با خودت یا با یه بات نبرد کنی!")
+        await update.message.reply_text("🙅 نمی‌تونی با خودت یا با یه بات نبرد کنی!")
         return
 
     try:
@@ -87,8 +87,10 @@ async def battle_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         ]
     )
     await update.message.reply_text(
-        f"⚔️ {display_name(challenger_user)} با {challenger_creature.name} به "
-        f"{display_name(opponent_user)} پیشنهاد نبرد تعاملی داد! قبول می‌کنی؟",
+        f"⚔️ <b>{display_name(challenger_user)}</b> با {challenger_creature.name} به "
+        f"<b>{display_name(opponent_user)}</b> پیشنهاد نبرد تعاملی زنده داد!\n"
+        f"قبول می‌کنی؟ 👇",
+        parse_mode="HTML",
         reply_markup=keyboard,
     )
 
@@ -145,7 +147,7 @@ async def battle_decline_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
-    await query.edit_message_text("❌ پیشنهاد نبرد رد شد.")
+    await query.edit_message_text("❌ پیشنهاد نبرد زنده رد شد.")
 
 
 def _battle_action_sync(battle_id, actor_tg_id, action):
@@ -186,13 +188,13 @@ def _battle_action_sync(battle_id, actor_tg_id, action):
         completed_missions = check_missions(winner_user, "duel_win")
 
         reward_lines.append(
-            f"💰 {winner_creature.name} +{constants.DUEL_WIN_COINS} سکه, +{constants.DUEL_WIN_XP} XP"
-            + (f" 🎉 سطح {winner_creature.level} شد!" if winner_levels else "")
+            f"💰 {winner_creature.name} +{constants.DUEL_WIN_COINS} سکه · +{constants.DUEL_WIN_XP} XP"
+            + (f" 🎉 رسید به سطح {winner_creature.level}!" if winner_levels else "")
         )
         for m in completed_missions:
             reward_lines.append(
-                f"🎯 ماموریت «{m['label']}» کامل شد! +{m['coins']} سکه"
-                + (f", +{m['dna']} DNA" if m["dna"] else "")
+                f"🎯 ماموریت «{m['label']}» تکمیل شد! +{m['coins']} 💰"
+                + (f" +{m['dna']} 🧬" if m["dna"] else "")
             )
 
     battle.save()

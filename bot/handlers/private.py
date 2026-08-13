@@ -15,23 +15,38 @@ from game.creature import (
     train,
     upgrade_part,
 )
-from game.daily import assert_energy_available, check_missions, mission_status, record_action
+from game.daily import apply_daily_login, check_missions, mission_status, record_action
+from game.energy import spend_energy, sync_energy
 from game.splice import splice
+
+
+def _mission_lines(completed: list[dict]) -> str:
+    if not completed:
+        return ""
+    lines = []
+    for m in completed:
+        reward = f"+{m['coins']} 💰"
+        if m["dna"]:
+            reward += f" +{m['dna']} 🧬"
+        lines.append(f"🎯 ماموریت «{m['label']}» تکمیل شد! {reward}")
+    return "\n" + "\n".join(lines)
 
 
 def creature_card_text(user, creature) -> str:
     stats = effective_stats(creature)
+    energy = sync_energy(user)
+    xp_bar = constants.render_bar(creature.xp, constants.XP_PER_LEVEL, width=12)
+    energy_bar = constants.render_bar(energy, constants.MAX_ENERGY, width=12)
     return (
-        f"🧬 <b>{creature.name}</b> (#{creature.id}) — {constants.ELEMENT_LABELS[creature.element]}\n"
-        f"{constants.RARITY_LABELS[creature.rarity]} — سطح {creature.level}\n"
-        f"XP: {creature.xp}/{constants.XP_PER_LEVEL}\n\n"
-        f"❤️ HP: {stats['hp']}\n"
-        f"⚔️ ATK: {stats['atk']}\n"
-        f"🛡 DEF: {stats['def']}\n"
-        f"💨 SPD: {stats['spd']}\n"
-        f"☠️ Poison: {stats['poison']}\n\n"
-        f"اعضا — بال:{creature.wings_lvl} زره:{creature.armor_lvl} نیش:{creature.fangs_lvl} زهر:{creature.poison_lvl}\n\n"
-        f"💰 سکه: {user.coins} | 🧬 DNA: {user.dna_fragments}"
+        f"🧬 <b>{creature.name}</b>  <code>#{creature.id}</code>\n"
+        f"{constants.ELEMENT_LABELS[creature.element]} · {constants.RARITY_LABELS[creature.rarity]} · سطح {creature.level}\n"
+        f"{xp_bar}  {creature.xp}/{constants.XP_PER_LEVEL} XP\n"
+        "\n"
+        f"❤️ {stats['hp']}   ⚔️ {stats['atk']}   🛡 {stats['def']}   💨 {stats['spd']}   ☠️ {stats['poison']}\n"
+        f"<i>🦋 بال {creature.wings_lvl} · 🛡 زره {creature.armor_lvl} · 🦷 نیش {creature.fangs_lvl} · ☠️ زهر {creature.poison_lvl}</i>\n"
+        "\n"
+        f"{energy_bar}  ⚡ {energy}/{constants.MAX_ENERGY}\n"
+        f"💰 {user.coins}   🧬 {user.dna_fragments}"
     )
 
 
@@ -61,18 +76,31 @@ def _start_sync(tg_user):
     if creature is None:
         creature = create_starter_creature(user)
         is_new = True
-    return user, creature, is_new
+    login_bonus = apply_daily_login(user)
+    return user, creature, is_new, login_bonus
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user, creature, is_new = await run_db(_start_sync, update.effective_user)
-    prefix = (
-        "🥚 آزمایشگاه فعال شد! یک موجود تازه از کپسول زیستی بیرون اومد:\n\n"
-        if is_new
-        else "به آزمایشگاه خوش برگشتی!\n\n"
-    )
+    user, creature, is_new, login_bonus = await run_db(_start_sync, update.effective_user)
+
+    lines = []
+    if is_new:
+        lines.append(
+            "🥚 <b>آزمایشگاه فعال شد!</b>\n"
+            "یه موجود تازه از کپسول زیستی بیرون اومد — بهش خوش‌آمد بگو 👇\n"
+        )
+    else:
+        lines.append("👋 <b>به آزمایشگاه خوش برگشتی!</b>\n")
+
+    if login_bonus:
+        streak_line = f"🔥 <b>{login_bonus['streak']} روز پشت‌سرهم</b> اومدی! +{login_bonus['coins']} 💰"
+        if login_bonus["dna"]:
+            streak_line += f" +{login_bonus['dna']} 🧬"
+        lines.append(streak_line + "\n")
+
+    lines.append(creature_card_text(user, creature))
     await update.message.reply_text(
-        prefix + creature_card_text(user, creature), parse_mode="HTML", reply_markup=creature_keyboard()
+        "\n".join(lines), parse_mode="HTML", reply_markup=creature_keyboard()
     )
 
 
@@ -84,7 +112,7 @@ def _me_sync(tg_user):
 async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user, creature = await run_db(_me_sync, update.effective_user)
     if creature is None:
-        await update.message.reply_text("هنوز موجودی نداری! دستور /start رو بزن.")
+        await update.message.reply_text("😅 هنوز موجودی نداری! دستور /start رو بزن تا از آزمایشگاه شروع کنی.")
         return
     await update.message.reply_text(
         creature_card_text(user, creature), parse_mode="HTML", reply_markup=creature_keyboard()
@@ -95,32 +123,29 @@ def _lab_action_sync(tg_user, action):
     user, _ = get_or_create_user(tg_user)
     creature = get_active_creature(user)
     if creature is None:
-        raise GameError("اول /start رو بزن.")
+        raise GameError("اول /start رو بزن تا موجودت رو بگیری.")
 
     completed_missions: list[dict] = []
     if action == "feed":
-        assert_energy_available(user, "feed")
+        spend_energy(user, constants.FEED_ENERGY_COST, "تغذیه")
         levels = feed(user, creature)
+        user.save(update_fields=["energy", "energy_updated_at"])
         record_action(user, "feed")
         completed_missions = check_missions(user, "feed")
-        note = "🍖 تغذیه شد!" + (f" 🎉 سطح {creature.level} شد!" if levels else "")
+        note = "🍖 <b>تغذیه شد!</b>" + (f" 🎉 رسید به سطح {creature.level}!" if levels else "")
     elif action == "train":
         levels = train(creature)
         record_action(user, "train")
         completed_missions = check_missions(user, "train")
-        note = "🏋️ تمرین کرد!" + (f" 🎉 سطح {creature.level} شد!" if levels else "")
+        note = "🏋️ <b>تمرین کرد!</b>" + (f" 🎉 رسید به سطح {creature.level}!" if levels else "")
     elif action.startswith("upgrade:"):
         part = action.split(":", 1)[1]
         new_level = upgrade_part(user, creature, part)
-        note = f"{constants.BODY_PARTS[part]['label']} به سطح {new_level} ارتقا یافت!"
+        note = f"{constants.BODY_PARTS[part]['label']} به سطح {new_level} ارتقا یافت! ✨"
     else:
         return None
 
-    for m in completed_missions:
-        note += f"\n🎯 ماموریت «{m['label']}» کامل شد! +{m['coins']} سکه" + (
-            f", +{m['dna']} DNA" if m["dna"] else ""
-        )
-    return user, creature, note
+    return user, creature, note + _mission_lines(completed_missions)
 
 
 async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -151,18 +176,18 @@ def _collection_sync(tg_user):
 async def collection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     creatures = await run_db(_collection_sync, update.effective_user)
     if not creatures:
-        await update.message.reply_text("کلکسیونت خالیه! دستور /start رو بزن.")
+        await update.message.reply_text("📭 کلکسیونت خالیه! دستور /start رو بزن.")
         return
 
-    lines = ["🗂 <b>کلکسیون تو:</b>"]
+    lines = [f"🗂 <b>کلکسیون تو</b> — {len(creatures)} موجود\n"]
     for c in creatures:
-        active_tag = " ✅فعال" if c.is_active else ""
+        active_tag = " ✅" if c.is_active else ""
         lines.append(
-            f"#{c.id} {c.name} — {constants.ELEMENT_LABELS[c.element]} — "
-            f"{constants.RARITY_LABELS[c.rarity]} — Lv{c.level}{active_tag}"
+            f"<code>#{c.id}</code> {c.name} — {constants.ELEMENT_LABELS[c.element]} · "
+            f"{constants.RARITY_LABELS[c.rarity]} · Lv{c.level}{active_tag}"
         )
-    lines.append("\nبرای تعویض موجود فعال بنویس: /select و شماره موجود (مثلاً /select 3)")
-    lines.append("برای ترکیب دو موجود بنویس: /splice و دو شماره (مثلاً /splice 3 5)")
+    lines.append("\n🔁 تعویض موجود فعال: <code>/select 3</code>")
+    lines.append("🧪 ترکیب دو موجود: <code>/splice 3 5</code>")
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
@@ -174,7 +199,7 @@ def _select_sync(tg_user, creature_id):
 async def select(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text(
-            "استفاده درست: /select و شماره موجود (مثلاً /select 3)\nبرای دیدن شماره‌ها: /collection"
+            "استفاده درست: <code>/select 3</code> (شماره‌ی موجود از /collection)", parse_mode="HTML"
         )
         return
     try:
@@ -183,7 +208,7 @@ async def select(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(str(exc))
         return
     await update.message.reply_text(
-        f"{creature.name} حالا موجود فعالته!\n\n" + creature_card_text(user, creature),
+        f"✅ <b>{creature.name}</b> حالا موجود فعالته!\n\n" + creature_card_text(user, creature),
         parse_mode="HTML",
         reply_markup=creature_keyboard(),
     )
@@ -195,23 +220,30 @@ def _splice_sync(tg_user, id_a, id_b):
         parent_a = Creature.objects.get(id=id_a)
         parent_b = Creature.objects.get(id=id_b)
     except Creature.DoesNotExist:
-        raise GameError("یکی از این idها پیدا نشد.")
-    return user, splice(user, parent_a, parent_b)
+        raise GameError("یکی از این شماره‌ها پیدا نشد.")
+    child = splice(user, parent_a, parent_b)
+    record_action(user, "splice")
+    completed_missions = check_missions(user, "splice")
+    return user, child, completed_missions
 
 
 async def splice_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if len(context.args) != 2 or not all(a.isdigit() for a in context.args):
         await update.message.reply_text(
-            "استفاده درست: /splice و دو شماره موجود (مثلاً /splice 3 5)\nبرای دیدن شماره‌ها: /collection"
+            "استفاده درست: <code>/splice 3 5</code> (دو شماره‌ی موجود از /collection)", parse_mode="HTML"
         )
         return
     try:
-        user, child = await run_db(_splice_sync, update.effective_user, int(context.args[0]), int(context.args[1]))
+        user, child, completed_missions = await run_db(
+            _splice_sync, update.effective_user, int(context.args[0]), int(context.args[1])
+        )
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
     await update.message.reply_text(
-        "🧪 ترکیب موفق بود! والدین جذب شدن و یک موجود جدید متولد شد:\n\n" + creature_card_text(user, child),
+        "🧪 <b>ترکیب موفق بود!</b> والدین توی کلکسیونت غیرفعال شدن و یه موجود جدید متولد شد:\n\n"
+        + creature_card_text(user, child)
+        + _mission_lines(completed_missions),
         parse_mode="HTML",
         reply_markup=creature_keyboard(),
     )
@@ -224,11 +256,12 @@ def _missions_sync(tg_user):
 
 async def missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     status = await run_db(_missions_sync, update.effective_user)
-    lines = ["🎯 <b>ماموریت‌های امروز:</b>"]
+    lines = ["🎯 <b>ماموریت‌های امروز</b>\n"]
     for m in status:
-        check = "✅" if m["done"] else f"({m['progress']}/{m['target']})"
-        reward = f"+{m['coins']} سکه" + (f", +{m['dna']} DNA" if m["dna"] else "")
-        lines.append(f"{check} {m['label']} — {reward}")
+        check = "✅" if m["done"] else f"⏳ {m['progress']}/{m['target']}"
+        reward = f"+{m['coins']} 💰" + (f" +{m['dna']} 🧬" if m["dna"] else "")
+        lines.append(f"{check} — {m['label']} ({reward})")
+    lines.append("\n<i>ماموریت‌ها هر روز (ساعت جهانی UTC) ریست می‌شن.</i>")
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 

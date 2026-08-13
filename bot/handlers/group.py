@@ -15,9 +15,22 @@ from game import constants
 from game.combat import resolve_duel
 from game.creature import GameError, add_xp, apply_random_mutation
 from game.daily import assert_energy_available, check_missions, group_event_available, mark_group_event, record_action
+from game.energy import spend_energy
 from game.guardian import challenge_guardian, ensure_guardian, get_guardian
 from game.raid import RaidError, attack_boss, distribute_rewards, get_active_boss, spawn_boss
 from game.trade import gift_creature
+
+
+def _mission_lines(completed: list[dict]) -> str:
+    if not completed:
+        return ""
+    lines = []
+    for m in completed:
+        reward = f"+{m['coins']} 💰"
+        if m["dna"]:
+            reward += f" +{m['dna']} 🧬"
+        lines.append(f"🎯 ماموریت «{m['label']}» تکمیل شد! {reward}")
+    return "\n" + "\n".join(lines)
 
 
 def _duel_sync(chat, challenger_tg, opponent_tg):
@@ -61,13 +74,13 @@ def _duel_sync(chat, challenger_tg, opponent_tg):
 
 async def duel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message.reply_to_message is None:
-        await update.message.reply_text("برای دوئل، روی پیام حریف ریپلای کن و بنویس /duel")
+        await update.message.reply_text("⚔️ برای دوئل، روی پیام حریف ریپلای کن و بنویس /duel")
         return
 
     opponent_tg = update.message.reply_to_message.from_user
     challenger_tg = update.effective_user
     if opponent_tg.id == challenger_tg.id or opponent_tg.is_bot:
-        await update.message.reply_text("نمی‌تونی با خودت یا با یه بات دوئل کنی!")
+        await update.message.reply_text("🙅 نمی‌تونی با خودت یا با یه بات دوئل کنی!")
         return
 
     try:
@@ -78,13 +91,10 @@ async def duel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(str(exc))
         return
 
-    reward_text = f"\n\n💰 {winner_creature.name} +{constants.DUEL_WIN_COINS} سکه, +{constants.DUEL_WIN_XP} XP"
+    reward_text = f"\n\n💰 {winner_creature.name} +{constants.DUEL_WIN_COINS} سکه · +{constants.DUEL_WIN_XP} XP"
     if winner_levels:
-        reward_text += f" 🎉 سطح {winner_creature.level} شد!"
-    for m in completed_missions:
-        reward_text += f"\n🎯 ماموریت «{m['label']}» کامل شد! +{m['coins']} سکه" + (
-            f", +{m['dna']} DNA" if m["dna"] else ""
-        )
+        reward_text += f" 🎉 رسید به سطح {winner_creature.level}!"
+    reward_text += _mission_lines(completed_missions)
     await update.message.reply_text(log_text + reward_text, parse_mode="HTML")
 
 
@@ -118,26 +128,27 @@ def _give_sync(chat, sender_tg, receiver_tg, kind, amount_arg):
 
 async def give(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     usage = (
-        "استفاده درست: روی پیام طرف مقابل ریپلای کن و بنویس /give و نوع منبع و مقدار\n"
-        "مثلاً: /give coins 50  یا  /give dna 10  یا  /give creature 7 (شماره موجود از /collection)"
+        "🎁 استفاده درست: روی پیام طرف مقابل ریپلای کن و بنویس /give به‌همراه نوع و مقدار\n"
+        "<code>/give coins 50</code> · <code>/give dna 10</code> · <code>/give creature 7</code> "
+        "(شماره موجود از /collection)"
     )
     if update.message.reply_to_message is None or len(context.args) != 2:
-        await update.message.reply_text(usage)
+        await update.message.reply_text(usage, parse_mode="HTML")
         return
 
     receiver_tg = update.message.reply_to_message.from_user
     sender_tg = update.effective_user
     if receiver_tg.id == sender_tg.id or receiver_tg.is_bot:
-        await update.message.reply_text("نمی‌تونی به خودت یا به یه بات چیزی بدی!")
+        await update.message.reply_text("🙅 نمی‌تونی به خودت یا به یه بات چیزی بدی!")
         return
 
     kind = context.args[0].lower()
     is_creature_gift = kind in ("creature", "موجود")
     if not is_creature_gift and constants.GIVE_RESOURCE_ALIASES.get(kind) is None:
-        await update.message.reply_text(usage)
+        await update.message.reply_text(usage, parse_mode="HTML")
         return
     if not context.args[1].isdigit() or int(context.args[1]) <= 0:
-        await update.message.reply_text(usage)
+        await update.message.reply_text(usage, parse_mode="HTML")
         return
     amount_arg = int(context.args[1])
 
@@ -150,7 +161,8 @@ async def give(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if result[0] == "creature":
         _, sender, receiver, creature = result
         await update.message.reply_text(
-            f"🎁 {display_name(sender)} موجود {creature.name} رو به {display_name(receiver)} هدیه داد!"
+            f"🎁 {display_name(sender)} موجود <b>{creature.name}</b> رو به {display_name(receiver)} هدیه داد!",
+            parse_mode="HTML",
         )
     else:
         _, sender, receiver, resource_key, amount = result
@@ -174,9 +186,10 @@ async def raid_spawn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text(str(exc))
         return
     await update.message.reply_text(
-        f"🐲 یک هیولای وحشی ظاهر شد: <b>{boss.name}</b>!\n"
-        f"HP: {boss.current_hp}/{boss.max_hp}\n"
-        f"برای حمله دستور /attack رو بزن.",
+        f"🐲 <b>یک هیولای وحشی ظاهر شد: {boss.name}!</b>\n"
+        f"{constants.render_bar(boss.current_hp, boss.max_hp, width=14)}  {boss.current_hp}/{boss.max_hp} HP\n"
+        f"{constants.ELEMENT_LABELS[boss.element]}\n\n"
+        f"همه با /attack بهش حمله کنین — هرچی سهم دمیج بیشتر، غنیمت بیشتر! 💪",
         parse_mode="HTML",
     )
 
@@ -185,7 +198,7 @@ def _attack_sync(chat, tg_user):
     group = get_or_create_group(chat)
     boss = get_active_boss(group.id)
     if boss is None:
-        raise GameError("هیچ هیولایی فعال نیست. با /raid_spawn یکی رو صدا بزن.")
+        raise GameError("😴 هیچ هیولایی فعال نیست. با /raid_spawn یکی رو صدا بزن.")
 
     user, _ = get_or_create_user(tg_user)
     touch_membership(group, user)
@@ -193,8 +206,9 @@ def _attack_sync(chat, tg_user):
     if creature is None:
         raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
 
-    assert_energy_available(user, "raid_attack")
+    spend_energy(user, constants.RAID_ATTACK_ENERGY_COST, "حمله")
     dmg, defeated = attack_boss(user, creature, boss)
+    user.save(update_fields=["energy", "energy_updated_at"])
 
     record_action(user, "raid_attack")
     completed_missions = check_missions(user, "raid_attack")
@@ -206,7 +220,7 @@ def _attack_sync(chat, tg_user):
         for uid, r in sorted(rewards.items(), key=lambda kv: kv[1]["damage"], reverse=True):
             member = User.objects.filter(id=uid).first()
             name = display_name(member) if member else str(uid)
-            reward_lines.append(f"{name}: {r['dna']} DNA, {r['coins']} سکه (دمیج: {r['damage']})")
+            reward_lines.append(f"{name} — 🧬{r['dna']} 💰{r['coins']} (دمیج: {r['damage']})")
 
     return creature, boss, dmg, defeated, completed_missions, reward_lines
 
@@ -220,15 +234,15 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(str(exc))
         return
 
-    text = f"{creature.name} به {boss.name} {dmg} دمیج زد! ({max(boss.current_hp, 0)}/{boss.max_hp} HP)"
-    for m in completed_missions:
-        text += f"\n🎯 ماموریت «{m['label']}» کامل شد! +{m['coins']} سکه" + (
-            f", +{m['dna']} DNA" if m["dna"] else ""
-        )
+    text = (
+        f"⚔️ <b>{creature.name}</b> به {boss.name} <b>{dmg}</b> دمیج زد!\n"
+        f"{constants.render_bar(boss.current_hp, boss.max_hp, width=14)}  {max(boss.current_hp, 0)}/{boss.max_hp} HP"
+    )
+    text += _mission_lines(completed_missions)
     if defeated:
-        text += "\n\n🎉 هیولا شکست خورد! غنایم:\n" + "\n".join(reward_lines)
+        text += "\n\n🎉 <b>هیولا شکست خورد!</b> غنایم:\n" + "\n".join(reward_lines)
 
-    await update.message.reply_text(text)
+    await update.message.reply_text(text, parse_mode="HTML")
 
 
 def _mutation_event_sync(chat, tg_user):
@@ -237,7 +251,7 @@ def _mutation_event_sync(chat, tg_user):
     touch_membership(group, user)
 
     if not group_event_available(group, "mutation"):
-        raise GameError("امروز قبلاً یه رویداد جهش تو این گروه اتفاق افتاده. فردا دوباره امتحان کن.")
+        raise GameError("☄️ امروز قبلاً یه رویداد جهش تو این گروه اتفاق افتاده. فردا دوباره امتحان کن.")
 
     members = group_member_creatures(group)
     if not members:
@@ -258,10 +272,10 @@ async def mutation_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(str(exc))
         return
 
-    lines = ["☄️ یه شهاب‌سنگ جهش‌زا روی گروه فرود اومد! همه‌ی موجودهای فعال این جهش رایگان رو گرفتن:"]
+    lines = ["☄️ <b>یه شهاب‌سنگ جهش‌زا روی گروه فرود اومد!</b> همه‌ی موجودهای فعال این جهش رایگان رو گرفتن:\n"]
     for name, stat, bonus in results:
-        lines.append(f"{name}: +{bonus} {constants.MUTATION_EVENT_STAT_LABELS[stat]}")
-    await update.message.reply_text("\n".join(lines))
+        lines.append(f"• {name}: +{bonus} {constants.MUTATION_EVENT_STAT_LABELS[stat]}")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
 def _creature_power(c: Creature) -> int:
@@ -280,9 +294,11 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not creatures:
         await update.message.reply_text("هنوز هیچ موجودی توی این گروه ثبت نشده.")
         return
-    lines = ["🏆 <b>برترین موجودات این گروه:</b>"]
+    medals = ["🥇", "🥈", "🥉"]
+    lines = ["🏆 <b>برترین موجودات این گروه</b>\n"]
     for i, c in enumerate(creatures, start=1):
-        lines.append(f"{i}. {c.name} (Lv{c.level}) — قدرت: {_creature_power(c)}")
+        rank = medals[i - 1] if i <= 3 else f"{i}."
+        lines.append(f"{rank} {c.name} (Lv{c.level}) — قدرت {_creature_power(c)}")
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
@@ -306,10 +322,11 @@ async def guardian(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(str(exc))
         return
     await update.message.reply_text(
-        f"🛡 <b>محافظ فعلی گروه:</b>\n{top.name} ({constants.RARITY_LABELS[top.rarity]}, Lv{top.level}) "
-        f"متعلق به {owner_name}\nقدرت کل: {_creature_power(top)}\n\n"
-        f"برای گرفتن این عنوان دستور /guardian_challenge رو بزن.\n"
-        f"محافظ فعلی هر روز با /guardian_claim یه جایزه می‌گیره.",
+        f"🛡 <b>محافظ فعلی گروه</b>\n"
+        f"{top.name} ({constants.RARITY_LABELS[top.rarity]}, Lv{top.level}) — متعلق به {owner_name}\n"
+        f"قدرت کل: {_creature_power(top)}\n\n"
+        f"⚔️ برای گرفتن عنوان: /guardian_challenge\n"
+        f"🎁 محافظ فعلی هر روز با /guardian_claim جایزه می‌گیره",
         parse_mode="HTML",
     )
 
@@ -324,17 +341,25 @@ def _guardian_challenge_sync(chat, tg_user):
         raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
 
     ensure_guardian(group, group_member_creatures(group))
-    return challenge_guardian(group, user, creature)
+    won, log_text = challenge_guardian(group, user, creature)
+
+    record_action(user, "guardian_challenge")
+    completed_missions = check_missions(user, "guardian_challenge")
+    return won, log_text, completed_missions
 
 
 async def guardian_challenge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        won, log_text = await run_db(_guardian_challenge_sync, update.effective_chat, update.effective_user)
+        won, log_text, completed_missions = await run_db(
+            _guardian_challenge_sync, update.effective_chat, update.effective_user
+        )
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
-    result_text = "🎉 بردی و محافظ جدید گروه شدی!" if won else "😔 باختی، محافظ همون قبلیه."
-    await update.message.reply_text(log_text + "\n\n" + result_text)
+    result_text = "🎉 <b>بردی و محافظ جدید گروه شدی!</b>" if won else "😔 باختی، محافظ همون قبلیه."
+    await update.message.reply_text(
+        log_text + "\n\n" + result_text + _mission_lines(completed_missions), parse_mode="HTML"
+    )
 
 
 def _guardian_claim_sync(chat, tg_user):
@@ -344,7 +369,7 @@ def _guardian_claim_sync(chat, tg_user):
 
     top = get_guardian(group)
     if top is None or top.owner_id != user.id:
-        raise GameError("تو محافظ فعلی این گروه نیستی. با /guardian ببین کیه.")
+        raise GameError("😅 تو محافظ فعلی این گروه نیستی. با /guardian ببین کیه.")
 
     assert_energy_available(user, "guardian_stipend")
 
@@ -361,8 +386,9 @@ async def guardian_claim(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(str(exc))
         return
     await update.message.reply_text(
-        f"🛡 به‌عنوان محافظ گروه، امروز {constants.GUARDIAN_STIPEND_COINS} سکه و "
-        f"{constants.GUARDIAN_STIPEND_DNA} DNA گرفتی!"
+        f"🛡 به‌عنوان محافظ گروه، امروز <b>{constants.GUARDIAN_STIPEND_COINS} 💰</b> و "
+        f"<b>{constants.GUARDIAN_STIPEND_DNA} 🧬</b> گرفتی!",
+        parse_mode="HTML",
     )
 
 

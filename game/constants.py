@@ -96,22 +96,49 @@ ELEMENT_SKILLS = {
     "electric": {"name": "⚡ شوک برق", "desc": "حریف یک نوبت برق می‌گیره و از دست می‌ده", "stun": True},
 }
 
-# daily action caps — prevents infinite grinding of actions with no natural cooldown
+# daily caps for actions with no natural cooldown of their own (guardian stipend is a
+# once-a-day claim, not a grindable action, so a flat daily cap fits it — feed/raid_attack
+# use the regenerating energy pool below instead, which encourages checking back
+# throughout the day rather than dumping everything in one sitting)
 ENERGY_CAPS = {
-    "feed": 8,
-    "raid_attack": 12,
     "guardian_stipend": 1,
 }
 
 GUARDIAN_STIPEND_COINS = 25
 GUARDIAN_STIPEND_DNA = 3
 
+# regenerating stamina pool spent on feed/raid_attack — refills over real time instead
+# of resetting once a day, so there's a reason to come back every couple hours
+MAX_ENERGY = 20
+ENERGY_REGEN_MINUTES = 12  # empty -> full in 4 hours
+FEED_ENERGY_COST = 1
+RAID_ATTACK_ENERGY_COST = 1
+
+# consecutive daily /start streak — resets if a day is missed, capped so late-game
+# players don't snowball into absurd payouts
+LOGIN_STREAK_BASE_COINS = 15
+LOGIN_STREAK_COINS_PER_DAY = 10
+LOGIN_STREAK_CAP_DAYS = 14
+LOGIN_STREAK_DNA_EVERY = 5  # bonus DNA every N-day milestone
+LOGIN_STREAK_DNA_BONUS = 10
+
 # key -> {action, target, label, coins, dna}
 MISSION_DEFS = {
     "feed_3": {"action": "feed", "target": 3, "label": "۳ بار تغذیه کن", "coins": 40, "dna": 0},
+    "feed_10": {"action": "feed", "target": 10, "label": "۱۰ بار تغذیه کن", "coins": 100, "dna": 5},
     "train_1": {"action": "train", "target": 1, "label": "۱ بار تمرین کن", "coins": 30, "dna": 0},
     "duel_win_1": {"action": "duel_win", "target": 1, "label": "۱ دوئل ببر", "coins": 50, "dna": 5},
+    "duel_win_3": {"action": "duel_win", "target": 3, "label": "۳ دوئل ببر", "coins": 120, "dna": 10},
     "raid_attack_2": {"action": "raid_attack", "target": 2, "label": "۲ بار به رید حمله کن", "coins": 40, "dna": 5},
+    "raid_attack_5": {"action": "raid_attack", "target": 5, "label": "۵ بار به رید حمله کن", "coins": 90, "dna": 8},
+    "splice_1": {"action": "splice", "target": 1, "label": "۱ بار DNA ترکیب کن", "coins": 60, "dna": 0},
+    "guardian_challenge_1": {
+        "action": "guardian_challenge",
+        "target": 1,
+        "label": "۱ بار برای محافظ گروه چالش بده",
+        "coins": 50,
+        "dna": 5,
+    },
 }
 
 STARTING_COINS = 200
@@ -164,3 +191,9 @@ def next_rarity(rarity: str) -> str:
 
 def higher_rarity(rarity_a: str, rarity_b: str) -> str:
     return rarity_a if RARITY_ORDER.index(rarity_a) >= RARITY_ORDER.index(rarity_b) else rarity_b
+
+
+def render_bar(current: int, total: int, width: int = 10) -> str:
+    total = max(total, 1)
+    filled = min(width, max(0, round(width * max(current, 0) / total)))
+    return "▓" * filled + "░" * (width - filled)

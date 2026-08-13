@@ -17,7 +17,16 @@ from bio_lab.models import (
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
-    list_display = ("id", "username", "first_name", "coins", "dna_fragments", "created_at")
+    list_display = (
+        "id",
+        "username",
+        "first_name",
+        "coins",
+        "dna_fragments",
+        "energy",
+        "login_streak",
+        "created_at",
+    )
     search_fields = ("username", "first_name", "id")
     ordering = ("-created_at",)
 

@@ -1,3 +1,5 @@
+import datetime
+
 from django.utils import timezone
 
 from bio_lab.models import DailyActionLog, Group, GroupEventLog, MissionClaim, User
@@ -56,6 +58,32 @@ def check_missions(user: User, action: str) -> list[dict]:
     if completed:
         user.save(update_fields=["coins", "dna_fragments"])
     return completed
+
+
+def apply_daily_login(user: User) -> dict | None:
+    """Call on /start. Grants a streak bonus once per UTC day; returns None if today's
+    was already claimed. Streak resets to 1 if a day was missed."""
+    today = today_str()
+    if user.last_login_day == today:
+        return None
+
+    yesterday = (timezone.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+    user.login_streak = user.login_streak + 1 if user.last_login_day == yesterday else 1
+    user.last_login_day = today
+
+    capped_streak = min(user.login_streak, constants.LOGIN_STREAK_CAP_DAYS)
+    coins = constants.LOGIN_STREAK_BASE_COINS + capped_streak * constants.LOGIN_STREAK_COINS_PER_DAY
+    dna = (
+        constants.LOGIN_STREAK_DNA_BONUS
+        if user.login_streak % constants.LOGIN_STREAK_DNA_EVERY == 0
+        else 0
+    )
+
+    user.coins += coins
+    user.dna_fragments += dna
+    user.save(update_fields=["login_streak", "last_login_day", "coins", "dna_fragments"])
+
+    return {"streak": user.login_streak, "coins": coins, "dna": dna}
 
 
 def group_event_available(group: Group, event_key: str) -> bool:
