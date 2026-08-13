@@ -128,6 +128,37 @@ class MissionClaim(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class InteractiveBattle(Base):
+    __tablename__ = "interactive_battles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("groups.id"))
+
+    player_a_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    player_b_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    creature_a_id: Mapped[int] = mapped_column(ForeignKey("creatures.id"))
+    creature_b_id: Mapped[int] = mapped_column(ForeignKey("creatures.id"))
+
+    hp_a: Mapped[int] = mapped_column(Integer)
+    hp_b: Mapped[int] = mapped_column(Integer)
+    skill_uses_a: Mapped[int] = mapped_column(Integer, default=2)
+    skill_uses_b: Mapped[int] = mapped_column(Integer, default=2)
+    shield_active_a: Mapped[bool] = mapped_column(Boolean, default=False)
+    shield_active_b: Mapped[bool] = mapped_column(Boolean, default=False)
+    stunned_a: Mapped[bool] = mapped_column(Boolean, default=False)
+    stunned_b: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    turn: Mapped[str] = mapped_column(String(1))  # "a" or "b"
+    status: Mapped[str] = mapped_column(String(16), default="pending")  # pending/active/finished/declined
+    log: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow)
+
+    player_a: Mapped["User"] = relationship(foreign_keys=[player_a_id])
+    player_b: Mapped["User"] = relationship(foreign_keys=[player_b_id])
+    creature_a: Mapped["Creature"] = relationship(foreign_keys=[creature_a_id])
+    creature_b: Mapped["Creature"] = relationship(foreign_keys=[creature_b_id])
+
+
 class DuelLog(Base):
     __tablename__ = "duel_logs"
 

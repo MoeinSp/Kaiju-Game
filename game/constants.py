@@ -83,6 +83,19 @@ MUTATION_EVENT_STAT_LABELS = {
 MUTATION_EVENT_HP_BONUS = (2, 6)
 MUTATION_EVENT_OTHER_BONUS = (1, 3)
 
+# interactive skill-based duel (the "advanced" battle mode, as opposed to /duel's
+# instant auto-resolve — used when both players want to play the fight out live)
+SKILL_USES_PER_BATTLE = 2
+BATTLE_CRIT_CHANCE = 0.12
+BATTLE_CRIT_MULTIPLIER = 1.5
+
+ELEMENT_SKILLS = {
+    "fire": {"name": "🔥 گلوله آتشین", "desc": "دمیج ویرانگر مضاعف", "power_mult": 2.0},
+    "water": {"name": "💧 موج شفا", "desc": "۲۵٪ HP ماکسیمم رو ترمیم می‌کنه", "heal_pct": 0.25},
+    "earth": {"name": "🪨 دیوار سنگی", "desc": "نیمی از ضربه‌ی بعدی حریف رو خنثی می‌کنه", "shield_pct": 0.5},
+    "electric": {"name": "⚡ شوک برق", "desc": "حریف یک نوبت برق می‌گیره و از دست می‌ده", "stun": True},
+}
+
 # daily action caps — prevents infinite grinding of actions with no natural cooldown
 ENERGY_CAPS = {
     "feed": 8,
