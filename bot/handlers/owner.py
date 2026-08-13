@@ -6,7 +6,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import User
 from bio_lab.repository import display_name
-from bot.utils import run_db
+from bot.utils import run_db, safe_edit_message_text
 from config import ADMIN_PANEL_URL, OWNER_TELEGRAM_ID
 from game import constants
 from game.creature import GameError
@@ -122,7 +122,7 @@ async def set_emoji_category_callback(update: Update, context: ContextTypes.DEFA
         await query.answer("دسته نامعتبر شد، دوباره /set_emoji رو بزن.", show_alert=True)
         return
     await query.answer()
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         f"{CATEGORY_LABELS[category]}\nکدوم کلید؟", reply_markup=_key_keyboard(category)
     )
 
@@ -133,7 +133,7 @@ async def set_emoji_back_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.answer()
         return
     await query.answer()
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         f"{get_emoji('settings')} یه دسته انتخاب کن:", parse_mode="HTML", reply_markup=_category_keyboard()
     )
 
@@ -150,7 +150,7 @@ async def set_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_T
 
     context.user_data["awaiting_emoji_key"] = key
     await query.answer()
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         f"👌 باشه! حالا فقط <b>ایموجی پرمیوم</b> مربوط به «{EMOJI_KEYS[key]}» رو بفرست "
         f"(تک و تنها، از کیبورد ایموجی «پرمیوم» تلگرام).\n\nبرای انصراف کافیه هر دستور دیگه‌ای بزنی.",
         parse_mode="HTML",
@@ -521,7 +521,7 @@ async def delete_creature_confirm_callback(update: Update, context: ContextTypes
 
     if query.data == "admin_del_cancel":
         await query.answer()
-        await query.edit_message_text(f"{get_emoji('cancel')} لغو شد، چیزی حذف نشد.", parse_mode="HTML")
+        await safe_edit_message_text(query, f"{get_emoji('cancel')} لغو شد، چیزی حذف نشد.", parse_mode="HTML")
         return
 
     creature_id = int(query.data.split(":")[1])
@@ -531,7 +531,7 @@ async def delete_creature_confirm_callback(update: Update, context: ContextTypes
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
-    await query.edit_message_text(f"🗑 موجود «{name}» برای همیشه حذف شد.", parse_mode="HTML")
+    await safe_edit_message_text(query, f"🗑 موجود «{name}» برای همیشه حذف شد.", parse_mode="HTML")
 
 
 async def preview_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -622,7 +622,7 @@ async def force_join_add_callback(update: Update, context: ContextTypes.DEFAULT_
         return
     context.user_data[AWAITING_FORCE_JOIN_KEY] = {"action": "add_channel"}
     await query.answer()
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         "🟢 یه پیام از خودِ کانال موردنظر رو همینجا فوروارد کن (نه لینکش رو بفرستی، خودِ پیام رو فوروارد کن).\n\n"
         "<i>برای انصراف، از منوی پنل ادمین دوباره شروع کن.</i>",
         parse_mode="HTML",
@@ -641,7 +641,7 @@ async def force_join_manage_callback(update: Update, context: ContextTypes.DEFAU
         await query.answer("این کانال دیگه پیدا نشد.", show_alert=True)
         return
     await query.answer()
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         _channel_card(channel), parse_mode="HTML", reply_markup=_channel_manage_keyboard(channel_id)
     )
 
@@ -654,7 +654,7 @@ async def force_join_duration_callback(update: Update, context: ContextTypes.DEF
     channel_id = int(query.data.split(":")[1])
     context.user_data[AWAITING_FORCE_JOIN_KEY] = {"action": "set_duration", "channel_id": channel_id}
     await query.answer()
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         "⏳ چند ساعت معتبر باشه؟ یه عدد بفرست (مثلاً <code>24</code>).", parse_mode="HTML"
     )
 
@@ -671,7 +671,7 @@ async def force_join_unlimited_callback(update: Update, context: ContextTypes.DE
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("♾ نامحدود شد.")
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         _channel_card(channel), parse_mode="HTML", reply_markup=_channel_manage_keyboard(channel_id)
     )
 
@@ -684,7 +684,7 @@ async def force_join_reward_callback(update: Update, context: ContextTypes.DEFAU
     channel_id = int(query.data.split(":")[1])
     context.user_data[AWAITING_FORCE_JOIN_KEY] = {"action": "set_reward", "channel_id": channel_id}
     await query.answer()
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         f"🎁 دو عدد بفرست، با فاصله: مقدار {get_emoji('coin')} طلا و مقدار {get_emoji('dna')} DNA "
         "(مثلاً <code>50 5</code> — برای بدون جایزه بنویس <code>0 0</code>).",
         parse_mode="HTML",
@@ -706,7 +706,7 @@ async def force_join_remove_callback(update: Update, context: ContextTypes.DEFAU
         ]
     )
     await query.answer()
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         "مطمئنی این کانال از لیست جوین اجباری حذف بشه؟ دیگه اجباری نخواهد بود.", reply_markup=keyboard
     )
 
@@ -819,7 +819,7 @@ async def admin_grant_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data[AWAITING_ADMIN_KEY] = {"action": "grant", "target_id": target_id, "resource": resource}
     await query.answer()
     label = "طلا" if resource == "coins" else "DNA"
-    await query.edit_message_text(f"🟢 چقدر {label} اعطا کنم؟ یه عدد مثبت بفرست:", parse_mode="HTML")
+    await safe_edit_message_text(query, f"🟢 چقدر {label} اعطا کنم؟ یه عدد مثبت بفرست:", parse_mode="HTML")
 
 
 async def admin_deduct_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -831,7 +831,7 @@ async def admin_deduct_callback(update: Update, context: ContextTypes.DEFAULT_TY
     context.user_data[AWAITING_ADMIN_KEY] = {"action": "deduct", "target_id": target_id, "resource": resource}
     await query.answer()
     label = "طلا" if resource == "coins" else "DNA"
-    await query.edit_message_text(f"🟠 چقدر {label} کسر کنم؟ یه عدد مثبت بفرست:", parse_mode="HTML")
+    await safe_edit_message_text(query, f"🟠 چقدر {label} کسر کنم؟ یه عدد مثبت بفرست:", parse_mode="HTML")
 
 
 async def admin_ban_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -847,7 +847,7 @@ async def admin_ban_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("🔴 مسدود شد.")
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         _user_info_text(data), parse_mode="HTML", reply_markup=_user_manage_keyboard(user.id, True)
     )
 
@@ -865,7 +865,7 @@ async def admin_unban_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("✅ رفع شد.")
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         _user_info_text(data), parse_mode="HTML", reply_markup=_user_manage_keyboard(user.id, False)
     )
 

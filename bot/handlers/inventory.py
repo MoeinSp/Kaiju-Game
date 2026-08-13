@@ -3,7 +3,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Equipment
 from bio_lab.repository import get_active_creature, get_or_create_user
-from bot.utils import run_db
+from bot.utils import run_db, safe_edit_message_text
 from game import constants
 from game.creature import GameError
 from game.emoji import get_emoji
@@ -88,7 +88,7 @@ async def inventory_pick_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         _item_line(item), parse_mode="HTML", reply_markup=_item_detail_keyboard(item, len(dupes))
     )
 
@@ -110,7 +110,7 @@ async def inventory_equip_callback(update: Update, context: ContextTypes.DEFAULT
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("⚔️ تجهیز شد!")
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         f"⚔️ {constants.EQUIPMENT_SLOT_LABELS[item.slot]} <b>{item.name}</b> +{item.level} روی موجود فعالت تجهیز شد!\n\n"
         + _item_line(item),
         parse_mode="HTML",
@@ -133,7 +133,7 @@ async def inventory_unequip_callback(update: Update, context: ContextTypes.DEFAU
         return
     _, dupes = await run_db(_item_detail_sync, update.effective_user, item_id)
     await query.answer("🎒 خارج شد.")
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         f"🎒 {item.name} به کوله‌پشتی برگشت.\n\n" + _item_line(item),
         parse_mode="HTML",
         reply_markup=_item_detail_keyboard(item, len(dupes)),
@@ -157,7 +157,7 @@ async def inventory_upgrade_list_callback(update: Update, context: ContextTypes.
         for d in dupes
     ]
     rows.append([InlineKeyboardButton("◀️ بازگشت", callback_data=f"inv_pick:{item.id}")])
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         f"✨ کدوم نمونه رو مصرف کنم تا <b>{item.name}</b> +{item.level} ارتقا پیدا کنه؟",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(rows),
@@ -179,7 +179,7 @@ async def inventory_upgrade_do_callback(update: Update, context: ContextTypes.DE
         return
     _, dupes = await run_db(_item_detail_sync, update.effective_user, int(item_id))
     await query.answer("✨ ارتقا یافت!")
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         f"✨ {item.name} به <b>+{item.level}</b> ارتقا یافت!\n\n" + _item_line(item),
         parse_mode="HTML",
         reply_markup=_item_detail_keyboard(item, len(dupes)),

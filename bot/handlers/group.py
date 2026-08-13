@@ -10,7 +10,7 @@ from bio_lab.repository import (
     group_member_creatures,
     touch_membership,
 )
-from bot.utils import run_db
+from bot.utils import run_db, safe_edit_message_text
 from game import constants
 from game.combat import resolve_duel
 from game.creature import GameError, add_xp, apply_random_mutation
@@ -222,7 +222,7 @@ async def duel_wager_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             await query.answer("فقط طرف مقابل می‌تونه این دوئل رو رد کنه.", show_alert=True)
             return
         await query.answer()
-        await query.edit_message_text(f"{get_emoji('cancel')} پیشنهاد دوئل با شرط رد شد.", parse_mode="HTML")
+        await safe_edit_message_text(query, f"{get_emoji('cancel')} پیشنهاد دوئل با شرط رد شد.", parse_mode="HTML")
         return
 
     wager = int(rest[0])
@@ -239,7 +239,7 @@ async def duel_wager_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     if winner_levels:
         reward_text += f" {get_emoji('celebrate')} رسید به سطح {winner_creature.level}!"
     reward_text += _mission_lines(completed_missions)
-    await query.edit_message_text(log_text + reward_text, parse_mode="HTML")
+    await safe_edit_message_text(query, log_text + reward_text, parse_mode="HTML")
 
 
 def _give_sync(chat, sender_tg, receiver_tg, kind, amount_arg):

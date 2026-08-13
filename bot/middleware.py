@@ -4,7 +4,7 @@ from telegram.ext import ApplicationHandlerStop, ContextTypes, TypeHandler
 
 from bio_lab.models import User
 from bio_lab.repository import get_or_create_user
-from bot.utils import run_db
+from bot.utils import run_db, safe_edit_message_text
 from config import OWNER_TELEGRAM_ID
 from game.force_join import NOT_JOINED_STATUSES, active_channels, grant_reward_if_unclaimed
 
@@ -98,8 +98,10 @@ async def enforce_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if is_check_callback:
         await update.callback_query.answer("✅ عضویت تأیید شد!")
-        await update.callback_query.edit_message_text(
-            "✅ <b>عضویتت تأیید شد!</b> حالا دوباره از /start یا منو استفاده کن.", parse_mode="HTML"
+        await safe_edit_message_text(
+            update.callback_query,
+            "✅ <b>عضویتت تأیید شد!</b> حالا دوباره از /start یا منو استفاده کن.",
+            parse_mode="HTML",
         )
         raise ApplicationHandlerStop
 

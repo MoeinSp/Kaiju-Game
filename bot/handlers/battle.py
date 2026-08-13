@@ -4,7 +4,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import InteractiveBattle, User
 from bio_lab.repository import display_name, get_active_creature, get_or_create_group, get_or_create_user, touch_membership
-from bot.utils import run_db
+from bot.utils import run_db, safe_edit_message_text
 from game import constants
 from game.creature import GameError, add_xp, effective_stats
 from game.daily import check_missions, record_action
@@ -124,7 +124,7 @@ async def battle_accept_callback(update: Update, context: ContextTypes.DEFAULT_T
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         render_battle_card(battle), parse_mode="HTML", reply_markup=_battle_keyboard(battle)
     )
 
@@ -151,7 +151,7 @@ async def battle_decline_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
-    await query.edit_message_text(f"{get_emoji('cancel')} پیشنهاد نبرد زنده رد شد.", parse_mode="HTML")
+    await safe_edit_message_text(query, f"{get_emoji('cancel')} پیشنهاد نبرد زنده رد شد.", parse_mode="HTML")
 
 
 def _battle_action_sync(battle_id, actor_tg_id, action):
@@ -224,7 +224,7 @@ async def battle_action_callback(update: Update, context: ContextTypes.DEFAULT_T
     if reward_lines:
         card_text += "\n\n" + "\n".join(reward_lines)
     keyboard = None if finished else _battle_keyboard(battle)
-    await query.edit_message_text(card_text, parse_mode="HTML", reply_markup=keyboard)
+    await safe_edit_message_text(query, card_text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def register(application) -> None:

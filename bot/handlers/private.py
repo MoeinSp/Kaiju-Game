@@ -6,7 +6,7 @@ from bio_lab.repository import display_name, get_active_creature, get_or_create_
 from bot.handlers.inventory import inventory_cmd
 from bot.handlers.lootbox import biocrate_cmd
 from bot.handlers.owner import admin_cmd
-from bot.utils import run_db
+from bot.utils import run_db, safe_edit_message_text
 from config import OWNER_TELEGRAM_ID
 from game import constants
 from game.alliance import (
@@ -227,7 +227,7 @@ async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     user, creature, note, equipped_items = result
     await query.answer()
     is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         note + "\n\n" + creature_card_text(user, creature, equipped_items),
         parse_mode="HTML",
         reply_markup=creature_keyboard(is_owner),
@@ -289,7 +289,7 @@ async def collection_pick_callback(update: Update, context: ContextTypes.DEFAULT
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         creature_card_text(user, creature, equipped_items),
         parse_mode="HTML",
         reply_markup=_creature_detail_keyboard(creature.id, creature.is_active),
@@ -312,7 +312,7 @@ async def collection_select_callback(update: Update, context: ContextTypes.DEFAU
         return
     is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
     await query.answer("🟢 انتخاب شد!")
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         f"🟢 <b>{creature.name}</b> حالا موجود فعالته!\n\n" + creature_card_text(user, creature, equipped_items),
         parse_mode="HTML",
         reply_markup=creature_keyboard(is_owner),
@@ -394,7 +394,7 @@ async def fusion_pick_a_callback(update: Update, context: ContextTypes.DEFAULT_T
         for c in candidates
     ]
     rows.append([InlineKeyboardButton("◀️ بازگشت", callback_data=f"coll_pick:{parent_a_id}")])
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         f"{get_emoji('lab')} موجود دومی که می‌خوای بسوزونی رو انتخاب کن:",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(rows),
@@ -413,7 +413,7 @@ async def fusion_pick_b_callback(update: Update, context: ContextTypes.DEFAULT_T
             ]
         ]
     )
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         f"{get_emoji('warning')} مطمئنی؟\n\n"
         f"<blockquote>هر دو موجود <b>برای همیشه سوزانده می‌شن</b> و "
         f"{constants.FUSION_GOLD_COST} {get_emoji('coin')} هزینه می‌شه. یه شانس هم هست rarity ارتقا پیدا کنه "
@@ -436,7 +436,7 @@ async def fusion_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
     is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
     inherit_note = "\n🧬 یه تجهیزات از والدین به ارث رسید!" if inherited else ""
     await query.answer("🟢 فیوژن موفق بود!")
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         f"{get_emoji('lab')} <b>فیوژن موفق بود!</b> والدین سوزانده شدن و یه موجود جدید متولد شد:\n\n"
         f"<tg-spoiler>{constants.RARITY_LABELS[child.rarity]}{inherit_note}</tg-spoiler>\n\n"
         + creature_card_text(user, child, equipped_items)
@@ -613,14 +613,14 @@ async def alliance_create_callback(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     context.user_data[AWAITING_PLAYER_KEY] = {"action": "alliance_create"}
     await query.answer()
-    await query.edit_message_text(f"🟢 {get_emoji('alliance')} اسم اتحاد جدیدت رو بفرست:", parse_mode="HTML")
+    await safe_edit_message_text(query, f"🟢 {get_emoji('alliance')} اسم اتحاد جدیدت رو بفرست:", parse_mode="HTML")
 
 
 async def alliance_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     context.user_data[AWAITING_PLAYER_KEY] = {"action": "alliance_join"}
     await query.answer()
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         f"🔵 {get_emoji('alliance')} اسم اتحادی که می‌خوای بهش بپیوندی رو بفرست:", parse_mode="HTML"
     )
 
@@ -629,7 +629,7 @@ async def alliance_deposit_callback(update: Update, context: ContextTypes.DEFAUL
     query = update.callback_query
     context.user_data[AWAITING_PLAYER_KEY] = {"action": "alliance_deposit"}
     await query.answer()
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         f"💰 چند {get_emoji('coin')} طلا می‌خوای به خزانه واریز کنی؟ یه عدد بفرست:", parse_mode="HTML"
     )
 
@@ -640,14 +640,14 @@ async def alliance_top_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ بازگشت", callback_data="menu:alliance_info")]])
     if not ranked:
-        await query.edit_message_text("هنوز هیچ اتحادی ساخته نشده.", reply_markup=keyboard)
+        await safe_edit_message_text(query, "هنوز هیچ اتحادی ساخته نشده.", reply_markup=keyboard)
         return
     medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
     lines = [f"{get_emoji('trophy')} <b>برترین اتحادها</b>\n"]
     for i, r in enumerate(ranked, start=1):
         rank = medals[i - 1] if i <= 3 else f"{i}."
         lines.append(f"{rank} {r['alliance'].name} — قدرت {r['power']} ({r['member_count']} عضو)")
-    await query.edit_message_text("\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
+    await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
 
 async def alliance_leave_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -661,7 +661,7 @@ async def alliance_leave_callback(update: Update, context: ContextTypes.DEFAULT_
         ]
     )
     await query.answer()
-    await query.edit_message_text("مطمئنی می‌خوای از اتحادت خارج بشی؟", reply_markup=keyboard)
+    await safe_edit_message_text(query, "مطمئنی می‌خوای از اتحادت خارج بشی؟", reply_markup=keyboard)
 
 
 async def alliance_leave_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -672,7 +672,7 @@ async def alliance_leave_confirm_callback(update: Update, context: ContextTypes.
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("👋 خارج شدی.")
-    await query.edit_message_text("👋 از اتحاد خارج شدی.")
+    await safe_edit_message_text(query, "👋 از اتحاد خارج شدی.")
 
 
 def _heist_targets_sync(tg_user):
@@ -695,7 +695,7 @@ async def alliance_heist_list_callback(update: Update, context: ContextTypes.DEF
     await query.answer()
     rows = [[InlineKeyboardButton(f"🏴‍☠️ {a.name}", callback_data=f"heist_pick:{a.id}")] for a in targets]
     rows.append([InlineKeyboardButton("◀️ بازگشت", callback_data="menu:alliance_info")])
-    await query.edit_message_text(
+    await safe_edit_message_text(query,
         f"🏴‍☠️ کدوم اتحاد رو غارت کنم؟ ({int(constants.HEIST_STEAL_PERCENT * 100)}٪ خزانه در صورت برد)",
         reply_markup=InlineKeyboardMarkup(rows),
     )
@@ -737,7 +737,7 @@ async def heist_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         reveal = f"😔 نگهبان‌های <b>{target.name}</b> دفاع کردن و شبیخونت شکست خورد."
     lines.append(f"<tg-spoiler>{reveal}</tg-spoiler>")
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ بازگشت", callback_data="menu:alliance_info")]])
-    await query.edit_message_text("\n\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
+    await safe_edit_message_text(query, "\n\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
 
 async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
