@@ -29,6 +29,7 @@ class UserAdmin(admin.ModelAdmin):
         "id",
         "username",
         "first_name",
+        "lab_name",
         "coins",
         "dna_fragments",
         "diamonds",

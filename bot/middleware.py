@@ -6,6 +6,7 @@ from bio_lab.models import User
 from bio_lab.repository import get_or_create_user
 from bot.utils import run_db, safe_edit_message_text
 from config import OWNER_TELEGRAM_ID
+from game.emoji import get_emoji
 from game.force_join import NOT_JOINED_STATUSES, active_channels, grant_reward_if_unclaimed
 
 FORCE_JOIN_CHECK_CALLBACK = "forcejoin_check"
@@ -38,6 +39,28 @@ def _join_gate_keyboard(missing_channels) -> InlineKeyboardMarkup:
         rows.append([InlineKeyboardButton(label, url=url)])
     rows.append([InlineKeyboardButton("✅ بررسی مجدد عضویت", callback_data=FORCE_JOIN_CHECK_CALLBACK)])
     return InlineKeyboardMarkup(rows)
+
+
+def _reward_summary(channel) -> str:
+    """Human-readable one-time join reward for a channel, or '' if it has none."""
+    parts = []
+    if channel.reward_coins:
+        parts.append(f"{channel.reward_coins} {get_emoji('coin')}")
+    if channel.reward_dna:
+        parts.append(f"{channel.reward_dna} {get_emoji('dna')}")
+    if channel.reward_diamonds:
+        parts.append(f"{channel.reward_diamonds} {get_emoji('diamond')}")
+    return " + ".join(parts)
+
+
+def _join_gate_text(missing_channels) -> str:
+    lines = ["📡 <b>قبل از استفاده از بات باید عضو کانال(های) زیر بشی:</b>\n"]
+    for ch in missing_channels:
+        name = ch.title or (f"@{ch.username}" if ch.username else "کانال")
+        reward = _reward_summary(ch)
+        lines.append(f"• {name}" + (f" — 🎁 جایزه‌ی عضویت: {reward}" if reward else ""))
+    lines.append("\n<blockquote>بعد از عضویت، روی «بررسی مجدد عضویت» بزن تا جایزه‌ها رو بگیری.</blockquote>")
+    return "\n".join(lines)
 
 
 async def enforce_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -81,28 +104,27 @@ async def enforce_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await update.callback_query.answer("هنوز عضو همه‌ی کانال‌ها نشدی!", show_alert=True)
         elif update.effective_message is not None:
             await update.effective_message.reply_text(
-                "📡 <b>قبل از استفاده از بات باید عضو کانال(های) زیر بشی:</b>\n\n"
-                "<blockquote>بعد از عضویت، روی «بررسی مجدد عضویت» بزن.</blockquote>",
-                parse_mode="HTML",
-                reply_markup=_join_gate_keyboard(missing),
+                _join_gate_text(missing), parse_mode="HTML", reply_markup=_join_gate_keyboard(missing)
             )
         raise ApplicationHandlerStop
 
     just_passed = not (current_ids <= passed_ids)
     context.user_data["force_join_passed_ids"] = current_ids
 
+    granted = []
     if just_passed:
         db_user, _ = await run_db(get_or_create_user, user)
         for ch in channels:
-            await run_db(grant_reward_if_unclaimed, db_user, ch)
+            if await run_db(grant_reward_if_unclaimed, db_user, ch):
+                granted.append(ch)
 
     if is_check_callback:
         await update.callback_query.answer("✅ عضویت تأیید شد!")
-        await safe_edit_message_text(
-            update.callback_query,
-            "✅ <b>عضویتت تأیید شد!</b> حالا دوباره از /start یا منو استفاده کن.",
-            parse_mode="HTML",
-        )
+        text = "✅ <b>عضویتت تأیید شد!</b> حالا دوباره از /start یا منو استفاده کن."
+        if granted:
+            reward_lines = "\n".join(f"🎁 {_reward_summary(ch)}" for ch in granted)
+            text += f"\n\n<b>جایزه‌ی عضویت گرفتی:</b>\n{reward_lines}"
+        await safe_edit_message_text(update.callback_query, text, parse_mode="HTML")
         raise ApplicationHandlerStop
 
 

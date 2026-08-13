@@ -19,6 +19,7 @@ from game.force_join import (
     set_reward,
 )
 from game.moderation import (
+    charge_user,
     deduct_resource,
     delete_creature,
     get_creature_or_raise,
@@ -364,6 +365,7 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
                 InlineKeyboardButton("🟠 کسر DNA", callback_data=f"admin_deduct:{target_id}:dna"),
                 InlineKeyboardButton("🟠 کسر الماس", callback_data=f"admin_deduct:{target_id}:diamonds"),
             ],
+            [InlineKeyboardButton("⚡ شارژ کامل (طلا+DNA+الماس)", callback_data=f"admin_charge:{target_id}")],
             [ban_button],
             [InlineKeyboardButton("◀️ بازگشت به پنل ادمین", callback_data="admin_menu:admin_home")],
         ]
@@ -391,12 +393,37 @@ async def user_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     )
 
 
+async def charge_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """One-shot multi-resource top-up: /charge <user> <gold> <dna> <diamonds>.
+    The advertised path is the admin panel's «⚡ شارژ کامل» button."""
+    if not _is_owner(update):
+        return
+    if len(context.args) != 4 or not all(_is_signed_int(a) for a in context.args[1:]):
+        await update.effective_message.reply_text(
+            "استفاده: <code>/charge آیدی_یا_یوزرنیم طلا DNA الماس</code>\n"
+            "مثلاً: <code>/charge @someone 1000 50 20</code> (عدد منفی هم برای کسر قبوله)",
+            parse_mode="HTML",
+        )
+        return
+    identifier, coins, dna, diamonds = context.args
+    try:
+        user, new_values = await run_db(charge_user, identifier, int(coins), int(dna), int(diamonds))
+    except GameError as exc:
+        await update.effective_message.reply_text(str(exc))
+        return
+    await update.effective_message.reply_text(
+        f"{get_emoji('confirm')} <b>{display_name(user)}</b> شارژ شد!\n\n" + _charge_summary(new_values),
+        parse_mode="HTML",
+        reply_markup=_user_manage_keyboard(user.id, user.is_banned),
+    )
+
+
 async def grant_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_owner(update):
         return
     if len(context.args) != 3 or not context.args[2].isdigit():
         await update.effective_message.reply_text(
-            "استفاده: <code>/grant آیدی_یا_یوزرنیم coins/dna مقدار</code>", parse_mode="HTML"
+            "استفاده: <code>/grant آیدی_یا_یوزرنیم coins/dna/diamonds مقدار</code>", parse_mode="HTML"
         )
         return
     identifier, resource, amount_str = context.args
@@ -573,11 +600,14 @@ AWAITING_FORCE_JOIN_KEY = "awaiting_force_join"
 
 def _channel_card(channel) -> str:
     limit = "♾ نامحدود" if channel.expires_at is None else f"⏳ تا {channel.expires_at.strftime('%Y-%m-%d %H:%M')}"
-    reward = (
-        f"🎁 {channel.reward_coins} {get_emoji('coin')} + {channel.reward_dna} {get_emoji('dna')}"
-        if (channel.reward_coins or channel.reward_dna)
-        else "🎁 بدون جایزه"
-    )
+    reward_parts = []
+    if channel.reward_coins:
+        reward_parts.append(f"{channel.reward_coins} {get_emoji('coin')}")
+    if channel.reward_dna:
+        reward_parts.append(f"{channel.reward_dna} {get_emoji('dna')}")
+    if channel.reward_diamonds:
+        reward_parts.append(f"{channel.reward_diamonds} {get_emoji('diamond')}")
+    reward = f"🎁 {' + '.join(reward_parts)}" if reward_parts else "🎁 بدون جایزه"
     handle = f"@{channel.username}" if channel.username else str(channel.chat_id)
     return (
         f"📡 <b>{channel.title or handle}</b> ({handle})\n{limit}\n{reward}\n\n"
@@ -687,8 +717,8 @@ async def force_join_reward_callback(update: Update, context: ContextTypes.DEFAU
     context.user_data[AWAITING_FORCE_JOIN_KEY] = {"action": "set_reward", "channel_id": channel_id}
     await query.answer()
     await safe_edit_message_text(query,
-        f"🎁 دو عدد بفرست، با فاصله: مقدار {get_emoji('coin')} طلا و مقدار {get_emoji('dna')} DNA "
-        "(مثلاً <code>50 5</code> — برای بدون جایزه بنویس <code>0 0</code>).",
+        f"🎁 سه عدد بفرست با فاصله: {get_emoji('coin')} طلا، {get_emoji('dna')} DNA، {get_emoji('diamond')} الماس\n"
+        "(مثلاً <code>50 5 2</code> — برای بدون جایزه بنویس <code>0 0 0</code>).",
         parse_mode="HTML",
     )
 
@@ -772,13 +802,17 @@ async def capture_force_join_reply(update: Update, context: ContextTypes.DEFAULT
     if action == "set_reward":
         channel_id = awaiting["channel_id"]
         parts = (message.text or "").split()
-        if len(parts) != 2 or not all(p.isdigit() for p in parts):
+        # accept 2 numbers too, so the old "gold DNA" muscle memory still works
+        if len(parts) not in (2, 3) or not all(p.isdigit() for p in parts):
             context.user_data[AWAITING_FORCE_JOIN_KEY] = awaiting
-            await message.reply_text("⚠️ دو عدد با فاصله بفرست، مثلاً: <code>50 5</code>", parse_mode="HTML")
+            await message.reply_text(
+                "⚠️ سه عدد با فاصله بفرست، مثلاً: <code>50 5 2</code>", parse_mode="HTML"
+            )
             return
         coins, dna = int(parts[0]), int(parts[1])
+        diamonds = int(parts[2]) if len(parts) == 3 else 0
         try:
-            channel = await run_db(set_reward, channel_id, coins, dna)
+            channel = await run_db(set_reward, channel_id, coins, dna, diamonds)
         except GameError as exc:
             await message.reply_text(str(exc))
             return
@@ -813,6 +847,18 @@ async def broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 _RESOURCE_LABELS = {"coins": "طلا", "dna": "DNA", "diamonds": "الماس"}
+_RESOURCE_EMOJI_KEYS = {"coins": "coin", "dna": "dna", "diamonds": "diamond"}
+
+
+def _is_signed_int(value: str) -> bool:
+    return value.lstrip("-").isdigit()
+
+
+def _charge_summary(new_values: dict) -> str:
+    return "\n".join(
+        f"{get_emoji(_RESOURCE_EMOJI_KEYS[res])} {_RESOURCE_LABELS[res]}: <b>{value}</b>"
+        for res, value in new_values.items()
+    )
 
 
 async def admin_grant_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -837,6 +883,22 @@ async def admin_deduct_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
     label = _RESOURCE_LABELS[resource]
     await safe_edit_message_text(query, f"🟠 چقدر {label} کسر کنم؟ یه عدد مثبت بفرست:", parse_mode="HTML")
+
+
+async def admin_charge_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    target_id = query.data.split(":")[1]
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "charge", "target_id": target_id}
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        f"⚡ سه عدد با فاصله بفرست: {get_emoji('coin')} طلا، {get_emoji('dna')} DNA، {get_emoji('diamond')} الماس\n"
+        "(مثلاً <code>1000 50 20</code> — عدد منفی هم قبوله برای کسر کردن، مثل <code>-500 0 0</code>)",
+        parse_mode="HTML",
+    )
 
 
 async def admin_ban_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -917,6 +979,26 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
+    if action == "charge":
+        parts = text.split()
+        if len(parts) != 3 or not all(_is_signed_int(p) for p in parts):
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text("⚠️ سه عدد با فاصله بفرست، مثلاً: <code>1000 50 20</code>", parse_mode="HTML")
+            return
+        coins, dna, diamonds = (int(p) for p in parts)
+        try:
+            user, new_values = await run_db(charge_user, awaiting["target_id"], coins, dna, diamonds)
+        except GameError as exc:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text(str(exc))
+            return
+        await message.reply_text(
+            f"{get_emoji('confirm')} <b>{display_name(user)}</b> شارژ شد!\n\n" + _charge_summary(new_values),
+            parse_mode="HTML",
+            reply_markup=_user_manage_keyboard(user.id, user.is_banned),
+        )
+        return
+
     if action == "delete_creature":
         if not text.isdigit():
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
@@ -993,6 +1075,7 @@ def register(application) -> None:
     application.add_handler(CommandHandler("broadcast", broadcast_cmd, private_only))
     application.add_handler(CommandHandler("user_info", user_info_cmd, private_only))
     application.add_handler(CommandHandler("grant", grant_cmd, private_only))
+    application.add_handler(CommandHandler("charge", charge_cmd, private_only))
     application.add_handler(CommandHandler("deduct", deduct_cmd, private_only))
     application.add_handler(CommandHandler("ban", ban_cmd, private_only))
     application.add_handler(CommandHandler("unban", unban_cmd, private_only))
@@ -1020,5 +1103,6 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(force_join_remove_callback, pattern=r"^fj_rm:"))
     application.add_handler(CallbackQueryHandler(admin_grant_callback, pattern=r"^admin_grant:"))
     application.add_handler(CallbackQueryHandler(admin_deduct_callback, pattern=r"^admin_deduct:"))
+    application.add_handler(CallbackQueryHandler(admin_charge_callback, pattern=r"^admin_charge:"))
     application.add_handler(CallbackQueryHandler(admin_unban_callback, pattern=r"^admin_unban:"))
     application.add_handler(CallbackQueryHandler(admin_ban_callback, pattern=r"^admin_ban:"))

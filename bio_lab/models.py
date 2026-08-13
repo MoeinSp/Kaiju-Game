@@ -9,6 +9,7 @@ class User(models.Model):
     id = models.BigIntegerField(primary_key=True)  # telegram user id
     username = models.CharField(max_length=64, null=True, blank=True)
     first_name = models.CharField(max_length=128, null=True, blank=True)
+    lab_name = models.CharField(max_length=32, null=True, blank=True)  # set once, at first /start
     coins = models.IntegerField(default=200)
     dna_fragments = models.IntegerField(default=0)
     diamonds = models.IntegerField(default=0)  # premium currency: diamond collector, daily wheel, diamond boxes
@@ -276,6 +277,7 @@ class RequiredChannel(models.Model):
     invite_link = models.CharField(max_length=256, null=True, blank=True)
     reward_coins = models.IntegerField(default=0)
     reward_dna = models.IntegerField(default=0)
+    reward_diamonds = models.IntegerField(default=0)
     expires_at = models.DateTimeField(null=True, blank=True)  # null = permanent
     created_at = models.DateTimeField(auto_now_add=True)
 
