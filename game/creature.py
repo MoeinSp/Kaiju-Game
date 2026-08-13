@@ -58,7 +58,7 @@ def feed(session: Session, user: User, creature: Creature) -> int:
 
 
 def train(session: Session, creature: Creature) -> int:
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.utcnow()
     if creature.last_trained_at is not None:
         elapsed = now - creature.last_trained_at
         cooldown = datetime.timedelta(hours=constants.TRAIN_COOLDOWN_HOURS)

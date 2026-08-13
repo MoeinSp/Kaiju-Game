@@ -60,6 +60,24 @@ STARTER_BASE_SPD = 10
 
 SPLICE_DNA_COST = 30
 
+DUEL_WIN_COINS = 30
+DUEL_WIN_XP = 20
+DUEL_LOSE_XP = 5
+
+# daily action caps — prevents infinite grinding of actions with no natural cooldown
+ENERGY_CAPS = {
+    "feed": 8,
+    "raid_attack": 12,
+}
+
+# key -> {action, target, label, coins, dna}
+MISSION_DEFS = {
+    "feed_3": {"action": "feed", "target": 3, "label": "۳ بار تغذیه کن", "coins": 40, "dna": 0},
+    "train_1": {"action": "train", "target": 1, "label": "۱ بار تمرین کن", "coins": 30, "dna": 0},
+    "duel_win_1": {"action": "duel_win", "target": 1, "label": "۱ دوئل ببر", "coins": 50, "dna": 5},
+    "raid_attack_2": {"action": "raid_attack", "target": 2, "label": "۲ بار به رید حمله کن", "coins": 40, "dna": 5},
+}
+
 STARTING_COINS = 200
 
 FEED_COST_COINS = 20

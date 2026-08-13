@@ -3,9 +3,12 @@ from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes, filters
 
 from db.models import Creature, DuelLog
-from db.repository import get_active_creature, get_or_create_group, get_or_create_user
+from db.repository import display_name, get_active_creature, get_or_create_group, get_or_create_user
 from db.session import get_session
+from game import constants
 from game.combat import resolve_duel
+from game.creature import GameError, add_xp
+from game.daily import assert_energy_available, check_missions, record_action
 from game.raid import RaidError, attack_boss, distribute_rewards, get_active_boss, spawn_boss
 
 
@@ -37,7 +40,15 @@ async def duel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
         winner_creature, log_text = resolve_duel(challenger_creature, opponent_creature)
-        winner_user = challenger_user if winner_creature.id == challenger_creature.id else opponent_user
+        is_challenger_winner = winner_creature.id == challenger_creature.id
+        winner_user = challenger_user if is_challenger_winner else opponent_user
+        loser_creature = opponent_creature if is_challenger_winner else challenger_creature
+
+        winner_user.coins += constants.DUEL_WIN_COINS
+        winner_levels = add_xp(winner_creature, constants.DUEL_WIN_XP)
+        add_xp(loser_creature, constants.DUEL_LOSE_XP)
+        record_action(session, winner_user, "duel_win")
+        completed_missions = check_missions(session, winner_user, "duel_win")
 
         session.add(
             DuelLog(
@@ -50,7 +61,14 @@ async def duel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         session.commit()
 
-        await update.message.reply_text(log_text)
+        reward_text = f"\n\n💰 {winner_creature.name} +{constants.DUEL_WIN_COINS} سکه, +{constants.DUEL_WIN_XP} XP"
+        if winner_levels:
+            reward_text += f" 🎉 سطح {winner_creature.level} شد!"
+        for m in completed_missions:
+            reward_text += f"\n🎯 ماموریت «{m['label']}» کامل شد! +{m['coins']} سکه" + (
+                f", +{m['dna']} DNA" if m["dna"] else ""
+            )
+        await update.message.reply_text(log_text + reward_text, parse_mode="HTML")
     finally:
         session.close()
 
@@ -90,19 +108,27 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
         try:
+            assert_energy_available(session, user, "raid_attack")
             dmg, defeated = attack_boss(session, user, creature, boss)
-        except RaidError as exc:
+        except (RaidError, GameError) as exc:
             await update.message.reply_text(str(exc))
             return
 
+        record_action(session, user, "raid_attack")
+        completed_missions = check_missions(session, user, "raid_attack")
+
         text = f"{creature.name} به {boss.name} {dmg} دمیج زد! ({max(boss.current_hp, 0)}/{boss.max_hp} HP)"
+        for m in completed_missions:
+            text += f"\n🎯 ماموریت «{m['label']}» کامل شد! +{m['coins']} سکه" + (
+                f", +{m['dna']} DNA" if m["dna"] else ""
+            )
         if defeated:
             rewards = distribute_rewards(session, boss)
             reward_lines = []
             for uid, r in sorted(rewards.items(), key=lambda kv: kv[1]["damage"], reverse=True):
                 member = session.get(type(user), uid)
-                name = member.username or str(uid)
-                reward_lines.append(f"@{name}: {r['dna']} DNA, {r['coins']} سکه (دمیج: {r['damage']})")
+                name = display_name(member) if member else str(uid)
+                reward_lines.append(f"{name}: {r['dna']} DNA, {r['coins']} سکه (دمیج: {r['damage']})")
             text += "\n\n🎉 هیولا شکست خورد! غنایم:\n" + "\n".join(reward_lines)
 
         await update.message.reply_text(text)

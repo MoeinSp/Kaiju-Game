@@ -48,7 +48,7 @@ def attack_boss(session: Session, user: User, creature: Creature, boss: RaidBoss
     ).scalars().first()
 
     if last_hit is not None:
-        elapsed = datetime.datetime.now(datetime.timezone.utc) - last_hit.created_at
+        elapsed = datetime.datetime.utcnow() - last_hit.created_at
         if elapsed < datetime.timedelta(seconds=ATTACK_COOLDOWN_SECONDS):
             remaining = ATTACK_COOLDOWN_SECONDS - int(elapsed.total_seconds())
             raise RaidError(f"هیولات نفس‌نفس می‌زنه، {remaining} ثانیه دیگه دوباره حمله کن.")

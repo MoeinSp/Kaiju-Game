@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -9,7 +9,9 @@ class Base(DeclarativeBase):
 
 
 def utcnow() -> datetime.datetime:
-    return datetime.datetime.now(datetime.timezone.utc)
+    # naive UTC on purpose: SQLite drops tzinfo on round-trip, so mixing
+    # aware/naive datetimes here would raise on comparison after a reload.
+    return datetime.datetime.utcnow()
 
 
 class User(Base):
@@ -17,9 +19,10 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)  # telegram user id
     username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    first_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     coins: Mapped[int] = mapped_column(Integer, default=200)
     dna_fragments: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow)
 
     creatures: Mapped[list["Creature"]] = relationship(back_populates="owner")
 
@@ -46,8 +49,8 @@ class Creature(Base):
     poison_lvl: Mapped[int] = mapped_column(Integer, default=0)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    last_trained_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow)
+    last_trained_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
 
     owner: Mapped["User"] = relationship(back_populates="creatures")
 
@@ -57,7 +60,7 @@ class Group(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)  # telegram chat id
     title: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class RaidBoss(Base):
@@ -70,7 +73,7 @@ class RaidBoss(Base):
     max_hp: Mapped[int] = mapped_column(Integer)
     current_hp: Mapped[int] = mapped_column(Integer)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    spawned_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    spawned_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class RaidDamageLog(Base):
@@ -81,7 +84,29 @@ class RaidDamageLog(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     creature_id: Mapped[int] = mapped_column(ForeignKey("creatures.id"))
     damage: Mapped[int] = mapped_column(Integer)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class DailyActionLog(Base):
+    __tablename__ = "daily_action_logs"
+    __table_args__ = (UniqueConstraint("user_id", "action", "day", name="uq_daily_action"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    action: Mapped[str] = mapped_column(String(32))
+    day: Mapped[str] = mapped_column(String(10))  # "YYYY-MM-DD" (UTC)
+    count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class MissionClaim(Base):
+    __tablename__ = "mission_claims"
+    __table_args__ = (UniqueConstraint("user_id", "mission_key", "day", name="uq_mission_claim"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    mission_key: Mapped[str] = mapped_column(String(32))
+    day: Mapped[str] = mapped_column(String(10))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class DuelLog(Base):
@@ -93,4 +118,4 @@ class DuelLog(Base):
     opponent_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     winner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     log_text: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow)

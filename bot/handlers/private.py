@@ -15,6 +15,7 @@ from game.creature import (
     train,
     upgrade_part,
 )
+from game.daily import assert_energy_available, check_missions, mission_status, record_action
 from game.splice import splice
 
 
@@ -105,12 +106,18 @@ async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             return
 
         action = query.data
+        completed_missions: list[dict] = []
         try:
             if action == "feed":
+                assert_energy_available(session, user, "feed")
                 levels = feed(session, user, creature)
-                note = f"🍖 تغذیه شد!" + (f" 🎉 سطح {creature.level} شد!" if levels else "")
+                record_action(session, user, "feed")
+                completed_missions = check_missions(session, user, "feed")
+                note = "🍖 تغذیه شد!" + (f" 🎉 سطح {creature.level} شد!" if levels else "")
             elif action == "train":
                 levels = train(session, creature)
+                record_action(session, user, "train")
+                completed_missions = check_missions(session, user, "train")
                 note = "🏋️ تمرین کرد!" + (f" 🎉 سطح {creature.level} شد!" if levels else "")
             elif action.startswith("upgrade:"):
                 part = action.split(":", 1)[1]
@@ -121,6 +128,11 @@ async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         except GameError as exc:
             await query.answer(str(exc), show_alert=True)
             return
+
+        for m in completed_missions:
+            note += f"\n🎯 ماموریت «{m['label']}» کامل شد! +{m['coins']} سکه" + (
+                f", +{m['dna']} DNA" if m["dna"] else ""
+            )
 
         await query.edit_message_text(
             note + "\n\n" + creature_card_text(user, creature),
@@ -207,9 +219,24 @@ async def splice_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         session.close()
 
 
+async def missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    session = get_session()
+    try:
+        user, _ = get_or_create_user(session, update.effective_user)
+        lines = ["🎯 <b>ماموریت‌های امروز:</b>"]
+        for m in mission_status(session, user):
+            check = "✅" if m["done"] else f"({m['progress']}/{m['target']})"
+            reward = f"+{m['coins']} سکه" + (f", +{m['dna']} DNA" if m["dna"] else "")
+            lines.append(f"{check} {m['label']} — {reward}")
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    finally:
+        session.close()
+
+
 def register(application) -> None:
     application.add_handler(CommandHandler("start", start, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("me", me, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("collection", collection, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("select", select, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("splice", splice_cmd, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("missions", missions, filters.ChatType.PRIVATE))
