@@ -11,23 +11,43 @@ class GameError(Exception):
     """Raised for expected game-rule violations (not enough coins, cooldown, etc.)."""
 
 
-def effective_stats(creature: Creature) -> dict[str, int]:
+def effective_stats(creature: Creature, equipped_items: list | None = None) -> dict[str, float]:
+    """`equipped_items` must be pre-fetched by the caller (e.g. via
+    game.equipment.get_equipped_items) — this function never queries the DB itself,
+    so it stays safe to call from async Telegram-handler code as long as callers
+    that need equipment bonuses fetch the list beforehand in sync context."""
+    from game.equipment import creature_equipment_bonus
+
+    bonus = creature_equipment_bonus(equipped_items) if equipped_items else {}
     return {
-        "hp": creature.base_hp,
-        "atk": creature.base_atk + creature.fangs_lvl * constants.BODY_PARTS["fangs"]["bonus"],
-        "def": creature.base_def + creature.armor_lvl * constants.BODY_PARTS["armor"]["bonus"],
-        "spd": creature.base_spd + creature.wings_lvl * constants.BODY_PARTS["wings"]["bonus"],
-        "poison": creature.poison_lvl * constants.BODY_PARTS["poison"]["bonus"],
+        "hp": creature.base_hp + round(bonus.get("hp", 0)),
+        "atk": creature.base_atk
+        + creature.fangs_lvl * constants.BODY_PARTS["fangs"]["bonus"]
+        + round(bonus.get("atk", 0)),
+        "def": creature.base_def
+        + creature.armor_lvl * constants.BODY_PARTS["armor"]["bonus"]
+        + round(bonus.get("def", 0)),
+        "spd": creature.base_spd
+        + creature.wings_lvl * constants.BODY_PARTS["wings"]["bonus"]
+        + round(bonus.get("spd", 0)),
+        "poison": creature.poison_lvl * constants.BODY_PARTS["poison"]["bonus"] + round(bonus.get("poison", 0)),
+        "crit_rate": constants.BASE_CRIT_CHANCE + bonus.get("crit_rate", 0),
+        "lifesteal": constants.BASE_LIFESTEAL + bonus.get("lifesteal", 0),
     }
 
 
 def create_starter_creature(owner: User) -> Creature:
     element = constants.random_element()
-    return Creature.objects.create(
+    creature = Creature.objects.create(
         owner=owner,
         name=constants.random_species_name(element),
         element=element,
     )
+    # self-healing: callers only reach here when get_active_creature() found no
+    # active row, but if that's because of a stale multi-active state rather than
+    # zero creatures, this keeps the invariant (exactly one is_active=True per owner)
+    Creature.objects.filter(owner=owner).exclude(id=creature.id).update(is_active=False)
+    return creature
 
 
 def add_xp(creature: Creature, amount: int) -> int:
@@ -47,7 +67,7 @@ def add_xp(creature: Creature, amount: int) -> int:
 
 def feed(user: User, creature: Creature) -> int:
     if user.coins < constants.FEED_COST_COINS:
-        raise GameError(f"سکه کافی نداری! هزینه تغذیه {constants.FEED_COST_COINS} سکه است.")
+        raise GameError(f"طلا کافی نداری! هزینه تغذیه {constants.FEED_COST_COINS} طلا است.")
     user.coins -= constants.FEED_COST_COINS
     levels_gained = add_xp(creature, constants.FEED_XP_GAIN)
     user.save(update_fields=["coins"])
@@ -106,7 +126,7 @@ def upgrade_part(user: User, creature: Creature, part: str) -> int:
     current_level = getattr(creature, f"{part}_lvl")
     cost = constants.upgrade_cost(current_level)
     if user.coins < cost:
-        raise GameError(f"سکه کافی نداری! ارتقای این عضو {cost} سکه هزینه داره.")
+        raise GameError(f"طلا کافی نداری! ارتقای این عضو {cost} طلا هزینه داره.")
     user.coins -= cost
     setattr(creature, f"{part}_lvl", current_level + 1)
     user.save(update_fields=["coins"])

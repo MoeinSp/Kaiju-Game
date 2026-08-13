@@ -6,6 +6,7 @@ from django.utils import timezone
 from bio_lab.models import Creature, RaidBoss, RaidDamageLog, User
 from game import constants
 from game.creature import effective_stats
+from game.equipment import get_equipped_items
 
 BOSS_NAMES = ["Kaiju Prime", "Terravore", "Voltiathan", "Abyssal Warden"]
 BOSS_MAX_HP = 800
@@ -45,7 +46,7 @@ def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bo
             remaining = ATTACK_COOLDOWN_SECONDS - int(elapsed.total_seconds())
             raise RaidError(f"هیولات نفس‌نفس می‌زنه، {remaining} ثانیه دیگه دوباره حمله کن.")
 
-    stats = effective_stats(creature)
+    stats = effective_stats(creature, get_equipped_items(creature))
     mult = constants.element_multiplier(creature.element, boss.element)
     base = max(1.0, stats["atk"] - BOSS_DEF * 0.5)
     dmg = round(base * mult * random.uniform(0.85, 1.15)) + stats["poison"]

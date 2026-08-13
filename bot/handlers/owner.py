@@ -272,10 +272,10 @@ async def report_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         f"{get_emoji('stats')} <b>گزارش پیشرفت</b>\n",
         f"{get_emoji('users')} کاربران: {data['users']}   {get_emoji('creature')} موجودات: {data['creatures']}"
         f"   {get_emoji('alliance')} اتحادها: {data['alliances']}\n",
-        f"{get_emoji('coin')} <b>برترین بازیکن‌ها (سکه):</b>",
+        f"{get_emoji('coin')} <b>برترین بازیکن‌ها (طلا):</b>",
     ]
     for p in data["top_players"]:
-        lines.append(f"• {p['name']} — {p['coins']} سکه")
+        lines.append(f"• {p['name']} — {p['coins']} طلا")
 
     lines.append(f"\n{get_emoji('creature')} <b>قوی‌ترین موجودات (سطح):</b>")
     for c in data["top_creatures"]:

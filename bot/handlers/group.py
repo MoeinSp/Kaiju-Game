@@ -1,5 +1,5 @@
-from telegram import Update
-from telegram.ext import CommandHandler, ContextTypes, filters
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bio_lab.models import Creature, DuelLog, User
 from bio_lab.repository import (
@@ -73,10 +73,28 @@ def _duel_sync(chat, challenger_tg, opponent_tg):
     return winner_creature, winner_levels, completed_missions, log_text
 
 
+def _duel_wager_challenge_sync(chat, challenger_tg, opponent_tg):
+    """Validates both sides can actually duel (used before showing the accept/decline
+    prompt for a wagered duel) without resolving combat or moving any gold yet."""
+    group = get_or_create_group(chat)
+    challenger_user, _ = get_or_create_user(challenger_tg)
+    opponent_user, _ = get_or_create_user(opponent_tg)
+    touch_membership(group, challenger_user)
+    touch_membership(group, opponent_user)
+
+    if get_active_creature(challenger_user) is None:
+        raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
+    if get_active_creature(opponent_user) is None:
+        raise GameError(f"{opponent_tg.first_name} هنوز موجودی نداره (باید /start بزنه).")
+    return challenger_user, opponent_user
+
+
 async def duel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message.reply_to_message is None:
         await update.message.reply_text(
-            f"{get_emoji('battle')} برای دوئل، روی پیام حریف ریپلای کن و بنویس /duel", parse_mode="HTML"
+            f"{get_emoji('battle')} برای دوئل، روی پیام حریف ریپلای کن و بنویس /duel\n"
+            f"برای دوئل با شرط طلا: <code>/duel 50</code> (حداکثر {constants.DUEL_WAGER_MAX})",
+            parse_mode="HTML",
         )
         return
 
@@ -86,22 +104,142 @@ async def duel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("🙅 نمی‌تونی با خودت یا با یه بات دوئل کنی!")
         return
 
+    wager = 0
+    if context.args:
+        if not context.args[0].isdigit() or int(context.args[0]) <= 0:
+            await update.message.reply_text(
+                f"مقدار شرط باید عدد مثبت باشه (حداکثر {constants.DUEL_WAGER_MAX}). مثلاً: <code>/duel 50</code>",
+                parse_mode="HTML",
+            )
+            return
+        wager = int(context.args[0])
+        if wager > constants.DUEL_WAGER_MAX:
+            await update.message.reply_text(f"حداکثر شرط مجاز {constants.DUEL_WAGER_MAX} طلاست.")
+            return
+
+    if wager == 0:
+        try:
+            winner_creature, winner_levels, completed_missions, log_text = await run_db(
+                _duel_sync, update.effective_chat, challenger_tg, opponent_tg
+            )
+        except GameError as exc:
+            await update.message.reply_text(str(exc))
+            return
+
+        reward_text = (
+            f"\n\n{get_emoji('coin')} {winner_creature.name} +{constants.DUEL_WIN_COINS} طلا · "
+            f"+{constants.DUEL_WIN_XP} XP"
+        )
+        if winner_levels:
+            reward_text += f" {get_emoji('celebrate')} رسید به سطح {winner_creature.level}!"
+        reward_text += _mission_lines(completed_missions)
+        await update.message.reply_text(log_text + reward_text, parse_mode="HTML")
+        return
+
     try:
-        winner_creature, winner_levels, completed_missions, log_text = await run_db(
-            _duel_sync, update.effective_chat, challenger_tg, opponent_tg
+        challenger_user, opponent_user = await run_db(
+            _duel_wager_challenge_sync, update.effective_chat, challenger_tg, opponent_tg
         )
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
 
-    reward_text = (
-        f"\n\n{get_emoji('coin')} {winner_creature.name} +{constants.DUEL_WIN_COINS} سکه · "
-        f"+{constants.DUEL_WIN_XP} XP"
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "✅ قبول می‌کنم", callback_data=f"duelwager_accept:{challenger_tg.id}:{opponent_tg.id}:{wager}"
+                ),
+                InlineKeyboardButton(
+                    "❌ رد می‌کنم", callback_data=f"duelwager_decline:{challenger_tg.id}:{opponent_tg.id}"
+                ),
+            ]
+        ]
     )
+    await update.message.reply_text(
+        f"{get_emoji('coin')} <b>{display_name(challenger_user)}</b> با شرط <b>{wager} طلا</b> به "
+        f"<b>{display_name(opponent_user)}</b> پیشنهاد دوئل داد! برنده هر دو شرط رو می‌بره.\n"
+        "قبول می‌کنی؟ 👇",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+def _duel_wager_resolve_sync(chat, challenger_id, opponent_id, wager, acceptor_id):
+    if acceptor_id != opponent_id:
+        raise GameError("فقط طرف مقابل می‌تونه این دوئل رو قبول یا رد کنه.")
+
+    group = get_or_create_group(chat)
+    try:
+        challenger_user = User.objects.get(id=challenger_id)
+        opponent_user = User.objects.get(id=opponent_id)
+    except User.DoesNotExist:
+        raise GameError("یکی از بازیکن‌ها دیگه پیدا نشد.")
+
+    challenger_creature = get_active_creature(challenger_user)
+    opponent_creature = get_active_creature(opponent_user)
+    if challenger_creature is None or opponent_creature is None:
+        raise GameError("یکی از دو نفر دیگه موجود فعال نداره.")
+    if challenger_user.coins < wager or opponent_user.coins < wager:
+        raise GameError(f"یکی از دو نفر دیگه {wager} طلا نداره، دوئل لغو شد.")
+
+    winner_creature, log_text = resolve_duel(challenger_creature, opponent_creature)
+    is_challenger_winner = winner_creature.id == challenger_creature.id
+    winner_user = challenger_user if is_challenger_winner else opponent_user
+    loser_user = opponent_user if is_challenger_winner else challenger_user
+    loser_creature = opponent_creature if is_challenger_winner else challenger_creature
+
+    winner_user.coins += wager
+    loser_user.coins -= wager
+    winner_levels = add_xp(winner_creature, constants.DUEL_WIN_XP)
+    add_xp(loser_creature, constants.DUEL_LOSE_XP)
+    winner_user.save(update_fields=["coins"])
+    loser_user.save(update_fields=["coins"])
+    winner_creature.save()
+    loser_creature.save()
+
+    record_action(winner_user, "duel_win")
+    completed_missions = check_missions(winner_user, "duel_win")
+
+    DuelLog.objects.create(
+        group_id=group.id,
+        challenger_id=challenger_user.id,
+        opponent_id=opponent_user.id,
+        winner_id=winner_user.id,
+        wager_gold=wager,
+        log_text=log_text,
+    )
+    return winner_creature, winner_levels, completed_missions, log_text
+
+
+async def duel_wager_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    action, challenger_id_str, opponent_id_str, *rest = query.data.split(":")
+    challenger_id, opponent_id = int(challenger_id_str), int(opponent_id_str)
+
+    if action == "duelwager_decline":
+        if update.effective_user.id != opponent_id:
+            await query.answer("فقط طرف مقابل می‌تونه این دوئل رو رد کنه.", show_alert=True)
+            return
+        await query.answer()
+        await query.edit_message_text(f"{get_emoji('cancel')} پیشنهاد دوئل با شرط رد شد.", parse_mode="HTML")
+        return
+
+    wager = int(rest[0])
+    try:
+        winner_creature, winner_levels, completed_missions, log_text = await run_db(
+            _duel_wager_resolve_sync, update.effective_chat, challenger_id, opponent_id, wager, update.effective_user.id
+        )
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+
+    await query.answer()
+    reward_text = f"\n\n{get_emoji('coin')} {winner_creature.name} +{wager} طلا (شرط) · +{constants.DUEL_WIN_XP} XP"
     if winner_levels:
         reward_text += f" {get_emoji('celebrate')} رسید به سطح {winner_creature.level}!"
     reward_text += _mission_lines(completed_missions)
-    await update.message.reply_text(log_text + reward_text, parse_mode="HTML")
+    await query.edit_message_text(log_text + reward_text, parse_mode="HTML")
 
 
 def _give_sync(chat, sender_tg, receiver_tg, kind, amount_arg):
@@ -135,7 +273,7 @@ def _give_sync(chat, sender_tg, receiver_tg, kind, amount_arg):
 async def give(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     usage = (
         f"{get_emoji('gift')} استفاده درست: روی پیام طرف مقابل ریپلای کن و بنویس /give به‌همراه نوع و مقدار\n"
-        "<code>/give coins 50</code> · <code>/give dna 10</code> · <code>/give creature 7</code> "
+        "<code>/give gold 50</code> · <code>/give dna 10</code> · <code>/give creature 7</code> "
         "(شماره موجود از /collection)"
     )
     if update.message.reply_to_message is None or len(context.args) != 2:
@@ -410,6 +548,7 @@ async def guardian_claim(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 def register(application) -> None:
     group_filter = filters.ChatType.GROUPS
     application.add_handler(CommandHandler("duel", duel, group_filter))
+    application.add_handler(CallbackQueryHandler(duel_wager_callback, pattern=r"^duelwager_"))
     application.add_handler(CommandHandler("raid_spawn", raid_spawn, group_filter))
     application.add_handler(CommandHandler("attack", attack, group_filter))
     application.add_handler(CommandHandler("leaderboard", leaderboard, group_filter))

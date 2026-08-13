@@ -1,3 +1,5 @@
+import html
+
 from bio_lab.models import Creature, Group, GroupMembership, User
 
 
@@ -13,10 +15,12 @@ def get_or_create_user(tg_user) -> tuple[User, bool]:
 
 
 def display_name(user: User) -> str:
+    """Escaped for direct interpolation into parse_mode="HTML" messages — usernames
+    and first names are user-controlled and may contain '<', '&', etc."""
     if user.username:
-        return f"@{user.username}"
+        return f"@{html.escape(user.username)}"
     if user.first_name:
-        return user.first_name
+        return html.escape(user.first_name)
     return f"بازیکن {user.id}"
 
 

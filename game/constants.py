@@ -50,14 +50,14 @@ SPECIES_NAMES = {
 STRONG_MULTIPLIER = 1.3
 WEAK_MULTIPLIER = 0.7
 
-RARITY_ORDER = ["common", "rare", "epic", "legendary", "mutant"]
+RARITY_ORDER = ["common", "rare", "epic", "legendary", "mythic"]
 
 RARITY_LABELS = {
     "common": "⚪ معمولی",
     "rare": "🔵 نایاب",
     "epic": "🟣 حماسی",
     "legendary": "🟡 افسانه‌ای",
-    "mutant": "🔴 جهش‌یافته",
+    "mythic": "🔴 اساطیری",
 }
 
 RARITY_STAT_MULTIPLIER = {
@@ -65,10 +65,10 @@ RARITY_STAT_MULTIPLIER = {
     "rare": 1.15,
     "epic": 1.35,
     "legendary": 1.6,
-    "mutant": 2.0,
+    "mythic": 2.0,
 }
 
-# chance that a splice result upgrades one tier above the higher-rarity parent
+# chance that a fusion result upgrades one tier above the higher-rarity parent
 RARITY_UPGRADE_CHANCE = {
     "common": 0.25,
     "rare": 0.15,
@@ -76,12 +76,20 @@ RARITY_UPGRADE_CHANCE = {
     "legendary": 0.03,
 }
 
+# odds when opening a Bio-Crate (game/lootbox.py) — a completely separate roll from
+# fusion's upgrade chance above, spec'd independently by the economy design
+LOOTBOX_RARITY_WEIGHTS = {
+    "common": 70,
+    "rare": 20,
+    "epic": 7,
+    "legendary": 2.5,
+    "mythic": 0.5,
+}
+
 STARTER_BASE_HP = 50
 STARTER_BASE_ATK = 10
 STARTER_BASE_DEF = 10
 STARTER_BASE_SPD = 10
-
-SPLICE_DNA_COST = 30
 
 DUEL_WIN_COINS = 30
 DUEL_WIN_XP = 20
@@ -90,12 +98,14 @@ DUEL_LOSE_XP = 5
 GIVE_RESOURCE_ALIASES = {
     "coins": "coins",
     "coin": "coins",
+    "gold": "coins",
     "سکه": "coins",
+    "طلا": "coins",
     "dna": "dna_fragments",
     "dnas": "dna_fragments",
     "دی‌ان‌ای": "dna_fragments",
 }
-GIVE_RESOURCE_LABELS = {"coins": "سکه", "dna_fragments": "DNA"}
+GIVE_RESOURCE_LABELS = {"coins": "طلا", "dna_fragments": "DNA"}
 
 MUTATION_EVENT_STAT_LABELS = {
     "base_hp": "❤️ HP",
@@ -155,7 +165,7 @@ MISSION_DEFS = {
     "duel_win_3": {"action": "duel_win", "target": 3, "label": "۳ دوئل ببر", "coins": 120, "dna": 10},
     "raid_attack_2": {"action": "raid_attack", "target": 2, "label": "۲ بار به رید حمله کن", "coins": 40, "dna": 5},
     "raid_attack_5": {"action": "raid_attack", "target": 5, "label": "۵ بار به رید حمله کن", "coins": 90, "dna": 8},
-    "splice_1": {"action": "splice", "target": 1, "label": "۱ بار DNA ترکیب کن", "coins": 60, "dna": 0},
+    "fusion_1": {"action": "fusion", "target": 1, "label": "۱ بار فیوژن کن", "coins": 60, "dna": 0},
     "guardian_challenge_1": {
         "action": "guardian_challenge",
         "target": 1,
@@ -187,6 +197,58 @@ BODY_PARTS = {
     "fangs": {"label": "🦷 نیش (حمله)", "stat": "atk", "bonus": 3},
     "poison": {"label": "☠️ غدد سمی (زهر هر راند)", "stat": "poison", "bonus": 1},
 }
+
+# ── Equipment ────────────────────────────────────────────────────────────────
+# 4 slots per creature; at most one equipped item per slot (enforced in
+# game/equipment.py, not at the DB level, since a slot is a property of *where*
+# an Equipment row is equipped, not a fixed column on Creature).
+EQUIPMENT_SLOTS = ["weapon", "armor", "rune", "offhand"]
+
+EQUIPMENT_SLOT_LABELS = {
+    "weapon": "⚔️ سلاح",
+    "armor": "🛡 زره",
+    "rune": "💍 طلسم",
+    "offhand": "🧪 غلاف",
+}
+
+EQUIPMENT_TEMPLATES = {
+    "weapon": ["پنجه‌های فولادی", "شمشیر لیزری", "تبر استخوانی"],
+    "armor": ["زره تیتانیومی", "فلس‌های اژدها", "سپر انرژی"],
+    "rune": ["حلقه سم", "گردنبند خون‌خوار"],
+    "offhand": ["غدد اسیدی", "پرتاب‌کننده آتش"],
+}
+
+# base bonus at rarity=common, level=1 — scales up by RARITY_STAT_MULTIPLIER and by
+# EQUIPMENT_UPGRADE_BONUS_PCT per +level. "poison" reuses the creature poison-gland
+# stat as the DoT mechanic instead of inventing a parallel damage-over-time system.
+EQUIPMENT_BASE_BONUS = {
+    "weapon": {"atk": 4, "crit_rate": 0.03},
+    "armor": {"hp": 15, "def": 4},
+    "rune": {"spd": 3, "lifesteal": 0.03},
+    "offhand": {"poison": 2},
+}
+
+EQUIPMENT_MAX_LEVEL = 10
+EQUIPMENT_UPGRADE_BONUS_PCT = 0.15  # each +level adds 15% on top of the base bonus
+EQUIPMENT_UPGRADE_GOLD_COST = 40  # per +level, scaled by current level in upgrade_cost-style formula
+EQUIPMENT_DUPES_TO_UPGRADE = 1  # duplicate equipment (same slot+template+rarity) consumed per +level
+
+BASE_CRIT_CHANCE = 0.10
+BASE_LIFESTEAL = 0.0
+
+# ── Economy: loot boxes, fusion, wagered duels, alliance heist ────────────────
+BIOCRATE_GOLD_COST = 150
+BIOCRATE_CREATURE_CHANCE = 0.5  # else yields an equipment piece
+
+FUSION_GOLD_COST = 120
+FUSION_INHERIT_CHANCE = 0.5  # child inherits one random equipped item from a parent
+
+DUEL_WAGER_MAX = 500
+
+HEIST_STEAL_PERCENT = 0.20
+HEIST_COOLDOWN_HOURS = 6
+HEIST_DAILY_ATTEMPTS = 3
+ENERGY_CAPS["heist"] = HEIST_DAILY_ATTEMPTS
 
 
 def upgrade_cost(current_level: int) -> int:

@@ -5,24 +5,26 @@ from bio_lab.models import Creature
 from game import constants
 from game.creature import effective_stats
 from game.emoji import get_emoji
+from game.equipment import get_equipped_items
 
 MAX_ROUNDS = 12
-CRIT_CHANCE = 0.1
 CRIT_MULTIPLIER = 1.5
 
 
 @dataclass
 class Fighter:
     creature: Creature
-    stats: dict[str, int]
+    stats: dict[str, float]
     hp: int
 
 
 def resolve_duel(creature_a: Creature, creature_b: Creature) -> tuple[Creature, str]:
-    """Simulates an automatic duel and returns (winner_creature, battle_log_text)."""
-    fa = Fighter(creature_a, effective_stats(creature_a), 0)
+    """Simulates an automatic duel and returns (winner_creature, battle_log_text).
+    Runs in sync context (called from run_db-wrapped code), so it's safe to fetch
+    equipped items here directly rather than requiring the caller to pass them."""
+    fa = Fighter(creature_a, effective_stats(creature_a, get_equipped_items(creature_a)), 0)
     fa.hp = fa.stats["hp"]
-    fb = Fighter(creature_b, effective_stats(creature_b), 0)
+    fb = Fighter(creature_b, effective_stats(creature_b, get_equipped_items(creature_b)), 0)
     fb.hp = fb.stats["hp"]
 
     log = [
@@ -48,13 +50,19 @@ def resolve_duel(creature_a: Creature, creature_b: Creature) -> tuple[Creature, 
 def _attack(attacker: Fighter, defender: Fighter, log: list[str]) -> None:
     mult = constants.element_multiplier(attacker.creature.element, defender.creature.element)
     base = max(1.0, attacker.stats["atk"] - defender.stats["def"] * 0.5)
-    is_crit = random.random() < CRIT_CHANCE
+    is_crit = random.random() < attacker.stats["crit_rate"]
     dmg = round(base * mult * random.uniform(0.85, 1.15) * (CRIT_MULTIPLIER if is_crit else 1.0))
     defender.hp -= dmg
 
     crit_txt = " 💥کریتیکال!" if is_crit else ""
     elem_txt = " (مؤثر بود!)" if mult > 1 else (" (کم‌اثر بود)" if mult < 1 else "")
     log.append(f"{attacker.creature.name} به {defender.creature.name} {dmg} دمیج زد{crit_txt}{elem_txt}")
+
+    if attacker.stats["lifesteal"] > 0:
+        healed = round(dmg * attacker.stats["lifesteal"])
+        if healed > 0:
+            attacker.hp = min(attacker.stats["hp"], attacker.hp + healed)
+            log.append(f"{get_emoji('lifesteal')} {attacker.creature.name} {healed} HP از جون‌خواری گرفت")
 
     if attacker.stats["poison"] > 0 and defender.hp > 0:
         poison_dmg = attacker.stats["poison"]

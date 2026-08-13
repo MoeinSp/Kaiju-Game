@@ -8,7 +8,7 @@ from bio_lab.models import EmojiOverride
 # text with no HTML support, so <tg-emoji> can never render there no matter what.
 EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     # resources
-    "coin": ("سکه", "💰", "resources"),
+    "coin": ("طلا", "💰", "resources"),
     "dna": ("DNA", "🧬", "resources"),
     "energy": ("انرژی", "⚡", "resources"),
     # stats
@@ -17,6 +17,8 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "def": ("DEF", "🛡", "stats"),
     "spd": ("SPD", "💨", "stats"),
     "poison": ("زهر", "☠️", "stats"),
+    "crit": ("کریتیکال", "💥", "stats"),
+    "lifesteal": ("جون‌خواری", "🧛", "stats"),
     # elements
     "element_fire": ("عنصر آتش", "🔥", "elements"),
     "element_water": ("عنصر آب", "💧", "elements"),
@@ -49,6 +51,7 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "guardian": ("محافظ گروه", "🛡", "progress"),
     "egg": ("موجود تازه", "🥚", "progress"),
     "lab": ("آزمایشگاه/ترکیب", "🧪", "progress"),
+    "biocrate": ("باکس ژنتیکی", "📦", "progress"),
     "comet": ("رویداد جهش", "☄️", "progress"),
     # UI
     "confirm": ("تأیید", "✅", "ui"),

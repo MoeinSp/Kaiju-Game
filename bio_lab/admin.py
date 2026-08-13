@@ -6,6 +6,7 @@ from bio_lab.models import (
     DailyActionLog,
     DuelLog,
     EmojiOverride,
+    Equipment,
     Group,
     GroupEventLog,
     GroupMembership,
@@ -38,12 +39,19 @@ class UserAdmin(admin.ModelAdmin):
 
 @admin.register(Alliance)
 class AllianceAdmin(admin.ModelAdmin):
-    list_display = ("id", "name", "leader", "member_count", "created_at")
+    list_display = ("id", "name", "leader", "member_count", "treasury_gold", "last_heisted_at", "created_at")
     search_fields = ("name",)
 
     @admin.display(description="اعضا")
     def member_count(self, obj: Alliance) -> int:
         return obj.members.count()
+
+
+@admin.register(Equipment)
+class EquipmentAdmin(admin.ModelAdmin):
+    list_display = ("id", "name", "owner", "slot", "rarity", "level", "equipped_on", "created_at")
+    list_filter = ("slot", "rarity")
+    search_fields = ("name", "owner__username", "template_key")
 
 
 @admin.register(EmojiOverride)

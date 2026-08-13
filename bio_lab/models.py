@@ -33,6 +33,8 @@ class User(models.Model):
 class Alliance(models.Model):
     name = models.CharField(max_length=64, unique=True)
     leader = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="+")
+    treasury_gold = models.IntegerField(default=0)
+    last_heisted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:
@@ -63,6 +65,27 @@ class Creature(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} (#{self.id})"
+
+
+class Equipment(models.Model):
+    """One item in a player's armory. `equipped_on` is null while sitting in
+    inventory; at most one Equipment per (creature, slot) should be equipped at
+    once — enforced in game/equipment.py, not here, since "slot" describes how an
+    item is being used rather than a fixed column on Creature."""
+
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="equipment")
+    slot = models.CharField(max_length=16)  # one of game.constants.EQUIPMENT_SLOTS
+    template_key = models.CharField(max_length=32)
+    name = models.CharField(max_length=64)
+    rarity = models.CharField(max_length=16, default="common")
+    level = models.IntegerField(default=1)  # "+1" .. "+10"
+    equipped_on = models.ForeignKey(
+        Creature, null=True, blank=True, on_delete=models.SET_NULL, related_name="equipment_items"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"{self.name} +{self.level} (#{self.id})"
 
 
 class Group(models.Model):
@@ -169,6 +192,7 @@ class DuelLog(models.Model):
     challenger = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
     opponent = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
     winner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
+    wager_gold = models.IntegerField(default=0)
     log_text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 

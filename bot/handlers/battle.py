@@ -192,7 +192,7 @@ def _battle_action_sync(battle_id, actor_tg_id, action):
         completed_missions = check_missions(winner_user, "duel_win")
 
         reward_lines.append(
-            f"{get_emoji('coin')} {winner_creature.name} +{constants.DUEL_WIN_COINS} سکه · "
+            f"{get_emoji('coin')} {winner_creature.name} +{constants.DUEL_WIN_COINS} طلا · "
             f"+{constants.DUEL_WIN_XP} XP"
             + (f" {get_emoji('celebrate')} رسید به سطح {winner_creature.level}!" if winner_levels else "")
         )
