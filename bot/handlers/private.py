@@ -3,9 +3,11 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Alliance, Creature
 from bio_lab.repository import display_name, get_active_creature, get_or_create_user
+from bot.handlers.buildings import buildings_panel
 from bot.handlers.inventory import inventory_cmd
-from bot.handlers.lootbox import biocrate_cmd
+from bot.handlers.lootbox import biocrate_cmd, diamond_box_panel
 from bot.handlers.owner import admin_cmd
+from bot.handlers.wheel import wheel_cmd
 from bot.utils import run_db, safe_edit_message_text
 from config import OWNER_TELEGRAM_ID
 from game import constants
@@ -18,6 +20,7 @@ from game.alliance import (
     leave_alliance,
     top_alliances,
 )
+from game.buildings import get_or_create_buildings
 from game.creature import (
     GameError,
     create_starter_creature,
@@ -64,9 +67,10 @@ def creature_card_text(user, creature, equipped_items: list | None = None) -> st
     if equipped_items:
         slots = ", ".join(constants.EQUIPMENT_SLOT_LABELS[i.slot] + f" +{i.level}" for i in equipped_items)
         equip_line = f"\n{get_emoji('crit')} {slots}"
+    stars = get_emoji("star") * creature.star_level
     return (
         f"{get_emoji('creature')} <b>{creature.name}</b>  <code>#{creature.id}</code>\n"
-        f"{constants.element_label(creature.element)} · {constants.RARITY_LABELS[creature.rarity]} · سطح {creature.level}\n"
+        f"{constants.element_label(creature.element)} · {constants.RARITY_LABELS[creature.rarity]} {stars} · سطح {creature.level}\n"
         f"{xp_bar}  {creature.xp}/{constants.XP_PER_LEVEL} XP\n"
         "\n"
         f"{hp} {stats['hp']}   {atk} {stats['atk']}   {def_} {stats['def']}   {spd} {stats['spd']}   {poison} {stats['poison']}\n"
@@ -75,7 +79,8 @@ def creature_card_text(user, creature, equipped_items: list | None = None) -> st
         f"{equip_line}\n"
         "\n"
         f"{energy_bar}  {get_emoji('energy')} {energy}/{constants.MAX_ENERGY}\n"
-        f"{get_emoji('coin')} {user.coins}   {get_emoji('dna')} {user.dna_fragments}"
+        f"{get_emoji('coin')} {user.coins}   {get_emoji('dna')} {user.dna_fragments}   "
+        f"{get_emoji('diamond')} {user.diamonds}"
     )
 
 
@@ -107,7 +112,14 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
             InlineKeyboardButton("📦 باکس ژنتیکی", callback_data="menu:biocrate"),
         ],
         [
+            InlineKeyboardButton("💠 جعبه‌های الماسی", callback_data="menu:diamond_box"),
+            InlineKeyboardButton("🏗 ساختمون‌ها", callback_data="menu:buildings"),
+        ],
+        [
             InlineKeyboardButton("🎯 ماموریت‌ها", callback_data="menu:missions"),
+            InlineKeyboardButton("🎡 گردونه‌ی شانس", callback_data="menu:wheel"),
+        ],
+        [
             InlineKeyboardButton("🤝 اتحاد من", callback_data="menu:alliance_info"),
         ],
         [
@@ -129,6 +141,7 @@ def _start_sync(tg_user):
         is_new = True
     login_bonus = apply_daily_login(user)
     equipped_items = get_equipped_items(creature)
+    get_or_create_buildings(user)
     return user, creature, is_new, login_bonus, equipped_items
 
 
@@ -963,10 +976,17 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton("📦 باکس ژنتیکی", callback_data="menu:biocrate"),
             ],
             [
-                InlineKeyboardButton("🤝 اتحاد من", callback_data="menu:alliance_info"),
-                InlineKeyboardButton("🏆 رتبه‌بندی", callback_data="menu:rank"),
+                InlineKeyboardButton("💠 جعبه‌های الماسی", callback_data="menu:diamond_box"),
+                InlineKeyboardButton("🏗 ساختمون‌ها", callback_data="menu:buildings"),
             ],
-            [InlineKeyboardButton("👤 پروفایل من", callback_data="menu:profile")],
+            [
+                InlineKeyboardButton("🎡 گردونه‌ی شانس", callback_data="menu:wheel"),
+                InlineKeyboardButton("🤝 اتحاد من", callback_data="menu:alliance_info"),
+            ],
+            [
+                InlineKeyboardButton("🏆 رتبه‌بندی", callback_data="menu:rank"),
+                InlineKeyboardButton("👤 پروفایل من", callback_data="menu:profile"),
+            ],
         ]
     )
 
@@ -984,6 +1004,9 @@ _MENU_ACTIONS = {
     "missions": missions,
     "inventory": inventory_cmd,
     "biocrate": biocrate_cmd,
+    "diamond_box": diamond_box_panel,
+    "buildings": buildings_panel,
+    "wheel": wheel_cmd,
     "alliance_info": alliance_info_cmd,
     "rank": rank,
     "admin": admin_cmd,

@@ -104,8 +104,11 @@ GIVE_RESOURCE_ALIASES = {
     "dna": "dna_fragments",
     "dnas": "dna_fragments",
     "دی‌ان‌ای": "dna_fragments",
+    "diamond": "diamonds",
+    "diamonds": "diamonds",
+    "الماس": "diamonds",
 }
-GIVE_RESOURCE_LABELS = {"coins": "طلا", "dna_fragments": "DNA"}
+GIVE_RESOURCE_LABELS = {"coins": "طلا", "dna_fragments": "DNA", "diamonds": "الماس"}
 
 MUTATION_EVENT_STAT_LABELS = {
     "base_hp": "❤️ HP",
@@ -249,6 +252,87 @@ HEIST_STEAL_PERCENT = 0.20
 HEIST_COOLDOWN_HOURS = 6
 HEIST_DAILY_ATTEMPTS = 3
 ENERGY_CAPS["heist"] = HEIST_DAILY_ATTEMPTS
+
+# ── Star prestige — a fusion "generation" counter, never player-set directly.
+# Fusing two creatures gives the child max(parent stars) + 1, up to STAR_MAX, and
+# each star beyond the first adds a small flat stat bonus on top of rarity. ─────
+STAR_MAX = 5
+STAR_STAT_BONUS_PCT = 0.05
+
+# ── Buildings: a small idle-production base with exactly one upgrade "worker"
+# at a time. Production accrues lazily (same pattern as game/energy.py's stamina
+# regen — computed from last_collected_at, no background ticking). ─────────────
+BUILDING_TYPES = ["gold_collector", "diamond_collector"]
+BUILDING_LABELS = {
+    "gold_collector": "🏭 جمع‌کننده طلا",
+    "diamond_collector": "💎 جمع‌کننده الماس",
+}
+BUILDING_MAX_LEVEL = 10
+BUILDING_UPGRADE_BASE_GOLD_COST = 100  # scales by *level per level-up
+BUILDING_UPGRADE_BASE_MINUTES = 15  # scales by *level per level-up
+
+# rate_per_hour/cap_base scale by *level; diamond_collector's rate is deliberately
+# tiny since diamonds are the premium currency
+BUILDING_PRODUCTION = {
+    "gold_collector": {"rate_per_hour": 20.0, "cap_base": 200, "resource": "coins"},
+    "diamond_collector": {"rate_per_hour": 0.4, "cap_base": 4, "resource": "diamonds"},
+}
+
+# ── Speed-up cards: consumable items that shave time off the active building
+# upgrade. Fixed denominations in minutes, rewarded by the daily wheel and a
+# handful of other activities rather than sold directly. ───────────────────────
+SPEEDUP_MINUTES = [1, 5, 30, 60, 720, 1440]
+SPEEDUP_LABELS = {
+    1: "⏱ ۱ دقیقه",
+    5: "⏱ ۵ دقیقه",
+    30: "⏱ ۳۰ دقیقه",
+    60: "⏱ ۱ ساعت",
+    720: "⏱ ۱۲ ساعت",
+    1440: "⏱ ۲۴ ساعت",
+}
+
+# ── Daily prize wheel: one free spin/day (capped via ENERGY_CAPS below), a
+# weighted table of small prizes across every resource plus speed-up cards. ─────
+WHEEL_DAILY_LIMIT = 1
+ENERGY_CAPS["wheel_spin"] = WHEEL_DAILY_LIMIT
+WHEEL_PRIZES = [
+    {"key": "coins_small", "kind": "coins", "amount": 50, "weight": 28, "label": "۵۰ طلا"},
+    {"key": "coins_medium", "kind": "coins", "amount": 150, "weight": 14, "label": "۱۵۰ طلا"},
+    {"key": "dna_small", "kind": "dna", "amount": 3, "weight": 20, "label": "۳ DNA"},
+    {"key": "dna_medium", "kind": "dna", "amount": 8, "weight": 8, "label": "۸ DNA"},
+    {"key": "diamonds_small", "kind": "diamonds", "amount": 2, "weight": 12, "label": "۲ الماس"},
+    {"key": "speedup_5", "kind": "speedup", "amount": 5, "weight": 8, "label": "کارت سرعت ۵ دقیقه"},
+    {"key": "speedup_30", "kind": "speedup", "amount": 30, "weight": 6, "label": "کارت سرعت ۳۰ دقیقه"},
+    {"key": "speedup_60", "kind": "speedup", "amount": 60, "weight": 3, "label": "کارت سرعت ۱ ساعت"},
+    {"key": "jackpot", "kind": "coins", "amount": 500, "weight": 1, "label": "🎉 جک‌پات ۵۰۰ طلا"},
+]
+
+# ── Diamond boxes: paid with diamonds, always yield a creature (unlike the gold
+# Bio-Crate, which can give equipment too) — this is the "open a new monster with
+# diamonds" tier. Each tier is a fully independent rarity-weight table; the
+# top tier deliberately skews heavily toward legendary/mythic. ─────────────────
+DIAMOND_BOX_TIERS = {
+    "bronze": {
+        "label": "🥉 جعبه‌ی الماسی برنزی",
+        "cost_diamonds": 20,
+        "weights": {"common": 70, "rare": 22, "epic": 6, "legendary": 1.8, "mythic": 0.2},
+    },
+    "silver": {
+        "label": "🥈 جعبه‌ی الماسی نقره‌ای",
+        "cost_diamonds": 50,
+        "weights": {"common": 50, "rare": 30, "epic": 14, "legendary": 5, "mythic": 1},
+    },
+    "gold": {
+        "label": "🥇 جعبه‌ی الماسی طلایی",
+        "cost_diamonds": 120,
+        "weights": {"common": 25, "rare": 30, "epic": 25, "legendary": 15, "mythic": 5},
+    },
+    "legendary": {
+        "label": "🔴 جعبه‌ی افسانه‌ای",
+        "cost_diamonds": 300,
+        "weights": {"common": 5, "rare": 15, "epic": 30, "legendary": 35, "mythic": 15},
+    },
+}
 
 
 def upgrade_cost(current_level: int) -> int:

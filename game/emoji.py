@@ -10,6 +10,7 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     # resources
     "coin": ("طلا", "💰", "resources"),
     "dna": ("DNA", "🧬", "resources"),
+    "diamond": ("الماس", "💎", "resources"),
     "energy": ("انرژی", "⚡", "resources"),
     # stats
     "hp": ("HP", "❤️", "stats"),
@@ -52,7 +53,12 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "egg": ("موجود تازه", "🥚", "progress"),
     "lab": ("آزمایشگاه/ترکیب", "🧪", "progress"),
     "biocrate": ("باکس ژنتیکی", "📦", "progress"),
+    "diamond_box": ("جعبه الماسی", "💠", "progress"),
     "comet": ("رویداد جهش", "☄️", "progress"),
+    "star": ("ستاره‌ی ارتقا", "⭐", "progress"),
+    "building": ("ساختمون", "🏗", "progress"),
+    "speedup": ("کارت سرعت", "⏱", "progress"),
+    "wheel": ("گردونه‌ی شانس", "🎡", "progress"),
     # UI
     "confirm": ("تأیید", "✅", "ui"),
     "cancel": ("لغو", "❌", "ui"),

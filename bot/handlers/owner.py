@@ -333,7 +333,7 @@ def _user_info_text(data: dict) -> str:
     lines = [
         f"{get_emoji('profile')} <b>{display_name(user)}</b>  (<code>{user.id}</code>)",
         f"{get_emoji('coin')} {user.coins}   {get_emoji('dna')} {user.dna_fragments}   "
-        f"{get_emoji('energy')} {user.energy}/{constants.MAX_ENERGY}",
+        f"{get_emoji('diamond')} {user.diamonds}   {get_emoji('energy')} {user.energy}/{constants.MAX_ENERGY}",
         f"🔥 streak: {user.login_streak}   {get_emoji('alliance')} اتحاد: "
         f"{user.alliance.name if user.alliance_id else '—'}",
         f"{get_emoji('banned')} مسدود: {'بله' if user.is_banned else 'نه'}",
@@ -357,10 +357,12 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
             [
                 InlineKeyboardButton("🟢 اعطای طلا", callback_data=f"admin_grant:{target_id}:coins"),
                 InlineKeyboardButton("🟢 اعطای DNA", callback_data=f"admin_grant:{target_id}:dna"),
+                InlineKeyboardButton("🟢 اعطای الماس", callback_data=f"admin_grant:{target_id}:diamonds"),
             ],
             [
                 InlineKeyboardButton("🟠 کسر طلا", callback_data=f"admin_deduct:{target_id}:coins"),
                 InlineKeyboardButton("🟠 کسر DNA", callback_data=f"admin_deduct:{target_id}:dna"),
+                InlineKeyboardButton("🟠 کسر الماس", callback_data=f"admin_deduct:{target_id}:diamonds"),
             ],
             [ban_button],
             [InlineKeyboardButton("◀️ بازگشت به پنل ادمین", callback_data="admin_menu:admin_home")],
@@ -810,6 +812,9 @@ async def broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
 
+_RESOURCE_LABELS = {"coins": "طلا", "dna": "DNA", "diamonds": "الماس"}
+
+
 async def admin_grant_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not _is_owner(update):
@@ -818,7 +823,7 @@ async def admin_grant_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     _, target_id, resource = query.data.split(":")
     context.user_data[AWAITING_ADMIN_KEY] = {"action": "grant", "target_id": target_id, "resource": resource}
     await query.answer()
-    label = "طلا" if resource == "coins" else "DNA"
+    label = _RESOURCE_LABELS[resource]
     await safe_edit_message_text(query, f"🟢 چقدر {label} اعطا کنم؟ یه عدد مثبت بفرست:", parse_mode="HTML")
 
 
@@ -830,7 +835,7 @@ async def admin_deduct_callback(update: Update, context: ContextTypes.DEFAULT_TY
     _, target_id, resource = query.data.split(":")
     context.user_data[AWAITING_ADMIN_KEY] = {"action": "deduct", "target_id": target_id, "resource": resource}
     await query.answer()
-    label = "طلا" if resource == "coins" else "DNA"
+    label = _RESOURCE_LABELS[resource]
     await safe_edit_message_text(query, f"🟠 چقدر {label} کسر کنم؟ یه عدد مثبت بفرست:", parse_mode="HTML")
 
 

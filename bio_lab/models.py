@@ -11,6 +11,7 @@ class User(models.Model):
     first_name = models.CharField(max_length=128, null=True, blank=True)
     coins = models.IntegerField(default=200)
     dna_fragments = models.IntegerField(default=0)
+    diamonds = models.IntegerField(default=0)  # premium currency: diamond collector, daily wheel, diamond boxes
 
     energy = models.IntegerField(default=20)  # keep in sync with game.constants.MAX_ENERGY
     energy_updated_at = models.DateTimeField(default=timezone.now)
@@ -46,6 +47,7 @@ class Creature(models.Model):
     name = models.CharField(max_length=64)
     element = models.CharField(max_length=16)
     rarity = models.CharField(max_length=16, default="common")
+    star_level = models.IntegerField(default=1)  # prestige tier from fusion "generations" — never player-set
     level = models.IntegerField(default=1)
     xp = models.IntegerField(default=0)
 
@@ -86,6 +88,57 @@ class Equipment(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} +{self.level} (#{self.id})"
+
+
+class Building(models.Model):
+    """One idle-production building the player owns. Production is computed lazily
+    from `last_collected_at` (same pattern as game/energy.py's stamina regen) —
+    there's no background job ticking resources up, it's all math at read time."""
+
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="buildings")
+    building_type = models.CharField(max_length=32)  # one of game.constants.BUILDING_TYPES
+    level = models.IntegerField(default=1)
+    last_collected_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["owner", "building_type"], name="uq_owner_building_type")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.building_type} Lv{self.level} ({self.owner_id})"
+
+
+class BuildingUpgrade(models.Model):
+    """The single active upgrade job for a player. OneToOneField enforces "only one
+    worker at a time" at the database level, not just in application code."""
+
+    owner = models.OneToOneField(User, on_delete=models.CASCADE, related_name="building_upgrade")
+    building = models.ForeignKey(Building, on_delete=models.CASCADE, related_name="+")
+    target_level = models.IntegerField()
+    started_at = models.DateTimeField(auto_now_add=True)
+    finishes_at = models.DateTimeField()
+
+    def __str__(self) -> str:
+        return f"{self.building.building_type} -> Lv{self.target_level} ({self.owner_id})"
+
+
+class SpeedupCard(models.Model):
+    """Consumable items that shave time off the active BuildingUpgrade. `minutes`
+    is one of game.constants.SPEEDUP_MINUTES — a fixed, small set of denominations,
+    so a per-(owner, minutes) counter is simpler than a row-per-card table."""
+
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="speedup_cards")
+    minutes = models.IntegerField()
+    count = models.IntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["owner", "minutes"], name="uq_owner_speedup_minutes")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.minutes}m x{self.count} ({self.owner_id})"
 
 
 class Group(models.Model):

@@ -2,6 +2,8 @@ from django.contrib import admin
 
 from bio_lab.models import (
     Alliance,
+    Building,
+    BuildingUpgrade,
     ChannelJoinClaim,
     Creature,
     DailyActionLog,
@@ -16,6 +18,7 @@ from bio_lab.models import (
     RaidBoss,
     RaidDamageLog,
     RequiredChannel,
+    SpeedupCard,
     User,
 )
 
@@ -28,6 +31,7 @@ class UserAdmin(admin.ModelAdmin):
         "first_name",
         "coins",
         "dna_fragments",
+        "diamonds",
         "energy",
         "login_streak",
         "alliance",
@@ -63,9 +67,26 @@ class EmojiOverrideAdmin(admin.ModelAdmin):
 
 @admin.register(Creature)
 class CreatureAdmin(admin.ModelAdmin):
-    list_display = ("id", "name", "owner", "element", "rarity", "level", "is_active", "created_at")
-    list_filter = ("element", "rarity", "is_active")
+    list_display = ("id", "name", "owner", "element", "rarity", "star_level", "level", "is_active", "created_at")
+    list_filter = ("element", "rarity", "star_level", "is_active")
     search_fields = ("name", "owner__username")
+
+
+@admin.register(Building)
+class BuildingAdmin(admin.ModelAdmin):
+    list_display = ("id", "owner", "building_type", "level", "last_collected_at")
+    list_filter = ("building_type",)
+
+
+@admin.register(BuildingUpgrade)
+class BuildingUpgradeAdmin(admin.ModelAdmin):
+    list_display = ("id", "owner", "building", "target_level", "started_at", "finishes_at")
+
+
+@admin.register(SpeedupCard)
+class SpeedupCardAdmin(admin.ModelAdmin):
+    list_display = ("id", "owner", "minutes", "count")
+    list_filter = ("minutes",)
 
 
 @admin.register(Group)

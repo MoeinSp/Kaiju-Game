@@ -2,7 +2,7 @@ from bio_lab.models import Creature, User
 from bio_lab.repository import resolve_user
 from game.creature import GameError
 
-GRANT_RESOURCE_FIELDS = {"coins": "coins", "dna": "dna_fragments"}
+GRANT_RESOURCE_FIELDS = {"coins": "coins", "dna": "dna_fragments", "diamonds": "diamonds"}
 
 
 def find_user_or_raise(identifier: str) -> User:
@@ -14,7 +14,7 @@ def find_user_or_raise(identifier: str) -> User:
 
 def _adjust_resource(identifier: str, resource: str, amount: int, sign: int) -> tuple[User, int]:
     if resource not in GRANT_RESOURCE_FIELDS:
-        raise GameError("نوع منبع نامعتبره. باید coins یا dna باشه.")
+        raise GameError("نوع منبع نامعتبره. باید coins، dna یا diamonds باشه.")
     if amount <= 0:
         raise GameError("مقدار باید یه عدد صحیح مثبت باشه.")
     user = find_user_or_raise(identifier)

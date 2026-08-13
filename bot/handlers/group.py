@@ -12,6 +12,7 @@ from bio_lab.repository import (
 )
 from bot.utils import run_db, safe_edit_message_text
 from game import constants
+from game.buildings import maybe_award_speedup_card
 from game.combat import resolve_duel
 from game.creature import GameError, add_xp, apply_random_mutation
 from game.daily import assert_energy_available, check_missions, group_event_available, mark_group_event, record_action
@@ -20,6 +21,12 @@ from game.energy import spend_energy
 from game.guardian import challenge_guardian, ensure_guardian, get_guardian
 from game.raid import RaidError, attack_boss, distribute_rewards, get_active_boss, spawn_boss
 from game.trade import gift_creature
+
+
+def _speedup_note(minutes: int | None) -> str:
+    if minutes is None:
+        return ""
+    return f"\n{get_emoji('speedup')} جایزه‌ی شانسی: {constants.SPEEDUP_LABELS[minutes]}!"
 
 
 def _mission_lines(completed: list[dict]) -> str:
@@ -62,6 +69,7 @@ def _duel_sync(chat, challenger_tg, opponent_tg):
 
     record_action(winner_user, "duel_win")
     completed_missions = check_missions(winner_user, "duel_win")
+    speedup_won = maybe_award_speedup_card(winner_user)
 
     DuelLog.objects.create(
         group_id=group.id,
@@ -70,7 +78,7 @@ def _duel_sync(chat, challenger_tg, opponent_tg):
         winner_id=winner_user.id,
         log_text=log_text,
     )
-    return winner_creature, winner_levels, completed_missions, log_text
+    return winner_creature, winner_levels, completed_missions, log_text, speedup_won
 
 
 def _duel_wager_challenge_sync(chat, challenger_tg, opponent_tg):
@@ -119,7 +127,7 @@ async def duel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if wager == 0:
         try:
-            winner_creature, winner_levels, completed_missions, log_text = await run_db(
+            winner_creature, winner_levels, completed_missions, log_text, speedup_won = await run_db(
                 _duel_sync, update.effective_chat, challenger_tg, opponent_tg
             )
         except GameError as exc:
@@ -132,7 +140,7 @@ async def duel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         if winner_levels:
             reward_text += f" {get_emoji('celebrate')} رسید به سطح {winner_creature.level}!"
-        reward_text += _mission_lines(completed_missions)
+        reward_text += _mission_lines(completed_missions) + _speedup_note(speedup_won)
         await update.message.reply_text(log_text + reward_text, parse_mode="HTML")
         return
 
@@ -200,6 +208,7 @@ def _duel_wager_resolve_sync(chat, challenger_id, opponent_id, wager, acceptor_i
 
     record_action(winner_user, "duel_win")
     completed_missions = check_missions(winner_user, "duel_win")
+    speedup_won = maybe_award_speedup_card(winner_user)
 
     DuelLog.objects.create(
         group_id=group.id,
@@ -209,7 +218,7 @@ def _duel_wager_resolve_sync(chat, challenger_id, opponent_id, wager, acceptor_i
         wager_gold=wager,
         log_text=log_text,
     )
-    return winner_creature, winner_levels, completed_missions, log_text
+    return winner_creature, winner_levels, completed_missions, log_text, speedup_won
 
 
 async def duel_wager_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -227,7 +236,7 @@ async def duel_wager_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     wager = int(rest[0])
     try:
-        winner_creature, winner_levels, completed_missions, log_text = await run_db(
+        winner_creature, winner_levels, completed_missions, log_text, speedup_won = await run_db(
             _duel_wager_resolve_sync, update.effective_chat, challenger_id, opponent_id, wager, update.effective_user.id
         )
     except GameError as exc:
@@ -238,7 +247,7 @@ async def duel_wager_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     reward_text = f"\n\n{get_emoji('coin')} {winner_creature.name} +{wager} طلا (شرط) · +{constants.DUEL_WIN_XP} XP"
     if winner_levels:
         reward_text += f" {get_emoji('celebrate')} رسید به سطح {winner_creature.level}!"
-    reward_text += _mission_lines(completed_missions)
+    reward_text += _mission_lines(completed_missions) + _speedup_note(speedup_won)
     await safe_edit_message_text(query, log_text + reward_text, parse_mode="HTML")
 
 
@@ -361,6 +370,7 @@ def _attack_sync(chat, tg_user):
     completed_missions = check_missions(user, "raid_attack")
 
     reward_lines = None
+    speedup_won = None
     if defeated:
         rewards = distribute_rewards(boss)
         reward_lines = []
@@ -370,13 +380,14 @@ def _attack_sync(chat, tg_user):
             reward_lines.append(
                 f"{name} — {get_emoji('dna')}{r['dna']} {get_emoji('coin')}{r['coins']} (دمیج: {r['damage']})"
             )
+        speedup_won = maybe_award_speedup_card(user)  # bonus chance for whoever lands the killing blow
 
-    return creature, boss, dmg, defeated, completed_missions, reward_lines
+    return creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won
 
 
 async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        creature, boss, dmg, defeated, completed_missions, reward_lines = await run_db(
+        creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won = await run_db(
             _attack_sync, update.effective_chat, update.effective_user
         )
     except (RaidError, GameError) as exc:
@@ -390,6 +401,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text += _mission_lines(completed_missions)
     if defeated:
         text += f"\n\n{get_emoji('celebrate')} <b>هیولا شکست خورد!</b> غنایم:\n" + "\n".join(reward_lines)
+        text += _speedup_note(speedup_won)
 
     await update.message.reply_text(text, parse_mode="HTML")
 
@@ -497,12 +509,13 @@ def _guardian_challenge_sync(chat, tg_user):
 
     record_action(user, "guardian_challenge")
     completed_missions = check_missions(user, "guardian_challenge")
-    return won, log_text, completed_missions
+    speedup_won = maybe_award_speedup_card(user) if won else None
+    return won, log_text, completed_missions, speedup_won
 
 
 async def guardian_challenge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        won, log_text, completed_missions = await run_db(
+        won, log_text, completed_missions, speedup_won = await run_db(
             _guardian_challenge_sync, update.effective_chat, update.effective_user
         )
     except GameError as exc:
@@ -510,7 +523,8 @@ async def guardian_challenge(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     result_text = f"{get_emoji('celebrate')} <b>بردی و محافظ جدید گروه شدی!</b>" if won else "😔 باختی، محافظ همون قبلیه."
     await update.message.reply_text(
-        log_text + "\n\n" + result_text + _mission_lines(completed_missions), parse_mode="HTML"
+        log_text + "\n\n" + result_text + _mission_lines(completed_missions) + _speedup_note(speedup_won),
+        parse_mode="HTML",
     )
 
 

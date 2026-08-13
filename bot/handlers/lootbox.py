@@ -1,12 +1,12 @@
-from telegram import Update
-from telegram.ext import CommandHandler, ContextTypes, filters
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bio_lab.repository import get_or_create_user
-from bot.utils import run_db
+from bot.utils import run_db, safe_edit_message_text
 from game import constants
 from game.creature import GameError
 from game.emoji import get_emoji
-from game.lootbox import open_biocrate
+from game.lootbox import open_biocrate, open_diamond_box
 
 
 def _biocrate_sync(tg_user):
@@ -39,5 +39,94 @@ async def biocrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 
+def _diamond_box_list_keyboard() -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(f"{cfg['label']} — {cfg['cost_diamonds']} 💎", callback_data=f"dbox_pick:{tier}")]
+        for tier, cfg in constants.DIAMOND_BOX_TIERS.items()
+    ]
+    rows.append([InlineKeyboardButton("◀️ بازگشت", callback_data="menu:me")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def diamond_box_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.effective_message.reply_text(
+        f"{get_emoji('diamond_box')} <b>جعبه‌های الماسی</b>\n"
+        "این جعبه‌ها همیشه یه موجود جدید می‌دن (نه تجهیزات) — هرچی سطح جعبه بالاتر، شانس نایاب‌بودنش بیشتره.\n\n"
+        "رو یکی بزن تا احتمالات دقیقش رو ببینی:",
+        parse_mode="HTML",
+        reply_markup=_diamond_box_list_keyboard(),
+    )
+
+
+def _diamond_box_detail_text(tier: str) -> str:
+    cfg = constants.DIAMOND_BOX_TIERS[tier]
+    lines = [
+        f"{cfg['label']}",
+        f"{get_emoji('diamond')} هزینه: {cfg['cost_diamonds']} الماس\n",
+        "📊 <b>احتمال هر رده:</b>",
+    ]
+    for rarity, weight in cfg["weights"].items():
+        lines.append(f"{constants.RARITY_LABELS[rarity]} — {weight:g}٪")
+    return "\n".join(lines)
+
+
+def _diamond_box_detail_keyboard(tier: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("🟢 خرید و باز کن", callback_data=f"dbox_buy:{tier}")],
+            [InlineKeyboardButton("◀️ بازگشت به لیست", callback_data="menu:diamond_box")],
+        ]
+    )
+
+
+async def diamond_box_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    tier = query.data.split(":")[1]
+    if tier not in constants.DIAMOND_BOX_TIERS:
+        await query.answer("این جعبه دیگه پیدا نشد.", show_alert=True)
+        return
+    await query.answer()
+    await safe_edit_message_text(
+        query, _diamond_box_detail_text(tier), parse_mode="HTML", reply_markup=_diamond_box_detail_keyboard(tier)
+    )
+
+
+def _diamond_box_buy_sync(tg_user, tier):
+    user, _ = get_or_create_user(tg_user)
+    return open_diamond_box(user, tier)
+
+
+async def diamond_box_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    tier = query.data.split(":")[1]
+    try:
+        result = await run_db(_diamond_box_buy_sync, update.effective_user, tier)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+
+    creature = result["creature"]
+    rarity_label = constants.RARITY_LABELS[result["rarity"]]
+    await query.answer("🟢 باز شد!")
+    keyboard = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("🎁 یکی دیگه باز کن", callback_data=f"dbox_pick:{tier}")],
+            [InlineKeyboardButton("◀️ بازگشت", callback_data="menu:diamond_box")],
+        ]
+    )
+    await safe_edit_message_text(
+        query,
+        f"{constants.DIAMOND_BOX_TIERS[tier]['label']} <b>باز شد!</b>\n\n"
+        f"<tg-spoiler>{get_emoji('egg')} <b>{creature.name}</b>\n"
+        f"{constants.element_label(creature.element)} · {rarity_label}</tg-spoiler>\n\n"
+        "<blockquote>از «🗂 کلکسیون» توی منو می‌تونی فعالش کنی.</blockquote>",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
 def register(application) -> None:
     application.add_handler(CommandHandler("biocrate", biocrate_cmd, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("diamondbox", diamond_box_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CallbackQueryHandler(diamond_box_pick_callback, pattern=r"^dbox_pick:"))
+    application.add_handler(CallbackQueryHandler(diamond_box_buy_callback, pattern=r"^dbox_buy:"))

@@ -8,10 +8,10 @@ from game.creature import GameError
 from game.equipment import roll_equipment
 
 
-def roll_rarity() -> str:
-    rarities = list(constants.LOOTBOX_RARITY_WEIGHTS)
-    weights = list(constants.LOOTBOX_RARITY_WEIGHTS.values())
-    return random.choices(rarities, weights=weights, k=1)[0]
+def roll_rarity(weights: dict[str, float] | None = None) -> str:
+    weights = weights or constants.LOOTBOX_RARITY_WEIGHTS
+    rarities = list(weights)
+    return random.choices(rarities, weights=list(weights.values()), k=1)[0]
 
 
 def _roll_creature(user: User, rarity: str) -> Creature:
@@ -47,3 +47,21 @@ def open_biocrate(user: User) -> dict:
         return {"kind": "creature", "rarity": rarity, "creature": creature}
     item = roll_equipment(user, rarity)
     return {"kind": "equipment", "rarity": rarity, "item": item}
+
+
+@transaction.atomic
+def open_diamond_box(user: User, tier: str) -> dict:
+    """Diamond boxes always yield a creature (never equipment) — this is the "open
+    a new monster with diamonds" path the gold Bio-Crate doesn't guarantee."""
+    if tier not in constants.DIAMOND_BOX_TIERS:
+        raise GameError("این نوع جعبه‌ی الماسی وجود نداره.")
+    cfg = constants.DIAMOND_BOX_TIERS[tier]
+    if user.diamonds < cfg["cost_diamonds"]:
+        raise GameError(f"الماس کافی نداری! این جعبه {cfg['cost_diamonds']} الماس هزینه داره.")
+
+    user.diamonds -= cfg["cost_diamonds"]
+    user.save(update_fields=["diamonds"])
+
+    rarity = roll_rarity(cfg["weights"])
+    creature = _roll_creature(user, rarity)
+    return {"kind": "creature", "rarity": rarity, "creature": creature, "tier": tier}

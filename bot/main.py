@@ -10,7 +10,7 @@ from telegram import Update  # noqa: E402
 from telegram.ext import Application, CallbackQueryHandler, ContextTypes, MessageHandler, filters  # noqa: E402
 
 from bot import middleware  # noqa: E402
-from bot.handlers import battle, group, inventory, lootbox, misc, owner, private, welcome  # noqa: E402
+from bot.handlers import battle, buildings, group, inventory, lootbox, misc, owner, private, welcome, wheel  # noqa: E402
 from config import BOT_TOKEN  # noqa: E402
 from game.emoji import refresh_cache  # noqa: E402
 
@@ -39,6 +39,8 @@ def main() -> None:
     private.register(application)
     inventory.register(application)
     lootbox.register(application)
+    buildings.register(application)
+    wheel.register(application)
     group.register(application)
     battle.register(application)
     misc.register(application)

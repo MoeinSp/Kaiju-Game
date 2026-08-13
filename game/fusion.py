@@ -31,12 +31,14 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
 
     mult = constants.RARITY_STAT_MULTIPLIER[new_rarity]
     avg_level = (parent_a.level + parent_b.level) / 2
+    star_level = min(constants.STAR_MAX, max(parent_a.star_level, parent_b.star_level) + 1)
 
     child = Creature.objects.create(
         owner=user,
         name=_fuse_name(parent_a.name, parent_b.name),
         element=random.choice([parent_a.element, parent_b.element]),
         rarity=new_rarity,
+        star_level=star_level,
         base_hp=round((constants.STARTER_BASE_HP + avg_level * 4) * mult),
         base_atk=round((constants.STARTER_BASE_ATK + avg_level * 1.0) * mult),
         base_def=round((constants.STARTER_BASE_DEF + avg_level * 1.0) * mult),

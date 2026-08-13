@@ -19,16 +19,16 @@ def effective_stats(creature: Creature, equipped_items: list | None = None) -> d
     from game.equipment import creature_equipment_bonus
 
     bonus = creature_equipment_bonus(equipped_items) if equipped_items else {}
+    # star_level is a fusion-generation prestige counter (never player-set — see
+    # game.fusion.fuse) that scales the creature's own stats, not its gear's bonus
+    star_mult = 1 + (creature.star_level - 1) * constants.STAR_STAT_BONUS_PCT
     return {
-        "hp": creature.base_hp + round(bonus.get("hp", 0)),
-        "atk": creature.base_atk
-        + creature.fangs_lvl * constants.BODY_PARTS["fangs"]["bonus"]
+        "hp": round(creature.base_hp * star_mult) + round(bonus.get("hp", 0)),
+        "atk": round((creature.base_atk + creature.fangs_lvl * constants.BODY_PARTS["fangs"]["bonus"]) * star_mult)
         + round(bonus.get("atk", 0)),
-        "def": creature.base_def
-        + creature.armor_lvl * constants.BODY_PARTS["armor"]["bonus"]
+        "def": round((creature.base_def + creature.armor_lvl * constants.BODY_PARTS["armor"]["bonus"]) * star_mult)
         + round(bonus.get("def", 0)),
-        "spd": creature.base_spd
-        + creature.wings_lvl * constants.BODY_PARTS["wings"]["bonus"]
+        "spd": round((creature.base_spd + creature.wings_lvl * constants.BODY_PARTS["wings"]["bonus"]) * star_mult)
         + round(bonus.get("spd", 0)),
         "poison": creature.poison_lvl * constants.BODY_PARTS["poison"]["bonus"] + round(bonus.get("poison", 0)),
         "crit_rate": constants.BASE_CRIT_CHANCE + bonus.get("crit_rate", 0),
