@@ -62,6 +62,11 @@ def creature_card_text(user, creature) -> str:
 
 
 def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
+    """Full navigation keyboard shown under the creature card — lab actions on top,
+    then shortcuts to every other section, so a player never has to remember a
+    slash-command to keep playing. callback_data mixes bare actions (feed/train/
+    upgrade:*, handled by lab_action_callback) with menu:* entries (handled by
+    menu_callback) — both handlers are always registered together, so this is safe."""
     rows = [
         [
             InlineKeyboardButton("🍖 تغذیه", callback_data="feed"),
@@ -74,6 +79,18 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton("🦷 ارتقا نیش", callback_data="upgrade:fangs"),
             InlineKeyboardButton("☠️ ارتقا زهر", callback_data="upgrade:poison"),
+        ],
+        [
+            InlineKeyboardButton("🗂 کلکسیون", callback_data="menu:collection"),
+            InlineKeyboardButton("🏹 شکار انفرادی", callback_data="menu:hunt"),
+        ],
+        [
+            InlineKeyboardButton("🎯 ماموریت‌ها", callback_data="menu:missions"),
+            InlineKeyboardButton("🤝 اتحاد من", callback_data="menu:alliance_info"),
+        ],
+        [
+            InlineKeyboardButton("🏆 رتبه‌بندی", callback_data="menu:rank"),
+            InlineKeyboardButton("👤 پروفایل من", callback_data="menu:profile"),
         ],
     ]
     if is_owner:
