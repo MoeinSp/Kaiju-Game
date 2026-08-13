@@ -28,9 +28,10 @@ class UserAdmin(admin.ModelAdmin):
         "energy",
         "login_streak",
         "alliance",
+        "is_banned",
         "created_at",
     )
-    list_filter = ("alliance",)
+    list_filter = ("alliance", "is_banned")
     search_fields = ("username", "first_name", "id")
     ordering = ("-created_at",)
 

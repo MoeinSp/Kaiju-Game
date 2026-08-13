@@ -2,12 +2,23 @@ import asyncio
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity, Update
 from telegram.error import TelegramError
-from telegram.ext import CommandHandler, ContextTypes, filters
+from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bio_lab.models import User
+from bio_lab.repository import display_name
 from bot.utils import run_db
 from config import ADMIN_PANEL_URL, OWNER_TELEGRAM_ID
+from game import constants
+from game.creature import GameError
 from game.emoji import EMOJI_KEYS, clear_emoji, list_overrides, set_emoji
+from game.moderation import (
+    deduct_resource,
+    delete_creature,
+    get_creature_or_raise,
+    grant_resource,
+    set_banned,
+    user_info,
+)
 from game.report import dashboard_stats, progress_report
 
 BROADCAST_DELAY_SECONDS = 0.05  # ~20 msg/s, safely under Telegram's flood limits
@@ -169,6 +180,163 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.effective_message.reply_text(summary)
 
 
+async def user_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_owner(update):
+        return
+    if not context.args:
+        await update.effective_message.reply_text(
+            "استفاده: <code>/user_info آیدی_یا_یوزرنیم</code>", parse_mode="HTML"
+        )
+        return
+    try:
+        data = await run_db(user_info, context.args[0])
+    except GameError as exc:
+        await update.effective_message.reply_text(str(exc))
+        return
+
+    user = data["user"]
+    lines = [
+        f"👤 <b>{display_name(user)}</b>  (<code>{user.id}</code>)",
+        f"💰 {user.coins}   🧬 {user.dna_fragments}   ⚡ {user.energy}/{constants.MAX_ENERGY}",
+        f"🔥 streak: {user.login_streak}   🤝 اتحاد: {user.alliance.name if user.alliance_id else '—'}",
+        f"🚫 مسدود: {'بله' if user.is_banned else 'نه'}",
+        f"📅 عضو از: {user.created_at.strftime('%Y-%m-%d')}\n",
+        f"🧬 <b>موجودات ({len(data['creatures'])}):</b>",
+    ]
+    for c in data["creatures"]:
+        active_tag = " ✅فعال" if c.is_active else ""
+        lines.append(f"  • <code>#{c.id}</code> {c.name} Lv{c.level} ({c.rarity}){active_tag}")
+    await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
+async def grant_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_owner(update):
+        return
+    if len(context.args) != 3 or not context.args[2].isdigit():
+        await update.effective_message.reply_text(
+            "استفاده: <code>/grant آیدی_یا_یوزرنیم coins/dna مقدار</code>", parse_mode="HTML"
+        )
+        return
+    identifier, resource, amount_str = context.args
+    try:
+        user, new_value = await run_db(grant_resource, identifier, resource, int(amount_str))
+    except GameError as exc:
+        await update.effective_message.reply_text(str(exc))
+        return
+    await update.effective_message.reply_text(
+        f"✅ به {display_name(user)} داده شد. مقدار جدید {resource}: {new_value}"
+    )
+
+
+async def deduct_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_owner(update):
+        return
+    if len(context.args) != 3 or not context.args[2].isdigit():
+        await update.effective_message.reply_text(
+            "استفاده: <code>/deduct آیدی_یا_یوزرنیم coins/dna مقدار</code>", parse_mode="HTML"
+        )
+        return
+    identifier, resource, amount_str = context.args
+    try:
+        user, new_value = await run_db(deduct_resource, identifier, resource, int(amount_str))
+    except GameError as exc:
+        await update.effective_message.reply_text(str(exc))
+        return
+    await update.effective_message.reply_text(
+        f"✅ از {display_name(user)} کم شد. مقدار جدید {resource}: {new_value}"
+    )
+
+
+async def ban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_owner(update):
+        return
+    if not context.args:
+        await update.effective_message.reply_text(
+            "استفاده: <code>/ban آیدی_یا_یوزرنیم</code>", parse_mode="HTML"
+        )
+        return
+    try:
+        user = await run_db(set_banned, context.args[0], True)
+    except GameError as exc:
+        await update.effective_message.reply_text(str(exc))
+        return
+    await update.effective_message.reply_text(f"🚫 {display_name(user)} مسدود شد.")
+
+
+async def unban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_owner(update):
+        return
+    if not context.args:
+        await update.effective_message.reply_text(
+            "استفاده: <code>/unban آیدی_یا_یوزرنیم</code>", parse_mode="HTML"
+        )
+        return
+    try:
+        user = await run_db(set_banned, context.args[0], False)
+    except GameError as exc:
+        await update.effective_message.reply_text(str(exc))
+        return
+    await update.effective_message.reply_text(f"✅ {display_name(user)} دیگه مسدود نیست.")
+
+
+def _delete_creature_preview_sync(creature_id: int):
+    creature = get_creature_or_raise(creature_id)
+    owner = User.objects.filter(id=creature.owner_id).first()
+    return creature, display_name(owner) if owner is not None else str(creature.owner_id)
+
+
+async def delete_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_owner(update):
+        return
+    if not context.args or not context.args[0].isdigit():
+        await update.effective_message.reply_text(
+            "استفاده: <code>/delete_creature شماره</code>", parse_mode="HTML"
+        )
+        return
+    creature_id = int(context.args[0])
+    try:
+        creature, owner_name = await run_db(_delete_creature_preview_sync, creature_id)
+    except GameError as exc:
+        await update.effective_message.reply_text(str(exc))
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("✅ حذف کن", callback_data=f"admin_del:{creature_id}"),
+                InlineKeyboardButton("❌ بی‌خیال", callback_data="admin_del_cancel"),
+            ]
+        ]
+    )
+    await update.effective_message.reply_text(
+        f"⚠️ مطمئنی می‌خوای <b>{creature.name}</b> (<code>#{creature.id}</code>, مال {owner_name}) رو "
+        f"برای همیشه حذف کنی؟ این کار غیرقابل‌برگشته و لاگ‌های رید/نبرد مرتبط باهاش هم پاک می‌شن.",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+async def delete_creature_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+
+    if query.data == "admin_del_cancel":
+        await query.answer()
+        await query.edit_message_text("لغو شد، چیزی حذف نشد.")
+        return
+
+    creature_id = int(query.data.split(":")[1])
+    try:
+        name = await run_db(delete_creature, creature_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    await query.edit_message_text(f"🗑 موجود «{name}» برای همیشه حذف شد.")
+
+
 def register(application) -> None:
     private_only = filters.ChatType.PRIVATE
     application.add_handler(CommandHandler("set_emoji", set_emoji_cmd, private_only))
@@ -177,3 +345,10 @@ def register(application) -> None:
     application.add_handler(CommandHandler("admin", admin_cmd, private_only))
     application.add_handler(CommandHandler("report", report_cmd, private_only))
     application.add_handler(CommandHandler("broadcast", broadcast_cmd, private_only))
+    application.add_handler(CommandHandler("user_info", user_info_cmd, private_only))
+    application.add_handler(CommandHandler("grant", grant_cmd, private_only))
+    application.add_handler(CommandHandler("deduct", deduct_cmd, private_only))
+    application.add_handler(CommandHandler("ban", ban_cmd, private_only))
+    application.add_handler(CommandHandler("unban", unban_cmd, private_only))
+    application.add_handler(CommandHandler("delete_creature", delete_creature_cmd, private_only))
+    application.add_handler(CallbackQueryHandler(delete_creature_confirm_callback, pattern=r"^admin_del"))

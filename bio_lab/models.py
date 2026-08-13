@@ -22,6 +22,8 @@ class User(models.Model):
         "Alliance", null=True, blank=True, on_delete=models.SET_NULL, related_name="members"
     )
 
+    is_banned = models.BooleanField(default=False)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:

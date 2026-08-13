@@ -38,3 +38,11 @@ def touch_membership(group: Group, user: User) -> None:
 def group_member_creatures(group: Group) -> list[Creature]:
     member_ids = GroupMembership.objects.filter(group=group).values_list("user_id", flat=True)
     return list(Creature.objects.filter(owner_id__in=member_ids, is_active=True))
+
+
+def resolve_user(identifier: str) -> User | None:
+    """Looks a player up by telegram id or @username (for owner-only moderation commands)."""
+    identifier = identifier.strip().lstrip("@")
+    if identifier.isdigit():
+        return User.objects.filter(id=int(identifier)).first()
+    return User.objects.filter(username__iexact=identifier).first()
