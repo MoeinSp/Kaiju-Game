@@ -3,7 +3,9 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Creature
 from bio_lab.repository import display_name, get_active_creature, get_or_create_user
+from bot.handlers.owner import admin_cmd
 from bot.utils import run_db
+from config import OWNER_TELEGRAM_ID
 from game import constants
 from game.alliance import alliance_info, create_alliance, join_alliance, leave_alliance, top_alliances
 from game.creature import (
@@ -59,23 +61,24 @@ def creature_card_text(user, creature) -> str:
     )
 
 
-def creature_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
+def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
+    rows = [
         [
-            [
-                InlineKeyboardButton("🍖 تغذیه", callback_data="feed"),
-                InlineKeyboardButton("🏋️ تمرین", callback_data="train"),
-            ],
-            [
-                InlineKeyboardButton("🦋 ارتقا بال", callback_data="upgrade:wings"),
-                InlineKeyboardButton("🛡 ارتقا زره", callback_data="upgrade:armor"),
-            ],
-            [
-                InlineKeyboardButton("🦷 ارتقا نیش", callback_data="upgrade:fangs"),
-                InlineKeyboardButton("☠️ ارتقا زهر", callback_data="upgrade:poison"),
-            ],
-        ]
-    )
+            InlineKeyboardButton("🍖 تغذیه", callback_data="feed"),
+            InlineKeyboardButton("🏋️ تمرین", callback_data="train"),
+        ],
+        [
+            InlineKeyboardButton("🦋 ارتقا بال", callback_data="upgrade:wings"),
+            InlineKeyboardButton("🛡 ارتقا زره", callback_data="upgrade:armor"),
+        ],
+        [
+            InlineKeyboardButton("🦷 ارتقا نیش", callback_data="upgrade:fangs"),
+            InlineKeyboardButton("☠️ ارتقا زهر", callback_data="upgrade:poison"),
+        ],
+    ]
+    if is_owner:
+        rows.append([InlineKeyboardButton("🛠 پنل ادمین", callback_data="menu:admin")])
+    return InlineKeyboardMarkup(rows)
 
 
 def _start_sync(tg_user):
@@ -108,8 +111,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         lines.append(streak_line + "\n")
 
     lines.append(creature_card_text(user, creature))
+    is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
     await update.message.reply_text(
-        "\n".join(lines), parse_mode="HTML", reply_markup=creature_keyboard()
+        "\n".join(lines), parse_mode="HTML", reply_markup=creature_keyboard(is_owner)
     )
 
 
@@ -125,8 +129,9 @@ async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "😅 هنوز موجودی نداری! دستور /start رو بزن تا از آزمایشگاه شروع کنی."
         )
         return
+    is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
     await update.effective_message.reply_text(
-        creature_card_text(user, creature), parse_mode="HTML", reply_markup=creature_keyboard()
+        creature_card_text(user, creature), parse_mode="HTML", reply_markup=creature_keyboard(is_owner)
     )
 
 
@@ -172,10 +177,11 @@ async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     user, creature, note = result
     await query.answer()
+    is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
     await query.edit_message_text(
         note + "\n\n" + creature_card_text(user, creature),
         parse_mode="HTML",
-        reply_markup=creature_keyboard(),
+        reply_markup=creature_keyboard(is_owner),
     )
 
 
@@ -218,10 +224,11 @@ async def select(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
+    is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
     await update.message.reply_text(
         f"✅ <b>{creature.name}</b> حالا موجود فعالته!\n\n" + creature_card_text(user, creature),
         parse_mode="HTML",
-        reply_markup=creature_keyboard(),
+        reply_markup=creature_keyboard(is_owner),
     )
 
 
@@ -251,12 +258,13 @@ async def splice_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
+    is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
     await update.message.reply_text(
         "🧪 <b>ترکیب موفق بود!</b> والدین توی کلکسیونت غیرفعال شدن و یه موجود جدید متولد شد:\n\n"
         + creature_card_text(user, child)
         + _mission_lines(completed_missions),
         parse_mode="HTML",
-        reply_markup=creature_keyboard(),
+        reply_markup=creature_keyboard(is_owner),
     )
 
 
@@ -449,6 +457,39 @@ async def rank(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
+def _profile_sync(tg_user):
+    from django.db.models import Sum
+
+    from bio_lab.models import DailyActionLog, DuelLog, RaidDamageLog
+
+    user, _ = get_or_create_user(tg_user)
+    duel_wins = DuelLog.objects.filter(winner=user).count()
+    total_raid_damage = RaidDamageLog.objects.filter(user=user).aggregate(t=Sum("damage"))["t"] or 0
+    total_hunts = DailyActionLog.objects.filter(user=user, action="hunt").aggregate(t=Sum("count"))["t"] or 0
+    creatures_owned = Creature.objects.filter(owner=user).count()
+    return user, {
+        "duel_wins": duel_wins,
+        "total_raid_damage": total_raid_damage,
+        "total_hunts": total_hunts,
+        "creatures_owned": creatures_owned,
+    }
+
+
+async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user, stats = await run_db(_profile_sync, update.effective_user)
+    lines = [
+        f"👤 <b>پروفایل {display_name(user)}</b>\n",
+        f"📅 عضو از: {user.created_at.strftime('%Y-%m-%d')}",
+        f"🔥 روزهای ورود پشت‌سرهم: {user.login_streak}",
+        f"🧬 موجودات ساخته‌شده: {stats['creatures_owned']}\n",
+        f"⚔️ دوئل‌های برده: {stats['duel_wins']}",
+        f"🏹 شکارهای انجام‌شده: {stats['total_hunts']}",
+        f"🐲 کل دمیج واردشده به رید باس‌ها: {stats['total_raid_damage']}\n",
+        f"{get_emoji('coin', '💰')} سکه فعلی: {user.coins}   {get_emoji('dna', '🧬')} DNA فعلی: {user.dna_fragments}",
+    ]
+    await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
 def main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
@@ -464,6 +505,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton("🤝 اتحاد من", callback_data="menu:alliance_info"),
                 InlineKeyboardButton("🏆 رتبه‌بندی", callback_data="menu:rank"),
             ],
+            [InlineKeyboardButton("👤 پروفایل من", callback_data="menu:profile")],
         ]
     )
 
@@ -481,6 +523,8 @@ _MENU_ACTIONS = {
     "missions": missions,
     "alliance_info": alliance_info_cmd,
     "rank": rank,
+    "admin": admin_cmd,
+    "profile": profile,
 }
 
 
@@ -507,5 +551,6 @@ def register(application) -> None:
     application.add_handler(CommandHandler("alliance_info", alliance_info_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("alliance_top", alliance_top, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("rank", rank, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("profile", profile, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("menu", menu, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^menu:"))
