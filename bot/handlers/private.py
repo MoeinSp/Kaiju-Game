@@ -1,17 +1,28 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CommandHandler, ContextTypes, filters
 
+from db.models import Creature
 from db.repository import get_active_creature, get_or_create_user
 from db.session import get_session
 from game import constants
-from game.creature import GameError, create_starter_creature, effective_stats, feed, train, upgrade_part
+from game.creature import (
+    GameError,
+    create_starter_creature,
+    effective_stats,
+    feed,
+    list_creatures,
+    set_active_creature,
+    train,
+    upgrade_part,
+)
+from game.splice import splice
 
 
 def creature_card_text(user, creature) -> str:
     stats = effective_stats(creature)
     return (
-        f"🧬 <b>{creature.name}</b> ({constants.ELEMENT_LABELS[creature.element]})\n"
-        f"سطح {creature.level} — نایابی: {creature.rarity}\n"
+        f"🧬 <b>{creature.name}</b> (#{creature.id}) — {constants.ELEMENT_LABELS[creature.element]}\n"
+        f"{constants.RARITY_LABELS[creature.rarity]} — سطح {creature.level}\n"
         f"XP: {creature.xp}/{constants.XP_PER_LEVEL}\n\n"
         f"❤️ HP: {stats['hp']}\n"
         f"⚔️ ATK: {stats['atk']}\n"
@@ -120,6 +131,85 @@ async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         session.close()
 
 
+async def collection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    session = get_session()
+    try:
+        user, _ = get_or_create_user(session, update.effective_user)
+        creatures = list_creatures(session, user)
+        if not creatures:
+            await update.message.reply_text("کلکسیونت خالیه! دستور /start رو بزن.")
+            return
+
+        lines = ["🗂 <b>کلکسیون تو:</b>"]
+        for c in creatures:
+            active_tag = " ✅فعال" if c.is_active else ""
+            lines.append(
+                f"#{c.id} {c.name} — {constants.ELEMENT_LABELS[c.element]} — "
+                f"{constants.RARITY_LABELS[c.rarity]} — Lv{c.level}{active_tag}"
+            )
+        lines.append("\nبرای تعویض موجود فعال بنویس: /select و شماره موجود (مثلاً /select 3)")
+        lines.append("برای ترکیب دو موجود بنویس: /splice و دو شماره (مثلاً /splice 3 5)")
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    finally:
+        session.close()
+
+
+async def select(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    session = get_session()
+    try:
+        if not context.args or not context.args[0].isdigit():
+            await update.message.reply_text("استفاده درست: /select و شماره موجود (مثلاً /select 3)\nبرای دیدن شماره‌ها: /collection")
+            return
+        user, _ = get_or_create_user(session, update.effective_user)
+        try:
+            creature = set_active_creature(session, user, int(context.args[0]))
+        except GameError as exc:
+            await update.message.reply_text(str(exc))
+            return
+        await update.message.reply_text(
+            f"{creature.name} حالا موجود فعالته!\n\n" + creature_card_text(user, creature),
+            parse_mode="HTML",
+            reply_markup=creature_keyboard(),
+        )
+    finally:
+        session.close()
+
+
+async def splice_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    session = get_session()
+    try:
+        if len(context.args) != 2 or not all(a.isdigit() for a in context.args):
+            await update.message.reply_text(
+                "استفاده درست: /splice و دو شماره موجود (مثلاً /splice 3 5)\nبرای دیدن شماره‌ها: /collection"
+            )
+            return
+        user, _ = get_or_create_user(session, update.effective_user)
+        id_a, id_b = int(context.args[0]), int(context.args[1])
+        parent_a = session.get(Creature, id_a)
+        parent_b = session.get(Creature, id_b)
+        if parent_a is None or parent_b is None:
+            await update.message.reply_text("یکی از این idها پیدا نشد.")
+            return
+
+        try:
+            child = splice(session, user, parent_a, parent_b)
+        except GameError as exc:
+            await update.message.reply_text(str(exc))
+            return
+
+        await update.message.reply_text(
+            f"🧪 ترکیب موفق بود! والدین جذب شدن و یک موجود جدید متولد شد:\n\n"
+            + creature_card_text(user, child),
+            parse_mode="HTML",
+            reply_markup=creature_keyboard(),
+        )
+    finally:
+        session.close()
+
+
 def register(application) -> None:
     application.add_handler(CommandHandler("start", start, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("me", me, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("collection", collection, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("select", select, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("splice", splice_cmd, filters.ChatType.PRIVATE))

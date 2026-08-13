@@ -1,5 +1,6 @@
 import datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from db.models import Creature, User
@@ -70,6 +71,21 @@ def train(session: Session, creature: Creature) -> int:
     levels_gained = add_xp(creature, constants.TRAIN_XP_GAIN)
     session.commit()
     return levels_gained
+
+
+def list_creatures(session: Session, user: User) -> list[Creature]:
+    stmt = select(Creature).where(Creature.owner_id == user.id).order_by(Creature.id)
+    return list(session.execute(stmt).scalars().all())
+
+
+def set_active_creature(session: Session, user: User, creature_id: int) -> Creature:
+    target = session.get(Creature, creature_id)
+    if target is None or target.owner_id != user.id:
+        raise GameError("این موجود توی کلکسیون تو نیست.")
+    for creature in list_creatures(session, user):
+        creature.is_active = creature.id == creature_id
+    session.commit()
+    return target
 
 
 def upgrade_part(session: Session, user: User, creature: Creature, part: str) -> int:

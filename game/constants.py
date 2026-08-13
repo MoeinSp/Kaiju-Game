@@ -27,6 +27,39 @@ SPECIES_NAMES = {
 STRONG_MULTIPLIER = 1.3
 WEAK_MULTIPLIER = 0.7
 
+RARITY_ORDER = ["common", "rare", "epic", "legendary", "mutant"]
+
+RARITY_LABELS = {
+    "common": "⚪ معمولی",
+    "rare": "🔵 نایاب",
+    "epic": "🟣 حماسی",
+    "legendary": "🟡 افسانه‌ای",
+    "mutant": "🔴 جهش‌یافته",
+}
+
+RARITY_STAT_MULTIPLIER = {
+    "common": 1.0,
+    "rare": 1.15,
+    "epic": 1.35,
+    "legendary": 1.6,
+    "mutant": 2.0,
+}
+
+# chance that a splice result upgrades one tier above the higher-rarity parent
+RARITY_UPGRADE_CHANCE = {
+    "common": 0.25,
+    "rare": 0.15,
+    "epic": 0.08,
+    "legendary": 0.03,
+}
+
+STARTER_BASE_HP = 50
+STARTER_BASE_ATK = 10
+STARTER_BASE_DEF = 10
+STARTER_BASE_SPD = 10
+
+SPLICE_DNA_COST = 30
+
 STARTING_COINS = 200
 
 FEED_COST_COINS = 20
@@ -68,3 +101,12 @@ def element_multiplier(attacker_element: str, defender_element: str) -> float:
     if ELEMENT_STRONG_AGAINST[defender_element] == attacker_element:
         return WEAK_MULTIPLIER
     return 1.0
+
+
+def next_rarity(rarity: str) -> str:
+    idx = RARITY_ORDER.index(rarity)
+    return RARITY_ORDER[min(idx + 1, len(RARITY_ORDER) - 1)]
+
+
+def higher_rarity(rarity_a: str, rarity_b: str) -> str:
+    return rarity_a if RARITY_ORDER.index(rarity_a) >= RARITY_ORDER.index(rarity_b) else rarity_b
