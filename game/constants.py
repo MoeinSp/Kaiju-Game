@@ -40,16 +40,49 @@ def element_label(element: str) -> str:
 
     return f"{get_emoji(ELEMENT_EMOJI_KEYS[element])} {ELEMENT_WORDS[element]}"
 
-# Persian names, because the whole bot speaks Persian and the old transliterated
-# English ones ("Hydrolarva", "Boulderkin") were unreadable at a glance. The name
-# is also the fusion identity key — two creatures only fuse if these match — so
-# keeping a small, memorable set per element matters for gameplay, not just flavor.
-SPECIES_NAMES = {
-    "fire": ["آتش‌دم", "شعله‌تاز", "اخگر", "دودچنگ", "کوره‌زاد"],
-    "water": ["موج‌سوار", "آبچر", "نیلگون", "غرقاب", "صدف‌پوش"],
-    "earth": ["سنگ‌پشته", "خاک‌چنگ", "کوهزاد", "غارنشین", "ریشه‌دار"],
-    "electric": ["رعدپا", "برق‌رو", "آذرخش", "جرقه‌ساز", "توفنده"],
+# Names drawn from Persian myth (Shahnameh / Avestan lore) rather than invented
+# words. **SPECIES is the single source of truth and the mapping is strictly
+# one-to-one**: a name determines its element, and no name appears under two
+# elements. That's not cosmetic — `name` is the fusion identity key (two creatures
+# only fuse if their names match), so a name shared by two different species would
+# let unrelated creatures fuse together.
+SPECIES = {
+    # fire — آتش و اژدها
+    "سیمرغ": "fire",
+    "اژدهاک": "fire",
+    "آذرگشسب": "fire",
+    "ضحاک": "fire",
+    "فرنبغ": "fire",
+    # water — آب و دریا
+    "اپم‌نپات": "water",
+    "آناهیتا": "water",
+    "تیشتر": "water",
+    "کرکس دریا": "water",
+    "ماهی‌ور": "water",
+    # earth — خاک و کوه
+    "کرکدان": "earth",
+    "البرزکوه": "earth",
+    "اسپندارمذ": "earth",
+    "گاوبرمایه": "earth",
+    "سنگ‌دیو": "earth",
+    # electric — رعد و باد
+    "بهرام": "electric",
+    "وایو": "electric",
+    "هما": "electric",
+    "رخش": "electric",
+    "شهباز": "electric",
 }
+
+# derived view: element -> [names]. Built from SPECIES so the two can never drift.
+SPECIES_NAMES: dict[str, list[str]] = {}
+for _name, _element in SPECIES.items():
+    SPECIES_NAMES.setdefault(_element, []).append(_name)
+
+
+def species_element(name: str) -> str | None:
+    """The element a species name belongs to, or None if it isn't a known species
+    (e.g. a creature created before the registry existed)."""
+    return SPECIES.get(name)
 
 STRONG_MULTIPLIER = 1.3
 WEAK_MULTIPLIER = 0.7
@@ -190,7 +223,11 @@ MISSION_DEFS = {
     },
 }
 
-STARTING_COINS = 200
+# generous welcome package — a new player should be able to build, forge, and open
+# a diamond box on day one instead of grinding before the game opens up
+STARTING_COINS = 5000
+STARTING_DNA = 100
+STARTING_DIAMONDS = 100
 
 FEED_COST_COINS = 20
 FEED_XP_GAIN = 15
@@ -242,7 +279,9 @@ EQUIPMENT_BASE_BONUS = {
     "offhand": {"poison": 2},
 }
 
-EQUIPMENT_MAX_LEVEL = 10
+# absolute ceiling (blacksmith level 5 x 5 levels each); the *effective* cap for a
+# given player is game.blacksmith.equipment_cap(), based on their forge's level
+EQUIPMENT_MAX_LEVEL = 25
 EQUIPMENT_UPGRADE_BONUS_PCT = 0.15  # each +level adds 15% on top of the base bonus
 EQUIPMENT_UPGRADE_GOLD_COST = 40  # per +level, scaled by current level in upgrade_cost-style formula
 EQUIPMENT_DUPES_TO_UPGRADE = 1  # duplicate equipment (same slot+template+rarity) consumed per +level
@@ -264,31 +303,63 @@ HEIST_COOLDOWN_HOURS = 6
 HEIST_DAILY_ATTEMPTS = 3
 ENERGY_CAPS["heist"] = HEIST_DAILY_ATTEMPTS
 
-# ── Star prestige — never player-set directly; the only source is fusion, and
-# fusion now demands two creatures of the SAME species name at the SAME star, so
-# climbing 1★→5★ is a deliberate collection goal rather than a side effect of
-# fusing whatever happened to be lying around. The child keeps both parents' XP. ─
+# ── Star prestige — never player-set directly; the only source is fusion, which
+# demands two creatures of the SAME species name at the SAME star. STAR_MAX is the
+# absolute ceiling, but each player's real cap is their main hall's level (see
+# game.buildings.star_cap) — so stars are gated behind base progression. ────────
 STAR_MAX = 5
 STAR_STAT_BONUS_PCT = 0.05
 
-# ── Buildings: a small idle-production base with exactly one upgrade "worker"
-# at a time. Production accrues lazily (same pattern as game/energy.py's stamina
-# regen — computed from last_collected_at, no background ticking). ─────────────
-BUILDING_TYPES = ["gold_collector", "diamond_collector"]
+# ── Buildings: the backbone of progression. Everything is level-gated by the main
+# hall — no other building may exceed its level, so the hall is the deliberate
+# bottleneck the whole base plans around. Production accrues lazily (same pattern
+# as game/energy.py's stamina regen — computed from last_collected_at, no
+# background ticking).
+#
+# **Level 0 means "not built yet"** — only the main hall starts at level 1. The
+# first "upgrade" of any other building is its construction.
+MAIN_BUILDING = "main_hall"
+BUILDING_TYPES = [
+    "main_hall",
+    "gold_collector",
+    "diamond_collector",
+    "dna_lab",
+    "blacksmith",
+    "fusion_lab",
+]
 BUILDING_LABELS = {
+    "main_hall": "🏛 تالار مِهر",  # the main hall; everything else is capped by its level
     "gold_collector": "🏭 جمع‌کننده طلا",
     "diamond_collector": "💎 جمع‌کننده الماس",
+    "dna_lab": "🧬 آزمایشگاه DNA",
+    "blacksmith": "⚒ آهنگری",
+    "fusion_lab": "🔮 تالار ادغام",
 }
-BUILDING_MAX_LEVEL = 10
+BUILDING_DESCRIPTIONS = {
+    "main_hall": "قلب آزمایشگاه. سقف سطح بقیه‌ی ساختمون‌ها و سقف ستاره‌ی هیولاهات رو تعیین می‌کنه.",
+    "gold_collector": "به‌مرور طلا تولید می‌کنه.",
+    "diamond_collector": "به‌مرور الماس تولید می‌کنه (خیلی کند، چون الماس ارز ویژه‌ست).",
+    "dna_lab": "به‌مرور DNA تولید می‌کنه.",
+    "blacksmith": "برای ارتقای تجهیزات لازمه. هر سطحش سقف تجهیزات رو ۵ تا بالاتر می‌بره.",
+    "fusion_lab": "برای ادغام دو هیولای هم‌نوع و بالا بردن ستاره لازمه.",
+}
+BUILDING_MAX_LEVEL = 5
 BUILDING_UPGRADE_BASE_GOLD_COST = 100  # scales by *level per level-up
 BUILDING_UPGRADE_BASE_MINUTES = 15  # scales by *level per level-up
 
 # rate_per_hour/cap_base scale by *level; diamond_collector's rate is deliberately
-# tiny since diamonds are the premium currency
+# tiny since diamonds are the premium currency. Buildings absent from this table
+# (main hall, blacksmith, fusion lab) are pure gates — they unlock things instead
+# of producing resources.
 BUILDING_PRODUCTION = {
     "gold_collector": {"rate_per_hour": 20.0, "cap_base": 200, "resource": "coins"},
     "diamond_collector": {"rate_per_hour": 0.4, "cap_base": 4, "resource": "diamonds"},
+    "dna_lab": {"rate_per_hour": 2.0, "cap_base": 20, "resource": "dna_fragments"},
 }
+
+# each blacksmith level raises the equipment ceiling by this much, so a level-1
+# forge caps items at +5 and a maxed level-5 forge at +25
+EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL = 5
 
 # ── Speed-up cards: consumable items that shave time off the active building
 # upgrade. Fixed denominations in minutes, rewarded by the daily wheel and a

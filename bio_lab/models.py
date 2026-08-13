@@ -10,9 +10,10 @@ class User(models.Model):
     username = models.CharField(max_length=64, null=True, blank=True)
     first_name = models.CharField(max_length=128, null=True, blank=True)
     lab_name = models.CharField(max_length=32, null=True, blank=True)  # set once, at first /start
-    coins = models.IntegerField(default=200)
-    dna_fragments = models.IntegerField(default=0)
-    diamonds = models.IntegerField(default=0)  # premium currency: diamond collector, daily wheel, diamond boxes
+    # welcome package — keep in sync with game.constants.STARTING_*
+    coins = models.IntegerField(default=5000)
+    dna_fragments = models.IntegerField(default=100)
+    diamonds = models.IntegerField(default=100)  # premium currency: diamond collector, daily wheel, diamond boxes
 
     energy = models.IntegerField(default=20)  # keep in sync with game.constants.MAX_ENERGY
     energy_updated_at = models.DateTimeField(default=timezone.now)
@@ -101,7 +102,7 @@ class Building(models.Model):
 
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="buildings")
     building_type = models.CharField(max_length=32)  # one of game.constants.BUILDING_TYPES
-    level = models.IntegerField(default=1)
+    level = models.IntegerField(default=0)  # 0 = not built yet; only the main hall starts at 1
     last_collected_at = models.DateTimeField(default=timezone.now)
 
     class Meta:

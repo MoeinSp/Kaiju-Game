@@ -77,8 +77,15 @@ def upgrade_item(user: User, item_id: int, dupe_item_id: int) -> Equipment:
         raise GameError("این تجهیزات مال تو نیست.")
     if item.id == dupe.id:
         raise GameError("باید یه تجهیزات تکراری متفاوت انتخاب کنی.")
-    if item.level >= constants.EQUIPMENT_MAX_LEVEL:
-        raise GameError(f"این تجهیزات به سقف +{constants.EQUIPMENT_MAX_LEVEL} رسیده.")
+
+    # the blacksmith gates BOTH upgrade paths — this one (consume a duplicate) and
+    # game.blacksmith.forge (pay gold) — so a forge-less player can't sidestep it
+    from game.blacksmith import assert_forge_available, equipment_cap
+
+    assert_forge_available(user)
+    cap = equipment_cap(user)
+    if item.level >= cap:
+        raise GameError(f"این تجهیزات به سقف فعلی (+{cap}) رسیده — اول ⚒ آهنگری رو ارتقا بده.")
     if dupe.slot != item.slot or dupe.template_key != item.template_key or dupe.rarity != item.rarity:
         raise GameError("تجهیزات دوم باید هم‌نوع (اسلات/مدل/نایابی یکسان) باشه.")
     cost = constants.EQUIPMENT_UPGRADE_GOLD_COST * item.level

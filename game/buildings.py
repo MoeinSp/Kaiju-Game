@@ -26,15 +26,55 @@ def maybe_award_speedup_card(user: User) -> int | None:
 
 
 def get_or_create_buildings(user: User) -> list[Building]:
+    """Seeds one row per building type. Everything starts at level 0 ("not built")
+    except the main hall, which a player always owns — otherwise there'd be nothing
+    to gate the very first construction against."""
     buildings = []
     for building_type in constants.BUILDING_TYPES:
-        building, _ = Building.objects.get_or_create(owner=user, building_type=building_type)
+        default_level = 1 if building_type == constants.MAIN_BUILDING else 0
+        building, _ = Building.objects.get_or_create(
+            owner=user, building_type=building_type, defaults={"level": default_level}
+        )
         buildings.append(building)
     return buildings
 
 
+def building_level(user: User, building_type: str) -> int:
+    """0 when the building doesn't exist yet or hasn't been constructed."""
+    building = Building.objects.filter(owner=user, building_type=building_type).first()
+    return building.level if building is not None else 0
+
+
+def main_hall_level(user: User) -> int:
+    return building_level(user, constants.MAIN_BUILDING)
+
+
+def max_level_for(user: User, building_type: str) -> int:
+    """The main hall is capped by BUILDING_MAX_LEVEL; every other building is
+    additionally capped by the hall's current level. That single rule is what makes
+    the hall the deliberate progression bottleneck."""
+    if building_type == constants.MAIN_BUILDING:
+        return constants.BUILDING_MAX_LEVEL
+    return min(constants.BUILDING_MAX_LEVEL, main_hall_level(user))
+
+
+def star_cap(user: User) -> int:
+    """A player can only raise creatures to as many stars as their main hall level."""
+    return min(constants.STAR_MAX, max(1, main_hall_level(user)))
+
+
+def is_built(user: User, building_type: str) -> bool:
+    return building_level(user, building_type) > 0
+
+
+def produces(building_type: str) -> bool:
+    return building_type in constants.BUILDING_PRODUCTION
+
+
 def pending_amount(building: Building) -> int:
-    cfg = constants.BUILDING_PRODUCTION[building.building_type]
+    cfg = constants.BUILDING_PRODUCTION.get(building.building_type)
+    if cfg is None or building.level <= 0:
+        return 0  # pure-gate buildings (hall/forge/fusion lab) and unbuilt ones make nothing
     rate = cfg["rate_per_hour"] * building.level
     cap = cfg["cap_base"] * building.level
     elapsed_hours = (timezone.now() - building.last_collected_at).total_seconds() / 3600
@@ -45,6 +85,8 @@ def collect(user: User, building: Building) -> tuple[int, str]:
     """Returns (amount, resource_field) collected."""
     if building.owner_id != user.id:
         raise GameError("این ساختمون مال تو نیست.")
+    if not produces(building.building_type):
+        raise GameError("این ساختمون چیزی تولید نمی‌کنه.")
     amount = pending_amount(building)
     if amount <= 0:
         raise GameError("چیزی برای جمع‌آوری نیست، بعداً دوباره سر بزن.")
@@ -75,6 +117,16 @@ def active_upgrade(user: User) -> BuildingUpgrade | None:
     return BuildingUpgrade.objects.filter(owner=user).first()
 
 
+def upgrade_cost_and_minutes(building: Building) -> tuple[int, int]:
+    """Construction (level 0 -> 1) is priced as if it were a level-1 upgrade, so a
+    brand-new building isn't free."""
+    steps = max(1, building.level)
+    return (
+        constants.BUILDING_UPGRADE_BASE_GOLD_COST * steps,
+        constants.BUILDING_UPGRADE_BASE_MINUTES * steps,
+    )
+
+
 def start_upgrade(user: User, building: Building) -> BuildingUpgrade:
     if building.owner_id != user.id:
         raise GameError("این ساختمون مال تو نیست.")
@@ -83,16 +135,21 @@ def start_upgrade(user: User, building: Building) -> BuildingUpgrade:
         raise GameError(
             "همین الان یه ارتقا در حال انجامه — فقط یه کارگر داری، صبر کن تموم بشه یا با کارت سرعت بدش."
         )
+
+    cap = max_level_for(user, building.building_type)
     if building.level >= constants.BUILDING_MAX_LEVEL:
         raise GameError("این ساختمون به سقف سطح رسیده.")
+    if building.level >= cap:
+        hall = constants.BUILDING_LABELS[constants.MAIN_BUILDING]
+        raise GameError(f"اول باید {hall} رو ارتقا بدی — هیچ ساختمونی نمی‌تونه از سطح اون جلو بزنه.")
 
-    cost = constants.BUILDING_UPGRADE_BASE_GOLD_COST * building.level
+    cost, minutes = upgrade_cost_and_minutes(building)
     if user.coins < cost:
-        raise GameError(f"طلا کافی نداری! ارتقا {cost} طلا هزینه داره.")
+        verb = "ساخت" if building.level == 0 else "ارتقا"
+        raise GameError(f"طلا کافی نداری! {verb} {cost} طلا هزینه داره.")
     user.coins -= cost
     user.save(update_fields=["coins"])
 
-    minutes = constants.BUILDING_UPGRADE_BASE_MINUTES * building.level
     finishes_at = timezone.now() + datetime.timedelta(minutes=minutes)
     return BuildingUpgrade.objects.create(
         owner=user, building=building, target_level=building.level + 1, finishes_at=finishes_at

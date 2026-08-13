@@ -4,14 +4,26 @@ from django.db import transaction
 
 from bio_lab.models import Creature, User
 from game import constants
+from game.buildings import is_built, star_cap
 from game.creature import GameError
 from game.equipment import get_equipped_items
+
+FUSION_BUILDING = "fusion_lab"
+
+
+def assert_fusion_available(user: User) -> None:
+    if not is_built(user, FUSION_BUILDING):
+        raise GameError("اول باید 🔮 تالار ادغام رو از «🏗 ساختمون‌ها» بسازی.")
 
 
 def fusion_partners(user: User, creature: Creature) -> list[Creature]:
     """Everything this creature can legally fuse with: same species name, same
-    star. Powers the picker UI so a player never gets offered an invalid pair."""
-    if creature.star_level >= constants.STAR_MAX:
+    star. Powers the picker UI so a player never gets offered an invalid pair.
+    Empty when the fusion lab isn't built or the creature is already at the
+    player's main-hall-derived star cap."""
+    if not is_built(user, FUSION_BUILDING):
+        return []
+    if creature.star_level >= star_cap(user):
         return []
     return list(
         Creature.objects.filter(owner=user, name=creature.name, star_level=creature.star_level)
@@ -30,6 +42,7 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
     Returns (child, inherited_item) — inherited_item is the Equipment moved onto the
     child if the FUSION_INHERIT_CHANCE roll hit and either parent had gear equipped,
     else None."""
+    assert_fusion_available(user)
     if parent_a.owner_id != user.id or parent_b.owner_id != user.id:
         raise GameError("هر دو موجود باید مال خودت باشن.")
     if parent_a.id == parent_b.id:
@@ -38,8 +51,13 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
         raise GameError("فقط دو هیولای هم‌نوع (با اسم یکسان) با هم ترکیب می‌شن.")
     if parent_a.star_level != parent_b.star_level:
         raise GameError("هر دو هیولا باید ستاره‌ی یکسان داشته باشن.")
-    if parent_a.star_level >= constants.STAR_MAX:
-        raise GameError(f"این هیولا به سقف {constants.STAR_MAX} ستاره رسیده.")
+
+    cap = star_cap(user)
+    if parent_a.star_level >= cap:
+        hall = constants.BUILDING_LABELS[constants.MAIN_BUILDING]
+        raise GameError(
+            f"سقف ستاره‌ی فعلی تو {cap}⭐ ـه — برای بالاتر رفتن باید {hall} رو ارتقا بدی."
+        )
     if user.coins < constants.FUSION_GOLD_COST:
         raise GameError(f"طلا کافی نداری! فیوژن {constants.FUSION_GOLD_COST} طلا هزینه داره.")
 
