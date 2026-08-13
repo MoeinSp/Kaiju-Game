@@ -99,7 +99,7 @@ async def list_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     lines.append("همه‌ی کلیدهای قابل تنظیم:")
     lines.append(_keys_help())
-    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
 async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -108,16 +108,48 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     stats = await run_db(dashboard_stats)
     text = (
         "🛠 <b>پنل مدیریت</b>\n\n"
-        f"👥 کاربران: {stats['users']}\n"
-        f"🧬 موجودات: {stats['creatures']}\n"
-        f"🤝 اتحادها: {stats['alliances']}\n"
-        f"🐲 رید فعال: {stats['active_raids']}\n\n"
-        "برای گزارش کامل و تشخیص فعالیت مشکوک: /report\n"
-        "<i>دکمه‌ی زیر فقط وقتی کار می‌کنه که از همون سیستمی بازش کنی که بات روش اجرا می‌شه "
-        "(مگه اینکه ADMIN_PANEL_URL رو روی یه آدرس عمومی/تانل تنظیم کرده باشی).</i>"
+        f"👥 کاربران: {stats['users']}   🧬 موجودات: {stats['creatures']}\n"
+        f"🤝 اتحادها: {stats['alliances']}   🐲 رید فعال: {stats['active_raids']}\n\n"
+        "━━━━━━━━━━━━━━\n"
+        "👤 <b>مدیریت کاربر</b> (آیدی یا @یوزرنیم)\n"
+        "<code>/user_info آیدی</code> — پروفایل کامل\n"
+        "<code>/grant آیدی coins/dna مقدار</code> — اعطای منبع\n"
+        "<code>/deduct آیدی coins/dna مقدار</code> — کسر منبع\n"
+        "<code>/ban آیدی</code> · <code>/unban آیدی</code> — مسدودسازی\n\n"
+        "🧬 <b>مدیریت موجود</b>\n"
+        "<code>/delete_creature شماره</code> — حذف واقعی (با تأیید)\n\n"
+        "📢 <b>ارتباط</b>\n"
+        "<code>/broadcast متن</code> — پیام همگانی\n\n"
+        "🎨 <b>ایموجی پرمیوم</b>\n"
+        "<code>/set_emoji کلید</code> + ایموجی · <code>/clear_emoji کلید</code>\n\n"
+        "<i>دکمه‌ی «پنل کامل» فقط از همون سیستمی که بات روش اجرا می‌شه باز می‌شه "
+        "(مگه ADMIN_PANEL_URL رو روی آدرس عمومی/تانل تنظیم کرده باشی).</i>"
     )
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🌐 باز کردن پنل ادمین کامل", url=ADMIN_PANEL_URL)]])
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("📊 گزارش پیشرفت", callback_data="admin_menu:report"),
+                InlineKeyboardButton("🎨 لیست ایموجی‌ها", callback_data="admin_menu:list_emoji"),
+            ],
+            [InlineKeyboardButton("🌐 باز کردن پنل کامل", url=ADMIN_PANEL_URL)],
+        ]
+    )
     await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+
+_ADMIN_MENU_ACTIONS = {}  # populated at the bottom of the module, after every command is defined
+
+
+async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    await query.answer()
+    action = query.data.split(":", 1)[1]
+    handler = _ADMIN_MENU_ACTIONS.get(action)
+    if handler is not None:
+        await handler(update, context)
 
 
 async def report_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -337,6 +369,9 @@ async def delete_creature_confirm_callback(update: Update, context: ContextTypes
     await query.edit_message_text(f"🗑 موجود «{name}» برای همیشه حذف شد.")
 
 
+_ADMIN_MENU_ACTIONS.update({"report": report_cmd, "list_emoji": list_emoji_cmd})
+
+
 def register(application) -> None:
     private_only = filters.ChatType.PRIVATE
     application.add_handler(CommandHandler("set_emoji", set_emoji_cmd, private_only))
@@ -352,3 +387,4 @@ def register(application) -> None:
     application.add_handler(CommandHandler("unban", unban_cmd, private_only))
     application.add_handler(CommandHandler("delete_creature", delete_creature_cmd, private_only))
     application.add_handler(CallbackQueryHandler(delete_creature_confirm_callback, pattern=r"^admin_del"))
+    application.add_handler(CallbackQueryHandler(admin_menu_callback, pattern=r"^admin_menu:"))
