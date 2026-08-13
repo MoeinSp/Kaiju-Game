@@ -3,7 +3,7 @@ import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from db.models import DailyActionLog, MissionClaim, User
+from db.models import DailyActionLog, Group, GroupEventLog, MissionClaim, User
 from game import constants
 from game.creature import GameError
 
@@ -68,6 +68,19 @@ def check_missions(session: Session, user: User, action: str) -> list[dict]:
             completed.append({**defn, "key": key})
     session.commit()
     return completed
+
+
+def group_event_available(session: Session, group: Group, event_key: str) -> bool:
+    day = today_str()
+    stmt = select(GroupEventLog).where(
+        GroupEventLog.group_id == group.id, GroupEventLog.event_key == event_key, GroupEventLog.day == day
+    )
+    return session.execute(stmt).scalar_one_or_none() is None
+
+
+def mark_group_event(session: Session, group: Group, event_key: str) -> None:
+    session.add(GroupEventLog(group_id=group.id, event_key=event_key, day=today_str()))
+    session.commit()
 
 
 def mission_status(session: Session, user: User) -> list[dict]:

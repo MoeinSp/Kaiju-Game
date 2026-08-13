@@ -87,6 +87,25 @@ class RaidDamageLog(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class GroupMembership(Base):
+    __tablename__ = "group_memberships"
+    __table_args__ = (UniqueConstraint("group_id", "user_id", name="uq_group_member"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("groups.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+
+
+class GroupEventLog(Base):
+    __tablename__ = "group_event_logs"
+    __table_args__ = (UniqueConstraint("group_id", "event_key", "day", name="uq_group_event"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("groups.id"))
+    event_key: Mapped[str] = mapped_column(String(32))
+    day: Mapped[str] = mapped_column(String(10))
+
+
 class DailyActionLog(Base):
     __tablename__ = "daily_action_logs"
     __table_args__ = (UniqueConstraint("user_id", "action", "day", name="uq_daily_action"),)

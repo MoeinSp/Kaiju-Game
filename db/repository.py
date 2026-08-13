@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from telegram import Chat, User as TgUser
 
-from db.models import Creature, Group, User
+from db.models import Creature, Group, GroupMembership, User
 
 
 def get_or_create_user(session: Session, tg_user: TgUser) -> tuple[User, bool]:
@@ -40,3 +40,23 @@ def get_or_create_group(session: Session, chat: Chat) -> Group:
 def get_active_creature(session: Session, user: User) -> Creature | None:
     stmt = select(Creature).where(Creature.owner_id == user.id, Creature.is_active.is_(True))
     return session.execute(stmt).scalars().first()
+
+
+def touch_membership(session: Session, group: Group, user: User) -> None:
+    """Records that `user` has been active in `group`, so group-scoped features
+    (leaderboard, guardian) know who to consider."""
+    stmt = select(GroupMembership).where(
+        GroupMembership.group_id == group.id, GroupMembership.user_id == user.id
+    )
+    if session.execute(stmt).scalar_one_or_none() is None:
+        session.add(GroupMembership(group_id=group.id, user_id=user.id))
+        session.commit()
+
+
+def group_member_creatures(session: Session, group: Group) -> list[Creature]:
+    stmt = (
+        select(Creature)
+        .join(GroupMembership, GroupMembership.user_id == Creature.owner_id)
+        .where(GroupMembership.group_id == group.id, Creature.is_active.is_(True))
+    )
+    return list(session.execute(stmt).scalars().all())

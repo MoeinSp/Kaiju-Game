@@ -64,6 +64,25 @@ DUEL_WIN_COINS = 30
 DUEL_WIN_XP = 20
 DUEL_LOSE_XP = 5
 
+GIVE_RESOURCE_ALIASES = {
+    "coins": "coins",
+    "coin": "coins",
+    "سکه": "coins",
+    "dna": "dna_fragments",
+    "dnas": "dna_fragments",
+    "دی‌ان‌ای": "dna_fragments",
+}
+GIVE_RESOURCE_LABELS = {"coins": "سکه", "dna_fragments": "DNA"}
+
+MUTATION_EVENT_STAT_LABELS = {
+    "base_hp": "❤️ HP",
+    "base_atk": "⚔️ ATK",
+    "base_def": "🛡 DEF",
+    "base_spd": "💨 SPD",
+}
+MUTATION_EVENT_HP_BONUS = (2, 6)
+MUTATION_EVENT_OTHER_BONUS = (1, 3)
+
 # daily action caps — prevents infinite grinding of actions with no natural cooldown
 ENERGY_CAPS = {
     "feed": 8,

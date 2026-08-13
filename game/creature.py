@@ -1,4 +1,5 @@
 import datetime
+import random
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -71,6 +72,17 @@ def train(session: Session, creature: Creature) -> int:
     levels_gained = add_xp(creature, constants.TRAIN_XP_GAIN)
     session.commit()
     return levels_gained
+
+
+def apply_random_mutation(creature: Creature) -> tuple[str, int]:
+    """Applies one free random stat bump (e.g. from a group mutation event). Returns (stat, bonus)."""
+    stat = random.choice(list(constants.MUTATION_EVENT_STAT_LABELS))
+    lo, hi = (
+        constants.MUTATION_EVENT_HP_BONUS if stat == "base_hp" else constants.MUTATION_EVENT_OTHER_BONUS
+    )
+    bonus = random.randint(lo, hi)
+    setattr(creature, stat, getattr(creature, stat) + bonus)
+    return stat, bonus
 
 
 def list_creatures(session: Session, user: User) -> list[Creature]:
