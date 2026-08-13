@@ -1,0 +1,85 @@
+import datetime
+
+from sqlalchemy.orm import Session
+
+from db.models import Creature, User
+from game import constants
+
+
+class GameError(Exception):
+    """Raised for expected game-rule violations (not enough coins, cooldown, etc.)."""
+
+
+def effective_stats(creature: Creature) -> dict[str, int]:
+    return {
+        "hp": creature.base_hp,
+        "atk": creature.base_atk + creature.fangs_lvl * constants.BODY_PARTS["fangs"]["bonus"],
+        "def": creature.base_def + creature.armor_lvl * constants.BODY_PARTS["armor"]["bonus"],
+        "spd": creature.base_spd + creature.wings_lvl * constants.BODY_PARTS["wings"]["bonus"],
+        "poison": creature.poison_lvl * constants.BODY_PARTS["poison"]["bonus"],
+    }
+
+
+def create_starter_creature(session: Session, owner: User) -> Creature:
+    element = constants.random_element()
+    creature = Creature(
+        owner_id=owner.id,
+        name=constants.random_species_name(element),
+        element=element,
+    )
+    session.add(creature)
+    session.flush()
+    return creature
+
+
+def add_xp(creature: Creature, amount: int) -> int:
+    """Adds xp and applies level-ups in place. Returns number of levels gained."""
+    creature.xp += amount
+    levels_gained = 0
+    while creature.xp >= constants.XP_PER_LEVEL:
+        creature.xp -= constants.XP_PER_LEVEL
+        creature.level += 1
+        creature.base_hp += constants.LEVEL_UP_HP
+        creature.base_atk += constants.LEVEL_UP_ATK
+        creature.base_def += constants.LEVEL_UP_DEF
+        creature.base_spd += constants.LEVEL_UP_SPD
+        levels_gained += 1
+    return levels_gained
+
+
+def feed(session: Session, user: User, creature: Creature) -> int:
+    if user.coins < constants.FEED_COST_COINS:
+        raise GameError(f"سکه کافی نداری! هزینه تغذیه {constants.FEED_COST_COINS} سکه است.")
+    user.coins -= constants.FEED_COST_COINS
+    levels_gained = add_xp(creature, constants.FEED_XP_GAIN)
+    session.commit()
+    return levels_gained
+
+
+def train(session: Session, creature: Creature) -> int:
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if creature.last_trained_at is not None:
+        elapsed = now - creature.last_trained_at
+        cooldown = datetime.timedelta(hours=constants.TRAIN_COOLDOWN_HOURS)
+        if elapsed < cooldown:
+            remaining = cooldown - elapsed
+            hours, remainder = divmod(int(remaining.total_seconds()), 3600)
+            minutes = remainder // 60
+            raise GameError(f"هیولات هنوز خسته‌ست، {hours} ساعت و {minutes} دقیقه دیگه صبر کن.")
+    creature.last_trained_at = now
+    levels_gained = add_xp(creature, constants.TRAIN_XP_GAIN)
+    session.commit()
+    return levels_gained
+
+
+def upgrade_part(session: Session, user: User, creature: Creature, part: str) -> int:
+    if part not in constants.BODY_PARTS:
+        raise GameError("این عضو وجود نداره.")
+    current_level = getattr(creature, f"{part}_lvl")
+    cost = constants.upgrade_cost(current_level)
+    if user.coins < cost:
+        raise GameError(f"سکه کافی نداری! ارتقای این عضو {cost} سکه هزینه داره.")
+    user.coins -= cost
+    setattr(creature, f"{part}_lvl", current_level + 1)
+    session.commit()
+    return current_level + 1

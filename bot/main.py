@@ -1,0 +1,28 @@
+import logging
+
+from telegram.ext import Application, CallbackQueryHandler
+
+from bot.handlers import group, private
+from config import BOT_TOKEN
+from db.session import init_db
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+
+def main() -> None:
+    if not BOT_TOKEN:
+        raise RuntimeError("BOT_TOKEN تنظیم نشده. فایل .env رو بر اساس .env.example بساز.")
+
+    init_db()
+
+    application = Application.builder().token(BOT_TOKEN).build()
+
+    private.register(application)
+    group.register(application)
+    application.add_handler(CallbackQueryHandler(private.lab_action_callback))
+
+    application.run_polling()
+
+
+if __name__ == "__main__":
+    main()
