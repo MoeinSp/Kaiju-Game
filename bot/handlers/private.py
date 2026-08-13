@@ -239,22 +239,61 @@ def _collection_sync(tg_user):
     return list_creatures(user)
 
 
+def _collection_keyboard(creatures: list[Creature]) -> InlineKeyboardMarkup:
+    rows = []
+    for c in creatures:
+        tag = "🟢 " if c.is_active else ""
+        rows.append(
+            [InlineKeyboardButton(f"{tag}{c.name} · Lv{c.level} · {constants.RARITY_LABELS[c.rarity]}", callback_data=f"coll_pick:{c.id}")]
+        )
+    rows.append([InlineKeyboardButton("◀️ بازگشت", callback_data="menu:me")])
+    return InlineKeyboardMarkup(rows)
+
+
 async def collection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     creatures = await run_db(_collection_sync, update.effective_user)
     if not creatures:
-        await update.effective_message.reply_text("📭 کلکسیونت خالیه! دستور /start رو بزن.")
+        await update.effective_message.reply_text(f"📭 کلکسیونت خالیه! {get_emoji('egg')} با /start شروع کن.")
         return
+    await update.effective_message.reply_text(
+        f"{get_emoji('collection')} <b>کلکسیون تو</b> — {len(creatures)} موجود\nرو هرکدوم بزن تا جزئیاتش رو ببینی:",
+        parse_mode="HTML",
+        reply_markup=_collection_keyboard(creatures),
+    )
 
-    lines = [f"{get_emoji('collection')} <b>کلکسیون تو</b> — {len(creatures)} موجود\n"]
-    for c in creatures:
-        active_tag = " ✅" if c.is_active else ""
-        lines.append(
-            f"<code>#{c.id}</code> {c.name} — {constants.element_label(c.element)} · "
-            f"{constants.RARITY_LABELS[c.rarity]} · Lv{c.level}{active_tag}"
-        )
-    lines.append("\n🔁 تعویض موجود فعال: <code>/select 3</code>")
-    lines.append("🧪 فیوژن دو موجود: <code>/fusion 3 5</code>")
-    await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
+
+def _creature_detail_sync(tg_user, creature_id):
+    user, _ = get_or_create_user(tg_user)
+    try:
+        creature = Creature.objects.get(id=creature_id, owner=user)
+    except Creature.DoesNotExist:
+        raise GameError("این موجود توی کلکسیون تو نیست.")
+    return user, creature, get_equipped_items(creature)
+
+
+def _creature_detail_keyboard(creature_id: int, is_active: bool) -> InlineKeyboardMarkup:
+    rows = []
+    if not is_active:
+        rows.append([InlineKeyboardButton("🟢 انتخاب به‌عنوان موجود فعال", callback_data=f"coll_select:{creature_id}")])
+    rows.append([InlineKeyboardButton("🧪 استفاده در فیوژن", callback_data=f"fus_a:{creature_id}")])
+    rows.append([InlineKeyboardButton("◀️ بازگشت به کلکسیون", callback_data="menu:collection")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def collection_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    creature_id = int(query.data.split(":")[1])
+    try:
+        user, creature, equipped_items = await run_db(_creature_detail_sync, update.effective_user, creature_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    await query.edit_message_text(
+        creature_card_text(user, creature, equipped_items),
+        parse_mode="HTML",
+        reply_markup=_creature_detail_keyboard(creature.id, creature.is_active),
+    )
 
 
 def _select_sync(tg_user, creature_id):
@@ -263,11 +302,28 @@ def _select_sync(tg_user, creature_id):
     return user, creature, get_equipped_items(creature)
 
 
+async def collection_select_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    creature_id = int(query.data.split(":")[1])
+    try:
+        user, creature, equipped_items = await run_db(_select_sync, update.effective_user, creature_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
+    await query.answer("🟢 انتخاب شد!")
+    await query.edit_message_text(
+        f"🟢 <b>{creature.name}</b> حالا موجود فعالته!\n\n" + creature_card_text(user, creature, equipped_items),
+        parse_mode="HTML",
+        reply_markup=creature_keyboard(is_owner),
+    )
+
+
 async def select(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Kept registered as a power-user shortcut — the advertised path is
+    /collection's buttons (collection_pick_callback -> collection_select_callback)."""
     if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text(
-            "استفاده درست: <code>/select 3</code> (شماره‌ی موجود از /collection)", parse_mode="HTML"
-        )
+        await update.message.reply_text(f"{get_emoji('collection')} برای انتخاب موجود از /collection استفاده کن.")
         return
     try:
         user, creature, equipped_items = await run_db(_select_sync, update.effective_user, int(context.args[0]))
@@ -276,7 +332,7 @@ async def select(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
     await update.message.reply_text(
-        f"✅ <b>{creature.name}</b> حالا موجود فعالته!\n\n" + creature_card_text(user, creature, equipped_items),
+        f"🟢 <b>{creature.name}</b> حالا موجود فعالته!\n\n" + creature_card_text(user, creature, equipped_items),
         parse_mode="HTML",
         reply_markup=creature_keyboard(is_owner),
     )
@@ -313,6 +369,76 @@ async def fusion_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     inherit_note = "\n🧬 یه تجهیزات از والدین به ارث رسید!" if inherited else ""
     await update.message.reply_text(
         f"{get_emoji('lab')} <b>فیوژن موفق بود!</b> والدین سوزانده شدن و یه موجود جدید متولد شد:{inherit_note}\n\n"
+        + creature_card_text(user, child, equipped_items)
+        + _mission_lines(completed_missions),
+        parse_mode="HTML",
+        reply_markup=creature_keyboard(is_owner),
+    )
+
+
+def _fusion_candidates_sync(tg_user, exclude_id):
+    user, _ = get_or_create_user(tg_user)
+    return [c for c in list_creatures(user) if c.id != exclude_id]
+
+
+async def fusion_pick_a_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    parent_a_id = int(query.data.split(":")[1])
+    candidates = await run_db(_fusion_candidates_sync, update.effective_user, parent_a_id)
+    if not candidates:
+        await query.answer("برای فیوژن حداقل به یه موجود دیگه نیاز داری.", show_alert=True)
+        return
+    await query.answer()
+    rows = [
+        [InlineKeyboardButton(f"{c.name} · Lv{c.level}", callback_data=f"fus_b:{parent_a_id}:{c.id}")]
+        for c in candidates
+    ]
+    rows.append([InlineKeyboardButton("◀️ بازگشت", callback_data=f"coll_pick:{parent_a_id}")])
+    await query.edit_message_text(
+        f"{get_emoji('lab')} موجود دومی که می‌خوای بسوزونی رو انتخاب کن:",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+async def fusion_pick_b_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    _, a_id, b_id = query.data.split(":")
+    await query.answer()
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("🟢 تأیید فیوژن", callback_data=f"fus_confirm:{a_id}:{b_id}"),
+                InlineKeyboardButton("🔴 لغو", callback_data=f"coll_pick:{a_id}"),
+            ]
+        ]
+    )
+    await query.edit_message_text(
+        f"{get_emoji('warning')} مطمئنی؟\n\n"
+        f"<blockquote>هر دو موجود <b>برای همیشه سوزانده می‌شن</b> و "
+        f"{constants.FUSION_GOLD_COST} {get_emoji('coin')} هزینه می‌شه. یه شانس هم هست rarity ارتقا پیدا کنه "
+        f"و {int(constants.FUSION_INHERIT_CHANCE * 100)}٪ احتمال داره تجهیزات مجهزشون به ارث برسه.</blockquote>",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+async def fusion_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    _, a_id, b_id = query.data.split(":")
+    try:
+        user, child, completed_missions, equipped_items, inherited = await run_db(
+            _fusion_sync, update.effective_user, int(a_id), int(b_id)
+        )
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
+    inherit_note = "\n🧬 یه تجهیزات از والدین به ارث رسید!" if inherited else ""
+    await query.answer("🟢 فیوژن موفق بود!")
+    await query.edit_message_text(
+        f"{get_emoji('lab')} <b>فیوژن موفق بود!</b> والدین سوزانده شدن و یه موجود جدید متولد شد:\n\n"
+        f"<tg-spoiler>{constants.RARITY_LABELS[child.rarity]}{inherit_note}</tg-spoiler>\n\n"
         + creature_card_text(user, child, equipped_items)
         + _mission_lines(completed_missions),
         parse_mode="HTML",
@@ -439,13 +565,31 @@ def _alliance_info_sync(tg_user):
     return alliance_info(user.alliance)
 
 
+def _alliance_action_keyboard(in_alliance: bool) -> InlineKeyboardMarkup:
+    if in_alliance:
+        rows = [
+            [InlineKeyboardButton("💰 واریز به خزانه", callback_data="ally_deposit")],
+            [InlineKeyboardButton("🏴‍☠️ شبیخون به اتحاد دیگه", callback_data="ally_heist_list")],
+            [InlineKeyboardButton("🏆 برترین اتحادها", callback_data="ally_top")],
+            [InlineKeyboardButton("🔴 خروج از اتحاد", callback_data="ally_leave")],
+        ]
+    else:
+        rows = [
+            [InlineKeyboardButton("🟢 ساخت اتحاد جدید", callback_data="ally_create")],
+            [InlineKeyboardButton("🔵 پیوستن به اتحاد", callback_data="ally_join")],
+            [InlineKeyboardButton("🏆 برترین اتحادها", callback_data="ally_top")],
+        ]
+    rows.append([InlineKeyboardButton("◀️ بازگشت", callback_data="menu:me")])
+    return InlineKeyboardMarkup(rows)
+
+
 async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     info = await run_db(_alliance_info_sync, update.effective_user)
     if info is None:
         await update.effective_message.reply_text(
-            f"{get_emoji('alliance')} توی هیچ اتحادی نیستی.\n"
-            "<code>/alliance_create اسم</code> برای ساختن، یا <code>/alliance_join اسم</code> برای پیوستن.",
+            f"{get_emoji('alliance')} توی هیچ اتحادی نیستی.",
             parse_mode="HTML",
+            reply_markup=_alliance_action_keyboard(in_alliance=False),
         )
         return
     lines = [
@@ -457,7 +601,198 @@ async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     ]
     for m in info["members"][:20]:
         lines.append(f"• {display_name(m)}")
-    await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
+    await update.effective_message.reply_text(
+        "\n".join(lines), parse_mode="HTML", reply_markup=_alliance_action_keyboard(in_alliance=True)
+    )
+
+
+AWAITING_PLAYER_KEY = "awaiting_player_input"
+
+
+async def alliance_create_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    context.user_data[AWAITING_PLAYER_KEY] = {"action": "alliance_create"}
+    await query.answer()
+    await query.edit_message_text(f"🟢 {get_emoji('alliance')} اسم اتحاد جدیدت رو بفرست:", parse_mode="HTML")
+
+
+async def alliance_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    context.user_data[AWAITING_PLAYER_KEY] = {"action": "alliance_join"}
+    await query.answer()
+    await query.edit_message_text(
+        f"🔵 {get_emoji('alliance')} اسم اتحادی که می‌خوای بهش بپیوندی رو بفرست:", parse_mode="HTML"
+    )
+
+
+async def alliance_deposit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    context.user_data[AWAITING_PLAYER_KEY] = {"action": "alliance_deposit"}
+    await query.answer()
+    await query.edit_message_text(
+        f"💰 چند {get_emoji('coin')} طلا می‌خوای به خزانه واریز کنی؟ یه عدد بفرست:", parse_mode="HTML"
+    )
+
+
+async def alliance_top_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    ranked = await run_db(_alliance_top_sync)
+    await query.answer()
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ بازگشت", callback_data="menu:alliance_info")]])
+    if not ranked:
+        await query.edit_message_text("هنوز هیچ اتحادی ساخته نشده.", reply_markup=keyboard)
+        return
+    medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
+    lines = [f"{get_emoji('trophy')} <b>برترین اتحادها</b>\n"]
+    for i, r in enumerate(ranked, start=1):
+        rank = medals[i - 1] if i <= 3 else f"{i}."
+        lines.append(f"{rank} {r['alliance'].name} — قدرت {r['power']} ({r['member_count']} عضو)")
+    await query.edit_message_text("\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
+
+
+async def alliance_leave_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("🔴 بله، خارج شو", callback_data="ally_leave_confirm"),
+                InlineKeyboardButton("❌ بی‌خیال", callback_data="menu:alliance_info"),
+            ]
+        ]
+    )
+    await query.answer()
+    await query.edit_message_text("مطمئنی می‌خوای از اتحادت خارج بشی؟", reply_markup=keyboard)
+
+
+async def alliance_leave_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    try:
+        await run_db(_alliance_leave_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("👋 خارج شدی.")
+    await query.edit_message_text("👋 از اتحاد خارج شدی.")
+
+
+def _heist_targets_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    if user.alliance_id is None:
+        raise GameError("اول باید عضو یه اتحاد باشی.")
+    return list(Alliance.objects.exclude(id=user.alliance_id).order_by("name"))
+
+
+async def alliance_heist_list_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    try:
+        targets = await run_db(_heist_targets_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    if not targets:
+        await query.answer("هیچ اتحاد دیگه‌ای برای شبیخون نیست.", show_alert=True)
+        return
+    await query.answer()
+    rows = [[InlineKeyboardButton(f"🏴‍☠️ {a.name}", callback_data=f"heist_pick:{a.id}")] for a in targets]
+    rows.append([InlineKeyboardButton("◀️ بازگشت", callback_data="menu:alliance_info")])
+    await query.edit_message_text(
+        f"🏴‍☠️ کدوم اتحاد رو غارت کنم؟ ({int(constants.HEIST_STEAL_PERCENT * 100)}٪ خزانه در صورت برد)",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+def _heist_by_id_sync(tg_user, target_alliance_id):
+    user, _ = get_or_create_user(tg_user)
+    creature = get_active_creature(user)
+    if creature is None:
+        raise GameError("اول یه موجود فعال انتخاب کن.")
+    try:
+        target = Alliance.objects.get(id=target_alliance_id)
+    except Alliance.DoesNotExist:
+        raise GameError("این اتحاد دیگه پیدا نشد.")
+    assert_energy_available(user, "heist")
+    result = heist(user, creature, target)
+    record_action(user, "heist")
+    return result, target
+
+
+async def heist_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    target_id = int(query.data.split(":")[1])
+    try:
+        result, target = await run_db(_heist_by_id_sync, update.effective_user, target_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("🟢 انجام شد!" if result["success"] else "🔴 شکست خوردی.")
+    lines = []
+    if result["defender_creature"] is not None:
+        lines.append(result["log_text"])
+    if result["success"]:
+        reveal = (
+            f"{get_emoji('celebrate')} <b>شبیخون موفق بود!</b> {result['stolen']} {get_emoji('coin')} از خزانه‌ی "
+            f"<b>{target.name}</b> دزدیدی!"
+        )
+    else:
+        reveal = f"😔 نگهبان‌های <b>{target.name}</b> دفاع کردن و شبیخونت شکست خورد."
+    lines.append(f"<tg-spoiler>{reveal}</tg-spoiler>")
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ بازگشت", callback_data="menu:alliance_info")]])
+    await query.edit_message_text("\n\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
+
+
+async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Single dispatcher for every 'awaiting a plain-text reply' player flow (alliance
+    name, deposit amount) — PTB only runs the first handler that matches an update
+    within a group, so this and owner.capture_owner_text_reply are combined into one
+    MessageHandler registration in bot/main.py rather than each registering their own."""
+    awaiting = context.user_data.pop(AWAITING_PLAYER_KEY, None)
+    if awaiting is None:
+        return
+    message = update.effective_message
+    action = awaiting["action"]
+    text = (message.text or "").strip()
+
+    if action == "alliance_create":
+        try:
+            alliance = await run_db(_alliance_create_sync, update.effective_user, text)
+        except GameError as exc:
+            context.user_data[AWAITING_PLAYER_KEY] = awaiting
+            await message.reply_text(str(exc))
+            return
+        await message.reply_text(
+            f"{get_emoji('alliance')} اتحاد <b>{alliance.name}</b> ساخته شد! تو رهبرشی {get_emoji('crown')}",
+            parse_mode="HTML",
+        )
+        return
+
+    if action == "alliance_join":
+        try:
+            alliance = await run_db(_alliance_join_sync, update.effective_user, text)
+        except GameError as exc:
+            context.user_data[AWAITING_PLAYER_KEY] = awaiting
+            await message.reply_text(str(exc))
+            return
+        await message.reply_text(
+            f"{get_emoji('alliance')} به اتحاد <b>{alliance.name}</b> پیوستی!", parse_mode="HTML"
+        )
+        return
+
+    if action == "alliance_deposit":
+        if not text.isdigit() or int(text) <= 0:
+            context.user_data[AWAITING_PLAYER_KEY] = awaiting
+            await message.reply_text("⚠️ یه عدد مثبت بفرست.")
+            return
+        try:
+            alliance = await run_db(_alliance_deposit_sync, update.effective_user, int(text))
+        except GameError as exc:
+            await message.reply_text(str(exc))
+            return
+        await message.reply_text(
+            f"{get_emoji('coin')} به خزانه‌ی <b>{alliance.name}</b> واریز شد! خزانه فعلی: "
+            f"{alliance.treasury_gold} طلا",
+            parse_mode="HTML",
+        )
+        return
 
 
 def _alliance_top_sync():
@@ -684,3 +1019,18 @@ def register(application) -> None:
     application.add_handler(CommandHandler("profile", profile, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("menu", menu, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^menu:"))
+    application.add_handler(CallbackQueryHandler(collection_pick_callback, pattern=r"^coll_pick:"))
+    application.add_handler(CallbackQueryHandler(collection_select_callback, pattern=r"^coll_select:"))
+    application.add_handler(CallbackQueryHandler(fusion_pick_a_callback, pattern=r"^fus_a:"))
+    application.add_handler(CallbackQueryHandler(fusion_pick_b_callback, pattern=r"^fus_b:"))
+    application.add_handler(CallbackQueryHandler(fusion_confirm_callback, pattern=r"^fus_confirm:"))
+    application.add_handler(CallbackQueryHandler(alliance_create_callback, pattern=r"^ally_create$"))
+    application.add_handler(CallbackQueryHandler(alliance_join_callback, pattern=r"^ally_join$"))
+    application.add_handler(CallbackQueryHandler(alliance_deposit_callback, pattern=r"^ally_deposit$"))
+    application.add_handler(CallbackQueryHandler(alliance_top_callback, pattern=r"^ally_top$"))
+    application.add_handler(
+        CallbackQueryHandler(alliance_leave_confirm_callback, pattern=r"^ally_leave_confirm$")
+    )
+    application.add_handler(CallbackQueryHandler(alliance_leave_callback, pattern=r"^ally_leave$"))
+    application.add_handler(CallbackQueryHandler(alliance_heist_list_callback, pattern=r"^ally_heist_list$"))
+    application.add_handler(CallbackQueryHandler(heist_pick_callback, pattern=r"^heist_pick:"))

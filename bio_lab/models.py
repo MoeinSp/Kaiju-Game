@@ -210,3 +210,35 @@ class EmojiOverride(models.Model):
 
     def __str__(self) -> str:
         return f"{self.key} -> {self.placeholder}"
+
+
+class RequiredChannel(models.Model):
+    """A channel players must join before using the bot at all (enforced by
+    bot.middleware.enforce_force_join). Added by forwarding a message from the
+    channel — chat_id/username/title come straight from that forward, never typed."""
+
+    chat_id = models.BigIntegerField(unique=True)  # telegram channel id
+    username = models.CharField(max_length=64, null=True, blank=True)  # without '@'
+    title = models.CharField(max_length=128, null=True, blank=True)
+    invite_link = models.CharField(max_length=256, null=True, blank=True)
+    reward_coins = models.IntegerField(default=0)
+    reward_dna = models.IntegerField(default=0)
+    expires_at = models.DateTimeField(null=True, blank=True)  # null = permanent
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return self.title or (f"@{self.username}" if self.username else str(self.chat_id))
+
+
+class ChannelJoinClaim(models.Model):
+    """Records that `user` already collected the join reward for `channel`, so
+    leaving and rejoining can't be used to farm the reward repeatedly."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    channel = models.ForeignKey(RequiredChannel, on_delete=models.CASCADE)
+    claimed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "channel"], name="uq_channel_join_claim")
+        ]

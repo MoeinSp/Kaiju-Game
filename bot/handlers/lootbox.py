@@ -24,21 +24,18 @@ async def biocrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     rarity_label = constants.RARITY_LABELS[result["rarity"]]
     if result["kind"] == "creature":
         creature = result["creature"]
-        body = (
-            f"{get_emoji('egg')} یه موجود تازه از کپسول بیرون اومد: <b>{creature.name}</b>\n"
-            f"{constants.element_label(creature.element)} · {rarity_label}\n"
-            "با <code>/select</code> می‌تونی فعالش کنی."
-        )
+        reveal = f"{get_emoji('egg')} <b>{creature.name}</b>\n{constants.element_label(creature.element)} · {rarity_label}"
+        hint = "از «🗂 کلکسیون» توی منو می‌تونی فعالش کنی."
     else:
         item = result["item"]
-        body = (
-            f"{constants.EQUIPMENT_SLOT_LABELS[item.slot]} یه قطعه تجهیزات تازه به‌دست اومد: <b>{item.name}</b>\n"
-            f"{rarity_label}\n"
-            "با <code>/inventory</code> ببینش و <code>/equip</code> کن."
-        )
+        reveal = f"{constants.EQUIPMENT_SLOT_LABELS[item.slot]} <b>{item.name}</b>\n{rarity_label}"
+        hint = "از «🎒 تجهیزات» توی منو می‌تونی تجهیزش کنی."
 
     await update.effective_message.reply_text(
-        f"{get_emoji('biocrate')} <b>باکس ژنتیکی باز شد!</b>\n\n{body}", parse_mode="HTML"
+        f"{get_emoji('biocrate')} <b>باکس ژنتیکی باز شد!</b>\n\n"
+        f"<tg-spoiler>{reveal}</tg-spoiler>\n\n"
+        f"<blockquote>{hint}</blockquote>",
+        parse_mode="HTML",
     )
 
 

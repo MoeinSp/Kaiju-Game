@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from bio_lab.models import (
     Alliance,
+    ChannelJoinClaim,
     Creature,
     DailyActionLog,
     DuelLog,
@@ -14,6 +15,7 @@ from bio_lab.models import (
     MissionClaim,
     RaidBoss,
     RaidDamageLog,
+    RequiredChannel,
     User,
 )
 
@@ -117,3 +119,14 @@ class InteractiveBattleAdmin(admin.ModelAdmin):
 class DuelLogAdmin(admin.ModelAdmin):
     list_display = ("id", "group", "challenger", "opponent", "winner", "created_at")
     ordering = ("-created_at",)
+
+
+@admin.register(RequiredChannel)
+class RequiredChannelAdmin(admin.ModelAdmin):
+    list_display = ("id", "title", "username", "chat_id", "reward_coins", "reward_dna", "expires_at", "created_at")
+
+
+@admin.register(ChannelJoinClaim)
+class ChannelJoinClaimAdmin(admin.ModelAdmin):
+    list_display = ("id", "user", "channel", "claimed_at")
+    ordering = ("-claimed_at",)

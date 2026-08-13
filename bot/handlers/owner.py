@@ -1,8 +1,8 @@
 import asyncio
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity, MessageOriginChannel, Update
 from telegram.error import TelegramError
-from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bio_lab.models import User
 from bio_lab.repository import display_name
@@ -11,6 +11,13 @@ from config import ADMIN_PANEL_URL, OWNER_TELEGRAM_ID
 from game import constants
 from game.creature import GameError
 from game.emoji import EMOJI_DEFS, EMOJI_KEYS, CATEGORY_LABELS, CATEGORY_OF, clear_emoji, get_emoji, list_overrides, set_emoji
+from game.force_join import (
+    add_channel,
+    list_channels,
+    remove_channel,
+    set_duration,
+    set_reward,
+)
 from game.moderation import (
     deduct_resource,
     delete_creature,
@@ -219,29 +226,23 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"{get_emoji('users')} کاربران: {stats['users']}   {get_emoji('creature')} موجودات: {stats['creatures']}\n"
         f"{get_emoji('alliance')} اتحادها: {stats['alliances']}   "
         f"{get_emoji('raid_boss')} رید فعال: {stats['active_raids']}\n\n"
-        "━━━━━━━━━━━━━━\n"
-        f"{get_emoji('profile')} <b>مدیریت کاربر</b> (آیدی یا @یوزرنیم)\n"
-        "<code>/user_info آیدی</code> — پروفایل کامل\n"
-        "<code>/grant آیدی coins/dna مقدار</code> — اعطای منبع\n"
-        "<code>/deduct آیدی coins/dna مقدار</code> — کسر منبع\n"
-        "<code>/ban آیدی</code> · <code>/unban آیدی</code> — مسدودسازی\n\n"
-        f"{get_emoji('creature')} <b>مدیریت موجود</b>\n"
-        "<code>/delete_creature شماره</code> — حذف واقعی (با تأیید)\n\n"
-        f"{get_emoji('broadcast')} <b>ارتباط</b>\n"
-        "<code>/broadcast متن</code> — پیام همگانی\n\n"
-        f"{get_emoji('settings')} <b>ایموجی پرمیوم</b>\n"
-        "<code>/set_emoji</code> — دکمه‌ای، دسته و کلید رو انتخاب کن بعد فقط ایموجی رو بفرست\n"
-        "<code>/clear_emoji کلید</code> — برگردوندن به حالت پیش‌فرض\n"
-        "<code>/preview_emoji</code> — دیدن نتیجه‌ی فعلی همه‌چیز، یه‌جا\n\n"
-        "<i>دکمه‌ی «پنل کامل» فقط از همون سیستمی که بات روش اجرا می‌شه باز می‌شه "
-        "(مگه ADMIN_PANEL_URL رو روی آدرس عمومی/تانل تنظیم کرده باشی).</i>"
+        "یکی رو از پایین انتخاب کن:"
     )
     keyboard = InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton("📊 گزارش پیشرفت", callback_data="admin_menu:report"),
+                InlineKeyboardButton("👤 مدیریت کاربر", callback_data="admin_menu:user_manage"),
+            ],
+            [
+                InlineKeyboardButton("🗑 حذف موجود", callback_data="admin_menu:del_creature_start"),
+                InlineKeyboardButton("📢 ارسال همگانی", callback_data="admin_menu:broadcast_start"),
+            ],
+            [
+                InlineKeyboardButton("🎨 ایموجی پرمیوم", callback_data="admin_menu:set_emoji_start"),
                 InlineKeyboardButton("🔍 پیش‌نمایش ایموجی‌ها", callback_data="admin_menu:preview_emoji"),
             ],
+            [InlineKeyboardButton("📡 جوین اجباری", callback_data="admin_menu:force_join")],
             [InlineKeyboardButton("🌐 باز کردن پنل کامل", url=ADMIN_PANEL_URL)],
         ]
     )
@@ -327,20 +328,7 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.effective_message.reply_text(summary)
 
 
-async def user_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_owner(update):
-        return
-    if not context.args:
-        await update.effective_message.reply_text(
-            "استفاده: <code>/user_info آیدی_یا_یوزرنیم</code>", parse_mode="HTML"
-        )
-        return
-    try:
-        data = await run_db(user_info, context.args[0])
-    except GameError as exc:
-        await update.effective_message.reply_text(str(exc))
-        return
-
+def _user_info_text(data: dict) -> str:
     user = data["user"]
     lines = [
         f"{get_emoji('profile')} <b>{display_name(user)}</b>  (<code>{user.id}</code>)",
@@ -355,7 +343,50 @@ async def user_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     for c in data["creatures"]:
         active_tag = " ✅فعال" if c.is_active else ""
         lines.append(f"  • <code>#{c.id}</code> {c.name} Lv{c.level} ({c.rarity}){active_tag}")
-    await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
+    return "\n".join(lines)
+
+
+def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMarkup:
+    ban_button = (
+        InlineKeyboardButton("✅ رفع مسدودی", callback_data=f"admin_unban:{target_id}")
+        if is_banned
+        else InlineKeyboardButton("🔴 مسدود کردن", callback_data=f"admin_ban:{target_id}")
+    )
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("🟢 اعطای طلا", callback_data=f"admin_grant:{target_id}:coins"),
+                InlineKeyboardButton("🟢 اعطای DNA", callback_data=f"admin_grant:{target_id}:dna"),
+            ],
+            [
+                InlineKeyboardButton("🟠 کسر طلا", callback_data=f"admin_deduct:{target_id}:coins"),
+                InlineKeyboardButton("🟠 کسر DNA", callback_data=f"admin_deduct:{target_id}:dna"),
+            ],
+            [ban_button],
+            [InlineKeyboardButton("◀️ بازگشت به پنل ادمین", callback_data="admin_menu:admin_home")],
+        ]
+    )
+
+
+async def user_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Power-user shortcut — the advertised path is the admin panel's «👤 مدیریت
+    کاربر» button, which also attaches quick grant/deduct/ban action buttons."""
+    if not _is_owner(update):
+        return
+    if not context.args:
+        await update.effective_message.reply_text(
+            "استفاده: <code>/user_info آیدی_یا_یوزرنیم</code>", parse_mode="HTML"
+        )
+        return
+    try:
+        data = await run_db(user_info, context.args[0])
+    except GameError as exc:
+        await update.effective_message.reply_text(str(exc))
+        return
+    user = data["user"]
+    await update.effective_message.reply_text(
+        _user_info_text(data), parse_mode="HTML", reply_markup=_user_manage_keyboard(user.id, user.is_banned)
+    )
 
 
 async def grant_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -440,7 +471,27 @@ def _delete_creature_preview_sync(creature_id: int):
     return creature, display_name(owner) if owner is not None else str(creature.owner_id)
 
 
+def _delete_creature_confirm_text(creature, owner_name: str) -> str:
+    return (
+        f"{get_emoji('warning')} مطمئنی می‌خوای <b>{creature.name}</b> (<code>#{creature.id}</code>, "
+        f"مال {owner_name}) رو حذف کنی؟\n\n"
+        "<blockquote>این کار غیرقابل‌برگشته و لاگ‌های رید/نبرد مرتبط باهاش هم پاک می‌شن.</blockquote>"
+    )
+
+
+def _delete_creature_confirm_keyboard(creature_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("🔴 حذف کن", callback_data=f"admin_del:{creature_id}"),
+                InlineKeyboardButton("❌ بی‌خیال", callback_data="admin_del_cancel"),
+            ]
+        ]
+    )
+
+
 async def delete_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Power-user shortcut — the advertised path is the admin panel's «🗑 حذف موجود» button."""
     if not _is_owner(update):
         return
     if not context.args or not context.args[0].isdigit():
@@ -455,19 +506,10 @@ async def delete_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.effective_message.reply_text(str(exc))
         return
 
-    keyboard = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton("✅ حذف کن", callback_data=f"admin_del:{creature_id}"),
-                InlineKeyboardButton("❌ بی‌خیال", callback_data="admin_del_cancel"),
-            ]
-        ]
-    )
     await update.effective_message.reply_text(
-        f"{get_emoji('warning')} مطمئنی می‌خوای <b>{creature.name}</b> (<code>#{creature.id}</code>, "
-        f"مال {owner_name}) رو برای همیشه حذف کنی؟ این کار غیرقابل‌برگشته و لاگ‌های رید/نبرد مرتبط باهاش هم پاک می‌شن.",
+        _delete_creature_confirm_text(creature, owner_name),
         parse_mode="HTML",
-        reply_markup=keyboard,
+        reply_markup=_delete_creature_confirm_keyboard(creature_id),
     )
 
 
@@ -524,8 +566,415 @@ async def preview_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
+AWAITING_FORCE_JOIN_KEY = "awaiting_force_join"
+
+
+def _channel_card(channel) -> str:
+    limit = "♾ نامحدود" if channel.expires_at is None else f"⏳ تا {channel.expires_at.strftime('%Y-%m-%d %H:%M')}"
+    reward = (
+        f"🎁 {channel.reward_coins} {get_emoji('coin')} + {channel.reward_dna} {get_emoji('dna')}"
+        if (channel.reward_coins or channel.reward_dna)
+        else "🎁 بدون جایزه"
+    )
+    handle = f"@{channel.username}" if channel.username else str(channel.chat_id)
+    return (
+        f"📡 <b>{channel.title or handle}</b> ({handle})\n{limit}\n{reward}\n\n"
+        "<i>یادت نباشه بات رو ادمین همین کانال کنی، وگرنه نمی‌تونه عضویت رو چک کنه.</i>"
+    )
+
+
+def _channel_manage_keyboard(channel_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("⏳ تنظیم مدت", callback_data=f"fj_dur:{channel_id}"),
+                InlineKeyboardButton("♾ نامحدود کن", callback_data=f"fj_unlim:{channel_id}"),
+            ],
+            [InlineKeyboardButton("🎁 تنظیم جایزه", callback_data=f"fj_reward:{channel_id}")],
+            [InlineKeyboardButton("🔴 حذف کانال", callback_data=f"fj_rm:{channel_id}")],
+            [InlineKeyboardButton("◀️ بازگشت به لیست", callback_data="admin_menu:force_join")],
+        ]
+    )
+
+
+async def force_join_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    channels = await run_db(list_channels)
+    text = f"{get_emoji('settings')} <b>کانال‌های جوین اجباری</b>\n\n"
+    rows = []
+    if not channels:
+        text += "<i>هنوز هیچ کانالی اضافه نشده.</i>"
+    else:
+        text += "برای مدیریت هرکدوم روش بزن:"
+        for ch in channels:
+            handle = f"@{ch.username}" if ch.username else str(ch.chat_id)
+            rows.append(
+                [InlineKeyboardButton(f"📡 {ch.title or handle}", callback_data=f"fj_manage:{ch.id}")]
+            )
+    rows.append([InlineKeyboardButton("🟢 افزودن کانال جدید", callback_data="fj_add")])
+    rows.append([InlineKeyboardButton("◀️ بازگشت به پنل ادمین", callback_data="admin_menu:admin_home")])
+    await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+
+
+async def force_join_add_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    context.user_data[AWAITING_FORCE_JOIN_KEY] = {"action": "add_channel"}
+    await query.answer()
+    await query.edit_message_text(
+        "🟢 یه پیام از خودِ کانال موردنظر رو همینجا فوروارد کن (نه لینکش رو بفرستی، خودِ پیام رو فوروارد کن).\n\n"
+        "<i>برای انصراف، از منوی پنل ادمین دوباره شروع کن.</i>",
+        parse_mode="HTML",
+    )
+
+
+async def force_join_manage_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    channel_id = int(query.data.split(":")[1])
+    channels = {c.id: c for c in await run_db(list_channels)}
+    channel = channels.get(channel_id)
+    if channel is None:
+        await query.answer("این کانال دیگه پیدا نشد.", show_alert=True)
+        return
+    await query.answer()
+    await query.edit_message_text(
+        _channel_card(channel), parse_mode="HTML", reply_markup=_channel_manage_keyboard(channel_id)
+    )
+
+
+async def force_join_duration_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    channel_id = int(query.data.split(":")[1])
+    context.user_data[AWAITING_FORCE_JOIN_KEY] = {"action": "set_duration", "channel_id": channel_id}
+    await query.answer()
+    await query.edit_message_text(
+        "⏳ چند ساعت معتبر باشه؟ یه عدد بفرست (مثلاً <code>24</code>).", parse_mode="HTML"
+    )
+
+
+async def force_join_unlimited_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    channel_id = int(query.data.split(":")[1])
+    try:
+        channel = await run_db(set_duration, channel_id, None)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("♾ نامحدود شد.")
+    await query.edit_message_text(
+        _channel_card(channel), parse_mode="HTML", reply_markup=_channel_manage_keyboard(channel_id)
+    )
+
+
+async def force_join_reward_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    channel_id = int(query.data.split(":")[1])
+    context.user_data[AWAITING_FORCE_JOIN_KEY] = {"action": "set_reward", "channel_id": channel_id}
+    await query.answer()
+    await query.edit_message_text(
+        f"🎁 دو عدد بفرست، با فاصله: مقدار {get_emoji('coin')} طلا و مقدار {get_emoji('dna')} DNA "
+        "(مثلاً <code>50 5</code> — برای بدون جایزه بنویس <code>0 0</code>).",
+        parse_mode="HTML",
+    )
+
+
+async def force_join_remove_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    channel_id = int(query.data.split(":")[1])
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("🔴 بله، حذف کن", callback_data=f"fj_rm_confirm:{channel_id}"),
+                InlineKeyboardButton("❌ بی‌خیال", callback_data=f"fj_manage:{channel_id}"),
+            ]
+        ]
+    )
+    await query.answer()
+    await query.edit_message_text(
+        "مطمئنی این کانال از لیست جوین اجباری حذف بشه؟ دیگه اجباری نخواهد بود.", reply_markup=keyboard
+    )
+
+
+async def force_join_remove_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    channel_id = int(query.data.split(":")[1])
+    await run_db(remove_channel, channel_id)
+    await query.answer("🔴 حذف شد.")
+    await force_join_panel(update, context)
+
+
+async def capture_force_join_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    awaiting = context.user_data.pop(AWAITING_FORCE_JOIN_KEY, None)
+    if awaiting is None:
+        return
+    message = update.effective_message
+    action = awaiting["action"]
+
+    if action == "add_channel":
+        origin = message.forward_origin
+        if not isinstance(origin, MessageOriginChannel):
+            context.user_data[AWAITING_FORCE_JOIN_KEY] = awaiting  # keep waiting
+            await message.reply_text(
+                "⚠️ این یه پیام فورواردشده از یه کانال نبود. یه پیام رو مستقیم از خودِ کانال فوروارد کن."
+            )
+            return
+        chat = origin.chat
+        channel = await run_db(add_channel, chat.id, chat.username, chat.title)
+        await message.reply_text(
+            f"{get_emoji('confirm')} کانال اضافه شد!\n\n" + _channel_card(channel),
+            parse_mode="HTML",
+            reply_markup=_channel_manage_keyboard(channel.id),
+        )
+        return
+
+    if action == "set_duration":
+        channel_id = awaiting["channel_id"]
+        text = (message.text or "").strip()
+        if text in ("نامحدود", "∞", "0"):
+            hours = None
+        elif text.isdigit() and int(text) > 0:
+            hours = int(text)
+        else:
+            context.user_data[AWAITING_FORCE_JOIN_KEY] = awaiting
+            await message.reply_text("⚠️ یه عدد مثبت بفرست (ساعت)، یا بنویس «نامحدود».")
+            return
+        try:
+            channel = await run_db(set_duration, channel_id, hours)
+        except GameError as exc:
+            await message.reply_text(str(exc))
+            return
+        await message.reply_text(
+            _channel_card(channel), parse_mode="HTML", reply_markup=_channel_manage_keyboard(channel_id)
+        )
+        return
+
+    if action == "set_reward":
+        channel_id = awaiting["channel_id"]
+        parts = (message.text or "").split()
+        if len(parts) != 2 or not all(p.isdigit() for p in parts):
+            context.user_data[AWAITING_FORCE_JOIN_KEY] = awaiting
+            await message.reply_text("⚠️ دو عدد با فاصله بفرست، مثلاً: <code>50 5</code>", parse_mode="HTML")
+            return
+        coins, dna = int(parts[0]), int(parts[1])
+        try:
+            channel = await run_db(set_reward, channel_id, coins, dna)
+        except GameError as exc:
+            await message.reply_text(str(exc))
+            return
+        await message.reply_text(
+            _channel_card(channel), parse_mode="HTML", reply_markup=_channel_manage_keyboard(channel_id)
+        )
+        return
+
+
+AWAITING_ADMIN_KEY = "awaiting_admin_input"
+
+
+async def user_manage_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "user_info"}
+    await update.effective_message.reply_text(
+        f"{get_emoji('profile')} آیدی عددی یا @یوزرنیم بازیکن رو بفرست:", parse_mode="HTML"
+    )
+
+
+async def delete_creature_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "delete_creature"}
+    await update.effective_message.reply_text(
+        f"{get_emoji('creature')} شماره‌ی موجودی که می‌خوای برای همیشه حذفش کنی رو بفرست:", parse_mode="HTML"
+    )
+
+
+async def broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "broadcast"}
+    await update.effective_message.reply_text(
+        f"{get_emoji('broadcast')} متن پیام همگانی رو بفرست:", parse_mode="HTML"
+    )
+
+
+async def admin_grant_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    _, target_id, resource = query.data.split(":")
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "grant", "target_id": target_id, "resource": resource}
+    await query.answer()
+    label = "طلا" if resource == "coins" else "DNA"
+    await query.edit_message_text(f"🟢 چقدر {label} اعطا کنم؟ یه عدد مثبت بفرست:", parse_mode="HTML")
+
+
+async def admin_deduct_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    _, target_id, resource = query.data.split(":")
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "deduct", "target_id": target_id, "resource": resource}
+    await query.answer()
+    label = "طلا" if resource == "coins" else "DNA"
+    await query.edit_message_text(f"🟠 چقدر {label} کسر کنم؟ یه عدد مثبت بفرست:", parse_mode="HTML")
+
+
+async def admin_ban_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    target_id = query.data.split(":")[1]
+    try:
+        user = await run_db(set_banned, target_id, True)
+        data = await run_db(user_info, str(user.id))
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("🔴 مسدود شد.")
+    await query.edit_message_text(
+        _user_info_text(data), parse_mode="HTML", reply_markup=_user_manage_keyboard(user.id, True)
+    )
+
+
+async def admin_unban_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    target_id = query.data.split(":")[1]
+    try:
+        user = await run_db(set_banned, target_id, False)
+        data = await run_db(user_info, str(user.id))
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("✅ رفع شد.")
+    await query.edit_message_text(
+        _user_info_text(data), parse_mode="HTML", reply_markup=_user_manage_keyboard(user.id, False)
+    )
+
+
+async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    awaiting = context.user_data.pop(AWAITING_ADMIN_KEY, None)
+    if awaiting is None:
+        return
+    message = update.effective_message
+    action = awaiting["action"]
+    text = (message.text or "").strip()
+
+    if action == "user_info":
+        try:
+            data = await run_db(user_info, text)
+        except GameError as exc:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text(str(exc))
+            return
+        user = data["user"]
+        await message.reply_text(
+            _user_info_text(data), parse_mode="HTML", reply_markup=_user_manage_keyboard(user.id, user.is_banned)
+        )
+        return
+
+    if action in ("grant", "deduct"):
+        if not text.isdigit() or int(text) <= 0:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text("⚠️ یه عدد مثبت بفرست.")
+            return
+        amount = int(text)
+        target_id = awaiting["target_id"]
+        resource = awaiting["resource"]
+        func = grant_resource if action == "grant" else deduct_resource
+        try:
+            user, new_value = await run_db(func, target_id, resource, amount)
+        except GameError as exc:
+            await message.reply_text(str(exc))
+            return
+        verb = "اعطا شد" if action == "grant" else "کسر شد"
+        await message.reply_text(
+            f"{get_emoji('confirm')} به/از {display_name(user)} {verb}. مقدار جدید {resource}: {new_value}",
+            parse_mode="HTML",
+        )
+        return
+
+    if action == "delete_creature":
+        if not text.isdigit():
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text("⚠️ یه شماره‌ی معتبر بفرست.")
+            return
+        creature_id = int(text)
+        try:
+            creature, owner_name = await run_db(_delete_creature_preview_sync, creature_id)
+        except GameError as exc:
+            await message.reply_text(str(exc))
+            return
+        await message.reply_text(
+            _delete_creature_confirm_text(creature, owner_name),
+            parse_mode="HTML",
+            reply_markup=_delete_creature_confirm_keyboard(creature_id),
+        )
+        return
+
+    if action == "broadcast":
+        user_ids = await run_db(_all_user_ids_sync)
+        sent = 0
+        failed = 0
+        for user_id in user_ids:
+            try:
+                await context.bot.send_message(chat_id=user_id, text=f"📢 {text}")
+                sent += 1
+            except TelegramError:
+                failed += 1
+            await asyncio.sleep(BROADCAST_DELAY_SECONDS)
+        summary = f"✅ به {sent} نفر ارسال شد."
+        if failed:
+            summary += f" ({failed} نفر ناموفق — احتمالاً بات رو بلاک کردن)"
+        await message.reply_text(summary)
+        return
+
+
+async def capture_owner_text_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Single dispatcher for every 'awaiting a plain-text/forwarded reply' flow in
+    the owner panel — PTB only ever runs the first handler that matches an update
+    within a group, so every such flow has to live behind one registration."""
+    if context.user_data.get("awaiting_emoji_key") is not None:
+        await capture_emoji_reply(update, context)
+        return
+    if context.user_data.get(AWAITING_FORCE_JOIN_KEY) is not None:
+        await capture_force_join_reply(update, context)
+        return
+    if context.user_data.get(AWAITING_ADMIN_KEY) is not None:
+        await capture_admin_reply(update, context)
+        return
+
+
 _ADMIN_MENU_ACTIONS.update(
-    {"report": report_cmd, "list_emoji": list_emoji_cmd, "preview_emoji": preview_emoji_cmd}
+    {
+        "report": report_cmd,
+        "list_emoji": list_emoji_cmd,
+        "preview_emoji": preview_emoji_cmd,
+        "force_join": force_join_panel,
+        "admin_home": admin_cmd,
+        "user_manage": user_manage_start,
+        "del_creature_start": delete_creature_start,
+        "broadcast_start": broadcast_start,
+        "set_emoji_start": set_emoji_cmd,
+    }
 )
 
 
@@ -555,9 +1004,16 @@ def register(application) -> None:
     application.add_handler(
         CallbackQueryHandler(set_emoji_key_callback, pattern=f"^{EMOJI_KEY_CALLBACK_PREFIX}")
     )
+    application.add_handler(CallbackQueryHandler(force_join_add_callback, pattern=r"^fj_add$"))
+    application.add_handler(CallbackQueryHandler(force_join_manage_callback, pattern=r"^fj_manage:"))
+    application.add_handler(CallbackQueryHandler(force_join_duration_callback, pattern=r"^fj_dur:"))
+    application.add_handler(CallbackQueryHandler(force_join_unlimited_callback, pattern=r"^fj_unlim:"))
+    application.add_handler(CallbackQueryHandler(force_join_reward_callback, pattern=r"^fj_reward:"))
     application.add_handler(
-        MessageHandler(
-            filters.User(user_id=OWNER_TELEGRAM_ID) & filters.ChatType.PRIVATE & ~filters.COMMAND,
-            capture_emoji_reply,
-        )
+        CallbackQueryHandler(force_join_remove_confirm_callback, pattern=r"^fj_rm_confirm:")
     )
+    application.add_handler(CallbackQueryHandler(force_join_remove_callback, pattern=r"^fj_rm:"))
+    application.add_handler(CallbackQueryHandler(admin_grant_callback, pattern=r"^admin_grant:"))
+    application.add_handler(CallbackQueryHandler(admin_deduct_callback, pattern=r"^admin_deduct:"))
+    application.add_handler(CallbackQueryHandler(admin_unban_callback, pattern=r"^admin_unban:"))
+    application.add_handler(CallbackQueryHandler(admin_ban_callback, pattern=r"^admin_ban:"))
