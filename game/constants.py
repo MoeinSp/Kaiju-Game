@@ -10,12 +10,35 @@ ELEMENT_STRONG_AGAINST = {
     "water": "fire",
 }
 
+ELEMENT_WORDS = {
+    "fire": "آتش",
+    "water": "آب",
+    "earth": "خاک",
+    "electric": "الکتریسیته",
+}
+
+ELEMENT_EMOJI_KEYS = {
+    "fire": "element_fire",
+    "water": "element_water",
+    "earth": "element_earth",
+    "electric": "element_electric",
+}
+
+# plain-unicode labels — kept for contexts that can't render <tg-emoji> (button text,
+# non-HTML messages). Prefer element_label() in any HTML message body.
 ELEMENT_LABELS = {
     "fire": "🔥 آتش",
     "water": "💧 آب",
     "earth": "🪨 خاک",
     "electric": "⚡ الکتریسیته",
 }
+
+
+def element_label(element: str) -> str:
+    """Owner-customizable element label for HTML message bodies."""
+    from game.emoji import get_emoji
+
+    return f"{get_emoji(ELEMENT_EMOJI_KEYS[element])} {ELEMENT_WORDS[element]}"
 
 SPECIES_NAMES = {
     "fire": ["Emberling", "Cindrax", "Pyrofang"],

@@ -8,6 +8,7 @@ from bot.utils import run_db
 from game import constants
 from game.creature import GameError, add_xp, effective_stats
 from game.daily import check_missions, record_action
+from game.emoji import get_emoji
 from game.interactive_battle import advance_turn, is_finished, perform_action, pick_first_turn, render_battle_card
 
 
@@ -61,7 +62,10 @@ def _battle_cmd_sync(chat, challenger_tg, opponent_tg):
 
 async def battle_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message.reply_to_message is None:
-        await update.message.reply_text("⚔️ برای نبرد تعاملی، روی پیام حریف ریپلای کن و بنویس /battle")
+        await update.message.reply_text(
+            f"{get_emoji('battle')} برای نبرد تعاملی، روی پیام حریف ریپلای کن و بنویس /battle",
+            parse_mode="HTML",
+        )
         return
 
     opponent_tg = update.message.reply_to_message.from_user
@@ -87,7 +91,7 @@ async def battle_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         ]
     )
     await update.message.reply_text(
-        f"⚔️ <b>{display_name(challenger_user)}</b> با {challenger_creature.name} به "
+        f"{get_emoji('battle')} <b>{display_name(challenger_user)}</b> با {challenger_creature.name} به "
         f"<b>{display_name(opponent_user)}</b> پیشنهاد نبرد تعاملی زنده داد!\n"
         f"قبول می‌کنی؟ 👇",
         parse_mode="HTML",
@@ -147,7 +151,7 @@ async def battle_decline_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
-    await query.edit_message_text("❌ پیشنهاد نبرد زنده رد شد.")
+    await query.edit_message_text(f"{get_emoji('cancel')} پیشنهاد نبرد زنده رد شد.", parse_mode="HTML")
 
 
 def _battle_action_sync(battle_id, actor_tg_id, action):
@@ -188,13 +192,14 @@ def _battle_action_sync(battle_id, actor_tg_id, action):
         completed_missions = check_missions(winner_user, "duel_win")
 
         reward_lines.append(
-            f"💰 {winner_creature.name} +{constants.DUEL_WIN_COINS} سکه · +{constants.DUEL_WIN_XP} XP"
-            + (f" 🎉 رسید به سطح {winner_creature.level}!" if winner_levels else "")
+            f"{get_emoji('coin')} {winner_creature.name} +{constants.DUEL_WIN_COINS} سکه · "
+            f"+{constants.DUEL_WIN_XP} XP"
+            + (f" {get_emoji('celebrate')} رسید به سطح {winner_creature.level}!" if winner_levels else "")
         )
         for m in completed_missions:
             reward_lines.append(
-                f"🎯 ماموریت «{m['label']}» تکمیل شد! +{m['coins']} 💰"
-                + (f" +{m['dna']} 🧬" if m["dna"] else "")
+                f"{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! +{m['coins']} {get_emoji('coin')}"
+                + (f" +{m['dna']} {get_emoji('dna')}" if m["dna"] else "")
             )
 
     battle.save()

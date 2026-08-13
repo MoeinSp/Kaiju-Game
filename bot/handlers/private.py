@@ -30,10 +30,10 @@ def _mission_lines(completed: list[dict]) -> str:
         return ""
     lines = []
     for m in completed:
-        reward = f"+{m['coins']} {get_emoji('coin', '💰')}"
+        reward = f"+{m['coins']} {get_emoji('coin')}"
         if m["dna"]:
-            reward += f" +{m['dna']} {get_emoji('dna', '🧬')}"
-        lines.append(f"🎯 ماموریت «{m['label']}» تکمیل شد! {reward}")
+            reward += f" +{m['dna']} {get_emoji('dna')}"
+        lines.append(f"{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! {reward}")
     return "\n" + "\n".join(lines)
 
 
@@ -42,22 +42,24 @@ def creature_card_text(user, creature) -> str:
     energy = sync_energy(user)
     xp_bar = constants.render_bar(creature.xp, constants.XP_PER_LEVEL, width=12)
     energy_bar = constants.render_bar(energy, constants.MAX_ENERGY, width=12)
-    hp, atk, def_, spd = (
-        get_emoji("hp", "❤️"),
-        get_emoji("atk", "⚔️"),
-        get_emoji("def", "🛡"),
-        get_emoji("spd", "💨"),
+    hp, atk, def_, spd, poison = (
+        get_emoji("hp"),
+        get_emoji("atk"),
+        get_emoji("def"),
+        get_emoji("spd"),
+        get_emoji("poison"),
     )
     return (
-        f"🧬 <b>{creature.name}</b>  <code>#{creature.id}</code>\n"
-        f"{constants.ELEMENT_LABELS[creature.element]} · {constants.RARITY_LABELS[creature.rarity]} · سطح {creature.level}\n"
+        f"{get_emoji('creature')} <b>{creature.name}</b>  <code>#{creature.id}</code>\n"
+        f"{constants.element_label(creature.element)} · {constants.RARITY_LABELS[creature.rarity]} · سطح {creature.level}\n"
         f"{xp_bar}  {creature.xp}/{constants.XP_PER_LEVEL} XP\n"
         "\n"
-        f"{hp} {stats['hp']}   {atk} {stats['atk']}   {def_} {stats['def']}   {spd} {stats['spd']}   ☠️ {stats['poison']}\n"
-        f"<i>🦋 بال {creature.wings_lvl} · 🛡 زره {creature.armor_lvl} · 🦷 نیش {creature.fangs_lvl} · ☠️ زهر {creature.poison_lvl}</i>\n"
+        f"{hp} {stats['hp']}   {atk} {stats['atk']}   {def_} {stats['def']}   {spd} {stats['spd']}   {poison} {stats['poison']}\n"
+        f"<i>{get_emoji('wings')} بال {creature.wings_lvl} · {def_} زره {creature.armor_lvl} · "
+        f"{get_emoji('fangs')} نیش {creature.fangs_lvl} · {poison} زهر {creature.poison_lvl}</i>\n"
         "\n"
-        f"{energy_bar}  {get_emoji('energy', '⚡')} {energy}/{constants.MAX_ENERGY}\n"
-        f"{get_emoji('coin', '💰')} {user.coins}   {get_emoji('dna', '🧬')} {user.dna_fragments}"
+        f"{energy_bar}  {get_emoji('energy')} {energy}/{constants.MAX_ENERGY}\n"
+        f"{get_emoji('coin')} {user.coins}   {get_emoji('dna')} {user.dna_fragments}"
     )
 
 
@@ -115,16 +117,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lines = []
     if is_new:
         lines.append(
-            "🥚 <b>آزمایشگاه فعال شد!</b>\n"
+            f"{get_emoji('egg')} <b>آزمایشگاه فعال شد!</b>\n"
             "یه موجود تازه از کپسول زیستی بیرون اومد — بهش خوش‌آمد بگو 👇\n"
         )
     else:
         lines.append("👋 <b>به آزمایشگاه خوش برگشتی!</b>\n")
 
     if login_bonus:
-        streak_line = f"🔥 <b>{login_bonus['streak']} روز پشت‌سرهم</b> اومدی! +{login_bonus['coins']} 💰"
+        streak_line = f"🔥 <b>{login_bonus['streak']} روز پشت‌سرهم</b> اومدی! +{login_bonus['coins']} {get_emoji('coin')}"
         if login_bonus["dna"]:
-            streak_line += f" +{login_bonus['dna']} 🧬"
+            streak_line += f" +{login_bonus['dna']} {get_emoji('dna')}"
         lines.append(streak_line + "\n")
 
     lines.append(creature_card_text(user, creature))
@@ -165,12 +167,16 @@ def _lab_action_sync(tg_user, action):
         user.save(update_fields=["energy", "energy_updated_at"])
         record_action(user, "feed")
         completed_missions = check_missions(user, "feed")
-        note = "🍖 <b>تغذیه شد!</b>" + (f" 🎉 رسید به سطح {creature.level}!" if levels else "")
+        note = "🍖 <b>تغذیه شد!</b>" + (
+            f" {get_emoji('celebrate')} رسید به سطح {creature.level}!" if levels else ""
+        )
     elif action == "train":
         levels = train(creature)
         record_action(user, "train")
         completed_missions = check_missions(user, "train")
-        note = "🏋️ <b>تمرین کرد!</b>" + (f" 🎉 رسید به سطح {creature.level}!" if levels else "")
+        note = "🏋️ <b>تمرین کرد!</b>" + (
+            f" {get_emoji('celebrate')} رسید به سطح {creature.level}!" if levels else ""
+        )
     elif action.startswith("upgrade:"):
         part = action.split(":", 1)[1]
         new_level = upgrade_part(user, creature, part)
@@ -213,11 +219,11 @@ async def collection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.effective_message.reply_text("📭 کلکسیونت خالیه! دستور /start رو بزن.")
         return
 
-    lines = [f"🗂 <b>کلکسیون تو</b> — {len(creatures)} موجود\n"]
+    lines = [f"{get_emoji('collection')} <b>کلکسیون تو</b> — {len(creatures)} موجود\n"]
     for c in creatures:
         active_tag = " ✅" if c.is_active else ""
         lines.append(
-            f"<code>#{c.id}</code> {c.name} — {constants.ELEMENT_LABELS[c.element]} · "
+            f"<code>#{c.id}</code> {c.name} — {constants.element_label(c.element)} · "
             f"{constants.RARITY_LABELS[c.rarity]} · Lv{c.level}{active_tag}"
         )
     lines.append("\n🔁 تعویض موجود فعال: <code>/select 3</code>")
@@ -277,7 +283,7 @@ async def splice_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
     is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
     await update.message.reply_text(
-        "🧪 <b>ترکیب موفق بود!</b> والدین توی کلکسیونت غیرفعال شدن و یه موجود جدید متولد شد:\n\n"
+        f"{get_emoji('lab')} <b>ترکیب موفق بود!</b> والدین توی کلکسیونت غیرفعال شدن و یه موجود جدید متولد شد:\n\n"
         + creature_card_text(user, child)
         + _mission_lines(completed_missions),
         parse_mode="HTML",
@@ -292,11 +298,11 @@ def _missions_sync(tg_user):
 
 async def missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     status = await run_db(_missions_sync, update.effective_user)
-    lines = ["🎯 <b>ماموریت‌های امروز</b>\n"]
+    lines = [f"{get_emoji('mission')} <b>ماموریت‌های امروز</b>\n"]
     for m in status:
         check = "✅" if m["done"] else f"⏳ {m['progress']}/{m['target']}"
-        reward = f"+{m['coins']} {get_emoji('coin', '💰')}" + (
-            f" +{m['dna']} {get_emoji('dna', '🧬')}" if m["dna"] else ""
+        reward = f"+{m['coins']} {get_emoji('coin')}" + (
+            f" +{m['dna']} {get_emoji('dna')}" if m["dna"] else ""
         )
         lines.append(f"{check} — {m['label']} ({reward})")
     lines.append("\n<i>ماموریت‌ها هر روز (ساعت جهانی UTC) ریست می‌شن.</i>")
@@ -327,12 +333,12 @@ async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if result["won"]:
         reward_line = (
-            f"\n\n🎉 <b>بردی!</b> +{result['coins']} {get_emoji('coin', '💰')}"
-            + (f" +{result['dna']} {get_emoji('dna', '🧬')}" if result["dna"] else "")
+            f"\n\n{get_emoji('celebrate')} <b>بردی!</b> +{result['coins']} {get_emoji('coin')}"
+            + (f" +{result['dna']} {get_emoji('dna')}" if result["dna"] else "")
             + f" +{result['xp']} XP"
         )
         if result["levels"]:
-            reward_line += f" 🎊 رسید به سطح {creature.level}!"
+            reward_line += f" {get_emoji('celebrate')} رسید به سطح {creature.level}!"
     else:
         reward_line = f"\n\n😔 باختی... +{result['xp']} XP تسلی‌بخش گرفتی."
     reward_line += _mission_lines(completed_missions)
@@ -357,7 +363,8 @@ async def alliance_create(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text(str(exc))
         return
     await update.message.reply_text(
-        f"🤝 اتحاد <b>{alliance.name}</b> ساخته شد! تو رهبرشی 👑", parse_mode="HTML"
+        f"{get_emoji('alliance')} اتحاد <b>{alliance.name}</b> ساخته شد! تو رهبرشی {get_emoji('crown')}",
+        parse_mode="HTML",
     )
 
 
@@ -377,7 +384,9 @@ async def alliance_join(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
-    await update.message.reply_text(f"🤝 به اتحاد <b>{alliance.name}</b> پیوستی!", parse_mode="HTML")
+    await update.message.reply_text(
+        f"{get_emoji('alliance')} به اتحاد <b>{alliance.name}</b> پیوستی!", parse_mode="HTML"
+    )
 
 
 def _alliance_leave_sync(tg_user):
@@ -405,15 +414,15 @@ async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     info = await run_db(_alliance_info_sync, update.effective_user)
     if info is None:
         await update.effective_message.reply_text(
-            "🤝 توی هیچ اتحادی نیستی.\n"
+            f"{get_emoji('alliance')} توی هیچ اتحادی نیستی.\n"
             "<code>/alliance_create اسم</code> برای ساختن، یا <code>/alliance_join اسم</code> برای پیوستن.",
             parse_mode="HTML",
         )
         return
     lines = [
-        f"🤝 <b>اتحاد {info['name']}</b>",
-        f"👑 رهبر: {display_name(info['leader']) if info['leader'] else '—'}",
-        f"👥 اعضا: {info['member_count']}   💪 قدرت کل: {info['power']}",
+        f"{get_emoji('alliance')} <b>اتحاد {info['name']}</b>",
+        f"{get_emoji('crown')} رهبر: {display_name(info['leader']) if info['leader'] else '—'}",
+        f"{get_emoji('users')} اعضا: {info['member_count']}   💪 قدرت کل: {info['power']}",
         "",
     ]
     for m in info["members"][:20]:
@@ -432,8 +441,8 @@ async def alliance_top(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "هنوز هیچ اتحادی ساخته نشده. با /alliance_create اولیش رو بساز!"
         )
         return
-    medals = ["🥇", "🥈", "🥉"]
-    lines = ["🏆 <b>برترین اتحادها</b>\n"]
+    medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
+    lines = [f"{get_emoji('trophy')} <b>برترین اتحادها</b>\n"]
     for i, r in enumerate(ranked, start=1):
         rank = medals[i - 1] if i <= 3 else f"{i}."
         lines.append(f"{rank} {r['alliance'].name} — قدرت {r['power']} ({r['member_count']} عضو)")
@@ -464,8 +473,8 @@ async def rank(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not top10:
         await update.effective_message.reply_text("هنوز هیچ موجودی ثبت نشده.")
         return
-    medals = ["🥇", "🥈", "🥉"]
-    lines = ["🏆 <b>رتبه‌بندی سراسری موجودات</b>\n"]
+    medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
+    lines = [f"{get_emoji('trophy')} <b>رتبه‌بندی سراسری موجودات</b>\n"]
     for i, c in enumerate(top10, start=1):
         rank_icon = medals[i - 1] if i <= 3 else f"{i}."
         lines.append(f"{rank_icon} {c.name} (Lv{c.level}) — قدرت {c.power}")
@@ -495,14 +504,14 @@ def _profile_sync(tg_user):
 async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user, stats = await run_db(_profile_sync, update.effective_user)
     lines = [
-        f"👤 <b>پروفایل {display_name(user)}</b>\n",
+        f"{get_emoji('profile')} <b>پروفایل {display_name(user)}</b>\n",
         f"📅 عضو از: {user.created_at.strftime('%Y-%m-%d')}",
         f"🔥 روزهای ورود پشت‌سرهم: {user.login_streak}",
-        f"🧬 موجودات ساخته‌شده: {stats['creatures_owned']}\n",
-        f"⚔️ دوئل‌های برده: {stats['duel_wins']}",
-        f"🏹 شکارهای انجام‌شده: {stats['total_hunts']}",
-        f"🐲 کل دمیج واردشده به رید باس‌ها: {stats['total_raid_damage']}\n",
-        f"{get_emoji('coin', '💰')} سکه فعلی: {user.coins}   {get_emoji('dna', '🧬')} DNA فعلی: {user.dna_fragments}",
+        f"{get_emoji('creature')} موجودات ساخته‌شده: {stats['creatures_owned']}\n",
+        f"{get_emoji('battle')} دوئل‌های برده: {stats['duel_wins']}",
+        f"{get_emoji('hunt')} شکارهای انجام‌شده: {stats['total_hunts']}",
+        f"{get_emoji('raid_boss')} کل دمیج واردشده به رید باس‌ها: {stats['total_raid_damage']}\n",
+        f"{get_emoji('coin')} سکه فعلی: {user.coins}   {get_emoji('dna')} DNA فعلی: {user.dna_fragments}",
     ]
     await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
 

@@ -10,7 +10,7 @@ from bot.utils import run_db
 from config import ADMIN_PANEL_URL, OWNER_TELEGRAM_ID
 from game import constants
 from game.creature import GameError
-from game.emoji import EMOJI_KEYS, clear_emoji, list_overrides, set_emoji
+from game.emoji import EMOJI_DEFS, EMOJI_KEYS, CATEGORY_LABELS, CATEGORY_OF, clear_emoji, get_emoji, list_overrides, set_emoji
 from game.moderation import (
     deduct_resource,
     delete_creature,
@@ -33,14 +33,27 @@ def _keys_help() -> str:
 
 
 EMOJI_KEY_CALLBACK_PREFIX = "set_emoji_key:"
+EMOJI_CAT_CALLBACK_PREFIX = "set_emoji_cat:"
+EMOJI_BACK_CALLBACK = "set_emoji_back"
 
 
-def _key_selection_keyboard() -> InlineKeyboardMarkup:
+def _category_keyboard() -> InlineKeyboardMarkup:
     buttons = [
-        InlineKeyboardButton(label, callback_data=f"{EMOJI_KEY_CALLBACK_PREFIX}{key}")
-        for key, label in EMOJI_KEYS.items()
+        InlineKeyboardButton(label, callback_data=f"{EMOJI_CAT_CALLBACK_PREFIX}{cat}")
+        for cat, label in CATEGORY_LABELS.items()
     ]
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+    return InlineKeyboardMarkup(rows)
+
+
+def _key_keyboard(category: str) -> InlineKeyboardMarkup:
+    keys_in_cat = [k for k, c in CATEGORY_OF.items() if c == category]
+    buttons = [
+        InlineKeyboardButton(EMOJI_KEYS[k], callback_data=f"{EMOJI_KEY_CALLBACK_PREFIX}{k}")
+        for k in keys_in_cat
+    ]
+    rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+    rows.append([InlineKeyboardButton("◀️ بازگشت به دسته‌ها", callback_data=EMOJI_BACK_CALLBACK)])
     return InlineKeyboardMarkup(rows)
 
 
@@ -60,12 +73,13 @@ async def set_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if not context.args:
         await update.effective_message.reply_text(
-            "🎨 <b>تنظیم ایموجی پرمیوم</b>\n"
-            "یکی از کلیدهای زیر رو انتخاب کن، بعدش فقط همون <b>ایموجی پرمیوم</b> رو تک و تنها بفرست "
+            f"{get_emoji('settings')} <b>تنظیم ایموجی پرمیوم</b>\n"
+            "اول یه دسته انتخاب کن، بعد کلید موردنظر رو، بعدش فقط همون <b>ایموجی پرمیوم</b> رو تک و تنها بفرست "
             "(از کیبورد ایموجی «پرمیوم» تلگرام، نه یونیکد معمولی).\n\n"
-            "میان‌بر برای حرفه‌ای‌ها: <code>/set_emoji coin</code> 🪙 (کلید + ایموجی تو یه پیام)",
+            "میان‌بر برای حرفه‌ای‌ها: <code>/set_emoji coin</code> 🪙 (کلید + ایموجی تو یه پیام)\n"
+            "برای دیدن نتیجه‌ی فعلی همه‌چیز: /preview_emoji",
             parse_mode="HTML",
-            reply_markup=_key_selection_keyboard(),
+            reply_markup=_category_keyboard(),
         )
         return
 
@@ -86,7 +100,35 @@ async def set_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     custom_emoji_id, placeholder = extracted
     await run_db(set_emoji, key, custom_emoji_id, placeholder)
-    await update.effective_message.reply_text(f"✅ ایموجی «{EMOJI_KEYS[key]}» با موفقیت تنظیم شد.")
+    await update.effective_message.reply_text(
+        f"{get_emoji('confirm')} ایموجی «{EMOJI_KEYS[key]}» با موفقیت تنظیم شد.", parse_mode="HTML"
+    )
+
+
+async def set_emoji_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    category = query.data[len(EMOJI_CAT_CALLBACK_PREFIX) :]
+    if category not in CATEGORY_LABELS:
+        await query.answer("دسته نامعتبر شد، دوباره /set_emoji رو بزن.", show_alert=True)
+        return
+    await query.answer()
+    await query.edit_message_text(
+        f"{CATEGORY_LABELS[category]}\nکدوم کلید؟", reply_markup=_key_keyboard(category)
+    )
+
+
+async def set_emoji_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    await query.answer()
+    await query.edit_message_text(
+        f"{get_emoji('settings')} یه دسته انتخاب کن:", parse_mode="HTML", reply_markup=_category_keyboard()
+    )
 
 
 async def set_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -126,7 +168,9 @@ async def capture_emoji_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     custom_emoji_id, placeholder = extracted
     await run_db(set_emoji, key, custom_emoji_id, placeholder)
-    await message.reply_text(f"✅ ایموجی «{EMOJI_KEYS[key]}» با موفقیت تنظیم شد.")
+    await message.reply_text(
+        f"{get_emoji('confirm')} ایموجی «{EMOJI_KEYS[key]}» با موفقیت تنظیم شد.", parse_mode="HTML"
+    )
 
 
 async def clear_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -139,7 +183,10 @@ async def clear_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return
     removed = await run_db(clear_emoji, context.args[0])
-    await update.message.reply_text("✅ به حالت پیش‌فرض برگشت." if removed else "این کلید سفارشی تنظیم نشده بود.")
+    await update.effective_message.reply_text(
+        f"{get_emoji('confirm')} به حالت پیش‌فرض برگشت." if removed else "این کلید سفارشی تنظیم نشده بود.",
+        parse_mode="HTML",
+    )
 
 
 async def list_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -147,7 +194,7 @@ async def list_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
     overrides = await run_db(list_overrides)
 
-    lines = ["🎨 <b>ایموجی‌های سفارشی فعلی</b>\n"]
+    lines = [f"{get_emoji('settings')} <b>ایموجی‌های سفارشی فعلی</b>\n"]
     if not overrides:
         lines.append("<i>هنوز چیزی تنظیم نشده.</i>\n")
     else:
@@ -169,21 +216,23 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     stats = await run_db(dashboard_stats)
     text = (
         "🛠 <b>پنل مدیریت</b>\n\n"
-        f"👥 کاربران: {stats['users']}   🧬 موجودات: {stats['creatures']}\n"
-        f"🤝 اتحادها: {stats['alliances']}   🐲 رید فعال: {stats['active_raids']}\n\n"
+        f"{get_emoji('users')} کاربران: {stats['users']}   {get_emoji('creature')} موجودات: {stats['creatures']}\n"
+        f"{get_emoji('alliance')} اتحادها: {stats['alliances']}   "
+        f"{get_emoji('raid_boss')} رید فعال: {stats['active_raids']}\n\n"
         "━━━━━━━━━━━━━━\n"
-        "👤 <b>مدیریت کاربر</b> (آیدی یا @یوزرنیم)\n"
+        f"{get_emoji('profile')} <b>مدیریت کاربر</b> (آیدی یا @یوزرنیم)\n"
         "<code>/user_info آیدی</code> — پروفایل کامل\n"
         "<code>/grant آیدی coins/dna مقدار</code> — اعطای منبع\n"
         "<code>/deduct آیدی coins/dna مقدار</code> — کسر منبع\n"
         "<code>/ban آیدی</code> · <code>/unban آیدی</code> — مسدودسازی\n\n"
-        "🧬 <b>مدیریت موجود</b>\n"
+        f"{get_emoji('creature')} <b>مدیریت موجود</b>\n"
         "<code>/delete_creature شماره</code> — حذف واقعی (با تأیید)\n\n"
-        "📢 <b>ارتباط</b>\n"
+        f"{get_emoji('broadcast')} <b>ارتباط</b>\n"
         "<code>/broadcast متن</code> — پیام همگانی\n\n"
-        "🎨 <b>ایموجی پرمیوم</b>\n"
-        "<code>/set_emoji</code> — دکمه‌ای، کلید رو انتخاب کن بعد فقط ایموجی رو بفرست\n"
-        "<code>/clear_emoji کلید</code> — برگردوندن به حالت پیش‌فرض\n\n"
+        f"{get_emoji('settings')} <b>ایموجی پرمیوم</b>\n"
+        "<code>/set_emoji</code> — دکمه‌ای، دسته و کلید رو انتخاب کن بعد فقط ایموجی رو بفرست\n"
+        "<code>/clear_emoji کلید</code> — برگردوندن به حالت پیش‌فرض\n"
+        "<code>/preview_emoji</code> — دیدن نتیجه‌ی فعلی همه‌چیز، یه‌جا\n\n"
         "<i>دکمه‌ی «پنل کامل» فقط از همون سیستمی که بات روش اجرا می‌شه باز می‌شه "
         "(مگه ADMIN_PANEL_URL رو روی آدرس عمومی/تانل تنظیم کرده باشی).</i>"
     )
@@ -191,7 +240,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         [
             [
                 InlineKeyboardButton("📊 گزارش پیشرفت", callback_data="admin_menu:report"),
-                InlineKeyboardButton("🎨 لیست ایموجی‌ها", callback_data="admin_menu:list_emoji"),
+                InlineKeyboardButton("🔍 پیش‌نمایش ایموجی‌ها", callback_data="admin_menu:preview_emoji"),
             ],
             [InlineKeyboardButton("🌐 باز کردن پنل کامل", url=ADMIN_PANEL_URL)],
         ]
@@ -220,24 +269,28 @@ async def report_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     data = await run_db(progress_report)
 
     lines = [
-        "📊 <b>گزارش پیشرفت</b>\n",
-        f"👥 کاربران: {data['users']}   🧬 موجودات: {data['creatures']}   🤝 اتحادها: {data['alliances']}\n",
-        "💰 <b>برترین بازیکن‌ها (سکه):</b>",
+        f"{get_emoji('stats')} <b>گزارش پیشرفت</b>\n",
+        f"{get_emoji('users')} کاربران: {data['users']}   {get_emoji('creature')} موجودات: {data['creatures']}"
+        f"   {get_emoji('alliance')} اتحادها: {data['alliances']}\n",
+        f"{get_emoji('coin')} <b>برترین بازیکن‌ها (سکه):</b>",
     ]
     for p in data["top_players"]:
         lines.append(f"• {p['name']} — {p['coins']} سکه")
 
-    lines.append("\n🧬 <b>قوی‌ترین موجودات (سطح):</b>")
+    lines.append(f"\n{get_emoji('creature')} <b>قوی‌ترین موجودات (سطح):</b>")
     for c in data["top_creatures"]:
         lines.append(f"• {c['name']} (Lv{c['level']}) — {c['owner']}")
 
     lines.append("")
     if data["suspicious"]:
-        lines.append("🚨 <b>فعالیت مشکوک امروز</b> (بیشتر از سقف نظری ممکن با انرژی عادی — یعنی یا باگه یا اکسپلویت):")
+        lines.append(
+            f"{get_emoji('warning')} <b>فعالیت مشکوک امروز</b> "
+            "(بیشتر از سقف نظری ممکن با انرژی عادی — یعنی یا باگه یا اکسپلویت):"
+        )
         for s in data["suspicious"]:
             lines.append(f"• {s['name']} — {s['action']}: {s['count']} بار (سقف نظری: {s['limit']})")
     else:
-        lines.append("✅ هیچ فعالیت مشکوکی امروز پیدا نشد.")
+        lines.append(f"{get_emoji('confirm')} هیچ فعالیت مشکوکی امروز پیدا نشد.")
 
     await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
 
@@ -290,12 +343,14 @@ async def user_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     user = data["user"]
     lines = [
-        f"👤 <b>{display_name(user)}</b>  (<code>{user.id}</code>)",
-        f"💰 {user.coins}   🧬 {user.dna_fragments}   ⚡ {user.energy}/{constants.MAX_ENERGY}",
-        f"🔥 streak: {user.login_streak}   🤝 اتحاد: {user.alliance.name if user.alliance_id else '—'}",
-        f"🚫 مسدود: {'بله' if user.is_banned else 'نه'}",
+        f"{get_emoji('profile')} <b>{display_name(user)}</b>  (<code>{user.id}</code>)",
+        f"{get_emoji('coin')} {user.coins}   {get_emoji('dna')} {user.dna_fragments}   "
+        f"{get_emoji('energy')} {user.energy}/{constants.MAX_ENERGY}",
+        f"🔥 streak: {user.login_streak}   {get_emoji('alliance')} اتحاد: "
+        f"{user.alliance.name if user.alliance_id else '—'}",
+        f"{get_emoji('banned')} مسدود: {'بله' if user.is_banned else 'نه'}",
         f"📅 عضو از: {user.created_at.strftime('%Y-%m-%d')}\n",
-        f"🧬 <b>موجودات ({len(data['creatures'])}):</b>",
+        f"{get_emoji('creature')} <b>موجودات ({len(data['creatures'])}):</b>",
     ]
     for c in data["creatures"]:
         active_tag = " ✅فعال" if c.is_active else ""
@@ -318,7 +373,8 @@ async def grant_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.effective_message.reply_text(str(exc))
         return
     await update.effective_message.reply_text(
-        f"✅ به {display_name(user)} داده شد. مقدار جدید {resource}: {new_value}"
+        f"{get_emoji('confirm')} به {display_name(user)} داده شد. مقدار جدید {resource}: {new_value}",
+        parse_mode="HTML",
     )
 
 
@@ -337,7 +393,8 @@ async def deduct_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.effective_message.reply_text(str(exc))
         return
     await update.effective_message.reply_text(
-        f"✅ از {display_name(user)} کم شد. مقدار جدید {resource}: {new_value}"
+        f"{get_emoji('confirm')} از {display_name(user)} کم شد. مقدار جدید {resource}: {new_value}",
+        parse_mode="HTML",
     )
 
 
@@ -354,7 +411,9 @@ async def ban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except GameError as exc:
         await update.effective_message.reply_text(str(exc))
         return
-    await update.effective_message.reply_text(f"🚫 {display_name(user)} مسدود شد.")
+    await update.effective_message.reply_text(
+        f"{get_emoji('banned')} {display_name(user)} مسدود شد.", parse_mode="HTML"
+    )
 
 
 async def unban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -370,7 +429,9 @@ async def unban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except GameError as exc:
         await update.effective_message.reply_text(str(exc))
         return
-    await update.effective_message.reply_text(f"✅ {display_name(user)} دیگه مسدود نیست.")
+    await update.effective_message.reply_text(
+        f"{get_emoji('confirm')} {display_name(user)} دیگه مسدود نیست.", parse_mode="HTML"
+    )
 
 
 def _delete_creature_preview_sync(creature_id: int):
@@ -403,8 +464,8 @@ async def delete_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
         ]
     )
     await update.effective_message.reply_text(
-        f"⚠️ مطمئنی می‌خوای <b>{creature.name}</b> (<code>#{creature.id}</code>, مال {owner_name}) رو "
-        f"برای همیشه حذف کنی؟ این کار غیرقابل‌برگشته و لاگ‌های رید/نبرد مرتبط باهاش هم پاک می‌شن.",
+        f"{get_emoji('warning')} مطمئنی می‌خوای <b>{creature.name}</b> (<code>#{creature.id}</code>, "
+        f"مال {owner_name}) رو برای همیشه حذف کنی؟ این کار غیرقابل‌برگشته و لاگ‌های رید/نبرد مرتبط باهاش هم پاک می‌شن.",
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -418,7 +479,7 @@ async def delete_creature_confirm_callback(update: Update, context: ContextTypes
 
     if query.data == "admin_del_cancel":
         await query.answer()
-        await query.edit_message_text("لغو شد، چیزی حذف نشد.")
+        await query.edit_message_text(f"{get_emoji('cancel')} لغو شد، چیزی حذف نشد.", parse_mode="HTML")
         return
 
     creature_id = int(query.data.split(":")[1])
@@ -428,10 +489,44 @@ async def delete_creature_confirm_callback(update: Update, context: ContextTypes
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
-    await query.edit_message_text(f"🗑 موجود «{name}» برای همیشه حذف شد.")
+    await query.edit_message_text(f"🗑 موجود «{name}» برای همیشه حذف شد.", parse_mode="HTML")
 
 
-_ADMIN_MENU_ACTIONS.update({"report": report_cmd, "list_emoji": list_emoji_cmd})
+async def preview_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """'گزینه تست' — shows a realistic sample card rendered with the current live
+    emoji set (custom or default), plus every key grouped by category so it's easy
+    to spot which ones are still default and which are already customized."""
+    if not _is_owner(update):
+        return
+
+    lines = [
+        "🔍 <b>پیش‌نمایش نمونه</b> (شبیه کارت موجود واقعی):\n",
+        f"{get_emoji('creature')} <b>Pyrofang</b>  <code>#1</code>",
+        f"{constants.element_label('fire')} · سطح ۵",
+        "",
+        f"{get_emoji('hp')} 90   {get_emoji('atk')} 24   {get_emoji('def')} 18   "
+        f"{get_emoji('spd')} 15   {get_emoji('poison')} 3",
+        f"{get_emoji('wings')} بال ۲ · {get_emoji('def')} زره ۱ · {get_emoji('fangs')} نیش ۳",
+        "",
+        f"{get_emoji('energy')} 14/20",
+        f"{get_emoji('coin')} 850   {get_emoji('dna')} 40",
+        "",
+        "━━━━━━━━━━━━━━",
+        "📋 <b>همه‌ی کلیدها به تفکیک دسته</b> (اگه پرمیوم تنظیم کرده باشی همینجا می‌بینیش):",
+    ]
+    for cat, cat_label in CATEGORY_LABELS.items():
+        lines.append(f"\n<b>{cat_label}</b>")
+        for key, (label, _default, key_cat) in EMOJI_DEFS.items():
+            if key_cat != cat:
+                continue
+            lines.append(f"{get_emoji(key)} {label} (<code>{key}</code>)")
+
+    await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
+_ADMIN_MENU_ACTIONS.update(
+    {"report": report_cmd, "list_emoji": list_emoji_cmd, "preview_emoji": preview_emoji_cmd}
+)
 
 
 def register(application) -> None:
@@ -448,8 +543,15 @@ def register(application) -> None:
     application.add_handler(CommandHandler("ban", ban_cmd, private_only))
     application.add_handler(CommandHandler("unban", unban_cmd, private_only))
     application.add_handler(CommandHandler("delete_creature", delete_creature_cmd, private_only))
+    application.add_handler(CommandHandler("preview_emoji", preview_emoji_cmd, private_only))
     application.add_handler(CallbackQueryHandler(delete_creature_confirm_callback, pattern=r"^admin_del"))
     application.add_handler(CallbackQueryHandler(admin_menu_callback, pattern=r"^admin_menu:"))
+    application.add_handler(
+        CallbackQueryHandler(set_emoji_category_callback, pattern=f"^{EMOJI_CAT_CALLBACK_PREFIX}")
+    )
+    application.add_handler(
+        CallbackQueryHandler(set_emoji_back_callback, pattern=f"^{EMOJI_BACK_CALLBACK}$")
+    )
     application.add_handler(
         CallbackQueryHandler(set_emoji_key_callback, pattern=f"^{EMOJI_KEY_CALLBACK_PREFIX}")
     )

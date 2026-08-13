@@ -3,6 +3,7 @@ import random
 from bio_lab.models import Creature, InteractiveBattle
 from game import constants
 from game.creature import GameError, effective_stats
+from game.emoji import get_emoji
 
 OTHER_SIDE = {"a": "b", "b": "a"}
 
@@ -45,7 +46,7 @@ def perform_action(battle: InteractiveBattle, actor_side: str, action: str) -> l
         raw = round(base * mult * random.uniform(0.85, 1.15) * (constants.BATTLE_CRIT_MULTIPLIER if is_crit else 1.0))
         dealt = _apply_damage(battle, defender_side, raw)
         crit_txt = " 💥کریتیکال!" if is_crit else ""
-        return [f"🗡 {actor.name} حمله کرد و {dealt} دمیج به {defender.name} زد{crit_txt}"]
+        return [f"{get_emoji('attack_action')} {actor.name} حمله کرد و {dealt} دمیج به {defender.name} زد{crit_txt}"]
 
     if action == "skill":
         uses_attr = f"skill_uses_{actor_side}"
@@ -78,7 +79,7 @@ def perform_action(battle: InteractiveBattle, actor_side: str, action: str) -> l
 
     if action == "forfeit":
         setattr(battle, f"hp_{actor_side}", 0)
-        return [f"🏳 {actor.name} تسلیم شد."]
+        return [f"{get_emoji('forfeit_action')} {actor.name} تسلیم شد."]
 
     raise GameError("این حرکت شناخته‌شده نیست.")
 
@@ -90,7 +91,7 @@ def advance_turn(battle: InteractiveBattle) -> list[str]:
     if getattr(battle, stunned_attr):
         setattr(battle, stunned_attr, False)
         creature = _creature(battle, other)
-        return [f"⚡ {creature.name} هنوز برق‌گرفته‌ست و این نوبت رو از دست داد!"]
+        return [f"{get_emoji('element_electric')} {creature.name} هنوز برق‌گرفته‌ست و این نوبت رو از دست داد!"]
     battle.turn = other
     return []
 
@@ -111,7 +112,7 @@ def render_battle_card(battle: InteractiveBattle) -> str:
     stats_a = effective_stats(battle.creature_a)
     stats_b = effective_stats(battle.creature_b)
     lines = [
-        "⚔️ <b>نبرد زنده</b>",
+        f"{get_emoji('battle')} <b>نبرد زنده</b>",
         f"{battle.creature_a.name}  {render_hp_bar(battle.hp_a, stats_a['hp'])}",
         f"{battle.creature_b.name}  {render_hp_bar(battle.hp_b, stats_b['hp'])}",
         "",
@@ -129,6 +130,6 @@ def render_battle_card(battle: InteractiveBattle) -> str:
     elif battle.status == "finished":
         winner_side = "a" if battle.hp_b <= 0 else "b"
         winner = _creature(battle, winner_side)
-        lines.append(f"🏆 <b>برنده: {winner.name}!</b>")
+        lines.append(f"{get_emoji('trophy')} <b>برنده: {winner.name}!</b>")
 
     return "\n".join(lines)

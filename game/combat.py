@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from bio_lab.models import Creature
 from game import constants
 from game.creature import effective_stats
+from game.emoji import get_emoji
 
 MAX_ROUNDS = 12
 CRIT_CHANCE = 0.1
@@ -25,8 +26,8 @@ def resolve_duel(creature_a: Creature, creature_b: Creature) -> tuple[Creature, 
     fb.hp = fb.stats["hp"]
 
     log = [
-        f"⚔️ <b>{fa.creature.name}</b> ({constants.ELEMENT_LABELS[fa.creature.element]}) "
-        f"در برابر <b>{fb.creature.name}</b> ({constants.ELEMENT_LABELS[fb.creature.element]})\n"
+        f"{get_emoji('battle')} <b>{fa.creature.name}</b> ({constants.element_label(fa.creature.element)}) "
+        f"در برابر <b>{fb.creature.name}</b> ({constants.element_label(fb.creature.element)})\n"
     ]
 
     round_num = 0
@@ -40,7 +41,7 @@ def resolve_duel(creature_a: Creature, creature_b: Creature) -> tuple[Creature, 
         log.append(f"<i>— راند {round_num}: {fa.creature.name} {max(fa.hp, 0)}HP | {fb.creature.name} {max(fb.hp, 0)}HP</i>")
 
     winner = _decide_winner(fa, fb)
-    log.append(f"\n🏆 <b>برنده: {winner.creature.name}!</b>")
+    log.append(f"\n{get_emoji('trophy')} <b>برنده: {winner.creature.name}!</b>")
     return winner.creature, "\n".join(log)
 
 
@@ -58,7 +59,10 @@ def _attack(attacker: Fighter, defender: Fighter, log: list[str]) -> None:
     if attacker.stats["poison"] > 0 and defender.hp > 0:
         poison_dmg = attacker.stats["poison"]
         defender.hp -= poison_dmg
-        log.append(f"☠️ زهر {attacker.creature.name} {poison_dmg} دمیج اضافه به {defender.creature.name} زد")
+        log.append(
+            f"{get_emoji('poison')} زهر {attacker.creature.name} {poison_dmg} دمیج اضافه به "
+            f"{defender.creature.name} زد"
+        )
 
 
 def _decide_winner(fa: Fighter, fb: Fighter) -> Fighter:

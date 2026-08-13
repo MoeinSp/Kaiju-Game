@@ -27,10 +27,10 @@ def _mission_lines(completed: list[dict]) -> str:
         return ""
     lines = []
     for m in completed:
-        reward = f"+{m['coins']} {get_emoji('coin', '💰')}"
+        reward = f"+{m['coins']} {get_emoji('coin')}"
         if m["dna"]:
-            reward += f" +{m['dna']} {get_emoji('dna', '🧬')}"
-        lines.append(f"🎯 ماموریت «{m['label']}» تکمیل شد! {reward}")
+            reward += f" +{m['dna']} {get_emoji('dna')}"
+        lines.append(f"{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! {reward}")
     return "\n" + "\n".join(lines)
 
 
@@ -75,7 +75,9 @@ def _duel_sync(chat, challenger_tg, opponent_tg):
 
 async def duel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message.reply_to_message is None:
-        await update.message.reply_text("⚔️ برای دوئل، روی پیام حریف ریپلای کن و بنویس /duel")
+        await update.message.reply_text(
+            f"{get_emoji('battle')} برای دوئل، روی پیام حریف ریپلای کن و بنویس /duel", parse_mode="HTML"
+        )
         return
 
     opponent_tg = update.message.reply_to_message.from_user
@@ -92,9 +94,12 @@ async def duel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(str(exc))
         return
 
-    reward_text = f"\n\n💰 {winner_creature.name} +{constants.DUEL_WIN_COINS} سکه · +{constants.DUEL_WIN_XP} XP"
+    reward_text = (
+        f"\n\n{get_emoji('coin')} {winner_creature.name} +{constants.DUEL_WIN_COINS} سکه · "
+        f"+{constants.DUEL_WIN_XP} XP"
+    )
     if winner_levels:
-        reward_text += f" 🎉 رسید به سطح {winner_creature.level}!"
+        reward_text += f" {get_emoji('celebrate')} رسید به سطح {winner_creature.level}!"
     reward_text += _mission_lines(completed_missions)
     await update.message.reply_text(log_text + reward_text, parse_mode="HTML")
 
@@ -129,7 +134,7 @@ def _give_sync(chat, sender_tg, receiver_tg, kind, amount_arg):
 
 async def give(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     usage = (
-        "🎁 استفاده درست: روی پیام طرف مقابل ریپلای کن و بنویس /give به‌همراه نوع و مقدار\n"
+        f"{get_emoji('gift')} استفاده درست: روی پیام طرف مقابل ریپلای کن و بنویس /give به‌همراه نوع و مقدار\n"
         "<code>/give coins 50</code> · <code>/give dna 10</code> · <code>/give creature 7</code> "
         "(شماره موجود از /collection)"
     )
@@ -162,14 +167,17 @@ async def give(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if result[0] == "creature":
         _, sender, receiver, creature = result
         await update.message.reply_text(
-            f"🎁 {display_name(sender)} موجود <b>{creature.name}</b> رو به {display_name(receiver)} هدیه داد!",
+            f"{get_emoji('gift')} {display_name(sender)} موجود <b>{creature.name}</b> رو به "
+            f"{display_name(receiver)} هدیه داد!",
             parse_mode="HTML",
         )
     else:
         _, sender, receiver, resource_key, amount = result
         label = constants.GIVE_RESOURCE_LABELS[resource_key]
         await update.message.reply_text(
-            f"🎁 {display_name(sender)} مقدار {amount} {label} به {display_name(receiver)} هدیه داد!"
+            f"{get_emoji('gift')} {display_name(sender)} مقدار {amount} {label} به "
+            f"{display_name(receiver)} هدیه داد!",
+            parse_mode="HTML",
         )
 
 
@@ -187,9 +195,9 @@ async def raid_spawn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text(str(exc))
         return
     await update.message.reply_text(
-        f"🐲 <b>یک هیولای وحشی ظاهر شد: {boss.name}!</b>\n"
+        f"{get_emoji('raid_boss')} <b>یک هیولای وحشی ظاهر شد: {boss.name}!</b>\n"
         f"{constants.render_bar(boss.current_hp, boss.max_hp, width=14)}  {boss.current_hp}/{boss.max_hp} HP\n"
-        f"{constants.ELEMENT_LABELS[boss.element]}\n\n"
+        f"{constants.element_label(boss.element)}\n\n"
         f"همه با /attack بهش حمله کنین — هرچی سهم دمیج بیشتر، غنیمت بیشتر! 💪",
         parse_mode="HTML",
     )
@@ -221,7 +229,9 @@ def _attack_sync(chat, tg_user):
         for uid, r in sorted(rewards.items(), key=lambda kv: kv[1]["damage"], reverse=True):
             member = User.objects.filter(id=uid).first()
             name = display_name(member) if member else str(uid)
-            reward_lines.append(f"{name} — 🧬{r['dna']} 💰{r['coins']} (دمیج: {r['damage']})")
+            reward_lines.append(
+                f"{name} — {get_emoji('dna')}{r['dna']} {get_emoji('coin')}{r['coins']} (دمیج: {r['damage']})"
+            )
 
     return creature, boss, dmg, defeated, completed_missions, reward_lines
 
@@ -236,12 +246,12 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     text = (
-        f"⚔️ <b>{creature.name}</b> به {boss.name} <b>{dmg}</b> دمیج زد!\n"
+        f"{get_emoji('attack_action')} <b>{creature.name}</b> به {boss.name} <b>{dmg}</b> دمیج زد!\n"
         f"{constants.render_bar(boss.current_hp, boss.max_hp, width=14)}  {max(boss.current_hp, 0)}/{boss.max_hp} HP"
     )
     text += _mission_lines(completed_missions)
     if defeated:
-        text += "\n\n🎉 <b>هیولا شکست خورد!</b> غنایم:\n" + "\n".join(reward_lines)
+        text += f"\n\n{get_emoji('celebrate')} <b>هیولا شکست خورد!</b> غنایم:\n" + "\n".join(reward_lines)
 
     await update.message.reply_text(text, parse_mode="HTML")
 
@@ -273,7 +283,10 @@ async def mutation_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(str(exc))
         return
 
-    lines = ["☄️ <b>یه شهاب‌سنگ جهش‌زا روی گروه فرود اومد!</b> همه‌ی موجودهای فعال این جهش رایگان رو گرفتن:\n"]
+    lines = [
+        f"{get_emoji('comet')} <b>یه شهاب‌سنگ جهش‌زا روی گروه فرود اومد!</b> "
+        "همه‌ی موجودهای فعال این جهش رایگان رو گرفتن:\n"
+    ]
     for name, stat, bonus in results:
         lines.append(f"• {name}: +{bonus} {constants.MUTATION_EVENT_STAT_LABELS[stat]}")
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -295,8 +308,8 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not creatures:
         await update.message.reply_text("هنوز هیچ موجودی توی این گروه ثبت نشده.")
         return
-    medals = ["🥇", "🥈", "🥉"]
-    lines = ["🏆 <b>برترین موجودات این گروه</b>\n"]
+    medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
+    lines = [f"{get_emoji('trophy')} <b>برترین موجودات این گروه</b>\n"]
     for i, c in enumerate(creatures, start=1):
         rank = medals[i - 1] if i <= 3 else f"{i}."
         lines.append(f"{rank} {c.name} (Lv{c.level}) — قدرت {_creature_power(c)}")
@@ -323,11 +336,11 @@ async def guardian(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(str(exc))
         return
     await update.message.reply_text(
-        f"🛡 <b>محافظ فعلی گروه</b>\n"
+        f"{get_emoji('guardian')} <b>محافظ فعلی گروه</b>\n"
         f"{top.name} ({constants.RARITY_LABELS[top.rarity]}, Lv{top.level}) — متعلق به {owner_name}\n"
         f"قدرت کل: {_creature_power(top)}\n\n"
-        f"⚔️ برای گرفتن عنوان: /guardian_challenge\n"
-        f"🎁 محافظ فعلی هر روز با /guardian_claim جایزه می‌گیره",
+        f"{get_emoji('battle')} برای گرفتن عنوان: /guardian_challenge\n"
+        f"{get_emoji('gift')} محافظ فعلی هر روز با /guardian_claim جایزه می‌گیره",
         parse_mode="HTML",
     )
 
@@ -357,7 +370,7 @@ async def guardian_challenge(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
-    result_text = "🎉 <b>بردی و محافظ جدید گروه شدی!</b>" if won else "😔 باختی، محافظ همون قبلیه."
+    result_text = f"{get_emoji('celebrate')} <b>بردی و محافظ جدید گروه شدی!</b>" if won else "😔 باختی، محافظ همون قبلیه."
     await update.message.reply_text(
         log_text + "\n\n" + result_text + _mission_lines(completed_missions), parse_mode="HTML"
     )
@@ -387,8 +400,9 @@ async def guardian_claim(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(str(exc))
         return
     await update.message.reply_text(
-        f"🛡 به‌عنوان محافظ گروه، امروز <b>{constants.GUARDIAN_STIPEND_COINS} 💰</b> و "
-        f"<b>{constants.GUARDIAN_STIPEND_DNA} 🧬</b> گرفتی!",
+        f"{get_emoji('guardian')} به‌عنوان محافظ گروه، امروز "
+        f"<b>{constants.GUARDIAN_STIPEND_COINS} {get_emoji('coin')}</b> و "
+        f"<b>{constants.GUARDIAN_STIPEND_DNA} {get_emoji('dna')}</b> گرفتی!",
         parse_mode="HTML",
     )
 

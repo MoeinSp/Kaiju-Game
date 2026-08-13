@@ -1,22 +1,28 @@
 from telegram import ChatMemberUpdated, Update
 from telegram.ext import ChatMemberHandler, ContextTypes
 
+from game.emoji import get_emoji
+
 IN_CHAT_STATUSES = ("member", "administrator", "creator")
 
-WELCOME_TEXT = (
-    "🧬 <b>سلام! من Kaiju Bio-Lab‌ام</b> 🐲\n"
-    "بازیِ رشد و ترکیب ژنتیکی هیولا — همینجا تو گروه میشه دوئل کرد، هیولای وحشی احضار کرد "
-    "و دسته‌جمعی شکارش کرد، و یه محافظ برای گروه داشت.\n\n"
-    "برای شروع، هرکی باید اول بره پیوی من و /start رو بزنه تا موجود اولیه‌ش رو از آزمایشگاه بگیره.\n\n"
-    "⚔️ <code>/duel</code> — دوئل خودکار (ریپلای روی پیام حریف)\n"
-    "🎮 <code>/battle</code> — نبرد زنده با اسکیل نوبت‌به‌نوبت\n"
-    "🐲 <code>/raid_spawn</code> — احضار هیولای وحشی برای شکار دسته‌جمعی\n"
-    "🏆 <code>/leaderboard</code> — برترین موجودای گروه\n"
-    "🛡 <code>/guardian</code> — محافظ فعلی گروه\n"
-    "📖 <code>/help</code> — لیست کامل دستورات\n\n"
-    "🙏 <b>یه خواهش:</b> لطفاً من رو <b>ادمین کامل</b> گروه کن — برای پین کردن اعلان‌های رید و "
-    "مدیریت بهتر پیام‌های بازی بهش نیاز دارم."
-)
+
+def _build_welcome_text() -> str:
+    # built fresh per-send (not a module constant) so it reflects the owner's
+    # current Premium emoji choices
+    return (
+        f"{get_emoji('creature')} <b>سلام! من Kaiju Bio-Lab‌ام</b> {get_emoji('raid_boss')}\n"
+        "بازیِ رشد و ترکیب ژنتیکی هیولا — همینجا تو گروه میشه دوئل کرد، هیولای وحشی احضار کرد "
+        "و دسته‌جمعی شکارش کرد، و یه محافظ برای گروه داشت.\n\n"
+        "برای شروع، هرکی باید اول بره پیوی من و /start رو بزنه تا موجود اولیه‌ش رو از آزمایشگاه بگیره.\n\n"
+        f"{get_emoji('battle')} <code>/duel</code> — دوئل خودکار (ریپلای روی پیام حریف)\n"
+        "🎮 <code>/battle</code> — نبرد زنده با اسکیل نوبت‌به‌نوبت\n"
+        f"{get_emoji('raid_boss')} <code>/raid_spawn</code> — احضار هیولای وحشی برای شکار دسته‌جمعی\n"
+        f"{get_emoji('trophy')} <code>/leaderboard</code> — برترین موجودای گروه\n"
+        f"{get_emoji('guardian')} <code>/guardian</code> — محافظ فعلی گروه\n"
+        "📖 <code>/help</code> — لیست کامل دستورات\n\n"
+        "🙏 <b>یه خواهش:</b> لطفاً من رو <b>ادمین کامل</b> گروه کن — برای پین کردن اعلان‌های رید و "
+        "مدیریت بهتر پیام‌های بازی بهش نیاز دارم."
+    )
 
 
 def _bot_just_added(chat_member_update: ChatMemberUpdated) -> bool:
@@ -32,7 +38,7 @@ async def on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if not _bot_just_added(result):
         return
 
-    await context.bot.send_message(chat_id=result.chat.id, text=WELCOME_TEXT, parse_mode="HTML")
+    await context.bot.send_message(chat_id=result.chat.id, text=_build_welcome_text(), parse_mode="HTML")
 
 
 def register(application) -> None:
