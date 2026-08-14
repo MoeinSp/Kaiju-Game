@@ -14,3 +14,7 @@ OWNER_TELEGRAM_ID = int(os.environ.get("OWNER_TELEGRAM_ID", "8810788620"))
 # panel deliberately doesn't cover. On a VPS set this to the real https domain,
 # otherwise the button hands out a localhost link that only works on the server.
 ADMIN_PANEL_URL = os.environ.get("ADMIN_PANEL_URL", "http://127.0.0.1:8000/panel/")
+
+# Used to build the "open the bot in private" deep link on group cards. Without
+# it the group can still play, but the buttons that hand off to DMs won't work.
+BOT_USERNAME = os.environ.get("BOT_USERNAME", "HeroGameZbot").lstrip("@")

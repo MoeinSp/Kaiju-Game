@@ -167,6 +167,29 @@ class BreedingJob(models.Model):
         return f"breeding {self.parent_a_id}+{self.parent_b_id} ({self.owner_id})"
 
 
+class WordRewardClaim(models.Model):
+    """Cooldown for the group chat's periodic reward words.
+
+    One row per (user, group), NOT per word: «جایزه», «شانس», «گنج» and the rest
+    all read and write this same timestamp, which is what makes their cooldown
+    shared. Storing it per word would let someone cycle the synonyms and collect
+    once per word."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="word_rewards")
+    # string reference: Group is declared further down this module
+    group = models.ForeignKey("Group", on_delete=models.CASCADE, related_name="word_rewards")
+    last_claimed_at = models.DateTimeField()
+    total_claims = models.IntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "group"], name="uq_word_reward_claim")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id}@{self.group_id} x{self.total_claims}"
+
+
 class SpeedupCard(models.Model):
     """Consumable items that shave time off the active BuildingUpgrade. `minutes`
     is one of game.constants.SPEEDUP_MINUTES — a fixed, small set of denominations,
