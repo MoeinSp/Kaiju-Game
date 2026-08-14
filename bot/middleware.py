@@ -4,6 +4,7 @@ from telegram.ext import ApplicationHandlerStop, ContextTypes, TypeHandler
 
 from bio_lab.models import User
 from bio_lab.repository import get_or_create_user
+from bot.buttons import DANGER, PRIMARY, SUCCESS, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text
 from config import OWNER_TELEGRAM_ID
 from game.emoji import get_emoji
@@ -36,8 +37,8 @@ def _join_gate_keyboard(missing_channels) -> InlineKeyboardMarkup:
         if url is None:
             continue
         label = f"🔵 عضویت در {ch.title or ('@' + ch.username if ch.username else 'کانال')}"
-        rows.append([InlineKeyboardButton(label, url=url)])
-    rows.append([InlineKeyboardButton("✅ بررسی مجدد عضویت", callback_data=FORCE_JOIN_CHECK_CALLBACK)])
+        rows.append([btn(label, emoji_key="btn_join", style=PRIMARY, url=url)])
+    rows.append([btn("بررسی مجدد عضویت", emoji_key="btn_recheck", style=SUCCESS, callback_data=FORCE_JOIN_CHECK_CALLBACK)])
     return InlineKeyboardMarkup(rows)
 
 

@@ -3,6 +3,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Equipment
 from bio_lab.repository import get_active_creature, get_or_create_user
+from bot.buttons import DANGER, PRIMARY, SUCCESS, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text
 from game import constants
 from game.blacksmith import forge, forge_preview, forgeable_items
@@ -30,13 +31,13 @@ def _inventory_keyboard(items: list[Equipment]) -> InlineKeyboardMarkup:
         tag = "⚔️ " if i.equipped_on_id else ""
         rows.append(
             [
-                InlineKeyboardButton(
+                btn(
                     f"{tag}{constants.EQUIPMENT_SLOT_LABELS[i.slot]} {i.name} +{i.level}",
                     callback_data=f"inv_pick:{i.id}",
                 )
             ]
         )
-    rows.append([InlineKeyboardButton("◀️ بازگشت", callback_data="menu:me")])
+    rows.append([back_btn("menu:me")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -71,12 +72,12 @@ def _item_detail_sync(tg_user, item_id):
 def _item_detail_keyboard(item: Equipment, dupe_count: int) -> InlineKeyboardMarkup:
     rows = []
     if item.equipped_on_id:
-        rows.append([InlineKeyboardButton("🎒 خارج کردن از موجود", callback_data=f"inv_unequip:{item.id}")])
+        rows.append([btn("خارج کردن از موجود", emoji_key="btn_inventory", style=DANGER, callback_data=f"inv_unequip:{item.id}")])
     else:
-        rows.append([InlineKeyboardButton("⚔️ تجهیز روی موجود فعال", callback_data=f"inv_equip:{item.id}")])
+        rows.append([btn("تجهیز روی موجود فعال", emoji_key="btn_attack", style=SUCCESS, callback_data=f"inv_equip:{item.id}")])
     if item.level < constants.EQUIPMENT_MAX_LEVEL and dupe_count > 0:
-        rows.append([InlineKeyboardButton("✨ ارتقا با یه نمونه‌ی مشابه", callback_data=f"inv_upgrade:{item.id}")])
-    rows.append([InlineKeyboardButton("◀️ بازگشت به کوله‌پشتی", callback_data="menu:inventory")])
+        rows.append([btn("✨ ارتقا با یه نمونه‌ی مشابه", style=SUCCESS, callback_data=f"inv_upgrade:{item.id}")])
+    rows.append([back_btn("menu:inventory", "بازگشت به کوله‌پشتی")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -154,10 +155,10 @@ async def inventory_upgrade_list_callback(update: Update, context: ContextTypes.
         return
     await query.answer()
     rows = [
-        [InlineKeyboardButton(f"{d.name} +{d.level} (#{d.id})", callback_data=f"inv_up_do:{item.id}:{d.id}")]
+        [btn(f"{d.name} +{d.level} (#{d.id})", style=SUCCESS, callback_data=f"inv_up_do:{item.id}:{d.id}")]
         for d in dupes
     ]
-    rows.append([InlineKeyboardButton("◀️ بازگشت", callback_data=f"inv_pick:{item.id}")])
+    rows.append([back_btn(f"inv_pick:{item.id}")])
     await safe_edit_message_text(query,
         f"✨ کدوم نمونه رو مصرف کنم تا <b>{item.name}</b> +{item.level} ارتقا پیدا کنه؟",
         parse_mode="HTML",
@@ -246,14 +247,14 @@ async def blacksmith_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
     rows = [
         [
-            InlineKeyboardButton(
+            btn(
                 f"{constants.EQUIPMENT_SLOT_LABELS[i.slot]} {i.name} +{i.level}",
                 callback_data=f"forge_pick:{i.id}",
             )
         ]
         for i in items
     ]
-    rows.append([InlineKeyboardButton("◀️ بازگشت", callback_data="menu:me")])
+    rows.append([back_btn("menu:me")])
     await update.effective_message.reply_text(
         f"⚒ <b>آهنگری</b>\n"
         f"اینجا با <b>طلا</b> سطح تجهیزات رو بالا می‌بری، بدون نیاز به نمونه‌ی تکراری — "
@@ -290,8 +291,8 @@ def _forge_detail_text(user, item, preview) -> str:
 def _forge_detail_keyboard(item_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("🔨 بزن!", callback_data=f"forge_do:{item_id}")],
-            [InlineKeyboardButton("◀️ بازگشت به آهنگری", callback_data="menu:blacksmith")],
+            [btn("بزن!", emoji_key="btn_forge", style=SUCCESS, callback_data=f"forge_do:{item_id}")],
+            [back_btn("menu:blacksmith", "بازگشت به آهنگری")],
         ]
     )
 

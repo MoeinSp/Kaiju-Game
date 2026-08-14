@@ -6,7 +6,16 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import User
 from bio_lab.repository import display_name
+from bot.buttons import DANGER, PRIMARY, SUCCESS, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text
+from game.button_emoji import (
+    BUTTON_CATEGORY_LABELS,
+    BUTTON_CATEGORY_OF,
+    BUTTON_EMOJI_KEYS,
+    clear_button_emoji,
+    list_button_overrides,
+    set_button_emoji,
+)
 from config import ADMIN_PANEL_URL, OWNER_TELEGRAM_ID
 from game import constants
 from game.creature import GameError
@@ -47,7 +56,7 @@ EMOJI_BACK_CALLBACK = "set_emoji_back"
 
 def _category_keyboard() -> InlineKeyboardMarkup:
     buttons = [
-        InlineKeyboardButton(label, callback_data=f"{EMOJI_CAT_CALLBACK_PREFIX}{cat}")
+        btn(label, callback_data=f"{EMOJI_CAT_CALLBACK_PREFIX}{cat}")
         for cat, label in CATEGORY_LABELS.items()
     ]
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
@@ -57,11 +66,11 @@ def _category_keyboard() -> InlineKeyboardMarkup:
 def _key_keyboard(category: str) -> InlineKeyboardMarkup:
     keys_in_cat = [k for k, c in CATEGORY_OF.items() if c == category]
     buttons = [
-        InlineKeyboardButton(EMOJI_KEYS[k], callback_data=f"{EMOJI_KEY_CALLBACK_PREFIX}{k}")
+        btn(EMOJI_KEYS[k], callback_data=f"{EMOJI_KEY_CALLBACK_PREFIX}{k}")
         for k in keys_in_cat
     ]
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
-    rows.append([InlineKeyboardButton("◀️ بازگشت به دسته‌ها", callback_data=EMOJI_BACK_CALLBACK)])
+    rows.append([back_btn(EMOJI_BACK_CALLBACK, "بازگشت به دسته‌ها")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -232,19 +241,20 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("📊 گزارش پیشرفت", callback_data="admin_menu:report"),
-                InlineKeyboardButton("👤 مدیریت کاربر", callback_data="admin_menu:user_manage"),
+                btn("گزارش پیشرفت", emoji_key="btn_report", style=PRIMARY, callback_data="admin_menu:report"),
+                btn("مدیریت کاربر", emoji_key="btn_profile", style=PRIMARY, callback_data="admin_menu:user_manage"),
             ],
             [
-                InlineKeyboardButton("🗑 حذف موجود", callback_data="admin_menu:del_creature_start"),
-                InlineKeyboardButton("📢 ارسال همگانی", callback_data="admin_menu:broadcast_start"),
+                btn("حذف موجود", emoji_key="btn_delete", style=DANGER, callback_data="admin_menu:del_creature_start"),
+                btn("ارسال همگانی", emoji_key="btn_broadcast", style=PRIMARY, callback_data="admin_menu:broadcast_start"),
             ],
             [
-                InlineKeyboardButton("🎨 ایموجی پرمیوم", callback_data="admin_menu:set_emoji_start"),
-                InlineKeyboardButton("🔍 پیش‌نمایش ایموجی‌ها", callback_data="admin_menu:preview_emoji"),
+                btn("🎨 ایموجی متن‌ها", style=PRIMARY, callback_data="admin_menu:set_emoji_start"),
+                btn("🎛 ایموجی دکمه‌ها", style=PRIMARY, callback_data="admin_menu:button_emoji"),
             ],
-            [InlineKeyboardButton("📡 جوین اجباری", callback_data="admin_menu:force_join")],
-            [InlineKeyboardButton("🌐 باز کردن پنل کامل", url=ADMIN_PANEL_URL)],
+            [btn("🔍 پیش‌نمایش ایموجی‌ها", style=PRIMARY, callback_data="admin_menu:preview_emoji")],
+            [btn("📡 جوین اجباری", style=PRIMARY, callback_data="admin_menu:force_join")],
+            [btn("🌐 باز کردن پنل کامل", url=ADMIN_PANEL_URL)],
         ]
     )
     await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
@@ -349,25 +359,25 @@ def _user_info_text(data: dict) -> str:
 
 def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMarkup:
     ban_button = (
-        InlineKeyboardButton("✅ رفع مسدودی", callback_data=f"admin_unban:{target_id}")
+        btn("رفع مسدودی", emoji_key="btn_confirm", style=SUCCESS, callback_data=f"admin_unban:{target_id}")
         if is_banned
-        else InlineKeyboardButton("🔴 مسدود کردن", callback_data=f"admin_ban:{target_id}")
+        else btn("مسدود کردن", emoji_key="btn_cancel", style=DANGER, callback_data=f"admin_ban:{target_id}")
     )
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("🟢 اعطای طلا", callback_data=f"admin_grant:{target_id}:coins"),
-                InlineKeyboardButton("🟢 اعطای DNA", callback_data=f"admin_grant:{target_id}:dna"),
-                InlineKeyboardButton("🟢 اعطای الماس", callback_data=f"admin_grant:{target_id}:diamonds"),
+                btn("🟢 اعطای طلا", style=SUCCESS, callback_data=f"admin_grant:{target_id}:coins"),
+                btn("🟢 اعطای DNA", style=SUCCESS, callback_data=f"admin_grant:{target_id}:dna"),
+                btn("🟢 اعطای الماس", style=SUCCESS, callback_data=f"admin_grant:{target_id}:diamonds"),
             ],
             [
-                InlineKeyboardButton("🟠 کسر طلا", callback_data=f"admin_deduct:{target_id}:coins"),
-                InlineKeyboardButton("🟠 کسر DNA", callback_data=f"admin_deduct:{target_id}:dna"),
-                InlineKeyboardButton("🟠 کسر الماس", callback_data=f"admin_deduct:{target_id}:diamonds"),
+                btn("🟠 کسر طلا", style=DANGER, callback_data=f"admin_deduct:{target_id}:coins"),
+                btn("🟠 کسر DNA", style=DANGER, callback_data=f"admin_deduct:{target_id}:dna"),
+                btn("🟠 کسر الماس", style=DANGER, callback_data=f"admin_deduct:{target_id}:diamonds"),
             ],
-            [InlineKeyboardButton("⚡ شارژ کامل (طلا+DNA+الماس)", callback_data=f"admin_charge:{target_id}")],
+            [btn("شارژ کامل (طلا+DNA+الماس)", emoji_key="btn_charge", style=SUCCESS, callback_data=f"admin_charge:{target_id}")],
             [ban_button],
-            [InlineKeyboardButton("◀️ بازگشت به پنل ادمین", callback_data="admin_menu:admin_home")],
+            [back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")],
         ]
     )
 
@@ -512,8 +522,8 @@ def _delete_creature_confirm_keyboard(creature_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("🔴 حذف کن", callback_data=f"admin_del:{creature_id}"),
-                InlineKeyboardButton("❌ بی‌خیال", callback_data="admin_del_cancel"),
+                btn("حذف کن", emoji_key="btn_delete", style=DANGER, callback_data=f"admin_del:{creature_id}"),
+                btn("بی‌خیال", emoji_key="btn_cancel", callback_data="admin_del_cancel"),
             ]
         ]
     )
@@ -619,12 +629,12 @@ def _channel_manage_keyboard(channel_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("⏳ تنظیم مدت", callback_data=f"fj_dur:{channel_id}"),
-                InlineKeyboardButton("♾ نامحدود کن", callback_data=f"fj_unlim:{channel_id}"),
+                btn("⏳ تنظیم مدت", style=PRIMARY, callback_data=f"fj_dur:{channel_id}"),
+                btn("♾ نامحدود کن", style=PRIMARY, callback_data=f"fj_unlim:{channel_id}"),
             ],
-            [InlineKeyboardButton("🎁 تنظیم جایزه", callback_data=f"fj_reward:{channel_id}")],
-            [InlineKeyboardButton("🔴 حذف کانال", callback_data=f"fj_rm:{channel_id}")],
-            [InlineKeyboardButton("◀️ بازگشت به لیست", callback_data="admin_menu:force_join")],
+            [btn("🎁 تنظیم جایزه", style=SUCCESS, callback_data=f"fj_reward:{channel_id}")],
+            [btn("حذف کانال", emoji_key="btn_delete", style=DANGER, callback_data=f"fj_rm:{channel_id}")],
+            [back_btn("admin_menu:force_join", "بازگشت به لیست")],
         ]
     )
 
@@ -640,10 +650,10 @@ async def force_join_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         for ch in channels:
             handle = f"@{ch.username}" if ch.username else str(ch.chat_id)
             rows.append(
-                [InlineKeyboardButton(f"📡 {ch.title or handle}", callback_data=f"fj_manage:{ch.id}")]
+                [btn(f"📡 {ch.title or handle}", callback_data=f"fj_manage:{ch.id}")]
             )
-    rows.append([InlineKeyboardButton("🟢 افزودن کانال جدید", callback_data="fj_add")])
-    rows.append([InlineKeyboardButton("◀️ بازگشت به پنل ادمین", callback_data="admin_menu:admin_home")])
+    rows.append([btn("افزودن کانال جدید", emoji_key="btn_confirm", style=SUCCESS, callback_data="fj_add")])
+    rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
     await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
 
@@ -732,8 +742,8 @@ async def force_join_remove_callback(update: Update, context: ContextTypes.DEFAU
     keyboard = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("🔴 بله، حذف کن", callback_data=f"fj_rm_confirm:{channel_id}"),
-                InlineKeyboardButton("❌ بی‌خیال", callback_data=f"fj_manage:{channel_id}"),
+                btn("بله، حذف کن", emoji_key="btn_delete", style=DANGER, callback_data=f"fj_rm_confirm:{channel_id}"),
+                btn("بی‌خیال", emoji_key="btn_cancel", callback_data=f"fj_manage:{channel_id}"),
             ]
         ]
     )
@@ -823,6 +833,143 @@ async def capture_force_join_reply(update: Update, context: ContextTypes.DEFAULT
 
 
 AWAITING_ADMIN_KEY = "awaiting_admin_input"
+
+# ── button icons (separate registry from the message-body emoji above) ─────────
+BTN_EMOJI_CAT_PREFIX = "btnemoji_cat:"
+BTN_EMOJI_KEY_PREFIX = "btnemoji_key:"
+BTN_EMOJI_BACK = "btnemoji_back"
+BTN_EMOJI_CLEAR_PREFIX = "btnemoji_clear:"
+AWAITING_BUTTON_EMOJI_KEY = "awaiting_button_emoji_key"
+
+
+def _btn_emoji_category_keyboard() -> InlineKeyboardMarkup:
+    buttons = [
+        btn(label, callback_data=f"{BTN_EMOJI_CAT_PREFIX}{cat}")
+        for cat, label in BUTTON_CATEGORY_LABELS.items()
+    ]
+    rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+    rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
+    return InlineKeyboardMarkup(rows)
+
+
+def _btn_emoji_key_keyboard(category: str) -> InlineKeyboardMarkup:
+    keys = [k for k, c in BUTTON_CATEGORY_OF.items() if c == category]
+    buttons = [btn(BUTTON_EMOJI_KEYS[k], callback_data=f"{BTN_EMOJI_KEY_PREFIX}{k}") for k in keys]
+    rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+    rows.append([back_btn(BTN_EMOJI_BACK, "بازگشت به دسته‌ها")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def button_emoji_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    overrides = await run_db(list_button_overrides)
+    lines = [
+        "🎛 <b>ایموجی دکمه‌ها</b>",
+        "اینجا ایموجی پرمیومی که <b>روی خودِ دکمه‌ها</b> نشون داده می‌شه رو تنظیم می‌کنی — "
+        "جدا از «🎨 ایموجی متن‌ها» که برای متن پیام‌هاست.\n",
+        f"<b>الان {len(overrides)} دکمه ایموجی سفارشی داره.</b>",
+        "\n<blockquote>هر دکمه فقط <b>یک</b> ایموجی می‌گیره که قبل از متنش می‌شینه. "
+        "روی کلاینت‌های خیلی قدیمی ممکنه نمایش داده نشه، برای همین ایموجی معمولی هم توی متن دکمه می‌مونه.</blockquote>",
+    ]
+    await update.effective_message.reply_text(
+        "\n".join(lines), parse_mode="HTML", reply_markup=_btn_emoji_category_keyboard()
+    )
+
+
+async def btn_emoji_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    category = query.data[len(BTN_EMOJI_CAT_PREFIX) :]
+    if category not in BUTTON_CATEGORY_LABELS:
+        await query.answer("دسته نامعتبره.", show_alert=True)
+        return
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        f"{BUTTON_CATEGORY_LABELS[category]}\nکدوم دکمه؟",
+        reply_markup=_btn_emoji_key_keyboard(category),
+    )
+
+
+async def btn_emoji_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    await query.answer()
+    await safe_edit_message_text(
+        query, "🎛 یه دسته انتخاب کن:", parse_mode="HTML", reply_markup=_btn_emoji_category_keyboard()
+    )
+
+
+async def btn_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    key = query.data[len(BTN_EMOJI_KEY_PREFIX) :]
+    if key not in BUTTON_EMOJI_KEYS:
+        await query.answer("این دکمه دیگه وجود نداره.", show_alert=True)
+        return
+
+    context.user_data[AWAITING_BUTTON_EMOJI_KEY] = key
+    await query.answer()
+    keyboard = InlineKeyboardMarkup(
+        [
+            [btn("پاک کردن (برگشت به پیش‌فرض)", emoji_key="btn_delete", style=DANGER,
+                 callback_data=f"{BTN_EMOJI_CLEAR_PREFIX}{key}")],
+            [back_btn(BTN_EMOJI_BACK, "بازگشت به دسته‌ها")],
+        ]
+    )
+    await safe_edit_message_text(
+        query,
+        f"👌 حالا فقط <b>ایموجی پرمیوم</b> دکمه‌ی «{BUTTON_EMOJI_KEYS[key]}» رو بفرست "
+        "(تک و تنها، از کیبورد ایموجی پرمیوم تلگرام).",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+async def btn_emoji_clear_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    key = query.data[len(BTN_EMOJI_CLEAR_PREFIX) :]
+    removed = await run_db(clear_button_emoji, key)
+    context.user_data.pop(AWAITING_BUTTON_EMOJI_KEY, None)
+    await query.answer("↩️ به پیش‌فرض برگشت." if removed else "چیزی تنظیم نشده بود.")
+    await safe_edit_message_text(
+        query, "🎛 یه دسته انتخاب کن:", parse_mode="HTML", reply_markup=_btn_emoji_category_keyboard()
+    )
+
+
+async def capture_button_emoji_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    key = context.user_data.pop(AWAITING_BUTTON_EMOJI_KEY, None)
+    if key is None:
+        return
+    message = update.effective_message
+    extracted = _extract_custom_emoji(message)
+    if extracted is None:
+        context.user_data[AWAITING_BUTTON_EMOJI_KEY] = key  # keep waiting
+        await message.reply_text(
+            "⚠️ توی این پیام ایموجی پرمیومی پیدا نکردم. یه ایموجی پرمیوم تک و تنها بفرست."
+        )
+        return
+
+    custom_emoji_id, placeholder = extracted
+    await run_db(set_button_emoji, key, custom_emoji_id, placeholder)
+    await message.reply_text(
+        f"{get_emoji('confirm')} ایموجی دکمه‌ی «{BUTTON_EMOJI_KEYS[key]}» تنظیم شد.\n"
+        "یه نمونه از همون دکمه 👇",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[btn("نمونه", emoji_key=key, style=PRIMARY, callback_data="btnemoji_noop")]]),
+    )
+
+
+async def btn_emoji_noop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.callback_query.answer("این فقط یه نمونه‌ست 🙂")
 
 
 async def user_manage_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1048,6 +1195,9 @@ async def capture_owner_text_reply(update: Update, context: ContextTypes.DEFAULT
     if context.user_data.get(AWAITING_ADMIN_KEY) is not None:
         await capture_admin_reply(update, context)
         return
+    if context.user_data.get(AWAITING_BUTTON_EMOJI_KEY) is not None:
+        await capture_button_emoji_reply(update, context)
+        return
 
 
 _ADMIN_MENU_ACTIONS.update(
@@ -1061,6 +1211,7 @@ _ADMIN_MENU_ACTIONS.update(
         "del_creature_start": delete_creature_start,
         "broadcast_start": broadcast_start,
         "set_emoji_start": set_emoji_cmd,
+        "button_emoji": button_emoji_panel,
     }
 )
 
@@ -1101,6 +1252,11 @@ def register(application) -> None:
         CallbackQueryHandler(force_join_remove_confirm_callback, pattern=r"^fj_rm_confirm:")
     )
     application.add_handler(CallbackQueryHandler(force_join_remove_callback, pattern=r"^fj_rm:"))
+    application.add_handler(CallbackQueryHandler(btn_emoji_category_callback, pattern=f"^{BTN_EMOJI_CAT_PREFIX}"))
+    application.add_handler(CallbackQueryHandler(btn_emoji_back_callback, pattern=f"^{BTN_EMOJI_BACK}$"))
+    application.add_handler(CallbackQueryHandler(btn_emoji_clear_callback, pattern=f"^{BTN_EMOJI_CLEAR_PREFIX}"))
+    application.add_handler(CallbackQueryHandler(btn_emoji_key_callback, pattern=f"^{BTN_EMOJI_KEY_PREFIX}"))
+    application.add_handler(CallbackQueryHandler(btn_emoji_noop_callback, pattern=r"^btnemoji_noop$"))
     application.add_handler(CallbackQueryHandler(admin_grant_callback, pattern=r"^admin_grant:"))
     application.add_handler(CallbackQueryHandler(admin_deduct_callback, pattern=r"^admin_deduct:"))
     application.add_handler(CallbackQueryHandler(admin_charge_callback, pattern=r"^admin_charge:"))

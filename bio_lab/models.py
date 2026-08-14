@@ -290,6 +290,24 @@ class EmojiOverride(models.Model):
         return f"{self.key} -> {self.placeholder}"
 
 
+class ButtonEmojiOverride(models.Model):
+    """Premium custom emoji shown as a button's leading icon, set by the owner.
+
+    Separate from EmojiOverride on purpose: message-body emoji are rendered with
+    <tg-emoji> inside HTML text, while a button icon is a bare
+    `icon_custom_emoji_id` field on InlineKeyboardButton. They're different
+    mechanisms with different keys, so the owner can style a button independently
+    of the matching in-text emoji."""
+
+    key = models.CharField(max_length=48, unique=True)  # one of game.button_emoji.BUTTON_EMOJI_DEFS
+    custom_emoji_id = models.CharField(max_length=64)
+    placeholder = models.CharField(max_length=16)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"{self.key} -> {self.placeholder}"
+
+
 class RequiredChannel(models.Model):
     """A channel players must join before using the bot at all (enforced by
     bot.middleware.enforce_force_join). Added by forwarding a message from the

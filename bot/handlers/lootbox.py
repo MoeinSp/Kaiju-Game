@@ -2,6 +2,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bio_lab.repository import get_or_create_user
+from bot.buttons import DANGER, PRIMARY, SUCCESS, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text
 from game import constants
 from game.creature import GameError
@@ -41,10 +42,10 @@ async def biocrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 def _diamond_box_list_keyboard() -> InlineKeyboardMarkup:
     rows = [
-        [InlineKeyboardButton(f"{cfg['label']} — {cfg['cost_diamonds']} 💎", callback_data=f"dbox_pick:{tier}")]
+        [btn(f"{cfg['label']} — {cfg['cost_diamonds']} 💎", style=PRIMARY, callback_data=f"dbox_pick:{tier}")]
         for tier, cfg in constants.DIAMOND_BOX_TIERS.items()
     ]
-    rows.append([InlineKeyboardButton("◀️ بازگشت", callback_data="menu:me")])
+    rows.append([back_btn("menu:me")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -73,8 +74,8 @@ def _diamond_box_detail_text(tier: str) -> str:
 def _diamond_box_detail_keyboard(tier: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("🟢 خرید و باز کن", callback_data=f"dbox_buy:{tier}")],
-            [InlineKeyboardButton("◀️ بازگشت به لیست", callback_data="menu:diamond_box")],
+            [btn("خرید و باز کن", emoji_key="btn_confirm", style=SUCCESS, callback_data=f"dbox_buy:{tier}")],
+            [back_btn("menu:diamond_box", "بازگشت به لیست")],
         ]
     )
 
@@ -110,8 +111,8 @@ async def diamond_box_buy_callback(update: Update, context: ContextTypes.DEFAULT
     await query.answer("🟢 باز شد!")
     keyboard = InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("🎁 یکی دیگه باز کن", callback_data=f"dbox_pick:{tier}")],
-            [InlineKeyboardButton("◀️ بازگشت", callback_data="menu:diamond_box")],
+            [btn("یکی دیگه باز کن", emoji_key="btn_diamond_box", style=SUCCESS, callback_data=f"dbox_pick:{tier}")],
+            [back_btn("menu:diamond_box")],
         ]
     )
     await safe_edit_message_text(

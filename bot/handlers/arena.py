@@ -2,6 +2,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bio_lab.repository import get_or_create_user
+from bot.buttons import DANGER, PRIMARY, SUCCESS, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text
 from game import constants
 from game.arena import (
@@ -68,9 +69,9 @@ def _arena_home_text(user, power, shield_secs, history) -> str:
 def _arena_home_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("⚔️ پیدا کردن حریف", callback_data="arena_find")],
-            [InlineKeyboardButton("🏆 برترین‌های کاپ", callback_data="arena_top")],
-            [InlineKeyboardButton("◀️ بازگشت", callback_data="menu:me")],
+            [btn("پیدا کردن حریف", emoji_key="btn_attack", style=DANGER, callback_data="arena_find")],
+            [btn("برترین‌های کاپ", emoji_key="btn_rank", style=PRIMARY, callback_data="arena_top")],
+            [back_btn("menu:me")],
         ]
     )
 
@@ -118,9 +119,9 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     ]
     keyboard = InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("⚔️ حمله!", callback_data="arena_attack")],
-            [InlineKeyboardButton("🔄 حریف بعدی", callback_data="arena_find")],
-            [InlineKeyboardButton("◀️ بازگشت", callback_data="menu:arena")],
+            [btn("حمله!", emoji_key="btn_attack", style=DANGER, callback_data="arena_attack")],
+            [btn("حریف بعدی", emoji_key="btn_recheck", style=PRIMARY, callback_data="arena_find")],
+            [back_btn("menu:arena")],
         ]
     )
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
@@ -177,8 +178,8 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     keyboard = InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("⚔️ حریف بعدی", callback_data="arena_find")],
-            [InlineKeyboardButton("◀️ بازگشت به آرنا", callback_data="menu:arena")],
+            [btn("حریف بعدی", emoji_key="btn_attack", style=DANGER, callback_data="arena_find")],
+            [back_btn("menu:arena", "بازگشت به آرنا")],
         ]
     )
     await query.answer("🟢 بردی!" if result["won"] else "🔴 باختی.")
@@ -204,7 +205,7 @@ async def arena_top_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         rank = medals[i - 1] if i <= 3 else f"{i}."
         label = u.lab_name or f"آزمایشگاه {u.id}"
         lines.append(f"{rank} {label} — 🏆 {u.cup}")
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("◀️ بازگشت", callback_data="menu:arena")]])
+    keyboard = InlineKeyboardMarkup([[back_btn("menu:arena")]])
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
 
