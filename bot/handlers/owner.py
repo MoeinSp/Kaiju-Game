@@ -6,7 +6,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import User
 from bio_lab.repository import display_name
-from bot.buttons import ADMIN, CONFIRM, DANGER, PRIMARY, back_btn, btn
+from bot.buttons import ADMIN, CONFIRM, DANGER, LIST, PRIMARY, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text
 from game.button_emoji import (
     BUTTON_CATEGORY_LABELS,
@@ -56,7 +56,7 @@ EMOJI_BACK_CALLBACK = "set_emoji_back"
 
 def _category_keyboard() -> InlineKeyboardMarkup:
     buttons = [
-        btn(label, callback_data=f"{EMOJI_CAT_CALLBACK_PREFIX}{cat}")
+        btn(label, style=ADMIN, callback_data=f"{EMOJI_CAT_CALLBACK_PREFIX}{cat}")
         for cat, label in CATEGORY_LABELS.items()
     ]
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
@@ -66,7 +66,7 @@ def _category_keyboard() -> InlineKeyboardMarkup:
 def _key_keyboard(category: str) -> InlineKeyboardMarkup:
     keys_in_cat = [k for k, c in CATEGORY_OF.items() if c == category]
     buttons = [
-        btn(EMOJI_KEYS[k], callback_data=f"{EMOJI_KEY_CALLBACK_PREFIX}{k}")
+        btn(EMOJI_KEYS[k], style=LIST, callback_data=f"{EMOJI_KEY_CALLBACK_PREFIX}{k}")
         for k in keys_in_cat
     ]
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
@@ -254,7 +254,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             ],
             [btn("🔍 پیش‌نمایش ایموجی‌ها", style=ADMIN, callback_data="admin_menu:preview_emoji")],
             [btn("📡 جوین اجباری", style=ADMIN, callback_data="admin_menu:force_join")],
-            [btn("🌐 پنل تحت وب (رنگ دکمه‌ها، لودآوت، پشتیبان‌گیری)", url=ADMIN_PANEL_URL)],
+            [btn("🌐 پنل تحت وب (رنگ دکمه‌ها، لودآوت، پشتیبان‌گیری)", style=PRIMARY, url=ADMIN_PANEL_URL)],
         ]
     )
     await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
@@ -523,7 +523,7 @@ def _delete_creature_confirm_keyboard(creature_id: int) -> InlineKeyboardMarkup:
         [
             [
                 btn("حذف کن", emoji_key="btn_delete", style=DANGER, callback_data=f"admin_del:{creature_id}"),
-                btn("بی‌خیال", emoji_key="btn_cancel", callback_data="admin_del_cancel"),
+                btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER, callback_data="admin_del_cancel"),
             ]
         ]
     )
@@ -650,7 +650,7 @@ async def force_join_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         for ch in channels:
             handle = f"@{ch.username}" if ch.username else str(ch.chat_id)
             rows.append(
-                [btn(f"📡 {ch.title or handle}", callback_data=f"fj_manage:{ch.id}")]
+                [btn(f"📡 {ch.title or handle}", style=LIST, callback_data=f"fj_manage:{ch.id}")]
             )
     rows.append([btn("افزودن کانال جدید", emoji_key="btn_confirm", style=CONFIRM, callback_data="fj_add")])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
@@ -743,7 +743,7 @@ async def force_join_remove_callback(update: Update, context: ContextTypes.DEFAU
         [
             [
                 btn("بله، حذف کن", emoji_key="btn_delete", style=DANGER, callback_data=f"fj_rm_confirm:{channel_id}"),
-                btn("بی‌خیال", emoji_key="btn_cancel", callback_data=f"fj_manage:{channel_id}"),
+                btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER, callback_data=f"fj_manage:{channel_id}"),
             ]
         ]
     )
@@ -844,7 +844,7 @@ AWAITING_BUTTON_EMOJI_KEY = "awaiting_button_emoji_key"
 
 def _btn_emoji_category_keyboard() -> InlineKeyboardMarkup:
     buttons = [
-        btn(label, callback_data=f"{BTN_EMOJI_CAT_PREFIX}{cat}")
+        btn(label, style=ADMIN, callback_data=f"{BTN_EMOJI_CAT_PREFIX}{cat}")
         for cat, label in BUTTON_CATEGORY_LABELS.items()
     ]
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
@@ -854,7 +854,7 @@ def _btn_emoji_category_keyboard() -> InlineKeyboardMarkup:
 
 def _btn_emoji_key_keyboard(category: str) -> InlineKeyboardMarkup:
     keys = [k for k, c in BUTTON_CATEGORY_OF.items() if c == category]
-    buttons = [btn(BUTTON_EMOJI_KEYS[k], callback_data=f"{BTN_EMOJI_KEY_PREFIX}{k}") for k in keys]
+    buttons = [btn(BUTTON_EMOJI_KEYS[k], style=LIST, callback_data=f"{BTN_EMOJI_KEY_PREFIX}{k}") for k in keys]
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
     rows.append([back_btn(BTN_EMOJI_BACK, "بازگشت به دسته‌ها")])
     return InlineKeyboardMarkup(rows)

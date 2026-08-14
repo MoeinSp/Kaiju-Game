@@ -3,9 +3,9 @@
 {% block content %}
 <h2>🎨 رنگ دکمه‌ها</h2>
 <p class="lead">
-  تلگرام فقط سه رنگ دکمه داره (آبی، سبز، قرمز) به‌علاوه‌ی حالت بی‌رنگ. پس چیزی که تنظیم می‌کنی
-  «رنگِ یک دکمه» نیست، بلکه <b>معنیِ هر رنگه</b>: هر نقش رو به یک رنگ می‌بندی و همه‌ی دکمه‌های اون
-  نقش توی کل بات با هم عوض می‌شن.
+  تلگرام سه رنگ دکمه داره: آبی، سبز، قرمز (به‌علاوه‌ی حالت بی‌رنگ که توصیه نمی‌شه — کنار دکمه‌های
+  رنگی، ناتموم به نظر می‌رسه). تنظیم توی <b>دو لایه</b> انجام می‌شه: اول رنگ هر <b>نقش</b>، بعد
+  اگه لازم بود رنگ <b>تک‌تک دکمه‌ها</b> که روی نقش رو می‌نویسه.
 </p>
 
 <div class="card">
@@ -50,18 +50,69 @@
     </div>
     <div class="row" style="margin-top:14px">
       <button type="submit" name="action" value="save" class="blue">ذخیره‌ی پالت</button>
-      <button type="submit" name="action" value="reset">برگشت به پیش‌فرض</button>
+      <button type="submit" name="action" value="reset">برگشت کامل به پیش‌فرض</button>
       <span class="hint">بعد از ذخیره، بات بلافاصله رنگ‌های جدید رو استفاده می‌کنه — نیاز به ری‌استارت نیست.</span>
     </div>
   </div>
 </form>
 
 <div class="card">
-  <h3>راهنمای پالت پیش‌فرض</h3>
+  <h3>منطق پالت پیش‌فرض</h3>
   <p class="hint" style="margin:0">
-    پیش‌فرض عمداً منوها رو بی‌رنگ گذاشته. قبلاً همه‌ی دکمه‌های منو آبی بودن و نتیجه‌ش یه دیوار آبی بود
-    که دو تا دکمه‌ی سبز توش گم می‌شد — رنگ عملاً هیچ معنی‌ای نداشت. حالا رنگ فقط روی کاری که بازیکن
-    <i>انجام می‌ده</i> می‌شینه (نبرد، ساخت، خرید، تأیید، حذف) و ناوبری عقب می‌ره.
+    <b>همه‌ی دکمه‌ها رنگ دارن.</b> معنی از راه <i>گروه‌بندی</i> منتقل می‌شه نه از راه کم‌رنگ گذاشتن:
+    <span style="color:#2f81f7">آبی = جابه‌جا شدن</span> (منو، لیست، بازگشت)،
+    <span style="color:#2ea043">سبز = چیزی به دست آوردن</span> (ساخت، خرید، تأیید)،
+    <span style="color:#da3633">قرمز = ریسک یا تخریب</span> (نبرد، حذف، مدیریت).
+    حالت «بی‌رنگ» هنوز در دسترسه ولی توصیه نمی‌شه — دکمه‌ی بی‌رنگ کنار دکمه‌های رنگی ناتموم دیده می‌شه.
   </p>
 </div>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="card">
+    <h3>رنگ تک‌تک دکمه‌ها</h3>
+    <p class="hint">
+      این لایه <b>روی نقش رو می‌نویسه</b>. اگه یه دکمه‌ی خاص باید از هم‌گروه‌هاش جدا باشه، همین‌جا
+      رنگش رو عوض کن؛ در غیر این‌صورت روی «پیروی از نقش» بذارش.
+      الان <b>{{ key_override_count }}</b> دکمه رنگ اختصاصی داره.
+    </p>
+    {% for group in key_groups %}
+      <h4 style="margin:18px 0 6px; font-size:14px; color:var(--muted)">{{ group.label }}</h4>
+      <div class="scroll">
+        <table>
+          <tr><th style="width:34%">دکمه</th><th style="width:26%">رنگ</th><th>پیش‌نمایش</th></tr>
+          {% for item in group.items %}
+            <tr>
+              <td>
+                <span style="font-size:17px">{{ item.fallback }}</span> {{ item.label }}
+                {% if item.overridden %}<span class="pill">اختصاصی</span>{% endif %}
+              </td>
+              <td>
+                <select name="key_{{ item.key }}">
+                  {% for choice in key_choices %}
+                    <option value="{{ choice.value }}" {% if choice.value == item.current %}selected{% endif %}>{{ choice.label }}</option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td>
+                {% if item.overridden %}
+                  <span style="display:inline-block;border-radius:9px;padding:7px 16px;font-size:14px;color:#fff;
+                               background:{% if item.override_style == 'primary' %}#2f81f7{% elif item.override_style == 'success' %}#2ea043{% elif item.override_style == 'danger' %}#da3633{% else %}#3f4a56{% endif %}">
+                    {{ item.fallback }} {{ item.label }}
+                  </span>
+                {% else %}
+                  <span class="hint">رنگش از نقشی می‌آد که توی هر صفحه بازی می‌کنه</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </table>
+      </div>
+    {% endfor %}
+    <div class="row" style="margin-top:14px">
+      <button type="submit" name="action" value="save_keys" class="blue">ذخیره‌ی رنگ دکمه‌ها</button>
+      <button type="submit" name="action" value="reset_keys">همه پیروِ نقش بشن</button>
+    </div>
+  </div>
+</form>
 {% endblock %}

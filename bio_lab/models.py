@@ -358,6 +358,25 @@ class ButtonStyleOverride(models.Model):
         return f"{self.role} -> {self.style or 'none'}"
 
 
+class ButtonKeyStyle(models.Model):
+    """Colour for one *specific* button, overriding whatever its role says.
+
+    Keyed by game.button_emoji.BUTTON_EMOJI_DEFS — the same registry that names
+    buttons for their Premium icons — so the panel can show one row per button
+    with both its icon and its colour. Only buttons built with an ``emoji_key``
+    can be targeted this way; everything else follows its role.
+
+    A missing row means "follow the role". An empty ``style`` is different: it
+    means the operator explicitly asked for no colour on this one button."""
+
+    key = models.CharField(max_length=48, unique=True)
+    style = models.CharField(max_length=16, blank=True)  # "" | primary | success | danger
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"{self.key} -> {self.style or 'none'}"
+
+
 class ThemeLoadout(models.Model):
     """A saved "look" of the bot — emoji + button colours, stored as one JSON blob.
 

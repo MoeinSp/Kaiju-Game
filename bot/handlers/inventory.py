@@ -3,7 +3,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Equipment
 from bio_lab.repository import get_active_creature, get_or_create_user
-from bot.buttons import BUILD, CONFIRM, DANGER, back_btn, btn
+from bot.buttons import BUILD, CONFIRM, DANGER, LIST, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text
 from game import constants
 from game.blacksmith import forge, forge_preview, forgeable_items
@@ -33,6 +33,7 @@ def _inventory_keyboard(items: list[Equipment]) -> InlineKeyboardMarkup:
             [
                 btn(
                     f"{tag}{constants.EQUIPMENT_SLOT_LABELS[i.slot]} {i.name} +{i.level}",
+                    style=LIST,
                     callback_data=f"inv_pick:{i.id}",
                 )
             ]
@@ -249,6 +250,7 @@ async def blacksmith_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         [
             btn(
                 f"{constants.EQUIPMENT_SLOT_LABELS[i.slot]} {i.name} +{i.level}",
+                style=LIST,
                 callback_data=f"forge_pick:{i.id}",
             )
         ]

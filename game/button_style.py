@@ -14,18 +14,25 @@ Two consequences that matter:
   9 Feb 2026) ignore ``style`` entirely, so every button still has to be
   distinguishable by its label and icon alone.
 
-The default palette deliberately leaves navigation **uncoloured**. An earlier
-version painted every menu entry blue, which meant a fifteen-button menu was a
-wall of blue with two green buttons floating in it — colour stopped meaning
-anything. Now colour marks the things a player acts on, and the menu recedes.
+**Every role is coloured by default.** An earlier iteration left navigation
+uncoloured on the theory that colour should be scarce to stay meaningful; in
+practice a plain button sitting next to coloured ones just looks unfinished, and
+Telegram's uncoloured style is visually weak rather than neutral. Meaning is
+carried by *grouping* instead: blue moves you around, green gains you something,
+red risks or destroys something. Three colours, consistently applied, still tell
+the player what a button does.
 
-Caching follows the same hard rule as game.button_emoji: the cache is never
+On top of roles there's a per-button layer (``ButtonKeyStyle``, keyed by the same
+registry as game/button_emoji.py) for the cases where one specific button should
+break from its role. Resolution is per-button → role → role default.
+
+Caching follows the same hard rule as game.button_emoji: neither cache is ever
 lazily populated on read, because buttons are built inside async handlers and a
-lazy Django query there raises SynchronousOnlyOperation. bot.main warms it at
-startup; every write refreshes it.
+lazy Django query there raises SynchronousOnlyOperation. bot.main warms them at
+startup; every write refreshes them.
 """
 
-from bio_lab.models import ButtonStyleOverride
+from bio_lab.models import ButtonKeyStyle, ButtonStyleOverride
 
 # The three colours Telegram actually renders, plus "no colour". Values are the
 # raw Bot API strings (telegram.constants.KeyboardButtonStyle members equal them),
@@ -45,16 +52,26 @@ STYLE_CHOICES: dict[str, tuple[str, str]] = {
 }
 
 # role -> (Persian label, default style, what the role is for)
+#
+# Every role has a colour: an uncoloured button next to coloured ones reads as
+# unfinished rather than restrained. The palette keeps meaning by *grouping*
+# instead — blue is "move around", green is "gain something", red is "risk or
+# destroy" — so three colours still tell the player what a button will do.
 ROLE_DEFS: dict[str, tuple[str, str, str]] = {
     "nav": (
         "ناوبری و منو",
-        STYLE_NONE,
-        "دکمه‌هایی که فقط بین صفحه‌ها جابه‌جا می‌کنن. بی‌رنگ‌ان تا رنگ‌ها برای کنش‌های واقعی بمونه.",
+        STYLE_PRIMARY,
+        "دکمه‌هایی که بین صفحه‌ها جابه‌جا می‌کنن — بدنه‌ی اصلی منو.",
     ),
     "back": (
         "بازگشت",
-        STYLE_NONE,
+        STYLE_PRIMARY,
         "دکمه‌ی بازگشت که تقریباً زیر هر صفحه‌ای هست.",
+    ),
+    "list": (
+        "انتخاب از لیست",
+        STYLE_PRIMARY,
+        "ردیف‌های لیست: انتخاب هیولا، آیتم، ساختمون، کانال — هر جایی که از یه فهرست یکی رو برمی‌داری.",
     ),
     "primary": (
         "کنش اصلی صفحه",
@@ -88,39 +105,102 @@ ROLE_DEFS: dict[str, tuple[str, str, str]] = {
     ),
     "admin": (
         "پنل مدیریت",
-        STYLE_PRIMARY,
+        STYLE_DANGER,
         "دکمه‌های مخصوص سازنده توی /admin.",
     ),
+}
+
+# "follow the role" — what a per-button override holds when it isn't overriding.
+# Distinct from STYLE_NONE (""), which is an override that says *explicitly*
+# uncoloured. Collapsing the two would make "no opinion" and "no colour" the
+# same value and the per-button page could never turn a colour off.
+STYLE_INHERIT = "inherit"
+
+KEY_STYLE_CHOICES: dict[str, tuple[str, str]] = {
+    STYLE_INHERIT: ("پیروی از نقش", "#3f4a56"),
+    **STYLE_CHOICES,
 }
 
 ROLE_LABELS: dict[str, str] = {key: label for key, (label, _s, _d) in ROLE_DEFS.items()}
 ROLE_DEFAULTS: dict[str, str] = {key: style for key, (_l, style, _d) in ROLE_DEFS.items()}
 ROLE_HELP: dict[str, str] = {key: help_ for key, (_l, _s, help_) in ROLE_DEFS.items()}
 
-# Never lazily populated — see the module docstring.
+# Neither cache is ever lazily populated — see the module docstring.
 _cache: dict[str, str] = {}
+_key_cache: dict[str, str] = {}
 
 
 def refresh_cache() -> None:
-    """Reload role overrides from the DB. Sync context only (startup or right
-    after a write) — never from inside an async handler."""
-    global _cache
+    """Reload role and per-button overrides from the DB. Sync context only
+    (startup or right after a write) — never from inside an async handler."""
+    global _cache, _key_cache
     _cache = {
         o.role: o.style for o in ButtonStyleOverride.objects.all() if o.role in ROLE_DEFS
     }
+    _key_cache = {o.key: o.style for o in ButtonKeyStyle.objects.all()}
 
 
-def resolve_style(role: str | None) -> str | None:
-    """The Bot API ``style`` value for a role, or None for "no colour".
+def resolve_style(role: str | None, key: str | None = None) -> str | None:
+    """The Bot API ``style`` value for a button, or None for "no colour".
+
+    Resolution order is per-button override → role → role default. The per-button
+    layer exists because roles are broad by design: sooner or later one specific
+    button wants to stand out (or blend in) without dragging every sibling in its
+    role along with it.
 
     Pure in-memory read, safe from async handler code. An unknown role resolves
     to None rather than raising: a mis-typed role should make a button plain,
     not crash a handler mid-conversation.
     """
+    if key is not None:
+        override = _key_cache.get(key)
+        if override is not None and override != STYLE_INHERIT:
+            return override or None
     if role is None:
         return None
     style = _cache.get(role, ROLE_DEFAULTS.get(role, STYLE_NONE))
     return style or None
+
+
+# --- per-button overrides --------------------------------------------------
+
+
+def current_key_styles() -> dict[str, str]:
+    """key -> stored override. Keys with no override are simply absent, which the
+    panel renders as "پیروی از نقش"."""
+    return dict(_key_cache)
+
+
+def set_key_style(key: str, style: str) -> None:
+    """`style` may be STYLE_INHERIT to drop the override, "" for explicitly
+    uncoloured, or one of the three colours."""
+    if style not in KEY_STYLE_CHOICES:
+        raise ValueError(f"unknown button style: {style!r}")
+    if style == STYLE_INHERIT:
+        clear_key_style(key)
+        return
+    ButtonKeyStyle.objects.update_or_create(key=key, defaults={"style": style})
+    refresh_cache()
+
+
+def clear_key_style(key: str) -> bool:
+    deleted, _ = ButtonKeyStyle.objects.filter(key=key).delete()
+    refresh_cache()
+    return deleted > 0
+
+
+def apply_key_styles(styles: dict[str, str]) -> None:
+    """Whole-set replace, matching apply_palette — a loadout switch must not
+    leave a stray per-button colour from the previous theme behind."""
+    ButtonKeyStyle.objects.all().delete()
+    ButtonKeyStyle.objects.bulk_create(
+        [
+            ButtonKeyStyle(key=key, style=style)
+            for key, style in styles.items()
+            if style in STYLE_CHOICES  # STYLE_INHERIT is stored as "no row"
+        ]
+    )
+    refresh_cache()
 
 
 def current_palette() -> dict[str, str]:
@@ -146,7 +226,9 @@ def clear_role_style(role: str) -> bool:
 
 
 def reset_palette() -> None:
+    """Back to stock: both the role palette and every per-button override."""
     ButtonStyleOverride.objects.all().delete()
+    ButtonKeyStyle.objects.all().delete()
     refresh_cache()
 
 

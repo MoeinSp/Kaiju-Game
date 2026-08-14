@@ -9,7 +9,7 @@ from bot.handlers.inventory import blacksmith_panel, inventory_cmd
 from bot.handlers.lootbox import biocrate_cmd, diamond_box_panel
 from bot.handlers.owner import admin_cmd
 from bot.handlers.wheel import wheel_cmd
-from bot.buttons import ADMIN, BATTLE, BUILD, CONFIRM, DANGER, NAV, PRIMARY, SHOP, back_btn, btn
+from bot.buttons import ADMIN, BATTLE, BUILD, CONFIRM, DANGER, LIST, NAV, PRIMARY, SHOP, back_btn, btn
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from config import OWNER_TELEGRAM_ID
 from game import constants
@@ -181,6 +181,7 @@ async def upgrade_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             [
                 btn(
                     f"{active_tag}{creature.name} {stars} · {rarity} · Lv{creature.level} · 💪{power}",
+                    style=LIST,
                     callback_data=f"upg_pick:{creature.id}",
                 )
             ]
@@ -421,7 +422,7 @@ def _collection_keyboard(creatures: list[Creature]) -> InlineKeyboardMarkup:
     for c in creatures:
         stars = "⭐" * c.star_level
         label = f"{c.name} {stars} · Lv{c.level} · {constants.RARITY_LABELS[c.rarity]}"
-        row = [btn(f"{'🟢 ' if c.is_active else ''}{label}", callback_data=f"coll_pick:{c.id}")]
+        row = [btn(f"{'🟢 ' if c.is_active else ''}{label}", style=LIST, callback_data=f"coll_pick:{c.id}")]
         if not c.is_active:
             row.append(btn("فعال کن", style=CONFIRM, callback_data=f"coll_select:{c.id}"))
         rows.append(row)
@@ -1009,7 +1010,7 @@ async def alliance_leave_callback(update: Update, context: ContextTypes.DEFAULT_
         [
             [
                 btn("بله، خارج شو", emoji_key="btn_confirm", style=DANGER, callback_data="ally_leave_confirm"),
-                btn("بی‌خیال", emoji_key="btn_cancel", callback_data="menu:alliance_info"),
+                btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER, callback_data="menu:alliance_info"),
             ]
         ]
     )

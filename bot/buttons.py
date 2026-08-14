@@ -30,8 +30,9 @@ from game.button_style import resolve_style
 # what colour that currently is. Kept as module constants (rather than bare
 # strings at the call site) so a typo is an ImportError instead of a silently
 # uncoloured button.
-NAV = "nav"  # moves between screens — deliberately uncoloured by default
+NAV = "nav"  # moves between screens — the bulk of a menu
 BACK = "back"  # the ubiquitous back button
+LIST = "list"  # one row of a list of things to pick from
 PRIMARY = "primary"  # the one main action of a screen
 CONFIRM = "confirm"  # "yes, do it" in a two-step dialog
 BUILD = "build"  # construct / upgrade / feed / collect — constructive actions
@@ -71,7 +72,9 @@ def btn(
             fallback = get_button_label_emoji(emoji_key)
             if fallback and not label.startswith(fallback):
                 label = f"{fallback} {label}"
-    resolved = resolve_style(style)
+    # emoji_key doubles as the per-button colour key, so a button that already
+    # has its own identity in the registry can also have its own colour
+    resolved = resolve_style(style, emoji_key)
     if resolved is not None:
         kwargs["style"] = resolved
     return InlineKeyboardButton(label, **kwargs)

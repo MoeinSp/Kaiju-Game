@@ -5,7 +5,8 @@ changing what players own:
 
 * message-body Premium emoji (game/emoji.py)
 * button icon Premium emoji (game/button_emoji.py)
-* the button colour palette (game/button_style.py)
+* the button colour palette, roles and per-button overrides alike
+  (game/button_style.py)
 
 Deliberately **not** included: players, creatures, buildings, currencies,
 alliances, seasons — any game state at all. Switching a loadout must be a safe,
@@ -64,6 +65,7 @@ def capture_snapshot() -> dict[str, Any]:
             for o in ButtonEmojiOverride.objects.order_by("key")
         ],
         "button_styles": button_style.current_palette(),
+        "button_key_styles": button_style.current_key_styles(),
     }
 
 
@@ -78,7 +80,8 @@ def snapshot_summary(snapshot: dict[str, Any]) -> dict[str, int]:
             1
             for role, style in palette.items()
             if role in button_style.ROLE_DEFS and style != button_style.ROLE_DEFAULTS[role]
-        ),
+        )
+        + len(snapshot.get("button_key_styles") or {}),
     }
 
 
@@ -129,12 +132,22 @@ def validate_snapshot(snapshot: Any) -> dict[str, Any]:
         if role in button_style.ROLE_DEFS and style in button_style.STYLE_CHOICES
     }
 
+    key_styles_raw = snapshot.get("button_key_styles") or {}
+    if not isinstance(key_styles_raw, dict):
+        raise ThemeError("بخش «button_key_styles» باید یک آبجکت باشه.")
+    key_styles = {
+        key: style
+        for key, style in key_styles_raw.items()
+        if key in button_emoji.BUTTON_EMOJI_DEFS and style in button_style.STYLE_CHOICES
+    }
+
     return {
         "version": SNAPSHOT_VERSION,
         "captured_at": snapshot.get("captured_at"),
         "emoji": _emoji_rows(snapshot.get("emoji"), "emoji"),
         "button_emoji": _emoji_rows(snapshot.get("button_emoji"), "button_emoji"),
         "button_styles": palette,
+        "button_key_styles": key_styles,
     }
 
 
@@ -164,6 +177,7 @@ def apply_snapshot(snapshot: dict[str, Any]) -> dict[str, int]:
     )
 
     button_style.apply_palette(clean["button_styles"])
+    button_style.apply_key_styles(clean["button_key_styles"])
     refresh_theme_caches()
     return snapshot_summary(clean)
 

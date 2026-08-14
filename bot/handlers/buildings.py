@@ -4,7 +4,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Building
 from bio_lab.repository import get_or_create_user
-from bot.buttons import BUILD, DANGER, PRIMARY, SHOP, back_btn, btn
+from bot.buttons import BUILD, DANGER, LIST, PRIMARY, SHOP, back_btn, btn
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from game import constants
 from game.buildings import (
@@ -60,7 +60,7 @@ def _buildings_keyboard(buildings: list[Building], upgrade) -> InlineKeyboardMar
             pending = pending_amount(b)
             state = f"Lv{b.level}" + (f" (+{pending})" if pending else "")
         busy_tag = " ⏳" if upgrade is not None and upgrade.building_id == b.id else ""
-        rows.append([btn(f"{label} — {state}{busy_tag}", callback_data=f"bld_pick:{b.id}")])
+        rows.append([btn(f"{label} — {state}{busy_tag}", style=LIST, callback_data=f"bld_pick:{b.id}")])
     rows.append([back_btn("menu:me")])
     return InlineKeyboardMarkup(rows)
 

@@ -106,7 +106,7 @@ def button_styles(request):
         action = _post_action(request)
         if action == "reset":
             button_style.reset_palette()
-            messages.success(request, "پالت به حالت پیش‌فرض برگشت.")
+            messages.success(request, "پالت و همه‌ی رنگ‌های تک‌دکمه‌ای به پیش‌فرض برگشتن.")
         elif action == "save":
             applied = 0
             for role in button_style.ROLE_DEFS:
@@ -119,6 +119,19 @@ def button_styles(request):
                     button_style.set_role_style(role, chosen)
                 applied += 1
             messages.success(request, f"پالت ذخیره شد ({applied} نقش بررسی شد).")
+        elif action == "save_keys":
+            changed = 0
+            for key in button_emoji.BUTTON_EMOJI_DEFS:
+                chosen = request.POST.get(f"key_{key}")
+                if chosen is None or chosen not in button_style.KEY_STYLE_CHOICES:
+                    continue
+                button_style.set_key_style(key, chosen)
+                changed += 1
+            messages.success(request, f"رنگ تک‌تک دکمه‌ها ذخیره شد ({changed} دکمه).")
+        elif action == "reset_keys":
+            for key in button_emoji.BUTTON_EMOJI_DEFS:
+                button_style.clear_key_style(key)
+            messages.success(request, "همه‌ی دکمه‌ها به رنگ نقش خودشون برگشتن.")
         return redirect("panel:button_styles")
 
     palette = button_style.current_palette()
@@ -133,16 +146,51 @@ def button_styles(request):
         }
         for role, (label, default, help_text) in button_style.ROLE_DEFS.items()
     ]
+    choices = [
+        {"value": value, "label": label, "color": color}
+        for value, (label, color) in button_style.STYLE_CHOICES.items()
+    ]
+
+    key_styles = button_style.current_key_styles()
+    key_groups: dict[str, list[dict]] = {}
+    for key, (label, fallback, category) in button_emoji.BUTTON_EMOJI_DEFS.items():
+        current = key_styles.get(key, button_style.STYLE_INHERIT)
+        key_groups.setdefault(category, []).append(
+            {
+                "key": key,
+                "label": label,
+                "fallback": fallback,
+                "current": current,
+                "overridden": key in key_styles,
+                # Only an overridden key has a colour we can name here. The same
+                # key is used at call sites playing different roles (btn_confirm
+                # appears as both CONFIRM and DANGER), so there's no single
+                # "effective colour" to preview when it isn't overridden — the
+                # template says «پیروی از نقش» instead of guessing.
+                "override_style": key_styles.get(key),
+            }
+        )
+
     return render(
         request,
         "panel/button_styles.html",
         {
             "page": "button_styles",
             "roles": roles,
-            "choices": [
+            "choices": choices,
+            "key_choices": [
                 {"value": value, "label": label, "color": color}
-                for value, (label, color) in button_style.STYLE_CHOICES.items()
+                for value, (label, color) in button_style.KEY_STYLE_CHOICES.items()
             ],
+            "key_groups": [
+                {
+                    "key": cat,
+                    "label": button_emoji.BUTTON_CATEGORY_LABELS.get(cat, cat),
+                    "items": items,
+                }
+                for cat, items in key_groups.items()
+            ],
+            "key_override_count": len(key_styles),
         },
     )
 
