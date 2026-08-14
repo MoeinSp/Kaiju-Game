@@ -17,11 +17,66 @@ def list_inventory(user: User) -> list[Equipment]:
     return list(Equipment.objects.filter(owner=user).order_by("slot", "-rarity", "-level"))
 
 
+def slot_loadout(user: User, creature: Creature) -> list[dict]:
+    """Every equipment slot for this creature: what's in it, and what could be.
+
+    One row per slot in constants.EQUIPMENT_SLOTS — **including empty ones**.
+    Listing only equipped gear meant an empty slot was invisible, so a player
+    with a spare weapon in their bag had no way to learn the slot existed. The
+    empty rows are the point of this function.
+
+    `candidates` excludes anything already equipped on *this* creature in this
+    slot (that's `item`), but does include gear equipped on a *different*
+    creature — equip_item moves it, which is usually what a player means when
+    they pick it, and hiding it would look like the item had vanished.
+    """
+    if creature.pk is None:
+        return []
+
+    equipped = {i.slot: i for i in Equipment.objects.filter(equipped_on=creature)}
+    pool: dict[str, list[Equipment]] = {}
+    for item in (
+        Equipment.objects.filter(owner=user)
+        .exclude(equipped_on=creature)
+        .select_related("equipped_on")
+        .order_by("slot", "-level")
+    ):
+        pool.setdefault(item.slot, []).append(item)
+
+    rows = []
+    for slot in constants.EQUIPMENT_SLOTS:
+        item = equipped.get(slot)
+        rows.append(
+            {
+                "slot": slot,
+                "label": constants.EQUIPMENT_SLOT_LABELS[slot],
+                "item": item,
+                "is_empty": item is None,
+                "candidates": pool.get(slot, []),
+            }
+        )
+    return rows
+
+
 def equipment_bonus(item: Equipment) -> dict[str, float]:
     base = constants.EQUIPMENT_BASE_BONUS[item.slot]
     rarity_mult = constants.RARITY_STAT_MULTIPLIER[item.rarity]
     level_mult = 1 + (item.level - 1) * constants.EQUIPMENT_UPGRADE_BONUS_PCT
     return {stat: value * rarity_mult * level_mult for stat, value in base.items()}
+
+
+def bonus_text(item: Equipment) -> str:
+    """An item's bonuses as one readable clause, e.g. "حمله +۵، کریتیکال +۳٪".
+
+    Lives here next to equipment_bonus() so every screen that shows gear renders
+    it identically — and so the percent-vs-flat distinction is decided once."""
+    parts = []
+    for stat, value in equipment_bonus(item).items():
+        if not value:
+            continue
+        label, is_percent = constants.EQUIPMENT_BONUS_LABELS.get(stat, (stat, False))
+        parts.append(f"{label} +{value * 100:.0f}٪" if is_percent else f"{label} +{value:.0f}")
+    return "، ".join(parts)
 
 
 def creature_equipment_bonus(equipped_items: list[Equipment]) -> dict[str, float]:

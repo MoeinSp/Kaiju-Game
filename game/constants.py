@@ -306,6 +306,19 @@ EQUIPMENT_BASE_BONUS = {
     "offhand": {"poison": 2},
 }
 
+# How each bonus stat is written to a player. `is_percent` matters: crit_rate and
+# lifesteal are stored as fractions (0.03), and printing those raw would show a
+# "+0.03 crit" that reads like a rounding error rather than +3%.
+EQUIPMENT_BONUS_LABELS = {
+    "atk": ("حمله", False),
+    "hp": ("جان", False),
+    "def": ("دفاع", False),
+    "spd": ("سرعت", False),
+    "poison": ("زهر", False),
+    "crit_rate": ("کریتیکال", True),
+    "lifesteal": ("جون‌خواری", True),
+}
+
 # absolute ceiling (blacksmith level 5 x 5 levels each); the *effective* cap for a
 # given player is game.blacksmith.equipment_cap(), based on their forge's level
 EQUIPMENT_MAX_LEVEL = 25

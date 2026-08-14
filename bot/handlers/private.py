@@ -38,7 +38,8 @@ from game.creature import (
 from game.daily import apply_daily_login, assert_energy_available, check_missions, mission_status, record_action
 from game.emoji import get_emoji
 from game.energy import spend_energy, sync_energy
-from game.equipment import get_equipped_items
+from game.equipment import (bonus_text, equip_item, get_equipped_items, slot_loadout,
+                            unequip_item)
 from game.fusion import FUSION_BUILDING, fuse, fusion_partners, ready_pairs
 from game.lab import lab_bar, lab_level, lab_progress
 from game.hunt import HUNT_TIERS, estimated_reward, resolve_hunt, scout_one
@@ -114,12 +115,28 @@ def creature_card_text(user, creature, equipped_items: list | None = None) -> st
     return "\n".join(lines)
 
 
-def upgrade_panel_text(user, creature, equipped_items: list | None = None) -> str:
+def _slot_summary_lines(slots: list[dict]) -> list[str]:
+    """One line per equipment slot, empty slots included — an invisible empty slot
+    is a feature a player never discovers."""
+    lines = ["🎒 <b>تجهیزات</b>"]
+    for row in slots:
+        if row["is_empty"]:
+            spare = len(row["candidates"])
+            hint = f" — {spare} گزینه آماده" if spare else ""  # 0 stays silent
+            lines.append(f"{row['label']}: <i>خالی</i>{hint}")
+        else:
+            item = row["item"]
+            lines.append(f"{row['label']}: {item.name} <b>+{item.level}</b>")
+    return lines
+
+
+def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots: list | None = None) -> str:
     stats = effective_stats(creature, equipped_items)
     stars = get_emoji("star") * creature.star_level
+    active_tag = " · 🟢 پیش‌فرض" if creature.is_active else ""
     lines = [
         f"🔧 <b>ارتقای {creature.name}</b>",
-        f"{constants.RARITY_LABELS[creature.rarity]} {stars} · سطح {creature.level}",
+        f"{constants.RARITY_LABELS[creature.rarity]} {stars} · سطح {creature.level}{active_tag}",
         "",
         f"{get_emoji('hp')} جان: <b>{stats['hp']}</b>      {get_emoji('atk')} حمله: <b>{stats['atk']}</b>",
         f"{get_emoji('def')} دفاع: <b>{stats['def']}</b>      {get_emoji('spd')} سرعت: <b>{stats['spd']}</b>",
@@ -131,13 +148,16 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None) -> st
         level = getattr(creature, f"{part}_lvl")
         cost = constants.upgrade_cost(level)
         lines.append(f"{cfg['label']} — سطح <b>{level}</b> · ارتقا: {cost} {get_emoji('coin')}")
+    if slots is not None:
+        lines.append("")
+        lines.extend(_slot_summary_lines(slots))
     lines.append("")
     lines.append(wallet_line(user))
     lines.append("\n<blockquote>تغذیه و تمرین XP می‌دن؛ ارتقای اعضا مستقیم استت اضافه می‌کنه.</blockquote>")
     return "\n".join(lines)
 
 
-def upgrade_panel_keyboard(creature_id: int) -> InlineKeyboardMarkup:
+def upgrade_panel_keyboard(creature_id: int, is_active: bool = True) -> InlineKeyboardMarkup:
     """Every action carries the creature id, so upgrading a non-active creature
     doesn't silently swap which creature is active for hunting/arena."""
     rows = [
@@ -153,8 +173,56 @@ def upgrade_panel_keyboard(creature_id: int) -> InlineKeyboardMarkup:
             btn("🦷 نیش", style=BUILD, callback_data=f"lab:up_fangs:{creature_id}"),
             btn("☠️ زهر", style=BUILD, callback_data=f"lab:up_poison:{creature_id}"),
         ],
-        [back_btn("menu:upgrade", "لیست هیولاها")],
+        [btn("مدیریت تجهیزات", emoji_key="btn_inventory", style=PRIMARY, callback_data=f"upg_eq:{creature_id}")],
     ]
+    if not is_active:
+        # setting the default from here saves a trip through the collection screen,
+        # which is where this used to be the only option
+        rows.append(
+            [btn("این رو پیش‌فرض کن", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"upg_default:{creature_id}")]
+        )
+    rows.append([back_btn("menu:upgrade", "لیست هیولاها")])
+    return InlineKeyboardMarkup(rows)
+
+
+def equip_panel_text(user, creature, slots: list[dict]) -> str:
+    filled = sum(1 for row in slots if not row["is_empty"])
+    lines = [
+        f"🎒 <b>تجهیزات {creature.name}</b>",
+        f"<blockquote>{filled} از {len(slots)} جایگاه پره — روی هر جایگاه بزن تا عوضش کنی.</blockquote>",
+        "",
+    ]
+    for row in slots:
+        if row["is_empty"]:
+            spare = len(row["candidates"])
+            lines.append(
+                f"{row['label']}: <i>خالی</i>"
+                + (
+                    f" — {spare} تجهیزات مناسب داری" if spare > 1
+                    else " — ۱ تجهیزات مناسب داری" if spare
+                    else " — چیزی برای این جایگاه نداری"
+                )
+            )
+        else:
+            item = row["item"]
+            bonus = bonus_text(item)
+            lines.append(f"{row['label']}: <b>{item.name} +{item.level}</b>" + (f"\n    <i>{bonus}</i>" if bonus else ""))
+    lines.append("")
+    lines.append(wallet_line(user))
+    return "\n".join(lines)
+
+
+def equip_panel_keyboard(creature_id: int, slots: list[dict]) -> InlineKeyboardMarkup:
+    rows = []
+    for row in slots:
+        if row["is_empty"]:
+            label = f"{row['label']} — خالی"
+            style = CONFIRM if row["candidates"] else NAV
+        else:
+            label = f"{row['label']} — {row['item'].name} +{row['item'].level}"
+            style = LIST
+        rows.append([btn(label, style=style, callback_data=f"upg_slot:{creature_id}:{row['slot']}")])
+    rows.append([back_btn(f"upg_pick:{creature_id}", "بازگشت به ارتقا")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -217,23 +285,169 @@ def _upgrade_pick_sync(tg_user, creature_id):
         creature = Creature.objects.get(id=creature_id, owner=user)
     except Creature.DoesNotExist:
         raise GameError("این موجود توی کلکسیون تو نیست.")
-    return user, creature, get_equipped_items(creature)
+    return user, creature, get_equipped_items(creature), slot_loadout(user, creature)
 
 
 async def upgrade_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     creature_id = int(query.data.split(":")[1])
     try:
-        user, creature, equipped_items = await run_db(_upgrade_pick_sync, update.effective_user, creature_id)
+        user, creature, equipped_items, slots = await run_db(
+            _upgrade_pick_sync, update.effective_user, creature_id
+        )
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
     await safe_edit_message_text(
         query,
-        upgrade_panel_text(user, creature, equipped_items),
+        upgrade_panel_text(user, creature, equipped_items, slots),
         parse_mode="HTML",
-        reply_markup=upgrade_panel_keyboard(creature.id),
+        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active),
+    )
+
+
+def _equip_panel_sync(tg_user, creature_id):
+    user, _ = get_or_create_user(tg_user)
+    try:
+        creature = Creature.objects.get(id=creature_id, owner=user)
+    except Creature.DoesNotExist:
+        raise GameError("این موجود توی کلکسیون تو نیست.")
+    return user, creature, slot_loadout(user, creature)
+
+
+async def equip_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Slot overview for one creature: what's worn, what's empty, what fits."""
+    query = update.callback_query
+    creature_id = int(query.data.split(":")[1])
+    try:
+        user, creature, slots = await run_db(_equip_panel_sync, update.effective_user, creature_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        equip_panel_text(user, creature, slots),
+        parse_mode="HTML",
+        reply_markup=equip_panel_keyboard(creature.id, slots),
+    )
+
+
+async def equip_slot_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """The candidates for one slot, plus a way to strip whatever's in it."""
+    query = update.callback_query
+    _, creature_id_raw, slot = query.data.split(":")
+    creature_id = int(creature_id_raw)
+    try:
+        user, creature, slots = await run_db(_equip_panel_sync, update.effective_user, creature_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    row = next((r for r in slots if r["slot"] == slot), None)
+    if row is None:
+        await query.answer("این جایگاه وجود نداره.", show_alert=True)
+        return
+
+    await query.answer()
+    lines = [f"{row['label']} — <b>{creature.name}</b>", ""]
+    if row["item"] is not None:
+        lines.append(f"الان: <b>{row['item'].name} +{row['item'].level}</b>")
+        bonus = bonus_text(row["item"])
+        if bonus:
+            lines.append(f"<i>{bonus}</i>")
+        lines.append("")
+    if row["candidates"]:
+        lines.append("یکی از این‌ها رو بذار توش:")
+    else:
+        lines.append(
+            "<blockquote>هیچ تجهیزاتی برای این جایگاه نداری. از باکس ژنتیکی و جعبه‌های الماسی "
+            "می‌تونی تجهیزات به دست بیاری.</blockquote>"
+        )
+
+    rows = []
+    for item in row["candidates"]:
+        # a candidate worn by another creature moves rather than duplicates, so say so
+        worn = f" (روی {item.equipped_on.name})" if item.equipped_on_id else ""
+        rows.append(
+            [
+                btn(
+                    f"{item.name} +{item.level} · {constants.RARITY_LABELS[item.rarity]}{worn}",
+                    style=CONFIRM,
+                    callback_data=f"upg_equip:{creature_id}:{item.id}",
+                )
+            ]
+        )
+    if row["item"] is not None:
+        rows.append(
+            [btn("خالی کردن این جایگاه", emoji_key="btn_cancel", style=DANGER,
+                 callback_data=f"upg_unequip:{creature_id}:{row['item'].id}")]
+        )
+    rows.append([back_btn(f"upg_eq:{creature_id}", "بازگشت به تجهیزات")])
+    await safe_edit_message_text(
+        query, "\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows)
+    )
+
+
+def _equip_do_sync(tg_user, creature_id, item_id):
+    user, _ = get_or_create_user(tg_user)
+    try:
+        creature = Creature.objects.get(id=creature_id, owner=user)
+    except Creature.DoesNotExist:
+        raise GameError("این موجود توی کلکسیون تو نیست.")
+    item = equip_item(user, creature, item_id)
+    return user, creature, slot_loadout(user, creature), item
+
+
+def _unequip_do_sync(tg_user, creature_id, item_id):
+    user, _ = get_or_create_user(tg_user)
+    try:
+        creature = Creature.objects.get(id=creature_id, owner=user)
+    except Creature.DoesNotExist:
+        raise GameError("این موجود توی کلکسیون تو نیست.")
+    item = unequip_item(user, item_id)
+    return user, creature, slot_loadout(user, creature), item
+
+
+async def equip_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    action, creature_id_raw, item_id_raw = query.data.split(":")
+    handler = _equip_do_sync if action == "upg_equip" else _unequip_do_sync
+    try:
+        user, creature, slots, item = await run_db(
+            handler, update.effective_user, int(creature_id_raw), int(item_id_raw)
+        )
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    verb = "تجهیز شد" if action == "upg_equip" else "خارج شد"
+    await query.answer(f"{item.name} {verb}")
+    await safe_edit_message_text(
+        query,
+        equip_panel_text(user, creature, slots),
+        parse_mode="HTML",
+        reply_markup=equip_panel_keyboard(creature.id, slots),
+    )
+
+
+async def upgrade_set_default_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Make this creature the active one without leaving the upgrade screen."""
+    query = update.callback_query
+    creature_id = int(query.data.split(":")[1])
+    try:
+        await run_db(_select_sync, update.effective_user, creature_id)
+        user, creature, equipped_items, slots = await run_db(
+            _upgrade_pick_sync, update.effective_user, creature_id
+        )
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("🟢 پیش‌فرض شد!")
+    await safe_edit_message_text(
+        query,
+        upgrade_panel_text(user, creature, equipped_items, slots),
+        parse_mode="HTML",
+        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active),
     )
 
 
@@ -398,7 +612,9 @@ def _lab_action_sync(tg_user, action, creature_id):
         return None
 
     equipped_items = get_equipped_items(creature)
-    return user, creature, note + _mission_lines(completed_missions), equipped_items
+    # slots come back too: this re-renders the upgrade panel, and fetching them
+    # here keeps the equipment section from vanishing after a feed/train/upgrade
+    return user, creature, note + _mission_lines(completed_missions), equipped_items, slot_loadout(user, creature)
 
 
 async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -417,14 +633,14 @@ async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.answer()
         return
 
-    user, creature, note, equipped_items = result
+    user, creature, note, equipped_items, slots = result
     await query.answer()
     # every lab action is reachable only from the upgrade panel now, so re-render
     # that rather than bouncing the player back to the creature card
     await safe_edit_message_text(query,
-        note + "\n\n" + upgrade_panel_text(user, creature, equipped_items),
+        note + "\n\n" + upgrade_panel_text(user, creature, equipped_items, slots),
         parse_mode="HTML",
-        reply_markup=upgrade_panel_keyboard(creature.id),
+        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active),
     )
 
 
@@ -1441,6 +1657,10 @@ def register(application) -> None:
     application.add_handler(CommandHandler("menu", menu, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^menu:"))
     application.add_handler(CallbackQueryHandler(upgrade_pick_callback, pattern=r"^upg_pick:"))
+    application.add_handler(CallbackQueryHandler(equip_panel_callback, pattern=r"^upg_eq:"))
+    application.add_handler(CallbackQueryHandler(equip_slot_callback, pattern=r"^upg_slot:"))
+    application.add_handler(CallbackQueryHandler(equip_do_callback, pattern=r"^upg_(equip|unequip):"))
+    application.add_handler(CallbackQueryHandler(upgrade_set_default_callback, pattern=r"^upg_default:"))
     application.add_handler(CallbackQueryHandler(hunt_go_callback, pattern=r"^hunt_go:"))
     application.add_handler(CallbackQueryHandler(hunt_next_callback, pattern=r"^hunt_next$"))
     application.add_handler(CallbackQueryHandler(collection_pick_callback, pattern=r"^coll_pick:"))
