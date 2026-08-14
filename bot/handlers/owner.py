@@ -6,7 +6,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import User
 from bio_lab.repository import display_name
-from bot.buttons import DANGER, PRIMARY, SUCCESS, back_btn, btn
+from bot.buttons import ADMIN, CONFIRM, DANGER, PRIMARY, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text
 from game.button_emoji import (
     BUTTON_CATEGORY_LABELS,
@@ -241,20 +241,20 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = InlineKeyboardMarkup(
         [
             [
-                btn("گزارش پیشرفت", emoji_key="btn_report", style=PRIMARY, callback_data="admin_menu:report"),
-                btn("مدیریت کاربر", emoji_key="btn_profile", style=PRIMARY, callback_data="admin_menu:user_manage"),
+                btn("گزارش پیشرفت", emoji_key="btn_report", style=ADMIN, callback_data="admin_menu:report"),
+                btn("مدیریت کاربر", emoji_key="btn_profile", style=ADMIN, callback_data="admin_menu:user_manage"),
             ],
             [
                 btn("حذف موجود", emoji_key="btn_delete", style=DANGER, callback_data="admin_menu:del_creature_start"),
-                btn("ارسال همگانی", emoji_key="btn_broadcast", style=PRIMARY, callback_data="admin_menu:broadcast_start"),
+                btn("ارسال همگانی", emoji_key="btn_broadcast", style=ADMIN, callback_data="admin_menu:broadcast_start"),
             ],
             [
-                btn("🎨 ایموجی متن‌ها", style=PRIMARY, callback_data="admin_menu:set_emoji_start"),
-                btn("🎛 ایموجی دکمه‌ها", style=PRIMARY, callback_data="admin_menu:button_emoji"),
+                btn("🎨 ایموجی متن‌ها", style=ADMIN, callback_data="admin_menu:set_emoji_start"),
+                btn("🎛 ایموجی دکمه‌ها", style=ADMIN, callback_data="admin_menu:button_emoji"),
             ],
-            [btn("🔍 پیش‌نمایش ایموجی‌ها", style=PRIMARY, callback_data="admin_menu:preview_emoji")],
-            [btn("📡 جوین اجباری", style=PRIMARY, callback_data="admin_menu:force_join")],
-            [btn("🌐 باز کردن پنل کامل", url=ADMIN_PANEL_URL)],
+            [btn("🔍 پیش‌نمایش ایموجی‌ها", style=ADMIN, callback_data="admin_menu:preview_emoji")],
+            [btn("📡 جوین اجباری", style=ADMIN, callback_data="admin_menu:force_join")],
+            [btn("🌐 پنل تحت وب (رنگ دکمه‌ها، لودآوت، پشتیبان‌گیری)", url=ADMIN_PANEL_URL)],
         ]
     )
     await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
@@ -359,23 +359,23 @@ def _user_info_text(data: dict) -> str:
 
 def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMarkup:
     ban_button = (
-        btn("رفع مسدودی", emoji_key="btn_confirm", style=SUCCESS, callback_data=f"admin_unban:{target_id}")
+        btn("رفع مسدودی", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"admin_unban:{target_id}")
         if is_banned
         else btn("مسدود کردن", emoji_key="btn_cancel", style=DANGER, callback_data=f"admin_ban:{target_id}")
     )
     return InlineKeyboardMarkup(
         [
             [
-                btn("🟢 اعطای طلا", style=SUCCESS, callback_data=f"admin_grant:{target_id}:coins"),
-                btn("🟢 اعطای DNA", style=SUCCESS, callback_data=f"admin_grant:{target_id}:dna"),
-                btn("🟢 اعطای الماس", style=SUCCESS, callback_data=f"admin_grant:{target_id}:diamonds"),
+                btn("اعطای طلا", style=CONFIRM, callback_data=f"admin_grant:{target_id}:coins"),
+                btn("اعطای DNA", style=CONFIRM, callback_data=f"admin_grant:{target_id}:dna"),
+                btn("اعطای الماس", style=CONFIRM, callback_data=f"admin_grant:{target_id}:diamonds"),
             ],
             [
-                btn("🟠 کسر طلا", style=DANGER, callback_data=f"admin_deduct:{target_id}:coins"),
-                btn("🟠 کسر DNA", style=DANGER, callback_data=f"admin_deduct:{target_id}:dna"),
-                btn("🟠 کسر الماس", style=DANGER, callback_data=f"admin_deduct:{target_id}:diamonds"),
+                btn("کسر طلا", style=DANGER, callback_data=f"admin_deduct:{target_id}:coins"),
+                btn("کسر DNA", style=DANGER, callback_data=f"admin_deduct:{target_id}:dna"),
+                btn("کسر الماس", style=DANGER, callback_data=f"admin_deduct:{target_id}:diamonds"),
             ],
-            [btn("شارژ کامل (طلا+DNA+الماس)", emoji_key="btn_charge", style=SUCCESS, callback_data=f"admin_charge:{target_id}")],
+            [btn("شارژ کامل (طلا+DNA+الماس)", emoji_key="btn_charge", style=CONFIRM, callback_data=f"admin_charge:{target_id}")],
             [ban_button],
             [back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")],
         ]
@@ -629,10 +629,10 @@ def _channel_manage_keyboard(channel_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
-                btn("⏳ تنظیم مدت", style=PRIMARY, callback_data=f"fj_dur:{channel_id}"),
-                btn("♾ نامحدود کن", style=PRIMARY, callback_data=f"fj_unlim:{channel_id}"),
+                btn("⏳ تنظیم مدت", style=ADMIN, callback_data=f"fj_dur:{channel_id}"),
+                btn("♾ نامحدود کن", style=ADMIN, callback_data=f"fj_unlim:{channel_id}"),
             ],
-            [btn("🎁 تنظیم جایزه", style=SUCCESS, callback_data=f"fj_reward:{channel_id}")],
+            [btn("🎁 تنظیم جایزه", style=CONFIRM, callback_data=f"fj_reward:{channel_id}")],
             [btn("حذف کانال", emoji_key="btn_delete", style=DANGER, callback_data=f"fj_rm:{channel_id}")],
             [back_btn("admin_menu:force_join", "بازگشت به لیست")],
         ]
@@ -652,7 +652,7 @@ async def force_join_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             rows.append(
                 [btn(f"📡 {ch.title or handle}", callback_data=f"fj_manage:{ch.id}")]
             )
-    rows.append([btn("افزودن کانال جدید", emoji_key="btn_confirm", style=SUCCESS, callback_data="fj_add")])
+    rows.append([btn("افزودن کانال جدید", emoji_key="btn_confirm", style=CONFIRM, callback_data="fj_add")])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
     await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 

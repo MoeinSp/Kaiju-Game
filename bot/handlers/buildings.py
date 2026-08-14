@@ -4,7 +4,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Building
 from bio_lab.repository import get_or_create_user
-from bot.buttons import DANGER, PRIMARY, SUCCESS, back_btn, btn
+from bot.buttons import BUILD, DANGER, PRIMARY, SHOP, back_btn, btn
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from game import constants
 from game.buildings import (
@@ -149,21 +149,21 @@ def _building_detail_text(building: Building, upgrade, pending: int, cap: int) -
 def _building_detail_keyboard(building: Building, upgrade, cap: int) -> InlineKeyboardMarkup:
     rows = []
     if produces(building.building_type) and building.level > 0:
-        rows.append([btn("جمع‌آوری", emoji_key="btn_collect", style=SUCCESS, callback_data=f"bld_collect:{building.id}")])
+        rows.append([btn("جمع‌آوری", emoji_key="btn_collect", style=BUILD, callback_data=f"bld_collect:{building.id}")])
     if upgrade is not None and upgrade.building_id == building.id:
-        rows.append([btn("سریع‌ترش کن", emoji_key="btn_speedup", style=SUCCESS, callback_data=f"bld_speedup_list:{building.id}")])
+        rows.append([btn("سریع‌ترش کن", emoji_key="btn_speedup", style=SHOP, callback_data=f"bld_speedup_list:{building.id}")])
         rows.append(
             [
                 btn(
                     f"💎 تمومش کن ({diamond_finish_price(upgrade)} الماس)",
-                    style=PRIMARY,
+                    style=SHOP,
                     callback_data=f"bld_finish:{building.id}",
                 )
             ]
         )
     elif upgrade is None and building.level < min(cap, constants.BUILDING_MAX_LEVEL):
         label = "🏗 ساخت" if building.level == 0 else "🔧 شروع ارتقا"
-        rows.append([btn(label, emoji_key="btn_build", style=SUCCESS, callback_data=f"bld_upgrade:{building.id}")])
+        rows.append([btn(label, emoji_key="btn_build", style=BUILD, callback_data=f"bld_upgrade:{building.id}")])
     rows.append([back_btn("menu:buildings")])
     return InlineKeyboardMarkup(rows)
 
@@ -279,7 +279,7 @@ async def building_speedup_list_callback(update: Update, context: ContextTypes.D
         [
             btn(
                 f"{constants.SPEEDUP_LABELS[c.minutes]} ×{c.count}",
-                style=SUCCESS,
+                style=BUILD,
                 callback_data=f"bld_speedup_do:{building_id}:{c.minutes}",
             )
         ]

@@ -1,0 +1,101 @@
+{% extends "panel/base.html" %}
+{% block title %}پشتیبان‌گیری — پنل Kaiju Bio-Lab{% endblock %}
+{% block content %}
+<h2>💾 پشتیبان‌گیری و بازیابی</h2>
+<p class="lead">
+  پشتیبان کامل از <b>کل داده‌های بات</b>: بازیکن‌ها، هیولاها، ساختمون‌ها، تجهیزات، اتحادها، فصل‌ها،
+  تنظیمات ظاهر و حساب‌های ورود پنل.
+</p>
+
+<div class="card">
+  <p class="hint" style="margin:0">
+    فرمت فایل، JSON فشرده‌شده (<code>.json.gz</code>) از سریالایزر خود جنگوئه، نه کپی باینری دیتابیس.
+    برای همین یه پشتیبانی که روی SQLite گرفتی، مستقیم روی Postgres سرور هم بازیابی می‌شه.
+    <br>مسیر ذخیره روی سرور: <code>{{ backup_dir }}</code>
+  </p>
+</div>
+
+<div class="card">
+  <h3>گرفتن پشتیبان جدید</h3>
+  <form method="post" class="row">
+    {% csrf_token %}
+    <input name="label" placeholder="برچسب (اختیاری، مثلاً before-balance-patch)" style="width:300px" dir="ltr">
+    <button type="submit" name="action" value="create" class="green">همین حالا پشتیبان بگیر</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3>فایل‌های موجود</h3>
+  {% if items %}
+    <div class="scroll">
+      <table>
+        <tr><th>فایل</th><th>رکورد</th><th>حجم</th><th>تاریخ</th><th style="width:30%">عملیات</th></tr>
+        {% for b in items %}
+          <tr>
+            <td>
+              <code>{{ b.name }}</code>
+              {% if not b.manifest %}<div><span class="pill off">ناخوانا</span></div>{% endif %}
+            </td>
+            <td>{% if b.manifest %}{{ b.manifest.object_count }}{% else %}—{% endif %}</td>
+            <td>{{ b.size_bytes|filesizeformat }}</td>
+            <td class="hint">
+              {{ b.modified_at|date:"Y/m/d H:i" }}
+              {% if b.manifest %}<div>{{ b.manifest.db_engine }} · جنگو {{ b.manifest.django_version }}</div>{% endif %}
+            </td>
+            <td>
+              <div class="row">
+                <a href="{% url 'panel:backup_download' %}?name={{ b.name|urlencode }}"><button type="button">دانلود</button></a>
+                <form method="post" onsubmit="return confirm('فایل {{ b.name|escapejs }} حذف بشه؟')">
+                  {% csrf_token %}
+                  <input type="hidden" name="name" value="{{ b.name }}">
+                  <button type="submit" name="action" value="delete" class="red">حذف</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </table>
+    </div>
+  {% else %}
+    <p class="hint">هنوز فایلی نیست.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3>آپلود فایل پشتیبان</h3>
+  <p class="hint">فایل اعتبارسنجی و کنار بقیه ذخیره می‌شه؛ بازیابی مرحله‌ی جداست.</p>
+  <form method="post" enctype="multipart/form-data" class="row">
+    {% csrf_token %}
+    <input type="file" name="file" accept=".gz" required>
+    <button type="submit" name="action" value="upload" class="blue">آپلود کن</button>
+  </form>
+</div>
+
+<div class="card danger-zone">
+  <h3 style="color:var(--red)">☠️ بازیابی — منطقه‌ی خطر</h3>
+  <p class="hint">
+    بازیابی <b>همه‌ی داده‌های فعلی رو پاک می‌کنه</b> و محتوای فایل رو جایگزینش می‌کنه. کل عملیات توی
+    یک تراکنشه، پس اگه وسطش خطا بده هیچی از دست نمی‌ره — ولی اگه موفق بشه، وضعیت فعلی برنمی‌گرده.
+    <b>قبلش یه پشتیبان تازه بگیر.</b>
+    <br>حساب‌های ورود پنل هم بازیابی می‌شن، پس ممکنه از این صفحه بیرون بیفتی و لازم بشه دوباره وارد بشی.
+  </p>
+  {% if items %}
+    <form method="post" onsubmit="return confirm('مطمئنی؟ همه‌ی داده‌های فعلی پاک می‌شن.')">
+      {% csrf_token %}
+      <div class="row">
+        <select name="name" required>
+          {% for b in items %}
+            {% if b.manifest %}
+              <option value="{{ b.name }}">{{ b.name }} — {{ b.manifest.object_count }} رکورد</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+        <input name="confirm" placeholder="کلمه‌ی «{{ confirm_phrase }}» رو تایپ کن" style="width:230px" required>
+        <button type="submit" name="action" value="restore" class="red">بازیابی کن</button>
+      </div>
+    </form>
+  {% else %}
+    <p class="hint">فایلی برای بازیابی وجود نداره.</p>
+  {% endif %}
+</div>
+{% endblock %}

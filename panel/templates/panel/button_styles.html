@@ -1,0 +1,67 @@
+{% extends "panel/base.html" %}
+{% block title %}رنگ دکمه‌ها — پنل Kaiju Bio-Lab{% endblock %}
+{% block content %}
+<h2>🎨 رنگ دکمه‌ها</h2>
+<p class="lead">
+  تلگرام فقط سه رنگ دکمه داره (آبی، سبز، قرمز) به‌علاوه‌ی حالت بی‌رنگ. پس چیزی که تنظیم می‌کنی
+  «رنگِ یک دکمه» نیست، بلکه <b>معنیِ هر رنگه</b>: هر نقش رو به یک رنگ می‌بندی و همه‌ی دکمه‌های اون
+  نقش توی کل بات با هم عوض می‌شن.
+</p>
+
+<div class="card">
+  <p class="hint" style="margin:0">
+    ⚠️ رنگ دکمه فقط روی نسخه‌های تلگرام بعد از ۲۰ بهمن ۱۴۰۴ نشون داده می‌شه. روی کلاینت‌های قدیمی‌تر
+    همه‌ی دکمه‌ها بی‌رنگ می‌مونن — برای همین هیچ‌وقت رنگ رو تنها راه تشخیص دو دکمه از هم قرار نده.
+  </p>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+  <div class="card">
+    <h3>پالت نقش‌ها</h3>
+    <div class="scroll">
+      <table>
+        <tr><th style="width:32%">نقش</th><th style="width:24%">رنگ</th><th>پیش‌نمایش</th></tr>
+        {% for role in roles %}
+          <tr>
+            <td>
+              <b>{{ role.label }}</b>
+              {% if not role.is_default %}<span class="pill" style="margin-inline-start:6px">تغییر داده شده</span>{% endif %}
+              <div class="hint" style="margin:2px 0 0">{{ role.help }}</div>
+            </td>
+            <td>
+              <select name="role_{{ role.key }}">
+                {% for choice in choices %}
+                  <option value="{{ choice.value }}" {% if choice.value == role.current %}selected{% endif %}>{{ choice.label }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td>
+              {% for choice in choices %}
+                {% if choice.value == role.current %}
+                  <span style="display:inline-block;background:{{ choice.color }};color:#fff;
+                               border-radius:9px;padding:7px 18px;font-size:14px">{{ role.label }}</span>
+                {% endif %}
+              {% endfor %}
+            </td>
+          </tr>
+        {% endfor %}
+      </table>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button type="submit" name="action" value="save" class="blue">ذخیره‌ی پالت</button>
+      <button type="submit" name="action" value="reset">برگشت به پیش‌فرض</button>
+      <span class="hint">بعد از ذخیره، بات بلافاصله رنگ‌های جدید رو استفاده می‌کنه — نیاز به ری‌استارت نیست.</span>
+    </div>
+  </div>
+</form>
+
+<div class="card">
+  <h3>راهنمای پالت پیش‌فرض</h3>
+  <p class="hint" style="margin:0">
+    پیش‌فرض عمداً منوها رو بی‌رنگ گذاشته. قبلاً همه‌ی دکمه‌های منو آبی بودن و نتیجه‌ش یه دیوار آبی بود
+    که دو تا دکمه‌ی سبز توش گم می‌شد — رنگ عملاً هیچ معنی‌ای نداشت. حالا رنگ فقط روی کاری که بازیکن
+    <i>انجام می‌ده</i> می‌شینه (نبرد، ساخت، خرید، تأیید، حذف) و ناوبری عقب می‌ره.
+  </p>
+</div>
+{% endblock %}

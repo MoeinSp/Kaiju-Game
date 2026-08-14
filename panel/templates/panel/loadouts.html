@@ -1,0 +1,107 @@
+{% extends "panel/base.html" %}
+{% block title %}لودآوت‌ها — پنل Kaiju Bio-Lab{% endblock %}
+{% block content %}
+<h2>🗂 لودآوت‌های ظاهر</h2>
+<p class="lead">
+  یه لودآوت، عکسِ لحظه‌ایِ <b>ظاهر</b> باته: ایموجی‌های پرمیوم متن‌ها، ایموجی‌های دکمه‌ها و پالت رنگ.
+  چندتا بساز و با یه کلیک بینشون سوییچ کن.
+</p>
+
+<div class="card">
+  <p class="hint" style="margin:0">
+    🔒 لودآوت <b>هیچ داده‌ی بازی</b> رو در بر نمی‌گیره — نه بازیکن، نه هیولا، نه طلا و الماس.
+    سوییچ کردن بینشون همیشه امن و برگشت‌پذیره. برای پشتیبان‌گیری از خود بازی به بخش
+    <a href="{% url 'panel:backups' %}">پشتیبان‌گیری</a> برو.
+  </p>
+</div>
+
+<div class="card">
+  <h3>ذخیره‌ی وضعیت فعلی به‌عنوان لودآوت جدید</h3>
+  <p class="hint">
+    الان روی بات: {{ live.emoji }} ایموجی متن، {{ live.button_emoji }} ایموجی دکمه،
+    {{ live.button_styles }} نقشِ رنگ سفارشی.
+  </p>
+  <form method="post" class="row">
+    {% csrf_token %}
+    <input name="name" placeholder="اسم لودآوت (مثلاً: تم نوروزی)" style="width:230px" required>
+    <input name="note" placeholder="توضیح اختیاری" style="width:260px">
+    <button type="submit" name="action" value="save" class="green">ذخیره کن</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3>لودآوت‌های ذخیره‌شده</h3>
+  {% if items %}
+    <div class="scroll">
+      <table>
+        <tr>
+          <th>اسم</th><th>محتوا</th><th>آخرین اعمال</th><th style="width:38%">عملیات</th>
+        </tr>
+        {% for item in items %}
+          <tr>
+            <td>
+              <b>{{ item.obj.name }}</b>
+              {% if item.obj.is_active %}<span class="pill on">فعال</span>{% endif %}
+              {% if item.broken %}<span class="pill off">خراب</span>{% endif %}
+              {% if item.obj.note %}<div class="hint" style="margin:2px 0 0">{{ item.obj.note }}</div>{% endif %}
+            </td>
+            <td class="hint">
+              {{ item.summary.emoji }} متن ·
+              {{ item.summary.button_emoji }} دکمه ·
+              {{ item.summary.button_styles }} رنگ
+            </td>
+            <td class="hint">
+              {% if item.obj.applied_at %}{{ item.obj.applied_at|date:"Y/m/d H:i" }}{% else %}—{% endif %}
+            </td>
+            <td>
+              <div class="row">
+                <form method="post">
+                  {% csrf_token %}
+                  <input type="hidden" name="loadout_id" value="{{ item.obj.id }}">
+                  <button type="submit" name="action" value="activate" class="green"
+                          {% if item.broken %}disabled{% endif %}>فعال کن</button>
+                </form>
+                <form method="post">
+                  {% csrf_token %}
+                  <input type="hidden" name="loadout_id" value="{{ item.obj.id }}">
+                  <input type="hidden" name="name" value="{{ item.obj.name }}">
+                  <input type="hidden" name="note" value="{{ item.obj.note }}">
+                  <button type="submit" name="action" value="overwrite"
+                          title="محتوای این لودآوت رو با وضعیت فعلی بات جایگزین کن">به‌روزرسانی</button>
+                </form>
+                <form method="post">
+                  {% csrf_token %}
+                  <input type="hidden" name="loadout_id" value="{{ item.obj.id }}">
+                  <button type="submit" name="action" value="duplicate">کپی</button>
+                </form>
+                <a href="{% url 'panel:loadout_export' item.obj.id %}"><button type="button">خروجی JSON</button></a>
+                <form method="post" onsubmit="return confirm('لودآوت «{{ item.obj.name|escapejs }}» حذف بشه؟')">
+                  {% csrf_token %}
+                  <input type="hidden" name="loadout_id" value="{{ item.obj.id }}">
+                  <button type="submit" name="action" value="delete" class="red">حذف</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </table>
+    </div>
+  {% else %}
+    <p class="hint">هنوز لودآوتی ذخیره نشده.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3>وارد کردن لودآوت از فایل</h3>
+  <p class="hint">
+    فایل خروجی JSON یه نصب دیگه رو این‌جا بده. فقط ذخیره می‌شه و <b>اعمال نمی‌شه</b> — بعدش خودت
+    «فعال کن» رو بزن.
+  </p>
+  <form method="post" enctype="multipart/form-data" class="row">
+    {% csrf_token %}
+    <input type="file" name="file" accept=".json,application/json" required>
+    <input name="name" placeholder="اسم دلخواه (اختیاری)" style="width:200px">
+    <button type="submit" name="action" value="import" class="blue">وارد کن</button>
+  </form>
+</div>
+{% endblock %}

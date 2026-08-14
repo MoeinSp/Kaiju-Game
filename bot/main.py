@@ -24,8 +24,7 @@ from bot.handlers import (  # noqa: E402
     wheel,
 )
 from config import BOT_TOKEN  # noqa: E402
-from game.button_emoji import refresh_cache as refresh_button_emoji_cache  # noqa: E402
-from game.emoji import refresh_cache  # noqa: E402
+from game.theme import refresh_theme_caches  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -44,10 +43,10 @@ def main() -> None:
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN تنظیم نشده. فایل .env رو بر اساس .env.example بساز.")
 
-    # warm both emoji caches before the event loop starts — get_emoji()/btn() read
-    # them from async handler code, so they must never hit the DB lazily
-    refresh_cache()
-    refresh_button_emoji_cache()
+    # warm every theme cache (message emoji, button icons, button colours) before
+    # the event loop starts — get_emoji()/btn() read them from async handler code,
+    # so they must never hit the DB lazily
+    refresh_theme_caches()
 
     application = Application.builder().token(BOT_TOKEN).build()
 

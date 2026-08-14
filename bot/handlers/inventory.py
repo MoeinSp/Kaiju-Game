@@ -3,7 +3,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Equipment
 from bio_lab.repository import get_active_creature, get_or_create_user
-from bot.buttons import DANGER, PRIMARY, SUCCESS, back_btn, btn
+from bot.buttons import BUILD, CONFIRM, DANGER, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text
 from game import constants
 from game.blacksmith import forge, forge_preview, forgeable_items
@@ -74,9 +74,9 @@ def _item_detail_keyboard(item: Equipment, dupe_count: int) -> InlineKeyboardMar
     if item.equipped_on_id:
         rows.append([btn("خارج کردن از موجود", emoji_key="btn_inventory", style=DANGER, callback_data=f"inv_unequip:{item.id}")])
     else:
-        rows.append([btn("تجهیز روی موجود فعال", emoji_key="btn_attack", style=SUCCESS, callback_data=f"inv_equip:{item.id}")])
+        rows.append([btn("تجهیز روی موجود فعال", emoji_key="btn_attack", style=BUILD, callback_data=f"inv_equip:{item.id}")])
     if item.level < constants.EQUIPMENT_MAX_LEVEL and dupe_count > 0:
-        rows.append([btn("✨ ارتقا با یه نمونه‌ی مشابه", style=SUCCESS, callback_data=f"inv_upgrade:{item.id}")])
+        rows.append([btn("✨ ارتقا با یه نمونه‌ی مشابه", style=BUILD, callback_data=f"inv_upgrade:{item.id}")])
     rows.append([back_btn("menu:inventory", "بازگشت به کوله‌پشتی")])
     return InlineKeyboardMarkup(rows)
 
@@ -155,7 +155,7 @@ async def inventory_upgrade_list_callback(update: Update, context: ContextTypes.
         return
     await query.answer()
     rows = [
-        [btn(f"{d.name} +{d.level} (#{d.id})", style=SUCCESS, callback_data=f"inv_up_do:{item.id}:{d.id}")]
+        [btn(f"{d.name} +{d.level} (#{d.id})", style=CONFIRM, callback_data=f"inv_up_do:{item.id}:{d.id}")]
         for d in dupes
     ]
     rows.append([back_btn(f"inv_pick:{item.id}")])
@@ -291,7 +291,7 @@ def _forge_detail_text(user, item, preview) -> str:
 def _forge_detail_keyboard(item_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [btn("بزن!", emoji_key="btn_forge", style=SUCCESS, callback_data=f"forge_do:{item_id}")],
+            [btn("بزن!", emoji_key="btn_forge", style=BUILD, callback_data=f"forge_do:{item_id}")],
             [back_btn("menu:blacksmith", "بازگشت به آهنگری")],
         ]
     )

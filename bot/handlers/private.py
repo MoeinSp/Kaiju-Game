@@ -9,7 +9,7 @@ from bot.handlers.inventory import blacksmith_panel, inventory_cmd
 from bot.handlers.lootbox import biocrate_cmd, diamond_box_panel
 from bot.handlers.owner import admin_cmd
 from bot.handlers.wheel import wheel_cmd
-from bot.buttons import DANGER, PRIMARY, SUCCESS, back_btn, btn
+from bot.buttons import ADMIN, BATTLE, BUILD, CONFIRM, DANGER, NAV, PRIMARY, SHOP, back_btn, btn
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from config import OWNER_TELEGRAM_ID
 from game import constants
@@ -127,16 +127,16 @@ def upgrade_panel_keyboard(creature_id: int) -> InlineKeyboardMarkup:
     doesn't silently swap which creature is active for hunting/arena."""
     rows = [
         [
-            btn("تغذیه", emoji_key="btn_feed", style=SUCCESS, callback_data=f"lab:feed:{creature_id}"),
-            btn("تمرین", emoji_key="btn_train", style=SUCCESS, callback_data=f"lab:train:{creature_id}"),
+            btn("تغذیه", emoji_key="btn_feed", style=BUILD, callback_data=f"lab:feed:{creature_id}"),
+            btn("تمرین", emoji_key="btn_train", style=BUILD, callback_data=f"lab:train:{creature_id}"),
         ],
         [
-            btn("🦋 بال", style=PRIMARY, callback_data=f"lab:up_wings:{creature_id}"),
-            btn("🛡 زره", style=PRIMARY, callback_data=f"lab:up_armor:{creature_id}"),
+            btn("🦋 بال", style=BUILD, callback_data=f"lab:up_wings:{creature_id}"),
+            btn("🛡 زره", style=BUILD, callback_data=f"lab:up_armor:{creature_id}"),
         ],
         [
-            btn("🦷 نیش", style=PRIMARY, callback_data=f"lab:up_fangs:{creature_id}"),
-            btn("☠️ زهر", style=PRIMARY, callback_data=f"lab:up_poison:{creature_id}"),
+            btn("🦷 نیش", style=BUILD, callback_data=f"lab:up_fangs:{creature_id}"),
+            btn("☠️ زهر", style=BUILD, callback_data=f"lab:up_poison:{creature_id}"),
         ],
         [back_btn("menu:upgrade", "لیست هیولاها")],
     ]
@@ -226,38 +226,39 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
     here too, but they made both the card and this keyboard unreadable — they're on
     the «🔧 ارتقا» screen now (upgrade_panel)."""
     rows = [
+        # The two things a player is most likely here to do get the only coloured
+        # buttons on the screen; everything below is navigation and stays plain,
+        # otherwise the whole menu is a wall of colour and none of it means anything.
         [btn("ارتقا و پرورش", emoji_key="btn_upgrade", style=PRIMARY, callback_data="menu:upgrade")],
         [
-            btn("کلکسیون", emoji_key="btn_collection", style=PRIMARY, callback_data="menu:collection"),
-            btn("ترکیب هیولا", emoji_key="btn_fusion", style=SUCCESS, callback_data="menu:fusion"),
+            btn("شکار انفرادی", emoji_key="btn_hunt", style=BATTLE, callback_data="menu:hunt"),
+            btn("آرنا (کاپ)", emoji_key="btn_arena", style=BATTLE, callback_data="menu:arena"),
         ],
         [
-            btn("شکار انفرادی", emoji_key="btn_hunt", style=PRIMARY, callback_data="menu:hunt"),
-            btn("آرنا (کاپ)", emoji_key="btn_arena", style=DANGER, callback_data="menu:arena"),
+            btn("کلکسیون", emoji_key="btn_collection", style=NAV, callback_data="menu:collection"),
+            btn("ترکیب هیولا", emoji_key="btn_fusion", style=NAV, callback_data="menu:fusion"),
         ],
         [
-            btn("تجهیزات", emoji_key="btn_inventory", style=PRIMARY, callback_data="menu:inventory"),
-            btn("آهنگری", emoji_key="btn_forge", style=PRIMARY, callback_data="menu:blacksmith"),
+            btn("تجهیزات", emoji_key="btn_inventory", style=NAV, callback_data="menu:inventory"),
+            btn("آهنگری", emoji_key="btn_forge", style=NAV, callback_data="menu:blacksmith"),
         ],
         [
-            btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SUCCESS, callback_data="menu:biocrate"),
+            btn("ساختمون‌ها", emoji_key="btn_buildings", style=NAV, callback_data="menu:buildings"),
+            btn("ماموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions"),
         ],
         [
-            btn("جعبه‌های الماسی", emoji_key="btn_diamond_box", style=SUCCESS, callback_data="menu:diamond_box"),
-            btn("ساختمون‌ها", emoji_key="btn_buildings", style=PRIMARY, callback_data="menu:buildings"),
+            btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate"),
+            btn("جعبه‌های الماسی", emoji_key="btn_diamond_box", style=SHOP, callback_data="menu:diamond_box"),
         ],
+        [btn("گردونه‌ی شانس", emoji_key="btn_wheel", style=SHOP, callback_data="menu:wheel")],
         [
-            btn("ماموریت‌ها", emoji_key="btn_missions", style=PRIMARY, callback_data="menu:missions"),
-            btn("گردونه‌ی شانس", emoji_key="btn_wheel", style=SUCCESS, callback_data="menu:wheel"),
+            btn("اتحاد من", emoji_key="btn_alliance", style=NAV, callback_data="menu:alliance_info"),
+            btn("رتبه‌بندی", emoji_key="btn_rank", style=NAV, callback_data="menu:rank"),
         ],
-        [btn("اتحاد من", emoji_key="btn_alliance", style=PRIMARY, callback_data="menu:alliance_info")],
-        [
-            btn("رتبه‌بندی", emoji_key="btn_rank", style=PRIMARY, callback_data="menu:rank"),
-            btn("پروفایل من", emoji_key="btn_profile", style=PRIMARY, callback_data="menu:profile"),
-        ],
+        [btn("پروفایل من", emoji_key="btn_profile", style=NAV, callback_data="menu:profile")],
     ]
     if is_owner:
-        rows.append([btn("پنل ادمین", emoji_key="btn_admin", style=DANGER, callback_data="menu:admin")])
+        rows.append([btn("پنل ادمین", emoji_key="btn_admin", style=ADMIN, callback_data="menu:admin")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -422,10 +423,10 @@ def _collection_keyboard(creatures: list[Creature]) -> InlineKeyboardMarkup:
         label = f"{c.name} {stars} · Lv{c.level} · {constants.RARITY_LABELS[c.rarity]}"
         row = [btn(f"{'🟢 ' if c.is_active else ''}{label}", callback_data=f"coll_pick:{c.id}")]
         if not c.is_active:
-            row.append(btn("فعال کن", style=SUCCESS, callback_data=f"coll_select:{c.id}"))
+            row.append(btn("فعال کن", style=CONFIRM, callback_data=f"coll_select:{c.id}"))
         rows.append(row)
     rows.append(
-        [btn("ترکیب هیولا", emoji_key="btn_fusion", style=SUCCESS, callback_data="menu:fusion")]
+        [btn("ترکیب هیولا", emoji_key="btn_fusion", style=NAV, callback_data="menu:fusion")]
     )
     rows.append([back_btn("menu:me")])
     return InlineKeyboardMarkup(rows)
@@ -455,7 +456,7 @@ def _creature_detail_sync(tg_user, creature_id):
 def _creature_detail_keyboard(creature_id: int, is_active: bool) -> InlineKeyboardMarkup:
     rows = []
     if not is_active:
-        rows.append([btn("انتخاب به‌عنوان موجود فعال", emoji_key="btn_confirm", style=SUCCESS, callback_data=f"coll_select:{creature_id}")])
+        rows.append([btn("انتخاب به‌عنوان موجود فعال", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"coll_select:{creature_id}")])
     rows.append([btn("استفاده در فیوژن", emoji_key="btn_fusion", style=PRIMARY, callback_data=f"fus_a:{creature_id}")])
     rows.append([back_btn("menu:collection", "بازگشت به کلکسیون")])
     return InlineKeyboardMarkup(rows)
@@ -600,7 +601,7 @@ async def fusion_pick_a_callback(update: Update, context: ContextTypes.DEFAULT_T
         [
             btn(
                 f"{c.name} {'⭐' * c.star_level} · Lv{c.level}",
-                style=SUCCESS,
+                style=PRIMARY,
                 callback_data=f"fus_b:{parent_a_id}:{c.id}",
             )
         ]
@@ -654,7 +655,7 @@ async def fusion_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             btn(
                 f"{p['name']} {'⭐' * p['star']} ×{p['count']} → {'⭐' * (p['star'] + 1)}",
                 emoji_key="btn_fusion",
-                style=SUCCESS,
+                style=PRIMARY,
                 callback_data=f"fus_b:{p['parent_a'].id}:{p['parent_b'].id}",
             )
         ]
@@ -674,7 +675,7 @@ async def fusion_pick_b_callback(update: Update, context: ContextTypes.DEFAULT_T
     keyboard = InlineKeyboardMarkup(
         [
             [
-                btn("تأیید فیوژن", emoji_key="btn_confirm", style=SUCCESS, callback_data=f"fus_confirm:{a_id}:{b_id}"),
+                btn("تأیید فیوژن", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"fus_confirm:{a_id}:{b_id}"),
                 btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data=f"coll_pick:{a_id}"),
             ]
         ]
@@ -761,8 +762,8 @@ def _hunt_scout_text(creature, my_power, target, energy) -> str:
 def _hunt_scout_keyboard(target) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [btn("حمله!", emoji_key="btn_attack", style=DANGER, callback_data=f"hunt_go:{target['tier']}:{target['seed']}")],
-            [btn("🔍 بعدی", style=PRIMARY, callback_data="hunt_next")],
+            [btn("حمله!", emoji_key="btn_attack", style=BATTLE, callback_data=f"hunt_go:{target['tier']}:{target['seed']}")],
+            [btn("🔍 بعدی", style=NAV, callback_data="hunt_next")],
             [back_btn("menu:me")],
         ]
     )
@@ -840,7 +841,7 @@ async def hunt_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     keyboard = InlineKeyboardMarkup(
         [
-            [btn("شکار دوباره", emoji_key="btn_hunt", style=PRIMARY, callback_data="hunt_next")],
+            [btn("شکار دوباره", emoji_key="btn_hunt", style=BATTLE, callback_data="hunt_next")],
             [back_btn("menu:me")],
         ]
     )
@@ -920,16 +921,16 @@ def _alliance_info_sync(tg_user):
 def _alliance_action_keyboard(in_alliance: bool) -> InlineKeyboardMarkup:
     if in_alliance:
         rows = [
-            [btn("واریز به خزانه", emoji_key="btn_deposit", style=SUCCESS, callback_data="ally_deposit")],
-            [btn("شبیخون به اتحاد دیگه", emoji_key="btn_heist", style=DANGER, callback_data="ally_heist_list")],
-            [btn("برترین اتحادها", emoji_key="btn_rank", style=PRIMARY, callback_data="ally_top")],
+            [btn("واریز به خزانه", emoji_key="btn_deposit", style=BUILD, callback_data="ally_deposit")],
+            [btn("شبیخون به اتحاد دیگه", emoji_key="btn_heist", style=BATTLE, callback_data="ally_heist_list")],
+            [btn("برترین اتحادها", emoji_key="btn_rank", style=NAV, callback_data="ally_top")],
             [btn("خروج از اتحاد", emoji_key="btn_cancel", style=DANGER, callback_data="ally_leave")],
         ]
     else:
         rows = [
-            [btn("ساخت اتحاد جدید", emoji_key="btn_alliance", style=SUCCESS, callback_data="ally_create")],
+            [btn("ساخت اتحاد جدید", emoji_key="btn_alliance", style=BUILD, callback_data="ally_create")],
             [btn("پیوستن به اتحاد", emoji_key="btn_alliance", style=PRIMARY, callback_data="ally_join")],
-            [btn("برترین اتحادها", emoji_key="btn_rank", style=PRIMARY, callback_data="ally_top")],
+            [btn("برترین اتحادها", emoji_key="btn_rank", style=NAV, callback_data="ally_top")],
         ]
     rows.append([back_btn("menu:me")])
     return InlineKeyboardMarkup(rows)
@@ -1045,7 +1046,7 @@ async def alliance_heist_list_callback(update: Update, context: ContextTypes.DEF
         await query.answer("هیچ اتحاد دیگه‌ای برای شبیخون نیست.", show_alert=True)
         return
     await query.answer()
-    rows = [[btn(a.name, emoji_key="btn_heist", style=DANGER, callback_data=f"heist_pick:{a.id}")] for a in targets]
+    rows = [[btn(a.name, emoji_key="btn_heist", style=BATTLE, callback_data=f"heist_pick:{a.id}")] for a in targets]
     rows.append([back_btn("menu:alliance_info")])
     await safe_edit_message_text(query,
         f"🏴‍☠️ کدوم اتحاد رو غارت کنم؟ ({int(constants.HEIST_STEAL_PERCENT * 100)}٪ خزانه در صورت برد)",
@@ -1318,36 +1319,38 @@ async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 def main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
+            # same palette discipline as creature_keyboard: colour marks the doing,
+            # not the going
             [
                 btn("موجود فعال", emoji_key="btn_creature", style=PRIMARY, callback_data="menu:me"),
                 btn("ارتقا و پرورش", emoji_key="btn_upgrade", style=PRIMARY, callback_data="menu:upgrade"),
             ],
             [
-                btn("کلکسیون", emoji_key="btn_collection", style=PRIMARY, callback_data="menu:collection"),
-                btn("ترکیب هیولا", emoji_key="btn_fusion", style=SUCCESS, callback_data="menu:fusion"),
+                btn("شکار انفرادی", emoji_key="btn_hunt", style=BATTLE, callback_data="menu:hunt"),
+                btn("آرنا (کاپ)", emoji_key="btn_arena", style=BATTLE, callback_data="menu:arena"),
             ],
             [
-                btn("شکار انفرادی", emoji_key="btn_hunt", style=PRIMARY, callback_data="menu:hunt"),
-                btn("ماموریت‌ها", emoji_key="btn_missions", style=PRIMARY, callback_data="menu:missions"),
+                btn("کلکسیون", emoji_key="btn_collection", style=NAV, callback_data="menu:collection"),
+                btn("ترکیب هیولا", emoji_key="btn_fusion", style=NAV, callback_data="menu:fusion"),
             ],
             [
-                btn("گردونه‌ی شانس", emoji_key="btn_wheel", style=SUCCESS, callback_data="menu:wheel"),
-                btn("ساختمون‌ها", emoji_key="btn_buildings", style=PRIMARY, callback_data="menu:buildings"),
+                btn("تجهیزات", emoji_key="btn_inventory", style=NAV, callback_data="menu:inventory"),
+                btn("آهنگری", emoji_key="btn_forge", style=NAV, callback_data="menu:blacksmith"),
             ],
             [
-                btn("آرنا (کاپ)", emoji_key="btn_arena", style=DANGER, callback_data="menu:arena"),
-                btn("تجهیزات", emoji_key="btn_inventory", style=PRIMARY, callback_data="menu:inventory"),
+                btn("ساختمون‌ها", emoji_key="btn_buildings", style=NAV, callback_data="menu:buildings"),
+                btn("ماموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions"),
             ],
             [
-                btn("آهنگری", emoji_key="btn_forge", style=PRIMARY, callback_data="menu:blacksmith"),
-                btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SUCCESS, callback_data="menu:biocrate"),
+                btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate"),
+                btn("جعبه‌های الماسی", emoji_key="btn_diamond_box", style=SHOP, callback_data="menu:diamond_box"),
             ],
+            [btn("گردونه‌ی شانس", emoji_key="btn_wheel", style=SHOP, callback_data="menu:wheel")],
             [
-                btn("جعبه‌های الماسی", emoji_key="btn_diamond_box", style=SUCCESS, callback_data="menu:diamond_box"),
-                btn("اتحاد من", emoji_key="btn_alliance", style=PRIMARY, callback_data="menu:alliance_info"),
+                btn("اتحاد من", emoji_key="btn_alliance", style=NAV, callback_data="menu:alliance_info"),
+                btn("رتبه‌بندی", emoji_key="btn_rank", style=NAV, callback_data="menu:rank"),
             ],
-            [btn("رتبه‌بندی", emoji_key="btn_rank", style=PRIMARY, callback_data="menu:rank")],
-            [btn("پروفایل من", emoji_key="btn_profile", style=PRIMARY, callback_data="menu:profile")],
+            [btn("پروفایل من", emoji_key="btn_profile", style=NAV, callback_data="menu:profile")],
         ]
     )
 

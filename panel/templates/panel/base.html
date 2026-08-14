@@ -1,0 +1,123 @@
+{% comment %}
+Panel shell. All CSS is inline on purpose: the panel has to work on a bare VPS
+behind whatever reverse proxy the operator set up, and a missing static file
+must never be the reason they can't reach the restore button.
+{% endcomment %}<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}پنل Kaiju Bio-Lab{% endblock %}</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel-2:#1c2129; --line:#2a3038;
+    --ink:#e6edf3; --muted:#8b949e;
+    --blue:#2f81f7; --green:#2ea043; --red:#da3633; --amber:#d29922;
+    --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Vazirmatn","Segoe UI",Tahoma,system-ui,sans-serif;
+    font-size:15px; line-height:1.8;
+  }
+  a{color:var(--blue); text-decoration:none}
+  a:hover{text-decoration:underline}
+  .layout{display:flex; min-height:100vh; flex-wrap:wrap}
+  aside{
+    width:230px; flex:0 0 230px; background:var(--panel);
+    border-inline-start:1px solid var(--line); padding:18px 12px;
+  }
+  aside h1{font-size:16px; margin:0 0 4px; padding:0 8px}
+  aside .sub{color:var(--muted); font-size:12px; padding:0 8px; margin-bottom:16px}
+  nav a{
+    display:block; padding:9px 12px; border-radius:9px; color:var(--ink);
+    margin-bottom:3px; font-size:14px;
+  }
+  nav a:hover{background:var(--panel-2); text-decoration:none}
+  nav a.on{background:var(--blue); color:#fff}
+  nav .sep{color:var(--muted); font-size:11px; padding:12px 12px 4px; letter-spacing:.4px}
+  main{flex:1 1 460px; padding:22px clamp(14px,3vw,32px); min-width:0}
+  h2{margin:0 0 6px; font-size:22px}
+  .lead{color:var(--muted); margin:0 0 20px; font-size:14px}
+  .card{
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:var(--radius); padding:16px 18px; margin-bottom:16px;
+  }
+  .card h3{margin:0 0 10px; font-size:16px}
+  .card .hint{color:var(--muted); font-size:13px; margin:0 0 12px}
+  .grid{display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+  .stat{background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:12px 14px}
+  .stat .n{font-size:22px; font-weight:700}
+  .stat .l{color:var(--muted); font-size:12px}
+  table{width:100%; border-collapse:collapse; font-size:14px}
+  th,td{padding:9px 8px; border-bottom:1px solid var(--line); text-align:right; vertical-align:middle}
+  th{color:var(--muted); font-weight:600; font-size:12px}
+  .scroll{overflow-x:auto}
+  input,select,textarea{
+    background:var(--panel-2); color:var(--ink); border:1px solid var(--line);
+    border-radius:8px; padding:8px 10px; font:inherit; font-size:14px; max-width:100%;
+  }
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--blue); outline-offset:-1px}
+  input[type=file]{padding:6px}
+  button{
+    background:var(--panel-2); color:var(--ink); border:1px solid var(--line);
+    border-radius:8px; padding:8px 14px; font:inherit; font-size:14px; cursor:pointer;
+  }
+  button:hover{border-color:var(--muted)}
+  button.blue{background:var(--blue); border-color:var(--blue); color:#fff}
+  button.green{background:var(--green); border-color:var(--green); color:#fff}
+  button.red{background:var(--red); border-color:var(--red); color:#fff}
+  .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+  .msgs{margin-bottom:16px}
+  .msg{padding:10px 14px; border-radius:9px; margin-bottom:8px; font-size:14px; border:1px solid}
+  .msg.success{background:rgba(46,160,67,.12); border-color:var(--green)}
+  .msg.error{background:rgba(218,54,51,.12); border-color:var(--red)}
+  .msg.warning,.msg.info{background:rgba(210,153,34,.12); border-color:var(--amber)}
+  .pill{display:inline-block; padding:1px 9px; border-radius:999px; font-size:12px; border:1px solid var(--line)}
+  .pill.on{background:var(--green); border-color:var(--green); color:#fff}
+  .pill.off{background:var(--red); border-color:var(--red); color:#fff}
+  .danger-zone{border-color:var(--red)}
+  code{background:var(--panel-2); padding:1px 6px; border-radius:5px; font-size:13px; direction:ltr; display:inline-block}
+  @media (max-width:760px){
+    aside{width:100%; flex:1 1 100%; border:0; border-bottom:1px solid var(--line)}
+    nav{display:flex; flex-wrap:wrap; gap:4px}
+    nav a{flex:1 1 auto; text-align:center}
+    nav .sep{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <h1>🧬 Kaiju Bio-Lab</h1>
+    <div class="sub">پنل مدیریت — {{ request.user.username }}</div>
+    <nav>
+      <a href="{% url 'panel:dashboard' %}" class="{% if page == 'dashboard' %}on{% endif %}">داشبورد</a>
+      <div class="sep">ظاهر بات</div>
+      <a href="{% url 'panel:button_styles' %}" class="{% if page == 'button_styles' %}on{% endif %}">🎨 رنگ دکمه‌ها</a>
+      <a href="{% url 'panel:button_emoji' %}" class="{% if page == 'button_emoji' %}on{% endif %}">🎛 ایموجی دکمه‌ها</a>
+      <a href="{% url 'panel:text_emoji' %}" class="{% if page == 'text_emoji' %}on{% endif %}">✨ ایموجی متن‌ها</a>
+      <a href="{% url 'panel:loadouts' %}" class="{% if page == 'loadouts' %}on{% endif %}">🗂 لودآوت‌ها</a>
+      <div class="sep">بازی</div>
+      <a href="{% url 'panel:players' %}" class="{% if page == 'players' %}on{% endif %}">👥 بازیکنان</a>
+      <a href="{% url 'panel:channels' %}" class="{% if page == 'channels' %}on{% endif %}">📡 جوین اجباری</a>
+      <div class="sep">سیستم</div>
+      <a href="{% url 'panel:backups' %}" class="{% if page == 'backups' %}on{% endif %}">💾 پشتیبان‌گیری</a>
+      <a href="/admin/">🗃 ادمین جنگو</a>
+      <form method="post" action="{% url 'panel:logout' %}" style="margin-top:10px">
+        {% csrf_token %}<button type="submit" style="width:100%">خروج</button>
+      </form>
+    </nav>
+  </aside>
+  <main>
+    {% if messages %}
+      <div class="msgs">
+        {% for message in messages %}<div class="msg {{ message.tags }}">{{ message }}</div>{% endfor %}
+      </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+</body>
+</html>

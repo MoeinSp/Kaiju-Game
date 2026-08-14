@@ -15,18 +15,34 @@ field still shows a sensible, distinguishable button. The two are mutually
 exclusive — Telegram draws the icon before the label, so showing both would
 render the emoji twice. That's why ``btn()`` takes an ``emoji_key`` rather than
 a pre-formatted label: it has to decide which of the two to use.
+
+Call sites pass a **role**, not a colour (see game/button_style.py). ``btn()``
+resolves the role through the configurable palette, so retuning the whole bot's
+colour scheme — from the web panel or a loadout — never touches a handler.
 """
 
 from telegram import InlineKeyboardButton
-from telegram.constants import KeyboardButtonStyle
 
 from game.button_emoji import get_button_icon, get_button_label_emoji
+from game.button_style import resolve_style
 
-# semantic aliases — call sites say what a button *means*, not what colour it is,
-# so the palette can be retuned in one place
-PRIMARY = KeyboardButtonStyle.PRIMARY  # the main action of a screen
-SUCCESS = KeyboardButtonStyle.SUCCESS  # confirm / build / acquire
-DANGER = KeyboardButtonStyle.DANGER  # destructive / cancel / leave
+# Semantic roles. Call sites say what a button *means*; game.button_style decides
+# what colour that currently is. Kept as module constants (rather than bare
+# strings at the call site) so a typo is an ImportError instead of a silently
+# uncoloured button.
+NAV = "nav"  # moves between screens — deliberately uncoloured by default
+BACK = "back"  # the ubiquitous back button
+PRIMARY = "primary"  # the one main action of a screen
+CONFIRM = "confirm"  # "yes, do it" in a two-step dialog
+BUILD = "build"  # construct / upgrade / feed / collect — constructive actions
+SHOP = "shop"  # spends a resource: crates, wheel, diamond finishes
+BATTLE = "battle"  # hunt / arena / raid — can fail, costs something
+DANGER = "danger"  # delete / cancel / leave / ban
+ADMIN = "admin"  # owner-only panel buttons
+
+# Back-compat alias: SUCCESS used to be a raw KeyboardButtonStyle. It now means
+# "the confirm role", which is what every old call site actually intended.
+SUCCESS = CONFIRM
 
 
 def btn(
@@ -36,11 +52,12 @@ def btn(
     style: str | None = None,
     **kwargs,
 ) -> InlineKeyboardButton:
-    """Builds a button with an optional Premium icon and colour.
+    """Builds a button with an optional Premium icon and role-derived colour.
 
     ``emoji_key`` is a key from game.button_emoji.BUTTON_EMOJI_DEFS. Its unicode
     fallback is prefixed to the label, and if the owner has set a Premium emoji
-    for that key it's additionally attached as the button's icon. Pass the rest
+    for that key it's used as the button's icon instead. ``style`` is a *role*
+    from the constants above, not a Telegram colour. Pass the rest
     (``callback_data``, ``url``, …) through as usual.
     """
     if emoji_key is not None:
@@ -54,12 +71,13 @@ def btn(
             fallback = get_button_label_emoji(emoji_key)
             if fallback and not label.startswith(fallback):
                 label = f"{fallback} {label}"
-    if style is not None:
-        kwargs["style"] = style
+    resolved = resolve_style(style)
+    if resolved is not None:
+        kwargs["style"] = resolved
     return InlineKeyboardButton(label, **kwargs)
 
 
 def back_btn(callback_data: str, label: str = "بازگشت") -> InlineKeyboardButton:
-    """The ubiquitous back button — always the same look, never coloured (it's
-    navigation, not an action, and colouring it would dilute the palette)."""
-    return btn(label, emoji_key="btn_back", callback_data=callback_data)
+    """The ubiquitous back button — always the same look. It's navigation, not an
+    action, so it gets its own role and is uncoloured by default."""
+    return btn(label, emoji_key="btn_back", style=BACK, callback_data=callback_data)

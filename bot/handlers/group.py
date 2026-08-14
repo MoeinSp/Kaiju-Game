@@ -10,7 +10,7 @@ from bio_lab.repository import (
     group_member_creatures,
     touch_membership,
 )
-from bot.buttons import DANGER, PRIMARY, SUCCESS, back_btn, btn
+from bot.buttons import CONFIRM, DANGER, PRIMARY, back_btn, btn
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from game import constants
 from game.buildings import maybe_award_speedup_card
@@ -156,7 +156,7 @@ async def duel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 btn(
                     "قبول می‌کنم",
                     emoji_key="btn_confirm",
-                    style=SUCCESS,
+                    style=CONFIRM,
                     callback_data=f"duelwager_accept:{challenger_tg.id}:{opponent_tg.id}:{wager}",
                 ),
                 btn(

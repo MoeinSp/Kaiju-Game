@@ -1,0 +1,81 @@
+# Three services from two images: Postgres, the web panel, and the bot.
+#
+#   docker compose up -d --build
+#   docker compose exec web python manage.py createsuperuser   # first run only
+#
+# The bot and the panel share one database and one codebase — a palette change
+# made in the panel is live in the bot on the next button it builds, with no
+# restart, because both read the same tables.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-kaiju}
+      POSTGRES_USER: ${POSTGRES_USER:-kaiju}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # -U matters: without it pg_isready checks the `root` role and reports
+      # healthy before the app's role/database actually exist
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kaiju} -d ${POSTGRES_DB:-kaiju}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build: .
+    command: ["web"]
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: &app_env
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY is required}
+      DJANGO_DEBUG: "false"
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-*}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
+      DJANGO_BEHIND_PROXY: ${DJANGO_BEHIND_PROXY:-true}
+      DJANGO_SECURE_COOKIES: ${DJANGO_SECURE_COOKIES:-true}
+      POSTGRES_DB: ${POSTGRES_DB:-kaiju}
+      POSTGRES_USER: ${POSTGRES_USER:-kaiju}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      BACKUP_DIR: /app/backups
+      BOT_TOKEN: ${BOT_TOKEN}
+      OWNER_TELEGRAM_ID: ${OWNER_TELEGRAM_ID}
+      ADMIN_PANEL_URL: ${ADMIN_PANEL_URL:-http://127.0.0.1:8000/panel/}
+    volumes:
+      - backups:/app/backups
+    ports:
+      # bind to loopback by default — put nginx/caddy in front for TLS, and
+      # override with 0.0.0.0:8000 only if you really want it public
+      - "${PANEL_BIND:-127.0.0.1}:${PANEL_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/panel/login/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  bot:
+    build: .
+    command: ["bot"]
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_started
+    environment: *app_env
+    volumes:
+      # same volume as web: a backup taken from the panel is visible to the bot
+      # container too, which keeps `docker compose exec bot` diagnostics honest
+      - backups:/app/backups
+
+volumes:
+  pgdata:
+  backups:

@@ -1,0 +1,67 @@
+{% extends "panel/base.html" %}
+{% block title %}جوین اجباری — پنل Kaiju Bio-Lab{% endblock %}
+{% block content %}
+<h2>📡 کانال‌های جوین اجباری</h2>
+<p class="lead">
+  تا وقتی بازیکن عضو این کانال‌ها نشه، بات باهاش کار نمی‌کنه. برای هر کانال می‌شه مدت‌دار یا نامحدود
+  بودن و جایزه‌ی عضویت رو تنظیم کرد.
+</p>
+
+<div class="card">
+  <h3>افزودن کانال</h3>
+  <p class="hint">
+    شناسه‌ی عددی کانال معمولاً با <code>-100</code> شروع می‌شه. راه ساده‌تر: توی خود بات از پنل ادمین
+    یه پیام از کانال فوروارد کن تا شناسه خودکار برداشته بشه.
+  </p>
+  <form method="post" class="row">
+    {% csrf_token %}
+    <input name="chat_id" placeholder="-1001234567890" style="width:190px" dir="ltr" required>
+    <input name="username" placeholder="username بدون @" style="width:170px" dir="ltr">
+    <input name="title" placeholder="عنوان نمایشی" style="width:190px">
+    <button type="submit" name="action" value="add" class="green">اضافه کن</button>
+  </form>
+</div>
+
+{% for c in rows %}
+  <div class="card">
+    <h3>
+      {{ c.title|default:c.chat_id }}
+      {% if c.expires_at %}
+        {% if c.expires_at > now %}<span class="pill">تا {{ c.expires_at|date:"Y/m/d H:i" }}</span>
+        {% else %}<span class="pill off">منقضی</span>{% endif %}
+      {% else %}<span class="pill on">نامحدود</span>{% endif %}
+    </h3>
+    <p class="hint">
+      <code>{{ c.chat_id }}</code>
+      {% if c.username %} · <span dir="ltr">@{{ c.username }}</span>{% endif %}
+    </p>
+
+    <form method="post" class="row" style="margin-bottom:10px">
+      {% csrf_token %}
+      <input type="hidden" name="channel_id" value="{{ c.id }}">
+      <span class="hint" style="width:76px">🎁 جایزه:</span>
+      <input name="coins" type="number" value="{{ c.reward_coins }}" style="width:110px" dir="ltr" placeholder="طلا">
+      <input name="dna" type="number" value="{{ c.reward_dna }}" style="width:110px" dir="ltr" placeholder="DNA">
+      <input name="diamonds" type="number" value="{{ c.reward_diamonds }}" style="width:110px" dir="ltr" placeholder="الماس">
+      <button type="submit" name="action" value="reward" class="blue">ذخیره‌ی جایزه</button>
+    </form>
+
+    <form method="post" class="row">
+      {% csrf_token %}
+      <input type="hidden" name="channel_id" value="{{ c.id }}">
+      <span class="hint" style="width:76px">⏳ مدت:</span>
+      <input name="hours" type="number" min="1" placeholder="ساعت (خالی = نامحدود)" style="width:200px" dir="ltr">
+      <button type="submit" name="action" value="duration">اعمال مدت</button>
+    </form>
+
+    <form method="post" style="margin-top:10px"
+          onsubmit="return confirm('کانال «{{ c.title|default:c.chat_id|escapejs }}» حذف بشه؟')">
+      {% csrf_token %}
+      <input type="hidden" name="channel_id" value="{{ c.id }}">
+      <button type="submit" name="action" value="delete" class="red">حذف کانال</button>
+    </form>
+  </div>
+{% empty %}
+  <div class="card"><p class="hint" style="margin:0">هیچ کانال اجباری‌ای تنظیم نشده — بات برای همه بازه.</p></div>
+{% endfor %}
+{% endblock %}

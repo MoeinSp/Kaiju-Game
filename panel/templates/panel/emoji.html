@@ -1,0 +1,63 @@
+{% extends "panel/base.html" %}
+{% block title %}{{ title }} — پنل Kaiju Bio-Lab{% endblock %}
+{% block content %}
+<h2>{{ title }}</h2>
+<p class="lead">{{ intro }} <b>{{ set_count }}</b> از <b>{{ total }}</b> مورد تنظیم شده.</p>
+
+<div class="card">
+  <p class="hint" style="margin:0">
+    شناسه‌ی ایموجی پرمیوم یه عدد بلنده. برای گرفتنش، توی تلگرام یه ایموجی پرمیوم برای بات بفرست و از
+    بخش «ایموجی» پنل ادمینِ خود بات شناسه‌ش رو بردار — یا اگه از قبل داری، همین‌جا بچسبونش.
+  </p>
+</div>
+
+{% for group in groups %}
+  <div class="card">
+    <h3>{{ group.label }}</h3>
+    <div class="scroll">
+      <table>
+        <tr>
+          <th style="width:26%">مورد</th>
+          <th style="width:10%">فعلی</th>
+          <th>شناسه‌ی ایموجی پرمیوم</th>
+          <th style="width:16%"></th>
+        </tr>
+        {% for item in group.items %}
+          <tr>
+            <td>
+              <b>{{ item.label }}</b>
+              <div class="hint" style="margin:2px 0 0"><code>{{ item.key }}</code></div>
+            </td>
+            <td style="font-size:20px">
+              {% if item.override %}{{ item.override.placeholder }}{% else %}{{ item.fallback }}{% endif %}
+            </td>
+            <td>
+              <form method="post" class="row">
+                {% csrf_token %}
+                <input type="hidden" name="key" value="{{ item.key }}">
+                <input name="custom_emoji_id" inputmode="numeric" style="width:190px" dir="ltr"
+                       placeholder="مثلاً 5368324170671202286"
+                       value="{% if item.override %}{{ item.override.custom_emoji_id }}{% endif %}">
+                <input name="placeholder" style="width:64px" maxlength="8"
+                       value="{% if item.override %}{{ item.override.placeholder }}{% else %}{{ item.fallback }}{% endif %}">
+                <button type="submit" name="action" value="set" class="blue">ذخیره</button>
+              </form>
+            </td>
+            <td>
+              {% if item.override %}
+                <form method="post">
+                  {% csrf_token %}
+                  <input type="hidden" name="key" value="{{ item.key }}">
+                  <button type="submit" name="action" value="clear">پاک کن</button>
+                </form>
+              {% else %}
+                <span class="hint">پیش‌فرض</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+{% endfor %}
+{% endblock %}

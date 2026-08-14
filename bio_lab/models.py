@@ -343,6 +343,46 @@ class ButtonEmojiOverride(models.Model):
         return f"{self.key} -> {self.placeholder}"
 
 
+class ButtonStyleOverride(models.Model):
+    """Remaps one semantic button *role* to a Telegram button colour.
+
+    Rows only exist for roles that differ from game.button_style.ROLE_DEFS, so an
+    empty table means "stock palette" — which keeps the default reachable by
+    deletion rather than by storing a copy of it."""
+
+    role = models.CharField(max_length=32, unique=True)  # one of game.button_style.ROLE_DEFS
+    style = models.CharField(max_length=16, blank=True)  # "" | primary | success | danger
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"{self.role} -> {self.style or 'none'}"
+
+
+class ThemeLoadout(models.Model):
+    """A saved "look" of the bot — emoji + button colours, stored as one JSON blob.
+
+    The payload is denormalised on purpose. A loadout is a *snapshot*, so it must
+    keep meaning what it meant on the day it was saved; foreign keys to the live
+    override tables would let editing today's theme silently rewrite yesterday's
+    saved one. It also makes export/import a file copy instead of a graph walk.
+
+    Contains no game state — see game/theme.py for why."""
+
+    name = models.CharField(max_length=48, unique=True)
+    note = models.CharField(max_length=200, blank=True, default="")
+    payload = models.TextField()  # JSON, schema game.theme.SNAPSHOT_VERSION
+    is_active = models.BooleanField(default=False)  # last one applied
+    applied_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-is_active", "name")
+
+    def __str__(self) -> str:
+        return f"{self.name}{' ✓' if self.is_active else ''}"
+
+
 class RequiredChannel(models.Model):
     """A channel players must join before using the bot at all (enforced by
     bot.middleware.enforce_force_join). Added by forwarding a message from the

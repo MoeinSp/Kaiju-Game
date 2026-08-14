@@ -1,0 +1,85 @@
+{% extends "panel/base.html" %}
+{% block title %}داشبورد — پنل Kaiju Bio-Lab{% endblock %}
+{% block content %}
+<h2>داشبورد</h2>
+<p class="lead">وضعیت کلی بازی و ظاهر بات، در یک نگاه.</p>
+
+<div class="card">
+  <h3>بازی</h3>
+  <div class="grid">
+    <div class="stat"><div class="n">{{ stats.players }}</div><div class="l">بازیکن</div></div>
+    <div class="stat"><div class="n">{{ stats.new_today }}</div><div class="l">تازه‌وارد ۲۴ ساعت اخیر</div></div>
+    <div class="stat"><div class="n">{{ stats.creatures }}</div><div class="l">هیولا</div></div>
+    <div class="stat"><div class="n">{{ stats.alliances }}</div><div class="l">اتحاد</div></div>
+    <div class="stat"><div class="n">{{ stats.attacks_today }}</div><div class="l">حمله‌ی ۲۴ ساعت اخیر</div></div>
+    <div class="stat"><div class="n">{{ stats.banned }}</div><div class="l">مسدود</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>اقتصاد در گردش</h3>
+  <div class="grid">
+    <div class="stat"><div class="n">{{ stats.coins|floatformat:0 }}</div><div class="l">💰 کل طلای بازیکنان</div></div>
+    <div class="stat"><div class="n">{{ stats.dna|floatformat:0 }}</div><div class="l">🧬 کل DNA</div></div>
+    <div class="stat"><div class="n">{{ stats.diamonds|floatformat:0 }}</div><div class="l">💎 کل الماس</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>ظاهر بات</h3>
+  <div class="grid">
+    <div class="stat">
+      <div class="n">{{ theme.button_emoji }}<span style="color:var(--muted);font-size:14px">/{{ theme.button_emoji_total }}</span></div>
+      <div class="l">ایموجی پرمیوم دکمه‌ها</div>
+    </div>
+    <div class="stat">
+      <div class="n">{{ theme.emoji }}<span style="color:var(--muted);font-size:14px">/{{ theme.emoji_total }}</span></div>
+      <div class="l">ایموجی پرمیوم متن‌ها</div>
+    </div>
+    <div class="stat"><div class="n">{{ theme.palette_changed }}</div><div class="l">نقش با رنگ سفارشی</div></div>
+    <div class="stat"><div class="n">{{ theme.loadouts }}</div><div class="l">لودآوت ذخیره‌شده</div></div>
+  </div>
+  <p class="hint" style="margin:12px 0 0">
+    لودآوت فعال:
+    {% if theme.active_loadout %}<b>{{ theme.active_loadout.name }}</b>{% else %}—{% endif %}
+    · <a href="{% url 'panel:loadouts' %}">مدیریت لودآوت‌ها</a>
+  </p>
+</div>
+
+<div class="card">
+  <h3>آخرین پشتیبان‌ها</h3>
+  {% if backups %}
+    <div class="scroll"><table>
+      <tr><th>فایل</th><th>رکورد</th><th>حجم</th><th>تاریخ</th></tr>
+      {% for b in backups %}
+        <tr>
+          <td><code>{{ b.name }}</code></td>
+          <td>{% if b.manifest %}{{ b.manifest.object_count }}{% else %}—{% endif %}</td>
+          <td>{{ b.size_bytes|filesizeformat }}</td>
+          <td>{{ b.modified_at|date:"Y/m/d H:i" }}</td>
+        </tr>
+      {% endfor %}
+    </table></div>
+  {% else %}
+    <p class="hint">هنوز پشتیبانی گرفته نشده. <a href="{% url 'panel:backups' %}">همین حالا یکی بساز</a>.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3>صدر جدول کاپ</h3>
+  <div class="scroll"><table>
+    <tr><th>#</th><th>آزمایشگاه</th><th>کاپ</th><th>طلا</th><th>الماس</th></tr>
+    {% for p in top_players %}
+      <tr>
+        <td>{{ forloop.counter }}</td>
+        <td>{{ p.lab_name|default:p }}</td>
+        <td>{{ p.cup }}</td>
+        <td>{{ p.coins }}</td>
+        <td>{{ p.diamonds }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5" class="hint">هنوز بازیکنی نیست.</td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+{% endblock %}

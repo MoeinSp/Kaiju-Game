@@ -4,7 +4,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import InteractiveBattle, User
 from bio_lab.repository import display_name, get_active_creature, get_or_create_group, get_or_create_user, touch_membership
-from bot.buttons import DANGER, PRIMARY, SUCCESS, back_btn, btn
+from bot.buttons import BATTLE, CONFIRM, DANGER, PRIMARY, back_btn, btn
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from game import constants
 from game.creature import GameError, add_xp, effective_stats
@@ -15,7 +15,7 @@ from game.interactive_battle import advance_turn, is_finished, perform_action, p
 
 def _battle_keyboard(battle: InteractiveBattle) -> InlineKeyboardMarkup:
     skill_uses = battle.skill_uses_a if battle.turn == "a" else battle.skill_uses_b
-    buttons = [btn("حمله", emoji_key="btn_attack", style=DANGER, callback_data=f"battle_action:{battle.id}:attack")]
+    buttons = [btn("حمله", emoji_key="btn_attack", style=BATTLE, callback_data=f"battle_action:{battle.id}:attack")]
     if skill_uses > 0:
         buttons.append(btn("✨ اسکیل", style=PRIMARY, callback_data=f"battle_action:{battle.id}:skill"))
     buttons.append(btn("🏳 تسلیم", style=DANGER, callback_data=f"battle_action:{battle.id}:forfeit"))
@@ -86,7 +86,7 @@ async def battle_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     keyboard = InlineKeyboardMarkup(
         [
             [
-                btn("قبول می‌کنم", emoji_key="btn_confirm", style=SUCCESS, callback_data=f"battle_accept:{battle.id}"),
+                btn("قبول می‌کنم", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"battle_accept:{battle.id}"),
                 btn("رد می‌کنم", emoji_key="btn_cancel", style=DANGER, callback_data=f"battle_decline:{battle.id}"),
             ]
         ]

@@ -2,7 +2,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bio_lab.repository import get_or_create_user
-from bot.buttons import DANGER, PRIMARY, SUCCESS, back_btn, btn
+from bot.buttons import BATTLE, DANGER, NAV, PRIMARY, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text
 from game import constants
 from game.arena import (
@@ -91,9 +91,9 @@ def _arena_home_text(user, power, shield_secs, history, week, season_secs) -> st
 def _arena_home_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [btn("پیدا کردن حریف", emoji_key="btn_attack", style=DANGER, callback_data="arena_find")],
-            [btn("جدول این هفته", emoji_key="btn_rank", style=PRIMARY, callback_data="arena_top")],
-            [btn("🗓 نتایج هفته‌ی قبل", style=PRIMARY, callback_data="arena_last_season")],
+            [btn("پیدا کردن حریف", emoji_key="btn_attack", style=BATTLE, callback_data="arena_find")],
+            [btn("جدول این هفته", emoji_key="btn_rank", style=NAV, callback_data="arena_top")],
+            [btn("🗓 نتایج هفته‌ی قبل", style=NAV, callback_data="arena_last_season")],
             [back_btn("menu:me")],
         ]
     )
@@ -153,8 +153,8 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     ]
     keyboard = InlineKeyboardMarkup(
         [
-            [btn("حمله!", emoji_key="btn_attack", style=DANGER, callback_data="arena_attack")],
-            [btn("حریف بعدی", emoji_key="btn_recheck", style=PRIMARY, callback_data="arena_find")],
+            [btn("حمله!", emoji_key="btn_attack", style=BATTLE, callback_data="arena_attack")],
+            [btn("حریف بعدی", emoji_key="btn_recheck", style=NAV, callback_data="arena_find")],
             [back_btn("menu:arena")],
         ]
     )
@@ -212,7 +212,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     keyboard = InlineKeyboardMarkup(
         [
-            [btn("حریف بعدی", emoji_key="btn_attack", style=DANGER, callback_data="arena_find")],
+            [btn("حریف بعدی", emoji_key="btn_attack", style=NAV, callback_data="arena_find")],
             [back_btn("menu:arena", "بازگشت به آرنا")],
         ]
     )

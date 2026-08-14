@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ورود — پنل Kaiju Bio-Lab</title>
+<style>
+  body{
+    margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:#0d1117; color:#e6edf3;
+    font-family:"Vazirmatn","Segoe UI",Tahoma,system-ui,sans-serif; font-size:15px;
+  }
+  .box{
+    background:#161b22; border:1px solid #2a3038; border-radius:14px;
+    padding:26px 24px; width:min(360px,92vw);
+  }
+  h1{font-size:19px; margin:0 0 4px}
+  p.sub{color:#8b949e; font-size:13px; margin:0 0 20px}
+  label{display:block; font-size:13px; color:#8b949e; margin:12px 0 5px}
+  input{
+    width:100%; background:#1c2129; color:#e6edf3; border:1px solid #2a3038;
+    border-radius:8px; padding:9px 11px; font:inherit;
+  }
+  input:focus{outline:2px solid #2f81f7; outline-offset:-1px}
+  button{
+    width:100%; margin-top:18px; background:#2f81f7; color:#fff; border:0;
+    border-radius:8px; padding:10px; font:inherit; font-size:15px; cursor:pointer;
+  }
+  .err{background:rgba(218,54,51,.12); border:1px solid #da3633; border-radius:8px;
+       padding:9px 12px; font-size:13px; margin-bottom:12px}
+</style>
+</head>
+<body>
+  <form class="box" method="post">
+    {% csrf_token %}
+    <h1>🧬 پنل Kaiju Bio-Lab</h1>
+    <p class="sub">با حساب staff جنگو وارد شو.</p>
+    {% if form.errors %}<div class="err">نام کاربری یا رمز درست نیست.</div>{% endif %}
+    <label for="id_username">نام کاربری</label>
+    <input id="id_username" name="username" autocomplete="username" autofocus required>
+    <label for="id_password">رمز عبور</label>
+    <input id="id_password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">ورود</button>
+  </form>
+</body>
+</html>
