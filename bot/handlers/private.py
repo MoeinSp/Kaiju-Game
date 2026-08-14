@@ -22,7 +22,7 @@ from game.alliance import (
     leave_alliance,
     top_alliances,
 )
-from game.buildings import get_or_create_buildings, grant_speedup_card
+from game.buildings import get_or_create_buildings, grant_speedup_card, is_built, star_cap
 from game.creature import (
     GameError,
     create_starter_creature,
@@ -37,7 +37,7 @@ from game.daily import apply_daily_login, assert_energy_available, check_mission
 from game.emoji import get_emoji
 from game.energy import spend_energy, sync_energy
 from game.equipment import get_equipped_items
-from game.fusion import fuse
+from game.fusion import FUSION_BUILDING, fuse, fusion_partners, ready_pairs
 from game.hunt import HUNT_TIERS, estimated_reward, resolve_hunt, scout_one
 
 
@@ -229,14 +229,17 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
         [btn("ارتقا و پرورش", emoji_key="btn_upgrade", style=PRIMARY, callback_data="menu:upgrade")],
         [
             btn("کلکسیون", emoji_key="btn_collection", style=PRIMARY, callback_data="menu:collection"),
+            btn("ترکیب هیولا", emoji_key="btn_fusion", style=SUCCESS, callback_data="menu:fusion"),
+        ],
+        [
             btn("شکار انفرادی", emoji_key="btn_hunt", style=PRIMARY, callback_data="menu:hunt"),
-        ],
-        [
             btn("آرنا (کاپ)", emoji_key="btn_arena", style=DANGER, callback_data="menu:arena"),
-            btn("تجهیزات", emoji_key="btn_inventory", style=PRIMARY, callback_data="menu:inventory"),
         ],
         [
+            btn("تجهیزات", emoji_key="btn_inventory", style=PRIMARY, callback_data="menu:inventory"),
             btn("آهنگری", emoji_key="btn_forge", style=PRIMARY, callback_data="menu:blacksmith"),
+        ],
+        [
             btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SUCCESS, callback_data="menu:biocrate"),
         ],
         [
@@ -410,12 +413,20 @@ def _collection_sync(tg_user):
 
 
 def _collection_keyboard(creatures: list[Creature]) -> InlineKeyboardMarkup:
+    """Each row is «name» + a one-tap activate button. Activating used to require
+    opening the detail card first, which players read as "selecting doesn't work" —
+    the shortcut is right here now, and the label itself still opens the card."""
     rows = []
     for c in creatures:
-        tag = "🟢 " if c.is_active else ""
-        rows.append(
-            [btn(f"{tag}{c.name} · Lv{c.level} · {constants.RARITY_LABELS[c.rarity]}", callback_data=f"coll_pick:{c.id}")]
-        )
+        stars = "⭐" * c.star_level
+        label = f"{c.name} {stars} · Lv{c.level} · {constants.RARITY_LABELS[c.rarity]}"
+        row = [btn(f"{'🟢 ' if c.is_active else ''}{label}", callback_data=f"coll_pick:{c.id}")]
+        if not c.is_active:
+            row.append(btn("فعال کن", style=SUCCESS, callback_data=f"coll_select:{c.id}"))
+        rows.append(row)
+    rows.append(
+        [btn("ترکیب هیولا", emoji_key="btn_fusion", style=SUCCESS, callback_data="menu:fusion")]
+    )
     rows.append([back_btn("menu:me")])
     return InlineKeyboardMarkup(rows)
 
@@ -546,28 +557,113 @@ async def fusion_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     )
 
 
-def _fusion_candidates_sync(tg_user, exclude_id):
+def _fusion_candidates_sync(tg_user, creature_id):
+    """Only genuinely fusable partners — same species, same star, lab built, below
+    the star cap. Offering anything else would let the player pick a pair that
+    fuse() then rejects, which reads as "fusion is broken"."""
     user, _ = get_or_create_user(tg_user)
-    return [c for c in list_creatures(user) if c.id != exclude_id]
+    try:
+        creature = Creature.objects.get(id=creature_id, owner=user)
+    except Creature.DoesNotExist:
+        raise GameError("این موجود توی کلکسیون تو نیست.")
+    return creature, fusion_partners(user, creature), is_built(user, FUSION_BUILDING), star_cap(user)
 
 
 async def fusion_pick_a_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     parent_a_id = int(query.data.split(":")[1])
-    candidates = await run_db(_fusion_candidates_sync, update.effective_user, parent_a_id)
-    if not candidates:
-        await query.answer("برای فیوژن حداقل به یه موجود دیگه نیاز داری.", show_alert=True)
+    try:
+        creature, candidates, lab_built, cap = await run_db(
+            _fusion_candidates_sync, update.effective_user, parent_a_id
+        )
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
         return
+
+    if not candidates:
+        # say *why* there's nothing to offer — a bare "no partners" alert sent
+        # players hunting for a valid pair that could never exist
+        if not lab_built:
+            reason = "اول باید 🔮 تالار ادغام رو از «🏗 ساختمون‌ها» بسازی."
+        elif creature.star_level >= cap:
+            reason = f"سقف ستاره‌ی فعلی تو {cap}⭐ ـه — برای بالاتر رفتن تالار مِهر رو ارتقا بده."
+        else:
+            reason = (
+                f"هیولای هم‌نوع دیگه‌ای با {creature.star_level}⭐ نداری.\n"
+                f"برای ترکیب به دو تا «{creature.name}» با ستاره‌ی یکسان نیاز داری."
+            )
+        await query.answer(reason, show_alert=True)
+        return
+
     await query.answer()
     rows = [
-        [btn(f"{c.name} · Lv{c.level}", callback_data=f"fus_b:{parent_a_id}:{c.id}")]
+        [
+            btn(
+                f"{c.name} {'⭐' * c.star_level} · Lv{c.level}",
+                style=SUCCESS,
+                callback_data=f"fus_b:{parent_a_id}:{c.id}",
+            )
+        ]
         for c in candidates
     ]
     rows.append([back_btn(f"coll_pick:{parent_a_id}")])
     await safe_edit_message_text(query,
-        f"{get_emoji('lab')} موجود دومی که می‌خوای بسوزونی رو انتخاب کن:",
+        f"{get_emoji('lab')} <b>ترکیب {creature.name}</b> {'⭐' * creature.star_level}\n"
+        f"این‌ها هم‌نوع و هم‌ستاره‌ان، پس ترکیبشون <b>حتماً</b> جواب می‌ده:",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+def _fusion_panel_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    return user, ready_pairs(user), is_built(user, FUSION_BUILDING), star_cap(user)
+
+
+async def fusion_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Lists the pairs the player can fuse *right now*. Reaching fusion used to mean
+    going collection → pick a creature → hope it had a valid partner; this shows the
+    valid combinations directly, so every offered button is guaranteed to work."""
+    user, pairs, lab_built, cap = await run_db(_fusion_panel_sync, update.effective_user)
+
+    lines = [f"{get_emoji('lab')} <b>تالار ادغام</b>"]
+    if not lab_built:
+        lines.append("\n🔒 اول باید 🔮 <b>تالار ادغام</b> رو از «🏗 ساختمون‌ها» بسازی.")
+        rows = [
+            [btn("رفتن به ساختمون‌ها", emoji_key="btn_buildings", style=PRIMARY, callback_data="menu:buildings")],
+            [back_btn("menu:me")],
+        ]
+        await update.effective_message.reply_text(
+            "\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows)
+        )
+        return
+
+    lines.append(f"⭐ سقف ستاره‌ی فعلی تو: <b>{cap}</b>")
+    lines.append("")
+    if pairs:
+        lines.append("این جفت‌ها آماده‌ی ترکیبن — <b>هر کدوم ۱۰۰٪ موفق می‌شه</b>:")
+    else:
+        lines.append(
+            "الان هیچ جفت آماده‌ای نداری.\n\n"
+            "<blockquote>برای ترکیب به <b>دو هیولای هم‌نام با ستاره‌ی یکسان</b> نیاز داری. "
+            "از باکس ژنتیکی و جعبه‌های الماسی هیولای بیشتری بگیر تا جفت پیدا کنی.</blockquote>"
+        )
+
+    rows = [
+        [
+            btn(
+                f"{p['name']} {'⭐' * p['star']} ×{p['count']} → {'⭐' * (p['star'] + 1)}",
+                emoji_key="btn_fusion",
+                style=SUCCESS,
+                callback_data=f"fus_b:{p['parent_a'].id}:{p['parent_b'].id}",
+            )
+        ]
+        for p in pairs
+    ]
+    rows.append([back_btn("menu:me")])
+    lines.append(f"\n{wallet_line(user)}")
+    await update.effective_message.reply_text(
+        "\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows)
     )
 
 
@@ -585,8 +681,9 @@ async def fusion_pick_b_callback(update: Update, context: ContextTypes.DEFAULT_T
     )
     await safe_edit_message_text(query,
         f"{get_emoji('warning')} مطمئنی؟\n\n"
-        f"<blockquote>هر دو موجود <b>برای همیشه سوزانده می‌شن</b> و "
-        f"{constants.FUSION_GOLD_COST} {get_emoji('coin')} هزینه می‌شه. یه شانس هم هست rarity ارتقا پیدا کنه "
+        f"<blockquote>این ترکیب <b>۱۰۰٪ موفق می‌شه</b> — هم‌نام و هم‌ستاره‌ان، پس شکست نداره.\n"
+        f"هر دو موجود <b>برای همیشه سوزانده می‌شن</b> و "
+        f"{constants.FUSION_GOLD_COST} {get_emoji('coin')} هزینه می‌شه. یه شانس هم هست درجه‌ی نایابی ارتقا پیدا کنه "
         f"و {int(constants.FUSION_INHERIT_CHANCE * 100)}٪ احتمال داره تجهیزات مجهزشون به ارث برسه.</blockquote>",
         parse_mode="HTML",
         reply_markup=keyboard,
@@ -1227,11 +1324,15 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 btn("کلکسیون", emoji_key="btn_collection", style=PRIMARY, callback_data="menu:collection"),
-                btn("شکار انفرادی", emoji_key="btn_hunt", style=PRIMARY, callback_data="menu:hunt"),
+                btn("ترکیب هیولا", emoji_key="btn_fusion", style=SUCCESS, callback_data="menu:fusion"),
             ],
             [
+                btn("شکار انفرادی", emoji_key="btn_hunt", style=PRIMARY, callback_data="menu:hunt"),
                 btn("ماموریت‌ها", emoji_key="btn_missions", style=PRIMARY, callback_data="menu:missions"),
+            ],
+            [
                 btn("گردونه‌ی شانس", emoji_key="btn_wheel", style=SUCCESS, callback_data="menu:wheel"),
+                btn("ساختمون‌ها", emoji_key="btn_buildings", style=PRIMARY, callback_data="menu:buildings"),
             ],
             [
                 btn("آرنا (کاپ)", emoji_key="btn_arena", style=DANGER, callback_data="menu:arena"),
@@ -1243,12 +1344,9 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 btn("جعبه‌های الماسی", emoji_key="btn_diamond_box", style=SUCCESS, callback_data="menu:diamond_box"),
-                btn("ساختمون‌ها", emoji_key="btn_buildings", style=PRIMARY, callback_data="menu:buildings"),
-            ],
-            [
                 btn("اتحاد من", emoji_key="btn_alliance", style=PRIMARY, callback_data="menu:alliance_info"),
-                btn("رتبه‌بندی", emoji_key="btn_rank", style=PRIMARY, callback_data="menu:rank"),
             ],
+            [btn("رتبه‌بندی", emoji_key="btn_rank", style=PRIMARY, callback_data="menu:rank")],
             [btn("پروفایل من", emoji_key="btn_profile", style=PRIMARY, callback_data="menu:profile")],
         ]
     )
@@ -1271,6 +1369,7 @@ _MENU_ACTIONS = {
     "upgrade": upgrade_panel,
     "arena": arena_panel,
     "blacksmith": blacksmith_panel,
+    "fusion": fusion_panel,
     "buildings": buildings_panel,
     "wheel": wheel_cmd,
     "alliance_info": alliance_info_cmd,

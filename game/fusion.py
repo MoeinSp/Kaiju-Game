@@ -16,6 +16,37 @@ def assert_fusion_available(user: User) -> None:
         raise GameError("اول باید 🔮 تالار ادغام رو از «🏗 ساختمون‌ها» بسازی.")
 
 
+def ready_pairs(user: User) -> list[dict]:
+    """Every (species, star) group the player owns two or more of, i.e. every pair
+    they could fuse right now. Powers the fusion screen so a player is shown what
+    they *can* do instead of hunting for a valid pair themselves.
+
+    Returns [] when the lab isn't built — the caller explains that separately."""
+    if not is_built(user, FUSION_BUILDING):
+        return []
+
+    cap = star_cap(user)
+    groups: dict[tuple[str, int], list[Creature]] = {}
+    for creature in Creature.objects.filter(owner=user, star_level__lt=cap).order_by("-level"):
+        groups.setdefault((creature.name, creature.star_level), []).append(creature)
+
+    pairs = []
+    for (name, star), members in groups.items():
+        if len(members) < 2:
+            continue
+        pairs.append(
+            {
+                "name": name,
+                "star": star,
+                "count": len(members),
+                "parent_a": members[0],  # highest level first, so fusing keeps the best
+                "parent_b": members[1],
+            }
+        )
+    pairs.sort(key=lambda p: (-p["star"], p["name"]))
+    return pairs
+
+
 def fusion_partners(user: User, creature: Creature) -> list[Creature]:
     """Everything this creature can legally fuse with: same species name, same
     star. Powers the picker UI so a player never gets offered an invalid pair.
