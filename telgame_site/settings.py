@@ -105,7 +105,12 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 LANGUAGE_CODE = "fa"
-TIME_ZONE = "UTC"
+# The game's day boundary is Tehran midnight, not UTC — daily missions, login
+# streaks and season rollovers all key off local dates, and players reasonably
+# expect "a new day" to start when their own clock says so. USE_TZ stays on, so
+# timestamps are still stored in UTC; only date arithmetic and presentation are
+# local, via timezone.localdate() / localtime(), which read this setting.
+TIME_ZONE = os.environ.get("GAME_TIMEZONE", "Asia/Tehran")
 USE_I18N = True
 USE_TZ = True
 

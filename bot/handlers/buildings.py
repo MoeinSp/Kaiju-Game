@@ -4,8 +4,8 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Building
 from bio_lab.repository import get_or_create_user
-from bot.buttons import BUILD, DANGER, LIST, PRIMARY, SHOP, back_btn, btn
-from bot.utils import mission_reward_text, run_db, safe_edit_message_text
+from bot.buttons import BUILD, DANGER, LIST, PRIMARY, SHOP, back_btn, back_only_keyboard, btn
+from bot.utils import mission_reward_text, run_db, safe_edit_message_text, send_screen
 from game import constants
 from game.buildings import (
     active_upgrade,
@@ -84,7 +84,7 @@ def _buildings_text(upgrade, hall_level: int) -> str:
 
 async def buildings_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     buildings, upgrade, hall_level = await run_db(_buildings_sync, update.effective_user)
-    await update.effective_message.reply_text(
+    await send_screen(update, 
         _buildings_text(upgrade, hall_level),
         parse_mode="HTML",
         reply_markup=_buildings_keyboard(buildings, upgrade),

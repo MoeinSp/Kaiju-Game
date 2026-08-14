@@ -18,8 +18,12 @@ class User(models.Model):
     energy = models.IntegerField(default=20)  # keep in sync with game.constants.MAX_ENERGY
     energy_updated_at = models.DateTimeField(default=timezone.now)
 
+    # overall progress for the lab as a whole, distinct from any one creature's
+    # level — see game/lab.py, which owns the curve and the award table
+    lab_xp = models.IntegerField(default=0)
+
     login_streak = models.IntegerField(default=0)
-    last_login_day = models.CharField(max_length=10, null=True, blank=True)  # "YYYY-MM-DD" (UTC)
+    last_login_day = models.CharField(max_length=10, null=True, blank=True)  # "YYYY-MM-DD" in the game timezone (game.daily.today_str)
 
     cup = models.IntegerField(default=0)  # arena rating; drives PvP matchmaking
     shield_until = models.DateTimeField(null=True, blank=True)  # anti-farm grace after being raided
@@ -201,7 +205,7 @@ class GroupEventLog(models.Model):
 class DailyActionLog(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     action = models.CharField(max_length=32)
-    day = models.CharField(max_length=10)  # "YYYY-MM-DD" (UTC)
+    day = models.CharField(max_length=10)  # "YYYY-MM-DD" in the game timezone (game.daily.today_str)
     count = models.IntegerField(default=0)
 
     class Meta:

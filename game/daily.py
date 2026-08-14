@@ -8,7 +8,12 @@ from game.creature import GameError
 
 
 def today_str() -> str:
-    return timezone.now().strftime("%Y-%m-%d")
+    """Today's date in the game's timezone (settings.TIME_ZONE = Asia/Tehran).
+
+    localdate() rather than now().strftime(): the stored timestamps are UTC, so
+    formatting them directly would roll the day over at 03:30 Tehran time and
+    daily missions would reset in the middle of the evening."""
+    return timezone.localdate().isoformat()
 
 
 def _get_or_create_log(user: User, action: str) -> DailyActionLog:
@@ -63,6 +68,11 @@ def check_missions(user: User, action: str) -> list[dict]:
             completed.append({**defn, "key": key})
     if completed:
         user.save(update_fields=["coins", "dna_fragments"])
+        # imported lazily for the same circular-import reason as grant_speedup_card
+        from game import lab
+
+        for _ in completed:
+            lab.award(user, "mission")
     return completed
 
 
@@ -73,7 +83,7 @@ def apply_daily_login(user: User) -> dict | None:
     if user.last_login_day == today:
         return None
 
-    yesterday = (timezone.now() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+    yesterday = (timezone.localdate() - datetime.timedelta(days=1)).isoformat()
     user.login_streak = user.login_streak + 1 if user.last_login_day == yesterday else 1
     user.last_login_day = today
 

@@ -1,9 +1,9 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
-from bio_lab.repository import get_or_create_user
-from bot.buttons import BATTLE, DANGER, NAV, PRIMARY, back_btn, btn
-from bot.utils import run_db, safe_edit_message_text
+from bio_lab.repository import get_or_create_user, lab_display
+from bot.buttons import BATTLE, DANGER, NAV, PRIMARY, back_btn, back_only_keyboard, btn
+from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants
 from game.arena import (
     active_power,
@@ -103,7 +103,7 @@ async def arena_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user, power, shield_secs, history, week, season_secs = await run_db(
         _arena_home_sync, update.effective_user
     )
-    await update.effective_message.reply_text(
+    await send_screen(update, 
         _arena_home_text(user, power, shield_secs, history, week, season_secs),
         parse_mode="HTML",
         reply_markup=_arena_home_keyboard(),
@@ -248,7 +248,7 @@ async def arena_top_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         lines.append("<i>هنوز کسی کاپ نگرفته — اولین نفر باش!</i>")
     for row in ranked:
         rank = medals[row["rank"] - 1] if row["rank"] <= 3 else f"{row['rank']}."
-        label = row["user"].lab_name or f"آزمایشگاه {row['user'].id}"
+        label = lab_display(row["user"])
         lines.append(f"{rank} {label} — 🏆 <b>{row['cup']}</b>  <i>(ریست به {row['reset_to']})</i>")
     keyboard = InlineKeyboardMarkup([[back_btn("menu:arena")]])
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
@@ -275,7 +275,7 @@ async def arena_last_season_callback(update: Update, context: ContextTypes.DEFAU
     lines = [f"🗓 <b>نتایج فصل {week}</b>\n"]
     for r in results:
         rank = medals[r.rank - 1] if r.rank <= 3 else f"{r.rank}."
-        label = r.user.lab_name or f"آزمایشگاه {r.user_id}"
+        label = lab_display(r.user)
         lines.append(f"{rank} {label} — 🏆 {r.cup_before} → {r.cup_after}")
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 

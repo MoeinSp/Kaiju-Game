@@ -371,8 +371,30 @@ BUILDING_DESCRIPTIONS = {
     "fusion_lab": "برای ادغام دو هیولای هم‌نوع و بالا بردن ستاره لازمه.",
 }
 BUILDING_MAX_LEVEL = 5
-BUILDING_UPGRADE_BASE_GOLD_COST = 100  # scales by *level per level-up
-BUILDING_UPGRADE_BASE_MINUTES = 15  # scales by *level per level-up
+
+# ── Upgrade pacing ────────────────────────────────────────────────────────────
+# Explicit per-level tables rather than a formula, because the thing being tuned
+# is a *total*: taking every building to level 5 should occupy 1–2 weeks of real
+# time. A `base * level` formula can't express that shape — it makes the early
+# levels too slow and the late ones nowhere near slow enough.
+#
+# Keys are the level being *reached* (so 1 is construction, 5 is the final tier).
+#
+# Total build time, with the single-worker rule that makes these add up:
+#   5 buildings x (15+90+360+900+1800)  = 15,825 min
+#   main hall, which starts at level 1  =  3,150 min
+#   ------------------------------------------------
+#   18,975 min = 316 h = 13.2 days
+# Speed-up cards from missions and the wheel pull that down to roughly 11–12
+# days for an active player, which is the middle of the intended window. Rushing
+# with diamonds is faster still, deliberately.
+BUILDING_UPGRADE_MINUTES = {1: 15, 2: 90, 3: 360, 4: 900, 5: 1800}
+
+# Gold is sized to be *felt but not binding*: the constraint is meant to be the
+# clock, not the wallet. Full build-out costs ~124k gold across those 13 days
+# (~9.5k/day), which a moderately active player clears while still having budget
+# for crates, fusion and the forge.
+BUILDING_UPGRADE_GOLD = {1: 250, 2: 800, 3: 2200, 4: 5500, 5: 12000}
 
 # rate_per_hour/cap_base scale by *level; diamond_collector's rate is deliberately
 # tiny since diamonds are the premium currency. Buildings absent from this table
@@ -399,6 +421,16 @@ SPEEDUP_LABELS = {
     60: "⏱ ۱ ساعت",
     720: "⏱ ۱۲ ساعت",
     1440: "⏱ ۲۴ ساعت",
+}
+# Just the duration, no clock glyph — for sentences that already say "card", where
+# SPEEDUP_LABELS' bare "⏱ ۳۰ دقیقه" reads like a countdown rather than an item.
+SPEEDUP_PLAIN_LABELS = {
+    1: "۱ دقیقه‌ای",
+    5: "۵ دقیقه‌ای",
+    30: "۳۰ دقیقه‌ای",
+    60: "۱ ساعته",
+    720: "۱۲ ساعته",
+    1440: "۲۴ ساعته",
 }
 
 # Diamonds can also finish an upgrade outright, priced from the time still left.
@@ -471,8 +503,13 @@ FORGE_MAX_FAIL_CHANCE = 0.45
 # ── Cup arena (PvP raiding): matchmaking is by cup, loot is a slice of the
 # defender's gold, and a fresh defender gets a shield so they can't be farmed.
 # The soft cap below is the important bit — see game/arena.py's cup_delta(). ─────
-ARENA_LOOT_PERCENT = 0.10
-ARENA_LOOT_MIN = 30  # a raid on a broke player still pays something, so raiding stays worth doing
+# Loot is tuned against the hunt, since both cost one energy: a successful raid
+# should pay roughly 3x a normal hunt at the same creature level. It used to pay
+# closer to 7x, which made hunting pointless and looting trivially the best move.
+# Now a raid is clearly worth doing, can still fail, and doesn't trivialise the
+# rest of the economy.
+ARENA_LOOT_PERCENT = 0.08
+ARENA_LOOT_MIN = 40  # a raid on a broke player still pays something, so raiding stays worth doing
 ARENA_SHIELD_HOURS = 8
 ARENA_ATTACK_ENERGY_COST = 1
 
@@ -480,8 +517,11 @@ ARENA_ATTACK_ENERGY_COST = 1
 # wallet. Without this, one lucky match against a hoarder hands a new player more
 # gold than hours of hunting and skips the whole early economy; with it, raiding
 # is reliably a bit better than hunting instead of a jackpot.
-ARENA_LOOT_CAP_BASE = 200
-ARENA_LOOT_CAP_PER_LEVEL = 45
+# The cap is what most raids actually pay, since 8% of an active player's purse
+# usually exceeds it. Keyed to the ATTACKER's level, not the defender's wealth,
+# so one lucky match against a rich player can't skip a week of progression.
+ARENA_LOOT_CAP_BASE = 90
+ARENA_LOOT_CAP_PER_LEVEL = 14
 
 ARENA_CUP_WIN_BASE = 22
 ARENA_CUP_LOSS_BASE = 14
@@ -514,8 +554,11 @@ ARENA_FAKE_LAB_NAMES = [
 ]
 # Bot loot scales with the attacker's own level so raiding bots keeps pace with
 # progression instead of going stale — the spread stays wide so it still gambles.
-ARENA_FAKE_LOOT_BASE = (60, 200)
-ARENA_FAKE_LOOT_PER_LEVEL = 18
+# Deliberately averaging a little under the real-opponent cap, so matchmaking
+# against actual players stays the preferable outcome — but wide enough that a
+# bot raid is still a gamble worth taking rather than a consolation prize.
+ARENA_FAKE_LOOT_BASE = (45, 110)
+ARENA_FAKE_LOOT_PER_LEVEL = 10
 
 
 def arena_loot_cap(attacker_level: int) -> int:

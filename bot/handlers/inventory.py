@@ -3,8 +3,8 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Equipment
 from bio_lab.repository import get_active_creature, get_or_create_user
-from bot.buttons import BUILD, CONFIRM, DANGER, LIST, back_btn, btn
-from bot.utils import run_db, safe_edit_message_text
+from bot.buttons import BUILD, CONFIRM, DANGER, LIST, back_btn, back_only_keyboard, btn
+from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants
 from game.blacksmith import forge, forge_preview, forgeable_items
 from game.creature import GameError
@@ -45,12 +45,12 @@ def _inventory_keyboard(items: list[Equipment]) -> InlineKeyboardMarkup:
 async def inventory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     items = await run_db(_inventory_sync, update.effective_user)
     if not items:
-        await update.effective_message.reply_text(
+        await send_screen(update, 
             f"{get_emoji('lab')} کوله‌پشتی‌ات خالیه! از باکس‌های ژنتیکی (📦 باکس ژنتیکی) تجهیزات به‌دست بیار.",
             parse_mode="HTML",
         )
         return
-    await update.effective_message.reply_text(
+    await send_screen(update, 
         f"{get_emoji('collection')} <b>کوله‌پشتی تجهیزات</b> — {len(items)} قطعه\nرو هرکدوم بزن:",
         parse_mode="HTML",
         reply_markup=_inventory_keyboard(items),
@@ -241,7 +241,7 @@ def _forge_list_sync(tg_user):
 async def blacksmith_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user, items = await run_db(_forge_list_sync, update.effective_user)
     if not items:
-        await update.effective_message.reply_text(
+        await send_screen(update, 
             "⚒ <b>آهنگری</b>\n\nهیچ تجهیزاتی برای ارتقا نداری (یا همه به سقف رسیدن).",
             parse_mode="HTML",
         )
@@ -257,7 +257,7 @@ async def blacksmith_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         for i in items
     ]
     rows.append([back_btn("menu:me")])
-    await update.effective_message.reply_text(
+    await send_screen(update, 
         f"⚒ <b>آهنگری</b>\n"
         f"اینجا با <b>طلا</b> سطح تجهیزات رو بالا می‌بری، بدون نیاز به نمونه‌ی تکراری — "
         f"ولی از سطح +{constants.FORGE_SAFE_LEVEL} به بالا شانس شکست داره.\n\n"

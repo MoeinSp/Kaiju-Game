@@ -19,9 +19,10 @@ from game import constants
 
 
 def week_key(when=None) -> str:
-    """ISO week label, e.g. "2026-W33". Weeks start Monday (ISO), so a season
-    boundary is Monday 00:00 UTC."""
-    when = when or timezone.now()
+    """ISO week label, e.g. "2026-W33". Weeks start Monday, and "Monday" is read
+    in the game's timezone (Asia/Tehran) — same reason today_str() uses
+    localdate(): a UTC boundary would end the season at 03:30 Tehran time."""
+    when = timezone.localtime(when) if when is not None else timezone.localtime()
     iso = when.isocalendar()
     return f"{iso.year}-W{iso.week:02d}"
 
@@ -106,7 +107,7 @@ def seconds_until_next_week() -> int:
     """Time left in the current season, for the countdown on the arena screen."""
     import datetime
 
-    now = timezone.now()
+    now = timezone.localtime()
     days_ahead = 7 - now.isoweekday()  # isoweekday: Mon=1 .. Sun=7
     next_monday = (now + datetime.timedelta(days=days_ahead + 1)).replace(
         hour=0, minute=0, second=0, microsecond=0

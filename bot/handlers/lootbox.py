@@ -2,8 +2,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bio_lab.repository import get_or_create_user
-from bot.buttons import CONFIRM, DANGER, PRIMARY, SHOP, back_btn, btn
-from bot.utils import run_db, safe_edit_message_text
+from bot.buttons import CONFIRM, DANGER, PRIMARY, SHOP, back_btn, back_only_keyboard, btn
+from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants
 from game.creature import GameError
 from game.emoji import get_emoji
@@ -19,7 +19,7 @@ async def biocrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     try:
         result = await run_db(_biocrate_sync, update.effective_user)
     except GameError as exc:
-        await update.effective_message.reply_text(str(exc))
+        await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard())
         return
 
     rarity_label = constants.RARITY_LABELS[result["rarity"]]
@@ -32,7 +32,7 @@ async def biocrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         reveal = f"{constants.EQUIPMENT_SLOT_LABELS[item.slot]} <b>{item.name}</b>\n{rarity_label}"
         hint = "از «🎒 تجهیزات» توی منو می‌تونی تجهیزش کنی."
 
-    await update.effective_message.reply_text(
+    await send_screen(update, 
         f"{get_emoji('biocrate')} <b>باکس ژنتیکی باز شد!</b>\n\n"
         f"<tg-spoiler>{reveal}</tg-spoiler>\n\n"
         f"<blockquote>{hint}</blockquote>",
@@ -50,7 +50,7 @@ def _diamond_box_list_keyboard() -> InlineKeyboardMarkup:
 
 
 async def diamond_box_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.effective_message.reply_text(
+    await send_screen(update, 
         f"{get_emoji('diamond_box')} <b>جعبه‌های الماسی</b>\n"
         "این جعبه‌ها همیشه یه موجود جدید می‌دن (نه تجهیزات) — هرچی سطح جعبه بالاتر، شانس نایاب‌بودنش بیشتره.\n\n"
         "رو یکی بزن تا احتمالات دقیقش رو ببینی:",

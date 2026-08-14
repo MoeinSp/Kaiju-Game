@@ -14,7 +14,9 @@ def mission_reward_text(m: dict) -> str:
     if m.get("dna"):
         parts.append(f"+{m['dna']} {get_emoji('dna')}")
     if m.get("speedup"):
-        parts.append(f"+{constants.SPEEDUP_LABELS[m['speedup']]}")
+        # "+⏱ ۳۰ دقیقه" read as "this mission takes 30 minutes" or "you have 30
+        # minutes left". Naming the item and what it does removes both readings.
+        parts.append(f"+۱ کارت سرعت {constants.SPEEDUP_PLAIN_LABELS[m['speedup']]} ⏱")
     return " ".join(parts)
 
 
@@ -23,6 +25,29 @@ async def run_db(func, *args, **kwargs):
     thread_sensitive keeps all DB access on one worker thread, matching SQLite's
     single-writer model and avoiding cross-thread connection issues."""
     return await sync_to_async(func, thread_sensitive=True)(*args, **kwargs)
+
+
+async def send_screen(update, text, *, reply_markup=None, parse_mode="HTML", **kwargs) -> None:
+    """Render a screen the right way for however the player got here.
+
+    Pressing a button used to post a *new* message, because the same handler
+    serves both `/collection` and the «کلکسیون» button and it only knew how to
+    reply. Walking the menu therefore buried the chat in near-identical cards.
+    Now the update itself decides: arriving from a button edits the message in
+    place, so the menu behaves like one screen the player navigates; arriving
+    from a command posts a new one, which is what a typed command should do.
+
+    Every menu screen goes through here, so the two paths can't drift.
+    """
+    query = getattr(update, "callback_query", None)
+    if query is not None:
+        await safe_edit_message_text(
+            query, text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
+        )
+        return
+    await update.effective_message.reply_text(
+        text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
+    )
 
 
 async def safe_edit_message_text(query, text, **kwargs) -> None:

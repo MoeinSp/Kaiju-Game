@@ -2,7 +2,8 @@ from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes, filters
 
 from bio_lab.repository import get_or_create_user
-from bot.utils import run_db
+from bot.buttons import back_only_keyboard
+from bot.utils import run_db, send_screen
 from game.creature import GameError
 from game.emoji import get_emoji
 from game.wheel import spin
@@ -19,11 +20,11 @@ async def wheel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         prize = await run_db(_wheel_sync, update.effective_user)
     except GameError as exc:
-        await update.effective_message.reply_text(str(exc))
+        await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard())
         return
 
     emoji = get_emoji(_KIND_EMOJI_KEY[prize["kind"]])
-    await update.effective_message.reply_text(
+    await send_screen(update, 
         f"{get_emoji('wheel')} <b>گردونه‌ی شانس روزانه</b>\n\n"
         f"<tg-spoiler>{emoji} {prize['label']}</tg-spoiler>\n\n"
         "<blockquote>فردا دوباره سر بزن، یه چرخش دیگه منتظرته.</blockquote>",

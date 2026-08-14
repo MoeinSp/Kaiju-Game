@@ -81,6 +81,18 @@ def btn(
 
 
 def back_btn(callback_data: str, label: str = "بازگشت") -> InlineKeyboardButton:
-    """The ubiquitous back button — always the same look. It's navigation, not an
-    action, so it gets its own role and is uncoloured by default."""
+    """The ubiquitous back button — always the same look and always the same role,
+    so recolouring "back" anywhere recolours it everywhere."""
     return btn(label, emoji_key="btn_back", style=BACK, callback_data=callback_data)
+
+
+def back_only_keyboard(callback_data: str = "menu:me", label: str = "بازگشت"):
+    """A screen whose only control is "go back".
+
+    Several screens (rank, missions, profile, …) used to end with no keyboard at
+    all. That was survivable when every tap posted a new message, since the menu
+    was still sitting above; now that screens edit in place, a keyboard-less
+    screen is a dead end the player can only escape by retyping a command."""
+    from telegram import InlineKeyboardMarkup
+
+    return InlineKeyboardMarkup([[back_btn(callback_data, label)]])

@@ -3,6 +3,7 @@ import random
 from bio_lab.models import Creature, User
 from game import constants
 from game.combat import resolve_duel
+from game import lab
 from game.creature import add_xp, effective_stats
 
 WILD_NAMES = ["Ferabeast", "Grimhide", "Rustclaw", "Mossfang", "Duskrunner"]
@@ -111,9 +112,11 @@ def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal", se
     user.save(update_fields=["coins", "dna_fragments"])
     levels = add_xp(player_creature, xp_gain)
     player_creature.save()
+    lab_up = lab.award(user, "hunt_win" if won else "hunt_loss")
 
     return {
         "won": won,
+        "lab_up": lab_up,
         "log_text": log_text,
         "wild_name": wild.name,
         "tier": tier,

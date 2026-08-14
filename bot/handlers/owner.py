@@ -1,5 +1,6 @@
 import asyncio
 
+from django.utils import timezone
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity, MessageOriginChannel, Update
 from telegram.error import TelegramError
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
@@ -348,7 +349,7 @@ def _user_info_text(data: dict) -> str:
         f"🔥 streak: {user.login_streak}   {get_emoji('alliance')} اتحاد: "
         f"{user.alliance.name if user.alliance_id else '—'}",
         f"{get_emoji('banned')} مسدود: {'بله' if user.is_banned else 'نه'}",
-        f"📅 عضو از: {user.created_at.strftime('%Y-%m-%d')}\n",
+        f"📅 عضو از: {timezone.localtime(user.created_at).strftime('%Y-%m-%d')}\n",
         f"{get_emoji('creature')} <b>موجودات ({len(data['creatures'])}):</b>",
     ]
     for c in data["creatures"]:

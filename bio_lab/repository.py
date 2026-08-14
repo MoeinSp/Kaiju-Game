@@ -24,6 +24,21 @@ def display_name(user: User) -> str:
     return f"بازیکن {user.id}"
 
 
+def lab_display(user: User) -> str:
+    """The lab's name, escaped for parse_mode="HTML" message bodies.
+
+    Lab names are typed by the player at their first /start, so they're exactly
+    as untrusted as usernames — a lab called ``<b>`` or ``a & b`` would break
+    (or inject into) every leaderboard it appears on. Every screen that shows a
+    lab goes through here for the same reason display_name() exists.
+
+    Falls back to a stable placeholder rather than the player's @username: these
+    are game-facing lists where the lab is the identity, not the person."""
+    if user.lab_name:
+        return html.escape(user.lab_name)
+    return f"آزمایشگاه {user.id}"
+
+
 def get_or_create_group(chat) -> Group:
     group, _ = Group.objects.get_or_create(id=chat.id, defaults={"title": chat.title})
     return group

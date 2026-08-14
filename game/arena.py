@@ -6,7 +6,8 @@ from django.db.models import Q
 from django.utils import timezone
 
 from bio_lab.models import AttackLog, Creature, User
-from game import constants
+from bio_lab.repository import lab_display
+from game import constants, lab
 from game.combat import resolve_duel
 from game.creature import GameError, effective_stats
 from game.equipment import get_equipped_items
@@ -112,7 +113,7 @@ def find_opponent(attacker: User) -> dict:
     return {
         "is_fake": False,
         "user": target,
-        "label": target.lab_name or f"آزمایشگاه {target.id}",
+        "label": lab_display(target),
         "cup": target.cup,
         "power": active_power(target),
         "loot_pool": target.coins,
@@ -186,8 +187,11 @@ def attack(attacker: User, opponent: dict) -> dict:
         cup_delta=delta,
     )
 
+    lab_up = lab.award(attacker, "arena_win" if won else "arena_loss")
+
     return {
         "won": won,
+        "lab_up": lab_up,
         "log_text": log_text,
         "loot": loot,
         "cup_delta": delta,

@@ -5,7 +5,7 @@ import random
 from django.utils import timezone
 
 from bio_lab.models import Building, BuildingUpgrade, SpeedupCard, User
-from game import constants
+from game import constants, lab
 from game.creature import GameError
 
 # small bonus chance (separate from the daily wheel's guaranteed prize) attached to
@@ -108,6 +108,10 @@ def check_and_apply_upgrade(user: User) -> Building | None:
     building = upgrade.building
     building.level = upgrade.target_level
     building.save(update_fields=["level"])
+    # a finished upgrade is worth real lab XP because it represents hours of real
+    # time, not one tap — awarded here, at the single point where an upgrade can
+    # complete, so it can't be double-credited by the callers that poll this
+    lab.award_building_level(user, upgrade.target_level)
     upgrade.delete()
     return building
 
@@ -118,13 +122,30 @@ def active_upgrade(user: User) -> BuildingUpgrade | None:
 
 
 def upgrade_cost_and_minutes(building: Building) -> tuple[int, int]:
-    """Construction (level 0 -> 1) is priced as if it were a level-1 upgrade, so a
-    brand-new building isn't free."""
-    steps = max(1, building.level)
+    """Cost and build time for this building's next level.
+
+    Keyed on the level being *reached* — level 0 -> 1 is construction, which is
+    the cheapest and quickest entry in the table rather than free."""
+    target = min(building.level + 1, constants.BUILDING_MAX_LEVEL)
     return (
-        constants.BUILDING_UPGRADE_BASE_GOLD_COST * steps,
-        constants.BUILDING_UPGRADE_BASE_MINUTES * steps,
+        constants.BUILDING_UPGRADE_GOLD[target],
+        constants.BUILDING_UPGRADE_MINUTES[target],
     )
+
+
+def full_buildout_estimate() -> tuple[int, int]:
+    """(total gold, total minutes) to take every building from scratch to max.
+
+    Only meaningful because a player has exactly one worker, so build times add
+    up instead of overlapping. Used by the tests that guard the 1–2 week target,
+    and by the buildings screen to show players what they're signing up for."""
+    gold = minutes = 0
+    for building_type in constants.BUILDING_TYPES:
+        start = 1 if building_type == constants.MAIN_BUILDING else 0
+        for target in range(start + 1, constants.BUILDING_MAX_LEVEL + 1):
+            gold += constants.BUILDING_UPGRADE_GOLD[target]
+            minutes += constants.BUILDING_UPGRADE_MINUTES[target]
+    return gold, minutes
 
 
 def start_upgrade(user: User, building: Building) -> BuildingUpgrade:
@@ -210,6 +231,10 @@ def finish_with_diamonds(user: User) -> tuple[Building, int]:
     building = upgrade.building
     building.level = upgrade.target_level
     building.save(update_fields=["level"])
+    # a finished upgrade is worth real lab XP because it represents hours of real
+    # time, not one tap — awarded here, at the single point where an upgrade can
+    # complete, so it can't be double-credited by the callers that poll this
+    lab.award_building_level(user, upgrade.target_level)
     upgrade.delete()
     return building, cost
 

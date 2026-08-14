@@ -3,7 +3,7 @@ import random
 from django.db import transaction
 
 from bio_lab.models import Creature, User
-from game import constants
+from game import constants, lab
 from game.buildings import is_built, star_cap
 from game.creature import GameError
 from game.equipment import get_equipped_items
@@ -126,6 +126,8 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
             inherited_item = random.choice(parent_items)
             inherited_item.equipped_on = child
             inherited_item.save(update_fields=["equipped_on"])
+
+    lab.award(user, "fusion")
 
     parent_a.delete()
     parent_b.delete()

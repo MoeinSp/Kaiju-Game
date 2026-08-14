@@ -1,16 +1,18 @@
+from django.utils import timezone
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
-from bio_lab.models import Alliance, Creature
-from bio_lab.repository import display_name, get_active_creature, get_or_create_user
+from bio_lab.models import Alliance, Creature, User
+from bio_lab.repository import display_name, get_active_creature, get_or_create_user, lab_display
 from bot.handlers.arena import arena_panel
 from bot.handlers.buildings import buildings_panel
 from bot.handlers.inventory import blacksmith_panel, inventory_cmd
 from bot.handlers.lootbox import biocrate_cmd, diamond_box_panel
 from bot.handlers.owner import admin_cmd
 from bot.handlers.wheel import wheel_cmd
-from bot.buttons import ADMIN, BATTLE, BUILD, CONFIRM, DANGER, LIST, NAV, PRIMARY, SHOP, back_btn, btn
-from bot.utils import mission_reward_text, run_db, safe_edit_message_text
+from bot.buttons import (ADMIN, BATTLE, BUILD, CONFIRM, DANGER, LIST, NAV, PRIMARY, SHOP,
+                         back_btn, back_only_keyboard, btn)
+from bot.utils import mission_reward_text, run_db, safe_edit_message_text, send_screen
 from config import OWNER_TELEGRAM_ID
 from game import constants
 from game.alliance import (
@@ -38,6 +40,7 @@ from game.emoji import get_emoji
 from game.energy import spend_energy, sync_energy
 from game.equipment import get_equipped_items
 from game.fusion import FUSION_BUILDING, fuse, fusion_partners, ready_pairs
+from game.lab import lab_bar, lab_level, lab_progress
 from game.hunt import HUNT_TIERS, estimated_reward, resolve_hunt, scout_one
 
 
@@ -49,6 +52,18 @@ def _mission_lines(completed: list[dict]) -> str:
         for m in completed
     ]
     return "\n" + "\n".join(lines)
+
+
+def lab_level_line(user) -> str:
+    """The lab's overall level with a progress bar — the one number that answers
+    "how far along is this player", independent of any single creature."""
+    progress = lab_progress(user)
+    if progress["is_max"]:
+        return f"🔬 سطح آزمایشگاه: <b>{progress['level']}</b> (بیشینه) {lab_bar(user)}"
+    return (
+        f"🔬 سطح آزمایشگاه: <b>{progress['level']}</b> {lab_bar(user)} "
+        f"{progress['into']:,}/{progress['span']:,}"
+    )
 
 
 def wallet_line(user, energy: int | None = None) -> str:
@@ -167,7 +182,7 @@ async def upgrade_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     try:
         user, ranked = await run_db(_upgrade_list_sync, update.effective_user)
     except GameError as exc:
-        await update.effective_message.reply_text(str(exc))
+        await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard())
         return
 
     rows = []
@@ -188,7 +203,7 @@ async def upgrade_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
     rows.append([back_btn("menu:me")])
 
-    await update.effective_message.reply_text(
+    await send_screen(update, 
         f"🔧 <b>ارتقا و پرورش</b>\n"
         f"هیولاهات به ترتیب قدرت مرتب شدن — کدوم رو می‌خوای قوی‌تر کنی؟\n\n{wallet_line(user)}",
         parse_mode="HTML",
@@ -285,7 +300,11 @@ def _start_sync(tg_user):
 
 def _set_lab_name_sync(tg_user, name):
     user, _ = get_or_create_user(tg_user)
-    user.lab_name = name
+    # Collapse whitespace and strip control characters. The name is shown on every
+    # leaderboard, so a name padded with newlines could push other rows off the
+    # screen; lab_display() handles the HTML escaping separately.
+    cleaned = " ".join(str(name).split())[:LAB_NAME_MAX_LEN]
+    user.lab_name = cleaned
     user.save(update_fields=["lab_name"])
     creature = get_active_creature(user)
     return user, creature, get_equipped_items(creature) if creature else []
@@ -306,11 +325,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lines = []
     if is_new:
         lines.append(
-            f"{get_emoji('egg')} <b>آزمایشگاه «{user.lab_name}» فعال شد!</b>\n"
+            f"{get_emoji('egg')} <b>آزمایشگاه «{lab_display(user)}» فعال شد!</b>\n"
             "یه موجود تازه از کپسول زیستی بیرون اومد — بهش خوش‌آمد بگو 👇\n"
         )
     else:
-        lines.append(f"👋 <b>به آزمایشگاه «{user.lab_name}» خوش برگشتی!</b>\n")
+        lines.append(f"👋 <b>به آزمایشگاه «{lab_display(user)}» خوش برگشتی!</b>\n")
 
     if login_bonus:
         streak_line = f"🔥 <b>{login_bonus['streak']} روز پشت‌سرهم</b> اومدی! +{login_bonus['coins']} {get_emoji('coin')}"
@@ -335,12 +354,12 @@ def _me_sync(tg_user):
 async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user, creature, equipped_items = await run_db(_me_sync, update.effective_user)
     if creature is None:
-        await update.effective_message.reply_text(
+        await send_screen(update, 
             "😅 هنوز موجودی نداری! دستور /start رو بزن تا از آزمایشگاه شروع کنی."
         )
         return
     is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
-    await update.effective_message.reply_text(
+    await send_screen(update, 
         creature_card_text(user, creature, equipped_items),
         parse_mode="HTML",
         reply_markup=creature_keyboard(is_owner),
@@ -436,9 +455,9 @@ def _collection_keyboard(creatures: list[Creature]) -> InlineKeyboardMarkup:
 async def collection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     creatures = await run_db(_collection_sync, update.effective_user)
     if not creatures:
-        await update.effective_message.reply_text(f"📭 کلکسیونت خالیه! {get_emoji('egg')} با /start شروع کن.")
+        await send_screen(update, f"📭 کلکسیونت خالیه! {get_emoji('egg')} با /start شروع کن.")
         return
-    await update.effective_message.reply_text(
+    await send_screen(update, 
         f"{get_emoji('collection')} <b>کلکسیون تو</b> — {len(creatures)} موجود\nرو هرکدوم بزن تا جزئیاتش رو ببینی:",
         parse_mode="HTML",
         reply_markup=_collection_keyboard(creatures),
@@ -635,7 +654,7 @@ async def fusion_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             [btn("رفتن به ساختمون‌ها", emoji_key="btn_buildings", style=PRIMARY, callback_data="menu:buildings")],
             [back_btn("menu:me")],
         ]
-        await update.effective_message.reply_text(
+        await send_screen(update, 
             "\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows)
         )
         return
@@ -664,7 +683,7 @@ async def fusion_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     ]
     rows.append([back_btn("menu:me")])
     lines.append(f"\n{wallet_line(user)}")
-    await update.effective_message.reply_text(
+    await send_screen(update, 
         "\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows)
     )
 
@@ -727,7 +746,7 @@ async def missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         check = "✅" if m["done"] else f"⏳ {m['progress']}/{m['target']}"
         lines.append(f"{check} — {m['label']} ({mission_reward_text(m)})")
     lines.append("\n<i>ماموریت‌ها هر روز (ساعت جهانی UTC) ریست می‌شن.</i>")
-    await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
+    await send_screen(update, "\n".join(lines), reply_markup=back_only_keyboard())
 
 
 def _hunt_scout_sync(tg_user):
@@ -777,9 +796,9 @@ async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         creature, my_power, target, energy = await run_db(_hunt_scout_sync, update.effective_user)
     except GameError as exc:
-        await update.effective_message.reply_text(str(exc))
+        await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard())
         return
-    await update.effective_message.reply_text(
+    await send_screen(update, 
         _hunt_scout_text(creature, my_power, target, energy),
         parse_mode="HTML",
         reply_markup=_hunt_scout_keyboard(target),
@@ -940,7 +959,7 @@ def _alliance_action_keyboard(in_alliance: bool) -> InlineKeyboardMarkup:
 async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     info = await run_db(_alliance_info_sync, update.effective_user)
     if info is None:
-        await update.effective_message.reply_text(
+        await send_screen(update, 
             f"{get_emoji('alliance')} توی هیچ اتحادی نیستی.",
             parse_mode="HTML",
             reply_markup=_alliance_action_keyboard(in_alliance=False),
@@ -955,7 +974,7 @@ async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     ]
     for m in info["members"][:20]:
         lines.append(f"• {display_name(m)}")
-    await update.effective_message.reply_text(
+    await send_screen(update, 
         "\n".join(lines), parse_mode="HTML", reply_markup=_alliance_action_keyboard(in_alliance=True)
     )
 
@@ -1114,7 +1133,7 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         user, creature, equipped_items = await run_db(_set_lab_name_sync, update.effective_user, text)
         is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
         await message.reply_text(
-            f"{get_emoji('egg')} <b>آزمایشگاه «{user.lab_name}» فعال شد!</b>\n"
+            f"{get_emoji('egg')} <b>آزمایشگاه «{lab_display(user)}» فعال شد!</b>\n"
             "یه موجود تازه از کپسول زیستی بیرون اومد — بهش خوش‌آمد بگو 👇\n\n"
             + creature_card_text(user, creature, equipped_items),
             parse_mode="HTML",
@@ -1251,37 +1270,45 @@ async def heist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def _rank_sync(tg_user):
-    from django.db.models import F
+    """The global table ranks *labs*, not creatures.
+
+    Ranking creatures meant the board was really a rarity-luck board: one lucky
+    crate could outrank weeks of play, and the player's own name never appeared
+    on it. Lab XP accumulates from everything a player actually does, so the
+    order reflects effort — and the row shows the lab that earned it."""
+    from django.db.models import F, Max
 
     user, _ = get_or_create_user(tg_user)
     ranked = list(
-        Creature.objects.filter(is_active=True)
-        .annotate(power=F("base_hp") + F("base_atk") + F("base_def") + F("base_spd"))
-        .order_by("-power")
+        User.objects.filter(is_banned=False)
+        .annotate(
+            best_power=Max(
+                F("creatures__base_hp")
+                + F("creatures__base_atk")
+                + F("creatures__base_def")
+                + F("creatures__base_spd")
+            )
+        )
+        .order_by("-lab_xp", "-cup", "id")
     )
-    my_creature = get_active_creature(user)
-    my_rank = None
-    if my_creature is not None:
-        for idx, c in enumerate(ranked, start=1):
-            if c.id == my_creature.id:
-                my_rank = idx
-                break
-    return ranked[:10], my_rank, len(ranked)
+    my_rank = next((i for i, u in enumerate(ranked, start=1) if u.id == user.id), None)
+    return ranked[:10], my_rank, len(ranked), user
 
 
 async def rank(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    top10, my_rank, total = await run_db(_rank_sync, update.effective_user)
+    top10, my_rank, total, me_user = await run_db(_rank_sync, update.effective_user)
     if not top10:
-        await update.effective_message.reply_text("هنوز هیچ موجودی ثبت نشده.")
+        await send_screen(update, "هنوز هیچ آزمایشگاهی ثبت نشده.", reply_markup=back_only_keyboard())
         return
     medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
-    lines = [f"{get_emoji('trophy')} <b>رتبه‌بندی سراسری موجودات</b>\n"]
-    for i, c in enumerate(top10, start=1):
-        rank_icon = medals[i - 1] if i <= 3 else f"{i}."
-        lines.append(f"{rank_icon} {c.name} (Lv{c.level}) — قدرت {c.power}")
+    lines = [f"{get_emoji('trophy')} <b>رتبه‌بندی آزمایشگاه‌ها</b>", "<blockquote>بر اساس سطح کلی آزمایشگاه</blockquote>\n"]
+    for i, u in enumerate(top10, start=1):
+        rank_icon = medals[i - 1] if i <= 3 else f"<b>{i}.</b>"
+        power = f" · 💪{u.best_power}" if u.best_power else ""
+        lines.append(f"{rank_icon} {lab_display(u)} — 🔬 سطح {lab_level(u)}{power}")
     if my_rank is not None:
-        lines.append(f"\nرتبه‌ی موجود فعال تو: <b>{my_rank}</b> از {total}")
-    await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
+        lines.append(f"\n📍 رتبه‌ی تو: <b>{my_rank}</b> از {total} — 🔬 سطح {lab_level(me_user)}")
+    await send_screen(update, "\n".join(lines), reply_markup=back_only_keyboard())
 
 
 def _profile_sync(tg_user):
@@ -1305,8 +1332,9 @@ def _profile_sync(tg_user):
 async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user, stats = await run_db(_profile_sync, update.effective_user)
     lines = [
-        f"{get_emoji('profile')} <b>پروفایل {display_name(user)}</b>\n",
-        f"📅 عضو از: {user.created_at.strftime('%Y-%m-%d')}",
+        f"{get_emoji('profile')} <b>آزمایشگاه {lab_display(user)}</b>",
+        f"<blockquote>{lab_level_line(user)}</blockquote>\n",
+        f"📅 عضو از: {timezone.localtime(user.created_at).strftime('%Y-%m-%d')}",
         f"🔥 روزهای ورود پشت‌سرهم: {user.login_streak}",
         f"{get_emoji('creature')} موجودات ساخته‌شده: {stats['creatures_owned']}\n",
         f"{get_emoji('battle')} دوئل‌های برده: {stats['duel_wins']}",
@@ -1314,7 +1342,7 @@ async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"{get_emoji('raid_boss')} کل دمیج واردشده به رید باس‌ها: {stats['total_raid_damage']}\n",
         wallet_line(user),
     ]
-    await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
+    await send_screen(update, "\n".join(lines), reply_markup=back_only_keyboard())
 
 
 def main_menu_keyboard() -> InlineKeyboardMarkup:
@@ -1357,7 +1385,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
 
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.effective_message.reply_text(
+    await send_screen(update, 
         "📋 <b>منوی اصلی</b>\nیکی رو انتخاب کن:", parse_mode="HTML", reply_markup=main_menu_keyboard()
     )
 
