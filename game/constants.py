@@ -197,15 +197,23 @@ LOGIN_STREAK_DNA_EVERY = 5  # bonus DNA every N-day milestone
 LOGIN_STREAK_DNA_BONUS = 10
 
 # key -> {action, target, label, coins, dna}
+# Missions may pay "speedup": <minutes> on top of coins/dna — that's the main way
+# a player keeps a stock of build-timer cards, since they aren't sold anywhere.
 MISSION_DEFS = {
     "feed_3": {"action": "feed", "target": 3, "label": "۳ بار تغذیه کن", "coins": 40, "dna": 0},
-    "feed_10": {"action": "feed", "target": 10, "label": "۱۰ بار تغذیه کن", "coins": 100, "dna": 5},
-    "train_1": {"action": "train", "target": 1, "label": "۱ بار تمرین کن", "coins": 30, "dna": 0},
+    "feed_10": {
+        "action": "feed", "target": 10, "label": "۱۰ بار تغذیه کن", "coins": 100, "dna": 5, "speedup": 5,
+    },
+    "train_1": {"action": "train", "target": 1, "label": "۱ بار تمرین کن", "coins": 30, "dna": 0, "speedup": 1},
     "duel_win_1": {"action": "duel_win", "target": 1, "label": "۱ دوئل ببر", "coins": 50, "dna": 5},
-    "duel_win_3": {"action": "duel_win", "target": 3, "label": "۳ دوئل ببر", "coins": 120, "dna": 10},
+    "duel_win_3": {
+        "action": "duel_win", "target": 3, "label": "۳ دوئل ببر", "coins": 120, "dna": 10, "speedup": 30,
+    },
     "raid_attack_2": {"action": "raid_attack", "target": 2, "label": "۲ بار به رید حمله کن", "coins": 40, "dna": 5},
-    "raid_attack_5": {"action": "raid_attack", "target": 5, "label": "۵ بار به رید حمله کن", "coins": 90, "dna": 8},
-    "fusion_1": {"action": "fusion", "target": 1, "label": "۱ بار فیوژن کن", "coins": 60, "dna": 0},
+    "raid_attack_5": {
+        "action": "raid_attack", "target": 5, "label": "۵ بار به رید حمله کن", "coins": 90, "dna": 8, "speedup": 30,
+    },
+    "fusion_1": {"action": "fusion", "target": 1, "label": "۱ بار فیوژن کن", "coins": 60, "dna": 0, "speedup": 5},
     "guardian_challenge_1": {
         "action": "guardian_challenge",
         "target": 1,
@@ -213,15 +221,34 @@ MISSION_DEFS = {
         "coins": 50,
         "dna": 5,
     },
-    "hunt_3": {"action": "hunt", "target": 3, "label": "۳ بار شکار انفرادی کن", "coins": 45, "dna": 3},
+    "hunt_3": {
+        "action": "hunt", "target": 3, "label": "۳ بار شکار انفرادی کن", "coins": 45, "dna": 3, "speedup": 5,
+    },
+    "hunt_10": {
+        "action": "hunt", "target": 10, "label": "۱۰ بار شکار انفرادی کن", "coins": 150, "dna": 10, "speedup": 60,
+    },
     "arena_attack_3": {
         "action": "arena_attack",
         "target": 3,
         "label": "۳ بار توی آرنا حمله کن",
         "coins": 70,
         "dna": 5,
+        "speedup": 30,
+    },
+    "collect_5": {
+        "action": "collect",
+        "target": 5,
+        "label": "۵ بار از ساختمون‌ها جمع‌آوری کن",
+        "coins": 60,
+        "dna": 5,
+        "speedup": 5,
     },
 }
+
+# Starter pack of build-timer cards. The early main-hall upgrades are the slowest
+# part of a new player's first session, so they get enough cards to blow through
+# the first couple of them instead of staring at a countdown.
+STARTING_SPEEDUP_CARDS = {5: 4, 30: 3, 60: 2, 720: 1}
 
 # generous welcome package — a new player should be able to build, forge, and open
 # a diamond box on day one instead of grinding before the game opens up
@@ -374,6 +401,21 @@ SPEEDUP_LABELS = {
     1440: "⏱ ۲۴ ساعت",
 }
 
+# Diamonds can also finish an upgrade outright, priced from the time still left.
+# Deliberately cheap per minute at the short end (a minimum charge stops 1-minute
+# finishes being free) and linear after that, so diamonds are a convenience for
+# impatient players rather than a way to buy the whole tech tree instantly.
+DIAMOND_FINISH_MIN_COST = 1
+DIAMOND_FINISH_PER_HOUR = 6  # diamonds per remaining hour, rounded up
+
+
+def diamond_finish_cost(remaining_seconds: float) -> int:
+    """Diamonds needed to instantly finish an upgrade with this much time left."""
+    import math as _math
+
+    hours = max(0.0, remaining_seconds) / 3600
+    return max(DIAMOND_FINISH_MIN_COST, _math.ceil(hours * DIAMOND_FINISH_PER_HOUR))
+
 # ── Daily prize wheel: one free spin/day (capped via ENERGY_CAPS below), a
 # weighted table of small prizes across every resource plus speed-up cards. ─────
 WHEEL_DAILY_LIMIT = 1
@@ -430,9 +472,17 @@ FORGE_MAX_FAIL_CHANCE = 0.45
 # defender's gold, and a fresh defender gets a shield so they can't be farmed.
 # The soft cap below is the important bit — see game/arena.py's cup_delta(). ─────
 ARENA_LOOT_PERCENT = 0.10
-ARENA_LOOT_MIN = 10  # a raid on a broke player still pays something, so raiding stays worth doing
+ARENA_LOOT_MIN = 30  # a raid on a broke player still pays something, so raiding stays worth doing
 ARENA_SHIELD_HOURS = 8
 ARENA_ATTACK_ENERGY_COST = 1
+
+# Loot is capped against the ATTACKER's own progression stage, not the defender's
+# wallet. Without this, one lucky match against a hoarder hands a new player more
+# gold than hours of hunting and skips the whole early economy; with it, raiding
+# is reliably a bit better than hunting instead of a jackpot.
+ARENA_LOOT_CAP_BASE = 200
+ARENA_LOOT_CAP_PER_LEVEL = 45
+
 ARENA_CUP_WIN_BASE = 22
 ARENA_CUP_LOSS_BASE = 14
 ARENA_CUP_MIN_DELTA = 4  # never award/deduct less than this, so every fight moves the needle
@@ -442,8 +492,10 @@ ARENA_STARTING_CUP = 0
 
 # A player's cup is soft-capped by their actual creature power: past the ceiling
 # implied by their power, wins award steeply less. Without this a weak player could
-# ride a lucky streak into a bracket that then farms them forever.
-ARENA_CUP_PER_POWER = 2.2
+# ride a lucky streak into a bracket that then farms them forever. Tuned generously
+# enough that a normally-progressing player is never damped — it's a guard rail for
+# outliers, not a tax on everyone.
+ARENA_CUP_PER_POWER = 4.0
 ARENA_OVERCAP_DAMPING = 0.25  # cup gain multiplier once you're above your deserved cup
 
 # Fake opponents shown when no real player sits in the cup band — their lab names
@@ -460,7 +512,35 @@ ARENA_FAKE_LAB_NAMES = [
     "قرارگاه مه‌آلود",
     "کندوی فولادی",
 ]
-ARENA_FAKE_LOOT_RANGE = (40, 260)  # deliberately swingy, so bot raids still feel like a gamble
+# Bot loot scales with the attacker's own level so raiding bots keeps pace with
+# progression instead of going stale — the spread stays wide so it still gambles.
+ARENA_FAKE_LOOT_BASE = (60, 200)
+ARENA_FAKE_LOOT_PER_LEVEL = 18
+
+
+def arena_loot_cap(attacker_level: int) -> int:
+    return ARENA_LOOT_CAP_BASE + max(0, attacker_level) * ARENA_LOOT_CAP_PER_LEVEL
+
+
+def arena_fake_loot_range(attacker_level: int) -> tuple[int, int]:
+    bonus = max(0, attacker_level) * ARENA_FAKE_LOOT_PER_LEVEL
+    return ARENA_FAKE_LOOT_BASE[0] + bonus, ARENA_FAKE_LOOT_BASE[1] + bonus
+
+
+# ── Weekly cup season ──────────────────────────────────────────────────────────
+# Resetting to zero every week would throw away a week of work; resetting to
+# nothing at all would let the first month's leaders sit on top forever. So each
+# player restarts at a floor set by where they finished, plus a slice of whatever
+# they earned above it.
+SEASON_RANK_FLOORS = [
+    (1, 600),  # champion
+    (3, 450),
+    (10, 320),
+    (25, 200),
+    (50, 120),
+]
+SEASON_DEFAULT_FLOOR = 60
+SEASON_CARRYOVER_PCT = 0.15
 
 
 def forge_cost(item_level: int, rarity: str) -> int:

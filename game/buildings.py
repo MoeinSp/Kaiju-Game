@@ -186,6 +186,34 @@ def apply_speedup(user: User, minutes: int) -> tuple[BuildingUpgrade | None, boo
     return upgrade, False
 
 
+def diamond_finish_price(upgrade: BuildingUpgrade) -> int:
+    """Diamonds to finish this upgrade right now, from the time still remaining."""
+    remaining = (upgrade.finishes_at - timezone.now()).total_seconds()
+    return constants.diamond_finish_cost(remaining)
+
+
+def finish_with_diamonds(user: User) -> tuple[Building, int]:
+    """Instantly completes the active upgrade for diamonds. Returns (building, cost).
+    Priced from the *remaining* time, so paying after waiting a while is cheaper —
+    otherwise the sensible play would always be to pay immediately."""
+    upgrade = BuildingUpgrade.objects.filter(owner=user).first()
+    if upgrade is None:
+        raise GameError("هیچ ارتقایی در حال انجام نیست.")
+
+    cost = diamond_finish_price(upgrade)
+    if user.diamonds < cost:
+        raise GameError(f"الماس کافی نداری! تموم کردن این ارتقا {cost} الماس می‌خواد.")
+
+    user.diamonds -= cost
+    user.save(update_fields=["diamonds"])
+
+    building = upgrade.building
+    building.level = upgrade.target_level
+    building.save(update_fields=["level"])
+    upgrade.delete()
+    return building, cost
+
+
 def grant_speedup_card(user: User, minutes: int, count: int = 1) -> SpeedupCard:
     card, _ = SpeedupCard.objects.get_or_create(owner=user, minutes=minutes)
     card.count += count

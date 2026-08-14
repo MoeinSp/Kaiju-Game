@@ -10,7 +10,7 @@ from bot.handlers.lootbox import biocrate_cmd, diamond_box_panel
 from bot.handlers.owner import admin_cmd
 from bot.handlers.wheel import wheel_cmd
 from bot.buttons import DANGER, PRIMARY, SUCCESS, back_btn, btn
-from bot.utils import run_db, safe_edit_message_text
+from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from config import OWNER_TELEGRAM_ID
 from game import constants
 from game.alliance import (
@@ -22,7 +22,7 @@ from game.alliance import (
     leave_alliance,
     top_alliances,
 )
-from game.buildings import get_or_create_buildings
+from game.buildings import get_or_create_buildings, grant_speedup_card
 from game.creature import (
     GameError,
     create_starter_creature,
@@ -44,57 +44,73 @@ from game.hunt import HUNT_TIERS, estimated_reward, resolve_hunt, scout_one
 def _mission_lines(completed: list[dict]) -> str:
     if not completed:
         return ""
-    lines = []
-    for m in completed:
-        reward = f"+{m['coins']} {get_emoji('coin')}"
-        if m["dna"]:
-            reward += f" +{m['dna']} {get_emoji('dna')}"
-        lines.append(f"{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! {reward}")
+    lines = [
+        f"{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}"
+        for m in completed
+    ]
     return "\n" + "\n".join(lines)
 
 
 def wallet_line(user, energy: int | None = None) -> str:
     """One compact resource strip, reused by every screen that needs it."""
     energy = sync_energy(user) if energy is None else energy
+    # one resource per line: crammed onto a single row the numbers ran together and
+    # it was impossible to tell which figure belonged to which currency
     return (
-        f"{get_emoji('coin')} {user.coins}  ·  {get_emoji('dna')} {user.dna_fragments}  ·  "
-        f"{get_emoji('diamond')} {user.diamonds}  ·  {get_emoji('energy')} {energy}/{constants.MAX_ENERGY}"
+        f"{get_emoji('coin')} طلا: <b>{user.coins:,}</b>\n"
+        f"{get_emoji('dna')} DNA: <b>{user.dna_fragments:,}</b>\n"
+        f"{get_emoji('diamond')} الماس: <b>{user.diamonds:,}</b>\n"
+        f"{get_emoji('energy')} انرژی: <b>{energy}</b>/{constants.MAX_ENERGY}"
     )
 
 
 def creature_card_text(user, creature, equipped_items: list | None = None) -> str:
     """Deliberately kept short: identity, one stat row, XP, wallet. Body-part levels
     live on the separate «ارتقا» screen (upgrade_panel) so this doesn't turn into a
-    wall of numbers on every single /start."""
+    wall of numbers on every single /start.
+
+    Every value is labelled — an unlabelled row of emoji+number reads as noise once
+    there are more than three of them."""
     stats = effective_stats(creature, equipped_items)
     energy = sync_energy(user)
     xp_bar = constants.render_bar(creature.xp, constants.XP_PER_LEVEL, width=10)
     stars = get_emoji("star") * creature.star_level
 
     lines = [
-        f"{get_emoji('creature')} <b>{creature.name}</b>   <code>#{creature.id}</code>",
-        f"{constants.element_label(creature.element)} · {constants.RARITY_LABELS[creature.rarity]} · {stars}",
-        f"سطح <b>{creature.level}</b>   {xp_bar} {creature.xp}/{constants.XP_PER_LEVEL}",
+        f"{get_emoji('creature')} <b>{creature.name}</b>  <code>#{creature.id}</code>",
+        f"{constants.RARITY_LABELS[creature.rarity]} {stars}",
+        f"{constants.element_label(creature.element)}",
         "",
-        f"{get_emoji('hp')} <b>{stats['hp']}</b>   {get_emoji('atk')} <b>{stats['atk']}</b>   "
-        f"{get_emoji('def')} <b>{stats['def']}</b>   {get_emoji('spd')} <b>{stats['spd']}</b>",
+        f"📊 سطح <b>{creature.level}</b>",
+        f"{xp_bar}  {creature.xp}/{constants.XP_PER_LEVEL} XP",
+        "",
+        "⚔️ <b>توانایی‌ها</b>",
+        f"{get_emoji('hp')} جان: <b>{stats['hp']}</b>      {get_emoji('atk')} حمله: <b>{stats['atk']}</b>",
+        f"{get_emoji('def')} دفاع: <b>{stats['def']}</b>      {get_emoji('spd')} سرعت: <b>{stats['spd']}</b>",
     ]
     if equipped_items:
-        slots = " · ".join(constants.EQUIPMENT_SLOT_LABELS[i.slot] + f"+{i.level}" for i in equipped_items)
-        lines.append(f"<i>{slots}</i>")
+        lines.append("")
+        lines.append("🎒 <b>تجهیزات</b>")
+        for i in equipped_items:
+            lines.append(f"{constants.EQUIPMENT_SLOT_LABELS[i.slot]} {i.name} <b>+{i.level}</b>")
     lines.append("")
+    lines.append("━━━━━━━━━━")
     lines.append(wallet_line(user, energy))
     return "\n".join(lines)
 
 
 def upgrade_panel_text(user, creature, equipped_items: list | None = None) -> str:
     stats = effective_stats(creature, equipped_items)
+    stars = get_emoji("star") * creature.star_level
     lines = [
         f"🔧 <b>ارتقای {creature.name}</b>",
-        f"{get_emoji('hp')} {stats['hp']}   {get_emoji('atk')} {stats['atk']}   "
-        f"{get_emoji('def')} {stats['def']}   {get_emoji('spd')} {stats['spd']}   "
-        f"{get_emoji('poison')} {stats['poison']}",
+        f"{constants.RARITY_LABELS[creature.rarity]} {stars} · سطح {creature.level}",
         "",
+        f"{get_emoji('hp')} جان: <b>{stats['hp']}</b>      {get_emoji('atk')} حمله: <b>{stats['atk']}</b>",
+        f"{get_emoji('def')} دفاع: <b>{stats['def']}</b>      {get_emoji('spd')} سرعت: <b>{stats['spd']}</b>",
+        f"{get_emoji('poison')} زهر: <b>{stats['poison']}</b>",
+        "",
+        "🧩 <b>اعضای قابل ارتقا</b>",
     ]
     for part, cfg in constants.BODY_PARTS.items():
         level = getattr(creature, f"{part}_lvl")
@@ -158,10 +174,13 @@ async def upgrade_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     for creature, power in ranked:
         active_tag = "🟢 " if creature.is_active else ""
         stars = "⭐" * creature.star_level
+        # RARITY_LABELS already carries its own colour dot, which is the fastest way
+        # to read rarity at a glance in a long list
+        rarity = constants.RARITY_LABELS[creature.rarity]
         rows.append(
             [
                 btn(
-                    f"{active_tag}{creature.name} {stars} · Lv{creature.level} · 💪{power}",
+                    f"{active_tag}{creature.name} {stars} · {rarity} · Lv{creature.level} · 💪{power}",
                     callback_data=f"upg_pick:{creature.id}",
                 )
             ]
@@ -249,6 +268,10 @@ def _start_sync(tg_user):
     if creature is None:
         creature = create_starter_creature(user)
         is_new = True
+        # starter build-timer cards — the first main-hall upgrades are the slowest
+        # part of a new player's first session, so hand them enough to skip past it
+        for minutes, count in constants.STARTING_SPEEDUP_CARDS.items():
+            grant_speedup_card(user, minutes, count=count)
     login_bonus = apply_daily_login(user)
     equipped_items = get_equipped_items(creature)
     get_or_create_buildings(user)
@@ -603,10 +626,7 @@ async def missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lines = [f"{get_emoji('mission')} <b>ماموریت‌های امروز</b>\n"]
     for m in status:
         check = "✅" if m["done"] else f"⏳ {m['progress']}/{m['target']}"
-        reward = f"+{m['coins']} {get_emoji('coin')}" + (
-            f" +{m['dna']} {get_emoji('dna')}" if m["dna"] else ""
-        )
-        lines.append(f"{check} — {m['label']} ({reward})")
+        lines.append(f"{check} — {m['label']} ({mission_reward_text(m)})")
     lines.append("\n<i>ماموریت‌ها هر روز (ساعت جهانی UTC) ریست می‌شن.</i>")
     await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
 
@@ -623,7 +643,7 @@ def _hunt_scout_sync(tg_user):
 
 def _hunt_scout_text(creature, my_power, target, energy) -> str:
     tier_label = HUNT_TIERS[target["tier"]]["label"]
-    lo, hi = estimated_reward(target["tier"])
+    lo, hi = estimated_reward(target["tier"], creature.level)
     diff = target["power"] - my_power
     odds = "🟢 شانس بالا" if diff < -15 else ("🔴 خطرناک" if diff > 15 else "🟡 سرتاسری")
     return "\n".join(

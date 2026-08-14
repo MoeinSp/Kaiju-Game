@@ -54,6 +54,12 @@ def check_missions(user: User, action: str) -> list[dict]:
             MissionClaim.objects.create(user=user, mission_key=key, day=day)
             user.coins += defn["coins"]
             user.dna_fragments += defn["dna"]
+            if defn.get("speedup"):
+                # imported here rather than at module level: game.buildings imports
+                # game.creature, which would make this a circular import at load time
+                from game.buildings import grant_speedup_card
+
+                grant_speedup_card(user, defn["speedup"], count=1)
             completed.append({**defn, "key": key})
     if completed:
         user.save(update_fields=["coins", "dna_fragments"])

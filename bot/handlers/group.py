@@ -11,7 +11,7 @@ from bio_lab.repository import (
     touch_membership,
 )
 from bot.buttons import DANGER, PRIMARY, SUCCESS, back_btn, btn
-from bot.utils import run_db, safe_edit_message_text
+from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from game import constants
 from game.buildings import maybe_award_speedup_card
 from game.combat import resolve_duel
@@ -35,10 +35,7 @@ def _mission_lines(completed: list[dict]) -> str:
         return ""
     lines = []
     for m in completed:
-        reward = f"+{m['coins']} {get_emoji('coin')}"
-        if m["dna"]:
-            reward += f" +{m['dna']} {get_emoji('dna')}"
-        lines.append(f"{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! {reward}")
+        lines.append(f"{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}")
     return "\n" + "\n".join(lines)
 
 

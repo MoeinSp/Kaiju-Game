@@ -9,10 +9,12 @@ Telegram's Bot API supports two things on a button that plain text can't express
 * ``icon_custom_emoji_id`` — a Premium custom emoji shown before the label.
   Available because the bot owner has Telegram Premium (see game/button_emoji.py).
 
-Both degrade gracefully: every button keeps a plain-unicode emoji in its label,
-so a client that supports neither field still shows a sensible, distinguishable
-button. That's why ``btn()`` takes an ``emoji_key`` rather than a pre-formatted
-label — it needs to place the fallback glyph itself.
+Both degrade gracefully. When no Premium icon is configured for a key, the plain
+unicode glyph goes into the label instead, so a client that supports neither
+field still shows a sensible, distinguishable button. The two are mutually
+exclusive — Telegram draws the icon before the label, so showing both would
+render the emoji twice. That's why ``btn()`` takes an ``emoji_key`` rather than
+a pre-formatted label: it has to decide which of the two to use.
 """
 
 from telegram import InlineKeyboardButton
@@ -42,12 +44,16 @@ def btn(
     (``callback_data``, ``url``, …) through as usual.
     """
     if emoji_key is not None:
-        fallback = get_button_label_emoji(emoji_key)
-        if fallback and not label.startswith(fallback):
-            label = f"{fallback} {label}"
         icon = get_button_icon(emoji_key)
         if icon is not None:
+            # Telegram draws the icon *before* the label, so keeping the unicode
+            # glyph in the label too would show the emoji twice. The icon replaces
+            # the fallback rather than joining it.
             kwargs["icon_custom_emoji_id"] = icon
+        else:
+            fallback = get_button_label_emoji(emoji_key)
+            if fallback and not label.startswith(fallback):
+                label = f"{fallback} {label}"
     if style is not None:
         kwargs["style"] = style
     return InlineKeyboardButton(label, **kwargs)

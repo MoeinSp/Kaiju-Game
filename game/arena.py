@@ -62,6 +62,11 @@ def cup_delta(attacker: User, defender_cup: int, won: bool, attacker_power: int)
     return -delta
 
 
+def _attacker_level(attacker: User) -> int:
+    creature = Creature.objects.filter(owner=attacker, is_active=True).first()
+    return creature.level if creature is not None else 1
+
+
 def _fake_opponent(attacker: User, attacker_power: int) -> dict:
     """A bot defender, used when no real player sits in the attacker's cup band.
     Scaled around the attacker's own power so the fight is a real coin-flip, with
@@ -74,7 +79,7 @@ def _fake_opponent(attacker: User, attacker_power: int) -> dict:
         "label": random.choice(constants.ARENA_FAKE_LAB_NAMES),
         "cup": max(0, attacker.cup + random.randint(-60, 90)),
         "power": power,
-        "loot_pool": random.randint(*constants.ARENA_FAKE_LOOT_RANGE),
+        "loot_pool": random.randint(*constants.arena_fake_loot_range(_attacker_level(attacker))),
     }
 
 
@@ -114,8 +119,15 @@ def find_opponent(attacker: User) -> dict:
     }
 
 
-def expected_loot(opponent: dict) -> int:
-    return max(constants.ARENA_LOOT_MIN, round(opponent["loot_pool"] * constants.ARENA_LOOT_PERCENT))
+def expected_loot(opponent: dict, attacker_level: int = 1) -> int:
+    """A slice of the defender's gold, floored so raiding a broke player still pays
+    and capped against the ATTACKER's own progression stage — one lucky match
+    against a hoarder shouldn't hand a new player more than hours of hunting."""
+    raw = round(opponent["loot_pool"] * constants.ARENA_LOOT_PERCENT)
+    return max(
+        constants.ARENA_LOOT_MIN,
+        min(raw, constants.arena_loot_cap(attacker_level)),
+    )
 
 
 @transaction.atomic
@@ -147,7 +159,7 @@ def attack(attacker: User, opponent: dict) -> dict:
 
     loot = 0
     if won:
-        loot = expected_loot(opponent)
+        loot = expected_loot(opponent, attacker_creature.level)
         if defender_user is not None:
             loot = min(loot, defender_user.coins)  # never push a real defender negative
             defender_user.coins -= loot

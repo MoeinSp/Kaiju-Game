@@ -5,7 +5,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 from bio_lab.models import InteractiveBattle, User
 from bio_lab.repository import display_name, get_active_creature, get_or_create_group, get_or_create_user, touch_membership
 from bot.buttons import DANGER, PRIMARY, SUCCESS, back_btn, btn
-from bot.utils import run_db, safe_edit_message_text
+from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from game import constants
 from game.creature import GameError, add_xp, effective_stats
 from game.daily import check_missions, record_action
@@ -199,8 +199,7 @@ def _battle_action_sync(battle_id, actor_tg_id, action):
         )
         for m in completed_missions:
             reward_lines.append(
-                f"{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! +{m['coins']} {get_emoji('coin')}"
-                + (f" +{m['dna']} {get_emoji('dna')}" if m["dna"] else "")
+                f"{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}"
             )
 
     battle.save()

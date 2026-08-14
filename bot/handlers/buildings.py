@@ -5,12 +5,14 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 from bio_lab.models import Building
 from bio_lab.repository import get_or_create_user
 from bot.buttons import DANGER, PRIMARY, SUCCESS, back_btn, btn
-from bot.utils import run_db, safe_edit_message_text
+from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from game import constants
 from game.buildings import (
     active_upgrade,
     apply_speedup,
     collect,
+    diamond_finish_price,
+    finish_with_diamonds,
     get_or_create_buildings,
     list_speedup_cards,
     main_hall_level,
@@ -21,6 +23,7 @@ from game.buildings import (
     upgrade_cost_and_minutes,
 )
 from game.creature import GameError
+from game.daily import check_missions, record_action
 from game.emoji import get_emoji
 
 _RESOURCE_EMOJI_KEY = {"coins": "coin", "diamonds": "diamond", "dna_fragments": "dna"}
@@ -124,6 +127,10 @@ def _building_detail_text(building: Building, upgrade, pending: int, cap: int) -
         remaining = (upgrade.finishes_at - timezone.now()).total_seconds()
         verb = "ساخت" if building.level == 0 else "ارتقا"
         lines.append(f"\n⏳ در حال {verb} تا سطح {upgrade.target_level} — {_format_remaining(remaining)} مونده")
+        lines.append(
+            f"<i>می‌تونی با کارت سرعت یا {diamond_finish_price(upgrade)} 💎 همین الان تمومش کنی "
+            "(هرچی بیشتر صبر کنی، ارزون‌تر می‌شه).</i>"
+        )
     elif upgrade is not None:
         lines.append("\n⏳ کارگرت الان مشغول یه ساختمون دیگه‌ست.")
     elif building.level >= constants.BUILDING_MAX_LEVEL:
@@ -145,6 +152,15 @@ def _building_detail_keyboard(building: Building, upgrade, cap: int) -> InlineKe
         rows.append([btn("جمع‌آوری", emoji_key="btn_collect", style=SUCCESS, callback_data=f"bld_collect:{building.id}")])
     if upgrade is not None and upgrade.building_id == building.id:
         rows.append([btn("سریع‌ترش کن", emoji_key="btn_speedup", style=SUCCESS, callback_data=f"bld_speedup_list:{building.id}")])
+        rows.append(
+            [
+                btn(
+                    f"💎 تمومش کن ({diamond_finish_price(upgrade)} الماس)",
+                    style=PRIMARY,
+                    callback_data=f"bld_finish:{building.id}",
+                )
+            ]
+        )
     elif upgrade is None and building.level < min(cap, constants.BUILDING_MAX_LEVEL):
         label = "🏗 ساخت" if building.level == 0 else "🔧 شروع ارتقا"
         rows.append([btn(label, emoji_key="btn_build", style=SUCCESS, callback_data=f"bld_upgrade:{building.id}")])
@@ -176,25 +192,41 @@ def _collect_sync(tg_user, building_id):
     except Building.DoesNotExist:
         raise GameError("این ساختمون پیدا نشد.")
     amount, resource = collect(user, building)
+    record_action(user, "collect")
+    completed_missions = check_missions(user, "collect")
     upgrade = active_upgrade(user)
     pending = pending_amount(building)
-    return building, upgrade, pending, amount, resource, max_level_for(user, building.building_type)
+    return (
+        building,
+        upgrade,
+        pending,
+        amount,
+        resource,
+        max_level_for(user, building.building_type),
+        completed_missions,
+    )
 
 
 async def building_collect_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     building_id = int(query.data.split(":")[1])
     try:
-        building, upgrade, pending, amount, resource, cap = await run_db(
+        building, upgrade, pending, amount, resource, cap, completed_missions = await run_db(
             _collect_sync, update.effective_user, building_id
         )
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer(f"+{amount} {_RESOURCE_NAMES[resource]}!")
+    text = _building_detail_text(building, upgrade, pending, cap)
+    if completed_missions:
+        text += "\n\n" + "\n".join(
+            f"{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}"
+            for m in completed_missions
+        )
     await safe_edit_message_text(
         query,
-        _building_detail_text(building, upgrade, pending, cap),
+        text,
         parse_mode="HTML",
         reply_markup=_building_detail_keyboard(building, upgrade, cap),
     )
@@ -259,6 +291,38 @@ async def building_speedup_list_callback(update: Update, context: ContextTypes.D
     )
 
 
+def _finish_with_diamonds_sync(tg_user, building_id):
+    user, _ = get_or_create_user(tg_user)
+    try:
+        building = Building.objects.get(id=building_id, owner=user)
+    except Building.DoesNotExist:
+        raise GameError("این ساختمون پیدا نشد.")
+    _, cost = finish_with_diamonds(user)
+    upgrade = active_upgrade(user)
+    building.refresh_from_db()
+    pending = pending_amount(building)
+    return building, upgrade, pending, cost, max_level_for(user, building.building_type)
+
+
+async def building_finish_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    building_id = int(query.data.split(":")[1])
+    try:
+        building, upgrade, pending, cost, cap = await run_db(
+            _finish_with_diamonds_sync, update.effective_user, building_id
+        )
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer(f"💎 −{cost} — تموم شد!")
+    await safe_edit_message_text(
+        query,
+        f"💎 <b>با {cost} الماس تموم شد!</b>\n\n" + _building_detail_text(building, upgrade, pending, cap),
+        parse_mode="HTML",
+        reply_markup=_building_detail_keyboard(building, upgrade, cap),
+    )
+
+
 def _speedup_do_sync(tg_user, building_id, minutes):
     user, _ = get_or_create_user(tg_user)
     try:
@@ -296,6 +360,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(building_pick_callback, pattern=r"^bld_pick:"))
     application.add_handler(CallbackQueryHandler(building_collect_callback, pattern=r"^bld_collect:"))
     application.add_handler(CallbackQueryHandler(building_upgrade_callback, pattern=r"^bld_upgrade:"))
+    application.add_handler(CallbackQueryHandler(building_finish_callback, pattern=r"^bld_finish:"))
     application.add_handler(
         CallbackQueryHandler(building_speedup_list_callback, pattern=r"^bld_speedup_list:")
     )

@@ -12,13 +12,36 @@ WILD_NAMES = ["Ferabeast", "Grimhide", "Rustclaw", "Mossfang", "Duskrunner"]
 HUNT_TIERS = {
     "weak": {"label": "🟢 ضعیف", "stat_mult": 0.8, "reward_mult": 0.6},
     "normal": {"label": "🟡 هم‌سطح", "stat_mult": 1.0, "reward_mult": 1.0},
-    "strong": {"label": "🔴 قوی", "stat_mult": 1.35, "reward_mult": 1.8},
+    "strong": {"label": "🔴 قوی", "stat_mult": 1.35, "reward_mult": 2.1},
 }
 
-HUNT_COIN_REWARD = (15, 35)
-HUNT_DNA_REWARD = (0, 4)
+# Payout scales with the hunter's level. Previously it was a flat 15–35 gold no
+# matter how strong you were, so hunting became worthless the moment building and
+# forge costs (which DO scale) took off — the main reason the economy felt off.
+HUNT_COIN_BASE = (25, 45)
+HUNT_COIN_PER_LEVEL = 4
+HUNT_DNA_BASE = (0, 3)
+HUNT_DNA_PER_LEVEL = 0.25  # ~1 extra DNA every 4 levels
 HUNT_XP_WIN = 25
 HUNT_XP_LOSE = 8
+
+
+def hunt_coin_range(level: int, tier: str) -> tuple[int, int]:
+    mult = HUNT_TIERS[tier]["reward_mult"]
+    bonus = max(0, level) * HUNT_COIN_PER_LEVEL
+    return (
+        round((HUNT_COIN_BASE[0] + bonus) * mult),
+        round((HUNT_COIN_BASE[1] + bonus) * mult),
+    )
+
+
+def hunt_dna_range(level: int, tier: str) -> tuple[int, int]:
+    mult = HUNT_TIERS[tier]["reward_mult"]
+    bonus = max(0, level) * HUNT_DNA_PER_LEVEL
+    return (
+        round((HUNT_DNA_BASE[0] + bonus) * mult),
+        round((HUNT_DNA_BASE[1] + bonus) * mult),
+    )
 
 
 def spawn_wild_creature(player_creature: Creature, tier: str = "normal", seed: int | None = None) -> Creature:
@@ -61,10 +84,10 @@ def scout_one(player_creature: Creature) -> dict:
     }
 
 
-def estimated_reward(tier: str) -> tuple[int, int]:
-    """(min_coins, max_coins) shown while scouting, so the payout is visible upfront."""
-    mult = HUNT_TIERS[tier]["reward_mult"]
-    return round(HUNT_COIN_REWARD[0] * mult), round(HUNT_COIN_REWARD[1] * mult)
+def estimated_reward(tier: str, level: int = 1) -> tuple[int, int]:
+    """(min_coins, max_coins) shown while scouting, so the payout is visible upfront.
+    Takes the hunter's level because the payout scales with it."""
+    return hunt_coin_range(level, tier)
 
 
 def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal", seed: int | None = None) -> dict:
@@ -75,8 +98,8 @@ def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal", se
     reward_mult = HUNT_TIERS[tier]["reward_mult"]
 
     if won:
-        coins = round(random.randint(*HUNT_COIN_REWARD) * reward_mult)
-        dna = round(random.randint(*HUNT_DNA_REWARD) * reward_mult)
+        coins = random.randint(*hunt_coin_range(player_creature.level, tier))
+        dna = random.randint(*hunt_dna_range(player_creature.level, tier))
         xp_gain = round(HUNT_XP_WIN * reward_mult)
     else:
         coins = 0

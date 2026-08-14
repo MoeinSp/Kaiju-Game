@@ -5,6 +5,7 @@ from bio_lab.models import (
     AttackLog,
     Building,
     BuildingUpgrade,
+    ButtonEmojiOverride,
     ChannelJoinClaim,
     Creature,
     DailyActionLog,
@@ -19,6 +20,8 @@ from bio_lab.models import (
     RaidBoss,
     RaidDamageLog,
     RequiredChannel,
+    SeasonResult,
+    SeasonState,
     SpeedupCard,
     User,
 )
@@ -90,6 +93,22 @@ class BuildingUpgradeAdmin(admin.ModelAdmin):
 class SpeedupCardAdmin(admin.ModelAdmin):
     list_display = ("id", "owner", "minutes", "count")
     list_filter = ("minutes",)
+
+
+@admin.register(SeasonResult)
+class SeasonResultAdmin(admin.ModelAdmin):
+    list_display = ("week_key", "rank", "user", "cup_before", "cup_after", "created_at")
+    list_filter = ("week_key",)
+
+
+@admin.register(SeasonState)
+class SeasonStateAdmin(admin.ModelAdmin):
+    list_display = ("id", "last_closed_week", "updated_at")
+
+
+@admin.register(ButtonEmojiOverride)
+class ButtonEmojiOverrideAdmin(admin.ModelAdmin):
+    list_display = ("key", "placeholder", "custom_emoji_id", "updated_at")
 
 
 @admin.register(AttackLog)

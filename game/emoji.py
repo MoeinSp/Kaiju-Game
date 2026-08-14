@@ -42,7 +42,9 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "users": ("کاربران", "👥", "social"),
     "crown": ("رهبر/محافظ", "👑", "social"),
     # progress / identity
-    "creature": ("نماد موجود", "🧬", "progress"),
+    # deliberately NOT 🧬 — that's the DNA resource, and using the same glyph for
+    # both made "🧬 وایو … 🧬 113" unreadable on the creature card
+    "creature": ("نماد موجود", "🦖", "progress"),
     "trophy": ("رتبه‌بندی", "🏆", "progress"),
     "celebrate": ("تبریک/لول‌آپ", "🎉", "progress"),
     "mission": ("ماموریت", "🎯", "progress"),

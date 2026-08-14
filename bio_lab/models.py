@@ -275,6 +275,41 @@ class AttackLog(models.Model):
         return f"{self.attacker_id} -> {self.defender_label} ({'W' if self.attacker_won else 'L'})"
 
 
+class SeasonResult(models.Model):
+    """A player's finishing position in one weekly cup season.
+
+    Written when a season is closed out. `cup_before` is what they ended on and
+    `cup_after` is the floor they were reset to — kept so the history explains
+    itself without re-deriving the reset formula that was in force at the time."""
+
+    week_key = models.CharField(max_length=10)  # ISO "YYYY-Www", e.g. 2026-W33
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="season_results")
+    rank = models.IntegerField()
+    cup_before = models.IntegerField()
+    cup_after = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["week_key", "user"], name="uq_season_result")
+        ]
+        ordering = ("-week_key", "rank")
+
+    def __str__(self) -> str:
+        return f"{self.week_key} #{self.rank} — {self.user_id}"
+
+
+class SeasonState(models.Model):
+    """Single-row table remembering which week has already been closed out, so a
+    season is never settled twice no matter how often the check runs."""
+
+    last_closed_week = models.CharField(max_length=10, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"last closed: {self.last_closed_week or '—'}"
+
+
 class EmojiOverride(models.Model):
     """Maps a semantic key (e.g. "coin") to a Telegram Premium custom emoji, set by
     the bot owner via /set_emoji. Rendered with <tg-emoji emoji-id="..."> in HTML
