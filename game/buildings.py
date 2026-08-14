@@ -75,8 +75,18 @@ def pending_amount(building: Building) -> int:
     cfg = constants.BUILDING_PRODUCTION.get(building.building_type)
     if cfg is None or building.level <= 0:
         return 0  # pure-gate buildings (hall/forge/fusion lab) and unbuilt ones make nothing
-    rate = cfg["rate_per_hour"] * building.level
-    cap = cfg["cap_base"] * building.level
+    # imported here rather than at module level: game.workers imports game.creature,
+    # which imports back into this module's dependency chain
+    from game.workers import worker_bonus
+
+    # Stationed creatures raise the rate *and* the storage cap. Raising only the
+    # rate looked tidier, but the cap is small enough that it binds within a few
+    # hours, so a staffed mine and a bare one paid identically to anyone who
+    # doesn't collect constantly — the bonus was invisible exactly where idle
+    # income matters. WORKER_BONUS_CAP is what keeps this bounded instead.
+    bonus = 1 + worker_bonus(building)
+    rate = cfg["rate_per_hour"] * building.level * bonus
+    cap = cfg["cap_base"] * building.level * bonus
     elapsed_hours = (timezone.now() - building.last_collected_at).total_seconds() / 3600
     return min(cap, math.floor(rate * max(elapsed_hours, 0)))
 

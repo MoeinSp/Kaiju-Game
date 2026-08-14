@@ -10,7 +10,8 @@ from telegram import Update  # noqa: E402
 from telegram.ext import Application, CallbackQueryHandler, ContextTypes, MessageHandler, filters  # noqa: E402
 
 from bot import middleware  # noqa: E402
-from bot.handlers import (  # noqa: E402
+from bot.handlers import (
+    breeding,  # noqa: E402
     arena,
     battle,
     buildings,
@@ -55,6 +56,7 @@ def main() -> None:
     inventory.register(application)
     lootbox.register(application)
     buildings.register(application)
+    breeding.register(application)
     wheel.register(application)
     arena.register(application)
     group.register(application)

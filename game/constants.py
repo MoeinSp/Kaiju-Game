@@ -423,6 +423,44 @@ BUILDING_PRODUCTION = {
 # forge caps items at +5 and a maxed level-5 forge at +25
 EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL = 5
 
+# ── Stationed creatures ───────────────────────────────────────────────────────
+# A production building hosts up to `level` creatures, and each one raises output
+# by its own level times this rate. A level-10 creature is +20%, so raising a
+# creature and then putting it to work compounds — which is the point.
+# The cap stops a full late-game roster from turning idle income into the whole
+# economy; hunting and raiding have to stay worth doing.
+WORKER_BONUS_PER_CREATURE_LEVEL = 0.02
+WORKER_BONUS_CAP = 1.5  # +150% at most, however many high-level creatures are stationed
+
+# ── Propagation (game/breeding.py) ────────────────────────────────────────────
+# Long by design: creatures are the scarce resource, so the rarer the parents the
+# longer they're locked up. Keyed to the better parent's rarity.
+BREEDING_MINUTES = {
+    "common": 240,      # 4h
+    "rare": 480,        # 8h
+    "epic": 960,        # 16h
+    "legendary": 1440,  # 24h
+    "mythic": 2160,     # 36h
+}
+BREEDING_DNA_COST = {
+    "common": 20,
+    "rare": 45,
+    "epic": 90,
+    "legendary": 160,
+    "mythic": 260,
+}
+# Bonuses to the offspring's rarity-upgrade roll. They reward a *considered*
+# pairing over two random creatures — matching element, matching species, and raw
+# power all push the odds up, but the cap keeps it a roll rather than a formula.
+BREEDING_SAME_ELEMENT_BONUS = 0.10
+BREEDING_SAME_SPECIES_BONUS = 0.05
+BREEDING_POWER_PER_BONUS_POINT = 60  # every 60 combined power adds 1 percentage point
+BREEDING_POWER_BONUS_CAP = 0.15
+BREEDING_MAX_UPGRADE_CHANCE = 0.60
+# the newborn inherits half its parents' average level, so propagation beats a
+# lootbox creature without handing over a finished fighter
+BREEDING_LEVEL_INHERIT = 0.5
+
 # ── Speed-up cards: consumable items that shave time off the active building
 # upgrade. Fixed denominations in minutes, rewarded by the daily wheel and a
 # handful of other activities rather than sold directly. ───────────────────────

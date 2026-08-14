@@ -40,6 +40,7 @@ LAB_XP_AWARDS = {
     "arena_loss": 4,
     "duel_win": 15,
     "fusion": 40,
+    "breeding": 35,
     "mission": 30,
     "box": 10,
 }

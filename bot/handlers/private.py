@@ -5,6 +5,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 from bio_lab.models import Alliance, Creature, User
 from bio_lab.repository import display_name, get_active_creature, get_or_create_user, lab_display
 from bot.handlers.arena import arena_panel
+from bot.handlers.breeding import breeding_panel
 from bot.handlers.buildings import buildings_panel
 from bot.handlers.inventory import blacksmith_panel, inventory_cmd
 from bot.handlers.lootbox import biocrate_cmd, diamond_box_panel
@@ -469,13 +470,14 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
             btn("ترکیب هیولا", emoji_key="btn_fusion", style=NAV, callback_data="menu:fusion"),
         ],
         [
+            btn("تکثیر زیستی", emoji_key="btn_breeding", style=NAV, callback_data="menu:breeding"),
+            btn("ساختمون‌ها", emoji_key="btn_buildings", style=NAV, callback_data="menu:buildings"),
+        ],
+        [
             btn("تجهیزات", emoji_key="btn_inventory", style=NAV, callback_data="menu:inventory"),
             btn("آهنگری", emoji_key="btn_forge", style=NAV, callback_data="menu:blacksmith"),
         ],
-        [
-            btn("ساختمون‌ها", emoji_key="btn_buildings", style=NAV, callback_data="menu:buildings"),
-            btn("ماموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions"),
-        ],
+        [btn("ماموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions")],
         [
             btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate"),
             btn("جعبه‌های الماسی", emoji_key="btn_diamond_box", style=SHOP, callback_data="menu:diamond_box"),
@@ -1579,13 +1581,14 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                 btn("ترکیب هیولا", emoji_key="btn_fusion", style=NAV, callback_data="menu:fusion"),
             ],
             [
+                btn("تکثیر زیستی", emoji_key="btn_breeding", style=NAV, callback_data="menu:breeding"),
+                btn("ساختمون‌ها", emoji_key="btn_buildings", style=NAV, callback_data="menu:buildings"),
+            ],
+            [
                 btn("تجهیزات", emoji_key="btn_inventory", style=NAV, callback_data="menu:inventory"),
                 btn("آهنگری", emoji_key="btn_forge", style=NAV, callback_data="menu:blacksmith"),
             ],
-            [
-                btn("ساختمون‌ها", emoji_key="btn_buildings", style=NAV, callback_data="menu:buildings"),
-                btn("ماموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions"),
-            ],
+            [btn("ماموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions")],
             [
                 btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate"),
                 btn("جعبه‌های الماسی", emoji_key="btn_diamond_box", style=SHOP, callback_data="menu:diamond_box"),
@@ -1618,6 +1621,7 @@ _MENU_ACTIONS = {
     "arena": arena_panel,
     "blacksmith": blacksmith_panel,
     "fusion": fusion_panel,
+    "breeding": breeding_panel,
     "buildings": buildings_panel,
     "wheel": wheel_cmd,
     "alliance_info": alliance_info_cmd,

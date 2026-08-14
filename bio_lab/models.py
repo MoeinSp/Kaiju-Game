@@ -132,6 +132,41 @@ class BuildingUpgrade(models.Model):
         return f"{self.building.building_type} -> Lv{self.target_level} ({self.owner_id})"
 
 
+class CreatureAssignment(models.Model):
+    """A creature stationed in a production building to raise its output.
+
+    OneToOne on `creature` is the whole safety story: a creature can be in
+    exactly one place, so "already working somewhere else" is a database
+    guarantee rather than something every call site has to remember to check.
+    How many a building can hold is its level (see game/workers.py)."""
+
+    creature = models.OneToOneField(Creature, on_delete=models.CASCADE, related_name="assignment")
+    building = models.ForeignKey(Building, on_delete=models.CASCADE, related_name="workers")
+    assigned_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"{self.creature_id} @ {self.building.building_type}"
+
+
+class BreedingJob(models.Model):
+    """One in-progress propagation. OneToOne on owner enforces "one at a time",
+    the same way BuildingUpgrade enforces the single worker.
+
+    Parents are NOT consumed — that's what separates this from fusion, which
+    burns both. They're merely busy until `finishes_at`, and game/workers.py's
+    availability check keeps them out of mines and off the active slot for the
+    duration."""
+
+    owner = models.OneToOneField(User, on_delete=models.CASCADE, related_name="breeding_job")
+    parent_a = models.ForeignKey(Creature, on_delete=models.CASCADE, related_name="+")
+    parent_b = models.ForeignKey(Creature, on_delete=models.CASCADE, related_name="+")
+    started_at = models.DateTimeField(auto_now_add=True)
+    finishes_at = models.DateTimeField()
+
+    def __str__(self) -> str:
+        return f"breeding {self.parent_a_id}+{self.parent_b_id} ({self.owner_id})"
+
+
 class SpeedupCard(models.Model):
     """Consumable items that shave time off the active BuildingUpgrade. `minutes`
     is one of game.constants.SPEEDUP_MINUTES — a fixed, small set of denominations,

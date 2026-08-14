@@ -36,6 +36,7 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_feed": ("تغذیه", "🍖", "action"),
     "btn_train": ("تمرین", "🏋️", "action"),
     "btn_fusion": ("فیوژن/ادغام", "🧪", "action"),
+    "btn_breeding": ("تکثیر زیستی", "🧫", "action"),
     "btn_forge": ("آهنگری", "⚒", "action"),
     "btn_collect": ("جمع‌آوری", "💰", "action"),
     "btn_build": ("ساخت/ارتقای ساختمون", "🏗", "action"),

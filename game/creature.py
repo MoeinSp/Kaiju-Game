@@ -114,6 +114,17 @@ def set_active_creature(user: User, creature_id: int) -> Creature:
         raise GameError("این موجود توی کلکسیون تو نیست.")
     if target.owner_id != user.id:
         raise GameError("این موجود توی کلکسیون تو نیست.")
+    # The other half of the "one job at a time" rule (game/workers.py owns the
+    # first half). Without this a player could station a creature in a mine and
+    # then make it active, and it would be both mining and fighting.
+    # Imported lazily: game.workers imports this module.
+    from game.workers import creature_status
+
+    status = creature_status(user, target)
+    if status is not None and not target.is_active:
+        raise GameError(
+            f"«{target.name}» الان مشغوله ({status}) — اول آزادش کن تا بتونی فعالش کنی."
+        )
     Creature.objects.filter(owner=user).exclude(id=creature_id).update(is_active=False)
     target.is_active = True
     target.save(update_fields=["is_active"])
