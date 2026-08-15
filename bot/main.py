@@ -41,6 +41,21 @@ async def _capture_private_text_reply(update: Update, context: ContextTypes.DEFA
     await owner.capture_owner_text_reply(update, context)
 
 
+async def _warn_if_group_privacy_on(application: Application) -> None:
+    """Telegram's group privacy mode silently withholds ordinary messages from
+    bots, which makes the entire word-driven group experience look broken while
+    every log stays clean. get_me() reports it, so say it out loud at startup."""
+    me = await application.bot.get_me()
+    if me.can_read_all_group_messages:
+        return
+    logging.warning(
+        "GROUP PRIVACY MODE IS ON for @%s - plain words like «هیولا» will NOT reach the bot "
+        "in groups. Fix: make the bot an admin in the group, or @BotFather -> /setprivacy -> "
+        "Disable, then remove and re-add the bot. Slash commands (/setup) still work either way.",
+        me.username,
+    )
+
+
 def main() -> None:
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN تنظیم نشده. فایل .env رو بر اساس .env.example بساز.")
@@ -72,6 +87,7 @@ def main() -> None:
         MessageHandler(filters.ChatType.PRIVATE & ~filters.COMMAND, _capture_private_text_reply)
     )
 
+    application.post_init = _warn_if_group_privacy_on
     # my_chat_member (bot added/removed from a group) isn't in the default update set
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 

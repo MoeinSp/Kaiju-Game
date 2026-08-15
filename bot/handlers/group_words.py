@@ -14,10 +14,12 @@ someone else's card would quietly re-render it with your own gear.
 """
 
 from telegram import InlineKeyboardMarkup, Update
-from telegram.ext import CallbackQueryHandler, ContextTypes, MessageHandler, filters
+from telegram.error import TelegramError
+from telegram.ext import (CallbackQueryHandler, CommandHandler, ContextTypes,
+                          MessageHandler, filters)
 
 from bio_lab.repository import display_name, get_active_creature, get_or_create_group, get_or_create_user, lab_display
-from bot.buttons import NAV, PRIMARY, btn
+from bot.buttons import NAV, PRIMARY, SHOP, btn
 from bot.utils import run_db, safe_edit_message_text
 from config import BOT_USERNAME
 from game import constants, keywords, word_reward
@@ -47,6 +49,33 @@ def _pm_button(label: str = "برو به پیوی ربات"):
 
 def _scoped(action: str, user_id: int) -> str:
     return f"grp:{action}:{user_id}"
+
+
+def group_footer_keyboard(user_id: int, *, skip: str | None = None) -> InlineKeyboardMarkup:
+    """The standard coloured keyboard hung under every group reply.
+
+    Group answers used to be bare text, which made the group half of the game
+    feel like a different, older product than the DM. These are the actions that
+    are safe to run straight from a button in a shared chat: read-only cards plus
+    the reward, all scoped to the presser. Anything that spends energy or picks a
+    target still needs the word (or the DM), because a mis-tap in a group is
+    public and irreversible.
+    """
+    row1 = [
+        btn("هیولا", emoji_key="btn_creature", style=NAV, callback_data=_scoped("creature", user_id)),
+        btn("جدول", emoji_key="btn_rank", style=NAV, callback_data=_scoped("leaderboard", user_id)),
+    ]
+    row2 = [
+        btn("جایزه", emoji_key="btn_diamond_box", style=SHOP, callback_data=_scoped("reward", user_id)),
+        btn("راهنما", emoji_key="btn_report", style=NAV, callback_data=_scoped("help", user_id)),
+    ]
+    rows = [
+        [b for b in row1 if skip is None or not (b.callback_data or "").startswith(f"grp:{skip}:")],
+        [b for b in row2 if skip is None or not (b.callback_data or "").startswith(f"grp:{skip}:")],
+    ]
+    rows = [r for r in rows if r]
+    rows.append([_pm_button()])
+    return InlineKeyboardMarkup(rows)
 
 
 # ── card renderers ──────────────────────────────────────────────────────────
@@ -179,6 +208,16 @@ def _card_sync(tg_user, chat, action):
         data["energy"] = sync_energy(user)
     elif action == "wallet":
         data["energy"] = sync_energy(user)
+    elif action == "leaderboard":
+        from bot.handlers.group import _creature_power, group_member_creatures
+
+        if group is None:
+            data["ranked"] = []
+        else:
+            data["ranked"] = sorted(
+                group_member_creatures(group), key=_creature_power, reverse=True
+            )[:10]
+            data["powers"] = {c.id: _creature_power(c) for c in data["ranked"]}
     return data
 
 
@@ -203,10 +242,23 @@ def _render(action: str, data: dict) -> tuple[str, InlineKeyboardMarkup]:
             [[btn("پروفایل", emoji_key="btn_profile", style=NAV, callback_data=_scoped("profile", user.id))],
              [_pm_button()]]
         )
+    if action == "leaderboard":
+        return _leaderboard_card(user, data.get("ranked", []), data.get("powers", {}))
     return _help_card()
 
 
-_CARD_ACTIONS = {"creature", "equipment", "collection", "profile", "lab", "wallet"}
+def _leaderboard_card(user, ranked, powers) -> tuple[str, InlineKeyboardMarkup]:
+    if not ranked:
+        return "هنوز هیچ موجودی توی این گروه ثبت نشده.", group_footer_keyboard(user.id, skip="leaderboard")
+    medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
+    lines = [f"{get_emoji('trophy')} <b>برترین موجودات این گروه</b>", ""]
+    for i, c in enumerate(ranked, start=1):
+        rank = medals[i - 1] if i <= 3 else f"<b>{i}.</b>"
+        lines.append(f"{rank} {c.name} (Lv{c.level}) — 💪{powers.get(c.id, 0)}")
+    return "\n".join(lines), group_footer_keyboard(user.id, skip="leaderboard")
+
+
+_CARD_ACTIONS = {"creature", "equipment", "collection", "profile", "lab", "wallet", "leaderboard"}
 
 
 # ── reward ──────────────────────────────────────────────────────────────────
@@ -279,7 +331,6 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "attack": group_handlers.attack,
         "duel": group_handlers.duel,
         "raid": group_handlers.raid_spawn,
-        "leaderboard": group_handlers.leaderboard,
         "guardian": group_handlers.guardian,
         "guardian_challenge": group_handlers.guardian_challenge,
         "guardian_claim": group_handlers.guardian_claim,
@@ -290,7 +341,11 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     if action == "reward":
         user, result = await run_db(_reward_sync, update.effective_user, message.chat)
-        await message.reply_text(_reward_text(user, result), parse_mode="HTML")
+        await message.reply_text(
+            _reward_text(user, result),
+            parse_mode="HTML",
+            reply_markup=group_footer_keyboard(update.effective_user.id, skip="reward"),
+        )
         return
 
     if action == "missions":
@@ -330,6 +385,19 @@ async def group_card_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     if update.effective_user.id != int(owner_id):
         await query.answer("این کارت مال تو نیست — خودت کلمه‌ش رو بفرست.", show_alert=True)
         return
+    if action == "reward":
+        # answered as a NEW message, not an edit: a claim is a personal event and
+        # overwriting the shared card with it would wipe whatever the group was
+        # looking at
+        user, result = await run_db(_reward_sync, update.effective_user, query.message.chat)
+        await query.answer("🎁 گرفتی!" if result["ok"] else "هنوز زوده")
+        await query.message.reply_text(
+            _reward_text(user, result),
+            parse_mode="HTML",
+            reply_markup=group_footer_keyboard(update.effective_user.id, skip="reward"),
+        )
+        return
+
     try:
         data = await run_db(_card_sync, update.effective_user, query.message.chat, action)
     except GameError as exc:
@@ -340,8 +408,65 @@ async def group_card_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
+PRIVACY_HELP = (
+    "⚠️ <b>حالت حریم خصوصی بات روشنه</b>\n\n"
+    "<blockquote>تلگرام تا وقتی این حالت روشنه، پیام‌های معمولی گروه رو <b>اصلاً به بات نمی‌رسونه</b> — "
+    "فقط دستورهای اسلش‌دار و ریپلای‌ها می‌رسن. برای همین نوشتن «هیولا» یا «اتک» هیچ جوابی نمی‌گیره.</blockquote>\n\n"
+    "<b>راه‌حل (یکی از این دو):</b>\n"
+    "۱️⃣ بات رو توی گروه <b>ادمین</b> کن — ادمین‌ها همه‌ی پیام‌ها رو می‌گیرن. (سریع‌ترین راه)\n"
+    "۲️⃣ یا توی @BotFather بزن <code>/setprivacy</code> ← بات رو انتخاب کن ← <b>Disable</b>، "
+    "بعد بات رو از گروه حذف و دوباره اضافه کن.\n\n"
+    "<i>بعدش دوباره «راهنما» رو بفرست تا مطمئن شی کار می‌کنه.</i>"
+)
+
+
+async def group_setup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """`/setup` — the one thing that still reaches the bot when privacy mode is on.
+
+    Slash commands are delivered to a group bot regardless of the privacy
+    setting, so this is the only channel through which the bot can explain why
+    everything else it offers appears to be broken.
+    """
+    me = await context.bot.get_me()
+    chat = update.effective_message.chat
+    try:
+        member = await context.bot.get_chat_member(chat.id, me.id)
+        is_admin = member.status in ("administrator", "creator")
+    except TelegramError:
+        is_admin = False
+
+    if me.can_read_all_group_messages or is_admin:
+        reason = "چون ادمین گروهه" if is_admin and not me.can_read_all_group_messages else ""
+        await update.effective_message.reply_text(
+            f"✅ <b>همه‌چیز آماده‌ست!</b> {reason}\n\n"
+            "کلمه‌ها رو مستقیم بفرست — مثلاً «هیولا»، «اتک»، «جایزه».\n"
+            "برای دیدن همه‌ی کلمه‌ها «راهنما» رو بفرست.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                [[btn("همه‌ی کلمه‌ها", emoji_key="btn_report", style=PRIMARY, callback_data=_scoped("help", update.effective_user.id))],
+                 [_pm_button()]]
+            ),
+        )
+        return
+
+    await update.effective_message.reply_text(PRIVACY_HELP, parse_mode="HTML")
+
+
+async def announce_setup(bot, chat_id: int) -> None:
+    """Posted when the bot joins a group. If privacy is on, the words the group
+    is about to be told to use won't work, so say that up front rather than
+    letting them discover it by being ignored."""
+    me = await bot.get_me()
+    if me.can_read_all_group_messages:
+        return
+    await bot.send_message(chat_id, PRIVACY_HELP, parse_mode="HTML")
+
+
 def register(application) -> None:
     application.add_handler(CallbackQueryHandler(group_card_callback, pattern=r"^grp:"))
+    application.add_handler(
+        CommandHandler("setup", group_setup, filters.ChatType.GROUPS)
+    )
     # THE group text handler — see the module docstring before adding another
     application.add_handler(
         MessageHandler(filters.ChatType.GROUPS & filters.TEXT & ~filters.COMMAND, handle_group_text)

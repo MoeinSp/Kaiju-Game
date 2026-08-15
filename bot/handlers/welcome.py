@@ -39,6 +39,12 @@ async def on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     await context.bot.send_message(chat_id=result.chat.id, text=_build_welcome_text(), parse_mode="HTML")
+    # The welcome text tells the group to type words at the bot. If privacy mode
+    # is on those words never reach it, so say so immediately instead of letting
+    # them find out by being ignored.
+    from bot.handlers.group_words import announce_setup
+
+    await announce_setup(context.bot, result.chat.id)
 
 
 def register(application) -> None:

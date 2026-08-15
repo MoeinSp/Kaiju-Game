@@ -11,6 +11,7 @@ from bio_lab.repository import (
     touch_membership,
 )
 from bot.buttons import CONFIRM, DANGER, PRIMARY, back_btn, btn
+from bot.handlers.group_words import group_footer_keyboard
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from game import constants
 from game.buildings import maybe_award_speedup_card
@@ -139,7 +140,11 @@ async def duel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if winner_levels:
             reward_text += f" {get_emoji('celebrate')} رسید به سطح {winner_creature.level}!"
         reward_text += _mission_lines(completed_missions) + _speedup_note(speedup_won)
-        await update.message.reply_text(log_text + reward_text, parse_mode="HTML")
+        await update.message.reply_text(
+            log_text + reward_text,
+            parse_mode="HTML",
+            reply_markup=group_footer_keyboard(update.effective_user.id),
+        )
         return
 
     try:
@@ -407,7 +412,9 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         text += f"\n\n{get_emoji('celebrate')} <b>هیولا شکست خورد!</b> غنایم:\n" + "\n".join(reward_lines)
         text += _speedup_note(speedup_won)
 
-    await update.message.reply_text(text, parse_mode="HTML")
+    await update.message.reply_text(
+        text, parse_mode="HTML", reply_markup=group_footer_keyboard(update.effective_user.id)
+    )
 
 
 def _mutation_event_sync(chat, tg_user):
@@ -443,7 +450,11 @@ async def mutation_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     ]
     for name, stat, bonus in results:
         lines.append(f"• {name}: +{bonus} {constants.MUTATION_EVENT_STAT_LABELS[stat]}")
-    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    await update.message.reply_text(
+        "\n".join(lines),
+        parse_mode="HTML",
+        reply_markup=group_footer_keyboard(update.effective_user.id),
+    )
 
 
 def _creature_power(c: Creature) -> int:
@@ -459,15 +470,18 @@ def _leaderboard_sync(chat, tg_user):
 
 async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     creatures = await run_db(_leaderboard_sync, update.effective_chat, update.effective_user)
+    keyboard = group_footer_keyboard(update.effective_user.id, skip="leaderboard")
     if not creatures:
-        await update.message.reply_text("هنوز هیچ موجودی توی این گروه ثبت نشده.")
+        await update.message.reply_text(
+            "هنوز هیچ موجودی توی این گروه ثبت نشده.", reply_markup=keyboard
+        )
         return
     medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
     lines = [f"{get_emoji('trophy')} <b>برترین موجودات این گروه</b>\n"]
     for i, c in enumerate(creatures, start=1):
         rank = medals[i - 1] if i <= 3 else f"{i}."
         lines.append(f"{rank} {c.name} (Lv{c.level}) — قدرت {_creature_power(c)}")
-    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
 
 def _guardian_sync(chat, tg_user):
