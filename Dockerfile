@@ -38,9 +38,10 @@ RUN useradd --create-home --uid 10001 kaiju \
 USER kaiju
 
 COPY --chown=kaiju:kaiju docker/entrypoint.sh /entrypoint.sh
-# chmod explicitly: git archive on a Windows checkout can drop the executable
-# bit, and an entrypoint without +x fails the container with a cryptic
-# "permission denied" at start.
-RUN chmod +x /entrypoint.sh
+# Normalise + make executable. A Windows checkout gives the script CRLF line
+# endings (so the shebang becomes "/bin/sh\r" → "no such file or directory") and
+# can drop the exec bit (→ "permission denied"). Both are fixed here so the image
+# builds correctly regardless of the host it's built on.
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["web"]
