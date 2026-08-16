@@ -70,6 +70,7 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "broadcast": ("پیام همگانی", "📢", "ui"),
     "collection": ("کلکسیون", "🗂", "ui"),
     "settings": ("تنظیمات", "🎨", "ui"),
+    "book": ("راهنما", "📖", "ui"),
 }
 
 CATEGORY_LABELS: dict[str, str] = {

@@ -7,21 +7,27 @@ IN_CHAT_STATUSES = ("member", "administrator", "creator")
 
 
 def _build_welcome_text() -> str:
-    # built fresh per-send (not a module constant) so it reflects the owner's
-    # current Premium emoji choices
+    """Built fresh per-send (not a module constant) so it reflects the owner's
+    current Premium emoji choices.
+
+    Deliberately advertises **one** thing — the word «راهنما» — instead of a list
+    of slash commands. The group is played with plain words now, and a welcome
+    that opens with six /commands teaches the wrong interface on first contact.
+    """
+    from game import keywords
+
     return (
         f"{get_emoji('creature')} <b>سلام! من Kaiju Bio-Lab‌ام</b> {get_emoji('raid_boss')}\n"
-        "بازیِ رشد و ترکیب ژنتیکی هیولا — همینجا تو گروه میشه دوئل کرد، هیولای وحشی احضار کرد "
-        "و دسته‌جمعی شکارش کرد، و یه محافظ برای گروه داشت.\n\n"
-        "برای شروع، هرکی باید اول بره پیوی من و /start رو بزنه تا موجود اولیه‌ش رو از آزمایشگاه بگیره.\n\n"
-        f"{get_emoji('battle')} <code>/duel</code> — دوئل خودکار (ریپلای روی پیام حریف)\n"
-        "🎮 <code>/battle</code> — نبرد زنده با اسکیل نوبت‌به‌نوبت\n"
-        f"{get_emoji('raid_boss')} <code>/raid_spawn</code> — احضار هیولای وحشی برای شکار دسته‌جمعی\n"
-        f"{get_emoji('trophy')} <code>/leaderboard</code> — برترین موجودای گروه\n"
-        f"{get_emoji('guardian')} <code>/guardian</code> — محافظ فعلی گروه\n"
-        "📖 <code>/help</code> — لیست کامل دستورات\n\n"
-        "🙏 <b>یه خواهش:</b> لطفاً من رو <b>ادمین کامل</b> گروه کن — برای پین کردن اعلان‌های رید و "
-        "مدیریت بهتر پیام‌های بازی بهش نیاز دارم."
+        "بازیِ رشد و ترکیب ژنتیکی هیولا — همینجا توی گروه می‌شه دوئل کرد، هیولای وحشی احضار کرد، "
+        "دسته‌جمعی شکارش کرد و محافظ گروه شد.\n\n"
+        f"{get_emoji('book')} <b>بازی با کلمه‌ست، نه دستور.</b>\n"
+        f"<blockquote>کافیه کلمه‌ی <b>«{keywords.word_for('help')}»</b> رو بفرستی تا همه‌چیز "
+        "دسته‌بندی‌شده برات بیاد.\n"
+        f"مثلاً «{keywords.word_for('creature')}» کارت هیولات رو می‌آره و "
+        f"«{keywords.word_for('reward')}» بهت جایزه می‌ده.</blockquote>\n\n"
+        "برای شروع، هرکی باید اول بره پیوی من و /start رو بزنه تا هیولای اولیه‌ش رو بگیره.\n\n"
+        "🙏 <b>یه خواهش مهم:</b> لطفاً من رو <b>ادمین</b> گروه کن — بدون ادمین بودن، تلگرام "
+        "پیام‌های معمولی گروه رو اصلاً به من نمی‌رسونه و هیچ‌کدوم از کلمه‌ها کار نمی‌کنه."
     )
 
 

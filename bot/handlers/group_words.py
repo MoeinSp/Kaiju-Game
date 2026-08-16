@@ -19,7 +19,7 @@ from telegram.ext import (CallbackQueryHandler, CommandHandler, ContextTypes,
                           MessageHandler, filters)
 
 from bio_lab.repository import display_name, get_active_creature, get_or_create_group, get_or_create_user, lab_display
-from bot.buttons import NAV, PRIMARY, SHOP, btn
+from bot.buttons import BACK, NAV, PRIMARY, SHOP, btn
 from bot.utils import run_db, safe_edit_message_text
 from config import BOT_USERNAME
 from game import constants, keywords, word_reward
@@ -28,20 +28,6 @@ from game.emoji import get_emoji
 from game.energy import sync_energy
 from game.equipment import bonus_text, get_equipped_items, slot_loadout
 from game.lab import lab_bar, lab_progress
-
-# Actions that need the full inline UI and don't fit a group message. Typing the
-# word still does something useful — it points at the private chat — rather than
-# being silently ignored, which would read as "the bot didn't hear me".
-_PRIVATE_ONLY = {
-    "hunt": "شکار انفرادی",
-    "arena": "آرنای کاپ",
-    "buildings": "ساختمون‌ها",
-    "wheel": "گردونه‌ی شانس",
-    "breeding": "تکثیر زیستی",
-    "shop": "باکس‌ها و جعبه‌ها",
-    "start": "شروع بازی",
-}
-
 
 def _pm_button(label: str = "برو به پیوی ربات"):
     return btn(label, style=PRIMARY, url=f"https://t.me/{BOT_USERNAME}?start=group")
@@ -168,17 +154,77 @@ def _profile_card(user, creature_count, energy) -> tuple[str, InlineKeyboardMark
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
-def _help_card() -> tuple[str, InlineKeyboardMarkup]:
+def _help_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
+    """The help *menu*: what the game is, then one button per category.
+
+    Listing all sixteen words at once produced a wall nobody read. Splitting it
+    into categories means the first screen fits on a phone and answers the only
+    question a newcomer actually has — "what can I do here?" — with five choices
+    instead of sixteen lines.
+    """
     lines = [
-        "🎮 <b>با کلمه بازی کن</b>",
-        "<blockquote>کافیه یکی از این کلمه‌ها رو تنها بفرستی — نیاز به دستور و اسلش نیست.</blockquote>",
+        f"{get_emoji('book')} <b>راهنمای بازی توی گروه</b>",
+        "",
+        "<blockquote>کافیه <b>خودِ کلمه</b> رو تنها بفرستی — بدون اسلش، بدون آرگومان."
+        "\nهر کار <b>دقیقاً یک کلمه</b> داره.</blockquote>",
+        "",
+        "<b>دسته‌ها:</b>",
     ]
-    for title, actions in keywords.KEYWORD_SECTIONS:
-        lines.append(f"\n<b>{title}</b>")
-        for action in actions:
-            words = " · ".join(keywords.words_for(action))
-            lines.append(f"‹{words}› — {keywords.describe(action)}")
-    return "\n".join(lines), InlineKeyboardMarkup([[_pm_button()]])
+    rows = []
+    for key, emoji_key, title, actions in keywords.KEYWORD_SECTIONS:
+        lines.append(f"{get_emoji(emoji_key)} {title} — {len(actions)} کلمه")
+        rows.append(
+            [btn(title, emoji_key=None, style=NAV, callback_data=f"grph:{key}:{user_id}")]
+        )
+    lines.append("")
+    lines.append(f"<i>مثال: بنویس «{keywords.word_for('creature')}» تا کارت هیولات بیاد.</i>")
+
+    # two per row keeps the menu compact on a phone
+    paired = [rows[i][0:1] + (rows[i + 1][0:1] if i + 1 < len(rows) else []) for i in range(0, len(rows), 2)]
+    paired = [[b for b in row] for row in paired]
+    flat = [b for row in paired for b in row]
+    keyboard = [flat[i : i + 2] for i in range(0, len(flat), 2)]
+    keyboard.append([_pm_button()])
+    return "\n".join(lines), InlineKeyboardMarkup(keyboard)
+
+
+def _help_section_card(section_key: str, user_id: int) -> tuple[str, InlineKeyboardMarkup]:
+    """One category: its words, what each does, and what actually happens."""
+    found = keywords.section(section_key)
+    if found is None:
+        return _help_card(user_id)
+    _key, emoji_key, title, actions = found
+
+    lines = [f"{get_emoji(emoji_key)} <b>{title}</b>", ""]
+    for action in actions:
+        word = keywords.word_for(action)
+        lines.append(f"{get_emoji(keywords.emoji_key_for(action))} <b>{word}</b> — {keywords.describe(action)}")
+        lines.append(f"<blockquote>{keywords.detail(action)}</blockquote>")
+        lines.append("")  # entries run together without it
+    rows = [
+        [btn("همه‌ی دسته‌ها", emoji_key="btn_back", style=BACK, callback_data=f"grph:__menu__:{user_id}")],
+        [_pm_button()],
+    ]
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _pm_card() -> tuple[str, InlineKeyboardMarkup]:
+    """«پیوی» — one word covering everything that needs the full inline UI.
+
+    These used to be six separate trigger words that all produced the same "go to
+    the DM" message, which made the word list look twice as big as the group
+    actually is."""
+    text = (
+        f"{get_emoji('lab')} <b>این بخش‌ها توی پیوی ربات‌ان</b>\n"
+        "<blockquote>اینا دکمه‌های زیادی لازم دارن و توی گروه شلوغ می‌شن:</blockquote>\n"
+        f"{get_emoji('hunt')} شکار انفرادی\n"
+        f"{get_emoji('trophy')} آرنای کاپ\n"
+        f"{get_emoji('building')} ساختمون‌ها و معدن‌ها\n"
+        f"{get_emoji('lab')} ترکیب و تکثیر هیولا\n"
+        f"{get_emoji('diamond')} باکس‌ها و گردونه‌ی شانس\n"
+        f"{get_emoji('battle')} ارتقا و تجهیز هیولاها"
+    )
+    return text, InlineKeyboardMarkup([[_pm_button("باز کردن پیوی ربات")]])
 
 
 # ── sync data gathering ─────────────────────────────────────────────────────
@@ -206,8 +252,6 @@ def _card_sync(tg_user, chat, action):
 
         data["creature_count"] = Creature.objects.filter(owner=user).count()
         data["energy"] = sync_energy(user)
-    elif action == "wallet":
-        data["energy"] = sync_energy(user)
     elif action == "leaderboard":
         from bot.handlers.group import _creature_power, group_member_creatures
 
@@ -229,22 +273,13 @@ def _render(action: str, data: dict) -> tuple[str, InlineKeyboardMarkup]:
         return _equipment_card(user, data["creature"], data["slots"])
     if action == "collection":
         return _collection_card(user, data["creatures"])
-    if action in ("profile", "lab"):
+    if action == "profile":
         return _profile_card(user, data.get("creature_count", 0), data.get("energy", 0))
-    if action == "wallet":
-        text = (
-            f"{get_emoji('coin')} طلا: <b>{user.coins:,}</b>\n"
-            f"{get_emoji('dna')} DNA: <b>{user.dna_fragments:,}</b>\n"
-            f"{get_emoji('diamond')} الماس: <b>{user.diamonds:,}</b>\n"
-            f"{get_emoji('energy')} انرژی: <b>{data['energy']}</b>/{constants.MAX_ENERGY}"
-        )
-        return text, InlineKeyboardMarkup(
-            [[btn("پروفایل", emoji_key="btn_profile", style=NAV, callback_data=_scoped("profile", user.id))],
-             [_pm_button()]]
-        )
     if action == "leaderboard":
         return _leaderboard_card(user, data.get("ranked", []), data.get("powers", {}))
-    return _help_card()
+    if action == "pm":
+        return _pm_card()
+    return _help_card(user.id)
 
 
 def _leaderboard_card(user, ranked, powers) -> tuple[str, InlineKeyboardMarkup]:
@@ -258,7 +293,7 @@ def _leaderboard_card(user, ranked, powers) -> tuple[str, InlineKeyboardMarkup]:
     return "\n".join(lines), group_footer_keyboard(user.id, skip="leaderboard")
 
 
-_CARD_ACTIONS = {"creature", "equipment", "collection", "profile", "lab", "wallet", "leaderboard"}
+_CARD_ACTIONS = {"creature", "equipment", "collection", "profile", "leaderboard", "pm"}
 
 
 # ── reward ──────────────────────────────────────────────────────────────────
@@ -360,14 +395,6 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await private_handlers.alliance_info_cmd(update, context)
         return
 
-    if action in _PRIVATE_ONLY:
-        await message.reply_text(
-            f"🔒 <b>{_PRIVATE_ONLY[action]}</b> توی پیوی ربات انجام می‌شه — اونجا دکمه‌های کاملش هست.",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([[_pm_button()]]),
-        )
-        return
-
     if action in _CARD_ACTIONS or action == "help":
         try:
             data = await run_db(_card_sync, update.effective_user, message.chat, action)
@@ -462,8 +489,24 @@ async def announce_setup(bot, chat_id: int) -> None:
     await bot.send_message(chat_id, PRIVACY_HELP, parse_mode="HTML")
 
 
+async def group_help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Move between the help menu and a category page, in place."""
+    query = update.callback_query
+    _, section_key, owner_id = query.data.split(":")
+    if update.effective_user.id != int(owner_id):
+        await query.answer("این راهنما مال تو نیست — خودت «راهنما» رو بفرست.", show_alert=True)
+        return
+    await query.answer()
+    if section_key == "__menu__":
+        text, keyboard = _help_card(update.effective_user.id)
+    else:
+        text, keyboard = _help_section_card(section_key, update.effective_user.id)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
 def register(application) -> None:
     application.add_handler(CallbackQueryHandler(group_card_callback, pattern=r"^grp:"))
+    application.add_handler(CallbackQueryHandler(group_help_callback, pattern=r"^grph:"))
     application.add_handler(
         CommandHandler("setup", group_setup, filters.ChatType.GROUPS)
     )

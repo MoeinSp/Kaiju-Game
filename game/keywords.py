@@ -4,6 +4,13 @@ Groups are where people actually play together, and `/guardian_challenge` is not
 something anyone types mid-conversation. This module maps ordinary words — «اتک»,
 «هیولا», «جایزه» — onto the same actions the slash commands run.
 
+**One word per action, no synonyms.** An earlier version registered three or four
+aliases each and the result was 84 triggers nobody could hold in their head: with
+«رتبه», «برترین», «جدول», «لیدربرد» and «تاپ» all doing the same thing, a player
+can't tell whether they're five features or one, and the help screen becomes a
+wall. One canonical word means the help is a short list, and every line in it is
+something you can act on.
+
 Two rules keep this from firing on normal chatter:
 
 * **Whole-message match only.** A message is a trigger when the entire text, once
@@ -57,75 +64,147 @@ def normalize(text: str) -> str:
     return text.strip("!?.،؟؛:")
 
 
-# action key -> (Persian words that trigger it, one-line description for the help card)
+# action key -> (the ONE word, emoji registry key for the help card, one-line
+# description, longer "what actually happens" line for the category page)
 #
-# Grouped by what they do. Every key is handled in bot/handlers/group_words.py;
-# a key with no handler is caught by the test suite rather than failing silently
-# in front of a group.
-KEYWORD_DEFS: dict[str, tuple[tuple[str, ...], str]] = {
+# Every key is handled in bot/handlers/group_words.py; a key with no handler is
+# caught by the test suite rather than failing silently in front of a group.
+KEYWORD_DEFS: dict[str, tuple[str, str, str, str]] = {
     # ── your lab ────────────────────────────────────────────────────────────
-    "creature": (("هیولا", "موجود", "هیولام", "کایجو"), "کارت هیولای فعالت"),
-    "equipment": (("تجهیزات", "آیتم", "کوله", "سلاح"), "تجهیزات هیولای فعالت"),
-    "collection": (("کلکسیون", "هیولاهام", "لیست"), "همه‌ی هیولاهات"),
-    "profile": (("پروفایل", "پروفایلم", "آمار", "اطلاعات"), "پروفایل و سطح آزمایشگاهت"),
-    "wallet": (("موجودی", "جیب", "دارایی", "کیف"), "طلا، DNA، الماس و انرژی"),
-    "lab": (("آزمایشگاه", "لابم", "پایگاه"), "سطح کلی آزمایشگاهت"),
-    # ── fighting ────────────────────────────────────────────────────────────
-    "attack": (("اتک", "حمله", "بزن", "یورش"), "حمله به هیولای وحشی گروه"),
-    "duel": (("دوئل", "مبارزه", "جنگ", "چالش"), "دوئل با کسی که ریپلای کردی"),
-    "raid": (("رید", "احضار", "باس", "هیولای وحشی"), "احضار هیولای وحشی توی گروه"),
-    "hunt": (("شکار", "گشت"), "شکار انفرادی (توی پیوی)"),
-    "arena": (("آرنا", "کاپ", "لیگ"), "آرنای کاپ (توی پیوی)"),
-    # ── group standing ──────────────────────────────────────────────────────
-    "leaderboard": (("رتبه", "برترین", "جدول", "لیدربرد", "تاپ"), "جدول گروه"),
-    "guardian": (("محافظ", "نگهبان"), "محافظ فعلی گروه"),
-    "guardian_challenge": (("تسخیر", "فتح", "چالش محافظ"), "چالش برای محافظ شدن"),
-    "guardian_claim": (("حقوق", "مقرری", "دستمزد"), "حقوق روزانه‌ی محافظ"),
-    "alliance": (("اتحاد", "تیم", "کلن"), "اتحاد تو"),
-    # ── economy ─────────────────────────────────────────────────────────────
-    "reward": (
-        ("جایزه", "شانس", "گنج", "هدیه", "بخت", "صندوق", "لوت", "پاداش"),
-        "جایزه‌ی دوره‌ای (تایمر مشترک بین همه‌ی این کلمه‌ها)",
+    "creature": (
+        "هیولا",
+        "creature",
+        "کارت هیولای فعالت",
+        "استت، ستاره، درجه و تعداد جایگاه پرِ تجهیزاتش رو نشون می‌ده.",
     ),
-    "buildings": (("ساختمون", "ساختمان", "معدن"), "ساختمون‌هات (توی پیوی)"),
-    "missions": (("ماموریت", "کوئست", "تسک"), "ماموریت‌های روزانه"),
-    "wheel": (("گردونه", "چرخ"), "گردونه‌ی شانس روزانه (توی پیوی)"),
-    "breeding": (("تکثیر", "پرورش"), "تکثیر زیستی (توی پیوی)"),
-    "shop": (("باکس", "جعبه", "کریت"), "باکس‌ها (توی پیوی)"),
+    "equipment": (
+        "تجهیزات",
+        "battle",
+        "تجهیزات هیولای فعالت",
+        "هر چهار جایگاه رو می‌بینی — پر و خالی — با بونوسی که هر آیتم می‌ده.",
+    ),
+    "collection": (
+        "کلکسیون",
+        "collection",
+        "همه‌ی هیولاهات",
+        "لیست کامل با ستاره، درجه و سطح. هیولای فعال با 🟢 مشخصه.",
+    ),
+    "profile": (
+        "پروفایل",
+        "profile",
+        "سطح آزمایشگاه و دارایی‌هات",
+        "سطح کلی، کاپ، تعداد هیولا، روزهای پشت‌سرهم و موجودی طلا/DNA/الماس/انرژی.",
+    ),
+    # ── group battles ───────────────────────────────────────────────────────
+    "raid": (
+        "احضار",
+        "raid_boss",
+        "احضار هیولای وحشی توی گروه",
+        "یه باس مشترک برای کل گروه می‌آره. همه می‌تونن بهش حمله کنن.",
+    ),
+    "attack": (
+        "اتک",
+        "attack_action",
+        "حمله به هیولای وحشی گروه",
+        "یه انرژی خرج می‌کنه. غنیمت بین همه‌ی کسایی که زدن پخش می‌شه.",
+    ),
+    "duel": (
+        "دوئل",
+        "battle",
+        "دوئل با کسی که ریپلای کردی",
+        "روی پیام طرف ریپلای کن و بنویس «دوئل». می‌تونی مقدار شرط هم بذاری.",
+    ),
+    # ── group standing ──────────────────────────────────────────────────────
+    "leaderboard": (
+        "جدول",
+        "trophy",
+        "برترین هیولاهای این گروه",
+        "ده هیولای قوی گروه به ترتیب قدرت.",
+    ),
+    "guardian": (
+        "محافظ",
+        "crown",
+        "محافظ فعلی گروه",
+        "کی الان محافظه و چقدر قدرت داره.",
+    ),
+    "guardian_challenge": (
+        "تسخیر",
+        "attack_action",
+        "چالش برای محافظ شدن",
+        "با محافظ فعلی می‌جنگی؛ ببری، جاش رو می‌گیری.",
+    ),
+    "guardian_claim": (
+        "حقوق",
+        "coin",
+        "حقوق روزانه‌ی محافظ",
+        "فقط محافظ گروه می‌تونه بگیره، روزی یک‌بار.",
+    ),
+    "alliance": (
+        "اتحاد",
+        "alliance",
+        "اتحاد تو",
+        "اسم اتحاد، اعضا و خزانه‌ش.",
+    ),
+    # ── rewards ─────────────────────────────────────────────────────────────
+    "reward": (
+        "جایزه",
+        "gift",
+        "جایزه‌ی دوره‌ای",
+        "هر ۵ دقیقه یک‌بار: طلا، DNA، الماس یا کارت سرعت. گاهی جکپات.",
+    ),
+    "missions": (
+        "ماموریت",
+        "mission",
+        "ماموریت‌های روزانه",
+        "کارهای امروزت و جایزه‌ی هرکدوم.",
+    ),
     # ── meta ────────────────────────────────────────────────────────────────
-    "help": (("راهنما", "کمک", "دستورات", "بازی", "کلمات"), "همین لیست"),
-    "start": (("شروع", "استارت", "عضویت"), "شروع بازی توی پیوی"),
+    "pm": (
+        "پیوی",
+        "lab",
+        "بخش‌هایی که توی پیوی‌ان",
+        "شکار، آرنا، ساختمون‌ها، گردونه، تکثیر و باکس‌ها اونجان.",
+    ),
+    "help": (
+        "راهنما",
+        "book",
+        "همین راهنما",
+        "همه‌ی کلمه‌ها، دسته‌بندی‌شده.",
+    ),
 }
 
-# Category headings for the help card, in the order they're shown.
-KEYWORD_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("🧬 آزمایشگاه تو", ("creature", "equipment", "collection", "profile", "wallet", "lab")),
-    ("⚔️ نبرد", ("attack", "duel", "raid", "hunt", "arena")),
-    ("👑 گروه", ("leaderboard", "guardian", "guardian_challenge", "guardian_claim", "alliance")),
-    ("💰 اقتصاد", ("reward", "buildings", "missions", "wheel", "breeding", "shop")),
-    ("❓ راهنما", ("help", "start")),
+# Category -> (emoji registry key, title, action keys). Drives both the help
+# menu's buttons and its pages, so a new action can't be added to one and
+# forgotten in the other.
+KEYWORD_SECTIONS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
+    ("lab", "creature", "آزمایشگاه من", ("creature", "equipment", "collection", "profile")),
+    ("battle", "battle", "نبرد گروهی", ("raid", "attack", "duel")),
+    ("rank", "trophy", "جایگاه در گروه", ("leaderboard", "guardian", "guardian_challenge", "guardian_claim", "alliance")),
+    ("reward", "gift", "جایزه و ماموریت", ("reward", "missions")),
+    ("more", "lab", "بقیه‌ی بازی", ("pm", "help")),
 )
 
 
 def _build_lookup() -> dict[str, str]:
     lookup: dict[str, str] = {}
-    for action, (words, _desc) in KEYWORD_DEFS.items():
-        for word in words:
-            key = normalize(word)
-            # A word must mean exactly one thing. Two actions claiming the same
-            # trigger would resolve by dict ordering, which is a coin flip nobody
-            # would ever debug — the test suite asserts this stays empty.
-            if key in lookup and lookup[key] != action:
-                raise ValueError(f"keyword {word!r} claimed by both {lookup[key]} and {action}")
-            lookup[key] = action
+    for action, (word, _e, _d, _l) in KEYWORD_DEFS.items():
+        key = normalize(word)
+        # A word must mean exactly one thing. Two actions claiming the same
+        # trigger would resolve by dict ordering, which is a coin flip nobody
+        # would ever debug — the test suite asserts this stays empty.
+        if key in lookup:
+            raise ValueError(f"keyword {word!r} claimed by both {lookup[key]} and {action}")
+        lookup[key] = action
     return lookup
 
 
 LOOKUP: dict[str, str] = _build_lookup()
 
-ALL_WORDS: tuple[str, ...] = tuple(
-    word for words, _desc in KEYWORD_DEFS.values() for word in words
-)
+ALL_WORDS: tuple[str, ...] = tuple(word for word, _e, _d, _l in KEYWORD_DEFS.values())
+
+SECTION_OF: dict[str, str] = {
+    action: cat for cat, _e, _t, actions in KEYWORD_SECTIONS for action in actions
+}
 
 
 def match(text: str) -> str | None:
@@ -133,9 +212,21 @@ def match(text: str) -> str | None:
     return LOOKUP.get(normalize(text))
 
 
-def words_for(action: str) -> tuple[str, ...]:
+def word_for(action: str) -> str:
     return KEYWORD_DEFS[action][0]
 
 
-def describe(action: str) -> str:
+def emoji_key_for(action: str) -> str:
     return KEYWORD_DEFS[action][1]
+
+
+def describe(action: str) -> str:
+    return KEYWORD_DEFS[action][2]
+
+
+def detail(action: str) -> str:
+    return KEYWORD_DEFS[action][3]
+
+
+def section(key: str) -> tuple[str, str, str, tuple[str, ...]] | None:
+    return next((s for s in KEYWORD_SECTIONS if s[0] == key), None)
