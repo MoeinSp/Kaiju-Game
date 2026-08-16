@@ -32,16 +32,18 @@ RUN DJANGO_SECRET_KEY=build-only DJANGO_DEBUG=false \
 # outlive the container.
 RUN mkdir -p /app/backups
 
+# Entrypoint is prepared HERE, as root, before we drop privileges — a Windows
+# checkout can give the script CRLF endings (so the shebang becomes "/bin/sh\r" →
+# "no such file or directory") and can drop the exec bit (→ "permission denied").
+# `sed -i` writes its temp file in the target's directory, so it must run while
+# we can still write to /: doing this after `USER kaiju` fails with exit 4.
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
+
 # Non-root: the app never needs to write outside /app/backups.
 RUN useradd --create-home --uid 10001 kaiju \
  && chown -R kaiju:kaiju /app
 USER kaiju
 
-COPY --chown=kaiju:kaiju docker/entrypoint.sh /entrypoint.sh
-# Normalise + make executable. A Windows checkout gives the script CRLF line
-# endings (so the shebang becomes "/bin/sh\r" → "no such file or directory") and
-# can drop the exec bit (→ "permission denied"). Both are fixed here so the image
-# builds correctly regardless of the host it's built on.
-RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["web"]

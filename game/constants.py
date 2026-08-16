@@ -407,12 +407,19 @@ BUILDING_MAX_LEVEL = 5
 # one, so raising the hall only ever raised a ceiling — it never *revealed*
 # anything. Staggering the unlocks gives each hall level its own reward and
 # paces the opening instead of dumping six construction sites on a new player.
+#
+# One unlock per hall level, so raising the hall ALWAYS reveals a new building —
+# there's never a "dead" level that only lifts a ceiling. The order follows the
+# natural power curve: income first, then the resource the mid-game spends
+# (DNA), then the two upgrade workshops, and finally the fusion hall — the
+# creature-combination building that grants prestige stars — as the reward for
+# fully maxing the main hall.
 BUILDING_UNLOCK_HALL_LEVEL = {
-    "gold_collector": 1,     # the first thing you build — income has to come first
-    "dna_lab": 2,
-    "blacksmith": 3,         # gear upgrades open once there's gold to spend on them
-    "fusion_lab": 4,         # stars and propagation are a mid-game goal
-    "diamond_collector": 5,  # the premium mine is the payoff for maxing the hall
+    "gold_collector": 1,      # the first thing you build — income has to come first
+    "dna_lab": 2,             # DNA feeds breeding and fusion costs
+    "blacksmith": 3,          # gear upgrades open once there's gold to spend on them
+    "diamond_collector": 4,   # the premium mine — a real mid/late-game payoff
+    "fusion_lab": 5,          # stars & propagation: the reward for maxing the hall
 }
 
 # ── Upgrade pacing ────────────────────────────────────────────────────────────

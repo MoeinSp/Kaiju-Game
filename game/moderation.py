@@ -1,3 +1,5 @@
+from django.db import transaction
+
 from bio_lab.models import Creature, User
 from bio_lab.repository import resolve_user
 from game.creature import GameError
@@ -76,6 +78,43 @@ def delete_creature(creature_id: int) -> str:
     name = creature.name
     creature.delete()
     return name
+
+
+def reset_user(identifier: str) -> User:
+    """Wipe a player's entire game progress and re-bootstrap them as a brand-new
+    player, keeping only their identity (telegram id, username, name, lab name,
+    and ban status). Owner-only and irreversible.
+
+    Implemented as delete-and-recreate on the same primary key rather than a
+    field-by-field reset: every game row (creatures, equipment, buildings, jobs,
+    cards, logs, season results, attack history, alliance membership) hangs off
+    the User by a cascading FK, so dropping the row is the one operation that is
+    guaranteed to leave nothing dangling. The row is then recreated with the same
+    id, which falls back to the model's starting-value defaults, and the standard
+    new-player bootstrap runs so the account is immediately in a valid fresh
+    state instead of an empty half-state."""
+    # imported here, not at module top, to keep the bootstrap dependencies
+    # (game.buildings -> game.constants ...) out of moderation's import path
+    from game import constants
+    from game.buildings import get_or_create_buildings, grant_speedup_card
+    from game.creature import create_starter_creature
+
+    user = find_user_or_raise(identifier)
+    identity = {
+        "id": user.id,
+        "username": user.username,
+        "first_name": user.first_name,
+        "lab_name": user.lab_name,
+        "is_banned": user.is_banned,
+    }
+    with transaction.atomic():
+        user.delete()  # cascades every owned game row
+        fresh = User.objects.create(**identity)  # resources/progress -> model defaults
+        create_starter_creature(fresh)
+        for minutes, count in constants.STARTING_SPEEDUP_CARDS.items():
+            grant_speedup_card(fresh, minutes, count=count)
+        get_or_create_buildings(fresh)
+    return fresh
 
 
 def user_info(identifier: str) -> dict:

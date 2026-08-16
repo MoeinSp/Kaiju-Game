@@ -34,6 +34,7 @@ from game.moderation import (
     delete_creature,
     get_creature_or_raise,
     grant_resource,
+    reset_user,
     set_banned,
     user_info,
 )
@@ -378,6 +379,7 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
             ],
             [btn("شارژ کامل (طلا+DNA+الماس)", emoji_key="btn_charge", style=CONFIRM, callback_data=f"admin_charge:{target_id}")],
             [ban_button],
+            [btn("♻️ ریست کامل بازیکن", emoji_key="btn_delete", style=DANGER, callback_data=f"admin_reset:{target_id}")],
             [back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")],
         ]
     )
@@ -572,6 +574,103 @@ async def delete_creature_confirm_callback(update: Update, context: ContextTypes
         return
     await query.answer()
     await safe_edit_message_text(query, f"🗑 موجود «{name}» برای همیشه حذف شد.", parse_mode="HTML")
+
+
+def _reset_preview_sync(identifier: str):
+    """Fetch the target (raising if unknown) so the confirm card can name them and
+    show what they're about to lose."""
+    data = user_info(identifier)
+    return data["user"], len(data["creatures"])
+
+
+def _reset_confirm_text(user, creature_count: int) -> str:
+    return (
+        f"{get_emoji('warning')} مطمئنی می‌خوای بازیِ <b>{display_name(user)}</b> "
+        f"(<code>{user.id}</code>) رو <b>کامل ریست</b> کنی؟\n\n"
+        f"<blockquote>همه‌ی پیشرفتش پاک می‌شه: {creature_count} موجود، ساختمون‌ها، تجهیزات، "
+        "کاپ، سطح آزمایشگاه، کارت‌ها و کل تاریخچه. بعدش دقیقاً مثل یه بازیکن تازه شروع می‌کنه "
+        "(اسم آزمایشگاه و هدیه‌ی شروع سرجاش). این کار غیرقابل‌برگشته.</blockquote>"
+    )
+
+
+def _reset_confirm_keyboard(target_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                btn("بله، ریست کن", emoji_key="btn_delete", style=DANGER, callback_data=f"admin_reset_do:{target_id}"),
+                btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER, callback_data=f"admin_reset_cancel:{target_id}"),
+            ]
+        ]
+    )
+
+
+async def reset_user_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Power-user shortcut — the advertised path is the «♻️ ریست کامل بازیکن»
+    button under «مدیریت کاربر» in the admin panel."""
+    if not _is_owner(update):
+        return
+    if not context.args:
+        await update.effective_message.reply_text(
+            "استفاده: <code>/reset_user آیدی_یا_یوزرنیم</code>", parse_mode="HTML"
+        )
+        return
+    try:
+        user, creature_count = await run_db(_reset_preview_sync, context.args[0])
+    except GameError as exc:
+        await update.effective_message.reply_text(str(exc))
+        return
+    await update.effective_message.reply_text(
+        _reset_confirm_text(user, creature_count),
+        parse_mode="HTML",
+        reply_markup=_reset_confirm_keyboard(user.id),
+    )
+
+
+async def reset_user_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Panel button «♻️ ریست کامل بازیکن» → show the typed-style confirmation."""
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    target_id = int(query.data.split(":")[1])
+    try:
+        user, creature_count = await run_db(_reset_preview_sync, str(target_id))
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        _reset_confirm_text(user, creature_count),
+        parse_mode="HTML",
+        reply_markup=_reset_confirm_keyboard(target_id),
+    )
+
+
+async def reset_user_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+
+    action, target_id = query.data.split(":")
+    if action == "admin_reset_cancel":
+        await query.answer()
+        await safe_edit_message_text(query, f"{get_emoji('cancel')} لغو شد، چیزی ریست نشد.", parse_mode="HTML")
+        return
+
+    try:
+        user = await run_db(reset_user, target_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("ریست شد", show_alert=False)
+    await safe_edit_message_text(
+        query,
+        f"♻️ بازیِ <b>{display_name(user)}</b> (<code>{user.id}</code>) کامل ریست شد؛ "
+        "الان یه آزمایشگاه تازه با هدیه‌ی شروع داره.",
+        parse_mode="HTML",
+    )
 
 
 async def preview_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1232,8 +1331,13 @@ def register(application) -> None:
     application.add_handler(CommandHandler("ban", ban_cmd, private_only))
     application.add_handler(CommandHandler("unban", unban_cmd, private_only))
     application.add_handler(CommandHandler("delete_creature", delete_creature_cmd, private_only))
+    application.add_handler(CommandHandler("reset_user", reset_user_cmd, private_only))
     application.add_handler(CommandHandler("preview_emoji", preview_emoji_cmd, private_only))
     application.add_handler(CallbackQueryHandler(delete_creature_confirm_callback, pattern=r"^admin_del"))
+    application.add_handler(CallbackQueryHandler(reset_user_start_callback, pattern=r"^admin_reset:"))
+    application.add_handler(
+        CallbackQueryHandler(reset_user_confirm_callback, pattern=r"^admin_reset_(do|cancel):")
+    )
     application.add_handler(CallbackQueryHandler(admin_menu_callback, pattern=r"^admin_menu:"))
     application.add_handler(
         CallbackQueryHandler(set_emoji_category_callback, pattern=f"^{EMOJI_CAT_CALLBACK_PREFIX}")
