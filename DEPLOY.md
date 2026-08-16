@@ -42,13 +42,62 @@ docker compose exec web python manage.py createsuperuser
 nginx یا caddy بذار تا TLS بگیره، و بعد `DJANGO_BEHIND_PROXY=true` و `DJANGO_SECURE_COOKIES=true`
 رو ست کن.
 
-نمونه‌ی caddy:
+## وبهوک + TLS (روی دامنه‌ی واقعی)
 
+بات به‌صورت پیش‌فرض **long-poll** می‌کنه و هیچ پورت ورودی لازم نداره. برای سوییچ به وبهوک، توی
+`.env` این‌ها رو ست کن:
+
+| کلید | مقدار |
+|---|---|
+| `WEBHOOK_URL` | `https://hero.spayerx.ir` |
+| `WEBHOOK_SECRET` | با `openssl rand -hex 32` بساز — هم مسیر URL وبهوکه، هم هدرِ تأیید |
+| `PANEL_DOMAIN` | `hero.spayerx.ir` (برای پروکسی همراه) |
+| `DJANGO_ALLOWED_HOSTS` | `hero.spayerx.ir` |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | `https://hero.spayerx.ir` |
+| `DJANGO_BEHIND_PROXY` | `true` |
+| `DJANGO_SECURE_COOKIES` | `true` |
+| `ADMIN_PANEL_URL` | `https://hero.spayerx.ir/panel/` |
+
+**اگه سرور پروکسی خودش رو نداره**، پروکسی همراه (Caddy) رو با پروفایل `proxy` بالا بیار — خودش
+گواهی TLS رو از Let's Encrypt می‌گیره:
+
+```bash
+docker compose --profile proxy up -d --build
 ```
-panel.example.com {
-    reverse_proxy 127.0.0.1:8000
+
+این Caddy فقط پورت‌های ۸۰ و ۴۴۳ هاست رو می‌گیره و بقیه‌ی سرویس‌ها روی شبکه‌ی داخلی compose می‌مونن.
+یه دامنه، دو مقصد: مسیر `/<WEBHOOK_SECRET>` می‌ره به بات، بقیه‌ی مسیرها به پنل.
+
+**اگه سرور از قبل nginx/caddy/traefik داره** (تا با بقیه‌ی چیزهایی که روی VPS رانن تداخل نکنه)،
+پروفایل `proxy` رو بالا نیار و پروکسیِ موجود رو این‌طوری تنظیم کن:
+
+- `hero.spayerx.ir/<WEBHOOK_SECRET>` → `web` نه، بلکه کانتینر `bot` روی پورت `8443`
+- بقیه‌ی `hero.spayerx.ir` → کانتینر `web` روی پورت `8000`
+
+برای اینکه پروکسیِ موجود به کانتینرها برسه، این دو پورت رو روی loopback هاست منتشر کن (توی یه
+`docker-compose.override.yml`):
+
+```yaml
+services:
+  web:
+    ports: ["127.0.0.1:8000:8000"]
+  bot:
+    ports: ["127.0.0.1:8443:8443"]
+```
+
+نمونه‌ی nginx برای این حالت:
+
+```nginx
+server {
+    server_name hero.spayerx.ir;
+    location /<WEBHOOK_SECRET> { proxy_pass http://127.0.0.1:8443; }
+    location /                 { proxy_pass http://127.0.0.1:8000; }
+    # ... بلوک TLS/certbot خودت
 }
 ```
+
+بات موقع بالا اومدن خودش وبهوک رو روی تلگرام ست می‌کنه؛ نیازی به `setWebhook` دستی نیست. برای
+چک کردن: `curl -s "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"`.
 
 ## دستورهای روزمره
 

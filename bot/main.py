@@ -25,7 +25,7 @@ from bot.handlers import (
     welcome,
     wheel,
 )
-from config import BOT_TOKEN  # noqa: E402
+from config import BOT_TOKEN, WEBHOOK_PORT, WEBHOOK_SECRET, WEBHOOK_URL  # noqa: E402
 from game.theme import refresh_theme_caches  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -88,7 +88,33 @@ def main() -> None:
     )
 
     application.post_init = _warn_if_group_privacy_on
-    # my_chat_member (bot added/removed from a group) isn't in the default update set
+
+    # my_chat_member (bot added/removed from a group) isn't in the default update
+    # set, so every mode below has to ask for ALL_TYPES explicitly.
+    if WEBHOOK_URL:
+        # Webhook mode: Telegram pushes updates to us instead of us polling it.
+        # The URL path is the secret rather than a guessable "/webhook", and
+        # secret_token makes PTB reject any request that doesn't carry the
+        # matching X-Telegram-Bot-Api-Secret-Token header — without it, anyone
+        # who learned the path could inject updates and act as any player.
+        url_path = WEBHOOK_SECRET
+        logging.info(
+            "starting in WEBHOOK mode on port %s, public URL %s/<secret>",
+            WEBHOOK_PORT,
+            WEBHOOK_URL.rstrip("/"),
+        )
+        application.run_webhook(
+            listen="0.0.0.0",  # inside the container; compose binds it to loopback
+            port=WEBHOOK_PORT,
+            url_path=url_path,
+            secret_token=WEBHOOK_SECRET,
+            webhook_url=f"{WEBHOOK_URL.rstrip('/')}/{url_path}",
+            drop_pending_updates=True,
+            allowed_updates=Update.ALL_TYPES,
+        )
+        return
+
+    logging.info("starting in POLLING mode (set WEBHOOK_URL to switch)")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 

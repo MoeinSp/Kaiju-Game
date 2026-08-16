@@ -1,0 +1,27 @@
+# Reverse proxy for both roles on one domain, with automatic HTTPS.
+#
+# Only used with `docker compose --profile proxy up -d`. If the VPS already has
+# its own proxy, ignore this file and point that proxy at web:8000 / bot:8443.
+#
+# One domain serves two things:
+#   /<webhook-secret>   -> the bot's webhook listener   (Telegram only)
+#   everything else     -> the Django panel
+#
+# The webhook path IS the secret, so it isn't guessable, and the bot additionally
+# verifies the X-Telegram-Bot-Api-Secret-Token header, so even a leaked path
+# can't be used to inject updates.
+
+{$PANEL_DOMAIN} {
+	encode gzip
+
+	# Telegram posts updates here. Matched first so it wins over the catch-all.
+	@webhook path /{$WEBHOOK_SECRET}
+	handle @webhook {
+		reverse_proxy bot:8443
+	}
+
+	# Everything else is the operator panel (and Django admin).
+	handle {
+		reverse_proxy web:8000
+	}
+}

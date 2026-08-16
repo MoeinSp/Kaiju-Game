@@ -48,6 +48,14 @@ services:
       BOT_TOKEN: ${BOT_TOKEN}
       OWNER_TELEGRAM_ID: ${OWNER_TELEGRAM_ID}
       ADMIN_PANEL_URL: ${ADMIN_PANEL_URL:-http://127.0.0.1:8000/panel/}
+      BOT_USERNAME: ${BOT_USERNAME:-}
+      GAME_TIMEZONE: ${GAME_TIMEZONE:-Asia/Tehran}
+      # Webhook mode. Empty WEBHOOK_URL => the bot long-polls, which needs no
+      # inbound port and works anywhere. Set it (and the compose profile picks up
+      # the port mapping on the bot service) to have Telegram push instead.
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+      WEBHOOK_PORT: "8443"
     volumes:
       - backups:/app/backups
     ports:
@@ -71,11 +79,43 @@ services:
       web:
         condition: service_started
     environment: *app_env
+    # In webhook mode the bundled Caddy (proxy profile) reaches this over the
+    # compose network, so the port never has to be published to the host. It's
+    # here as an expose, not a ports:, on purpose — nothing on the VPS outside
+    # this compose project can see it.
+    expose:
+      - "8443"
     volumes:
       # same volume as web: a backup taken from the panel is visible to the bot
       # container too, which keeps `docker compose exec bot` diagnostics honest
       - backups:/app/backups
 
+  # Optional reverse proxy with automatic Let's Encrypt TLS, started only with
+  #   docker compose --profile proxy up -d
+  # Skip it if the VPS already runs its own nginx/caddy/traefik — point that at
+  # web:8000 and bot:8443 instead. Ports 80/443 are the only host ports this
+  # project ever claims, and only when this profile is active, so it won't fight
+  # a proxy you already have. Everything else binds to loopback.
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["proxy"]
+    restart: unless-stopped
+    depends_on:
+      - web
+      - bot
+    environment:
+      PANEL_DOMAIN: ${PANEL_DOMAIN:?PANEL_DOMAIN is required for the proxy profile}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
 volumes:
   pgdata:
   backups:
+  caddy_data:
+  caddy_config:
