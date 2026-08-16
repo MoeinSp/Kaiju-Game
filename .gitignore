@@ -3,6 +3,8 @@ venv/
 __pycache__/
 *.pyc
 .env
+# Deployment-local compose overrides (host ports, proxy wiring) — never committed
+docker-compose.override.yml
 *.db
 *.sqlite3
 .idea/
