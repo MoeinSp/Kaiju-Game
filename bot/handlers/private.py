@@ -11,8 +11,8 @@ from bot.handlers.inventory import blacksmith_panel, inventory_cmd
 from bot.handlers.lootbox import biocrate_cmd, diamond_box_panel
 from bot.handlers.owner import admin_cmd
 from bot.handlers.wheel import wheel_cmd
-from bot.buttons import (ADMIN, BATTLE, BUILD, CONFIRM, DANGER, LIST, NAV, PRIMARY, SHOP,
-                         back_btn, back_only_keyboard, btn)
+from bot.buttons import (ADMIN, BACK, BATTLE, BUILD, CONFIRM, DANGER, LIST, NAV, PRIMARY,
+                         SHOP, back_btn, back_only_keyboard, btn)
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text, send_screen
 from config import OWNER_TELEGRAM_ID
 from game import constants
@@ -42,6 +42,7 @@ from game.energy import spend_energy, sync_energy
 from game.equipment import (bonus_text, equip_item, get_equipped_items, slot_loadout,
                             unequip_item)
 from game.fusion import FUSION_BUILDING, fuse, fusion_partners, ready_pairs
+from game import guide
 from game.lab import lab_bar, lab_level, lab_progress
 from game.hunt import HUNT_TIERS, estimated_reward, resolve_hunt, scout_one
 
@@ -452,6 +453,98 @@ async def upgrade_set_default_callback(update: Update, context: ContextTypes.DEF
     )
 
 
+# ── the in-DM guide ─────────────────────────────────────────────────────────
+#
+# Same two-part split as the group help, and the *same* concept pages behind it
+# (game/guide.py): how the game works is identical in both places, and a rule
+# written twice is a rule that eventually disagrees with itself. Only the
+# "where is it" half differs, because the DM is button-driven and the group is
+# word-driven.
+
+_GUIDE_RULE = "━━━━━━━━━━━━━━"
+
+
+def guide_home_text_and_keyboard(is_first_run: bool = False) -> tuple[str, InlineKeyboardMarkup]:
+    lines = [f"{get_emoji('book')} <b>راهنمای Kaiju Bio-Lab</b>", ""]
+    if is_first_run:
+        lines.append("<b>خوش اومدی! این پنج قدم اولته:</b>")
+        lines.append("<blockquote>" + "\n".join(guide.first_run_lines()) + "</blockquote>")
+    else:
+        lines.append(
+            "یه بازی پرورش هیولاست: یه هیولا داری، قوی‌ترش می‌کنی، باهاش می‌جنگی "
+            "و آزمایشگاهت رو بزرگ می‌کنی."
+        )
+    lines += [
+        "",
+        _GUIDE_RULE,
+        f"{get_emoji('lab')} <b>چطور بازی می‌کنم؟</b>",
+        "<i>قانون‌های بازی — اگه تازه‌واردی از اینجا شروع کن.</i>",
+        "",
+    ]
+    concept_buttons = []
+    for key, (emoji_key, title, _blurb, _rows) in guide.CONCEPTS.items():
+        lines.append(f"{get_emoji(emoji_key)} {title}")
+        concept_buttons.append(btn(title, style=CONFIRM, callback_data=f"guide:c_{key}"))
+
+    lines += ["", _GUIDE_RULE, f"{get_emoji('settings')} <b>کجا چیکار کنم؟</b>",
+              "<i>هر بخش منو چیه و چه‌کار می‌کنه.</i>", ""]
+    area_buttons = []
+    for key, (emoji_key, title, blurb, _rows) in guide.DM_SECTIONS.items():
+        lines.append(f"{get_emoji(emoji_key)} {title} — <i>{blurb}</i>")
+        area_buttons.append(btn(title, style=NAV, callback_data=f"guide:a_{key}"))
+
+    keyboard = [concept_buttons[i : i + 2] for i in range(0, len(concept_buttons), 2)]
+    keyboard += [area_buttons[i : i + 2] for i in range(0, len(area_buttons), 2)]
+    keyboard.append([back_btn("menu:me", "بازگشت به بازی")])
+    return "\n".join(lines), InlineKeyboardMarkup(keyboard)
+
+
+def _guide_page(source: dict, key: str) -> tuple[str, InlineKeyboardMarkup] | None:
+    found = source.get(key)
+    if found is None:
+        return None
+    emoji_key, title, blurb, rows = found
+    lines = [f"{get_emoji(emoji_key)} <b>{title}</b>", "", f"<i>{blurb}</i>", ""]
+    for heading, body in rows:
+        lines += [_GUIDE_RULE, f"<b>{heading}</b>", body, ""]
+    keyboard = InlineKeyboardMarkup(
+        [[btn("راهنمای اصلی", emoji_key="btn_back", style=BACK, callback_data="guide:home")],
+         [back_btn("menu:me", "بازگشت به بازی")]]
+    )
+    return "\n".join(lines).rstrip(), keyboard
+
+
+async def send_first_run_guide(message) -> None:
+    """The welcome guide, as a SECOND message after the creature card.
+
+    Appended to the card it would bury the thing the player actually came for,
+    and the first screen of a game shouldn't be something you scroll past. The
+    guide also lives permanently on the menu, so this is a nudge rather than the
+    only chance to see it."""
+    text, keyboard = guide_home_text_and_keyboard(is_first_run=True)
+    await message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def guide_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    text, keyboard = guide_home_text_and_keyboard()
+    await send_screen(update, text, reply_markup=keyboard)
+
+
+async def guide_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    key = query.data.split(":", 1)[1]
+    await query.answer()
+    if key == "home":
+        text, keyboard = guide_home_text_and_keyboard()
+    elif key.startswith("c_"):
+        rendered = _guide_page(guide.CONCEPTS, key[2:])
+        text, keyboard = rendered or guide_home_text_and_keyboard()
+    else:
+        rendered = _guide_page(guide.DM_SECTIONS, key[2:])
+        text, keyboard = rendered or guide_home_text_and_keyboard()
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
 def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
     """Navigation keyboard under the creature card. Body-part upgrades used to live
     here too, but they made both the card and this keyboard unreadable — they're on
@@ -487,7 +580,10 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
             btn("اتحاد من", emoji_key="btn_alliance", style=NAV, callback_data="menu:alliance_info"),
             btn("رتبه‌بندی", emoji_key="btn_rank", style=NAV, callback_data="menu:rank"),
         ],
-        [btn("پروفایل من", emoji_key="btn_profile", style=NAV, callback_data="menu:profile")],
+        [
+            btn("پروفایل من", emoji_key="btn_profile", style=NAV, callback_data="menu:profile"),
+            btn("راهنما", emoji_key="btn_report", style=CONFIRM, callback_data="menu:guide"),
+        ],
     ]
     if is_owner:
         rows.append([btn("پنل ادمین", emoji_key="btn_admin", style=ADMIN, callback_data="menu:admin")])
@@ -558,6 +654,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "\n".join(lines), parse_mode="HTML", reply_markup=creature_keyboard(is_owner)
     )
+
+    if is_new:
+        await send_first_run_guide(update.message)
 
 
 def _me_sync(tg_user):
@@ -1357,6 +1456,11 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
             parse_mode="HTML",
             reply_markup=creature_keyboard(is_owner),
         )
+        # THIS is a player's real first screen, not /start: the first /start only
+        # asks for a lab name and returns, and by the time they come back the
+        # creature already exists so `is_new` is False. Sending the guide here is
+        # what actually reaches a new player.
+        await send_first_run_guide(message)
         return
 
     if action == "alliance_create":
@@ -1598,7 +1702,10 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                 btn("اتحاد من", emoji_key="btn_alliance", style=NAV, callback_data="menu:alliance_info"),
                 btn("رتبه‌بندی", emoji_key="btn_rank", style=NAV, callback_data="menu:rank"),
             ],
-            [btn("پروفایل من", emoji_key="btn_profile", style=NAV, callback_data="menu:profile")],
+            [
+                btn("پروفایل من", emoji_key="btn_profile", style=NAV, callback_data="menu:profile"),
+                btn("راهنما", emoji_key="btn_report", style=CONFIRM, callback_data="menu:guide"),
+            ],
         ]
     )
 
@@ -1628,6 +1735,7 @@ _MENU_ACTIONS = {
     "rank": rank,
     "admin": admin_cmd,
     "profile": profile,
+    "guide": guide_panel,
 }
 
 
@@ -1659,7 +1767,9 @@ def register(application) -> None:
     application.add_handler(CommandHandler("rank", rank, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("profile", profile, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("menu", menu, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("help", guide_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^menu:"))
+    application.add_handler(CallbackQueryHandler(guide_page_callback, pattern=r"^guide:"))
     application.add_handler(CallbackQueryHandler(upgrade_pick_callback, pattern=r"^upg_pick:"))
     application.add_handler(CallbackQueryHandler(equip_panel_callback, pattern=r"^upg_eq:"))
     application.add_handler(CallbackQueryHandler(equip_slot_callback, pattern=r"^upg_slot:"))
