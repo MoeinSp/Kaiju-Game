@@ -271,7 +271,7 @@ def _act(action: str, user_id: int, arg: str = "") -> str:
 def _upgrade_card(user, creature, energy) -> tuple[str, InlineKeyboardMarkup]:
     text = (
         f"{get_emoji('settings')} <b>ارتقای {creature.name}</b>\n"
-        f"سطح <b>{creature.level}</b> · XP {creature.xp}/{constants.XP_PER_LEVEL}\n\n"
+        f"سطح <b>{creature.level}</b> · XP {creature.xp}/{constants.xp_for_creature_level(creature.level)}\n\n"
         f"{get_emoji('coin')} تغذیه: {constants.FEED_COST_COINS} طلا → "
         f"{constants.FEED_XP_GAIN} XP\n"
         f"🏋️ تمرین: رایگان → {constants.TRAIN_XP_GAIN} XP "

@@ -91,7 +91,8 @@ def creature_card_text(user, creature, equipped_items: list | None = None) -> st
     there are more than three of them."""
     stats = effective_stats(creature, equipped_items)
     energy = sync_energy(user)
-    xp_bar = constants.render_bar(creature.xp, constants.XP_PER_LEVEL, width=10)
+    xp_needed = constants.xp_for_creature_level(creature.level)
+    xp_bar = constants.render_bar(creature.xp, xp_needed, width=10)
     stars = get_emoji("star") * creature.star_level
 
     lines = [
@@ -100,7 +101,7 @@ def creature_card_text(user, creature, equipped_items: list | None = None) -> st
         f"{constants.element_label(creature.element)}",
         "",
         f"📊 سطح <b>{creature.level}</b>",
-        f"{xp_bar}  {creature.xp}/{constants.XP_PER_LEVEL} XP",
+        f"{xp_bar}  {creature.xp}/{xp_needed} XP",
         "",
         "⚔️ <b>توانایی‌ها</b>",
         f"{get_emoji('hp')} جان: <b>{stats['hp']}</b>      {get_emoji('atk')} حمله: <b>{stats['atk']}</b>",

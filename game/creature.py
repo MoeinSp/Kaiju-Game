@@ -54,8 +54,8 @@ def add_xp(creature: Creature, amount: int) -> int:
     """Adds xp and applies level-ups in place. Caller is responsible for saving `creature`."""
     creature.xp += amount
     levels_gained = 0
-    while creature.xp >= constants.XP_PER_LEVEL:
-        creature.xp -= constants.XP_PER_LEVEL
+    while creature.xp >= constants.xp_for_creature_level(creature.level):
+        creature.xp -= constants.xp_for_creature_level(creature.level)
         creature.level += 1
         creature.base_hp += constants.LEVEL_UP_HP
         creature.base_atk += constants.LEVEL_UP_ATK

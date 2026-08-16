@@ -9,20 +9,27 @@ from game.creature import add_xp, effective_stats
 WILD_NAMES = ["Ferabeast", "Grimhide", "Rustclaw", "Mossfang", "Duskrunner"]
 
 # each tier scales the wild creature's stats and its payout together, so picking a
-# tougher target is a real risk/reward decision rather than a free upgrade
+# tougher target is a real risk/reward decision rather than a free upgrade.
+#
+# The reward spread was deliberately widened so *easy* hunting barely pays: farming
+# the 🟢 weak tier is now a trickle (0.4x), a same-level 🟡 fight is modest (0.75x),
+# and only the risky 🔴 strong tier — a genuinely hard fight you can lose — pays
+# well (2.4x). The point is that loot should cost effort: you either grind many
+# small wins or gamble on a fight that might give you nothing.
 HUNT_TIERS = {
-    "weak": {"label": "🟢 ضعیف", "stat_mult": 0.8, "reward_mult": 0.6},
-    "normal": {"label": "🟡 هم‌سطح", "stat_mult": 1.0, "reward_mult": 1.0},
-    "strong": {"label": "🔴 قوی", "stat_mult": 1.35, "reward_mult": 2.1},
+    "weak": {"label": "🟢 ضعیف", "stat_mult": 0.8, "reward_mult": 0.4},
+    "normal": {"label": "🟡 هم‌سطح", "stat_mult": 1.0, "reward_mult": 0.75},
+    "strong": {"label": "🔴 قوی", "stat_mult": 1.4, "reward_mult": 2.4},
 }
 
-# Payout scales with the hunter's level. Previously it was a flat 15–35 gold no
-# matter how strong you were, so hunting became worthless the moment building and
-# forge costs (which DO scale) took off — the main reason the economy felt off.
-HUNT_COIN_BASE = (18, 34)
-HUNT_COIN_PER_LEVEL = 3
-HUNT_DNA_BASE = (0, 3)
-HUNT_DNA_PER_LEVEL = 0.25  # ~1 extra DNA every 4 levels
+# Payout scales with the hunter's level so hunting keeps pace with building/forge
+# costs (which also scale) instead of going worthless mid-game. The base was pulled
+# down (~25%) as part of the loot-should-be-earned pass: hunting is a steady trickle
+# you work at, not a faucet that trivialises the build economy.
+HUNT_COIN_BASE = (13, 25)
+HUNT_COIN_PER_LEVEL = 2.5
+HUNT_DNA_BASE = (0, 2)
+HUNT_DNA_PER_LEVEL = 0.2  # ~1 extra DNA every 5 levels
 HUNT_XP_WIN = 25
 HUNT_XP_LOSE = 8
 

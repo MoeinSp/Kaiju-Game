@@ -262,7 +262,23 @@ FEED_XP_GAIN = 15
 TRAIN_COOLDOWN_HOURS = 4
 TRAIN_XP_GAIN = 40
 
-XP_PER_LEVEL = 100
+# Creature level-up XP scales with the level so deep levels are a real grind.
+# It used to be a flat 100 per level, which made level 30 as cheap to reach as
+# level 2 and let a fed creature snowball forever. The curve is pinned so that
+# the very first level-up (1 -> 2) still costs the old 100 — early game is
+# unchanged — and then climbs: ~400 at level 5, ~1000 at level 10, ~2750 at
+# level 20. Growth is super-linear (a linear term plus an exponential one) so
+# each level costs strictly more than the last.
+CREATURE_XP_BASE = 70
+CREATURE_XP_LINEAR = 30
+CREATURE_XP_EXPONENT = 1.5
+
+
+def xp_for_creature_level(level: int) -> int:
+    """XP needed to advance FROM `level` to `level`+1. Strictly increasing, so
+    leveling a creature deep is a long-term investment rather than a formality."""
+    return round(CREATURE_XP_BASE + CREATURE_XP_LINEAR * max(1, level) ** CREATURE_XP_EXPONENT)
+
 
 LEVEL_UP_HP = 10
 LEVEL_UP_ATK = 2
@@ -588,8 +604,10 @@ ARENA_ATTACK_ENERGY_COST = 1
 # The cap is what most raids actually pay, since 5% of an active player's purse
 # usually exceeds it. Keyed to the ATTACKER's level, not the defender's wealth,
 # so one lucky match against a rich player can't skip a week of progression.
-ARENA_LOOT_CAP_BASE = 45
-ARENA_LOOT_CAP_PER_LEVEL = 8
+# Trimmed alongside the hunt-loot cut so a raid stays ~1.8x a hunt (the intended
+# ratio) instead of drifting into a relative jackpot once hunting was nerfed.
+ARENA_LOOT_CAP_BASE = 35
+ARENA_LOOT_CAP_PER_LEVEL = 6
 
 ARENA_CUP_WIN_BASE = 22
 ARENA_CUP_LOSS_BASE = 14
@@ -625,8 +643,8 @@ ARENA_FAKE_LAB_NAMES = [
 # Deliberately averaging a little under the real-opponent cap, so matchmaking
 # against actual players stays the preferable outcome — but wide enough that a
 # bot raid is still a gamble worth taking rather than a consolation prize.
-ARENA_FAKE_LOOT_BASE = (20, 65)
-ARENA_FAKE_LOOT_PER_LEVEL = 5
+ARENA_FAKE_LOOT_BASE = (16, 50)
+ARENA_FAKE_LOOT_PER_LEVEL = 4
 
 
 def arena_loot_cap(attacker_level: int) -> int:
