@@ -1,4 +1,6 @@
-python-telegram-bot>=22.0
+# [webhooks] pulls in the tornado-based web server PTB needs for run_webhook();
+# without the extra the bot works in polling mode but crashes in webhook mode.
+python-telegram-bot[webhooks]>=22.0
 Django>=5.0
 python-dotenv>=1.0
 # panel: static files without a separate nginx location, and a WSGI server
