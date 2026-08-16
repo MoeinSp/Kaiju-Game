@@ -38,5 +38,9 @@ RUN useradd --create-home --uid 10001 kaiju \
 USER kaiju
 
 COPY --chown=kaiju:kaiju docker/entrypoint.sh /entrypoint.sh
+# chmod explicitly: git archive on a Windows checkout can drop the executable
+# bit, and an entrypoint without +x fails the container with a cryptic
+# "permission denied" at start.
+RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["web"]
