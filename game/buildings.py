@@ -58,6 +58,17 @@ def max_level_for(user: User, building_type: str) -> int:
     return min(constants.BUILDING_MAX_LEVEL, main_hall_level(user))
 
 
+def unlock_level_for(building_type: str) -> int:
+    """Main-hall level needed before this building can be constructed at all."""
+    return constants.BUILDING_UNLOCK_HALL_LEVEL.get(building_type, 1)
+
+
+def is_unlocked(user: User, building_type: str) -> bool:
+    if building_type == constants.MAIN_BUILDING:
+        return True
+    return main_hall_level(user) >= unlock_level_for(building_type)
+
+
 def star_cap(user: User) -> int:
     """A player can only raise creatures to as many stars as their main hall level."""
     return min(constants.STAR_MAX, max(1, main_hall_level(user)))
@@ -166,6 +177,11 @@ def start_upgrade(user: User, building: Building) -> BuildingUpgrade:
         raise GameError(
             "همین الان یه ارتقا در حال انجامه — فقط یه کارگر داری، صبر کن تموم بشه یا با کارت سرعت بدش."
         )
+
+    if building.level == 0 and not is_unlocked(user, building.building_type):
+        hall = constants.BUILDING_LABELS[constants.MAIN_BUILDING]
+        needed = unlock_level_for(building.building_type)
+        raise GameError(f"این ساختمون از سطح {needed} {hall} باز می‌شه.")
 
     cap = max_level_for(user, building.building_type)
     if building.level >= constants.BUILDING_MAX_LEVEL:

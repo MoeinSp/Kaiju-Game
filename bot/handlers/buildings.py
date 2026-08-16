@@ -18,8 +18,10 @@ from game.buildings import (
     get_or_create_buildings,
     list_speedup_cards,
     main_hall_level,
+    is_unlocked,
     max_level_for,
     pending_amount,
+    unlock_level_for,
     produces,
     start_upgrade,
     upgrade_cost_and_minutes,
@@ -52,18 +54,18 @@ def _buildings_sync(tg_user):
     # pending_amount() reads the building's stationed workers, so it must be
     # resolved HERE, in sync context — the keyboard builder runs on the event loop
     # and a lazy query there raises SynchronousOnlyOperation
-    rows = [(b, pending_amount(b)) for b in buildings]
+    rows = [(b, pending_amount(b), is_unlocked(user, b.building_type)) for b in buildings]
     return rows, upgrade, main_hall_level(user)
 
 
 def _buildings_keyboard(building_rows, upgrade) -> InlineKeyboardMarkup:
-    """`building_rows` is [(Building, pending_amount)] — precomputed by
-    _buildings_sync, because working it out needs the database."""
+    """`building_rows` is [(Building, pending_amount, is_unlocked)] — precomputed
+    by _buildings_sync, because working any of it out needs the database."""
     rows = []
-    for b, pending in building_rows:
+    for b, pending, unlocked in building_rows:
         label = constants.BUILDING_LABELS[b.building_type]
         if b.level == 0:
-            state = "🔒 ساخته‌نشده"
+            state = "🔒 ساخته‌نشده" if unlocked else f"🔒 از سطح {unlock_level_for(b.building_type)} تالار"
         else:
             state = f"Lv{b.level}" + (f" (+{pending})" if pending else "")
         busy_tag = " ⏳" if upgrade is not None and upgrade.building_id == b.id else ""
@@ -122,6 +124,7 @@ def _detail_view(user, building: Building) -> dict:
         "workers": assigned_creatures(building),
         "slots": worker_slots(building),
         "bonus": worker_bonus(building),
+        "unlocked": is_unlocked(user, building.building_type),
     }
 
 
@@ -131,7 +134,13 @@ def _building_detail_text(view: dict) -> str:
     workers, slots, bonus = view["workers"], view["slots"], view["bonus"]
     btype = building.building_type
     label = constants.BUILDING_LABELS[btype]
-    level_txt = "🔒 ساخته‌نشده" if building.level == 0 else f"سطح {building.level}/{constants.BUILDING_MAX_LEVEL}"
+    unlocked = view["unlocked"]
+    if building.level > 0:
+        level_txt = f"سطح {building.level}/{constants.BUILDING_MAX_LEVEL}"
+    elif unlocked:
+        level_txt = "🔒 ساخته‌نشده"
+    else:
+        level_txt = f"🔒 قفل — از سطح {unlock_level_for(btype)} تالار مِهر"
     lines = [f"{label} — {level_txt}", f"<i>{constants.BUILDING_DESCRIPTIONS[btype]}</i>", ""]
 
     if produces(btype) and building.level > 0:
@@ -213,6 +222,8 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
                 )
             ]
         )
+    elif building.level == 0 and not view["unlocked"]:
+        pass  # locked: no build button until the hall catches up
     elif upgrade is None and building.level < min(cap, constants.BUILDING_MAX_LEVEL):
         label = "🏗 ساخت" if building.level == 0 else "🔧 شروع ارتقا"
         rows.append([btn(label, emoji_key="btn_build", style=BUILD, callback_data=f"bld_upgrade:{building.id}")])

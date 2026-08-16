@@ -13,11 +13,15 @@ compounding multiplier on top of those would quietly invalidate that tuning.
 Lab level is progression *feedback* and the sort key for the leaderboard — no
 more. If it ever gains a bonus, the economy needs re-tuning in the same change.
 
-The curve is quadratic: `xp_for_level(L) = LAB_XP_COEFFICIENT * (L - 1)²`. Early
-levels come fast enough to feel like progress in the first session, and the
-distance between levels widens without ever hard-stopping. An active player
-tracks roughly level 20 by the time they've maxed their buildings, which is the
-same 1–2 week horizon the build times target.
+The curve is **super-quadratic**: `xp_for_level(L) = COEFFICIENT * (L - 1) ^ EXPONENT`
+with the exponent above 2. A plain square made the late levels too easy to
+inflate — the gap from 40 to 41 was only about 1.7x the gap from 10 to 11, so a
+player who kept playing at the same rate climbed at nearly a constant speed and
+a high number stopped meaning much. At 2.6 the gap widens roughly 8x over the
+same span, so every tier of the ladder costs visibly more than the one below it.
+
+Early levels are deliberately still cheap: the first few come inside one session
+so a new player sees the number move, and only then does it start to bite.
 """
 
 from __future__ import annotations
@@ -26,7 +30,8 @@ import math
 
 from bio_lab.models import User
 
-LAB_XP_COEFFICIENT = 25
+LAB_XP_COEFFICIENT = 18
+LAB_XP_EXPONENT = 2.6
 LAB_MAX_LEVEL = 50
 
 # What each action is worth. Ratios matter more than absolute values: a raid is
@@ -50,14 +55,24 @@ LAB_XP_PER_BUILDING_LEVEL = 40
 
 def xp_for_level(level: int) -> int:
     """Total XP needed to *be* this level."""
-    return LAB_XP_COEFFICIENT * max(0, level - 1) ** 2
+    return round(LAB_XP_COEFFICIENT * max(0, level - 1) ** LAB_XP_EXPONENT)
 
 
 def level_for_xp(xp: int) -> int:
-    """Inverse of xp_for_level, clamped to LAB_MAX_LEVEL."""
+    """Inverse of xp_for_level, clamped to LAB_MAX_LEVEL.
+
+    Computed by inverting the power, then corrected by comparing against
+    xp_for_level: the float root can land a hair either side of a boundary once
+    the numbers get large, and a level that flickers at the threshold would make
+    the progress bar jump backwards.
+    """
     if xp <= 0:
         return 1
-    level = int(math.isqrt(int(xp) // LAB_XP_COEFFICIENT)) + 1
+    level = int((int(xp) / LAB_XP_COEFFICIENT) ** (1 / LAB_XP_EXPONENT)) + 1
+    while level > 1 and xp_for_level(level) > xp:
+        level -= 1
+    while level < LAB_MAX_LEVEL and xp_for_level(level + 1) <= xp:
+        level += 1
     return min(level, LAB_MAX_LEVEL)
 
 

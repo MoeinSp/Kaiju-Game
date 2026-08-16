@@ -19,7 +19,7 @@ from telegram.ext import (CallbackQueryHandler, CommandHandler, ContextTypes,
                           MessageHandler, filters)
 
 from bio_lab.repository import display_name, get_active_creature, get_or_create_group, get_or_create_user, lab_display
-from bot.buttons import BACK, NAV, PRIMARY, SHOP, btn
+from bot.buttons import BACK, BATTLE, BUILD, CONFIRM, NAV, PRIMARY, SHOP, btn
 from bot.utils import run_db, safe_edit_message_text
 from config import BOT_USERNAME
 from game import constants, keywords, word_reward
@@ -154,80 +154,296 @@ def _profile_card(user, creature_count, energy) -> tuple[str, InlineKeyboardMark
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
-def _help_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
-    """The help *menu*: what the game is, then one button per category.
+_RULE = "━━━━━━━━━━━━━━"
 
-    Listing all sixteen words at once produced a wall nobody read. Splitting it
-    into categories means the first screen fits on a phone and answers the only
-    question a newcomer actually has — "what can I do here?" — with five choices
-    instead of sixteen lines.
+
+def _help_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
+    """The help home: what the game is, then two kinds of page.
+
+    Two earlier versions failed in opposite ways. The first listed all the words
+    in one message — a wall nobody read. The second listed category names with a
+    word count, which is a table of contents: it says how much there is without
+    saying what any of it does. This one splits the job in two: «چطور بازی
+    می‌کنم؟» pages teach the mechanics, and «چی بنویسم؟» pages list the words. A
+    group member who has never opened the DM needs the first before the second.
     """
     lines = [
-        f"{get_emoji('book')} <b>راهنمای بازی توی گروه</b>",
+        f"{get_emoji('book')} <b>راهنمای Kaiju Bio-Lab</b>",
         "",
-        "<blockquote>کافیه <b>خودِ کلمه</b> رو تنها بفرستی — بدون اسلش، بدون آرگومان."
-        "\nهر کار <b>دقیقاً یک کلمه</b> داره.</blockquote>",
+        "یه بازی پرورش هیولاست: یه هیولا داری، قوی‌ترش می‌کنی، باهاش می‌جنگی "
+        "و آزمایشگاهت رو بزرگ می‌کنی.",
         "",
-        "<b>دسته‌ها:</b>",
+        f"<blockquote>همین‌جا توی گروه بازی کن — کافیه <b>خودِ کلمه</b> رو تنها "
+        f"بفرستی، بدون اسلش.\nمثلاً بنویس «{keywords.word_for('creature')}».</blockquote>",
+        "",
+        _RULE,
+        f"{get_emoji('lab')} <b>چطور بازی می‌کنم؟</b>",
+        "<i>مفهوم‌های بازی رو توضیح می‌ده — از اینجا شروع کن.</i>",
+        "",
     ]
-    rows = []
-    for key, emoji_key, title, actions in keywords.KEYWORD_SECTIONS:
-        lines.append(f"{get_emoji(emoji_key)} {title} — {len(actions)} کلمه")
-        rows.append(
-            [btn(title, emoji_key=None, style=NAV, callback_data=f"grph:{key}:{user_id}")]
-        )
-    lines.append("")
-    lines.append(f"<i>مثال: بنویس «{keywords.word_for('creature')}» تا کارت هیولات بیاد.</i>")
+    topic_buttons = []
+    for key, (emoji_key, title, _blurb, _rows) in keywords.HELP_TOPICS.items():
+        lines.append(f"{get_emoji(emoji_key)} {title}")
+        topic_buttons.append(btn(title, style=CONFIRM, callback_data=f"grph:t_{key}:{user_id}"))
 
-    # two per row keeps the menu compact on a phone
-    paired = [rows[i][0:1] + (rows[i + 1][0:1] if i + 1 < len(rows) else []) for i in range(0, len(rows), 2)]
-    paired = [[b for b in row] for row in paired]
-    flat = [b for row in paired for b in row]
-    keyboard = [flat[i : i + 2] for i in range(0, len(flat), 2)]
+    lines.append("")
+    lines.append(_RULE)
+    lines.append(f"{get_emoji('settings')} <b>چی بنویسم؟</b>")
+    lines.append("<i>فهرست کلمه‌ها، دسته‌بندی‌شده.</i>")
+    lines.append("")
+    word_buttons = []
+    for key, emoji_key, title, blurb, actions in keywords.KEYWORD_SECTIONS:
+        lines.append(f"{get_emoji(emoji_key)} {title} — <i>{blurb}</i>")
+        word_buttons.append(btn(title, style=NAV, callback_data=f"grph:{key}:{user_id}"))
+
+    keyboard = [topic_buttons[i : i + 2] for i in range(0, len(topic_buttons), 2)]
+    keyboard += [word_buttons[i : i + 2] for i in range(0, len(word_buttons), 2)]
     keyboard.append([_pm_button()])
     return "\n".join(lines), InlineKeyboardMarkup(keyboard)
 
 
+def _help_back_rows(user_id: int):
+    return [
+        [btn("راهنمای اصلی", emoji_key="btn_back", style=BACK, callback_data=f"grph:__menu__:{user_id}")],
+        [_pm_button()],
+    ]
+
+
+def _help_topic_card(topic_key: str, user_id: int) -> tuple[str, InlineKeyboardMarkup]:
+    """A concept page — how a mechanic works, with no word to type."""
+    found = keywords.topic(topic_key)
+    if found is None:
+        return _help_card(user_id)
+    emoji_key, title, blurb, rows = found
+
+    lines = [f"{get_emoji(emoji_key)} <b>{title}</b>", "", f"<i>{blurb}</i>", ""]
+    for heading, body in rows:
+        lines.append(_RULE)
+        lines.append(f"<b>{heading}</b>")
+        lines.append(body)
+        lines.append("")
+    return "\n".join(lines).rstrip(), InlineKeyboardMarkup(_help_back_rows(user_id))
+
+
 def _help_section_card(section_key: str, user_id: int) -> tuple[str, InlineKeyboardMarkup]:
-    """One category: its words, what each does, and what actually happens."""
+    """One category of words: each trigger, what it does, and its rules.
+
+    Each entry is fenced by a rule and its rules sit in their own quote block —
+    without that the descriptions and the bullet lists ran into each other and
+    the page read as one undifferentiated paragraph.
+    """
+    if section_key.startswith("t_"):
+        return _help_topic_card(section_key[2:], user_id)
     found = keywords.section(section_key)
     if found is None:
         return _help_card(user_id)
-    _key, emoji_key, title, actions = found
+    _key, emoji_key, title, blurb, actions = found
 
-    lines = [f"{get_emoji(emoji_key)} <b>{title}</b>", ""]
+    lines = [f"{get_emoji(emoji_key)} <b>{title}</b>", "", f"<i>{blurb}</i>", ""]
     for action in actions:
-        word = keywords.word_for(action)
-        lines.append(f"{get_emoji(keywords.emoji_key_for(action))} <b>{word}</b> — {keywords.describe(action)}")
-        lines.append(f"<blockquote>{keywords.detail(action)}</blockquote>")
-        lines.append("")  # entries run together without it
+        lines.append(_RULE)
+        lines.append(
+            f"{get_emoji(keywords.emoji_key_for(action))} <b>«{keywords.word_for(action)}»</b>"
+        )
+        lines.append(keywords.describe(action))
+        lines.append("<blockquote>" + "\n".join(keywords.how(action)) + "</blockquote>")
+        lines.append("")
+    return "\n".join(lines).rstrip(), InlineKeyboardMarkup(_help_back_rows(user_id))
+
+
+# ── the sections promoted from DM-only into the group ───────────────────────
+#
+# These used to answer "go to the DM". They're here now because the group is
+# where people actually are, and a game you can only play alone in a DM isn't a
+# group game. Only the *interactive pickers* (choosing which creature to fuse,
+# which slot to equip) stay in the DM — those need long scrollable lists that
+# would bury a group chat.
+#
+# Every button below is owner-scoped: `grpa:` callbacks carry the id of whoever
+# summoned the card and refuse anyone else, because in a shared chat a keyboard
+# is visible to everybody.
+
+
+def _act(action: str, user_id: int, arg: str = "") -> str:
+    return f"grpa:{action}:{user_id}" + (f":{arg}" if arg else "")
+
+
+def _upgrade_card(user, creature, energy) -> tuple[str, InlineKeyboardMarkup]:
+    text = (
+        f"{get_emoji('settings')} <b>ارتقای {creature.name}</b>\n"
+        f"سطح <b>{creature.level}</b> · XP {creature.xp}/{constants.XP_PER_LEVEL}\n\n"
+        f"{get_emoji('coin')} تغذیه: {constants.FEED_COST_COINS} طلا → "
+        f"{constants.FEED_XP_GAIN} XP\n"
+        f"🏋️ تمرین: رایگان → {constants.TRAIN_XP_GAIN} XP "
+        f"(هر {constants.TRAIN_COOLDOWN_HOURS} ساعت)\n\n"
+        f"{get_emoji('coin')} {user.coins:,}   {get_emoji('energy')} {energy}/{constants.MAX_ENERGY}"
+    )
     rows = [
-        [btn("همه‌ی دسته‌ها", emoji_key="btn_back", style=BACK, callback_data=f"grph:__menu__:{user_id}")],
+        [
+            btn("تغذیه", emoji_key="btn_feed", style=BUILD, callback_data=_act("feed", user.id)),
+            btn("تمرین", emoji_key="btn_train", style=BUILD, callback_data=_act("train", user.id)),
+        ],
+        [btn("هیولا", emoji_key="btn_creature", style=NAV, callback_data=_scoped("creature", user.id))],
+        [_pm_button("ارتقای اعضای بدن در پیوی")],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
+    if target is None:
+        return (
+            f"{get_emoji('hunt')} حریفی پیدا نشد — دوباره امتحان کن.",
+            group_footer_keyboard(user.id),
+        )
+    lo, hi = target["reward"]
+    text = (
+        f"{get_emoji('hunt')} <b>حریف پیدا شد!</b>\n\n"
+        f"<blockquote>{target['name']} — {target['tier_label']}\n"
+        f"{constants.element_label(target['element'])} · 💪 قدرت {target['power']}</blockquote>\n"
+        f"{get_emoji('coin')} جایزه‌ی تقریبی: {lo}–{hi}\n"
+        f"{get_emoji('energy')} هزینه: ۱ (داری: {energy})"
+    )
+    rows = [
+        [
+            btn("حمله!", emoji_key="btn_attack", style=BATTLE,
+                callback_data=_act("hunt_go", user.id, f"{target['tier']}:{target['seed']}")),
+            btn("بعدی", emoji_key="btn_recheck", style=NAV, callback_data=_act("hunt_next", user.id)),
+        ],
+        [_pm_button()],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _arena_card(user, opponent, loot, shielded_for) -> tuple[str, InlineKeyboardMarkup]:
+    lines = [
+        f"{get_emoji('trophy')} <b>آرنا</b> — کاپ تو: <b>{user.cup}</b>",
+    ]
+    if shielded_for:
+        lines.append(f"🛡 سپر داری: {shielded_for // 3600} ساعت — با حمله کردن می‌پره.")
+    if opponent is None:
+        lines.append("\nحریفی پیدا نشد، بعداً دوباره امتحان کن.")
+        return "\n".join(lines), group_footer_keyboard(user.id)
+    lines.append("")
+    lines.append(f"<blockquote>🎯 {opponent['label']}\n💪 قدرت {opponent['power']} · 🏆 کاپ {opponent['cup']}</blockquote>")
+    lines.append(f"{get_emoji('coin')} غنیمت تقریبی: <b>{loot:,}</b>")
+    lines.append(f"{get_emoji('energy')} هزینه: ۱ انرژی")
+    rows = [
+        [
+            btn("حمله!", emoji_key="btn_attack", style=BATTLE, callback_data=_act("arena_go", user.id)),
+            btn("حریف بعدی", emoji_key="btn_recheck", style=NAV, callback_data=_act("arena_find", user.id)),
+        ],
         [_pm_button()],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
-def _pm_card() -> tuple[str, InlineKeyboardMarkup]:
-    """«پیوی» — one word covering everything that needs the full inline UI.
-
-    These used to be six separate trigger words that all produced the same "go to
-    the DM" message, which made the word list look twice as big as the group
-    actually is."""
-    text = (
-        f"{get_emoji('lab')} <b>این بخش‌ها توی پیوی ربات‌ان</b>\n"
-        "<blockquote>اینا دکمه‌های زیادی لازم دارن و توی گروه شلوغ می‌شن:</blockquote>\n"
-        f"{get_emoji('hunt')} شکار انفرادی\n"
-        f"{get_emoji('trophy')} آرنای کاپ\n"
-        f"{get_emoji('building')} ساختمون‌ها و معدن‌ها\n"
-        f"{get_emoji('lab')} ترکیب و تکثیر هیولا\n"
-        f"{get_emoji('diamond')} باکس‌ها و گردونه‌ی شانس\n"
-        f"{get_emoji('battle')} ارتقا و تجهیز هیولاها"
+def _mine_card(user, rows_data) -> tuple[str, InlineKeyboardMarkup]:
+    lines = [f"{get_emoji('building')} <b>ساختمون‌های تو</b>", ""]
+    total = 0
+    for building, pending, label in rows_data:
+        state = "🔒 ساخته‌نشده" if building.level == 0 else f"سطح {building.level}"
+        extra = f" · آماده: <b>{pending}</b>" if pending else ""
+        lines.append(f"{label} — {state}{extra}")
+        total += pending
+    lines.append("")
+    lines.append(
+        f"<blockquote>مجموع آماده‌ی جمع‌آوری: <b>{total}</b></blockquote>"
+        if total
+        else "<blockquote>فعلاً چیزی برای جمع‌آوری نیست.</blockquote>"
     )
-    return text, InlineKeyboardMarkup([[_pm_button("باز کردن پیوی ربات")]])
+    rows = []
+    if total:
+        rows.append([btn("جمع‌آوری همه", emoji_key="btn_collect", style=BUILD,
+                         callback_data=_act("collect_all", user.id))])
+    rows.append([_pm_button("ساخت و ارتقا در پیوی")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _box_card(user) -> tuple[str, InlineKeyboardMarkup]:
+    text = (
+        f"{get_emoji('diamond')} <b>باکس ژنتیکی</b>\n\n"
+        f"<blockquote>هزینه: <b>{constants.BIOCRATE_GOLD_COST}</b> {get_emoji('coin')}\n"
+        "شانسی هیولا یا تجهیزات می‌ده، با درجه‌ی نایابی تصادفی.</blockquote>\n"
+        f"موجودی تو: {user.coins:,} {get_emoji('coin')}"
+    )
+    rows = [
+        [btn("باز کن", emoji_key="btn_biocrate", style=SHOP, callback_data=_act("box_open", user.id))],
+        [_pm_button("جعبه‌های الماسی در پیوی")],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _wheel_card(user, spun_today) -> tuple[str, InlineKeyboardMarkup]:
+    if spun_today:
+        text = (
+            f"{get_emoji('wheel')} <b>گردونه‌ی شانس</b>\n\n"
+            "امروز چرخوندیش — فردا دوباره بیا."
+        )
+        return text, group_footer_keyboard(user.id)
+    text = (
+        f"{get_emoji('wheel')} <b>گردونه‌ی شانس</b>\n\n"
+        "<blockquote>روزی یک‌بار رایگان. جایزه: طلا، DNA، الماس یا کارت سرعت.</blockquote>"
+    )
+    rows = [[btn("بچرخون!", emoji_key="btn_wheel", style=SHOP, callback_data=_act("wheel_spin", user.id))]]
+    rows.append([_pm_button()])
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _fusion_card(user, pairs, built, cap) -> tuple[str, InlineKeyboardMarkup]:
+    lines = [f"{get_emoji('lab')} <b>ترکیب هیولا</b>"]
+    if not built:
+        lines.append("\n🔒 اول باید 🔮 تالار ادغام رو توی پیوی بسازی.")
+    elif pairs:
+        lines.append(f"⭐ سقف ستاره‌ی تو: <b>{cap}</b>\n")
+        lines.append("این جفت‌ها آماده‌ان — <b>هر کدوم ۱۰۰٪ موفقه</b>:")
+        for pair in pairs[:6]:
+            lines.append(f"• {pair['name']} {'⭐' * pair['star']} ×{pair['count']} → {'⭐' * (pair['star'] + 1)}")
+    else:
+        lines.append(
+            "\n<blockquote>الان جفت آماده‌ای نداری. برای ترکیب به <b>دو هیولای هم‌نام "
+            "با ستاره‌ی یکسان</b> نیاز داری.</blockquote>"
+        )
+    return "\n".join(lines), InlineKeyboardMarkup([[_pm_button("انجام ترکیب در پیوی")]])
+
+
+def _breeding_card(user, job, seconds_left, built) -> tuple[str, InlineKeyboardMarkup]:
+    lines = [f"{get_emoji('egg')} <b>تکثیر زیستی</b>"]
+    if not built:
+        lines.append("\n🔒 اول باید 🔮 تالار ادغام رو توی پیوی بسازی.")
+    elif job is None:
+        lines.append(
+            "\n<blockquote>دو هیولای آزاد رو انتخاب کن تا یه هیولای تازه ساخته بشه. "
+            "والدین سوزونده <b>نمی‌شن</b> — فقط چند ساعت مشغولن.</blockquote>"
+        )
+    elif seconds_left <= 0:
+        lines.append(f"\n✅ <b>آماده‌ست!</b> {job.parent_a.name} + {job.parent_b.name}")
+        lines.append("توی پیوی تحویلش بگیر.")
+    else:
+        hours, rem = divmod(seconds_left, 3600)
+        lines.append(f"\n⏳ در جریان: {job.parent_a.name} + {job.parent_b.name}")
+        lines.append(f"<b>{hours} ساعت و {rem // 60} دقیقه</b> مونده")
+    return "\n".join(lines), InlineKeyboardMarkup([[_pm_button("مدیریت تکثیر در پیوی")]])
+
+
+def _start_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
+    lines = [f"{get_emoji('egg')} <b>چطور شروع کنم؟</b>", ""]
+    for line in keywords.how("start"):
+        lines.append(line)
+    lines.append("")
+    lines.append(f"<i>برای دیدن همه‌ی کارها «{keywords.word_for('help')}» رو بفرست.</i>")
+    rows = [
+        [btn("راهنمای کامل", emoji_key="btn_report", style=NAV, callback_data=_scoped("help", user_id))],
+        [_pm_button("شروع در پیوی ربات")],
+    ]
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 # ── sync data gathering ─────────────────────────────────────────────────────
+
+
+def _require_creature(creature):
+    if creature is None:
+        raise GameError("هنوز هیولایی نداری! توی پیوی ربات /start رو بزن.")
 
 
 def _card_sync(tg_user, chat, action):
@@ -239,19 +455,66 @@ def _card_sync(tg_user, chat, action):
     data = {"user": user, "group": group, "creature": creature}
 
     if action in ("creature", "equipment"):
-        if creature is None:
-            raise GameError("هنوز هیولایی نداری! توی پیوی ربات /start رو بزن.")
+        _require_creature(creature)
         data["equipped"] = get_equipped_items(creature)
         data["slots"] = slot_loadout(user, creature)
     elif action == "collection":
         from game.creature import list_creatures
 
         data["creatures"] = list_creatures(user)
-    elif action == "profile":
+    elif action == "lab":
         from bio_lab.models import Creature
 
         data["creature_count"] = Creature.objects.filter(owner=user).count()
         data["energy"] = sync_energy(user)
+    elif action == "upgrade":
+        _require_creature(creature)
+        data["energy"] = sync_energy(user)
+    elif action == "hunt":
+        _require_creature(creature)
+        from game.hunt import HUNT_TIERS, estimated_reward, scout_one
+
+        data["energy"] = sync_energy(user)
+        target = scout_one(creature)
+        # scout_one returns the raw roll; the card needs it labelled and priced
+        target["tier_label"] = HUNT_TIERS[target["tier"]]["label"]
+        target["reward"] = estimated_reward(target["tier"], creature.level)
+        data["target"] = target
+    elif action == "arena":
+        from game import arena
+
+        _require_creature(creature)
+        opponent = arena.find_opponent(user)
+        data["opponent"] = opponent
+        data["loot"] = arena.expected_loot(opponent, creature.level) if opponent else 0
+        data["shielded_for"] = arena.shield_remaining_seconds(user)
+    elif action == "mine":
+        from game.buildings import get_or_create_buildings, pending_amount
+
+        buildings = get_or_create_buildings(user)
+        buildings.sort(key=lambda b: (b.building_type != constants.MAIN_BUILDING, b.building_type))
+        data["rows"] = [
+            (b, pending_amount(b), constants.BUILDING_LABELS[b.building_type]) for b in buildings
+        ]
+    elif action == "wheel":
+        from game.daily import get_daily_count
+
+        data["spun_today"] = get_daily_count(user, "wheel_spin") >= constants.WHEEL_DAILY_LIMIT
+    elif action == "fusion":
+        from game.buildings import is_built, star_cap
+        from game.fusion import FUSION_BUILDING, ready_pairs
+
+        data["built"] = is_built(user, FUSION_BUILDING)
+        data["pairs"] = ready_pairs(user)
+        data["cap"] = star_cap(user)
+    elif action == "breeding":
+        from game import breeding as breeding_mod
+        from game.buildings import is_built
+
+        job = breeding_mod.active_job(user)
+        data["built"] = is_built(user, breeding_mod.BREEDING_BUILDING)
+        data["job"] = job
+        data["seconds_left"] = breeding_mod.seconds_left(job) if job else 0
     elif action == "leaderboard":
         from bot.handlers.group import _creature_power, group_member_creatures
 
@@ -273,12 +536,28 @@ def _render(action: str, data: dict) -> tuple[str, InlineKeyboardMarkup]:
         return _equipment_card(user, data["creature"], data["slots"])
     if action == "collection":
         return _collection_card(user, data["creatures"])
-    if action == "profile":
+    if action == "lab":
         return _profile_card(user, data.get("creature_count", 0), data.get("energy", 0))
+    if action == "upgrade":
+        return _upgrade_card(user, data["creature"], data.get("energy", 0))
+    if action == "hunt":
+        return _hunt_card(user, data.get("target"), data.get("energy", 0))
+    if action == "arena":
+        return _arena_card(user, data.get("opponent"), data.get("loot", 0), data.get("shielded_for", 0))
+    if action == "mine":
+        return _mine_card(user, data.get("rows", []))
+    if action == "box":
+        return _box_card(user)
+    if action == "wheel":
+        return _wheel_card(user, data.get("spun_today", False))
+    if action == "fusion":
+        return _fusion_card(user, data.get("pairs", []), data.get("built", False), data.get("cap", 1))
+    if action == "breeding":
+        return _breeding_card(user, data.get("job"), data.get("seconds_left", 0), data.get("built", False))
+    if action == "start":
+        return _start_card(user.id)
     if action == "leaderboard":
         return _leaderboard_card(user, data.get("ranked", []), data.get("powers", {}))
-    if action == "pm":
-        return _pm_card()
     return _help_card(user.id)
 
 
@@ -293,7 +572,10 @@ def _leaderboard_card(user, ranked, powers) -> tuple[str, InlineKeyboardMarkup]:
     return "\n".join(lines), group_footer_keyboard(user.id, skip="leaderboard")
 
 
-_CARD_ACTIONS = {"creature", "equipment", "collection", "profile", "leaderboard", "pm"}
+_CARD_ACTIONS = {
+    "creature", "equipment", "collection", "lab", "leaderboard",
+    "upgrade", "hunt", "arena", "mine", "box", "wheel", "fusion", "breeding", "start",
+}
 
 
 # ── reward ──────────────────────────────────────────────────────────────────
@@ -383,7 +665,7 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
         return
 
-    if action == "missions":
+    if action == "mission":
         from bot.handlers import private as private_handlers
 
         await private_handlers.missions(update, context)
@@ -504,9 +786,166 @@ async def group_help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
+# ── owner-scoped actions ────────────────────────────────────────────────────
+
+
+def _do_sync(tg_user, chat, action, arg):
+    """Every mutating group action, in one sync function.
+
+    They share the shape "do the thing, then hand back whatever the follow-up
+    card needs", so keeping them together means the transaction boundary and the
+    error handling are identical for all of them instead of drifting per action.
+    """
+    user, _ = get_or_create_user(tg_user)
+    creature = get_active_creature(user)
+
+    if action in ("feed", "train"):
+        from game.creature import feed, train
+        from game.daily import check_missions, record_action
+
+        _require_creature(creature)
+        levels = feed(user, creature) if action == "feed" else train(creature)
+        record_action(user, action)
+        check_missions(user, action)
+        return {"kind": action, "levels": levels, "creature": creature,
+                "card": _card_sync(tg_user, chat, "upgrade")}
+
+    if action == "hunt_next":
+        return {"kind": "card", "card": _card_sync(tg_user, chat, "hunt")}
+
+    if action == "hunt_go":
+        from game.daily import check_missions, record_action
+        from game.energy import spend_energy
+        from game.hunt import resolve_hunt
+
+        _require_creature(creature)
+        tier, seed = arg.split(":")
+        spend_energy(user, constants.HUNT_ENERGY_COST)
+        result = resolve_hunt(user, creature, tier, int(seed))
+        record_action(user, "hunt")
+        result["missions"] = check_missions(user, "hunt")
+        return {"kind": "hunt", "result": result, "card": _card_sync(tg_user, chat, "hunt")}
+
+    if action == "arena_find":
+        return {"kind": "card", "card": _card_sync(tg_user, chat, "arena")}
+
+    if action == "arena_go":
+        from game import arena
+        from game.daily import check_missions, record_action
+
+        _require_creature(creature)
+        opponent = arena.find_opponent(user)
+        if opponent is None:
+            raise GameError("حریفی پیدا نشد، دوباره امتحان کن.")
+        result = arena.attack(user, opponent)
+        record_action(user, "arena_attack")
+        result["missions"] = check_missions(user, "arena_attack")
+        return {"kind": "arena", "result": result, "card": _card_sync(tg_user, chat, "arena")}
+
+    if action == "collect_all":
+        from game.buildings import collect, get_or_create_buildings, pending_amount
+        from game.daily import check_missions, record_action
+
+        collected = {}
+        for building in get_or_create_buildings(user):
+            if pending_amount(building) <= 0:
+                continue
+            amount, resource = collect(user, building)
+            collected[resource] = collected.get(resource, 0) + amount
+        if not collected:
+            raise GameError("چیزی برای جمع‌آوری نیست.")
+        record_action(user, "collect")
+        check_missions(user, "collect")
+        return {"kind": "collect", "collected": collected,
+                "card": _card_sync(tg_user, chat, "mine")}
+
+    if action == "box_open":
+        from game.lootbox import open_biocrate
+
+        result = open_biocrate(user)
+        return {"kind": "box", "result": result, "card": _card_sync(tg_user, chat, "box")}
+
+    if action == "wheel_spin":
+        from game.wheel import spin
+
+        result = spin(user)
+        return {"kind": "wheel", "result": result, "card": _card_sync(tg_user, chat, "wheel")}
+
+    raise GameError("این کار پیدا نشد.")
+
+
+def _action_note(payload: dict) -> str:
+    """The one-line "what just happened" banner above the refreshed card."""
+    kind = payload["kind"]
+    if kind == "feed":
+        note = f"{get_emoji('coin')} <b>تغذیه شد!</b>"
+    elif kind == "train":
+        note = "🏋️ <b>تمرین کرد!</b>"
+    elif kind == "hunt":
+        r = payload["result"]
+        if r["won"]:
+            note = (f"{get_emoji('celebrate')} <b>بردی!</b> +{r['coins']} {get_emoji('coin')} "
+                    f"+{r['dna']} {get_emoji('dna')}")
+        else:
+            note = "💀 <b>باختی!</b> دفعه‌ی بعد قوی‌تر برگرد."
+    elif kind == "arena":
+        r = payload["result"]
+        arrow = "▲" if r["cup_delta"] >= 0 else "▼"
+        note = (f"{get_emoji('celebrate')} <b>غارت موفق!</b> +{r['loot']:,} {get_emoji('coin')}"
+                if r["won"] else "🛡 <b>حمله دفع شد!</b>")
+        note += f"  {arrow} {abs(r['cup_delta'])} 🏆 (کاپ: {r['new_cup']})"
+    elif kind == "collect":
+        parts = [f"+{amount:,} {get_emoji(_RESOURCE_EMOJI[res])}" for res, amount in payload["collected"].items()]
+        note = f"{get_emoji('coin')} <b>جمع‌آوری شد!</b> " + "  ".join(parts)
+    elif kind == "box":
+        r = payload["result"]
+        note = f"{get_emoji('celebrate')} <b>باکس باز شد!</b> <tg-spoiler>{r.get('label', '')}</tg-spoiler>"
+    elif kind == "wheel":
+        r = payload["result"]
+        note = f"{get_emoji('wheel')} <b>{r.get('label', 'جایزه گرفتی!')}</b>"
+    else:
+        return ""
+    if payload.get("levels"):
+        note += f" {get_emoji('celebrate')} سطح {payload['creature'].level}!"
+    return note + "\n\n"
+
+
+_RESOURCE_EMOJI = {"coins": "coin", "diamonds": "diamond", "dna_fragments": "dna"}
+
+
+async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Perform a mutating action, then re-render its card with a result banner.
+
+    Edits in place rather than posting: these are all "do it again" loops (hunt
+    the next target, spin, collect) and a new message per tap would bury the
+    group the way the DM used to be buried.
+    """
+    query = update.callback_query
+    parts = query.data.split(":")
+    action, owner_id = parts[1], parts[2]
+    arg = ":".join(parts[3:]) if len(parts) > 3 else ""
+    if update.effective_user.id != int(owner_id):
+        await query.answer("این کارت مال تو نیست — خودت کلمه‌ش رو بفرست.", show_alert=True)
+        return
+    try:
+        payload = await run_db(_do_sync, update.effective_user, query.message.chat, action, arg)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    card_action = {"feed": "upgrade", "train": "upgrade", "hunt_go": "hunt", "hunt_next": "hunt",
+                   "arena_go": "arena", "arena_find": "arena", "collect_all": "mine",
+                   "box_open": "box", "wheel_spin": "wheel"}[action]
+    text, keyboard = _render(card_action, payload["card"])
+    await safe_edit_message_text(
+        query, _action_note(payload) + text, parse_mode="HTML", reply_markup=keyboard
+    )
+
+
 def register(application) -> None:
     application.add_handler(CallbackQueryHandler(group_card_callback, pattern=r"^grp:"))
     application.add_handler(CallbackQueryHandler(group_help_callback, pattern=r"^grph:"))
+    application.add_handler(CallbackQueryHandler(group_action_callback, pattern=r"^grpa:"))
     application.add_handler(
         CommandHandler("setup", group_setup, filters.ChatType.GROUPS)
     )

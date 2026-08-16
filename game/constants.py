@@ -385,6 +385,20 @@ BUILDING_DESCRIPTIONS = {
 }
 BUILDING_MAX_LEVEL = 5
 
+# Main-hall level required before a building can be CONSTRUCTED at all. This is
+# separate from max_level_for(), which caps how high a building may go: the hall
+# already limited every building's level, but everything was buildable from day
+# one, so raising the hall only ever raised a ceiling — it never *revealed*
+# anything. Staggering the unlocks gives each hall level its own reward and
+# paces the opening instead of dumping six construction sites on a new player.
+BUILDING_UNLOCK_HALL_LEVEL = {
+    "gold_collector": 1,     # the first thing you build — income has to come first
+    "dna_lab": 2,
+    "blacksmith": 3,         # gear upgrades open once there's gold to spend on them
+    "fusion_lab": 4,         # stars and propagation are a mid-game goal
+    "diamond_collector": 5,  # the premium mine is the payoff for maxing the hall
+}
+
 # ── Upgrade pacing ────────────────────────────────────────────────────────────
 # Explicit per-level tables rather than a formula, because the thing being tuned
 # is a *total*: taking every building to level 5 should occupy 1–2 weeks of real
@@ -404,10 +418,13 @@ BUILDING_MAX_LEVEL = 5
 BUILDING_UPGRADE_MINUTES = {1: 15, 2: 90, 3: 360, 4: 900, 5: 1800}
 
 # Gold is sized to be *felt but not binding*: the constraint is meant to be the
-# clock, not the wallet. Full build-out costs ~124k gold across those 13 days
-# (~9.5k/day), which a moderately active player clears while still having budget
-# for crates, fusion and the forge.
-BUILDING_UPGRADE_GOLD = {1: 250, 2: 800, 3: 2200, 4: 5500, 5: 12000}
+# clock, not the wallet. These came down when hunt and raid income was cut — with
+# the old figures, gold overtook the timers as the bottleneck and full build-out
+# needed ~21 days of income against a 13-day clock, which would have quietly
+# broken the 1–2 week target. Full build-out is now ~63k, roughly 80% of what a
+# moderately active player earns over those 13 days, leaving the rest for crates,
+# fusion and the forge.
+BUILDING_UPGRADE_GOLD = {1: 150, 2: 450, 3: 1200, 4: 2800, 5: 6000}
 
 # rate_per_hour/cap_base scale by *level; diamond_collector's rate is deliberately
 # tiny since diamonds are the premium currency. Buildings absent from this table
@@ -554,13 +571,13 @@ FORGE_MAX_FAIL_CHANCE = 0.45
 # ── Cup arena (PvP raiding): matchmaking is by cup, loot is a slice of the
 # defender's gold, and a fresh defender gets a shield so they can't be farmed.
 # The soft cap below is the important bit — see game/arena.py's cup_delta(). ─────
-# Loot is tuned against the hunt, since both cost one energy: a successful raid
-# should pay roughly 3x a normal hunt at the same creature level. It used to pay
-# closer to 7x, which made hunting pointless and looting trivially the best move.
-# Now a raid is clearly worth doing, can still fail, and doesn't trivialise the
-# rest of the economy.
-ARENA_LOOT_PERCENT = 0.08
-ARENA_LOOT_MIN = 40  # a raid on a broke player still pays something, so raiding stays worth doing
+# Loot is tuned against the hunt, since both cost one energy. A successful raid
+# pays roughly 1.8x a normal hunt — it was 3x, and before that 7x. The point of a
+# raid is no longer the gold: it's the cup. Gold that arrives faster than it can
+# be spent makes the build timers meaningless, and building is the spine of the
+# game, so raiding has to be a grind you work at rather than a faucet.
+ARENA_LOOT_PERCENT = 0.05
+ARENA_LOOT_MIN = 15  # a raid on a broke player still pays something, but barely
 ARENA_SHIELD_HOURS = 8
 ARENA_ATTACK_ENERGY_COST = 1
 
@@ -568,11 +585,11 @@ ARENA_ATTACK_ENERGY_COST = 1
 # wallet. Without this, one lucky match against a hoarder hands a new player more
 # gold than hours of hunting and skips the whole early economy; with it, raiding
 # is reliably a bit better than hunting instead of a jackpot.
-# The cap is what most raids actually pay, since 8% of an active player's purse
+# The cap is what most raids actually pay, since 5% of an active player's purse
 # usually exceeds it. Keyed to the ATTACKER's level, not the defender's wealth,
 # so one lucky match against a rich player can't skip a week of progression.
-ARENA_LOOT_CAP_BASE = 90
-ARENA_LOOT_CAP_PER_LEVEL = 14
+ARENA_LOOT_CAP_BASE = 45
+ARENA_LOOT_CAP_PER_LEVEL = 8
 
 ARENA_CUP_WIN_BASE = 22
 ARENA_CUP_LOSS_BASE = 14
@@ -608,8 +625,8 @@ ARENA_FAKE_LAB_NAMES = [
 # Deliberately averaging a little under the real-opponent cap, so matchmaking
 # against actual players stays the preferable outcome — but wide enough that a
 # bot raid is still a gamble worth taking rather than a consolation prize.
-ARENA_FAKE_LOOT_BASE = (45, 110)
-ARENA_FAKE_LOOT_PER_LEVEL = 10
+ARENA_FAKE_LOOT_BASE = (20, 65)
+ARENA_FAKE_LOOT_PER_LEVEL = 5
 
 
 def arena_loot_cap(attacker_level: int) -> int:

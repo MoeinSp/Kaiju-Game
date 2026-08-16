@@ -68,17 +68,31 @@ def _attacker_level(attacker: User) -> int:
     return creature.level if creature is not None else 1
 
 
-def _fake_opponent(attacker: User, attacker_power: int) -> dict:
+def power_for_cup(cup: int) -> int:
+    """The power a lab at this cup rating is *expected* to have.
+
+    Inverse of deserved_cup(). Bots are built from this rather than from the
+    attacker's own power, and that difference is the whole point: a bot mirroring
+    the attacker was always a coin flip, so a weak player could keep winning and
+    climb forever. Sized to the cup instead, the ladder pushes back — reach a cup
+    your creature can't back up and the bots there simply beat you.
+    """
+    return max(1, round(cup / constants.ARENA_CUP_PER_POWER))
+
+
+def _fake_opponent(attacker: User) -> dict:
     """A bot defender, used when no real player sits in the attacker's cup band.
-    Scaled around the attacker's own power so the fight is a real coin-flip, with
-    deliberately swingy loot so bot raids still feel like a gamble."""
-    swing = random.uniform(0.85, 1.2)
-    power = max(1, round(attacker_power * swing))
+
+    Built from the attacker's CUP, not their power, so it enforces the ladder.
+    The swing keeps individual fights uncertain without softening the trend."""
+    bot_cup = max(0, attacker.cup + random.randint(-40, 90))
+    swing = random.uniform(0.9, 1.15)
+    power = max(1, round(power_for_cup(bot_cup) * swing))
     return {
         "is_fake": True,
         "user": None,
         "label": random.choice(constants.ARENA_FAKE_LAB_NAMES),
-        "cup": max(0, attacker.cup + random.randint(-60, 90)),
+        "cup": bot_cup,
         "power": power,
         "loot_pool": random.randint(*constants.arena_fake_loot_range(_attacker_level(attacker))),
     }
@@ -87,9 +101,14 @@ def _fake_opponent(attacker: User, attacker_power: int) -> dict:
 def find_opponent(attacker: User) -> dict:
     """Picks a raid target: a real, unshielded player inside the cup band if one
     exists, otherwise a bot. Returns a uniform dict either way so callers don't
-    branch on opponent kind."""
-    attacker_power = active_power(attacker)
-    if attacker_power <= 0:
+    branch on opponent kind.
+
+    **Matchmaking is by cup, never by power** — on both branches. Real players are
+    filtered to the cup band; bots are sized from the attacker's cup. Pairing on
+    power would quietly undo the ladder: it would hand a weak player weak
+    opponents at every rating, so they'd keep winning and keep climbing.
+    """
+    if active_power(attacker) <= 0:
         raise GameError("اول یه موجود فعال انتخاب کن.")
 
     now = timezone.now()
@@ -107,7 +126,7 @@ def find_opponent(attacker: User) -> dict:
     )
 
     if not candidates:
-        return _fake_opponent(attacker, attacker_power)
+        return _fake_opponent(attacker)
 
     target = random.choice(candidates)
     return {

@@ -19,8 +19,8 @@ HUNT_TIERS = {
 # Payout scales with the hunter's level. Previously it was a flat 15–35 gold no
 # matter how strong you were, so hunting became worthless the moment building and
 # forge costs (which DO scale) took off — the main reason the economy felt off.
-HUNT_COIN_BASE = (25, 45)
-HUNT_COIN_PER_LEVEL = 4
+HUNT_COIN_BASE = (18, 34)
+HUNT_COIN_PER_LEVEL = 3
 HUNT_DNA_BASE = (0, 3)
 HUNT_DNA_PER_LEVEL = 0.25  # ~1 extra DNA every 4 levels
 HUNT_XP_WIN = 25
