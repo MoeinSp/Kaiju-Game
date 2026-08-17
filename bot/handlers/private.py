@@ -1802,7 +1802,7 @@ async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         wallet_line(user),
     ]
     rows = [
-        [btn(f"✏️ تغییر اسم آزمایشگاه ({rename_cost} {get_emoji('diamond')})", style=SHOP, callback_data="lab_rename")],
+        [btn(f"✏️ تغییر اسم آزمایشگاه ({rename_cost} 💎)", style=SHOP, callback_data="lab_rename")],
         [back_btn("menu:me")],
     ]
     await send_screen(update, "\n".join(lines), reply_markup=InlineKeyboardMarkup(rows))

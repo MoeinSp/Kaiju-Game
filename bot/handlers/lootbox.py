@@ -20,22 +20,56 @@ def _user_coins_sync(tg_user):
     return user.coins
 
 
+def _biocrate_panel_text(coins: int) -> str:
+    return (
+        f"{get_emoji('biocrate')} <b>باکس ژنتیکی</b>\n"
+        "<blockquote>یه باکس شانسی — بیشترش تجهیزاته و گاهی یه هیولای تازه ازش درمیاد.</blockquote>\n\n"
+        f"{get_emoji('coin')} هزینه: <b>{constants.BIOCRATE_GOLD_COST}</b> طلا  (موجودی: {coins})"
+    )
+
+
+def _biocrate_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [btn("خرید و باز کن", emoji_key="btn_confirm", style=CONFIRM, callback_data="bc_buy")],
+            [btn("📊 شانس‌ها", style=PRIMARY, callback_data="bc_odds")],
+            [back_btn("menu:me")],
+        ]
+    )
+
+
+def _biocrate_odds_text() -> str:
+    """The drop odds, on their own screen behind the «📊 شانس‌ها» button so the main
+    panel stays clean. Computed from the constants so it can never drift."""
+    cc = constants.BIOCRATE_CREATURE_CHANCE
+    weights = constants.BIOCRATE_CREATURE_RARITY_WEIGHTS
+    total = sum(weights.values())
+    lines = [
+        f"{get_emoji('biocrate')} <b>شانس‌های باکس ژنتیکی</b>\n",
+        f"🎒 تجهیزات — <b>{(1 - cc) * 100:g}٪</b>",
+        "",
+        f"🧬 <b>هیولا</b> — روی‌هم <b>{cc * 100:g}٪</b>:",
+    ]
+    for rarity, weight in weights.items():
+        pct = cc * weight / total * 100
+        lines.append(f"　{constants.RARITY_LABELS[rarity]} — <b>{pct:g}٪</b>")
+    lines.append("\n<i>هرچی نایاب‌تر، کمیاب‌تر. برای شکار هیولای نایاب، جعبه‌های الماسی بهترن.</i>")
+    return "\n".join(lines)
+
+
 async def biocrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Cost + confirmation screen — opening the crate spends gold, so it must never
-    fire on a single tap without the player agreeing to the price first."""
+    fire on a single tap without the player agreeing to the price first. The odds
+    live behind their own button to keep this screen uncluttered."""
     coins = await run_db(_user_coins_sync, update.effective_user)
-    cost = constants.BIOCRATE_GOLD_COST
-    text = (
-        f"{get_emoji('biocrate')} <b>باکس ژنتیکی</b>\n"
-        "<blockquote>یه باکس شانسی: بیشتر مواقع (۹۰٪) یه تجهیزات می‌ده و گاهی (۱۰٪) یه هیولای تازه. "
-        "درجه‌ش هم شانسیه — هرچی نایاب‌تر، کمیاب‌تر. برای شکار هیولای نایاب، جعبه‌های الماسی بهترن.</blockquote>\n\n"
-        f"{get_emoji('coin')} هزینه: <b>{cost}</b> طلا  (موجودی: {coins})"
-    )
-    rows = [
-        [btn("خرید و باز کن", emoji_key="btn_confirm", style=CONFIRM, callback_data="bc_buy")],
-        [back_btn("menu:me")],
-    ]
-    await send_screen(update, text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+    await send_screen(update, _biocrate_panel_text(coins), parse_mode="HTML", reply_markup=_biocrate_keyboard())
+
+
+async def biocrate_odds_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    keyboard = InlineKeyboardMarkup([[back_btn("menu:biocrate", "بازگشت به باکس")]])
+    await safe_edit_message_text(query, _biocrate_odds_text(), parse_mode="HTML", reply_markup=keyboard)
 
 
 async def biocrate_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -162,6 +196,7 @@ async def diamond_box_buy_callback(update: Update, context: ContextTypes.DEFAULT
 def register(application) -> None:
     application.add_handler(CommandHandler("biocrate", biocrate_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(biocrate_buy_callback, pattern=r"^bc_buy$"))
+    application.add_handler(CallbackQueryHandler(biocrate_odds_callback, pattern=r"^bc_odds$"))
     application.add_handler(CommandHandler("diamondbox", diamond_box_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(diamond_box_pick_callback, pattern=r"^dbox_pick:"))
     application.add_handler(CallbackQueryHandler(diamond_box_buy_callback, pattern=r"^dbox_buy:"))
