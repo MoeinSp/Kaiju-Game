@@ -55,14 +55,46 @@ def _format_remaining(seconds: float) -> str:
 def _panel_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
     job = breeding.active_job(user)
+    eggs = breeding.active_eggs(user)
     return {
         "user": user,
         "built": is_built(user, breeding.BREEDING_BUILDING),
         "job": job,
-        "ready": job is not None and breeding.ready(job),
-        "seconds_left": breeding.seconds_left(job) if job is not None else 0,
-        "candidates": breeding.parent_candidates(user),
+        "job_ready": job is not None and breeding.ready(job),
+        "job_seconds_left": breeding.seconds_left(job) if job is not None else 0,
+        "cave_finish_price": breeding.cave_finish_price(job) if job is not None else 0,
+        "eggs": [
+            {
+                "id": e.id,
+                "ready": breeding.egg_ready(e),
+                "seconds_left": breeding.egg_seconds_left(e),
+                "finish_price": breeding.egg_finish_price(e),
+            }
+            for e in eggs
+        ],
+        "free_count": len(breeding.parent_candidates(user)),
     }
+
+
+def _parent_a_render(candidates: list) -> tuple[str, InlineKeyboardMarkup]:
+    text = (
+        "🕳 <b>غار هیولا — جفت بفرست</b>\n"
+        "<blockquote>دو هیولای آزاد رو بفرست توی غار. اول جفت‌گیری می‌کنن، بعد یه <b>تخم</b> "
+        "می‌ذارن و آزاد می‌شن؛ تخم جدا رشد می‌کنه تا سر باز کنه.</blockquote>\n"
+        "\n<b>والد اول رو انتخاب کن:</b>"
+    )
+    rows = [
+        [
+            btn(
+                f"{c.name} {'⭐' * c.star_level} · {constants.RARITY_LABELS[c.rarity]} · Lv{c.level}",
+                style=LIST,
+                callback_data=f"brd_a:{c.id}",
+            )
+        ]
+        for c in candidates[:12]
+    ]
+    rows.append([back_btn("menu:breeding")])
+    return text, InlineKeyboardMarkup(rows)
 
 
 def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
@@ -79,60 +111,53 @@ def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
         ]
         return text, InlineKeyboardMarkup(rows)
 
+    lines = ["🕳 <b>غار هیولا</b>", ""]
+    rows: list = []
+
+    # ── cave (phase 1: mating) ────────────────────────────────────────────────
     job = view["job"]
     if job is not None:
         parents = f"{job.parent_a.name} + {job.parent_b.name}"
-        if view["ready"]:
-            text = (
-                f"{get_emoji('egg')} <b>تخم آماده‌ی سر باز کردنه!</b>\n\n"
-                f"<blockquote>{parents}</blockquote>\n"
-                "بزن تا سر باز کنه و ببینی چی ازش درمیاد."
-            )
-            rows = [
-                [btn("🐣 تخم رو سر باز کن", emoji_key="btn_confirm", style=CONFIRM, callback_data="brd_collect")],
-                [back_btn("menu:me")],
-            ]
+        if view["job_ready"]:
+            lines.append(f"💞 <b>جفت‌گیری تموم شد!</b>  <blockquote>{parents}</blockquote>")
+            lines.append("بزن تا تخم بذارن و از غار آزاد شن.")
+            rows.append([btn("🥚 تخم بذار", emoji_key="btn_confirm", style=CONFIRM, callback_data="brd_lay")])
         else:
-            text = (
-                f"{get_emoji('egg')} <b>یه تخم توی غار هیولاست…</b>\n\n"
-                f"<blockquote>{parents}</blockquote>\n"
-                f"⏳ <b>{_format_remaining(view['seconds_left'])}</b> مونده تا سر باز کنه\n\n"
-                "<i>چی توی تخمه؟ تا درنیاد هیچ‌کس نمی‌دونه. این دو والد تا اون‌موقع نه می‌جنگن نه سر کار می‌رن.</i>"
+            lines.append(f"💞 یه جفت توی غارن:  <blockquote>{parents}</blockquote>")
+            lines.append(f"⏳ <b>{_format_remaining(view['job_seconds_left'])}</b> تا تخم‌گذاری")
+            rows.append(
+                [
+                    btn(f"💎 فوری‌کن ({view['cave_finish_price']})", style=PRIMARY, callback_data="brd_cave_finish"),
+                    btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data="brd_cancel"),
+                ]
             )
-            rows = [
-                [btn("بی‌خیالِ تخم", emoji_key="btn_cancel", style=DANGER, callback_data="brd_cancel")],
-                [back_btn("menu:me")],
-            ]
-        return text, InlineKeyboardMarkup(rows)
+    else:
+        if view["free_count"] >= 2:
+            lines.append("🕳 غار خالیه — یه جفت بفرست تا جفت‌گیری کنن و تخم بذارن.")
+            rows.append([btn("🐣 جفت بفرست غار", emoji_key="btn_confirm", style=CONFIRM, callback_data="brd_new")])
+        else:
+            lines.append("🕳 غار خالیه. برای جفت‌گیری حداقل <b>دو</b> هیولای آزاد لازم داری.")
+            lines.append("<i>موجود فعال و هیولاهایی که سر کارن حساب نمی‌شن.</i>")
 
-    candidates = view["candidates"]
-    text = (
-        f"🕳 <b>غار هیولا</b>\n"
-        "<blockquote>دو هیولای آزاد رو بفرست توی غار تا جفت بشن و یه <b>تخم</b> بذارن. "
-        "والدین سالم برمی‌گردن — فقط تا سر باز کردن تخم مشغولن.\n"
-        "چی از تخم درمیاد؟ <b>رازه</b> — تا لحظه‌ی درومدن معلوم نیست. ولی هم‌عنصر یا هم‌نژاد بودن و "
-        "قدرت بالاتر، شانس یه تخمِ نایاب‌تر رو بیشتر می‌کنه.</blockquote>\n"
-    )
-    if len(candidates) < 2:
-        text += (
-            "\n⚠️ حداقل <b>دو</b> هیولای آزاد لازم داری.\n"
-            "<i>موجود فعال و هیولاهایی که سر کارن حساب نمی‌شن.</i>"
-        )
-        return text, InlineKeyboardMarkup([[back_btn("menu:me")]])
+    # ── eggs (phase 2: incubating, decoupled from the cave) ───────────────────
+    eggs = view["eggs"]
+    if eggs:
+        lines.append("")
+        lines.append(f"{get_emoji('egg')} <b>تخم‌های در حال رشد ({len(eggs)}):</b>")
+        for i, e in enumerate(eggs, 1):
+            if e["ready"]:
+                lines.append(f"  🐣 تخم #{i} — <b>آماده‌ی سر باز کردنه!</b>")
+                rows.append([btn(f"🐣 سر باز کن تخم #{i}", style=CONFIRM, callback_data=f"brd_hatch:{e['id']}")])
+            else:
+                lines.append(f"  🥚 تخم #{i} — ⏳ {_format_remaining(e['seconds_left'])}")
+                rows.append(
+                    [btn(f"💎 فوری‌کن تخم #{i} ({e['finish_price']})", style=PRIMARY, callback_data=f"brd_egg_finish:{e['id']}")]
+                )
+        lines.append("\n<i>چی توی تخم‌هاست؟ تا سر باز نکنن هیچ‌کس نمی‌دونه.</i>")
 
-    text += "\n<b>والد اول رو انتخاب کن:</b>"
-    rows = [
-        [
-            btn(
-                f"{c.name} {'⭐' * c.star_level} · {constants.RARITY_LABELS[c.rarity]} · Lv{c.level}",
-                style=LIST,
-                callback_data=f"brd_a:{c.id}",
-            )
-        ]
-        for c in candidates[:12]
-    ]
+    lines.append(f"\n{get_emoji('diamond')} موجودی الماس: {view['user'].diamonds}")
     rows.append([back_btn("menu:me")])
-    return text, InlineKeyboardMarkup(rows)
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 async def breeding_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -227,11 +252,13 @@ async def breeding_pick_b_callback(update: Update, context: ContextTypes.DEFAULT
         f"🕳 <b>فرستادن به غار هیولا</b>\n\n"
         f"<blockquote>{parent_a.name} ({constants.RARITY_LABELS[parent_a.rarity]}) "
         f"+ {parent_b.name} ({constants.RARITY_LABELS[parent_b.rarity]})</blockquote>\n"
-        f"⏳ زمان تا سر باز کردن تخم: <b>{_format_remaining(info['minutes'] * 60)}</b>\n"
+        f"💞 زمان جفت‌گیری: <b>{_format_remaining(info['mating_minutes'] * 60)}</b> "
+        "<i>(بعدش والدها آزاد می‌شن)</i>\n"
+        f"🥚 بعدش رشد تخم: <b>{_format_remaining(info['hatch_minutes'] * 60)}</b>\n"
         f"{get_emoji('dna')} هزینه: <b>{info['dna']}</b> DNA (موجودی: {user.dna_fragments})\n"
         f"{rarer_line}{bonus_line}\n\n"
         f"{get_emoji('egg')} <b>چی از تخم درمیاد؟ تا سر باز نکنه هیچ‌کس نمی‌دونه.</b>\n"
-        "<i>هر دو والد تا اون‌موقع مشغول می‌مونن — نه می‌جنگن، نه سر کار می‌رن.</i>"
+        "<i>فقط تا وقتِ تخم‌گذاری این دو مشغولن؛ بعدش می‌تونی جفت بعدی رو بفرستی.</i>"
     )
     rows = [
         [
@@ -261,28 +288,68 @@ async def breeding_start_callback(update: Update, context: ContextTypes.DEFAULT_
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer("🥚 تخم گذاشته شد!")
+    await query.answer("💞 رفتن توی غار!")
     text, keyboard = _panel_render(view)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
-def _collect_sync(tg_user):
+def _new_pair_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
-    child, info = breeding.collect(user)
+    return breeding.parent_candidates(user)
+
+
+async def breeding_new_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«جفت بفرست غار» — open the parent picker."""
+    query = update.callback_query
+    candidates = await run_db(_new_pair_sync, update.effective_user)
+    await query.answer()
+    if len(candidates) < 2:
+        await safe_edit_message_text(
+            query,
+            "⚠️ حداقل <b>دو</b> هیولای آزاد لازم داری.",
+            parse_mode="HTML",
+            reply_markup=back_only_keyboard("menu:breeding"),
+        )
+        return
+    text, keyboard = _parent_a_render(candidates)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _lay_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    breeding.lay_egg(user)
+    return _panel_sync(tg_user)
+
+
+async def breeding_lay_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Mating done → lay the egg and free the parents."""
+    query = update.callback_query
+    try:
+        view = await run_db(_lay_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("🥚 تخم گذاشته شد! والدها آزاد شدن.")
+    text, keyboard = _panel_render(view)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _hatch_sync(tg_user, egg_id):
+    user, _ = get_or_create_user(tg_user)
+    child, info = breeding.hatch(user, egg_id)
     return child, info, _panel_sync(tg_user)
 
 
-async def breeding_collect_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def breeding_hatch_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    egg_id = int(query.data.split(":")[1])
     try:
-        child, info, view = await run_db(_collect_sync, update.effective_user)
+        child, info, view = await run_db(_hatch_sync, update.effective_user, egg_id)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("🐣 تخم سر باز کرد!")
-    upgrade_note = (
-        f"\n✨ <b>نایاب‌تر از والدینش دراومد!</b>" if info["upgraded"] else ""
-    )
+    upgrade_note = "\n✨ <b>نایاب‌تر از والدینش دراومد!</b>" if info["upgraded"] else ""
     text, keyboard = _panel_render(view)
     await safe_edit_message_text(
         query,
@@ -294,6 +361,43 @@ async def breeding_collect_callback(update: Update, context: ContextTypes.DEFAUL
         parse_mode="HTML",
         reply_markup=keyboard,
     )
+
+
+def _cave_finish_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    breeding.finish_cave_with_diamonds(user)
+    return _panel_sync(tg_user)
+
+
+async def breeding_cave_finish_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    try:
+        view = await run_db(_cave_finish_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("💎 فوری شد — تخم گذاشته شد!")
+    text, keyboard = _panel_render(view)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _egg_finish_sync(tg_user, egg_id):
+    user, _ = get_or_create_user(tg_user)
+    breeding.finish_egg_with_diamonds(user, egg_id)
+    return _panel_sync(tg_user)
+
+
+async def breeding_egg_finish_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    egg_id = int(query.data.split(":")[1])
+    try:
+        view = await run_db(_egg_finish_sync, update.effective_user, egg_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("💎 فوری شد — آماده‌ی سر باز کردنه!")
+    text, keyboard = _panel_render(view)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _cancel_sync(tg_user):
@@ -316,8 +420,12 @@ async def breeding_cancel_callback(update: Update, context: ContextTypes.DEFAULT
 
 def register(application) -> None:
     application.add_handler(CommandHandler("breeding", breeding_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CallbackQueryHandler(breeding_new_callback, pattern=r"^brd_new$"))
     application.add_handler(CallbackQueryHandler(breeding_pick_a_callback, pattern=r"^brd_a:"))
     application.add_handler(CallbackQueryHandler(breeding_pick_b_callback, pattern=r"^brd_b:"))
     application.add_handler(CallbackQueryHandler(breeding_start_callback, pattern=r"^brd_go:"))
-    application.add_handler(CallbackQueryHandler(breeding_collect_callback, pattern=r"^brd_collect$"))
+    application.add_handler(CallbackQueryHandler(breeding_lay_callback, pattern=r"^brd_lay$"))
+    application.add_handler(CallbackQueryHandler(breeding_hatch_callback, pattern=r"^brd_hatch:"))
+    application.add_handler(CallbackQueryHandler(breeding_cave_finish_callback, pattern=r"^brd_cave_finish$"))
+    application.add_handler(CallbackQueryHandler(breeding_egg_finish_callback, pattern=r"^brd_egg_finish:"))
     application.add_handler(CallbackQueryHandler(breeding_cancel_callback, pattern=r"^brd_cancel$"))

@@ -34,6 +34,7 @@ from game.moderation import (
     delete_creature,
     get_creature_or_raise,
     grant_resource,
+    player_progress,
     reset_user,
     set_banned,
     user_info,
@@ -378,6 +379,7 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
                 btn("کسر الماس", style=DANGER, callback_data=f"admin_deduct:{target_id}:diamonds"),
             ],
             [btn("شارژ کامل (طلا+DNA+الماس)", emoji_key="btn_charge", style=CONFIRM, callback_data=f"admin_charge:{target_id}")],
+            [btn("📊 لاگ پیشرفت", emoji_key="btn_report", style=ADMIN, callback_data=f"admin_plog:{target_id}")],
             [ban_button],
             [btn("♻️ ریست کامل بازیکن", emoji_key="btn_delete", style=DANGER, callback_data=f"admin_reset:{target_id}")],
             [back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")],
@@ -670,6 +672,81 @@ async def reset_user_confirm_callback(update: Update, context: ContextTypes.DEFA
         f"♻️ بازیِ <b>{display_name(user)}</b> (<code>{user.id}</code>) کامل ریست شد؛ "
         "الان یه آزمایشگاه تازه با هدیه‌ی شروع داره.",
         parse_mode="HTML",
+    )
+
+
+_ACTION_LABELS = {
+    "feed": "تغذیه", "train": "تمرین", "hunt": "شکار", "arena_attack": "حمله آرنا",
+    "raid_attack": "حمله رید", "duel_win": "برد دوئل", "fusion": "ادغام",
+    "collect": "جمع‌آوری", "wheel_spin": "گردونه", "guardian_stipend": "حقوق محافظ",
+    "heist": "شبیخون", "guardian_challenge": "چالش محافظ",
+}
+
+
+def _player_log_text(d: dict) -> str:
+    user = d["user"]
+    rarities = "، ".join(
+        f"{constants.RARITY_LABELS.get(r, r)}×{n}" for r, n in d["rarity_counts"].items()
+    ) or "—"
+    halls = "، ".join(
+        f"{constants.BUILDING_LABELS.get(bt, bt)} L{lv}" for bt, lv in sorted(d["buildings"].items()) if lv
+    ) or "—"
+    lines = [
+        f"📊 <b>لاگ پیشرفت {display_name(user)}</b>  (<code>{user.id}</code>)",
+        f"🔬 سطح آزمایشگاه: <b>{d['lab_level']}</b> (XP {d['lab_xp']})",
+        f"{get_emoji('coin')} {user.coins}   {get_emoji('dna')} {user.dna_fragments}   {get_emoji('diamond')} {user.diamonds}",
+        f"🏆 کاپ: {d['cup']}   🔥 استریک: {d['streak']}",
+        f"⚔️ آرنا: {d['arena_wins']}/{d['arena_total']} برد",
+        "",
+        f"{get_emoji('creature')} موجودات: <b>{d['creatures_total']}</b>  ({rarities})",
+        f"⭐ بیشترین ستاره: {d['max_star']}   📈 بالاترین سطح موجود: {d['max_creature_level']}",
+        f"🏗 ساختمون‌ها: {halls}",
+        f"📅 عضو از: {timezone.localtime(d['created_at']).strftime('%Y-%m-%d')}",
+    ]
+    if d["recent_activity"]:
+        lines.append("\n🗒 <b>فعالیت اخیر:</b>")
+        for day, action, count in d["recent_activity"]:
+            lines.append(f"  {day} · {_ACTION_LABELS.get(action, action)}: {count}")
+    else:
+        lines.append("\n🗒 <i>فعالیت ثبت‌شده‌ای نداره.</i>")
+    return "\n".join(lines)
+
+
+async def player_log_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Power-user shortcut for «📊 لاگ پیشرفت». Accepts a numeric id, @username, or
+    lab name."""
+    if not _is_owner(update):
+        return
+    if not context.args:
+        await update.effective_message.reply_text(
+            "استفاده: <code>/player_log آیدی_یا_یوزرنیم_یا_اسم‌آزمایشگاه</code>", parse_mode="HTML"
+        )
+        return
+    try:
+        data = await run_db(player_progress, " ".join(context.args))
+    except GameError as exc:
+        await update.effective_message.reply_text(str(exc))
+        return
+    await update.effective_message.reply_text(_player_log_text(data), parse_mode="HTML")
+
+
+async def player_log_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    target_id = query.data.split(":")[1]
+    try:
+        data = await run_db(player_progress, target_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        _player_log_text(data),
+        parse_mode="HTML",
+        reply_markup=_user_manage_keyboard(data["user"].id, data["user"].is_banned),
     )
 
 
@@ -1332,7 +1409,9 @@ def register(application) -> None:
     application.add_handler(CommandHandler("unban", unban_cmd, private_only))
     application.add_handler(CommandHandler("delete_creature", delete_creature_cmd, private_only))
     application.add_handler(CommandHandler("reset_user", reset_user_cmd, private_only))
+    application.add_handler(CommandHandler("player_log", player_log_cmd, private_only))
     application.add_handler(CommandHandler("preview_emoji", preview_emoji_cmd, private_only))
+    application.add_handler(CallbackQueryHandler(player_log_callback, pattern=r"^admin_plog:"))
     application.add_handler(CallbackQueryHandler(delete_creature_confirm_callback, pattern=r"^admin_del"))
     application.add_handler(CallbackQueryHandler(reset_user_start_callback, pattern=r"^admin_reset:"))
     application.add_handler(

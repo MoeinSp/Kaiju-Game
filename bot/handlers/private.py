@@ -3,7 +3,13 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bio_lab.models import Alliance, Creature, User
-from bio_lab.repository import display_name, get_active_creature, get_or_create_user, lab_display
+from bio_lab.repository import (
+    display_name,
+    get_active_creature,
+    get_or_create_user,
+    lab_display,
+    lab_name_taken,
+)
 from bot.handlers.arena import arena_panel
 from bot.handlers.breeding import breeding_panel
 from bot.handlers.buildings import buildings_panel
@@ -617,6 +623,10 @@ def _set_lab_name_sync(tg_user, name):
     # leaderboard, so a name padded with newlines could push other rows off the
     # screen; lab_display() handles the HTML escaping separately.
     cleaned = " ".join(str(name).split())[:LAB_NAME_MAX_LEN]
+    # Lab names must be unique — they're shown on every leaderboard AND used as a
+    # moderation identifier (resolve_user), so a duplicate would be ambiguous.
+    if lab_name_taken(cleaned, exclude_user_id=user.id):
+        raise GameError("این اسم آزمایشگاه قبلاً گرفته شده")
     user.lab_name = cleaned
     user.save(update_fields=["lab_name"])
     creature = get_active_creature(user)
@@ -1448,7 +1458,12 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
             context.user_data[AWAITING_PLAYER_KEY] = awaiting
             await message.reply_text(f"⚠️ اسم باید بین ۱ تا {LAB_NAME_MAX_LEN} کاراکتر باشه. دوباره بفرست:")
             return
-        user, creature, equipped_items = await run_db(_set_lab_name_sync, update.effective_user, text)
+        try:
+            user, creature, equipped_items = await run_db(_set_lab_name_sync, update.effective_user, text)
+        except GameError as exc:
+            context.user_data[AWAITING_PLAYER_KEY] = awaiting
+            await message.reply_text(f"⚠️ {exc} — یه اسم دیگه بفرست:")
+            return
         is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
         await message.reply_text(
             f"{get_emoji('egg')} <b>آزمایشگاه «{lab_display(user)}» فعال شد!</b>\n"

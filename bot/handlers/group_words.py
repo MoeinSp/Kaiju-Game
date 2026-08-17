@@ -406,22 +406,25 @@ def _fusion_card(user, pairs, built, cap) -> tuple[str, InlineKeyboardMarkup]:
     return "\n".join(lines), InlineKeyboardMarkup([[_pm_button("انجام ترکیب در پیوی")]])
 
 
-def _breeding_card(user, job, seconds_left, built) -> tuple[str, InlineKeyboardMarkup]:
+def _breeding_card(user, job, seconds_left, built, egg_count=0) -> tuple[str, InlineKeyboardMarkup]:
     lines = [f"🕳 <b>غار هیولا</b>"]
     if not built:
         lines.append("\n🔒 اول باید 🔮 تالار ادغام رو توی پیوی بسازی تا غار باز شه.")
-    elif job is None:
-        lines.append(
-            "\n<blockquote>دو هیولای آزاد رو بفرست توی غار تا یه <b>تخم</b> بذارن. "
-            "والدین سالم برمی‌گردن. چی از تخم درمیاد؟ تا سر باز نکنه معلوم نیست.</blockquote>"
-        )
-    elif seconds_left <= 0:
-        lines.append(f"\n{get_emoji('egg')} <b>تخم آماده‌ی سر باز کردنه!</b> {job.parent_a.name} + {job.parent_b.name}")
-        lines.append("توی پیوی سر باز کن ببین چیه.")
     else:
-        hours, rem = divmod(seconds_left, 3600)
-        lines.append(f"\n{get_emoji('egg')} یه تخم توی غاره: {job.parent_a.name} + {job.parent_b.name}")
-        lines.append(f"<b>{hours} ساعت و {rem // 60} دقیقه</b> مونده تا سر باز کنه")
+        if job is None:
+            lines.append(
+                "\n<blockquote>یه جفت بفرست توی غار تا جفت‌گیری کنن و یه <b>تخم</b> بذارن. "
+                "والدین بعد از تخم‌گذاری آزاد می‌شن. چی توی تخمه؟ تا سر باز نکنه معلوم نیست.</blockquote>"
+            )
+        elif seconds_left <= 0:
+            lines.append(f"\n💞 <b>جفت‌گیری تموم شد!</b> {job.parent_a.name} + {job.parent_b.name}")
+            lines.append("توی پیوی تخم رو بردار و والدها رو آزاد کن.")
+        else:
+            hours, rem = divmod(seconds_left, 3600)
+            lines.append(f"\n💞 یه جفت توی غارن: {job.parent_a.name} + {job.parent_b.name}")
+            lines.append(f"<b>{hours} ساعت و {rem // 60} دقیقه</b> مونده تا تخم‌گذاری")
+        if egg_count:
+            lines.append(f"\n{get_emoji('egg')} <b>{egg_count}</b> تخم در حال رشد داری.")
     return "\n".join(lines), InlineKeyboardMarkup([[_pm_button("مدیریت غار هیولا در پیوی")]])
 
 
@@ -515,6 +518,7 @@ def _card_sync(tg_user, chat, action):
         data["built"] = is_built(user, breeding_mod.BREEDING_BUILDING)
         data["job"] = job
         data["seconds_left"] = breeding_mod.seconds_left(job) if job else 0
+        data["egg_count"] = len(breeding_mod.active_eggs(user))
     elif action == "leaderboard":
         from bot.handlers.group import _creature_power, group_member_creatures
 
@@ -553,7 +557,9 @@ def _render(action: str, data: dict) -> tuple[str, InlineKeyboardMarkup]:
     if action == "fusion":
         return _fusion_card(user, data.get("pairs", []), data.get("built", False), data.get("cap", 1))
     if action == "breeding":
-        return _breeding_card(user, data.get("job"), data.get("seconds_left", 0), data.get("built", False))
+        return _breeding_card(
+            user, data.get("job"), data.get("seconds_left", 0), data.get("built", False), data.get("egg_count", 0)
+        )
     if action == "start":
         return _start_card(user.id)
     if action == "leaderboard":

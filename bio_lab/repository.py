@@ -60,8 +60,22 @@ def group_member_creatures(group: Group) -> list[Creature]:
 
 
 def resolve_user(identifier: str) -> User | None:
-    """Looks a player up by telegram id or @username (for owner-only moderation commands)."""
+    """Looks a player up for owner-only moderation, by any of: numeric telegram id,
+    @username, or lab name (case-insensitive). Lab names are unique (enforced when
+    set — see bot.handlers.private), so they're a safe identifier."""
     identifier = identifier.strip().lstrip("@")
     if identifier.isdigit():
         return User.objects.filter(id=int(identifier)).first()
-    return User.objects.filter(username__iexact=identifier).first()
+    return (
+        User.objects.filter(username__iexact=identifier).first()
+        or User.objects.filter(lab_name__iexact=identifier).first()
+    )
+
+
+def lab_name_taken(name: str, exclude_user_id: int | None = None) -> bool:
+    """Whether another player already uses this lab name (case-insensitive). Used
+    to keep lab names unique so they work as a moderation identifier."""
+    qs = User.objects.filter(lab_name__iexact=name.strip())
+    if exclude_user_id is not None:
+        qs = qs.exclude(id=exclude_user_id)
+    return qs.exists()

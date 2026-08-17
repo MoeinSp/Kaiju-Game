@@ -15,9 +15,19 @@ Offspring rarity starts at the better parent's tier and can climb from there. Th
 bonuses reward *matching* — same element, same species — and raw power, so a
 considered pairing beats throwing two random creatures together.
 
+Two phases, decoupled so the parents aren't hostage to the whole wait:
+
+* **mating** (BreedingJob) — the two parents are busy in the cave. `start()`
+  begins it; when `ready()`, `lay_egg()` (or `finish_cave_with_diamonds()`) frees
+  the parents and lays an egg.
+* **hatching** (Egg) — the laid egg incubates on its own. Because the parents are
+  already free, the player can send a new pair into the cave immediately, so
+  several eggs can incubate at once. `hatch()` (or `finish_egg_with_diamonds()`)
+  turns a ready egg into a creature.
+
 Settlement is lazy, like every other timer in this codebase (see
-game/buildings.py, game/energy.py): there's no background job. `collect()` is
-what finishes a job, and the panel calls `ready()` to know whether to offer it.
+game/buildings.py, game/energy.py): there's no background job — the panel polls
+`ready()` / `egg_ready()` and the collect actions are what finish things.
 """
 
 from __future__ import annotations
@@ -28,7 +38,7 @@ import random
 from django.db import transaction
 from django.utils import timezone
 
-from bio_lab.models import BreedingJob, Creature, User
+from bio_lab.models import BreedingJob, Creature, Egg, User
 from game import constants, lab
 from game.buildings import is_built
 from game.creature import GameError
@@ -52,12 +62,17 @@ def active_job(user: User) -> BreedingJob | None:
     return BreedingJob.objects.filter(owner=user).select_related("parent_a", "parent_b").first()
 
 
-def duration_minutes(parent_a: Creature, parent_b: Creature) -> int:
-    """Keyed to the *better* parent's rarity — pairing a legendary with a common
-    still costs legendary time, so rarity can't be laundered through a cheap
-    partner."""
+def mating_minutes(parent_a: Creature, parent_b: Creature) -> int:
+    """Phase-1 (mating) duration, keyed to the *better* parent's rarity — pairing a
+    legendary with a common still costs legendary time, so rarity can't be
+    laundered through a cheap partner."""
     rarity = constants.higher_rarity(parent_a.rarity, parent_b.rarity)
-    return constants.BREEDING_MINUTES[rarity]
+    return constants.CAVE_MATING_MINUTES[rarity]
+
+
+def hatch_minutes(rarity: str) -> int:
+    """Phase-2 (egg incubation) duration for an egg of the given base rarity."""
+    return constants.EGG_HATCH_MINUTES[rarity]
 
 
 def dna_cost(parent_a: Creature, parent_b: Creature) -> int:
@@ -91,10 +106,16 @@ def upgrade_chance(parent_a: Creature, parent_b: Creature) -> float:
     return min(constants.BREEDING_MAX_UPGRADE_CHANCE, chance)
 
 
+def active_eggs(user: User) -> list[Egg]:
+    """Every egg this player has incubating right now (ordered soonest-first)."""
+    return list(Egg.objects.filter(owner=user))
+
+
 def preview(user: User, parent_a: Creature, parent_b: Creature) -> dict:
     """Everything the confirmation screen needs, without starting anything."""
     return {
-        "minutes": duration_minutes(parent_a, parent_b),
+        "mating_minutes": mating_minutes(parent_a, parent_b),
+        "hatch_minutes": hatch_minutes(constants.higher_rarity(parent_a.rarity, parent_b.rarity)),
         "dna": dna_cost(parent_a, parent_b),
         "base_rarity": constants.higher_rarity(parent_a.rarity, parent_b.rarity),
         "upgrade_chance": upgrade_chance(parent_a, parent_b),
@@ -105,11 +126,13 @@ def preview(user: User, parent_a: Creature, parent_b: Creature) -> dict:
 
 @transaction.atomic
 def start(user: User, parent_a: Creature, parent_b: Creature) -> BreedingJob:
+    """Phase 1: send two parents into the cave to mate. They're locked until the
+    mating timer finishes, at which point lay_egg() frees them and lays an egg."""
     assert_available(user)
     if parent_a.id == parent_b.id:
         raise GameError("یه موجود نمی‌تونه با خودش جفت بشه — دو تای متفاوت انتخاب کن.")
     if BreedingJob.objects.filter(owner=user).exists():
-        raise GameError("همین الان یه تخم توی غاره — صبر کن سر باز کنه.")
+        raise GameError("همین الان یه جفت توی غارن — صبر کن تخم بذارن، بعد جفت بعدی رو بفرست.")
 
     # both parents must be idle: not active, not mining, not already in the cave
     assert_free(user, parent_a, for_action="بفرستی توی غار هیولا")
@@ -117,11 +140,11 @@ def start(user: User, parent_a: Creature, parent_b: Creature) -> BreedingJob:
 
     cost = dna_cost(parent_a, parent_b)
     if user.dna_fragments < cost:
-        raise GameError(f"DNA کافی نداری! این تخم {cost} DNA لازم داره.")
+        raise GameError(f"DNA کافی نداری! این جفت‌گیری {cost} DNA لازم داره.")
     user.dna_fragments -= cost
     user.save(update_fields=["dna_fragments"])
 
-    minutes = duration_minutes(parent_a, parent_b)
+    minutes = mating_minutes(parent_a, parent_b)
     return BreedingJob.objects.create(
         owner=user,
         parent_a=parent_a,
@@ -138,37 +161,77 @@ def seconds_left(job: BreedingJob) -> int:
     return max(0, int((job.finishes_at - timezone.now()).total_seconds()))
 
 
-@transaction.atomic
-def collect(user: User) -> tuple[Creature, dict]:
-    """Finish a completed job and hatch the offspring.
+def _lay_egg_from(user: User, job: BreedingJob) -> Egg:
+    """Turn a finished mating job into an incubating egg and free the parents.
 
-    Returns (child, info) where info explains the roll, so the result screen can
-    tell the player *why* they got what they got rather than just showing it."""
-    job = active_job(user)
-    if job is None:
-        raise GameError("هیچ تخمی توی غار نیست.")
-    if not ready(job):
-        raise GameError("تخم هنوز سر باز نکرده — صبر کن تایمرش تموم بشه.")
-
+    The recipe (base rarity, upgrade odds, both parents, inherited level) is
+    frozen onto the Egg here, so hatching later doesn't care what happens to the
+    parents in the meantime."""
     parent_a, parent_b = job.parent_a, job.parent_b
     base_rarity = constants.higher_rarity(parent_a.rarity, parent_b.rarity)
-    chance = upgrade_chance(parent_a, parent_b)
-    upgraded = random.random() < chance
-    rarity = constants.next_rarity(base_rarity) if upgraded else base_rarity
+    egg = Egg.objects.create(
+        owner=user,
+        base_rarity=base_rarity,
+        upgrade_chance=upgrade_chance(parent_a, parent_b),
+        parent_a_name=parent_a.name,
+        parent_a_element=parent_a.element,
+        parent_b_name=parent_b.name,
+        parent_b_element=parent_b.element,
+        inherit_level=max(1, round((parent_a.level + parent_b.level) / 2 * constants.BREEDING_LEVEL_INHERIT)),
+        finishes_at=timezone.now() + datetime.timedelta(minutes=hatch_minutes(base_rarity)),
+    )
+    job.delete()  # frees both parents — the cave is open again
+    return egg
 
-    # the child is one of the two species, never a blend — `name` is the fusion
-    # identity key, so inventing a hybrid name would create a species that can
-    # never find a fusion partner
-    parent = random.choice([parent_a, parent_b])
+
+@transaction.atomic
+def lay_egg(user: User) -> Egg:
+    """Phase 1 → 2: the mating is done, so lay the egg and free the parents."""
+    job = active_job(user)
+    if job is None:
+        raise GameError("هیچ جفتی توی غار نیست.")
+    if not ready(job):
+        raise GameError("هنوز جفت‌گیری تموم نشده — صبر کن تایمرش تموم بشه.")
+    return _lay_egg_from(user, job)
+
+
+def egg_ready(egg: Egg) -> bool:
+    return timezone.now() >= egg.finishes_at
+
+
+def egg_seconds_left(egg: Egg) -> int:
+    return max(0, int((egg.finishes_at - timezone.now()).total_seconds()))
+
+
+@transaction.atomic
+def hatch(user: User, egg_id: int) -> tuple[Creature, dict]:
+    """Phase 2 → done: hatch a ready egg into a creature. The rarity/species roll
+    happens HERE, from the recipe frozen on the egg — that's what keeps the egg's
+    contents a genuine mystery until this moment."""
+    egg = Egg.objects.filter(id=egg_id, owner=user).first()
+    if egg is None:
+        raise GameError("این تخم پیدا نشد.")
+    if not egg_ready(egg):
+        raise GameError("تخم هنوز سر باز نکرده — صبر کن تایمرش تموم بشه.")
+
+    upgraded = random.random() < egg.upgrade_chance
+    rarity = constants.next_rarity(egg.base_rarity) if upgraded else egg.base_rarity
+
+    # the child is one of the two parent species, never a blend — `name` is the
+    # fusion identity key, so a hybrid name would create an unfuseable species
+    if random.random() < 0.5:
+        name, element = egg.parent_a_name, egg.parent_a_element
+    else:
+        name, element = egg.parent_b_name, egg.parent_b_element
+    level = egg.inherit_level
     mult = constants.RARITY_STAT_MULTIPLIER[rarity]
-    level = max(1, round((parent_a.level + parent_b.level) / 2 * constants.BREEDING_LEVEL_INHERIT))
 
     child = Creature.objects.create(
         owner=user,
-        name=parent.name,
-        element=parent.element,
+        name=name,
+        element=element,
         rarity=rarity,
-        star_level=1,  # stars come only from fusion — propagation never grants them
+        star_level=1,  # stars come only from fusion — the cave never grants them
         level=level,
         xp=0,
         base_hp=round((constants.STARTER_BASE_HP + level * 4) * mult),
@@ -178,25 +241,69 @@ def collect(user: User) -> tuple[Creature, dict]:
         is_active=False,  # single-active-creature rule
     )
 
-    job.delete()
+    parents = (egg.parent_a_name, egg.parent_b_name)
+    egg.delete()
     lab.award(user, "breeding")
     return child, {
-        "base_rarity": base_rarity,
+        "base_rarity": egg.base_rarity,
         "rarity": rarity,
         "upgraded": upgraded,
-        "chance": chance,
         "level": level,
-        "parents": (parent_a.name, parent_b.name),
+        "parents": parents,
     }
+
+
+def cave_finish_price(job: BreedingJob) -> int:
+    return constants.diamond_finish_cost((job.finishes_at - timezone.now()).total_seconds())
+
+
+def egg_finish_price(egg: Egg) -> int:
+    return constants.diamond_finish_cost((egg.finishes_at - timezone.now()).total_seconds())
+
+
+@transaction.atomic
+def finish_cave_with_diamonds(user: User) -> Egg:
+    """Pay diamonds to end the mating right now and lay the egg. Priced from the
+    time still left, like every other diamond-finish in the game."""
+    job = active_job(user)
+    if job is None:
+        raise GameError("هیچ جفتی توی غار نیست.")
+    if ready(job):
+        return _lay_egg_from(user, job)  # already done — just lay it, no charge
+    cost = cave_finish_price(job)
+    if user.diamonds < cost:
+        raise GameError(f"الماس کافی نداری! فوری‌کردن جفت‌گیری {cost} الماس می‌خواد.")
+    user.diamonds -= cost
+    user.save(update_fields=["diamonds"])
+    return _lay_egg_from(user, job)
+
+
+@transaction.atomic
+def finish_egg_with_diamonds(user: User, egg_id: int) -> Egg:
+    """Pay diamonds to make an egg ready to hatch right now."""
+    egg = Egg.objects.filter(id=egg_id, owner=user).first()
+    if egg is None:
+        raise GameError("این تخم پیدا نشد.")
+    if egg_ready(egg):
+        return egg
+    cost = egg_finish_price(egg)
+    if user.diamonds < cost:
+        raise GameError(f"الماس کافی نداری! فوری‌کردن این تخم {cost} الماس می‌خواد.")
+    user.diamonds -= cost
+    egg.finishes_at = timezone.now()
+    user.save(update_fields=["diamonds"])
+    egg.save(update_fields=["finishes_at"])
+    return egg
 
 
 @transaction.atomic
 def cancel(user: User) -> BreedingJob:
-    """Abandon a job. The DNA is not refunded — otherwise a player could park two
-    creatures whenever they weren't using them and cancel for free."""
+    """Abandon the mating in progress. The DNA is not refunded — otherwise a
+    player could park two creatures whenever they weren't using them and cancel
+    for free. (Laid eggs can't be cancelled; they only hatch.)"""
     job = active_job(user)
     if job is None:
-        raise GameError("هیچ تخمی توی غار نیست.")
+        raise GameError("هیچ جفتی توی غار نیست.")
     job.delete()
     return job
 

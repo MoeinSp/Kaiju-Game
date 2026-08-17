@@ -121,3 +121,36 @@ def user_info(identifier: str) -> dict:
     user = find_user_or_raise(identifier)
     creatures = list(Creature.objects.filter(owner=user).order_by("id"))
     return {"user": user, "creatures": creatures}
+
+
+def player_progress(identifier: str) -> dict:
+    """A read-only progress snapshot + recent activity log for one player, for the
+    owner's «لاگ پیشرفت» view. Everything here is derived from current state, so it
+    stays correct without any extra tracking."""
+    from bio_lab.models import AttackLog, Building, DailyActionLog
+    from game import lab
+
+    user = find_user_or_raise(identifier)
+    creatures = list(Creature.objects.filter(owner=user))
+    rarity_counts: dict[str, int] = {}
+    for c in creatures:
+        rarity_counts[c.rarity] = rarity_counts.get(c.rarity, 0) + 1
+    buildings = {b.building_type: b.level for b in Building.objects.filter(owner=user)}
+    attacks = AttackLog.objects.filter(attacker=user)
+    recent = list(DailyActionLog.objects.filter(user=user).order_by("-day", "-count")[:15])
+    return {
+        "user": user,
+        "lab_level": lab.level_for_xp(user.lab_xp),
+        "lab_xp": user.lab_xp,
+        "creatures_total": len(creatures),
+        "rarity_counts": rarity_counts,
+        "max_creature_level": max((c.level for c in creatures), default=0),
+        "max_star": max((c.star_level for c in creatures), default=0),
+        "buildings": buildings,
+        "cup": user.cup,
+        "streak": user.login_streak,
+        "arena_wins": attacks.filter(attacker_won=True).count(),
+        "arena_total": attacks.count(),
+        "recent_activity": [(r.day, r.action, r.count) for r in recent],
+        "created_at": user.created_at,
+    }

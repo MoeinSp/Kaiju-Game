@@ -473,16 +473,26 @@ WORKER_BONUS_PER_CREATURE_LEVEL = 0.02
 WORKER_BONUS_CAP = 1.5  # +150% at most, however many high-level creatures are stationed
 
 # ── Monster Cave / egg incubation (game/breeding.py) ──────────────────────────
-# Two creatures go into the cave and lay a mystery egg that hatches over real
-# time. Long by design: creatures are the scarce resource, so the rarer the
-# parents ("type and breed"), the longer the egg takes — up to a full day for the
-# rarest. Keyed to the better parent's rarity.
-BREEDING_MINUTES = {
-    "common": 180,      # 3h
-    "rare": 360,        # 6h
-    "epic": 600,        # 10h
-    "legendary": 960,   # 16h
-    "mythic": 1440,     # 24h — a full day for the rarest eggs
+# Two phases, deliberately decoupled:
+#   1. MATING — the two parents are busy in the cave. When it finishes, an egg is
+#      laid and the parents are FREED, so a new pair can go straight back in.
+#   2. HATCHING — the laid egg then incubates on its OWN timer, independent of the
+#      cave, and hatches into a mystery creature.
+# Both are keyed to the better parent's rarity ("type and breed"); the total for
+# the rarest tops out at a full day (mating 6h + hatch 18h = 24h).
+CAVE_MATING_MINUTES = {
+    "common": 60,       # 1h
+    "rare": 120,        # 2h
+    "epic": 180,        # 3h
+    "legendary": 240,   # 4h
+    "mythic": 360,      # 6h
+}
+EGG_HATCH_MINUTES = {
+    "common": 120,      # 2h
+    "rare": 240,        # 4h
+    "epic": 420,        # 7h
+    "legendary": 720,   # 12h
+    "mythic": 1080,     # 18h — the rarest egg alone is most of a day
 }
 BREEDING_DNA_COST = {
     "common": 20,

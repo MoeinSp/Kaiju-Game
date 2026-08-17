@@ -167,6 +167,38 @@ class BreedingJob(models.Model):
         return f"breeding {self.parent_a_id}+{self.parent_b_id} ({self.owner_id})"
 
 
+class Egg(models.Model):
+    """An egg laid in the Monster Cave, incubating on its own timer.
+
+    Split from BreedingJob on purpose: BreedingJob is only the *mating* phase
+    (parents locked). When that finishes the parents are freed and one of these
+    is laid, so the player can send a new pair into the cave while this egg keeps
+    incubating — there can be several eggs at once.
+
+    The egg's contents stay a mystery: the rarity/species roll happens at hatch,
+    from the recipe frozen here at lay time (base rarity, upgrade odds, both
+    parents' name/element, inherited level). Freezing the recipe means hatching
+    doesn't depend on the now-freed parents, which may have been leveled, used,
+    or even sent back into the cave in the meantime."""
+
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="eggs")
+    base_rarity = models.CharField(max_length=16, default="common")
+    upgrade_chance = models.FloatField(default=0.0)
+    parent_a_name = models.CharField(max_length=64)
+    parent_a_element = models.CharField(max_length=16)
+    parent_b_name = models.CharField(max_length=64)
+    parent_b_element = models.CharField(max_length=16)
+    inherit_level = models.IntegerField(default=1)
+    started_at = models.DateTimeField(auto_now_add=True)
+    finishes_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ("finishes_at",)
+
+    def __str__(self) -> str:
+        return f"egg<{self.parent_a_name}+{self.parent_b_name}> ({self.owner_id})"
+
+
 class WordRewardClaim(models.Model):
     """Cooldown for the group chat's periodic reward words.
 
