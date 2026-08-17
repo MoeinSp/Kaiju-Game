@@ -1,3 +1,9 @@
-# Shell scripts must keep LF endings — a CRLF shebang breaks them in Linux containers.
+# Normalise ALL text files to LF in the working tree. The bot is developed on
+# Windows but built and run in Linux containers; without this, a Windows checkout
+# gives CRLF working-tree files that show as "modified" against the LF blobs on
+# the Linux server and block `git pull` on every deploy.
+* text=auto eol=lf
+
+# Shell scripts especially must keep LF — a CRLF shebang breaks them in containers.
 *.sh text eol=lf
 docker/entrypoint.sh text eol=lf
