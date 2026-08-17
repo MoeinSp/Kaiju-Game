@@ -407,22 +407,22 @@ def _fusion_card(user, pairs, built, cap) -> tuple[str, InlineKeyboardMarkup]:
 
 
 def _breeding_card(user, job, seconds_left, built) -> tuple[str, InlineKeyboardMarkup]:
-    lines = [f"{get_emoji('egg')} <b>تکثیر زیستی</b>"]
+    lines = [f"🕳 <b>غار هیولا</b>"]
     if not built:
-        lines.append("\n🔒 اول باید 🔮 تالار ادغام رو توی پیوی بسازی.")
+        lines.append("\n🔒 اول باید 🔮 تالار ادغام رو توی پیوی بسازی تا غار باز شه.")
     elif job is None:
         lines.append(
-            "\n<blockquote>دو هیولای آزاد رو انتخاب کن تا یه هیولای تازه ساخته بشه. "
-            "والدین سوزونده <b>نمی‌شن</b> — فقط چند ساعت مشغولن.</blockquote>"
+            "\n<blockquote>دو هیولای آزاد رو بفرست توی غار تا یه <b>تخم</b> بذارن. "
+            "والدین سالم برمی‌گردن. چی از تخم درمیاد؟ تا سر باز نکنه معلوم نیست.</blockquote>"
         )
     elif seconds_left <= 0:
-        lines.append(f"\n✅ <b>آماده‌ست!</b> {job.parent_a.name} + {job.parent_b.name}")
-        lines.append("توی پیوی تحویلش بگیر.")
+        lines.append(f"\n{get_emoji('egg')} <b>تخم آماده‌ی سر باز کردنه!</b> {job.parent_a.name} + {job.parent_b.name}")
+        lines.append("توی پیوی سر باز کن ببین چیه.")
     else:
         hours, rem = divmod(seconds_left, 3600)
-        lines.append(f"\n⏳ در جریان: {job.parent_a.name} + {job.parent_b.name}")
-        lines.append(f"<b>{hours} ساعت و {rem // 60} دقیقه</b> مونده")
-    return "\n".join(lines), InlineKeyboardMarkup([[_pm_button("مدیریت تکثیر در پیوی")]])
+        lines.append(f"\n{get_emoji('egg')} یه تخم توی غاره: {job.parent_a.name} + {job.parent_b.name}")
+        lines.append(f"<b>{hours} ساعت و {rem // 60} دقیقه</b> مونده تا سر باز کنه")
+    return "\n".join(lines), InlineKeyboardMarkup([[_pm_button("مدیریت غار هیولا در پیوی")]])
 
 
 def _start_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:

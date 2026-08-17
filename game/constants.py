@@ -472,15 +472,17 @@ EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL = 5
 WORKER_BONUS_PER_CREATURE_LEVEL = 0.02
 WORKER_BONUS_CAP = 1.5  # +150% at most, however many high-level creatures are stationed
 
-# ── Propagation (game/breeding.py) ────────────────────────────────────────────
-# Long by design: creatures are the scarce resource, so the rarer the parents the
-# longer they're locked up. Keyed to the better parent's rarity.
+# ── Monster Cave / egg incubation (game/breeding.py) ──────────────────────────
+# Two creatures go into the cave and lay a mystery egg that hatches over real
+# time. Long by design: creatures are the scarce resource, so the rarer the
+# parents ("type and breed"), the longer the egg takes — up to a full day for the
+# rarest. Keyed to the better parent's rarity.
 BREEDING_MINUTES = {
-    "common": 240,      # 4h
-    "rare": 480,        # 8h
-    "epic": 960,        # 16h
-    "legendary": 1440,  # 24h
-    "mythic": 2160,     # 36h
+    "common": 180,      # 3h
+    "rare": 360,        # 6h
+    "epic": 600,        # 10h
+    "legendary": 960,   # 16h
+    "mythic": 1440,     # 24h — a full day for the rarest eggs
 }
 BREEDING_DNA_COST = {
     "common": 20,

@@ -1,4 +1,4 @@
-"""تکثیر زیستی — propagation: two creatures produce a third over real time.
+"""غار هیولا — the Monster Cave: two creatures lay an egg that hatches over time.
 
 Deliberately shaped as the opposite trade to fusion (game/fusion.py):
 
@@ -109,15 +109,15 @@ def start(user: User, parent_a: Creature, parent_b: Creature) -> BreedingJob:
     if parent_a.id == parent_b.id:
         raise GameError("یه موجود نمی‌تونه با خودش جفت بشه — دو تای متفاوت انتخاب کن.")
     if BreedingJob.objects.filter(owner=user).exists():
-        raise GameError("همین الان یه تکثیر در جریانه — صبر کن تموم بشه.")
+        raise GameError("همین الان یه تخم توی غاره — صبر کن سر باز کنه.")
 
-    # both parents must be idle: not active, not mining, not already breeding
-    assert_free(user, parent_a, for_action="برای تکثیر بذاری")
-    assert_free(user, parent_b, for_action="برای تکثیر بذاری")
+    # both parents must be idle: not active, not mining, not already in the cave
+    assert_free(user, parent_a, for_action="بفرستی توی غار هیولا")
+    assert_free(user, parent_b, for_action="بفرستی توی غار هیولا")
 
     cost = dna_cost(parent_a, parent_b)
     if user.dna_fragments < cost:
-        raise GameError(f"DNA کافی نداری! این تکثیر {cost} DNA لازم داره.")
+        raise GameError(f"DNA کافی نداری! این تخم {cost} DNA لازم داره.")
     user.dna_fragments -= cost
     user.save(update_fields=["dna_fragments"])
 
@@ -146,9 +146,9 @@ def collect(user: User) -> tuple[Creature, dict]:
     tell the player *why* they got what they got rather than just showing it."""
     job = active_job(user)
     if job is None:
-        raise GameError("هیچ تکثیری در جریان نیست.")
+        raise GameError("هیچ تخمی توی غار نیست.")
     if not ready(job):
-        raise GameError("هنوز آماده نیست — صبر کن تایمرش تموم بشه.")
+        raise GameError("تخم هنوز سر باز نکرده — صبر کن تایمرش تموم بشه.")
 
     parent_a, parent_b = job.parent_a, job.parent_b
     base_rarity = constants.higher_rarity(parent_a.rarity, parent_b.rarity)
@@ -196,7 +196,7 @@ def cancel(user: User) -> BreedingJob:
     creatures whenever they weren't using them and cancel for free."""
     job = active_job(user)
     if job is None:
-        raise GameError("هیچ تکثیری در جریان نیست.")
+        raise GameError("هیچ تخمی توی غار نیست.")
     job.delete()
     return job
 

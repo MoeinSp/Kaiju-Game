@@ -80,7 +80,7 @@ def creature_status(user: User, creature: Creature) -> str | None:
         return f"⛏ در {constants.BUILDING_LABELS[assignment.building.building_type]}"
     job = BreedingJob.objects.filter(owner=user).first()
     if job is not None and creature.id in (job.parent_a_id, job.parent_b_id):
-        return "🧫 در حال تکثیر"
+        return "🥚 توی غار هیولا"
     return None
 
 

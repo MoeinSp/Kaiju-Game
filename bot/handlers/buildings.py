@@ -136,7 +136,9 @@ def _building_detail_text(view: dict) -> str:
     label = constants.BUILDING_LABELS[btype]
     unlocked = view["unlocked"]
     if building.level > 0:
-        level_txt = f"سطح {building.level}/{constants.BUILDING_MAX_LEVEL}"
+        level_txt = f"سطح {building.level}/{cap}"
+        if btype != constants.MAIN_BUILDING and cap < constants.BUILDING_MAX_LEVEL:
+            level_txt += f" (سقف با تالار مِهر)"
     elif unlocked:
         level_txt = "🔒 ساخته‌نشده"
     else:
@@ -164,7 +166,7 @@ def _building_detail_text(view: dict) -> str:
             lines.append("   <i>خالیه — هر هیولایی که بذاری تولید رو بیشتر می‌کنه.</i>")
         lines.append(
             "<blockquote>هرچی سطح هیولا بالاتر باشه تولید بیشتره. "
-            "موجود فعال و هیولاهای در حال تکثیر رو نمی‌شه سر کار گذاشت.</blockquote>"
+            "موجود فعال و هیولاهایی که توی غار هیولا تخم گذاشتن رو نمی‌شه سر کار گذاشت.</blockquote>"
         )
 
     if btype == "blacksmith" and building.level > 0:
@@ -411,7 +413,7 @@ def _workers_text(building: Building, workers, slots: int, free) -> str:
         lines.append("<b>آماده‌ی کار:</b> یکی رو انتخاب کن")
     else:
         lines.append(
-            "<i>هیچ هیولای آزادی نداری. موجود فعال و هیولاهای در حال تکثیر نمی‌تونن کار کنن.</i>"
+            "<i>هیچ هیولای آزادی نداری. موجود فعال و هیولاهایی که توی غار هیولا تخم گذاشتن نمی‌تونن کار کنن.</i>"
         )
     return "\n".join(lines)
 

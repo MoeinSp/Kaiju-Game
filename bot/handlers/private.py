@@ -564,7 +564,7 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
             btn("ترکیب هیولا", emoji_key="btn_fusion", style=NAV, callback_data="menu:fusion"),
         ],
         [
-            btn("تکثیر زیستی", emoji_key="btn_breeding", style=NAV, callback_data="menu:breeding"),
+            btn("غار هیولا", emoji_key="btn_breeding", style=NAV, callback_data="menu:breeding"),
             btn("ساختمون‌ها", emoji_key="btn_buildings", style=NAV, callback_data="menu:buildings"),
         ],
         [
@@ -1686,7 +1686,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                 btn("ترکیب هیولا", emoji_key="btn_fusion", style=NAV, callback_data="menu:fusion"),
             ],
             [
-                btn("تکثیر زیستی", emoji_key="btn_breeding", style=NAV, callback_data="menu:breeding"),
+                btn("غار هیولا", emoji_key="btn_breeding", style=NAV, callback_data="menu:breeding"),
                 btn("ساختمون‌ها", emoji_key="btn_buildings", style=NAV, callback_data="menu:buildings"),
             ],
             [
