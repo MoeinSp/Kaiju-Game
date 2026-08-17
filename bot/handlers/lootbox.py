@@ -15,11 +15,35 @@ def _biocrate_sync(tg_user):
     return open_biocrate(user)
 
 
+def _user_coins_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    return user.coins
+
+
 async def biocrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Cost + confirmation screen — opening the crate spends gold, so it must never
+    fire on a single tap without the player agreeing to the price first."""
+    coins = await run_db(_user_coins_sync, update.effective_user)
+    cost = constants.BIOCRATE_GOLD_COST
+    text = (
+        f"{get_emoji('biocrate')} <b>باکس ژنتیکی</b>\n"
+        "<blockquote>یه باکس شانسی: نصف مواقع یه هیولای تازه می‌ده، نصف مواقع یه تجهیزات. "
+        "درجه‌ش هم شانسیه — هرچی نایاب‌تر، کمیاب‌تر.</blockquote>\n\n"
+        f"{get_emoji('coin')} هزینه: <b>{cost}</b> طلا  (موجودی: {coins})"
+    )
+    rows = [
+        [btn("خرید و باز کن", emoji_key="btn_confirm", style=CONFIRM, callback_data="bc_buy")],
+        [back_btn("menu:me")],
+    ]
+    await send_screen(update, text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+
+
+async def biocrate_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
     try:
         result = await run_db(_biocrate_sync, update.effective_user)
     except GameError as exc:
-        await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard())
+        await query.answer(str(exc), show_alert=True)
         return
 
     rarity_label = constants.RARITY_LABELS[result["rarity"]]
@@ -32,11 +56,20 @@ async def biocrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         reveal = f"{constants.EQUIPMENT_SLOT_LABELS[item.slot]} <b>{item.name}</b>\n{rarity_label}"
         hint = "از «🎒 تجهیزات» توی منو می‌تونی تجهیزش کنی."
 
-    await send_screen(update, 
+    await query.answer("🟢 باز شد!")
+    keyboard = InlineKeyboardMarkup(
+        [
+            [btn("یکی دیگه باز کن", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate")],
+            [back_btn("menu:me")],
+        ]
+    )
+    await safe_edit_message_text(
+        query,
         f"{get_emoji('biocrate')} <b>باکس ژنتیکی باز شد!</b>\n\n"
         f"<tg-spoiler>{reveal}</tg-spoiler>\n\n"
         f"<blockquote>{hint}</blockquote>",
         parse_mode="HTML",
+        reply_markup=keyboard,
     )
 
 
@@ -128,6 +161,7 @@ async def diamond_box_buy_callback(update: Update, context: ContextTypes.DEFAULT
 
 def register(application) -> None:
     application.add_handler(CommandHandler("biocrate", biocrate_cmd, filters.ChatType.PRIVATE))
+    application.add_handler(CallbackQueryHandler(biocrate_buy_callback, pattern=r"^bc_buy$"))
     application.add_handler(CommandHandler("diamondbox", diamond_box_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(diamond_box_pick_callback, pattern=r"^dbox_pick:"))
     application.add_handler(CallbackQueryHandler(diamond_box_buy_callback, pattern=r"^dbox_buy:"))

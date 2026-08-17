@@ -45,9 +45,10 @@ def _inventory_keyboard(items: list[Equipment]) -> InlineKeyboardMarkup:
 async def inventory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     items = await run_db(_inventory_sync, update.effective_user)
     if not items:
-        await send_screen(update, 
+        await send_screen(update,
             f"{get_emoji('lab')} کوله‌پشتی‌ات خالیه! از باکس‌های ژنتیکی (📦 باکس ژنتیکی) تجهیزات به‌دست بیار.",
             parse_mode="HTML",
+            reply_markup=back_only_keyboard(),
         )
         return
     await send_screen(update, 
@@ -241,9 +242,10 @@ def _forge_list_sync(tg_user):
 async def blacksmith_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user, items = await run_db(_forge_list_sync, update.effective_user)
     if not items:
-        await send_screen(update, 
+        await send_screen(update,
             "⚒ <b>آهنگری</b>\n\nهیچ تجهیزاتی برای ارتقا نداری (یا همه به سقف رسیدن).",
             parse_mode="HTML",
+            reply_markup=back_only_keyboard(),
         )
         return
     rows = [

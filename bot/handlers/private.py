@@ -844,7 +844,8 @@ def _collection_keyboard(creatures: list[Creature]) -> InlineKeyboardMarkup:
 async def collection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     creatures = await run_db(_collection_sync, update.effective_user)
     if not creatures:
-        await send_screen(update, f"📭 کلکسیونت خالیه! {get_emoji('egg')} با /start شروع کن.")
+        await send_screen(update, f"📭 کلکسیونت خالیه! {get_emoji('egg')} با /start شروع کن.",
+                          reply_markup=back_only_keyboard())
         return
     await send_screen(update, 
         f"{get_emoji('collection')} <b>کلکسیون تو</b> — {len(creatures)} موجود\nرو هرکدوم بزن تا جزئیاتش رو ببینی:",
