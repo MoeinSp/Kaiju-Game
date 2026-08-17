@@ -41,10 +41,15 @@ def open_biocrate(user: User) -> dict:
     user.coins -= constants.BIOCRATE_GOLD_COST
     user.save(update_fields=["coins"])
 
-    rarity = roll_rarity()
+    # Decide creature-vs-equipment FIRST, then roll rarity from the table that
+    # belongs to that outcome — a creature uses its own steep table (so the crate's
+    # absolute creature odds are 8% common + a thin tail), equipment keeps the
+    # standard loot weights.
     if random.random() < constants.BIOCRATE_CREATURE_CHANCE:
+        rarity = roll_rarity(constants.BIOCRATE_CREATURE_RARITY_WEIGHTS)
         creature = _roll_creature(user, rarity)
         return {"kind": "creature", "rarity": rarity, "creature": creature}
+    rarity = roll_rarity()
     item = roll_equipment(user, rarity)
     return {"kind": "equipment", "rarity": rarity, "item": item}
 

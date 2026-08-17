@@ -357,7 +357,21 @@ BASE_LIFESTEAL = 0.0
 
 # ── Economy: loot boxes, fusion, wagered duels, alliance heist ────────────────
 BIOCRATE_GOLD_COST = 150
-BIOCRATE_CREATURE_CHANCE = 0.5  # else yields an equipment piece
+BIOCRATE_CREATURE_CHANCE = 0.10  # 10% yields a creature; the other 90% is equipment
+
+# Rarity split used ONLY when the crate rolls a creature (the 10% above). Tuned so
+# the *absolute* odds work out to 8% common and a steep tail — i.e. of the whole
+# crate: 8% common, 1.2% rare, 0.5% epic, 0.2% legendary, 0.1% mythic creature,
+# and 90% equipment. Common is deliberately the overwhelming share of the creature
+# slice so a monster from the gold crate is usually a starter, not a jackpot;
+# diamond boxes stay the real way to chase rare creatures.
+BIOCRATE_CREATURE_RARITY_WEIGHTS = {
+    "common": 80,
+    "rare": 12,
+    "epic": 5,
+    "legendary": 2,
+    "mythic": 1,
+}
 
 FUSION_GOLD_COST = 120
 FUSION_INHERIT_CHANCE = 0.5  # child inherits one random equipped item from a parent

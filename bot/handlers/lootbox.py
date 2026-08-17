@@ -27,8 +27,8 @@ async def biocrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     cost = constants.BIOCRATE_GOLD_COST
     text = (
         f"{get_emoji('biocrate')} <b>باکس ژنتیکی</b>\n"
-        "<blockquote>یه باکس شانسی: نصف مواقع یه هیولای تازه می‌ده، نصف مواقع یه تجهیزات. "
-        "درجه‌ش هم شانسیه — هرچی نایاب‌تر، کمیاب‌تر.</blockquote>\n\n"
+        "<blockquote>یه باکس شانسی: بیشتر مواقع (۹۰٪) یه تجهیزات می‌ده و گاهی (۱۰٪) یه هیولای تازه. "
+        "درجه‌ش هم شانسیه — هرچی نایاب‌تر، کمیاب‌تر. برای شکار هیولای نایاب، جعبه‌های الماسی بهترن.</blockquote>\n\n"
         f"{get_emoji('coin')} هزینه: <b>{cost}</b> طلا  (موجودی: {coins})"
     )
     rows = [
