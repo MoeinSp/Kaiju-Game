@@ -9,7 +9,8 @@ class User(models.Model):
     id = models.BigIntegerField(primary_key=True)  # telegram user id
     username = models.CharField(max_length=64, null=True, blank=True)
     first_name = models.CharField(max_length=128, null=True, blank=True)
-    lab_name = models.CharField(max_length=32, null=True, blank=True)  # set once, at first /start
+    lab_name = models.CharField(max_length=32, null=True, blank=True)  # first set free at /start; later renames cost diamonds
+    lab_renames = models.IntegerField(default=0)  # how many paid renames so far — drives the escalating cost
     # welcome package — keep in sync with game.constants.STARTING_*
     coins = models.IntegerField(default=5000)
     dna_fragments = models.IntegerField(default=100)
@@ -165,6 +166,27 @@ class BreedingJob(models.Model):
 
     def __str__(self) -> str:
         return f"breeding {self.parent_a_id}+{self.parent_b_id} ({self.owner_id})"
+
+
+class AchievementClaim(models.Model):
+    """Records that `user` has claimed the reward for achievement `key`.
+
+    Achievements themselves are defined in code (game/achievements.py) and their
+    progress is derived from live state, so nothing about the *definition* lives
+    here — this table only remembers which one-time rewards a player has already
+    taken, so they can't be claimed twice."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="achievement_claims")
+    key = models.CharField(max_length=48)
+    claimed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "key"], name="uq_achievement_claim")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id}:{self.key}"
 
 
 class Egg(models.Model):

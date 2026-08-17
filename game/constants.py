@@ -256,6 +256,16 @@ STARTING_COINS = 5000
 STARTING_DNA = 100
 STARTING_DIAMONDS = 100
 
+# The first lab name is set free at /start. Changing it afterwards costs diamonds,
+# and each rename costs more than the last so a name isn't churned casually:
+# rename #1 = 100, #2 = 200, #3 = 300, …
+LAB_RENAME_BASE_COST = 100
+
+
+def lab_rename_cost(renames_done: int) -> int:
+    return LAB_RENAME_BASE_COST * (max(0, renames_done) + 1)
+
+
 FEED_COST_COINS = 20
 FEED_XP_GAIN = 15
 

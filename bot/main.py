@@ -11,6 +11,7 @@ from telegram.ext import Application, CallbackQueryHandler, ContextTypes, Messag
 
 from bot import middleware  # noqa: E402
 from bot.handlers import (
+    achievements,
     breeding,
     group_words,  # noqa: E402
     arena,
@@ -73,6 +74,7 @@ def main() -> None:
     lootbox.register(application)
     buildings.register(application)
     breeding.register(application)
+    achievements.register(application)
     wheel.register(application)
     arena.register(application)
     group.register(application)

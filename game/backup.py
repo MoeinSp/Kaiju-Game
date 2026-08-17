@@ -183,6 +183,21 @@ def read_payload(source: Path | BinaryIO) -> dict[str, Any]:
     return data
 
 
+def _reset_sequences() -> None:
+    """Advance every table's auto-increment sequence past the largest restored id.
+    A plain SQL no-op on SQLite; essential on Postgres after a keyed reload."""
+    from django.apps import apps
+    from django.core.management.color import no_style
+    from django.db import connection
+
+    statements = connection.ops.sequence_reset_sql(no_style(), list(apps.get_models()))
+    if not statements:
+        return
+    with connection.cursor() as cursor:
+        for sql in statements:
+            cursor.execute(sql)
+
+
 def restore_payload(data: dict[str, Any]) -> dict[str, Any]:
     """Replace the entire database contents with `data`.
 
@@ -201,6 +216,13 @@ def restore_payload(data: dict[str, Any]) -> dict[str, Any]:
         call_command("flush", "--noinput", verbosity=0)
         for obj in objects:
             obj.save()
+        # CRITICAL on Postgres: the objects were re-inserted with their original
+        # primary keys, but that doesn't advance the auto-increment sequences, so
+        # the very next INSERT of a new row (a wheel spin, a mission log, a crate)
+        # collides with a restored pk — an IntegrityError that silently breaks
+        # half the game. Reset every sequence to max(pk)+1 here. (No-op on SQLite,
+        # which derives the next id from the table itself.)
+        _reset_sequences()
 
     # the restored rows include the theme tables, so the in-memory caches the bot
     # reads from are now stale; refresh them here rather than at every call site

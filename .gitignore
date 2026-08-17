@@ -10,3 +10,6 @@ docker-compose.override.yml
 .idea/
 staticfiles/
 backups/
+
+# One-off VPS/ops fix scripts (not app code)
+scripts/

@@ -10,6 +10,7 @@ from bio_lab.repository import (
     lab_display,
     lab_name_taken,
 )
+from bot.handlers.achievements import achievements_panel
 from bot.handlers.arena import arena_panel
 from bot.handlers.breeding import breeding_panel
 from bot.handlers.buildings import buildings_panel
@@ -253,17 +254,19 @@ def _upgrade_list_sync(tg_user):
     return user, ranked
 
 
-async def upgrade_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Creature picker, strongest first — the player chooses who to invest in
-    rather than the panel silently assuming the active creature."""
-    try:
-        user, ranked = await run_db(_upgrade_list_sync, update.effective_user)
-    except GameError as exc:
-        await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard())
-        return
+UPGRADE_PAGE_SIZE = 8
+
+
+def _upgrade_render(user, ranked, page: int) -> tuple[str, InlineKeyboardMarkup]:
+    """One page of the strongest-first creature picker. Paginated because a player
+    with a big roster produced a keyboard tall enough to be unwieldy (and, past
+    Telegram's limits, to fail outright)."""
+    total_pages = max(1, (len(ranked) + UPGRADE_PAGE_SIZE - 1) // UPGRADE_PAGE_SIZE)
+    page = max(0, min(page, total_pages - 1))
+    chunk = ranked[page * UPGRADE_PAGE_SIZE : (page + 1) * UPGRADE_PAGE_SIZE]
 
     rows = []
-    for creature, power in ranked:
+    for creature, power in chunk:
         active_tag = "🟢 " if creature.is_active else ""
         stars = "⭐" * creature.star_level
         # RARITY_LABELS already carries its own colour dot, which is the fastest way
@@ -278,14 +281,46 @@ async def upgrade_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 )
             ]
         )
+    nav = []
+    if page > 0:
+        nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"upg_page:{page - 1}"))
+    if page < total_pages - 1:
+        nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"upg_page:{page + 1}"))
+    if nav:
+        rows.append(nav)
     rows.append([back_btn("menu:me")])
 
-    await send_screen(update, 
-        f"🔧 <b>ارتقا و پرورش</b>\n"
-        f"هیولاهات به ترتیب قدرت مرتب شدن — کدوم رو می‌خوای قوی‌تر کنی؟\n\n{wallet_line(user)}",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(rows),
+    page_note = f"  (صفحه {page + 1}/{total_pages})" if total_pages > 1 else ""
+    text = (
+        f"🔧 <b>ارتقا و پرورش</b>{page_note}\n"
+        f"هیولاهات به ترتیب قدرت مرتب شدن — کدوم رو می‌خوای قوی‌تر کنی؟\n\n{wallet_line(user)}"
     )
+    return text, InlineKeyboardMarkup(rows)
+
+
+async def upgrade_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Creature picker, strongest first — the player chooses who to invest in
+    rather than the panel silently assuming the active creature."""
+    try:
+        user, ranked = await run_db(_upgrade_list_sync, update.effective_user)
+    except GameError as exc:
+        await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard())
+        return
+    text, keyboard = _upgrade_render(user, ranked, 0)
+    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def upgrade_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    page = int(query.data.split(":")[1])
+    try:
+        user, ranked = await run_db(_upgrade_list_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    text, keyboard = _upgrade_render(user, ranked, page)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _upgrade_pick_sync(tg_user, creature_id):
@@ -577,7 +612,10 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
             btn("تجهیزات", emoji_key="btn_inventory", style=NAV, callback_data="menu:inventory"),
             btn("آهنگری", emoji_key="btn_forge", style=NAV, callback_data="menu:blacksmith"),
         ],
-        [btn("ماموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions")],
+        [
+            btn("ماموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions"),
+            btn("🏅 دستاوردها", style=NAV, callback_data="menu:achievements"),
+        ],
         [
             btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate"),
             btn("جعبه‌های الماسی", emoji_key="btn_diamond_box", style=SHOP, callback_data="menu:diamond_box"),
@@ -631,6 +669,29 @@ def _set_lab_name_sync(tg_user, name):
     user.save(update_fields=["lab_name"])
     creature = get_active_creature(user)
     return user, creature, get_equipped_items(creature) if creature else []
+
+
+def _rename_lab_sync(tg_user, name):
+    """Paid lab rename: charges diamonds (escalating each time) and enforces the
+    same uniqueness as the free first-time name."""
+    user, _ = get_or_create_user(tg_user)
+    cleaned = " ".join(str(name).split())[:LAB_NAME_MAX_LEN]
+    if not cleaned:
+        raise GameError("اسم نمی‌تونه خالی باشه")
+    if user.lab_name is None:
+        raise GameError("اول با /start اسم آزمایشگاهت رو بذار")
+    if cleaned.casefold() == user.lab_name.casefold():
+        raise GameError("این همون اسم فعلیته")
+    if lab_name_taken(cleaned, exclude_user_id=user.id):
+        raise GameError("این اسم آزمایشگاه قبلاً گرفته شده")
+    cost = constants.lab_rename_cost(user.lab_renames)
+    if user.diamonds < cost:
+        raise GameError(f"الماس کافی نداری! تغییر اسم {cost} الماس می‌خواد")
+    user.diamonds -= cost
+    user.lab_name = cleaned
+    user.lab_renames += 1
+    user.save(update_fields=["diamonds", "lab_name", "lab_renames"])
+    return user, cost, cleaned
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1067,14 +1128,55 @@ def _missions_sync(tg_user):
     return mission_status(user)
 
 
+MISSIONS_PAGE_SIZE = 7
+
+
+def _missions_render(status: list[dict], page: int) -> tuple[str, InlineKeyboardMarkup]:
+    """Missions, in-progress first then completed, split across pages. A player's
+    full mission list plus reward text overran Telegram's message limit and got
+    rejected outright; paging it keeps every screen short and readable."""
+    ordered = sorted(status, key=lambda m: (m["done"], m["label"]))  # unfinished first
+    total_pages = max(1, (len(ordered) + MISSIONS_PAGE_SIZE - 1) // MISSIONS_PAGE_SIZE)
+    page = max(0, min(page, total_pages - 1))
+    chunk = ordered[page * MISSIONS_PAGE_SIZE : (page + 1) * MISSIONS_PAGE_SIZE]
+
+    done_count = sum(1 for m in status if m["done"])
+    page_note = f"  (صفحه {page + 1}/{total_pages})" if total_pages > 1 else ""
+    lines = [f"{get_emoji('mission')} <b>ماموریت‌های امروز</b>  {done_count}/{len(status)}{page_note}", ""]
+    for m in chunk:
+        if m["done"]:
+            lines.append(f"✅ <s>{m['label']}</s>")
+        else:
+            bar = constants.render_bar(m["progress"], m["target"], width=8)
+            lines.append(f"⏳ <b>{m['label']}</b>")
+            lines.append(f"    {bar} {m['progress']}/{m['target']}  🎁 <i>{mission_reward_text(m)}</i>")
+    lines.append("\n<i>ماموریت‌ها هر روز (ساعت جهانی UTC) ریست می‌شن.</i>")
+
+    rows = []
+    nav = []
+    if page > 0:
+        nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"mission_page:{page - 1}"))
+    if page < total_pages - 1:
+        nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"mission_page:{page + 1}"))
+    if nav:
+        rows.append(nav)
+    rows.append([back_btn("menu:me")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
 async def missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     status = await run_db(_missions_sync, update.effective_user)
-    lines = [f"{get_emoji('mission')} <b>ماموریت‌های امروز</b>\n"]
-    for m in status:
-        check = "✅" if m["done"] else f"⏳ {m['progress']}/{m['target']}"
-        lines.append(f"{check} — {m['label']} ({mission_reward_text(m)})")
-    lines.append("\n<i>ماموریت‌ها هر روز (ساعت جهانی UTC) ریست می‌شن.</i>")
-    await send_screen(update, "\n".join(lines), reply_markup=back_only_keyboard())
+    text, keyboard = _missions_render(status, 0)
+    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def missions_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    page = int(query.data.split(":")[1])
+    status = await run_db(_missions_sync, update.effective_user)
+    await query.answer()
+    text, keyboard = _missions_render(status, page)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _hunt_scout_sync(tg_user):
@@ -1479,6 +1581,23 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         await send_first_run_guide(message)
         return
 
+    if action == "rename_lab":
+        if not text or len(text) > LAB_NAME_MAX_LEN:
+            context.user_data[AWAITING_PLAYER_KEY] = awaiting
+            await message.reply_text(f"⚠️ اسم باید بین ۱ تا {LAB_NAME_MAX_LEN} کاراکتر باشه. دوباره بفرست:")
+            return
+        try:
+            user, cost, _newname = await run_db(_rename_lab_sync, update.effective_user, text)
+        except GameError as exc:
+            await message.reply_text(f"⚠️ {exc}.")
+            return
+        await message.reply_text(
+            f"✅ اسم آزمایشگاهت به «{lab_display(user)}» تغییر کرد. "
+            f"({cost} {get_emoji('diamond')} کم شد؛ دفعه‌ی بعد {constants.lab_rename_cost(user.lab_renames)} می‌شه)",
+            parse_mode="HTML",
+        )
+        return
+
     if action == "alliance_create":
         try:
             alliance = await run_db(_alliance_create_sync, update.effective_user, text)
@@ -1669,6 +1788,7 @@ def _profile_sync(tg_user):
 
 async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user, stats = await run_db(_profile_sync, update.effective_user)
+    rename_cost = constants.lab_rename_cost(user.lab_renames)
     lines = [
         f"{get_emoji('profile')} <b>آزمایشگاه {lab_display(user)}</b>",
         f"<blockquote>{lab_level_line(user)}</blockquote>\n",
@@ -1680,7 +1800,34 @@ async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"{get_emoji('raid_boss')} کل دمیج واردشده به رید باس‌ها: {stats['total_raid_damage']}\n",
         wallet_line(user),
     ]
-    await send_screen(update, "\n".join(lines), reply_markup=back_only_keyboard())
+    rows = [
+        [btn(f"✏️ تغییر اسم آزمایشگاه ({rename_cost} {get_emoji('diamond')})", style=SHOP, callback_data="lab_rename")],
+        [back_btn("menu:me")],
+    ]
+    await send_screen(update, "\n".join(lines), reply_markup=InlineKeyboardMarkup(rows))
+
+
+async def lab_rename_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user, _ = await run_db(lambda tg: get_or_create_user(tg), update.effective_user)
+    cost = constants.lab_rename_cost(user.lab_renames)
+    if user.lab_name is None:
+        await query.answer("اول با /start اسم آزمایشگاهت رو بذار.", show_alert=True)
+        return
+    if user.diamonds < cost:
+        await query.answer(f"الماس کافی نداری! تغییر اسم {cost} الماس می‌خواد.", show_alert=True)
+        return
+    await query.answer()
+    context.user_data[AWAITING_PLAYER_KEY] = {"action": "rename_lab"}
+    await safe_edit_message_text(
+        query,
+        f"✏️ <b>تغییر اسم آزمایشگاه</b>\n"
+        f"هزینه: <b>{cost}</b> {get_emoji('diamond')} (موجودی: {user.diamonds})\n"
+        f"<i>هر بار که عوض کنی، دفعه‌ی بعد گرون‌تر می‌شه.</i>\n\n"
+        f"اسم جدید رو بفرست (حداکثر {LAB_NAME_MAX_LEN} کاراکتر):",
+        parse_mode="HTML",
+        reply_markup=back_only_keyboard("menu:profile"),
+    )
 
 
 def main_menu_keyboard() -> InlineKeyboardMarkup:
@@ -1708,7 +1855,10 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                 btn("تجهیزات", emoji_key="btn_inventory", style=NAV, callback_data="menu:inventory"),
                 btn("آهنگری", emoji_key="btn_forge", style=NAV, callback_data="menu:blacksmith"),
             ],
-            [btn("ماموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions")],
+            [
+            btn("ماموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions"),
+            btn("🏅 دستاوردها", style=NAV, callback_data="menu:achievements"),
+        ],
             [
                 btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate"),
                 btn("جعبه‌های الماسی", emoji_key="btn_diamond_box", style=SHOP, callback_data="menu:diamond_box"),
@@ -1746,6 +1896,7 @@ _MENU_ACTIONS = {
     "fusion": fusion_panel,
     "breeding": breeding_panel,
     "buildings": buildings_panel,
+    "achievements": achievements_panel,
     "wheel": wheel_cmd,
     "alliance_info": alliance_info_cmd,
     "rank": rank,
@@ -1787,6 +1938,9 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^menu:"))
     application.add_handler(CallbackQueryHandler(guide_page_callback, pattern=r"^guide:"))
     application.add_handler(CallbackQueryHandler(upgrade_pick_callback, pattern=r"^upg_pick:"))
+    application.add_handler(CallbackQueryHandler(upgrade_page_callback, pattern=r"^upg_page:"))
+    application.add_handler(CallbackQueryHandler(missions_page_callback, pattern=r"^mission_page:"))
+    application.add_handler(CallbackQueryHandler(lab_rename_start_callback, pattern=r"^lab_rename$"))
     application.add_handler(CallbackQueryHandler(equip_panel_callback, pattern=r"^upg_eq:"))
     application.add_handler(CallbackQueryHandler(equip_slot_callback, pattern=r"^upg_slot:"))
     application.add_handler(CallbackQueryHandler(equip_do_callback, pattern=r"^upg_(equip|unequip):"))

@@ -2,6 +2,7 @@ import datetime
 import math
 import random
 
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from bio_lab.models import Building, BuildingUpgrade, SpeedupCard, User
@@ -32,11 +33,33 @@ def get_or_create_buildings(user: User) -> list[Building]:
     buildings = []
     for building_type in constants.BUILDING_TYPES:
         default_level = 1 if building_type == constants.MAIN_BUILDING else 0
-        building, _ = Building.objects.get_or_create(
-            owner=user, building_type=building_type, defaults={"level": default_level}
-        )
+        try:
+            with transaction.atomic():
+                building, _ = Building.objects.get_or_create(
+                    owner=user,
+                    building_type=building_type,
+                    defaults={"level": default_level},
+                )
+        except IntegrityError:
+            # PK sequence can lag after restores/imports; unique (owner, type) may
+            # already exist from a concurrent request. Re-fetch or retry once.
+            building = Building.objects.filter(
+                owner=user, building_type=building_type
+            ).first()
+            if building is None:
+                with transaction.atomic():
+                    building, _ = Building.objects.get_or_create(
+                        owner=user,
+                        building_type=building_type,
+                        defaults={"level": default_level},
+                    )
         buildings.append(building)
-    return buildings
+    enforce_building_level_caps(user)
+    by_type = {
+        b.building_type: b
+        for b in Building.objects.filter(owner=user, building_type__in=constants.BUILDING_TYPES)
+    }
+    return [by_type[t] for t in constants.BUILDING_TYPES if t in by_type]
 
 
 def building_level(user: User, building_type: str) -> int:
@@ -50,12 +73,31 @@ def main_hall_level(user: User) -> int:
 
 
 def max_level_for(user: User, building_type: str) -> int:
-    """The main hall is capped by BUILDING_MAX_LEVEL; every other building is
-    additionally capped by the hall's current level. That single rule is what makes
-    the hall the deliberate progression bottleneck."""
+    """سقف سطح هر ساختمون.
+
+    - تالار مِهر: تا BUILDING_MAX_LEVEL
+    - بقیه: حداکثر برابر سطح فعلی تالار مِهر (جلوتر از تالار نمی‌روند؛
+      پس لول آخر مطلق فقط وقتی در دسترس است که خود تالار به سقف رسیده باشد)
+    """
     if building_type == constants.MAIN_BUILDING:
         return constants.BUILDING_MAX_LEVEL
-    return min(constants.BUILDING_MAX_LEVEL, main_hall_level(user))
+    hall = main_hall_level(user)
+    return min(constants.BUILDING_MAX_LEVEL, hall)
+
+
+def enforce_building_level_caps(user: User) -> int:
+    """اگر ساختمونی از سقف تالار جلو زده (دیتای قدیمی/باگ)، به سقف برش می‌دهد."""
+    fixed = 0
+    hall = main_hall_level(user)
+    for building in Building.objects.filter(owner=user).exclude(
+        building_type=constants.MAIN_BUILDING
+    ):
+        cap = min(constants.BUILDING_MAX_LEVEL, hall)
+        if building.level > cap:
+            building.level = cap
+            building.save(update_fields=["level"])
+            fixed += 1
+    return fixed
 
 
 def unlock_level_for(building_type: str) -> int:
@@ -127,12 +169,18 @@ def check_and_apply_upgrade(user: User) -> Building | None:
     if upgrade is None or timezone.now() < upgrade.finishes_at:
         return None
     building = upgrade.building
-    building.level = upgrade.target_level
+    cap = max_level_for(user, building.building_type)
+    target = min(upgrade.target_level, cap)
+    if target < upgrade.target_level:
+        # تالار عقب‌تر از هدف ارتقا — ارتقا را بدون اعمال لول غیرمجاز لغو کن
+        upgrade.delete()
+        return None
+    building.level = target
     building.save(update_fields=["level"])
     # a finished upgrade is worth real lab XP because it represents hours of real
     # time, not one tap — awarded here, at the single point where an upgrade can
     # complete, so it can't be double-credited by the callers that poll this
-    lab.award_building_level(user, upgrade.target_level)
+    lab.award_building_level(user, target)
     upgrade.delete()
     return building
 
@@ -184,11 +232,16 @@ def start_upgrade(user: User, building: Building) -> BuildingUpgrade:
         raise GameError(f"این ساختمون از سطح {needed} {hall} باز می‌شه.")
 
     cap = max_level_for(user, building.building_type)
+    target = building.level + 1
     if building.level >= constants.BUILDING_MAX_LEVEL:
         raise GameError("این ساختمون به سقف سطح رسیده.")
-    if building.level >= cap:
+    if target > cap or building.level >= cap:
         hall = constants.BUILDING_LABELS[constants.MAIN_BUILDING]
-        raise GameError(f"اول باید {hall} رو ارتقا بدی — هیچ ساختمونی نمی‌تونه از سطح اون جلو بزنه.")
+        raise GameError(
+            f"سقف این ساختمون الان سطح {cap} است — "
+            f"اول {hall} رو ارتقا بده تا بشه بالاتر رفت "
+            f"(هیچ ساختمونی از سطح تالار و لول آخر جلو نمی‌زنه)."
+        )
 
     cost, minutes = upgrade_cost_and_minutes(building)
     if user.coins < cost:
@@ -199,7 +252,7 @@ def start_upgrade(user: User, building: Building) -> BuildingUpgrade:
 
     finishes_at = timezone.now() + datetime.timedelta(minutes=minutes)
     return BuildingUpgrade.objects.create(
-        owner=user, building=building, target_level=building.level + 1, finishes_at=finishes_at
+        owner=user, building=building, target_level=target, finishes_at=finishes_at
     )
 
 
@@ -224,8 +277,14 @@ def apply_speedup(user: User, minutes: int) -> tuple[BuildingUpgrade | None, boo
     upgrade.finishes_at -= datetime.timedelta(minutes=minutes)
     if upgrade.finishes_at <= timezone.now():
         building = upgrade.building
-        building.level = upgrade.target_level
+        cap = max_level_for(user, building.building_type)
+        target = min(upgrade.target_level, cap)
+        if target < upgrade.target_level:
+            upgrade.delete()
+            return None, True
+        building.level = target
         building.save(update_fields=["level"])
+        lab.award_building_level(user, target)
         upgrade.delete()
         return None, True
 
@@ -255,12 +314,19 @@ def finish_with_diamonds(user: User) -> tuple[Building, int]:
     user.save(update_fields=["diamonds"])
 
     building = upgrade.building
-    building.level = upgrade.target_level
+    cap = max_level_for(user, building.building_type)
+    target = min(upgrade.target_level, cap)
+    if target < upgrade.target_level:
+        upgrade.delete()
+        raise GameError(
+            f"سقف این ساختمون الان سطح {cap} است — اول تالار مِهر رو ارتقا بده."
+        )
+    building.level = target
     building.save(update_fields=["level"])
     # a finished upgrade is worth real lab XP because it represents hours of real
     # time, not one tap — awarded here, at the single point where an upgrade can
     # complete, so it can't be double-credited by the callers that poll this
-    lab.award_building_level(user, upgrade.target_level)
+    lab.award_building_level(user, target)
     upgrade.delete()
     return building, cost
 
