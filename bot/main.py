@@ -14,6 +14,8 @@ from bot.handlers import (
     achievements,
     battlepass,
     breeding,
+    codex,
+    referral,
     group_words,  # noqa: E402
     arena,
     battle,
@@ -78,6 +80,8 @@ def main() -> None:
     breeding.register(application)
     achievements.register(application)
     battlepass.register(application)
+    codex.register(application)
+    referral.register(application)
     notify.register(application)  # periodic re-engagement DMs (JobQueue)
     wheel.register(application)
     arena.register(application)

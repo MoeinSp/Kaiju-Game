@@ -13,6 +13,8 @@ from bio_lab.repository import (
 from bot.handlers.achievements import achievements_panel
 from bot.handlers.arena import arena_panel
 from bot.handlers.battlepass import battlepass_panel
+from bot.handlers.codex import codex_panel
+from bot.handlers.referral import referral_panel
 from bot.handlers.breeding import breeding_panel
 from bot.handlers.buildings import buildings_panel
 from bot.handlers.inventory import blacksmith_panel, inventory_cmd
@@ -617,6 +619,10 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
             btn("ماموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions"),
             btn("🏅 دستاوردها", style=NAV, callback_data="menu:achievements"),
         ],
+        [
+            btn("📖 دانشنامه", style=NAV, callback_data="menu:codex"),
+            btn("🎁 دعوت دوستان", style=NAV, callback_data="menu:referral"),
+        ],
         [btn("🎟 پاس فصلی", style=SHOP, callback_data="menu:battlepass")],
         [
             btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate"),
@@ -640,8 +646,12 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
 LAB_NAME_MAX_LEN = 32
 
 
-def _start_sync(tg_user):
-    user, _ = get_or_create_user(tg_user)
+def _start_sync(tg_user, referrer_id=None):
+    user, was_created = get_or_create_user(tg_user)
+    if referrer_id is not None:
+        from game.referral import register_referral
+
+        register_referral(user, was_created, referrer_id)
     creature = get_active_creature(user)
     is_new = False
     if creature is None:
@@ -697,7 +707,14 @@ def _rename_lab_sync(tg_user, name):
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user, creature, is_new, login_bonus, equipped_items = await run_db(_start_sync, update.effective_user)
+    referrer_id = None
+    if context.args:
+        from game.referral import parse_payload
+
+        referrer_id = parse_payload(context.args[0])
+    user, creature, is_new, login_bonus, equipped_items = await run_db(
+        _start_sync, update.effective_user, referrer_id
+    )
 
     if user.lab_name is None:
         context.user_data[AWAITING_PLAYER_KEY] = {"action": "set_lab_name"}
@@ -1884,6 +1901,10 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
             btn("ماموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions"),
             btn("🏅 دستاوردها", style=NAV, callback_data="menu:achievements"),
         ],
+        [
+            btn("📖 دانشنامه", style=NAV, callback_data="menu:codex"),
+            btn("🎁 دعوت دوستان", style=NAV, callback_data="menu:referral"),
+        ],
         [btn("🎟 پاس فصلی", style=SHOP, callback_data="menu:battlepass")],
             [
                 btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate"),
@@ -1924,6 +1945,8 @@ _MENU_ACTIONS = {
     "buildings": buildings_panel,
     "achievements": achievements_panel,
     "battlepass": battlepass_panel,
+    "codex": codex_panel,
+    "referral": referral_panel,
     "wheel": wheel_cmd,
     "alliance_info": alliance_info_cmd,
     "rank": rank,

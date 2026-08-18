@@ -37,6 +37,13 @@ class User(models.Model):
     energy_full_notified = models.BooleanField(default=False)
     last_nudge_day = models.CharField(max_length=10, null=True, blank=True)
 
+    # referrals (game/referral.py). referred_by is the telegram id of whoever's
+    # invite link brought this player in (set once, at their first /start);
+    # referral_bonus_paid marks that both sides have collected the reward earned
+    # when this player crossed the referral milestone.
+    referred_by = models.BigIntegerField(null=True, blank=True)
+    referral_bonus_paid = models.BooleanField(default=False)
+
     alliance = models.ForeignKey(
         "Alliance", null=True, blank=True, on_delete=models.SET_NULL, related_name="members"
     )
@@ -176,6 +183,24 @@ class BreedingJob(models.Model):
 
     def __str__(self) -> str:
         return f"breeding {self.parent_a_id}+{self.parent_b_id} ({self.owner_id})"
+
+
+class CodexEntry(models.Model):
+    """One species a player has discovered (ever owned). Persistent so the Codex
+    stays complete even after the creature is fused or released. Recorded lazily
+    from currently-owned creatures whenever the Codex is viewed (game/codex.py)."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="codex_entries")
+    species = models.CharField(max_length=64)
+    discovered_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "species"], name="uq_codex_entry")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id}:{self.species}"
 
 
 class PassProgress(models.Model):

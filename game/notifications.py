@@ -109,6 +109,11 @@ def collect_due() -> list[tuple[int, str]]:
                 user.energy_full_notified = False
                 user.save(update_fields=["energy_full_notified"])
 
+        # ── referral rewards (friend crossed the milestone → pay both) ────────
+        from game import referral
+
+        out.extend(referral.collect_rewards())
+
         # ── daily "come back" nudge (evening window, recently-active only) ────
         local_hour = timezone.localtime(now).hour
         if NUDGE_HOUR_START <= local_hour < NUDGE_HOUR_END:
