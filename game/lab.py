@@ -127,6 +127,14 @@ def add_lab_xp(user: User, amount: int) -> dict | None:
         amount = int(amount * events.xp_multiplier())
     except Exception:  # pragma: no cover
         pass
+    # alliance XP perk — a member of an alliance that invested treasury in the perk
+    # earns more XP from everything.
+    try:
+        from game import alliance
+
+        amount = int(amount * alliance.xp_perk_multiplier(user))
+    except Exception:  # pragma: no cover
+        pass
     before = lab_level(user)
     user.lab_xp = max(0, user.lab_xp + amount)
     user.save(update_fields=["lab_xp"])
@@ -153,6 +161,13 @@ def award(user: User, key: str) -> dict | None:
     amount feeds the Battle Pass, so every rewarding action also moves the pass."""
     amount = LAB_XP_AWARDS.get(key, 0)
     _award_pass_points(user, amount)
+    # the same activity feeds the alliance's weekly war score
+    try:
+        from game import alliance
+
+        alliance.add_war_points(user, amount)
+    except Exception:  # pragma: no cover
+        pass
     return add_lab_xp(user, amount)
 
 

@@ -95,6 +95,13 @@ def award(user: User, points: int) -> None:
         points = int(points * events.pass_multiplier())
     except Exception:  # pragma: no cover
         pass
+    # alliance Pass perk stacks on top
+    try:
+        from game import alliance
+
+        points = int(points * alliance.pass_perk_multiplier(user))
+    except Exception:  # pragma: no cover
+        pass
     progress = _get_progress(user)
     progress.points += points
     progress.save(update_fields=["points", "updated_at"])

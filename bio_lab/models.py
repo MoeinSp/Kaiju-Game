@@ -74,8 +74,29 @@ class Alliance(models.Model):
     last_heisted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # treasury-funded, alliance-wide perks (game/alliance.py) — every member benefits
+    xp_perk_level = models.IntegerField(default=0)
+    pass_perk_level = models.IntegerField(default=0)
+
+    # weekly alliance war: members' activity adds war points; the top alliance's
+    # treasury wins a bonus at week's end. war_week scopes points to the current
+    # ISO week so they reset cleanly.
+    war_points = models.IntegerField(default=0)
+    war_week = models.CharField(max_length=10, null=True, blank=True)
+
     def __str__(self) -> str:
         return self.name
+
+
+class AllianceWarState(models.Model):
+    """Single-row table remembering the last week whose alliance war was settled,
+    so the weekly treasury bonus is paid exactly once (mirrors SeasonState)."""
+
+    last_settled_week = models.CharField(max_length=10, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"war settled: {self.last_settled_week or '—'}"
 
 
 class Creature(models.Model):

@@ -166,3 +166,129 @@ def heist(attacker: User, attacker_creature: Creature, defender_alliance: Allian
         "defender_creature": defender_creature,
         "log_text": log_text,
     }
+
+
+# ── Alliance perks + weekly war (game/alliance depth) ─────────────────────────
+XP_PERK_PER_LEVEL = 0.03     # +3% lab XP per level, all members
+PASS_PERK_PER_LEVEL = 0.05   # +5% Battle Pass points per level, all members
+PERK_MAX_LEVEL = 5
+WAR_WINNER_TREASURY_BONUS = 5000  # gold added to the top alliance's treasury each week
+
+PERKS = {
+    "xp": {"emoji": "⭐", "title": "بونوس XP", "field": "xp_perk_level", "per_level": XP_PERK_PER_LEVEL},
+    "pass": {"emoji": "🎟", "title": "بونوس پاس", "field": "pass_perk_level", "per_level": PASS_PERK_PER_LEVEL},
+}
+
+
+def perk_cost(level: int) -> int:
+    """Treasury gold to buy the NEXT level (level = current level, 0-based)."""
+    return 3000 * (level + 1)
+
+
+def _war_week() -> str:
+    return timezone.localtime(timezone.now()).strftime("%G-W%V")
+
+
+def xp_perk_multiplier(user: User) -> float:
+    if not user.alliance_id:
+        return 1.0
+    lvl = Alliance.objects.filter(id=user.alliance_id).values_list("xp_perk_level", flat=True).first() or 0
+    return 1.0 + lvl * XP_PERK_PER_LEVEL
+
+
+def pass_perk_multiplier(user: User) -> float:
+    if not user.alliance_id:
+        return 1.0
+    lvl = Alliance.objects.filter(id=user.alliance_id).values_list("pass_perk_level", flat=True).first() or 0
+    return 1.0 + lvl * PASS_PERK_PER_LEVEL
+
+
+@transaction.atomic
+def buy_perk(user: User, perk_key: str) -> dict:
+    """Leader-only: spend treasury gold to raise an alliance perk by one level."""
+    if perk_key not in PERKS:
+        raise GameError("این پرک وجود نداره.")
+    if user.alliance_id is None:
+        raise GameError("عضو هیچ اتحادی نیستی.")
+    alliance = Alliance.objects.select_for_update().get(id=user.alliance_id)
+    if alliance.leader_id != user.id:
+        raise GameError("فقط رهبر اتحاد می‌تونه پرک بخره.")
+    field = PERKS[perk_key]["field"]
+    level = getattr(alliance, field)
+    if level >= PERK_MAX_LEVEL:
+        raise GameError("این پرک به بالاترین سطح رسیده.")
+    cost = perk_cost(level)
+    if alliance.treasury_gold < cost:
+        raise GameError(f"خزانه‌ی اتحاد کافی نیست! این ارتقا {cost} طلا از خزانه می‌خواد.")
+    alliance.treasury_gold -= cost
+    setattr(alliance, field, level + 1)
+    alliance.save(update_fields=["treasury_gold", field])
+    return {"perk": perk_key, "level": level + 1, "cost": cost, "treasury": alliance.treasury_gold}
+
+
+def add_war_points(user: User, points: int) -> None:
+    """Credit a member's activity as war points for their alliance's current week."""
+    if not user.alliance_id or points <= 0:
+        return
+    week = _war_week()
+    alliance = Alliance.objects.filter(id=user.alliance_id).first()
+    if alliance is None:
+        return
+    if alliance.war_week != week:
+        alliance.war_points = 0
+        alliance.war_week = week
+    alliance.war_points += int(points)
+    alliance.save(update_fields=["war_points", "war_week"])
+
+
+def war_leaderboard(limit: int = 10) -> list[dict]:
+    week = _war_week()
+    rows = Alliance.objects.filter(war_week=week, war_points__gt=0).order_by("-war_points")[:limit]
+    return [{"name": a.name, "war_points": a.war_points, "id": a.id} for a in rows]
+
+
+def perks_info(alliance: Alliance) -> dict:
+    return {
+        "xp_level": alliance.xp_perk_level,
+        "pass_level": alliance.pass_perk_level,
+        "xp_cost": perk_cost(alliance.xp_perk_level),
+        "pass_cost": perk_cost(alliance.pass_perk_level),
+        "max_level": PERK_MAX_LEVEL,
+        "treasury": alliance.treasury_gold,
+        "war_points": alliance.war_points if alliance.war_week == _war_week() else 0,
+    }
+
+
+def settle_war_if_needed() -> list[tuple[int, str]]:
+    """Weekly: once the ISO week rolls over, award the top alliance's treasury a
+    bonus and DM its members, then leave points to reset on next award. Returns
+    (user_id, text) DMs. Safe to call often — settles each week exactly once."""
+    from bio_lab.models import AllianceWarState
+
+    current = _war_week()
+    state, _ = AllianceWarState.objects.get_or_create(id=1)
+    if state.last_settled_week == current:
+        return []
+
+    out: list[tuple[int, str]] = []
+    # the winner is the top alliance whose points belong to a *past* week
+    winner = (
+        Alliance.objects.exclude(war_week=current)
+        .filter(war_points__gt=0)
+        .order_by("-war_points")
+        .first()
+    )
+    if winner is not None:
+        winner.treasury_gold += WAR_WINNER_TREASURY_BONUS
+        winner.war_points = 0
+        winner.war_week = current
+        winner.save(update_fields=["treasury_gold", "war_points", "war_week"])
+        for member_id in User.objects.filter(alliance_id=winner.id, notifications_on=True).values_list(
+            "id", flat=True
+        ):
+            out.append(
+                (member_id, f"🏰 <b>اتحادت «{winner.name}» جنگ هفتگی رو برد!</b> خزانه {WAR_WINNER_TREASURY_BONUS} طلا جایزه گرفت.")
+            )
+    state.last_settled_week = current
+    state.save(update_fields=["last_settled_week", "updated_at"])
+    return out

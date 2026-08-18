@@ -114,6 +114,11 @@ def collect_due() -> list[tuple[int, str]]:
 
         out.extend(referral.collect_rewards())
 
+        # ── weekly alliance war settlement (top alliance's treasury bonus) ────
+        from game import alliance
+
+        out.extend(alliance.settle_war_if_needed())
+
         # ── daily "come back" nudge (evening window, recently-active only) ────
         local_hour = timezone.localtime(now).hour
         if NUDGE_HOUR_START <= local_hour < NUDGE_HOUR_END:

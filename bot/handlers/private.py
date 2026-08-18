@@ -1404,6 +1404,10 @@ def _alliance_action_keyboard(in_alliance: bool) -> InlineKeyboardMarkup:
     if in_alliance:
         rows = [
             [btn("واریز به خزانه", emoji_key="btn_deposit", style=BUILD, callback_data="ally_deposit")],
+            [
+                btn("🏰 پرک‌های اتحاد", style=PRIMARY, callback_data="ally_perks"),
+                btn("⚔️ جنگ هفتگی", style=BATTLE, callback_data="ally_war"),
+            ],
             [btn("شبیخون به اتحاد دیگه", emoji_key="btn_heist", style=BATTLE, callback_data="ally_heist_list")],
             [btn("برترین اتحادها", emoji_key="btn_rank", style=NAV, callback_data="ally_top")],
             [btn("خروج از اتحاد", emoji_key="btn_cancel", style=DANGER, callback_data="ally_leave")],
