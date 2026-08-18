@@ -72,9 +72,14 @@ def close_due_season() -> str | None:
         state.save(update_fields=["last_closed_week"])
         return None
 
+    from game import league
+
     closing = state.last_closed_week
     ranked = list(User.objects.filter(is_banned=False, cup__gt=0).order_by("-cup", "id"))
     for rank, user in enumerate(ranked, start=1):
+        # league division reward for how they FINISHED (their end-of-season cup),
+        # granted before the cup is reset to next week's floor
+        league.grant_season_reward(user, user.cup)
         new_cup = reset_floor(rank, user.cup)
         SeasonResult.objects.update_or_create(
             week_key=closing,

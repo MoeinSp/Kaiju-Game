@@ -20,6 +20,7 @@ from bot.handlers import (
     codex,
     events,
     idle,
+    league,
     referral,
     team,
     group_words,  # noqa: E402
@@ -94,6 +95,7 @@ def main() -> None:
     banner.register(application)
     alliancewar.register(application)
     idle.register(application)
+    league.register(application)
     notify.register(application)  # periodic re-engagement DMs (JobQueue)
     wheel.register(application)
     arena.register(application)

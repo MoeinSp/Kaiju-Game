@@ -18,6 +18,7 @@ from bot.handlers.campaign import campaign_panel
 from bot.handlers.codex import codex_panel
 from bot.handlers.events import events_panel
 from bot.handlers.idle import idle_panel
+from bot.handlers.league import league_panel
 from bot.handlers.referral import referral_panel
 from bot.handlers.team import team_panel
 from bot.handlers.breeding import breeding_panel
@@ -612,6 +613,7 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
             btn("🗺 کمپین", style=BATTLE, callback_data="menu:campaign"),
             btn("⚔️ تیم من", style=NAV, callback_data="menu:team"),
         ],
+        [btn("🏆 لیگ رتبه‌بندی", style=NAV, callback_data="menu:league")],
         [
             btn("کلکسیون", emoji_key="btn_collection", style=NAV, callback_data="menu:collection"),
             btn("ترکیب هیولا", emoji_key="btn_fusion", style=NAV, callback_data="menu:fusion"),
@@ -1978,6 +1980,7 @@ _MENU_ACTIONS = {
     "events": events_panel,
     "banner": banner_panel,
     "idle": idle_panel,
+    "league": league_panel,
     "wheel": wheel_cmd,
     "alliance_info": alliance_info_cmd,
     "rank": rank,
