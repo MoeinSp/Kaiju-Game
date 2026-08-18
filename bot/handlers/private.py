@@ -1787,8 +1787,7 @@ def _profile_sync(tg_user):
     }
 
 
-async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user, stats = await run_db(_profile_sync, update.effective_user)
+def _profile_text_and_keyboard(user, stats) -> tuple[str, InlineKeyboardMarkup]:
     rename_cost = constants.lab_rename_cost(user.lab_renames)
     lines = [
         f"{get_emoji('profile')} <b>آزمایشگاه {lab_display(user)}</b>",
@@ -1801,11 +1800,34 @@ async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"{get_emoji('raid_boss')} کل دمیج واردشده به رید باس‌ها: {stats['total_raid_damage']}\n",
         wallet_line(user),
     ]
+    notif_label = "🔔 اعلان‌ها: روشن" if user.notifications_on else "🔕 اعلان‌ها: خاموش"
     rows = [
         [btn(f"✏️ تغییر اسم آزمایشگاه ({rename_cost} 💎)", style=SHOP, callback_data="lab_rename")],
+        [btn(notif_label, style=NAV, callback_data="notif_toggle")],
         [back_btn("menu:me")],
     ]
-    await send_screen(update, "\n".join(lines), reply_markup=InlineKeyboardMarkup(rows))
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user, stats = await run_db(_profile_sync, update.effective_user)
+    text, keyboard = _profile_text_and_keyboard(user, stats)
+    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _notif_toggle_sync(tg_user):
+    user, stats = _profile_sync(tg_user)
+    user.notifications_on = not user.notifications_on
+    user.save(update_fields=["notifications_on"])
+    return user, stats
+
+
+async def notif_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user, stats = await run_db(_notif_toggle_sync, update.effective_user)
+    await query.answer("🔔 اعلان‌ها روشن شد" if user.notifications_on else "🔕 اعلان‌ها خاموش شد")
+    text, keyboard = _profile_text_and_keyboard(user, stats)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def lab_rename_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1942,6 +1964,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(upgrade_page_callback, pattern=r"^upg_page:"))
     application.add_handler(CallbackQueryHandler(missions_page_callback, pattern=r"^mission_page:"))
     application.add_handler(CallbackQueryHandler(lab_rename_start_callback, pattern=r"^lab_rename$"))
+    application.add_handler(CallbackQueryHandler(notif_toggle_callback, pattern=r"^notif_toggle$"))
     application.add_handler(CallbackQueryHandler(equip_panel_callback, pattern=r"^upg_eq:"))
     application.add_handler(CallbackQueryHandler(equip_slot_callback, pattern=r"^upg_slot:"))
     application.add_handler(CallbackQueryHandler(equip_do_callback, pattern=r"^upg_(equip|unequip):"))

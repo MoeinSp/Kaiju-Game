@@ -29,6 +29,14 @@ class User(models.Model):
     cup = models.IntegerField(default=0)  # arena rating; drives PvP matchmaking
     shield_until = models.DateTimeField(null=True, blank=True)  # anti-farm grace after being raided
 
+    # re-engagement push (game/notifications.py). notifications_on is the master
+    # opt-out; energy_full_notified fires the "energy is full" DM exactly once per
+    # drain-and-refill cycle (reset when energy is spent); last_nudge_day dedups the
+    # once-a-day "your daily reward is waiting" nudge.
+    notifications_on = models.BooleanField(default=True)
+    energy_full_notified = models.BooleanField(default=False)
+    last_nudge_day = models.CharField(max_length=10, null=True, blank=True)
+
     alliance = models.ForeignKey(
         "Alliance", null=True, blank=True, on_delete=models.SET_NULL, related_name="members"
     )
@@ -128,6 +136,7 @@ class BuildingUpgrade(models.Model):
     target_level = models.IntegerField()
     started_at = models.DateTimeField(auto_now_add=True)
     finishes_at = models.DateTimeField()
+    notified = models.BooleanField(default=False)  # "building upgrade finished" DM sent
 
     def __str__(self) -> str:
         return f"{self.building.building_type} -> Lv{self.target_level} ({self.owner_id})"
@@ -163,6 +172,7 @@ class BreedingJob(models.Model):
     parent_b = models.ForeignKey(Creature, on_delete=models.CASCADE, related_name="+")
     started_at = models.DateTimeField(auto_now_add=True)
     finishes_at = models.DateTimeField()
+    notified = models.BooleanField(default=False)  # "mating done, lay the egg" DM sent
 
     def __str__(self) -> str:
         return f"breeding {self.parent_a_id}+{self.parent_b_id} ({self.owner_id})"
@@ -213,6 +223,7 @@ class Egg(models.Model):
     inherit_level = models.IntegerField(default=1)
     started_at = models.DateTimeField(auto_now_add=True)
     finishes_at = models.DateTimeField()
+    notified = models.BooleanField(default=False)  # "egg ready to hatch" DM sent
 
     class Meta:
         ordering = ("finishes_at",)
@@ -386,6 +397,7 @@ class AttackLog(models.Model):
     loot_gold = models.IntegerField(default=0)
     cup_delta = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
+    defender_notified = models.BooleanField(default=False)  # "you were raided" DM sent to the defender
 
     def __str__(self) -> str:
         return f"{self.attacker_id} -> {self.defender_label} ({'W' if self.attacker_won else 'L'})"

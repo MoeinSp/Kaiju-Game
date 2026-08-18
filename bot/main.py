@@ -16,6 +16,7 @@ from bot.handlers import (
     group_words,  # noqa: E402
     arena,
     battle,
+    notify,
     buildings,
     group,
     inventory,
@@ -75,6 +76,7 @@ def main() -> None:
     buildings.register(application)
     breeding.register(application)
     achievements.register(application)
+    notify.register(application)  # periodic re-engagement DMs (JobQueue)
     wheel.register(application)
     arena.register(application)
     group.register(application)
