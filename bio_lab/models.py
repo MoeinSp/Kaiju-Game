@@ -55,6 +55,11 @@ class User(models.Model):
     # last legendary+; at the pity threshold the next pull is a guaranteed legendary
     banner_pity = models.IntegerField(default=0)
 
+    # idle/AFK rewards (game/idle.py): loot accrues from this timestamp and is
+    # collected on return; last_dungeon_day gates the once-a-day resource dungeon.
+    idle_since = models.DateTimeField(default=timezone.now)
+    last_dungeon_day = models.CharField(max_length=10, null=True, blank=True)
+
     alliance = models.ForeignKey(
         "Alliance", null=True, blank=True, on_delete=models.SET_NULL, related_name="members"
     )

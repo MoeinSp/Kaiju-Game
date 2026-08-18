@@ -17,6 +17,7 @@ from bot.handlers.battlepass import battlepass_panel
 from bot.handlers.campaign import campaign_panel
 from bot.handlers.codex import codex_panel
 from bot.handlers.events import events_panel
+from bot.handlers.idle import idle_panel
 from bot.handlers.referral import referral_panel
 from bot.handlers.team import team_panel
 from bot.handlers.breeding import breeding_panel
@@ -640,7 +641,10 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
             btn("جعبه‌های الماسی", emoji_key="btn_diamond_box", style=SHOP, callback_data="menu:diamond_box"),
         ],
         [btn("🎰 بنر ویژه", style=SHOP, callback_data="menu:banner")],
-        [btn("گردونه‌ی شانس", emoji_key="btn_wheel", style=SHOP, callback_data="menu:wheel")],
+        [
+            btn("گردونه‌ی شانس", emoji_key="btn_wheel", style=SHOP, callback_data="menu:wheel"),
+            btn("💤 پاداش آفلاین", style=SHOP, callback_data="menu:idle"),
+        ],
         [
             btn("اتحاد من", emoji_key="btn_alliance", style=NAV, callback_data="menu:alliance_info"),
             btn("رتبه‌بندی", emoji_key="btn_rank", style=NAV, callback_data="menu:rank"),
@@ -1929,7 +1933,10 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                 btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate"),
                 btn("جعبه‌های الماسی", emoji_key="btn_diamond_box", style=SHOP, callback_data="menu:diamond_box"),
             ],
-            [btn("گردونه‌ی شانس", emoji_key="btn_wheel", style=SHOP, callback_data="menu:wheel")],
+            [
+            btn("گردونه‌ی شانس", emoji_key="btn_wheel", style=SHOP, callback_data="menu:wheel"),
+            btn("💤 پاداش آفلاین", style=SHOP, callback_data="menu:idle"),
+        ],
             [
                 btn("اتحاد من", emoji_key="btn_alliance", style=NAV, callback_data="menu:alliance_info"),
                 btn("رتبه‌بندی", emoji_key="btn_rank", style=NAV, callback_data="menu:rank"),
@@ -1970,6 +1977,7 @@ _MENU_ACTIONS = {
     "campaign": campaign_panel,
     "events": events_panel,
     "banner": banner_panel,
+    "idle": idle_panel,
     "wheel": wheel_cmd,
     "alliance_info": alliance_info_cmd,
     "rank": rank,
