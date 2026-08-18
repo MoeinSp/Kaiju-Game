@@ -88,6 +88,13 @@ def award(user: User, points: int) -> None:
     points = int(points)
     if points <= 0:
         return
+    # a limited-time event may double pass points ("Double-Pass week")
+    try:
+        from game import events
+
+        points = int(points * events.pass_multiplier())
+    except Exception:  # pragma: no cover
+        pass
     progress = _get_progress(user)
     progress.points += points
     progress.save(update_fields=["points", "updated_at"])

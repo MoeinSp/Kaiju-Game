@@ -47,6 +47,14 @@ class User(models.Model):
     # highest PvE campaign stage cleared (game/campaign.py); 0 = none yet
     campaign_stage = models.IntegerField(default=0)
 
+    # last day the player claimed the limited-time event's daily reward
+    # (game/events.py), so it can be claimed once per day during an event
+    last_event_claim_day = models.CharField(max_length=10, null=True, blank=True)
+
+    # gacha pity counter for the featured banner (game/banner.py): pulls since the
+    # last legendary+; at the pity threshold the next pull is a guaranteed legendary
+    banner_pity = models.IntegerField(default=0)
+
     alliance = models.ForeignKey(
         "Alliance", null=True, blank=True, on_delete=models.SET_NULL, related_name="members"
     )

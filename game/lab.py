@@ -119,6 +119,14 @@ def add_lab_xp(user: User, amount: int) -> dict | None:
     amount = int(amount)
     if amount <= 0:
         return None
+    # limited-time event may multiply XP (e.g. "Double-XP week") — single hook so
+    # every XP source is covered. Guarded so an event bug can't break progression.
+    try:
+        from game import events
+
+        amount = int(amount * events.xp_multiplier())
+    except Exception:  # pragma: no cover
+        pass
     before = lab_level(user)
     user.lab_xp = max(0, user.lab_xp + amount)
     user.save(update_fields=["lab_xp"])

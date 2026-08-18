@@ -12,9 +12,11 @@ from bio_lab.repository import (
 )
 from bot.handlers.achievements import achievements_panel
 from bot.handlers.arena import arena_panel
+from bot.handlers.banner import banner_panel
 from bot.handlers.battlepass import battlepass_panel
 from bot.handlers.campaign import campaign_panel
 from bot.handlers.codex import codex_panel
+from bot.handlers.events import events_panel
 from bot.handlers.referral import referral_panel
 from bot.handlers.team import team_panel
 from bot.handlers.breeding import breeding_panel
@@ -629,11 +631,15 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
             btn("📖 دانشنامه", style=NAV, callback_data="menu:codex"),
             btn("🎁 دعوت دوستان", style=NAV, callback_data="menu:referral"),
         ],
-        [btn("🎟 پاس فصلی", style=SHOP, callback_data="menu:battlepass")],
+        [
+            btn("🎟 پاس فصلی", style=SHOP, callback_data="menu:battlepass"),
+            btn("⏳ رویداد", style=SHOP, callback_data="menu:events"),
+        ],
         [
             btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate"),
             btn("جعبه‌های الماسی", emoji_key="btn_diamond_box", style=SHOP, callback_data="menu:diamond_box"),
         ],
+        [btn("🎰 بنر ویژه", style=SHOP, callback_data="menu:banner")],
         [btn("گردونه‌ی شانس", emoji_key="btn_wheel", style=SHOP, callback_data="menu:wheel")],
         [
             btn("اتحاد من", emoji_key="btn_alliance", style=NAV, callback_data="menu:alliance_info"),
@@ -1911,7 +1917,10 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
             btn("📖 دانشنامه", style=NAV, callback_data="menu:codex"),
             btn("🎁 دعوت دوستان", style=NAV, callback_data="menu:referral"),
         ],
-        [btn("🎟 پاس فصلی", style=SHOP, callback_data="menu:battlepass")],
+        [
+            btn("🎟 پاس فصلی", style=SHOP, callback_data="menu:battlepass"),
+            btn("⏳ رویداد", style=SHOP, callback_data="menu:events"),
+        ],
             [
                 btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate"),
                 btn("جعبه‌های الماسی", emoji_key="btn_diamond_box", style=SHOP, callback_data="menu:diamond_box"),
@@ -1955,6 +1964,8 @@ _MENU_ACTIONS = {
     "referral": referral_panel,
     "team": team_panel,
     "campaign": campaign_panel,
+    "events": events_panel,
+    "banner": banner_panel,
     "wheel": wheel_cmd,
     "alliance_info": alliance_info_cmd,
     "rank": rank,

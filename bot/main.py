@@ -12,10 +12,12 @@ from telegram.ext import Application, CallbackQueryHandler, ContextTypes, Messag
 from bot import middleware  # noqa: E402
 from bot.handlers import (
     achievements,
+    banner,
     battlepass,
     breeding,
     campaign,
     codex,
+    events,
     referral,
     team,
     group_words,  # noqa: E402
@@ -86,6 +88,8 @@ def main() -> None:
     referral.register(application)
     team.register(application)
     campaign.register(application)
+    events.register(application)
+    banner.register(application)
     notify.register(application)  # periodic re-engagement DMs (JobQueue)
     wheel.register(application)
     arena.register(application)
