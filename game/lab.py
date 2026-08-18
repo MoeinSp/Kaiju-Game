@@ -48,6 +48,7 @@ LAB_XP_AWARDS = {
     "breeding": 35,
     "mission": 30,
     "box": 10,
+    "campaign_win": 14,
 }
 # building upgrades pay per level reached, so the level-5 grind is worth the wait
 LAB_XP_PER_BUILDING_LEVEL = 40

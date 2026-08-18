@@ -44,6 +44,9 @@ class User(models.Model):
     referred_by = models.BigIntegerField(null=True, blank=True)
     referral_bonus_paid = models.BooleanField(default=False)
 
+    # highest PvE campaign stage cleared (game/campaign.py); 0 = none yet
+    campaign_stage = models.IntegerField(default=0)
+
     alliance = models.ForeignKey(
         "Alliance", null=True, blank=True, on_delete=models.SET_NULL, related_name="members"
     )
@@ -183,6 +186,24 @@ class BreedingJob(models.Model):
 
     def __str__(self) -> str:
         return f"breeding {self.parent_a_id}+{self.parent_b_id} ({self.owner_id})"
+
+
+class Team(models.Model):
+    """A player's chosen squad of up to three creatures for 3v3 team battles
+    (game/teambattle.py, used by the campaign). Slots are nullable and SET_NULL so
+    fusing or releasing a creature just empties its slot rather than erroring."""
+
+    owner = models.OneToOneField(User, on_delete=models.CASCADE, related_name="team")
+    slot1 = models.ForeignKey(Creature, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    slot2 = models.ForeignKey(Creature, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    slot3 = models.ForeignKey(Creature, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def creatures(self) -> list:
+        return [c for c in (self.slot1, self.slot2, self.slot3) if c is not None]
+
+    def __str__(self) -> str:
+        return f"team of {self.owner_id}"
 
 
 class CodexEntry(models.Model):

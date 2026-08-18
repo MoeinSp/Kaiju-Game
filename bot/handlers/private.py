@@ -13,8 +13,10 @@ from bio_lab.repository import (
 from bot.handlers.achievements import achievements_panel
 from bot.handlers.arena import arena_panel
 from bot.handlers.battlepass import battlepass_panel
+from bot.handlers.campaign import campaign_panel
 from bot.handlers.codex import codex_panel
 from bot.handlers.referral import referral_panel
+from bot.handlers.team import team_panel
 from bot.handlers.breeding import breeding_panel
 from bot.handlers.buildings import buildings_panel
 from bot.handlers.inventory import blacksmith_panel, inventory_cmd
@@ -602,6 +604,10 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
         [
             btn("شکار انفرادی", emoji_key="btn_hunt", style=BATTLE, callback_data="menu:hunt"),
             btn("آرنا (کاپ)", emoji_key="btn_arena", style=BATTLE, callback_data="menu:arena"),
+        ],
+        [
+            btn("🗺 کمپین", style=BATTLE, callback_data="menu:campaign"),
+            btn("⚔️ تیم من", style=NAV, callback_data="menu:team"),
         ],
         [
             btn("کلکسیون", emoji_key="btn_collection", style=NAV, callback_data="menu:collection"),
@@ -1947,6 +1953,8 @@ _MENU_ACTIONS = {
     "battlepass": battlepass_panel,
     "codex": codex_panel,
     "referral": referral_panel,
+    "team": team_panel,
+    "campaign": campaign_panel,
     "wheel": wheel_cmd,
     "alliance_info": alliance_info_cmd,
     "rank": rank,
