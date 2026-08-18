@@ -60,6 +60,11 @@ class User(models.Model):
     idle_since = models.DateTimeField(default=timezone.now)
     last_dungeon_day = models.CharField(max_length=10, null=True, blank=True)
 
+    # cosmetic prestige (game/titles.py): the title key the player has equipped to
+    # show on their profile/leaderboards; last_shop_day gates the daily rotating shop
+    title = models.CharField(max_length=32, null=True, blank=True)
+    last_shop_day = models.CharField(max_length=10, null=True, blank=True)
+
     alliance = models.ForeignKey(
         "Alliance", null=True, blank=True, on_delete=models.SET_NULL, related_name="members"
     )

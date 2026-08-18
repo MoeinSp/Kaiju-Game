@@ -19,6 +19,8 @@ from bot.handlers.codex import codex_panel
 from bot.handlers.events import events_panel
 from bot.handlers.idle import idle_panel
 from bot.handlers.league import league_panel
+from bot.handlers.shop import shop_panel
+from bot.handlers.titles import titles_panel
 from bot.handlers.referral import referral_panel
 from bot.handlers.team import team_panel
 from bot.handlers.breeding import breeding_panel
@@ -642,7 +644,10 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
             btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate"),
             btn("جعبه‌های الماسی", emoji_key="btn_diamond_box", style=SHOP, callback_data="menu:diamond_box"),
         ],
-        [btn("🎰 بنر ویژه", style=SHOP, callback_data="menu:banner")],
+        [
+            btn("🎰 بنر ویژه", style=SHOP, callback_data="menu:banner"),
+            btn("🛒 شاپ روزانه", style=SHOP, callback_data="menu:shop"),
+        ],
         [
             btn("گردونه‌ی شانس", emoji_key="btn_wheel", style=SHOP, callback_data="menu:wheel"),
             btn("💤 پاداش آفلاین", style=SHOP, callback_data="menu:idle"),
@@ -1829,9 +1834,11 @@ def _profile_sync(tg_user):
 
 
 def _profile_text_and_keyboard(user, stats) -> tuple[str, InlineKeyboardMarkup]:
+    from game import titles
+
     rename_cost = constants.lab_rename_cost(user.lab_renames)
     lines = [
-        f"{get_emoji('profile')} <b>آزمایشگاه {lab_display(user)}</b>",
+        f"{get_emoji('profile')} <b>آزمایشگاه {lab_display(user)}</b>{titles.label(user)}",
         f"<blockquote>{lab_level_line(user)}</blockquote>\n",
         f"📅 عضو از: {timezone.localtime(user.created_at).strftime('%Y-%m-%d')}",
         f"🔥 روزهای ورود پشت‌سرهم: {user.login_streak}",
@@ -1843,6 +1850,7 @@ def _profile_text_and_keyboard(user, stats) -> tuple[str, InlineKeyboardMarkup]:
     ]
     notif_label = "🔔 اعلان‌ها: روشن" if user.notifications_on else "🔕 اعلان‌ها: خاموش"
     rows = [
+        [btn("🏅 لقب‌ها", style=NAV, callback_data="menu:titles")],
         [btn(f"✏️ تغییر اسم آزمایشگاه ({rename_cost} 💎)", style=SHOP, callback_data="lab_rename")],
         [btn(notif_label, style=NAV, callback_data="notif_toggle")],
         [back_btn("menu:me")],
@@ -1981,6 +1989,8 @@ _MENU_ACTIONS = {
     "banner": banner_panel,
     "idle": idle_panel,
     "league": league_panel,
+    "shop": shop_panel,
+    "titles": titles_panel,
     "wheel": wheel_cmd,
     "alliance_info": alliance_info_cmd,
     "rank": rank,
