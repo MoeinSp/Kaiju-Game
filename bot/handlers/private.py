@@ -12,6 +12,7 @@ from bio_lab.repository import (
 )
 from bot.handlers.achievements import achievements_panel
 from bot.handlers.arena import arena_panel
+from bot.handlers.battlepass import battlepass_panel
 from bot.handlers.breeding import breeding_panel
 from bot.handlers.buildings import buildings_panel
 from bot.handlers.inventory import blacksmith_panel, inventory_cmd
@@ -616,6 +617,7 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
             btn("ماموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions"),
             btn("🏅 دستاوردها", style=NAV, callback_data="menu:achievements"),
         ],
+        [btn("🎟 پاس فصلی", style=SHOP, callback_data="menu:battlepass")],
         [
             btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate"),
             btn("جعبه‌های الماسی", emoji_key="btn_diamond_box", style=SHOP, callback_data="menu:diamond_box"),
@@ -1882,6 +1884,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
             btn("ماموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions"),
             btn("🏅 دستاوردها", style=NAV, callback_data="menu:achievements"),
         ],
+        [btn("🎟 پاس فصلی", style=SHOP, callback_data="menu:battlepass")],
             [
                 btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate"),
                 btn("جعبه‌های الماسی", emoji_key="btn_diamond_box", style=SHOP, callback_data="menu:diamond_box"),
@@ -1920,6 +1923,7 @@ _MENU_ACTIONS = {
     "breeding": breeding_panel,
     "buildings": buildings_panel,
     "achievements": achievements_panel,
+    "battlepass": battlepass_panel,
     "wheel": wheel_cmd,
     "alliance_info": alliance_info_cmd,
     "rank": rank,

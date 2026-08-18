@@ -99,6 +99,15 @@ def apply_daily_login(user: User) -> dict | None:
     user.dna_fragments += dna
     user.save(update_fields=["login_streak", "last_login_day", "coins", "dna_fragments"])
 
+    # a healthy daily chunk of Battle Pass points, so even a login-only player
+    # ticks the pass forward. Lazy + guarded so it can never break /start.
+    try:
+        from game import battlepass
+
+        battlepass.award(user, 40)
+    except Exception:  # pragma: no cover
+        pass
+
     return {"streak": user.login_streak, "coins": coins, "dna": dna}
 
 

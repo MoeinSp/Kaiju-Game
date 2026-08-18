@@ -125,16 +125,32 @@ def add_lab_xp(user: User, amount: int) -> dict | None:
     return {"from": before, "to": after} if after > before else None
 
 
+def _award_pass_points(user: User, points: int) -> None:
+    """Mirror an XP award into Battle Pass points. Lazy import + swallow errors so
+    a pass problem can never break the underlying game action."""
+    try:
+        from game import battlepass
+
+        battlepass.award(user, points)
+    except Exception:  # pragma: no cover - defensive; pass points are non-critical
+        pass
+
+
 def award(user: User, key: str) -> dict | None:
     """Credit the XP for a named action from LAB_XP_AWARDS.
 
     Unknown keys are ignored rather than raising: a typo in a call site should
-    cost a player some XP, not crash the action they were performing."""
-    return add_lab_xp(user, LAB_XP_AWARDS.get(key, 0))
+    cost a player some XP, not crash the action they were performing. The same
+    amount feeds the Battle Pass, so every rewarding action also moves the pass."""
+    amount = LAB_XP_AWARDS.get(key, 0)
+    _award_pass_points(user, amount)
+    return add_lab_xp(user, amount)
 
 
 def award_building_level(user: User, target_level: int) -> dict | None:
-    return add_lab_xp(user, LAB_XP_PER_BUILDING_LEVEL * max(1, target_level))
+    amount = LAB_XP_PER_BUILDING_LEVEL * max(1, target_level)
+    _award_pass_points(user, amount)
+    return add_lab_xp(user, amount)
 
 
 def lab_bar(user: User, width: int = 10) -> str:

@@ -178,6 +178,32 @@ class BreedingJob(models.Model):
         return f"breeding {self.parent_a_id}+{self.parent_b_id} ({self.owner_id})"
 
 
+class PassProgress(models.Model):
+    """A player's Battle Pass progress for one season.
+
+    Seasons aren't a table — the key is derived from the date (game/battlepass),
+    so a new month just makes a fresh row on first award and the old one is kept
+    as history. `premium` is the paid track unlock; `free_claimed` /
+    `premium_claimed` are the highest tier already collected on each track, so a
+    claim just grants everything between there and the current tier."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="pass_progress")
+    season_key = models.CharField(max_length=10)  # e.g. "2026-08"
+    points = models.IntegerField(default=0)
+    premium = models.BooleanField(default=False)
+    free_claimed = models.IntegerField(default=0)
+    premium_claimed = models.IntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "season_key"], name="uq_pass_progress")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id} {self.season_key} pts={self.points}{' ✦' if self.premium else ''}"
+
+
 class AchievementClaim(models.Model):
     """Records that `user` has claimed the reward for achievement `key`.
 
