@@ -369,14 +369,14 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
     return InlineKeyboardMarkup(
         [
             [
-                btn("اعطای طلا", style=CONFIRM, callback_data=f"admin_grant:{target_id}:coins"),
-                btn("اعطای DNA", style=CONFIRM, callback_data=f"admin_grant:{target_id}:dna"),
-                btn("اعطای الماس", style=CONFIRM, callback_data=f"admin_grant:{target_id}:diamonds"),
+                btn("💰 اعطای طلا", style=CONFIRM, callback_data=f"admin_grant:{target_id}:coins"),
+                btn("🧬 اعطای DNA", style=CONFIRM, callback_data=f"admin_grant:{target_id}:dna"),
+                btn("💎 اعطای الماس", style=CONFIRM, callback_data=f"admin_grant:{target_id}:diamonds"),
             ],
             [
-                btn("کسر طلا", style=DANGER, callback_data=f"admin_deduct:{target_id}:coins"),
-                btn("کسر DNA", style=DANGER, callback_data=f"admin_deduct:{target_id}:dna"),
-                btn("کسر الماس", style=DANGER, callback_data=f"admin_deduct:{target_id}:diamonds"),
+                btn("💰 کسر طلا", style=DANGER, callback_data=f"admin_deduct:{target_id}:coins"),
+                btn("🧬 کسر DNA", style=DANGER, callback_data=f"admin_deduct:{target_id}:dna"),
+                btn("💎 کسر الماس", style=DANGER, callback_data=f"admin_deduct:{target_id}:diamonds"),
             ],
             [btn("شارژ کامل (طلا+DNA+الماس)", emoji_key="btn_charge", style=CONFIRM, callback_data=f"admin_charge:{target_id}")],
             [btn("📊 لاگ پیشرفت", emoji_key="btn_report", style=ADMIN, callback_data=f"admin_plog:{target_id}")],

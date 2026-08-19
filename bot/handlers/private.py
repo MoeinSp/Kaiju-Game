@@ -889,7 +889,7 @@ def _collection_keyboard(creatures: list[Creature]) -> InlineKeyboardMarkup:
         label = f"{c.name} {stars} · Lv{c.level} · {constants.RARITY_LABELS[c.rarity]}"
         row = [btn(f"{'🟢 ' if c.is_active else ''}{label}", style=LIST, callback_data=f"coll_pick:{c.id}")]
         if not c.is_active:
-            row.append(btn("فعال کن", style=CONFIRM, callback_data=f"coll_select:{c.id}"))
+            row.append(btn("فعال کن", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"coll_select:{c.id}"))
         rows.append(row)
     rows.append(
         [btn("ترکیب هیولا", emoji_key="btn_fusion", style=NAV, callback_data="menu:fusion")]
