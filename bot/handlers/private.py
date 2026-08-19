@@ -598,69 +598,69 @@ async def guide_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
-def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
-    """Navigation keyboard under the creature card. Body-part upgrades used to live
-    here too, but they made both the card and this keyboard unreadable — they're on
-    the «🔧 ارتقا» screen now (upgrade_panel)."""
+# ── Categorised menu ──────────────────────────────────────────────────────────
+# The feature list grew to ~28 buttons, which was a wall. Instead the main menu
+# now shows six category buttons, each opening a small submenu. One source of
+# truth so the /menu command and the creature-card keyboard can never drift.
+#
+# Each category: (button title, [ rows of (label, menu-action, style-key) ]).
+_STYLE_MAP = {"p": PRIMARY, "b": BATTLE, "n": NAV, "s": SHOP}
+_CATEGORIES = {
+    "battle": ("⚔️ نبرد", [
+        [("شکار انفرادی", "hunt", "b"), ("آرنا (کاپ)", "arena", "b")],
+        [("🗺 کمپین", "campaign", "b"), ("⚔️ تیم من", "team", "n")],
+        [("🏆 لیگ رتبه‌بندی", "league", "n")],
+    ]),
+    "creatures": ("🧬 هیولاها", [
+        [("🔧 ارتقا و پرورش", "upgrade", "p"), ("🗂 کلکسیون", "collection", "n")],
+        [("🧪 ترکیب هیولا", "fusion", "n"), ("🕳 غار هیولا", "breeding", "n")],
+        [("📖 دانشنامه", "codex", "n")],
+    ]),
+    "lab": ("🏗 آزمایشگاه", [
+        [("🏗 ساختمون‌ها", "buildings", "n"), ("🎒 تجهیزات", "inventory", "n")],
+        [("⚒ آهنگری", "blacksmith", "n"), ("💤 پاداش آفلاین", "idle", "s")],
+    ]),
+    "rewards": ("🎁 جایزه‌ها", [
+        [("📋 ماموریت‌ها", "missions", "n"), ("🏅 دستاوردها", "achievements", "n")],
+        [("🎟 پاس فصلی", "battlepass", "s"), ("⏳ رویداد", "events", "s")],
+        [("🎡 گردونه‌ی شانس", "wheel", "s"), ("🎁 دعوت دوستان", "referral", "n")],
+    ]),
+    "shop": ("🛒 فروشگاه", [
+        [("📦 باکس ژنتیکی", "biocrate", "s"), ("💎 جعبه‌های الماسی", "diamond_box", "s")],
+        [("🎰 بنر ویژه", "banner", "s"), ("🛒 شاپ روزانه", "shop", "s")],
+    ]),
+    "social": ("👥 اجتماعی", [
+        [("🤝 اتحاد من", "alliance_info", "n"), ("🏆 رتبه‌بندی", "rank", "n")],
+        [("👤 پروفایل من", "profile", "n")],
+    ]),
+}
+_CATEGORY_ORDER = ["battle", "creatures", "lab", "rewards", "shop", "social"]
+
+
+def _main_menu_rows() -> list:
+    """The compact top-level menu: quick action + the six category buttons."""
+    rows = [[btn("🔧 ارتقا و پرورش", emoji_key="btn_upgrade", style=PRIMARY, callback_data="menu:upgrade")]]
+    for i in range(0, len(_CATEGORY_ORDER), 2):
+        rows.append(
+            [btn(_CATEGORIES[k][0], style=NAV, callback_data=f"menu:cat_{k}") for k in _CATEGORY_ORDER[i : i + 2]]
+        )
+    rows.append([btn("📘 راهنما", emoji_key="btn_report", style=CONFIRM, callback_data="menu:guide")])
+    return rows
+
+
+def _category_keyboard(cat_key: str) -> tuple[str, InlineKeyboardMarkup]:
+    title, rows_def = _CATEGORIES[cat_key]
     rows = [
-        # The two things a player is most likely here to do get the only coloured
-        # buttons on the screen; everything below is navigation and stays plain,
-        # otherwise the whole menu is a wall of colour and none of it means anything.
-        [btn("ارتقا و پرورش", emoji_key="btn_upgrade", style=PRIMARY, callback_data="menu:upgrade")],
-        [
-            btn("شکار انفرادی", emoji_key="btn_hunt", style=BATTLE, callback_data="menu:hunt"),
-            btn("آرنا (کاپ)", emoji_key="btn_arena", style=BATTLE, callback_data="menu:arena"),
-        ],
-        [
-            btn("🗺 کمپین", style=BATTLE, callback_data="menu:campaign"),
-            btn("⚔️ تیم من", style=NAV, callback_data="menu:team"),
-        ],
-        [btn("🏆 لیگ رتبه‌بندی", style=NAV, callback_data="menu:league")],
-        [
-            btn("کلکسیون", emoji_key="btn_collection", style=NAV, callback_data="menu:collection"),
-            btn("ترکیب هیولا", emoji_key="btn_fusion", style=NAV, callback_data="menu:fusion"),
-        ],
-        [
-            btn("غار هیولا", emoji_key="btn_breeding", style=NAV, callback_data="menu:breeding"),
-            btn("ساختمون‌ها", emoji_key="btn_buildings", style=NAV, callback_data="menu:buildings"),
-        ],
-        [
-            btn("تجهیزات", emoji_key="btn_inventory", style=NAV, callback_data="menu:inventory"),
-            btn("آهنگری", emoji_key="btn_forge", style=NAV, callback_data="menu:blacksmith"),
-        ],
-        [
-            btn("ماموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions"),
-            btn("🏅 دستاوردها", style=NAV, callback_data="menu:achievements"),
-        ],
-        [
-            btn("📖 دانشنامه", style=NAV, callback_data="menu:codex"),
-            btn("🎁 دعوت دوستان", style=NAV, callback_data="menu:referral"),
-        ],
-        [
-            btn("🎟 پاس فصلی", style=SHOP, callback_data="menu:battlepass"),
-            btn("⏳ رویداد", style=SHOP, callback_data="menu:events"),
-        ],
-        [
-            btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate"),
-            btn("جعبه‌های الماسی", emoji_key="btn_diamond_box", style=SHOP, callback_data="menu:diamond_box"),
-        ],
-        [
-            btn("🎰 بنر ویژه", style=SHOP, callback_data="menu:banner"),
-            btn("🛒 شاپ روزانه", style=SHOP, callback_data="menu:shop"),
-        ],
-        [
-            btn("گردونه‌ی شانس", emoji_key="btn_wheel", style=SHOP, callback_data="menu:wheel"),
-            btn("💤 پاداش آفلاین", style=SHOP, callback_data="menu:idle"),
-        ],
-        [
-            btn("اتحاد من", emoji_key="btn_alliance", style=NAV, callback_data="menu:alliance_info"),
-            btn("رتبه‌بندی", emoji_key="btn_rank", style=NAV, callback_data="menu:rank"),
-        ],
-        [
-            btn("پروفایل من", emoji_key="btn_profile", style=NAV, callback_data="menu:profile"),
-            btn("راهنما", emoji_key="btn_report", style=CONFIRM, callback_data="menu:guide"),
-        ],
+        [btn(label, style=_STYLE_MAP[st], callback_data=f"menu:{act}") for (label, act, st) in row]
+        for row in rows_def
     ]
+    rows.append([back_btn("menu:me", "بازگشت به منو")])
+    return title, InlineKeyboardMarkup(rows)
+
+
+def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
+    """Compact categorised navigation under the creature card."""
+    rows = _main_menu_rows()
     if is_owner:
         rows.append([btn("پنل ادمین", emoji_key="btn_admin", style=ADMIN, callback_data="menu:admin")])
     return InlineKeyboardMarkup(rows)
@@ -1902,61 +1902,10 @@ async def lab_rename_start_callback(update: Update, context: ContextTypes.DEFAUL
     )
 
 
-def main_menu_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        [
-            # same palette discipline as creature_keyboard: colour marks the doing,
-            # not the going
-            [
-                btn("موجود فعال", emoji_key="btn_creature", style=PRIMARY, callback_data="menu:me"),
-                btn("ارتقا و پرورش", emoji_key="btn_upgrade", style=PRIMARY, callback_data="menu:upgrade"),
-            ],
-            [
-                btn("شکار انفرادی", emoji_key="btn_hunt", style=BATTLE, callback_data="menu:hunt"),
-                btn("آرنا (کاپ)", emoji_key="btn_arena", style=BATTLE, callback_data="menu:arena"),
-            ],
-            [
-                btn("کلکسیون", emoji_key="btn_collection", style=NAV, callback_data="menu:collection"),
-                btn("ترکیب هیولا", emoji_key="btn_fusion", style=NAV, callback_data="menu:fusion"),
-            ],
-            [
-                btn("غار هیولا", emoji_key="btn_breeding", style=NAV, callback_data="menu:breeding"),
-                btn("ساختمون‌ها", emoji_key="btn_buildings", style=NAV, callback_data="menu:buildings"),
-            ],
-            [
-                btn("تجهیزات", emoji_key="btn_inventory", style=NAV, callback_data="menu:inventory"),
-                btn("آهنگری", emoji_key="btn_forge", style=NAV, callback_data="menu:blacksmith"),
-            ],
-            [
-            btn("ماموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions"),
-            btn("🏅 دستاوردها", style=NAV, callback_data="menu:achievements"),
-        ],
-        [
-            btn("📖 دانشنامه", style=NAV, callback_data="menu:codex"),
-            btn("🎁 دعوت دوستان", style=NAV, callback_data="menu:referral"),
-        ],
-        [
-            btn("🎟 پاس فصلی", style=SHOP, callback_data="menu:battlepass"),
-            btn("⏳ رویداد", style=SHOP, callback_data="menu:events"),
-        ],
-            [
-                btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate"),
-                btn("جعبه‌های الماسی", emoji_key="btn_diamond_box", style=SHOP, callback_data="menu:diamond_box"),
-            ],
-            [
-            btn("گردونه‌ی شانس", emoji_key="btn_wheel", style=SHOP, callback_data="menu:wheel"),
-            btn("💤 پاداش آفلاین", style=SHOP, callback_data="menu:idle"),
-        ],
-            [
-                btn("اتحاد من", emoji_key="btn_alliance", style=NAV, callback_data="menu:alliance_info"),
-                btn("رتبه‌بندی", emoji_key="btn_rank", style=NAV, callback_data="menu:rank"),
-            ],
-            [
-                btn("پروفایل من", emoji_key="btn_profile", style=NAV, callback_data="menu:profile"),
-                btn("راهنما", emoji_key="btn_report", style=CONFIRM, callback_data="menu:guide"),
-            ],
-        ]
-    )
+def main_menu_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
+    """The /menu command's keyboard — same compact categorised layout as the
+    creature-card menu, so the two can't drift."""
+    return creature_keyboard(is_owner)
 
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2004,6 +1953,15 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     query = update.callback_query
     await query.answer()
     action = query.data.split(":", 1)[1]
+    # a category button drills into its submenu (rendered in place)
+    if action.startswith("cat_"):
+        cat_key = action[4:]
+        if cat_key in _CATEGORIES:
+            title, keyboard = _category_keyboard(cat_key)
+            await safe_edit_message_text(
+                query, f"{title}\n<i>یکی رو انتخاب کن:</i>", parse_mode="HTML", reply_markup=keyboard
+            )
+        return
     handler = _MENU_ACTIONS.get(action)
     if handler is not None:
         await handler(update, context)
