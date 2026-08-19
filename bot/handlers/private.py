@@ -617,46 +617,51 @@ def _mkbtn(spec):
     return btn(label, emoji_key=ekey, style=_STYLE_MAP[style], callback_data=f"menu:{action}")
 
 
-# shown directly on the main menu — the core loop
+# shown directly on the main menu — the core loop. Every button carries an
+# emoji_key (never a literal emoji in the label), and both buttons in a row share
+# one style so each row is colour-symmetric.
 _MAIN_ROWS = [
     [("ارتقا و پرورش", "upgrade", "p", "btn_upgrade")],
     [("شکار انفرادی", "hunt", "b", "btn_hunt"), ("آرنا (کاپ)", "arena", "b", "btn_arena")],
-    [("🗺 کمپین", "campaign", "b", None), ("⚔️ تیم من", "team", "n", None)],
+    [("کمپین", "campaign", "b", "btn_campaign"), ("تیم من", "team", "b", "btn_team")],
     [("کلکسیون", "collection", "n", "btn_collection"), ("ترکیب هیولا", "fusion", "n", "btn_fusion")],
     [("غار هیولا", "breeding", "n", "btn_breeding"), ("ساختمون‌ها", "buildings", "n", "btn_buildings")],
     [("تجهیزات", "inventory", "n", "btn_inventory"), ("آهنگری", "blacksmith", "n", "btn_forge")],
 ]
 
-# folded into category submenus — the long tail
+# folded into category submenus — the long tail. Each category's buttons share one
+# style, so every row is colour-symmetric.
 _CATEGORIES = {
     "rewards": ("🎁 جایزه‌ها", [
-        [("ماموریت‌ها", "missions", "n", "btn_missions"), ("🏅 دستاوردها", "achievements", "n", None)],
-        [("🎟 پاس فصلی", "battlepass", "s", None), ("⏳ رویداد", "events", "s", None)],
-        [("گردونه‌ی شانس", "wheel", "s", "btn_wheel"), ("💤 پاداش آفلاین", "idle", "s", None)],
-        [("📖 دانشنامه", "codex", "n", None), ("🎁 دعوت دوستان", "referral", "n", None)],
+        [("ماموریت‌ها", "missions", "s", "btn_missions"), ("دستاوردها", "achievements", "s", "btn_achievements")],
+        [("پاس فصلی", "battlepass", "s", "btn_battlepass"), ("رویداد", "events", "s", "btn_events")],
+        [("گردونه‌ی شانس", "wheel", "s", "btn_wheel"), ("پاداش آفلاین", "idle", "s", "btn_idle")],
+        [("دانشنامه", "codex", "s", "btn_codex"), ("دعوت دوستان", "referral", "s", "btn_referral")],
     ]),
     "shop": ("🛒 فروشگاه", [
         [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("جعبه‌های الماسی", "diamond_box", "s", "btn_diamond_box")],
-        [("🎰 بنر ویژه", "banner", "s", None), ("🛒 شاپ روزانه", "shop", "s", None)],
+        [("بنر ویژه", "banner", "s", "btn_banner"), ("شاپ روزانه", "shop", "s", "btn_shop")],
     ]),
     "social": ("👥 اجتماعی", [
-        [("اتحاد من", "alliance_info", "n", "btn_alliance"), ("🏆 لیگ", "league", "n", None)],
+        [("اتحاد من", "alliance_info", "n", "btn_alliance"), ("لیگ رتبه‌بندی", "league", "n", "btn_league")],
         [("رتبه‌بندی", "rank", "n", "btn_rank"), ("پروفایل من", "profile", "n", "btn_profile")],
     ]),
 }
+
+# the three category buttons on the main menu, in a single colour-symmetric row
+_CATEGORY_BUTTONS = [
+    ("جایزه‌ها", "cat_rewards", "btn_cat_rewards"),
+    ("فروشگاه", "cat_shop", "btn_cat_shop"),
+    ("اجتماعی", "cat_social", "btn_cat_social"),
+]
 
 
 def _main_menu_rows() -> list:
     rows = [[_mkbtn(spec) for spec in row] for row in _MAIN_ROWS]
     rows.append(
-        [btn(_CATEGORIES[k][0], style=NAV, callback_data=f"menu:cat_{k}") for k in ("rewards", "shop")]
+        [btn(label, emoji_key=ekey, style=SHOP, callback_data=f"menu:{action}") for (label, action, ekey) in _CATEGORY_BUTTONS]
     )
-    rows.append(
-        [
-            btn(_CATEGORIES["social"][0], style=NAV, callback_data="menu:cat_social"),
-            btn("راهنما", emoji_key="btn_report", style=CONFIRM, callback_data="menu:guide"),
-        ]
-    )
+    rows.append([btn("راهنما", emoji_key="btn_report", style=CONFIRM, callback_data="menu:guide")])
     return rows
 
 

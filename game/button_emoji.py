@@ -60,12 +60,30 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_broadcast": ("پیام همگانی", "📢", "admin"),
     "btn_report": ("گزارش", "📊", "admin"),
     "btn_charge": ("شارژ کاربر", "⚡", "admin"),
+    # newer features — no Premium emoji yet, so these unicode fallbacks show until
+    # the owner themes them in the panel (they're first-class keys now, so they can be)
+    "btn_campaign": ("کمپین", "🗺", "features"),
+    "btn_team": ("تیم من", "🛡", "features"),
+    "btn_league": ("لیگ رتبه‌بندی", "🎖", "features"),
+    "btn_codex": ("دانشنامه", "📖", "features"),
+    "btn_referral": ("دعوت دوستان", "🎁", "features"),
+    "btn_battlepass": ("پاس فصلی", "🎟", "features"),
+    "btn_events": ("رویداد", "⏳", "features"),
+    "btn_banner": ("بنر ویژه", "🎰", "features"),
+    "btn_shop": ("شاپ روزانه", "🛒", "features"),
+    "btn_idle": ("پاداش آفلاین", "💤", "features"),
+    "btn_achievements": ("دستاوردها", "🏅", "features"),
+    "btn_titles": ("لقب‌ها", "👑", "features"),
+    "btn_cat_rewards": ("دسته‌ی جایزه‌ها", "🎁", "features"),
+    "btn_cat_shop": ("دسته‌ی فروشگاه", "🛒", "features"),
+    "btn_cat_social": ("دسته‌ی اجتماعی", "👥", "features"),
 }
 
 BUTTON_CATEGORY_LABELS: dict[str, str] = {
     "nav": "🧭 ناوبری",
     "action": "⚔️ اکشن‌ها",
     "economy": "💰 اقتصاد",
+    "features": "🎮 قابلیت‌های جدید",
     "confirm": "✅ تأیید و حذف",
     "admin": "🛠 مدیریت",
 }
