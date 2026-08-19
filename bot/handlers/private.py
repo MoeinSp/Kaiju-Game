@@ -599,67 +599,77 @@ async def guide_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 # ── Categorised menu ──────────────────────────────────────────────────────────
-# The feature list grew to ~28 buttons, which was a wall. Instead the main menu
-# now shows six category buttons, each opening a small submenu. One source of
-# truth so the /menu command and the creature-card keyboard can never drift.
+# The full feature list is ~28 items — too many on one screen, but hiding it all
+# behind six category buttons felt empty. Middle ground: the core gameplay loop
+# is shown directly (a full, colourful grid), and the long tail is folded into
+# three category buttons that open a submenu in place.
 #
-# Each category: (button title, [ rows of (label, menu-action, style-key) ]).
-_STYLE_MAP = {"p": PRIMARY, "b": BATTLE, "n": NAV, "s": SHOP}
+# Each button spec is (label, menu-action, style-key, emoji_key-or-None). IMPORTANT:
+# when emoji_key is set, the label must NOT also contain a literal emoji — Telegram
+# draws the emoji_key icon before the label, so a literal one shows the emoji
+# twice. Features that have a registry key use it (for the owner's Premium emoji
+# theming); newer features that don't carry a literal emoji instead.
+_STYLE_MAP = {"p": PRIMARY, "b": BATTLE, "n": NAV, "s": SHOP, "c": CONFIRM}
+
+
+def _mkbtn(spec):
+    label, action, style, ekey = spec
+    return btn(label, emoji_key=ekey, style=_STYLE_MAP[style], callback_data=f"menu:{action}")
+
+
+# shown directly on the main menu — the core loop
+_MAIN_ROWS = [
+    [("ارتقا و پرورش", "upgrade", "p", "btn_upgrade")],
+    [("شکار انفرادی", "hunt", "b", "btn_hunt"), ("آرنا (کاپ)", "arena", "b", "btn_arena")],
+    [("🗺 کمپین", "campaign", "b", None), ("⚔️ تیم من", "team", "n", None)],
+    [("کلکسیون", "collection", "n", "btn_collection"), ("ترکیب هیولا", "fusion", "n", "btn_fusion")],
+    [("غار هیولا", "breeding", "n", "btn_breeding"), ("ساختمون‌ها", "buildings", "n", "btn_buildings")],
+    [("تجهیزات", "inventory", "n", "btn_inventory"), ("آهنگری", "blacksmith", "n", "btn_forge")],
+]
+
+# folded into category submenus — the long tail
 _CATEGORIES = {
-    "battle": ("⚔️ نبرد", [
-        [("شکار انفرادی", "hunt", "b"), ("آرنا (کاپ)", "arena", "b")],
-        [("🗺 کمپین", "campaign", "b"), ("⚔️ تیم من", "team", "n")],
-        [("🏆 لیگ رتبه‌بندی", "league", "n")],
-    ]),
-    "creatures": ("🧬 هیولاها", [
-        [("🔧 ارتقا و پرورش", "upgrade", "p"), ("🗂 کلکسیون", "collection", "n")],
-        [("🧪 ترکیب هیولا", "fusion", "n"), ("🕳 غار هیولا", "breeding", "n")],
-        [("📖 دانشنامه", "codex", "n")],
-    ]),
-    "lab": ("🏗 آزمایشگاه", [
-        [("🏗 ساختمون‌ها", "buildings", "n"), ("🎒 تجهیزات", "inventory", "n")],
-        [("⚒ آهنگری", "blacksmith", "n"), ("💤 پاداش آفلاین", "idle", "s")],
-    ]),
     "rewards": ("🎁 جایزه‌ها", [
-        [("📋 ماموریت‌ها", "missions", "n"), ("🏅 دستاوردها", "achievements", "n")],
-        [("🎟 پاس فصلی", "battlepass", "s"), ("⏳ رویداد", "events", "s")],
-        [("🎡 گردونه‌ی شانس", "wheel", "s"), ("🎁 دعوت دوستان", "referral", "n")],
+        [("ماموریت‌ها", "missions", "n", "btn_missions"), ("🏅 دستاوردها", "achievements", "n", None)],
+        [("🎟 پاس فصلی", "battlepass", "s", None), ("⏳ رویداد", "events", "s", None)],
+        [("گردونه‌ی شانس", "wheel", "s", "btn_wheel"), ("💤 پاداش آفلاین", "idle", "s", None)],
+        [("📖 دانشنامه", "codex", "n", None), ("🎁 دعوت دوستان", "referral", "n", None)],
     ]),
     "shop": ("🛒 فروشگاه", [
-        [("📦 باکس ژنتیکی", "biocrate", "s"), ("💎 جعبه‌های الماسی", "diamond_box", "s")],
-        [("🎰 بنر ویژه", "banner", "s"), ("🛒 شاپ روزانه", "shop", "s")],
+        [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("جعبه‌های الماسی", "diamond_box", "s", "btn_diamond_box")],
+        [("🎰 بنر ویژه", "banner", "s", None), ("🛒 شاپ روزانه", "shop", "s", None)],
     ]),
     "social": ("👥 اجتماعی", [
-        [("🤝 اتحاد من", "alliance_info", "n"), ("🏆 رتبه‌بندی", "rank", "n")],
-        [("👤 پروفایل من", "profile", "n")],
+        [("اتحاد من", "alliance_info", "n", "btn_alliance"), ("🏆 لیگ", "league", "n", None)],
+        [("رتبه‌بندی", "rank", "n", "btn_rank"), ("پروفایل من", "profile", "n", "btn_profile")],
     ]),
 }
-_CATEGORY_ORDER = ["battle", "creatures", "lab", "rewards", "shop", "social"]
 
 
 def _main_menu_rows() -> list:
-    """The compact top-level menu: quick action + the six category buttons."""
-    rows = [[btn("🔧 ارتقا و پرورش", emoji_key="btn_upgrade", style=PRIMARY, callback_data="menu:upgrade")]]
-    for i in range(0, len(_CATEGORY_ORDER), 2):
-        rows.append(
-            [btn(_CATEGORIES[k][0], style=NAV, callback_data=f"menu:cat_{k}") for k in _CATEGORY_ORDER[i : i + 2]]
-        )
-    rows.append([btn("📘 راهنما", emoji_key="btn_report", style=CONFIRM, callback_data="menu:guide")])
+    rows = [[_mkbtn(spec) for spec in row] for row in _MAIN_ROWS]
+    rows.append(
+        [btn(_CATEGORIES[k][0], style=NAV, callback_data=f"menu:cat_{k}") for k in ("rewards", "shop")]
+    )
+    rows.append(
+        [
+            btn(_CATEGORIES["social"][0], style=NAV, callback_data="menu:cat_social"),
+            btn("راهنما", emoji_key="btn_report", style=CONFIRM, callback_data="menu:guide"),
+        ]
+    )
     return rows
 
 
 def _category_keyboard(cat_key: str) -> tuple[str, InlineKeyboardMarkup]:
     title, rows_def = _CATEGORIES[cat_key]
-    rows = [
-        [btn(label, style=_STYLE_MAP[st], callback_data=f"menu:{act}") for (label, act, st) in row]
-        for row in rows_def
-    ]
+    rows = [[_mkbtn(spec) for spec in row] for row in rows_def]
     rows.append([back_btn("menu:me", "بازگشت به منو")])
     return title, InlineKeyboardMarkup(rows)
 
 
 def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
-    """Compact categorised navigation under the creature card."""
+    """Categorised navigation under the creature card — core loop direct, the rest
+    in three category submenus."""
     rows = _main_menu_rows()
     if is_owner:
         rows.append([btn("پنل ادمین", emoji_key="btn_admin", style=ADMIN, callback_data="menu:admin")])
