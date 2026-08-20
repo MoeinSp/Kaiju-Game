@@ -22,6 +22,17 @@ def _delete_drop(drop_id: int) -> None:
     GroupDrop.objects.filter(id=drop_id).delete()
 
 
+async def _delete_drop_message(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Scheduled ~1 min after a drop lapses: remove the 'time's up' message so the
+    group doesn't fill up with dead drops, and drop the row."""
+    data = context.job.data
+    try:
+        await context.bot.delete_message(chat_id=data["group_id"], message_id=data["message_id"])
+    except TelegramError:
+        pass
+    await run_db(groupdrops.delete_row, data["drop_id"])
+
+
 async def drops_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     # spawn new drops
     for d in await run_db(groupdrops.due_spawns):
@@ -37,13 +48,28 @@ async def drops_job(context: ContextTypes.DEFAULT_TYPE) -> None:
             await run_db(_delete_drop, d["id"])  # bot not in the group anymore, etc.
         await asyncio.sleep(SEND_DELAY)
 
-    # edit any that lapsed unclaimed
+    # edit any that lapsed unclaimed, then schedule their message for deletion a
+    # minute later so the "time's up" note doesn't linger and clutter the group
     for e in await run_db(groupdrops.expire_due):
         try:
             await context.bot.edit_message_text(
                 chat_id=e["group_id"], message_id=e["message_id"],
                 text="⌛ <b>زمان این جایزه تموم شد</b> — کسی به‌موقع نزد.", parse_mode="HTML",
             )
+        except TelegramError:
+            pass
+        if context.job_queue is not None:
+            context.job_queue.run_once(
+                _delete_drop_message, groupdrops.DELETE_AFTER_EXPIRE_SECONDS,
+                data={"group_id": e["group_id"], "message_id": e["message_id"], "drop_id": e["id"]},
+            )
+        await asyncio.sleep(SEND_DELAY)
+
+    # fallback sweep: delete lapsed messages whose scheduled delete was lost to a
+    # restart (their grace minute is already up)
+    for d in await run_db(groupdrops.delete_due):
+        try:
+            await context.bot.delete_message(chat_id=d["group_id"], message_id=d["message_id"])
         except TelegramError:
             pass
         await asyncio.sleep(SEND_DELAY)

@@ -172,3 +172,27 @@ def expire_due() -> list[dict]:
     if out:
         GroupDrop.objects.filter(id__in=[d["id"] for d in out]).update(expired_notified=True)
     return out
+
+
+# a lapsed-and-edited drop's message is deleted this long after it expired, so the
+# "time's up" note lingers only briefly instead of cluttering the group
+DELETE_AFTER_EXPIRE_SECONDS = 60
+
+
+def delete_row(drop_id: int) -> None:
+    GroupDrop.objects.filter(id=drop_id).delete()
+
+
+def delete_due() -> list[dict]:
+    """Fallback sweep (survives a bot restart): expired, already-noted, unclaimed
+    drops whose grace minute is up — returns their messages to delete and removes
+    the rows. Precise 1-minute deletion is normally handled by a scheduled job;
+    this just catches any the restart dropped."""
+    cutoff = timezone.now() - datetime.timedelta(seconds=DELETE_AFTER_EXPIRE_SECONDS)
+    rows = GroupDrop.objects.filter(
+        claimed_by__isnull=True, expired_notified=True, message_id__isnull=False, expires_at__lte=cutoff
+    )
+    out = [{"id": d.id, "group_id": d.group_id, "message_id": d.message_id} for d in rows]
+    if out:
+        GroupDrop.objects.filter(id__in=[d["id"] for d in out]).delete()
+    return out
