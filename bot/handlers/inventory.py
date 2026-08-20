@@ -3,7 +3,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Equipment
 from bio_lab.repository import get_active_creature, get_or_create_user
-from bot.buttons import BUILD, CONFIRM, DANGER, LIST, back_btn, back_only_keyboard, btn
+from bot.buttons import BUILD, CONFIRM, DANGER, LIST, NAV, back_btn, back_only_keyboard, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants
 from game.blacksmith import forge, forge_preview, forgeable_items
@@ -25,21 +25,32 @@ def _inventory_sync(tg_user):
     return list_inventory(user)
 
 
-def _inventory_keyboard(items: list[Equipment]) -> InlineKeyboardMarkup:
+PAGE_SIZE = 10
+
+
+def _inventory_render(items: list[Equipment], page: int) -> tuple[str, InlineKeyboardMarkup]:
+    """One page of the backpack — paginated so a big armory doesn't overrun
+    Telegram's keyboard limit and break the whole screen."""
+    total_pages = max(1, (len(items) + PAGE_SIZE - 1) // PAGE_SIZE)
+    page = max(0, min(page, total_pages - 1))
+    chunk = items[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
     rows = []
-    for i in items:
+    for i in chunk:
         tag = "⚔️ " if i.equipped_on_id else ""
         rows.append(
-            [
-                btn(
-                    f"{tag}{constants.EQUIPMENT_SLOT_LABELS[i.slot]} {i.name} +{i.level}",
-                    style=LIST,
-                    callback_data=f"inv_pick:{i.id}",
-                )
-            ]
+            [btn(f"{tag}{constants.EQUIPMENT_SLOT_LABELS[i.slot]} {i.name} +{i.level}", style=LIST, callback_data=f"inv_pick:{i.id}")]
         )
+    nav = []
+    if page > 0:
+        nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"inv_page:{page - 1}"))
+    if page < total_pages - 1:
+        nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"inv_page:{page + 1}"))
+    if nav:
+        rows.append(nav)
     rows.append([back_btn("menu:me")])
-    return InlineKeyboardMarkup(rows)
+    page_note = f"  (صفحه {page + 1}/{total_pages})" if total_pages > 1 else ""
+    text = f"{get_emoji('collection')} <b>کوله‌پشتی تجهیزات</b> — {len(items)} قطعه{page_note}\nرو هرکدوم بزن:"
+    return text, InlineKeyboardMarkup(rows)
 
 
 async def inventory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -51,11 +62,17 @@ async def inventory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             reply_markup=back_only_keyboard(),
         )
         return
-    await send_screen(update, 
-        f"{get_emoji('collection')} <b>کوله‌پشتی تجهیزات</b> — {len(items)} قطعه\nرو هرکدوم بزن:",
-        parse_mode="HTML",
-        reply_markup=_inventory_keyboard(items),
-    )
+    text, keyboard = _inventory_render(items, 0)
+    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def inventory_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    page = int(query.data.split(":")[1])
+    items = await run_db(_inventory_sync, update.effective_user)
+    await query.answer()
+    text, keyboard = _inventory_render(items, page)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _item_detail_sync(tg_user, item_id):
@@ -239,6 +256,32 @@ def _forge_list_sync(tg_user):
     return user, forgeable_items(user)
 
 
+def _forge_render(user, items, page: int) -> tuple[str, InlineKeyboardMarkup]:
+    total_pages = max(1, (len(items) + PAGE_SIZE - 1) // PAGE_SIZE)
+    page = max(0, min(page, total_pages - 1))
+    chunk = items[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
+    rows = [
+        [btn(f"{constants.EQUIPMENT_SLOT_LABELS[i.slot]} {i.name} +{i.level}", style=LIST, callback_data=f"forge_pick:{i.id}")]
+        for i in chunk
+    ]
+    nav = []
+    if page > 0:
+        nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"forge_page:{page - 1}"))
+    if page < total_pages - 1:
+        nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"forge_page:{page + 1}"))
+    if nav:
+        rows.append(nav)
+    rows.append([back_btn("menu:me")])
+    page_note = f"  (صفحه {page + 1}/{total_pages})" if total_pages > 1 else ""
+    text = (
+        f"⚒ <b>آهنگری</b>{page_note}\n"
+        f"اینجا با <b>طلا</b> سطح تجهیزات رو بالا می‌بری، بدون نیاز به نمونه‌ی تکراری — "
+        f"ولی از سطح +{constants.FORGE_SAFE_LEVEL} به بالا شانس شکست داره.\n\n"
+        f"{get_emoji('coin')} طلای تو: <b>{user.coins}</b>\n\nکدوم تجهیزات؟"
+    )
+    return text, InlineKeyboardMarkup(rows)
+
+
 async def blacksmith_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user, items = await run_db(_forge_list_sync, update.effective_user)
     if not items:
@@ -248,25 +291,17 @@ async def blacksmith_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             reply_markup=back_only_keyboard(),
         )
         return
-    rows = [
-        [
-            btn(
-                f"{constants.EQUIPMENT_SLOT_LABELS[i.slot]} {i.name} +{i.level}",
-                style=LIST,
-                callback_data=f"forge_pick:{i.id}",
-            )
-        ]
-        for i in items
-    ]
-    rows.append([back_btn("menu:me")])
-    await send_screen(update, 
-        f"⚒ <b>آهنگری</b>\n"
-        f"اینجا با <b>طلا</b> سطح تجهیزات رو بالا می‌بری، بدون نیاز به نمونه‌ی تکراری — "
-        f"ولی از سطح +{constants.FORGE_SAFE_LEVEL} به بالا شانس شکست داره.\n\n"
-        f"{get_emoji('coin')} طلای تو: <b>{user.coins}</b>\n\nکدوم تجهیزات؟",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(rows),
-    )
+    text, keyboard = _forge_render(user, items, 0)
+    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def forge_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    page = int(query.data.split(":")[1])
+    user, items = await run_db(_forge_list_sync, update.effective_user)
+    await query.answer()
+    text, keyboard = _forge_render(user, items, page)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _forge_detail_sync(tg_user, item_id):
@@ -354,11 +389,13 @@ def register(application) -> None:
     application.add_handler(CommandHandler("inventory", inventory_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("blacksmith", blacksmith_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(forge_pick_callback, pattern=r"^forge_pick:"))
+    application.add_handler(CallbackQueryHandler(forge_page_callback, pattern=r"^forge_page:"))
     application.add_handler(CallbackQueryHandler(forge_do_callback, pattern=r"^forge_do:"))
     application.add_handler(CommandHandler("equip", equip_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("unequip", unequip_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("upgrade_item", upgrade_item_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(inventory_pick_callback, pattern=r"^inv_pick:"))
+    application.add_handler(CallbackQueryHandler(inventory_page_callback, pattern=r"^inv_page:"))
     application.add_handler(CallbackQueryHandler(inventory_equip_callback, pattern=r"^inv_equip:"))
     application.add_handler(CallbackQueryHandler(inventory_unequip_callback, pattern=r"^inv_unequip:"))
     application.add_handler(CallbackQueryHandler(inventory_upgrade_do_callback, pattern=r"^inv_up_do:"))

@@ -879,23 +879,41 @@ def _collection_sync(tg_user):
     return list_creatures(user)
 
 
-def _collection_keyboard(creatures: list[Creature]) -> InlineKeyboardMarkup:
-    """Each row is «name» + a one-tap activate button. Activating used to require
-    opening the detail card first, which players read as "selecting doesn't work" —
-    the shortcut is right here now, and the label itself still opens the card."""
+COLLECTION_PAGE_SIZE = 8
+
+
+def _collection_render(creatures: list[Creature], page: int) -> tuple[str, InlineKeyboardMarkup]:
+    """One page of the collection. Paginated because a big roster (each creature is
+    two buttons) blew past Telegram's ~100-button keyboard limit — the whole
+    keyboard was rejected, so the screen (back button included) never rendered."""
+    total_pages = max(1, (len(creatures) + COLLECTION_PAGE_SIZE - 1) // COLLECTION_PAGE_SIZE)
+    page = max(0, min(page, total_pages - 1))
+    chunk = creatures[page * COLLECTION_PAGE_SIZE : (page + 1) * COLLECTION_PAGE_SIZE]
+
     rows = []
-    for c in creatures:
+    for c in chunk:
         stars = "⭐" * c.star_level
         label = f"{c.name} {stars} · Lv{c.level} · {constants.RARITY_LABELS[c.rarity]}"
         row = [btn(f"{'🟢 ' if c.is_active else ''}{label}", style=LIST, callback_data=f"coll_pick:{c.id}")]
         if not c.is_active:
             row.append(btn("فعال کن", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"coll_select:{c.id}"))
         rows.append(row)
-    rows.append(
-        [btn("ترکیب هیولا", emoji_key="btn_fusion", style=NAV, callback_data="menu:fusion")]
-    )
+    nav = []
+    if page > 0:
+        nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"coll_page:{page - 1}"))
+    if page < total_pages - 1:
+        nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"coll_page:{page + 1}"))
+    if nav:
+        rows.append(nav)
+    rows.append([btn("ترکیب هیولا", emoji_key="btn_fusion", style=NAV, callback_data="menu:fusion")])
     rows.append([back_btn("menu:me")])
-    return InlineKeyboardMarkup(rows)
+
+    page_note = f"  (صفحه {page + 1}/{total_pages})" if total_pages > 1 else ""
+    text = (
+        f"{get_emoji('collection')} <b>کلکسیون تو</b> — {len(creatures)} موجود{page_note}\n"
+        "رو هرکدوم بزن تا جزئیاتش رو ببینی:"
+    )
+    return text, InlineKeyboardMarkup(rows)
 
 
 async def collection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -904,11 +922,17 @@ async def collection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await send_screen(update, f"📭 کلکسیونت خالیه! {get_emoji('egg')} با /start شروع کن.",
                           reply_markup=back_only_keyboard())
         return
-    await send_screen(update, 
-        f"{get_emoji('collection')} <b>کلکسیون تو</b> — {len(creatures)} موجود\nرو هرکدوم بزن تا جزئیاتش رو ببینی:",
-        parse_mode="HTML",
-        reply_markup=_collection_keyboard(creatures),
-    )
+    text, keyboard = _collection_render(creatures, 0)
+    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def collection_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    page = int(query.data.split(":")[1])
+    creatures = await run_db(_collection_sync, update.effective_user)
+    await query.answer()
+    text, keyboard = _collection_render(creatures, page)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _creature_detail_sync(tg_user, creature_id):
@@ -2016,6 +2040,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(hunt_go_callback, pattern=r"^hunt_go:"))
     application.add_handler(CallbackQueryHandler(hunt_next_callback, pattern=r"^hunt_next$"))
     application.add_handler(CallbackQueryHandler(collection_pick_callback, pattern=r"^coll_pick:"))
+    application.add_handler(CallbackQueryHandler(collection_page_callback, pattern=r"^coll_page:"))
     application.add_handler(CallbackQueryHandler(collection_select_callback, pattern=r"^coll_select:"))
     application.add_handler(CallbackQueryHandler(fusion_pick_a_callback, pattern=r"^fus_a:"))
     application.add_handler(CallbackQueryHandler(fusion_pick_b_callback, pattern=r"^fus_b:"))
