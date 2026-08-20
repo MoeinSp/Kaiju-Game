@@ -33,7 +33,7 @@ def _biocrate_keyboard() -> InlineKeyboardMarkup:
         [
             [btn("خرید و باز کن", emoji_key="btn_confirm", style=CONFIRM, callback_data="bc_buy")],
             [btn("📊 شانس‌ها", style=PRIMARY, callback_data="bc_odds")],
-            [back_btn("menu:me")],
+            [back_btn("menu:cat_shop", "بازگشت به فروشگاه")],
         ]
     )
 
@@ -94,7 +94,7 @@ async def biocrate_buy_callback(update: Update, context: ContextTypes.DEFAULT_TY
     keyboard = InlineKeyboardMarkup(
         [
             [btn("یکی دیگه باز کن", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate")],
-            [back_btn("menu:me")],
+            [back_btn("menu:cat_shop", "بازگشت به فروشگاه")],
         ]
     )
     await safe_edit_message_text(
@@ -112,7 +112,7 @@ def _diamond_box_list_keyboard() -> InlineKeyboardMarkup:
         [btn(f"{cfg['label']} — {cfg['cost_diamonds']} 💎", style=SHOP, callback_data=f"dbox_pick:{tier}")]
         for tier, cfg in constants.DIAMOND_BOX_TIERS.items()
     ]
-    rows.append([back_btn("menu:me")])
+    rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
     return InlineKeyboardMarkup(rows)
 
 

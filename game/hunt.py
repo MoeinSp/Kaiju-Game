@@ -26,8 +26,8 @@ HUNT_TIERS = {
 # costs (which also scale) instead of going worthless mid-game. The base was pulled
 # down (~25%) as part of the loot-should-be-earned pass: hunting is a steady trickle
 # you work at, not a faucet that trivialises the build economy.
-HUNT_COIN_BASE = (13, 25)
-HUNT_COIN_PER_LEVEL = 2.5
+HUNT_COIN_BASE = (8, 16)
+HUNT_COIN_PER_LEVEL = 1.5
 HUNT_DNA_BASE = (0, 2)
 HUNT_DNA_PER_LEVEL = 0.2  # ~1 extra DNA every 5 levels
 HUNT_XP_WIN = 25

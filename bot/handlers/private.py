@@ -1218,7 +1218,7 @@ def _missions_render(status: list[dict], page: int) -> tuple[str, InlineKeyboard
         nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"mission_page:{page + 1}"))
     if nav:
         rows.append(nav)
-    rows.append([back_btn("menu:me")])
+    rows.append([back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -1444,7 +1444,7 @@ def _alliance_action_keyboard(in_alliance: bool) -> InlineKeyboardMarkup:
             [btn("پیوستن به اتحاد", emoji_key="btn_alliance", style=PRIMARY, callback_data="ally_join")],
             [btn("برترین اتحادها", emoji_key="btn_rank", style=NAV, callback_data="ally_top")],
         ]
-    rows.append([back_btn("menu:me")])
+    rows.append([back_btn("menu:cat_social", "بازگشت به اجتماعی")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -1827,7 +1827,7 @@ async def rank(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         lines.append(f"{rank_icon} {lab_display(u)} — 🔬 سطح {lab_level(u)}{power}")
     if my_rank is not None:
         lines.append(f"\n📍 رتبه‌ی تو: <b>{my_rank}</b> از {total} — 🔬 سطح {lab_level(me_user)}")
-    await send_screen(update, "\n".join(lines), reply_markup=back_only_keyboard())
+    await send_screen(update, "\n".join(lines), reply_markup=back_only_keyboard("menu:cat_social", "بازگشت به اجتماعی"))
 
 
 def _profile_sync(tg_user):
@@ -1868,7 +1868,7 @@ def _profile_text_and_keyboard(user, stats) -> tuple[str, InlineKeyboardMarkup]:
         [btn("🏅 لقب‌ها", style=NAV, callback_data="menu:titles")],
         [btn(f"✏️ تغییر اسم آزمایشگاه ({rename_cost} 💎)", style=SHOP, callback_data="lab_rename")],
         [btn(notif_label, style=NAV, callback_data="notif_toggle")],
-        [back_btn("menu:me")],
+        [back_btn("menu:cat_social", "بازگشت به اجتماعی")],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 

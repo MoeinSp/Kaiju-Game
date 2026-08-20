@@ -51,7 +51,7 @@ def _render(user, st: dict) -> tuple[str, InlineKeyboardMarkup]:
         rows.append(
             [btn(f"✦ خرید پاس ویژه ({st['premium_cost']} 💎)", style=SHOP, callback_data="pass_buy")]
         )
-    rows.append([back_btn("menu:me")])
+    rows.append([back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 

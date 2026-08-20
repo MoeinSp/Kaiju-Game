@@ -33,7 +33,7 @@ def _render(st: dict) -> tuple[str, InlineKeyboardMarkup]:
     rows = []
     if st["claimable"]:
         rows.append([btn(f"🎁 دریافت جوایز ({st['claimable']})", emoji_key="btn_confirm", style=CONFIRM, callback_data="codex_claim")])
-    rows.append([back_btn("menu:me")])
+    rows.append([back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 

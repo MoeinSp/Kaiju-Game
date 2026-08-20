@@ -448,21 +448,22 @@ BUILDING_UNLOCK_HALL_LEVEL = {
 
 # ── Upgrade pacing ────────────────────────────────────────────────────────────
 # Explicit per-level tables rather than a formula, because the thing being tuned
-# is a *total*: taking every building to level 5 should occupy 1–2 weeks of real
-# time. A `base * level` formula can't express that shape — it makes the early
-# levels too slow and the late ones nowhere near slow enough.
+# is a *total*: taking every building to level 5 should occupy about **3 weeks**
+# of real time. A `base * level` formula can't express that shape — it makes the
+# early levels too slow and the late ones nowhere near slow enough.
 #
 # Keys are the level being *reached* (so 1 is construction, 5 is the final tier).
 #
 # Total build time, with the single-worker rule that makes these add up:
-#   5 buildings x (15+90+360+900+1800)  = 15,825 min
-#   main hall, which starts at level 1  =  3,150 min
-#   ------------------------------------------------
-#   18,975 min = 316 h = 13.2 days
-# Speed-up cards from missions and the wheel pull that down to roughly 11–12
-# days for an active player, which is the middle of the intended window. Rushing
-# with diamonds is faster still, deliberately.
-BUILDING_UPGRADE_MINUTES = {1: 15, 2: 90, 3: 360, 4: 900, 5: 1800}
+#   5 buildings x (24+144+576+1440+2880)  = 25,320 min
+#   main hall, which starts at level 1    =  5,040 min
+#   --------------------------------------------------
+#   30,360 min = 506 h = 21.1 days  (~3 weeks)
+# Speed-up cards from missions and the wheel pull that down a bit for an active
+# player; rushing with diamonds is faster still, deliberately. (These were 1.6x
+# smaller for a ~13-day target; loot income was cut by the same 1.6x below so the
+# gold-vs-clock balance is unchanged — gold stays felt-but-not-binding.)
+BUILDING_UPGRADE_MINUTES = {1: 24, 2: 144, 3: 576, 4: 1440, 5: 2880}
 
 # Gold is sized to be *felt but not binding*: the constraint is meant to be the
 # clock, not the wallet. These came down when hunt and raid income was cut — with
@@ -636,7 +637,7 @@ FORGE_MAX_FAIL_CHANCE = 0.45
 # be spent makes the build timers meaningless, and building is the spine of the
 # game, so raiding has to be a grind you work at rather than a faucet.
 ARENA_LOOT_PERCENT = 0.05
-ARENA_LOOT_MIN = 15  # a raid on a broke player still pays something, but barely
+ARENA_LOOT_MIN = 9  # a raid on a broke player still pays something, but barely
 ARENA_SHIELD_HOURS = 8
 ARENA_ATTACK_ENERGY_COST = 1
 
@@ -649,8 +650,8 @@ ARENA_ATTACK_ENERGY_COST = 1
 # so one lucky match against a rich player can't skip a week of progression.
 # Trimmed alongside the hunt-loot cut so a raid stays ~1.8x a hunt (the intended
 # ratio) instead of drifting into a relative jackpot once hunting was nerfed.
-ARENA_LOOT_CAP_BASE = 35
-ARENA_LOOT_CAP_PER_LEVEL = 6
+ARENA_LOOT_CAP_BASE = 22
+ARENA_LOOT_CAP_PER_LEVEL = 4
 
 ARENA_CUP_WIN_BASE = 22
 ARENA_CUP_LOSS_BASE = 14
@@ -686,8 +687,8 @@ ARENA_FAKE_LAB_NAMES = [
 # Deliberately averaging a little under the real-opponent cap, so matchmaking
 # against actual players stays the preferable outcome — but wide enough that a
 # bot raid is still a gamble worth taking rather than a consolation prize.
-ARENA_FAKE_LOOT_BASE = (16, 50)
-ARENA_FAKE_LOOT_PER_LEVEL = 4
+ARENA_FAKE_LOOT_BASE = (10, 31)
+ARENA_FAKE_LOOT_PER_LEVEL = 2.5
 
 
 def arena_loot_cap(attacker_level: int) -> int:

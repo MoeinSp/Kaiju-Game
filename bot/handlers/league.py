@@ -60,7 +60,7 @@ async def league_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     await send_screen(
         update, "\n".join(lines), parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([[back_btn("menu:me")]]),
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:cat_social", "بازگشت به اجتماعی")]]),
     )
 
 

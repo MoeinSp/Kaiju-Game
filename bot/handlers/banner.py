@@ -29,7 +29,7 @@ def _render(st: dict) -> tuple[str, InlineKeyboardMarkup]:
     ]
     rows = [
         [btn(f"🎰 کشیدن بنر ({st['cost']} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="banner_pull")],
-        [back_btn("menu:me")],
+        [back_btn("menu:cat_shop", "بازگشت به فروشگاه")],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 

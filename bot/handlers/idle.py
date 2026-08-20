@@ -44,7 +44,7 @@ def _render(idle_st: dict, dg_st: dict) -> tuple[str, InlineKeyboardMarkup]:
         rows.append([btn(f"{dg['emoji']} ورود به دخمه‌ی امروز", style=BUILD, callback_data="idle_dungeon")])
     else:
         lines.append("\n✅ دخمه‌ی امروزو رفتی. فردا دوباره بیا.")
-    rows.append([back_btn("menu:me")])
+    rows.append([back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 

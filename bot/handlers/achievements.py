@@ -43,7 +43,7 @@ def _render(user, view: dict) -> tuple[str, InlineKeyboardMarkup]:
         rows.append(
             [btn(f"🎁 دریافت همه ({view['claimable']})", emoji_key="btn_confirm", style=CONFIRM, callback_data="ach_claim")]
         )
-    rows.append([back_btn("menu:me")])
+    rows.append([back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 

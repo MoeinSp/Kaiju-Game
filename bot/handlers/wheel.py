@@ -29,7 +29,7 @@ async def wheel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"<tg-spoiler>{emoji} {prize['label']}</tg-spoiler>\n\n"
         "<blockquote>فردا دوباره سر بزن، یه چرخش دیگه منتظرته.</blockquote>",
         parse_mode="HTML",
-        reply_markup=back_only_keyboard(),
+        reply_markup=back_only_keyboard("menu:cat_rewards", "بازگشت به جایزه‌ها"),
     )
 
 

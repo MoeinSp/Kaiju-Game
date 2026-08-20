@@ -32,7 +32,7 @@ async def referral_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         f"<code>{st['link']}</code>\n"
         "<i>روی لینک بزن تا کپی شه، بعد برای دوستات بفرست.</i>"
     )
-    await send_screen(update, text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup([[back_btn("menu:me")]]))
+    await send_screen(update, text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup([[back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")]]))
 
 
 def register(application) -> None:
