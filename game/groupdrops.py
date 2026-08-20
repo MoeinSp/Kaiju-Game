@@ -156,9 +156,11 @@ def claim(drop_id: int, tg_user) -> dict:
         user.save(update_fields=list(set(fields)))
 
     drop.claimed_by = user
+    drop.claimed_at = timezone.now()
     drop.reward_json = json.dumps(reward)
-    drop.save(update_fields=["claimed_by", "reward_json"])
-    return {"status": "won", "winner": display_name(user), "reward": reward, "kind": drop.kind}
+    drop.save(update_fields=["claimed_by", "claimed_at", "reward_json"])
+    return {"status": "won", "winner": display_name(user), "reward": reward, "kind": drop.kind,
+            "drop_id": drop.id, "group_id": drop.group_id, "message_id": drop.message_id}
 
 
 def expire_due() -> list[dict]:
@@ -174,9 +176,11 @@ def expire_due() -> list[dict]:
     return out
 
 
-# a lapsed-and-edited drop's message is deleted this long after it expired, so the
-# "time's up" note lingers only briefly instead of cluttering the group
+# how long a drop's message stays before it's deleted to keep the group tidy:
+# a lapsed/unclaimed one goes quickly (its "time's up" note is noise); a WON one
+# lingers longer since "X won Y" is a nice moment.
 DELETE_AFTER_EXPIRE_SECONDS = 60
+DELETE_AFTER_WIN_SECONDS = 600  # 10 minutes
 
 
 def delete_row(drop_id: int) -> None:
@@ -184,13 +188,18 @@ def delete_row(drop_id: int) -> None:
 
 
 def delete_due() -> list[dict]:
-    """Fallback sweep (survives a bot restart): expired, already-noted, unclaimed
-    drops whose grace minute is up — returns their messages to delete and removes
-    the rows. Precise 1-minute deletion is normally handled by a scheduled job;
-    this just catches any the restart dropped."""
-    cutoff = timezone.now() - datetime.timedelta(seconds=DELETE_AFTER_EXPIRE_SECONDS)
-    rows = GroupDrop.objects.filter(
-        claimed_by__isnull=True, expired_notified=True, message_id__isnull=False, expires_at__lte=cutoff
+    """Fallback sweep (survives a bot restart): drops whose message is due for
+    removal — unclaimed ones a minute after they lapsed, won ones ten minutes
+    after the win. Returns their messages to delete and removes the rows. Precise
+    timing is normally handled by scheduled jobs; this catches any a restart lost."""
+    from django.db.models import Q
+
+    now = timezone.now()
+    expire_cutoff = now - datetime.timedelta(seconds=DELETE_AFTER_EXPIRE_SECONDS)
+    win_cutoff = now - datetime.timedelta(seconds=DELETE_AFTER_WIN_SECONDS)
+    rows = GroupDrop.objects.filter(message_id__isnull=False).filter(
+        Q(claimed_by__isnull=True, expired_notified=True, expires_at__lte=expire_cutoff)
+        | Q(claimed_by__isnull=False, claimed_at__lte=win_cutoff)
     )
     out = [{"id": d.id, "group_id": d.group_id, "message_id": d.message_id} for d in rows]
     if out:

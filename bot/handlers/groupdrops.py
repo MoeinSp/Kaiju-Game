@@ -90,6 +90,12 @@ async def drop_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"🎉 <b>{result['winner']}</b> اولین نفر بود و <b>{groupdrops.reward_text(result['reward'])}</b> برد!",
             parse_mode="HTML",
         )
+        # keep the "X won Y" moment up for a while, then tidy it away
+        if context.job_queue is not None and result.get("message_id"):
+            context.job_queue.run_once(
+                _delete_drop_message, groupdrops.DELETE_AFTER_WIN_SECONDS,
+                data={"group_id": result["group_id"], "message_id": result["message_id"], "drop_id": result["drop_id"]},
+            )
     elif status == "taken":
         await query.answer(f"⛔ دیر رسیدی! «{result['winner']}» زودتر زد.", show_alert=True)
     elif status == "expired":

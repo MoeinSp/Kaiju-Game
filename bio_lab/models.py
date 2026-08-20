@@ -407,6 +407,7 @@ class GroupDrop(models.Model):
     kind = models.CharField(max_length=24)  # one of game.groupdrops.DROP_KINDS
     message_id = models.IntegerField(null=True, blank=True)  # set after posting, for expiry edits
     claimed_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    claimed_at = models.DateTimeField(null=True, blank=True)  # when the winner claimed it
     reward_json = models.TextField(blank=True, default="")  # what the winner got, for display
     expires_at = models.DateTimeField()
     expired_notified = models.BooleanField(default=False)  # message edited to "expired"
