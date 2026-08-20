@@ -396,6 +396,26 @@ class Group(models.Model):
         return self.title or str(self.id)
 
 
+class GroupDrop(models.Model):
+    """A flash reward dropped into a group chat. The bot posts a message with a
+    claim button; the FIRST member to tap it wins a random reward scaled to their
+    own level/power. `claimed_by` null = still up for grabs. Reliability note:
+    claiming is a button (callback query), which always reaches the bot regardless
+    of group privacy mode — unlike reading a chat message."""
+
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="drops")
+    kind = models.CharField(max_length=24)  # one of game.groupdrops.DROP_KINDS
+    message_id = models.IntegerField(null=True, blank=True)  # set after posting, for expiry edits
+    claimed_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    reward_json = models.TextField(blank=True, default="")  # what the winner got, for display
+    expires_at = models.DateTimeField()
+    expired_notified = models.BooleanField(default=False)  # message edited to "expired"
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"{self.kind}@{self.group_id} {'claimed' if self.claimed_by_id else 'open'}"
+
+
 class RaidBoss(models.Model):
     group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="raid_bosses")
     name = models.CharField(max_length=64)

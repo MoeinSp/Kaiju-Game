@@ -19,6 +19,7 @@ from bot.handlers import (
     campaign,
     codex,
     events,
+    groupdrops,
     idle,
     league,
     referral,
@@ -100,6 +101,7 @@ def main() -> None:
     league.register(application)
     shop.register(application)
     titles.register(application)
+    groupdrops.register(application)  # flash reward drops in groups (JobQueue)
     notify.register(application)  # periodic re-engagement DMs (JobQueue)
     wheel.register(application)
     arena.register(application)
