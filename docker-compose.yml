@@ -50,6 +50,7 @@ services:
       ADMIN_PANEL_URL: ${ADMIN_PANEL_URL:-http://127.0.0.1:8000/panel/}
       BOT_USERNAME: ${BOT_USERNAME:-}
       GAME_TIMEZONE: ${GAME_TIMEZONE:-Asia/Tehran}
+      AD_API_KEY: ${AD_API_KEY:-}
       # Webhook mode. Empty WEBHOOK_URL => the bot long-polls, which needs no
       # inbound port and works anywhere. Set it (and the compose profile picks up
       # the port mapping on the bot service) to have Telegram push instead.
