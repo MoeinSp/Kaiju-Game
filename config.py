@@ -19,6 +19,10 @@ ADMIN_PANEL_URL = os.environ.get("ADMIN_PANEL_URL", "http://127.0.0.1:8000/panel
 # it the group can still play, but the buttons that hand off to DMs won't work.
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "HeroGameZbot").lstrip("@")
 
+# Secret for the public "has this user started the bot?" API (telgame_site/api.py),
+# handed to an advertiser to verify their referred users. Empty = the API is off.
+AD_API_KEY = os.environ.get("AD_API_KEY", "")
+
 # ── Webhook mode ──────────────────────────────────────────────────────────────
 # Leave WEBHOOK_URL empty to run long-polling (the right choice on a laptop, and
 # the only choice without a public HTTPS URL). Set it in production and the bot
