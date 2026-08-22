@@ -7,7 +7,7 @@ must never be the reason they can't reach the restore button.
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}پنل Kaiju Bio-Lab{% endblock %}</title>
+<title>{% block title %}پنل Kaiju Legends{% endblock %}</title>
 <style>
   :root{
     --bg:#0d1117; --panel:#161b22; --panel-2:#1c2129; --line:#2a3038;
@@ -90,7 +90,7 @@ must never be the reason they can't reach the restore button.
 <body>
 <div class="layout">
   <aside>
-    <h1>🧬 Kaiju Bio-Lab</h1>
+    <h1>🧬 Kaiju Legends</h1>
     <div class="sub">پنل مدیریت — {{ request.user.username }}</div>
     <nav>
       <a href="{% url 'panel:dashboard' %}" class="{% if page == 'dashboard' %}on{% endif %}">داشبورد</a>

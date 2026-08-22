@@ -1,4 +1,4 @@
-# Kaiju Bio-Lab 🧬
+# Kaiju Legends 🧬
 
 A Persian-language Telegram game bot: collect monsters, evolve them, build a lab,
 and fight — in private chat **and** in group chats, played with plain words

@@ -1,4 +1,4 @@
-# Kaiju Bio-Lab — Telegram Chat Game
+# Kaiju Legends — Telegram Chat Game
 
 بات بازی تلگرام: رشد و ترکیب ژنتیکی هیولا در پیوی، دوئل/رید باس در گروه. دیتابیس و ادمین با **Django**، بات با **python-telegram-bot** (asyncio).
 

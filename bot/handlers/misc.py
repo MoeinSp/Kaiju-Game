@@ -10,7 +10,7 @@ def _build_help_text() -> str:
     # the owner's current Premium emoji choices, not just whatever was cached at
     # import time before the cache was warmed
     return (
-        f"{get_emoji('creature')} <b>Kaiju Bio-Lab</b>\n"
+        f"{get_emoji('creature')} <b>Kaiju Legends</b>\n"
         "بازیِ رشد، ترکیب ژنتیکی و نبرد هیولا — توی پیوی پرورش می‌دی، توی گروه می‌جنگی.\n\n"
         "━━━━━━━━━━━━━━\n"
         f"{get_emoji('lab')} <b>آزمایشگاه</b>  <i>(پیوی بات)</i>\n"

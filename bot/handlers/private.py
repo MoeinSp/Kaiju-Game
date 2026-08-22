@@ -518,7 +518,7 @@ _GUIDE_RULE = "━━━━━━━━━━━━━━"
 
 
 def guide_home_text_and_keyboard(is_first_run: bool = False) -> tuple[str, InlineKeyboardMarkup]:
-    lines = [f"{get_emoji('book')} <b>راهنمای Kaiju Bio-Lab</b>", ""]
+    lines = [f"{get_emoji('book')} <b>راهنمای Kaiju Legends</b>", ""]
     if is_first_run:
         lines.append("<b>خوش اومدی! این پنج قدم اولته:</b>")
         lines.append("<blockquote>" + "\n".join(guide.first_run_lines()) + "</blockquote>")
@@ -757,7 +757,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if user.lab_name is None:
         context.user_data[AWAITING_PLAYER_KEY] = {"action": "set_lab_name"}
         await update.message.reply_text(
-            f"{get_emoji('egg')} <b>به Kaiju Bio-Lab خوش اومدی!</b>\n"
+            f"{get_emoji('egg')} <b>به Kaiju Legends خوش اومدی!</b>\n"
             "قبل از هرچیزی، اسم آزمایشگاهت رو انتخاب کن — همینو بفرست:",
             parse_mode="HTML",
         )

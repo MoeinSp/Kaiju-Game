@@ -168,7 +168,7 @@ def _help_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
     group member who has never opened the DM needs the first before the second.
     """
     lines = [
-        f"{get_emoji('book')} <b>راهنمای Kaiju Bio-Lab</b>",
+        f"{get_emoji('book')} <b>راهنمای Kaiju Legends</b>",
         "",
         "یه بازی پرورش هیولاست: یه هیولا داری، قوی‌ترش می‌کنی، باهاش می‌جنگی "
         "و آزمایشگاهت رو بزرگ می‌کنی.",
