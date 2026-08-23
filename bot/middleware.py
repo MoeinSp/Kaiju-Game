@@ -100,6 +100,13 @@ async def enforce_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE)
             missing.append(ch)
 
     if missing:
+        # Record that this person started the bot even though the join gate still
+        # blocks their gameplay. Without this the User row is only created once
+        # they clear the gate (below), so anything keyed on "has started the bot"
+        # — the advertiser API included — would wrongly report them as absent
+        # until they join. Creating the row here is free of side effects: join
+        # rewards are still only granted on `just_passed`.
+        await run_db(get_or_create_user, user)
         context.user_data["force_join_passed_ids"] = frozenset()
         if is_check_callback:
             await update.callback_query.answer("هنوز عضو همه‌ی کانال‌ها نشدی!", show_alert=True)
