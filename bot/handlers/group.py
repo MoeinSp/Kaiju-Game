@@ -481,7 +481,7 @@ async def _pvp_attack_prompt(update, context, target_tg) -> None:
         f"💪 قدرت حریف: <b>{t_power}</b>  ({constants.element_label(t_elem)})\n"
         f"💪 قدرت تو: <b>{a_power}</b>  ({constants.element_label(a_elem)}) — {odds}\n"
         + (f"{matchup}\n" if matchup else "")
-        + f"\n<i>هر حمله ۱ ⚡ انرژی می‌بره. برنده {constants.DUEL_WIN_COINS} طلا و XP می‌گیره.</i>",
+        + f"\n<i>هر حمله ۱ ⚡ انرژی می‌بره. برنده تا {int(constants.GROUP_ATTACK_LOOT_PERCENT * 100)}٪ طلای بازنده رو غارت می‌کنه.</i>",
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -505,13 +505,19 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     winner_creature, log_text = resolve_duel(a_creature, t_creature)
     attacker_won = winner_creature.id == a_creature.id
     winner_user = attacker if attacker_won else target
+    loser_user = target if attacker_won else attacker
     winner_creature_obj = a_creature if attacker_won else t_creature
     loser_creature_obj = t_creature if attacker_won else a_creature
 
-    winner_user.coins += constants.DUEL_WIN_COINS
+    # the winner loots a share of the LOSER's gold (capped), instead of a flat reward
+    loot = min(round(loser_user.coins * constants.GROUP_ATTACK_LOOT_PERCENT), constants.GROUP_ATTACK_LOOT_CAP)
+    loot = max(0, min(loot, loser_user.coins))
+    loser_user.coins -= loot
+    winner_user.coins += loot
     winner_levels = add_xp(winner_creature_obj, constants.DUEL_WIN_XP)
     add_xp(loser_creature_obj, constants.DUEL_LOSE_XP)
     winner_user.save(update_fields=["coins"])
+    loser_user.save(update_fields=["coins"])
     winner_creature_obj.save()
     loser_creature_obj.save()
 
@@ -521,12 +527,13 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
 
     DuelLog.objects.create(
         group_id=group.id, challenger_id=attacker.id, opponent_id=target.id,
-        winner_id=winner_user.id, wager_gold=0, log_text=log_text,
+        winner_id=winner_user.id, wager_gold=loot, log_text=log_text,
     )
     return {
         "log_text": log_text,
         "attacker_won": attacker_won,
         "winner_name": display_name(winner_user),
+        "loot": loot,
         "winner_level_up": bool(winner_levels),
         "winner_creature": winner_creature_obj.name,
         "winner_new_level": winner_creature_obj.level,
@@ -553,7 +560,7 @@ async def pvp_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         if result["attacker_won"]
         else f"💀 <b>باختی — {result['winner_name']} برنده شد.</b>"
     )
-    reward = f"\n\n{get_emoji('coin')} +{constants.DUEL_WIN_COINS} طلا · +{constants.DUEL_WIN_XP} XP به برنده"
+    reward = f"\n\n{get_emoji('coin')} برنده {result['loot']} طلا از بازنده غارت کرد · +{constants.DUEL_WIN_XP} XP"
     if result["winner_level_up"]:
         reward += f" {get_emoji('celebrate')} {result['winner_creature']} رسید به سطح {result['winner_new_level']}!"
     reward += f"\n⚡ ۱ انرژی کم شد (باقی‌مونده: {result['energy_left']})"
@@ -679,6 +686,8 @@ def _guardian_challenge_sync(chat, tg_user):
     if creature is None:
         raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
 
+    spend_energy(user, constants.GUARDIAN_CHALLENGE_ENERGY_COST, "چالش نگهبان")
+    user.save(update_fields=["energy", "energy_updated_at"])
     ensure_guardian(group, group_member_creatures(group))
     won, log_text = challenge_guardian(group, user, creature)
 

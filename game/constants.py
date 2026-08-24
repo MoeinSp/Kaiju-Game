@@ -186,7 +186,12 @@ MAX_ENERGY = 50
 ENERGY_REGEN_MINUTES = 6   # empty -> full in 5 hours
 FEED_ENERGY_COST = 1
 RAID_ATTACK_ENERGY_COST = 1
+GUARDIAN_CHALLENGE_ENERGY_COST = 1
 HUNT_ENERGY_COST = 1
+# a group «اتک» on a player loots this share of the loser's gold (capped), instead
+# of a flat reward
+GROUP_ATTACK_LOOT_PERCENT = 0.10
+GROUP_ATTACK_LOOT_CAP = 500
 
 # consecutive daily /start streak — resets if a day is missed, capped so late-game
 # players don't snowball into absurd payouts
@@ -636,7 +641,7 @@ FORGE_MAX_FAIL_CHANCE = 0.45
 # raid is no longer the gold: it's the cup. Gold that arrives faster than it can
 # be spent makes the build timers meaningless, and building is the spine of the
 # game, so raiding has to be a grind you work at rather than a faucet.
-ARENA_LOOT_PERCENT = 0.05
+ARENA_LOOT_PERCENT = 0.10
 ARENA_LOOT_MIN = 9  # a raid on a broke player still pays something, but barely
 ARENA_SHIELD_HOURS = 8
 ARENA_ATTACK_ENERGY_COST = 1
