@@ -33,7 +33,7 @@ from bot.buttons import (ADMIN, BACK, BATTLE, BUILD, CONFIRM, DANGER, LIST, NAV,
                          SHOP, back_btn, back_only_keyboard, btn)
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text, send_screen
 from config import OWNER_TELEGRAM_ID
-from game import botconfig, constants
+from game import botconfig, constants, keywords
 from game.alliance import (
     alliance_info,
     create_alliance,
@@ -2087,6 +2087,41 @@ _MENU_ACTIONS = {
     "profile": profile,
     "guide": guide_panel,
 }
+
+
+# Typing a group trigger word in a *private* chat opens the matching menu panel,
+# so the same simple words work in the DM as in a group. Group-only combat words
+# (raid/attack/duel/guardian…) and anything unmapped fall back to the main menu.
+_KEYWORD_TO_MENU = {
+    "creature": "me", "equipment": "inventory", "collection": "collection",
+    "upgrade": "upgrade", "lab": "profile", "hunt": "hunt", "arena": "arena",
+    "mission": "missions", "fusion": "fusion", "breeding": "breeding",
+    "reward": "idle", "alliance": "alliance_info", "leaderboard": "rank",
+    "box": "biocrate", "mine": "buildings", "wheel": "wheel",
+    "help": "guide", "start": "guide",
+}
+
+
+async def route_private_keyword(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """If a plain private message is a recognised trigger word (incl. brand words
+    like «کایجو»/«ربات»), open the matching panel. Returns True if it handled the
+    message, False for ordinary text (which stays quiet, as before)."""
+    message = update.effective_message
+    if message is None or not message.text:
+        return False
+    action = keywords.match(message.text)
+    if action is None:
+        return False
+    handler = _MENU_ACTIONS.get(_KEYWORD_TO_MENU.get(action, ""))
+    if handler is None:
+        # group-only combat word or brand fallback → just show the main menu
+        await send_screen(
+            update, "📋 <b>منوی اصلی</b>\nیکی رو انتخاب کن:",
+            parse_mode="HTML", reply_markup=main_menu_keyboard(),
+        )
+        return True
+    await handler(update, context)
+    return True
 
 
 async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

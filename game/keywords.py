@@ -381,6 +381,21 @@ KEYWORD_SECTIONS: tuple[tuple[str, str, str, str, tuple[str, ...]], ...] = (
 )
 
 
+# Extra brand triggers that map onto an existing action but aren't shown in the
+# help list (they'd bloat it). Saying the game's name should always get a friendly
+# response: «کایجو»/«kaiju» claim the recurring reward (so the brand word itself is
+# rewarding), while «ربات» and the full name open the help card.
+ALIASES: dict[str, str] = {
+    "کایجو": "reward",
+    "kaiju": "reward",
+    "ربات": "help",
+    "کایجو لجند": "help",
+    "کایجولجند": "help",
+    "kaiju legend": "help",
+    "kaijulegend": "help",
+}
+
+
 def _build_lookup() -> dict[str, str]:
     lookup: dict[str, str] = {}
     for action, (word, _e, _s, _h) in KEYWORD_DEFS.items():
@@ -391,6 +406,11 @@ def _build_lookup() -> dict[str, str]:
         if key in lookup:
             raise ValueError(f"keyword {word!r} claimed by both {lookup[key]} and {action}")
         lookup[key] = action
+    for alias, action in ALIASES.items():
+        key = normalize(alias)
+        if action not in KEYWORD_DEFS:
+            raise ValueError(f"alias {alias!r} points at unknown action {action}")
+        lookup.setdefault(key, action)  # a real word always wins over an alias
     return lookup
 
 

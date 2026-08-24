@@ -6,7 +6,12 @@ import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "telgame_site.settings")
 django.setup()
 
-from telegram import Update  # noqa: E402
+from telegram import (  # noqa: E402
+    BotCommand,
+    BotCommandScopeAllGroupChats,
+    BotCommandScopeAllPrivateChats,
+    Update,
+)
 from telegram.ext import Application, CallbackQueryHandler, ContextTypes, MessageHandler, filters  # noqa: E402
 
 from bot import middleware  # noqa: E402
@@ -47,14 +52,53 @@ from game.theme import refresh_theme_caches  # noqa: E402
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
+# every "awaiting a plain-text reply" key across the bot — if any is pending, the
+# message belongs to that flow, not to a keyword trigger
+_PRIVATE_AWAIT_KEYS = (
+    "awaiting_player_input",
+    "awaiting_emoji_key",
+    "awaiting_force_join",
+    "awaiting_admin_input",
+    "awaiting_button_emoji_key",
+)
+
+
 async def _capture_private_text_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """The single MessageHandler for every 'awaiting a plain-text reply' button flow
     across the whole bot (player flows in private.py, owner flows in owner.py) — PTB
     only ever runs the first handler that matches an update within a group, so all
     such flows have to be dispatched from one registration rather than each module
-    registering its own MessageHandler."""
+    registering its own MessageHandler.
+
+    When nothing is awaiting input, a plain private message is also given to the
+    keyword router, so simple words («نبرد», «کایجو», …) work in the DM too."""
+    pending = any(context.user_data.get(k) for k in _PRIVATE_AWAIT_KEYS)
     await private.capture_player_text_reply(update, context)
     await owner.capture_owner_text_reply(update, context)
+    if not pending:
+        await private.route_private_keyword(update, context)
+
+
+# The minimal command set. Everything else is driven by buttons (in the DM) and
+# plain words (in groups), which is what players actually use — a long slash-command
+# list just clutters the input box, especially in groups.
+_PRIVATE_COMMANDS = [
+    BotCommand("start", "شروع بازی"),
+    BotCommand("menu", "منوی اصلی"),
+    BotCommand("help", "راهنما"),
+]
+_GROUP_COMMANDS = [
+    BotCommand("setup", "فعال‌سازی و راهنمای گروه"),
+    BotCommand("help", "راهنما و لیست کلمه‌ها"),
+]
+
+
+async def _configure_commands(application: Application) -> None:
+    """Publish the minimal command set authoritatively, overriding whatever mess is
+    left in BotFather. Scoped so groups see only /setup and /help."""
+    bot = application.bot
+    await bot.set_my_commands(_PRIVATE_COMMANDS, scope=BotCommandScopeAllPrivateChats())
+    await bot.set_my_commands(_GROUP_COMMANDS, scope=BotCommandScopeAllGroupChats())
 
 
 async def _warn_if_group_privacy_on(application: Application) -> None:
@@ -70,6 +114,11 @@ async def _warn_if_group_privacy_on(application: Application) -> None:
         "Disable, then remove and re-add the bot. Slash commands (/setup) still work either way.",
         me.username,
     )
+
+
+async def _post_init(application: Application) -> None:
+    await _configure_commands(application)
+    await _warn_if_group_privacy_on(application)
 
 
 def main() -> None:
@@ -119,7 +168,7 @@ def main() -> None:
         MessageHandler(filters.ChatType.PRIVATE & ~filters.COMMAND, _capture_private_text_reply)
     )
 
-    application.post_init = _warn_if_group_privacy_on
+    application.post_init = _post_init
 
     # my_chat_member (bot added/removed from a group) isn't in the default update
     # set, so every mode below has to ask for ALL_TYPES explicitly.
