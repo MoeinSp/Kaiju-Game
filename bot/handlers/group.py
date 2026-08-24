@@ -832,16 +832,13 @@ async def guardian_claim(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 def register(application) -> None:
     group_filter = filters.ChatType.GROUPS
-    application.add_handler(CommandHandler("duel", duel, group_filter))
+    # The gameplay slash commands (/duel /attack /raid_spawn /leaderboard /guardian*)
+    # are gone — groups are word-driven («دوئل», «اتک», «احضار», «جدول», «نگهبان» …),
+    # and the words call the same functions. Only button callbacks and the two
+    # commands without a word equivalent (/give a creature, /mutation_event) remain.
     application.add_handler(CallbackQueryHandler(duel_wager_callback, pattern=r"^duelwager_"))
-    application.add_handler(CommandHandler("raid_spawn", raid_spawn, group_filter))
-    application.add_handler(CommandHandler("attack", attack, group_filter))
     application.add_handler(CallbackQueryHandler(pvp_attack_callback, pattern=r"^gatk:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_attack_cancel_callback, pattern=r"^gatk_cancel:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_detail_callback, pattern=r"^gatk_detail:\d+$"))
-    application.add_handler(CommandHandler("leaderboard", leaderboard, group_filter))
-    application.add_handler(CommandHandler("guardian", guardian, group_filter))
-    application.add_handler(CommandHandler("guardian_challenge", guardian_challenge, group_filter))
-    application.add_handler(CommandHandler("guardian_claim", guardian_claim, group_filter))
     application.add_handler(CommandHandler("give", give, group_filter))
     application.add_handler(CommandHandler("mutation_event", mutation_event, group_filter))
