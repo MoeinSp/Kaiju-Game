@@ -32,6 +32,7 @@ def join_alliance(user: User, name: str) -> Alliance:
     alliance = Alliance.objects.filter(name__iexact=name.strip()).first()
     if alliance is None:
         raise GameError("همچین اتحادی پیدا نشد. اسم رو دقیق بنویس یا با /alliance_create یکی بساز.")
+    _assert_has_room(alliance)
 
     user.alliance = alliance
     user.save(update_fields=["alliance"])
@@ -71,6 +72,7 @@ def alliance_info(alliance: Alliance) -> dict:
         "name": alliance.name,
         "leader": alliance.leader,
         "member_count": len(members),
+        "capacity": max_members(alliance),
         "members": members,
         "power": _alliance_power(alliance),
         "treasury_gold": alliance.treasury_gold,
@@ -126,6 +128,7 @@ def join_alliance_by_id(user: User, alliance_id: int) -> Alliance:
     alliance = Alliance.objects.filter(id=alliance_id).first()
     if alliance is None:
         raise GameError("این اتحاد دیگه وجود نداره.")
+    _assert_has_room(alliance)
     user.alliance = alliance
     user.save(update_fields=["alliance"])
     return alliance
@@ -230,8 +233,29 @@ PASS_PERK_PER_LEVEL = 0.05    # معبد: +5% Battle Pass points per level, all 
 FORTRESS_PER_LEVEL = 0.06     # دژ: -6% gold stolen per heist, per level (cap enforced by max level)
 BARRACKS_PER_LEVEL = 0.08     # پادگان: +8% war power per level, all members
 VAULT_INCOME_PER_LEVEL = 200  # خزانه: +200 treasury gold/day per level
+CAPACITY_PER_LEVEL = 10       # تالار: +10 member slots per level
 PERK_MAX_LEVEL = 5
 WAR_WINNER_TREASURY_BONUS = 5000  # gold added to the top alliance's treasury each week
+
+# Member capacity: every alliance starts at 50 and the تالار building adds
+# CAPACITY_PER_LEVEL per level up to PERK_MAX_LEVEL → a hard ceiling of 100.
+ALLIANCE_BASE_CAPACITY = 50
+# The تالار is deliberately far more expensive than the effect-perks — its treasury
+# cost climbs steeply so growing past 50 members is a serious, long-term investment.
+HALL_COST = {1: 30000, 2: 70000, 3: 150000, 4: 300000, 5: 600000}
+
+
+def max_members(alliance: Alliance) -> int:
+    """Current member ceiling: 50 base + 10 per تالار level, capped at 100."""
+    level = min(alliance.hall_level, PERK_MAX_LEVEL)
+    return ALLIANCE_BASE_CAPACITY + level * CAPACITY_PER_LEVEL
+
+
+def _assert_has_room(alliance: Alliance) -> None:
+    if alliance.members.count() >= max_members(alliance):
+        raise GameError(
+            f"این اتحاد پره ({max_members(alliance)} عضو). رهبرش باید «تالار اتحاد» رو ارتقا بده تا ظرفیت بیشتر شه."
+        )
 
 # Treasury-funded, alliance-wide upgradeable buildings. All share the buy_perk()
 # machinery; each maps to one integer level field on Alliance. `unit` describes
@@ -247,13 +271,18 @@ PERKS = {
                  "desc": "افزایش قدرت اتحاد در جنگ یک‌روزه", "unit": "pct"},
     "vault": {"emoji": "🏦", "title": "خزانه", "field": "vault_level", "per_level": VAULT_INCOME_PER_LEVEL,
               "desc": "درآمد روزانه‌ی طلا به خزانه", "unit": "gold"},
+    "hall": {"emoji": "🏰", "title": "تالار اتحاد", "field": "hall_level", "per_level": CAPACITY_PER_LEVEL,
+             "desc": "افزایش ظرفیت اعضای اتحاد (پایه ۵۰، سقف ۱۰۰)", "unit": "capacity"},
 }
-# order shown in the panel
-BUILDING_ORDER = ["xp", "pass", "fortress", "barracks", "vault"]
+# order shown in the panel — تالار (capacity) first, it's the headline upgrade
+BUILDING_ORDER = ["hall", "xp", "pass", "fortress", "barracks", "vault"]
 
 
-def perk_cost(level: int) -> int:
-    """Treasury gold to buy the NEXT level (level = current level, 0-based)."""
+def perk_cost(perk_key: str, level: int) -> int:
+    """Treasury gold to buy the NEXT level (level = current level, 0-based). The
+    تالار has its own steep curve; every other building shares the flat 3000×tier."""
+    if perk_key == "hall":
+        return HALL_COST.get(level + 1, HALL_COST[max(HALL_COST)])
     return 3000 * (level + 1)
 
 
@@ -305,7 +334,7 @@ def buy_perk(user: User, perk_key: str) -> dict:
     level = getattr(alliance, field)
     if level >= PERK_MAX_LEVEL:
         raise GameError("این پرک به بالاترین سطح رسیده.")
-    cost = perk_cost(level)
+    cost = perk_cost(perk_key, level)
     if alliance.treasury_gold < cost:
         raise GameError(f"خزانه‌ی اتحاد کافی نیست! این ارتقا {cost} طلا از خزانه می‌خواد.")
     alliance.treasury_gold -= cost
@@ -340,6 +369,8 @@ def _building_effect_text(key: str, level: int) -> str:
     spec = PERKS[key]
     if spec["unit"] == "pct":
         return f"+{round(level * spec['per_level'] * 100)}٪"
+    if spec["unit"] == "capacity":
+        return f"ظرفیت {ALLIANCE_BASE_CAPACITY + level * spec['per_level']} نفر"
     return f"{level * spec['per_level']} طلا/روز"
 
 
@@ -356,7 +387,7 @@ def buildings_info(alliance: Alliance) -> dict:
             "desc": spec["desc"],
             "level": level,
             "maxed": level >= PERK_MAX_LEVEL,
-            "cost": perk_cost(level),
+            "cost": perk_cost(key, level),
             "effect": _building_effect_text(key, level),
             "next_effect": _building_effect_text(key, level + 1),
         })
@@ -372,8 +403,8 @@ def perks_info(alliance: Alliance) -> dict:
     return {
         "xp_level": alliance.xp_perk_level,
         "pass_level": alliance.pass_perk_level,
-        "xp_cost": perk_cost(alliance.xp_perk_level),
-        "pass_cost": perk_cost(alliance.pass_perk_level),
+        "xp_cost": perk_cost("xp", alliance.xp_perk_level),
+        "pass_cost": perk_cost("pass", alliance.pass_perk_level),
         "max_level": PERK_MAX_LEVEL,
         "treasury": alliance.treasury_gold,
         "war_points": alliance.war_points if alliance.war_week == _war_week() else 0,

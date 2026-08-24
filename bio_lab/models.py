@@ -95,6 +95,7 @@ class Alliance(models.Model):
     barracks_level = models.IntegerField(default=0)      # پادگان — +power in the 1-day war
     vault_level = models.IntegerField(default=0)         # خزانه — passive daily treasury income
     vault_collected_at = models.DateTimeField(null=True, blank=True)  # last vault income collection
+    hall_level = models.IntegerField(default=0)          # تالار — +10 member capacity per level (base 50, max 100)
 
     # weekly alliance war: members' activity adds war points; the top alliance's
     # treasury wins a bonus at week's end. war_week scopes points to the current

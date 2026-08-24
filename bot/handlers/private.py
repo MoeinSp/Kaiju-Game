@@ -1193,7 +1193,7 @@ def _fusion_sync(tg_user, id_a, id_b):
 async def fusion_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if len(context.args) != 2 or not all(a.isdigit() for a in context.args):
         await update.message.reply_text(
-            f"استفاده درست: <code>/fusion 3 5</code> (دو شماره‌ی موجود از /collection — {constants.FUSION_GOLD_COST} طلا هزینه داره و والدین سوزانده می‌شن)",
+            "استفاده درست: <code>/fusion 3 5</code> (دو شماره‌ی موجود از /collection — هزینه‌ی طلا بر اساس ستاره و نایابی حساب می‌شه و والدین سوزانده می‌شن)",
             parse_mode="HTML",
         )
         return
@@ -1325,9 +1325,24 @@ async def fusion_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 
+def _fusion_cost_sync(tg_user, a_id, b_id):
+    user, _ = get_or_create_user(tg_user)
+    a = Creature.objects.filter(id=a_id, owner=user).first()
+    b = Creature.objects.filter(id=b_id, owner=user).first()
+    if a is None or b is None:
+        raise GameError("این جفت دیگه پیدا نشد.")
+    base_rarity = constants.higher_rarity(a.rarity, b.rarity)
+    return constants.fusion_cost(a.star_level, base_rarity)
+
+
 async def fusion_pick_b_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     _, a_id, b_id = query.data.split(":")
+    try:
+        cost = await run_db(_fusion_cost_sync, update.effective_user, int(a_id), int(b_id))
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
     await query.answer()
     keyboard = InlineKeyboardMarkup(
         [
@@ -1341,8 +1356,9 @@ async def fusion_pick_b_callback(update: Update, context: ContextTypes.DEFAULT_T
         f"{get_emoji('warning')} مطمئنی؟\n\n"
         f"<blockquote>این ترکیب <b>۱۰۰٪ موفق می‌شه</b> — هم‌نام و هم‌ستاره‌ان، پس شکست نداره.\n"
         f"هر دو موجود <b>برای همیشه سوزانده می‌شن</b> و "
-        f"{constants.FUSION_GOLD_COST} {get_emoji('coin')} هزینه می‌شه. یه شانس هم هست درجه‌ی نایابی ارتقا پیدا کنه "
-        f"و {int(constants.FUSION_INHERIT_CHANCE * 100)}٪ احتمال داره تجهیزات مجهزشون به ارث برسه.</blockquote>",
+        f"<b>{cost}</b> {get_emoji('coin')} هزینه می‌شه (بر اساس ستاره و نایابی). یه شانس هم هست درجه‌ی "
+        f"نایابی ارتقا پیدا کنه و {int(constants.FUSION_INHERIT_CHANCE * 100)}٪ احتمال داره تجهیزات مجهزشون "
+        f"به ارث برسه.</blockquote>",
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -1651,13 +1667,20 @@ async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     lines = [
         f"{get_emoji('alliance')} <b>اتحاد {info['name']}</b>",
         f"{get_emoji('crown')} رهبر: {display_name(info['leader']) if info['leader'] else '—'}",
-        f"{get_emoji('users')} اعضا: {info['member_count']}   💪 قدرت کل: {info['power']}",
+        f"{get_emoji('users')} اعضا: {info['member_count']}/{info.get('capacity', 50)}   "
+        f"💪 قدرت کل: {info['power']}",
         f"{get_emoji('coin')} خزانه: {info['treasury_gold']} طلا",
         "",
     ]
-    for m in info["members"][:20]:
+    # cap the printed list so a big alliance never blows past Telegram's message
+    # limit; the rest are summarised on one line
+    MEMBER_LIST_CAP = 20
+    for m in info["members"][:MEMBER_LIST_CAP]:
         lines.append(f"• {display_name(m)}")
-    await send_screen(update, 
+    extra = info["member_count"] - MEMBER_LIST_CAP
+    if extra > 0:
+        lines.append(f"<i>… و {extra} عضو دیگه</i>")
+    await send_screen(update,
         "\n".join(lines), parse_mode="HTML", reply_markup=_alliance_action_keyboard(in_alliance=True)
     )
 

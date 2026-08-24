@@ -378,8 +378,23 @@ BIOCRATE_CREATURE_RARITY_WEIGHTS = {
     "mythic": 1,
 }
 
-FUSION_GOLD_COST = 120
+FUSION_GOLD_COST = 120  # legacy floor / fallback; real cost is fusion_cost() below
 FUSION_INHERIT_CHANCE = 0.5  # child inherits one random equipped item from a parent
+# Fusion is a major power spike (a strictly-stronger, higher-star creature), so its
+# price has to climb hard with what you're forging — a flat 120 gold made pushing to
+# 5★ almost free. Cost scales by the parents' shared STAR and their rarity.
+FUSION_BASE_GOLD_COST = 400
+FUSION_STAR_COST_MULT = {1: 1, 2: 3, 3: 8, 4: 20, 5: 40}  # keyed by the parents' current star
+FUSION_RARITY_COST_MULT = {"common": 1.0, "rare": 1.8, "epic": 3.0, "legendary": 5.0, "mythic": 8.0}
+
+
+def fusion_cost(parent_star: int, rarity: str) -> int:
+    """Gold to fuse two creatures that are at `parent_star` and (the higher) `rarity`.
+    Ranges from ~400 (1★ common) to ~256k (5★ mythic), so high-star fusion is a real
+    long-term gold sink instead of pocket change."""
+    star_mult = FUSION_STAR_COST_MULT.get(parent_star, FUSION_STAR_COST_MULT[max(FUSION_STAR_COST_MULT)])
+    rarity_mult = FUSION_RARITY_COST_MULT.get(rarity, 1.0)
+    return round(FUSION_BASE_GOLD_COST * star_mult * rarity_mult)
 # A fused creature must ALWAYS come out stronger than either parent — otherwise the
 # gold + the two creatures you sank into it bought a downgrade. The child inherits
 # the BEST of each parent's base stat, keeps the higher of each body-part upgrade

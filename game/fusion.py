@@ -89,13 +89,14 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
         raise GameError(
             f"سقف ستاره‌ی فعلی تو {cap}⭐ ـه — برای بالاتر رفتن باید {hall} رو ارتقا بدی."
         )
-    if user.coins < constants.FUSION_GOLD_COST:
-        raise GameError(f"طلا کافی نداری! فیوژن {constants.FUSION_GOLD_COST} طلا هزینه داره.")
+    base_rarity = constants.higher_rarity(parent_a.rarity, parent_b.rarity)
+    cost = constants.fusion_cost(parent_a.star_level, base_rarity)
+    if user.coins < cost:
+        raise GameError(f"طلا کافی نداری! فیوژن این جفت {cost} طلا هزینه داره.")
 
-    user.coins -= constants.FUSION_GOLD_COST
+    user.coins -= cost
     user.save(update_fields=["coins"])
 
-    base_rarity = constants.higher_rarity(parent_a.rarity, parent_b.rarity)
     new_rarity = base_rarity
     if random.random() < constants.RARITY_UPGRADE_CHANCE.get(base_rarity, 0.0):
         new_rarity = constants.next_rarity(base_rarity)
