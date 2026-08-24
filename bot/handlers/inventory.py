@@ -27,58 +27,94 @@ def _item_line(item: Equipment) -> str:
     )
 
 
-def _inventory_sync(tg_user):
-    user, _ = get_or_create_user(tg_user)
-    return list_inventory(user)
-
-
 PAGE_SIZE = 10
 
+_RARITY_RANK = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
 
-def _inventory_render(items: list[Equipment], page: int) -> tuple[str, InlineKeyboardMarkup]:
-    """One page of the backpack — paginated so a big armory doesn't overrun
-    Telegram's keyboard limit and break the whole screen."""
+
+def _inv_home_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    items = list_inventory(user)
+    counts = {slot: 0 for slot in constants.EQUIPMENT_SLOTS}
+    for i in items:
+        counts[i.slot] = counts.get(i.slot, 0) + 1
+    return counts
+
+
+def _inv_home_render(counts: dict) -> tuple[str, InlineKeyboardMarkup]:
+    text = (
+        f"{get_emoji('collection')} <b>کوله‌پشتی تجهیزات</b>\n"
+        "بر اساس نوع دسته‌بندی شده — یه دسته انتخاب کن (رنگ کنار هر آیتم = نایابی):"
+    )
+    slots = constants.EQUIPMENT_SLOTS
+    rows = []
+    for i in range(0, len(slots), 2):
+        row = [
+            btn(f"{constants.EQUIPMENT_SLOT_LABELS[s]} ({counts.get(s, 0)})", style=NAV, callback_data=f"inv_cat:{s}:0")
+            for s in slots[i : i + 2]
+        ]
+        rows.append(row)
+    rows.append([back_btn("menu:me")])
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _inv_cat_sync(tg_user, slot):
+    user, _ = get_or_create_user(tg_user)
+    items = [i for i in list_inventory(user) if i.slot == slot]
+    # rarity (desc) then level (desc), so the best gear is on top
+    items.sort(key=lambda i: (_RARITY_RANK.get(i.rarity, 0), i.level), reverse=True)
+    return items
+
+
+def _inv_cat_render(slot, items: list[Equipment], page: int) -> tuple[str, InlineKeyboardMarkup]:
+    label = constants.EQUIPMENT_SLOT_LABELS[slot]
+    if not items:
+        return (
+            f"{get_emoji('collection')} <b>کوله‌پشتی — {label}</b>\n\nتوی این دسته چیزی نداری.",
+            InlineKeyboardMarkup([[back_btn("menu:inventory", "بازگشت به دسته‌ها")]]),
+        )
     total_pages = max(1, (len(items) + PAGE_SIZE - 1) // PAGE_SIZE)
     page = max(0, min(page, total_pages - 1))
     chunk = items[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
     rows = []
     for i in chunk:
         tag = "⚔️ " if i.equipped_on_id else ""
-        rows.append(
-            [btn(f"{tag}{constants.EQUIPMENT_SLOT_LABELS[i.slot]} {i.name} +{i.level}", style=LIST, callback_data=f"inv_pick:{i.id}")]
-        )
+        rows.append([btn(
+            f"{tag}{constants.RARITY_LABELS[i.rarity]} {i.name} +{i.level}",
+            style=LIST, callback_data=f"inv_pick:{i.id}",
+        )])
     nav = []
     if page > 0:
-        nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"inv_page:{page - 1}"))
+        nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"inv_cat:{slot}:{page - 1}"))
     if page < total_pages - 1:
-        nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"inv_page:{page + 1}"))
+        nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"inv_cat:{slot}:{page + 1}"))
     if nav:
         rows.append(nav)
-    rows.append([back_btn("menu:me")])
+    rows.append([back_btn("menu:inventory", "بازگشت به دسته‌ها")])
     page_note = f"  (صفحه {page + 1}/{total_pages})" if total_pages > 1 else ""
-    text = f"{get_emoji('collection')} <b>کوله‌پشتی تجهیزات</b> — {len(items)} قطعه{page_note}\nرو هرکدوم بزن:"
+    text = f"{get_emoji('collection')} <b>کوله‌پشتی — {label}</b>{page_note}\nرو هرکدوم بزن:"
     return text, InlineKeyboardMarkup(rows)
 
 
 async def inventory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    items = await run_db(_inventory_sync, update.effective_user)
-    if not items:
+    counts = await run_db(_inv_home_sync, update.effective_user)
+    if sum(counts.values()) == 0:
         await send_screen(update,
             f"{get_emoji('lab')} کوله‌پشتی‌ات خالیه! از باکس‌های ژنتیکی (📦 باکس ژنتیکی) تجهیزات به‌دست بیار.",
             parse_mode="HTML",
             reply_markup=back_only_keyboard(),
         )
         return
-    text, keyboard = _inventory_render(items, 0)
+    text, keyboard = _inv_home_render(counts)
     await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
 
 
-async def inventory_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def inventory_cat_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    page = int(query.data.split(":")[1])
-    items = await run_db(_inventory_sync, update.effective_user)
+    _, slot, page = query.data.split(":")
+    items = await run_db(_inv_cat_sync, update.effective_user, slot)
     await query.answer()
-    text, keyboard = _inventory_render(items, page)
+    text, keyboard = _inv_cat_render(slot, items, int(page))
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -549,7 +585,7 @@ def register(application) -> None:
     application.add_handler(CommandHandler("unequip", unequip_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("upgrade_item", upgrade_item_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(inventory_pick_callback, pattern=r"^inv_pick:"))
-    application.add_handler(CallbackQueryHandler(inventory_page_callback, pattern=r"^inv_page:"))
+    application.add_handler(CallbackQueryHandler(inventory_cat_callback, pattern=r"^inv_cat:"))
     application.add_handler(CallbackQueryHandler(inventory_equip_callback, pattern=r"^inv_equip:"))
     application.add_handler(CallbackQueryHandler(inventory_unequip_callback, pattern=r"^inv_unequip:"))
     application.add_handler(CallbackQueryHandler(inventory_upgrade_do_callback, pattern=r"^inv_up_do:"))

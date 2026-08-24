@@ -200,6 +200,7 @@ def upgrade_panel_keyboard(creature_id: int, is_active: bool = True) -> InlineKe
             btn("☠️ زهر", style=BUILD, callback_data=f"lab:up_poison:{creature_id}"),
         ],
         [btn("مدیریت تجهیزات", emoji_key="btn_inventory", style=PRIMARY, callback_data=f"upg_eq:{creature_id}")],
+        [btn("🍖 تقویت با خوردن هیولا", style=BUILD, callback_data=f"devour_start:{creature_id}")],
     ]
     if not is_active:
         # setting the default from here saves a trip through the collection screen,

@@ -502,8 +502,8 @@ EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL = 5
 # creature and then putting it to work compounds — which is the point.
 # The cap stops a full late-game roster from turning idle income into the whole
 # economy; hunting and raiding have to stay worth doing.
-WORKER_BONUS_PER_CREATURE_LEVEL = 0.02
-WORKER_BONUS_CAP = 1.5  # +150% at most, however many high-level creatures are stationed
+WORKER_BONUS_PER_CREATURE_LEVEL = 0.06  # 3× stronger — a stationed worker matters a lot now
+WORKER_BONUS_CAP = 4.0  # up to +400% output from stationed creatures
 
 # ── Monster Cave / egg incubation (game/breeding.py) ──────────────────────────
 # Two phases, deliberately decoupled:
