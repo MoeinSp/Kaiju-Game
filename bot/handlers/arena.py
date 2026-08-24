@@ -41,6 +41,7 @@ from game.season import (
 logger = logging.getLogger(__name__)
 
 PENDING_OPPONENT_KEY = "arena_pending_opponent"
+ARENA_DETAIL_KEY = "arena_last_detail"
 
 
 def _format_remaining(seconds: int) -> str:
@@ -223,6 +224,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     context.user_data.pop(PENDING_OPPONENT_KEY, None)
+    context.user_data[ARENA_DETAIL_KEY] = result.get("detail_log", "")
 
     if result["won"]:
         summary = (
@@ -238,6 +240,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     keyboard = InlineKeyboardMarkup(
         [
+            [btn("🔍 جزییات حمله", style=NAV, callback_data="arena_detail")],
             [btn("حریف بعدی", emoji_key="btn_attack", style=NAV, callback_data="arena_find")],
             [back_btn("menu:arena", "بازگشت به آرنا")],
         ]
@@ -249,6 +252,17 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
         parse_mode="HTML",
         reply_markup=keyboard,
     )
+
+
+async def arena_detail_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    detail = context.user_data.get(ARENA_DETAIL_KEY)
+    if not detail:
+        await query.answer("جزییاتی ذخیره نشده — یه حمله‌ی تازه بزن.", show_alert=True)
+        return
+    await query.answer()
+    keyboard = InlineKeyboardMarkup([[back_btn("menu:arena", "بازگشت به آرنا")]])
+    await safe_edit_message_text(query, detail, parse_mode="HTML", reply_markup=keyboard)
 
 
 # ── Revenge panel ─────────────────────────────────────────────────────────────
@@ -468,6 +482,7 @@ def register(application) -> None:
     application.add_handler(CommandHandler("arena", arena_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(arena_find_callback, pattern=r"^arena_find$"))
     application.add_handler(CallbackQueryHandler(arena_attack_callback, pattern=r"^arena_attack$"))
+    application.add_handler(CallbackQueryHandler(arena_detail_callback, pattern=r"^arena_detail$"))
     application.add_handler(CallbackQueryHandler(arena_top_callback, pattern=r"^arena_top$"))
     application.add_handler(
         CallbackQueryHandler(arena_last_season_callback, pattern=r"^arena_last_season$")

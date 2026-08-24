@@ -11,12 +11,12 @@ from bio_lab.repository import (
     mention,
     touch_membership,
 )
-from bot.buttons import CONFIRM, DANGER, PRIMARY, back_btn, btn
+from bot.buttons import CONFIRM, DANGER, NAV, PRIMARY, back_btn, btn
 from bot.handlers.group_words import group_footer_keyboard
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from game import constants
 from game.buildings import maybe_award_speedup_card
-from game.combat import resolve_duel
+from game.combat import resolve_duel, resolve_duel_detailed
 from game.creature import GameError, add_xp, apply_random_mutation
 from game.daily import assert_energy_available, check_missions, group_event_available, mark_group_event, record_action
 from game.emoji import get_emoji
@@ -502,7 +502,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     spend_energy(attacker, constants.RAID_ATTACK_ENERGY_COST, "حمله")
     attacker.save(update_fields=["energy", "energy_updated_at"])
 
-    winner_creature, log_text = resolve_duel(a_creature, t_creature)
+    winner_creature, log_text, detail_log = resolve_duel_detailed(a_creature, t_creature)
     attacker_won = winner_creature.id == a_creature.id
     winner_user = attacker if attacker_won else target
     loser_user = target if attacker_won else attacker
@@ -531,6 +531,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     )
     return {
         "log_text": log_text,
+        "detail_log": detail_log,
         "attacker_won": attacker_won,
         "winner_name": display_name(winner_user),
         "loot": loot,
@@ -565,10 +566,29 @@ async def pvp_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         reward += f" {get_emoji('celebrate')} {result['winner_creature']} رسید به سطح {result['winner_new_level']}!"
     reward += f"\n⚡ ۱ انرژی کم شد (باقی‌مونده: {result['energy_left']})"
     reward += _mission_lines(result["missions"]) + _speedup_note(result["speedup"])
+    context.user_data["pvp_last_detail"] = result.get("detail_log", "")
+    keyboard = InlineKeyboardMarkup(
+        [[btn("🔍 جزییات حمله", style=NAV, callback_data=f"gatk_detail:{update.effective_user.id}")]]
+        + list(group_footer_keyboard(update.effective_user.id).inline_keyboard)
+    )
     await safe_edit_message_text(
         query, result["log_text"] + "\n\n" + head + reward, parse_mode="HTML",
-        reply_markup=group_footer_keyboard(update.effective_user.id),
+        reply_markup=keyboard,
     )
+
+
+async def pvp_detail_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    _, owner_id = query.data.split(":")
+    if update.effective_user.id != int(owner_id):
+        await query.answer("این جزییات مال تو نیست.", show_alert=True)
+        return
+    detail = context.user_data.get("pvp_last_detail")
+    if not detail:
+        await query.answer("جزییاتی ذخیره نشده.", show_alert=True)
+        return
+    await query.answer()
+    await query.message.reply_text(detail, parse_mode="HTML")
 
 
 async def pvp_attack_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -751,6 +771,7 @@ def register(application) -> None:
     application.add_handler(CommandHandler("attack", attack, group_filter))
     application.add_handler(CallbackQueryHandler(pvp_attack_callback, pattern=r"^gatk:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_attack_cancel_callback, pattern=r"^gatk_cancel:\d+$"))
+    application.add_handler(CallbackQueryHandler(pvp_detail_callback, pattern=r"^gatk_detail:\d+$"))
     application.add_handler(CommandHandler("leaderboard", leaderboard, group_filter))
     application.add_handler(CommandHandler("guardian", guardian, group_filter))
     application.add_handler(CommandHandler("guardian_challenge", guardian_challenge, group_filter))

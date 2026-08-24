@@ -8,7 +8,7 @@ from django.utils import timezone
 from bio_lab.models import AttackLog, Creature, User
 from bio_lab.repository import lab_display
 from game import constants, lab
-from game.combat import resolve_duel
+from game.combat import resolve_duel, resolve_duel_detailed
 from game.creature import GameError, effective_stats
 from game.equipment import get_equipped_items
 
@@ -174,7 +174,7 @@ def attack(attacker: User, opponent: dict) -> dict:
         if is_shielded(defender_user):
             raise GameError("این حریف الان سپر محافظ داره، یکی دیگه رو امتحان کن.")
 
-    winner, log_text = resolve_duel(attacker_creature, defender_creature)
+    winner, log_text, detail_log = resolve_duel_detailed(attacker_creature, defender_creature)
     won = winner is attacker_creature
 
     attacker_power = creature_power(attacker_creature, get_equipped_items(attacker_creature))
@@ -217,6 +217,7 @@ def attack(attacker: User, opponent: dict) -> dict:
         "won": won,
         "lab_up": lab_up,
         "log_text": log_text,
+        "detail_log": detail_log,
         "loot": loot,
         "cup_delta": delta,
         "opponent_label": opponent["label"],
