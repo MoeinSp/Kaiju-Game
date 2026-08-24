@@ -9,6 +9,19 @@ from game.equipment import get_equipped_items
 
 MAX_ROUNDS = 12
 CRIT_MULTIPLIER = 1.5
+# Tight, deterministic variance: enough to keep the blow-by-blow looking alive, too
+# small to flip who wins. Combat is decided by stats + element, never a coin flip —
+# so the same matchup always resolves the same way (no "won, then lost the rematch").
+DMG_VARIANCE = (0.97, 1.03)
+
+
+def _matchup_seed(a: Creature, b: Creature) -> int:
+    """A stable seed from both creatures' composition, so a given pairing always
+    plays out identically (works for unsaved bot creatures with id=None too)."""
+    def key(c: Creature):
+        return (c.element, int(c.level), int(c.base_hp), int(c.base_atk),
+                int(c.base_def), int(c.base_spd), c.rarity, c.star_level)
+    return hash((key(a), key(b))) & 0x7FFFFFFF
 
 
 @dataclass
@@ -31,6 +44,7 @@ def resolve_duel_detailed(creature_a: Creature, creature_b: Creature) -> tuple[C
     """Like resolve_duel but also returns a detailed blow-by-blow log (one line per
     hit) for the optional «جزییات حمله» view. The compact log is the default — the
     old always-on blow-by-blow read as 24 lines of noise."""
+    rng = random.Random(_matchup_seed(creature_a, creature_b))
     fa = Fighter(creature_a, effective_stats(creature_a, get_equipped_items(creature_a)), 0)
     fa.hp = fa.stats["hp"]
     fb = Fighter(creature_b, effective_stats(creature_b, get_equipped_items(creature_b)), 0)
@@ -41,11 +55,12 @@ def resolve_duel_detailed(creature_a: Creature, creature_b: Creature) -> tuple[C
     while fa.hp > 0 and fb.hp > 0 and round_num < MAX_ROUNDS:
         round_num += 1
         blow_by_blow.append(f"<b>راند {round_num}</b>")
-        order = sorted([fa, fb], key=lambda f: f.stats["spd"] + random.uniform(0, 3), reverse=True)
+        # faster attacks first; the tiny seeded tiebreak is deterministic
+        order = sorted([fa, fb], key=lambda f: (f.stats["spd"], rng.random()), reverse=True)
         for attacker, defender in ((order[0], order[1]), (order[1], order[0])):
             if attacker.hp <= 0 or defender.hp <= 0:
                 continue
-            _attack(attacker, defender, blow_by_blow)
+            _attack(attacker, defender, blow_by_blow, rng)
 
     winner = _decide_winner(fa, fb)
     mult = constants.element_multiplier(fa.creature.element, fb.creature.element)
@@ -82,13 +97,14 @@ def _scoreline(f: Fighter) -> str:
     return f"{bar} {hp}/{maxhp}❤️  <b>{f.creature.name}</b> <i>(زد: {round(f.dmg_dealt)}{crit})</i>"
 
 
-def _attack(attacker: Fighter, defender: Fighter, detail: list[str]) -> None:
+def _attack(attacker: Fighter, defender: Fighter, detail: list[str], rng: random.Random) -> None:
     """Resolves one hit: folds the result into the attacker's running totals (for the
-    compact scoreboard) and appends one blow-by-blow line to `detail`."""
+    compact scoreboard) and appends one blow-by-blow line to `detail`. All randomness
+    comes from the seeded `rng`, so the fight is deterministic per matchup."""
     mult = constants.element_multiplier(attacker.creature.element, defender.creature.element)
     base = max(1.0, attacker.stats["atk"] - defender.stats["def"] * 0.5)
-    is_crit = random.random() < attacker.stats["crit_rate"]
-    dmg = round(base * mult * random.uniform(0.85, 1.15) * (CRIT_MULTIPLIER if is_crit else 1.0))
+    is_crit = rng.random() < attacker.stats["crit_rate"]
+    dmg = round(base * mult * rng.uniform(*DMG_VARIANCE) * (CRIT_MULTIPLIER if is_crit else 1.0))
     defender.hp -= dmg
     attacker.dmg_dealt += dmg
     if is_crit:
@@ -118,11 +134,20 @@ def _attack(attacker: Fighter, defender: Fighter, detail: list[str]) -> None:
     detail.append(f"{attacker.creature.name} ➜ {defender.creature.name}  <b>−{dmg}</b>{suffix_txt}")
 
 
+def _power(f: Fighter) -> float:
+    s = f.stats
+    return s["hp"] + s["atk"] + s["def"] + s["spd"]
+
+
 def _decide_winner(fa: Fighter, fb: Fighter) -> Fighter:
     if fa.hp <= 0 and fb.hp > 0:
         return fb
     if fb.hp <= 0 and fa.hp > 0:
         return fa
-    ratio_a = fa.hp / fa.stats["hp"]
-    ratio_b = fb.hp / fb.stats["hp"]
-    return fa if ratio_a >= ratio_b else fb
+    # both alive (timeout): higher remaining-HP ratio wins; if that ties, the
+    # stronger creature does — so the outcome is never a coin flip.
+    ratio_a = fa.hp / max(1.0, fa.stats["hp"])
+    ratio_b = fb.hp / max(1.0, fb.stats["hp"])
+    if abs(ratio_a - ratio_b) > 1e-9:
+        return fa if ratio_a > ratio_b else fb
+    return fa if _power(fa) >= _power(fb) else fb

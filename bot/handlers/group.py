@@ -509,9 +509,8 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     winner_creature_obj = a_creature if attacker_won else t_creature
     loser_creature_obj = t_creature if attacker_won else a_creature
 
-    # the winner loots a share of the LOSER's gold (capped), instead of a flat reward
-    loot = min(round(loser_user.coins * constants.GROUP_ATTACK_LOOT_PERCENT), constants.GROUP_ATTACK_LOOT_CAP)
-    loot = max(0, min(loot, loser_user.coins))
+    # the winner loots exactly 10% of the LOSER's gold (integer, no cap, no decimals)
+    loot = max(0, loser_user.coins // 10)
     loser_user.coins -= loot
     winner_user.coins += loot
     winner_levels = add_xp(winner_creature_obj, constants.DUEL_WIN_XP)

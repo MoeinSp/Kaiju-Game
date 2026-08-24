@@ -143,14 +143,10 @@ def find_opponent(attacker: User) -> dict:
 
 
 def expected_loot(opponent: dict, attacker_level: int = 1) -> int:
-    """A slice of the defender's gold, floored so raiding a broke player still pays
-    and capped against the ATTACKER's own progression stage — one lucky match
-    against a hoarder shouldn't hand a new player more than hours of hunting."""
-    raw = round(opponent["loot_pool"] * constants.ARENA_LOOT_PERCENT)
-    return max(
-        constants.ARENA_LOOT_MIN,
-        min(raw, constants.arena_loot_cap(attacker_level)),
-    )
+    """Exactly 10% of the defender's gold, as an integer (no decimals, no cap). A
+    small floor keeps a raid on a near-broke target from paying literally nothing."""
+    raw = int(opponent["loot_pool"]) // 10  # exactly 10%, integer
+    return max(constants.ARENA_LOOT_MIN, raw)
 
 
 @transaction.atomic
