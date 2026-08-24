@@ -703,6 +703,32 @@ async def _maybe_capture_group_reply(update: Update, context: ContextTypes.DEFAU
     return True
 
 
+# How long the bot's reply (and the triggering user message) survive in a group
+# before being auto-deleted, per action. Keeps groups from filling with transient
+# cards. The leaderboard lingers longer; everything else is short-lived.
+_GROUP_TTL_DEFAULT = 60
+_GROUP_TTL = {"leaderboard": 300}
+
+
+async def _delete_msgs_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id, ids = context.job.data
+    for mid in ids:
+        try:
+            await context.bot.delete_message(chat_id, mid)
+        except TelegramError:
+            pass
+
+
+def _schedule_cleanup(context, chat_id: int, message_ids, action: str) -> None:
+    """Auto-delete the given messages (bot reply + the user's trigger) after the
+    action's TTL, so recognised word-commands don't pile up in the group."""
+    jq = getattr(context, "job_queue", None)
+    ids = [m for m in message_ids if m]
+    if jq is None or not ids:
+        return
+    jq.run_once(_delete_msgs_job, _GROUP_TTL.get(action, _GROUP_TTL_DEFAULT), data=(chat_id, ids))
+
+
 async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     if message is None or not message.text:
@@ -739,37 +765,44 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     }
     if action in delegates:
         await delegates[action](update, context)
+        # combat/raid replies are sent inside the delegate; just tidy the trigger word
+        _schedule_cleanup(context, message.chat_id, [message.message_id], action)
         return
 
     if action == "reward":
         user, result = await run_db(_reward_sync, update.effective_user, message.chat)
-        await message.reply_text(
+        sent = await message.reply_text(
             _reward_text(user, result),
             parse_mode="HTML",
             reply_markup=group_footer_keyboard(update.effective_user.id, skip="reward"),
         )
+        _schedule_cleanup(context, message.chat_id, [message.message_id, sent.message_id], action)
         return
 
     if action == "mission":
         from bot.handlers import private as private_handlers
 
         await private_handlers.missions(update, context)
+        _schedule_cleanup(context, message.chat_id, [message.message_id], action)
         return
 
     if action == "alliance":
         from bot.handlers import private as private_handlers
 
         await private_handlers.alliance_info_cmd(update, context)
+        _schedule_cleanup(context, message.chat_id, [message.message_id], action)
         return
 
     if action in _CARD_ACTIONS or action == "help":
         try:
             data = await run_db(_card_sync, update.effective_user, message.chat, action)
         except GameError as exc:
-            await message.reply_text(str(exc))
+            sent = await message.reply_text(str(exc))
+            _schedule_cleanup(context, message.chat_id, [message.message_id, sent.message_id], action)
             return
         text, keyboard = _render(action, data)
-        await message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+        sent = await message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+        _schedule_cleanup(context, message.chat_id, [message.message_id, sent.message_id], action)
 
 
 async def group_card_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
