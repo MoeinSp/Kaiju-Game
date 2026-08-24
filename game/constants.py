@@ -749,6 +749,14 @@ def element_multiplier(attacker_element: str, defender_element: str) -> float:
     return 1.0
 
 
+def element_advantage_chain() -> str:
+    """Compact one-line cycle of who beats whom, e.g. 🔥 › 🪨 › ⚡ › 💧 › 🔥."""
+    from game.emoji import get_emoji
+
+    seq = ["fire", "earth", "electric", "water", "fire"]
+    return "🔁 ترتیب برتری عنصری: " + " › ".join(get_emoji(ELEMENT_EMOJI_KEYS[e]) for e in seq)
+
+
 def element_matchup_note(my_element: str, opp_element: str) -> str:
     """A one-line elemental heads-up for a fight preview: warns when the opponent's
     element beats yours, cheers when yours beats theirs, empty when neutral."""

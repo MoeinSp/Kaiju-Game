@@ -8,6 +8,7 @@ from bio_lab.repository import (
     get_or_create_group,
     get_or_create_user,
     group_member_creatures,
+    mention,
     touch_membership,
 )
 from bot.buttons import CONFIRM, DANGER, PRIMARY, back_btn, btn
@@ -633,10 +634,10 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         )
         return
     medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
-    lines = [f"{get_emoji('trophy')} <b>برترین موجودات این گروه</b>\n"]
+    lines = [f"{get_emoji('trophy')} <b>برترین بازیکن‌های این گروه</b>\n"]
     for i, c in enumerate(creatures, start=1):
         rank = medals[i - 1] if i <= 3 else f"{i}."
-        lines.append(f"{rank} {c.name} (Lv{c.level}) — قدرت {_creature_power(c)}")
+        lines.append(f"{rank} {mention(c.owner)} — 💪{_creature_power(c)}  <i>(Lv{c.level})</i>")
     await update.message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
 

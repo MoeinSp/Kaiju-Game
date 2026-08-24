@@ -15,23 +15,21 @@ CRIT_MULTIPLIER = 1.5
 class Fighter:
     creature: Creature
     stats: dict[str, float]
-    hp: int
+    hp: float
+    dmg_dealt: float = 0.0
+    crits: int = 0
 
 
 def resolve_duel(creature_a: Creature, creature_b: Creature) -> tuple[Creature, str]:
     """Simulates an automatic duel and returns (winner_creature, battle_log_text).
-    Runs in sync context (called from run_db-wrapped code), so it's safe to fetch
-    equipped items here directly rather than requiring the caller to pass them."""
+
+    The log is a compact scoreboard, not a blow-by-blow: the old version printed up
+    to 24 «A ➜ B −5» lines that read as noise. Now it's the matchup, an HP bar and
+    total damage for each side, and the outcome — the numbers people actually want."""
     fa = Fighter(creature_a, effective_stats(creature_a, get_equipped_items(creature_a)), 0)
     fa.hp = fa.stats["hp"]
     fb = Fighter(creature_b, effective_stats(creature_b, get_equipped_items(creature_b)), 0)
     fb.hp = fb.stats["hp"]
-
-    log = [
-        f"{get_emoji('battle')} <b>{fa.creature.name}</b> {constants.element_label(fa.creature.element)}"
-        f"  ⚔️  <b>{fb.creature.name}</b> {constants.element_label(fb.creature.element)}",
-        "",
-    ]
 
     round_num = 0
     while fa.hp > 0 and fb.hp > 0 and round_num < MAX_ROUNDS:
@@ -40,48 +38,60 @@ def resolve_duel(creature_a: Creature, creature_b: Creature) -> tuple[Creature, 
         for attacker, defender in ((order[0], order[1]), (order[1], order[0])):
             if attacker.hp <= 0 or defender.hp <= 0:
                 continue
-            _attack(attacker, defender, log)
+            _attack(attacker, defender)
 
     winner = _decide_winner(fa, fb)
-    log.append("")
-    log.append(
-        f"<i>{fa.creature.name} {max(fa.hp, 0)}❤️  ·  {fb.creature.name} {max(fb.hp, 0)}❤️  ·  {round_num} راند</i>"
-    )
-    log.append(f"{get_emoji('trophy')} <b>برنده: {winner.creature.name}</b>")
+    mult = constants.element_multiplier(fa.creature.element, fb.creature.element)
+    if mult > 1:
+        edge = f"🔺 برتری عنصری با <b>{fa.creature.name}</b>"
+    elif mult < 1:
+        edge = f"🔺 برتری عنصری با <b>{fb.creature.name}</b>"
+    else:
+        edge = "⚖️ عنصرها خنثی‌ان"
+
+    log = [
+        f"{get_emoji('battle')} <b>{fa.creature.name}</b> {constants.element_label(fa.creature.element)}"
+        f"  ⚔️  <b>{fb.creature.name}</b> {constants.element_label(fb.creature.element)}",
+        edge,
+        "",
+        _scoreline(fa),
+        _scoreline(fb),
+        "",
+        f"{get_emoji('trophy')} <b>برنده: {winner.creature.name}</b>  <i>· {round_num} راند</i>",
+        constants.element_advantage_chain(),
+    ]
     return winner.creature, "\n".join(log)
 
 
-def _attack(attacker: Fighter, defender: Fighter, log: list[str]) -> None:
-    """Appends exactly one line per attack — poison and lifesteal are folded into
-    that same line as suffixes rather than getting their own lines, which used to
-    triple the length of every log."""
+def _scoreline(f: Fighter) -> str:
+    hp = max(0, round(f.hp))
+    maxhp = max(1, round(f.stats["hp"]))
+    bar = constants.render_bar(hp, maxhp, width=10)
+    crit = f" · 💥{f.crits}" if f.crits else ""
+    return f"{bar} {hp}/{maxhp}❤️  <b>{f.creature.name}</b> <i>(زد: {round(f.dmg_dealt)}{crit})</i>"
+
+
+def _attack(attacker: Fighter, defender: Fighter) -> None:
+    """Resolves one hit and folds the result into the attacker's running totals —
+    the log no longer prints a line per hit."""
     mult = constants.element_multiplier(attacker.creature.element, defender.creature.element)
     base = max(1.0, attacker.stats["atk"] - defender.stats["def"] * 0.5)
     is_crit = random.random() < attacker.stats["crit_rate"]
     dmg = round(base * mult * random.uniform(0.85, 1.15) * (CRIT_MULTIPLIER if is_crit else 1.0))
     defender.hp -= dmg
-
-    suffixes = []
+    attacker.dmg_dealt += dmg
     if is_crit:
-        suffixes.append("💥")
-    if mult > 1:
-        suffixes.append("🔺مؤثر")
-    elif mult < 1:
-        suffixes.append("🔻کم‌اثر")
+        attacker.crits += 1
 
     if attacker.stats["lifesteal"] > 0:
         healed = round(dmg * attacker.stats["lifesteal"])
         if healed > 0:
             attacker.hp = min(attacker.stats["hp"], attacker.hp + healed)
-            suffixes.append(f"{get_emoji('lifesteal')}+{healed}")
 
     if attacker.stats["poison"] > 0 and defender.hp > 0:
         poison_dmg = attacker.stats["poison"]
         defender.hp -= poison_dmg
-        suffixes.append(f"{get_emoji('poison')}+{poison_dmg}")
-
-    suffix_txt = f"  <i>{' '.join(suffixes)}</i>" if suffixes else ""
-    log.append(f"{attacker.creature.name} ➜ {defender.creature.name}  <b>−{dmg}</b>{suffix_txt}")
+        attacker.dmg_dealt += poison_dmg
 
 
 def _decide_winner(fa: Fighter, fb: Fighter) -> Fighter:

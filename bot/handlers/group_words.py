@@ -18,7 +18,7 @@ from telegram.error import TelegramError
 from telegram.ext import (CallbackQueryHandler, CommandHandler, ContextTypes,
                           MessageHandler, filters)
 
-from bio_lab.repository import display_name, get_active_creature, get_or_create_group, get_or_create_user, lab_display
+from bio_lab.repository import display_name, get_active_creature, get_or_create_group, get_or_create_user, lab_display, mention
 from bot.buttons import BACK, BATTLE, BUILD, CONFIRM, NAV, PRIMARY, SHOP, btn
 from bot.utils import run_db, safe_edit_message_text
 from config import BOT_USERNAME
@@ -611,10 +611,10 @@ def _leaderboard_card(user, ranked, powers) -> tuple[str, InlineKeyboardMarkup]:
     if not ranked:
         return "هنوز هیچ موجودی توی این گروه ثبت نشده.", group_footer_keyboard(user.id, skip="leaderboard")
     medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
-    lines = [f"{get_emoji('trophy')} <b>برترین موجودات این گروه</b>", ""]
+    lines = [f"{get_emoji('trophy')} <b>برترین بازیکن‌های این گروه</b>", ""]
     for i, c in enumerate(ranked, start=1):
         rank = medals[i - 1] if i <= 3 else f"<b>{i}.</b>"
-        lines.append(f"{rank} {c.name} (Lv{c.level}) — 💪{powers.get(c.id, 0)}")
+        lines.append(f"{rank} {mention(c.owner)} — 💪{powers.get(c.id, 0)}  <i>(Lv{c.level})</i>")
     return "\n".join(lines), group_footer_keyboard(user.id, skip="leaderboard")
 
 

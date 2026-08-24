@@ -4,7 +4,7 @@ from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bio_lab.models import AttackLog
-from bio_lab.repository import get_or_create_user, lab_display
+from bio_lab.repository import get_or_create_user, lab_display, mention
 from bot.buttons import BATTLE, DANGER, NAV, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants
@@ -434,8 +434,7 @@ async def arena_top_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         lines.append("<i>هنوز کسی کاپ نگرفته — اولین نفر باش!</i>")
     for row in ranked:
         rank = medals[row["rank"] - 1] if row["rank"] <= 3 else f"{row['rank']}."
-        label = lab_display(row["user"])
-        lines.append(f"{rank} {label} — 🏆 <b>{row['cup']}</b>  <i>(ریست به {row['reset_to']})</i>")
+        lines.append(f"{rank} {mention(row['user'])} — 🏆 <b>{row['cup']}</b>  <i>(ریست به {row['reset_to']})</i>")
     keyboard = InlineKeyboardMarkup([[back_btn("menu:arena")]])
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
@@ -461,8 +460,7 @@ async def arena_last_season_callback(update: Update, context: ContextTypes.DEFAU
     lines = [f"🗓 <b>نتایج فصل {week}</b>\n"]
     for r in results:
         rank = medals[r.rank - 1] if r.rank <= 3 else f"{r.rank}."
-        label = lab_display(r.user)
-        lines.append(f"{rank} {label} — 🏆 {r.cup_before} → {r.cup_after}")
+        lines.append(f"{rank} {mention(r.user)} — 🏆 {r.cup_before} → {r.cup_after}")
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
 

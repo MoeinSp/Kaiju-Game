@@ -24,6 +24,14 @@ def display_name(user: User) -> str:
     return f"بازیکن {user.id}"
 
 
+def mention(user: User) -> str:
+    """A clickable Telegram mention of the account (tg://user link), for leaderboards
+    where the person — not the lab or creature — is the identity. The visible label
+    is the escaped account name; tapping it opens the user's profile."""
+    label = display_name(user)
+    return f'<a href="tg://user?id={user.id}">{label}</a>'
+
+
 def lab_display(user: User) -> str:
     """The lab's name, escaped for parse_mode="HTML" message bodies.
 
@@ -56,7 +64,9 @@ def touch_membership(group: Group, user: User) -> None:
 
 def group_member_creatures(group: Group) -> list[Creature]:
     member_ids = GroupMembership.objects.filter(group=group).values_list("user_id", flat=True)
-    return list(Creature.objects.filter(owner_id__in=member_ids, is_active=True))
+    # select_related("owner") so leaderboards can mention the account without a lazy
+    # FK query firing on the event loop (SynchronousOnlyOperation)
+    return list(Creature.objects.filter(owner_id__in=member_ids, is_active=True).select_related("owner"))
 
 
 def resolve_user(identifier: str) -> User | None:
