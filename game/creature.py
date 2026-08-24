@@ -1,6 +1,7 @@
 import datetime
 import random
 
+from django.db import transaction
 from django.utils import timezone
 
 from bio_lab.models import Creature, User
@@ -63,6 +64,56 @@ def add_xp(creature: Creature, amount: int) -> int:
         creature.base_spd += constants.LEVEL_UP_SPD
         levels_gained += 1
     return levels_gained
+
+
+def _devour_xp(sacrifice: Creature) -> int:
+    """XP a target gains from devouring `sacrifice` — scales with the sacrifice's
+    level, rarity and stars, so feeding a strong creature is worth more."""
+    rarity_idx = constants.RARITY_ORDER.index(sacrifice.rarity) if sacrifice.rarity in constants.RARITY_ORDER else 0
+    per_level = constants.CREATURE_XP_BASE + constants.CREATURE_XP_LINEAR
+    mult = (1 + 0.3 * rarity_idx) * (1 + 0.5 * max(0, sacrifice.star_level - 1))
+    return max(per_level, round(per_level * max(1, sacrifice.level) * mult))
+
+
+def devour_candidates(user: User, target_id: int) -> list[Creature]:
+    """Creatures that may be fed to `target_id`: any of the player's OTHER creatures
+    that aren't currently active or busy (mining / breeding)."""
+    from game.workers import creature_status
+
+    out = []
+    for c in Creature.objects.filter(owner=user).exclude(id=target_id).order_by("rarity", "level"):
+        if c.is_active:
+            continue
+        if creature_status(user, c) is not None:
+            continue
+        out.append(c)
+    return out
+
+
+@transaction.atomic
+def devour_creature(user: User, target_id: int, sacrifice_id: int) -> dict:
+    """Feed one creature to another (fusion-without-stars): the sacrifice is consumed
+    and the target gains XP (possibly levelling up). No same-name/same-star rule."""
+    target = Creature.objects.filter(id=target_id, owner=user).first()
+    sacrifice = Creature.objects.filter(id=sacrifice_id, owner=user).first()
+    if target is None or sacrifice is None:
+        raise GameError("این موجود توی کلکسیون تو نیست.")
+    if target.id == sacrifice.id:
+        raise GameError("نمی‌تونی یه موجود رو به خودش بدی.")
+    if sacrifice.is_active:
+        raise GameError("موجود فعال رو نمی‌شه قربانی کرد — اول یکی دیگه رو فعال کن.")
+    from game.workers import creature_status
+
+    status = creature_status(user, sacrifice)
+    if status is not None:
+        raise GameError(f"«{sacrifice.name}» الان مشغوله ({status}) — اول آزادش کن.")
+
+    xp = _devour_xp(sacrifice)
+    sac_name = sacrifice.name
+    levels = add_xp(target, xp)
+    target.save()
+    sacrifice.delete()
+    return {"xp": xp, "levels": levels, "sac_name": sac_name, "target": target, "new_level": target.level}
 
 
 def feed(user: User, creature: Creature) -> int:
