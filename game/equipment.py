@@ -152,3 +152,59 @@ def upgrade_item(user: User, item_id: int, dupe_item_id: int) -> Equipment:
     item.level += 1
     item.save(update_fields=["level"])
     return item
+
+
+def _fuse_fail_chance(target: Equipment, sacrifice: Equipment) -> float:
+    """Same-slot fusion odds: a sacrifice of equal-or-higher rarity, or a higher
+    level, makes success more likely."""
+    chance = constants.EQUIPMENT_FUSE_FAIL_CHANCE
+    order = constants.RARITY_ORDER
+    if order.index(sacrifice.rarity) >= order.index(target.rarity):
+        chance -= 0.15
+    chance -= 0.03 * max(0, sacrifice.level - 1)
+    return max(0.05, min(0.6, chance))
+
+
+def fuse_equipment(user: User, target_id: int, sacrifice_id: int) -> dict:
+    """Sacrifice a SAME-SLOT item (sword into sword) to try to raise another by one
+    level. Flexible (no exact-duplicate needed) but risky: on failure the sacrifice
+    is still consumed and the level doesn't go up. Returns the outcome."""
+    try:
+        target = Equipment.objects.get(id=target_id)
+        sacrifice = Equipment.objects.get(id=sacrifice_id)
+    except Equipment.DoesNotExist:
+        raise GameError("این تجهیزات پیدا نشد.")
+    if target.owner_id != user.id or sacrifice.owner_id != user.id:
+        raise GameError("این تجهیزات مال تو نیست.")
+    if target.id == sacrifice.id:
+        raise GameError("باید دو تجهیزات متفاوت انتخاب کنی.")
+    if sacrifice.slot != target.slot:
+        raise GameError("باید هم‌نوع باشن — مثلاً شمشیر با شمشیر.")
+
+    from game.blacksmith import assert_forge_available, equipment_cap
+
+    assert_forge_available(user)
+    cap = equipment_cap(user)
+    if target.level >= cap:
+        raise GameError(f"این تجهیزات به سقف فعلی (+{cap}) رسیده — اول ⚒ آهنگری رو ارتقا بده.")
+
+    fail_chance = _fuse_fail_chance(target, sacrifice)
+    sacrifice.delete()  # the sacrifice is consumed whether it works or not
+    success = random.random() >= fail_chance
+    if success:
+        target.level += 1
+        target.save(update_fields=["level"])
+    return {"success": success, "target": target, "fail_chance": fail_chance, "new_level": target.level}
+
+
+def same_slot_candidates(user: User, target_id: int) -> list[Equipment]:
+    """Other unequipped-preferred items in the same slot as `target`, usable as a
+    fusion sacrifice (any rarity/model — just the slot must match)."""
+    target = Equipment.objects.filter(id=target_id, owner=user).first()
+    if target is None:
+        return []
+    return list(
+        Equipment.objects.filter(owner=user, slot=target.slot)
+        .exclude(id=target.id)
+        .order_by("equipped_on", "rarity", "level")
+    )

@@ -355,6 +355,9 @@ EQUIPMENT_BONUS_LABELS = {
 EQUIPMENT_MAX_LEVEL = 25
 EQUIPMENT_UPGRADE_BONUS_PCT = 0.15  # each +level adds 15% on top of the base bonus
 EQUIPMENT_UPGRADE_GOLD_COST = 40  # per +level, scaled by current level in upgrade_cost-style formula
+# same-slot equipment fusion (any sword into any sword): flexible but risky, unlike
+# the risk-free exact-duplicate upgrade. Better/rarer sacrifices improve the odds.
+EQUIPMENT_FUSE_FAIL_CHANCE = 0.35
 EQUIPMENT_DUPES_TO_UPGRADE = 1  # duplicate equipment (same slot+template+rarity) consumed per +level
 
 BASE_CRIT_CHANCE = 0.10
