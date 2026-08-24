@@ -916,7 +916,7 @@ def _do_sync(tg_user, chat, action, arg):
         opponent = arena.find_opponent(user)
         if opponent is None:
             raise GameError("حریفی پیدا نشد، دوباره امتحان کن.")
-        result = arena.attack(user, opponent)
+        result = arena.attack(user, opponent, award_cup=False)  # group arena is cup-neutral
         record_action(user, "arena_attack")
         result["missions"] = check_missions(user, "arena_attack")
         return {"kind": "arena", "result": result, "card": _card_sync(tg_user, chat, "arena")}

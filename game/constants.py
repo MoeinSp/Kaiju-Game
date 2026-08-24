@@ -647,6 +647,7 @@ FORGE_MAX_FAIL_CHANCE = 0.45
 ARENA_LOOT_PERCENT = 0.10
 ARENA_LOOT_MIN = 9  # a raid on a broke player still pays something, but barely
 ARENA_SHIELD_HOURS = 8
+GROUP_SHIELD_HOURS = 4  # separate anti-farm grace after being hit by a group «اتک»
 ARENA_ATTACK_ENERGY_COST = 1
 
 # Loot is capped against the ATTACKER's own progression stage, not the defender's

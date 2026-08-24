@@ -27,7 +27,8 @@ class User(models.Model):
     last_login_day = models.CharField(max_length=10, null=True, blank=True)  # "YYYY-MM-DD" in the game timezone (game.daily.today_str)
 
     cup = models.IntegerField(default=0)  # arena rating; drives PvP matchmaking
-    shield_until = models.DateTimeField(null=True, blank=True)  # anti-farm grace after being raided
+    shield_until = models.DateTimeField(null=True, blank=True)  # anti-farm grace after being raided (arena)
+    group_shield_until = models.DateTimeField(null=True, blank=True)  # separate 4h grace after a group «اتک»
 
     # re-engagement push (game/notifications.py). notifications_on is the master
     # opt-out; energy_full_notified fires the "energy is full" DM exactly once per

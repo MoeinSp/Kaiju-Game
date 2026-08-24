@@ -499,6 +499,12 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     if a_creature is None or t_creature is None:
         raise GameError("یکی از دو طرف موجود فعال نداره.")
 
+    from game.arena import group_shield_remaining_seconds, is_group_shielded
+
+    if is_group_shielded(target):
+        secs = group_shield_remaining_seconds(target)
+        raise GameError(f"این بازیکن الان محافظ گروهی داره ({secs // 3600} ساعت و {(secs % 3600) // 60} دقیقه دیگه می‌پره).")
+
     spend_energy(attacker, constants.RAID_ATTACK_ENERGY_COST, "حمله")
     attacker.save(update_fields=["energy", "energy_updated_at"])
 
@@ -528,6 +534,24 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         group_id=group.id, challenger_id=attacker.id, opponent_id=target.id,
         winner_id=winner_user.id, wager_gold=loot, log_text=log_text,
     )
+    # log it as a real attack too, so the target gets a report + can revenge (no cup),
+    # and give the target a 4h group shield so they can't be farmed in the group
+    from bio_lab.models import AttackLog
+    from bio_lab.repository import lab_display
+    from game.arena import apply_group_shield, creature_power
+
+    AttackLog.objects.create(
+        attacker=attacker,
+        attacker_label=lab_display(attacker),
+        attacker_power=creature_power(a_creature),
+        defender=target,
+        defender_label=lab_display(target),
+        is_fake_defender=False,
+        attacker_won=attacker_won,
+        loot_gold=loot if attacker_won else 0,
+        cup_delta=0,
+    )
+    apply_group_shield(target)
     return {
         "log_text": log_text,
         "detail_log": detail_log,

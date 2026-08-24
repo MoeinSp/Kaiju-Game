@@ -43,6 +43,22 @@ def shield_remaining_seconds(user: User) -> int:
     return int((user.shield_until - timezone.now()).total_seconds())
 
 
+def is_group_shielded(user: User) -> bool:
+    return user.group_shield_until is not None and user.group_shield_until > timezone.now()
+
+
+def group_shield_remaining_seconds(user: User) -> int:
+    if not is_group_shielded(user):
+        return 0
+    return int((user.group_shield_until - timezone.now()).total_seconds())
+
+
+def apply_group_shield(user: User) -> None:
+    """Give `user` a fresh 4h group shield — separate from the arena shield."""
+    user.group_shield_until = timezone.now() + datetime.timedelta(hours=constants.GROUP_SHIELD_HOURS)
+    user.save(update_fields=["group_shield_until"])
+
+
 def cup_delta(attacker: User, defender_cup: int, won: bool, attacker_power: int) -> int:
     """Cup swing for one raid. Beating someone rated above you pays more than
     beating someone below; losing to someone below you costs more than losing to
@@ -150,7 +166,7 @@ def expected_loot(opponent: dict, attacker_level: int = 1) -> int:
 
 
 @transaction.atomic
-def attack(attacker: User, opponent: dict) -> dict:
+def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
     """Resolves one arena raid. Attacking always drops the attacker's own shield —
     you can't camp behind protection while farming other people."""
     attacker_creature = Creature.objects.filter(owner=attacker, is_active=True).first()
@@ -174,7 +190,9 @@ def attack(attacker: User, opponent: dict) -> dict:
     won = winner is attacker_creature
 
     attacker_power = creature_power(attacker_creature, get_equipped_items(attacker_creature))
-    delta = cup_delta(attacker, opponent["cup"], won, attacker_power)
+    # in a group, this fight is cup-neutral (award_cup=False): no cup change, and the
+    # arena shield is left untouched — group aggression uses its own 4h group shield.
+    delta = cup_delta(attacker, opponent["cup"], won, attacker_power) if award_cup else 0
 
     loot = 0
     if won:
@@ -184,16 +202,21 @@ def attack(attacker: User, opponent: dict) -> dict:
             defender_user.coins -= loot
         attacker.coins += loot
 
-    attacker.cup = max(0, attacker.cup + delta)
-    # raiding always burns your own shield, win or lose
-    attacker.shield_until = None
-    attacker.save(update_fields=["coins", "cup", "shield_until"])
+    attacker_fields = ["coins"]
+    if award_cup:
+        attacker.cup = max(0, attacker.cup + delta)
+        attacker.shield_until = None  # raiding always burns your own arena shield
+        attacker_fields += ["cup", "shield_until"]
+    attacker.save(update_fields=attacker_fields)
 
     if defender_user is not None:
-        # a freshly-raided defender gets protection so they can't be farmed
-        defender_user.shield_until = timezone.now() + datetime.timedelta(hours=constants.ARENA_SHIELD_HOURS)
-        defender_user.cup = max(0, defender_user.cup + (-delta if won else abs(delta)))
-        defender_user.save(update_fields=["coins", "cup", "shield_until"])
+        defender_fields = ["coins"]
+        if award_cup:
+            # a freshly-raided defender gets arena protection so they can't be farmed
+            defender_user.shield_until = timezone.now() + datetime.timedelta(hours=constants.ARENA_SHIELD_HOURS)
+            defender_user.cup = max(0, defender_user.cup + (-delta if won else abs(delta)))
+            defender_fields += ["cup", "shield_until"]
+        defender_user.save(update_fields=defender_fields)
 
     AttackLog.objects.create(
         attacker=attacker,
@@ -247,13 +270,14 @@ def recent_attacks_received(user: User, limit: int = 5) -> list[AttackLog]:
 
 
 def revengeable_attacks(user: User, limit: int = 10) -> list[AttackLog]:
-    """Real attacks on the user that won, haven't been revenged, and are < 3 days old."""
+    """Real attacks on the user (won OR defended) not yet revenged and < 3 days old —
+    you can strike back at anyone who came for you, even if your defence held."""
     deadline = timezone.now() - datetime.timedelta(days=3)
     return list(
         AttackLog.objects.filter(
             defender=user,
-            attacker_won=True,
             is_fake_defender=False,
+            attacker__isnull=False,
             revenge_taken=False,
             created_at__gte=deadline,
         )

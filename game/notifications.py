@@ -89,24 +89,29 @@ def collect_due() -> list[tuple[int, str]]:
             "defender", "attacker"
         ):
             if log.defender.notifications_on and log.created_at >= cutoff:
+                attacker_name = log.attacker_label or (
+                    log.attacker.lab_name if log.attacker_id and log.attacker else "یه مهاجم"
+                )
+                power_note = f" (قدرت {log.attacker_power})" if log.attacker_power else ""
+                revengeable = not log.is_fake_defender and log.attacker_id
                 if log.attacker_won:
-                    attacker_name = log.attacker_label or (
-                        log.attacker.lab_name if log.attacker_id and log.attacker else "یه مهاجم"
-                    )
-                    power_note = f" (قدرت {log.attacker_power})" if log.attacker_power else ""
                     text = (
                         f"⚔️ <b>به آزمایشگاهت حمله شد!</b>\n"
                         f"🏭 مهاجم: <b>{attacker_name}</b>{power_note}\n"
                         f"💰 <b>{log.loot_gold}</b> طلا غارت شد.\n"
-                        f"می‌تونی همین‌جا انتقام بگیری 👇"
+                        "می‌تونی همین‌جا جواب بدی 👇"
                     )
-                    # only real, still-revengeable raids get the button (fakes have no attacker)
-                    if not log.is_fake_defender and log.attacker_id:
-                        out.append((log.defender_id, text, f"arena_revenge:{log.id}"))
-                    else:
-                        out.append((log.defender_id, text))
                 else:
-                    out.append((log.defender_id, "🛡 <b>یکی بهت حمله کرد ولی دفاعت موفق بود!</b>"))
+                    # defence held — still report who came and let them strike back
+                    text = (
+                        f"🛡 <b>یکی بهت حمله کرد ولی دفاعت موفق بود!</b>\n"
+                        f"🏭 مهاجم: <b>{attacker_name}</b>{power_note}\n"
+                        "می‌تونی همین‌جا حمله‌ی متقابل بزنی 👇"
+                    )
+                if revengeable:
+                    out.append((log.defender_id, text, f"arena_revenge:{log.id}"))
+                else:
+                    out.append((log.defender_id, text))
             log.defender_notified = True
             log.save(update_fields=["defender_notified"])
 
