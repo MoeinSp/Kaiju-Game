@@ -351,10 +351,12 @@ async def raid_spawn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text(str(exc))
         return
     await update.message.reply_text(
-        f"{get_emoji('raid_boss')} <b>یک هیولای وحشی ظاهر شد: {boss.name}!</b>\n"
+        f"{get_emoji('raid_boss')} <b>یک باس وحشی ظاهر شد: {boss.name}!</b>\n"
         f"{constants.render_bar(boss.current_hp, boss.max_hp, width=14)}  {boss.current_hp}/{boss.max_hp} HP\n"
         f"{constants.element_label(boss.element)}\n\n"
-        f"همه با /attack بهش حمله کنین — هرچی سهم دمیج بیشتر، غنیمت بیشتر! 💪",
+        f"همه «اتک» بفرستن تا به <b>باس</b> حمله کنن — هر حمله ۱ ⚡ انرژی می‌بره و "
+        f"هرچی سهم دمیجت بیشتر باشه، غنیمت بیشتری از پا افتادنش می‌گیری! 💪\n"
+        f"<i>می‌خوای به یه بازیکن حمله کنی؟ روی پیامش ریپلای کن و «اتک» بفرست.</i>",
         parse_mode="HTML",
     )
 
@@ -391,12 +393,19 @@ def _attack_sync(chat, tg_user):
             )
         speedup_won = maybe_award_speedup_card(user)  # bonus chance for whoever lands the killing blow
 
-    return creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won
+    return creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won, user.energy
 
 
 async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # replying to another player's message turns «اتک» into a PvP challenge instead
+    # of a hit on the raid boss.
+    reply = update.message.reply_to_message
+    if reply is not None and reply.from_user is not None and not reply.from_user.is_bot:
+        await _pvp_attack_prompt(update, context, reply.from_user)
+        return
+
     try:
-        creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won = await run_db(
+        creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won, energy_left = await run_db(
             _attack_sync, update.effective_chat, update.effective_user
         )
     except (RaidError, GameError) as exc:
@@ -404,17 +413,156 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     text = (
-        f"{get_emoji('attack_action')} <b>{creature.name}</b> به {boss.name} <b>{dmg}</b> دمیج زد!\n"
-        f"{constants.render_bar(boss.current_hp, boss.max_hp, width=14)}  {max(boss.current_hp, 0)}/{boss.max_hp} HP"
+        f"{get_emoji('attack_action')} <b>{creature.name}</b> به باس <b>{boss.name}</b> "
+        f"<b>{dmg}</b> دمیج زد!\n"
+        f"{constants.render_bar(boss.current_hp, boss.max_hp, width=14)}  {max(boss.current_hp, 0)}/{boss.max_hp} HP\n"
+        f"⚡ ۱ انرژی کم شد (باقی‌مونده: {energy_left})"
     )
     text += _mission_lines(completed_missions)
     if defeated:
-        text += f"\n\n{get_emoji('celebrate')} <b>هیولا شکست خورد!</b> غنایم:\n" + "\n".join(reward_lines)
+        text += f"\n\n{get_emoji('celebrate')} <b>باس شکست خورد!</b> غنایم بین همه‌ی مهاجم‌ها:\n" + "\n".join(reward_lines)
         text += _speedup_note(speedup_won)
+    else:
+        text += "\n<i>💡 برای حمله به یه بازیکن، روی پیامش ریپلای کن و «اتک» بفرست.</i>"
 
     await update.message.reply_text(
         text, parse_mode="HTML", reply_markup=group_footer_keyboard(update.effective_user.id)
     )
+
+
+# ── PvP: reply-to-attack another player ───────────────────────────────────────
+
+def _pvp_preview_sync(attacker_tg, target_tg):
+    """Read-only power comparison before a reply-attack is confirmed."""
+    if target_tg.id == attacker_tg.id or target_tg.is_bot:
+        raise GameError("🙅 نمی‌تونی به خودت یا به یه بات حمله کنی!")
+    attacker, _ = get_or_create_user(attacker_tg)
+    target = User.objects.filter(id=target_tg.id).first()
+    if target is None:
+        raise GameError("این بازیکن هنوز بازی رو شروع نکرده — نمی‌شه بهش حمله کرد.")
+    a_creature = get_active_creature(attacker)
+    t_creature = get_active_creature(target)
+    if a_creature is None:
+        raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
+    if t_creature is None:
+        raise GameError("این بازیکن موجود فعالی نداره.")
+    return (
+        display_name(attacker), _creature_power(a_creature),
+        display_name(target), _creature_power(t_creature),
+    )
+
+
+async def _pvp_attack_prompt(update, context, target_tg) -> None:
+    try:
+        a_name, a_power, t_name, t_power = await run_db(
+            _pvp_preview_sync, update.effective_user, target_tg
+        )
+    except GameError as exc:
+        await update.message.reply_text(str(exc))
+        return
+    gap = t_power - a_power
+    odds = "🟢 شانس بالا" if gap < -15 else ("🔴 خطرناک" if gap > 15 else "🟡 نزدیک")
+    keyboard = InlineKeyboardMarkup([
+        [btn("⚔️ حمله!", emoji_key="btn_attack", style=CONFIRM,
+             callback_data=f"gatk:{update.effective_user.id}:{target_tg.id}")],
+        [btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER,
+             callback_data=f"gatk_cancel:{update.effective_user.id}")],
+    ])
+    await update.message.reply_text(
+        f"{get_emoji('battle')} <b>حمله به {t_name}؟</b>\n\n"
+        f"💪 قدرت حریف: <b>{t_power}</b>\n"
+        f"💪 قدرت تو: <b>{a_power}</b>  ({odds})\n\n"
+        f"<i>هر حمله ۱ ⚡ انرژی می‌بره. برنده {constants.DUEL_WIN_COINS} طلا و XP می‌گیره.</i>",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+def _pvp_attack_sync(chat, attacker_tg, target_id):
+    group = get_or_create_group(chat)
+    attacker, _ = get_or_create_user(attacker_tg)
+    touch_membership(group, attacker)
+    target = User.objects.filter(id=target_id).first()
+    if target is None:
+        raise GameError("این بازیکن دیگه پیدا نشد.")
+    a_creature = get_active_creature(attacker)
+    t_creature = get_active_creature(target)
+    if a_creature is None or t_creature is None:
+        raise GameError("یکی از دو طرف موجود فعال نداره.")
+
+    spend_energy(attacker, constants.RAID_ATTACK_ENERGY_COST, "حمله")
+    attacker.save(update_fields=["energy", "energy_updated_at"])
+
+    winner_creature, log_text = resolve_duel(a_creature, t_creature)
+    attacker_won = winner_creature.id == a_creature.id
+    winner_user = attacker if attacker_won else target
+    winner_creature_obj = a_creature if attacker_won else t_creature
+    loser_creature_obj = t_creature if attacker_won else a_creature
+
+    winner_user.coins += constants.DUEL_WIN_COINS
+    winner_levels = add_xp(winner_creature_obj, constants.DUEL_WIN_XP)
+    add_xp(loser_creature_obj, constants.DUEL_LOSE_XP)
+    winner_user.save(update_fields=["coins"])
+    winner_creature_obj.save()
+    loser_creature_obj.save()
+
+    record_action(attacker, "duel_win" if attacker_won else "duel_loss")
+    completed_missions = check_missions(winner_user, "duel_win") if attacker_won else []
+    speedup_won = maybe_award_speedup_card(winner_user) if attacker_won else None
+
+    DuelLog.objects.create(
+        group_id=group.id, challenger_id=attacker.id, opponent_id=target.id,
+        winner_id=winner_user.id, wager_gold=0, log_text=log_text,
+    )
+    return {
+        "log_text": log_text,
+        "attacker_won": attacker_won,
+        "winner_name": display_name(winner_user),
+        "winner_level_up": bool(winner_levels),
+        "winner_creature": winner_creature_obj.name,
+        "winner_new_level": winner_creature_obj.level,
+        "energy_left": attacker.energy,
+        "missions": completed_missions,
+        "speedup": speedup_won,
+    }
+
+
+async def pvp_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    _, attacker_id, target_id = query.data.split(":")
+    if update.effective_user.id != int(attacker_id):
+        await query.answer("این حمله مال تو نیست — خودت روی پیام حریف «اتک» بفرست.", show_alert=True)
+        return
+    try:
+        result = await run_db(_pvp_attack_sync, update.effective_chat, update.effective_user, int(target_id))
+    except (RaidError, GameError) as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("🟢 بردی!" if result["attacker_won"] else "🔴 باختی.")
+    head = (
+        f"{get_emoji('celebrate')} <b>{result['winner_name']} برد!</b>"
+        if result["attacker_won"]
+        else f"💀 <b>باختی — {result['winner_name']} برنده شد.</b>"
+    )
+    reward = f"\n\n{get_emoji('coin')} +{constants.DUEL_WIN_COINS} طلا · +{constants.DUEL_WIN_XP} XP به برنده"
+    if result["winner_level_up"]:
+        reward += f" {get_emoji('celebrate')} {result['winner_creature']} رسید به سطح {result['winner_new_level']}!"
+    reward += f"\n⚡ ۱ انرژی کم شد (باقی‌مونده: {result['energy_left']})"
+    reward += _mission_lines(result["missions"]) + _speedup_note(result["speedup"])
+    await safe_edit_message_text(
+        query, result["log_text"] + "\n\n" + head + reward, parse_mode="HTML",
+        reply_markup=group_footer_keyboard(update.effective_user.id),
+    )
+
+
+async def pvp_attack_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    _, attacker_id = query.data.split(":")
+    if update.effective_user.id != int(attacker_id):
+        await query.answer()
+        return
+    await query.answer("لغو شد.")
+    await safe_edit_message_text(query, "🚫 حمله لغو شد.")
 
 
 def _mutation_event_sync(chat, tg_user):
@@ -583,6 +731,8 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(duel_wager_callback, pattern=r"^duelwager_"))
     application.add_handler(CommandHandler("raid_spawn", raid_spawn, group_filter))
     application.add_handler(CommandHandler("attack", attack, group_filter))
+    application.add_handler(CallbackQueryHandler(pvp_attack_callback, pattern=r"^gatk:\d+:\d+$"))
+    application.add_handler(CallbackQueryHandler(pvp_attack_cancel_callback, pattern=r"^gatk_cancel:\d+$"))
     application.add_handler(CommandHandler("leaderboard", leaderboard, group_filter))
     application.add_handler(CommandHandler("guardian", guardian, group_filter))
     application.add_handler(CommandHandler("guardian_challenge", guardian_challenge, group_filter))
