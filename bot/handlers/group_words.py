@@ -765,9 +765,9 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "guardian_claim": group_handlers.guardian_claim,
     }
     if action in delegates:
+        # combat / boss / guardian results are shared group events — leave them
+        # (and their trigger word) in place; only transient info cards get cleaned.
         await delegates[action](update, context)
-        # combat/raid replies are sent inside the delegate; just tidy the trigger word
-        _schedule_cleanup(context, message.chat_id, [message.message_id], action)
         return
 
     if action == "reward":
