@@ -32,6 +32,7 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     # actions
     "btn_hunt": ("شکار انفرادی", "🏹", "action"),
     "btn_attack": ("حمله", "⚔️", "action"),
+    "btn_revenge": ("انتقام", "⚔️", "action"),
     "btn_arena": ("آرنا", "🏆", "action"),
     "btn_feed": ("تغذیه", "🍖", "action"),
     "btn_train": ("تمرین", "🏋️", "action"),

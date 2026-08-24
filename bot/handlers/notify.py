@@ -7,9 +7,11 @@ no external cron — one repeating job, same event loop as the webhook listener.
 
 import asyncio
 
+from telegram import InlineKeyboardMarkup
 from telegram.error import Forbidden, TelegramError
 from telegram.ext import ContextTypes
 
+from bot.buttons import DANGER, btn
 from bot.utils import run_db
 from game.notifications import collect_due
 
@@ -27,9 +29,21 @@ def _opt_out(user_id: int) -> None:
 
 async def notify_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     pending = await run_db(collect_due)
-    for user_id, text in pending:
+    for item in pending:
+        # items are (user_id, text) or (user_id, text, revenge_callback_data). The
+        # optional 3rd element attaches a red inline "revenge" button that routes
+        # straight into the arena revenge pre-fight (arena_revenge:<log_id>).
+        user_id, text = item[0], item[1]
+        revenge_cb = item[2] if len(item) > 2 else None
+        reply_markup = None
+        if revenge_cb:
+            reply_markup = InlineKeyboardMarkup(
+                [[btn("انتقام", emoji_key="btn_revenge", style=DANGER, callback_data=revenge_cb)]]
+            )
         try:
-            await context.bot.send_message(chat_id=user_id, text=text, parse_mode="HTML")
+            await context.bot.send_message(
+                chat_id=user_id, text=text, parse_mode="HTML", reply_markup=reply_markup
+            )
         except Forbidden:
             await run_db(_opt_out, user_id)  # blocked the bot / never opened DMs
         except TelegramError:
