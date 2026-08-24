@@ -1,3 +1,5 @@
+import logging
+
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
@@ -35,6 +37,8 @@ from game.season import (
     seconds_until_next_week,
     standings,
 )
+
+logger = logging.getLogger(__name__)
 
 PENDING_OPPONENT_KEY = "arena_pending_opponent"
 
@@ -141,6 +145,10 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         user, opponent, my_power, loot = await run_db(_find_sync, update.effective_user)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
+        return
+    except Exception:  # noqa: BLE001 — never let a raid-matchmaking bug silently kill the button
+        logger.exception("arena_find failed for user %s", update.effective_user.id)
+        await query.answer("یه مشکل پیش اومد، دوباره امتحان کن.", show_alert=True)
         return
 
     context.user_data[PENDING_OPPONENT_KEY] = {

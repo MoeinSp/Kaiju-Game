@@ -696,7 +696,10 @@ def arena_loot_cap(attacker_level: int) -> int:
 
 
 def arena_fake_loot_range(attacker_level: int) -> tuple[int, int]:
-    bonus = max(0, attacker_level) * ARENA_FAKE_LOOT_PER_LEVEL
+    # ARENA_FAKE_LOOT_PER_LEVEL is a float, so bonus is too — int() it, otherwise
+    # random.randint() (used on this range) raises TypeError on the fake-opponent
+    # branch and the whole "find opponent" flow silently dies.
+    bonus = int(max(0, attacker_level) * ARENA_FAKE_LOOT_PER_LEVEL)
     return ARENA_FAKE_LOOT_BASE[0] + bonus, ARENA_FAKE_LOOT_BASE[1] + bonus
 
 
