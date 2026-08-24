@@ -16,7 +16,7 @@ class User(models.Model):
     dna_fragments = models.IntegerField(default=100)
     diamonds = models.IntegerField(default=100)  # premium currency: diamond collector, daily wheel, diamond boxes
 
-    energy = models.IntegerField(default=20)  # keep in sync with game.constants.MAX_ENERGY
+    energy = models.IntegerField(default=50)  # keep in sync with game.constants.MAX_ENERGY
     energy_updated_at = models.DateTimeField(default=timezone.now)
 
     # overall progress for the lab as a whole, distinct from any one creature's
@@ -523,6 +523,8 @@ class AttackLog(models.Model):
     defender = models.ForeignKey(
         User, null=True, blank=True, on_delete=models.CASCADE, related_name="attacks_received"
     )
+    attacker_label = models.CharField(max_length=64, default="")  # attacker's lab name at raid time
+    attacker_power = models.IntegerField(default=0)              # attacker's creature power at raid time
     defender_label = models.CharField(max_length=64)  # lab name shown at raid time (real or fake)
     is_fake_defender = models.BooleanField(default=False)
     attacker_won = models.BooleanField()
@@ -530,6 +532,7 @@ class AttackLog(models.Model):
     cup_delta = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     defender_notified = models.BooleanField(default=False)  # "you were raided" DM sent to the defender
+    revenge_taken = models.BooleanField(default=False)      # defender has revenged this attack
 
     def __str__(self) -> str:
         return f"{self.attacker_id} -> {self.defender_label} ({'W' if self.attacker_won else 'L'})"

@@ -141,7 +141,7 @@ def pending_amount(building: Building) -> int:
     rate = cfg["rate_per_hour"] * building.level * bonus
     cap = cfg["cap_base"] * building.level * bonus
     elapsed_hours = (timezone.now() - building.last_collected_at).total_seconds() / 3600
-    return min(cap, math.floor(rate * max(elapsed_hours, 0)))
+    return int(min(cap, math.floor(rate * max(elapsed_hours, 0))))
 
 
 def collect(user: User, building: Building) -> tuple[int, str]:

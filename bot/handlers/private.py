@@ -40,7 +40,10 @@ from game.alliance import (
     deposit_treasury,
     heist,
     join_alliance,
+    join_alliance_by_id,
     leave_alliance,
+    list_alliances_page,
+    search_alliances,
     top_alliances,
 )
 from game.buildings import get_or_create_buildings, grant_speedup_card, is_built, star_cap
@@ -1505,12 +1508,94 @@ async def alliance_create_callback(update: Update, context: ContextTypes.DEFAULT
     await safe_edit_message_text(query, f"🟢 {get_emoji('alliance')} اسم اتحاد جدیدت رو بفرست:", parse_mode="HTML")
 
 
+def _alliance_browse_render(data: dict, search_results=None, search_query: str = "") -> tuple[str, InlineKeyboardMarkup]:
+    rows = []
+    if search_results is not None:
+        # search results mode
+        if search_results:
+            lines = [f"🔍 <b>نتایج جستجو برای «{search_query}»:</b>\n"]
+            for r in search_results:
+                a = r["alliance"]
+                lines.append(f"• <b>{a.name}</b> — {r['member_count']} عضو  💪{r['power']}")
+                rows.append([btn(f"➕ پیوستن به {a.name}", style=PRIMARY, callback_data=f"ally_browse_join:{a.id}")])
+        else:
+            lines = [f"🔍 هیچ اتحادی با «{search_query}» پیدا نشد."]
+        rows.append([btn("🔍 جستجوی دیگه", style=NAV, callback_data="ally_search")])
+        rows.append([btn("📋 همه‌ی اتحادها", style=NAV, callback_data="ally_browse:0")])
+        rows.append([back_btn("menu:alliance_info", "بازگشت")])
+        return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+    # browse mode
+    page = data["page"]
+    total = data["total"]
+    alliances = data["alliances"]
+    lines = [f"🏰 <b>اتحادهای موجود</b> (صفحه {page + 1}، جمعاً {total} اتحاد)\n"]
+    if not alliances:
+        lines.append("<i>هنوز هیچ اتحادی ساخته نشده.</i>")
+    for r in alliances:
+        a = r["alliance"]
+        lines.append(f"• <b>{a.name}</b> — {r['member_count']} عضو  💪{r['power']}")
+        rows.append([btn(f"➕ پیوستن به {a.name}", style=PRIMARY, callback_data=f"ally_browse_join:{a.id}")])
+
+    nav_row = []
+    if data["has_prev"]:
+        nav_row.append(btn("◀️ قبلی", style=NAV, callback_data=f"ally_browse:{page - 1}"))
+    if data["has_next"]:
+        nav_row.append(btn("▶️ بعدی", style=NAV, callback_data=f"ally_browse:{page + 1}"))
+    if nav_row:
+        rows.append(nav_row)
+    rows.append([btn("🔍 جستجو با اسم", style=NAV, callback_data="ally_search")])
+    rows.append([back_btn("menu:alliance_info", "بازگشت")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
 async def alliance_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    context.user_data[AWAITING_PLAYER_KEY] = {"action": "alliance_join"}
     await query.answer()
-    await safe_edit_message_text(query,
-        f"🔵 {get_emoji('alliance')} اسم اتحادی که می‌خوای بهش بپیوندی رو بفرست:", parse_mode="HTML"
+    data = await run_db(list_alliances_page, 0)
+    text, keyboard = _alliance_browse_render(data)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def alliance_browse_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    page = int(query.data.split(":")[1])
+    data = await run_db(list_alliances_page, page)
+    text, keyboard = _alliance_browse_render(data)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _join_by_id_sync(tg_user, alliance_id: int):
+    user, _ = get_or_create_user(tg_user)
+    return join_alliance_by_id(user, alliance_id)
+
+
+async def alliance_browse_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    alliance_id = int(query.data.split(":")[1])
+    try:
+        alliance = await run_db(_join_by_id_sync, update.effective_user, alliance_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await safe_edit_message_text(
+        query,
+        f"{get_emoji('alliance')} به اتحاد <b>{alliance.name}</b> پیوستی! 🎉",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info")]]),
+    )
+
+
+async def alliance_search_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    context.user_data[AWAITING_PLAYER_KEY] = {"action": "alliance_search"}
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        f"🔍 {get_emoji('alliance')} اسم (یا بخشی از اسم) اتحاد رو بفرست:",
+        parse_mode="HTML",
     )
 
 
@@ -1707,6 +1792,16 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         await message.reply_text(
             f"{get_emoji('alliance')} به اتحاد <b>{alliance.name}</b> پیوستی!", parse_mode="HTML"
         )
+        return
+
+    if action == "alliance_search":
+        if not text:
+            context.user_data[AWAITING_PLAYER_KEY] = awaiting
+            await message.reply_text("⚠️ یه اسم بفرست تا جستجو کنم.")
+            return
+        results = await run_db(search_alliances, text)
+        rendered, keyboard = _alliance_browse_render({}, search_results=results, search_query=text)
+        await message.reply_text(rendered, parse_mode="HTML", reply_markup=keyboard)
         return
 
     if action == "alliance_deposit":
@@ -2047,6 +2142,9 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(fusion_confirm_callback, pattern=r"^fus_confirm:"))
     application.add_handler(CallbackQueryHandler(alliance_create_callback, pattern=r"^ally_create$"))
     application.add_handler(CallbackQueryHandler(alliance_join_callback, pattern=r"^ally_join$"))
+    application.add_handler(CallbackQueryHandler(alliance_browse_callback, pattern=r"^ally_browse:\d+$"))
+    application.add_handler(CallbackQueryHandler(alliance_browse_join_callback, pattern=r"^ally_browse_join:\d+$"))
+    application.add_handler(CallbackQueryHandler(alliance_search_callback, pattern=r"^ally_search$"))
     application.add_handler(CallbackQueryHandler(alliance_deposit_callback, pattern=r"^ally_deposit$"))
     application.add_handler(CallbackQueryHandler(alliance_top_callback, pattern=r"^ally_top$"))
     application.add_handler(

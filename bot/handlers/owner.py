@@ -766,7 +766,7 @@ async def preview_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         f"{get_emoji('spd')} 15   {get_emoji('poison')} 3",
         f"{get_emoji('wings')} بال ۲ · {get_emoji('def')} زره ۱ · {get_emoji('fangs')} نیش ۳",
         "",
-        f"{get_emoji('energy')} 14/20",
+        f"{get_emoji('energy')} 38/50",
         f"{get_emoji('coin')} 850   {get_emoji('dna')} 40",
         "",
         "━━━━━━━━━━━━━━",

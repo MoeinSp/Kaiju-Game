@@ -198,6 +198,8 @@ def attack(attacker: User, opponent: dict) -> dict:
 
     AttackLog.objects.create(
         attacker=attacker,
+        attacker_label=lab_display(attacker),
+        attacker_power=attacker_power,
         defender=defender_user,
         defender_label=opponent["label"],
         is_fake_defender=opponent["is_fake"],
@@ -237,7 +239,37 @@ def _bot_creature(power: int) -> Creature:
 
 
 def recent_attacks_received(user: User, limit: int = 5) -> list[AttackLog]:
-    return list(AttackLog.objects.filter(defender=user).order_by("-created_at")[:limit])
+    return list(
+        AttackLog.objects.filter(defender=user)
+        .select_related("attacker")
+        .order_by("-created_at")[:limit]
+    )
+
+
+def revengeable_attacks(user: User, limit: int = 10) -> list[AttackLog]:
+    """Real attacks on the user that won, haven't been revenged, and are < 3 days old."""
+    deadline = timezone.now() - datetime.timedelta(days=3)
+    return list(
+        AttackLog.objects.filter(
+            defender=user,
+            attacker_won=True,
+            is_fake_defender=False,
+            revenge_taken=False,
+            created_at__gte=deadline,
+        )
+        .select_related("attacker")
+        .order_by("-created_at")[:limit]
+    )
+
+
+def mark_revenge_taken(log_id: int, defender: User) -> AttackLog | None:
+    """Atomically marks an AttackLog as revenged. Returns it if still open, None if already done."""
+    updated = AttackLog.objects.filter(
+        id=log_id, defender=defender, revenge_taken=False
+    ).update(revenge_taken=True)
+    if not updated:
+        return None
+    return AttackLog.objects.select_related("attacker").get(id=log_id)
 
 
 def top_by_cup(limit: int = 10) -> list[User]:

@@ -1,20 +1,27 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bio_lab.models import AttackLog
 from bio_lab.repository import get_or_create_user, lab_display
-from bot.buttons import BATTLE, DANGER, NAV, PRIMARY, back_btn, back_only_keyboard, btn
+from bot.buttons import BATTLE, DANGER, NAV, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants
+import datetime
+
+from django.db import transaction
+from django.utils import timezone as tz
+
 from game.arena import (
     active_power,
     attack,
+    creature_power,
     deserved_cup,
     expected_loot,
     find_opponent,
-    is_shielded,
+    mark_revenge_taken,
     recent_attacks_received,
+    revengeable_attacks,
     shield_remaining_seconds,
-    top_by_cup,
 )
 from game.creature import GameError
 from game.daily import check_missions, record_action
@@ -29,8 +36,6 @@ from game.season import (
     standings,
 )
 
-# the pending opponent lives in user_data between "find" and "attack" so the fight
-# resolves against exactly the opponent that was shown, not a freshly rolled one
 PENDING_OPPONENT_KEY = "arena_pending_opponent"
 
 
@@ -44,7 +49,6 @@ def _format_remaining(seconds: int) -> str:
 
 def _arena_home_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
-    # settle last week's season lazily on any arena read — no cron anywhere in this bot
     close_due_season()
     user.refresh_from_db()
     return (
@@ -54,10 +58,11 @@ def _arena_home_sync(tg_user):
         recent_attacks_received(user),
         current_week(),
         seconds_until_next_week(),
+        revengeable_attacks(user),
     )
 
 
-def _arena_home_text(user, power, shield_secs, history, week, season_secs) -> str:
+def _arena_home_text(user, power, shield_secs, history, week, season_secs, revenges) -> str:
     lines = [
         f"{get_emoji('trophy')} <b>آرنا</b>",
         f"🗓 فصل <code>{week}</code> — <b>{_format_remaining(season_secs)}</b> تا پایان",
@@ -78,8 +83,14 @@ def _arena_home_text(user, power, shield_secs, history, week, season_secs) -> st
         lines.append("\n<b>آخرین حمله‌ها بهت:</b>")
         for log in history:
             mark = "🔴" if log.attacker_won else "🟢"
-            loot = f" −{log.loot_gold} {get_emoji('coin')}" if log.loot_gold else ""
-            lines.append(f"{mark} {log.defender_label or '—'}{loot}")
+            attacker_name = log.attacker_label or lab_display(log.attacker)
+            pwr = f"  💪{log.attacker_power}" if log.attacker_power else ""
+            loot = f"  −{log.loot_gold} {get_emoji('coin')}" if log.loot_gold else ""
+            lines.append(f"{mark} <b>{attacker_name}</b>{pwr}{loot}")
+
+    if revenges:
+        lines.append(f"\n⚔️ <b>{len(revenges)} انتقام</b> در انتظار — مهلت ۳ روزه")
+
     lines.append(
         f"\n<blockquote>هر حمله {constants.ARENA_ATTACK_ENERGY_COST} انرژی می‌بره و "
         f"{int(constants.ARENA_LOOT_PERCENT * 100)}٪ طلای حریف رو غارت می‌کنه.\n"
@@ -88,32 +99,32 @@ def _arena_home_text(user, power, shield_secs, history, week, season_secs) -> st
     return "\n".join(lines)
 
 
-def _arena_home_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        [
-            [btn("پیدا کردن حریف", emoji_key="btn_attack", style=BATTLE, callback_data="arena_find")],
-            [btn("جدول این هفته", emoji_key="btn_rank", style=NAV, callback_data="arena_top")],
-            [btn("🗓 نتایج هفته‌ی قبل", style=NAV, callback_data="arena_last_season")],
-            [back_btn("menu:me")],
-        ]
-    )
+def _arena_home_keyboard(has_revenges: bool) -> InlineKeyboardMarkup:
+    rows = [
+        [btn("پیدا کردن حریف", emoji_key="btn_attack", style=BATTLE, callback_data="arena_find")],
+    ]
+    if has_revenges:
+        rows.append([btn("⚔️ انتقام‌ها", style=DANGER, callback_data="arena_revenges")])
+    rows += [
+        [btn("جدول این هفته", emoji_key="btn_rank", style=NAV, callback_data="arena_top")],
+        [btn("🗓 نتایج هفته‌ی قبل", style=NAV, callback_data="arena_last_season")],
+        [back_btn("menu:me")],
+    ]
+    return InlineKeyboardMarkup(rows)
 
 
 async def arena_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user, power, shield_secs, history, week, season_secs = await run_db(
+    user, power, shield_secs, history, week, season_secs, revenges = await run_db(
         _arena_home_sync, update.effective_user
     )
-    await send_screen(update, 
-        _arena_home_text(user, power, shield_secs, history, week, season_secs),
+    await send_screen(update,
+        _arena_home_text(user, power, shield_secs, history, week, season_secs, revenges),
         parse_mode="HTML",
-        reply_markup=_arena_home_keyboard(),
+        reply_markup=_arena_home_keyboard(bool(revenges)),
     )
 
 
 def _find_sync(tg_user):
-    """Everything the preview screen needs, resolved here in sync context — the
-    async callback must not touch the ORM (see the async-safety rule in CLAUDE.md),
-    so my_power and the loot estimate are computed up front, not at render time."""
     from bio_lab.models import Creature
 
     user, _ = get_or_create_user(tg_user)
@@ -125,13 +136,13 @@ def _find_sync(tg_user):
 
 async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    await query.answer()
     try:
         user, opponent, my_power, loot = await run_db(_find_sync, update.effective_user)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
 
-    # stash only what attack() needs, since user_data must stay JSON-ish/simple
     context.user_data[PENDING_OPPONENT_KEY] = {
         "is_fake": opponent["is_fake"],
         "user_id": None if opponent["is_fake"] else opponent["user"].id,
@@ -141,7 +152,6 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         "loot_pool": opponent["loot_pool"],
     }
 
-    await query.answer()
     gap = opponent["power"] - my_power
     odds = "🟢 شانس بالا" if gap < -15 else ("🔴 خطرناک" if gap > 15 else "🟡 سرتاسری")
     lines = [
@@ -225,10 +235,170 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 
+# ── Revenge panel ─────────────────────────────────────────────────────────────
+
+def _revenges_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    return user, revengeable_attacks(user)
+
+
+async def arena_revenges_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    user, revenges = await run_db(_revenges_sync, update.effective_user)
+
+    if not revenges:
+        keyboard = InlineKeyboardMarkup([[back_btn("menu:arena")]])
+        await safe_edit_message_text(
+            query,
+            "⚔️ هیچ انتقام باز‌ی نداری. مهلت انتقام ۳ روزه.",
+            reply_markup=keyboard,
+        )
+        return
+
+    now = tz.now()
+
+    lines = [f"⚔️ <b>انتقام‌های باز</b> ({len(revenges)} مورد)\n"]
+    rows = []
+    for log in revenges:
+        attacker_name = log.attacker_label or lab_display(log.attacker)
+        pwr = f"  💪{log.attacker_power}" if log.attacker_power else ""
+        loot = f"  −{log.loot_gold} {get_emoji('coin')}" if log.loot_gold else ""
+        deadline = log.created_at + datetime.timedelta(days=3)
+        hrs_left = max(0, int((deadline - now).total_seconds() // 3600))
+        lines.append(f"🔴 <b>{attacker_name}</b>{pwr}{loot}  — {hrs_left}h مهلت")
+        rows.append([btn(
+            f"⚔️ انتقام از {attacker_name}",
+            style=DANGER,
+            callback_data=f"arena_revenge:{log.id}",
+        )])
+
+    rows.append([back_btn("menu:arena")])
+    await safe_edit_message_text(
+        query,
+        "\n".join(lines),
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+def _revenge_find_sync(tg_user, log_id: int):
+    user, _ = get_or_create_user(tg_user)
+    try:
+        log = AttackLog.objects.select_related("attacker").get(
+            id=log_id, defender=user, revenge_taken=False, is_fake_defender=False
+        )
+    except AttackLog.DoesNotExist:
+        raise GameError("این انتقام دیگه در دسترس نیست.")
+
+    if log.created_at < tz.now() - datetime.timedelta(days=3):
+        raise GameError("مهلت ۳ روزه‌ی انتقام گذشته.")
+
+    my_power = active_power(user)
+    opponent_power = active_power(log.attacker) if log.attacker else 0
+    attacker_name = log.attacker_label or lab_display(log.attacker)
+    return user, log, my_power, opponent_power, attacker_name
+
+
+async def arena_revenge_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    log_id = int(query.data.split(":")[1])
+
+    try:
+        user, log, my_power, opp_power, attacker_name = await run_db(
+            _revenge_find_sync, update.effective_user, log_id
+        )
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+
+    gap = opp_power - my_power
+    odds = "🟢 شانس بالا" if gap < -15 else ("🔴 خطرناک" if gap > 15 else "🟡 سرتاسری")
+    lines = [
+        f"⚔️ <b>انتقام از {attacker_name}</b>\n",
+        f"💪 قدرت حریف: <b>{opp_power}</b>  (تو: {my_power} — {odds})",
+        f"{get_emoji('coin')} اون از تو {log.loot_gold} طلا دزدید",
+        f"\n<i>حمله {constants.ARENA_ATTACK_ENERGY_COST} انرژی می‌بره.</i>",
+    ]
+    keyboard = InlineKeyboardMarkup([
+        [btn("⚔️ حمله کن!", style=BATTLE, callback_data=f"arena_revenge_atk:{log_id}")],
+        [back_btn("arena_revenges", "بازگشت به انتقام‌ها")],
+    ])
+    await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
+
+
+@transaction.atomic
+def _revenge_attack_sync(tg_user, log_id: int):
+    from bio_lab.models import Creature
+    user, _ = get_or_create_user(tg_user)
+
+    log = mark_revenge_taken(log_id, user)
+    if log is None:
+        raise GameError("این انتقام قبلاً گرفته شده یا دیگه معتبر نیست.")
+
+    if log.created_at < tz.now() - datetime.timedelta(days=3):
+        raise GameError("مهلت ۳ روزه‌ی انتقام گذشته.")
+
+    target = log.attacker
+    if target is None:
+        raise GameError("حریف دیگه در دسترس نیست.")
+
+    target_creature = Creature.objects.filter(owner=target, is_active=True).first()
+
+    spend_energy(user, constants.ARENA_ATTACK_ENERGY_COST, "انتقام")
+    user.save(update_fields=["energy", "energy_updated_at"])
+
+    opponent = {
+        "is_fake": False,
+        "user": target,
+        "label": log.attacker_label or lab_display(target),
+        "cup": target.cup,
+        "power": creature_power(target_creature) if target_creature else 0,
+        "loot_pool": target.coins,
+    }
+    result = attack(user, opponent)
+    record_action(user, "arena_attack")
+    return result
+
+
+async def arena_revenge_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    log_id = int(query.data.split(":")[1])
+    try:
+        result = await run_db(_revenge_attack_sync, update.effective_user, log_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+
+    if result["won"]:
+        summary = (
+            f"{get_emoji('celebrate')} <b>انتقام گرفتی!</b>\n"
+            f"{get_emoji('coin')} +{result['loot']} غنیمت\n"
+            f"🏆 +{result['cup_delta']} کاپ (الان: {result['new_cup']})"
+        )
+    else:
+        summary = (
+            f"😔 <b>باختی — انتقام گرفته نشد.</b>\n"
+            f"🏆 {result['cup_delta']} کاپ (الان: {result['new_cup']})"
+        )
+
+    keyboard = InlineKeyboardMarkup([
+        [back_btn("menu:arena", "بازگشت به آرنا")],
+    ])
+    await query.answer("🟢 بردی!" if result["won"] else "🔴 باختی.")
+    await safe_edit_message_text(
+        query,
+        result["log_text"] + "\n\n" + f"<tg-spoiler>{summary}</tg-spoiler>",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+# ── Leaderboard ───────────────────────────────────────────────────────────────
+
 def _top_sync():
     close_due_season()
-    # each row carries the floor its rank would reset to, so the table doubles as
-    # the explanation of what climbing one more place is actually worth
     return [
         {**row, "reset_to": reset_floor(row["rank"], row["cup"])}
         for row in standings(10)
@@ -287,4 +457,13 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(arena_top_callback, pattern=r"^arena_top$"))
     application.add_handler(
         CallbackQueryHandler(arena_last_season_callback, pattern=r"^arena_last_season$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(arena_revenges_callback, pattern=r"^arena_revenges$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(arena_revenge_callback, pattern=r"^arena_revenge:\d+$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(arena_revenge_attack_callback, pattern=r"^arena_revenge_atk:\d+$")
     )

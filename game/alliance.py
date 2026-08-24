@@ -77,6 +77,60 @@ def alliance_info(alliance: Alliance) -> dict:
     }
 
 
+ALLIANCE_BROWSE_PAGE_SIZE = 8
+
+
+def list_alliances_page(page: int = 0) -> dict:
+    """Returns one page of alliances sorted by power for the browse UI."""
+    from django.db.models import Count
+
+    offset = page * ALLIANCE_BROWSE_PAGE_SIZE
+    total = Alliance.objects.count()
+    raw = list(
+        Alliance.objects.annotate(member_count=Count("members"))
+        .order_by("-treasury_gold", "id")[offset : offset + ALLIANCE_BROWSE_PAGE_SIZE]
+    )
+    return {
+        "alliances": [
+            {
+                "alliance": a,
+                "power": _alliance_power(a),
+                "member_count": a.member_count,
+            }
+            for a in raw
+        ],
+        "total": total,
+        "page": page,
+        "page_size": ALLIANCE_BROWSE_PAGE_SIZE,
+        "has_next": offset + ALLIANCE_BROWSE_PAGE_SIZE < total,
+        "has_prev": page > 0,
+    }
+
+
+def search_alliances(query: str, limit: int = 8) -> list[dict]:
+    """Partial-match alliance search (case-insensitive contains)."""
+    matches = list(Alliance.objects.filter(name__icontains=query.strip())[:limit])
+    return [
+        {
+            "alliance": a,
+            "power": _alliance_power(a),
+            "member_count": a.members.count(),
+        }
+        for a in matches
+    ]
+
+
+def join_alliance_by_id(user: User, alliance_id: int) -> Alliance:
+    if user.alliance_id is not None:
+        raise GameError("اول باید از اتحاد فعلیت با /alliance_leave خارج بشی.")
+    alliance = Alliance.objects.filter(id=alliance_id).first()
+    if alliance is None:
+        raise GameError("این اتحاد دیگه وجود نداره.")
+    user.alliance = alliance
+    user.save(update_fields=["alliance"])
+    return alliance
+
+
 def top_alliances(limit: int = 10) -> list[dict]:
     ranked = sorted(
         (
