@@ -186,6 +186,7 @@ MAX_ENERGY = 50
 ENERGY_REGEN_MINUTES = 6   # empty -> full in 5 hours
 FEED_ENERGY_COST = 1
 RAID_ATTACK_ENERGY_COST = 1
+RAID_DAILY_ATTACKS = 10   # each player can land up to 10 raid hits per day
 HUNT_ENERGY_COST = 1
 
 # consecutive daily /start streak — resets if a day is missed, capped so late-game
@@ -382,6 +383,7 @@ HEIST_STEAL_PERCENT = 0.20
 HEIST_COOLDOWN_HOURS = 6
 HEIST_DAILY_ATTEMPTS = 3
 ENERGY_CAPS["heist"] = HEIST_DAILY_ATTEMPTS
+ENERGY_CAPS["raid_attack"] = RAID_DAILY_ATTACKS
 
 # ── Star prestige — never player-set directly; the only source is fusion, which
 # demands two creatures of the SAME species name at the SAME star. STAR_MAX is the

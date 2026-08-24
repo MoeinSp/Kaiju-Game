@@ -341,7 +341,7 @@ def _raid_spawn_sync(chat, spawner_tg):
     group = get_or_create_group(chat)
     spawner_user, _ = get_or_create_user(spawner_tg)
     touch_membership(group, spawner_user)
-    return spawn_boss(group.id)
+    return spawn_boss(group)
 
 
 async def raid_spawn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -351,11 +351,12 @@ async def raid_spawn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text(str(exc))
         return
     await update.message.reply_text(
-        f"{get_emoji('raid_boss')} <b>یک باس وحشی ظاهر شد: {boss.name}!</b>\n"
+        f"{get_emoji('raid_boss')} <b>باس رید لِوِل {boss.level} ظاهر شد: {boss.name}!</b>\n"
         f"{constants.render_bar(boss.current_hp, boss.max_hp, width=14)}  {boss.current_hp}/{boss.max_hp} HP\n"
         f"{constants.element_label(boss.element)}\n\n"
-        f"همه «اتک» بفرستن تا به <b>باس</b> حمله کنن — هر حمله ۱ ⚡ انرژی می‌بره و "
-        f"هرچی سهم دمیجت بیشتر باشه، غنیمت بیشتری از پا افتادنش می‌گیری! 💪\n"
+        f"همه «اتک» بفرستن تا به <b>باس</b> حمله کنن — هر حمله ۱ ⚡ انرژی می‌بره "
+        f"(روزی {constants.RAID_DAILY_ATTACKS} اتک برای هر نفر) و هرچی سهم دمیجت بیشتر، غنیمت بیشتر! 💪\n"
+        f"باس تایم‌اوت نداره؛ می‌مونه تا بکشیدش — و بعدش لِوِل رید گروه یکی بالا می‌ره و باس بعدی قوی‌تر و پرجایزه‌تره.\n"
         f"<i>می‌خوای به یه بازیکن حمله کنی؟ روی پیامش ریپلای کن و «اتک» بفرست.</i>",
         parse_mode="HTML",
     )
@@ -373,6 +374,7 @@ def _attack_sync(chat, tg_user):
     if creature is None:
         raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
 
+    assert_energy_available(user, "raid_attack")  # daily 10-hit cap per player
     spend_energy(user, constants.RAID_ATTACK_ENERGY_COST, "حمله")
     dmg, defeated = attack_boss(user, creature, boss)
     user.save(update_fields=["energy", "energy_updated_at"])
@@ -413,14 +415,18 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     text = (
-        f"{get_emoji('attack_action')} <b>{creature.name}</b> به باس <b>{boss.name}</b> "
+        f"{get_emoji('attack_action')} <b>{creature.name}</b> به باس <b>{boss.name}</b> (لِوِل {boss.level}) "
         f"<b>{dmg}</b> دمیج زد!\n"
         f"{constants.render_bar(boss.current_hp, boss.max_hp, width=14)}  {max(boss.current_hp, 0)}/{boss.max_hp} HP\n"
         f"⚡ ۱ انرژی کم شد (باقی‌مونده: {energy_left})"
     )
     text += _mission_lines(completed_missions)
     if defeated:
-        text += f"\n\n{get_emoji('celebrate')} <b>باس شکست خورد!</b> غنایم بین همه‌ی مهاجم‌ها:\n" + "\n".join(reward_lines)
+        text += (
+            f"\n\n{get_emoji('celebrate')} <b>باس لِوِل {boss.level} شکست خورد!</b> "
+            f"لِوِل رید گروه رفت رو <b>{boss.level + 1}</b> — باس بعدی قوی‌تر و پرجایزه‌تره.\n"
+            "غنایم بین همه‌ی مهاجم‌ها:\n" + "\n".join(reward_lines)
+        )
         text += _speedup_note(speedup_won)
     else:
         text += "\n<i>💡 برای حمله به یه بازیکن، روی پیامش ریپلای کن و «اتک» بفرست.</i>"

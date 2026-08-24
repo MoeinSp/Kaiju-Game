@@ -432,6 +432,7 @@ class Group(models.Model):
     guardian_creature = models.ForeignKey(
         Creature, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
     )
+    raid_level = models.IntegerField(default=1)  # climbs each time the group fells a raid boss
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:
@@ -463,6 +464,7 @@ class RaidBoss(models.Model):
     group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="raid_bosses")
     name = models.CharField(max_length=64)
     element = models.CharField(max_length=16)
+    level = models.IntegerField(default=1)  # the group's raid level when this boss spawned
     max_hp = models.IntegerField()
     current_hp = models.IntegerField()
     is_active = models.BooleanField(default=True)
