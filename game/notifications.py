@@ -131,6 +131,9 @@ def collect_due() -> list[tuple[int, str]]:
 
         out.extend(alliance.settle_war_if_needed())
 
+        # ── one-day alliance wars whose 24h is up ─────────────────────────────
+        out.extend(alliance.settle_due_wars())
+
         # ── daily "come back" nudge (evening window, recently-active only) ────
         local_hour = timezone.localtime(now).hour
         if NUDGE_HOUR_START <= local_hour < NUDGE_HOUR_END:

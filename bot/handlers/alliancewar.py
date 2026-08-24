@@ -11,7 +11,7 @@ from telegram.ext import CallbackQueryHandler, ContextTypes
 
 from bio_lab.models import Alliance
 from bio_lab.repository import get_or_create_user
-from bot.buttons import BUILD, back_btn, btn
+from bot.buttons import BATTLE, BUILD, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text
 from game import alliance
 from game.creature import GameError
@@ -22,30 +22,34 @@ def _perks_sync(tg_user):
     if user.alliance_id is None:
         return None
     al = Alliance.objects.get(id=user.alliance_id)
-    info = alliance.perks_info(al)
+    info = alliance.buildings_info(al)
     info["is_leader"] = al.leader_id == user.id
     info["name"] = al.name
     return info
 
 
 def _perks_render(info: dict) -> tuple[str, InlineKeyboardMarkup]:
-    xp_bonus = round(info["xp_level"] * alliance.XP_PERK_PER_LEVEL * 100)
-    pass_bonus = round(info["pass_level"] * alliance.PASS_PERK_PER_LEVEL * 100)
     lines = [
-        f"🏰 <b>پرک‌های اتحاد {info['name']}</b>",
+        f"🏰 <b>ساختمون‌های اتحاد {info['name']}</b>",
         f"<blockquote>💰 خزانه: <b>{info['treasury']}</b> طلا\n"
-        "پرک‌ها از خزانه خریداری می‌شن و برای <b>همه‌ی اعضا</b> کار می‌کنن.</blockquote>",
-        f"\n⭐ بونوس XP: سطح <b>{info['xp_level']}</b>/{info['max_level']}  (+{xp_bonus}٪ XP)",
-        f"🎟 بونوس پاس: سطح <b>{info['pass_level']}</b>/{info['max_level']}  (+{pass_bonus}٪ امتیاز پاس)",
+        "ساختمون‌ها از خزانه ارتقا می‌گیرن و مزایاشون برای <b>همه‌ی اعضا</b>ست.</blockquote>",
     ]
     rows = []
-    if info["is_leader"]:
-        if info["xp_level"] < info["max_level"]:
-            rows.append([btn(f"⭐ ارتقای بونوس XP ({info['xp_cost']} طلا)", style=BUILD, callback_data="ally_perk_buy:xp")])
-        if info["pass_level"] < info["max_level"]:
-            rows.append([btn(f"🎟 ارتقای بونوس پاس ({info['pass_cost']} طلا)", style=BUILD, callback_data="ally_perk_buy:pass")])
-    else:
-        lines.append("\n<i>فقط رهبر اتحاد می‌تونه پرک بخره.</i>")
+    for b in info["buildings"]:
+        cap = " (تکمیل)" if b["maxed"] else ""
+        lines.append(
+            f"\n{b['emoji']} <b>{b['title']}</b> — سطح <b>{b['level']}</b>/{info['max_level']}{cap}\n"
+            f"   <i>{b['desc']}: {b['effect']}</i>"
+        )
+        if info["is_leader"] and not b["maxed"]:
+            rows.append([btn(
+                f"{b['emoji']} ارتقای {b['title']} → {b['next_effect']} ({b['cost']} طلا)",
+                style=BUILD, callback_data=f"ally_perk_buy:{b['key']}",
+            )])
+    if info["vault_income"] > 0:
+        rows.append([btn(f"🏦 جمع‌آوری درآمد خزانه ({info['vault_income']} طلا/روز)", style=BUILD, callback_data="ally_vault_collect")])
+    if not info["is_leader"]:
+        lines.append("\n<i>فقط رهبر اتحاد می‌تونه ساختمون ارتقا بده.</i>")
     rows.append([back_btn("menu:alliance_info")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -57,6 +61,24 @@ async def perks_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     if info is None:
         await safe_edit_message_text(query, "توی هیچ اتحادی نیستی.", reply_markup=InlineKeyboardMarkup([[back_btn("menu:me")]]))
         return
+    text, keyboard = _perks_render(info)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _vault_collect_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    result = alliance.collect_vault(user)
+    return result, _perks_sync(tg_user)
+
+
+async def vault_collect_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    try:
+        result, info = await run_db(_vault_collect_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer(f"🏦 {result['income']} طلا به خزانه اضافه شد!")
     text, keyboard = _perks_render(info)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
@@ -116,7 +138,114 @@ async def war_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
 
 
+# ── One-day war panel ─────────────────────────────────────────────────────────
+
+def _fmt_remaining(seconds: int) -> str:
+    hours, rem = divmod(max(0, seconds), 3600)
+    minutes = rem // 60
+    if hours:
+        return f"{hours} ساعت و {minutes} دقیقه"
+    return f"{minutes} دقیقه"
+
+
+def _war1d_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    if user.alliance_id is None:
+        return {"in_alliance": False}
+    view = alliance.war_view(user)
+    is_leader = Alliance.objects.filter(id=user.alliance_id, leader_id=user.id).exists()
+    return {"in_alliance": True, "view": view, "is_leader": is_leader}
+
+
+def _war1d_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
+    view = data["view"]
+    if view is None:
+        lines = [
+            "🔥 <b>جنگ یک‌روزه‌ی اتحادها</b>",
+            "<blockquote>یه حریف هم‌قدرت پیدا می‌شه و ۲۴ ساعت باهاش می‌جنگید. "
+            "هر عضو یک‌بار می‌تونه «شرکت» کنه و قدرتشو به امتیاز اتحاد اضافه کنه. "
+            "برنده خزانه و امتیاز جنگ می‌گیره!\n"
+            "قدرت پایه از مجموع قوت اعضا و ساختمون «پادگان» میاد.</blockquote>",
+        ]
+        rows = []
+        if data["is_leader"]:
+            rows.append([btn("🔎 پیدا کردن حریف و شروع جنگ", style=BATTLE, callback_data="ally_war_start")])
+        else:
+            lines.append("\n<i>فقط رهبر اتحاد می‌تونه جنگ رو شروع کنه.</i>")
+        rows.append([back_btn("menu:alliance_info")])
+        return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+    lead = "🟢 جلویی" if view["my_score"] > view["foe_score"] else ("🔴 عقبی" if view["my_score"] < view["foe_score"] else "🟡 مساوی")
+    lines = [
+        "🔥 <b>جنگ یک‌روزه در جریانه!</b>",
+        f"\n⚔️ <b>{view['my_name']}</b>  vs  <b>{view['foe_name']}</b>",
+        f"\n📊 امتیاز شما: <b>{view['my_score']}</b>  ({lead})",
+        f"📊 امتیاز حریف: <b>{view['foe_score']}</b>",
+        f"\n⏳ <b>{_fmt_remaining(view['remaining_seconds'])}</b> تا پایان",
+    ]
+    rows = []
+    if view["ended"]:
+        lines.append("\n<i>جنگ تموم شده — نتیجه به‌زودی اعلام می‌شه.</i>")
+    elif view["already_rallied"]:
+        lines.append("\n✅ تو توی این جنگ شرکت کردی. بقیه‌ی اعضا رو هم خبر کن!")
+    else:
+        rows.append([btn("💪 شرکت در جنگ (قدرتمو اضافه کن)", style=BATTLE, callback_data="ally_war_rally")])
+    rows.append([back_btn("menu:alliance_info")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+async def war1d_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    data = await run_db(_war1d_sync, update.effective_user)
+    await query.answer()
+    if not data["in_alliance"]:
+        await safe_edit_message_text(query, "توی هیچ اتحادی نیستی.", reply_markup=InlineKeyboardMarkup([[back_btn("menu:me")]]))
+        return
+    text, keyboard = _war1d_render(data)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _war_start_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    alliance.start_war(user)
+    return _war1d_sync(tg_user)
+
+
+async def war_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    try:
+        data = await run_db(_war_start_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("🔥 جنگ شروع شد!")
+    text, keyboard = _war1d_render(data)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _war_rally_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    result = alliance.rally_war(user)
+    return result, _war1d_sync(tg_user)
+
+
+async def war_rally_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    try:
+        result, data = await run_db(_war_rally_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer(f"💪 +{result['contribution']} امتیاز اضافه شد!")
+    text, keyboard = _war1d_render(data)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
 def register(application) -> None:
     application.add_handler(CallbackQueryHandler(perks_panel_callback, pattern=r"^ally_perks$"))
     application.add_handler(CallbackQueryHandler(perk_buy_callback, pattern=r"^ally_perk_buy:"))
+    application.add_handler(CallbackQueryHandler(vault_collect_callback, pattern=r"^ally_vault_collect$"))
     application.add_handler(CallbackQueryHandler(war_panel_callback, pattern=r"^ally_war$"))
+    application.add_handler(CallbackQueryHandler(war1d_panel_callback, pattern=r"^ally_war1d$"))
+    application.add_handler(CallbackQueryHandler(war_start_callback, pattern=r"^ally_war_start$"))
+    application.add_handler(CallbackQueryHandler(war_rally_callback, pattern=r"^ally_war_rally$"))

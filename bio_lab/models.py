@@ -84,9 +84,15 @@ class Alliance(models.Model):
     last_heisted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    # treasury-funded, alliance-wide perks (game/alliance.py) — every member benefits
-    xp_perk_level = models.IntegerField(default=0)
-    pass_perk_level = models.IntegerField(default=0)
+    # treasury-funded, alliance-wide buildings (game/alliance.py) — every member
+    # benefits. xp/pass are the original two; fortress/barracks/vault were added
+    # later. All share the buy_perk() upgrade machinery and a per-building level.
+    xp_perk_level = models.IntegerField(default=0)       # آکادمی — +lab XP
+    pass_perk_level = models.IntegerField(default=0)     # معبد — +battle-pass points
+    fortress_level = models.IntegerField(default=0)      # دژ — less gold stolen in heists
+    barracks_level = models.IntegerField(default=0)      # پادگان — +power in the 1-day war
+    vault_level = models.IntegerField(default=0)         # خزانه — passive daily treasury income
+    vault_collected_at = models.DateTimeField(null=True, blank=True)  # last vault income collection
 
     # weekly alliance war: members' activity adds war points; the top alliance's
     # treasury wins a bonus at week's end. war_week scopes points to the current
@@ -107,6 +113,42 @@ class AllianceWarState(models.Model):
 
     def __str__(self) -> str:
         return f"war settled: {self.last_settled_week or '—'}"
+
+
+class AllianceWar(models.Model):
+    """A one-day war between two alliances (game/alliance.py). Matchmaking pairs
+    similar-strength alliances; each side starts with a base score (member power ×
+    barracks bonus) and members «rally» to add more. When ends_at passes the higher
+    score wins a treasury bonus. Settled exactly once by the notification job."""
+
+    ACTIVE = "active"
+    SETTLED = "settled"
+
+    alliance_a = models.ForeignKey(Alliance, on_delete=models.CASCADE, related_name="wars_as_a")
+    alliance_b = models.ForeignKey(Alliance, on_delete=models.CASCADE, related_name="wars_as_b")
+    score_a = models.IntegerField(default=0)
+    score_b = models.IntegerField(default=0)
+    started_at = models.DateTimeField(auto_now_add=True)
+    ends_at = models.DateTimeField()
+    status = models.CharField(max_length=12, default=ACTIVE)  # active | settled
+    winner = models.ForeignKey(Alliance, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+
+    def __str__(self) -> str:
+        return f"{self.alliance_a_id} vs {self.alliance_b_id} ({self.status})"
+
+
+class AllianceWarHit(models.Model):
+    """One member's rally in a war — capped at one per member per war (unique)."""
+
+    war = models.ForeignKey(AllianceWar, on_delete=models.CASCADE, related_name="hits")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
+    power = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["war", "user"], name="uq_alliance_war_hit")
+        ]
 
 
 class Creature(models.Model):
