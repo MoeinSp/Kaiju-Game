@@ -91,8 +91,9 @@ def _shield_render(diamonds: int, shield_secs: int) -> tuple[str, InlineKeyboard
     ]
     rows = []
     for tier, cfg in constants.SHIELD_SHOP_TIERS.items():
+        # button labels are plain text — never get_emoji() here (it returns <tg-emoji> HTML)
         rows.append([btn(
-            f"{cfg['label']} — {cfg['diamonds']} {get_emoji('diamond')}",
+            f"{cfg['label']} — {cfg['diamonds']} 💎",
             style=SHOP, callback_data=f"shield_buy:{tier}",
         )])
     rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])

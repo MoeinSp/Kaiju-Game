@@ -614,18 +614,11 @@ ENERGY_CAPS["wheel_spin"] = WHEEL_DAILY_LIMIT
 # table is weighted with a real chance of «nothing» (the house edge) and a rare
 # jackpot, so it reads as a gamble rather than a guaranteed payout. The paid
 # tiers' expected value sits a little under their cost.
-ENERGY_CAPS["casino_free"] = 1
 CASINO_TIERS = {
     "free": {
-        "label": "🎁 چرخ رایگان روزانه", "cost": 0, "currency": None, "daily": True,
-        "desc": "روزی یک‌بار، مجانی — یه شانس کوچیک برای جایزه.",
-        "prizes": [
-            {"kind": "coins", "amount": 30, "weight": 38, "label": "۳۰ طلا"},
-            {"kind": "coins", "amount": 80, "weight": 24, "label": "۸۰ طلا"},
-            {"kind": "dna", "amount": 3, "weight": 20, "label": "۳ DNA"},
-            {"kind": "diamonds", "amount": 1, "weight": 12, "label": "۱ الماس"},
-            {"kind": "speedup", "amount": 5, "weight": 6, "label": "کارت سرعت ۵ دقیقه"},
-        ],
+        # the free option IS the daily wheel — same limit & prizes (game.wheel)
+        "label": "🎁 چرخ رایگان روزانه (قرعه‌کشی)", "cost": 0, "currency": None, "daily": True,
+        "desc": "همون قرعه‌کشیِ رایگان روزانه‌ست — روزی یک‌بار.",
     },
     "bronze": {
         # coin-only payouts (no diamonds — a coin table that paid the premium

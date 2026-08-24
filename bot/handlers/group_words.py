@@ -430,6 +430,21 @@ def _wheel_card(user, spun_today) -> tuple[str, InlineKeyboardMarkup]:
     return text, InlineKeyboardMarkup(rows)
 
 
+def _casino_card(user) -> tuple[str, InlineKeyboardMarkup]:
+    from game import casino
+
+    lines = [f"{get_emoji('wheel')} <b>کازینو</b>", ""]
+    for t in casino.tier_list():
+        if t["daily"]:
+            cost = "رایگان روزانه (همون قرعه‌کشی)"
+        else:
+            cost = f"{t['cost']} " + ("الماس" if t["currency"] == "diamonds" else "طلا")
+        lines.append(f"• <b>{t['label']}</b> — {cost}")
+    lines.append("\n<blockquote>قماره — ممکنه ببری یا ببازی. برای بازی و انتخاب میز، برو پیوی ربات.</blockquote>")
+    rows = [[_pm_button("🎰 بازی در پیوی")]]
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
 def _fusion_card(user, pairs, built, cap) -> tuple[str, InlineKeyboardMarkup]:
     lines = [f"{get_emoji('lab')} <b>ترکیب هیولا</b>"]
     if not built:
@@ -614,6 +629,8 @@ def _render(action: str, data: dict) -> tuple[str, InlineKeyboardMarkup]:
         return _start_card(user.id)
     if action == "leaderboard":
         return _leaderboard_card(user, data.get("ranked", []), data.get("powers", {}))
+    if action == "casino":
+        return _casino_card(user)
     return _help_card(user.id)
 
 
@@ -631,6 +648,7 @@ def _leaderboard_card(user, ranked, powers) -> tuple[str, InlineKeyboardMarkup]:
 _CARD_ACTIONS = {
     "creature", "equipment", "collection", "lab", "leaderboard", "select",
     "upgrade", "hunt", "arena", "mine", "box", "wheel", "fusion", "breeding", "start",
+    "casino",
 }
 
 

@@ -16,7 +16,7 @@ _KIND_EMOJI_KEY = {"coins": "coin", "dna": "dna", "diamonds": "diamond", "speedu
 
 def _panel_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
-    free_used = get_daily_count(user, "casino_free") >= constants.ENERGY_CAPS["casino_free"]
+    free_used = get_daily_count(user, "wheel_spin") >= constants.WHEEL_DAILY_LIMIT
     return casino.tier_list(), user.coins, user.diamonds, free_used
 
 
@@ -29,10 +29,11 @@ def _render(tiers, coins, diamonds, free_used) -> tuple[str, InlineKeyboardMarku
     rows = []
     for t in tiers:
         if t["daily"]:
-            tag = " (امروز استفاده شده)" if free_used else " (رایگان امروز)"
-            cost_txt = tag
+            cost_txt = " (امروز استفاده شده)" if free_used else " (رایگان امروز)"
         else:
-            cur = get_emoji("diamond") if t["currency"] == "diamonds" else get_emoji("coin")
+            # plain text in button labels — get_emoji() returns <tg-emoji> HTML that
+            # can't render on a button
+            cur = "💎" if t["currency"] == "diamonds" else "طلا"
             cost_txt = f" — {t['cost']} {cur}"
         rows.append([btn(f"{t['label']}{cost_txt}", style=SHOP, callback_data=f"casino_pick:{t['key']}")])
     rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
@@ -74,7 +75,7 @@ async def casino_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 def _play_sync(tg_user, tier):
     user, _ = get_or_create_user(tg_user)
     prize = casino.play(user, tier)
-    free_used = get_daily_count(user, "casino_free") >= constants.ENERGY_CAPS["casino_free"]
+    free_used = get_daily_count(user, "wheel_spin") >= constants.WHEEL_DAILY_LIMIT
     return prize, user.coins, user.diamonds, free_used
 
 

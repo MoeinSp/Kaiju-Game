@@ -6,7 +6,6 @@ from bio_lab.models import User
 from game import constants
 from game.buildings import grant_speedup_card
 from game.creature import GameError
-from game.daily import assert_energy_available, record_action
 
 
 def tier_list() -> list[dict]:
@@ -47,30 +46,32 @@ def _apply_prize(user: User, prize: dict) -> None:
 
 @transaction.atomic
 def play(user: User, tier: str) -> dict:
-    """Charge the tier's cost (free tier is once/day instead), roll its table and
-    apply the prize. Returns the winning prize dict."""
+    """Charge the tier's cost, roll its table and apply the prize. The free tier IS
+    the daily wheel (قرعه‌کشی) — same once-a-day limit and prize table — so a player
+    can't claim both. Returns the winning prize dict."""
     cfg = constants.CASINO_TIERS.get(tier)
     if cfg is None:
         raise GameError("این میز وجود نداره.")
-    user = User.objects.select_for_update().get(id=user.id)
 
     if cfg.get("daily"):
-        assert_energy_available(user, "casino_free")
-    else:
-        currency, cost = cfg["currency"], cfg["cost"]
-        if currency == "coins":
-            if user.coins < cost:
-                raise GameError(f"طلا کافی نداری! این میز {cost} طلا شرط می‌خواد.")
-            user.coins -= cost
-            user.save(update_fields=["coins"])
-        elif currency == "diamonds":
-            if user.diamonds < cost:
-                raise GameError(f"الماس کافی نداری! این میز {cost} الماس شرط می‌خواد.")
-            user.diamonds -= cost
-            user.save(update_fields=["diamonds"])
+        # the free casino option is literally the daily wheel
+        from game.wheel import spin
+
+        return spin(user)
+
+    user = User.objects.select_for_update().get(id=user.id)
+    currency, cost = cfg["currency"], cfg["cost"]
+    if currency == "coins":
+        if user.coins < cost:
+            raise GameError(f"طلا کافی نداری! این میز {cost} طلا شرط می‌خواد.")
+        user.coins -= cost
+        user.save(update_fields=["coins"])
+    elif currency == "diamonds":
+        if user.diamonds < cost:
+            raise GameError(f"الماس کافی نداری! این میز {cost} الماس شرط می‌خواد.")
+        user.diamonds -= cost
+        user.save(update_fields=["diamonds"])
 
     prize = _roll(cfg["prizes"])
     _apply_prize(user, prize)
-    if cfg.get("daily"):
-        record_action(user, "casino_free")
     return prize
