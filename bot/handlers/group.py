@@ -354,8 +354,9 @@ async def raid_spawn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         f"{get_emoji('raid_boss')} <b>باس رید لِوِل {boss.level} ظاهر شد: {boss.name}!</b>\n"
         f"{constants.render_bar(boss.current_hp, boss.max_hp, width=14)}  {boss.current_hp}/{boss.max_hp} HP\n"
         f"{constants.element_label(boss.element)}\n\n"
-        f"همه «اتک» بفرستن تا به <b>باس</b> حمله کنن — هر حمله ۱ ⚡ انرژی می‌بره "
-        f"(روزی {constants.RAID_DAILY_ATTACKS} اتک برای هر نفر) و هرچی سهم دمیجت بیشتر، غنیمت بیشتر! 💪\n"
+        f"همه «اتک» بفرستن تا به <b>باس</b> حمله کنن — هر حمله ۱ ⚡ انرژی می‌بره و "
+        f"هرچی سهم دمیجت بیشتر، غنیمت بیشتر! 💪\n"
+        f"<i>سقف روزانه نداره؛ ولی هر اتک، کول‌داون اتک بعدیت رو ۱ دقیقه بیشتر می‌کنه.</i>\n"
         f"باس تایم‌اوت نداره؛ می‌مونه تا بکشیدش — و بعدش لِوِل رید گروه یکی بالا می‌ره و باس بعدی قوی‌تر و پرجایزه‌تره.\n"
         f"<i>می‌خوای به یه بازیکن حمله کنی؟ روی پیامش ریپلای کن و «اتک» بفرست.</i>",
         parse_mode="HTML",
@@ -374,7 +375,6 @@ def _attack_sync(chat, tg_user):
     if creature is None:
         raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
 
-    assert_energy_available(user, "raid_attack")  # daily 10-hit cap per player
     spend_energy(user, constants.RAID_ATTACK_ENERGY_COST, "حمله")
     dmg, defeated = attack_boss(user, creature, boss)
     user.save(update_fields=["energy", "energy_updated_at"])
@@ -453,14 +453,14 @@ def _pvp_preview_sync(attacker_tg, target_tg):
     if t_creature is None:
         raise GameError("این بازیکن موجود فعالی نداره.")
     return (
-        display_name(attacker), _creature_power(a_creature),
-        display_name(target), _creature_power(t_creature),
+        display_name(attacker), _creature_power(a_creature), a_creature.element,
+        display_name(target), _creature_power(t_creature), t_creature.element,
     )
 
 
 async def _pvp_attack_prompt(update, context, target_tg) -> None:
     try:
-        a_name, a_power, t_name, t_power = await run_db(
+        a_name, a_power, a_elem, t_name, t_power, t_elem = await run_db(
             _pvp_preview_sync, update.effective_user, target_tg
         )
     except GameError as exc:
@@ -468,6 +468,7 @@ async def _pvp_attack_prompt(update, context, target_tg) -> None:
         return
     gap = t_power - a_power
     odds = "🟢 شانس بالا" if gap < -15 else ("🔴 خطرناک" if gap > 15 else "🟡 نزدیک")
+    matchup = constants.element_matchup_note(a_elem, t_elem)
     keyboard = InlineKeyboardMarkup([
         [btn("⚔️ حمله!", emoji_key="btn_attack", style=CONFIRM,
              callback_data=f"gatk:{update.effective_user.id}:{target_tg.id}")],
@@ -476,9 +477,10 @@ async def _pvp_attack_prompt(update, context, target_tg) -> None:
     ])
     await update.message.reply_text(
         f"{get_emoji('battle')} <b>حمله به {t_name}؟</b>\n\n"
-        f"💪 قدرت حریف: <b>{t_power}</b>\n"
-        f"💪 قدرت تو: <b>{a_power}</b>  ({odds})\n\n"
-        f"<i>هر حمله ۱ ⚡ انرژی می‌بره. برنده {constants.DUEL_WIN_COINS} طلا و XP می‌گیره.</i>",
+        f"💪 قدرت حریف: <b>{t_power}</b>  ({constants.element_label(t_elem)})\n"
+        f"💪 قدرت تو: <b>{a_power}</b>  ({constants.element_label(a_elem)}) — {odds}\n"
+        + (f"{matchup}\n" if matchup else "")
+        + f"\n<i>هر حمله ۱ ⚡ انرژی می‌بره. برنده {constants.DUEL_WIN_COINS} طلا و XP می‌گیره.</i>",
         parse_mode="HTML",
         reply_markup=keyboard,
     )

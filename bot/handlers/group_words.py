@@ -126,8 +126,36 @@ def _collection_card(user, creatures) -> tuple[str, InlineKeyboardMarkup]:
             btn("هیولا", emoji_key="btn_creature", style=NAV, callback_data=_scoped("creature", user.id)),
             btn("تجهیزات", emoji_key="btn_inventory", style=NAV, callback_data=_scoped("equipment", user.id)),
         ],
+        [btn("🔄 انتخاب هیولای فعال", style=NAV, callback_data=_scoped("select", user.id))],
         [_pm_button()],
     ]
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _select_card(user, creatures, powers) -> tuple[str, InlineKeyboardMarkup]:
+    """Group-side «انتخاب کایجو»: pick which creature is active, strongest first,
+    right in the chat — no need to open the DM."""
+    if not creatures:
+        return (
+            "هنوز هیولایی نداری. توی پیوی بات /start بزن تا اولین هیولات رو بگیری.",
+            group_footer_keyboard(user.id),
+        )
+    lines = [f"{get_emoji('creature')} <b>انتخاب هیولای فعال</b> — قوی‌ترین‌ها اول:", ""]
+    rows = []
+    for c in creatures[:8]:
+        active = c.is_active
+        lines.append(
+            f"{'🟢 ' if active else ''}{c.name} {'⭐' * c.star_level} · "
+            f"{constants.RARITY_LABELS[c.rarity]} · Lv{c.level} · 💪{powers.get(c.id, 0)}"
+        )
+        if not active:
+            rows.append([btn(
+                f"فعال کن: {c.name} (💪{powers.get(c.id, 0)})",
+                emoji_key="btn_confirm", style=CONFIRM,
+                callback_data=_act("setactive", user.id, str(c.id)),
+            )])
+    lines.append("\n<i>هیولای فعال توی همه‌ی نبردها (اتک، شکار، نبرد) می‌جنگه.</i>")
+    rows.append([_pm_button("مدیریت کامل در پیوی")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -174,7 +202,8 @@ def _help_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
         "و آزمایشگاهت رو بزرگ می‌کنی.",
         "",
         f"<blockquote>همین‌جا توی گروه بازی کن — کافیه <b>خودِ کلمه</b> رو تنها "
-        f"بفرستی، بدون اسلش.\nمثلاً بنویس «{keywords.word_for('creature')}».</blockquote>",
+        f"بفرستی، بدون اسلش.\nمثلاً بفرست <code>{keywords.word_for('creature')}</code> "
+        f"(بزن روش تا کپی شه).</blockquote>",
         "",
         _RULE,
         f"{get_emoji('lab')} <b>چطور بازی می‌کنم؟</b>",
@@ -242,8 +271,10 @@ def _help_section_card(section_key: str, user_id: int) -> tuple[str, InlineKeybo
     lines = [f"{get_emoji(emoji_key)} <b>{title}</b>", "", f"<i>{blurb}</i>", ""]
     for action in actions:
         lines.append(_RULE)
+        # the word is wrapped in <code> so a tap copies it, ready to paste and send
         lines.append(
-            f"{get_emoji(keywords.emoji_key_for(action))} <b>«{keywords.word_for(action)}»</b>"
+            f"{get_emoji(keywords.emoji_key_for(action))} <code>{keywords.word_for(action)}</code>"
+            "  <i>(بزن روش تا کپی شه)</i>"
         )
         lines.append(keywords.describe(action))
         lines.append("<blockquote>" + "\n".join(keywords.how(action)) + "</blockquote>")
@@ -465,6 +496,13 @@ def _card_sync(tg_user, chat, action):
         from game.creature import list_creatures
 
         data["creatures"] = list_creatures(user)
+    elif action == "select":
+        from bot.handlers.group import _creature_power
+        from game.creature import list_creatures
+
+        creatures = sorted(list_creatures(user), key=_creature_power, reverse=True)
+        data["creatures"] = creatures
+        data["powers"] = {c.id: _creature_power(c) for c in creatures}
     elif action == "lab":
         from bio_lab.models import Creature
 
@@ -540,6 +578,8 @@ def _render(action: str, data: dict) -> tuple[str, InlineKeyboardMarkup]:
         return _equipment_card(user, data["creature"], data["slots"])
     if action == "collection":
         return _collection_card(user, data["creatures"])
+    if action == "select":
+        return _select_card(user, data["creatures"], data.get("powers", {}))
     if action == "lab":
         return _profile_card(user, data.get("creature_count", 0), data.get("energy", 0))
     if action == "upgrade":
@@ -579,7 +619,7 @@ def _leaderboard_card(user, ranked, powers) -> tuple[str, InlineKeyboardMarkup]:
 
 
 _CARD_ACTIONS = {
-    "creature", "equipment", "collection", "lab", "leaderboard",
+    "creature", "equipment", "collection", "lab", "leaderboard", "select",
     "upgrade", "hunt", "arena", "mine", "box", "wheel", "fusion", "breeding", "start",
 }
 
@@ -605,9 +645,8 @@ def _format_wait(seconds: int) -> str:
 def _reward_text(user, result: dict) -> str:
     if not result["ok"]:
         return (
-            f"⏳ {display_name(user)} هنوز زوده!\n"
-            f"<b>{_format_wait(result['seconds_left'])}</b> دیگه دوباره مجازی.\n"
-            f"<i>همه‌ی کلمه‌های جایزه یه تایمر مشترک دارن.</i>"
+            f"⏳ <b>{display_name(user)}</b> هنوز زوده!\n"
+            f"تا جایزه‌ی بعدیت <b>{_format_wait(result['seconds_left'])}</b> مونده."
         )
 
     kind = result["kind"]
@@ -628,10 +667,10 @@ def _reward_text(user, result: dict) -> str:
         else ""
     )
     return (
-        f"{get_emoji('gift')} <b>تبریک {display_name(user)}!</b>\n"
-        f"جایزه‌ت: {prize}\n"
-        f"<i>جایزه‌ی شماره‌ی {result['count']} تو</i>{level_note}\n\n"
-        f"⏳ <b>{word_reward.COOLDOWN_MINUTES} دقیقه</b> دیگه دوباره مجازی."
+        f"{get_emoji('gift')} <b>تبریک {display_name(user)}!</b> جایزه گرفتی 🎉\n"
+        f"🎁 {prize}\n"
+        f"<i>این {result['count']}اُمین جایزه‌ی توئه</i>{level_note}\n\n"
+        f"⏳ هر <b>{word_reward.COOLDOWN_MINUTES} دقیقه</b> یه‌بار «جایزه» یا «کایجو» بفرست تا باز جایزه بگیری."
     )
 
 
@@ -814,6 +853,13 @@ def _do_sync(tg_user, chat, action, arg):
         return {"kind": action, "levels": levels, "creature": creature,
                 "card": _card_sync(tg_user, chat, "upgrade")}
 
+    if action == "setactive":
+        from game.creature import set_active_creature
+
+        chosen = set_active_creature(user, int(arg))
+        return {"kind": "setactive", "creature": chosen,
+                "card": _card_sync(tg_user, chat, "select")}
+
     if action == "hunt_next":
         return {"kind": "card", "card": _card_sync(tg_user, chat, "hunt")}
 
@@ -881,7 +927,9 @@ def _do_sync(tg_user, chat, action, arg):
 def _action_note(payload: dict) -> str:
     """The one-line "what just happened" banner above the refreshed card."""
     kind = payload["kind"]
-    if kind == "feed":
+    if kind == "setactive":
+        note = f"🟢 <b>{payload['creature'].name}</b> شد هیولای فعالت!"
+    elif kind == "feed":
         note = f"{get_emoji('coin')} <b>تغذیه شد!</b>"
     elif kind == "train":
         note = "🏋️ <b>تمرین کرد!</b>"
@@ -939,7 +987,7 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
     card_action = {"feed": "upgrade", "train": "upgrade", "hunt_go": "hunt", "hunt_next": "hunt",
                    "arena_go": "arena", "arena_find": "arena", "collect_all": "mine",
-                   "box_open": "box", "wheel_spin": "wheel"}[action]
+                   "box_open": "box", "wheel_spin": "wheel", "setactive": "select"}[action]
     text, keyboard = _render(card_action, payload["card"])
     await safe_edit_message_text(
         query, _action_note(payload) + text, parse_mode="HTML", reply_markup=keyboard

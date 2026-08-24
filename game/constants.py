@@ -186,7 +186,6 @@ MAX_ENERGY = 50
 ENERGY_REGEN_MINUTES = 6   # empty -> full in 5 hours
 FEED_ENERGY_COST = 1
 RAID_ATTACK_ENERGY_COST = 1
-RAID_DAILY_ATTACKS = 10   # each player can land up to 10 raid hits per day
 HUNT_ENERGY_COST = 1
 
 # consecutive daily /start streak — resets if a day is missed, capped so late-game
@@ -383,7 +382,6 @@ HEIST_STEAL_PERCENT = 0.20
 HEIST_COOLDOWN_HOURS = 6
 HEIST_DAILY_ATTEMPTS = 3
 ENERGY_CAPS["heist"] = HEIST_DAILY_ATTEMPTS
-ENERGY_CAPS["raid_attack"] = RAID_DAILY_ATTACKS
 
 # ── Star prestige — never player-set directly; the only source is fusion, which
 # demands two creatures of the SAME species name at the SAME star. STAR_MAX is the
@@ -749,6 +747,22 @@ def element_multiplier(attacker_element: str, defender_element: str) -> float:
     if ELEMENT_STRONG_AGAINST[defender_element] == attacker_element:
         return WEAK_MULTIPLIER
     return 1.0
+
+
+def element_matchup_note(my_element: str, opp_element: str) -> str:
+    """A one-line elemental heads-up for a fight preview: warns when the opponent's
+    element beats yours, cheers when yours beats theirs, empty when neutral."""
+    if ELEMENT_STRONG_AGAINST.get(opp_element) == my_element:
+        return (
+            f"⚠️ <b>احتمال باخت بیشتره:</b> {element_label(opp_element)} به "
+            f"{element_label(my_element)} برتری داره."
+        )
+    if ELEMENT_STRONG_AGAINST.get(my_element) == opp_element:
+        return (
+            f"✅ <b>برتری عنصری با توئه:</b> {element_label(my_element)} به "
+            f"{element_label(opp_element)} برتری داره."
+        )
+    return ""
 
 
 def next_rarity(rarity: str) -> str:

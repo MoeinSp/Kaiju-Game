@@ -2098,7 +2098,7 @@ _KEYWORD_TO_MENU = {
     "mission": "missions", "fusion": "fusion", "breeding": "breeding",
     "reward": "idle", "alliance": "alliance_info", "leaderboard": "rank",
     "box": "biocrate", "mine": "buildings", "wheel": "wheel",
-    "help": "guide", "start": "guide",
+    "select": "collection", "help": "guide", "start": "guide",
 }
 
 

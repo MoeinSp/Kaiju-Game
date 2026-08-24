@@ -261,7 +261,10 @@ def _forge_render(user, items, page: int) -> tuple[str, InlineKeyboardMarkup]:
     page = max(0, min(page, total_pages - 1))
     chunk = items[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
     rows = [
-        [btn(f"{constants.EQUIPMENT_SLOT_LABELS[i.slot]} {i.name} +{i.level}", style=LIST, callback_data=f"forge_pick:{i.id}")]
+        [btn(
+            f"{constants.RARITY_LABELS[i.rarity]} {constants.EQUIPMENT_SLOT_LABELS[i.slot]} {i.name} +{i.level}",
+            style=LIST, callback_data=f"forge_pick:{i.id}",
+        )]
         for i in chunk
     ]
     nav = []

@@ -94,6 +94,7 @@ def _fake_opponent(attacker: User) -> dict:
         "label": random.choice(constants.ARENA_FAKE_LAB_NAMES),
         "cup": bot_cup,
         "power": power,
+        "element": constants.random_element(),  # fixed here so the preview matches the fight
         "loot_pool": random.randint(*constants.arena_fake_loot_range(_attacker_level(attacker))),
     }
 
@@ -129,12 +130,14 @@ def find_opponent(attacker: User) -> dict:
         return _fake_opponent(attacker)
 
     target = random.choice(candidates)
+    target_creature = Creature.objects.filter(owner=target, is_active=True).first()
     return {
         "is_fake": False,
         "user": target,
         "label": lab_display(target),
         "cup": target.cup,
         "power": active_power(target),
+        "element": target_creature.element if target_creature else constants.random_element(),
         "loot_pool": target.coins,
     }
 
@@ -161,7 +164,7 @@ def attack(attacker: User, opponent: dict) -> dict:
     if opponent["is_fake"]:
         # bot defenders have no Creature row, so build an unsaved stand-in scaled to
         # the rolled power (never saved — same trick as hunt.py's wild creatures)
-        defender_creature = _bot_creature(opponent["power"])
+        defender_creature = _bot_creature(opponent["power"], opponent.get("element"))
         defender_user = None
     else:
         defender_user = opponent["user"]
@@ -221,10 +224,10 @@ def attack(attacker: User, opponent: dict) -> dict:
     }
 
 
-def _bot_creature(power: int) -> Creature:
+def _bot_creature(power: int, element: str | None = None) -> Creature:
     """Unsaved stand-in for a bot defender — `id` stays None, so it only ever feeds
     the combat math (game.equipment.get_equipped_items() short-circuits on pk=None)."""
-    element = constants.random_element()
+    element = element or constants.random_element()
     share = max(1, power // 4)
     return Creature(
         name=constants.random_species_name(element),

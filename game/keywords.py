@@ -115,7 +115,17 @@ KEYWORD_DEFS: dict[str, tuple[str, str, str, tuple[str, ...]]] = {
         (
             "لیست کامل با ستاره، درجه و سطح. هیولای فعال با 🟢 مشخصه.",
             "هرچی هیولای بیشتری داشته باشی، شانس پیدا کردن جفت هم‌نام برای «ترکیب» بیشتره.",
-            "عوض کردن هیولای فعال توی پیوی انجام می‌شه.",
+            "برای عوض کردن هیولای فعال، «انتخاب» رو بفرست.",
+        ),
+    ),
+    "select": (
+        "انتخاب",
+        "creature",
+        "انتخاب هیولای فعال",
+        (
+            "لیست هیولاهات رو قوی‌ترین‌اول نشون می‌ده و با یه لمس فعالش می‌کنی.",
+            "هیولای فعال توی همه‌ی نبردها می‌جنگه: اتک، شکار، نبرد و دوئل.",
+            "همین‌جا توی گروه هم کار می‌کنه — لازم نیست بری پیوی.",
         ),
     ),
     "upgrade": (
@@ -363,7 +373,7 @@ KEYWORD_SECTIONS: tuple[tuple[str, str, str, str, tuple[str, ...]], ...] = (
         "settings",
         "قوی‌تر کردن هیولا",
         "هیولات رو ارتقا بده، تجهیز کن و ستاره‌ش رو بالا ببر.",
-        ("upgrade", "equipment", "collection", "fusion", "breeding"),
+        ("upgrade", "equipment", "collection", "select", "fusion", "breeding"),
     ),
     (
         "economy",
@@ -394,6 +404,13 @@ ALIASES: dict[str, str] = {
     "کایجولجند": "help",
     "kaiju legend": "help",
     "kaijulegend": "help",
+    # easy synonyms so players reach features by the word that comes to mind
+    "قرعه کشی": "wheel",     # normalize() already folds the ZWNJ in «قرعه‌کشی» to a space
+    "کازینو": "wheel",
+    "شانس": "wheel",
+    "انتخاب کایجو": "select",
+    "انتخاب هیولا": "select",
+    "کایجو من": "select",
 }
 
 

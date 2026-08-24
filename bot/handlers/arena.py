@@ -135,14 +135,15 @@ def _find_sync(tg_user):
     opponent = find_opponent(user)
     creature = Creature.objects.filter(owner=user, is_active=True).first()
     level = creature.level if creature is not None else 1
-    return user, opponent, active_power(user), expected_loot(opponent, level)
+    my_element = creature.element if creature is not None else None
+    return user, opponent, active_power(user), expected_loot(opponent, level), my_element
 
 
 async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     try:
-        user, opponent, my_power, loot = await run_db(_find_sync, update.effective_user)
+        user, opponent, my_power, loot, my_element = await run_db(_find_sync, update.effective_user)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
@@ -157,18 +158,25 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         "label": opponent["label"],
         "cup": opponent["cup"],
         "power": opponent["power"],
+        "element": opponent.get("element"),
         "loot_pool": opponent["loot_pool"],
     }
 
     gap = opponent["power"] - my_power
     odds = "🟢 شانس بالا" if gap < -15 else ("🔴 خطرناک" if gap > 15 else "🟡 سرتاسری")
+    opp_element = opponent.get("element")
+    elem_tag = f"  ({constants.element_label(opp_element)})" if opp_element else ""
     lines = [
         f"{get_emoji('battle')} <b>حریف پیدا شد!</b>\n",
-        f"🏭 <b>{opponent['label']}</b>",
+        f"🏭 <b>{opponent['label']}</b>{elem_tag}",
         f"🏆 کاپ: <b>{opponent['cup']}</b>",
         f"💪 قدرت: <b>{opponent['power']}</b>  (تو: {my_power} — {odds})",
         f"{get_emoji('coin')} غنیمت در صورت برد: حدود <b>{loot}</b>",
     ]
+    if my_element and opp_element:
+        note = constants.element_matchup_note(my_element, opp_element)
+        if note:
+            lines.append(note)
     keyboard = InlineKeyboardMarkup(
         [
             [btn("حمله!", emoji_key="btn_attack", style=BATTLE, callback_data="arena_attack")],

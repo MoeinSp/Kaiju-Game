@@ -1,4 +1,3 @@
-import datetime
 import random
 
 from django.db.models import F
@@ -18,8 +17,7 @@ BOSS_DEF_PER_LEVEL = 1         # small def growth so it never becomes unkillable
 DNA_REWARD_POOL_BASE = 60
 COIN_REWARD_POOL_BASE = 300
 REWARD_PER_LEVEL = 0.18        # +18% of the reward pool per level
-ATTACK_COOLDOWN_SECONDS = 8    # brief anti-double-tap; the real limit is the daily cap
-DAILY_ATTACK_CAP = constants.RAID_DAILY_ATTACKS
+COOLDOWN_STEP_SECONDS = 60     # each raid hit today makes the next one wait 1 min longer
 
 
 class RaidError(Exception):
@@ -52,15 +50,34 @@ def spawn_boss(group: Group) -> RaidBoss:
     )
 
 
+def _fmt_wait(seconds: int) -> str:
+    m, s = divmod(max(0, seconds), 60)
+    if m and s:
+        return f"{m} دقیقه و {s} ثانیه"
+    if m:
+        return f"{m} دقیقه"
+    return f"{s} ثانیه"
+
+
 def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bool]:
-    last_hit = (
-        RaidDamageLog.objects.filter(raid_id=boss.id, user_id=user.id).order_by("-created_at").first()
-    )
-    if last_hit is not None:
-        elapsed = timezone.now() - last_hit.created_at
-        if elapsed < datetime.timedelta(seconds=ATTACK_COOLDOWN_SECONDS):
-            remaining = ATTACK_COOLDOWN_SECONDS - int(elapsed.total_seconds())
-            raise RaidError(f"هیولات نفس‌نفس می‌زنه، {remaining} ثانیه دیگه دوباره حمله کن.")
+    # No daily cap: instead the cooldown escalates by 1 minute for every raid hit
+    # already landed today, so early hits are fast and heavy grinding slows itself.
+    from game.daily import get_daily_count
+
+    hits_today = get_daily_count(user, "raid_attack")
+    required = hits_today * COOLDOWN_STEP_SECONDS
+    if required > 0:
+        last_hit = (
+            RaidDamageLog.objects.filter(user_id=user.id).order_by("-created_at").first()
+        )
+        if last_hit is not None:
+            elapsed = int((timezone.now() - last_hit.created_at).total_seconds())
+            if elapsed < required:
+                nxt = (hits_today + 1) * COOLDOWN_STEP_SECONDS // 60
+                raise RaidError(
+                    f"هیولات خسته‌ست — {_fmt_wait(required - elapsed)} دیگه دوباره حمله کن.\n"
+                    f"<i>هر اتک رید امروز، کول‌داون بعدی رو ۱ دقیقه بیشتر می‌کنه (اتک بعدی: {nxt} دقیقه).</i>"
+                )
 
     stats = effective_stats(creature, get_equipped_items(creature))
     mult = constants.element_multiplier(creature.element, boss.element)
