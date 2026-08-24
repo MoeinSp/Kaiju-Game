@@ -17,14 +17,16 @@ def _biocrate_sync(tg_user):
 
 def _user_coins_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
-    return user.coins
+    return user.coins, user.dna_fragments
 
 
-def _biocrate_panel_text(coins: int) -> str:
+def _biocrate_panel_text(coins: int, dna: int) -> str:
     return (
         f"{get_emoji('biocrate')} <b>باکس ژنتیکی</b>\n"
         "<blockquote>یه باکس شانسی — بیشترش تجهیزاته و گاهی یه هیولای تازه ازش درمیاد.</blockquote>\n\n"
-        f"{get_emoji('coin')} هزینه: <b>{constants.BIOCRATE_GOLD_COST}</b> طلا  (موجودی: {coins})"
+        f"هزینه: <b>{constants.BIOCRATE_GOLD_COST}</b> {get_emoji('coin')} + "
+        f"<b>{constants.BIOCRATE_DNA_COST}</b> {get_emoji('dna')}\n"
+        f"<i>موجودی: {coins} طلا · {dna} DNA</i>"
     )
 
 
@@ -61,8 +63,8 @@ async def biocrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """Cost + confirmation screen — opening the crate spends gold, so it must never
     fire on a single tap without the player agreeing to the price first. The odds
     live behind their own button to keep this screen uncluttered."""
-    coins = await run_db(_user_coins_sync, update.effective_user)
-    await send_screen(update, _biocrate_panel_text(coins), parse_mode="HTML", reply_markup=_biocrate_keyboard())
+    coins, dna = await run_db(_user_coins_sync, update.effective_user)
+    await send_screen(update, _biocrate_panel_text(coins, dna), parse_mode="HTML", reply_markup=_biocrate_keyboard())
 
 
 async def biocrate_odds_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

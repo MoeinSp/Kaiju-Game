@@ -393,9 +393,10 @@ def _mine_card(user, rows_data) -> tuple[str, InlineKeyboardMarkup]:
 def _box_card(user) -> tuple[str, InlineKeyboardMarkup]:
     text = (
         f"{get_emoji('diamond')} <b>باکس ژنتیکی</b>\n\n"
-        f"<blockquote>هزینه: <b>{constants.BIOCRATE_GOLD_COST}</b> {get_emoji('coin')}\n"
+        f"<blockquote>هزینه: <b>{constants.BIOCRATE_GOLD_COST}</b> {get_emoji('coin')} + "
+        f"<b>{constants.BIOCRATE_DNA_COST}</b> {get_emoji('dna')}\n"
         "شانسی هیولا یا تجهیزات می‌ده، با درجه‌ی نایابی تصادفی.</blockquote>\n"
-        f"موجودی تو: {user.coins:,} {get_emoji('coin')}"
+        f"موجودی تو: {user.coins:,} {get_emoji('coin')} · {user.dna_fragments} {get_emoji('dna')}"
     )
     rows = [
         [btn("باز کن", emoji_key="btn_biocrate", style=SHOP, callback_data=_act("box_open", user.id))],

@@ -360,7 +360,8 @@ BASE_CRIT_CHANCE = 0.10
 BASE_LIFESTEAL = 0.0
 
 # ── Economy: loot boxes, fusion, wagered duels, alliance heist ────────────────
-BIOCRATE_GOLD_COST = 150
+BIOCRATE_GOLD_COST = 250
+BIOCRATE_DNA_COST = 15  # a biocrate now also costs DNA, giving DNA a real everyday use
 BIOCRATE_CREATURE_CHANCE = 0.10  # 10% yields a creature; the other 90% is equipment
 
 # Rarity split used ONLY when the crate rolls a creature (the 10% above). Tuned so

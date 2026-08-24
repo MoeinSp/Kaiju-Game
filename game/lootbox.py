@@ -38,8 +38,14 @@ def _roll_creature(user: User, rarity: str) -> Creature:
 def open_biocrate(user: User) -> dict:
     if user.coins < constants.BIOCRATE_GOLD_COST:
         raise GameError(f"طلا کافی نداری! باز کردن باکس ژنتیکی {constants.BIOCRATE_GOLD_COST} طلا هزینه داره.")
+    if user.dna_fragments < constants.BIOCRATE_DNA_COST:
+        raise GameError(
+            f"{constants.BIOCRATE_DNA_COST} DNA لازمه (الان {user.dna_fragments} داری). "
+            "DNA از شکار، دخمه، آزمایشگاه DNA و پاداش آفلاین به‌دست می‌آد."
+        )
     user.coins -= constants.BIOCRATE_GOLD_COST
-    user.save(update_fields=["coins"])
+    user.dna_fragments -= constants.BIOCRATE_DNA_COST
+    user.save(update_fields=["coins", "dna_fragments"])
 
     # Decide creature-vs-equipment FIRST, then roll rarity from the table that
     # belongs to that outcome — a creature uses its own steep table (so the crate's
