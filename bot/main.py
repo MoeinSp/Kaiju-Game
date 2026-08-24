@@ -22,6 +22,7 @@ from bot.handlers import (
     battlepass,
     breeding,
     campaign,
+    casino,
     codex,
     events,
     groupdrops,
@@ -153,6 +154,7 @@ def main() -> None:
     idle.register(application)
     league.register(application)
     shop.register(application)
+    casino.register(application)
     titles.register(application)
     groupdrops.register(application)  # flash reward drops in groups (JobQueue)
     notify.register(application)  # periodic re-engagement DMs (JobQueue)

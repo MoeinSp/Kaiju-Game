@@ -79,6 +79,23 @@ def bonus_text(item: Equipment) -> str:
     return "، ".join(parts)
 
 
+def equipment_power(item: Equipment) -> int:
+    """A single 💪 figure for a piece of gear so players can compare items and see
+    what upgrading adds. Uses the same stat weights as game.creature.combat_rating;
+    the multiplicative stats (crit/lifesteal) get a fixed additive weight here since
+    a standalone item has no base ATK to multiply."""
+    b = equipment_bonus(item)
+    return round(
+        b.get("hp", 0) * 0.45
+        + b.get("atk", 0) * 4.0
+        + b.get("def", 0) * 2.0
+        + b.get("spd", 0) * 1.4
+        + b.get("poison", 0) * 6.0
+        + b.get("crit_rate", 0) * 100.0
+        + b.get("lifesteal", 0) * 200.0
+    )
+
+
 def creature_equipment_bonus(equipped_items: list[Equipment]) -> dict[str, float]:
     total: dict[str, float] = {}
     for item in equipped_items:

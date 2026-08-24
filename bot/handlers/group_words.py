@@ -98,8 +98,11 @@ def _equipment_card(user, creature, slots) -> tuple[str, InlineKeyboardMarkup]:
         else:
             item = row["item"]
             bonus = bonus_text(item)
+            from game.equipment import equipment_power
+
             lines.append(
-                f"{row['label']}: <b>{item.name} +{item.level}</b>" + (f" — <i>{bonus}</i>" if bonus else "")
+                f"{row['label']}: <b>{item.name} +{item.level}</b> · 💪{equipment_power(item)}"
+                + (f" — <i>{bonus}</i>" if bonus else "")
             )
     rows = [
         [
@@ -843,11 +846,12 @@ async def group_card_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 PRIVACY_HELP = (
-    "⚠️ <b>برای فعال‌سازی ربات، اون رو ادمین فول کنید</b>\n\n"
-    "<blockquote>تا وقتی ربات توی این گروه <b>ادمین (با دسترسی کامل)</b> نباشه، "
-    "تلگرام پیام‌های معمولی گروه رو بهش نمی‌رسونه و نوشتن «هیولا» یا «اتک» هیچ جوابی نمی‌گیره.</blockquote>\n\n"
+    "⚠️ <b>برای فعال‌سازی ربات، اون رو ادمین کنید</b>\n\n"
+    "<blockquote>تا وقتی ربات توی این گروه ادمین نباشه، تلگرام پیام‌های معمولی گروه رو بهش "
+    "نمی‌رسونه و نوشتن «هیولا» یا «اتک» هیچ جوابی نمی‌گیره.</blockquote>\n\n"
     "<b>چطور ادمینش کنم؟</b>\n"
-    "تنظیمات گروه ← ادمین‌ها ← افزودن ادمین ← ربات رو انتخاب کن ← <b>همه‌ی دسترسی‌ها</b> رو روشن کن.\n\n"
+    "تنظیمات گروه ← ادمین‌ها ← افزودن ادمین ← ربات رو انتخاب کن ← فقط دسترسی <b>«حذف پیام‌ها»</b> کافیه.\n\n"
+    "🔒 <i>به دسترسی‌های حساس مثل بن/محدودکردن اعضا یا تغییر تنظیمات نیازی نداره — می‌تونی همه رو خاموش بذاری.</i>\n\n"
     "<i>بعدش دوباره «راهنما» رو بفرست تا مطمئن شی کار می‌کنه.</i>"
 )
 

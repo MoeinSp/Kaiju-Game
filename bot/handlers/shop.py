@@ -4,9 +4,9 @@ from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bio_lab.repository import get_or_create_user
-from bot.buttons import BUILD, SHOP, back_btn, btn
+from bot.buttons import BUILD, CONFIRM, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
-from game import shop
+from game import constants, shop
 from game.creature import GameError
 from game.emoji import get_emoji
 
@@ -62,6 +62,77 @@ async def shop_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
 
 
+# ── 🛡 shield shop (diamonds) ─────────────────────────────────────────────────
+def _shield_state_sync(tg_user):
+    from game.arena import shield_remaining_seconds
+
+    user, _ = get_or_create_user(tg_user)
+    return user.diamonds, shield_remaining_seconds(user)
+
+
+def _fmt_hours(seconds: int) -> str:
+    hours, rem = divmod(max(0, seconds), 3600)
+    minutes = rem // 60
+    if hours and minutes:
+        return f"{hours} ساعت و {minutes} دقیقه"
+    if hours:
+        return f"{hours} ساعت"
+    return f"{minutes} دقیقه"
+
+
+def _shield_render(diamonds: int, shield_secs: int) -> tuple[str, InlineKeyboardMarkup]:
+    status = f"🛡 سپر فعلی: <b>{_fmt_hours(shield_secs)}</b>" if shield_secs > 0 else "🛡 الان سپر نداری"
+    lines = [
+        "🛡 <b>خرید سپر محافظ</b>",
+        f"<blockquote>{status}\n"
+        f"موجودی: {get_emoji('diamond')} <b>{diamonds}</b> الماس\n\n"
+        f"تا وقتی سپر داری کسی نمی‌تونه توی آرنا غارتت کنه. هر حمله‌ای که <b>خودت</b> بزنی "
+        f"{constants.SHIELD_ATTACK_COST_HOURS} ساعت از سپرت کم می‌کنه. خریدها روی هم جمع می‌شن.</blockquote>",
+    ]
+    rows = []
+    for tier, cfg in constants.SHIELD_SHOP_TIERS.items():
+        rows.append([btn(
+            f"{cfg['label']} — {cfg['diamonds']} {get_emoji('diamond')}",
+            style=SHOP, callback_data=f"shield_buy:{tier}",
+        )])
+    rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+async def shield_shop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    diamonds, shield_secs = await run_db(_shield_state_sync, update.effective_user)
+    text, keyboard = _shield_render(diamonds, shield_secs)
+    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _shield_buy_sync(tg_user, tier):
+    from game.arena import buy_shield, shield_remaining_seconds
+
+    user, _ = get_or_create_user(tg_user)
+    result = buy_shield(user, tier)
+    return result, user.diamonds, shield_remaining_seconds(user)
+
+
+async def shield_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    tier = query.data.split(":")[1]
+    try:
+        result, diamonds, shield_secs = await run_db(_shield_buy_sync, update.effective_user, tier)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("🛡 سپر فعال شد!")
+    text, keyboard = _shield_render(diamonds, shield_secs)
+    await safe_edit_message_text(
+        query,
+        f"✅ <b>سپر خریداری شد!</b> الان <b>{_fmt_hours(shield_secs)}</b> محافظت داری.\n\n━━━━━━━━━━\n" + text,
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
 def register(application) -> None:
     application.add_handler(CommandHandler("shop", shop_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(shop_buy_callback, pattern=r"^shop_buy:"))
+    application.add_handler(CommandHandler("shield", shield_shop_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CallbackQueryHandler(shield_buy_callback, pattern=r"^shield_buy:"))

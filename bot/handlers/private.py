@@ -19,7 +19,8 @@ from bot.handlers.codex import codex_panel
 from bot.handlers.events import events_panel
 from bot.handlers.idle import idle_panel
 from bot.handlers.league import league_panel
-from bot.handlers.shop import shop_panel
+from bot.handlers.shop import shield_shop_panel, shop_panel
+from bot.handlers.casino import casino_panel
 from bot.handlers.titles import titles_panel
 from bot.handlers.referral import referral_panel
 from bot.handlers.team import team_panel
@@ -130,10 +131,14 @@ def creature_card_text(user, creature, equipped_items: list | None = None) -> st
         f"{get_emoji('def')} دفاع: <b>{stats['def']}</b>      {get_emoji('spd')} سرعت: <b>{stats['spd']}</b>",
     ]
     if equipped_items:
+        from game.equipment import equipment_power
+
         lines.append("")
         lines.append("🎒 <b>تجهیزات</b>")
         for i in equipped_items:
-            lines.append(f"{constants.EQUIPMENT_SLOT_LABELS[i.slot]} {i.name} <b>+{i.level}</b>")
+            lines.append(
+                f"{constants.EQUIPMENT_SLOT_LABELS[i.slot]} {i.name} <b>+{i.level}</b> · 💪{equipment_power(i)}"
+            )
     from game.arena import shield_status_lines
 
     shield_lines = shield_status_lines(user)
@@ -156,9 +161,26 @@ def _slot_summary_lines(slots: list[dict]) -> list[str]:
             hint = f" — {spare} گزینه آماده" if spare else ""  # 0 stays silent
             lines.append(f"{row['label']}: <i>خالی</i>{hint}")
         else:
+            from game.equipment import equipment_power
+
             item = row["item"]
-            lines.append(f"{row['label']}: {item.name} <b>+{item.level}</b>")
+            lines.append(f"{row['label']}: {item.name} <b>+{item.level}</b> · 💪{equipment_power(item)}")
     return lines
+
+
+def _part_power_gain(creature, part: str, equipped_items: list | None) -> int:
+    """How much 💪 power upgrading `part` by one level would add — computed exactly
+    by re-scoring the creature with the part bumped (then restored), so the number a
+    player sees before spending gold is the real gain, not a guess."""
+    from game.creature import combat_rating
+
+    attr = f"{part}_lvl"
+    before = combat_rating(effective_stats(creature, equipped_items))
+    current = getattr(creature, attr)
+    setattr(creature, attr, current + 1)
+    after = combat_rating(effective_stats(creature, equipped_items))
+    setattr(creature, attr, current)  # restore — the object may be reused/saved elsewhere
+    return after - before
 
 
 def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots: list | None = None) -> str:
@@ -178,7 +200,11 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
     for part, cfg in constants.BODY_PARTS.items():
         level = getattr(creature, f"{part}_lvl")
         cost = constants.upgrade_cost(level)
-        lines.append(f"{cfg['label']} — سطح <b>{level}</b> · ارتقا: {cost} {get_emoji('coin')}")
+        gain = _part_power_gain(creature, part, equipped_items)
+        lines.append(
+            f"{cfg['label']} — سطح <b>{level}</b> · ارتقا: {cost} {get_emoji('coin')} "
+            f"→ <b>+{gain}</b> 💪"
+        )
     if slots is not None:
         lines.append("")
         lines.extend(_slot_summary_lines(slots))
@@ -653,6 +679,7 @@ _CATEGORIES = {
     "shop": ("🛒 فروشگاه", [
         [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("جعبه‌های الماسی", "diamond_box", "s", "btn_diamond_box")],
         [("بنر ویژه", "banner", "s", "btn_banner"), ("شاپ روزانه", "shop", "s", "btn_shop")],
+        [("🛡 خرید سپر", "shield_shop", "s", "btn_shop"), ("🎰 کازینو", "casino", "s", "btn_wheel")],
     ]),
     "social": ("👥 اجتماعی", [
         [("اتحاد من", "alliance_info", "n", "btn_alliance"), ("لیگ رتبه‌بندی", "league", "n", "btn_league")],
@@ -2272,6 +2299,8 @@ _MENU_ACTIONS = {
     "idle": idle_panel,
     "league": league_panel,
     "shop": shop_panel,
+    "shield_shop": shield_shop_panel,
+    "casino": casino_panel,
     "titles": titles_panel,
     "wheel": wheel_cmd,
     "alliance_info": alliance_info_cmd,
@@ -2292,6 +2321,7 @@ _KEYWORD_TO_MENU = {
     "reward": "idle", "alliance": "alliance_info", "leaderboard": "rank",
     "box": "biocrate", "mine": "buildings", "wheel": "wheel",
     "select": "collection", "help": "guide", "start": "guide",
+    "casino": "casino",
 }
 
 

@@ -238,6 +238,16 @@ KEYWORD_DEFS: dict[str, tuple[str, str, str, tuple[str, ...]]] = {
             "کارت سرعت، زمان ساخت ساختمون رو کم می‌کنه — خیلی به‌دردبخوره.",
         ),
     ),
+    "casino": (
+        "کازینو",
+        "wheel",
+        "کازینوی شرطی (پیوی)",
+        (
+            "چهار میز: یه چرخ رایگان روزانه و سه میز شرطی از ارزون تا گرون.",
+            "میز رو انتخاب و تأیید می‌کنی؛ ممکنه ببری یا ببازی.",
+            "شرط‌ها با طلا یا الماسن — قماره، پس با حساب‌وکتاب بازی کن.",
+        ),
+    ),
     "reward": (
         "جایزه",
         "gift",
@@ -406,7 +416,7 @@ ALIASES: dict[str, str] = {
     "kaijulegend": "help",
     # easy synonyms so players reach features by the word that comes to mind
     "قرعه کشی": "wheel",     # normalize() already folds the ZWNJ in «قرعه‌کشی» to a space
-    "کازینو": "wheel",
+    "کازینو": "casino",      # the paid gamble (PV) — distinct from the free daily wheel
     "شانس": "wheel",
     "انتخاب کایجو": "select",
     "انتخاب هیولا": "select",

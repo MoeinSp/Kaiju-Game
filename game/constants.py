@@ -608,6 +608,67 @@ def diamond_finish_cost(remaining_seconds: float) -> int:
 # weighted table of small prizes across every resource plus speed-up cards. ─────
 WHEEL_DAILY_LIMIT = 1
 ENERGY_CAPS["wheel_spin"] = WHEEL_DAILY_LIMIT
+
+# ── Casino (paid gamble, «کازینو») ─────────────────────────────────────────────
+# Four tables: one free spin/day plus three paid tiers (cheap→expensive). Each
+# table is weighted with a real chance of «nothing» (the house edge) and a rare
+# jackpot, so it reads as a gamble rather than a guaranteed payout. The paid
+# tiers' expected value sits a little under their cost.
+ENERGY_CAPS["casino_free"] = 1
+CASINO_TIERS = {
+    "free": {
+        "label": "🎁 چرخ رایگان روزانه", "cost": 0, "currency": None, "daily": True,
+        "desc": "روزی یک‌بار، مجانی — یه شانس کوچیک برای جایزه.",
+        "prizes": [
+            {"kind": "coins", "amount": 30, "weight": 38, "label": "۳۰ طلا"},
+            {"kind": "coins", "amount": 80, "weight": 24, "label": "۸۰ طلا"},
+            {"kind": "dna", "amount": 3, "weight": 20, "label": "۳ DNA"},
+            {"kind": "diamonds", "amount": 1, "weight": 12, "label": "۱ الماس"},
+            {"kind": "speedup", "amount": 5, "weight": 6, "label": "کارت سرعت ۵ دقیقه"},
+        ],
+    },
+    "bronze": {
+        # coin-only payouts (no diamonds — a coin table that paid the premium
+        # currency would be a coin→diamond pump) with a real house edge: coin EV
+        # ~119 against the 150 cost.
+        "label": "🥉 میز برنزی", "cost": 150, "currency": "coins", "daily": False,
+        "desc": "شرط ۱۵۰ طلا.",
+        "prizes": [
+            {"kind": "nothing", "amount": 0, "weight": 35, "label": "باختی 😔"},
+            {"kind": "coins", "amount": 100, "weight": 30, "label": "۱۰۰ طلا"},
+            {"kind": "coins", "amount": 220, "weight": 20, "label": "۲۲۰ طلا"},
+            {"kind": "coins", "amount": 400, "weight": 9, "label": "۴۰۰ طلا"},
+            {"kind": "dna", "amount": 5, "weight": 5, "label": "۵ DNA"},
+            {"kind": "coins", "amount": 900, "weight": 1, "label": "🎉 جک‌پات ۹۰۰ طلا"},
+        ],
+    },
+    "silver": {
+        "label": "🥈 میز نقره‌ای", "cost": 600, "currency": "coins", "daily": False,
+        "desc": "شرط ۶۰۰ طلا.",
+        "prizes": [
+            {"kind": "nothing", "amount": 0, "weight": 32, "label": "باختی 😔"},
+            {"kind": "coins", "amount": 400, "weight": 30, "label": "۴۰۰ طلا"},
+            {"kind": "coins", "amount": 850, "weight": 20, "label": "۸۵۰ طلا"},
+            {"kind": "coins", "amount": 1600, "weight": 9, "label": "۱۶۰۰ طلا"},
+            {"kind": "dna", "amount": 18, "weight": 7, "label": "۱۸ DNA"},
+            {"kind": "coins", "amount": 4000, "weight": 2, "label": "🎉 جک‌پات ۴۰۰۰ طلا"},
+        ],
+    },
+    "gold": {
+        "label": "🥇 میز طلایی (الماسی)", "cost": 12, "currency": "diamonds", "daily": False,
+        "desc": "شرط ۱۲ الماس.",
+        "prizes": [
+            {"kind": "nothing", "amount": 0, "weight": 25, "label": "باختی 😔"},
+            {"kind": "diamonds", "amount": 7, "weight": 25, "label": "۷ الماس"},
+            {"kind": "diamonds", "amount": 14, "weight": 22, "label": "۱۴ الماس"},
+            {"kind": "diamonds", "amount": 25, "weight": 14, "label": "۲۵ الماس"},
+            {"kind": "coins", "amount": 3000, "weight": 8, "label": "۳۰۰۰ طلا"},
+            {"kind": "dna", "amount": 45, "weight": 4, "label": "۴۵ DNA"},
+            {"kind": "diamonds", "amount": 90, "weight": 2, "label": "🎉 جک‌پات ۹۰ الماس"},
+        ],
+    },
+}
+CASINO_TIER_ORDER = ["free", "bronze", "silver", "gold"]
 WHEEL_PRIZES = [
     {"key": "coins_small", "kind": "coins", "amount": 50, "weight": 28, "label": "۵۰ طلا"},
     {"key": "coins_medium", "kind": "coins", "amount": 150, "weight": 14, "label": "۱۵۰ طلا"},
@@ -668,6 +729,18 @@ ARENA_LOOT_PERCENT = 0.10
 ARENA_LOOT_MIN = 9  # a raid on a broke player still pays something, but barely
 ARENA_SHIELD_HOURS = 8
 GROUP_SHIELD_HOURS = 4  # separate anti-farm grace after being hit by a group «اتک»
+
+# Purchasable arena shields (diamonds). Unlike the free 8h grace after being raided,
+# these are bought up-front for long stretches of protection. Each attack YOU launch
+# spends SHIELD_ATTACK_COST_HOURS off your shield instead of dropping it entirely —
+# so a week-long shield survives ~21 raids before you're exposed again.
+SHIELD_ATTACK_COST_HOURS = 8
+SHIELD_SHOP_TIERS = {
+    "8h":  {"hours": 8,   "diamonds": 10,  "label": "🛡 سپر ۸ ساعته"},
+    "24h": {"hours": 24,  "diamonds": 25,  "label": "🛡 سپر ۲۴ ساعته"},
+    "3d":  {"hours": 72,  "diamonds": 60,  "label": "🛡 سپر ۳ روزه"},
+    "7d":  {"hours": 168, "diamonds": 120, "label": "🛡 سپر یک‌هفته‌ای"},
+}
 ARENA_ATTACK_ENERGY_COST = 1
 
 # Loot is capped against the ATTACKER's own progression stage, not the defender's

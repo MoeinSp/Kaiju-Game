@@ -80,6 +80,38 @@ def apply_group_shield(user: User) -> None:
     user.save(update_fields=["group_shield_until"])
 
 
+@transaction.atomic
+def buy_shield(user: User, tier: str) -> dict:
+    """Buy an arena shield with diamonds. Stacks onto any time already left, so a
+    player can top up before a long break."""
+    cfg = constants.SHIELD_SHOP_TIERS.get(tier)
+    if cfg is None:
+        raise GameError("این نوع سپر وجود نداره.")
+    user = User.objects.select_for_update().get(id=user.id)
+    if user.diamonds < cfg["diamonds"]:
+        raise GameError(f"الماس کافی نداری! این سپر {cfg['diamonds']} الماس هزینه داره.")
+    now = timezone.now()
+    base = user.shield_until if (user.shield_until and user.shield_until > now) else now
+    user.shield_until = base + datetime.timedelta(hours=cfg["hours"])
+    user.diamonds -= cfg["diamonds"]
+    user.save(update_fields=["shield_until", "diamonds"])
+    return {"tier": tier, "shield_until": user.shield_until, "remaining": shield_remaining_seconds(user)}
+
+
+def spend_shield_on_attack(user: User) -> int:
+    """Called when `user` launches an attack: burns SHIELD_ATTACK_COST_HOURS off their
+    arena shield (instead of the old all-or-nothing drop). Returns the seconds left
+    after the deduction. No-op / 0 when they weren't shielded. The caller is
+    responsible for including 'shield_until' in its own save()."""
+    if not is_shielded(user):
+        user.shield_until = None
+        return 0
+    reduced = user.shield_until - datetime.timedelta(hours=constants.SHIELD_ATTACK_COST_HOURS)
+    now = timezone.now()
+    user.shield_until = reduced if reduced > now else None
+    return max(0, int((user.shield_until - now).total_seconds())) if user.shield_until else 0
+
+
 def cup_delta(attacker: User, defender_cup: int, won: bool, attacker_power: int) -> int:
     """Cup swing for one raid. Beating someone rated above you pays more than
     beating someone below; losing to someone below you costs more than losing to
@@ -226,7 +258,9 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
     attacker_fields = ["coins"]
     if award_cup:
         attacker.cup = max(0, attacker.cup + delta)
-        attacker.shield_until = None  # raiding always burns your own arena shield
+        # raiding spends 8h off your shield (not the whole thing anymore), so a
+        # bought shield lets you attack a handful of times before it's gone
+        spend_shield_on_attack(attacker)
         attacker_fields += ["cup", "shield_until"]
     attacker.save(update_fields=attacker_fields)
 

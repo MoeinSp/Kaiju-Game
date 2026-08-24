@@ -19,10 +19,12 @@ from game.equipment import (
 
 
 def _item_line(item: Equipment) -> str:
+    from game.equipment import equipment_power
+
     status = f" · روی #{item.equipped_on_id}" if item.equipped_on_id else ""
     return (
         f"<code>#{item.id}</code> {constants.EQUIPMENT_SLOT_LABELS[item.slot]} — {item.name} "
-        f"{constants.RARITY_LABELS[item.rarity]} +{item.level}{status}"
+        f"{constants.RARITY_LABELS[item.rarity]} +{item.level} · 💪{equipment_power(item)}{status}"
     )
 
 
