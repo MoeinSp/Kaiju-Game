@@ -18,7 +18,7 @@ from game.button_emoji import (
     set_button_emoji,
 )
 from config import ADMIN_PANEL_URL, OWNER_TELEGRAM_ID
-from game import constants
+from game import botconfig, constants
 from game.creature import GameError
 from game.emoji import EMOJI_DEFS, EMOJI_KEYS, CATEGORY_LABELS, CATEGORY_OF, clear_emoji, get_emoji, list_overrides, set_emoji
 from game.force_join import (
@@ -256,7 +256,10 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 btn("🎛 ایموجی دکمه‌ها", style=ADMIN, callback_data="admin_menu:button_emoji"),
             ],
             [btn("🔍 پیش‌نمایش ایموجی‌ها", style=ADMIN, callback_data="admin_menu:preview_emoji")],
-            [btn("📡 جوین اجباری", style=ADMIN, callback_data="admin_menu:force_join")],
+            [
+                btn("📡 جوین اجباری", style=ADMIN, callback_data="admin_menu:force_join"),
+                btn("🎮 گروه بازی", style=ADMIN, callback_data="admin_menu:group_link"),
+            ],
             [btn("🌐 پنل تحت وب (رنگ دکمه‌ها، لودآوت، پشتیبان‌گیری)", style=PRIMARY, url=ADMIN_PANEL_URL)],
         ]
     )
@@ -1170,6 +1173,58 @@ async def broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
 
+def _group_link_sync() -> tuple[str, str]:
+    link = botconfig.get_group_link()
+    if link is None:
+        return "", ""
+    return link  # (url, title)
+
+
+def _group_link_panel_keyboard(has_link: bool) -> InlineKeyboardMarkup:
+    rows = [[btn("✏️ تنظیم/تغییر لینک گروه", style=PRIMARY, callback_data="admin_menu:group_link_set")]]
+    if has_link:
+        rows.append([btn("🗑 حذف دکمه‌ی گروه", style=DANGER, callback_data="admin_menu:group_link_clear")])
+    rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def group_link_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    url, title = await run_db(_group_link_sync)
+    if url:
+        body = (
+            f"🎮 <b>گروه بازی</b>\n\n"
+            f"لینک فعلی: <code>{url}</code>\n"
+            f"متن دکمه: <b>{title}</b>\n\n"
+            "این دکمه ته منوی اصلیِ همه‌ی بازیکن‌ها نشون داده می‌شه."
+        )
+    else:
+        body = (
+            "🎮 <b>گروه بازی</b>\n\n"
+            "هنوز گروهی تنظیم نشده. با تنظیم لینک، یه دکمه ته منوی اصلیِ همه‌ی بازیکن‌ها اضافه می‌شه "
+            "که مستقیم می‌برتشون به گروه بازی."
+        )
+    await update.effective_message.reply_text(
+        body, parse_mode="HTML", reply_markup=_group_link_panel_keyboard(bool(url))
+    )
+
+
+async def group_link_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "set_group_link"}
+    await update.effective_message.reply_text(
+        "🎮 لینک گروه رو بفرست (مثلاً <code>https://t.me/mygroup</code>).\n\n"
+        "اگه می‌خوای متن دکمه هم عوض شه، بعد از لینک یه <code>|</code> بذار و متن دلخواه رو بنویس:\n"
+        "<code>https://t.me/mygroup | 🎮 گروه ما</code>",
+        parse_mode="HTML",
+    )
+
+
+async def group_link_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await run_db(botconfig.set_group_link, "", "")
+    await update.effective_message.reply_text(
+        "✅ دکمه‌ی گروه حذف شد.", reply_markup=_group_link_panel_keyboard(False)
+    )
+
+
 _RESOURCE_LABELS = {"coins": "طلا", "dna": "DNA", "diamonds": "الماس"}
 _RESOURCE_EMOJI_KEYS = {"coins": "coin", "dna": "dna", "diamonds": "diamond"}
 
@@ -1341,6 +1396,34 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
+    if action == "set_group_link":
+        raw = text
+        if "|" in raw:
+            url_part, title_part = raw.split("|", 1)
+        else:
+            url_part, title_part = raw, ""
+        url = url_part.strip()
+        title = title_part.strip()
+        # accept t.me/... without scheme; require a plausible link otherwise
+        if url.startswith("t.me/") or url.startswith("@"):
+            url = "https://t.me/" + url.lstrip("@").removeprefix("t.me/")
+        if not (url.startswith("http://") or url.startswith("https://")):
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text(
+                "⚠️ لینک معتبر نیست. باید با <code>https://</code> شروع شه یا مثل "
+                "<code>https://t.me/mygroup</code> باشه. دوباره بفرست:",
+                parse_mode="HTML",
+            )
+            return
+        await run_db(botconfig.set_group_link, url, title)
+        shown_title = title or botconfig.DEFAULT_GROUP_TITLE
+        await message.reply_text(
+            f"✅ دکمه‌ی گروه تنظیم شد.\nلینک: <code>{url}</code>\nمتن دکمه: <b>{shown_title}</b>\n\n"
+            "حالا ته منوی اصلیِ همه‌ی بازیکن‌ها نشون داده می‌شه.",
+            parse_mode="HTML",
+        )
+        return
+
     if action == "broadcast":
         user_ids = await run_db(_all_user_ids_sync)
         sent = 0
@@ -1389,6 +1472,9 @@ _ADMIN_MENU_ACTIONS.update(
         "broadcast_start": broadcast_start,
         "set_emoji_start": set_emoji_cmd,
         "button_emoji": button_emoji_panel,
+        "group_link": group_link_panel,
+        "group_link_set": group_link_set_start,
+        "group_link_clear": group_link_clear,
     }
 )
 

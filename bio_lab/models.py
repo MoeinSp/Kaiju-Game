@@ -696,3 +696,18 @@ class ChannelJoinClaim(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["user", "channel"], name="uq_channel_join_claim")
         ]
+
+
+class BotConfig(models.Model):
+    """Single-row (id=1) table of owner-tunable global settings that aren't part of
+    a theme/loadout and aren't game state — e.g. the public "game group" the bot
+    invites players into from the main menu. Read through an in-memory cache
+    (game.botconfig) because it's consulted while building keyboards in async
+    handler code, where a lazy DB query would raise SynchronousOnlyOperation."""
+
+    group_game_url = models.CharField(max_length=256, default="", blank=True)  # https://t.me/... invite/link
+    group_game_title = models.CharField(max_length=48, default="", blank=True)  # button label override
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"group={self.group_game_url or '—'}"

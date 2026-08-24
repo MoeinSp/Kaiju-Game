@@ -7,10 +7,43 @@ from bio_lab.repository import get_or_create_user
 from bot.buttons import CONFIRM, DANGER, PRIMARY, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text
 from config import OWNER_TELEGRAM_ID
+from game import keywords
 from game.emoji import get_emoji
 from game.force_join import NOT_JOINED_STATUSES, active_channels, grant_reward_if_unclaimed
 
 FORCE_JOIN_CHECK_CALLBACK = "forcejoin_check"
+
+_GROUP_CHAT_TYPES = ("group", "supergroup")
+
+
+def _is_group_bot_invocation(update: Update) -> bool:
+    """In a group, decide whether this update is actually aimed at the bot.
+
+    The ban / force-join gates run on *every* update. In a group where the bot
+    can read all messages that would mean replying "join the channel" (or "you're
+    banned") to ordinary chatter — so in groups we only gate real invocations:
+    a callback on one of our buttons, a slash command, or a recognised game word.
+    Everything else is left alone (handle_group_text stays quiet on it too).
+    """
+    if update.callback_query is not None:
+        return True
+    message = update.effective_message
+    if message is None or not message.text:
+        return False
+    text = message.text
+    if text.startswith("/"):
+        return True
+    return keywords.match(text) is not None
+
+
+def _gate_applies(update: Update) -> bool:
+    """Whether the ban / force-join gate should run for this update at all.
+
+    Always in private chats; in groups only for actual bot invocations."""
+    chat = update.effective_chat
+    if chat is not None and chat.type in _GROUP_CHAT_TYPES:
+        return _is_group_bot_invocation(update)
+    return True
 
 
 def _is_banned_sync(user_id: int) -> bool:
@@ -24,6 +57,8 @@ async def enforce_ban(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user = update.effective_user
     if user is None or user.id == OWNER_TELEGRAM_ID:
         return
+    if not _gate_applies(update):
+        return  # ordinary group chatter — never gate it
     if await run_db(_is_banned_sync, user.id):
         if update.effective_message is not None:
             await update.effective_message.reply_text("🚫 دسترسیت به این بات مسدود شده.")
@@ -76,6 +111,8 @@ async def enforce_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user = update.effective_user
     if user is None or user.id == OWNER_TELEGRAM_ID:
         return
+    if not _gate_applies(update):
+        return  # ordinary group chatter — never gate it
 
     channels = await run_db(active_channels)
     if not channels:

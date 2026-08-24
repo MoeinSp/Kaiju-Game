@@ -41,6 +41,7 @@ from bot.handlers import (
     wheel,
 )
 from config import BOT_TOKEN, WEBHOOK_PORT, WEBHOOK_SECRET, WEBHOOK_URL  # noqa: E402
+from game import botconfig  # noqa: E402
 from game.theme import refresh_theme_caches  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -79,6 +80,7 @@ def main() -> None:
     # the event loop starts — get_emoji()/btn() read them from async handler code,
     # so they must never hit the DB lazily
     refresh_theme_caches()
+    botconfig.refresh_cache()  # the "join the game group" button reads this in async code
 
     application = Application.builder().token(BOT_TOKEN).build()
 

@@ -33,7 +33,7 @@ from bot.buttons import (ADMIN, BACK, BATTLE, BUILD, CONFIRM, DANGER, LIST, NAV,
                          SHOP, back_btn, back_only_keyboard, btn)
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text, send_screen
 from config import OWNER_TELEGRAM_ID
-from game import constants
+from game import botconfig, constants
 from game.alliance import (
     alliance_info,
     create_alliance,
@@ -679,6 +679,11 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
     """Categorised navigation under the creature card — core loop direct, the rest
     in three category submenus."""
     rows = _main_menu_rows()
+    # the owner-configured "join the game group" button, always last (in-memory read)
+    group_link = botconfig.get_group_link()
+    if group_link is not None:
+        url, title = group_link
+        rows.append([btn(title, style=PRIMARY, url=url)])
     if is_owner:
         rows.append([btn("پنل ادمین", emoji_key="btn_admin", style=ADMIN, callback_data="menu:admin")])
     return InlineKeyboardMarkup(rows)
