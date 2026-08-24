@@ -1507,11 +1507,22 @@ async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 AWAITING_PLAYER_KEY = "awaiting_player_input"
 
 
+def _reply_hint(update: Update) -> str:
+    """In a group, awaiting-text flows are fed by replying to the bot's prompt, so
+    tell the user to do that. Empty in private chats, where a plain message works."""
+    chat = update.effective_chat
+    if chat is not None and chat.type in ("group", "supergroup"):
+        return "\n\n<i>👈 توی گروه حتماً به همین پیام <b>ریپلای</b> کن و جوابت رو بنویس.</i>"
+    return ""
+
+
 async def alliance_create_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     context.user_data[AWAITING_PLAYER_KEY] = {"action": "alliance_create"}
     await query.answer()
-    await safe_edit_message_text(query, f"🟢 {get_emoji('alliance')} اسم اتحاد جدیدت رو بفرست:", parse_mode="HTML")
+    await safe_edit_message_text(
+        query, f"🟢 {get_emoji('alliance')} اسم اتحاد جدیدت رو بفرست:{_reply_hint(update)}", parse_mode="HTML"
+    )
 
 
 def _alliance_browse_render(data: dict, search_results=None, search_query: str = "") -> tuple[str, InlineKeyboardMarkup]:
@@ -1600,7 +1611,7 @@ async def alliance_search_callback(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
     await safe_edit_message_text(
         query,
-        f"🔍 {get_emoji('alliance')} اسم (یا بخشی از اسم) اتحاد رو بفرست:",
+        f"🔍 {get_emoji('alliance')} اسم (یا بخشی از اسم) اتحاد رو بفرست:{_reply_hint(update)}",
         parse_mode="HTML",
     )
 
@@ -1610,7 +1621,8 @@ async def alliance_deposit_callback(update: Update, context: ContextTypes.DEFAUL
     context.user_data[AWAITING_PLAYER_KEY] = {"action": "alliance_deposit"}
     await query.answer()
     await safe_edit_message_text(query,
-        f"💰 چند {get_emoji('coin')} طلا می‌خوای به خزانه واریز کنی؟ یه عدد بفرست:", parse_mode="HTML"
+        f"💰 چند {get_emoji('coin')} طلا می‌خوای به خزانه واریز کنی؟ یه عدد بفرست:{_reply_hint(update)}",
+        parse_mode="HTML",
     )
 
 

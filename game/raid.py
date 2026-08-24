@@ -75,8 +75,8 @@ def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bo
             if elapsed < required:
                 nxt = (hits_today + 1) * COOLDOWN_STEP_SECONDS // 60
                 raise RaidError(
-                    f"هیولات خسته‌ست — {_fmt_wait(required - elapsed)} دیگه دوباره حمله کن.\n"
-                    f"<i>هر اتک رید امروز، کول‌داون بعدی رو ۱ دقیقه بیشتر می‌کنه (اتک بعدی: {nxt} دقیقه).</i>"
+                    f"هیولات خسته‌ست — {_fmt_wait(required - elapsed)} دیگه دوباره حمله کن. "
+                    f"(هر اتک رید امروز، کول‌داون بعدی رو ۱ دقیقه بیشتر می‌کنه؛ اتک بعدی: {nxt} دقیقه)"
                 )
 
     stats = effective_stats(creature, get_equipped_items(creature))

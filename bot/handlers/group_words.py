@@ -677,9 +677,38 @@ def _reward_text(user, result: dict) -> str:
 # ── dispatch ────────────────────────────────────────────────────────────────
 
 
+_GROUP_AWAIT_KEYS = (
+    "awaiting_player_input",
+    "awaiting_emoji_key",
+    "awaiting_force_join",
+    "awaiting_admin_input",
+    "awaiting_button_emoji_key",
+)
+
+
+async def _maybe_capture_group_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """In a group, an 'awaiting a name/number' flow (alliance name, admin search, …)
+    is fed by REPLYING to the bot's prompt. Ordinary chatter is never captured — we
+    only act when the message replies to the bot AND that user has a pending flow."""
+    if not any(context.user_data.get(k) for k in _GROUP_AWAIT_KEYS):
+        return False
+    reply = update.effective_message.reply_to_message
+    if reply is None or reply.from_user is None or reply.from_user.id != context.bot.id:
+        return False
+    from bot.handlers.owner import capture_owner_text_reply
+    from bot.handlers.private import capture_player_text_reply
+
+    await capture_player_text_reply(update, context)
+    await capture_owner_text_reply(update, context)
+    return True
+
+
 async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     if message is None or not message.text:
+        return
+    # a reply to the bot's prompt feeds a pending text flow (alliance name, search…)
+    if await _maybe_capture_group_reply(update, context):
         return
     action = keywords.match(message.text)
     if action is None:

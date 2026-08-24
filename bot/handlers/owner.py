@@ -1,4 +1,6 @@
 import asyncio
+import html
+import logging
 
 from django.utils import timezone
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity, MessageOriginChannel, Update
@@ -44,6 +46,8 @@ from game.moderation import (
     user_info,
 )
 from game.report import dashboard_stats, progress_report
+
+logger = logging.getLogger(__name__)
 
 BROADCAST_DELAY_SECONDS = 0.05  # ~20 msg/s, safely under Telegram's flood limits
 
@@ -361,14 +365,19 @@ def _user_info_text(data: dict) -> str:
         f"{get_emoji('coin')} {user.coins}   {get_emoji('dna')} {user.dna_fragments}   "
         f"{get_emoji('diamond')} {user.diamonds}   {get_emoji('energy')} {user.energy}/{constants.MAX_ENERGY}",
         f"🔥 streak: {user.login_streak}   {get_emoji('alliance')} اتحاد: "
-        f"{user.alliance.name if user.alliance_id else '—'}",
+        f"{html.escape(user.alliance.name) if user.alliance_id else '—'}",
         f"{get_emoji('banned')} مسدود: {'بله' if user.is_banned else 'نه'}",
         f"📅 عضو از: {timezone.localtime(user.created_at).strftime('%Y-%m-%d')}\n",
         f"{get_emoji('creature')} <b>موجودات ({len(data['creatures'])}):</b>",
     ]
-    for c in data["creatures"]:
+    # cap the list so a big roster can't push the message past Telegram's 4096 limit;
+    # names are escaped because a creature/lab name can contain <, > or & (HTML-unsafe)
+    shown = data["creatures"][:40]
+    for c in shown:
         active_tag = " ✅فعال" if c.is_active else ""
-        lines.append(f"  • <code>#{c.id}</code> {c.name} Lv{c.level} ({c.rarity}){active_tag}")
+        lines.append(f"  • <code>#{c.id}</code> {html.escape(c.name)} Lv{c.level} ({c.rarity}){active_tag}")
+    if len(data["creatures"]) > len(shown):
+        lines.append(f"  <i>… و {len(data['creatures']) - len(shown)} تای دیگه</i>")
     return "\n".join(lines)
 
 
@@ -1226,10 +1235,20 @@ async def user_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     await query.answer()
     user = data["user"]
-    await safe_edit_message_text(
-        query, _user_info_text(data), parse_mode="HTML",
-        reply_markup=_user_manage_keyboard(user.id, user.is_banned),
-    )
+    text = _user_info_text(data)
+    keyboard = _user_manage_keyboard(user.id, user.is_banned)
+    try:
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+    except TelegramError:
+        # editing the results message can fail (too old, not modifiable, parse edge
+        # case) — never leave the owner staring at a dead button; post a fresh card
+        # and record why so the underlying cause is visible.
+        logger.exception("user_open edit failed for target %s; falling back to new message", target_id)
+        try:
+            await query.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+        except TelegramError:
+            logger.exception("user_open fallback send also failed for target %s", target_id)
+            await query.answer("نمایش این کاربر با خطا خورد — لاگ رو چک کن.", show_alert=True)
 
 
 async def gift_all_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
