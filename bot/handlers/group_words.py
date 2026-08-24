@@ -824,7 +824,7 @@ def _do_sync(tg_user, chat, action, arg):
 
         _require_creature(creature)
         tier, seed = arg.split(":")
-        spend_energy(user, constants.HUNT_ENERGY_COST)
+        spend_energy(user, constants.HUNT_ENERGY_COST, "شکار")
         result = resolve_hunt(user, creature, tier, int(seed))
         record_action(user, "hunt")
         result["missions"] = check_missions(user, "hunt")
