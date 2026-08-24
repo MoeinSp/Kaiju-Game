@@ -49,3 +49,33 @@ def set_group_link(url: str, title: str = "") -> None:
         id=1, defaults={"group_game_url": url[:256], "group_game_title": title}
     )
     refresh_cache()
+
+
+def get_backup_interval() -> int:
+    """Auto-backup interval in hours (0 = off)."""
+    row = BotConfig.objects.filter(id=1).first()
+    return row.backup_interval_hours if row else 0
+
+
+def set_backup_interval(hours: int) -> None:
+    BotConfig.objects.update_or_create(id=1, defaults={"backup_interval_hours": max(0, int(hours))})
+
+
+def due_backup() -> bool:
+    """True if auto-backup is on and its interval has elapsed since the last one."""
+    import datetime
+
+    from django.utils import timezone
+
+    row = BotConfig.objects.filter(id=1).first()
+    if row is None or row.backup_interval_hours <= 0:
+        return False
+    if row.backup_last_at is None:
+        return True
+    return timezone.now() - row.backup_last_at >= datetime.timedelta(hours=row.backup_interval_hours)
+
+
+def mark_backup_done() -> None:
+    from django.utils import timezone
+
+    BotConfig.objects.filter(id=1).update(backup_last_at=timezone.now())

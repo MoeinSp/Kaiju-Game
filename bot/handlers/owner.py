@@ -53,7 +53,17 @@ BROADCAST_DELAY_SECONDS = 0.05  # ~20 msg/s, safely under Telegram's flood limit
 
 
 def _is_owner(update: Update) -> bool:
+    """Strict: only the single bot owner. Used for admin management (add/remove admin)."""
     return update.effective_user is not None and update.effective_user.id == OWNER_TELEGRAM_ID
+
+
+def _is_admin(update: Update) -> bool:
+    """The owner OR any owner-granted admin. Gates the whole panel except admin
+    management. In-memory check (game.admins), so it's async-safe."""
+    from game import admins
+
+    u = update.effective_user
+    return u is not None and (u.id == OWNER_TELEGRAM_ID or admins.is_admin(u.id))
 
 
 def _keys_help() -> str:
@@ -96,7 +106,7 @@ def _extract_custom_emoji(message) -> tuple[str, str] | None:
 
 
 async def set_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_owner(update):
+    if not _is_admin(update):
         return
 
     if not context.args:
@@ -135,7 +145,7 @@ async def set_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def set_emoji_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     category = query.data[len(EMOJI_CAT_CALLBACK_PREFIX) :]
@@ -150,7 +160,7 @@ async def set_emoji_category_callback(update: Update, context: ContextTypes.DEFA
 
 async def set_emoji_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     await query.answer()
@@ -161,7 +171,7 @@ async def set_emoji_back_callback(update: Update, context: ContextTypes.DEFAULT_
 
 async def set_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     key = query.data[len(EMOJI_KEY_CALLBACK_PREFIX) :]
@@ -202,7 +212,7 @@ async def capture_emoji_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def clear_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_owner(update):
+    if not _is_admin(update):
         return
     if not context.args or context.args[0] not in EMOJI_KEYS:
         await update.message.reply_text(
@@ -218,7 +228,7 @@ async def clear_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def list_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_owner(update):
+    if not _is_admin(update):
         return
     overrides = await run_db(list_overrides)
 
@@ -239,7 +249,7 @@ async def list_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_owner(update):
+    if not _is_admin(update):
         return
     stats = await run_db(dashboard_stats)
     text = (
@@ -276,7 +286,96 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             [btn("🌐 پنل تحت وب (رنگ دکمه‌ها، لودآوت، پشتیبان‌گیری)", style=PRIMARY, url=ADMIN_PANEL_URL)],
         ]
     )
+    if _is_owner(update):
+        # admin management + auto-backup are the owner's alone
+        rows = list(keyboard.inline_keyboard)
+        rows.insert(-1, [
+            btn("👮 مدیریت ادمین‌ها", style=ADMIN, callback_data="admin_menu:admin_manage"),
+            btn("💾 بکاپ خودکار", style=ADMIN, callback_data="admin_menu:autobackup"),
+        ])
+        keyboard = InlineKeyboardMarkup(rows)
     await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+
+# ── admin management (owner-only) ─────────────────────────────────────────────
+
+async def admin_manage_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_owner(update):
+        if update.callback_query:
+            await update.callback_query.answer("فقط مالک می‌تونه ادمین‌ها رو مدیریت کنه.", show_alert=True)
+        return
+    from game import admins
+
+    admin_list = await run_db(admins.list_admins)
+    lines = ["👮 <b>مدیریت ادمین‌ها</b>\n", "<i>ادمین‌ها همه‌کاره‌ی پنل‌ان جز افزودن/حذف ادمین.</i>\n"]
+    rows = []
+    if admin_list:
+        for a in admin_list:
+            lines.append(f"• {display_name(a)} (<code>{a.id}</code>)")
+            rows.append([btn(f"🗑 حذف {display_name(a)}", style=DANGER, callback_data=f"admin_rm:{a.id}")])
+    else:
+        lines.append("هنوز ادمینی اضافه نشده.")
+    rows.append([btn("➕ افزودن ادمین", style=CONFIRM, callback_data="admin_menu:admin_add")])
+    rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
+    target = update.callback_query.message if update.callback_query else update.effective_message
+    await target.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+
+
+async def admin_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_owner(update):
+        return
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "add_admin"}
+    await update.effective_message.reply_text(
+        "👮 آیدی عددی یا @یوزرنیم کسی که می‌خوای ادمین شه رو بفرست:", parse_mode="HTML"
+    )
+
+
+async def admin_remove_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer("فقط مالک می‌تونه.", show_alert=True)
+        return
+    from game import admins
+
+    target_id = int(query.data.split(":")[1])
+    await run_db(admins.remove_admin, target_id)
+    await query.answer("حذف شد.")
+    await admin_manage_panel(update, context)
+
+
+_BACKUP_INTERVAL_CHOICES = [0, 6, 12, 24, 48]
+
+
+async def autobackup_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_owner(update):
+        if update.callback_query:
+            await update.callback_query.answer("فقط مالک.", show_alert=True)
+        return
+    hours = await run_db(botconfig.get_backup_interval)
+    status = "خاموش" if hours == 0 else f"هر <b>{hours}</b> ساعت"
+    text = (
+        "💾 <b>بکاپ خودکار دیتابیس</b>\n\n"
+        f"وضعیت فعلی: {status}\n\n"
+        "<blockquote>هر بازه، یه نسخه‌ی فشرده از دیتابیس ساخته و همین‌جا (پیوی مالک) "
+        "فرستاده می‌شه. برای خاموش‌کردن «خاموش» رو بزن.</blockquote>"
+    )
+    labels = {0: "🚫 خاموش", 6: "۶ ساعت", 12: "۱۲ ساعت", 24: "۲۴ ساعت", 48: "۴۸ ساعت"}
+    rows = [[btn(("✅ " if h == hours else "") + labels[h], style=(CONFIRM if h == hours else ADMIN),
+                 callback_data=f"autobk_set:{h}")] for h in _BACKUP_INTERVAL_CHOICES]
+    rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
+    target = update.callback_query.message if update.callback_query else update.effective_message
+    await target.reply_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+
+
+async def autobackup_set_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer("فقط مالک.", show_alert=True)
+        return
+    hours = int(query.data.split(":")[1])
+    await run_db(botconfig.set_backup_interval, hours)
+    await query.answer("ذخیره شد." if hours else "خاموش شد.")
+    await autobackup_panel(update, context)
 
 
 _ADMIN_MENU_ACTIONS = {}  # populated at the bottom of the module, after every command is defined
@@ -284,7 +383,7 @@ _ADMIN_MENU_ACTIONS = {}  # populated at the bottom of the module, after every c
 
 async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     await query.answer()
@@ -295,7 +394,7 @@ async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def report_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_owner(update):
+    if not _is_admin(update):
         return
     data = await run_db(progress_report)
 
@@ -331,7 +430,7 @@ def _all_user_ids_sync() -> list[int]:
 
 
 async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_owner(update):
+    if not _is_admin(update):
         return
     if not context.args:
         await update.effective_message.reply_text(
@@ -414,7 +513,7 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
 async def user_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Power-user shortcut — the advertised path is the admin panel's «👤 مدیریت
     کاربر» button, which also attaches quick grant/deduct/ban action buttons."""
-    if not _is_owner(update):
+    if not _is_admin(update):
         return
     if not context.args:
         await update.effective_message.reply_text(
@@ -435,7 +534,7 @@ async def user_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def charge_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """One-shot multi-resource top-up: /charge <user> <gold> <dna> <diamonds>.
     The advertised path is the admin panel's «⚡ شارژ کامل» button."""
-    if not _is_owner(update):
+    if not _is_admin(update):
         return
     if len(context.args) != 4 or not all(_is_signed_int(a) for a in context.args[1:]):
         await update.effective_message.reply_text(
@@ -458,7 +557,7 @@ async def charge_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def grant_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_owner(update):
+    if not _is_admin(update):
         return
     if len(context.args) != 3 or not context.args[2].isdigit():
         await update.effective_message.reply_text(
@@ -478,7 +577,7 @@ async def grant_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def deduct_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_owner(update):
+    if not _is_admin(update):
         return
     if len(context.args) != 3 or not context.args[2].isdigit():
         await update.effective_message.reply_text(
@@ -498,7 +597,7 @@ async def deduct_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def ban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_owner(update):
+    if not _is_admin(update):
         return
     if not context.args:
         await update.effective_message.reply_text(
@@ -516,7 +615,7 @@ async def ban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def unban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_owner(update):
+    if not _is_admin(update):
         return
     if not context.args:
         await update.effective_message.reply_text(
@@ -560,7 +659,7 @@ def _delete_creature_confirm_keyboard(creature_id: int) -> InlineKeyboardMarkup:
 
 async def delete_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Power-user shortcut — the advertised path is the admin panel's «🗑 حذف موجود» button."""
-    if not _is_owner(update):
+    if not _is_admin(update):
         return
     if not context.args or not context.args[0].isdigit():
         await update.effective_message.reply_text(
@@ -583,7 +682,7 @@ async def delete_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def delete_creature_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
 
@@ -633,7 +732,7 @@ def _reset_confirm_keyboard(target_id: int) -> InlineKeyboardMarkup:
 async def reset_user_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Power-user shortcut — the advertised path is the «♻️ ریست کامل بازیکن»
     button under «مدیریت کاربر» in the admin panel."""
-    if not _is_owner(update):
+    if not _is_admin(update):
         return
     if not context.args:
         await update.effective_message.reply_text(
@@ -655,7 +754,7 @@ async def reset_user_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def reset_user_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Panel button «♻️ ریست کامل بازیکن» → show the typed-style confirmation."""
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     target_id = int(query.data.split(":")[1])
@@ -675,7 +774,7 @@ async def reset_user_start_callback(update: Update, context: ContextTypes.DEFAUL
 
 async def reset_user_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
 
@@ -739,7 +838,7 @@ def _player_log_text(d: dict) -> str:
 async def player_log_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Power-user shortcut for «📊 لاگ پیشرفت». Accepts a numeric id, @username, or
     lab name."""
-    if not _is_owner(update):
+    if not _is_admin(update):
         return
     if not context.args:
         await update.effective_message.reply_text(
@@ -756,7 +855,7 @@ async def player_log_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def player_log_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     target_id = query.data.split(":")[1]
@@ -778,7 +877,7 @@ async def preview_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     """'گزینه تست' — shows a realistic sample card rendered with the current live
     emoji set (custom or default), plus every key grouped by category so it's easy
     to spot which ones are still default and which are already customized."""
-    if not _is_owner(update):
+    if not _is_admin(update):
         return
 
     lines = [
@@ -860,7 +959,7 @@ async def force_join_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def force_join_add_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     context.user_data[AWAITING_FORCE_JOIN_KEY] = {"action": "add_channel"}
@@ -874,7 +973,7 @@ async def force_join_add_callback(update: Update, context: ContextTypes.DEFAULT_
 
 async def force_join_manage_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     channel_id = int(query.data.split(":")[1])
@@ -891,7 +990,7 @@ async def force_join_manage_callback(update: Update, context: ContextTypes.DEFAU
 
 async def force_join_duration_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     channel_id = int(query.data.split(":")[1])
@@ -904,7 +1003,7 @@ async def force_join_duration_callback(update: Update, context: ContextTypes.DEF
 
 async def force_join_unlimited_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     channel_id = int(query.data.split(":")[1])
@@ -921,7 +1020,7 @@ async def force_join_unlimited_callback(update: Update, context: ContextTypes.DE
 
 async def force_join_reward_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     channel_id = int(query.data.split(":")[1])
@@ -936,7 +1035,7 @@ async def force_join_reward_callback(update: Update, context: ContextTypes.DEFAU
 
 async def force_join_remove_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     channel_id = int(query.data.split(":")[1])
@@ -956,7 +1055,7 @@ async def force_join_remove_callback(update: Update, context: ContextTypes.DEFAU
 
 async def force_join_remove_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     channel_id = int(query.data.split(":")[1])
@@ -1078,7 +1177,7 @@ async def button_emoji_panel(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def btn_emoji_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     category = query.data[len(BTN_EMOJI_CAT_PREFIX) :]
@@ -1095,7 +1194,7 @@ async def btn_emoji_category_callback(update: Update, context: ContextTypes.DEFA
 
 async def btn_emoji_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     await query.answer()
@@ -1106,7 +1205,7 @@ async def btn_emoji_back_callback(update: Update, context: ContextTypes.DEFAULT_
 
 async def btn_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     key = query.data[len(BTN_EMOJI_KEY_PREFIX) :]
@@ -1134,7 +1233,7 @@ async def btn_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_T
 
 async def btn_emoji_clear_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     key = query.data[len(BTN_EMOJI_CLEAR_PREFIX) :]
@@ -1203,7 +1302,7 @@ def _users_browse_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
 
 
 async def users_browse_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_owner(update):
+    if not _is_admin(update):
         return
     page = 0
     data_str = update.callback_query.data if update.callback_query else ""
@@ -1224,7 +1323,7 @@ def _user_open_sync(target_id: int):
 
 async def user_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     target_id = int(query.data.split(":")[1])
@@ -1262,7 +1361,7 @@ async def gift_all_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def global_stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_owner(update):
+    if not _is_admin(update):
         return
     s = await run_db(global_stats)
     text = (
@@ -1285,7 +1384,7 @@ async def global_stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def dm_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     target_id = int(query.data.split(":")[1])
@@ -1380,7 +1479,7 @@ def _charge_summary(new_values: dict) -> str:
 
 async def admin_grant_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     _, target_id, resource = query.data.split(":")
@@ -1392,7 +1491,7 @@ async def admin_grant_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def admin_deduct_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     _, target_id, resource = query.data.split(":")
@@ -1404,7 +1503,7 @@ async def admin_deduct_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def admin_charge_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     target_id = query.data.split(":")[1]
@@ -1420,7 +1519,7 @@ async def admin_charge_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def admin_ban_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     target_id = query.data.split(":")[1]
@@ -1438,7 +1537,7 @@ async def admin_ban_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def admin_unban_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _is_owner(update):
+    if not _is_admin(update):
         await query.answer()
         return
     target_id = query.data.split(":")[1]
@@ -1505,6 +1604,21 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         await message.reply_text(
             f"🎁 به <b>{affected}</b> کاربر هدیه داده شد: "
             f"{coins} طلا + {dna} DNA + {diamonds} الماس.",
+            parse_mode="HTML",
+        )
+        return
+
+    if action == "add_admin":
+        from game import admins
+
+        try:
+            user = await run_db(admins.add_admin, text)
+        except GameError as exc:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text(str(exc))
+            return
+        await message.reply_text(
+            f"✅ <b>{display_name(user)}</b> حالا ادمینه (همه‌کاره جز مدیریت ادمین‌ها).",
             parse_mode="HTML",
         )
         return
@@ -1660,6 +1774,9 @@ _ADMIN_MENU_ACTIONS.update(
         "users": users_browse_callback,
         "gift_all": gift_all_start,
         "global_stats": global_stats_cmd,
+        "admin_manage": admin_manage_panel,
+        "admin_add": admin_add_start,
+        "autobackup": autobackup_panel,
     }
 )
 
@@ -1685,6 +1802,8 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(users_browse_callback, pattern=r"^admin_users:\d+$"))
     application.add_handler(CallbackQueryHandler(user_open_callback, pattern=r"^admin_uinfo:\d+$"))
     application.add_handler(CallbackQueryHandler(dm_user_start, pattern=r"^admin_dm:\d+$"))
+    application.add_handler(CallbackQueryHandler(admin_remove_callback, pattern=r"^admin_rm:\d+$"))
+    application.add_handler(CallbackQueryHandler(autobackup_set_callback, pattern=r"^autobk_set:\d+$"))
     application.add_handler(CallbackQueryHandler(player_log_callback, pattern=r"^admin_plog:"))
     application.add_handler(CallbackQueryHandler(delete_creature_confirm_callback, pattern=r"^admin_del"))
     application.add_handler(CallbackQueryHandler(reset_user_start_callback, pattern=r"^admin_reset:"))

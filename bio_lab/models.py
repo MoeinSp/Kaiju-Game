@@ -71,6 +71,7 @@ class User(models.Model):
     )
 
     is_banned = models.BooleanField(default=False)
+    is_admin = models.BooleanField(default=False)  # granted by the owner; full panel except admin management
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -752,6 +753,8 @@ class BotConfig(models.Model):
 
     group_game_url = models.CharField(max_length=256, default="", blank=True)  # https://t.me/... invite/link
     group_game_title = models.CharField(max_length=48, default="", blank=True)  # button label override
+    backup_interval_hours = models.IntegerField(default=0)  # 0 = auto-backup off
+    backup_last_at = models.DateTimeField(null=True, blank=True)  # last auto-backup sent to the owner
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:

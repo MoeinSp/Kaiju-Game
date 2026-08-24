@@ -51,6 +51,30 @@ async def notify_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         await asyncio.sleep(SEND_DELAY_SECONDS)
 
 
+AUTOBACKUP_CHECK_SECONDS = 1800  # check every 30 min; the interval itself gates the actual run
+
+
+async def autobackup_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """If the owner turned on auto-backup and its interval has elapsed, build a DB
+    backup and DM it to the owner."""
+    from config import OWNER_TELEGRAM_ID
+    from game import botconfig
+    from game.backup import create_backup
+
+    if not await run_db(botconfig.due_backup):
+        return
+    try:
+        meta = await run_db(create_backup, "auto")
+        with open(meta["path"], "rb") as fh:
+            await context.bot.send_document(
+                chat_id=OWNER_TELEGRAM_ID, document=fh, filename=meta["name"],
+                caption="💾 بکاپ خودکار دیتابیس",
+            )
+        await run_db(botconfig.mark_backup_done)
+    except (Forbidden, TelegramError, OSError):
+        pass
+
+
 def register(application) -> None:
     job_queue = application.job_queue
     if job_queue is None:
@@ -61,3 +85,4 @@ def register(application) -> None:
         logging.getLogger(__name__).warning("JobQueue unavailable — push notifications disabled.")
         return
     job_queue.run_repeating(notify_job, interval=NOTIFY_INTERVAL_SECONDS, first=30)
+    job_queue.run_repeating(autobackup_job, interval=AUTOBACKUP_CHECK_SECONDS, first=120)

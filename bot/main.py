@@ -46,7 +46,7 @@ from bot.handlers import (
     wheel,
 )
 from config import BOT_TOKEN, WEBHOOK_PORT, WEBHOOK_SECRET, WEBHOOK_URL  # noqa: E402
-from game import botconfig  # noqa: E402
+from game import admins, botconfig  # noqa: E402
 from game.theme import refresh_theme_caches  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -130,6 +130,7 @@ def main() -> None:
     # so they must never hit the DB lazily
     refresh_theme_caches()
     botconfig.refresh_cache()  # the "join the game group" button reads this in async code
+    admins.refresh_cache()  # the panel's access check reads this in async code
 
     application = Application.builder().token(BOT_TOKEN).build()
 
