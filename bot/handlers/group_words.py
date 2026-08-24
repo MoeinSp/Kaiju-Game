@@ -710,6 +710,17 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     # a reply to the bot's prompt feeds a pending text flow (alliance name, search…)
     if await _maybe_capture_group_reply(update, context):
         return
+
+    # «انتقال طلا <عدد>» — a gold transfer to whoever you replied to
+    norm = keywords.normalize(message.text)
+    if norm.startswith("انتقال طلا") or norm.startswith("انتقال"):
+        digits = "".join(ch for ch in norm if ch.isdigit())
+        if norm.startswith("انتقال طلا") and digits:
+            from bot.handlers import group as group_handlers
+
+            await group_handlers.gold_transfer(update, context, int(digits))
+            return
+
     action = keywords.match(message.text)
     if action is None:
         return  # ordinary conversation — stay quiet

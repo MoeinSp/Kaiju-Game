@@ -132,18 +132,14 @@ DUEL_WIN_COINS = 30
 DUEL_WIN_XP = 20
 DUEL_LOSE_XP = 5
 
+# only GOLD is transferable between players — DNA and diamonds are not, to keep
+# the premium/genetic economies from being farmed across throwaway accounts
 GIVE_RESOURCE_ALIASES = {
     "coins": "coins",
     "coin": "coins",
     "gold": "coins",
     "سکه": "coins",
     "طلا": "coins",
-    "dna": "dna_fragments",
-    "dnas": "dna_fragments",
-    "دی‌ان‌ای": "dna_fragments",
-    "diamond": "diamonds",
-    "diamonds": "diamonds",
-    "الماس": "diamonds",
 }
 GIVE_RESOURCE_LABELS = {"coins": "طلا", "dna_fragments": "DNA", "diamonds": "الماس"}
 

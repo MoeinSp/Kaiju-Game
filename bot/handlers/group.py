@@ -276,7 +276,9 @@ def _give_sync(chat, sender_tg, receiver_tg, kind, amount_arg):
         gift_creature(sender, receiver, creature)
         return "creature", sender, receiver, creature
 
-    resource_key = constants.GIVE_RESOURCE_ALIASES[kind]
+    resource_key = constants.GIVE_RESOURCE_ALIASES.get(kind)
+    if resource_key is None:
+        raise GameError("فقط طلا قابل انتقاله. DNA و الماس رو نمی‌شه انتقال داد.")
     current = getattr(sender, resource_key)
     if current < amount_arg:
         label = constants.GIVE_RESOURCE_LABELS[resource_key]
@@ -291,9 +293,9 @@ def _give_sync(chat, sender_tg, receiver_tg, kind, amount_arg):
 
 async def give(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     usage = (
-        f"{get_emoji('gift')} استفاده درست: روی پیام طرف مقابل ریپلای کن و بنویس /give به‌همراه نوع و مقدار\n"
-        "<code>/give gold 50</code> · <code>/give dna 10</code> · <code>/give creature 7</code> "
-        "(شماره موجود از /collection)"
+        f"{get_emoji('gift')} روی پیام طرف ریپلای کن و بنویس «انتقال طلا ۵۰» — یا "
+        "<code>/give gold 50</code> / <code>/give creature 7</code>.\n"
+        "<i>فقط طلا و موجود قابل انتقاله؛ DNA و الماس نه.</i>"
     )
     if update.message.reply_to_message is None or len(context.args) != 2:
         await update.message.reply_text(usage, parse_mode="HTML")
@@ -336,6 +338,48 @@ async def give(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"{display_name(receiver)} هدیه داد!",
             parse_mode="HTML",
         )
+
+
+def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
+    group = get_or_create_group(chat)
+    sender, _ = get_or_create_user(sender_tg)
+    touch_membership(group, sender)
+    receiver = User.objects.filter(id=receiver_id).first()
+    if receiver is None:
+        raise GameError("این بازیکن هنوز بازی رو شروع نکرده.")
+    if amount <= 0:
+        raise GameError("مقدار باید بیشتر از صفر باشه.")
+    if sender.coins < amount:
+        raise GameError(f"طلا کافی نداری! فقط {sender.coins} طلا داری.")
+    sender.coins -= amount
+    receiver.coins += amount
+    sender.save(update_fields=["coins"])
+    receiver.save(update_fields=["coins"])
+    return sender, receiver
+
+
+async def gold_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE, amount: int) -> None:
+    """Word command «انتقال طلا <عدد>» — reply to the recipient. Gold only."""
+    reply = update.message.reply_to_message
+    if reply is None or reply.from_user is None:
+        await update.message.reply_text(
+            f"{get_emoji('gift')} برای انتقال طلا، روی پیام طرف <b>ریپلای</b> کن و بنویس «انتقال طلا ۵۰».",
+            parse_mode="HTML",
+        )
+        return
+    recipient = reply.from_user
+    if recipient.id == update.effective_user.id or recipient.is_bot:
+        await update.message.reply_text("🙅 به خودت یا به یه بات نمی‌تونی انتقال بدی!")
+        return
+    try:
+        sender, receiver = await run_db(_gold_transfer_sync, update.effective_chat, update.effective_user, recipient.id, amount)
+    except GameError as exc:
+        await update.message.reply_text(str(exc))
+        return
+    await update.message.reply_text(
+        f"{get_emoji('coin')} {display_name(sender)} مقدار <b>{amount}</b> طلا به {display_name(receiver)} انتقال داد! ✅",
+        parse_mode="HTML",
+    )
 
 
 def _raid_spawn_sync(chat, spawner_tg):
