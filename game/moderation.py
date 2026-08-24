@@ -66,6 +66,88 @@ def set_banned(identifier: str, banned: bool) -> User:
     return user
 
 
+# ── admin: user browse / search / gifting / global stats ──────────────────────
+
+USER_PAGE_SIZE = 10
+
+
+def _user_row(user: User) -> dict:
+    return {
+        "id": user.id,
+        "name": user.lab_name or user.first_name or (f"@{user.username}" if user.username else str(user.id)),
+        "coins": user.coins,
+        "cup": user.cup,
+        "banned": user.is_banned,
+        "last_login_day": user.last_login_day,
+    }
+
+
+def list_users_page(page: int = 0) -> dict:
+    """One page of users, newest first, for the admin browse UI."""
+    offset = max(0, page) * USER_PAGE_SIZE
+    total = User.objects.count()
+    rows = list(User.objects.order_by("-created_at")[offset : offset + USER_PAGE_SIZE])
+    return {
+        "users": [_user_row(u) for u in rows],
+        "total": total,
+        "page": page,
+        "has_next": offset + USER_PAGE_SIZE < total,
+        "has_prev": page > 0,
+    }
+
+
+def search_users(query: str, limit: int = 10) -> list[dict]:
+    """Partial match on lab name / first name / username (and exact id)."""
+    from django.db.models import Q
+
+    q = (query or "").strip().lstrip("@")
+    if not q:
+        return []
+    filt = Q(lab_name__icontains=q) | Q(first_name__icontains=q) | Q(username__icontains=q)
+    if q.isdigit():
+        filt = filt | Q(id=int(q))
+    return [_user_row(u) for u in User.objects.filter(filt).order_by("-created_at")[:limit]]
+
+
+@transaction.atomic
+def gift_all(coins: int = 0, dna: int = 0, diamonds: int = 0) -> int:
+    """Add resources to EVERY user (events / compensation). Returns affected count."""
+    from django.db.models import F
+
+    if coins <= 0 and dna <= 0 and diamonds <= 0:
+        raise GameError("حداقل یکی از مقدارها باید مثبت باشه.")
+    updates = {}
+    if coins > 0:
+        updates["coins"] = F("coins") + coins
+    if dna > 0:
+        updates["dna_fragments"] = F("dna_fragments") + dna
+    if diamonds > 0:
+        updates["diamonds"] = F("diamonds") + diamonds
+    return User.objects.update(**updates)
+
+
+def global_stats() -> dict:
+    """Richer economy + activity snapshot for the admin dashboard."""
+    from django.db.models import Sum
+    from django.utils import timezone
+
+    from game.daily import today_str
+
+    agg = User.objects.aggregate(
+        coins=Sum("coins"), dna=Sum("dna_fragments"), diamonds=Sum("diamonds")
+    )
+    return {
+        "users": User.objects.count(),
+        "banned": User.objects.filter(is_banned=True).count(),
+        "active_today": User.objects.filter(last_login_day=today_str()).count(),
+        "new_today": User.objects.filter(created_at__date=timezone.localtime(timezone.now()).date()).count(),
+        "creatures": Creature.objects.count(),
+        "total_coins": agg["coins"] or 0,
+        "total_dna": agg["dna"] or 0,
+        "total_diamonds": agg["diamonds"] or 0,
+    }
+
+
 def get_creature_or_raise(creature_id: int) -> Creature:
     creature = Creature.objects.filter(id=creature_id).first()
     if creature is None:

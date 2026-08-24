@@ -33,9 +33,13 @@ from game.moderation import (
     deduct_resource,
     delete_creature,
     get_creature_or_raise,
+    gift_all,
+    global_stats,
     grant_resource,
+    list_users_page,
     player_progress,
     reset_user,
+    search_users,
     set_banned,
     user_info,
 )
@@ -244,13 +248,18 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = InlineKeyboardMarkup(
         [
             [
+                btn("📊 آمار کلی", style=ADMIN, callback_data="admin_menu:global_stats"),
                 btn("گزارش پیشرفت", emoji_key="btn_report", style=ADMIN, callback_data="admin_menu:report"),
-                btn("مدیریت کاربر", emoji_key="btn_profile", style=ADMIN, callback_data="admin_menu:user_manage"),
             ],
             [
-                btn("حذف موجود", emoji_key="btn_delete", style=DANGER, callback_data="admin_menu:del_creature_start"),
+                btn("👥 لیست کاربران", style=ADMIN, callback_data="admin_menu:users"),
+                btn("🔍 جستجوی کاربر", emoji_key="btn_profile", style=ADMIN, callback_data="admin_menu:user_manage"),
+            ],
+            [
+                btn("🎁 هدیه به همه", style=ADMIN, callback_data="admin_menu:gift_all"),
                 btn("ارسال همگانی", emoji_key="btn_broadcast", style=ADMIN, callback_data="admin_menu:broadcast_start"),
             ],
+            [btn("حذف موجود", emoji_key="btn_delete", style=DANGER, callback_data="admin_menu:del_creature_start")],
             [
                 btn("🎨 ایموجی متن‌ها", style=ADMIN, callback_data="admin_menu:set_emoji_start"),
                 btn("🎛 ایموجی دکمه‌ها", style=ADMIN, callback_data="admin_menu:button_emoji"),
@@ -382,7 +391,10 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
                 btn("💎 کسر الماس", style=DANGER, callback_data=f"admin_deduct:{target_id}:diamonds"),
             ],
             [btn("شارژ کامل (طلا+DNA+الماس)", emoji_key="btn_charge", style=CONFIRM, callback_data=f"admin_charge:{target_id}")],
-            [btn("📊 لاگ پیشرفت", emoji_key="btn_report", style=ADMIN, callback_data=f"admin_plog:{target_id}")],
+            [
+                btn("📊 لاگ پیشرفت", emoji_key="btn_report", style=ADMIN, callback_data=f"admin_plog:{target_id}"),
+                btn("✉️ پیام", style=ADMIN, callback_data=f"admin_dm:{target_id}"),
+            ],
             [ban_button],
             [btn("♻️ ریست کامل بازیکن", emoji_key="btn_delete", style=DANGER, callback_data=f"admin_reset:{target_id}")],
             [back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")],
@@ -1153,9 +1165,116 @@ async def btn_emoji_noop_callback(update: Update, context: ContextTypes.DEFAULT_
 
 
 async def user_manage_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    context.user_data[AWAITING_ADMIN_KEY] = {"action": "user_info"}
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "user_search"}
     await update.effective_message.reply_text(
-        f"{get_emoji('profile')} آیدی عددی یا @یوزرنیم بازیکن رو بفرست:", parse_mode="HTML"
+        f"{get_emoji('profile')} آیدی عددی، @یوزرنیم یا بخشی از اسم بازیکن رو بفرست:", parse_mode="HTML"
+    )
+
+
+def _user_row_button(row: dict):
+    flag = "🚫 " if row["banned"] else ""
+    return btn(
+        f"{flag}{row['name']} — 🏆{row['cup']} · 💰{row['coins']}",
+        style=ADMIN, callback_data=f"admin_uinfo:{row['id']}",
+    )
+
+
+def _users_browse_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
+    lines = [f"👥 <b>کاربران</b> (صفحه {data['page'] + 1}، جمعاً {data['total']})"]
+    rows = [[_user_row_button(u)] for u in data["users"]]
+    nav = []
+    if data["has_prev"]:
+        nav.append(btn("◀️ قبلی", style=ADMIN, callback_data=f"admin_users:{data['page'] - 1}"))
+    if data["has_next"]:
+        nav.append(btn("بعدی ▶️", style=ADMIN, callback_data=f"admin_users:{data['page'] + 1}"))
+    if nav:
+        rows.append(nav)
+    rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+async def users_browse_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_owner(update):
+        return
+    page = 0
+    data_str = update.callback_query.data if update.callback_query else ""
+    if data_str.startswith("admin_users:"):
+        page = int(data_str.split(":")[1])
+    data = await run_db(list_users_page, page)
+    text, keyboard = _users_browse_render(data)
+    if update.callback_query:
+        await update.callback_query.answer()
+        await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=keyboard)
+    else:
+        await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _user_open_sync(target_id: int):
+    return user_info(str(target_id))
+
+
+async def user_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    target_id = int(query.data.split(":")[1])
+    try:
+        data = await run_db(_user_open_sync, target_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    user = data["user"]
+    await safe_edit_message_text(
+        query, _user_info_text(data), parse_mode="HTML",
+        reply_markup=_user_manage_keyboard(user.id, user.is_banned),
+    )
+
+
+async def gift_all_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "gift_all"}
+    await update.effective_message.reply_text(
+        "🎁 <b>هدیه به همه‌ی کاربران</b>\n"
+        "سه عدد با فاصله بفرست: <code>طلا DNA الماس</code>\n"
+        "مثلاً <code>1000 50 10</code> (هرکدوم رو نخواستی، صفر بذار).",
+        parse_mode="HTML",
+    )
+
+
+async def global_stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_owner(update):
+        return
+    s = await run_db(global_stats)
+    text = (
+        f"{get_emoji('stats')} <b>آمار کلی</b>\n\n"
+        f"{get_emoji('users')} کاربران: <b>{s['users']}</b>  (🚫 {s['banned']} مسدود)\n"
+        f"🟢 فعال امروز: <b>{s['active_today']}</b>   🆕 جدید امروز: <b>{s['new_today']}</b>\n"
+        f"{get_emoji('creature')} موجودات: <b>{s['creatures']}</b>\n\n"
+        f"<b>اقتصاد کل بازی:</b>\n"
+        f"{get_emoji('coin')} طلا: <b>{s['total_coins']:,}</b>\n"
+        f"{get_emoji('dna')} DNA: <b>{s['total_dna']:,}</b>\n"
+        f"{get_emoji('diamond')} الماس: <b>{s['total_diamonds']:,}</b>"
+    )
+    kb = InlineKeyboardMarkup([[back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")]])
+    if update.callback_query:
+        await update.callback_query.answer()
+        await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=kb)
+    else:
+        await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=kb)
+
+
+async def dm_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer()
+        return
+    target_id = int(query.data.split(":")[1])
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "dm_user", "target_id": target_id}
+    await query.answer()
+    await query.message.reply_text(
+        f"✉️ متن پیامی که می‌خوای به کاربر <code>{target_id}</code> بفرستم رو بنویس:",
+        parse_mode="HTML",
     )
 
 
@@ -1324,17 +1443,61 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
     action = awaiting["action"]
     text = (message.text or "").strip()
 
-    if action == "user_info":
+    if action in ("user_info", "user_search"):
+        # exact id/username → open directly; otherwise show matching candidates
+        exact = None
         try:
-            data = await run_db(user_info, text)
+            exact = await run_db(user_info, text)
+        except GameError:
+            exact = None
+        if exact is not None:
+            user = exact["user"]
+            await message.reply_text(
+                _user_info_text(exact), parse_mode="HTML",
+                reply_markup=_user_manage_keyboard(user.id, user.is_banned),
+            )
+            return
+        matches = await run_db(search_users, text)
+        if not matches:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text("کاربری پیدا نشد. یه آیدی، @یوزرنیم یا بخشی از اسم دیگه بفرست:")
+            return
+        rows = [[_user_row_button(m)] for m in matches]
+        rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
+        await message.reply_text(
+            f"🔍 <b>{len(matches)} کاربر پیدا شد</b> — یکی رو انتخاب کن:",
+            parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows),
+        )
+        return
+
+    if action == "gift_all":
+        parts = text.split()
+        if len(parts) != 3 or not all(p.lstrip("-").isdigit() for p in parts):
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text("⚠️ سه عدد با فاصله بفرست، مثلاً: <code>1000 50 10</code>", parse_mode="HTML")
+            return
+        coins, dna, diamonds = (int(p) for p in parts)
+        try:
+            affected = await run_db(gift_all, coins, dna, diamonds)
         except GameError as exc:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
             await message.reply_text(str(exc))
             return
-        user = data["user"]
         await message.reply_text(
-            _user_info_text(data), parse_mode="HTML", reply_markup=_user_manage_keyboard(user.id, user.is_banned)
+            f"🎁 به <b>{affected}</b> کاربر هدیه داده شد: "
+            f"{coins} طلا + {dna} DNA + {diamonds} الماس.",
+            parse_mode="HTML",
         )
+        return
+
+    if action == "dm_user":
+        target_id = awaiting["target_id"]
+        try:
+            await context.bot.send_message(chat_id=target_id, text=f"✉️ <b>پیام از مدیریت:</b>\n\n{text}", parse_mode="HTML")
+        except TelegramError:
+            await message.reply_text("⚠️ نشد بفرستم — احتمالاً کاربر بات رو بلاک کرده یا استارت نزده.")
+            return
+        await message.reply_text(f"✅ پیام به کاربر <code>{target_id}</code> فرستاده شد.", parse_mode="HTML")
         return
 
     if action in ("grant", "deduct"):
@@ -1475,6 +1638,9 @@ _ADMIN_MENU_ACTIONS.update(
         "group_link": group_link_panel,
         "group_link_set": group_link_set_start,
         "group_link_clear": group_link_clear,
+        "users": users_browse_callback,
+        "gift_all": gift_all_start,
+        "global_stats": global_stats_cmd,
     }
 )
 
@@ -1497,6 +1663,9 @@ def register(application) -> None:
     application.add_handler(CommandHandler("reset_user", reset_user_cmd, private_only))
     application.add_handler(CommandHandler("player_log", player_log_cmd, private_only))
     application.add_handler(CommandHandler("preview_emoji", preview_emoji_cmd, private_only))
+    application.add_handler(CallbackQueryHandler(users_browse_callback, pattern=r"^admin_users:\d+$"))
+    application.add_handler(CallbackQueryHandler(user_open_callback, pattern=r"^admin_uinfo:\d+$"))
+    application.add_handler(CallbackQueryHandler(dm_user_start, pattern=r"^admin_dm:\d+$"))
     application.add_handler(CallbackQueryHandler(player_log_callback, pattern=r"^admin_plog:"))
     application.add_handler(CallbackQueryHandler(delete_creature_confirm_callback, pattern=r"^admin_del"))
     application.add_handler(CallbackQueryHandler(reset_user_start_callback, pattern=r"^admin_reset:"))
