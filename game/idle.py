@@ -126,7 +126,9 @@ def dungeon_status(user: User) -> dict:
 def _boss_creature(dg: dict, player_power: int) -> Creature:
     """Build an unsaved boss creature scaled relative to the player's power."""
     power = max(5, round(player_power * dg["boss_power_mult"]))
-    share = max(1, power // 4)
+    from game.creature import base_share_for_rating
+
+    share = base_share_for_rating(power)
     return Creature(
         name=random.choice(dg["boss_names"]),
         element=dg["boss_element"],
@@ -140,8 +142,9 @@ def _boss_creature(dg: dict, player_power: int) -> Creature:
 
 
 def _player_power(creature: Creature) -> int:
-    stats = effective_stats(creature, get_equipped_items(creature))
-    return round(stats["hp"] + stats["atk"] + stats["def"] + stats["spd"])
+    from game.creature import creature_power
+
+    return creature_power(creature, get_equipped_items(creature))
 
 
 def run_dungeon(user: User) -> dict | None:

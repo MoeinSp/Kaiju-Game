@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from bio_lab.models import Creature
 from game import constants
-from game.creature import effective_stats
+from game.creature import combat_rating, effective_stats
 from game.emoji import get_emoji
 from game.equipment import get_equipped_items
 
@@ -135,8 +135,9 @@ def _attack(attacker: Fighter, defender: Fighter, detail: list[str], rng: random
 
 
 def _power(f: Fighter) -> float:
-    s = f.stats
-    return s["hp"] + s["atk"] + s["def"] + s["spd"]
+    # same combat-accurate rating used everywhere else, so the timeout tiebreak
+    # agrees with the power number the player was shown
+    return combat_rating(f.stats)
 
 
 def _decide_winner(fa: Fighter, fb: Fighter) -> Fighter:

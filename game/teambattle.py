@@ -125,10 +125,12 @@ def resolve(team_a: list[Creature], team_b: list[Creature], seed: int | None = N
 
 def team_power(creatures: list[Creature]) -> int:
     """A quick strength number for a team, for previews/matchmaking."""
+    from game.creature import combat_rating
+
     synergy = _same_element(creatures)
     total = 0
     for f in _build_side(creatures, synergy):
-        total += round(f.stats["hp"] + f.stats["atk"] + f.stats["def"] + f.stats["spd"])
+        total += combat_rating(f.stats)
     return total
 
 

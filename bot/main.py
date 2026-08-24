@@ -60,6 +60,7 @@ _PRIVATE_AWAIT_KEYS = (
     "awaiting_force_join",
     "awaiting_admin_input",
     "awaiting_button_emoji_key",
+    "awaiting_restore_file",
 )
 
 

@@ -197,6 +197,48 @@ def fuse_equipment(user: User, target_id: int, sacrifice_id: int) -> dict:
     return {"success": success, "target": target, "fail_chance": fail_chance, "new_level": target.level}
 
 
+def fuse_equipment_many(user: User, target_id: int, sacrifice_ids: list[int]) -> dict:
+    """Multi-select fusion: feed several same-slot sacrifices into one target, one
+    roll each, stopping early if the target reaches the forge cap (remaining picks
+    are left untouched). Skips ids that became invalid instead of aborting the batch.
+    Returns aggregate successes/fails and the final level."""
+    from game.blacksmith import assert_forge_available, equipment_cap
+
+    successes = 0
+    fails = 0
+    consumed = 0
+    target = Equipment.objects.filter(id=target_id, owner=user).first()
+    if target is None:
+        raise GameError("این تجهیزات پیدا نشد.")
+    assert_forge_available(user)
+    cap = equipment_cap(user)
+    for sac_id in dict.fromkeys(sacrifice_ids):
+        if sac_id == target_id:
+            continue
+        if target.level >= cap:
+            break  # can't go higher until the forge is upgraded
+        sacrifice = Equipment.objects.filter(id=sac_id, owner=user, slot=target.slot).first()
+        if sacrifice is None:
+            continue
+        result = fuse_equipment(user, target_id, sac_id)
+        consumed += 1
+        if result["success"]:
+            successes += 1
+            target = result["target"]
+        else:
+            fails += 1
+    if consumed == 0:
+        raise GameError("هیچ‌کدوم از انتخاب‌ها قابل استفاده نبودن.")
+    return {
+        "target": target,
+        "successes": successes,
+        "fails": fails,
+        "consumed": consumed,
+        "new_level": target.level,
+        "capped": target.level >= cap,
+    }
+
+
 def same_slot_candidates(user: User, target_id: int) -> list[Equipment]:
     """Other unequipped-preferred items in the same slot as `target`, usable as a
     fusion sacrifice (any rarity/model — just the slot must match)."""

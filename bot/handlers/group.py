@@ -100,8 +100,8 @@ def _duel_wager_challenge_sync(chat, challenger_tg, opponent_tg):
 async def duel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message.reply_to_message is None:
         await update.message.reply_text(
-            f"{get_emoji('battle')} برای دوئل، روی پیام حریف ریپلای کن و بنویس /duel\n"
-            f"برای دوئل با شرط طلا: <code>/duel 50</code> (حداکثر {constants.DUEL_WAGER_MAX})",
+            f"{get_emoji('battle')} برای دوئل، روی پیام حریف ریپلای کن و بنویس «دوئل»\n"
+            f"برای دوئل با شرط طلا: «دوئل ۵۰» (حداکثر {constants.DUEL_WAGER_MAX})",
             parse_mode="HTML",
         )
         return
@@ -116,7 +116,7 @@ async def duel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if context.args:
         if not context.args[0].isdigit() or int(context.args[0]) <= 0:
             await update.message.reply_text(
-                f"مقدار شرط باید عدد مثبت باشه (حداکثر {constants.DUEL_WAGER_MAX}). مثلاً: <code>/duel 50</code>",
+                f"مقدار شرط باید عدد مثبت باشه (حداکثر {constants.DUEL_WAGER_MAX}). مثلاً: «دوئل ۵۰»",
                 parse_mode="HTML",
             )
             return
@@ -412,7 +412,7 @@ def _attack_sync(chat, tg_user):
     group = get_or_create_group(chat)
     boss = get_active_boss(group.id)
     if boss is None:
-        raise GameError("😴 هیچ هیولایی فعال نیست. با /raid_spawn یکی رو صدا بزن.")
+        raise GameError("😴 الان هیچ باسی توی گروه نیست. با فرستادن «احضار» یه باس بیار، بعد «اتک» بزن.")
 
     user, _ = get_or_create_user(tg_user)
     touch_membership(group, user)
@@ -709,7 +709,9 @@ async def mutation_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 def _creature_power(c: Creature) -> int:
-    return c.base_hp + c.base_atk + c.base_def + c.base_spd
+    from game.creature import creature_power
+
+    return creature_power(c)
 
 
 def _leaderboard_sync(chat, tg_user):
@@ -758,8 +760,8 @@ async def guardian(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"{get_emoji('guardian')} <b>محافظ فعلی گروه</b>\n"
         f"{top.name} ({constants.RARITY_LABELS[top.rarity]}, Lv{top.level}) — متعلق به {owner_name}\n"
         f"قدرت کل: {_creature_power(top)}\n\n"
-        f"{get_emoji('battle')} برای گرفتن عنوان: /guardian_challenge\n"
-        f"{get_emoji('gift')} محافظ فعلی هر روز با /guardian_claim جایزه می‌گیره",
+        f"{get_emoji('battle')} برای گرفتن عنوان، «تسخیر» بفرست\n"
+        f"{get_emoji('gift')} محافظ فعلی هر روز با «حقوق» جایزه می‌گیره",
         parse_mode="HTML",
     )
 
@@ -806,7 +808,7 @@ def _guardian_claim_sync(chat, tg_user):
 
     top = get_guardian(group)
     if top is None or top.owner_id != user.id:
-        raise GameError("😅 تو محافظ فعلی این گروه نیستی. با /guardian ببین کیه.")
+        raise GameError("😅 تو محافظ فعلی این گروه نیستی. با «محافظ» ببین کیه.")
 
     assert_energy_available(user, "guardian_stipend")
 

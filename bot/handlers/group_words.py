@@ -23,7 +23,7 @@ from bot.buttons import BACK, BATTLE, BUILD, CONFIRM, NAV, PRIMARY, SHOP, btn
 from bot.utils import run_db, safe_edit_message_text
 from config import BOT_USERNAME
 from game import constants, keywords, word_reward
-from game.creature import GameError, effective_stats
+from game.creature import GameError, combat_rating, effective_stats
 from game.emoji import get_emoji
 from game.energy import sync_energy
 from game.equipment import bonus_text, get_equipped_items, slot_loadout
@@ -78,7 +78,7 @@ def _creature_card(user, creature, equipped, slots) -> tuple[str, InlineKeyboard
         "",
         f"{get_emoji('hp')} {stats['hp']}   {get_emoji('atk')} {stats['atk']}   "
         f"{get_emoji('def')} {stats['def']}   {get_emoji('spd')} {stats['spd']}",
-        f"🎒 تجهیزات: <b>{filled}/{len(slots)}</b> جایگاه پر",
+        f"💪 قدرت: <b>{combat_rating(stats)}</b>   ·   🎒 تجهیزات: <b>{filled}/{len(slots)}</b> جایگاه پر",
     ]
     rows = [
         [
@@ -172,6 +172,12 @@ def _profile_card(user, creature_count, energy) -> tuple[str, InlineKeyboardMark
         f"{get_emoji('coin')} {user.coins:,}   {get_emoji('dna')} {user.dna_fragments:,}   "
         f"{get_emoji('diamond')} {user.diamonds:,}   {get_emoji('energy')} {energy}/{constants.MAX_ENERGY}",
     ]
+    from game.arena import shield_status_lines
+
+    shield_lines = shield_status_lines(user)
+    if shield_lines:
+        lines.append("")
+        lines.extend(shield_lines)
     rows = [
         [
             btn("هیولا", emoji_key="btn_creature", style=NAV, callback_data=_scoped("creature", user.id)),

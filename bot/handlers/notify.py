@@ -63,11 +63,12 @@ async def autobackup_job(context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if not await run_db(botconfig.due_backup):
         return
+    dest = await run_db(botconfig.get_backup_chat_id) or OWNER_TELEGRAM_ID
     try:
         meta = await run_db(create_backup, "auto")
         with open(meta["path"], "rb") as fh:
             await context.bot.send_document(
-                chat_id=OWNER_TELEGRAM_ID, document=fh, filename=meta["name"],
+                chat_id=dest, document=fh, filename=meta["name"],
                 caption="💾 بکاپ خودکار دیتابیس",
             )
         await run_db(botconfig.mark_backup_done)

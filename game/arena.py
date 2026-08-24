@@ -9,13 +9,12 @@ from bio_lab.models import AttackLog, Creature, User
 from bio_lab.repository import lab_display
 from game import constants, lab
 from game.combat import resolve_duel, resolve_duel_detailed
-from game.creature import GameError, effective_stats
+from game.creature import GameError, base_share_for_rating, creature_power
 from game.equipment import get_equipped_items
 
-
-def creature_power(creature: Creature, equipped_items: list | None = None) -> int:
-    stats = effective_stats(creature, equipped_items)
-    return round(stats["hp"] + stats["atk"] + stats["def"] + stats["spd"])
+# creature_power is the canonical strength score (game.creature) — re-exported here
+# so the many `from game.arena import creature_power` call sites keep working.
+__all__ = ["creature_power"]
 
 
 def active_power(user: User) -> int:
@@ -51,6 +50,28 @@ def group_shield_remaining_seconds(user: User) -> int:
     if not is_group_shielded(user):
         return 0
     return int((user.group_shield_until - timezone.now()).total_seconds())
+
+
+def _fmt_shield_remaining(seconds: int) -> str:
+    hours, rem = divmod(max(0, seconds), 3600)
+    minutes = rem // 60
+    if hours:
+        return f"{hours} ساعت و {minutes} دقیقه"
+    return f"{minutes} دقیقه"
+
+
+def shield_status_lines(user: User) -> list[str]:
+    """Human-readable countdown for whichever of the two shields (arena / group)
+    the player currently has, so their remaining protection is visible on their
+    profile — in the DM and in the group alike. Empty list when unshielded."""
+    lines = []
+    arena_secs = shield_remaining_seconds(user)
+    if arena_secs > 0:
+        lines.append(f"🛡 سپر آرنا: <b>{_fmt_shield_remaining(arena_secs)}</b> باقی‌مونده")
+    group_secs = group_shield_remaining_seconds(user)
+    if group_secs > 0:
+        lines.append(f"🛡 سپر گروه: <b>{_fmt_shield_remaining(group_secs)}</b> باقی‌مونده")
+    return lines
 
 
 def apply_group_shield(user: User) -> None:
@@ -248,7 +269,7 @@ def _bot_creature(power: int, element: str | None = None) -> Creature:
     """Unsaved stand-in for a bot defender — `id` stays None, so it only ever feeds
     the combat math (game.equipment.get_equipped_items() short-circuits on pk=None)."""
     element = element or constants.random_element()
-    share = max(1, power // 4)
+    share = base_share_for_rating(power)
     return Creature(
         name=constants.random_species_name(element),
         element=element,

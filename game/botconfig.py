@@ -61,6 +61,16 @@ def set_backup_interval(hours: int) -> None:
     BotConfig.objects.update_or_create(id=1, defaults={"backup_interval_hours": max(0, int(hours))})
 
 
+def get_backup_chat_id() -> int | None:
+    """Chat the auto-backup file is sent to, or None to use the owner's own DM."""
+    row = BotConfig.objects.filter(id=1).first()
+    return row.backup_chat_id if row else None
+
+
+def set_backup_chat_id(chat_id: int | None) -> None:
+    BotConfig.objects.update_or_create(id=1, defaults={"backup_chat_id": chat_id})
+
+
 def due_backup() -> bool:
     """True if auto-backup is on and its interval has elapsed since the last one."""
     import datetime

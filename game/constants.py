@@ -380,6 +380,14 @@ BIOCRATE_CREATURE_RARITY_WEIGHTS = {
 
 FUSION_GOLD_COST = 120
 FUSION_INHERIT_CHANCE = 0.5  # child inherits one random equipped item from a parent
+# A fused creature must ALWAYS come out stronger than either parent — otherwise the
+# gold + the two creatures you sank into it bought a downgrade. The child inherits
+# the BEST of each parent's base stat, keeps the higher of each body-part upgrade
+# (previously reset to 0, silently deleting everything you'd paid to upgrade), then
+# gains a slice of the weaker parent plus a flat growth bump on top.
+FUSION_WEAK_PARENT_SHARE = 0.25   # child adds this much of the weaker parent's stat
+FUSION_STAT_GROWTH = {"base_hp": 12, "base_atk": 3, "base_def": 3, "base_spd": 2}
+FUSION_RARITY_UPGRADE_BUMP = 1.15  # extra multiplier when the fusion also upgrades rarity
 
 DUEL_WAGER_MAX = 500
 
@@ -671,7 +679,7 @@ ARENA_STARTING_CUP = 0
 # ride a lucky streak into a bracket that then farms them forever. Tuned generously
 # enough that a normally-progressing player is never damped — it's a guard rail for
 # outliers, not a tax on everyone.
-ARENA_CUP_PER_POWER = 4.0
+ARENA_CUP_PER_POWER = 3.0  # rescaled with the combat-accurate power metric (was 4.0)
 ARENA_OVERCAP_DAMPING = 0.25  # cup gain multiplier once you're above your deserved cup
 
 # Fake opponents shown when no real player sits in the cup band — their lab names

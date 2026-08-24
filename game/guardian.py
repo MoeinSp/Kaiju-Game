@@ -4,7 +4,9 @@ from game.creature import GameError
 
 
 def _power(c: Creature) -> int:
-    return c.base_hp + c.base_atk + c.base_def + c.base_spd
+    from game.creature import creature_power
+
+    return creature_power(c)
 
 
 def get_guardian(group: Group) -> Creature | None:

@@ -51,7 +51,6 @@ from game.creature import (
     GameError,
     create_starter_creature,
     devour_candidates,
-    devour_creature,
     effective_stats,
     feed,
     list_creatures,
@@ -126,7 +125,7 @@ def creature_card_text(user, creature, equipped_items: list | None = None) -> st
         f"📊 سطح <b>{creature.level}</b>",
         f"{xp_bar}  {creature.xp}/{xp_needed} XP",
         "",
-        "⚔️ <b>توانایی‌ها</b>",
+        f"⚔️ <b>توانایی‌ها</b>   ·   💪 قدرت: <b>{_creature_power(creature, equipped_items)}</b>",
         f"{get_emoji('hp')} جان: <b>{stats['hp']}</b>      {get_emoji('atk')} حمله: <b>{stats['atk']}</b>",
         f"{get_emoji('def')} دفاع: <b>{stats['def']}</b>      {get_emoji('spd')} سرعت: <b>{stats['spd']}</b>",
     ]
@@ -135,6 +134,12 @@ def creature_card_text(user, creature, equipped_items: list | None = None) -> st
         lines.append("🎒 <b>تجهیزات</b>")
         for i in equipped_items:
             lines.append(f"{constants.EQUIPMENT_SLOT_LABELS[i.slot]} {i.name} <b>+{i.level}</b>")
+    from game.arena import shield_status_lines
+
+    shield_lines = shield_status_lines(user)
+    if shield_lines:
+        lines.append("")
+        lines.extend(shield_lines)
     lines.append("")
     lines.append("━━━━━━━━━━")
     lines.append(wallet_line(user, energy))
@@ -254,8 +259,9 @@ def equip_panel_keyboard(creature_id: int, slots: list[dict]) -> InlineKeyboardM
 
 
 def _creature_power(creature, equipped_items: list | None = None) -> int:
-    stats = effective_stats(creature, equipped_items)
-    return round(stats["hp"] + stats["atk"] + stats["def"] + stats["spd"])
+    from game.creature import creature_power
+
+    return creature_power(creature, equipped_items)
 
 
 def _upgrade_list_sync(tg_user):
@@ -1004,111 +1010,145 @@ async def collection_select_callback(update: Update, context: ContextTypes.DEFAU
     )
 
 
-# ── devour: feed one creature to another for XP (fusion without stars) ─────────
+# ── devour: feed one OR MANY creatures to another for XP (multi-select) ────────
+# Selection lives in user_data keyed by target id, so a player can tick several
+# sacrifices and eat them all in one go («انتخاب چندتایی») instead of one at a time.
+_DEVOUR_SEL = "devour_sel"
+
+
+def _devour_selection(context, target_id: int) -> set[int]:
+    store = context.user_data.setdefault(_DEVOUR_SEL, {})
+    return store.setdefault(target_id, set())
+
 
 def _devour_list_sync(tg_user, target_id):
-    user, _ = get_or_create_user(tg_user)
-    try:
-        target = Creature.objects.get(id=target_id, owner=user)
-    except Creature.DoesNotExist:
-        raise GameError("این موجود توی کلکسیون تو نیست.")
-    return target, devour_candidates(user, target_id)
-
-
-def _devour_list_render(target, candidates) -> tuple[str, InlineKeyboardMarkup]:
-    if not candidates:
-        return (
-            f"🍖 <b>تقویت {target.name}</b>\n\n"
-            "هیچ موجود آزادی برای خوروندن نداری (موجود فعال و موجودهای مشغول قابل قربانی نیستن).",
-            InlineKeyboardMarkup([[back_btn(f"coll_pick:{target.id}", "بازگشت")]]),
-        )
-    rows = []
-    for c in candidates[:12]:
-        rows.append([btn(
-            f"{constants.RARITY_LABELS[c.rarity]} {c.name} {'⭐' * c.star_level} Lv{c.level}",
-            style=LIST, callback_data=f"devour_pick:{target.id}:{c.id}",
-        )])
-    rows.append([back_btn(f"coll_pick:{target.id}", "بازگشت")])
-    text = (
-        f"🍖 <b>تقویت {target.name}</b> (Lv{target.level})\n\n"
-        "یه موجود رو انتخاب کن تا <b>خورده بشه</b> و XP‌ش به این منتقل شه. "
-        "<i>هرچی قربانی قوی‌تر و نایاب‌تر، XP بیشتر. قربانی برای همیشه حذف می‌شه.</i>"
-    )
-    return text, InlineKeyboardMarkup(rows)
-
-
-async def devour_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    target_id = int(query.data.split(":")[1])
-    try:
-        target, candidates = await run_db(_devour_list_sync, update.effective_user, target_id)
-    except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
-        return
-    await query.answer()
-    text, keyboard = _devour_list_render(target, candidates)
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
-
-
-def _devour_confirm_sync(tg_user, target_id, sac_id):
     user, _ = get_or_create_user(tg_user)
     from game.creature import _devour_xp
 
     try:
         target = Creature.objects.get(id=target_id, owner=user)
-        sac = Creature.objects.get(id=sac_id, owner=user)
     except Creature.DoesNotExist:
         raise GameError("این موجود توی کلکسیون تو نیست.")
-    return target, sac, _devour_xp(sac)
+    candidates = devour_candidates(user, target_id)
+    return target, [(c, _devour_xp(c)) for c in candidates]
 
 
-async def devour_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+def _devour_list_render(target, scored, selected: set[int]) -> tuple[str, InlineKeyboardMarkup]:
+    if not scored:
+        return (
+            f"🍖 <b>تقویت {target.name}</b>\n\n"
+            "هیچ موجود آزادی برای خوروندن نداری (موجود فعال و موجودهای مشغول قابل قربانی نیستن).",
+            InlineKeyboardMarkup([[back_btn(f"coll_pick:{target.id}", "بازگشت")]]),
+        )
+    shown = scored[:12]
+    valid_ids = {c.id for c, _ in shown}
+    selected = selected & valid_ids  # drop stale picks that scrolled off
+    rows = []
+    for c, xp in shown:
+        mark = "✅" if c.id in selected else "⬜️"
+        rows.append([btn(
+            f"{mark} {constants.RARITY_LABELS[c.rarity]} {c.name} {'⭐' * c.star_level} Lv{c.level}  ➕{xp}",
+            style=LIST, callback_data=f"devour_tog:{target.id}:{c.id}",
+        )])
+    total_xp = sum(xp for c, xp in shown if c.id in selected)
+    if len(selected) == len(shown):
+        rows.append([btn("◻️ برداشتن همه", style=NAV, callback_data=f"devour_none:{target.id}")])
+    else:
+        rows.append([btn("✅ انتخاب همه", style=NAV, callback_data=f"devour_all:{target.id}")])
+    if selected:
+        rows.append([btn(
+            f"🍖 بخورون ({len(selected)} تا · ➕{total_xp} XP)",
+            style=CONFIRM, callback_data=f"devour_multi:{target.id}",
+        )])
+    rows.append([back_btn(f"coll_pick:{target.id}", "بازگشت")])
+    text = (
+        f"🍖 <b>تقویت {target.name}</b> (Lv{target.level})\n\n"
+        "هرچند تا موجود که می‌خوای رو <b>تیک بزن</b> تا با هم خورده بشن و XP‌شون به این منتقل شه. "
+        "<i>هرچی قربانی قوی‌تر و نایاب‌تر، XP بیشتر. قربانی‌ها برای همیشه حذف می‌شن.</i>"
+    )
+    return text, InlineKeyboardMarkup(rows)
+
+
+async def _devour_rerender(update, context, target_id: int) -> None:
     query = update.callback_query
-    _, target_id, sac_id = query.data.split(":")
     try:
-        target, sac, xp = await run_db(_devour_confirm_sync, update.effective_user, int(target_id), int(sac_id))
+        target, scored = await run_db(_devour_list_sync, update.effective_user, target_id)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer()
-    text = (
-        f"🍖 <b>تأیید تقویت</b>\n\n"
-        f"هدف: <b>{target.name}</b> Lv{target.level}\n"
-        f"قربانی: <b>{sac.name}</b> {constants.RARITY_LABELS[sac.rarity]} {'⭐' * sac.star_level} Lv{sac.level}\n\n"
-        f"➕ <b>{xp}</b> XP به هدف می‌رسه.\n"
-        "<b>⚠️ قربانی برای همیشه حذف می‌شه.</b>"
-    )
-    keyboard = InlineKeyboardMarkup([
-        [btn("🍖 بخورونش!", style=CONFIRM, callback_data=f"devour_do:{target.id}:{sac.id}")],
-        [back_btn(f"devour_start:{target.id}", "بازگشت")],
-    ])
+    selected = _devour_selection(context, target_id)
+    text, keyboard = _devour_list_render(target, scored, selected)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
-def _devour_do_sync(tg_user, target_id, sac_id):
+async def devour_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    target_id = int(query.data.split(":")[1])
+    context.user_data.setdefault(_DEVOUR_SEL, {})[target_id] = set()  # fresh selection
+    await query.answer()
+    await _devour_rerender(update, context, target_id)
+
+
+async def devour_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    _, target_id, sac_id = query.data.split(":")
+    target_id, sac_id = int(target_id), int(sac_id)
+    selection = _devour_selection(context, target_id)
+    selection.symmetric_difference_update({sac_id})  # toggle
+    await query.answer()
+    await _devour_rerender(update, context, target_id)
+
+
+async def devour_select_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    action, target_id = query.data.split(":")
+    target_id = int(target_id)
+    if action == "devour_none":
+        context.user_data.setdefault(_DEVOUR_SEL, {})[target_id] = set()
+    else:
+        try:
+            _target, scored = await run_db(_devour_list_sync, update.effective_user, target_id)
+        except GameError as exc:
+            await query.answer(str(exc), show_alert=True)
+            return
+        context.user_data.setdefault(_DEVOUR_SEL, {})[target_id] = {c.id for c, _ in scored[:12]}
+    await query.answer()
+    await _devour_rerender(update, context, target_id)
+
+
+def _devour_multi_sync(tg_user, target_id, sac_ids):
     user, _ = get_or_create_user(tg_user)
-    result = devour_creature(user, target_id, sac_id)
+    from game.creature import devour_creatures
+
+    result = devour_creatures(user, target_id, sac_ids)
     result["equipped"] = get_equipped_items(result["target"])
     result["user"] = user
     return result
 
 
-async def devour_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def devour_multi_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    _, target_id, sac_id = query.data.split(":")
+    target_id = int(query.data.split(":")[1])
+    selection = list(_devour_selection(context, target_id))
+    if not selection:
+        await query.answer("اول حداقل یه موجود رو تیک بزن.", show_alert=True)
+        return
     try:
-        result = await run_db(_devour_do_sync, update.effective_user, int(target_id), int(sac_id))
+        result = await run_db(_devour_multi_sync, update.effective_user, target_id, selection)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
+    context.user_data.get(_DEVOUR_SEL, {}).pop(target_id, None)  # consumed
     target = result["target"]
     level_note = (
         f" و {result['levels']} سطح بالا رفت (الان Lv{result['new_level']})!" if result["levels"] else "!"
     )
     await query.answer(f"🍖 +{result['xp']} XP")
+    eaten = "، ".join(result["eaten"][:6]) + (" …" if result["count"] > 6 else "")
     await safe_edit_message_text(
         query,
-        f"🍖 <b>{result['sac_name']}</b> خورده شد — <b>{target.name}</b> <b>{result['xp']}</b> XP گرفت{level_note}\n\n"
+        f"🍖 <b>{result['count']} موجود</b> خورده شد ({eaten}) — "
+        f"<b>{target.name}</b> <b>{result['xp']}</b> XP گرفت{level_note}\n\n"
         + creature_card_text(result["user"], target, result["equipped"]),
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
@@ -2309,8 +2349,9 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(collection_page_callback, pattern=r"^coll_page:"))
     application.add_handler(CallbackQueryHandler(collection_select_callback, pattern=r"^coll_select:"))
     application.add_handler(CallbackQueryHandler(devour_start_callback, pattern=r"^devour_start:\d+$"))
-    application.add_handler(CallbackQueryHandler(devour_pick_callback, pattern=r"^devour_pick:\d+:\d+$"))
-    application.add_handler(CallbackQueryHandler(devour_do_callback, pattern=r"^devour_do:\d+:\d+$"))
+    application.add_handler(CallbackQueryHandler(devour_toggle_callback, pattern=r"^devour_tog:\d+:\d+$"))
+    application.add_handler(CallbackQueryHandler(devour_select_all_callback, pattern=r"^devour_(all|none):\d+$"))
+    application.add_handler(CallbackQueryHandler(devour_multi_callback, pattern=r"^devour_multi:\d+$"))
     application.add_handler(CallbackQueryHandler(fusion_pick_a_callback, pattern=r"^fus_a:"))
     application.add_handler(CallbackQueryHandler(fusion_pick_b_callback, pattern=r"^fus_b:"))
     application.add_handler(CallbackQueryHandler(fusion_confirm_callback, pattern=r"^fus_confirm:"))

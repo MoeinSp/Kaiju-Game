@@ -754,7 +754,9 @@ class BotConfig(models.Model):
     group_game_url = models.CharField(max_length=256, default="", blank=True)  # https://t.me/... invite/link
     group_game_title = models.CharField(max_length=48, default="", blank=True)  # button label override
     backup_interval_hours = models.IntegerField(default=0)  # 0 = auto-backup off
-    backup_last_at = models.DateTimeField(null=True, blank=True)  # last auto-backup sent to the owner
+    backup_last_at = models.DateTimeField(null=True, blank=True)  # last auto-backup sent
+    # where auto-backups are sent; null = the owner's own DM (the default)
+    backup_chat_id = models.BigIntegerField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:

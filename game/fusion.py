@@ -100,9 +100,17 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
     if random.random() < constants.RARITY_UPGRADE_CHANCE.get(base_rarity, 0.0):
         new_rarity = constants.next_rarity(base_rarity)
 
-    mult = constants.RARITY_STAT_MULTIPLIER[new_rarity]
-    avg_level = (parent_a.level + parent_b.level) / 2
+    # rarity_bump only kicks in when the fusion actually upgrades the tier — it's a
+    # multiplier ≥ 1, so the child is never smaller than its inherited base.
+    rarity_bump = constants.FUSION_RARITY_UPGRADE_BUMP if new_rarity != base_rarity else 1.0
     star_level = parent_a.star_level + 1  # both parents share a star, verified above
+
+    def _inherit_stat(attr: str) -> int:
+        """Best of both parents + a slice of the weaker + flat growth, so the child
+        is guaranteed strictly stronger than either parent on every base stat."""
+        a_val, b_val = getattr(parent_a, attr), getattr(parent_b, attr)
+        blended = max(a_val, b_val) + min(a_val, b_val) * constants.FUSION_WEAK_PARENT_SHARE
+        return round((blended + constants.FUSION_STAT_GROWTH[attr]) * rarity_bump)
 
     child = Creature.objects.create(
         owner=user,
@@ -112,10 +120,16 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
         star_level=star_level,
         level=max(parent_a.level, parent_b.level),
         xp=parent_a.xp + parent_b.xp,
-        base_hp=round((constants.STARTER_BASE_HP + avg_level * 4) * mult),
-        base_atk=round((constants.STARTER_BASE_ATK + avg_level * 1.0) * mult),
-        base_def=round((constants.STARTER_BASE_DEF + avg_level * 1.0) * mult),
-        base_spd=round((constants.STARTER_BASE_SPD + avg_level * 0.6) * mult),
+        base_hp=_inherit_stat("base_hp"),
+        base_atk=_inherit_stat("base_atk"),
+        base_def=_inherit_stat("base_def"),
+        base_spd=_inherit_stat("base_spd"),
+        # carry over the BEST body-part upgrades — the old code dropped these to 0,
+        # so every gold spent upgrading fangs/armor/wings/poison was lost on fusion
+        fangs_lvl=max(parent_a.fangs_lvl, parent_b.fangs_lvl),
+        armor_lvl=max(parent_a.armor_lvl, parent_b.armor_lvl),
+        wings_lvl=max(parent_a.wings_lvl, parent_b.wings_lvl),
+        poison_lvl=max(parent_a.poison_lvl, parent_b.poison_lvl),
         is_active=True,
     )
 

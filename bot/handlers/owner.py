@@ -9,7 +9,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import User
 from bio_lab.repository import display_name
-from bot.buttons import ADMIN, CONFIRM, DANGER, LIST, PRIMARY, back_btn, btn
+from bot.buttons import ADMIN, CONFIRM, DANGER, LIST, NAV, PRIMARY, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text
 from game.button_emoji import (
     BUTTON_CATEGORY_LABELS,
@@ -346,25 +346,44 @@ async def admin_remove_callback(update: Update, context: ContextTypes.DEFAULT_TY
 _BACKUP_INTERVAL_CHOICES = [0, 6, 12, 24, 48]
 
 
+def _autobackup_panel_markup(hours: int, dest_id) -> tuple[str, InlineKeyboardMarkup]:
+    status = "خاموش" if hours == 0 else f"هر <b>{hours}</b> ساعت"
+    dest_label = "پیوی مالک (پیش‌فرض)" if not dest_id else f"<code>{dest_id}</code>"
+    text = (
+        "💾 <b>بکاپ خودکار دیتابیس</b>\n\n"
+        f"⏱ بازه: {status}\n"
+        f"📍 مقصد: {dest_label}\n\n"
+        "<blockquote>هر بازه یه نسخه‌ی فشرده از کل دیتابیس ساخته و به مقصد فرستاده می‌شه. "
+        "می‌تونی بازه‌ی دلخواه بذاری، مقصد رو به یه گروه/کانال تغییر بدی، همین حالا بکاپ بگیری، "
+        "یا از یه فایل بکاپ بازیابی کنی.</blockquote>"
+    )
+    labels = {0: "🚫 خاموش", 6: "۶ ساعت", 12: "۱۲ ساعت", 24: "۲۴ ساعت", 48: "۴۸ ساعت"}
+    rows = [[btn(("✅ " if h == hours else "") + labels[h], style=(CONFIRM if h == hours else ADMIN),
+                 callback_data=f"autobk_set:{h}")] for h in _BACKUP_INTERVAL_CHOICES]
+    rows.append([btn("⏱ بازه‌ی دلخواه (ساعت)", style=ADMIN, callback_data="autobk_custom")])
+    rows.append([
+        btn("📍 مقصد: همینجا", style=ADMIN, callback_data="autobk_dest_here"),
+        btn("📍 مقصد دلخواه", style=ADMIN, callback_data="autobk_dest_set"),
+    ])
+    rows.append([btn("📤 بکاپ همین حالا", style=CONFIRM, callback_data="autobk_now")])
+    rows.append([btn("♻️ بازیابی از فایل", style=DANGER, callback_data="autobk_restore")])
+    rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _autobackup_state_sync():
+    return botconfig.get_backup_interval(), botconfig.get_backup_chat_id()
+
+
 async def autobackup_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_owner(update):
         if update.callback_query:
             await update.callback_query.answer("فقط مالک.", show_alert=True)
         return
-    hours = await run_db(botconfig.get_backup_interval)
-    status = "خاموش" if hours == 0 else f"هر <b>{hours}</b> ساعت"
-    text = (
-        "💾 <b>بکاپ خودکار دیتابیس</b>\n\n"
-        f"وضعیت فعلی: {status}\n\n"
-        "<blockquote>هر بازه، یه نسخه‌ی فشرده از دیتابیس ساخته و همین‌جا (پیوی مالک) "
-        "فرستاده می‌شه. برای خاموش‌کردن «خاموش» رو بزن.</blockquote>"
-    )
-    labels = {0: "🚫 خاموش", 6: "۶ ساعت", 12: "۱۲ ساعت", 24: "۲۴ ساعت", 48: "۴۸ ساعت"}
-    rows = [[btn(("✅ " if h == hours else "") + labels[h], style=(CONFIRM if h == hours else ADMIN),
-                 callback_data=f"autobk_set:{h}")] for h in _BACKUP_INTERVAL_CHOICES]
-    rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
+    hours, dest_id = await run_db(_autobackup_state_sync)
+    text, keyboard = _autobackup_panel_markup(hours, dest_id)
     target = update.callback_query.message if update.callback_query else update.effective_message
-    await target.reply_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+    await target.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def autobackup_set_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -376,6 +395,82 @@ async def autobackup_set_callback(update: Update, context: ContextTypes.DEFAULT_
     await run_db(botconfig.set_backup_interval, hours)
     await query.answer("ذخیره شد." if hours else "خاموش شد.")
     await autobackup_panel(update, context)
+
+
+async def autobackup_custom_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer("فقط مالک.", show_alert=True)
+        return
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "backup_interval"}
+    await query.answer()
+    await query.message.reply_text(
+        "⏱ بازه‌ی بکاپ خودکار رو به <b>ساعت</b> بفرست (مثلاً <code>8</code>). "
+        "<code>0</code> یعنی خاموش.",
+        parse_mode="HTML",
+    )
+
+
+async def autobackup_dest_here_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer("فقط مالک.", show_alert=True)
+        return
+    await run_db(botconfig.set_backup_chat_id, None)
+    await query.answer("مقصد شد پیوی مالک.")
+    await autobackup_panel(update, context)
+
+
+async def autobackup_dest_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer("فقط مالک.", show_alert=True)
+        return
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "backup_dest"}
+    await query.answer()
+    await query.message.reply_text(
+        "📍 <b>chat id</b> مقصد بکاپ رو بفرست (مثلاً <code>-1001234567890</code> برای یه گروه/کانال). "
+        "بات باید اونجا عضو/ادمین باشه تا بتونه فایل بفرسته.\n"
+        "<i>برای برگردوندن به پیوی مالک، عدد <code>0</code> بفرست.</i>",
+        parse_mode="HTML",
+    )
+
+
+async def autobackup_now_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer("فقط مالک.", show_alert=True)
+        return
+    await query.answer("در حال ساخت بکاپ…")
+    from game.backup import create_backup
+
+    try:
+        meta = await run_db(create_backup, "manual")
+        dest = await run_db(botconfig.get_backup_chat_id) or OWNER_TELEGRAM_ID
+        with open(meta["path"], "rb") as fh:
+            await context.bot.send_document(
+                chat_id=dest, document=fh, filename=meta["name"], caption="💾 بکاپ دستی دیتابیس",
+            )
+        await query.message.reply_text("✅ بکاپ ساخته و به مقصد فرستاده شد.")
+    except (TelegramError, OSError) as exc:
+        await query.message.reply_text(f"⚠️ نشد بکاپ رو بفرستم: {exc}")
+
+
+async def autobackup_restore_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer("فقط مالک.", show_alert=True)
+        return
+    context.user_data[AWAITING_RESTORE_KEY] = True
+    await query.answer()
+    await query.message.reply_text(
+        "♻️ <b>بازیابی دیتابیس از فایل</b>\n\n"
+        "فایل بکاپ (<code>.json.gz</code>) رو همینجا بفرست.\n"
+        "<b>⚠️ هشدار:</b> بازیابی کل دیتای فعلی بازی رو با محتوای فایل <b>جایگزین</b> می‌کنه "
+        "و برگشت‌پذیر نیست. قبلش یه «📤 بکاپ همین حالا» بگیر.\n\n"
+        "<i>برای انصراف، هر پیام دیگه‌ای بفرست.</i>",
+        parse_mode="HTML",
+    )
 
 
 _ADMIN_MENU_ACTIONS = {}  # populated at the bottom of the module, after every command is defined
@@ -1133,6 +1228,7 @@ async def capture_force_join_reply(update: Update, context: ContextTypes.DEFAULT
 
 
 AWAITING_ADMIN_KEY = "awaiting_admin_input"
+AWAITING_RESTORE_KEY = "awaiting_restore_file"  # owner is expected to upload a backup .json.gz
 
 # ── button icons (separate registry from the message-body emoji above) ─────────
 BTN_EMOJI_CAT_PREFIX = "btnemoji_cat:"
@@ -1720,6 +1816,40 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
+    if action == "backup_interval":
+        digits = text.strip()
+        if not digits.isdigit() or int(digits) > 720:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text("⚠️ یه عدد ساعت بین ۰ تا ۷۲۰ بفرست (۰ = خاموش).")
+            return
+        hours = int(digits)
+        await run_db(botconfig.set_backup_interval, hours)
+        await message.reply_text(
+            "🚫 بکاپ خودکار خاموش شد." if hours == 0 else f"✅ بازه‌ی بکاپ خودکار شد هر <b>{hours}</b> ساعت.",
+            parse_mode="HTML",
+        )
+        return
+
+    if action == "backup_dest":
+        raw = text.strip()
+        if not _is_signed_int(raw):
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text(
+                "⚠️ یه chat id معتبر بفرست (مثلاً <code>-1001234567890</code>) یا <code>0</code> برای پیوی مالک.",
+                parse_mode="HTML",
+            )
+            return
+        chat_id = int(raw)
+        await run_db(botconfig.set_backup_chat_id, None if chat_id == 0 else chat_id)
+        if chat_id == 0:
+            await message.reply_text("✅ مقصد بکاپ شد پیوی مالک.")
+        else:
+            await message.reply_text(
+                f"✅ مقصد بکاپ شد <code>{chat_id}</code>. مطمئن شو بات اونجا می‌تونه فایل بفرسته.",
+                parse_mode="HTML",
+            )
+        return
+
     if action == "broadcast":
         user_ids = await run_db(_all_user_ids_sync)
         sent = 0
@@ -1738,10 +1868,103 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
 
+async def capture_restore_upload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Owner sent (hopefully) a backup file after tapping «بازیابی از فایل». Validate
+    it, stash it alongside the other backups, and ask for one final confirmation
+    before it replaces the whole database."""
+    import io
+
+    from game import backup as backup_mod
+
+    message = update.effective_message
+    if not _is_owner(update):
+        context.user_data.pop(AWAITING_RESTORE_KEY, None)
+        return
+    document = message.document
+    if document is None:
+        context.user_data.pop(AWAITING_RESTORE_KEY, None)
+        await message.reply_text("❌ بازیابی لغو شد (فایلی نفرستادی).")
+        return
+    if document.file_size and document.file_size > 60 * 1024 * 1024:
+        context.user_data.pop(AWAITING_RESTORE_KEY, None)
+        await message.reply_text("⚠️ فایل خیلی بزرگه (بیشتر از ۶۰ مگابایت).")
+        return
+
+    context.user_data.pop(AWAITING_RESTORE_KEY, None)
+    try:
+        tg_file = await context.bot.get_file(document.file_id)
+        raw = await tg_file.download_as_bytearray()
+    except TelegramError:
+        await message.reply_text("⚠️ نشد فایل رو دانلود کنم. دوباره امتحان کن.")
+        return
+
+    def _validate_and_store():
+        meta = backup_mod.store_upload(io.BytesIO(bytes(raw)), "restore-upload")
+        payload = backup_mod.read_payload(meta["path"])
+        return meta, (payload.get("manifest") or {})
+
+    try:
+        meta, manifest = await run_db(_validate_and_store)
+    except backup_mod.BackupError as exc:
+        await message.reply_text(f"⚠️ {exc}")
+        return
+
+    created = manifest.get("created_at", "—")
+    count = manifest.get("object_count", "—")
+    await message.reply_text(
+        "♻️ <b>تأیید بازیابی</b>\n\n"
+        f"فایل: <code>{meta['name']}</code>\n"
+        f"ساخته‌شده: <code>{created}</code>\n"
+        f"تعداد رکورد: <b>{count}</b>\n\n"
+        "<b>⚠️ این کل دیتای فعلی بازی رو جایگزین می‌کنه و برگشت‌پذیر نیست.</b>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [btn("♻️ بله، بازیابی کن", style=DANGER, callback_data=f"autobk_restore_do:{meta['name']}")],
+            [btn("انصراف", style=NAV, callback_data="admin_menu:autobackup")],
+        ]),
+    )
+
+
+async def autobackup_restore_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_owner(update):
+        await query.answer("فقط مالک.", show_alert=True)
+        return
+    name = query.data.split(":", 1)[1]
+    await query.answer("در حال بازیابی…")
+
+    def _do_restore():
+        from game import admins as admins_mod
+        from game import backup as backup_mod
+        from game import botconfig as botconfig_mod
+
+        result = backup_mod.restore_from_file(name)
+        # the caches the bot serves from are now stale (they were rebuilt from the
+        # OLD rows); refresh the ones restore_payload doesn't already handle
+        botconfig_mod.refresh_cache()
+        admins_mod.refresh_cache()
+        return result
+
+    try:
+        result = await run_db(_do_restore)
+    except Exception as exc:  # noqa: BLE001 — surface any restore failure to the owner
+        await query.message.reply_text(f"⚠️ بازیابی ناموفق بود: {exc}")
+        return
+    await safe_edit_message_text(
+        query,
+        f"✅ <b>بازیابی انجام شد.</b>\n{result.get('object_count', 0)} رکورد بازگردانده شد.",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[back_btn("admin_menu:autobackup", "بازگشت")]]),
+    )
+
+
 async def capture_owner_text_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Single dispatcher for every 'awaiting a plain-text/forwarded reply' flow in
     the owner panel — PTB only ever runs the first handler that matches an update
     within a group, so every such flow has to live behind one registration."""
+    if context.user_data.get(AWAITING_RESTORE_KEY):
+        await capture_restore_upload(update, context)
+        return
     if context.user_data.get("awaiting_emoji_key") is not None:
         await capture_emoji_reply(update, context)
         return
@@ -1804,6 +2027,14 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(dm_user_start, pattern=r"^admin_dm:\d+$"))
     application.add_handler(CallbackQueryHandler(admin_remove_callback, pattern=r"^admin_rm:\d+$"))
     application.add_handler(CallbackQueryHandler(autobackup_set_callback, pattern=r"^autobk_set:\d+$"))
+    application.add_handler(CallbackQueryHandler(autobackup_custom_start, pattern=r"^autobk_custom$"))
+    application.add_handler(CallbackQueryHandler(autobackup_dest_here_callback, pattern=r"^autobk_dest_here$"))
+    application.add_handler(CallbackQueryHandler(autobackup_dest_set_start, pattern=r"^autobk_dest_set$"))
+    application.add_handler(CallbackQueryHandler(autobackup_now_callback, pattern=r"^autobk_now$"))
+    application.add_handler(CallbackQueryHandler(autobackup_restore_start, pattern=r"^autobk_restore$"))
+    application.add_handler(
+        CallbackQueryHandler(autobackup_restore_do_callback, pattern=r"^autobk_restore_do:")
+    )
     application.add_handler(CallbackQueryHandler(player_log_callback, pattern=r"^admin_plog:"))
     application.add_handler(CallbackQueryHandler(delete_creature_confirm_callback, pattern=r"^admin_del"))
     application.add_handler(CallbackQueryHandler(reset_user_start_callback, pattern=r"^admin_reset:"))

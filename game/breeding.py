@@ -81,7 +81,9 @@ def dna_cost(parent_a: Creature, parent_b: Creature) -> int:
 
 
 def _power(creature: Creature) -> int:
-    return creature.base_hp + creature.base_atk + creature.base_def + creature.base_spd
+    from game.creature import creature_power
+
+    return creature_power(creature)
 
 
 def upgrade_chance(parent_a: Creature, parent_b: Creature) -> float:
@@ -318,7 +320,6 @@ def parent_candidates(user: User, exclude_id: int | None = None) -> list[Creatur
 
 def creature_power(creature: Creature) -> int:
     """Public helper so screens can rank candidates the same way the roll does."""
-    from game.creature import effective_stats
+    from game.creature import creature_power as _cp
 
-    stats = effective_stats(creature, get_equipped_items(creature))
-    return round(stats["hp"] + stats["atk"] + stats["def"] + stats["spd"])
+    return _cp(creature, get_equipped_items(creature))

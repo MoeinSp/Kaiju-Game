@@ -11,7 +11,6 @@ from game.creature import GameError
 from game.emoji import get_emoji
 from game.equipment import (
     equip_item,
-    fuse_equipment,
     list_inventory,
     same_slot_candidates,
     unequip_item,
@@ -410,108 +409,141 @@ def _forge_detail_keyboard(item_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def _efuse_pick_sync(tg_user, target_id):
+# Multi-select equipment fusion: tick several same-slot sacrifices and feed them
+# into the target one roll each. Selection is kept in user_data keyed by target id.
+_EFUSE_SEL = "efuse_sel"
+
+
+def _efuse_selection(context, target_id: int) -> set[int]:
+    store = context.user_data.setdefault(_EFUSE_SEL, {})
+    return store.setdefault(target_id, set())
+
+
+def _efuse_scored_sync(tg_user, target_id):
     user, _ = get_or_create_user(tg_user)
+    from game.equipment import _fuse_fail_chance
+
     try:
         target = Equipment.objects.get(id=target_id, owner=user)
     except Equipment.DoesNotExist:
         raise GameError("این تجهیزات پیدا نشد.")
-    return user, target, same_slot_candidates(user, target_id)
+    candidates = same_slot_candidates(user, target_id)
+    return target, [(c, _fuse_fail_chance(target, c)) for c in candidates]
 
 
-def _efuse_pick_render(target, candidates) -> tuple[str, InlineKeyboardMarkup]:
-    if not candidates:
+def _efuse_pick_render(target, scored, selected: set[int]) -> tuple[str, InlineKeyboardMarkup]:
+    if not scored:
         return (
             f"🔗 <b>ترکیب هم‌نوع</b>\n\n{_item_line(target)}\n\n"
             "هیچ تجهیزات هم‌نوع دیگه‌ای برای قربانی کردن نداری.",
             InlineKeyboardMarkup([[back_btn(f"forge_pick:{target.id}", "بازگشت")]]),
         )
-    rows = [
-        [btn(
-            f"{constants.RARITY_LABELS[c.rarity]} {c.name} +{c.level}"
-            + (" · درحال‌استفاده" if c.equipped_on_id else ""),
-            style=LIST, callback_data=f"efuse_pick:{target.id}:{c.id}",
-        )]
-        for c in candidates[:PAGE_SIZE]
-    ]
+    shown = scored[:PAGE_SIZE]
+    valid_ids = {c.id for c, _ in shown}
+    selected = selected & valid_ids
+    rows = []
+    for c, fail in shown:
+        mark = "✅" if c.id in selected else "⬜️"
+        used = " · درحال‌استفاده" if c.equipped_on_id else ""
+        rows.append([btn(
+            f"{mark} {constants.RARITY_LABELS[c.rarity]} {c.name} +{c.level}  (شکست {round(fail * 100)}٪){used}",
+            style=LIST, callback_data=f"efuse_tog:{target.id}:{c.id}",
+        )])
+    if len(selected) == len(shown):
+        rows.append([btn("◻️ برداشتن همه", style=NAV, callback_data=f"efuse_none:{target.id}")])
+    else:
+        rows.append([btn("✅ انتخاب همه", style=NAV, callback_data=f"efuse_all:{target.id}")])
+    if selected:
+        rows.append([btn(
+            f"🔗 ترکیب ({len(selected)} تا)",
+            style=CONFIRM, callback_data=f"efuse_multi:{target.id}",
+        )])
     rows.append([back_btn(f"forge_pick:{target.id}", "بازگشت")])
     text = (
         f"🔗 <b>ترکیب هم‌نوع</b>\n\n"
         f"هدف: {_item_line(target)}\n\n"
-        "کدوم تجهیزات رو قربانی کنی؟ (هم‌نوع = همون اسلات). "
-        "<i>قربانی هرچی نایاب‌تر و بالاتر باشه، شانس موفقیت بیشتره.</i>"
+        "هرچند تا قربانی که می‌خوای رو <b>تیک بزن</b> — هر کدوم یه شانس جدا برای <b>+۱</b> سطحه. "
+        "<i>قربانی هرچی نایاب‌تر و بالاتر، شانس موفقیت بیشتر. قربانی در هر صورت مصرف می‌شه.</i>"
     )
     return text, InlineKeyboardMarkup(rows)
+
+
+async def _efuse_rerender(update, context, target_id: int) -> None:
+    query = update.callback_query
+    try:
+        target, scored = await run_db(_efuse_scored_sync, update.effective_user, target_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    selected = _efuse_selection(context, target_id)
+    text, keyboard = _efuse_pick_render(target, scored, selected)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def efuse_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     target_id = int(query.data.split(":")[1])
-    try:
-        user, target, candidates = await run_db(_efuse_pick_sync, update.effective_user, target_id)
-    except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
-        return
+    context.user_data.setdefault(_EFUSE_SEL, {})[target_id] = set()
     await query.answer()
-    text, keyboard = _efuse_pick_render(target, candidates)
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+    await _efuse_rerender(update, context, target_id)
 
 
-def _efuse_confirm_sync(tg_user, target_id, sac_id):
-    user, _ = get_or_create_user(tg_user)
-    try:
-        target = Equipment.objects.get(id=target_id, owner=user)
-        sac = Equipment.objects.get(id=sac_id, owner=user)
-    except Equipment.DoesNotExist:
-        raise GameError("این تجهیزات پیدا نشد.")
-    from game.equipment import _fuse_fail_chance
-
-    return target, sac, _fuse_fail_chance(target, sac)
-
-
-async def efuse_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def efuse_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     _, target_id, sac_id = query.data.split(":")
-    try:
-        target, sac, fail = await run_db(_efuse_confirm_sync, update.effective_user, int(target_id), int(sac_id))
-    except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
-        return
+    target_id, sac_id = int(target_id), int(sac_id)
+    _efuse_selection(context, target_id).symmetric_difference_update({sac_id})
     await query.answer()
-    text = (
-        f"🔗 <b>تأیید ترکیب</b>\n\n"
-        f"هدف: {_item_line(target)}\n"
-        f"قربانی: {_item_line(sac)}\n\n"
-        f"🎯 در صورت موفقیت: <b>+{target.level + 1}</b>\n"
-        f"⚠️ شانس شکست: <b>{round(fail * 100)}٪</b> (در هر صورت قربانی از بین می‌ره)"
-    )
-    keyboard = InlineKeyboardMarkup([
-        [btn("🔗 ترکیب کن!", style=CONFIRM, callback_data=f"efuse_do:{target.id}:{sac.id}")],
-        [back_btn(f"efuse_start:{target.id}", "بازگشت")],
-    ])
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+    await _efuse_rerender(update, context, target_id)
 
 
-def _efuse_do_sync(tg_user, target_id, sac_id):
-    user, _ = get_or_create_user(tg_user)
-    return fuse_equipment(user, target_id, sac_id)
-
-
-async def efuse_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def efuse_select_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    _, target_id, sac_id = query.data.split(":")
-    try:
-        result = await run_db(_efuse_do_sync, update.effective_user, int(target_id), int(sac_id))
-    except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
-        return
-    target = result["target"]
-    if result["success"]:
-        await query.answer("🎉 موفق شد!")
-        head = f"🎉 <b>ترکیب موفق!</b> تجهیزات به <b>+{result['new_level']}</b> رسید."
+    action, target_id = query.data.split(":")
+    target_id = int(target_id)
+    if action == "efuse_none":
+        context.user_data.setdefault(_EFUSE_SEL, {})[target_id] = set()
     else:
-        await query.answer("💥 شکست خورد!")
-        head = "💥 <b>ترکیب شکست خورد.</b> قربانی از بین رفت و سطح بالا نرفت — دفعه‌ی بعد قربانی بهتری بذار."
+        try:
+            _target, scored = await run_db(_efuse_scored_sync, update.effective_user, target_id)
+        except GameError as exc:
+            await query.answer(str(exc), show_alert=True)
+            return
+        context.user_data.setdefault(_EFUSE_SEL, {})[target_id] = {c.id for c, _ in scored[:PAGE_SIZE]}
+    await query.answer()
+    await _efuse_rerender(update, context, target_id)
+
+
+def _efuse_multi_sync(tg_user, target_id, sac_ids):
+    user, _ = get_or_create_user(tg_user)
+    from game.equipment import fuse_equipment_many
+
+    return fuse_equipment_many(user, target_id, sac_ids)
+
+
+async def efuse_multi_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    target_id = int(query.data.split(":")[1])
+    selection = list(_efuse_selection(context, target_id))
+    if not selection:
+        await query.answer("اول حداقل یه تجهیزات رو تیک بزن.", show_alert=True)
+        return
+    try:
+        result = await run_db(_efuse_multi_sync, update.effective_user, target_id, selection)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    context.user_data.get(_EFUSE_SEL, {}).pop(target_id, None)
+    target = result["target"]
+    await query.answer(f"🎉 {result['successes']} موفق / 💥 {result['fails']} شکست")
+    head = (
+        f"🔗 <b>ترکیب چندتایی انجام شد</b>\n"
+        f"🎉 موفق: <b>{result['successes']}</b>  ·  💥 شکست: <b>{result['fails']}</b>  "
+        f"(از {result['consumed']} قربانی)\n"
+        f"سطح فعلی: <b>+{result['new_level']}</b>"
+    )
+    if result["capped"]:
+        head += "\n<i>به سقف فعلی آهنگری رسید — برای بالاتر، ⚒ آهنگری رو ارتقا بده.</i>"
     await safe_edit_message_text(
         query,
         f"{head}\n\n{_item_line(target)}",
@@ -579,8 +611,9 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(forge_cat_callback, pattern=r"^forge_cat:"))
     application.add_handler(CallbackQueryHandler(forge_do_callback, pattern=r"^forge_do:"))
     application.add_handler(CallbackQueryHandler(efuse_start_callback, pattern=r"^efuse_start:\d+$"))
-    application.add_handler(CallbackQueryHandler(efuse_pick_callback, pattern=r"^efuse_pick:\d+:\d+$"))
-    application.add_handler(CallbackQueryHandler(efuse_do_callback, pattern=r"^efuse_do:\d+:\d+$"))
+    application.add_handler(CallbackQueryHandler(efuse_toggle_callback, pattern=r"^efuse_tog:\d+:\d+$"))
+    application.add_handler(CallbackQueryHandler(efuse_select_all_callback, pattern=r"^efuse_(all|none):\d+$"))
+    application.add_handler(CallbackQueryHandler(efuse_multi_callback, pattern=r"^efuse_multi:\d+$"))
     application.add_handler(CommandHandler("equip", equip_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("unequip", unequip_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("upgrade_item", upgrade_item_cmd, filters.ChatType.PRIVATE))

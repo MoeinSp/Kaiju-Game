@@ -37,6 +37,45 @@ def effective_stats(creature: Creature, equipped_items: list | None = None) -> d
     }
 
 
+def combat_rating(stats: dict) -> int:
+    """One 'power' number that actually tracks who wins a duel.
+
+    In resolve_duel() a point of ATK is worth far more than a point of HP — damage
+    lands every round while HP only delays the end — so the old flat
+    hp+atk+def+spd sum was misleading: an HP-bloated creature scored high yet lost
+    to a leaner attacker (the "۱۱۰۰ از ۱۸۰۰ می‌بره" complaint). These weights
+    approximate each stat's marginal value in the fight, so a higher rating now
+    genuinely means "usually wins".
+    """
+    crit = stats.get("crit_rate", constants.BASE_CRIT_CHANCE)
+    offense = stats["atk"] * (1 + crit * 0.5) + stats.get("poison", 0)
+    offense *= 1 + stats.get("lifesteal", 0)
+    return round(
+        stats["hp"] * 0.45
+        + offense * 4.0
+        + stats["def"] * 2.0
+        + stats["spd"] * 1.4
+    )
+
+
+def creature_power(creature: Creature, equipped_items: list | None = None) -> int:
+    """Canonical strength score for any creature — the single source of truth every
+    display, leaderboard and matchmaker delegates to, so a power number always
+    means the same thing and always predicts combat."""
+    return combat_rating(effective_stats(creature, equipped_items))
+
+
+# Equal-split share S (hp=atk=def=spd=S, level 1, no gear, crit 0.10) has
+# combat_rating ≈ 8.05·S; this inverts that so a synthetic opponent built to a
+# target rating sits on the SAME curve real creatures are measured on.
+_EQUAL_SPLIT_RATING_PER_SHARE = 8.05
+
+
+def base_share_for_rating(power: int) -> int:
+    """Inverse of combat_rating for a bot/boss built with equal base stats."""
+    return max(1, round(power / _EQUAL_SPLIT_RATING_PER_SHARE))
+
+
 def create_starter_creature(owner: User) -> Creature:
     element = constants.random_element()
     creature = Creature.objects.create(
@@ -114,6 +153,47 @@ def devour_creature(user: User, target_id: int, sacrifice_id: int) -> dict:
     target.save()
     sacrifice.delete()
     return {"xp": xp, "levels": levels, "sac_name": sac_name, "target": target, "new_level": target.level}
+
+
+@transaction.atomic
+def devour_creatures(user: User, target_id: int, sacrifice_ids: list[int]) -> dict:
+    """Feed several creatures to one target in a single atomic action (multi-select
+    devour). Skips any id that's since become invalid (active/busy/gone) instead of
+    aborting the whole batch, and returns the running totals plus the names actually
+    consumed. Raises only if the target itself is invalid or nothing was eaten."""
+    target = Creature.objects.filter(id=target_id, owner=user).first()
+    if target is None:
+        raise GameError("این موجود توی کلکسیون تو نیست.")
+    from game.workers import creature_status
+
+    total_xp = 0
+    total_levels = 0
+    eaten: list[str] = []
+    # de-dupe and drop the target itself defensively
+    for sac_id in dict.fromkeys(sacrifice_ids):
+        if sac_id == target_id:
+            continue
+        sacrifice = Creature.objects.filter(id=sac_id, owner=user).first()
+        if sacrifice is None or sacrifice.is_active:
+            continue
+        if creature_status(user, sacrifice) is not None:
+            continue
+        total_xp += _devour_xp(sacrifice)
+        eaten.append(sacrifice.name)
+        sacrifice.delete()
+
+    if not eaten:
+        raise GameError("هیچ‌کدوم از انتخاب‌ها قابل قربانی نبودن (فعال/مشغول یا حذف‌شده).")
+    total_levels = add_xp(target, total_xp)
+    target.save()
+    return {
+        "xp": total_xp,
+        "levels": total_levels,
+        "eaten": eaten,
+        "count": len(eaten),
+        "target": target,
+        "new_level": target.level,
+    }
 
 
 def feed(user: User, creature: Creature) -> int:
