@@ -75,6 +75,7 @@ async def casino_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 def _play_sync(tg_user, tier):
     user, _ = get_or_create_user(tg_user)
     prize = casino.play(user, tier)
+    user.refresh_from_db()  # play() may have charged via a locked re-fetch
     free_used = get_daily_count(user, "wheel_spin") >= constants.WHEEL_DAILY_LIMIT
     return prize, user.coins, user.diamonds, free_used
 

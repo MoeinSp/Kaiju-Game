@@ -431,18 +431,72 @@ def _wheel_card(user, spun_today) -> tuple[str, InlineKeyboardMarkup]:
 
 
 def _casino_card(user) -> tuple[str, InlineKeyboardMarkup]:
+    """The casino home, playable right here in the group. One inline button per
+    table (scoped to the summoner), tapping opens a confirm step."""
     from game import casino
 
-    lines = [f"{get_emoji('wheel')} <b>کازینو</b>", ""]
+    lines = [
+        f"{get_emoji('wheel')} <b>کازینو</b>",
+        f"<blockquote>{get_emoji('coin')} {user.coins:,} طلا · {get_emoji('diamond')} {user.diamonds} الماس\n"
+        "یه میز رو انتخاب کن. قماره — ممکنه ببری یا ببازی.</blockquote>",
+    ]
+    rows = []
     for t in casino.tier_list():
         if t["daily"]:
-            cost = "رایگان روزانه (همون قرعه‌کشی)"
+            cost = "رایگان روزانه"
         else:
-            cost = f"{t['cost']} " + ("الماس" if t["currency"] == "diamonds" else "طلا")
-        lines.append(f"• <b>{t['label']}</b> — {cost}")
-    lines.append("\n<blockquote>قماره — ممکنه ببری یا ببازی. برای بازی و انتخاب میز، برو پیوی ربات.</blockquote>")
-    rows = [[_pm_button("🎰 بازی در پیوی")]]
+            cost = f"{t['cost']} " + ("💎" if t["currency"] == "diamonds" else "طلا")
+        rows.append([btn(f"{t['label']} — {cost}", style=SHOP, callback_data=_act("casino_pick", user.id, t["key"]))])
+    rows.append([_pm_button("🎰 در پیوی")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _casino_home_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    return user
+
+
+def _casino_play_sync(tg_user, tier):
+    from game import casino
+
+    user, _ = get_or_create_user(tg_user)
+    prize = casino.play(user, tier)
+    user.refresh_from_db()  # play() may have charged via a locked re-fetch
+    return prize, user.coins, user.diamonds
+
+
+def _casino_confirm(owner_id: int, tier: str) -> tuple[str, InlineKeyboardMarkup]:
+    cfg = constants.CASINO_TIERS[tier]
+    if cfg["daily"]:
+        cost_line = "رایگان (روزی یک‌بار — همون قرعه‌کشی)"
+    else:
+        cur = "💎 الماس" if cfg["currency"] == "diamonds" else "طلا"
+        cost_line = f"شرط: <b>{cfg['cost']}</b> {cur}"
+    text = (
+        f"{cfg['label']}\n<blockquote>{cfg['desc']}\n{cost_line}\n\n"
+        "ممکنه جایزه‌ی بزرگ ببری یا هیچی گیرت نیاد. مطمئنی؟</blockquote>"
+    )
+    rows = [
+        [btn("🎲 بچرخون!", style=CONFIRM, callback_data=_act("casino_play", owner_id, tier))],
+        [btn("↩️ میزهای دیگه", style=NAV, callback_data=_act("casino_home", owner_id))],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _casino_result(owner_id: int, tier: str, prize: dict, coins: int, diamonds: int) -> tuple[str, InlineKeyboardMarkup]:
+    if prize["kind"] == "nothing":
+        reveal = "😔 <b>باختی!</b> این دور چیزی نصیبت نشد."
+    else:
+        reveal = f"🎉 <b>بردی!</b>\n<tg-spoiler>{prize['label']}</tg-spoiler>"
+    text = (
+        f"{constants.CASINO_TIERS[tier]['label']}\n\n{reveal}\n\n"
+        f"<i>موجودی: {coins:,} طلا · {diamonds} الماس</i>"
+    )
+    rows = [
+        [btn("🎲 دوباره همین میز", style=SHOP, callback_data=_act("casino_pick", owner_id, tier))],
+        [btn("↩️ میزهای دیگه", style=NAV, callback_data=_act("casino_home", owner_id))],
+    ]
+    return text, InlineKeyboardMarkup(rows)
 
 
 def _fusion_card(user, pairs, built, cap) -> tuple[str, InlineKeyboardMarkup]:
@@ -735,7 +789,7 @@ async def _maybe_capture_group_reply(update: Update, context: ContextTypes.DEFAU
 # before being auto-deleted, per action. Keeps groups from filling with transient
 # cards. The leaderboard lingers longer; everything else is short-lived.
 _GROUP_TTL_DEFAULT = 60
-_GROUP_TTL = {"leaderboard": 300}
+_GROUP_TTL = {"leaderboard": 300, "casino": 600}  # casino is a multi-step play session
 
 
 async def _delete_msgs_job(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1081,6 +1135,34 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
     if update.effective_user.id != int(owner_id):
         await query.answer("این کارت مال تو نیست — خودت کلمه‌ش رو بفرست.", show_alert=True)
         return
+
+    # ── casino: a self-contained pick → confirm → play loop, all in the group ──
+    if action in ("casino_pick", "casino_home", "casino_play"):
+        if action == "casino_home":
+            user = await run_db(_casino_home_sync, update.effective_user)
+            await query.answer()
+            text, keyboard = _casino_card(user)
+            await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+            return
+        if action == "casino_pick":
+            if arg not in constants.CASINO_TIERS:
+                await query.answer("این میز پیدا نشد.", show_alert=True)
+                return
+            await query.answer()
+            text, keyboard = _casino_confirm(int(owner_id), arg)
+            await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+            return
+        # casino_play
+        try:
+            prize, coins, diamonds = await run_db(_casino_play_sync, update.effective_user, arg)
+        except GameError as exc:
+            await query.answer(str(exc), show_alert=True)
+            return
+        await query.answer("🎉 بردی!" if prize["kind"] != "nothing" else "😔 نبردی.")
+        text, keyboard = _casino_result(int(owner_id), arg, prize, coins, diamonds)
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        return
+
     try:
         payload = await run_db(_do_sync, update.effective_user, query.message.chat, action, arg)
     except GameError as exc:
