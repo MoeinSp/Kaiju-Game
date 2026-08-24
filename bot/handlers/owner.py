@@ -365,7 +365,7 @@ def _user_info_text(data: dict) -> str:
         f"{get_emoji('coin')} {user.coins}   {get_emoji('dna')} {user.dna_fragments}   "
         f"{get_emoji('diamond')} {user.diamonds}   {get_emoji('energy')} {user.energy}/{constants.MAX_ENERGY}",
         f"🔥 streak: {user.login_streak}   {get_emoji('alliance')} اتحاد: "
-        f"{html.escape(user.alliance.name) if user.alliance_id else '—'}",
+        f"{html.escape(data['alliance_name']) if data.get('alliance_name') else '—'}",
         f"{get_emoji('banned')} مسدود: {'بله' if user.is_banned else 'نه'}",
         f"📅 عضو از: {timezone.localtime(user.created_at).strftime('%Y-%m-%d')}\n",
         f"{get_emoji('creature')} <b>موجودات ({len(data['creatures'])}):</b>",

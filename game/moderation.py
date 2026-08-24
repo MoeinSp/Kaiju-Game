@@ -202,7 +202,11 @@ def reset_user(identifier: str) -> User:
 def user_info(identifier: str) -> dict:
     user = find_user_or_raise(identifier)
     creatures = list(Creature.objects.filter(owner=user).order_by("id"))
-    return {"user": user, "creatures": creatures}
+    # resolve the alliance name HERE (sync/ORM context) — the card is rendered on
+    # the event loop, where a lazy user.alliance FK load would raise
+    # SynchronousOnlyOperation (this crashed opening any user who's in an alliance)
+    alliance_name = user.alliance.name if user.alliance_id else None
+    return {"user": user, "creatures": creatures, "alliance_name": alliance_name}
 
 
 def player_progress(identifier: str) -> dict:
