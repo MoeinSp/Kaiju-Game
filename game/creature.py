@@ -262,15 +262,27 @@ def set_active_creature(user: User, creature_id: int) -> Creature:
     return target
 
 
-def upgrade_part(user: User, creature: Creature, part: str) -> int:
+def part_bulk_cost(current_level: int, count: int) -> int:
+    """Total gold to raise a body part `count` levels from `current_level` — the sum
+    of the escalating per-level costs, so a ×5 buy is priced exactly as five ×1s."""
+    return sum(constants.upgrade_cost(current_level + i) for i in range(max(1, count)))
+
+
+def upgrade_part(user: User, creature: Creature, part: str, count: int = 1) -> tuple[int, int]:
+    """Raise a body part by `count` levels in one paid step. Returns (new_level,
+    total_cost). Charges the full escalating sum up front; all-or-nothing (if the
+    player can't afford the whole batch, nothing is upgraded)."""
     if part not in constants.BODY_PARTS:
         raise GameError("این عضو وجود نداره.")
+    count = max(1, count)
     current_level = getattr(creature, f"{part}_lvl")
-    cost = constants.upgrade_cost(current_level)
-    if user.coins < cost:
-        raise GameError(f"طلا کافی نداری! ارتقای این عضو {cost} طلا هزینه داره.")
-    user.coins -= cost
-    setattr(creature, f"{part}_lvl", current_level + 1)
+    total = part_bulk_cost(current_level, count)
+    if user.coins < total:
+        raise GameError(
+            f"طلا کافی نداری! ارتقای {count} سطحِ این عضو {total} طلا هزینه داره (موجودی: {user.coins})."
+        )
+    user.coins -= total
+    setattr(creature, f"{part}_lvl", current_level + count)
     user.save(update_fields=["coins"])
     creature.save()
-    return current_level + 1
+    return current_level + count, total

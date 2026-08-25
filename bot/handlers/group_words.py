@@ -436,7 +436,7 @@ def _casino_card(user) -> tuple[str, InlineKeyboardMarkup]:
     from game import casino
 
     lines = [
-        f"{get_emoji('wheel')} <b>کازینو</b>",
+        f"{get_emoji('casino')} <b>کازینو</b>",
         f"<blockquote>{get_emoji('coin')} {user.coins:,} طلا · {get_emoji('diamond')} {user.diamonds} الماس\n"
         "یه میز رو انتخاب کن. قماره — ممکنه ببری یا ببازی.</blockquote>",
     ]

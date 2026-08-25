@@ -21,10 +21,20 @@ resolves the role through the configurable palette, so retuning the whole bot's
 colour scheme — from the web panel or a loadout — never touches a handler.
 """
 
+import re
+
 from telegram import InlineKeyboardButton
 
 from game.button_emoji import get_button_icon, get_button_label_emoji
 from game.button_style import resolve_style
+
+# A leading emoji cluster (broad unicode emoji ranges + variation selectors / ZWJ
+# joins), optionally followed by a space. Used to detect/strip an emoji a call site
+# baked into the label so it never renders alongside the button's Premium icon.
+_LEADING_EMOJI = re.compile(
+    r"^\s*[\U0001F000-\U0001FAFF☀-➿←-⇿⬀-⯿⌀-⏿]"
+    r"[️‍\U0001F000-\U0001FAFF☀-➿⬀-⯿]*\s*"
+)
 
 # Semantic roles. Call sites say what a button *means*; game.button_style decides
 # what colour that currently is. Kept as module constants (rather than bare
@@ -63,14 +73,18 @@ def btn(
     """
     if emoji_key is not None:
         icon = get_button_icon(emoji_key)
+        label_has_emoji = bool(_LEADING_EMOJI.match(label))
         if icon is not None:
-            # Telegram draws the icon *before* the label, so keeping the unicode
-            # glyph in the label too would show the emoji twice. The icon replaces
-            # the fallback rather than joining it.
+            # Telegram draws the icon *before* the label, so any emoji baked into the
+            # label would render a SECOND time next to the Premium icon. Strip it.
             kwargs["icon_custom_emoji_id"] = icon
-        else:
+            if label_has_emoji:
+                label = _LEADING_EMOJI.sub("", label, count=1)
+        elif not label_has_emoji:
+            # no Premium icon and the label has no emoji of its own → prefix the
+            # key's unicode fallback so the button still has an identifying glyph
             fallback = get_button_label_emoji(emoji_key)
-            if fallback and not label.startswith(fallback):
+            if fallback:
                 label = f"{fallback} {label}"
     # emoji_key doubles as the per-button colour key, so a button that already
     # has its own identity in the registry can also have its own colour

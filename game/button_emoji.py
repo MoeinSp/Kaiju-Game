@@ -78,6 +78,10 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_cat_rewards": ("دسته‌ی جایزه‌ها", "🎁", "features"),
     "btn_cat_shop": ("دسته‌ی فروشگاه", "🛒", "features"),
     "btn_cat_social": ("دسته‌ی اجتماعی", "👥", "features"),
+    # newest sections
+    "btn_shield": ("خرید سپر", "🛡", "features"),
+    "btn_casino": ("کازینو", "🎰", "features"),
+    "btn_items": ("آیتم‌های ویژه", "🛍", "features"),
 }
 
 BUTTON_CATEGORY_LABELS: dict[str, str] = {

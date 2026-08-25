@@ -83,9 +83,10 @@ def _fmt_hours(seconds: int) -> str:
 
 
 def _shield_render(diamonds: int, shield_secs: int) -> tuple[str, InlineKeyboardMarkup]:
-    status = f"🛡 سپر فعلی: <b>{_fmt_hours(shield_secs)}</b>" if shield_secs > 0 else "🛡 الان سپر نداری"
+    sh = get_emoji("shield")
+    status = f"{sh} سپر فعلی: <b>{_fmt_hours(shield_secs)}</b>" if shield_secs > 0 else f"{sh} الان سپر نداری"
     lines = [
-        "🛡 <b>خرید سپر محافظ</b>",
+        f"{sh} <b>خرید سپر محافظ</b>",
         f"<blockquote>{status}\n"
         f"موجودی: {get_emoji('diamond')} <b>{diamonds}</b> الماس\n\n"
         f"تا وقتی سپر داری کسی نمی‌تونه توی آرنا غارتت کنه. هر حمله‌ای که <b>خودت</b> بزنی "
@@ -147,7 +148,7 @@ def _item_shop_render(items, coins, diamonds) -> tuple[str, InlineKeyboardMarkup
     from game import itemshop
 
     lines = [
-        "🛍 <b>آیتم‌های ویژه</b>",
+        f"{get_emoji('shop_item')} <b>آیتم‌های ویژه</b>",
         f"<blockquote>{get_emoji('coin')} {coins:,} طلا · {get_emoji('diamond')} {diamonds} الماس</blockquote>",
     ]
     rows = []

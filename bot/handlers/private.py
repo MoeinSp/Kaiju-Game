@@ -168,41 +168,44 @@ def _slot_summary_lines(slots: list[dict]) -> list[str]:
     return lines
 
 
-def _part_power_gain(creature, part: str, equipped_items: list | None) -> int:
-    """How much 💪 power upgrading `part` by one level would add — computed exactly
-    by re-scoring the creature with the part bumped (then restored), so the number a
-    player sees before spending gold is the real gain, not a guess."""
+def _part_power_gain(creature, part: str, equipped_items: list | None, step: int = 1) -> int:
+    """How much 💪 power upgrading `part` by `step` levels would add — computed
+    exactly by re-scoring the creature with the part bumped (then restored), so the
+    number a player sees before spending gold is the real gain, not a guess."""
     from game.creature import combat_rating
 
     attr = f"{part}_lvl"
     before = combat_rating(effective_stats(creature, equipped_items))
     current = getattr(creature, attr)
-    setattr(creature, attr, current + 1)
+    setattr(creature, attr, current + max(1, step))
     after = combat_rating(effective_stats(creature, equipped_items))
     setattr(creature, attr, current)  # restore — the object may be reused/saved elsewhere
     return after - before
 
 
-def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots: list | None = None) -> str:
+def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots: list | None = None, step: int = 1) -> str:
+    from game.creature import part_bulk_cost
+
     stats = effective_stats(creature, equipped_items)
     stars = get_emoji("star") * creature.star_level
     active_tag = " · 🟢 پیش‌فرض" if creature.is_active else ""
+    step_tag = f" · هر ارتقا <b>×{step}</b>" if step > 1 else ""
     lines = [
         f"🔧 <b>ارتقای {creature.name}</b>",
-        f"{constants.RARITY_LABELS[creature.rarity]} {stars} · سطح {creature.level}{active_tag}",
+        f"{constants.RARITY_LABELS[creature.rarity]} {stars} · سطح {creature.level}{active_tag}{step_tag}",
         "",
         f"{get_emoji('hp')} جان: <b>{stats['hp']}</b>      {get_emoji('atk')} حمله: <b>{stats['atk']}</b>",
         f"{get_emoji('def')} دفاع: <b>{stats['def']}</b>      {get_emoji('spd')} سرعت: <b>{stats['spd']}</b>",
         f"{get_emoji('poison')} زهر: <b>{stats['poison']}</b>",
         "",
-        "🧩 <b>اعضای قابل ارتقا</b>",
+        "🧩 <b>اعضای قابل ارتقا</b>" + (f" <i>(قیمت برای {step} سطح)</i>" if step > 1 else ""),
     ]
     for part, cfg in constants.BODY_PARTS.items():
         level = getattr(creature, f"{part}_lvl")
-        cost = constants.upgrade_cost(level)
-        gain = _part_power_gain(creature, part, equipped_items)
+        cost = part_bulk_cost(level, step)
+        gain = _part_power_gain(creature, part, equipped_items, step)
         lines.append(
-            f"{cfg['label']} — سطح <b>{level}</b> · ارتقا: {cost} {get_emoji('coin')} "
+            f"{cfg['label']} — سطح <b>{level}</b> · ارتقا: {cost:,} {get_emoji('coin')} "
             f"→ <b>+{gain}</b> 💪"
         )
     if slots is not None:
@@ -214,21 +217,29 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
     return "\n".join(lines)
 
 
-def upgrade_panel_keyboard(creature_id: int, is_active: bool = True) -> InlineKeyboardMarkup:
+def upgrade_panel_keyboard(creature_id: int, is_active: bool = True, step: int = 1) -> InlineKeyboardMarkup:
     """Every action carries the creature id, so upgrading a non-active creature
     doesn't silently swap which creature is active for hunting/arena."""
+    sfx = f" ×{step}" if step > 1 else ""
+    # ×1/×5/×10 selector: how many levels each part tap buys (paid in one go)
+    step_row = [
+        btn(("✅ " if s == step else "") + f"×{s}", style=(CONFIRM if s == step else NAV),
+            callback_data=f"upg_step:{creature_id}:{s}")
+        for s in _UPG_STEPS
+    ]
     rows = [
         [
             btn("تغذیه", emoji_key="btn_feed", style=BUILD, callback_data=f"lab:feed:{creature_id}"),
             btn("تمرین", emoji_key="btn_train", style=BUILD, callback_data=f"lab:train:{creature_id}"),
         ],
+        step_row,
         [
-            btn("🦋 بال", style=BUILD, callback_data=f"lab:up_wings:{creature_id}"),
-            btn("🛡 زره", style=BUILD, callback_data=f"lab:up_armor:{creature_id}"),
+            btn(f"🦋 بال{sfx}", style=BUILD, callback_data=f"lab:up_wings:{creature_id}"),
+            btn(f"🛡 زره{sfx}", style=BUILD, callback_data=f"lab:up_armor:{creature_id}"),
         ],
         [
-            btn("🦷 نیش", style=BUILD, callback_data=f"lab:up_fangs:{creature_id}"),
-            btn("☠️ زهر", style=BUILD, callback_data=f"lab:up_poison:{creature_id}"),
+            btn(f"🦷 نیش{sfx}", style=BUILD, callback_data=f"lab:up_fangs:{creature_id}"),
+            btn(f"☠️ زهر{sfx}", style=BUILD, callback_data=f"lab:up_poison:{creature_id}"),
         ],
         [btn("مدیریت تجهیزات", emoji_key="btn_inventory", style=PRIMARY, callback_data=f"upg_eq:{creature_id}")],
         [btn("🍖 تقویت با خوردن هیولا", style=BUILD, callback_data=f"devour_start:{creature_id}")],
@@ -392,11 +403,12 @@ async def upgrade_pick_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
+    step = context.user_data.get("upg_step", 1)
     await safe_edit_message_text(
         query,
-        upgrade_panel_text(user, creature, equipped_items, slots),
+        upgrade_panel_text(user, creature, equipped_items, slots, step=step),
         parse_mode="HTML",
-        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active),
+        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=step),
     )
 
 
@@ -536,11 +548,12 @@ async def upgrade_set_default_callback(update: Update, context: ContextTypes.DEF
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("🟢 پیش‌فرض شد!")
+    step = context.user_data.get("upg_step", 1)
     await safe_edit_message_text(
         query,
-        upgrade_panel_text(user, creature, equipped_items, slots),
+        upgrade_panel_text(user, creature, equipped_items, slots, step=step),
         parse_mode="HTML",
-        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active),
+        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=step),
     )
 
 
@@ -679,8 +692,8 @@ _CATEGORIES = {
     "shop": ("🛒 فروشگاه", [
         [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("جعبه‌های الماسی", "diamond_box", "s", "btn_diamond_box")],
         [("بنر ویژه", "banner", "s", "btn_banner"), ("شاپ روزانه", "shop", "s", "btn_shop")],
-        [("🛡 خرید سپر", "shield_shop", "s", "btn_shop"), ("🎰 کازینو", "casino", "s", "btn_wheel")],
-        [("🛍 آیتم‌های ویژه", "item_shop", "s", "btn_shop")],
+        [("خرید سپر", "shield_shop", "s", "btn_shield"), ("کازینو", "casino", "s", "btn_casino")],
+        [("آیتم‌های ویژه", "item_shop", "s", "btn_items")],
     ]),
     "social": ("👥 اجتماعی", [
         [("اتحاد من", "alliance_info", "n", "btn_alliance"), ("لیگ رتبه‌بندی", "league", "n", "btn_league")],
@@ -855,7 +868,7 @@ async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
-def _lab_action_sync(tg_user, action, creature_id):
+def _lab_action_sync(tg_user, action, creature_id, count=1):
     user, _ = get_or_create_user(tg_user)
     try:
         creature = Creature.objects.get(id=creature_id, owner=user)
@@ -881,8 +894,9 @@ def _lab_action_sync(tg_user, action, creature_id):
         )
     elif action.startswith("up_"):
         part = action[len("up_") :]
-        new_level = upgrade_part(user, creature, part)
-        note = f"{constants.BODY_PARTS[part]['label']} به سطح {new_level} ارتقا یافت! ✨"
+        new_level, spent = upgrade_part(user, creature, part, count)
+        step_note = f" (<b>{count}</b> سطح، {spent:,} طلا)" if count > 1 else ""
+        note = f"{constants.BODY_PARTS[part]['label']} به سطح {new_level} رسید{step_note}! ✨"
     else:
         return None
 
@@ -892,6 +906,44 @@ def _lab_action_sync(tg_user, action, creature_id):
     return user, creature, note + _mission_lines(completed_missions), equipped_items, slot_loadout(user, creature)
 
 
+_UPG_STEPS = (1, 5, 10)
+
+
+async def upgrade_step_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Set how many levels each body-part tap buys (×1/×5/×10), then re-render."""
+    query = update.callback_query
+    try:
+        _, creature_id, step = query.data.split(":")
+        step = int(step)
+    except ValueError:
+        await query.answer()
+        return
+    context.user_data["upg_step"] = step if step in _UPG_STEPS else 1
+    try:
+        user, creature, equipped_items, slots = await run_db(
+            _upgrade_view_sync, update.effective_user, int(creature_id)
+        )
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer(f"هر ارتقا حالا ×{context.user_data['upg_step']}")
+    await safe_edit_message_text(query,
+        upgrade_panel_text(user, creature, equipped_items, slots, step=context.user_data["upg_step"]),
+        parse_mode="HTML",
+        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=context.user_data["upg_step"]),
+    )
+
+
+def _upgrade_view_sync(tg_user, creature_id):
+    user, _ = get_or_create_user(tg_user)
+    try:
+        creature = Creature.objects.get(id=creature_id, owner=user)
+    except Creature.DoesNotExist:
+        raise GameError("این موجود توی کلکسیون تو نیست.")
+    equipped_items = get_equipped_items(creature)
+    return user, creature, equipped_items, slot_loadout(user, creature)
+
+
 async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     try:
@@ -899,8 +951,10 @@ async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     except ValueError:
         await query.answer()
         return
+    # body-part upgrades honour the chosen ×1/×5/×10 step; feed/train ignore it
+    step = context.user_data.get("upg_step", 1) if action.startswith("up_") else 1
     try:
-        result = await run_db(_lab_action_sync, update.effective_user, action, int(creature_id))
+        result = await run_db(_lab_action_sync, update.effective_user, action, int(creature_id), step)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
@@ -913,9 +967,9 @@ async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     # every lab action is reachable only from the upgrade panel now, so re-render
     # that rather than bouncing the player back to the creature card
     await safe_edit_message_text(query,
-        note + "\n\n" + upgrade_panel_text(user, creature, equipped_items, slots),
+        note + "\n\n" + upgrade_panel_text(user, creature, equipped_items, slots, step=step),
         parse_mode="HTML",
-        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active),
+        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=step),
     )
 
 
@@ -2398,6 +2452,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(equip_slot_callback, pattern=r"^upg_slot:"))
     application.add_handler(CallbackQueryHandler(equip_do_callback, pattern=r"^upg_(equip|unequip):"))
     application.add_handler(CallbackQueryHandler(upgrade_set_default_callback, pattern=r"^upg_default:"))
+    application.add_handler(CallbackQueryHandler(upgrade_step_callback, pattern=r"^upg_step:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(hunt_go_callback, pattern=r"^hunt_go:"))
     application.add_handler(CallbackQueryHandler(hunt_next_callback, pattern=r"^hunt_next$"))
     application.add_handler(CallbackQueryHandler(collection_pick_callback, pattern=r"^coll_pick:"))

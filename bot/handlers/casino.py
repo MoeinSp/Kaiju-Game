@@ -22,7 +22,7 @@ def _panel_sync(tg_user):
 
 def _render(tiers, coins, diamonds, free_used) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
-        "🎰 <b>کازینو</b>",
+        f"{get_emoji('casino')} <b>کازینو</b>",
         f"<blockquote>{get_emoji('coin')} {coins} طلا · {get_emoji('diamond')} {diamonds} الماس\n"
         "یه میز رو انتخاب کن. هر میز یه جدول جایزه‌ی خودش رو داره — شانسیه، ممکنه ببری یا ببازی.</blockquote>",
     ]
