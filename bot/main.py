@@ -12,7 +12,14 @@ from telegram import (  # noqa: E402
     BotCommandScopeAllPrivateChats,
     Update,
 )
-from telegram.ext import Application, CallbackQueryHandler, ContextTypes, MessageHandler, filters  # noqa: E402
+from telegram.ext import (  # noqa: E402
+    AIORateLimiter,
+    Application,
+    CallbackQueryHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 from bot import middleware  # noqa: E402
 from bot.handlers import (
@@ -134,7 +141,16 @@ def main() -> None:
     botconfig.refresh_cache()  # the "join the game group" button reads this in async code
     admins.refresh_cache()  # the panel's access check reads this in async code
 
-    application = Application.builder().token(BOT_TOKEN).build()
+    # A built-in rate limiter smooths outgoing calls under Telegram's limits (30/s
+    # global, 1/s per chat, ~20/min per group) and transparently retries the 429
+    # "Flood control exceeded" responses instead of letting them surface as a
+    # user-visible stall during busy button bursts. max_retries>0 = auto-retry.
+    application = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .rate_limiter(AIORateLimiter(max_retries=3))
+        .build()
+    )
 
     middleware.register(application)
     private.register(application)

@@ -1,7 +1,7 @@
 # [webhooks] pulls in the tornado web server PTB needs for run_webhook(); without
 # it the bot works in polling mode but crashes in webhook mode. [job-queue] pulls
 # in APScheduler for the periodic re-engagement-notification job (bot/handlers/notify.py).
-python-telegram-bot[webhooks,job-queue]>=22.0
+python-telegram-bot[webhooks,job-queue,rate-limiter]>=22.0
 Django>=5.0
 python-dotenv>=1.0
 # panel: static files without a separate nginx location, and a WSGI server
