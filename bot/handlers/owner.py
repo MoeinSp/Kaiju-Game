@@ -498,7 +498,10 @@ async def itemshop_manage_panel(update: Update, context: ContextTypes.DEFAULT_TY
         return
     items = await run_db(_itemshop_list_sync)
     lines = ["🛍 <b>مدیریت فروشگاه آیتم‌ها</b>"]
-    rows = [[btn("➕ افزودن آیتم/پک", style=CONFIRM, callback_data="sitem_add")]]
+    rows = [
+        [btn("➕ ساخت آیتم/پک (با دکمه)", style=CONFIRM, callback_data="ish:new")],
+        [btn("✍️ افزودن با متن", style=NAV, callback_data="sitem_add")],
+    ]
     if not items:
         lines.append("<i>هنوز آیتمی نساختی.</i>")
     for it in items:
@@ -522,6 +525,227 @@ async def itemshop_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data[AWAITING_ADMIN_KEY] = {"action": "shop_item"}
     await query.answer()
     await query.message.reply_text(_ITEMSHOP_HELP, parse_mode="HTML")
+
+
+# ── inline item/pack builder ──────────────────────────────────────────────────
+_ISH_DRAFT = "itemshop_draft"
+_ISH_PRESETS = {
+    "coins": [1000, 5000, 10000, 50000, 100000],
+    "diamonds": [10, 50, 100, 500, 1000],
+    "dna": [50, 100, 200, 500, 1000],
+}
+_ISH_CTYPE_LABELS = {
+    "coins": "🪙 سکه", "diamonds": "💎 جم", "dna": "🧬 DNA",
+    "speedup": "⏱ کارت سرعت", "creature": "🐉 هیولا", "equipment": "⚔️ تجهیزات",
+}
+
+
+def _ish_draft(context) -> dict:
+    return context.user_data.setdefault(
+        _ISH_DRAFT, {"title": None, "emoji": "🎁", "price_coins": 0, "price_diamonds": 0, "contents": []}
+    )
+
+
+def _ish_home_markup(draft: dict):
+    from game import itemshop
+
+    title = draft["title"] or "—"
+    price_bits = []
+    if draft["price_coins"]:
+        price_bits.append(f"{draft['price_coins']:,} طلا")
+    if draft["price_diamonds"]:
+        price_bits.append(f"{draft['price_diamonds']} 💎")
+    price = " + ".join(price_bits) or "— (تنظیم نشده)"
+    contents = itemshop.content_summary(draft["contents"]) if draft["contents"] else "— (خالی)"
+    text = (
+        "🛠 <b>ساخت آیتم/پک (با دکمه)</b>\n\n"
+        f"{draft['emoji']} عنوان: <b>{title}</b>\n"
+        f"💰 قیمت: <b>{price}</b>\n"
+        f"🎁 محتوا ({len(draft['contents'])}): {contents}"
+    )
+    rows = [
+        [btn("✏️ عنوان", style=ADMIN, callback_data="ish:title"),
+         btn("💰 قیمت", style=ADMIN, callback_data="ish:price")],
+        [btn("➕ افزودن محتوا", style=CONFIRM, callback_data="ish:addc")],
+    ]
+    if draft["contents"]:
+        rows.append([btn("↩️ حذف آخرین محتوا", style=NAV, callback_data="ish:rmlast")])
+    ready = bool(draft["title"]) and (draft["price_coins"] or draft["price_diamonds"]) and draft["contents"]
+    if ready:
+        rows.append([btn("✅ ثبت و انتشار آیتم", style=CONFIRM, callback_data="ish:save")])
+    rows.append([btn("🗑 پاک‌کردن پیش‌نویس", style=DANGER, callback_data="ish:discard"),
+                 back_btn("admin_menu:itemshop", "بازگشت")])
+    return text, InlineKeyboardMarkup(rows)
+
+
+async def _ish_show_home(update, context, *, edit=True):
+    text, kb = _ish_home_markup(_ish_draft(context))
+    q = update.callback_query
+    if edit and q is not None:
+        await safe_edit_message_text(q, text, parse_mode="HTML", reply_markup=kb)
+    else:
+        target = q.message if q else update.effective_message
+        await target.reply_text(text, parse_mode="HTML", reply_markup=kb)
+
+
+async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    from game import constants
+
+    parts = query.data.split(":")
+    verb = parts[1]
+    draft = _ish_draft(context)
+
+    if verb in ("new", "home"):
+        if verb == "new":
+            context.user_data[_ISH_DRAFT] = {"title": None, "emoji": "🎁",
+                                             "price_coins": 0, "price_diamonds": 0, "contents": []}
+        await query.answer()
+        await _ish_show_home(update, context)
+        return
+    if verb == "discard":
+        context.user_data.pop(_ISH_DRAFT, None)
+        await query.answer("پیش‌نویس پاک شد.")
+        await itemshop_manage_panel(update, context)
+        return
+    if verb == "rmlast":
+        if draft["contents"]:
+            draft["contents"].pop()
+        await query.answer("حذف شد.")
+        await _ish_show_home(update, context)
+        return
+    if verb == "title":
+        context.user_data[AWAITING_ADMIN_KEY] = {"action": "ish_title"}
+        await query.answer()
+        await query.message.reply_text("✏️ عنوان آیتم رو بفرست (می‌تونه با ایموجی شروع شه):")
+        return
+    if verb == "price":
+        context.user_data[AWAITING_ADMIN_KEY] = {"action": "ish_price"}
+        await query.answer()
+        await query.message.reply_text(
+            "💰 قیمت رو بفرست، مثل: <code>19000 جم</code> یا <code>5000 سکه</code> یا <code>5000 سکه 50 جم</code>",
+            parse_mode="HTML",
+        )
+        return
+    if verb == "addc":
+        rows = [[btn(_ISH_CTYPE_LABELS[k], style=ADMIN, callback_data=f"ish:ct:{k}")]
+                for k in ("coins", "diamonds", "dna", "speedup", "creature", "equipment")]
+        rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:home")])
+        await query.answer()
+        await safe_edit_message_text(query, "➕ <b>نوع محتوا رو انتخاب کن:</b>", parse_mode="HTML",
+                                     reply_markup=InlineKeyboardMarkup(rows))
+        return
+    if verb == "ct":
+        kind = parts[2]
+        if kind in _ISH_PRESETS:
+            rows = [[btn(f"{v:,}", style=ADMIN, callback_data=f"ish:amt:{kind}:{v}")]
+                    for v in _ISH_PRESETS[kind]]
+            rows.append([btn("🔢 مقدار دلخواه", style=NAV, callback_data=f"ish:amtx:{kind}")])
+            rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:addc")])
+            await query.answer()
+            await safe_edit_message_text(query, f"مقدار «{_ISH_CTYPE_LABELS[kind]}» رو انتخاب کن:",
+                                         parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+            return
+        if kind == "speedup":
+            rows = [[btn(f"{m} دقیقه", style=ADMIN, callback_data=f"ish:sp:{m}")]
+                    for m in constants.SPEEDUP_MINUTES]
+            rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:addc")])
+            await query.answer()
+            await safe_edit_message_text(query, "⏱ مدت کارت سرعت رو انتخاب کن:", parse_mode="HTML",
+                                         reply_markup=InlineKeyboardMarkup(rows))
+            return
+        if kind == "creature":
+            rows = [[btn(constants.RARITY_LABELS[r], style=ADMIN, callback_data=f"ish:cr:{r}")]
+                    for r in constants.RARITY_ORDER]
+            rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:addc")])
+            await query.answer()
+            await safe_edit_message_text(query, "🐉 نایابیِ هیولا رو انتخاب کن:", parse_mode="HTML",
+                                         reply_markup=InlineKeyboardMarkup(rows))
+            return
+        if kind == "equipment":
+            rows = [[btn(constants.EQUIPMENT_SLOT_LABELS[s], style=ADMIN, callback_data=f"ish:eq:{s}")]
+                    for s in constants.EQUIPMENT_SLOTS]
+            rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:addc")])
+            await query.answer()
+            await safe_edit_message_text(query, "⚔️ اسلات تجهیزات رو انتخاب کن:", parse_mode="HTML",
+                                         reply_markup=InlineKeyboardMarkup(rows))
+            return
+    if verb == "amt":
+        kind, amount = parts[2], int(parts[3])
+        draft["contents"].append({"type": kind, "amount": amount})
+        await query.answer("اضافه شد.")
+        await _ish_show_home(update, context)
+        return
+    if verb == "amtx":
+        context.user_data[AWAITING_ADMIN_KEY] = {"action": "ish_amount", "kind": parts[2]}
+        await query.answer()
+        await query.message.reply_text(f"🔢 مقدار «{_ISH_CTYPE_LABELS[parts[2]]}» رو به عدد بفرست:")
+        return
+    if verb == "sp":
+        minutes = int(parts[2])
+        rows = [[btn(f"×{c}", style=ADMIN, callback_data=f"ish:spc:{minutes}:{c}")] for c in (1, 2, 3, 5, 10)]
+        rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:ct:speedup")])
+        await query.answer()
+        await safe_edit_message_text(query, f"تعداد کارت {minutes}دقیقه‌ای:", parse_mode="HTML",
+                                     reply_markup=InlineKeyboardMarkup(rows))
+        return
+    if verb == "spc":
+        draft["contents"].append({"type": "speedup", "minutes": int(parts[2]), "count": int(parts[3])})
+        await query.answer("اضافه شد.")
+        await _ish_show_home(update, context)
+        return
+    if verb == "cr":
+        rarity = parts[2]
+        rows = [[btn(constants.ELEMENT_WORDS[e], style=ADMIN, callback_data=f"ish:cre:{rarity}:{e}")]
+                for e in constants.ELEMENTS]
+        rows.append([btn("🎲 تصادفی", style=NAV, callback_data=f"ish:cre:{rarity}:rand")])
+        rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:ct:creature")])
+        await query.answer()
+        await safe_edit_message_text(query, "🐉 عنصرِ هیولا:", parse_mode="HTML",
+                                     reply_markup=InlineKeyboardMarkup(rows))
+        return
+    if verb == "cre":
+        rarity, element = parts[2], parts[3]
+        draft["contents"].append({"type": "creature", "rarity": rarity,
+                                  "element": None if element == "rand" else element})
+        await query.answer("اضافه شد.")
+        await _ish_show_home(update, context)
+        return
+    if verb == "eq":
+        slot = parts[2]
+        rows = [[btn(constants.RARITY_LABELS[r], style=ADMIN, callback_data=f"ish:eqr:{slot}:{r}")]
+                for r in constants.RARITY_ORDER]
+        rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:ct:equipment")])
+        await query.answer()
+        await safe_edit_message_text(query, "⚔️ نایابیِ تجهیزات:", parse_mode="HTML",
+                                     reply_markup=InlineKeyboardMarkup(rows))
+        return
+    if verb == "eqr":
+        draft["contents"].append({"type": "equipment", "slot": parts[2], "rarity": parts[3]})
+        await query.answer("اضافه شد.")
+        await _ish_show_home(update, context)
+        return
+    if verb == "save":
+        from game import itemshop
+
+        if not (draft.get("title") and (draft["price_coins"] or draft["price_diamonds"]) and draft["contents"]):
+            await query.answer("عنوان، قیمت و حداقل یه محتوا لازمه.", show_alert=True)
+            return
+        item = await run_db(itemshop.create_item_from_draft, draft)
+        context.user_data.pop(_ISH_DRAFT, None)
+        await query.answer("✅ ثبت شد!")
+        await safe_edit_message_text(
+            query,
+            f"✅ <b>آیتم ساخته شد:</b> {item.emoji} {item.title}\n"
+            "حالا توی «🛍 آیتم‌های ویژه»ی فروشگاه دیده می‌شه.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[back_btn("admin_menu:itemshop", "بازگشت به مدیریت فروشگاه")]]),
+        )
+        return
+    await query.answer()
 
 
 async def itemshop_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2005,6 +2229,42 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
         return
 
+    if action == "ish_title":
+        draft = _ish_draft(context)
+        emoji = "🎁"
+        t = text.strip()
+        first = t.split()[0] if t.split() else ""
+        if first and any(ord(ch) > 0x2600 for ch in first) and len(first) <= 4:
+            emoji, t = first, (t[len(first):].strip() or t)
+        draft["title"] = t[:64]
+        draft["emoji"] = emoji
+        await _ish_show_home(update, context, edit=False)
+        return
+
+    if action == "ish_price":
+        from game import itemshop
+
+        try:
+            coins, diamonds = itemshop.parse_price_line(text)
+        except GameError as exc:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text(f"⚠️ {exc}")
+            return
+        draft = _ish_draft(context)
+        draft["price_coins"], draft["price_diamonds"] = coins, diamonds
+        await _ish_show_home(update, context, edit=False)
+        return
+
+    if action == "ish_amount":
+        digits = text.strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
+        if not digits.isdigit() or int(digits) <= 0:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text("⚠️ یه عدد مثبت بفرست.")
+            return
+        _ish_draft(context)["contents"].append({"type": awaiting["kind"], "amount": int(digits)})
+        await _ish_show_home(update, context, edit=False)
+        return
+
     if action == "shop_item":
         from game import itemshop
 
@@ -2206,6 +2466,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(dm_user_start, pattern=r"^admin_dm:\d+$"))
     application.add_handler(CallbackQueryHandler(admin_remove_callback, pattern=r"^admin_rm:\d+$"))
     application.add_handler(CallbackQueryHandler(itemshop_add_start, pattern=r"^sitem_add$"))
+    application.add_handler(CallbackQueryHandler(itemshop_builder_callback, pattern=r"^ish:"))
     application.add_handler(CallbackQueryHandler(itemshop_toggle_callback, pattern=r"^sitem_toggle:\d+$"))
     application.add_handler(CallbackQueryHandler(itemshop_delete_callback, pattern=r"^sitem_del:\d+$"))
     application.add_handler(CallbackQueryHandler(autobackup_set_callback, pattern=r"^autobk_set:\d+$"))

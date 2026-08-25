@@ -112,6 +112,36 @@ def parse_spec(text: str) -> dict:
     }
 
 
+def parse_price_line(text: str) -> tuple[int, int]:
+    """Parse a free-form price like «5000 سکه 50 جم» → (coins, diamonds). Raises
+    GameError if no valid price is found. Used by the inline admin builder."""
+    toks = text.replace("قیمت", " ").replace(":", " ").replace("price", " ").split()
+    coins = diamonds = 0
+    i = 0
+    while i < len(toks):
+        n = _to_int(toks[i])
+        if n is not None and i + 1 < len(toks):
+            unit = toks[i + 1].lower()
+            if unit in _COIN_WORDS:
+                coins = max(0, n)
+            elif unit in _DIAMOND_WORDS:
+                diamonds = max(0, n)
+            i += 2
+            continue
+        i += 1
+    if coins <= 0 and diamonds <= 0:
+        raise GameError("قیمت رو نفهمیدم. مثال: «5000 سکه» یا «19000 جم» یا «5000 سکه 50 جم».")
+    return coins, diamonds
+
+
+def create_item_from_draft(draft: dict) -> ShopItem:
+    return ShopItem.objects.create(
+        title=draft["title"][:64], emoji=draft.get("emoji", "🎁"),
+        price_coins=draft.get("price_coins", 0), price_diamonds=draft.get("price_diamonds", 0),
+        contents_json=json.dumps(draft["contents"], ensure_ascii=False),
+    )
+
+
 def _parse_content_line(line: str) -> dict:
     toks = line.split()
     head = toks[0].lower()
