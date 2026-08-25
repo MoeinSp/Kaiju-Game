@@ -52,9 +52,20 @@ def leave_alliance(user: User) -> None:
     if not remaining:
         alliance.delete()
         return
-    if alliance.leader_id == user.id:
-        alliance.leader = remaining[0]
-        alliance.save(update_fields=["leader"])
+    fields = []
+    if alliance.deputy_id == user.id:  # the deputy left
+        alliance.deputy = None
+        fields.append("deputy")
+    if alliance.leader_id == user.id:  # the leader left → deputy inherits if there is one
+        heir = alliance.deputy if (alliance.deputy_id and alliance.deputy_id != user.id) else remaining[0]
+        alliance.leader = heir
+        fields.append("leader")
+        if alliance.deputy_id == heir.id:  # the new leader shouldn't also be deputy
+            alliance.deputy = None
+            if "deputy" not in fields:
+                fields.append("deputy")
+    if fields:
+        alliance.save(update_fields=fields)
 
 
 def _alliance_power(alliance: Alliance) -> int:
@@ -71,12 +82,101 @@ def alliance_info(alliance: Alliance) -> dict:
     return {
         "name": alliance.name,
         "leader": alliance.leader,
+        "deputy": alliance.deputy,
         "member_count": len(members),
         "capacity": max_members(alliance),
         "members": members,
         "power": _alliance_power(alliance),
         "treasury_gold": alliance.treasury_gold,
     }
+
+
+def member_roster(alliance: Alliance) -> list[dict]:
+    """Every member with their id and role, leader → deputy → the rest by power."""
+    from bio_lab.repository import display_name
+
+    rows = []
+    for m in alliance.members.all():
+        rows.append({
+            "id": m.id,
+            "name": display_name(m),
+            "is_leader": m.id == alliance.leader_id,
+            "is_deputy": m.id == alliance.deputy_id,
+            "power": _member_power(m),
+        })
+    rows.sort(key=lambda r: (not r["is_leader"], not r["is_deputy"], -r["power"]))
+    return rows
+
+
+def _role_of(alliance: Alliance, user_id: int) -> str:
+    if user_id == alliance.leader_id:
+        return "leader"
+    if user_id == alliance.deputy_id:
+        return "deputy"
+    return "member"
+
+
+@transaction.atomic
+def kick_member(actor: User, target_id: int) -> dict:
+    """Remove a member. The leader can kick anyone but themselves; a deputy can kick
+    ordinary members only (not the leader or another deputy)."""
+    if actor.alliance_id is None:
+        raise GameError("عضو هیچ اتحادی نیستی.")
+    alliance = Alliance.objects.select_for_update().get(id=actor.alliance_id)
+    actor_role = _role_of(alliance, actor.id)
+    if actor_role == "member":
+        raise GameError("فقط رهبر یا قائم‌مقام می‌تونه عضو حذف کنه.")
+    if target_id == actor.id:
+        raise GameError("نمی‌تونی خودت رو حذف کنی — برای خروج «/alliance_leave» بزن.")
+    target = User.objects.filter(id=target_id, alliance_id=alliance.id).first()
+    if target is None:
+        raise GameError("این بازیکن عضو اتحاد تو نیست.")
+    target_role = _role_of(alliance, target_id)
+    if target_role == "leader":
+        raise GameError("رهبر رو نمی‌شه حذف کرد.")
+    if actor_role == "deputy" and target_role == "deputy":
+        raise GameError("قائم‌مقام نمی‌تونه قائم‌مقام دیگه رو حذف کنه.")
+    if target_role == "deputy":
+        alliance.deputy = None
+        alliance.save(update_fields=["deputy"])
+    target.alliance = None
+    target.save(update_fields=["alliance"])
+    return {"name": _display(target)}
+
+
+@transaction.atomic
+def set_deputy(leader: User, target_id: int) -> dict:
+    """Leader-only: make a member the alliance's single قائم‌مقام (deputy)."""
+    if leader.alliance_id is None:
+        raise GameError("عضو هیچ اتحادی نیستی.")
+    alliance = Alliance.objects.select_for_update().get(id=leader.alliance_id)
+    if alliance.leader_id != leader.id:
+        raise GameError("فقط رهبر می‌تونه قائم‌مقام تعیین کنه.")
+    if target_id == leader.id:
+        raise GameError("خودت رهبری، نمی‌تونی قائم‌مقام خودت بشی.")
+    target = User.objects.filter(id=target_id, alliance_id=alliance.id).first()
+    if target is None:
+        raise GameError("این بازیکن عضو اتحاد تو نیست.")
+    alliance.deputy = target
+    alliance.save(update_fields=["deputy"])
+    return {"name": _display(target)}
+
+
+@transaction.atomic
+def remove_deputy(leader: User) -> None:
+    if leader.alliance_id is None:
+        raise GameError("عضو هیچ اتحادی نیستی.")
+    alliance = Alliance.objects.select_for_update().get(id=leader.alliance_id)
+    if alliance.leader_id != leader.id:
+        raise GameError("فقط رهبر می‌تونه قائم‌مقام رو برداره.")
+    alliance.deputy = None
+    alliance.save(update_fields=["deputy"])
+
+
+def _display(user: User) -> str:
+    from bio_lab.repository import display_name
+
+    return display_name(user)
 
 
 ALLIANCE_BROWSE_PAGE_SIZE = 8

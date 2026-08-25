@@ -33,7 +33,10 @@ def _check_cooldown(user: User, field: str, who: str) -> None:
     ready = getattr(user, field)
     if ready is not None and ready > timezone.now():
         wait = int((ready - timezone.now()).total_seconds())
-        raise GameError(f"{who} باید {_fmt_wait(wait)} دیگه صبر کنه (کول‌داون انتقال).")
+        raise GameError(
+            f"⏳ هر {constants.TRANSFER_COOLDOWN_HOURS} ساعت فقط یک‌بار می‌شه انتقال داد یا گرفت. "
+            f"{who} به‌تازگی یه انتقال داشته — {_fmt_wait(wait)} دیگه می‌تونه دوباره."
+        )
 
 
 def _set_cooldown(users: list[User], field: str) -> None:

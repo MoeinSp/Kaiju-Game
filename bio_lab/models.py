@@ -96,6 +96,7 @@ class User(models.Model):
 class Alliance(models.Model):
     name = models.CharField(max_length=64, unique=True)
     leader = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="+")
+    deputy = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     treasury_gold = models.IntegerField(default=0)
     last_heisted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

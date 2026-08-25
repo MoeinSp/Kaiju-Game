@@ -1441,12 +1441,9 @@ async def fusion_pick_b_callback(update: Update, context: ContextTypes.DEFAULT_T
         ]
     )
     await safe_edit_message_text(query,
-        f"{get_emoji('warning')} مطمئنی؟\n\n"
-        f"<blockquote>این ترکیب <b>۱۰۰٪ موفق می‌شه</b> — هم‌نام و هم‌ستاره‌ان، پس شکست نداره.\n"
-        f"هر دو موجود <b>برای همیشه سوزانده می‌شن</b> و "
-        f"<b>{cost}</b> {get_emoji('coin')} هزینه می‌شه (بر اساس ستاره و نایابی). یه شانس هم هست درجه‌ی "
-        f"نایابی ارتقا پیدا کنه و {int(constants.FUSION_INHERIT_CHANCE * 100)}٪ احتمال داره تجهیزات مجهزشون "
-        f"به ارث برسه.</blockquote>",
+        f"{get_emoji('warning')} <b>ترکیب؟</b>\n"
+        f"هر دو سوزانده می‌شن و یکی با یک ستاره بالاتر می‌سازی.\n"
+        f"هزینه: <b>{cost:,}</b> {get_emoji('coin')}",
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -1726,6 +1723,7 @@ def _alliance_info_sync(tg_user):
 def _alliance_action_keyboard(in_alliance: bool) -> InlineKeyboardMarkup:
     if in_alliance:
         rows = [
+            [btn("👥 اعضا و مدیریت", style=NAV, callback_data="ally_members")],
             [btn("واریز به خزانه", emoji_key="btn_deposit", style=BUILD, callback_data="ally_deposit")],
             [btn("🏰 ساختمون‌های اتحاد", style=PRIMARY, callback_data="ally_perks")],
             [
@@ -1757,7 +1755,8 @@ async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
     lines = [
         f"{get_emoji('alliance')} <b>اتحاد {info['name']}</b>",
-        f"{get_emoji('crown')} رهبر: {display_name(info['leader']) if info['leader'] else '—'}",
+        f"{get_emoji('crown')} رهبر: {display_name(info['leader']) if info['leader'] else '—'}"
+        + (f"  ·  🎖 قائم‌مقام: {display_name(info['deputy'])}" if info.get('deputy') else ""),
         f"{get_emoji('users')} اعضا: {info['member_count']}/{info.get('capacity', 50)}   "
         f"💪 قدرت کل: {info['power']}",
         f"{get_emoji('coin')} خزانه: {info['treasury_gold']} طلا",
@@ -1774,6 +1773,92 @@ async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await send_screen(update,
         "\n".join(lines), parse_mode="HTML", reply_markup=_alliance_action_keyboard(in_alliance=True)
     )
+
+
+# ── alliance members roster + management (leader/deputy) ──────────────────────
+def _members_sync(tg_user):
+    from game import alliance as alliance_mod
+
+    user, _ = get_or_create_user(tg_user)
+    if user.alliance_id is None:
+        return None
+    al = user.alliance
+    return {
+        "name": al.name,
+        "roster": alliance_mod.member_roster(al),
+        "viewer_role": alliance_mod._role_of(al, user.id),
+        "has_deputy": al.deputy_id is not None,
+    }
+
+
+def _members_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
+    roster = data["roster"]
+    lines = [f"{get_emoji('users')} <b>اعضای اتحاد {data['name']}</b> — {len(roster)} نفر\n"]
+    CAP = 30
+    for r in roster[:CAP]:
+        badge = "👑" if r["is_leader"] else ("🎖" if r["is_deputy"] else "•")
+        lines.append(f"{badge} {r['name']} — <code>{r['id']}</code>  💪{r['power']}")
+    if len(roster) > CAP:
+        lines.append(f"<i>… و {len(roster) - CAP} نفر دیگه</i>")
+    role = data["viewer_role"]
+    rows = []
+    if role in ("leader", "deputy"):
+        lines.append("\n<blockquote>👑 رهبر · 🎖 قائم‌مقام. برای مدیریت، آیدیِ عضو (کد جلوی اسمش) رو بده.</blockquote>")
+        rows.append([btn("🥾 کیک با آیدی", style=DANGER, callback_data="ally_kick")])
+    if role == "leader":
+        rows.append([btn("🎖 تعیین قائم‌مقام با آیدی", style=PRIMARY, callback_data="ally_deputy")])
+        if data["has_deputy"]:
+            rows.append([btn("➖ برداشتن قائم‌مقام", style=NAV, callback_data="ally_deputy_off")])
+    rows.append([back_btn("menu:alliance_info", "بازگشت به اتحاد")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+async def alliance_members_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    data = await run_db(_members_sync, update.effective_user)
+    await query.answer()
+    if data is None:
+        await safe_edit_message_text(query, "توی هیچ اتحادی نیستی.",
+                                     reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info")]]))
+        return
+    text, keyboard = _members_render(data)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def alliance_kick_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    context.user_data[AWAITING_PLAYER_KEY] = {"action": "ally_kick"}
+    await query.answer()
+    await safe_edit_message_text(query, f"🥾 آیدیِ عضوی که می‌خوای کیک بشه رو بفرست:{_reply_hint(update)}",
+                                 parse_mode="HTML")
+
+
+async def alliance_deputy_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    context.user_data[AWAITING_PLAYER_KEY] = {"action": "ally_deputy"}
+    await query.answer()
+    await safe_edit_message_text(query, f"🎖 آیدیِ عضوی که قائم‌مقام بشه رو بفرست:{_reply_hint(update)}",
+                                 parse_mode="HTML")
+
+
+def _deputy_off_sync(tg_user):
+    from game import alliance as alliance_mod
+
+    user, _ = get_or_create_user(tg_user)
+    alliance_mod.remove_deputy(user)
+    return _members_sync(tg_user)
+
+
+async def alliance_deputy_off_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    try:
+        data = await run_db(_deputy_off_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("قائم‌مقام برداشته شد.")
+    text, keyboard = _members_render(data)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 AWAITING_PLAYER_KEY = "awaiting_player_input"
@@ -2082,6 +2167,32 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         await message.reply_text(
             f"{get_emoji('alliance')} به اتحاد <b>{alliance.name}</b> پیوستی!", parse_mode="HTML"
         )
+        return
+
+    if action in ("ally_kick", "ally_deputy"):
+        digits = text.strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
+        if not digits.isdigit():
+            context.user_data[AWAITING_PLAYER_KEY] = awaiting
+            await message.reply_text("⚠️ آیدیِ عددی عضو رو بفرست (کد جلوی اسمش توی لیست اعضا).")
+            return
+
+        def _do(tg_user, target_id, act):
+            from game import alliance as alliance_mod
+
+            user, _ = get_or_create_user(tg_user)
+            if act == "ally_kick":
+                return alliance_mod.kick_member(user, target_id)
+            return alliance_mod.set_deputy(user, target_id)
+
+        try:
+            result = await run_db(_do, update.effective_user, int(digits), action)
+        except GameError as exc:
+            await message.reply_text(str(exc))
+            return
+        if action == "ally_kick":
+            await message.reply_text(f"🥾 <b>{result['name']}</b> از اتحاد حذف شد.", parse_mode="HTML")
+        else:
+            await message.reply_text(f"🎖 <b>{result['name']}</b> حالا قائم‌مقام اتحاده.", parse_mode="HTML")
         return
 
     if action == "alliance_search":
@@ -2481,6 +2592,10 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(alliance_search_callback, pattern=r"^ally_search$"))
     application.add_handler(CallbackQueryHandler(alliance_deposit_callback, pattern=r"^ally_deposit$"))
     application.add_handler(CallbackQueryHandler(alliance_top_callback, pattern=r"^ally_top$"))
+    application.add_handler(CallbackQueryHandler(alliance_members_callback, pattern=r"^ally_members$"))
+    application.add_handler(CallbackQueryHandler(alliance_kick_start, pattern=r"^ally_kick$"))
+    application.add_handler(CallbackQueryHandler(alliance_deputy_start, pattern=r"^ally_deputy$"))
+    application.add_handler(CallbackQueryHandler(alliance_deputy_off_callback, pattern=r"^ally_deputy_off$"))
     application.add_handler(
         CallbackQueryHandler(alliance_leave_confirm_callback, pattern=r"^ally_leave_confirm$")
     )
