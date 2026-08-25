@@ -111,6 +111,7 @@ def _shield_buy_sync(tg_user, tier):
 
     user, _ = get_or_create_user(tg_user)
     result = buy_shield(user, tier)
+    user.refresh_from_db()  # buy_shield charged via a locked re-fetch; outer instance is stale
     return result, user.diamonds, shield_remaining_seconds(user)
 
 
