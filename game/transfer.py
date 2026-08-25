@@ -21,6 +21,26 @@ from game.buildings import building_level
 from game.creature import GameError
 
 
+def creature_prices_text() -> str:
+    """Full diamond-cost breakdown for creature transfers, by star × rarity."""
+    lines = ["💎 <b>هزینه‌ی انتقال هیولا (گیرنده می‌ده):</b>"]
+    for rarity in constants.RARITY_ORDER:
+        by_star = " · ".join(
+            f"{star}⭐ {constants.creature_transfer_cost(star, rarity)}"
+            for star in sorted(constants.CREATURE_TRANSFER_STAR_COST)
+        )
+        lines.append(f"{constants.RARITY_LABELS[rarity]}: {by_star}")
+    return "\n".join(lines)
+
+
+def equip_prices_text() -> str:
+    parts = " · ".join(
+        f"{constants.RARITY_LABELS[r].split()[0]} {constants.equip_transfer_cost(r)}"
+        for r in constants.RARITY_ORDER
+    )
+    return f"💎 <b>هزینه‌ی انتقال تجهیزات:</b> {parts}"
+
+
 def _fmt_wait(seconds: int) -> str:
     hours, rem = divmod(max(0, seconds), 3600)
     minutes = rem // 60

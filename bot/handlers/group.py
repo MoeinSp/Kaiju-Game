@@ -428,9 +428,13 @@ async def transfer_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TY
     RECEIVER must accept (they pay the diamonds), never charging without consent."""
     reply = update.message.reply_to_message
     if reply is None or reply.from_user is None:
+        from game import transfer
+
         await update.message.reply_text(
             "🦖 برای انتقال هیولا، روی پیام گیرنده <b>ریپلای</b> کن و بنویس «انتقال کایجو <کد>».\n"
-            "<i>کد هیولا رو از «کلکسیون» توی پیوی ربات می‌بینی. گیرنده باید الماسش رو بده و تأیید کنه.</i>",
+            "<i>کد هیولا رو از «کلکسیون» توی پیوی ربات می‌بینی. گیرنده الماسش رو می‌ده و تأیید می‌کنه؛ "
+            f"برای هر دو طرف {constants.TRANSFER_COOLDOWN_HOURS} ساعت کول‌داون داره.</i>\n\n"
+            + transfer.creature_prices_text(),
             parse_mode="HTML",
         )
         return
@@ -477,9 +481,12 @@ async def transfer_equip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE,
     """Word «انتقال تجهیز/تجهیزات <کد>» — reply to the recipient, with receiver confirm."""
     reply = update.message.reply_to_message
     if reply is None or reply.from_user is None:
+        from game import transfer
+
         await update.message.reply_text(
             "🎒 برای انتقال تجهیزات، روی پیام گیرنده <b>ریپلای</b> کن و بنویس «انتقال تجهیزات <کد>».\n"
-            "<i>کد تجهیزات رو از «تجهیزات» توی پیوی ربات می‌بینی. گیرنده الماسش رو می‌ده و تأیید می‌کنه.</i>",
+            "<i>کد تجهیزات رو از «تجهیزات» توی پیوی ربات می‌بینی. گیرنده الماسش رو می‌ده و تأیید می‌کنه.</i>\n\n"
+            + transfer.equip_prices_text(),
             parse_mode="HTML",
         )
         return

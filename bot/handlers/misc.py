@@ -81,8 +81,33 @@ def _build_help_text() -> str:
     )
 
 
+def _group_help_text() -> str:
+    """Group help lists only what actually works IN A GROUP — the word triggers and
+    the handful of group commands — so it never advertises PV-only slash commands
+    that do nothing here. Everything else lives in the DM."""
+    return (
+        f"{get_emoji('creature')} <b>Kaiju Legends — راهنمای گروه</b>\n"
+        "<i>توی گروه با «کلمه» بازی می‌کنی، نه دستور.</i>\n\n"
+        f"{get_emoji('battle')} <b>نبرد</b>\n"
+        "«دوئل» (ریپلای؛ «دوئل ۱۰۰» = شرط) · «اتک» (باس یا ریپلای روی بازیکن)\n"
+        "«احضار» (باس گروه) · «نبرد» (آرنا) · «شکار» (تکی)\n\n"
+        f"{get_emoji('trophy')} <b>گروه</b>\n"
+        "«جدول» (برترین‌ها) · «محافظ»/«تسخیر»/«حقوق» · «کازینو»\n"
+        "«جایزه» یا «کایجو» — جایزه‌ی دوره‌ای رایگان\n\n"
+        f"{get_emoji('gift')} <b>انتقال</b>  <i>(روی پیام گیرنده ریپلای کن)</i>\n"
+        "«انتقال طلا <عدد>» · «انتقال کایجو <کد>» · «انتقال تجهیزات <کد>»\n"
+        f"<blockquote>گیرنده الماس می‌ده و تأیید می‌کنه؛ {constants.TRANSFER_COOLDOWN_HOURS} ساعت کول‌داون برای هر دو طرف.</blockquote>\n\n"
+        f"{get_emoji('lab')} <b>پرورش، اقتصاد، ساختمون و اتحاد</b> همه توی <b>پیوی ربات</b> با دکمه‌ست.\n"
+        "برای شروع برو پیوی و /start رو بزن. برای لیست کامل کلمه‌ها، همینجا «راهنما» بفرست 🚀"
+    )
+
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(_build_help_text(), parse_mode="HTML")
+    chat = update.effective_chat
+    if chat is not None and chat.type in ("group", "supergroup"):
+        await update.message.reply_text(_group_help_text(), parse_mode="HTML")
+    else:
+        await update.message.reply_text(_build_help_text(), parse_mode="HTML")
 
 
 def register(application) -> None:
