@@ -269,6 +269,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 btn("👥 لیست کاربران", style=ADMIN, callback_data="admin_menu:users"),
                 btn("🔍 جستجوی کاربر", emoji_key="btn_profile", style=ADMIN, callback_data="admin_menu:user_manage"),
             ],
+            [btn("🕵 چیت‌یاب (جایزه‌گیرهای مشکوک)", style=DANGER, callback_data="admin_menu:cheat")],
             [
                 btn("🎁 هدیه به همه", style=ADMIN, callback_data="admin_menu:gift_all"),
                 btn("ارسال همگانی", emoji_key="btn_broadcast", style=ADMIN, callback_data="admin_menu:broadcast_start"),
@@ -395,6 +396,68 @@ async def autobackup_set_callback(update: Update, context: ContextTypes.DEFAULT_
     await run_db(botconfig.set_backup_interval, hours)
     await query.answer("ذخیره شد." if hours else "خاموش شد.")
     await autobackup_panel(update, context)
+
+
+# ── cheat-finder ──────────────────────────────────────────────────────────────
+def _cheat_report_sync(limit: int = 15):
+    """Today's biggest «جایزه» claimers, most-claimed first — the main signal for a
+    reward-farming account. With the global cooldown a normal player tops out well
+    under the theoretical cap, so an outlier near it stands out."""
+    from django.utils import timezone
+
+    from bio_lab.models import DailyActionLog, User
+    from bio_lab.repository import display_name
+    from game.daily import today_str
+
+    rows = (
+        DailyActionLog.objects.filter(action="word_reward", day=today_str())
+        .select_related("user")
+        .order_by("-count")[:limit]
+    )
+    now = timezone.now()
+    out = []
+    for r in rows:
+        u = r.user
+        age_days = (now - u.created_at).days if u.created_at else 0
+        out.append({
+            "id": u.id,
+            "name": display_name(u),
+            "count": r.count,
+            "banned": u.is_banned,
+            "age_days": age_days,
+            "lifetime": u.reward_total_claims,
+        })
+    return out, User.objects.count()
+
+
+async def cheat_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update):
+        if update.callback_query:
+            await update.callback_query.answer()
+        return
+    rows, total_users = await run_db(_cheat_report_sync)
+    lines = [
+        "🕵 <b>چیت‌یاب — جایزه‌گیرهای امروز</b>",
+        f"<blockquote>بیشترین دفعاتِ گرفتن «جایزه»/«کایجو» در امروز. "
+        f"کول‌داون حالا سراسریه، پس عدد خیلی بالا = مشکوک.\n"
+        f"👥 کل کاربرها: {total_users}</blockquote>",
+    ]
+    keyboard_rows = []
+    if not rows:
+        lines.append("\n<i>امروز هنوز کسی جایزه نگرفته.</i>")
+    for i, r in enumerate(rows, start=1):
+        flag = "🚫 " if r["banned"] else ""
+        lines.append(
+            f"{i}. {flag}<b>{r['name']}</b> — امروز <b>{r['count']}</b> بار "
+            f"<i>(کل: {r['lifetime']} · سن حساب: {r['age_days']} روز)</i>"
+        )
+        keyboard_rows.append([btn(
+            f"{flag}مدیریت {r['name']} ({r['count']})",
+            style=ADMIN, callback_data=f"admin_uinfo:{r['id']}",
+        )])
+    keyboard_rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
+    target = update.callback_query.message if update.callback_query else update.effective_message
+    await target.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard_rows))
 
 
 async def autobackup_custom_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2000,6 +2063,7 @@ _ADMIN_MENU_ACTIONS.update(
         "admin_manage": admin_manage_panel,
         "admin_add": admin_add_start,
         "autobackup": autobackup_panel,
+        "cheat": cheat_panel,
     }
 )
 

@@ -98,6 +98,12 @@ async def drop_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
     elif status == "taken":
         await query.answer(f"⛔ دیر رسیدی! «{result['winner']}» زودتر زد.", show_alert=True)
+    elif status == "cooldown":
+        m, s = divmod(result["seconds_left"], 60)
+        await query.answer(
+            f"⏳ به‌تازگی یه جایزه گرفتی — {m}:{s:02d} دیگه صبر کن (تا نشه توی چند گروه همزمان جمعش کرد).",
+            show_alert=True,
+        )
     elif status == "expired":
         await query.answer("⌛ زمان این جایزه تموم شده.", show_alert=True)
     else:

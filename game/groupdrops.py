@@ -30,6 +30,9 @@ SPAWN_CHANCE = 0.4          # per eligible group, per tick
 MIN_GAP_MINUTES = 10        # ≤ ~6/hour per group
 EXPIRE_MINUTES = 12         # unclaimed drops lapse after this
 MIN_GROUP_MEMBERS = 2       # only real, active groups
+# a GLOBAL per-player cooldown on WINNING a drop, so someone who joined the bot to
+# 30 groups can't sweep a drop in each — matches the ~per-group spawn cadence
+CLAIM_COOLDOWN_MINUTES = 10
 
 DROP_KINDS = {
     "chest":   {"emoji": "🎁", "title": "صندوقچه‌ی گنج", "flavor": "یه صندوقچه‌ی گنج وسط گروه افتاد!",
@@ -139,9 +142,15 @@ def claim(drop_id: int, tg_user) -> dict:
         return {"status": "expired"}
 
     user, _ = get_or_create_user(tg_user)
+    # global anti-multi-group cooldown: on cooldown → can't win, drop stays open
+    now = timezone.now()
+    if user.drop_claim_ready_at is not None and user.drop_claim_ready_at > now:
+        wait = int((user.drop_claim_ready_at - now).total_seconds())
+        return {"status": "cooldown", "seconds_left": wait}
     reward = reward_for(user, drop.kind)
     # grant
-    fields = []
+    fields = ["drop_claim_ready_at"]
+    user.drop_claim_ready_at = now + datetime.timedelta(minutes=CLAIM_COOLDOWN_MINUTES)
     if reward.get("coins"):
         user.coins += reward["coins"]; fields.append("coins")
     if reward.get("dna"):

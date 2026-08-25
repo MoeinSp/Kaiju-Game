@@ -30,6 +30,14 @@ class User(models.Model):
     shield_until = models.DateTimeField(null=True, blank=True)  # anti-farm grace after being raided (arena)
     group_shield_until = models.DateTimeField(null=True, blank=True)  # separate 4h grace after a group «اتک»
 
+    # «جایزه»/«کایجو» word-reward cooldown — GLOBAL per player (not per-group), so
+    # joining the bot to 30 groups no longer multiplies the payout. reward_ready_at
+    # is when the next claim is allowed; reward_total_claims is the lifetime count.
+    reward_ready_at = models.DateTimeField(null=True, blank=True)
+    reward_total_claims = models.IntegerField(default=0)
+    # global cooldown on winning a group flash-drop, for the same anti-multi-group reason
+    drop_claim_ready_at = models.DateTimeField(null=True, blank=True)
+
     # re-engagement push (game/notifications.py). notifications_on is the master
     # opt-out; energy_full_notified fires the "energy is full" DM exactly once per
     # drain-and-refill cycle (reset when energy is spent); last_nudge_day dedups the

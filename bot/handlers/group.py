@@ -655,7 +655,8 @@ async def pvp_detail_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.answer("جزییاتی ذخیره نشده.", show_alert=True)
         return
     await query.answer()
-    await query.message.reply_text(detail, parse_mode="HTML")
+    # edit the result message in place instead of posting a new one, to keep the group tidy
+    await safe_edit_message_text(query, detail, parse_mode="HTML")
 
 
 async def pvp_attack_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

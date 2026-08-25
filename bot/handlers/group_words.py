@@ -724,11 +724,24 @@ def _format_wait(seconds: int) -> str:
     return f"{secs} ثانیه"
 
 
+def _format_mmss(seconds: int) -> str:
+    """MM:SS, e.g. 4:45 — the exact 'come back in' countdown the reward now shows."""
+    minutes, secs = divmod(max(0, seconds), 60)
+    return f"{minutes}:{secs:02d}"
+
+
 def _reward_text(user, result: dict) -> str:
     if not result["ok"]:
         return (
             f"⏳ <b>{display_name(user)}</b> هنوز زوده!\n"
-            f"تا جایزه‌ی بعدیت <b>{_format_wait(result['seconds_left'])}</b> مونده."
+            f"تا جایزه‌ی بعدی <b>{_format_mmss(result['seconds_left'])}</b> مونده."
+        )
+
+    # off cooldown but a chance-based miss — still starts the fresh random cooldown
+    if not result.get("won"):
+        return (
+            f"🎲 <b>{display_name(user)}</b>، این‌بار چیزی نبود!\n"
+            f"<b>{_format_mmss(result['next_wait'])}</b> دیگه دوباره «جایزه» یا «کایجو» بفرست."
         )
 
     kind = result["kind"]
@@ -752,7 +765,7 @@ def _reward_text(user, result: dict) -> str:
         f"{get_emoji('gift')} <b>تبریک {display_name(user)}!</b> جایزه گرفتی 🎉\n"
         f"🎁 {prize}\n"
         f"<i>این {result['count']}اُمین جایزه‌ی توئه</i>{level_note}\n\n"
-        f"⏳ هر <b>{word_reward.COOLDOWN_MINUTES} دقیقه</b> یه‌بار «جایزه» یا «کایجو» بفرست تا باز جایزه بگیری."
+        f"⏳ <b>{_format_mmss(result['next_wait'])}</b> دیگه دوباره «جایزه» یا «کایجو» بفرست."
     )
 
 
@@ -895,12 +908,13 @@ async def group_card_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.answer("این کارت مال تو نیست — خودت کلمه‌ش رو بفرست.", show_alert=True)
         return
     if action == "reward":
-        # answered as a NEW message, not an edit: a claim is a personal event and
-        # overwriting the shared card with it would wipe whatever the group was
-        # looking at
+        # edit in place rather than posting a new message — button presses shouldn't
+        # pile up messages in the group (per the group-tidiness rule)
         user, result = await run_db(_reward_sync, update.effective_user, query.message.chat)
-        await query.answer("🎁 گرفتی!" if result["ok"] else "هنوز زوده")
-        await query.message.reply_text(
+        won = result.get("ok") and result.get("won")
+        await query.answer("🎁 گرفتی!" if won else ("🎲 این‌بار نشد" if result["ok"] else "هنوز زوده"))
+        await safe_edit_message_text(
+            query,
             _reward_text(user, result),
             parse_mode="HTML",
             reply_markup=group_footer_keyboard(update.effective_user.id, skip="reward"),
