@@ -1379,31 +1379,36 @@ async def fusion_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     lines.append(f"⭐ سقف ستاره‌ی فعلی تو: <b>{cap}</b>")
-    lines.append("")
-    if pairs:
-        lines.append("این جفت‌ها آماده‌ی ترکیبن — <b>هر کدوم ۱۰۰٪ موفق می‌شه</b>:")
-    else:
-        lines.append(
-            "الان هیچ جفت آماده‌ای نداری.\n\n"
-            "<blockquote>برای ترکیب به <b>دو هیولای هم‌نام، هم‌نایابی و هم‌ستاره</b> نیاز داری. "
-            "از باکس ژنتیکی و جعبه‌های الماسی هیولای بیشتری بگیر تا جفت پیدا کنی.</blockquote>"
-        )
+    lines.append(
+        "<blockquote>🔗 <b>قانون:</b> دو هیولای <b>هم‌نام + هم‌نایابی + هم‌ستاره</b> → یکی با یک ستاره بالاتر.\n"
+        "🪜 <b>مسیر ۵ ستاره:</b> ۲تا ۱★ → ۲★، ۲تا ۲★ → ۳★ … (جمعاً ۱۶ تا ۱★).</blockquote>"
+    )
 
-    rows = [
-        [
-            btn(
-                f"{constants.RARITY_LABELS[p['rarity']].split()[0]} {p['name']} {'⭐' * p['star']} "
-                f"×{p['count']} → {'⭐' * (p['star'] + 1)}",
-                emoji_key="btn_fusion",
-                style=PRIMARY,
+    rows = []
+    if not pairs:
+        lines.append(
+            "\n📭 الان هیچ جفت آماده‌ای نداری — برای هر ترکیب به <b>دو تای دقیقاً یکسان</b> "
+            "(نام و نایابی و ستاره) نیاز داری. از باکس‌ها هیولای بیشتری بگیر."
+        )
+    else:
+        # group the ready pairs by star tier so the list reads as a clear ladder
+        lines.append("\n✅ <b>جفت‌های آماده</b> (هرکدوم ۱۰۰٪ موفق):")
+        last_star = None
+        for p in sorted(pairs, key=lambda x: (x["star"], x["name"])):
+            if p["star"] != last_star:
+                lines.append(f"\n{'⭐' * p['star']} <b>{p['star']} ستاره → {p['star'] + 1} ستاره</b>")
+                last_star = p["star"]
+            cost = constants.fusion_cost(p["star"], p["rarity"])
+            rarity_dot = constants.RARITY_LABELS[p["rarity"]].split()[0]
+            lines.append(f"　{rarity_dot} {p['name']} — <b>{p['count']}</b> تا آماده · {cost:,} {get_emoji('coin')}")
+            rows.append([btn(
+                f"{rarity_dot} {p['name']} {'⭐' * p['star']} → {'⭐' * (p['star'] + 1)}  ({cost:,}💰)",
+                style=PRIMARY,  # no emoji_key: keep the rarity dot as the leading glyph
                 callback_data=f"fus_b:{p['parent_a'].id}:{p['parent_b'].id}",
-            )
-        ]
-        for p in pairs
-    ]
+            )])
     rows.append([back_btn("menu:me")])
     lines.append(f"\n{wallet_line(user)}")
-    await send_screen(update, 
+    await send_screen(update,
         "\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows)
     )
 
