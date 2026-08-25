@@ -3,8 +3,8 @@
 Several words («جایزه», «کایجو», …) all lead here and share **one GLOBAL** cooldown
 per player (stored on User.reward_ready_at, not per-group) — so adding the bot to
 many groups no longer multiplies the payout, and cycling synonyms doesn't help
-either. The cooldown is a fresh random 4–6 minutes chosen after each claim, and the
-claim is chance-based: sometimes it pays nothing but still starts the cooldown.
+either. The cooldown is a fresh random 4–6 minutes chosen after each claim. Every
+off-cooldown claim always pays out a (small) prize — no empty/blank results.
 
 Prizes are small on purpose. This is a reason to keep the group alive, not an
 income stream; the numbers sit well under what a few minutes of hunting pays, so
@@ -25,11 +25,9 @@ from game.daily import record_action
 
 # The cooldown is a fresh RANDOM value in this window, chosen after every claim, and
 # it's GLOBAL per player (stored on User, not per-group) — so being in 30 groups no
-# longer means 30× the reward. The claim is also chance-based: sometimes the word
-# gives nothing but still starts the cooldown, so it can't be spammed to a win.
+# longer means 30× the reward. Every off-cooldown claim always pays a prize.
 COOLDOWN_MIN_SECONDS = 4 * 60
 COOLDOWN_MAX_SECONDS = 6 * 60
-WIN_CHANCE = 0.70  # chance a claim actually pays out (else "nothing this time")
 
 # (weight, kind, low, high) — `kind` names the resource so the caller can render
 # the right emoji without re-deriving it from the amount.
@@ -102,10 +100,7 @@ def claim(user: User, group: Group | None = None) -> dict:
 
     record_action(user, "word_reward")  # for the admin cheat-finder's daily counts
 
-    if random.random() >= WIN_CHANCE:
-        user.save(update_fields=["reward_ready_at"])
-        return {"ok": True, "won": False, "next_wait": next_wait}
-
+    # every off-cooldown claim pays out — no empty results
     kind, amount, minutes = _roll_prize(user)
     user.reward_total_claims += 1
     user.save(update_fields=["reward_ready_at", "reward_total_claims"])

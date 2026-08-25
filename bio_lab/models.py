@@ -753,6 +753,25 @@ class ChannelJoinClaim(models.Model):
         ]
 
 
+class ShopItem(models.Model):
+    """An owner-authored shop offer (game/itemshop.py). A single item OR a multi-part
+    «pack» — the contents are a JSON list of reward components (coins/dna/diamonds/
+    speedup/creature/equipment). Priced in coins and/or diamonds, both optional."""
+
+    title = models.CharField(max_length=64)
+    emoji = models.CharField(max_length=8, default="🎁")
+    description = models.CharField(max_length=256, blank=True, default="")
+    price_coins = models.IntegerField(default=0)
+    price_diamonds = models.IntegerField(default=0)
+    contents_json = models.TextField(default="[]")  # list[{"type": ..., ...}]
+    is_active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.price_coins}c/{self.price_diamonds}d)"
+
+
 class BotConfig(models.Model):
     """Single-row (id=1) table of owner-tunable global settings that aren't part of
     a theme/loadout and aren't game state — e.g. the public "game group" the bot

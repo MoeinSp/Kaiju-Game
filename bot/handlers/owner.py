@@ -1,5 +1,6 @@
 import asyncio
 import html
+import json
 import logging
 
 from django.utils import timezone
@@ -270,6 +271,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 btn("🔍 جستجوی کاربر", emoji_key="btn_profile", style=ADMIN, callback_data="admin_menu:user_manage"),
             ],
             [btn("🕵 چیت‌یاب (جایزه‌گیرهای مشکوک)", style=DANGER, callback_data="admin_menu:cheat")],
+            [btn("🛍 مدیریت فروشگاه (آیتم/پک)", style=ADMIN, callback_data="admin_menu:itemshop")],
             [
                 btn("🎁 هدیه به همه", style=ADMIN, callback_data="admin_menu:gift_all"),
                 btn("ارسال همگانی", emoji_key="btn_broadcast", style=ADMIN, callback_data="admin_menu:broadcast_start"),
@@ -458,6 +460,96 @@ async def cheat_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     keyboard_rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
     target = update.callback_query.message if update.callback_query else update.effective_message
     await target.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard_rows))
+
+
+# ── owner-authored item shop management ───────────────────────────────────────
+_ITEMSHOP_HELP = (
+    "🛍 <b>افزودن آیتم به فروشگاه</b>\n\n"
+    "آیتم رو توی این قالب بفرست (هر خط یه چیز):\n"
+    "<blockquote>خط ۱: عنوان (می‌تونه با ایموجی شروع شه)\n"
+    "خط ۲: قیمت — مثل «قیمت: 19000 جم» یا «قیمت: 5000 سکه 50 جم»\n"
+    "خط‌های بعد: محتوا، هرکدوم یکی:\n"
+    "• <code>سکه 10000</code>\n"
+    "• <code>جم 25</code>\n"
+    "• <code>dna 200</code>\n"
+    "• <code>کارت 60 3</code>  (کارت سرعت ۶۰دقیقه ×۳)\n"
+    "• <code>هیولا mythic fire</code>  (عنصر اختیاریه)\n"
+    "• <code>تجهیزات weapon legendary</code></blockquote>\n"
+    "<b>نمونه پک:</b>\n"
+    "<code>🐉 پک اساطیری\nقیمت: 19000 جم\nسکه 10000\ndna 200\nهیولا mythic fire\nتجهیزات weapon legendary</code>"
+)
+
+
+def _itemshop_list_sync():
+    from game import itemshop
+
+    items = itemshop.list_items(active_only=False)
+    return [{
+        "id": it.id, "emoji": it.emoji, "title": it.title, "active": it.is_active,
+        "price": itemshop.price_text(it),
+        "contents": itemshop.content_summary(json.loads(it.contents_json)),
+    } for it in items]
+
+
+async def itemshop_manage_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update):
+        if update.callback_query:
+            await update.callback_query.answer()
+        return
+    items = await run_db(_itemshop_list_sync)
+    lines = ["🛍 <b>مدیریت فروشگاه آیتم‌ها</b>"]
+    rows = [[btn("➕ افزودن آیتم/پک", style=CONFIRM, callback_data="sitem_add")]]
+    if not items:
+        lines.append("<i>هنوز آیتمی نساختی.</i>")
+    for it in items:
+        state = "🟢" if it["active"] else "🔴"
+        lines.append(f"\n{state} {it['emoji']} <b>{it['title']}</b> — {it['price']}\n   <i>{it['contents']}</i>")
+        rows.append([
+            btn(("🔴 غیرفعال" if it["active"] else "🟢 فعال") + f" {it['title'][:14]}",
+                style=ADMIN, callback_data=f"sitem_toggle:{it['id']}"),
+            btn("🗑 حذف", style=DANGER, callback_data=f"sitem_del:{it['id']}"),
+        ])
+    rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
+    target = update.callback_query.message if update.callback_query else update.effective_message
+    await target.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+
+
+async def itemshop_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "shop_item"}
+    await query.answer()
+    await query.message.reply_text(_ITEMSHOP_HELP, parse_mode="HTML")
+
+
+async def itemshop_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    from game import itemshop
+
+    try:
+        await run_db(itemshop.toggle_item, int(query.data.split(":")[1]))
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("انجام شد.")
+    await itemshop_manage_panel(update, context)
+
+
+async def itemshop_delete_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    from game import itemshop
+
+    await run_db(itemshop.delete_item, int(query.data.split(":")[1]))
+    await query.answer("حذف شد.")
+    await itemshop_manage_panel(update, context)
 
 
 async def autobackup_custom_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1913,6 +2005,28 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
         return
 
+    if action == "shop_item":
+        from game import itemshop
+
+        def _create():
+            spec = itemshop.parse_spec(text)
+            return itemshop.create_item(spec), spec
+
+        try:
+            item, spec = await run_db(_create)
+        except GameError as exc:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text(f"⚠️ {exc}\n\nدوباره با قالب درست بفرست:")
+            return
+        await message.reply_text(
+            f"✅ <b>آیتم ساخته شد:</b> {item.emoji} {item.title}\n"
+            f"قیمت: {itemshop.price_text(item)}\n"
+            f"محتوا: {itemshop.content_summary(spec['contents'])}\n\n"
+            "حالا توی «🛍 آیتم‌های ویژه»ی فروشگاه برای بازیکن‌ها دیده می‌شه.",
+            parse_mode="HTML",
+        )
+        return
+
     if action == "broadcast":
         user_ids = await run_db(_all_user_ids_sync)
         sent = 0
@@ -2064,6 +2178,7 @@ _ADMIN_MENU_ACTIONS.update(
         "admin_add": admin_add_start,
         "autobackup": autobackup_panel,
         "cheat": cheat_panel,
+        "itemshop": itemshop_manage_panel,
     }
 )
 
@@ -2090,6 +2205,9 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(user_open_callback, pattern=r"^admin_uinfo:\d+$"))
     application.add_handler(CallbackQueryHandler(dm_user_start, pattern=r"^admin_dm:\d+$"))
     application.add_handler(CallbackQueryHandler(admin_remove_callback, pattern=r"^admin_rm:\d+$"))
+    application.add_handler(CallbackQueryHandler(itemshop_add_start, pattern=r"^sitem_add$"))
+    application.add_handler(CallbackQueryHandler(itemshop_toggle_callback, pattern=r"^sitem_toggle:\d+$"))
+    application.add_handler(CallbackQueryHandler(itemshop_delete_callback, pattern=r"^sitem_del:\d+$"))
     application.add_handler(CallbackQueryHandler(autobackup_set_callback, pattern=r"^autobk_set:\d+$"))
     application.add_handler(CallbackQueryHandler(autobackup_custom_start, pattern=r"^autobk_custom$"))
     application.add_handler(CallbackQueryHandler(autobackup_dest_here_callback, pattern=r"^autobk_dest_here$"))

@@ -1,10 +1,12 @@
 """«🛒 شاپ» — the rotating daily shop."""
 
+import json
+
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bio_lab.repository import get_or_create_user
-from bot.buttons import BUILD, CONFIRM, SHOP, back_btn, btn
+from bot.buttons import BUILD, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants, shop
 from game.creature import GameError
@@ -133,8 +135,74 @@ async def shield_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 
+# ── 🛍 owner-authored item shop / packs ───────────────────────────────────────
+def _item_shop_sync(tg_user):
+    from game import itemshop
+
+    user, _ = get_or_create_user(tg_user)
+    return itemshop.list_items(active_only=True), user.coins, user.diamonds
+
+
+def _item_shop_render(items, coins, diamonds) -> tuple[str, InlineKeyboardMarkup]:
+    from game import itemshop
+
+    lines = [
+        "🛍 <b>آیتم‌های ویژه</b>",
+        f"<blockquote>{get_emoji('coin')} {coins:,} طلا · {get_emoji('diamond')} {diamonds} الماس</blockquote>",
+    ]
+    rows = []
+    if not items:
+        lines.append("\n<i>الان آیتم ویژه‌ای موجود نیست. بعداً سر بزن.</i>")
+    for it in items:
+        contents = json.loads(it.contents_json)
+        lines.append(
+            f"\n{it.emoji} <b>{it.title}</b> — {itemshop.price_text(it)}\n"
+            f"   <i>{itemshop.content_summary(contents)}</i>"
+            + (f"\n   {it.description}" if it.description else "")
+        )
+        rows.append([btn(f"{it.emoji} خرید {it.title} ({itemshop.price_text(it)})",
+                         style=SHOP, callback_data=f"sitem_buy:{it.id}")])
+    rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+async def item_shop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    items, coins, diamonds = await run_db(_item_shop_sync, update.effective_user)
+    text, keyboard = _item_shop_render(items, coins, diamonds)
+    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _item_buy_sync(tg_user, item_id):
+    from game import itemshop
+
+    user, _ = get_or_create_user(tg_user)
+    result = itemshop.buy(user, item_id)
+    return result, itemshop.list_items(active_only=True)
+
+
+async def item_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    item_id = int(query.data.split(":")[1])
+    try:
+        result, items = await run_db(_item_buy_sync, update.effective_user, item_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("✅ خریداری شد!")
+    text, keyboard = _item_shop_render(items, result["coins"], result["diamonds"])
+    got = "، ".join(result["notes"])
+    await safe_edit_message_text(
+        query,
+        f"✅ <b>خرید موفق: {result['emoji']} {result['title']}</b>\n🎁 گرفتی: {got}\n\n━━━━━━━━━━\n" + text,
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
 def register(application) -> None:
     application.add_handler(CommandHandler("shop", shop_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(shop_buy_callback, pattern=r"^shop_buy:"))
     application.add_handler(CommandHandler("shield", shield_shop_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(shield_buy_callback, pattern=r"^shield_buy:"))
+    application.add_handler(CommandHandler("items", item_shop_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CallbackQueryHandler(item_buy_callback, pattern=r"^sitem_buy:\d+$"))

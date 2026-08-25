@@ -19,7 +19,7 @@ from bot.handlers.codex import codex_panel
 from bot.handlers.events import events_panel
 from bot.handlers.idle import idle_panel
 from bot.handlers.league import league_panel
-from bot.handlers.shop import shield_shop_panel, shop_panel
+from bot.handlers.shop import item_shop_panel, shield_shop_panel, shop_panel
 from bot.handlers.casino import casino_panel
 from bot.handlers.titles import titles_panel
 from bot.handlers.referral import referral_panel
@@ -680,6 +680,7 @@ _CATEGORIES = {
         [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("جعبه‌های الماسی", "diamond_box", "s", "btn_diamond_box")],
         [("بنر ویژه", "banner", "s", "btn_banner"), ("شاپ روزانه", "shop", "s", "btn_shop")],
         [("🛡 خرید سپر", "shield_shop", "s", "btn_shop"), ("🎰 کازینو", "casino", "s", "btn_wheel")],
+        [("🛍 آیتم‌های ویژه", "item_shop", "s", "btn_shop")],
     ]),
     "social": ("👥 اجتماعی", [
         [("اتحاد من", "alliance_info", "n", "btn_alliance"), ("لیگ رتبه‌بندی", "league", "n", "btn_league")],
@@ -2300,6 +2301,7 @@ _MENU_ACTIONS = {
     "league": league_panel,
     "shop": shop_panel,
     "shield_shop": shield_shop_panel,
+    "item_shop": item_shop_panel,
     "casino": casino_panel,
     "titles": titles_panel,
     "wheel": wheel_cmd,
