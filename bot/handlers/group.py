@@ -398,6 +398,173 @@ async def gold_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE, amou
     )
 
 
+def _preview_creature_sync(chat, sender_tg, receiver_id, creature_id):
+    from game import transfer
+
+    group = get_or_create_group(chat)
+    sender, _ = get_or_create_user(sender_tg)
+    touch_membership(group, sender)
+    receiver = User.objects.filter(id=receiver_id).first()
+    if receiver is None:
+        raise GameError("این بازیکن هنوز بازی رو شروع نکرده.")
+    preview = transfer.preview_creature_transfer(sender, receiver, creature_id)
+    return sender, receiver, preview
+
+
+async def transfer_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, creature_id: int) -> None:
+    """Word «انتقال کایجو/هیولا <کد>» — reply to the recipient. Shows a confirm the
+    RECEIVER must accept (they pay the diamonds), never charging without consent."""
+    reply = update.message.reply_to_message
+    if reply is None or reply.from_user is None:
+        await update.message.reply_text(
+            "🦖 برای انتقال هیولا، روی پیام گیرنده <b>ریپلای</b> کن و بنویس «انتقال کایجو <کد>».\n"
+            "<i>کد هیولا رو از «کلکسیون» توی پیوی ربات می‌بینی. گیرنده باید الماسش رو بده و تأیید کنه.</i>",
+            parse_mode="HTML",
+        )
+        return
+    recipient = reply.from_user
+    if recipient.id == update.effective_user.id or recipient.is_bot:
+        await update.message.reply_text("🙅 به خودت یا به یه بات نمی‌تونی انتقال بدی!")
+        return
+    try:
+        sender, receiver, preview = await run_db(
+            _preview_creature_sync, update.effective_chat, update.effective_user, recipient.id, creature_id
+        )
+    except GameError as exc:
+        await update.message.reply_text(str(exc))
+        return
+    c = preview["creature"]
+    keyboard = InlineKeyboardMarkup([[
+        btn(f"✅ قبول ({preview['cost']} 💎)", style=CONFIRM,
+            callback_data=f"xfer:cok:{sender.id}:{receiver.id}:{c.id}"),
+        btn("❌ رد", style=DANGER, callback_data=f"xfer:cno:{receiver.id}"),
+    ]])
+    await update.message.reply_text(
+        f"🦖 <b>{display_name(sender)}</b> می‌خواد هیولای <b>{c.name}</b> "
+        f"{constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level} رو به <b>{display_name(receiver)}</b> بده.\n"
+        f"{get_emoji('diamond')} گیرنده باید <b>{preview['cost']}</b> الماس بده.\n"
+        f"<b>{display_name(receiver)}</b>، تأیید می‌کنی؟ 👇 <i>(۱ روز کول‌داون برای هر دو طرف)</i>",
+        parse_mode="HTML", reply_markup=keyboard,
+    )
+
+
+def _preview_equip_sync(chat, sender_tg, receiver_id, equip_id):
+    from game import transfer
+
+    group = get_or_create_group(chat)
+    sender, _ = get_or_create_user(sender_tg)
+    touch_membership(group, sender)
+    receiver = User.objects.filter(id=receiver_id).first()
+    if receiver is None:
+        raise GameError("این بازیکن هنوز بازی رو شروع نکرده.")
+    preview = transfer.preview_equip_transfer(sender, receiver, equip_id)
+    return sender, receiver, preview
+
+
+async def transfer_equip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, equip_id: int) -> None:
+    """Word «انتقال تجهیز/تجهیزات <کد>» — reply to the recipient, with receiver confirm."""
+    reply = update.message.reply_to_message
+    if reply is None or reply.from_user is None:
+        await update.message.reply_text(
+            "🎒 برای انتقال تجهیزات، روی پیام گیرنده <b>ریپلای</b> کن و بنویس «انتقال تجهیزات <کد>».\n"
+            "<i>کد تجهیزات رو از «تجهیزات» توی پیوی ربات می‌بینی. گیرنده الماسش رو می‌ده و تأیید می‌کنه.</i>",
+            parse_mode="HTML",
+        )
+        return
+    recipient = reply.from_user
+    if recipient.id == update.effective_user.id or recipient.is_bot:
+        await update.message.reply_text("🙅 به خودت یا به یه بات نمی‌تونی انتقال بدی!")
+        return
+    try:
+        sender, receiver, preview = await run_db(
+            _preview_equip_sync, update.effective_chat, update.effective_user, recipient.id, equip_id
+        )
+    except GameError as exc:
+        await update.message.reply_text(str(exc))
+        return
+    it = preview["item"]
+    keyboard = InlineKeyboardMarkup([[
+        btn(f"✅ قبول ({preview['cost']} 💎)", style=CONFIRM,
+            callback_data=f"xfer:eok:{sender.id}:{receiver.id}:{it.id}"),
+        btn("❌ رد", style=DANGER, callback_data=f"xfer:eno:{receiver.id}"),
+    ]])
+    await update.message.reply_text(
+        f"🎒 <b>{display_name(sender)}</b> می‌خواد تجهیزاتِ <b>{it.name} +{it.level}</b> "
+        f"{constants.RARITY_LABELS[it.rarity]} رو به <b>{display_name(receiver)}</b> بده.\n"
+        f"{get_emoji('diamond')} گیرنده باید <b>{preview['cost']}</b> الماس بده.\n"
+        f"<b>{display_name(receiver)}</b>، تأیید می‌کنی؟ 👇 <i>(۱ روز کول‌داون برای هر دو طرف)</i>",
+        parse_mode="HTML", reply_markup=keyboard,
+    )
+
+
+def _transfer_creature_do_sync(sender_id, receiver_id, creature_id):
+    from game import transfer
+
+    sender = User.objects.filter(id=sender_id).first()
+    receiver = User.objects.filter(id=receiver_id).first()
+    if sender is None or receiver is None:
+        raise GameError("یکی از طرف‌ها دیگه پیدا نشد.")
+    return sender, receiver, transfer.transfer_creature(sender, receiver, creature_id)
+
+
+def _transfer_equip_do_sync(sender_id, receiver_id, equip_id):
+    from game import transfer
+
+    sender = User.objects.filter(id=sender_id).first()
+    receiver = User.objects.filter(id=receiver_id).first()
+    if sender is None or receiver is None:
+        raise GameError("یکی از طرف‌ها دیگه پیدا نشد.")
+    return sender, receiver, transfer.transfer_equipment(sender, receiver, equip_id)
+
+
+async def transfer_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Resolve a pending creature/equipment transfer — only the RECEIVER may accept
+    or reject, so nobody's diamonds move without their consent."""
+    query = update.callback_query
+    parts = query.data.split(":")
+    verb = parts[1]
+
+    if verb in ("cno", "eno"):
+        receiver_id = int(parts[2])
+        if update.effective_user.id != receiver_id:
+            await query.answer("فقط گیرنده می‌تونه رد کنه.", show_alert=True)
+            return
+        await query.answer("رد شد.")
+        await safe_edit_message_text(query, "❌ انتقال رد شد.")
+        return
+
+    _, _, sender_id, receiver_id, item_id = parts
+    sender_id, receiver_id, item_id = int(sender_id), int(receiver_id), int(item_id)
+    if update.effective_user.id != receiver_id:
+        await query.answer("فقط گیرنده می‌تونه تأیید کنه.", show_alert=True)
+        return
+    try:
+        if verb == "cok":
+            sender, receiver, result = await run_db(_transfer_creature_do_sync, sender_id, receiver_id, item_id)
+            c = result["creature"]
+            body = (
+                f"🦖 هیولای <b>{c.name}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level} "
+                f"به <b>{display_name(receiver)}</b> منتقل شد! ✅"
+            )
+        else:
+            sender, receiver, result = await run_db(_transfer_equip_do_sync, sender_id, receiver_id, item_id)
+            it = result["item"]
+            body = (
+                f"🎒 تجهیزاتِ <b>{it.name} +{it.level}</b> {constants.RARITY_LABELS[it.rarity]} "
+                f"به <b>{display_name(receiver)}</b> منتقل شد! ✅"
+            )
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("✅ انجام شد!")
+    await safe_edit_message_text(
+        query,
+        f"{body}\n{get_emoji('diamond')} گیرنده <b>{result['cost']}</b> الماس پرداخت کرد.\n"
+        "<i>۱ روز کول‌داون برای هر دو طرف فعال شد.</i>",
+        parse_mode="HTML",
+    )
+
+
 def _raid_spawn_sync(chat, spawner_tg):
     group = get_or_create_group(chat)
     spawner_user, _ = get_or_create_user(spawner_tg)
@@ -856,6 +1023,7 @@ def register(application) -> None:
     # and the words call the same functions. Only button callbacks and the two
     # commands without a word equivalent (/give a creature, /mutation_event) remain.
     application.add_handler(CallbackQueryHandler(duel_wager_callback, pattern=r"^duelwager_"))
+    application.add_handler(CallbackQueryHandler(transfer_confirm_callback, pattern=r"^xfer:"))
     application.add_handler(CallbackQueryHandler(pvp_attack_callback, pattern=r"^gatk:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_attack_cancel_callback, pattern=r"^gatk_cancel:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_detail_callback, pattern=r"^gatk_detail:\d+$"))

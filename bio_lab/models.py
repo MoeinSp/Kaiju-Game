@@ -38,6 +38,12 @@ class User(models.Model):
     # global cooldown on winning a group flash-drop, for the same anti-multi-group reason
     drop_claim_ready_at = models.DateTimeField(null=True, blank=True)
 
+    # trading (game/transfer.py): a creature and an equipment transfer each carry a
+    # 1-day cooldown that applies to BOTH sending and receiving, so a player (or a
+    # fake account) can't rapidly funnel items around
+    kaiju_transfer_ready_at = models.DateTimeField(null=True, blank=True)
+    equip_transfer_ready_at = models.DateTimeField(null=True, blank=True)
+
     # re-engagement push (game/notifications.py). notifications_on is the master
     # opt-out; energy_full_notified fires the "energy is full" DM exactly once per
     # drain-and-refill cycle (reset when energy is spent); last_nudge_day dedups the

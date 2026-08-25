@@ -833,14 +833,20 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if await _maybe_capture_group_reply(update, context):
         return
 
-    # «انتقال طلا <عدد>» — a gold transfer to whoever you replied to
+    # «انتقال …» family: gold, kaiju/creature, or equipment — all reply-based
     norm = keywords.normalize(message.text)
-    if norm.startswith("انتقال طلا") or norm.startswith("انتقال"):
-        digits = "".join(ch for ch in norm if ch.isdigit())
-        if norm.startswith("انتقال طلا") and digits:
-            from bot.handlers import group as group_handlers
+    if norm.startswith("انتقال"):
+        digits = "".join(ch for ch in norm.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789")) if ch.isdigit())
+        from bot.handlers import group as group_handlers
 
+        if norm.startswith("انتقال طلا") and digits:
             await group_handlers.gold_transfer(update, context, int(digits))
+            return
+        if (norm.startswith("انتقال کایجو") or norm.startswith("انتقال هیولا")) and digits:
+            await group_handlers.transfer_creature_cmd(update, context, int(digits))
+            return
+        if norm.startswith("انتقال تجهیز") and digits:  # covers «تجهیز» and «تجهیزات»
+            await group_handlers.transfer_equip_cmd(update, context, int(digits))
             return
 
     action = keywords.match(message.text)

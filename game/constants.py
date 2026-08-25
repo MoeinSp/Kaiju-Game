@@ -428,6 +428,47 @@ FUSION_RARITY_UPGRADE_BUMP = 1.15  # extra multiplier when the fusion also upgra
 
 DUEL_WAGER_MAX = 500
 
+# ── Player-to-player trading (game/transfer.py) ───────────────────────────────
+# Transferring a creature or a piece of gear: the RECEIVER pays diamonds (scaled by
+# what they're getting), a 1-day cooldown applies to both sides, and the receiver
+# must have progressed far enough (building levels) to hold it — so a throwaway fake
+# account can't instantly stockpile high-star creatures.
+TRANSFER_COOLDOWN_HOURS = 24
+
+# creature diamond cost = star base × rarity multiplier. Star base is the mythic
+# price the owner specified; lower rarities cost proportionally less.
+CREATURE_TRANSFER_STAR_COST = {1: 200, 2: 300, 3: 500, 4: 750, 5: 1000}
+CREATURE_TRANSFER_RARITY_MULT = {
+    "common": 0.12, "rare": 0.25, "epic": 0.45, "legendary": 0.7, "mythic": 1.0,
+}
+# equipment is much cheaper — a flat per-rarity price
+EQUIP_TRANSFER_COST = {
+    "common": 15, "rare": 35, "epic": 70, "legendary": 130, "mythic": 250,
+}
+# receiver prerequisites by the creature's star: (main_hall level, fusion_lab level).
+# main_hall is the whole game's bottleneck (weeks to max), so this is the real
+# anti-fake-account gate — you can't receive a 5★ without a mature base.
+CREATURE_TRANSFER_REQS = {
+    1: {"main_hall": 1, "fusion_lab": 0},
+    2: {"main_hall": 2, "fusion_lab": 0},
+    3: {"main_hall": 3, "fusion_lab": 1},
+    4: {"main_hall": 4, "fusion_lab": 2},
+    5: {"main_hall": 5, "fusion_lab": 3},
+}
+# equipment receiver prereq: only the rarer gear needs a bit of a base
+EQUIP_TRANSFER_MAIN_HALL_REQ = {
+    "common": 1, "rare": 1, "epic": 2, "legendary": 3, "mythic": 3,
+}
+
+
+def creature_transfer_cost(star_level: int, rarity: str) -> int:
+    star_base = CREATURE_TRANSFER_STAR_COST.get(star_level, CREATURE_TRANSFER_STAR_COST[max(CREATURE_TRANSFER_STAR_COST)])
+    return round(star_base * CREATURE_TRANSFER_RARITY_MULT.get(rarity, 1.0))
+
+
+def equip_transfer_cost(rarity: str) -> int:
+    return EQUIP_TRANSFER_COST.get(rarity, EQUIP_TRANSFER_COST["common"])
+
 HEIST_STEAL_PERCENT = 0.20
 HEIST_COOLDOWN_HOURS = 6
 HEIST_DAILY_ATTEMPTS = 3
