@@ -7,6 +7,11 @@ from game import constants
 from game.creature import GameError
 
 
+class EnergyError(GameError):
+    """Raised specifically when an action can't run for lack of energy, so callers can
+    tell it apart from other GameErrors and offer the diamond-refill button."""
+
+
 def _synced_energy_and_anchor(user: User) -> tuple[int, datetime.datetime]:
     """Computes energy regenerated since energy_updated_at without mutating `user`."""
     if user.energy >= constants.MAX_ENERGY:
@@ -51,8 +56,27 @@ def spend_energy(user: User, amount: int, action_label: str) -> None:
     """Raises GameError if not enough energy. Otherwise deducts it. Caller must .save() `user`."""
     sync_energy(user)
     if user.energy < amount:
-        raise GameError(
+        raise EnergyError(
             f"⚡ انرژیت برای {action_label} کافی نیست ({user.energy}/{constants.MAX_ENERGY}). "
             f"تا انرژی بعدی حدود {minutes_until_next_point(user)} دقیقه مونده."
         )
     user.energy -= amount
+
+
+def refill_energy(user: User) -> dict:
+    """Pay diamonds to top energy back up to full. Returns {"cost", "energy"}."""
+    from django.db import transaction
+
+    with transaction.atomic():
+        user = User.objects.select_for_update().get(id=user.id)
+        sync_energy(user)
+        if user.energy >= constants.MAX_ENERGY:
+            raise GameError("انرژیت پره، نیازی به شارژ نیست.")
+        cost = constants.ENERGY_REFILL_DIAMOND_COST
+        if user.diamonds < cost:
+            raise GameError(f"الماس کافی نداری! شارژ کامل انرژی {cost} الماس می‌خواد.")
+        user.diamonds -= cost
+        user.energy = constants.MAX_ENERGY
+        user.energy_updated_at = timezone.now()
+        user.save(update_fields=["diamonds", "energy", "energy_updated_at"])
+    return {"cost": cost, "energy": user.energy}

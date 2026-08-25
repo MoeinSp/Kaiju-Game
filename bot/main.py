@@ -24,6 +24,7 @@ from bot.handlers import (
     campaign,
     casino,
     codex,
+    energy,
     events,
     groupdrops,
     idle,
@@ -168,6 +169,7 @@ def main() -> None:
     wheel.register(application)
     arena.register(application)
     group.register(application)
+    energy.register(application)  # «شارژ انرژی با الماس» button flow (PV + group)
     group_words.register(application)  # owns THE group text handler
     battle.register(application)
     misc.register(application)

@@ -1621,7 +1621,10 @@ async def hunt_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             _hunt_go_sync, update.effective_user, tier, int(seed)
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        from bot.handlers.energy import show_energy_error
+
+        if not await show_energy_error(query, exc):
+            await query.answer(str(exc), show_alert=True)
         return
 
     if result["won"]:

@@ -202,6 +202,7 @@ GUARDIAN_STIPEND_DNA = 3
 # of resetting once a day, so there's a reason to come back every couple hours
 MAX_ENERGY = 50
 ENERGY_REGEN_MINUTES = 6   # empty -> full in 5 hours
+ENERGY_REFILL_DIAMOND_COST = 15  # diamonds to instantly refill energy to full
 FEED_ENERGY_COST = 1
 RAID_ATTACK_ENERGY_COST = 1
 GUARDIAN_CHALLENGE_ENERGY_COST = 1

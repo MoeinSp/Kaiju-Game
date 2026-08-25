@@ -220,7 +220,10 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         result, completed_missions = await run_db(_attack_sync, update.effective_user, pending)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        from bot.handlers.energy import show_energy_error
+
+        if not await show_energy_error(query, exc):
+            await query.answer(str(exc), show_alert=True)
         return
 
     context.user_data.pop(PENDING_OPPONENT_KEY, None)

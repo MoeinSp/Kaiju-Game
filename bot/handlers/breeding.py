@@ -17,7 +17,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Creature
 from bio_lab.repository import get_or_create_user
-from bot.buttons import BUILD, CONFIRM, DANGER, LIST, PRIMARY, back_btn, back_only_keyboard, btn
+from bot.buttons import BUILD, CONFIRM, DANGER, LIST, NAV, PRIMARY, back_btn, back_only_keyboard, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import breeding, constants
 from game.buildings import is_built
@@ -407,6 +407,22 @@ def _cancel_sync(tg_user):
 
 
 async def breeding_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """First step: ask for confirmation, since cancelling burns the DNA."""
+    query = update.callback_query
+    await query.answer()
+    keyboard = InlineKeyboardMarkup([[
+        btn("✅ بله، لغو کن", style=DANGER, callback_data="brd_cancel_yes"),
+        btn("انصراف", emoji_key="btn_cancel", style=NAV, callback_data="menu:breeding"),
+    ]])
+    await safe_edit_message_text(
+        query,
+        "⚠️ <b>مطمئنی می‌خوای جفت‌گیری غار رو لغو کنی؟</b>\n"
+        "<blockquote>DNA‌ای که خرج کردی <b>برنمی‌گرده</b>.</blockquote>",
+        parse_mode="HTML", reply_markup=keyboard,
+    )
+
+
+async def breeding_cancel_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     try:
         view = await run_db(_cancel_sync, update.effective_user)
@@ -429,3 +445,4 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(breeding_cave_finish_callback, pattern=r"^brd_cave_finish$"))
     application.add_handler(CallbackQueryHandler(breeding_egg_finish_callback, pattern=r"^brd_egg_finish:"))
     application.add_handler(CallbackQueryHandler(breeding_cancel_callback, pattern=r"^brd_cancel$"))
+    application.add_handler(CallbackQueryHandler(breeding_cancel_confirm_callback, pattern=r"^brd_cancel_yes$"))

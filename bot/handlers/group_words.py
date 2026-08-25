@@ -1187,6 +1187,14 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         payload = await run_db(_do_sync, update.effective_user, query.message.chat, action, arg)
     except GameError as exc:
+        from game.energy import EnergyError
+
+        if isinstance(exc, EnergyError):
+            from bot.handlers.energy import energy_refill_markup
+
+            await query.answer()
+            await safe_edit_message_text(query, str(exc), reply_markup=energy_refill_markup())
+            return
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
