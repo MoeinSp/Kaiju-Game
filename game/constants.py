@@ -563,11 +563,21 @@ CAVE_MATING_MINUTES = {
     "mythic": 360,      # 6h
 }
 EGG_HATCH_MINUTES = {
-    "common": 120,      # 2h
-    "rare": 240,        # 4h
-    "epic": 420,        # 7h
-    "legendary": 720,   # 12h
-    "mythic": 1080,     # 18h — the rarest egg alone is most of a day
+    "common": 240,      # 4h
+    "rare": 480,        # 8h
+    "epic": 900,        # 15h
+    "legendary": 1440,  # 24h
+    "mythic": 2160,     # 36h — the rarest egg is a day and a half
+}
+# Finishing an egg early is a FIXED per-rarity diamond price (not the time-based
+# building formula), and deliberately far higher than a building speed-up — a rare
+# creature should be a real diamond decision, not a cheap skip.
+EGG_HATCH_DIAMOND_COST = {
+    "common": 120,
+    "rare": 250,
+    "epic": 450,
+    "legendary": 650,
+    "mythic": 800,
 }
 BREEDING_DNA_COST = {
     "common": 20,

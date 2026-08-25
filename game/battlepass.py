@@ -19,7 +19,10 @@ from django.utils import timezone
 
 from bio_lab.models import PassProgress, User
 
-POINTS_PER_TIER = 150
+# Deliberately steep: each tier costs far more points than before (was 150), so the
+# pass is a season-long grind rather than something cleared in a few days. Tier
+# REWARDS are unchanged — only the effort to reach them went up.
+POINTS_PER_TIER = 400
 MAX_TIER = 30
 PREMIUM_COST_DIAMONDS = 150
 

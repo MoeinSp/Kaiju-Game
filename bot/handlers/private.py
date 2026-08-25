@@ -1385,14 +1385,15 @@ async def fusion_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     else:
         lines.append(
             "الان هیچ جفت آماده‌ای نداری.\n\n"
-            "<blockquote>برای ترکیب به <b>دو هیولای هم‌نام با ستاره‌ی یکسان</b> نیاز داری. "
+            "<blockquote>برای ترکیب به <b>دو هیولای هم‌نام، هم‌نایابی و هم‌ستاره</b> نیاز داری. "
             "از باکس ژنتیکی و جعبه‌های الماسی هیولای بیشتری بگیر تا جفت پیدا کنی.</blockquote>"
         )
 
     rows = [
         [
             btn(
-                f"{p['name']} {'⭐' * p['star']} ×{p['count']} → {'⭐' * (p['star'] + 1)}",
+                f"{constants.RARITY_LABELS[p['rarity']].split()[0]} {p['name']} {'⭐' * p['star']} "
+                f"×{p['count']} → {'⭐' * (p['star'] + 1)}",
                 emoji_key="btn_fusion",
                 style=PRIMARY,
                 callback_data=f"fus_b:{p['parent_a'].id}:{p['parent_b'].id}",

@@ -35,7 +35,7 @@ DUNGEON_DEFS = [
         "resource": "coins",
         "boss_names": ["محافظ خزانه", "دزد طلا", "گارد فولادی"],
         "boss_element": "earth",
-        "boss_power_mult": 1.1,
+        "boss_power_mult": 1.35,
         "boss_flavor": "درون دخمه درخشش طلا چشم‌ها رو می‌زنه...",
     },
     {
@@ -45,7 +45,7 @@ DUNGEON_DEFS = [
         "resource": "dna",
         "boss_names": ["بیوهیولا", "موتانت آزمایشگاه", "ژنتیک‌باز"],
         "boss_element": "electric",
-        "boss_power_mult": 1.15,
+        "boss_power_mult": 1.5,
         "boss_flavor": "فضای دخمه از انرژی زیستی لرزش داره...",
     },
     {
@@ -55,7 +55,7 @@ DUNGEON_DEFS = [
         "resource": "xp",
         "boss_names": ["قهرمان باستان", "آزمایشگر افسانه‌ای", "استاد دخمه"],
         "boss_element": "fire",
-        "boss_power_mult": 1.2,
+        "boss_power_mult": 1.65,
         "boss_flavor": "سایه‌ی یک موجود قدرتمند توی تاریکی حرکت می‌کنه...",
     },
 ]

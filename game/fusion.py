@@ -26,17 +26,21 @@ def ready_pairs(user: User) -> list[dict]:
         return []
 
     cap = star_cap(user)
-    groups: dict[tuple[str, int], list[Creature]] = {}
+    # fusion identity is (name, rarity, star): two creatures only fuse if all three
+    # match, so rarity is preserved up the whole 1★→5★ pyramid (16 same-rarity base
+    # creatures for one 5★).
+    groups: dict[tuple[str, str, int], list[Creature]] = {}
     for creature in Creature.objects.filter(owner=user, star_level__lt=cap).order_by("-level"):
-        groups.setdefault((creature.name, creature.star_level), []).append(creature)
+        groups.setdefault((creature.name, creature.rarity, creature.star_level), []).append(creature)
 
     pairs = []
-    for (name, star), members in groups.items():
+    for (name, rarity, star), members in groups.items():
         if len(members) < 2:
             continue
         pairs.append(
             {
                 "name": name,
+                "rarity": rarity,
                 "star": star,
                 "count": len(members),
                 "parent_a": members[0],  # highest level first, so fusing keeps the best
@@ -49,15 +53,17 @@ def ready_pairs(user: User) -> list[dict]:
 
 def fusion_partners(user: User, creature: Creature) -> list[Creature]:
     """Everything this creature can legally fuse with: same species name, same
-    star. Powers the picker UI so a player never gets offered an invalid pair.
-    Empty when the fusion lab isn't built or the creature is already at the
-    player's main-hall-derived star cap."""
+    rarity, same star. Powers the picker UI so a player never gets offered an
+    invalid pair. Empty when the fusion lab isn't built or the creature is already
+    at the player's main-hall-derived star cap."""
     if not is_built(user, FUSION_BUILDING):
         return []
     if creature.star_level >= star_cap(user):
         return []
     return list(
-        Creature.objects.filter(owner=user, name=creature.name, star_level=creature.star_level)
+        Creature.objects.filter(
+            owner=user, name=creature.name, rarity=creature.rarity, star_level=creature.star_level
+        )
         .exclude(id=creature.id)
         .order_by("-level")
     )
@@ -80,6 +86,8 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
         raise GameError("نمی‌تونی یه موجود رو با خودش ترکیب کنی.")
     if parent_a.name != parent_b.name:
         raise GameError("فقط دو هیولای هم‌نوع (با اسم یکسان) با هم ترکیب می‌شن.")
+    if parent_a.rarity != parent_b.rarity:
+        raise GameError("هر دو هیولا باید نایابیِ یکسان داشته باشن (مثلاً هر دو اساطیری).")
     if parent_a.star_level != parent_b.star_level:
         raise GameError("هر دو هیولا باید ستاره‌ی یکسان داشته باشن.")
 
@@ -89,21 +97,16 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
         raise GameError(
             f"سقف ستاره‌ی فعلی تو {cap}⭐ ـه — برای بالاتر رفتن باید {hall} رو ارتقا بدی."
         )
-    base_rarity = constants.higher_rarity(parent_a.rarity, parent_b.rarity)
-    cost = constants.fusion_cost(parent_a.star_level, base_rarity)
+    # rarity is now a fixed fusion-identity dimension, so the child keeps it (no
+    # random tier upgrade) — that's what makes the same-name+same-rarity pyramid work
+    rarity = parent_a.rarity
+    cost = constants.fusion_cost(parent_a.star_level, rarity)
     if user.coins < cost:
         raise GameError(f"طلا کافی نداری! فیوژن این جفت {cost} طلا هزینه داره.")
 
     user.coins -= cost
     user.save(update_fields=["coins"])
 
-    new_rarity = base_rarity
-    if random.random() < constants.RARITY_UPGRADE_CHANCE.get(base_rarity, 0.0):
-        new_rarity = constants.next_rarity(base_rarity)
-
-    # rarity_bump only kicks in when the fusion actually upgrades the tier — it's a
-    # multiplier ≥ 1, so the child is never smaller than its inherited base.
-    rarity_bump = constants.FUSION_RARITY_UPGRADE_BUMP if new_rarity != base_rarity else 1.0
     star_level = parent_a.star_level + 1  # both parents share a star, verified above
 
     def _inherit_stat(attr: str) -> int:
@@ -111,13 +114,13 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
         is guaranteed strictly stronger than either parent on every base stat."""
         a_val, b_val = getattr(parent_a, attr), getattr(parent_b, attr)
         blended = max(a_val, b_val) + min(a_val, b_val) * constants.FUSION_WEAK_PARENT_SHARE
-        return round((blended + constants.FUSION_STAT_GROWTH[attr]) * rarity_bump)
+        return round(blended + constants.FUSION_STAT_GROWTH[attr])
 
     child = Creature.objects.create(
         owner=user,
         name=parent_a.name,  # same species in, same species out — only the star climbs
         element=random.choice([parent_a.element, parent_b.element]),
-        rarity=new_rarity,
+        rarity=rarity,
         star_level=star_level,
         level=max(parent_a.level, parent_b.level),
         xp=parent_a.xp + parent_b.xp,

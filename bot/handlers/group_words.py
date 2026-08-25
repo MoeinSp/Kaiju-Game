@@ -507,11 +507,12 @@ def _fusion_card(user, pairs, built, cap) -> tuple[str, InlineKeyboardMarkup]:
         lines.append(f"⭐ سقف ستاره‌ی تو: <b>{cap}</b>\n")
         lines.append("این جفت‌ها آماده‌ان — <b>هر کدوم ۱۰۰٪ موفقه</b>:")
         for pair in pairs[:6]:
-            lines.append(f"• {pair['name']} {'⭐' * pair['star']} ×{pair['count']} → {'⭐' * (pair['star'] + 1)}")
+            rarity = constants.RARITY_LABELS[pair["rarity"]].split()[0]
+            lines.append(f"• {rarity} {pair['name']} {'⭐' * pair['star']} ×{pair['count']} → {'⭐' * (pair['star'] + 1)}")
     else:
         lines.append(
-            "\n<blockquote>الان جفت آماده‌ای نداری. برای ترکیب به <b>دو هیولای هم‌نام "
-            "با ستاره‌ی یکسان</b> نیاز داری.</blockquote>"
+            "\n<blockquote>الان جفت آماده‌ای نداری. برای ترکیب به <b>دو هیولای هم‌نام، "
+            "هم‌نایابی و هم‌ستاره</b> نیاز داری.</blockquote>"
         )
     return "\n".join(lines), InlineKeyboardMarkup([[_pm_button("انجام ترکیب در پیوی")]])
 
