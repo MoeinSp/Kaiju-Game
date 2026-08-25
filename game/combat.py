@@ -71,15 +71,17 @@ def resolve_duel_detailed(creature_a: Creature, creature_b: Creature) -> tuple[C
     else:
         edge = "⚖️ عنصرها خنثی‌ان"
 
+    # attacker on top, defender below — labelled, one per line, so it's clear who's who
     header = (
-        f"{get_emoji('battle')} <b>{fa.creature.name}</b> {constants.element_label(fa.creature.element)}"
-        f"  ⚔️  <b>{fb.creature.name}</b> {constants.element_label(fb.creature.element)}"
+        f"🗡 <b>حمله‌کننده:</b> <b>{fa.creature.name}</b> {constants.element_label(fa.creature.element)}\n"
+        f"🛡 <b>دفاع‌کننده:</b> <b>{fb.creature.name}</b> {constants.element_label(fb.creature.element)}"
     )
     compact = "\n".join([
         header, edge, "",
         _scoreline(fa), _scoreline(fb), "",
         f"{get_emoji('trophy')} <b>برنده: {winner.creature.name}</b>  <i>· {round_num} راند</i>",
-        constants.element_advantage_chain(),
+        "",
+        constants.element_advantage_lines(),
     ])
     detail = "\n".join([
         f"🔍 <b>جزییات نبرد</b>\n{header}\n{edge}\n",
@@ -90,11 +92,13 @@ def resolve_duel_detailed(creature_a: Creature, creature_b: Creature) -> tuple[C
 
 
 def _scoreline(f: Fighter) -> str:
+    """HP bar + name. The old "(زد: N)" damage-dealt total was cryptic, so it's gone;
+    a crit count only shows when there were crits."""
     hp = max(0, round(f.hp))
     maxhp = max(1, round(f.stats["hp"]))
     bar = constants.render_bar(hp, maxhp, width=10)
-    crit = f" · 💥{f.crits}" if f.crits else ""
-    return f"{bar} {hp}/{maxhp}❤️  <b>{f.creature.name}</b> <i>(زد: {round(f.dmg_dealt)}{crit})</i>"
+    crit = f"  💥{f.crits}" if f.crits else ""
+    return f"{bar} {hp}/{maxhp}❤️  <b>{f.creature.name}</b>{crit}"
 
 
 def _attack(attacker: Fighter, defender: Fighter, detail: list[str], rng: random.Random) -> None:
