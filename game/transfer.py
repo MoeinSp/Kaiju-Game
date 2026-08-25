@@ -21,6 +21,15 @@ from game.buildings import building_level
 from game.creature import GameError
 
 
+class TransferFundsError(GameError):
+    """Raised when the receiver can't afford a transfer — carries the numbers so the
+    handler can render a nice message with the diamond emoji + a price-guide button."""
+
+    def __init__(self, cost: int, have: int, kind: str):
+        self.cost, self.have, self.kind = cost, have, kind
+        super().__init__(f"گیرنده {cost} الماس لازم داره ولی {have} تا داره.")
+
+
 def creature_prices_text() -> str:
     """Full diamond-cost breakdown for creature transfers, by star × rarity."""
     lines = ["💎 <b>هزینه‌ی انتقال هیولا (گیرنده می‌ده):</b>"]
@@ -101,7 +110,7 @@ def preview_creature_transfer(sender: User, receiver: User, creature_id: int) ->
         )
     cost = constants.creature_transfer_cost(creature.star_level, creature.rarity)
     if receiver.diamonds < cost:
-        raise GameError(f"گیرنده {cost} الماس لازم داره ولی {receiver.diamonds} تا داره.")
+        raise TransferFundsError(cost, receiver.diamonds, "creature")
     return {"creature": creature, "cost": cost}
 
 
@@ -123,7 +132,7 @@ def preview_equip_transfer(sender: User, receiver: User, equip_id: int) -> dict:
         )
     cost = constants.equip_transfer_cost(item.rarity)
     if receiver.diamonds < cost:
-        raise GameError(f"گیرنده {cost} الماس لازم داره ولی {receiver.diamonds} تا داره.")
+        raise TransferFundsError(cost, receiver.diamonds, "equip")
     return {"item": item, "cost": cost}
 
 
@@ -167,7 +176,7 @@ def transfer_creature(sender: User, receiver: User, creature_id: int) -> dict:
 
     cost = constants.creature_transfer_cost(creature.star_level, creature.rarity)
     if receiver.diamonds < cost:
-        raise GameError(f"گیرنده {cost} الماس لازم داره ولی {receiver.diamonds} تا داره.")
+        raise TransferFundsError(cost, receiver.diamonds, "creature")
 
     receiver.diamonds -= cost
     creature.owner = receiver
@@ -205,7 +214,7 @@ def transfer_equipment(sender: User, receiver: User, equip_id: int) -> dict:
 
     cost = constants.equip_transfer_cost(item.rarity)
     if receiver.diamonds < cost:
-        raise GameError(f"گیرنده {cost} الماس لازم داره ولی {receiver.diamonds} تا داره.")
+        raise TransferFundsError(cost, receiver.diamonds, "equip")
 
     receiver.diamonds -= cost
     item.owner = receiver

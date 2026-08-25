@@ -410,6 +410,27 @@ async def gold_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE, amou
     )
 
 
+async def _reply_transfer_error(message, exc) -> None:
+    """Insufficient-diamond errors get a pretty HTML message with the diamond emoji
+    and a «راهنمای هزینه‌ها» button; everything else stays a plain reply."""
+    from game.transfer import TransferFundsError
+
+    if isinstance(exc, TransferFundsError):
+        guide = "c" if exc.kind == "creature" else "e"
+        keyboard = InlineKeyboardMarkup([[
+            btn("💎 راهنمای هزینه‌ها", style=NAV, callback_data=f"xfer:prices:{guide}"),
+        ]])
+        await message.reply_text(
+            f"{get_emoji('diamond')} <b>الماس گیرنده کافی نیست</b>\n\n"
+            f"این انتقال <b>{exc.cost}</b> {get_emoji('diamond')} لازم داره، "
+            f"ولی گیرنده الان فقط <b>{exc.have}</b> تا داره.\n"
+            "<blockquote>گیرنده اول باید الماس تهیه کنه — از جعبه‌ی الماسی، معدن الماس یا گردونه‌ی شانس.</blockquote>",
+            parse_mode="HTML", reply_markup=keyboard,
+        )
+    else:
+        await message.reply_text(str(exc))
+
+
 def _preview_creature_sync(chat, sender_tg, receiver_id, creature_id):
     from game import transfer
 
@@ -447,7 +468,7 @@ async def transfer_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TY
             _preview_creature_sync, update.effective_chat, update.effective_user, recipient.id, creature_id
         )
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await _reply_transfer_error(update.message, exc)
         return
     c = preview["creature"]
     keyboard = InlineKeyboardMarkup([[
@@ -499,7 +520,7 @@ async def transfer_equip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE,
             _preview_equip_sync, update.effective_chat, update.effective_user, recipient.id, equip_id
         )
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await _reply_transfer_error(update.message, exc)
         return
     it = preview["item"]
     keyboard = InlineKeyboardMarkup([[
@@ -542,6 +563,14 @@ async def transfer_confirm_callback(update: Update, context: ContextTypes.DEFAUL
     query = update.callback_query
     parts = query.data.split(":")
     verb = parts[1]
+
+    if verb == "prices":  # «راهنمای هزینه‌ها» — anyone can view; shows the full table
+        from game import transfer
+
+        await query.answer()
+        text = transfer.creature_prices_text() if parts[2] == "c" else transfer.equip_prices_text()
+        await safe_edit_message_text(query, text, parse_mode="HTML")
+        return
 
     if verb in ("cno", "eno"):
         receiver_id = int(parts[2])
