@@ -142,7 +142,11 @@ def main() -> None:
     # real outage; the occasional Telegram 429 it was meant to prevent is rarer and
     # self-heals. If we revisit this, group_max_rate must be raised far above the
     # default and callback answers kept off the limiter.
-    application = Application.builder().token(BOT_TOKEN).build()
+    # concurrent_updates(True): PTB processes updates in parallel tasks instead of
+    # strictly one-at-a-time, so one slow handler (or a JobQueue tick) never blocks
+    # everyone else's taps. Paired with the thread-pool run_db (bot/utils), this is
+    # what keeps the bot responsive under load — NOT any outgoing rate limit.
+    application = Application.builder().token(BOT_TOKEN).concurrent_updates(True).build()
 
     middleware.register(application)
     private.register(application)

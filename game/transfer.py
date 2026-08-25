@@ -30,24 +30,35 @@ class TransferFundsError(GameError):
         super().__init__(f"گیرنده {cost} الماس لازم داره ولی {have} تا داره.")
 
 
+def _fa(n: int) -> str:
+    """Latin → Persian digits, so numbers sit cleanly in the right-to-left text."""
+    return str(n).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+
+
 def creature_prices_text() -> str:
-    """Full diamond-cost breakdown for creature transfers, by star × rarity."""
-    lines = ["💎 <b>هزینه‌ی انتقال هیولا (گیرنده می‌ده):</b>"]
-    for rarity in constants.RARITY_ORDER:
-        by_star = " · ".join(
-            f"{star}⭐ {constants.creature_transfer_cost(star, rarity)}"
+    """Full diamond-cost breakdown for creature transfers, by rarity then star. Rarest
+    first (the interesting end), each rarity on its own line, so it's easy to scan."""
+    from game.emoji import get_emoji
+
+    d = get_emoji("diamond")
+    lines = [f"{d} <b>هزینه‌ی انتقال هیولا</b>  <i>(الماس — گیرنده می‌ده)</i>", ""]
+    for rarity in reversed(constants.RARITY_ORDER):
+        stars = " · ".join(
+            f"{_fa(star)}★ <b>{_fa(constants.creature_transfer_cost(star, rarity))}</b>"
             for star in sorted(constants.CREATURE_TRANSFER_STAR_COST)
         )
-        lines.append(f"{constants.RARITY_LABELS[rarity]}: {by_star}")
+        lines.append(f"{constants.RARITY_LABELS[rarity]}\n<blockquote>{stars}</blockquote>")
     return "\n".join(lines)
 
 
 def equip_prices_text() -> str:
-    parts = " · ".join(
-        f"{constants.RARITY_LABELS[r].split()[0]} {constants.equip_transfer_cost(r)}"
-        for r in constants.RARITY_ORDER
-    )
-    return f"💎 <b>هزینه‌ی انتقال تجهیزات:</b> {parts}"
+    from game.emoji import get_emoji
+
+    d = get_emoji("diamond")
+    lines = [f"{d} <b>هزینه‌ی انتقال تجهیزات</b>  <i>(الماس — گیرنده می‌ده)</i>", ""]
+    for rarity in reversed(constants.RARITY_ORDER):
+        lines.append(f"{constants.RARITY_LABELS[rarity]} — <b>{_fa(constants.equip_transfer_cost(rarity))}</b>")
+    return "\n".join(lines)
 
 
 def _fmt_wait(seconds: int) -> str:

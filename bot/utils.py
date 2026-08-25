@@ -20,11 +20,28 @@ def mission_reward_text(m: dict) -> str:
     return " ".join(parts)
 
 
+def _run_db_sync(func, args, kwargs):
+    # Each pool thread keeps its own Django DB connection; drop any that Postgres
+    # has since closed (idle-timeout) so a reused thread never hits a stale socket.
+    from django.db import close_old_connections
+
+    close_old_connections()
+    try:
+        return func(*args, **kwargs)
+    finally:
+        close_old_connections()
+
+
 async def run_db(func, *args, **kwargs):
     """Runs a synchronous Django-ORM function off the event loop and awaits its result.
-    thread_sensitive keeps all DB access on one worker thread, matching SQLite's
-    single-writer model and avoiding cross-thread connection issues."""
-    return await sync_to_async(func, thread_sensitive=True)(*args, **kwargs)
+
+    thread_sensitive=False deliberately: it runs on a real thread POOL so many
+    players' DB work executes in parallel. The old thread_sensitive=True funnelled
+    EVERY query bot-wide onto one worker thread (a leftover from the SQLite dev DB) —
+    on the Postgres production DB that just serialised everyone and made the bot feel
+    slow under load. Postgres handles concurrent connections fine; per-transaction
+    locking (select_for_update in the money paths) keeps writes correct."""
+    return await sync_to_async(_run_db_sync, thread_sensitive=False)(func, args, kwargs)
 
 
 async def send_screen(update, text, *, reply_markup=None, parse_mode="HTML", **kwargs) -> None:

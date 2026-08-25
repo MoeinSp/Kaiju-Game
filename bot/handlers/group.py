@@ -471,11 +471,14 @@ async def transfer_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TY
         await _reply_transfer_error(update.message, exc)
         return
     c = preview["creature"]
-    keyboard = InlineKeyboardMarkup([[
-        btn(f"✅ قبول ({preview['cost']} 💎)", style=CONFIRM,
-            callback_data=f"xfer:cok:{sender.id}:{receiver.id}:{c.id}"),
-        btn("❌ رد", style=DANGER, callback_data=f"xfer:cno:{receiver.id}"),
-    ]])
+    keyboard = InlineKeyboardMarkup([
+        [
+            btn(f"✅ قبول ({preview['cost']} 💎)", style=CONFIRM,
+                callback_data=f"xfer:cok:{sender.id}:{receiver.id}:{c.id}"),
+            btn("❌ رد", style=DANGER, callback_data=f"xfer:cno:{receiver.id}"),
+        ],
+        [btn("💎 راهنمای هزینه‌ها", style=NAV, callback_data="xfer:prices:c")],
+    ])
     await update.message.reply_text(
         f"🦖 <b>{display_name(sender)}</b> می‌خواد هیولای <b>{c.name}</b> "
         f"{constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level} رو به <b>{display_name(receiver)}</b> بده.\n"
@@ -523,11 +526,14 @@ async def transfer_equip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE,
         await _reply_transfer_error(update.message, exc)
         return
     it = preview["item"]
-    keyboard = InlineKeyboardMarkup([[
-        btn(f"✅ قبول ({preview['cost']} 💎)", style=CONFIRM,
-            callback_data=f"xfer:eok:{sender.id}:{receiver.id}:{it.id}"),
-        btn("❌ رد", style=DANGER, callback_data=f"xfer:eno:{receiver.id}"),
-    ]])
+    keyboard = InlineKeyboardMarkup([
+        [
+            btn(f"✅ قبول ({preview['cost']} 💎)", style=CONFIRM,
+                callback_data=f"xfer:eok:{sender.id}:{receiver.id}:{it.id}"),
+            btn("❌ رد", style=DANGER, callback_data=f"xfer:eno:{receiver.id}"),
+        ],
+        [btn("💎 راهنمای هزینه‌ها", style=NAV, callback_data="xfer:prices:e")],
+    ])
     await update.message.reply_text(
         f"🎒 <b>{display_name(sender)}</b> می‌خواد تجهیزاتِ <b>{it.name} +{it.level}</b> "
         f"{constants.RARITY_LABELS[it.rarity]} رو به <b>{display_name(receiver)}</b> بده.\n"
@@ -568,8 +574,12 @@ async def transfer_confirm_callback(update: Update, context: ContextTypes.DEFAUL
         from game import transfer
 
         await query.answer()
-        text = transfer.creature_prices_text() if parts[2] == "c" else transfer.equip_prices_text()
-        await safe_edit_message_text(query, text, parse_mode="HTML")
+        which = parts[2]
+        text = transfer.creature_prices_text() if which == "c" else transfer.equip_prices_text()
+        # a button to flip to the other table so both are one tap away
+        other = ("🎒 هزینه‌ی تجهیزات", "xfer:prices:e") if which == "c" else ("🦖 هزینه‌ی هیولا", "xfer:prices:c")
+        keyboard = InlineKeyboardMarkup([[btn(other[0], style=NAV, callback_data=other[1])]])
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
         return
 
     if verb in ("cno", "eno"):
