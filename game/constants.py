@@ -128,9 +128,31 @@ STARTER_BASE_ATK = 10
 STARTER_BASE_DEF = 10
 STARTER_BASE_SPD = 10
 
-DUEL_WIN_COINS = 30
+DUEL_WIN_COINS = 30  # legacy flat reward; free duels now use duel_win_reward() below
 DUEL_WIN_XP = 20
 DUEL_LOSE_XP = 5
+
+# A free «دوئل» now costs energy (like every other combat action) and pays a reward
+# that SCALES with the opponent you beat — flat 30 gold that ignored the fight and
+# cost nothing was the complaint. Reward keys off the loser's level, so beating a
+# stronger player is worth more, and there's a small DNA cut on top.
+DUEL_ENERGY_COST = 1
+DUEL_WIN_COINS_BASE = 20
+DUEL_WIN_COINS_PER_OPP_LEVEL = 7
+DUEL_WIN_COINS_CAP = 300
+DUEL_WIN_XP_BASE = 15
+DUEL_WIN_XP_PER_OPP_LEVEL = 3
+DUEL_WIN_DNA_PER_OPP_LEVEL = 0.5  # e.g. beating a level-10 opponent → 5 DNA
+
+
+def duel_win_reward(opponent_level: int) -> dict:
+    """Scaled reward for winning a free duel against a creature at `opponent_level`."""
+    lvl = max(1, opponent_level)
+    return {
+        "coins": min(DUEL_WIN_COINS_CAP, DUEL_WIN_COINS_BASE + lvl * DUEL_WIN_COINS_PER_OPP_LEVEL),
+        "xp": DUEL_WIN_XP_BASE + lvl * DUEL_WIN_XP_PER_OPP_LEVEL,
+        "dna": int(lvl * DUEL_WIN_DNA_PER_OPP_LEVEL),
+    }
 
 # only GOLD is transferable between players — DNA and diamonds are not, to keep
 # the premium/genetic economies from being farmed across throwaway accounts

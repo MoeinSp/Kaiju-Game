@@ -182,19 +182,22 @@ def _battle_action_sync(battle_id, actor_tg_id, action):
         loser_creature = battle.creature_b if winner_side == "a" else battle.creature_a
         winner_user = User.objects.get(id=winner_user_id)
 
-        winner_user.coins += constants.DUEL_WIN_COINS
-        winner_levels = add_xp(winner_creature, constants.DUEL_WIN_XP)
+        reward = constants.duel_win_reward(loser_creature.level)
+        winner_user.coins += reward["coins"]
+        winner_user.dna_fragments += reward["dna"]
+        winner_levels = add_xp(winner_creature, reward["xp"])
         add_xp(loser_creature, constants.DUEL_LOSE_XP)
-        winner_user.save(update_fields=["coins"])
+        winner_user.save(update_fields=["coins", "dna_fragments"])
         winner_creature.save()
         loser_creature.save()
 
         record_action(winner_user, "duel_win")
         completed_missions = check_missions(winner_user, "duel_win")
 
+        dna_bit = f" · +{reward['dna']} {get_emoji('dna')}" if reward["dna"] else ""
         reward_lines.append(
-            f"{get_emoji('coin')} {winner_creature.name} +{constants.DUEL_WIN_COINS} طلا · "
-            f"+{constants.DUEL_WIN_XP} XP"
+            f"{get_emoji('coin')} {winner_creature.name} +{reward['coins']} طلا · "
+            f"+{reward['xp']} XP{dna_bit}"
             + (f" {get_emoji('celebrate')} رسید به سطح {winner_creature.level}!" if winner_levels else "")
         )
         for m in completed_missions:

@@ -55,15 +55,21 @@ def _duel_sync(chat, challenger_tg, opponent_tg):
     if opponent_creature is None:
         raise GameError(f"{opponent_tg.first_name} هنوز موجودی نداره (باید /start بزنه).")
 
+    # the challenger pays energy to start the duel (defender doesn't, like the arena)
+    spend_energy(challenger_user, constants.DUEL_ENERGY_COST, "دوئل")
+    challenger_user.save(update_fields=["energy", "energy_updated_at"])
+
     winner_creature, log_text = resolve_duel(challenger_creature, opponent_creature)
     is_challenger_winner = winner_creature.id == challenger_creature.id
     winner_user = challenger_user if is_challenger_winner else opponent_user
     loser_creature = opponent_creature if is_challenger_winner else challenger_creature
 
-    winner_user.coins += constants.DUEL_WIN_COINS
-    winner_levels = add_xp(winner_creature, constants.DUEL_WIN_XP)
+    reward = constants.duel_win_reward(loser_creature.level)
+    winner_user.coins += reward["coins"]
+    winner_user.dna_fragments += reward["dna"]
+    winner_levels = add_xp(winner_creature, reward["xp"])
     add_xp(loser_creature, constants.DUEL_LOSE_XP)
-    winner_user.save(update_fields=["coins"])
+    winner_user.save(update_fields=["coins", "dna_fragments"])
     winner_creature.save()
     loser_creature.save()
 
@@ -78,7 +84,7 @@ def _duel_sync(chat, challenger_tg, opponent_tg):
         winner_id=winner_user.id,
         log_text=log_text,
     )
-    return winner_creature, winner_levels, completed_missions, log_text, speedup_won
+    return winner_creature, winner_levels, completed_missions, log_text, speedup_won, reward, challenger_user.energy
 
 
 def _duel_wager_challenge_sync(chat, challenger_tg, opponent_tg):
@@ -127,19 +133,21 @@ async def duel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if wager == 0:
         try:
-            winner_creature, winner_levels, completed_missions, log_text, speedup_won = await run_db(
+            winner_creature, winner_levels, completed_missions, log_text, speedup_won, reward, energy_left = await run_db(
                 _duel_sync, update.effective_chat, challenger_tg, opponent_tg
             )
         except GameError as exc:
             await update.message.reply_text(str(exc))
             return
 
+        dna_bit = f" · +{reward['dna']} {get_emoji('dna')}" if reward["dna"] else ""
         reward_text = (
-            f"\n\n{get_emoji('coin')} {winner_creature.name} +{constants.DUEL_WIN_COINS} طلا · "
-            f"+{constants.DUEL_WIN_XP} XP"
+            f"\n\n{get_emoji('coin')} {winner_creature.name} +{reward['coins']} طلا · "
+            f"+{reward['xp']} XP{dna_bit}"
         )
         if winner_levels:
             reward_text += f" {get_emoji('celebrate')} رسید به سطح {winner_creature.level}!"
+        reward_text += f"\n<i>⚡ ۱ انرژی کم شد (باقی‌مونده: {energy_left})</i>"
         reward_text += _mission_lines(completed_missions) + _speedup_note(speedup_won)
         await update.message.reply_text(
             log_text + reward_text,
@@ -201,6 +209,9 @@ def _duel_wager_resolve_sync(chat, challenger_id, opponent_id, wager, acceptor_i
     if challenger_user.coins < wager or opponent_user.coins < wager:
         raise GameError(f"یکی از دو نفر دیگه {wager} طلا نداره، دوئل لغو شد.")
 
+    # the challenger pays energy to fight (defender doesn't)
+    spend_energy(challenger_user, constants.DUEL_ENERGY_COST, "دوئل")
+
     winner_creature, log_text = resolve_duel(challenger_creature, opponent_creature)
     is_challenger_winner = winner_creature.id == challenger_creature.id
     winner_user = challenger_user if is_challenger_winner else opponent_user
@@ -211,6 +222,8 @@ def _duel_wager_resolve_sync(chat, challenger_id, opponent_id, wager, acceptor_i
     loser_user.coins -= wager
     winner_levels = add_xp(winner_creature, constants.DUEL_WIN_XP)
     add_xp(loser_creature, constants.DUEL_LOSE_XP)
+    # challenger_user always needs its energy persisted; both need coins
+    challenger_user.save(update_fields=["energy", "energy_updated_at"])
     winner_user.save(update_fields=["coins"])
     loser_user.save(update_fields=["coins"])
     winner_creature.save()
@@ -228,7 +241,7 @@ def _duel_wager_resolve_sync(chat, challenger_id, opponent_id, wager, acceptor_i
         wager_gold=wager,
         log_text=log_text,
     )
-    return winner_creature, winner_levels, completed_missions, log_text, speedup_won
+    return winner_creature, winner_levels, completed_missions, log_text, speedup_won, challenger_user.energy
 
 
 async def duel_wager_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -246,7 +259,7 @@ async def duel_wager_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     wager = int(rest[0])
     try:
-        winner_creature, winner_levels, completed_missions, log_text, speedup_won = await run_db(
+        winner_creature, winner_levels, completed_missions, log_text, speedup_won, energy_left = await run_db(
             _duel_wager_resolve_sync, update.effective_chat, challenger_id, opponent_id, wager, update.effective_user.id
         )
     except GameError as exc:
@@ -254,7 +267,10 @@ async def duel_wager_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     await query.answer()
-    reward_text = f"\n\n{get_emoji('coin')} {winner_creature.name} +{wager} طلا (شرط) · +{constants.DUEL_WIN_XP} XP"
+    reward_text = (
+        f"\n\n{get_emoji('coin')} {winner_creature.name} +{wager} طلا (شرط) · +{constants.DUEL_WIN_XP} XP"
+        f"\n<i>⚡ ۱ انرژی از چالنجر کم شد (باقی‌مونده: {energy_left})</i>"
+    )
     if winner_levels:
         reward_text += f" {get_emoji('celebrate')} رسید به سطح {winner_creature.level}!"
     reward_text += _mission_lines(completed_missions) + _speedup_note(speedup_won)
