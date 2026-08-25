@@ -12,14 +12,7 @@ from telegram import (  # noqa: E402
     BotCommandScopeAllPrivateChats,
     Update,
 )
-from telegram.ext import (  # noqa: E402
-    AIORateLimiter,
-    Application,
-    CallbackQueryHandler,
-    ContextTypes,
-    MessageHandler,
-    filters,
-)
+from telegram.ext import Application, CallbackQueryHandler, ContextTypes, MessageHandler, filters  # noqa: E402
 
 from bot import middleware  # noqa: E402
 from bot.handlers import (
@@ -141,16 +134,14 @@ def main() -> None:
     botconfig.refresh_cache()  # the "join the game group" button reads this in async code
     admins.refresh_cache()  # the panel's access check reads this in async code
 
-    # A built-in rate limiter smooths outgoing calls under Telegram's limits (30/s
-    # global, 1/s per chat, ~20/min per group) and transparently retries the 429
-    # "Flood control exceeded" responses instead of letting them surface as a
-    # user-visible stall during busy button bursts. max_retries>0 = auto-retry.
-    application = (
-        Application.builder()
-        .token(BOT_TOKEN)
-        .rate_limiter(AIORateLimiter(max_retries=3))
-        .build()
-    )
+    # NOTE: deliberately NO AIORateLimiter. Its default per-group throttle is
+    # 20 messages/60s = one per 3 seconds, which for a busy game group queues
+    # replies and — worse — delays answerCallbackQuery past its short validity
+    # window, so buttons silently stop responding ("Query is too old"). That was a
+    # real outage; the occasional Telegram 429 it was meant to prevent is rarer and
+    # self-heals. If we revisit this, group_max_rate must be raised far above the
+    # default and callback answers kept off the limiter.
+    application = Application.builder().token(BOT_TOKEN).build()
 
     middleware.register(application)
     private.register(application)
