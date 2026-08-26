@@ -35,29 +35,31 @@ def _roll_creature(user: User, rarity: str) -> Creature:
 
 
 @transaction.atomic
-def open_biocrate(user: User) -> dict:
-    if user.coins < constants.BIOCRATE_GOLD_COST:
-        raise GameError(f"طلا کافی نداری! باز کردن باکس ژنتیکی {constants.BIOCRATE_GOLD_COST} طلا هزینه داره.")
-    if user.dna_fragments < constants.BIOCRATE_DNA_COST:
+def open_biocrate(user: User, tier: str = "basic") -> dict:
+    cfg = constants.BIOCRATE_TIERS.get(tier)
+    if cfg is None:
+        raise GameError("این نوع باکس ژنتیکی وجود نداره.")
+    if user.coins < cfg["gold"]:
+        raise GameError(f"طلا کافی نداری! این باکس {cfg['gold']:,} طلا هزینه داره.")
+    if user.dna_fragments < cfg["dna"]:
         raise GameError(
-            f"{constants.BIOCRATE_DNA_COST} DNA لازمه (الان {user.dna_fragments} داری). "
+            f"{cfg['dna']} DNA لازمه (الان {user.dna_fragments} داری). "
             "DNA از شکار، دخمه، آزمایشگاه DNA و پاداش آفلاین به‌دست می‌آد."
         )
-    user.coins -= constants.BIOCRATE_GOLD_COST
-    user.dna_fragments -= constants.BIOCRATE_DNA_COST
+    user.coins -= cfg["gold"]
+    user.dna_fragments -= cfg["dna"]
     user.save(update_fields=["coins", "dna_fragments"])
 
-    # Decide creature-vs-equipment FIRST, then roll rarity from the table that
-    # belongs to that outcome — a creature uses its own steep table (so the crate's
-    # absolute creature odds are 8% common + a thin tail), equipment keeps the
-    # standard loot weights.
-    if random.random() < constants.BIOCRATE_CREATURE_CHANCE:
-        rarity = roll_rarity(constants.BIOCRATE_CREATURE_RARITY_WEIGHTS)
+    # Decide creature-vs-equipment FIRST (per-tier chance), then roll rarity from the
+    # table that belongs to that outcome — pricier tiers give a creature more often
+    # and skew its rarity higher; equipment keeps the standard loot weights.
+    if random.random() < cfg["creature_chance"]:
+        rarity = roll_rarity(cfg["weights"])
         creature = _roll_creature(user, rarity)
-        return {"kind": "creature", "rarity": rarity, "creature": creature}
+        return {"kind": "creature", "rarity": rarity, "creature": creature, "tier": tier}
     rarity = roll_rarity()
     item = roll_equipment(user, rarity)
-    return {"kind": "equipment", "rarity": rarity, "item": item}
+    return {"kind": "equipment", "rarity": rarity, "item": item, "tier": tier}
 
 
 @transaction.atomic

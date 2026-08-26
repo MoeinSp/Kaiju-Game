@@ -2,7 +2,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bio_lab.repository import get_or_create_user
-from bot.buttons import CONFIRM, DANGER, PRIMARY, SHOP, back_btn, back_only_keyboard, btn
+from bot.buttons import CONFIRM, DANGER, SHOP, back_btn, back_only_keyboard, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants
 from game.creature import GameError
@@ -10,9 +10,9 @@ from game.emoji import get_emoji
 from game.lootbox import open_biocrate, open_diamond_box
 
 
-def _biocrate_sync(tg_user):
+def _biocrate_buy_sync(tg_user, tier):
     user, _ = get_or_create_user(tg_user)
-    return open_biocrate(user)
+    return open_biocrate(user, tier)
 
 
 def _user_coins_sync(tg_user):
@@ -20,64 +20,71 @@ def _user_coins_sync(tg_user):
     return user.coins, user.dna_fragments
 
 
-def _biocrate_panel_text(coins: int, dna: int) -> str:
-    return (
+def _biocrate_list_keyboard() -> InlineKeyboardMarkup:
+    rows = []
+    for tier in constants.BIOCRATE_TIER_ORDER:
+        cfg = constants.BIOCRATE_TIERS[tier]
+        rows.append([btn(
+            f"{cfg['label']} — {cfg['gold']:,} طلا + {cfg['dna']} DNA",
+            style=SHOP, callback_data=f"bc_pick:{tier}",
+        )])
+    rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def biocrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    coins, dna = await run_db(_user_coins_sync, update.effective_user)
+    text = (
         f"{get_emoji('biocrate')} <b>باکس ژنتیکی</b>\n"
-        "<blockquote>یه باکس شانسی — بیشترش تجهیزاته و گاهی یه هیولای تازه ازش درمیاد.</blockquote>\n\n"
-        f"هزینه: <b>{constants.BIOCRATE_GOLD_COST}</b> {get_emoji('coin')} + "
-        f"<b>{constants.BIOCRATE_DNA_COST}</b> {get_emoji('dna')}\n"
-        f"<i>موجودی: {coins} طلا · {dna} DNA</i>"
+        "<blockquote>یه باکس شانسی — بیشترش تجهیزاته و گاهی هیولای تازه ازش درمی‌آد. "
+        "هرچی گرون‌تر، شانس هیولا و نایابیش بیشتر.</blockquote>\n"
+        f"<i>موجودی: {coins:,} طلا · {dna} DNA</i>\n\n"
+        "رو یکی بزن تا شانس‌ها و خریدش رو ببینی:"
     )
+    await send_screen(update, text, parse_mode="HTML", reply_markup=_biocrate_list_keyboard())
 
 
-def _biocrate_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        [
-            [btn("خرید و باز کن", emoji_key="btn_confirm", style=CONFIRM, callback_data="bc_buy")],
-            [btn("📊 شانس‌ها", style=PRIMARY, callback_data="bc_odds")],
-            [back_btn("menu:cat_shop", "بازگشت به فروشگاه")],
-        ]
-    )
-
-
-def _biocrate_odds_text() -> str:
-    """The drop odds, on their own screen behind the «📊 شانس‌ها» button so the main
-    panel stays clean. Computed from the constants so it can never drift."""
-    cc = constants.BIOCRATE_CREATURE_CHANCE
-    weights = constants.BIOCRATE_CREATURE_RARITY_WEIGHTS
+def _biocrate_detail_text(tier: str) -> str:
+    cfg = constants.BIOCRATE_TIERS[tier]
+    cc = cfg["creature_chance"]
+    weights = cfg["weights"]
     total = sum(weights.values())
     lines = [
-        f"{get_emoji('biocrate')} <b>شانس‌های باکس ژنتیکی</b>\n",
+        f"{cfg['label']}",
+        f"هزینه: <b>{cfg['gold']:,}</b> {get_emoji('coin')} + <b>{cfg['dna']}</b> {get_emoji('dna')}\n",
         f"🎒 تجهیزات — <b>{(1 - cc) * 100:g}٪</b>",
-        "",
         f"🧬 <b>هیولا</b> — روی‌هم <b>{cc * 100:g}٪</b>:",
     ]
     for rarity, weight in weights.items():
         pct = cc * weight / total * 100
-        lines.append(f"　{constants.RARITY_LABELS[rarity]} — <b>{pct:g}٪</b>")
-    lines.append("\n<i>هرچی نایاب‌تر، کمیاب‌تر. برای شکار هیولای نایاب، جعبه‌های الماسی بهترن.</i>")
+        lines.append(f"　{constants.RARITY_LABELS[rarity]} — <b>{pct:.2g}٪</b>")
     return "\n".join(lines)
 
 
-async def biocrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Cost + confirmation screen — opening the crate spends gold, so it must never
-    fire on a single tap without the player agreeing to the price first. The odds
-    live behind their own button to keep this screen uncluttered."""
-    coins, dna = await run_db(_user_coins_sync, update.effective_user)
-    await send_screen(update, _biocrate_panel_text(coins, dna), parse_mode="HTML", reply_markup=_biocrate_keyboard())
+def _biocrate_detail_keyboard(tier: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [btn("خرید و باز کن", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"bc_buy:{tier}")],
+        [back_btn("menu:biocrate", "بازگشت به لیست")],
+    ])
 
 
-async def biocrate_odds_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def biocrate_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    tier = query.data.split(":")[1]
+    if tier not in constants.BIOCRATE_TIERS:
+        await query.answer("این باکس پیدا نشد.", show_alert=True)
+        return
     await query.answer()
-    keyboard = InlineKeyboardMarkup([[back_btn("menu:biocrate", "بازگشت به باکس")]])
-    await safe_edit_message_text(query, _biocrate_odds_text(), parse_mode="HTML", reply_markup=keyboard)
+    await safe_edit_message_text(
+        query, _biocrate_detail_text(tier), parse_mode="HTML", reply_markup=_biocrate_detail_keyboard(tier)
+    )
 
 
 async def biocrate_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    tier = query.data.split(":")[1]
     try:
-        result = await run_db(_biocrate_sync, update.effective_user)
+        result = await run_db(_biocrate_buy_sync, update.effective_user, tier)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
@@ -93,15 +100,13 @@ async def biocrate_buy_callback(update: Update, context: ContextTypes.DEFAULT_TY
         hint = "از «🎒 تجهیزات» توی منو می‌تونی تجهیزش کنی."
 
     await query.answer("🟢 باز شد!")
-    keyboard = InlineKeyboardMarkup(
-        [
-            [btn("یکی دیگه باز کن", emoji_key="btn_biocrate", style=SHOP, callback_data="menu:biocrate")],
-            [back_btn("menu:cat_shop", "بازگشت به فروشگاه")],
-        ]
-    )
+    keyboard = InlineKeyboardMarkup([
+        [btn("یکی دیگه از همین", emoji_key="btn_biocrate", style=SHOP, callback_data=f"bc_pick:{tier}")],
+        [back_btn("menu:biocrate", "لیست باکس‌ها")],
+    ])
     await safe_edit_message_text(
         query,
-        f"{get_emoji('biocrate')} <b>باکس ژنتیکی باز شد!</b>\n\n"
+        f"{constants.BIOCRATE_TIERS[tier]['label']} <b>باز شد!</b>\n\n"
         f"<tg-spoiler>{reveal}</tg-spoiler>\n\n"
         f"<blockquote>{hint}</blockquote>",
         parse_mode="HTML",
@@ -197,8 +202,8 @@ async def diamond_box_buy_callback(update: Update, context: ContextTypes.DEFAULT
 
 def register(application) -> None:
     application.add_handler(CommandHandler("biocrate", biocrate_cmd, filters.ChatType.PRIVATE))
-    application.add_handler(CallbackQueryHandler(biocrate_buy_callback, pattern=r"^bc_buy$"))
-    application.add_handler(CallbackQueryHandler(biocrate_odds_callback, pattern=r"^bc_odds$"))
+    application.add_handler(CallbackQueryHandler(biocrate_pick_callback, pattern=r"^bc_pick:"))
+    application.add_handler(CallbackQueryHandler(biocrate_buy_callback, pattern=r"^bc_buy:"))
     application.add_handler(CommandHandler("diamondbox", diamond_box_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(diamond_box_pick_callback, pattern=r"^dbox_pick:"))
     application.add_handler(CallbackQueryHandler(diamond_box_buy_callback, pattern=r"^dbox_buy:"))

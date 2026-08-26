@@ -401,6 +401,27 @@ BIOCRATE_CREATURE_RARITY_WEIGHTS = {
     "mythic": 1,
 }
 
+# Three Bio-Crate tiers paid with gold (+DNA). The cheapest is the original; the
+# pricier ones cost more gold AND DNA but pay for themselves with a higher chance of
+# a creature and a far better rarity spread — so the money is worth it.
+BIOCRATE_TIERS = {
+    "basic": {
+        "label": "📦 باکس ژنتیکی معمولی", "gold": BIOCRATE_GOLD_COST, "dna": BIOCRATE_DNA_COST,
+        "creature_chance": BIOCRATE_CREATURE_CHANCE, "weights": BIOCRATE_CREATURE_RARITY_WEIGHTS,
+    },
+    "rare": {
+        "label": "🎁 باکس ژنتیکی نایاب", "gold": 2000, "dna": 60,
+        "creature_chance": 0.10,
+        "weights": {"common": 45, "rare": 30, "epic": 15, "legendary": 7, "mythic": 3},
+    },
+    "epic": {
+        "label": "💎 باکس ژنتیکی حماسی", "gold": 5000, "dna": 120,
+        "creature_chance": 0.18,
+        "weights": {"common": 20, "rare": 30, "epic": 28, "legendary": 15, "mythic": 7},
+    },
+}
+BIOCRATE_TIER_ORDER = ["basic", "rare", "epic"]
+
 FUSION_GOLD_COST = 120  # legacy floor / fallback; real cost is fusion_cost() below
 FUSION_INHERIT_CHANCE = 0.5  # child inherits one random equipped item from a parent
 # Fusion is a major power spike (a strictly-stronger, higher-star creature), so its
@@ -426,6 +447,11 @@ def fusion_cost(parent_star: int, rarity: str) -> int:
 FUSION_WEAK_PARENT_SHARE = 0.25   # child adds this much of the weaker parent's stat
 FUSION_STAT_GROWTH = {"base_hp": 12, "base_atk": 3, "base_def": 3, "base_spd": 2}
 FUSION_RARITY_UPGRADE_BUMP = 1.15  # extra multiplier when the fusion also upgrades rarity
+# The child keeps the STRONGER parent's build; the weaker parent's investment
+# (body-part upgrades it paid gold for, and its level) isn't just lost — a modest
+# slice of it comes back to the child as XP. Kept small on purpose ("نه زیاد").
+FUSION_WEAK_XP_PER_PART_LEVEL = 30
+FUSION_WEAK_XP_PER_LEVEL = 12
 
 DUEL_WAGER_MAX = 500
 

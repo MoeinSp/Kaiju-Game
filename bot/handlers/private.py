@@ -1385,39 +1385,63 @@ async def fusion_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         return
 
-    lines.append(f"⭐ سقف ستاره‌ی فعلی تو: <b>{cap}</b>")
-    lines.append(
-        "<blockquote>🔗 <b>قانون:</b> دو هیولای <b>هم‌نام + هم‌نایابی + هم‌ستاره</b> → یکی با یک ستاره بالاتر.\n"
-        "🪜 <b>مسیر ۵ ستاره:</b> ۲تا ۱★ → ۲★، ۲تا ۲★ → ۳★ … (جمعاً ۱۶ تا ۱★).</blockquote>"
-    )
+    text, keyboard = _fusion_body(user, pairs, cap, "all")
+    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
 
+
+def _fusion_body(user, pairs, cap, filt: str) -> tuple[str, InlineKeyboardMarkup]:
+    """Fusion list, filterable by rarity via tabs so a big roster isn't one long
+    scattered list. `filt` is a rarity key or "all"."""
+    lines = [
+        f"{get_emoji('lab')} <b>تالار ادغام</b>",
+        f"⭐ سقف ستاره‌ی فعلی تو: <b>{cap}</b>",
+        "<blockquote>🔗 دو هیولای <b>هم‌نام + هم‌نایابی + هم‌ستاره</b> → یکی یک ستاره بالاتر. "
+        "اول ۲تا ۱★ کن ۲★، بعد ۲تا ۲★ کن ۳★ … (۵★ = ۱۶ تا ۱★).</blockquote>",
+    ]
+    # rarity tabs — only rarities that actually have a ready pair, plus «همه»
+    present = [r for r in constants.RARITY_ORDER if any(p["rarity"] == r for p in pairs)]
     rows = []
+    if present:
+        tab_row = [btn(("• " if filt == "all" else "") + "همه", style=NAV, callback_data="fus_rarity:all")]
+        for r in present:
+            label = constants.RARITY_LABELS[r].split()[0]
+            tab_row.append(btn(("• " if filt == r else "") + label, style=NAV, callback_data=f"fus_rarity:{r}"))
+        rows.append(tab_row)
+
+    shown = pairs if filt == "all" else [p for p in pairs if p["rarity"] == filt]
     if not pairs:
         lines.append(
             "\n📭 الان هیچ جفت آماده‌ای نداری — برای هر ترکیب به <b>دو تای دقیقاً یکسان</b> "
             "(نام و نایابی و ستاره) نیاز داری. از باکس‌ها هیولای بیشتری بگیر."
         )
+    elif not shown:
+        lines.append("\n📭 توی این نایابی جفت آماده‌ای نیست — یه تبِ دیگه رو ببین.")
     else:
-        # group the ready pairs by star tier so the list reads as a clear ladder
         lines.append("\n✅ <b>جفت‌های آماده</b> (هرکدوم ۱۰۰٪ موفق):")
         last_star = None
-        for p in sorted(pairs, key=lambda x: (x["star"], x["name"])):
+        for p in sorted(shown, key=lambda x: (x["star"], x["name"])):
             if p["star"] != last_star:
                 lines.append(f"\n{'⭐' * p['star']} <b>{p['star']} ستاره → {p['star'] + 1} ستاره</b>")
                 last_star = p["star"]
             cost = constants.fusion_cost(p["star"], p["rarity"])
             rarity_dot = constants.RARITY_LABELS[p["rarity"]].split()[0]
-            lines.append(f"　{rarity_dot} {p['name']} — <b>{p['count']}</b> تا آماده · {cost:,} {get_emoji('coin')}")
             rows.append([btn(
                 f"{rarity_dot} {p['name']} {'⭐' * p['star']} → {'⭐' * (p['star'] + 1)}  ({cost:,}💰)",
-                style=PRIMARY,  # no emoji_key: keep the rarity dot as the leading glyph
-                callback_data=f"fus_b:{p['parent_a'].id}:{p['parent_b'].id}",
+                style=PRIMARY, callback_data=f"fus_b:{p['parent_a'].id}:{p['parent_b'].id}",
             )])
     rows.append([back_btn("menu:me")])
     lines.append(f"\n{wallet_line(user)}")
-    await send_screen(update,
-        "\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows)
-    )
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+async def fusion_rarity_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    filt = update.callback_query.data.split(":")[1]
+    user, pairs, lab_built, cap = await run_db(_fusion_panel_sync, update.effective_user)
+    if not lab_built:
+        await update.callback_query.answer()
+        return
+    text, keyboard = _fusion_body(user, pairs, cap, filt)
+    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _fusion_cost_sync(tg_user, a_id, b_id):
@@ -2608,6 +2632,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(devour_select_all_callback, pattern=r"^devour_(all|none):\d+$"))
     application.add_handler(CallbackQueryHandler(devour_multi_callback, pattern=r"^devour_multi:\d+$"))
     application.add_handler(CallbackQueryHandler(fusion_pick_a_callback, pattern=r"^fus_a:"))
+    application.add_handler(CallbackQueryHandler(fusion_rarity_callback, pattern=r"^fus_rarity:"))
     application.add_handler(CallbackQueryHandler(fusion_pick_b_callback, pattern=r"^fus_b:"))
     application.add_handler(CallbackQueryHandler(fusion_confirm_callback, pattern=r"^fus_confirm:"))
     application.add_handler(CallbackQueryHandler(alliance_create_callback, pattern=r"^ally_create$"))

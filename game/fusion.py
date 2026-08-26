@@ -137,6 +137,18 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
         is_active=True,
     )
 
+    # the weaker parent's build is otherwise lost (child keeps the STRONGER one's
+    # max stats/parts); refund a modest slice of its investment as XP to the child
+    from game.creature import add_xp, creature_power
+
+    weaker = parent_a if creature_power(parent_a) <= creature_power(parent_b) else parent_b
+    weak_parts = weaker.fangs_lvl + weaker.armor_lvl + weaker.wings_lvl + weaker.poison_lvl
+    xp_refund = (weak_parts * constants.FUSION_WEAK_XP_PER_PART_LEVEL
+                 + weaker.level * constants.FUSION_WEAK_XP_PER_LEVEL)
+    if xp_refund > 0:
+        add_xp(child, xp_refund)
+        child.save()
+
     inherited_item = None
     if random.random() < constants.FUSION_INHERIT_CHANCE:
         parent_items = get_equipped_items(parent_a) + get_equipped_items(parent_b)

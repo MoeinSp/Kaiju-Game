@@ -172,14 +172,15 @@ def upgrade_item(user: User, item_id: int, dupe_item_id: int) -> Equipment:
 
 
 def _fuse_fail_chance(target: Equipment, sacrifice: Equipment) -> float:
-    """Same-slot fusion odds: a sacrifice of equal-or-higher rarity, or a higher
-    level, makes success more likely."""
-    chance = constants.EQUIPMENT_FUSE_FAIL_CHANCE
+    """Same-slot fusion odds: the rarer (and higher-level) the sacrifice, the better
+    the odds — a mythic sacrifice is almost a guaranteed success, so a valuable item
+    fed in is really worth it."""
     order = constants.RARITY_ORDER
-    if order.index(sacrifice.rarity) >= order.index(target.rarity):
-        chance -= 0.15
-    chance -= 0.03 * max(0, sacrifice.level - 1)
-    return max(0.05, min(0.6, chance))
+    chance = constants.EQUIPMENT_FUSE_FAIL_CHANCE
+    # scales with the sacrifice's rarity: common 0, … mythic −0.40
+    chance -= 0.10 * order.index(sacrifice.rarity)
+    chance -= 0.04 * max(0, sacrifice.level - 1)
+    return max(0.03, min(0.6, chance))
 
 
 def fuse_equipment(user: User, target_id: int, sacrifice_id: int) -> dict:

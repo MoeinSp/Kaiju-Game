@@ -1089,7 +1089,7 @@ def _do_sync(tg_user, chat, action, arg):
     if action == "box_open":
         from game.lootbox import open_biocrate
 
-        result = open_biocrate(user)
+        result = open_biocrate(user, "basic")  # group crate is the basic tier; pricier ones live in the DM
         return {"kind": "box", "result": result, "card": _card_sync(tg_user, chat, "box")}
 
     if action == "wheel_spin":

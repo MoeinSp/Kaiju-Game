@@ -105,13 +105,32 @@ def add_xp(creature: Creature, amount: int) -> int:
     return levels_gained
 
 
+# XP a devoured creature is worth, multiplied by its rarity — mythic is worth many
+# times a common, so sacrificing a rare monster really matters.
+DEVOUR_RARITY_MULT = {"common": 1.0, "rare": 2.5, "epic": 5.0, "legendary": 10.0, "mythic": 20.0}
+DEVOUR_STAR_BONUS = 0.6      # extra XP per star above 1★
+DEVOUR_GOLD_TO_XP = 0.25     # this fraction of the gold spent on the sacrifice's body-part upgrades comes back as XP
+
+
+def _part_invested_gold(creature: Creature) -> int:
+    """Total gold that was spent upgrading this creature's body parts to their
+    current levels — used to refund a slice of it as XP on devour."""
+    total = 0
+    for part in constants.BODY_PARTS:
+        lvl = getattr(creature, f"{part}_lvl", 0)
+        total += sum(constants.upgrade_cost(i) for i in range(lvl))
+    return total
+
+
 def _devour_xp(sacrifice: Creature) -> int:
-    """XP a target gains from devouring `sacrifice` — scales with the sacrifice's
-    level, rarity and stars, so feeding a strong creature is worth more."""
-    rarity_idx = constants.RARITY_ORDER.index(sacrifice.rarity) if sacrifice.rarity in constants.RARITY_ORDER else 0
+    """XP a target gains from devouring `sacrifice` — scales hard with the sacrifice's
+    rarity, plus its level, stars, and the gold invested in its body-part upgrades."""
     per_level = constants.CREATURE_XP_BASE + constants.CREATURE_XP_LINEAR
-    mult = (1 + 0.3 * rarity_idx) * (1 + 0.5 * max(0, sacrifice.star_level - 1))
-    return max(per_level, round(per_level * max(1, sacrifice.level) * mult))
+    rarity_mult = DEVOUR_RARITY_MULT.get(sacrifice.rarity, 1.0)
+    star_mult = 1 + DEVOUR_STAR_BONUS * max(0, sacrifice.star_level - 1)
+    base = per_level * max(1, sacrifice.level) * rarity_mult * star_mult
+    base += _part_invested_gold(sacrifice) * DEVOUR_GOLD_TO_XP  # money-spent → XP, same for every rarity
+    return max(per_level, round(base))
 
 
 def devour_candidates(user: User, target_id: int) -> list[Creature]:
