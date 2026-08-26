@@ -165,11 +165,17 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         "loot_pool": opponent["loot_pool"],
     }
 
+    text, keyboard = _render_opponent(user, opponent, my_power, loot, my_element, dna_win)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _render_opponent(user, opponent, my_power, loot, my_element, dna_win) -> tuple[str, InlineKeyboardMarkup]:
+    """The 'opponent found' screen — shared by matchmaking and the «بازگشت» from the
+    opponent-details view so the same screen is rebuilt identically."""
     gap = opponent["power"] - my_power
     odds = "🟢 شانس بالا" if gap < -15 else ("🔴 خطرناک" if gap > 15 else "🟡 سرتاسری")
     opp_element = opponent.get("element")
     elem_tag = f"  ({constants.element_label(opp_element)})" if opp_element else ""
-    # preview the cup swing so the rating stakes are visible before committing
     win_cup = cup_delta(user, opponent["cup"], True, my_power)
     loss_cup = cup_delta(user, opponent["cup"], False, my_power)
     lines = [
@@ -187,11 +193,128 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     keyboard = InlineKeyboardMarkup(
         [
             [btn("حمله!", emoji_key="btn_attack", style=BATTLE, callback_data="arena_attack")],
-            [btn("حریف بعدی", emoji_key="btn_recheck", style=NAV, callback_data="arena_find")],
+            [btn("🔍 جزییات حریف", style=NAV, callback_data="arena_opp_details"),
+             btn("حریف بعدی", emoji_key="btn_recheck", style=NAV, callback_data="arena_find")],
             [back_btn("menu:arena")],
         ]
     )
-    await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
+    return "\n".join(lines), keyboard
+
+
+def _opponent_details_sync(pending: dict) -> dict:
+    """Full readout of the matched opponent — level, stars, every equipped item with
+    its rarity/enhancement, the gear's power contribution, and body-part upgrades.
+    Bots have no creature row, so they only report power/element."""
+    from bio_lab.models import Creature, User
+    from game.creature import effective_stats
+    from game.equipment import get_equipped_items
+
+    if pending.get("is_fake") or not pending.get("user_id"):
+        return {"is_fake": True, "label": pending["label"], "power": pending["power"],
+                "element": pending.get("element")}
+
+    target = User.objects.filter(id=pending["user_id"]).first()
+    creature = Creature.objects.filter(owner=target, is_active=True).first() if target else None
+    if creature is None:
+        return {"is_fake": True, "label": pending["label"], "power": pending["power"],
+                "element": pending.get("element")}
+
+    items = get_equipped_items(creature)
+    stats = effective_stats(creature, items)
+    bare_power = creature_power(creature, [])
+    full_power = creature_power(creature, items)
+    gear = [
+        {
+            "slot": constants.EQUIPMENT_SLOT_LABELS.get(it.slot, it.slot),
+            "name": it.name,
+            "rarity": constants.RARITY_LABELS.get(it.rarity, it.rarity),
+            "level": it.level,
+        }
+        for it in items
+    ]
+    parts = [
+        (constants.BODY_PARTS["fangs"]["label"], creature.fangs_lvl),
+        (constants.BODY_PARTS["armor"]["label"], creature.armor_lvl),
+        (constants.BODY_PARTS["wings"]["label"], creature.wings_lvl),
+        (constants.BODY_PARTS["poison"]["label"], creature.poison_lvl),
+    ]
+    return {
+        "is_fake": False,
+        "label": pending["label"],
+        "name": creature.name,
+        "element": creature.element,
+        "rarity": constants.RARITY_LABELS.get(creature.rarity, creature.rarity),
+        "level": creature.level,
+        "star_level": creature.star_level,
+        "stats": stats,
+        "gear": gear,
+        "gear_power": full_power - bare_power,
+        "full_power": full_power,
+        "parts": parts,
+    }
+
+
+async def arena_opp_details_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    pending = context.user_data.get(PENDING_OPPONENT_KEY)
+    if pending is None:
+        await query.answer("اول «پیدا کردن حریف» رو بزن.", show_alert=True)
+        return
+    await query.answer()
+    d = await run_db(_opponent_details_sync, pending)
+    if d["is_fake"]:
+        text = (
+            f"🔍 <b>جزییات حریف</b>\n\n🏭 <b>{d['label']}</b>\n"
+            f"💪 قدرت کل: <b>{d['power']}</b>\n"
+            f"{constants.element_label(d['element']) if d.get('element') else ''}\n\n"
+            "<i>این حریف یه آزمایشگاه بات ساختگیه — تجهیزات واقعی نداره.</i>"
+        )
+    else:
+        s = d["stats"]
+        lines = [
+            f"🔍 <b>جزییات حریف</b>",
+            f"🏭 <b>{d['label']}</b>\n",
+            f"{get_emoji('creature')} <b>{d['name']}</b> · {constants.element_label(d['element'])}",
+            f"{d['rarity']} · {'⭐' * d['star_level']} · سطح <b>{d['level']}</b>",
+            f"💪 قدرت کل: <b>{d['full_power']}</b>  <i>(از تجهیزات: +{d['gear_power']})</i>\n",
+            f"❤️ HP <b>{s['hp']}</b> · ⚔️ ATK <b>{s['atk']}</b> · 🛡 DEF <b>{s['def']}</b> · 💨 SPD <b>{s['spd']}</b>"
+            + (f" · ☠️ {round(s['poison'])}" if s.get('poison') else ""),
+            "",
+            "<b>🦴 ارتقای اعضا:</b>",
+        ]
+        lines += [f"　{label} — <b>{lvl}</b>" for label, lvl in d["parts"]]
+        lines.append("")
+        if d["gear"]:
+            lines.append("<b>🎒 تجهیزات:</b>")
+            lines += [f"　{g['slot']} — {g['name']} +{g['level']} ({g['rarity']})" for g in d["gear"]]
+        else:
+            lines.append("<i>🎒 هیچ تجهیزاتی نداره.</i>")
+        text = "\n".join(lines)
+    keyboard = InlineKeyboardMarkup([[btn("↩️ بازگشت به حریف", style=NAV, callback_data="arena_opp_back")]])
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _opponent_reshow_sync(tg_user, pending):
+    from bio_lab.models import Creature
+
+    user, _ = get_or_create_user(tg_user)
+    creature = Creature.objects.filter(owner=user, is_active=True).first()
+    level = creature.level if creature is not None else 1
+    my_element = creature.element if creature is not None else None
+    dna_win = round(constants.ARENA_WIN_DNA_BASE + level * constants.ARENA_WIN_DNA_PER_LEVEL)
+    return user, active_power(user), expected_loot(pending, level), my_element, dna_win
+
+
+async def arena_opp_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    pending = context.user_data.get(PENDING_OPPONENT_KEY)
+    if pending is None:
+        await query.answer("اول «پیدا کردن حریف» رو بزن.", show_alert=True)
+        return
+    await query.answer()
+    user, my_power, loot, my_element, dna_win = await run_db(_opponent_reshow_sync, update.effective_user, pending)
+    text, keyboard = _render_opponent(user, pending, my_power, loot, my_element, dna_win)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _attack_sync(tg_user, pending):
@@ -490,6 +613,8 @@ async def arena_last_season_callback(update: Update, context: ContextTypes.DEFAU
 def register(application) -> None:
     application.add_handler(CommandHandler("arena", arena_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(arena_find_callback, pattern=r"^arena_find$"))
+    application.add_handler(CallbackQueryHandler(arena_opp_details_callback, pattern=r"^arena_opp_details$"))
+    application.add_handler(CallbackQueryHandler(arena_opp_back_callback, pattern=r"^arena_opp_back$"))
     application.add_handler(CallbackQueryHandler(arena_attack_callback, pattern=r"^arena_attack$"))
     application.add_handler(CallbackQueryHandler(arena_detail_callback, pattern=r"^arena_detail$"))
     application.add_handler(CallbackQueryHandler(arena_top_callback, pattern=r"^arena_top$"))
