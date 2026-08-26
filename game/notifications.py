@@ -40,6 +40,24 @@ from game.energy import _synced_energy_and_anchor
 # history the first time the job runs (or after any downtime)
 RAID_NOTIFY_WINDOW = datetime.timedelta(hours=2)
 
+
+def defense_report_text(attacker_name: str, attacker_power: int, attacker_won: bool, loot: int) -> str:
+    """The 'you were attacked' DM body — shared by the immediate send (fired the
+    instant a raid resolves) and the periodic catch-up job, so both read identically."""
+    power_note = f" (قدرت {attacker_power})" if attacker_power else ""
+    if attacker_won:
+        return (
+            f"⚔️ <b>به آزمایشگاهت حمله شد!</b>\n"
+            f"🏭 مهاجم: <b>{attacker_name}</b>{power_note}\n"
+            f"💰 <b>{loot}</b> طلا غارت شد.\n"
+            "می‌تونی همین‌جا جواب بدی 👇"
+        )
+    return (
+        f"🛡 <b>یکی بهت حمله کرد ولی دفاعت موفق بود!</b>\n"
+        f"🏭 مهاجم: <b>{attacker_name}</b>{power_note}\n"
+        "می‌تونی همین‌جا حمله‌ی متقابل بزنی 👇"
+    )
+
 # the once-a-day "your daily reward is waiting" nudge only fires in this local-hour
 # window (Asia/Tehran) and only for players seen within this many days
 NUDGE_HOUR_START = 18
@@ -92,22 +110,8 @@ def collect_due() -> list[tuple[int, str]]:
                 attacker_name = log.attacker_label or (
                     log.attacker.lab_name if log.attacker_id and log.attacker else "یه مهاجم"
                 )
-                power_note = f" (قدرت {log.attacker_power})" if log.attacker_power else ""
+                text = defense_report_text(attacker_name, log.attacker_power, log.attacker_won, log.loot_gold)
                 revengeable = not log.is_fake_defender and log.attacker_id
-                if log.attacker_won:
-                    text = (
-                        f"⚔️ <b>به آزمایشگاهت حمله شد!</b>\n"
-                        f"🏭 مهاجم: <b>{attacker_name}</b>{power_note}\n"
-                        f"💰 <b>{log.loot_gold}</b> طلا غارت شد.\n"
-                        "می‌تونی همین‌جا جواب بدی 👇"
-                    )
-                else:
-                    # defence held — still report who came and let them strike back
-                    text = (
-                        f"🛡 <b>یکی بهت حمله کرد ولی دفاعت موفق بود!</b>\n"
-                        f"🏭 مهاجم: <b>{attacker_name}</b>{power_note}\n"
-                        "می‌تونی همین‌جا حمله‌ی متقابل بزنی 👇"
-                    )
                 # 4th element = the attacker's user id, for a «🔍 جزییات حریف» button
                 # on the defense report (defrep_opp:<id>).
                 if revengeable:

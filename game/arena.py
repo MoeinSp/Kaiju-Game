@@ -357,7 +357,9 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
             defender_fields += ["cup", "shield_until"]
         defender_user.save(update_fields=defender_fields)
 
-    AttackLog.objects.create(
+    # For a REAL defender we DM them the moment this returns (see the handler), so the
+    # log is pre-marked notified here — the periodic catch-up job then leaves it alone.
+    log = AttackLog.objects.create(
         attacker=attacker,
         attacker_label=lab_display(attacker),
         attacker_power=attacker_power,
@@ -367,6 +369,7 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         attacker_won=won,
         loot_gold=loot,
         cup_delta=delta,
+        defender_notified=defender_user is not None,
     )
 
     lab_up = lab.award(attacker, "arena_win" if won else "arena_loss")
@@ -381,6 +384,17 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         "cup_delta": delta,
         "opponent_label": opponent["label"],
         "new_cup": attacker.cup,
+        # payload for the INSTANT defense DM (None defender_id = bot, no DM)
+        "defense": None if defender_user is None else {
+            "defender_id": defender_user.id,
+            "notifications_on": defender_user.notifications_on,
+            "log_id": log.id,
+            "attacker_id": attacker.id,
+            "attacker_name": lab_display(attacker),
+            "attacker_power": attacker_power,
+            "attacker_won": won,
+            "loot": loot,
+        },
     }
 
 

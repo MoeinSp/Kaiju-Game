@@ -426,6 +426,11 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     context.user_data[ARENA_DETAIL_KEY] = result.get("detail_log", "")
 
+    # INSTANT defense report to the raided player (no 5-minute delay)
+    from bot.handlers.notify import send_defense_report_now
+
+    await send_defense_report_now(context, result.get("defense"))
+
     if result["won"]:
         summary = (
             f"{get_emoji('celebrate')} <b>بردی!</b>\n"
@@ -643,6 +648,10 @@ async def arena_revenge_attack_callback(update: Update, context: ContextTypes.DE
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
+
+    from bot.handlers.notify import send_defense_report_now
+
+    await send_defense_report_now(context, result.get("defense"))
 
     if result["won"]:
         summary = (

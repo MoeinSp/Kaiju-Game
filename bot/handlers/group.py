@@ -944,11 +944,15 @@ async def gatk_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
+@transaction.atomic
 def _pvp_attack_sync(chat, attacker_tg, target_id):
     group = get_or_create_group(chat)
     attacker, _ = get_or_create_user(attacker_tg)
     touch_membership(group, attacker)
-    target = User.objects.filter(id=target_id).first()
+    # LOCK the target's row and re-check the group shield UNDER the lock, so two
+    # attackers hitting the same person at once serialise — the first applies the 4h
+    # group shield and the second bounces (was raceable: both read shield=None).
+    target = User.objects.select_for_update().filter(id=target_id).first()
     if target is None:
         raise GameError("این بازیکن دیگه پیدا نشد.")
     a_creature = get_active_creature(attacker)
@@ -999,16 +1003,18 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     from bio_lab.repository import lab_display
     from game.arena import apply_group_shield, creature_power
 
-    AttackLog.objects.create(
+    a_power = creature_power(a_creature)
+    log = AttackLog.objects.create(
         attacker=attacker,
         attacker_label=lab_display(attacker),
-        attacker_power=creature_power(a_creature),
+        attacker_power=a_power,
         defender=target,
         defender_label=lab_display(target),
         is_fake_defender=False,
         attacker_won=attacker_won,
         loot_gold=loot if attacker_won else 0,
         cup_delta=0,
+        defender_notified=True,  # DM'd instantly from the callback below
     )
     apply_group_shield(target)
     return {
@@ -1024,6 +1030,16 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         "energy_left": attacker.energy,
         "missions": completed_missions,
         "speedup": speedup_won,
+        "defense": {
+            "defender_id": target.id,
+            "notifications_on": target.notifications_on,
+            "log_id": log.id,
+            "attacker_id": attacker.id,
+            "attacker_name": lab_display(attacker),
+            "attacker_power": a_power,
+            "attacker_won": attacker_won,
+            "loot": loot if attacker_won else 0,
+        },
     }
 
 
@@ -1038,6 +1054,10 @@ async def pvp_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     except (RaidError, GameError) as exc:
         await query.answer(str(exc), show_alert=True)
         return
+    # INSTANT defense report DM to the attacked player (no 5-minute delay)
+    from bot.handlers.notify import send_defense_report_now
+
+    await send_defense_report_now(context, result.get("defense"), group=True)
     await query.answer("🟢 بردی!" if result["attacker_won"] else "🔴 باختی.")
     head = (
         f"{get_emoji('celebrate')} <b>{result['winner_name']} برد!</b>"

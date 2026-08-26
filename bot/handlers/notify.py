@@ -19,6 +19,40 @@ NOTIFY_INTERVAL_SECONDS = 300  # scan every 5 minutes — finer than any timer n
 SEND_DELAY_SECONDS = 0.05  # ~20 msg/s, well under Telegram's flood limit
 
 
+def _defense_keyboard(revenge_cb, attacker_id):
+    buttons = []
+    if revenge_cb:
+        buttons.append([btn("انتقام", emoji_key="btn_revenge", style=DANGER, callback_data=revenge_cb)])
+    if attacker_id:
+        buttons.append([btn("🔍 جزییات حریف", style=NAV, callback_data=f"defrep_opp:{attacker_id}")])
+    return InlineKeyboardMarkup(buttons) if buttons else None
+
+
+async def send_defense_report_now(context, defense: dict, *, group: bool = False) -> None:
+    """Send the 'you were attacked' DM the INSTANT a raid resolves (no waiting for the
+    5-minute catch-up job). `defense` is the payload from attack()/the group attack.
+    Silently no-ops if the defender has DMs off or blocked the bot."""
+    if defense is None or not defense.get("notifications_on", True):
+        return
+    from game.notifications import defense_report_text
+
+    text = defense_report_text(
+        defense["attacker_name"], defense["attacker_power"], defense["attacker_won"], defense["loot"]
+    )
+    # arena reports offer revenge (a real cup fight); group ones don't (group aggression
+    # is separate), but both get the «🔍 جزییات حریف» button.
+    revenge_cb = None if group else f"arena_revenge:{defense['log_id']}"
+    try:
+        await context.bot.send_message(
+            chat_id=defense["defender_id"], text=text, parse_mode="HTML",
+            reply_markup=_defense_keyboard(revenge_cb, defense["attacker_id"]),
+        )
+    except Forbidden:
+        await run_db(_opt_out, defense["defender_id"])
+    except TelegramError:
+        pass
+
+
 def _opt_out(user_id: int) -> None:
     """A player who blocked the bot shouldn't be retried — turn their master
     switch off so the collector stops queueing DMs for them."""
