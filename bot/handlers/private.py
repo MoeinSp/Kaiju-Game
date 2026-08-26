@@ -97,11 +97,18 @@ def wallet_line(user, energy: int | None = None) -> str:
     energy = sync_energy(user) if energy is None else energy
     # one resource per line: crammed onto a single row the numbers ran together and
     # it was impossible to tell which figure belonged to which currency
+    # under energy: how long until the next point (or "full")
+    from game.energy import minutes_until_next_point
+
+    if energy >= constants.MAX_ENERGY:
+        energy_note = "<i>پره ✅</i>"
+    else:
+        energy_note = f"<i>⏳ تا انرژی بعدی ~{minutes_until_next_point(user)} دقیقه</i>"
     return (
         f"{get_emoji('coin')} طلا: <b>{user.coins:,}</b>\n"
         f"{get_emoji('dna')} DNA: <b>{user.dna_fragments:,}</b>\n"
         f"{get_emoji('diamond')} الماس: <b>{user.diamonds:,}</b>\n"
-        f"{get_emoji('energy')} انرژی: <b>{energy}</b>/{constants.MAX_ENERGY}"
+        f"{get_emoji('energy')} انرژی: <b>{energy}</b>/{constants.MAX_ENERGY}   {energy_note}"
     )
 
 
@@ -1791,17 +1798,33 @@ def _members_sync(tg_user):
     }
 
 
-def _members_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
+_MEMBERS_PER_PAGE = 20
+
+
+def _members_render(data: dict, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
     roster = data["roster"]
-    lines = [f"{get_emoji('users')} <b>اعضای اتحاد {data['name']}</b> — {len(roster)} نفر\n"]
-    CAP = 30
-    for r in roster[:CAP]:
+    total_pages = max(1, (len(roster) + _MEMBERS_PER_PAGE - 1) // _MEMBERS_PER_PAGE)
+    page = max(0, min(page, total_pages - 1))
+    chunk = roster[page * _MEMBERS_PER_PAGE : (page + 1) * _MEMBERS_PER_PAGE]
+
+    lines = [
+        f"{get_emoji('users')} <b>اعضای اتحاد {data['name']}</b> — {len(roster)} نفر"
+        + (f"  <i>(صفحه {page + 1}/{total_pages})</i>" if total_pages > 1 else "") + "\n"
+    ]
+    for r in chunk:
         badge = "👑" if r["is_leader"] else ("🎖" if r["is_deputy"] else "•")
         lines.append(f"{badge} {r['name']} — <code>{r['id']}</code>  💪{r['power']}")
-    if len(roster) > CAP:
-        lines.append(f"<i>… و {len(roster) - CAP} نفر دیگه</i>")
-    role = data["viewer_role"]
+
     rows = []
+    nav = []
+    if page > 0:
+        nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"ally_members:{page - 1}"))
+    if page < total_pages - 1:
+        nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"ally_members:{page + 1}"))
+    if nav:
+        rows.append(nav)
+
+    role = data["viewer_role"]
     if role in ("leader", "deputy"):
         lines.append("\n<blockquote>👑 رهبر · 🎖 قائم‌مقام. برای مدیریت، آیدیِ عضو (کد جلوی اسمش) رو بده.</blockquote>")
         rows.append([btn("🥾 کیک با آیدی", style=DANGER, callback_data="ally_kick")])
@@ -1815,13 +1838,15 @@ def _members_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
 
 async def alliance_members_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    parts = query.data.split(":")
+    page = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
     data = await run_db(_members_sync, update.effective_user)
     await query.answer()
     if data is None:
         await safe_edit_message_text(query, "توی هیچ اتحادی نیستی.",
                                      reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info")]]))
         return
-    text, keyboard = _members_render(data)
+    text, keyboard = _members_render(data, page)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -2592,7 +2617,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(alliance_search_callback, pattern=r"^ally_search$"))
     application.add_handler(CallbackQueryHandler(alliance_deposit_callback, pattern=r"^ally_deposit$"))
     application.add_handler(CallbackQueryHandler(alliance_top_callback, pattern=r"^ally_top$"))
-    application.add_handler(CallbackQueryHandler(alliance_members_callback, pattern=r"^ally_members$"))
+    application.add_handler(CallbackQueryHandler(alliance_members_callback, pattern=r"^ally_members(:\d+)?$"))
     application.add_handler(CallbackQueryHandler(alliance_kick_start, pattern=r"^ally_kick$"))
     application.add_handler(CallbackQueryHandler(alliance_deputy_start, pattern=r"^ally_deputy$"))
     application.add_handler(CallbackQueryHandler(alliance_deputy_off_callback, pattern=r"^ally_deputy_off$"))

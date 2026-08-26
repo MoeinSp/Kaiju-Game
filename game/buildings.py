@@ -270,8 +270,17 @@ def start_upgrade(user: User, building: Building) -> BuildingUpgrade:
 
 
 def apply_speedup(user: User, minutes: int) -> tuple[BuildingUpgrade | None, bool]:
-    """Returns (remaining_upgrade_or_None, completed). `completed=True` means the
-    card finished the upgrade outright rather than just shortening it."""
+    """Use ONE card. Kept for back-compat; delegates to the bulk path."""
+    upgrade, completed, _used = apply_speedup_bulk(user, minutes, 1)
+    return upgrade, completed
+
+
+def apply_speedup_bulk(user: User, minutes: int, count: int) -> tuple[BuildingUpgrade | None, bool, int]:
+    """Use up to `count` cards of one denomination at once — but never more than are
+    needed to finish the upgrade, so cards aren't wasted past completion. Returns
+    (remaining_upgrade_or_None, completed, cards_actually_used)."""
+    import math
+
     if minutes not in constants.SPEEDUP_MINUTES:
         raise GameError("این کارت سرعت معتبر نیست.")
     card = SpeedupCard.objects.filter(owner=user, minutes=minutes).first()
@@ -281,28 +290,32 @@ def apply_speedup(user: User, minutes: int) -> tuple[BuildingUpgrade | None, boo
     if upgrade is None:
         raise GameError("هیچ ارتقایی در حال انجام نیست که سرعتش بدی.")
 
-    card.count -= 1
+    remaining = (upgrade.finishes_at - timezone.now()).total_seconds()
+    needed = max(1, math.ceil(remaining / (minutes * 60))) if remaining > 0 else 1
+    use = max(1, min(int(count), card.count, needed))
+
+    card.count -= use
     if card.count <= 0:
         card.delete()
     else:
         card.save(update_fields=["count"])
 
-    upgrade.finishes_at -= datetime.timedelta(minutes=minutes)
+    upgrade.finishes_at -= datetime.timedelta(minutes=minutes * use)
     if upgrade.finishes_at <= timezone.now():
         building = upgrade.building
         cap = max_level_for(user, building.building_type)
         target = min(upgrade.target_level, cap)
         if target < upgrade.target_level:
             upgrade.delete()
-            return None, True
+            return None, True, use
         building.level = target
         building.save(update_fields=["level"])
         lab.award_building_level(user, target)
         upgrade.delete()
-        return None, True
+        return None, True, use
 
     upgrade.save(update_fields=["finishes_at"])
-    return upgrade, False
+    return upgrade, False, use
 
 
 def diamond_finish_price(upgrade: BuildingUpgrade) -> int:

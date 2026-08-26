@@ -200,10 +200,69 @@ async def item_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
 
 
+# ── 🛡 group-shield shop (cheaper, protects from group «اتک») ─────────────────
+def _gshield_state_sync(tg_user):
+    from game.arena import group_shield_remaining_seconds
+
+    user, _ = get_or_create_user(tg_user)
+    return user.diamonds, group_shield_remaining_seconds(user)
+
+
+def _gshield_render(diamonds: int, shield_secs: int) -> tuple[str, InlineKeyboardMarkup]:
+    status = f"🛡 سپر گروه فعلی: <b>{_fmt_hours(shield_secs)}</b>" if shield_secs > 0 else "🛡 الان سپر گروه نداری"
+    lines = [
+        "🛡 <b>خرید سپر گروه</b>",
+        f"<blockquote>{status}\n"
+        f"موجودی: {get_emoji('diamond')} <b>{diamonds}</b> الماس\n\n"
+        "تا وقتی سپر گروه داری، کسی نمی‌تونه توی گروه با «اتک» بهت حمله کنه. "
+        "از سپر آرنا جداست و ارزون‌تره.</blockquote>",
+    ]
+    rows = []
+    for tier, cfg in constants.GROUP_SHIELD_SHOP_TIERS.items():
+        rows.append([btn(f"{cfg['label']} — {cfg['diamonds']} 💎",
+                         style=SHOP, callback_data=f"gshield_buy:{tier}")])
+    rows.append([back_btn("menu:arena", "بازگشت به آرنا")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+async def group_shield_shop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    diamonds, shield_secs = await run_db(_gshield_state_sync, update.effective_user)
+    text, keyboard = _gshield_render(diamonds, shield_secs)
+    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _gshield_buy_sync(tg_user, tier):
+    from game.arena import buy_group_shield, group_shield_remaining_seconds
+
+    user, _ = get_or_create_user(tg_user)
+    result = buy_group_shield(user, tier)
+    user.refresh_from_db()
+    return result, user.diamonds, group_shield_remaining_seconds(user)
+
+
+async def group_shield_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    tier = query.data.split(":")[1]
+    try:
+        result, diamonds, shield_secs = await run_db(_gshield_buy_sync, update.effective_user, tier)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("🛡 سپر گروه فعال شد!")
+    text, keyboard = _gshield_render(diamonds, shield_secs)
+    await safe_edit_message_text(
+        query,
+        f"✅ <b>سپر گروه خریداری شد!</b> الان <b>{_fmt_hours(shield_secs)}</b> محافظت داری.\n\n━━━━━━━━━━\n" + text,
+        parse_mode="HTML", reply_markup=keyboard,
+    )
+
+
 def register(application) -> None:
     application.add_handler(CommandHandler("shop", shop_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(shop_buy_callback, pattern=r"^shop_buy:"))
     application.add_handler(CommandHandler("shield", shield_shop_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(shield_buy_callback, pattern=r"^shield_buy:"))
+    application.add_handler(CallbackQueryHandler(group_shield_shop_panel, pattern=r"^gshield_shop$"))
+    application.add_handler(CallbackQueryHandler(group_shield_buy_callback, pattern=r"^gshield_buy:"))
     application.add_handler(CommandHandler("items", item_shop_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(item_buy_callback, pattern=r"^sitem_buy:\d+$"))

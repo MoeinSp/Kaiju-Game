@@ -328,19 +328,23 @@ async def building_speedup_list_callback(update: Update, context: ContextTypes.D
         await query.answer("هیچ کارت سرعتی نداری.", show_alert=True)
         return
     await query.answer()
-    rows = [
-        [
-            btn(
-                f"{constants.SPEEDUP_LABELS[c.minutes]} ×{c.count}",
-                style=BUILD,
-                callback_data=f"bld_speedup_do:{building_id}:{c.minutes}",
-            )
-        ]
-        for c in cards
-    ]
+    rows = []
+    for c in cards:
+        row = [btn(
+            f"{constants.SPEEDUP_LABELS[c.minutes]} — یکی",
+            style=BUILD, callback_data=f"bld_speedup_do:{building_id}:{c.minutes}",
+        )]
+        if c.count > 1:
+            row.append(btn(
+                f"همه ({c.count})", style=SHOP,
+                callback_data=f"bld_speedup_all:{building_id}:{c.minutes}",
+            ))
+        rows.append(row)
     rows.append([back_btn(f"bld_pick:{building_id}")])
     await safe_edit_message_text(
-        query, f"{get_emoji('speedup')} کدوم کارت سرعت رو استفاده کنم؟", reply_markup=InlineKeyboardMarkup(rows)
+        query,
+        f"{get_emoji('speedup')} کدوم کارت سرعت؟ «یکی» یه کارت مصرف می‌کنه، «همه» تا جایی که لازمه از اون کارت می‌ذاره.",
+        reply_markup=InlineKeyboardMarkup(rows),
     )
 
 
@@ -380,7 +384,21 @@ def _speedup_do_sync(tg_user, building_id, minutes):
         raise GameError("این ساختمون پیدا نشد.")
     _, completed = apply_speedup(user, minutes)
     building.refresh_from_db()
-    return _detail_view(user, building), completed
+    return _detail_view(user, building), completed, 1
+
+
+def _speedup_all_sync(tg_user, building_id, minutes):
+    from game.buildings import apply_speedup_bulk
+
+    user, _ = get_or_create_user(tg_user)
+    try:
+        building = Building.objects.get(id=building_id, owner=user)
+    except Building.DoesNotExist:
+        raise GameError("این ساختمون پیدا نشد.")
+    # a big count — bulk clamps it to what's available and to what's needed to finish
+    _, completed, used = apply_speedup_bulk(user, minutes, 9999)
+    building.refresh_from_db()
+    return _detail_view(user, building), completed, used
 
 
 def _workers_sync(tg_user, building_id):
@@ -509,14 +527,16 @@ async def building_assign_callback(update: Update, context: ContextTypes.DEFAULT
 async def building_speedup_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     _, building_id, minutes = query.data.split(":")
+    sync = _speedup_all_sync if query.data.startswith("bld_speedup_all:") else _speedup_do_sync
     try:
-        view, completed = await run_db(
-            _speedup_do_sync, update.effective_user, int(building_id), int(minutes)
-        )
+        view, completed, used = await run_db(sync, update.effective_user, int(building_id), int(minutes))
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer("🏆 ارتقا تموم شد!" if completed else "⚡ سرعت گرفت!")
+    if completed:
+        await query.answer("🏆 ارتقا تموم شد!")
+    else:
+        await query.answer(f"⚡ {used} کارت استفاده شد!" if used > 1 else "⚡ سرعت گرفت!")
     await safe_edit_message_text(
         query,
         _building_detail_text(view),
@@ -534,7 +554,7 @@ def register(application) -> None:
     application.add_handler(
         CallbackQueryHandler(building_speedup_list_callback, pattern=r"^bld_speedup_list:")
     )
-    application.add_handler(CallbackQueryHandler(building_speedup_do_callback, pattern=r"^bld_speedup_do:"))
+    application.add_handler(CallbackQueryHandler(building_speedup_do_callback, pattern=r"^bld_speedup_(do|all):"))
     application.add_handler(CallbackQueryHandler(building_workers_callback, pattern=r"^bld_workers:"))
     application.add_handler(
         CallbackQueryHandler(building_assign_callback, pattern=r"^bld_(assign|unassign):")

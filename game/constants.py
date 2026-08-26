@@ -815,6 +815,14 @@ SHIELD_SHOP_TIERS = {
     "3d":  {"hours": 72,  "diamonds": 60,  "label": "🛡 سپر ۳ روزه"},
     "7d":  {"hours": 168, "diamonds": 120, "label": "🛡 سپر یک‌هفته‌ای"},
 }
+# A separate, cheaper shield against group «اتک» (uses group_shield_until). Group
+# aggression is lower-stakes than arena raiding, so protection costs less.
+GROUP_SHIELD_SHOP_TIERS = {
+    "8h":  {"hours": 8,   "diamonds": 5,  "label": "🛡 سپر گروه ۸ ساعته"},
+    "24h": {"hours": 24,  "diamonds": 12, "label": "🛡 سپر گروه ۲۴ ساعته"},
+    "3d":  {"hours": 72,  "diamonds": 30, "label": "🛡 سپر گروه ۳ روزه"},
+    "7d":  {"hours": 168, "diamonds": 55, "label": "🛡 سپر گروه یک‌هفته‌ای"},
+}
 ARENA_ATTACK_ENERGY_COST = 1
 
 # Loot is capped against the ATTACKER's own progression stage, not the defender's

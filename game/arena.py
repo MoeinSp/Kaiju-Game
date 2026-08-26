@@ -98,6 +98,24 @@ def buy_shield(user: User, tier: str) -> dict:
     return {"tier": tier, "shield_until": user.shield_until, "remaining": shield_remaining_seconds(user)}
 
 
+@transaction.atomic
+def buy_group_shield(user: User, tier: str) -> dict:
+    """Buy a GROUP shield (against «اتک») with diamonds — cheaper than the arena one.
+    Stacks onto any group-shield time already left."""
+    cfg = constants.GROUP_SHIELD_SHOP_TIERS.get(tier)
+    if cfg is None:
+        raise GameError("این نوع سپر وجود نداره.")
+    user = User.objects.select_for_update().get(id=user.id)
+    if user.diamonds < cfg["diamonds"]:
+        raise GameError(f"الماس کافی نداری! این سپر {cfg['diamonds']} الماس هزینه داره.")
+    now = timezone.now()
+    base = user.group_shield_until if (user.group_shield_until and user.group_shield_until > now) else now
+    user.group_shield_until = base + datetime.timedelta(hours=cfg["hours"])
+    user.diamonds -= cfg["diamonds"]
+    user.save(update_fields=["group_shield_until", "diamonds"])
+    return {"tier": tier, "remaining": group_shield_remaining_seconds(user)}
+
+
 def spend_shield_on_attack(user: User) -> int:
     """Called when `user` launches an attack: burns SHIELD_ATTACK_COST_HOURS off their
     arena shield (instead of the old all-or-nothing drop). Returns the seconds left
