@@ -76,23 +76,93 @@ def _panel_sync(tg_user):
     }
 
 
-def _parent_a_render(candidates: list) -> tuple[str, InlineKeyboardMarkup]:
+_CAVE_PER_PAGE = 8
+
+
+def _rarity_counts(cands: list) -> dict:
+    counts: dict = {}
+    for c in cands:
+        counts[c.rarity] = counts.get(c.rarity, 0) + 1
+    return counts
+
+
+def _filter_sort(cands: list, filt: str) -> list:
+    """Filter to one rarity (or 'all') and sort rarest-and-strongest first, so the
+    list is fully separated by نایابی and the best pairs are easiest to reach."""
+    order = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
+    if filt != "all":
+        cands = [c for c in cands if c.rarity == filt]
+    return sorted(cands, key=lambda c: (order.get(c.rarity, 0), c.level), reverse=True)
+
+
+def _tab_rows(cands: list, filt: str, cb) -> list:
+    """A row (or two) of rarity-filter tabs — only rarities the player actually has,
+    plus «همه». `cb(filter_value)` builds each tab's callback_data."""
+    counts = _rarity_counts(cands)
+    tabs = [btn(("• " if filt == "all" else "") + f"همه ({len(cands)})", style=NAV, callback_data=cb("all"))]
+    for r in reversed(constants.RARITY_ORDER):
+        if counts.get(r):
+            mark = "• " if filt == r else ""
+            tabs.append(btn(f"{mark}{constants.RARITY_LABELS[r]} ({counts[r]})", style=NAV, callback_data=cb(r)))
+    return [tabs[i:i + 3] for i in range(0, len(tabs), 3)]
+
+
+def _page_slice(items: list, page: int) -> tuple[list, int, int]:
+    total_pages = max(1, (len(items) + _CAVE_PER_PAGE - 1) // _CAVE_PER_PAGE)
+    page = max(0, min(page, total_pages - 1))
+    start = page * _CAVE_PER_PAGE
+    return items[start:start + _CAVE_PER_PAGE], page, total_pages
+
+
+def _nav_row(page: int, total_pages: int, cb) -> list:
+    """Prev/next page buttons; `cb(page_index)` builds each callback_data."""
+    row = []
+    if page > 0:
+        row.append(btn("« قبلی", style=NAV, callback_data=cb(page - 1)))
+    if total_pages > 1:
+        row.append(btn(f"صفحه {page + 1}/{total_pages}", style=NAV, callback_data="brd_noop"))
+    if page < total_pages - 1:
+        row.append(btn("بعدی »", style=NAV, callback_data=cb(page + 1)))
+    return [row] if row else []
+
+
+def _parent_a_render(candidates: list, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
     text = (
         "🕳 <b>غار هیولا — جفت بفرست</b>\n"
         "<blockquote>دو هیولای آزاد رو بفرست توی غار. اول جفت‌گیری می‌کنن، بعد یه <b>تخم</b> "
         "می‌ذارن و آزاد می‌شن؛ تخم جدا رشد می‌کنه تا سر باز کنه.</blockquote>\n"
-        "\n<b>والد اول رو انتخاب کن:</b>"
+        "\n<b>والد اول رو انتخاب کن:</b>  <i>(با تب نایابی جدا کن)</i>"
     )
-    rows = [
-        [
-            btn(
-                f"{c.name} {'⭐' * c.star_level} · {constants.RARITY_LABELS[c.rarity]} · Lv{c.level}",
-                style=LIST,
-                callback_data=f"brd_a:{c.id}",
-            )
-        ]
-        for c in candidates[:12]
+    rows = _tab_rows(candidates, filt, lambda f: f"brd_ap:{f}:0")
+    shown, page, total_pages = _page_slice(_filter_sort(candidates, filt), page)
+    rows += [
+        [btn(
+            f"{c.name} {'⭐' * c.star_level} · {constants.RARITY_LABELS[c.rarity]} · Lv{c.level}",
+            style=LIST, callback_data=f"brd_a:{c.id}",
+        )]
+        for c in shown
     ]
+    rows += _nav_row(page, total_pages, lambda p: f"brd_ap:{filt}:{p}")
+    rows.append([back_btn("menu:breeding")])
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _parent_b_render(parent_a, candidates: list, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+    text = (
+        f"{get_emoji('lab')} والد اول: <b>{parent_a.name}</b> "
+        f"({constants.RARITY_LABELS[parent_a.rarity]})\n\n<b>حالا والد دوم رو انتخاب کن:</b>  "
+        "<i>(با تب نایابی جدا کن)</i>"
+    )
+    rows = _tab_rows(candidates, filt, lambda f: f"brd_bp:{parent_a.id}:{f}:0")
+    shown, page, total_pages = _page_slice(_filter_sort(candidates, filt), page)
+    rows += [
+        [btn(
+            f"{c.name} {'⭐' * c.star_level} · {constants.RARITY_LABELS[c.rarity]} · Lv{c.level}",
+            style=LIST, callback_data=f"brd_b:{parent_a.id}:{c.id}",
+        )]
+        for c in shown
+    ]
+    rows += _nav_row(page, total_pages, lambda p: f"brd_bp:{parent_a.id}:{filt}:{p}")
     rows.append([back_btn("menu:breeding")])
     return text, InlineKeyboardMarkup(rows)
 
@@ -192,24 +262,48 @@ async def breeding_pick_a_callback(update: Update, context: ContextTypes.DEFAULT
             reply_markup=back_only_keyboard("menu:breeding"),
         )
         return
-    rows = [
-        [
-            btn(
-                f"{c.name} {'⭐' * c.star_level} · {constants.RARITY_LABELS[c.rarity]} · Lv{c.level}",
-                style=LIST,
-                callback_data=f"brd_b:{parent_a.id}:{c.id}",
-            )
-        ]
-        for c in candidates[:12]
-    ]
-    rows.append([back_btn("menu:breeding")])
-    await safe_edit_message_text(
-        query,
-        f"{get_emoji('lab')} والد اول: <b>{parent_a.name}</b> "
-        f"({constants.RARITY_LABELS[parent_a.rarity]})\n\n<b>حالا والد دوم رو انتخاب کن:</b>",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(rows),
-    )
+    text, keyboard = _parent_b_render(parent_a, candidates)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def breeding_a_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Rarity-tab / page navigation for the parent-A picker."""
+    query = update.callback_query
+    _, filt, page = query.data.split(":")
+    candidates = await run_db(_new_pair_sync, update.effective_user)
+    await query.answer()
+    if len(candidates) < 2:
+        await safe_edit_message_text(
+            query, "⚠️ حداقل <b>دو</b> هیولای آزاد لازم داری.",
+            parse_mode="HTML", reply_markup=back_only_keyboard("menu:breeding"),
+        )
+        return
+    text, keyboard = _parent_a_render(candidates, filt, int(page))
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def breeding_b_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Rarity-tab / page navigation for the parent-B picker."""
+    query = update.callback_query
+    _, parent_a_id, filt, page = query.data.split(":")
+    try:
+        parent_a, candidates = await run_db(_pick_b_sync, update.effective_user, int(parent_a_id))
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    if not candidates:
+        await safe_edit_message_text(
+            query, "⚠️ هیولای آزاد دیگه‌ای برای والد دوم نداری.",
+            parse_mode="HTML", reply_markup=back_only_keyboard("menu:breeding"),
+        )
+        return
+    text, keyboard = _parent_b_render(parent_a, candidates, filt, int(page))
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def breeding_noop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.callback_query.answer()
 
 
 def _preview_sync(tg_user, id_a, id_b):
@@ -439,6 +533,9 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(breeding_new_callback, pattern=r"^brd_new$"))
     application.add_handler(CallbackQueryHandler(breeding_pick_a_callback, pattern=r"^brd_a:"))
     application.add_handler(CallbackQueryHandler(breeding_pick_b_callback, pattern=r"^brd_b:"))
+    application.add_handler(CallbackQueryHandler(breeding_a_page_callback, pattern=r"^brd_ap:"))
+    application.add_handler(CallbackQueryHandler(breeding_b_page_callback, pattern=r"^brd_bp:"))
+    application.add_handler(CallbackQueryHandler(breeding_noop_callback, pattern=r"^brd_noop$"))
     application.add_handler(CallbackQueryHandler(breeding_start_callback, pattern=r"^brd_go:"))
     application.add_handler(CallbackQueryHandler(breeding_lay_callback, pattern=r"^brd_lay$"))
     application.add_handler(CallbackQueryHandler(breeding_hatch_callback, pattern=r"^brd_hatch:"))
