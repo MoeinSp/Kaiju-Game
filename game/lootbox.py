@@ -34,52 +34,122 @@ def _roll_creature(user: User, rarity: str) -> Creature:
     )
 
 
-@transaction.atomic
-def open_biocrate(user: User, tier: str = "basic") -> dict:
-    cfg = constants.BIOCRATE_TIERS.get(tier)
-    if cfg is None:
-        raise GameError("این نوع باکس ژنتیکی وجود نداره.")
-    if user.coins < cfg["gold"]:
-        raise InsufficientGoldError(
-            f"طلا کافی نداری! این باکس <b>{cfg['gold']:,}</b> طلا می‌خواد "
-            f"(الان {user.coins:,} داری).",
-            need=cfg["gold"], have=user.coins,
-        )
-    if user.dna_fragments < cfg["dna"]:
-        raise GameError(
-            f"{cfg['dna']} DNA لازمه (الان {user.dna_fragments} داری). "
-            "DNA از شکار، دخمه، آزمایشگاه DNA و پاداش آفلاین به‌دست می‌آد."
-        )
-    user.coins -= cfg["gold"]
-    user.dna_fragments -= cfg["dna"]
-    user.save(update_fields=["coins", "dna_fragments"])
+# Bulk-open deal: pay for BULK_PAY boxes, open BULK_OPEN (one free).
+BULK_PAY = 10
+BULK_OPEN = 11
 
-    # Decide creature-vs-equipment FIRST (per-tier chance), then roll rarity from the
-    # table that belongs to that outcome — pricier tiers give a creature more often
-    # and skew its rarity higher; equipment keeps the standard loot weights.
+
+def _biocrate_roll_once(user: User, cfg: dict, tier: str) -> dict:
+    """One biocrate outcome WITHOUT charging — shared by single and bulk opens.
+
+    Decide creature-vs-equipment FIRST (per-tier chance), then roll rarity from the
+    table that belongs to that outcome — pricier tiers give a creature more often
+    and skew its rarity higher; equipment uses the tier's own gear table."""
     if random.random() < cfg["creature_chance"]:
         rarity = roll_rarity(cfg["weights"])
         creature = _roll_creature(user, rarity)
         return {"kind": "creature", "rarity": rarity, "creature": creature, "tier": tier}
-    # equipment rarity uses the tier's own gear table (pricier tiers skew higher)
     rarity = roll_rarity(cfg.get("equip_weights"))
     item = roll_equipment(user, rarity)
     return {"kind": "equipment", "rarity": rarity, "item": item, "tier": tier}
+
+
+def _biocrate_cfg(tier: str) -> dict:
+    cfg = constants.BIOCRATE_TIERS.get(tier)
+    if cfg is None:
+        raise GameError("این نوع باکس ژنتیکی وجود نداره.")
+    return cfg
+
+
+def _charge_biocrate(user: User, cfg: dict, times: int) -> None:
+    gold, dna = cfg["gold"] * times, cfg["dna"] * times
+    if user.coins < gold:
+        raise InsufficientGoldError(
+            f"طلا کافی نداری! این خرید <b>{gold:,}</b> طلا می‌خواد (الان {user.coins:,} داری).",
+            need=gold, have=user.coins,
+        )
+    if user.dna_fragments < dna:
+        raise GameError(
+            f"{dna} DNA لازمه (الان {user.dna_fragments} داری). "
+            "DNA از شکار، دخمه، آزمایشگاه DNA و پاداش آفلاین به‌دست می‌آد."
+        )
+    user.coins -= gold
+    user.dna_fragments -= dna
+    user.save(update_fields=["coins", "dna_fragments"])
+
+
+@transaction.atomic
+def open_biocrate(user: User, tier: str = "basic") -> dict:
+    cfg = _biocrate_cfg(tier)
+    _charge_biocrate(user, cfg, 1)
+    return _biocrate_roll_once(user, cfg, tier)
+
+
+@transaction.atomic
+def open_biocrate_bulk(user: User, tier: str = "basic") -> dict:
+    """Pay for BULK_PAY boxes, open BULK_OPEN (one free). Returns an aggregate."""
+    cfg = _biocrate_cfg(tier)
+    _charge_biocrate(user, cfg, BULK_PAY)
+    rolls = [_biocrate_roll_once(user, cfg, tier) for _ in range(BULK_OPEN)]
+    return _summarise_rolls(rolls, tier, paid=BULK_PAY, opened=BULK_OPEN)
+
+
+def _summarise_rolls(rolls: list[dict], tier: str, paid: int, opened: int) -> dict:
+    """Fold a bunch of box outcomes into counts for a compact 'you opened 11' screen.
+    `best` is the single highest-rarity drop, to headline the reveal."""
+    order = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
+    creatures = [r for r in rolls if r["kind"] == "creature"]
+    items = [r for r in rolls if r["kind"] == "equipment"]
+    by_rarity: dict[str, int] = {}
+    for r in rolls:
+        by_rarity[r["rarity"]] = by_rarity.get(r["rarity"], 0) + 1
+    best = max(rolls, key=lambda r: order.get(r["rarity"], 0))
+    return {
+        "bulk": True,
+        "tier": tier,
+        "paid": paid,
+        "opened": opened,
+        "rolls": rolls,
+        "creatures": creatures,
+        "items": items,
+        "by_rarity": by_rarity,
+        "best": best,
+    }
+
+
+def _diamond_box_cfg(tier: str) -> dict:
+    if tier not in constants.DIAMOND_BOX_TIERS:
+        raise GameError("این نوع جعبه‌ی الماسی وجود نداره.")
+    return constants.DIAMOND_BOX_TIERS[tier]
+
+
+def _charge_diamond_box(user: User, cfg: dict, times: int) -> None:
+    cost = cfg["cost_diamonds"] * times
+    if user.diamonds < cost:
+        raise GameError(f"الماس کافی نداری! این خرید {cost} الماس هزینه داره (الان {user.diamonds} داری).")
+    user.diamonds -= cost
+    user.save(update_fields=["diamonds"])
+
+
+def _diamond_box_roll_once(user: User, cfg: dict, tier: str) -> dict:
+    rarity = roll_rarity(cfg["weights"])
+    creature = _roll_creature(user, rarity)
+    return {"kind": "creature", "rarity": rarity, "creature": creature, "tier": tier}
 
 
 @transaction.atomic
 def open_diamond_box(user: User, tier: str) -> dict:
     """Diamond boxes always yield a creature (never equipment) — this is the "open
     a new monster with diamonds" path the gold Bio-Crate doesn't guarantee."""
-    if tier not in constants.DIAMOND_BOX_TIERS:
-        raise GameError("این نوع جعبه‌ی الماسی وجود نداره.")
-    cfg = constants.DIAMOND_BOX_TIERS[tier]
-    if user.diamonds < cfg["cost_diamonds"]:
-        raise GameError(f"الماس کافی نداری! این جعبه {cfg['cost_diamonds']} الماس هزینه داره.")
+    cfg = _diamond_box_cfg(tier)
+    _charge_diamond_box(user, cfg, 1)
+    return _diamond_box_roll_once(user, cfg, tier)
 
-    user.diamonds -= cfg["cost_diamonds"]
-    user.save(update_fields=["diamonds"])
 
-    rarity = roll_rarity(cfg["weights"])
-    creature = _roll_creature(user, rarity)
-    return {"kind": "creature", "rarity": rarity, "creature": creature, "tier": tier}
+@transaction.atomic
+def open_diamond_box_bulk(user: User, tier: str) -> dict:
+    """Pay for BULK_PAY diamond boxes, open BULK_OPEN (one free)."""
+    cfg = _diamond_box_cfg(tier)
+    _charge_diamond_box(user, cfg, BULK_PAY)
+    rolls = [_diamond_box_roll_once(user, cfg, tier) for _ in range(BULK_OPEN)]
+    return _summarise_rolls(rolls, tier, paid=BULK_PAY, opened=BULK_OPEN)
