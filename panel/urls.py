@@ -30,5 +30,6 @@ urlpatterns = [
     path("backups/", views.backups, name="backups"),
     path("backups/download/", views.backup_download, name="backup_download"),
     path("players/", views.players, name="players"),
+    path("players/<int:user_id>/creatures/", views.player_creatures, name="player_creatures"),
     path("channels/", views.channels, name="channels"),
 ]

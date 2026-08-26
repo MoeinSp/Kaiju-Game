@@ -1,0 +1,54 @@
+{% extends "panel/base.html" %}
+{% block title %}کایجوهای {{ player.lab_name|default:player.id }} — پنل Kaiju Legends{% endblock %}
+{% block content %}
+<h2>🦖 کایجوهای بازیکن</h2>
+<p class="lead">
+  <a href="{% url 'panel:players' %}?q={{ player.id }}">← بازگشت به بازیکنان</a>
+  &nbsp;·&nbsp;
+  <code dir="ltr">{{ player.id }}</code> ·
+  {{ player.lab_name|default:"—" }}
+  {% if player.username %}(@{{ player.username }}){% endif %}
+</p>
+
+<div class="card">
+  <p class="hint">
+    «کاهش ستاره» ستاره رو پایین می‌آره و به‌همراهش <b>سطح</b> و <b>ارتقای اعضا</b> (نیش/زره/بال/سم) رو هم
+    پایین می‌کشه (اعضا تا سقفِ ستاره‌ی جدید = ستاره×۲۰، سطح متناسب کم می‌شه). «حذف» موجود رو کامل پاک می‌کنه.
+  </p>
+  <div class="scroll">
+    <table>
+      <tr>
+        <th>#</th><th>نام</th><th>نایابی</th><th>ستاره</th><th>سطح</th>
+        <th>قدرت</th><th>اعضا (نیش/زره/بال/سم)</th><th>عملیات</th>
+      </tr>
+      {% for c in creatures %}
+        <tr>
+          <td dir="ltr"><code>{{ c.obj.id }}</code></td>
+          <td>{{ c.obj.name }}{% if c.obj.is_active %} 🟢{% endif %}</td>
+          <td>{{ c.rarity_label }}</td>
+          <td>{{ c.obj.star_level }}⭐</td>
+          <td>{{ c.obj.level }}</td>
+          <td>{{ c.power }}</td>
+          <td dir="ltr">{{ c.obj.fangs_lvl }}/{{ c.obj.armor_lvl }}/{{ c.obj.wings_lvl }}/{{ c.obj.poison_lvl }} <span class="hint">(سقف {{ c.cap }})</span></td>
+          <td>
+            <form method="post" class="row" style="gap:6px;align-items:center">
+              {% csrf_token %}
+              <input type="hidden" name="creature_id" value="{{ c.obj.id }}">
+              <select name="new_star" dir="ltr" style="width:64px">
+                {% for s in c.star_options %}
+                  <option value="{{ s }}" {% if s == c.obj.star_level %}selected{% endif %}>{{ s }}⭐</option>
+                {% endfor %}
+              </select>
+              <button type="submit" name="action" value="weaken" class="blue">اعمال ستاره</button>
+              <button type="submit" name="action" value="delete" class="red"
+                      onclick="return confirm('حذف «{{ c.obj.name|escapejs }}»؟ برگشت نداره.')">حذف</button>
+            </form>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="8" class="hint">این بازیکن هیچ کایجویی نداره.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

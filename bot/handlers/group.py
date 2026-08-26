@@ -26,7 +26,6 @@ from game.emoji import get_emoji
 from game.energy import spend_energy
 from game.guardian import challenge_guardian, ensure_guardian, get_guardian
 from game.raid import RaidError, attack_boss, distribute_rewards, get_active_boss, spawn_boss
-from game.trade import gift_creature
 
 
 def _speedup_note(minutes: int | None) -> str:
@@ -291,85 +290,6 @@ async def duel_wager_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         reward_text += f" {get_emoji('celebrate')} رسید به سطح {winner_creature.level}!"
     reward_text += _mission_lines(completed_missions) + _speedup_note(speedup_won)
     await safe_edit_message_text(query, log_text + reward_text, parse_mode="HTML")
-
-
-def _give_sync(chat, sender_tg, receiver_tg, kind, amount_arg):
-    group = get_or_create_group(chat)
-    sender, _ = get_or_create_user(sender_tg)
-    receiver, _ = get_or_create_user(receiver_tg)
-    touch_membership(group, sender)
-    touch_membership(group, receiver)
-
-    if kind in ("creature", "موجود"):
-        try:
-            creature = Creature.objects.get(id=amount_arg)
-        except Creature.DoesNotExist:
-            raise GameError("این شماره موجود پیدا نشد.")
-        gift_creature(sender, receiver, creature)
-        return "creature", sender, receiver, creature
-
-    resource_key = constants.GIVE_RESOURCE_ALIASES.get(kind)
-    if resource_key is None:
-        raise GameError("فقط طلا قابل انتقاله. DNA و الماس رو نمی‌شه انتقال داد.")
-    current = getattr(sender, resource_key)
-    if current < amount_arg:
-        label = constants.GIVE_RESOURCE_LABELS[resource_key]
-        raise GameError(f"به این اندازه {label} نداری! ({current} تا داری)")
-
-    setattr(sender, resource_key, current - amount_arg)
-    setattr(receiver, resource_key, getattr(receiver, resource_key) + amount_arg)
-    sender.save(update_fields=[resource_key])
-    receiver.save(update_fields=[resource_key])
-    return "resource", sender, receiver, resource_key, amount_arg
-
-
-async def give(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    usage = (
-        f"{get_emoji('gift')} روی پیام طرف ریپلای کن و بنویس «انتقال طلا ۵۰» — یا "
-        "<code>/give gold 50</code> / <code>/give creature 7</code>.\n"
-        "<i>فقط طلا و موجود قابل انتقاله؛ DNA و الماس نه.</i>"
-    )
-    if update.message.reply_to_message is None or len(context.args) != 2:
-        await update.message.reply_text(usage, parse_mode="HTML")
-        return
-
-    receiver_tg = update.message.reply_to_message.from_user
-    sender_tg = update.effective_user
-    if receiver_tg.id == sender_tg.id or receiver_tg.is_bot:
-        await update.message.reply_text("🙅 نمی‌تونی به خودت یا به یه بات چیزی بدی!")
-        return
-
-    kind = context.args[0].lower()
-    is_creature_gift = kind in ("creature", "موجود")
-    if not is_creature_gift and constants.GIVE_RESOURCE_ALIASES.get(kind) is None:
-        await update.message.reply_text(usage, parse_mode="HTML")
-        return
-    if not context.args[1].isdigit() or int(context.args[1]) <= 0:
-        await update.message.reply_text(usage, parse_mode="HTML")
-        return
-    amount_arg = int(context.args[1])
-
-    try:
-        result = await run_db(_give_sync, update.effective_chat, sender_tg, receiver_tg, kind, amount_arg)
-    except GameError as exc:
-        await update.message.reply_text(str(exc))
-        return
-
-    if result[0] == "creature":
-        _, sender, receiver, creature = result
-        await update.message.reply_text(
-            f"{get_emoji('gift')} {display_name(sender)} موجود <b>{creature.name}</b> رو به "
-            f"{display_name(receiver)} هدیه داد!",
-            parse_mode="HTML",
-        )
-    else:
-        _, sender, receiver, resource_key, amount = result
-        label = constants.GIVE_RESOURCE_LABELS[resource_key]
-        await update.message.reply_text(
-            f"{get_emoji('gift')} {display_name(sender)} مقدار {amount} {label} به "
-            f"{display_name(receiver)} هدیه داد!",
-            parse_mode="HTML",
-        )
 
 
 def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
@@ -1307,8 +1227,9 @@ def register(application) -> None:
     group_filter = filters.ChatType.GROUPS
     # The gameplay slash commands (/duel /attack /raid_spawn /leaderboard /guardian*)
     # are gone — groups are word-driven («دوئل», «اتک», «احضار», «جدول», «نگهبان» …),
-    # and the words call the same functions. Only button callbacks and the two
-    # commands without a word equivalent (/give a creature, /mutation_event) remain.
+    # and the words call the same functions. /give was removed too: it bypassed the
+    # priced-transfer flow (and transferred a creature by id with NO ownership check).
+    # Trading is «انتقال …» only. /mutation_event has no word equivalent, so it stays.
     application.add_handler(CallbackQueryHandler(duel_wager_callback, pattern=r"^duelwager_"))
     application.add_handler(CallbackQueryHandler(transfer_offer_callback, pattern=r"^xfo:"))
     application.add_handler(CallbackQueryHandler(pvp_attack_callback, pattern=r"^gatk:\d+:\d+$"))
@@ -1316,5 +1237,4 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(pvp_detail_callback, pattern=r"^gatk_detail:\d+$"))
     application.add_handler(CallbackQueryHandler(gatk_opp_callback, pattern=r"^gatk_opp:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(gatk_back_callback, pattern=r"^gatk_back:\d+:\d+$"))
-    application.add_handler(CommandHandler("give", give, group_filter))
     application.add_handler(CommandHandler("mutation_event", mutation_event, group_filter))

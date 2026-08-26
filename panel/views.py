@@ -508,6 +508,49 @@ def players(request):
     )
 
 
+@staff_member_required(login_url="panel:login")
+def player_creatures(request, user_id: int):
+    """View one player's kaiju and moderate them: lower a creature's star (which
+    cascades its level + body-part upgrades down) or delete it outright."""
+    from game import constants
+    from game.creature import creature_power
+    from game.equipment import get_equipped_items
+
+    user = User.objects.filter(id=user_id).first()
+    if user is None:
+        messages.error(request, "این بازیکن پیدا نشد.")
+        return redirect("panel:players")
+
+    if request.method == "POST":
+        action = _post_action(request)
+        creature_id = _int(request, "creature_id")
+        try:
+            if action == "weaken":
+                c = moderation.set_creature_star(creature_id, _int(request, "new_star", 1))
+                messages.success(request, f"«{c.name}» → {c.star_level}⭐ (سطح {c.level}) شد.")
+            elif action == "delete":
+                name = moderation.delete_creature(creature_id)
+                messages.success(request, f"«{name}» حذف شد.")
+        except GameError as exc:
+            messages.error(request, str(exc))
+        return redirect("panel:player_creatures", user_id=user_id)
+
+    creatures = []
+    for c in Creature.objects.filter(owner=user).order_by("-star_level", "-level"):
+        creatures.append({
+            "obj": c,
+            "power": creature_power(c, get_equipped_items(c)),
+            "cap": constants.part_upgrade_cap(c.star_level),
+            "rarity_label": constants.RARITY_LABELS.get(c.rarity, c.rarity),
+            "star_options": range(1, 6),
+        })
+    return render(
+        request,
+        "panel/player_creatures.html",
+        {"page": "players", "player": user, "creatures": creatures},
+    )
+
+
 # --- force-join channels ---------------------------------------------------
 
 

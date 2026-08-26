@@ -47,7 +47,7 @@
           <td>{{ p.coins }}</td>
           <td>{{ p.dna_fragments }}</td>
           <td>{{ p.diamonds }}</td>
-          <td>{{ p.creature_count }}</td>
+          <td><a href="{% url 'panel:player_creatures' p.id %}">{{ p.creature_count }} 🦖</a></td>
           <td>
             {% if p.is_banned %}<span class="pill off">مسدود</span>
             {% else %}<span class="pill on">فعال</span>{% endif %}

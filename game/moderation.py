@@ -162,6 +162,37 @@ def delete_creature(creature_id: int) -> str:
     return name
 
 
+def set_creature_star(creature_id: int, new_star: int) -> Creature:
+    """Operator tool: force a creature's star level, cascading its power DOWN when
+    the star drops. Star acts as a stat multiplier, so lowering it already weakens
+    the creature — but level and body-part upgrades are pulled down too so nothing
+    is left inconsistent above the new tier:
+
+    * body parts are clamped to the new star's cap (star × 20);
+    * level is scaled proportionally to the star reduction (and xp reset).
+
+    Raising the star only bumps the star (no free levels/parts). Clamped to 1..5."""
+    from game import constants
+
+    creature = get_creature_or_raise(creature_id)
+    new_star = max(1, min(5, int(new_star)))
+    old_star = creature.star_level or 1
+    creature.star_level = new_star
+
+    cap = constants.part_upgrade_cap(new_star)
+    for part in constants.BODY_PARTS:
+        attr = f"{part}_lvl"
+        if getattr(creature, attr) > cap:
+            setattr(creature, attr, cap)
+
+    if new_star < old_star:
+        creature.level = max(1, round(creature.level * new_star / old_star))
+        creature.xp = 0
+
+    creature.save()
+    return creature
+
+
 def reset_user(identifier: str) -> User:
     """Wipe a player's entire game progress and re-bootstrap them as a brand-new
     player, keeping only their identity (telegram id, username, name, lab name,
