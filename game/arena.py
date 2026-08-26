@@ -137,15 +137,20 @@ def cup_delta(attacker: User, defender_cup: int, won: bool, attacker_power: int)
     their power deserves."""
     gap = defender_cup - attacker.cup
 
+    div = constants.ARENA_CUP_GAP_DIVISOR
     if won:
-        # +1 cup per 8 points of rating gap, so punching up is worth it
-        raw = constants.ARENA_CUP_WIN_BASE + gap / 8
+        # beating someone rated ABOVE you pays a lot more; beating someone far below
+        # pays near the floor — so a low-cup attacker who beats a high-cup defender
+        # gains big (and that defender loses big).
+        raw = constants.ARENA_CUP_WIN_BASE + gap / div
         if attacker.cup > deserved_cup(attacker_power):
             raw *= constants.ARENA_OVERCAP_DAMPING
         delta = max(constants.ARENA_CUP_MIN_DELTA, min(constants.ARENA_CUP_MAX_DELTA, round(raw)))
         return delta
 
-    raw = constants.ARENA_CUP_LOSS_BASE - gap / 8
+    # losing to someone ABOVE you barely dents your cup; losing to someone far below
+    # costs a lot
+    raw = constants.ARENA_CUP_LOSS_BASE - gap / div
     delta = max(constants.ARENA_CUP_MIN_DELTA, min(constants.ARENA_CUP_MAX_DELTA, round(raw)))
     return -delta
 
@@ -269,14 +274,18 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
     delta = cup_delta(attacker, opponent["cup"], won, attacker_power) if award_cup else 0
 
     loot = 0
+    dna_win = 0
     if won:
         loot = expected_loot(opponent, attacker_creature.level)
         if defender_user is not None:
             loot = min(loot, defender_user.coins)  # never push a real defender negative
             defender_user.coins -= loot
         attacker.coins += loot
+        # a win also drips some DNA, scaled by the attacker's level
+        dna_win = round(constants.ARENA_WIN_DNA_BASE + attacker_creature.level * constants.ARENA_WIN_DNA_PER_LEVEL)
+        attacker.dna_fragments += dna_win
 
-    attacker_fields = ["coins"]
+    attacker_fields = ["coins", "dna_fragments"]
     if award_cup:
         attacker.cup = max(0, attacker.cup + delta)
         # raiding spends 8h off your shield (not the whole thing anymore), so a
@@ -314,6 +323,7 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         "log_text": log_text,
         "detail_log": detail_log,
         "loot": loot,
+        "dna": dna_win,
         "cup_delta": delta,
         "opponent_label": opponent["label"],
         "new_cup": attacker.cup,

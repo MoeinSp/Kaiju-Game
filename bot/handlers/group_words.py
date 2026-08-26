@@ -1120,7 +1120,8 @@ def _action_note(payload: dict) -> str:
     elif kind == "arena":
         r = payload["result"]
         arrow = "▲" if r["cup_delta"] >= 0 else "▼"
-        note = (f"{get_emoji('celebrate')} <b>غارت موفق!</b> +{r['loot']:,} {get_emoji('coin')}"
+        note = (f"{get_emoji('celebrate')} <b>غارت موفق!</b> +{r['loot']:,} {get_emoji('coin')} "
+                f"+{r.get('dna', 0)} {get_emoji('dna')}"
                 if r["won"] else "🛡 <b>حمله دفع شد!</b>")
         note += f"  {arrow} {abs(r['cup_delta'])} 🏆 (کاپ: {r['new_cup']})"
     elif kind == "collect":

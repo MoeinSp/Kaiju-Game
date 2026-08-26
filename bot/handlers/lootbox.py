@@ -52,9 +52,15 @@ def _biocrate_detail_text(tier: str) -> str:
     lines = [
         f"{cfg['label']}",
         f"هزینه: <b>{cfg['gold']:,}</b> {get_emoji('coin')} + <b>{cfg['dna']}</b> {get_emoji('dna')}\n",
-        f"🎒 تجهیزات — <b>{(1 - cc) * 100:g}٪</b>",
-        f"🧬 <b>هیولا</b> — روی‌هم <b>{cc * 100:g}٪</b>:",
+        f"🎒 <b>تجهیزات</b> — روی‌هم <b>{(1 - cc) * 100:g}٪</b>:",
     ]
+    # equipment rarity breakdown (standard loot weights)
+    ew = constants.LOOTBOX_RARITY_WEIGHTS
+    et = sum(ew.values())
+    for rarity, weight in ew.items():
+        pct = (1 - cc) * weight / et * 100
+        lines.append(f"　{constants.RARITY_LABELS[rarity]} — <b>{pct:.2g}٪</b>")
+    lines.append(f"\n🧬 <b>هیولا</b> — روی‌هم <b>{cc * 100:g}٪</b>:")
     for rarity, weight in weights.items():
         pct = cc * weight / total * 100
         lines.append(f"　{constants.RARITY_LABELS[rarity]} — <b>{pct:.2g}٪</b>")

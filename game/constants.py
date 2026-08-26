@@ -417,7 +417,8 @@ BIOCRATE_TIERS = {
     "epic": {
         "label": "💎 باکس ژنتیکی حماسی", "gold": 5000, "dna": 120,
         "creature_chance": 0.18,
-        "weights": {"common": 20, "rare": 30, "epic": 28, "legendary": 15, "mythic": 7},
+        # mythic kept to ~1% of all opens (0.18 × 5/98) — a rare jackpot, not routine
+        "weights": {"common": 25, "rare": 30, "epic": 26, "legendary": 12, "mythic": 5},
     },
 }
 BIOCRATE_TIER_ORDER = ["basic", "rare", "epic"]
@@ -836,18 +837,18 @@ GROUP_SHIELD_HOURS = 4  # separate anti-farm grace after being hit by a group «
 # so a week-long shield survives ~21 raids before you're exposed again.
 SHIELD_ATTACK_COST_HOURS = 8
 SHIELD_SHOP_TIERS = {
-    "8h":  {"hours": 8,   "diamonds": 10,  "label": "🛡 سپر ۸ ساعته"},
-    "24h": {"hours": 24,  "diamonds": 25,  "label": "🛡 سپر ۲۴ ساعته"},
-    "3d":  {"hours": 72,  "diamonds": 60,  "label": "🛡 سپر ۳ روزه"},
-    "7d":  {"hours": 168, "diamonds": 120, "label": "🛡 سپر یک‌هفته‌ای"},
+    "8h":  {"hours": 8,   "diamonds": 20,  "label": "🛡 سپر ۸ ساعته"},
+    "24h": {"hours": 24,  "diamonds": 50,  "label": "🛡 سپر ۲۴ ساعته"},
+    "3d":  {"hours": 72,  "diamonds": 120, "label": "🛡 سپر ۳ روزه"},
+    "7d":  {"hours": 168, "diamonds": 240, "label": "🛡 سپر یک‌هفته‌ای"},
 }
 # A separate, cheaper shield against group «اتک» (uses group_shield_until). Group
 # aggression is lower-stakes than arena raiding, so protection costs less.
 GROUP_SHIELD_SHOP_TIERS = {
-    "8h":  {"hours": 8,   "diamonds": 5,  "label": "🛡 سپر گروه ۸ ساعته"},
-    "24h": {"hours": 24,  "diamonds": 12, "label": "🛡 سپر گروه ۲۴ ساعته"},
-    "3d":  {"hours": 72,  "diamonds": 30, "label": "🛡 سپر گروه ۳ روزه"},
-    "7d":  {"hours": 168, "diamonds": 55, "label": "🛡 سپر گروه یک‌هفته‌ای"},
+    "8h":  {"hours": 8,   "diamonds": 10,  "label": "🛡 سپر گروه ۸ ساعته"},
+    "24h": {"hours": 24,  "diamonds": 24,  "label": "🛡 سپر گروه ۲۴ ساعته"},
+    "3d":  {"hours": 72,  "diamonds": 60,  "label": "🛡 سپر گروه ۳ روزه"},
+    "7d":  {"hours": 168, "diamonds": 110, "label": "🛡 سپر گروه یک‌هفته‌ای"},
 }
 ARENA_ATTACK_ENERGY_COST = 1
 
@@ -865,8 +866,15 @@ ARENA_LOOT_CAP_PER_LEVEL = 4
 
 ARENA_CUP_WIN_BASE = 22
 ARENA_CUP_LOSS_BASE = 14
-ARENA_CUP_MIN_DELTA = 4  # never award/deduct less than this, so every fight moves the needle
-ARENA_CUP_MAX_DELTA = 40
+ARENA_CUP_MIN_DELTA = 3  # never award/deduct less than this, so every fight moves the needle
+ARENA_CUP_MAX_DELTA = 70  # wider so a big rating gap really swings the cup
+ARENA_CUP_GAP_DIVISOR = 5  # +1 cup per this many points of rating gap (was 8 — steeper now)
+
+# Arena/PvP wins now also pay a little DNA, scaled by the attacker's level.
+ARENA_WIN_DNA_BASE = 2
+ARENA_WIN_DNA_PER_LEVEL = 0.2
+GROUP_ATTACK_WIN_DNA = 3   # winning a group «اتک» on a player
+RAID_HIT_DNA = 1           # every raid-boss hit drips a little DNA on top of the kill split
 ARENA_MATCH_CUP_BAND = 120  # real opponents within +/- this cup range are eligible
 ARENA_STARTING_CUP = 0
 

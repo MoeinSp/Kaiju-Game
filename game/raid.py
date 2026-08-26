@@ -86,6 +86,9 @@ def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bo
     dmg = round(base * mult * random.uniform(0.75, 1.3)) + stats["poison"]
 
     boss.current_hp = max(0, boss.current_hp - dmg)
+    # every hit drips a little DNA on top of the kill-split reward
+    user.dna_fragments += constants.RAID_HIT_DNA
+    user.save(update_fields=["dna_fragments"])
     RaidDamageLog.objects.create(raid_id=boss.id, user_id=user.id, creature_id=creature.id, damage=dmg)
 
     defeated = boss.current_hp <= 0

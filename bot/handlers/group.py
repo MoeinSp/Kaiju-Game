@@ -704,7 +704,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"{get_emoji('attack_action')} <b>{creature.name}</b> به باس <b>{boss.name}</b> (لِوِل {boss.level}) "
         f"<b>{dmg}</b> دمیج زد!\n"
         f"{constants.render_bar(boss.current_hp, boss.max_hp, width=14)}  {max(boss.current_hp, 0)}/{boss.max_hp} HP\n"
-        f"⚡ ۱ انرژی کم شد (باقی‌مونده: {energy_left})"
+        f"+{constants.RAID_HIT_DNA} {get_emoji('dna')} · ⚡ ۱ انرژی کم شد (باقی‌مونده: {energy_left})"
     )
     text += _mission_lines(completed_missions)
     if defeated:
@@ -804,9 +804,11 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     loot = max(0, loser_user.coins // 10)
     loser_user.coins -= loot
     winner_user.coins += loot
+    dna_win = constants.GROUP_ATTACK_WIN_DNA
+    winner_user.dna_fragments += dna_win  # a group win also pays a little DNA
     winner_levels = add_xp(winner_creature_obj, constants.DUEL_WIN_XP)
     add_xp(loser_creature_obj, constants.DUEL_LOSE_XP)
-    winner_user.save(update_fields=["coins"])
+    winner_user.save(update_fields=["coins", "dna_fragments"])
     loser_user.save(update_fields=["coins"])
     winner_creature_obj.save()
     loser_creature_obj.save()
@@ -843,6 +845,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         "attacker_won": attacker_won,
         "winner_name": display_name(winner_user),
         "loot": loot,
+        "dna": dna_win,
         "winner_level_up": bool(winner_levels),
         "winner_creature": winner_creature_obj.name,
         "winner_new_level": winner_creature_obj.level,
@@ -869,7 +872,8 @@ async def pvp_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         if result["attacker_won"]
         else f"💀 <b>باختی — {result['winner_name']} برنده شد.</b>"
     )
-    reward = f"\n\n{get_emoji('coin')} برنده {result['loot']} طلا از بازنده غارت کرد · +{constants.DUEL_WIN_XP} XP"
+    reward = (f"\n\n{get_emoji('coin')} برنده {result['loot']} طلا از بازنده غارت کرد "
+              f"· +{result.get('dna', 0)} {get_emoji('dna')} · +{constants.DUEL_WIN_XP} XP")
     if result["winner_level_up"]:
         reward += f" {get_emoji('celebrate')} {result['winner_creature']} رسید به سطح {result['winner_new_level']}!"
     reward += f"\n⚡ ۱ انرژی کم شد (باقی‌مونده: {result['energy_left']})"

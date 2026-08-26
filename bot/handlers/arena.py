@@ -17,6 +17,7 @@ from game.arena import (
     active_power,
     attack,
     creature_power,
+    cup_delta,
     deserved_cup,
     expected_loot,
     find_opponent,
@@ -138,14 +139,15 @@ def _find_sync(tg_user):
     creature = Creature.objects.filter(owner=user, is_active=True).first()
     level = creature.level if creature is not None else 1
     my_element = creature.element if creature is not None else None
-    return user, opponent, active_power(user), expected_loot(opponent, level), my_element
+    dna_win = round(constants.ARENA_WIN_DNA_BASE + level * constants.ARENA_WIN_DNA_PER_LEVEL)
+    return user, opponent, active_power(user), expected_loot(opponent, level), my_element, dna_win
 
 
 async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     try:
-        user, opponent, my_power, loot, my_element = await run_db(_find_sync, update.effective_user)
+        user, opponent, my_power, loot, my_element, dna_win = await run_db(_find_sync, update.effective_user)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
@@ -168,12 +170,16 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     odds = "🟢 شانس بالا" if gap < -15 else ("🔴 خطرناک" if gap > 15 else "🟡 سرتاسری")
     opp_element = opponent.get("element")
     elem_tag = f"  ({constants.element_label(opp_element)})" if opp_element else ""
+    # preview the cup swing so the rating stakes are visible before committing
+    win_cup = cup_delta(user, opponent["cup"], True, my_power)
+    loss_cup = cup_delta(user, opponent["cup"], False, my_power)
     lines = [
         f"{get_emoji('battle')} <b>حریف پیدا شد!</b>\n",
         f"🏭 <b>{opponent['label']}</b>{elem_tag}",
-        f"🏆 کاپ: <b>{opponent['cup']}</b>",
+        f"{get_emoji('trophy')} کاپ تو: <b>{user.cup}</b>   ·   کاپ حریف: <b>{opponent['cup']}</b>",
         f"💪 قدرت: <b>{opponent['power']}</b>  (تو: {my_power} — {odds})",
-        f"{get_emoji('coin')} غنیمت در صورت برد: حدود <b>{loot}</b>",
+        f"{get_emoji('coin')} غنیمت در صورت برد: حدود <b>{loot}</b> + <b>{dna_win}</b> {get_emoji('dna')}",
+        f"{get_emoji('trophy')} کاپ: برد <b>+{win_cup}</b> · باخت <b>{loss_cup}</b>",
     ]
     if my_element and opp_element:
         note = constants.element_matchup_note(my_element, opp_element)
@@ -233,7 +239,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     if result["won"]:
         summary = (
             f"{get_emoji('celebrate')} <b>بردی!</b>\n"
-            f"{get_emoji('coin')} +{result['loot']} غنیمت از {result['opponent_label']}\n"
+            f"{get_emoji('coin')} +{result['loot']} غنیمت + {result.get('dna', 0)} {get_emoji('dna')} از {result['opponent_label']}\n"
             f"🏆 +{result['cup_delta']} کاپ (الان: {result['new_cup']})"
         )
     else:
@@ -408,7 +414,7 @@ async def arena_revenge_attack_callback(update: Update, context: ContextTypes.DE
     if result["won"]:
         summary = (
             f"{get_emoji('celebrate')} <b>انتقام گرفتی!</b>\n"
-            f"{get_emoji('coin')} +{result['loot']} غنیمت\n"
+            f"{get_emoji('coin')} +{result['loot']} غنیمت + {result.get('dna', 0)} {get_emoji('dna')}\n"
             f"🏆 +{result['cup_delta']} کاپ (الان: {result['new_cup']})"
         )
     else:
