@@ -209,15 +209,21 @@ def _opponent_details_sync(pending: dict) -> dict:
     from game.creature import effective_stats
     from game.equipment import get_equipped_items
 
-    if pending.get("is_fake") or not pending.get("user_id"):
+    def _bot(pending):
+        from game.arena import _bot_display_tier
+
+        rarity, star = _bot_display_tier(int(pending.get("cup", 0)))
         return {"is_fake": True, "label": pending["label"], "power": pending["power"],
-                "element": pending.get("element")}
+                "element": pending.get("element"),
+                "rarity": constants.RARITY_LABELS.get(rarity, rarity), "star_level": star}
+
+    if pending.get("is_fake") or not pending.get("user_id"):
+        return _bot(pending)
 
     target = User.objects.filter(id=pending["user_id"]).first()
     creature = Creature.objects.filter(owner=target, is_active=True).first() if target else None
     if creature is None:
-        return {"is_fake": True, "label": pending["label"], "power": pending["power"],
-                "element": pending.get("element")}
+        return _bot(pending)
 
     items = get_equipped_items(creature)
     stats = effective_stats(creature, items)
@@ -270,11 +276,14 @@ def opponent_details_text(d: dict) -> str:
     """Render a full opponent readout from _opponent_details_sync's dict. Shared with
     the group «اتک» flow so both show the same detailed card."""
     if d["is_fake"]:
+        tier = f"{d['rarity']} · {'⭐' * d['star_level']}\n" if d.get("rarity") else ""
         return (
             f"🔍 <b>جزییات حریف</b>\n\n🏭 <b>{d['label']}</b>\n"
+            f"{tier}"
             f"💪 قدرت کل: <b>{d['power']}</b>\n"
             f"{constants.element_label(d['element']) if d.get('element') else ''}\n\n"
-            "<i>این حریف یه آزمایشگاه بات ساختگیه — تجهیزات واقعی نداره.</i>"
+            "<i>این یه آزمایشگاه بات هم‌ردهٔ کاپته — هرچی کاپت بالاتر، قوی‌تر و مجهزتره "
+            "(نزدیک کاپ ۵۰۰۰ کاملاً مکس و فول‌تجهیزات می‌شه).</i>"
         )
     s = d["stats"]
     lines = [

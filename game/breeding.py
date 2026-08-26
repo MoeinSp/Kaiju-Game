@@ -63,11 +63,10 @@ def active_job(user: User) -> BreedingJob | None:
 
 
 def mating_minutes(parent_a: Creature, parent_b: Creature) -> int:
-    """Phase-1 (mating) duration, keyed to the *better* parent's rarity — pairing a
-    legendary with a common still costs legendary time, so rarity can't be
-    laundered through a cheap partner."""
-    rarity = constants.higher_rarity(parent_a.rarity, parent_b.rarity)
-    return constants.CAVE_MATING_MINUTES[rarity]
+    """Phase-1 (mating) duration — the SERIAL gate, scaled by BOTH parents' rarity
+    (mythic+mythic = 36h, down to 1h). Only one mating runs at a time, so this is the
+    real bottleneck; the egg then incubates quickly (and several eggs can stack)."""
+    return constants.cave_mating_minutes(parent_a.rarity, parent_b.rarity)
 
 
 def hatch_minutes(parent_a: Creature, parent_b: Creature) -> int:

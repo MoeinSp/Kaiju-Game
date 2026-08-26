@@ -10,24 +10,17 @@ WILD_NAMES = ["Ferabeast", "Grimhide", "Rustclaw", "Mossfang", "Duskrunner"]
 
 # each tier scales the wild creature's stats and its payout together, so picking a
 # tougher target is a real risk/reward decision rather than a free upgrade.
-#
-# The reward spread was deliberately widened so *easy* hunting barely pays: farming
-# the 🟢 weak tier is now a trickle (0.4x), a same-level 🟡 fight is modest (0.75x),
-# and only the risky 🔴 strong tier — a genuinely hard fight you can lose — pays
-# well (2.4x). The point is that loot should cost effort: you either grind many
-# small wins or gamble on a fight that might give you nothing.
+# `stat_mult` sizes the opponent (difficulty); `reward_mult` scales the loot.
 HUNT_TIERS = {
-    "weak": {"label": "🟢 ضعیف", "stat_mult": 0.8, "reward_mult": 0.4},
-    "normal": {"label": "🟡 هم‌سطح", "stat_mult": 1.0, "reward_mult": 0.75},
-    "strong": {"label": "🔴 قوی", "stat_mult": 1.4, "reward_mult": 2.4},
+    "weak": {"label": "🟢 ضعیف", "stat_mult": 0.8, "reward_mult": 0.5},
+    "normal": {"label": "🟡 هم‌سطح", "stat_mult": 1.0, "reward_mult": 1.0},
+    "strong": {"label": "🔴 قوی", "stat_mult": 1.4, "reward_mult": 1.8},
 }
 
-# Payout now scales with the hunter's real POWER (not just level), so a player who's
-# strong through equipment/stars/upgrades faces strong wild opponents and earns loot
-# to match — the old level-only scaling handed a high-power/modest-level player weak
-# targets and pocket change.
-HUNT_COIN_FLAT = 10
-HUNT_COIN_PER_POWER = 0.10
+# Hunt coin loot is pegged to the ARENA reward at the same cup: a «هم‌سطح» hunt pays
+# ~80% of what a same-cup bot raid pays, so when a player's cup stalls they can still
+# earn a solid trickle by hunting instead. (weak ≈ 40% of arena, strong ≈ 144%.)
+HUNT_ARENA_LOOT_FRACTION = 0.80
 HUNT_DNA_PER_POWER = 0.006
 HUNT_XP_WIN = 25
 HUNT_XP_LOSE = 8
@@ -48,9 +41,10 @@ def scout_cost(creature: Creature) -> int:
     return max(HUNT_SCOUT_COST_MIN, round(_player_power(creature) * HUNT_SCOUT_COST_PER_POWER))
 
 
-def hunt_coin_range(player_power: int, tier: str) -> tuple[int, int]:
+def hunt_coin_range(cup: int, tier: str) -> tuple[int, int]:
+    """Coin loot for a hunt, pegged to the arena bot-loot at this cup × 80% × tier."""
     mult = HUNT_TIERS[tier]["reward_mult"]
-    base = HUNT_COIN_FLAT + max(0, player_power) * HUNT_COIN_PER_POWER
+    base = constants.arena_fake_loot(max(0, cup)) * HUNT_ARENA_LOOT_FRACTION
     return (round(base * mult * 0.85), round(base * mult * 1.15))
 
 
@@ -97,9 +91,9 @@ def scout_one(player_creature: Creature) -> dict:
     }
 
 
-def estimated_reward(tier: str, player_power: int = 1) -> tuple[int, int]:
-    """(min_coins, max_coins) shown while scouting — scales with the hunter's power."""
-    return hunt_coin_range(player_power, tier)
+def estimated_reward(tier: str, cup: int = 0) -> tuple[int, int]:
+    """(min_coins, max_coins) shown while scouting — pegged to arena loot at this cup."""
+    return hunt_coin_range(cup, tier)
 
 
 def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal", seed: int | None = None) -> dict:
@@ -111,7 +105,7 @@ def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal", se
     power = _player_power(player_creature)
 
     if won:
-        coins = random.randint(*hunt_coin_range(power, tier))
+        coins = random.randint(*hunt_coin_range(user.cup, tier))
         dna = random.randint(*hunt_dna_range(power, tier))
         xp_gain = round(HUNT_XP_WIN * reward_mult)
     else:

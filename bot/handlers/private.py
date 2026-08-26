@@ -1618,12 +1618,12 @@ def _hunt_scout_sync(tg_user, charge=False):
         user.save(update_fields=["coins"])
     my_stats = effective_stats(creature, get_equipped_items(creature))
     my_power = round(my_stats["hp"] + my_stats["atk"] + my_stats["def"] + my_stats["spd"])
-    return creature, my_power, scout_one(creature), sync_energy(user), cost
+    return creature, my_power, user.cup, scout_one(creature), sync_energy(user), cost
 
 
-def _hunt_scout_text(creature, my_power, target, energy, scout_price) -> str:
+def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> str:
     tier_label = HUNT_TIERS[target["tier"]]["label"]
-    lo, hi = estimated_reward(target["tier"], my_power)
+    lo, hi = estimated_reward(target["tier"], cup)
     diff = target["power"] - my_power
     odds = "🟢 شانس بالا" if diff < -15 else ("🔴 خطرناک" if diff > 15 else "🟡 سرتاسری")
     return "\n".join(
@@ -1656,12 +1656,12 @@ async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     player can judge the risk *before* any energy is spent. Searching again is free
     ("بعدی"); only committing to a fight costs energy."""
     try:
-        creature, my_power, target, energy, cost = await run_db(_hunt_scout_sync, update.effective_user)
+        creature, my_power, cup, target, energy, cost = await run_db(_hunt_scout_sync, update.effective_user)
     except GameError as exc:
         await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard())
         return
     await send_screen(update,
-        _hunt_scout_text(creature, my_power, target, energy, cost),
+        _hunt_scout_text(creature, my_power, cup, target, energy, cost),
         parse_mode="HTML",
         reply_markup=_hunt_scout_keyboard(target),
     )
@@ -1670,14 +1670,14 @@ async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def hunt_next_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     try:
-        creature, my_power, target, energy, cost = await run_db(_hunt_scout_sync, update.effective_user, True)
+        creature, my_power, cup, target, energy, cost = await run_db(_hunt_scout_sync, update.effective_user, True)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("🔍 جستجوی دوباره…")
     await safe_edit_message_text(
         query,
-        _hunt_scout_text(creature, my_power, target, energy, cost),
+        _hunt_scout_text(creature, my_power, cup, target, energy, cost),
         parse_mode="HTML",
         reply_markup=_hunt_scout_keyboard(target),
     )

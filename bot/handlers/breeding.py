@@ -117,7 +117,7 @@ def _parent_a_render(candidates: list, filt: str = "all", page: int = 0) -> tupl
         "🕳 <b>غار هیولا — جفت بفرست</b>\n"
         "<blockquote>دو هیولای آزاد رو بفرست توی غار. اول جفت‌گیری می‌کنن، بعد یه <b>تخم</b> "
         "می‌ذارن و آزاد می‌شن؛ تخم جدا رشد می‌کنه تا سر باز کنه.\n"
-        "هرچی والدین <b>نایاب‌تر</b>، زمان تخم <b>خیلی بیشتر</b> (اساطیری+اساطیری تا ۴۸ ساعت). "
+        "هرچی والدین <b>نایاب‌تر</b>، <b>زمان جفت‌گیری</b> خیلی بیشتر (اساطیری+اساطیری تا ۳۶ ساعت). "
         "رده‌ی تخم از والدین بالاتر نمی‌ره؛ همنوع‌بودن شانس رسیدن به سقف رده رو بیشتر می‌کنه.</blockquote>\n"
         "\n<b>والد اول رو انتخاب کن:</b>  <i>(با تب نایابی جدا کن)</i>"
     )
@@ -232,7 +232,7 @@ def _cave_guide_text() -> str:
     time_lines = []
     for s in range(9):
         i, j = reps[s]
-        hours = constants.EGG_HATCH_HOURS_BY_RARITY_SUM[s]
+        hours = constants.CAVE_MATING_HOURS_BY_RARITY_SUM[s]
         time_lines.append(f"　{dot[ro[i]]}+{dot[ro[j]]} → <b>{fa(hours)} ساعت</b>")
     dna_lines = " · ".join(f"{dot[r]} {fa(constants.BREEDING_DNA_COST[r])}" for r in ro)
     return (
@@ -243,9 +243,9 @@ def _cave_guide_text() -> str:
         "<blockquote>هیچ‌وقت از والدین بالاتر نمی‌ره (مثلاً دو افسانه‌ای، اساطیری نمی‌دن).\n"
         "شانس رسیدن به <b>سقف رده</b>: همنوع (هم‌اسم) <b>۶۰٪</b> · غیرهمنوع <b>۳۰٪</b> — "
         "وگرنه یه رده پایین‌تر می‌آد.</blockquote>\n\n"
-        "⏱ <b>زمان رشد تخم</b> <i>(هرچی والدین نایاب‌تر، خیلی بیشتر)</i>\n"
+        "⏱ <b>زمان جفت‌گیری</b> <i>(والدها قفلن — فقط یه جفت همزمان؛ گلوگاه اصلی همینه)</i>\n"
         + "\n".join(time_lines)
-        + "\n<i>　جفت‌گیری هم جدا ۴۵ دقیقه تا ۵ ساعت طول می‌کشه.</i>\n\n"
+        + "\n<i>　بعدش تخم خیلی سریع رشد می‌کنه (۱۰ دقیقه تا ۱ ساعت) و چند تا تخم می‌تونن با هم رشد کنن.</i>\n\n"
         "🧬 <b>DNA لازم</b> <i>(بر اساس نایاب‌ترین والد)</i>\n"
         f"　{dna_lines}\n\n"
         "💎 <b>فوری‌کردن</b>: از داخل غار، بر اساس <b>زمان مونده</b> (حدود ۶ الماس هر ساعت) — "
@@ -415,10 +415,9 @@ async def breeding_info_callback(update: Update, context: ContextTypes.DEFAULT_T
     else:  # time
         msg = (
             f"⏱ زمان‌ها\n\n"
-            f"جفت‌گیری: {_format_remaining(info['mating_minutes'] * 60)} (بعدش والدها آزاد)\n"
-            f"رشد تخم: {_format_remaining(info['hatch_minutes'] * 60)}\n\n"
-            "هرچی والدین نایاب‌تر، زمان تخم بیشتر — اساطیری+اساطیری ۴۸ ساعت، "
-            "اساطیری+افسانه‌ای ۳۶ ساعت.\n"
+            f"جفت‌گیری (والدها قفل): {_format_remaining(info['mating_minutes'] * 60)}\n"
+            f"رشد تخم (سریع): {_format_remaining(info['hatch_minutes'] * 60)}\n\n"
+            "زمان جفت‌گیری گلوگاه اصلیه — اساطیری+اساطیری ۳۶ ساعت، اساطیری+افسانه‌ای ۲۸ ساعت.\n"
             "می‌تونی بعد از فرستادن، از داخل غار با الماس فوری‌ش کنی (بر اساس زمان مونده)."
         )
     await query.answer(msg, show_alert=True)

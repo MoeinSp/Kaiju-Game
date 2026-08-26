@@ -272,7 +272,7 @@ MISSION_DEFS = {
 # Starter pack of build-timer cards. The early main-hall upgrades are the slowest
 # part of a new player's first session, so they get enough cards to blow through
 # the first couple of them instead of staring at a countdown.
-STARTING_SPEEDUP_CARDS = {5: 4, 30: 3, 60: 2, 720: 1}
+STARTING_SPEEDUP_CARDS = {5: 3, 30: 1}
 
 # generous welcome package — a new player should be able to build, forge, and open
 # a diamond box on day one instead of grinding before the game opens up
@@ -643,40 +643,43 @@ WORKER_RARITY_MULT = {"common": 1.0, "rare": 1.4, "epic": 2.0, "legendary": 3.0,
 
 # ── Monster Cave / egg incubation (game/breeding.py) ──────────────────────────
 # Two phases, deliberately decoupled:
-#   1. MATING — the two parents are busy in the cave. When it finishes, an egg is
-#      laid and the parents are FREED, so a new pair can go straight back in.
-#   2. HATCHING — the laid egg then incubates on its OWN timer, independent of the
-#      cave, and hatches into a mystery creature.
-# Both are keyed to the better parent's rarity ("type and breed"); the total for
-# the rarest tops out at a full day (mating 6h + hatch 18h = 24h).
-CAVE_MATING_MINUTES = {
-    "common": 45,       # 45m
-    "rare": 90,         # 1.5h
-    "epic": 150,        # 2.5h
-    "legendary": 210,   # 3.5h
-    "mythic": 300,      # 5h — parents freed after this; the egg then incubates on its own
+#   1. MATING — the two parents are LOCKED in the cave. Only ONE mating runs at a
+#      time, so this is the real serial bottleneck. When it finishes, an egg is
+#      laid and the parents are freed.
+#   2. HATCHING — the laid egg incubates on its own SHORT timer. Several eggs can
+#      incubate at once, so this phase can't be the gate (a player could stack many).
+# THE MATING TIME is therefore the significant one and scales hard with BOTH parents'
+# rarity (sum of indices): mythic+mythic = 36h, decreasing down to 1h for common+common.
+CAVE_MATING_HOURS_BY_RARITY_SUM = {
+    0: 1,    # common + common
+    1: 2,
+    2: 4,
+    3: 7,
+    4: 10,
+    5: 15,
+    6: 21,   # legendary + legendary (or mythic + epic)
+    7: 28,   # mythic + legendary
+    8: 36,   # mythic + mythic
 }
-# Egg incubation is now keyed to BOTH parents (sum of their rarity indices), so a
-# mythic+mythic pair waits far longer than a mythic+legendary one — the rarer the
-# pair, the longer the egg. Times deliberately pushed high: the two headline points
-# the design targets are mythic+mythic = 48h and mythic+legendary = 36h.
-# index sum: common=0 … mythic=4, so 0 (c+c) … 8 (m+m).
-EGG_HATCH_HOURS_BY_RARITY_SUM = {
-    0: 3,    # common + common
-    1: 5,
-    2: 7,
-    3: 10,
-    4: 14,
-    5: 20,
-    6: 27,   # legendary + legendary  (or mythic + epic)
-    7: 36,   # mythic + legendary
-    8: 48,   # mythic + mythic
+# Egg incubation is now SHORT (parallel phase), keyed only to the top rarity.
+EGG_HATCH_SHORT_MINUTES = {
+    "common": 10,
+    "rare": 20,
+    "epic": 30,
+    "legendary": 45,
+    "mythic": 60,
 }
+
+
+def cave_mating_minutes(rarity_a: str, rarity_b: str) -> int:
+    """Mating (parents-locked) duration — the serial gate; scales with both parents."""
+    s = RARITY_ORDER.index(rarity_a) + RARITY_ORDER.index(rarity_b)
+    return CAVE_MATING_HOURS_BY_RARITY_SUM[s] * 60
 
 
 def egg_hatch_minutes(rarity_a: str, rarity_b: str) -> int:
-    s = RARITY_ORDER.index(rarity_a) + RARITY_ORDER.index(rarity_b)
-    return EGG_HATCH_HOURS_BY_RARITY_SUM[s] * 60
+    """Egg incubation — short, keyed to the top parent rarity (parallel phase)."""
+    return EGG_HATCH_SHORT_MINUTES[higher_rarity(rarity_a, rarity_b)]
 
 
 # Chance the egg lands at the parents' TOP rarity (it can never exceed it — two
@@ -818,10 +821,9 @@ WHEEL_PRIZES = [
     {"key": "coins_medium", "kind": "coins", "amount": 150, "weight": 14, "label": "۱۵۰ طلا"},
     {"key": "dna_small", "kind": "dna", "amount": 3, "weight": 20, "label": "۳ DNA"},
     {"key": "dna_medium", "kind": "dna", "amount": 8, "weight": 8, "label": "۸ DNA"},
-    {"key": "diamonds_small", "kind": "diamonds", "amount": 2, "weight": 12, "label": "۲ الماس"},
-    {"key": "speedup_5", "kind": "speedup", "amount": 5, "weight": 8, "label": "کارت سرعت ۵ دقیقه"},
-    {"key": "speedup_30", "kind": "speedup", "amount": 30, "weight": 6, "label": "کارت سرعت ۳۰ دقیقه"},
-    {"key": "speedup_60", "kind": "speedup", "amount": 60, "weight": 3, "label": "کارت سرعت ۱ ساعت"},
+    {"key": "diamonds_small", "kind": "diamonds", "amount": 2, "weight": 14, "label": "۲ الماس"},
+    {"key": "speedup_5", "kind": "speedup", "amount": 5, "weight": 4, "label": "کارت سرعت ۵ دقیقه"},
+    {"key": "speedup_30", "kind": "speedup", "amount": 30, "weight": 2, "label": "کارت سرعت ۳۰ دقیقه"},
     {"key": "jackpot", "kind": "coins", "amount": 500, "weight": 1, "label": "🎉 جک‌پات ۵۰۰ طلا"},
 ]
 
@@ -937,6 +939,15 @@ ARENA_OVERCAP_DAMPING = 0.25  # cup gain multiplier once you're above your deser
 # softcap you sit. Net effect — the ladder compresses at the top, ~5000 is a real
 # grind and ~10000 is nearly asymptotic, and the field stays in close competition.
 ARENA_CUP_SOFTCAP = 2500
+
+# Bot (fake) opponents scale from very weak at low cup to a FULLY-MAXED lab at the
+# ceiling: at ARENA_BOT_MAX_CUP the bot's power equals a mythic 5★, level-100,
+# fully-upgraded, fully-geared creature (~6000), so even a maxed player is only ~even
+# there and can't push past — the intended hard wall around 5000 cup. The exponent
+# makes low cups easy and the climb bite near the top.
+ARENA_BOT_MAX_CUP = 5000
+ARENA_BOT_MAX_POWER = 6000
+ARENA_BOT_POWER_EXP = 1.25
 
 # Fake opponents shown when no real player sits in the cup band — their lab names
 # are obviously flavored so the roster never looks empty on a small player base.

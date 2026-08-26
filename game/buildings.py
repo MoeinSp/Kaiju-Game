@@ -10,9 +10,11 @@ from game import constants, lab
 from game.creature import GameError, InsufficientGoldError
 
 # small bonus chance (separate from the daily wheel's guaranteed prize) attached to
-# a handful of natural "win" moments — duel wins, raid kills, guardian defenses
-ACTIVITY_SPEEDUP_CHANCE = 0.08
-ACTIVITY_SPEEDUP_CHOICES = [(1, 50), (5, 35), (30, 15)]  # (minutes, weight) — small denominations only
+# a handful of natural "win" moments — duel wins, raid kills, guardian defenses.
+# Deliberately rare and small-denomination: building upgrades are the game's main
+# time-gate, so speed-up cards must stay scarce or the whole build pacing collapses.
+ACTIVITY_SPEEDUP_CHANCE = 0.02
+ACTIVITY_SPEEDUP_CHOICES = [(1, 70), (5, 25), (30, 5)]  # (minutes, weight) — small denominations only
 
 
 def maybe_award_speedup_card(user: User) -> int | None:

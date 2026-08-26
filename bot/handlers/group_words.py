@@ -601,7 +601,7 @@ def _card_sync(tg_user, chat, action):
         target = scout_one(creature)
         # scout_one returns the raw roll; the card needs it labelled and priced
         target["tier_label"] = HUNT_TIERS[target["tier"]]["label"]
-        target["reward"] = estimated_reward(target["tier"], my_power)
+        target["reward"] = estimated_reward(target["tier"], user.cup)
         target["scout_cost"] = scout_cost(creature)
         data["target"] = target
     elif action == "arena":

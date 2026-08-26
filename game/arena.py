@@ -170,15 +170,24 @@ def _attacker_level(attacker: User) -> int:
 
 
 def power_for_cup(cup: int) -> int:
-    """The power a lab at this cup rating is *expected* to have.
-
-    Inverse of deserved_cup(). Bots are built from this rather than from the
-    attacker's own power, and that difference is the whole point: a bot mirroring
-    the attacker was always a coin flip, so a weak player could keep winning and
-    climb forever. Sized to the cup instead, the ladder pushes back — reach a cup
-    your creature can't back up and the bots there simply beat you.
+    """The power a lab at this cup rating is *expected* to have — what a bot at this
+    cup is built to. Scales from very weak at cup 0 up to a fully-maxed lab (~6000)
+    at ARENA_BOT_MAX_CUP, and no higher: past the ceiling the bot is already max, so
+    even a fully-maxed player is only ~even there and the ladder walls out ~5000.
     """
-    return max(1, round(cup / constants.ARENA_CUP_PER_POWER))
+    frac = min(1.0, max(0, cup) / constants.ARENA_BOT_MAX_CUP)
+    return max(15, round(constants.ARENA_BOT_MAX_POWER * frac ** constants.ARENA_BOT_POWER_EXP))
+
+
+def _bot_display_tier(cup: int) -> tuple[str, int]:
+    """Cosmetic rarity + star for a bot, scaled by cup — so a high-cup bot reads as a
+    maxed mythic 5★ lab (matching its real, scaled power). Combat still runs off the
+    power number; this is only what the player sees on the card."""
+    frac = min(1.0, max(0, cup) / constants.ARENA_BOT_MAX_CUP)
+    idx = min(len(constants.RARITY_ORDER) - 1, int(frac * len(constants.RARITY_ORDER)))
+    rarity = constants.RARITY_ORDER[idx]
+    star = max(1, min(5, 1 + round(frac * 4)))
+    return rarity, star
 
 
 def _fake_opponent(attacker: User) -> dict:
@@ -189,6 +198,7 @@ def _fake_opponent(attacker: User) -> dict:
     bot_cup = max(0, attacker.cup + random.randint(-40, 90))
     swing = random.uniform(0.9, 1.15)
     power = max(1, round(power_for_cup(bot_cup) * swing))
+    rarity, star = _bot_display_tier(bot_cup)
     return {
         "is_fake": True,
         "user": None,
@@ -197,6 +207,8 @@ def _fake_opponent(attacker: User) -> dict:
         "power": power,
         "element": constants.random_element(),  # fixed here so the preview matches the fight
         "loot_pool": random.randint(*constants.arena_fake_loot_range(_attacker_level(attacker))),
+        "bot_rarity": rarity,
+        "bot_star": star,
     }
 
 
