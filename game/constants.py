@@ -408,17 +408,22 @@ BIOCRATE_TIERS = {
     "basic": {
         "label": "📦 باکس ژنتیکی معمولی", "gold": BIOCRATE_GOLD_COST, "dna": BIOCRATE_DNA_COST,
         "creature_chance": BIOCRATE_CREATURE_CHANCE, "weights": BIOCRATE_CREATURE_RARITY_WEIGHTS,
+        "equip_weights": LOOTBOX_RARITY_WEIGHTS,  # standard: mostly common gear
     },
     "rare": {
         "label": "🎁 باکس ژنتیکی نایاب", "gold": 2000, "dna": 60,
         "creature_chance": 0.10,
         "weights": {"common": 45, "rare": 30, "epic": 15, "legendary": 7, "mythic": 3},
+        # gear skews NAYAB: common is rare here, rare dominates
+        "equip_weights": {"common": 10, "rare": 55, "epic": 25, "legendary": 8, "mythic": 2},
     },
     "epic": {
         "label": "💎 باکس ژنتیکی حماسی", "gold": 5000, "dna": 120,
         "creature_chance": 0.18,
         # mythic kept to ~1% of all opens (0.18 × 5/98) — a rare jackpot, not routine
         "weights": {"common": 25, "rare": 30, "epic": 26, "legendary": 12, "mythic": 5},
+        # gear skews HAMASI: common almost never, epic dominates
+        "equip_weights": {"common": 3, "rare": 20, "epic": 50, "legendary": 20, "mythic": 7},
     },
 }
 BIOCRATE_TIER_ORDER = ["basic", "rare", "epic"]

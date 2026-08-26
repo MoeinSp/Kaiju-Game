@@ -2,7 +2,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bio_lab.repository import get_or_create_user
-from bot.buttons import CONFIRM, DANGER, SHOP, back_btn, back_only_keyboard, btn
+from bot.buttons import CONFIRM, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants
 from game.creature import GameError
@@ -54,8 +54,8 @@ def _biocrate_detail_text(tier: str) -> str:
         f"هزینه: <b>{cfg['gold']:,}</b> {get_emoji('coin')} + <b>{cfg['dna']}</b> {get_emoji('dna')}\n",
         f"🎒 <b>تجهیزات</b> — روی‌هم <b>{(1 - cc) * 100:g}٪</b>:",
     ]
-    # equipment rarity breakdown (standard loot weights)
-    ew = constants.LOOTBOX_RARITY_WEIGHTS
+    # equipment rarity breakdown (this tier's own gear table)
+    ew = cfg.get("equip_weights", constants.LOOTBOX_RARITY_WEIGHTS)
     et = sum(ew.values())
     for rarity, weight in ew.items():
         pct = (1 - cc) * weight / et * 100

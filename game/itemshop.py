@@ -139,6 +139,7 @@ def create_item_from_draft(draft: dict) -> ShopItem:
         title=draft["title"][:64], emoji=draft.get("emoji", "🎁"),
         price_coins=draft.get("price_coins", 0), price_diamonds=draft.get("price_diamonds", 0),
         contents_json=json.dumps(draft["contents"], ensure_ascii=False),
+        max_per_user=max(0, int(draft.get("max_per_user", 0))),
     )
 
 
@@ -207,9 +208,11 @@ def content_summary(contents: list[dict]) -> str:
         elif t == "creature":
             r = constants.RARITY_LABELS[c["rarity"]]
             el = f" {constants.ELEMENT_WORDS[c['element']]}" if c.get("element") else ""
-            parts.append(f"هیولای {r}{el}")
+            nm = f" «{c['name']}»" if c.get("name") else ""
+            parts.append(f"هیولای {r}{el}{nm}")
         elif t == "equipment":
-            parts.append(f"{constants.EQUIPMENT_SLOT_LABELS[c['slot']]} {constants.RARITY_LABELS[c['rarity']]}")
+            nm = f" «{c['name']}»" if c.get("name") else ""
+            parts.append(f"{constants.EQUIPMENT_SLOT_LABELS[c['slot']]} {constants.RARITY_LABELS[c['rarity']]}{nm}")
     return " + ".join(parts) or "—"
 
 
@@ -256,11 +259,11 @@ def toggle_item(item_id: int) -> bool:
 
 
 # ── granting ──────────────────────────────────────────────────────────────────
-def _make_creature(user: User, rarity: str, element: str | None) -> Creature:
+def _make_creature(user: User, rarity: str, element: str | None, name: str | None = None) -> Creature:
     element = element or constants.random_element()
     mult = constants.RARITY_STAT_MULTIPLIER[rarity]
     return Creature.objects.create(
-        owner=user, name=constants.random_species_name(element), element=element, rarity=rarity,
+        owner=user, name=(name or constants.random_species_name(element))[:64], element=element, rarity=rarity,
         base_hp=round(constants.STARTER_BASE_HP * mult),
         base_atk=round(constants.STARTER_BASE_ATK * mult),
         base_def=round(constants.STARTER_BASE_DEF * mult),
@@ -269,9 +272,11 @@ def _make_creature(user: User, rarity: str, element: str | None) -> Creature:
     )
 
 
-def _make_equipment(user: User, slot: str, rarity: str) -> Equipment:
+def _make_equipment(user: User, slot: str, rarity: str, name: str | None = None) -> Equipment:
     template = random.choice(constants.EQUIPMENT_TEMPLATES[slot])
-    return Equipment.objects.create(owner=user, slot=slot, template_key=template, name=template, rarity=rarity)
+    return Equipment.objects.create(
+        owner=user, slot=slot, template_key=template, name=(name or template)[:48], rarity=rarity
+    )
 
 
 def grant_contents(user: User, contents: list[dict]) -> list[str]:
@@ -292,10 +297,10 @@ def grant_contents(user: User, contents: list[dict]) -> list[str]:
             grant_speedup_card(user, c["minutes"], count=c["count"])
             notes.append(f"{c['count']}× کارت سرعت {c['minutes']}دقیقه")
         elif t == "creature":
-            cr = _make_creature(user, c["rarity"], c.get("element"))
+            cr = _make_creature(user, c["rarity"], c.get("element"), c.get("name"))
             notes.append(f"هیولای {constants.RARITY_LABELS[c['rarity']]} «{cr.name}»")
         elif t == "equipment":
-            it = _make_equipment(user, c["slot"], c["rarity"])
+            it = _make_equipment(user, c["slot"], c["rarity"], c.get("name"))
             notes.append(f"{constants.EQUIPMENT_SLOT_LABELS[c['slot']]} «{it.name}» {constants.RARITY_LABELS[c['rarity']]}")
     if money_fields:
         user.save(update_fields=list(money_fields))
@@ -304,9 +309,19 @@ def grant_contents(user: User, contents: list[dict]) -> list[str]:
 
 @transaction.atomic
 def buy(user: User, item_id: int) -> dict:
+    from bio_lab.models import ShopItemPurchase
+
     item = ShopItem.objects.select_for_update().filter(id=item_id, is_active=True).first()
     if item is None:
         raise GameError("این آیتم دیگه در دسترس نیست.")
+    # per-user purchase limit
+    purchase = None
+    if item.max_per_user and item.max_per_user > 0:
+        purchase, _ = ShopItemPurchase.objects.select_for_update().get_or_create(user=user, item=item)
+        if purchase.count >= item.max_per_user:
+            raise GameError(
+                f"این آیتم محدوده — هر نفر حداکثر {item.max_per_user} بار می‌تونه بخره و تو سقفت رو زدی."
+            )
     user = User.objects.select_for_update().get(id=user.id)
     if user.coins < item.price_coins:
         raise GameError(f"طلا کافی نداری! این آیتم {item.price_coins:,} طلا می‌خواد.")
@@ -320,5 +335,8 @@ def buy(user: User, item_id: int) -> dict:
 
     contents = json.loads(item.contents_json)
     notes = grant_contents(user, contents)
+    if purchase is not None:
+        purchase.count += 1
+        purchase.save(update_fields=["count"])
     return {"title": item.title, "emoji": item.emoji, "notes": notes,
             "coins": user.coins, "diamonds": user.diamonds}

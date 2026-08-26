@@ -57,7 +57,8 @@ def open_biocrate(user: User, tier: str = "basic") -> dict:
         rarity = roll_rarity(cfg["weights"])
         creature = _roll_creature(user, rarity)
         return {"kind": "creature", "rarity": rarity, "creature": creature, "tier": tier}
-    rarity = roll_rarity()
+    # equipment rarity uses the tier's own gear table (pricier tiers skew higher)
+    rarity = roll_rarity(cfg.get("equip_weights"))
     item = roll_equipment(user, rarity)
     return {"kind": "equipment", "rarity": rarity, "item": item, "tier": tier}
 

@@ -773,10 +773,23 @@ class ShopItem(models.Model):
     contents_json = models.TextField(default="[]")  # list[{"type": ..., ...}]
     is_active = models.BooleanField(default=True)
     sort_order = models.IntegerField(default=0)
+    max_per_user = models.IntegerField(default=0)  # 0 = unlimited; N = each player may buy at most N
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:
         return f"{self.title} ({self.price_coins}c/{self.price_diamonds}d)"
+
+
+class ShopItemPurchase(models.Model):
+    """How many times a given player has bought a given owner-authored ShopItem —
+    used to enforce ShopItem.max_per_user."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    item = models.ForeignKey(ShopItem, on_delete=models.CASCADE, related_name="purchases")
+    count = models.IntegerField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "item"], name="uq_shop_purchase")]
 
 
 class BotConfig(models.Model):

@@ -542,7 +542,7 @@ _ISH_CTYPE_LABELS = {
 
 def _ish_draft(context) -> dict:
     return context.user_data.setdefault(
-        _ISH_DRAFT, {"title": None, "emoji": "🎁", "price_coins": 0, "price_diamonds": 0, "contents": []}
+        _ISH_DRAFT, {"title": None, "emoji": "🎁", "price_coins": 0, "price_diamonds": 0, "contents": [], "max_per_user": 0}
     )
 
 
@@ -557,15 +557,19 @@ def _ish_home_markup(draft: dict):
         price_bits.append(f"{draft['price_diamonds']} 💎")
     price = " + ".join(price_bits) or "— (تنظیم نشده)"
     contents = itemshop.content_summary(draft["contents"]) if draft["contents"] else "— (خالی)"
+    limit = draft.get("max_per_user", 0)
+    limit_txt = f"هر نفر {limit} بار" if limit else "نامحدود"
     text = (
         "🛠 <b>ساخت آیتم/پک (با دکمه)</b>\n\n"
         f"{draft['emoji']} عنوان: <b>{title}</b>\n"
         f"💰 قیمت: <b>{price}</b>\n"
+        f"🔢 محدودیت خرید: <b>{limit_txt}</b>\n"
         f"🎁 محتوا ({len(draft['contents'])}): {contents}"
     )
     rows = [
         [btn("✏️ عنوان", style=ADMIN, callback_data="ish:title"),
          btn("💰 قیمت", style=ADMIN, callback_data="ish:price")],
+        [btn("🔢 محدودیت خرید", style=ADMIN, callback_data="ish:limit")],
         [btn("➕ افزودن محتوا", style=CONFIRM, callback_data="ish:addc")],
     ]
     if draft["contents"]:
@@ -588,6 +592,18 @@ async def _ish_show_home(update, context, *, edit=True):
         await target.reply_text(text, parse_mode="HTML", reply_markup=kb)
 
 
+async def _ish_ask_name(query) -> None:
+    """Offer a custom name for a creature/equipment component, or add it as-is."""
+    kb = InlineKeyboardMarkup([
+        [btn("✏️ اسم دلخواه بده", style=ADMIN, callback_data="ish:name")],
+        [btn("بدون اسم (پیش‌فرض)", style=CONFIRM, callback_data="ish:noname")],
+    ])
+    await safe_edit_message_text(
+        query, "می‌خوای اسم دلخواه روش بذاری؟ (مثلاً «اژدهای آتش» یا «شمشیر مرگ»)",
+        parse_mode="HTML", reply_markup=kb,
+    )
+
+
 async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not _is_admin(update):
@@ -602,7 +618,7 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
     if verb in ("new", "home"):
         if verb == "new":
             context.user_data[_ISH_DRAFT] = {"title": None, "emoji": "🎁",
-                                             "price_coins": 0, "price_diamonds": 0, "contents": []}
+                                             "price_coins": 0, "price_diamonds": 0, "contents": [], "max_per_user": 0}
         await query.answer()
         await _ish_show_home(update, context)
         return
@@ -709,10 +725,10 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
         return
     if verb == "cre":
         rarity, element = parts[2], parts[3]
-        draft["contents"].append({"type": "creature", "rarity": rarity,
-                                  "element": None if element == "rand" else element})
-        await query.answer("اضافه شد.")
-        await _ish_show_home(update, context)
+        context.user_data["ish_pending"] = {"type": "creature", "rarity": rarity,
+                                            "element": None if element == "rand" else element}
+        await query.answer()
+        await _ish_ask_name(query)
         return
     if verb == "eq":
         slot = parts[2]
@@ -724,9 +740,32 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
                                      reply_markup=InlineKeyboardMarkup(rows))
         return
     if verb == "eqr":
-        draft["contents"].append({"type": "equipment", "slot": parts[2], "rarity": parts[3]})
+        context.user_data["ish_pending"] = {"type": "equipment", "slot": parts[2], "rarity": parts[3]}
+        await query.answer()
+        await _ish_ask_name(query)
+        return
+    if verb == "noname":  # add the pending creature/equipment without a custom name
+        pending = context.user_data.pop("ish_pending", None)
+        if pending:
+            draft["contents"].append(pending)
         await query.answer("اضافه شد.")
         await _ish_show_home(update, context)
+        return
+    if verb == "name":  # ask for a custom name for the pending component
+        if context.user_data.get("ish_pending"):
+            context.user_data[AWAITING_ADMIN_KEY] = {"action": "ish_cname"}
+            await query.answer()
+            await query.message.reply_text("✏️ اسم دلخواه برای این هیولا/تجهیزات رو بفرست:")
+        else:
+            await query.answer()
+        return
+    if verb == "limit":
+        context.user_data[AWAITING_ADMIN_KEY] = {"action": "ish_limit"}
+        await query.answer()
+        await query.message.reply_text(
+            "🔢 هر نفر چند بار بتونه این آیتم رو بخره؟ عدد بفرست (<code>0</code> = نامحدود، <code>1</code> = فقط یک‌بار).",
+            parse_mode="HTML",
+        )
         return
     if verb == "save":
         from game import itemshop
@@ -2238,6 +2277,24 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             emoji, t = first, (t[len(first):].strip() or t)
         draft["title"] = t[:64]
         draft["emoji"] = emoji
+        await _ish_show_home(update, context, edit=False)
+        return
+
+    if action == "ish_cname":
+        pending = context.user_data.pop("ish_pending", None)
+        if pending is not None:
+            pending["name"] = text.strip()[:48]
+            _ish_draft(context)["contents"].append(pending)
+        await _ish_show_home(update, context, edit=False)
+        return
+
+    if action == "ish_limit":
+        digits = text.strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
+        if not digits.isdigit():
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text("⚠️ یه عدد بفرست (۰ = نامحدود).")
+            return
+        _ish_draft(context)["max_per_user"] = int(digits)
         await _ish_show_home(update, context, edit=False)
         return
 
