@@ -640,19 +640,44 @@ WORKER_RARITY_MULT = {"common": 1.0, "rare": 1.4, "epic": 2.0, "legendary": 3.0,
 # Both are keyed to the better parent's rarity ("type and breed"); the total for
 # the rarest tops out at a full day (mating 6h + hatch 18h = 24h).
 CAVE_MATING_MINUTES = {
-    "common": 60,       # 1h
-    "rare": 120,        # 2h
-    "epic": 180,        # 3h
-    "legendary": 240,   # 4h
-    "mythic": 360,      # 6h
+    "common": 45,       # 45m
+    "rare": 90,         # 1.5h
+    "epic": 150,        # 2.5h
+    "legendary": 210,   # 3.5h
+    "mythic": 300,      # 5h — parents freed after this; the egg then incubates on its own
 }
-EGG_HATCH_MINUTES = {
-    "common": 240,      # 4h
-    "rare": 480,        # 8h
-    "epic": 900,        # 15h
-    "legendary": 1440,  # 24h
-    "mythic": 2160,     # 36h — the rarest egg is a day and a half
+# Egg incubation is now keyed to BOTH parents (sum of their rarity indices), so a
+# mythic+mythic pair waits far longer than a mythic+legendary one — the rarer the
+# pair, the longer the egg. Times deliberately pushed high: the two headline points
+# the design targets are mythic+mythic = 48h and mythic+legendary = 36h.
+# index sum: common=0 … mythic=4, so 0 (c+c) … 8 (m+m).
+EGG_HATCH_HOURS_BY_RARITY_SUM = {
+    0: 3,    # common + common
+    1: 5,
+    2: 7,
+    3: 10,
+    4: 14,
+    5: 20,
+    6: 27,   # legendary + legendary  (or mythic + epic)
+    7: 36,   # mythic + legendary
+    8: 48,   # mythic + mythic
 }
+
+
+def egg_hatch_minutes(rarity_a: str, rarity_b: str) -> int:
+    s = RARITY_ORDER.index(rarity_a) + RARITY_ORDER.index(rarity_b)
+    return EGG_HATCH_HOURS_BY_RARITY_SUM[s] * 60
+
+
+# Chance the egg lands at the parents' TOP rarity (it can never exceed it — two
+# legendaries can't make a mythic). Otherwise it drops one tier. Same-species pairs
+# are far more reliable than cross-species ones.
+CAVE_TOP_CHANCE_SAME_SPECIES = 0.60
+CAVE_TOP_CHANCE_DIFF_SPECIES = 0.30
+
+
+def cave_top_chance(same_species: bool) -> float:
+    return CAVE_TOP_CHANCE_SAME_SPECIES if same_species else CAVE_TOP_CHANCE_DIFF_SPECIES
 # Finishing an egg early is a FIXED per-rarity diamond price (not the time-based
 # building formula), and deliberately far higher than a building speed-up — a rare
 # creature should be a real diamond decision, not a cheap skip.
@@ -1031,6 +1056,11 @@ def element_matchup_note(my_element: str, opp_element: str) -> str:
 def next_rarity(rarity: str) -> str:
     idx = RARITY_ORDER.index(rarity)
     return RARITY_ORDER[min(idx + 1, len(RARITY_ORDER) - 1)]
+
+
+def prev_rarity(rarity: str) -> str:
+    idx = RARITY_ORDER.index(rarity)
+    return RARITY_ORDER[max(idx - 1, 0)]
 
 
 def higher_rarity(rarity_a: str, rarity_b: str) -> str:

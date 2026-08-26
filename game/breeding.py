@@ -70,9 +70,10 @@ def mating_minutes(parent_a: Creature, parent_b: Creature) -> int:
     return constants.CAVE_MATING_MINUTES[rarity]
 
 
-def hatch_minutes(rarity: str) -> int:
-    """Phase-2 (egg incubation) duration for an egg of the given base rarity."""
-    return constants.EGG_HATCH_MINUTES[rarity]
+def hatch_minutes(parent_a: Creature, parent_b: Creature) -> int:
+    """Phase-2 (egg incubation) duration — keyed to BOTH parents' rarities, so a
+    mythic+mythic pair waits much longer than a mythic+legendary one."""
+    return constants.egg_hatch_minutes(parent_a.rarity, parent_b.rarity)
 
 
 def dna_cost(parent_a: Creature, parent_b: Creature) -> int:
@@ -86,26 +87,11 @@ def _power(creature: Creature) -> int:
     return creature_power(creature)
 
 
-def upgrade_chance(parent_a: Creature, parent_b: Creature) -> float:
-    """Probability the offspring lands one rarity tier above its better parent.
-
-    Starts from the shared RARITY_UPGRADE_CHANCE table and adds bonuses for a
-    deliberate pairing. Capped, so even a perfect match is a roll, not a
-    guarantee — otherwise the best strategy collapses to one pairing repeated."""
-    base_rarity = constants.higher_rarity(parent_a.rarity, parent_b.rarity)
-    chance = constants.RARITY_UPGRADE_CHANCE.get(base_rarity, 0.0)
-    if chance <= 0:
-        return 0.0  # mythic has nowhere to climb
-    if parent_a.element == parent_b.element:
-        chance += constants.BREEDING_SAME_ELEMENT_BONUS
-    if parent_a.name == parent_b.name:
-        chance += constants.BREEDING_SAME_SPECIES_BONUS
-    combined = _power(parent_a) + _power(parent_b)
-    chance += min(
-        constants.BREEDING_POWER_BONUS_CAP,
-        combined / constants.BREEDING_POWER_PER_BONUS_POINT * 0.01,
-    )
-    return min(constants.BREEDING_MAX_UPGRADE_CHANCE, chance)
+def top_chance(parent_a: Creature, parent_b: Creature) -> float:
+    """Probability the egg lands at the parents' TOP rarity (it can never go above
+    it). Same-species pairs are far more reliable (60%) than cross-species (30%);
+    on a miss the egg drops one tier below the top."""
+    return constants.cave_top_chance(parent_a.name == parent_b.name)
 
 
 def active_eggs(user: User) -> list[Egg]:
@@ -115,14 +101,20 @@ def active_eggs(user: User) -> list[Egg]:
 
 def preview(user: User, parent_a: Creature, parent_b: Creature) -> dict:
     """Everything the confirmation screen needs, without starting anything."""
+    top = constants.higher_rarity(parent_a.rarity, parent_b.rarity)
+    p_top = top_chance(parent_a, parent_b)
+    fallback = constants.prev_rarity(top)
     return {
         "mating_minutes": mating_minutes(parent_a, parent_b),
-        "hatch_minutes": hatch_minutes(constants.higher_rarity(parent_a.rarity, parent_b.rarity)),
+        "hatch_minutes": hatch_minutes(parent_a, parent_b),
         "dna": dna_cost(parent_a, parent_b),
-        "base_rarity": constants.higher_rarity(parent_a.rarity, parent_b.rarity),
-        "upgrade_chance": upgrade_chance(parent_a, parent_b),
+        "base_rarity": top,          # the top attainable rarity (never exceeded)
+        "top_rarity": top,
+        "fallback_rarity": fallback,  # what you get on a miss (one tier below top)
+        "top_chance": p_top,
         "same_element": parent_a.element == parent_b.element,
         "same_species": parent_a.name == parent_b.name,
+        "finish_gems": constants.EGG_HATCH_DIAMOND_COST.get(top, constants.EGG_HATCH_DIAMOND_COST["common"]),
     }
 
 
@@ -174,13 +166,15 @@ def _lay_egg_from(user: User, job: BreedingJob) -> Egg:
     egg = Egg.objects.create(
         owner=user,
         base_rarity=base_rarity,
-        upgrade_chance=upgrade_chance(parent_a, parent_b),
+        # `upgrade_chance` now stores P(hit the top rarity); on a miss the egg drops
+        # one tier (see hatch()). Reused the existing column so no migration is needed.
+        upgrade_chance=top_chance(parent_a, parent_b),
         parent_a_name=parent_a.name,
         parent_a_element=parent_a.element,
         parent_b_name=parent_b.name,
         parent_b_element=parent_b.element,
         inherit_level=max(1, round((parent_a.level + parent_b.level) / 2 * constants.BREEDING_LEVEL_INHERIT)),
-        finishes_at=timezone.now() + datetime.timedelta(minutes=hatch_minutes(base_rarity)),
+        finishes_at=timezone.now() + datetime.timedelta(minutes=hatch_minutes(parent_a, parent_b)),
     )
     job.delete()  # frees both parents — the cave is open again
     return egg
@@ -216,8 +210,10 @@ def hatch(user: User, egg_id: int) -> tuple[Creature, dict]:
     if not egg_ready(egg):
         raise GameError("تخم هنوز سر باز نکرده — صبر کن تایمرش تموم بشه.")
 
-    upgraded = random.random() < egg.upgrade_chance
-    rarity = constants.next_rarity(egg.base_rarity) if upgraded else egg.base_rarity
+    # egg.base_rarity is the TOP (max parent) rarity; hit it with prob upgrade_chance,
+    # otherwise drop one tier. The egg can never exceed the parents' rarity.
+    hit_top = random.random() < egg.upgrade_chance
+    rarity = egg.base_rarity if hit_top else constants.prev_rarity(egg.base_rarity)
 
     # the child is one of the two parent species, never a blend — `name` is the
     # fusion identity key, so a hybrid name would create an unfuseable species
@@ -249,7 +245,7 @@ def hatch(user: User, egg_id: int) -> tuple[Creature, dict]:
     return child, {
         "base_rarity": egg.base_rarity,
         "rarity": rarity,
-        "upgraded": upgraded,
+        "hit_top": hit_top,
         "level": level,
         "parents": parents,
     }

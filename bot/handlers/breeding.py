@@ -27,20 +27,6 @@ from game.emoji import get_emoji
 _AWAIT_KEY = "breeding_parent_a"
 
 
-def _odds_band(chance: float) -> str:
-    """Qualitative label for the rarer-egg chance. Deliberately NOT an exact
-    percentage — the cave is meant to feel like a gamble, and a precise number
-    turns the mystery into a spreadsheet. Still enough signal to reward a good
-    pairing (matching element/species/power all push the band up)."""
-    if chance <= 0:
-        return "—"
-    if chance >= 0.35:
-        return "🟢 زیاد"
-    if chance >= 0.18:
-        return "🟡 متوسط"
-    return "🔴 کم"
-
-
 def _format_remaining(seconds: float) -> str:
     seconds = max(0, int(seconds))
     hours, rem = divmod(seconds, 3600)
@@ -130,7 +116,9 @@ def _parent_a_render(candidates: list, filt: str = "all", page: int = 0) -> tupl
     text = (
         "🕳 <b>غار هیولا — جفت بفرست</b>\n"
         "<blockquote>دو هیولای آزاد رو بفرست توی غار. اول جفت‌گیری می‌کنن، بعد یه <b>تخم</b> "
-        "می‌ذارن و آزاد می‌شن؛ تخم جدا رشد می‌کنه تا سر باز کنه.</blockquote>\n"
+        "می‌ذارن و آزاد می‌شن؛ تخم جدا رشد می‌کنه تا سر باز کنه.\n"
+        "هرچی والدین <b>نایاب‌تر</b>، زمان تخم <b>خیلی بیشتر</b> (اساطیری+اساطیری تا ۴۸ ساعت). "
+        "رده‌ی تخم از والدین بالاتر نمی‌ره؛ همنوع‌بودن شانس رسیدن به سقف رده رو بیشتر می‌کنه.</blockquote>\n"
         "\n<b>والد اول رو انتخاب کن:</b>  <i>(با تب نایابی جدا کن)</i>"
     )
     rows = _tab_rows(candidates, filt, lambda f: f"brd_ap:{f}:0")
@@ -328,39 +316,75 @@ async def breeding_pick_b_callback(update: Update, context: ContextTypes.DEFAULT
         return
     await query.answer()
 
-    reasons = []
-    if info["same_element"]:
-        reasons.append("هم‌عنصر")
-    if info["same_species"]:
-        reasons.append("هم‌نژاد")
-    bonus_line = f"\n✨ جفت خوبیه: {'، '.join(reasons)}" if reasons else ""
-
-    next_rarity = constants.next_rarity(info["base_rarity"])
-    rarer_line = (
-        f"🎲 شانس یه تخمِ نایاب‌تر: <b>{_odds_band(info['upgrade_chance'])}</b>"
-        if next_rarity != info["base_rarity"]
-        else "🎲 والدینت از بالاترین درجه‌ان — نایاب‌تر از این نمی‌شه"
-    )
+    top_label = constants.RARITY_LABELS[info["top_rarity"]]
+    pct = round(info["top_chance"] * 100)
+    species_note = "هم‌نژاد ✅ (شانس بالاتر)" if info["same_species"] else "غیرهم‌نژاد (شانس پایین‌تر)"
 
     text = (
         f"🕳 <b>فرستادن به غار هیولا</b>\n\n"
         f"<blockquote>{parent_a.name} ({constants.RARITY_LABELS[parent_a.rarity]}) "
         f"+ {parent_b.name} ({constants.RARITY_LABELS[parent_b.rarity]})</blockquote>\n"
-        f"💞 زمان جفت‌گیری: <b>{_format_remaining(info['mating_minutes'] * 60)}</b> "
-        "<i>(بعدش والدها آزاد می‌شن)</i>\n"
-        f"🥚 بعدش رشد تخم: <b>{_format_remaining(info['hatch_minutes'] * 60)}</b>\n"
-        f"{get_emoji('dna')} هزینه: <b>{info['dna']}</b> DNA (موجودی: {user.dna_fragments})\n"
-        f"{rarer_line}{bonus_line}\n\n"
+        f"🎲 سقف رده: <b>{top_label}</b> — شانس <b>{pct}٪</b> ({species_note})\n"
+        f"⏱ زمان کل: جفت‌گیری <b>{_format_remaining(info['mating_minutes'] * 60)}</b> + "
+        f"تخم <b>{_format_remaining(info['hatch_minutes'] * 60)}</b>\n"
+        f"{get_emoji('dna')} هزینه: <b>{info['dna']}</b> DNA (موجودی: {user.dna_fragments})\n\n"
         f"{get_emoji('egg')} <b>چی از تخم درمیاد؟ تا سر باز نکنه هیچ‌کس نمی‌دونه.</b>\n"
-        "<i>فقط تا وقتِ تخم‌گذاری این دو مشغولن؛ بعدش می‌تونی جفت بعدی رو بفرستی.</i>"
+        "<i>رده‌ی تخم هیچ‌وقت از والدین بالاتر نمی‌ره. برای جزییات کامل، دکمه‌های زیر رو بزن.</i>"
     )
+    pair = f"{parent_a.id}:{parent_b.id}"
     rows = [
+        [btn(f"🎲 شانس رده ({pct}٪)", style=NAV, callback_data=f"brd_info:chance:{pair}"),
+         btn("⏱ زمان‌ها", style=NAV, callback_data=f"brd_info:time:{pair}")],
+        [btn(f"💎 فوری‌کردن ({info['finish_gems']}💎)", style=NAV, callback_data=f"brd_info:gems:{pair}")],
         [
             btn("بذارش توی غار", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"brd_go:{parent_a.id}:{parent_b.id}"),
             btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER, callback_data="menu:breeding"),
-        ]
+        ],
     ]
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+
+
+async def breeding_info_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """The 2-3 «جزییات» buttons under the pairing preview — each pops an alert with
+    the chances / times / gem costs, recomputed for this exact pair."""
+    query = update.callback_query
+    _, kind, id_a, id_b = query.data.split(":")
+    try:
+        user, parent_a, parent_b, info = await run_db(
+            _preview_sync, update.effective_user, int(id_a), int(id_b)
+        )
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+
+    lbl = constants.RARITY_LABELS
+    if kind == "chance":
+        top, fb = lbl[info["top_rarity"]], lbl[info["fallback_rarity"]]
+        pct = round(info["top_chance"] * 100)
+        if info["top_rarity"] == info["fallback_rarity"]:
+            msg = f"🎲 این تخم حتماً {top} می‌شه (پایین‌ترین رده).\nرده هیچ‌وقت از والدین بالاتر نمی‌ره."
+        else:
+            msg = (
+                f"🎲 شانس رده\n\n"
+                f"{top} : {pct}٪\n{fb} : {100 - pct}٪\n\n"
+                f"همنوع بودن ⇒ ۶۰٪ · غیرهمنوع ⇒ ۳۰٪.\n"
+                "رده هیچ‌وقت از والدین بالاتر نمی‌ره (مثلاً دو افسانه‌ای، اساطیری نمی‌دن)."
+            )
+    elif kind == "time":
+        msg = (
+            f"⏱ زمان‌ها\n\n"
+            f"جفت‌گیری: {_format_remaining(info['mating_minutes'] * 60)} (بعدش والدها آزاد)\n"
+            f"رشد تخم: {_format_remaining(info['hatch_minutes'] * 60)}\n\n"
+            "هرچی والدین نایاب‌تر، زمان تخم بیشتر — اساطیری+اساطیری ۴۸ ساعت، "
+            "اساطیری+افسانه‌ای ۳۶ ساعت."
+        )
+    else:  # gems
+        msg = (
+            f"💎 فوری‌کردن\n\n"
+            f"می‌تونی تخم رو با <b>{info['finish_gems']}</b> الماس آنی سر باز کنی.\n"
+            "هرچی رده بالاتر، الماس بیشتر (اساطیری = ۸۰۰)."
+        ).replace("<b>", "").replace("</b>", "")
+    await query.answer(msg, show_alert=True)
 
 
 def _start_sync(tg_user, id_a, id_b):
@@ -443,7 +467,10 @@ async def breeding_hatch_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("🐣 تخم سر باز کرد!")
-    upgrade_note = "\n✨ <b>نایاب‌تر از والدینش دراومد!</b>" if info["upgraded"] else ""
+    upgrade_note = (
+        "\n✨ <b>به سقف رده رسید!</b>" if info["hit_top"]
+        else "\n<i>این‌بار یه رده پایین‌تر دراومد.</i>"
+    )
     text, keyboard = _panel_render(view)
     await safe_edit_message_text(
         query,
@@ -536,6 +563,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(breeding_a_page_callback, pattern=r"^brd_ap:"))
     application.add_handler(CallbackQueryHandler(breeding_b_page_callback, pattern=r"^brd_bp:"))
     application.add_handler(CallbackQueryHandler(breeding_noop_callback, pattern=r"^brd_noop$"))
+    application.add_handler(CallbackQueryHandler(breeding_info_callback, pattern=r"^brd_info:"))
     application.add_handler(CallbackQueryHandler(breeding_start_callback, pattern=r"^brd_go:"))
     application.add_handler(CallbackQueryHandler(breeding_lay_callback, pattern=r"^brd_lay$"))
     application.add_handler(CallbackQueryHandler(breeding_hatch_callback, pattern=r"^brd_hatch:"))
