@@ -1,3 +1,6 @@
+import secrets
+import time
+
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
@@ -419,7 +422,7 @@ async def _reply_transfer_error(message, exc) -> None:
     if isinstance(exc, TransferFundsError):
         guide = "c" if exc.kind == "creature" else "e"
         keyboard = InlineKeyboardMarkup([[
-            btn("💎 راهنمای هزینه‌ها", style=NAV, callback_data=f"xfer:prices:{guide}"),
+            btn("💎 راهنمای هزینه‌ها", style=NAV, callback_data=f"xfo:prices:{guide}"),
         ]])
         await message.reply_text(
             f"{get_emoji('diamond')} <b>الماس گیرنده کافی نیست</b>\n\n"
@@ -445,17 +448,76 @@ def _preview_creature_sync(chat, sender_tg, receiver_id, creature_id):
     return sender, receiver, preview
 
 
+# ── Player-to-player trading with a seller-set price ─────────────────────────
+# A trade is a two-step, two-party handshake held in memory for 5 minutes:
+#   1) SELLER replies «انتقال هیولا/تجهیزات <کد>» → gets تعیین قیمت / رایگان / لغو
+#   2) after a price is set, the RECEIVER sees the price + diamond fee and قبول/رد.
+# Offers live only in _PENDING_OFFERS (ephemeral — a restart drops them, which is
+# fine for something that expires in 5 min anyway).
+_PENDING_OFFERS: dict[str, dict] = {}
+_OFFER_TTL_SECONDS = 300
+
+
+def _prune_offers() -> None:
+    now = time.time()
+    for tok in [t for t, o in _PENDING_OFFERS.items() if o["expires_at"] < now]:
+        _PENDING_OFFERS.pop(tok, None)
+
+
+def _new_offer(kind: str, sender_id: int, receiver_id: int, item_id: int, fee: int, desc: str,
+               sender_name: str, receiver_name: str) -> str:
+    _prune_offers()
+    token = secrets.token_urlsafe(6)
+    _PENDING_OFFERS[token] = {
+        "kind": kind, "sender_id": sender_id, "receiver_id": receiver_id,
+        "item_id": item_id, "fee": fee, "desc": desc, "price": 0,
+        "sender_name": sender_name, "receiver_name": receiver_name,
+        "expires_at": time.time() + _OFFER_TTL_SECONDS,
+    }
+    return token
+
+
+def _get_offer(token: str) -> dict | None:
+    offer = _PENDING_OFFERS.get(token)
+    if offer is None:
+        return None
+    if offer["expires_at"] < time.time():
+        _PENDING_OFFERS.pop(token, None)
+        return None
+    return offer
+
+
+def _seller_step_keyboard(token: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [btn("💰 تعیین قیمت", style=PRIMARY, callback_data=f"xfo:setp:{token}"),
+         btn("🎁 رایگان", style=CONFIRM, callback_data=f"xfo:free:{token}")],
+        [btn("❌ لغو", style=DANGER, callback_data=f"xfo:cancel:{token}")],
+    ])
+
+
+async def _begin_offer(update, kind: str, sender, receiver, item_id: int, desc: str, fee: int) -> None:
+    token = _new_offer(kind, sender.id, receiver.id, item_id=item_id, fee=fee, desc=desc,
+                       sender_name=display_name(sender), receiver_name=display_name(receiver))
+    await update.message.reply_text(
+        f"🤝 <b>{display_name(sender)}</b> می‌خواد {desc} رو به <b>{display_name(receiver)}</b> بده.\n"
+        f"{get_emoji('diamond')} کارمزد انتقال: <b>{fee}</b> الماس (گیرنده می‌ده)\n\n"
+        f"<b>{display_name(sender)}</b>، قیمت (به طلا) رو تعیین کن یا رایگان بفرست 👇\n"
+        "<i>۵ دقیقه اعتبار داره.</i>",
+        parse_mode="HTML", reply_markup=_seller_step_keyboard(token),
+    )
+
+
 async def transfer_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, creature_id: int) -> None:
-    """Word «انتقال کایجو/هیولا <کد>» — reply to the recipient. Shows a confirm the
-    RECEIVER must accept (they pay the diamonds), never charging without consent."""
+    """Word «انتقال کایجو/هیولا <کد>» — reply to the recipient. Opens the seller's
+    price step; the receiver only pays once they accept the final offer."""
     reply = update.message.reply_to_message
     if reply is None or reply.from_user is None:
         from game import transfer
 
         await update.message.reply_text(
             "🦖 برای انتقال هیولا، روی پیام گیرنده <b>ریپلای</b> کن و بنویس «انتقال کایجو <کد>».\n"
-            "<i>کد هیولا رو از «کلکسیون» توی پیوی ربات می‌بینی. گیرنده الماسش رو می‌ده و تأیید می‌کنه؛ "
-            f"برای هر دو طرف {constants.TRANSFER_COOLDOWN_HOURS} ساعت کول‌داون داره.</i>\n\n"
+            "<i>کد هیولا رو از «کلکسیون» توی پیوی ربات می‌بینی. اول قیمت می‌ذاری، بعد گیرنده قیمت و "
+            f"کارمزد الماس رو می‌بینه و تأیید می‌کنه؛ برای هر دو طرف {constants.TRANSFER_COOLDOWN_HOURS} ساعت کول‌داون داره.</i>\n\n"
             + transfer.creature_prices_text(),
             parse_mode="HTML",
         )
@@ -472,21 +534,8 @@ async def transfer_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TY
         await _reply_transfer_error(update.message, exc)
         return
     c = preview["creature"]
-    keyboard = InlineKeyboardMarkup([
-        [
-            btn(f"✅ قبول ({preview['cost']} 💎)", style=CONFIRM,
-                callback_data=f"xfer:cok:{sender.id}:{receiver.id}:{c.id}"),
-            btn("❌ رد", style=DANGER, callback_data=f"xfer:cno:{receiver.id}"),
-        ],
-        [btn("💎 راهنمای هزینه‌ها", style=NAV, callback_data="xfer:prices:c")],
-    ])
-    await update.message.reply_text(
-        f"🦖 <b>{display_name(sender)}</b> می‌خواد هیولای <b>{c.name}</b> "
-        f"{constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level} رو به <b>{display_name(receiver)}</b> بده.\n"
-        f"{get_emoji('diamond')} گیرنده باید <b>{preview['cost']}</b> الماس بده.\n"
-        f"<b>{display_name(receiver)}</b>، تأیید می‌کنی؟ 👇 <i>(۱ روز کول‌داون برای هر دو طرف)</i>",
-        parse_mode="HTML", reply_markup=keyboard,
-    )
+    desc = f"هیولای <b>{c.name}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level}"
+    await _begin_offer(update, "c", sender, receiver, c.id, desc, preview["cost"])
 
 
 def _preview_equip_sync(chat, sender_tg, receiver_id, equip_id):
@@ -503,14 +552,16 @@ def _preview_equip_sync(chat, sender_tg, receiver_id, equip_id):
 
 
 async def transfer_equip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, equip_id: int) -> None:
-    """Word «انتقال تجهیز/تجهیزات <کد>» — reply to the recipient, with receiver confirm."""
+    """Word «انتقال تجهیز/تجهیزات <کد>» — reply to the recipient. Opens the seller's
+    price step; the receiver pays only on final accept."""
     reply = update.message.reply_to_message
     if reply is None or reply.from_user is None:
         from game import transfer
 
         await update.message.reply_text(
             "🎒 برای انتقال تجهیزات، روی پیام گیرنده <b>ریپلای</b> کن و بنویس «انتقال تجهیزات <کد>».\n"
-            "<i>کد تجهیزات رو از «تجهیزات» توی پیوی ربات می‌بینی. گیرنده الماسش رو می‌ده و تأیید می‌کنه.</i>\n\n"
+            "<i>کد تجهیزات رو از «تجهیزات» توی پیوی ربات می‌بینی. اول قیمت می‌ذاری، بعد گیرنده قیمت و "
+            "کارمزد الماس رو می‌بینه و تأیید می‌کنه.</i>\n\n"
             + transfer.equip_prices_text(),
             parse_mode="HTML",
         )
@@ -527,101 +578,199 @@ async def transfer_equip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE,
         await _reply_transfer_error(update.message, exc)
         return
     it = preview["item"]
-    keyboard = InlineKeyboardMarkup([
-        [
-            btn(f"✅ قبول ({preview['cost']} 💎)", style=CONFIRM,
-                callback_data=f"xfer:eok:{sender.id}:{receiver.id}:{it.id}"),
-            btn("❌ رد", style=DANGER, callback_data=f"xfer:eno:{receiver.id}"),
-        ],
-        [btn("💎 راهنمای هزینه‌ها", style=NAV, callback_data="xfer:prices:e")],
+    desc = f"تجهیزاتِ <b>{it.name} +{it.level}</b> {constants.RARITY_LABELS[it.rarity]}"
+    await _begin_offer(update, "e", sender, receiver, it.id, desc, preview["cost"])
+
+
+def _transfer_do_sync(kind, sender_id, receiver_id, item_id, price):
+    from game import transfer
+
+    sender = User.objects.filter(id=sender_id).first()
+    receiver = User.objects.filter(id=receiver_id).first()
+    if sender is None or receiver is None:
+        raise GameError("یکی از طرف‌ها دیگه پیدا نشد.")
+    if kind == "c":
+        return sender, receiver, transfer.transfer_creature(sender, receiver, item_id, price)
+    return sender, receiver, transfer.transfer_equipment(sender, receiver, item_id, price)
+
+
+def _offer_receiver_keyboard(token: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [btn("✅ قبول", style=CONFIRM, callback_data=f"xfo:acc:{token}"),
+         btn("❌ رد", style=DANGER, callback_data=f"xfo:rej:{token}")],
+        [btn("💎 راهنمای هزینه‌ها", style=NAV, callback_data="xfo:prices:c")],
     ])
-    await update.message.reply_text(
-        f"🎒 <b>{display_name(sender)}</b> می‌خواد تجهیزاتِ <b>{it.name} +{it.level}</b> "
-        f"{constants.RARITY_LABELS[it.rarity]} رو به <b>{display_name(receiver)}</b> بده.\n"
-        f"{get_emoji('diamond')} گیرنده باید <b>{preview['cost']}</b> الماس بده.\n"
-        f"<b>{display_name(receiver)}</b>، تأیید می‌کنی؟ 👇 <i>(۱ روز کول‌داون برای هر دو طرف)</i>",
-        parse_mode="HTML", reply_markup=keyboard,
+
+
+def _offer_receiver_text(offer: dict) -> str:
+    price = offer["price"]
+    price_line = (
+        f"{get_emoji('coin')} قیمت: <b>{price:,}</b> طلا (به فروشنده می‌رسه)"
+        if price > 0 else f"{get_emoji('gift')} <b>رایگان</b> (بدون قیمت)"
+    )
+    return (
+        f"🤝 <b>پیشنهاد انتقال</b>\n"
+        f"{offer['desc']}\n"
+        f"از <b>{offer['sender_name']}</b> به <b>{offer['receiver_name']}</b>\n\n"
+        f"{price_line}\n"
+        f"{get_emoji('diamond')} کارمزد: <b>{offer['fee']}</b> الماس\n\n"
+        f"<b>{offer['receiver_name']}</b>، قبول می‌کنی؟ 👇  <i>(۵ دقیقه اعتبار · ۱ روز کول‌داون برای هر دو طرف)</i>"
     )
 
 
-def _transfer_creature_do_sync(sender_id, receiver_id, creature_id):
-    from game import transfer
-
-    sender = User.objects.filter(id=sender_id).first()
-    receiver = User.objects.filter(id=receiver_id).first()
-    if sender is None or receiver is None:
-        raise GameError("یکی از طرف‌ها دیگه پیدا نشد.")
-    return sender, receiver, transfer.transfer_creature(sender, receiver, creature_id)
-
-
-def _transfer_equip_do_sync(sender_id, receiver_id, equip_id):
-    from game import transfer
-
-    sender = User.objects.filter(id=sender_id).first()
-    receiver = User.objects.filter(id=receiver_id).first()
-    if sender is None or receiver is None:
-        raise GameError("یکی از طرف‌ها دیگه پیدا نشد.")
-    return sender, receiver, transfer.transfer_equipment(sender, receiver, equip_id)
+async def _present_offer_to_receiver(update, token: str, via_query=None) -> None:
+    """Show the final offer (price + diamond fee) to the receiver with accept/reject.
+    Called after the seller sets a price (new message) or taps «رایگان» (edit)."""
+    offer = _get_offer(token)
+    if offer is None:
+        text = "⌛ این پیشنهاد منقضی شد. دوباره از «انتقال …» شروع کن."
+        if via_query is not None:
+            await safe_edit_message_text(via_query, text)
+        else:
+            await update.message.reply_text(text)
+        return
+    text, keyboard = _offer_receiver_text(offer), _offer_receiver_keyboard(token)
+    if via_query is not None:
+        await safe_edit_message_text(via_query, text, parse_mode="HTML", reply_markup=keyboard)
+    else:
+        await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
-async def transfer_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Resolve a pending creature/equipment transfer — only the RECEIVER may accept
-    or reject, so nobody's diamonds move without their consent."""
+async def maybe_capture_transfer_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """If the sender is mid-«تعیین قیمت», treat their next numeric message as the
+    price and move the offer to the receiver. Returns True if it consumed the
+    message (so the group text router stops here)."""
+    token = context.user_data.get("xfer_price_token")
+    if not token:
+        return False
+    message = update.effective_message
+    if message is None or not message.text:
+        return False
+    raw = message.text.strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
+    if raw in ("لغو", "انصراف", "کنسل"):
+        context.user_data.pop("xfer_price_token", None)
+        await message.reply_text("باشه، قیمت‌گذاری لغو شد.")
+        return True
+    if not raw.isdigit():
+        await message.reply_text("فقط یه عدد بفرست (مثلا 5000) — یا «لغو».")
+        return True
+    offer = _get_offer(token)
+    context.user_data.pop("xfer_price_token", None)
+    if offer is None:
+        await message.reply_text("⌛ این پیشنهاد منقضی شد. دوباره از «انتقال …» شروع کن.")
+        return True
+    if update.effective_user.id != offer["sender_id"]:
+        return True  # not the seller — ignore
+    offer["price"] = int(raw)
+    await _present_offer_to_receiver(update, token)
+    return True
+
+
+async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """All buttons of the trade handshake (xfo:…). Seller-only steps: setp/free/cancel.
+    Receiver-only steps: acc/rej. Anyone: prices guide."""
     query = update.callback_query
     parts = query.data.split(":")
     verb = parts[1]
 
-    if verb == "prices":  # «راهنمای هزینه‌ها» — anyone can view; shows the full table
+    if verb == "prices":
         from game import transfer
 
         await query.answer()
-        which = parts[2]
+        which = parts[2] if len(parts) > 2 else "c"
         text = transfer.creature_prices_text() if which == "c" else transfer.equip_prices_text()
-        # a button to flip to the other table so both are one tap away
-        other = ("🎒 هزینه‌ی تجهیزات", "xfer:prices:e") if which == "c" else ("🦖 هزینه‌ی هیولا", "xfer:prices:c")
-        keyboard = InlineKeyboardMarkup([[btn(other[0], style=NAV, callback_data=other[1])]])
-        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        other = ("🎒 هزینه‌ی تجهیزات", "xfo:prices:e") if which == "c" else ("🦖 هزینه‌ی هیولا", "xfo:prices:c")
+        await safe_edit_message_text(
+            query, text, parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[btn(other[0], style=NAV, callback_data=other[1])]]),
+        )
         return
 
-    if verb in ("cno", "eno"):
-        receiver_id = int(parts[2])
-        if update.effective_user.id != receiver_id:
-            await query.answer("فقط گیرنده می‌تونه رد کنه.", show_alert=True)
+    token = parts[2]
+    offer = _get_offer(token)
+    if offer is None:
+        await query.answer("⌛ این پیشنهاد منقضی شد.", show_alert=True)
+        await safe_edit_message_text(query, "⌛ این پیشنهاد منقضی شد. دوباره از «انتقال …» شروع کن.")
+        return
+
+    # ── seller-only steps ────────────────────────────────────────────────────
+    if verb in ("setp", "free", "cancel"):
+        if update.effective_user.id != offer["sender_id"]:
+            await query.answer("فقط فرستنده می‌تونه اینجا تصمیم بگیره.", show_alert=True)
             return
-        await query.answer("رد شد.")
-        await safe_edit_message_text(query, "❌ انتقال رد شد.")
+        if verb == "cancel":
+            _PENDING_OFFERS.pop(token, None)
+            context.user_data.pop("xfer_price_token", None)
+            await query.answer("لغو شد.")
+            await safe_edit_message_text(query, "❌ انتقال لغو شد.")
+            return
+        if verb == "free":
+            offer["price"] = 0
+            await query.answer()
+            await _present_offer_to_receiver(update, token, via_query=query)
+            return
+        # setp → ask the seller to type a number; captured in maybe_capture_transfer_price
+        context.user_data["xfer_price_token"] = token
+        await query.answer()
+        await safe_edit_message_text(
+            query,
+            f"{offer['desc']}\n\n💰 <b>{offer['sender_name']}</b>، قیمت رو به طلا بفرست "
+            "(فقط یه عدد، مثلا <code>5000</code>) — یا «لغو».\n<i>۵ دقیقه اعتبار.</i>",
+            parse_mode="HTML",
+        )
         return
 
-    _, _, sender_id, receiver_id, item_id = parts
-    sender_id, receiver_id, item_id = int(sender_id), int(receiver_id), int(item_id)
-    if update.effective_user.id != receiver_id:
-        await query.answer("فقط گیرنده می‌تونه تأیید کنه.", show_alert=True)
+    # ── receiver-only steps ──────────────────────────────────────────────────
+    if update.effective_user.id != offer["receiver_id"]:
+        await query.answer("فقط گیرنده می‌تونه قبول یا رد کنه.", show_alert=True)
         return
-    try:
-        if verb == "cok":
-            sender, receiver, result = await run_db(_transfer_creature_do_sync, sender_id, receiver_id, item_id)
+    if verb == "rej":
+        _PENDING_OFFERS.pop(token, None)
+        await query.answer("رد شد.")
+        await safe_edit_message_text(query, "❌ گیرنده پیشنهاد رو رد کرد.")
+        return
+    if verb == "acc":
+        try:
+            sender, receiver, result = await run_db(
+                _transfer_do_sync, offer["kind"], offer["sender_id"], offer["receiver_id"],
+                offer["item_id"], offer["price"],
+            )
+        except GameError as exc:
+            from game.transfer import TransferFundsError
+
+            if isinstance(exc, TransferFundsError):
+                await query.answer()
+                await safe_edit_message_text(
+                    query,
+                    f"{get_emoji('diamond')} <b>الماس گیرنده کافی نیست</b>\n\n"
+                    f"این انتقال <b>{exc.cost}</b> {get_emoji('diamond')} کارمزد لازم داره، "
+                    f"ولی گیرنده فقط <b>{exc.have}</b> تا داره.",
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup([[_offer_receiver_keyboard(token).inline_keyboard[0][0]]]),
+                )
+                return
+            await query.answer(str(exc), show_alert=True)
+            return
+        _PENDING_OFFERS.pop(token, None)
+        if offer["kind"] == "c":
             c = result["creature"]
-            body = (
-                f"🦖 هیولای <b>{c.name}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level} "
-                f"به <b>{display_name(receiver)}</b> منتقل شد! ✅"
-            )
+            body = (f"🦖 هیولای <b>{c.name}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level} "
+                    f"به <b>{display_name(receiver)}</b> منتقل شد! ✅")
         else:
-            sender, receiver, result = await run_db(_transfer_equip_do_sync, sender_id, receiver_id, item_id)
             it = result["item"]
-            body = (
-                f"🎒 تجهیزاتِ <b>{it.name} +{it.level}</b> {constants.RARITY_LABELS[it.rarity]} "
-                f"به <b>{display_name(receiver)}</b> منتقل شد! ✅"
-            )
-    except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
-        return
-    await query.answer("✅ انجام شد!")
-    await safe_edit_message_text(
-        query,
-        f"{body}\n{get_emoji('diamond')} گیرنده <b>{result['cost']}</b> الماس پرداخت کرد.\n"
-        "<i>۱ روز کول‌داون برای هر دو طرف فعال شد.</i>",
-        parse_mode="HTML",
-    )
+            body = (f"🎒 تجهیزاتِ <b>{it.name} +{it.level}</b> {constants.RARITY_LABELS[it.rarity]} "
+                    f"به <b>{display_name(receiver)}</b> منتقل شد! ✅")
+        price_line = (
+            f"\n{get_emoji('coin')} گیرنده <b>{result['price']:,}</b> طلا به فروشنده داد."
+            if result.get("price") else ""
+        )
+        await query.answer("✅ انجام شد!")
+        await safe_edit_message_text(
+            query,
+            f"{body}{price_line}\n{get_emoji('diamond')} کارمزد <b>{result['cost']}</b> الماس پرداخت شد.\n"
+            "<i>۱ روز کول‌داون برای هر دو طرف فعال شد.</i>",
+            parse_mode="HTML",
+        )
 
 
 def _raid_spawn_sync(chat, spawner_tg):
@@ -1086,7 +1235,7 @@ def register(application) -> None:
     # and the words call the same functions. Only button callbacks and the two
     # commands without a word equivalent (/give a creature, /mutation_event) remain.
     application.add_handler(CallbackQueryHandler(duel_wager_callback, pattern=r"^duelwager_"))
-    application.add_handler(CallbackQueryHandler(transfer_confirm_callback, pattern=r"^xfer:"))
+    application.add_handler(CallbackQueryHandler(transfer_offer_callback, pattern=r"^xfo:"))
     application.add_handler(CallbackQueryHandler(pvp_attack_callback, pattern=r"^gatk:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_attack_cancel_callback, pattern=r"^gatk_cancel:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_detail_callback, pattern=r"^gatk_detail:\d+$"))

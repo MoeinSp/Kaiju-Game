@@ -836,20 +836,30 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if await _maybe_capture_group_reply(update, context):
         return
 
+    from bot.handlers import group as group_handlers
+
+    # seller mid-«تعیین قیمت»: their next number is the trade price
+    if await group_handlers.maybe_capture_transfer_price(update, context):
+        return
+
     # «انتقال …» family: gold, kaiju/creature, or equipment — all reply-based
     norm = keywords.normalize(message.text)
     if norm.startswith("انتقال"):
-        digits = "".join(ch for ch in norm.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789")) if ch.isdigit())
-        from bot.handlers import group as group_handlers
+        # the FIRST run of digits is the item code (a later number could be a price)
+        import re
 
-        if norm.startswith("انتقال طلا") and digits:
-            await group_handlers.gold_transfer(update, context, int(digits))
+        ascii_txt = norm.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
+        m = re.search(r"\d+", ascii_txt)
+        code = int(m.group()) if m else 0
+
+        if norm.startswith("انتقال طلا") and code:
+            await group_handlers.gold_transfer(update, context, code)
             return
-        if (norm.startswith("انتقال کایجو") or norm.startswith("انتقال هیولا")) and digits:
-            await group_handlers.transfer_creature_cmd(update, context, int(digits))
+        if (norm.startswith("انتقال کایجو") or norm.startswith("انتقال هیولا")) and code:
+            await group_handlers.transfer_creature_cmd(update, context, code)
             return
-        if norm.startswith("انتقال تجهیز") and digits:  # covers «تجهیز» and «تجهیزات»
-            await group_handlers.transfer_equip_cmd(update, context, int(digits))
+        if norm.startswith("انتقال تجهیز") and code:  # covers «تجهیز» and «تجهیزات»
+            await group_handlers.transfer_equip_cmd(update, context, code)
             return
 
     action = keywords.match(message.text)

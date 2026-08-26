@@ -148,10 +148,16 @@ def preview_equip_transfer(sender: User, receiver: User, equip_id: int) -> dict:
 
 
 @transaction.atomic
-def transfer_creature(sender: User, receiver: User, creature_id: int) -> dict:
-    """Give one of the sender's creatures to the receiver, who pays the diamond cost.
-    Enforces the shared cooldown, the receiver's building prerequisites, and that the
-    creature isn't the sender's active/only one."""
+def transfer_creature(sender: User, receiver: User, creature_id: int, price: int = 0) -> dict:
+    """Give one of the sender's creatures to the receiver. The receiver pays the
+    diamond fee (a sink) plus, if the seller set one, `price` gold that goes TO the
+    seller. Enforces the shared cooldown, the receiver's building prerequisites, and
+    that the creature isn't the sender's active/busy one.
+
+    The creature leaves the sender COMPLETELY: any gear it wears is returned to the
+    sender's inventory first, so the transferred creature carries no trace of the
+    sender's data (no equipped items, not active, not a worker)."""
+    price = max(0, int(price))
     sender = User.objects.select_for_update().get(id=sender.id)
     receiver = User.objects.select_for_update().get(id=receiver.id)
     if sender.id == receiver.id:
@@ -188,22 +194,33 @@ def transfer_creature(sender: User, receiver: User, creature_id: int) -> dict:
     cost = constants.creature_transfer_cost(creature.star_level, creature.rarity)
     if receiver.diamonds < cost:
         raise TransferFundsError(cost, receiver.diamonds, "creature")
+    if price > 0 and receiver.coins < price:
+        raise GameError(f"گیرنده {price:,} طلا برای این قیمت لازم داره ولی {receiver.coins:,} داره.")
+
+    # strip the creature clean: return every worn item to the SENDER's armory so the
+    # creature transfers naked and leaves no equipped-gear trace on the sender.
+    Equipment.objects.filter(equipped_on=creature).update(equipped_on=None)
 
     receiver.diamonds -= cost
+    if price > 0:
+        receiver.coins -= price
+        sender.coins += price
     creature.owner = receiver
     creature.is_active = False
     creature.save(update_fields=["owner", "is_active"])
 
     _set_cooldown([sender, receiver], "kaiju_transfer_ready_at")
-    sender.save(update_fields=["kaiju_transfer_ready_at"])
-    receiver.save(update_fields=["diamonds", "kaiju_transfer_ready_at"])
-    return {"creature": creature, "cost": cost}
+    sender.save(update_fields=["kaiju_transfer_ready_at", "coins"])
+    receiver.save(update_fields=["diamonds", "coins", "kaiju_transfer_ready_at"])
+    return {"creature": creature, "cost": cost, "price": price}
 
 
 @transaction.atomic
-def transfer_equipment(sender: User, receiver: User, equip_id: int) -> dict:
-    """Give one of the sender's equipment pieces to the receiver, who pays the (much
-    smaller) diamond cost. Auto-unequips it first."""
+def transfer_equipment(sender: User, receiver: User, equip_id: int, price: int = 0) -> dict:
+    """Give one of the sender's equipment pieces to the receiver. Receiver pays the
+    diamond fee (sink) plus, if set, `price` gold to the seller. Auto-unequips it
+    from the sender's creature first, so nothing of the sender's remains on it."""
+    price = max(0, int(price))
     sender = User.objects.select_for_update().get(id=sender.id)
     receiver = User.objects.select_for_update().get(id=receiver.id)
     if sender.id == receiver.id:
@@ -226,13 +243,18 @@ def transfer_equipment(sender: User, receiver: User, equip_id: int) -> dict:
     cost = constants.equip_transfer_cost(item.rarity)
     if receiver.diamonds < cost:
         raise TransferFundsError(cost, receiver.diamonds, "equip")
+    if price > 0 and receiver.coins < price:
+        raise GameError(f"گیرنده {price:,} طلا برای این قیمت لازم داره ولی {receiver.coins:,} داره.")
 
     receiver.diamonds -= cost
+    if price > 0:
+        receiver.coins -= price
+        sender.coins += price
     item.owner = receiver
     item.equipped_on = None  # can't stay equipped on the sender's creature
     item.save(update_fields=["owner", "equipped_on"])
 
     _set_cooldown([sender, receiver], "equip_transfer_ready_at")
-    sender.save(update_fields=["equip_transfer_ready_at"])
-    receiver.save(update_fields=["diamonds", "equip_transfer_ready_at"])
-    return {"item": item, "cost": cost}
+    sender.save(update_fields=["equip_transfer_ready_at", "coins"])
+    receiver.save(update_fields=["diamonds", "coins", "equip_transfer_ready_at"])
+    return {"item": item, "cost": cost, "price": price}
