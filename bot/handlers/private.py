@@ -122,6 +122,8 @@ def creature_card_text(user, creature, equipped_items: list | None = None) -> st
     there are more than three of them."""
     stats = effective_stats(creature, equipped_items)
     energy = sync_energy(user)
+    max_level = constants.creature_max_level(creature.rarity, creature.star_level)
+    is_maxed = creature.level >= max_level
     xp_needed = constants.xp_for_creature_level(creature.level)
     xp_bar = constants.render_bar(creature.xp, xp_needed, width=10)
     stars = get_emoji("star") * creature.star_level
@@ -131,8 +133,8 @@ def creature_card_text(user, creature, equipped_items: list | None = None) -> st
         f"{constants.RARITY_LABELS[creature.rarity]} {stars}",
         f"{constants.element_label(creature.element)}",
         "",
-        f"📊 سطح <b>{creature.level}</b>",
-        f"{xp_bar}  {creature.xp}/{xp_needed} XP",
+        f"📊 سطح <b>{creature.level}/{max_level}</b>" + ("  ✅ بیشینه" if is_maxed else ""),
+        ("▓" * 10 + "  بیشینه" if is_maxed else f"{xp_bar}  {creature.xp}/{xp_needed} XP"),
         "",
         f"⚔️ <b>توانایی‌ها</b>   ·   💪 قدرت: <b>{_creature_power(creature, equipped_items)}</b>",
         f"{get_emoji('hp')} جان: <b>{stats['hp']}</b>      {get_emoji('atk')} حمله: <b>{stats['atk']}</b>",
@@ -198,9 +200,10 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
     stars = get_emoji("star") * creature.star_level
     active_tag = " · 🟢 پیش‌فرض" if creature.is_active else ""
     step_tag = f" · هر ارتقا <b>×{step}</b>" if step > 1 else ""
+    max_level = constants.creature_max_level(creature.rarity, creature.star_level)
     lines = [
         f"🔧 <b>ارتقای {creature.name}</b>",
-        f"{constants.RARITY_LABELS[creature.rarity]} {stars} · سطح {creature.level}{active_tag}{step_tag}",
+        f"{constants.RARITY_LABELS[creature.rarity]} {stars} · سطح {creature.level}/{max_level}{active_tag}{step_tag}",
         "",
         f"{get_emoji('hp')} جان: <b>{stats['hp']}</b>      {get_emoji('atk')} حمله: <b>{stats['atk']}</b>",
         f"{get_emoji('def')} دفاع: <b>{stats['def']}</b>      {get_emoji('spd')} سرعت: <b>{stats['spd']}</b>",

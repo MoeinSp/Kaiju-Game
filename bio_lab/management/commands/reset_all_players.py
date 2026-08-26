@@ -1,17 +1,24 @@
-"""FULL GAME WIPE: reset every player to a brand-new account, keeping only their
-identity + lab name, and restart the creature/equipment/building id sequences at 1.
+"""FULL GAME WIPE ("official v1 relaunch"): reset almost the ENTIRE database back to
+a clean slate, keeping ONLY (a) each player's premium-emoji theming and (b) each
+player's lab name. Everything else about gameplay, social and group state is wiped.
 
-This is the destructive "official v1 relaunch" reset. It:
+It:
   1. snapshots each user's identity (id, username, first_name, lab_name, is_banned);
-  2. deletes ALL game state — every user (cascading creatures, equipment, buildings,
-     jobs, eggs, cards, logs, memberships, season results…), plus alliances, wars,
-     raid/group bosses, drops, interactive battles and season state;
+  2. deletes ALL game/social/GROUP state — every user (cascading creatures, equipment,
+     buildings, jobs, eggs, cards, teams, codex, logs, memberships, claims, season
+     results…), plus alliances + wars, raid/group bosses, drops, interactive battles,
+     season state, AND every group row (cascading its guardians, memberships, bosses,
+     drops and event logs — so all "in-group settings" reset too);
   3. restarts the creature/equipment/building id sequences at 1 (Postgres);
-  4. recreates each user with their kept identity and runs the fresh-player bootstrap
-     (starter creature, buildings, starting speed-up cards).
+  4. recreates each user with their kept identity + lab name and runs the fresh-player
+     bootstrap (starter creature, buildings, starting speed-up cards).
 
-Operator config (groups, themes, button/emoji overrides, required channels, shop
-items, bot config) is deliberately left untouched.
+DELIBERATELY KEPT (so the bot keeps working and the owner's setup survives):
+  • premium emojis — EmojiOverride, ButtonEmojiOverride  (explicitly requested)
+  • lab names — carried onto each recreated user            (explicitly requested)
+  • the bot's own operator config that isn't "game" data: button/theme styling,
+    required-join channels, custom shop items, and BotConfig. Wiping these would
+    break the bot or destroy the owner's setup, not "reset the competition".
 
     docker compose exec web python manage.py reset_all_players --dry-run
     docker compose exec web python manage.py reset_all_players --yes
@@ -26,6 +33,7 @@ from bio_lab.models import (
     Creature,
     Equipment,
     Building,
+    Group,
     GroupDrop,
     GroupEventLog,
     InteractiveBattle,
@@ -70,9 +78,12 @@ class Command(BaseCommand):
             return
 
         with transaction.atomic():
-            # non-user-owned game state first (not cleared by cascading user deletes)
+            # non-user-owned game state first (not cleared by cascading user deletes).
+            # Group last of these so its cascade (bosses/drops/memberships/event logs)
+            # clears everything hanging off a group in one go — this is the "in-group
+            # settings" reset the relaunch calls for.
             for model in (AllianceWarState, RaidBoss, GroupDrop, GroupEventLog,
-                          InteractiveBattle, SeasonState, Alliance):
+                          InteractiveBattle, SeasonState, Alliance, Group):
                 n = model.objects.all().delete()[0]
                 self.stdout.write(f"  cleared {model.__name__}: {n}")
             # every user + all their cascaded game rows

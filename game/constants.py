@@ -105,6 +105,24 @@ RARITY_STAT_MULTIPLIER = {
     "mythic": 2.0,
 }
 
+# A creature's MAX level is set by its rarity (the base ceiling) plus its star tier
+# (fusion raises the ceiling). So rarity matters twice — higher rarity has both
+# stronger per-level stats (RARITY_STAT_MULTIPLIER) AND a higher level ceiling —
+# and fusing to more stars unlocks more levels on top.
+CREATURE_MAX_LEVEL_BY_RARITY = {
+    "common": 20,
+    "rare": 40,
+    "epic": 60,
+    "legendary": 80,
+    "mythic": 100,
+}
+CREATURE_MAX_LEVEL_PER_STAR = 10  # each ⭐ above the first raises the ceiling by this
+
+
+def creature_max_level(rarity: str, star_level: int = 1) -> int:
+    base = CREATURE_MAX_LEVEL_BY_RARITY.get(rarity, 20)
+    return base + max(0, (star_level or 1) - 1) * CREATURE_MAX_LEVEL_PER_STAR
+
 # chance that a fusion result upgrades one tier above the higher-rarity parent
 RARITY_UPGRADE_CHANCE = {
     "common": 0.25,

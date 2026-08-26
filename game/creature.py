@@ -101,10 +101,13 @@ def create_starter_creature(owner: User) -> Creature:
 
 
 def add_xp(creature: Creature, amount: int) -> int:
-    """Adds xp and applies level-ups in place. Caller is responsible for saving `creature`."""
+    """Adds xp and applies level-ups in place, capped at the creature's max level
+    (set by its rarity + star, see constants.creature_max_level). Once maxed, extra
+    XP is discarded rather than stored, so the bar reads as full. Caller saves it."""
+    max_level = constants.creature_max_level(creature.rarity, creature.star_level)
     creature.xp += amount
     levels_gained = 0
-    while creature.xp >= constants.xp_for_creature_level(creature.level):
+    while creature.level < max_level and creature.xp >= constants.xp_for_creature_level(creature.level):
         creature.xp -= constants.xp_for_creature_level(creature.level)
         creature.level += 1
         creature.base_hp += constants.LEVEL_UP_HP
@@ -112,6 +115,8 @@ def add_xp(creature: Creature, amount: int) -> int:
         creature.base_def += constants.LEVEL_UP_DEF
         creature.base_spd += constants.LEVEL_UP_SPD
         levels_gained += 1
+    if creature.level >= max_level:
+        creature.xp = 0  # maxed — don't hoard overflow XP
     return levels_gained
 
 
