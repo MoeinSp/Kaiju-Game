@@ -385,7 +385,7 @@ BASE_LIFESTEAL = 0.0
 # ── Economy: loot boxes, fusion, wagered duels, alliance heist ────────────────
 BIOCRATE_GOLD_COST = 250
 BIOCRATE_DNA_COST = 15  # a biocrate now also costs DNA, giving DNA a real everyday use
-BIOCRATE_CREATURE_CHANCE = 0.10  # 10% yields a creature; the other 90% is equipment
+BIOCRATE_CREATURE_CHANCE = 0.04  # 4% yields a creature; the other 96% is equipment
 
 # Rarity split used ONLY when the crate rolls a creature (the 10% above). Tuned so
 # the *absolute* odds work out to 8% common and a steep tail — i.e. of the whole
@@ -517,6 +517,11 @@ BUILDING_DESCRIPTIONS = {
 }
 BUILDING_MAX_LEVEL = 5
 
+# Lab-level required to REACH each building level. Lab level comes from actual play
+# (missions, fusions, rewards…), which a throwaway account can't rush, so this stops
+# someone from speed-maxing a building (e.g. the main hall) on day one.
+BUILDING_LEVEL_LAB_REQ = {1: 0, 2: 3, 3: 7, 4: 12, 5: 18}
+
 # Main-hall level required before a building can be CONSTRUCTED at all. This is
 # separate from max_level_for(), which caps how high a building may go: the hall
 # already limited every building's level, but everything was buildable from day
@@ -555,7 +560,9 @@ BUILDING_UNLOCK_HALL_LEVEL = {
 # player; rushing with diamonds is faster still, deliberately. (These were 1.6x
 # smaller for a ~13-day target; loot income was cut by the same 1.6x below so the
 # gold-vs-clock balance is unchanged — gold stays felt-but-not-binding.)
-BUILDING_UPGRADE_MINUTES = {1: 24, 2: 144, 3: 576, 4: 1440, 5: 2880}
+# Doubled across the board, with the top two tiers stretched much further apart:
+# level 4 = 3 days, level 5 = 5 days. Base progression is now a multi-week haul.
+BUILDING_UPGRADE_MINUTES = {1: 48, 2: 288, 3: 1152, 4: 4320, 5: 7200}
 
 # Gold is sized to be *felt but not binding*: the constraint is meant to be the
 # clock, not the wallet. These came down when hunt and raid income was cut — with
@@ -701,7 +708,7 @@ CASINO_TIERS = {
         "label": "🥉 میز برنزی", "cost": 150, "currency": "coins", "daily": False,
         "desc": "شرط ۱۵۰ طلا.",
         "prizes": [
-            {"kind": "nothing", "amount": 0, "weight": 35, "label": "باختی 😔"},
+            {"kind": "nothing", "amount": 0, "weight": 20, "label": "باختی 😔"},
             {"kind": "coins", "amount": 100, "weight": 30, "label": "۱۰۰ طلا"},
             {"kind": "coins", "amount": 220, "weight": 20, "label": "۲۲۰ طلا"},
             {"kind": "coins", "amount": 400, "weight": 9, "label": "۴۰۰ طلا"},
@@ -713,7 +720,7 @@ CASINO_TIERS = {
         "label": "🥈 میز نقره‌ای", "cost": 600, "currency": "coins", "daily": False,
         "desc": "شرط ۶۰۰ طلا.",
         "prizes": [
-            {"kind": "nothing", "amount": 0, "weight": 32, "label": "باختی 😔"},
+            {"kind": "nothing", "amount": 0, "weight": 22, "label": "باختی 😔"},
             {"kind": "coins", "amount": 400, "weight": 30, "label": "۴۰۰ طلا"},
             {"kind": "coins", "amount": 850, "weight": 20, "label": "۸۵۰ طلا"},
             {"kind": "coins", "amount": 1600, "weight": 9, "label": "۱۶۰۰ طلا"},
@@ -725,7 +732,7 @@ CASINO_TIERS = {
         "label": "🥇 میز طلایی (الماسی)", "cost": 12, "currency": "diamonds", "daily": False,
         "desc": "شرط ۱۲ الماس.",
         "prizes": [
-            {"kind": "nothing", "amount": 0, "weight": 25, "label": "باختی 😔"},
+            {"kind": "nothing", "amount": 0, "weight": 14, "label": "باختی 😔"},
             {"kind": "diamonds", "amount": 7, "weight": 25, "label": "۷ الماس"},
             {"kind": "diamonds", "amount": 14, "weight": 22, "label": "۱۴ الماس"},
             {"kind": "diamonds", "amount": 25, "weight": 14, "label": "۲۵ الماس"},
@@ -870,6 +877,17 @@ def arena_fake_loot_range(attacker_level: int) -> tuple[int, int]:
     # branch and the whole "find opponent" flow silently dies.
     bonus = int(max(0, attacker_level) * ARENA_FAKE_LOOT_PER_LEVEL)
     return ARENA_FAKE_LOOT_BASE[0] + bonus, ARENA_FAKE_LOOT_BASE[1] + bonus
+
+
+# Loot from a BOT/fake opponent scales super-linearly with the raider's cup, so a
+# high-cup player who can't find a real target isn't stuck on ~9 coins. Real players
+# still pay the flat 10%-of-gold (arena.expected_loot); this is bot-only.
+ARENA_FAKE_LOOT_MIN = 25
+
+
+def arena_fake_loot(cup: int) -> int:
+    cup = max(0, cup)
+    return round(ARENA_FAKE_LOOT_MIN + cup * 0.2 + (cup ** 1.3) / 60)
 
 
 # ── Weekly cup season ──────────────────────────────────────────────────────────

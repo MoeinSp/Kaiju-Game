@@ -37,12 +37,15 @@ def enemy_team(stage: int) -> list[Creature]:
     """Three ephemeral enemy creatures scaled to the stage. Deterministic per stage
     so a stage always presents the same challenge."""
     rng = random.Random(stage * 7919)
-    level = max(1, round(stage * 1.1))
+    # much steeper enemy scaling — the campaign was too easy. Level climbs faster
+    # with the stage AND every level adds far more stat, so enemy power grows
+    # several times quicker than before.
+    level = max(1, round(stage * 1.6))
     boss = is_boss(stage)
     # rarity climbs with depth, so late stages hit harder even at the same level
-    tier_idx = min(len(constants.RARITY_ORDER) - 1, stage // 8)
+    tier_idx = min(len(constants.RARITY_ORDER) - 1, stage // 6)
     rarity = constants.RARITY_ORDER[tier_idx]
-    rmult = constants.RARITY_STAT_MULTIPLIER[rarity] * (1.18 if boss else 1.0)
+    rmult = constants.RARITY_STAT_MULTIPLIER[rarity] * (1.25 if boss else 1.0)
     team = []
     for i in range(3):
         element = constants.ELEMENTS[(stage + i) % len(constants.ELEMENTS)]
@@ -52,10 +55,10 @@ def enemy_team(stage: int) -> list[Creature]:
                 element=element,
                 rarity=rarity,
                 level=level,
-                base_hp=round((constants.STARTER_BASE_HP + level * 5) * rmult),
-                base_atk=round((constants.STARTER_BASE_ATK + level * 1.2) * rmult),
-                base_def=round((constants.STARTER_BASE_DEF + level * 1.1) * rmult),
-                base_spd=round((constants.STARTER_BASE_SPD + level * 0.7) * rmult),
+                base_hp=round((constants.STARTER_BASE_HP + level * 10) * rmult),
+                base_atk=round((constants.STARTER_BASE_ATK + level * 2.3) * rmult),
+                base_def=round((constants.STARTER_BASE_DEF + level * 2.0) * rmult),
+                base_spd=round((constants.STARTER_BASE_SPD + level * 1.2) * rmult),
             )
         )
     return team

@@ -243,6 +243,19 @@ def start_upgrade(user: User, building: Building) -> BuildingUpgrade:
             f"(هیچ ساختمونی از سطح تالار و لول آخر جلو نمی‌زنه)."
         )
 
+    # lab-level gate: reaching a building level needs enough lab level, which only
+    # real play earns — so a building (esp. the main hall) can't be speed-maxed early
+    req = constants.BUILDING_LEVEL_LAB_REQ.get(target, 0)
+    if req > 0:
+        from game import lab
+
+        lvl = lab.lab_level(user)
+        if lvl < req:
+            raise GameError(
+                f"برای رسوندن این ساختمون به سطح {target} باید سطح آزمایشگاهت حداقل {req} باشه "
+                f"(الان {lvl}). با بازی‌کردن و فعالیت، سطح آزمایشگاه بالا می‌ره."
+            )
+
     cost, minutes = upgrade_cost_and_minutes(building)
     if user.coins < cost:
         verb = "ساخت" if building.level == 0 else "ارتقا"

@@ -212,8 +212,11 @@ def find_opponent(attacker: User) -> dict:
 
 
 def expected_loot(opponent: dict, attacker_level: int = 1) -> int:
-    """Exactly 10% of the defender's gold, as an integer (no decimals, no cap). A
-    small floor keeps a raid on a near-broke target from paying literally nothing."""
+    """Real opponents pay exactly 10% of their gold (integer, small floor). Bot/fake
+    opponents instead pay a cup-scaled amount that climbs super-linearly, so a
+    high-cup raider who only ever matches bots still earns a meaningful reward."""
+    if opponent.get("is_fake"):
+        return constants.arena_fake_loot(int(opponent.get("cup", 0)))
     raw = int(opponent["loot_pool"]) // 10  # exactly 10%, integer
     return max(constants.ARENA_LOOT_MIN, raw)
 
