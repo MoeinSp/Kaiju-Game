@@ -894,6 +894,27 @@ def _pvp_preview_sync(attacker_tg, target_tg):
     )
 
 
+def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, t_power, t_elem):
+    gap = t_power - a_power
+    odds = "🟢 شانس بالا" if gap < -15 else ("🔴 خطرناک" if gap > 15 else "🟡 نزدیک")
+    matchup = constants.element_matchup_note(a_elem, t_elem)
+    keyboard = InlineKeyboardMarkup([
+        [btn("⚔️ حمله!", emoji_key="btn_attack", style=CONFIRM,
+             callback_data=f"gatk:{attacker_id}:{target_id}")],
+        [btn("🔍 جزییات حریف", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}"),
+         btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER,
+             callback_data=f"gatk_cancel:{attacker_id}")],
+    ])
+    text = (
+        f"{get_emoji('battle')} <b>حمله به {t_name}؟</b>\n\n"
+        f"💪 قدرت حریف: <b>{t_power}</b>  ({constants.element_label(t_elem)})\n"
+        f"💪 قدرت تو: <b>{a_power}</b>  ({constants.element_label(a_elem)}) — {odds}\n"
+        + (f"{matchup}\n" if matchup else "")
+        + f"\n<i>هر حمله ۱ ⚡ انرژی می‌بره. برنده تا {int(constants.GROUP_ATTACK_LOOT_PERCENT * 100)}٪ طلای بازنده رو غارت می‌کنه.</i>"
+    )
+    return text, keyboard
+
+
 async def _pvp_attack_prompt(update, context, target_tg) -> None:
     try:
         a_name, a_power, a_elem, t_name, t_power, t_elem = await run_db(
@@ -902,24 +923,78 @@ async def _pvp_attack_prompt(update, context, target_tg) -> None:
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
-    gap = t_power - a_power
-    odds = "🟢 شانس بالا" if gap < -15 else ("🔴 خطرناک" if gap > 15 else "🟡 نزدیک")
-    matchup = constants.element_matchup_note(a_elem, t_elem)
-    keyboard = InlineKeyboardMarkup([
-        [btn("⚔️ حمله!", emoji_key="btn_attack", style=CONFIRM,
-             callback_data=f"gatk:{update.effective_user.id}:{target_tg.id}")],
-        [btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER,
-             callback_data=f"gatk_cancel:{update.effective_user.id}")],
-    ])
-    await update.message.reply_text(
-        f"{get_emoji('battle')} <b>حمله به {t_name}؟</b>\n\n"
-        f"💪 قدرت حریف: <b>{t_power}</b>  ({constants.element_label(t_elem)})\n"
-        f"💪 قدرت تو: <b>{a_power}</b>  ({constants.element_label(a_elem)}) — {odds}\n"
-        + (f"{matchup}\n" if matchup else "")
-        + f"\n<i>هر حمله ۱ ⚡ انرژی می‌بره. برنده تا {int(constants.GROUP_ATTACK_LOOT_PERCENT * 100)}٪ طلای بازنده رو غارت می‌کنه.</i>",
-        parse_mode="HTML",
-        reply_markup=keyboard,
+    text, keyboard = _pvp_prompt_render(
+        update.effective_user.id, target_tg.id, a_name, a_power, a_elem, t_name, t_power, t_elem
     )
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _pvp_preview_by_ids_sync(attacker_id, target_id):
+    """Same as _pvp_preview_sync but keyed by DB ids — for the «بازگشت» from the
+    opponent-details view, where we only have the ids in the callback data."""
+    attacker = User.objects.filter(id=attacker_id).first()
+    target = User.objects.filter(id=target_id).first()
+    if attacker is None or target is None:
+        raise GameError("یکی از طرف‌ها دیگه پیدا نشد.")
+    a_creature = get_active_creature(attacker)
+    t_creature = get_active_creature(target)
+    if a_creature is None or t_creature is None:
+        raise GameError("یکی از دو طرف موجود فعال نداره.")
+    return (
+        display_name(attacker), _creature_power(a_creature), a_creature.element,
+        display_name(target), _creature_power(t_creature), t_creature.element,
+    )
+
+
+def _gatk_opp_details_sync(target_id):
+    from bio_lab.repository import lab_display
+    from bot.handlers.arena import _opponent_details_sync
+
+    target = User.objects.filter(id=target_id).first()
+    if target is None:
+        raise GameError("این بازیکن دیگه پیدا نشد.")
+    creature = get_active_creature(target)
+    power = _creature_power(creature) if creature is not None else 0
+    element = creature.element if creature is not None else None
+    pending = {"is_fake": False, "user_id": target_id, "label": lab_display(target),
+               "power": power, "element": element}
+    return _opponent_details_sync(pending)
+
+
+async def gatk_opp_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«🔍 جزییات حریف» under a group attack prompt — attacker-only, full readout."""
+    query = update.callback_query
+    _, attacker_id, target_id = query.data.split(":")
+    if update.effective_user.id != int(attacker_id):
+        await query.answer("این دکمه مال تو نیست 🙂", show_alert=True)
+        return
+    try:
+        d = await run_db(_gatk_opp_details_sync, int(target_id))
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    from bot.handlers.arena import opponent_details_text
+
+    await query.answer()
+    keyboard = InlineKeyboardMarkup([[btn("↩️ بازگشت", style=NAV, callback_data=f"gatk_back:{attacker_id}:{target_id}")]])
+    await safe_edit_message_text(query, opponent_details_text(d), parse_mode="HTML", reply_markup=keyboard)
+
+
+async def gatk_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«↩️ بازگشت» from opponent details back to the attack prompt — attacker-only."""
+    query = update.callback_query
+    _, attacker_id, target_id = query.data.split(":")
+    if update.effective_user.id != int(attacker_id):
+        await query.answer("این دکمه مال تو نیست 🙂", show_alert=True)
+        return
+    try:
+        data = await run_db(_pvp_preview_by_ids_sync, int(attacker_id), int(target_id))
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    text, keyboard = _pvp_prompt_render(int(attacker_id), int(target_id), *data)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _pvp_attack_sync(chat, attacker_tg, target_id):
@@ -1239,5 +1314,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(pvp_attack_callback, pattern=r"^gatk:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_attack_cancel_callback, pattern=r"^gatk_cancel:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_detail_callback, pattern=r"^gatk_detail:\d+$"))
+    application.add_handler(CallbackQueryHandler(gatk_opp_callback, pattern=r"^gatk_opp:\d+:\d+$"))
+    application.add_handler(CallbackQueryHandler(gatk_back_callback, pattern=r"^gatk_back:\d+:\d+$"))
     application.add_handler(CommandHandler("give", give, group_filter))
     application.add_handler(CommandHandler("mutation_event", mutation_event, group_filter))

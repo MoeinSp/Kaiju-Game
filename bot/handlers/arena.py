@@ -262,36 +262,40 @@ async def arena_opp_details_callback(update: Update, context: ContextTypes.DEFAU
         return
     await query.answer()
     d = await run_db(_opponent_details_sync, pending)
+    keyboard = InlineKeyboardMarkup([[btn("↩️ بازگشت به حریف", style=NAV, callback_data="arena_opp_back")]])
+    await safe_edit_message_text(query, opponent_details_text(d), parse_mode="HTML", reply_markup=keyboard)
+
+
+def opponent_details_text(d: dict) -> str:
+    """Render a full opponent readout from _opponent_details_sync's dict. Shared with
+    the group «اتک» flow so both show the same detailed card."""
     if d["is_fake"]:
-        text = (
+        return (
             f"🔍 <b>جزییات حریف</b>\n\n🏭 <b>{d['label']}</b>\n"
             f"💪 قدرت کل: <b>{d['power']}</b>\n"
             f"{constants.element_label(d['element']) if d.get('element') else ''}\n\n"
             "<i>این حریف یه آزمایشگاه بات ساختگیه — تجهیزات واقعی نداره.</i>"
         )
+    s = d["stats"]
+    lines = [
+        "🔍 <b>جزییات حریف</b>",
+        f"🏭 <b>{d['label']}</b>\n",
+        f"{get_emoji('creature')} <b>{d['name']}</b> · {constants.element_label(d['element'])}",
+        f"{d['rarity']} · {'⭐' * d['star_level']} · سطح <b>{d['level']}</b>",
+        f"💪 قدرت کل: <b>{d['full_power']}</b>  <i>(از تجهیزات: +{d['gear_power']})</i>\n",
+        f"❤️ HP <b>{s['hp']}</b> · ⚔️ ATK <b>{s['atk']}</b> · 🛡 DEF <b>{s['def']}</b> · 💨 SPD <b>{s['spd']}</b>"
+        + (f" · ☠️ {round(s['poison'])}" if s.get('poison') else ""),
+        "",
+        "<b>🦴 ارتقای اعضا:</b>",
+    ]
+    lines += [f"　{label} — <b>{lvl}</b>" for label, lvl in d["parts"]]
+    lines.append("")
+    if d["gear"]:
+        lines.append("<b>🎒 تجهیزات:</b>")
+        lines += [f"　{g['slot']} — {g['name']} +{g['level']} ({g['rarity']})" for g in d["gear"]]
     else:
-        s = d["stats"]
-        lines = [
-            f"🔍 <b>جزییات حریف</b>",
-            f"🏭 <b>{d['label']}</b>\n",
-            f"{get_emoji('creature')} <b>{d['name']}</b> · {constants.element_label(d['element'])}",
-            f"{d['rarity']} · {'⭐' * d['star_level']} · سطح <b>{d['level']}</b>",
-            f"💪 قدرت کل: <b>{d['full_power']}</b>  <i>(از تجهیزات: +{d['gear_power']})</i>\n",
-            f"❤️ HP <b>{s['hp']}</b> · ⚔️ ATK <b>{s['atk']}</b> · 🛡 DEF <b>{s['def']}</b> · 💨 SPD <b>{s['spd']}</b>"
-            + (f" · ☠️ {round(s['poison'])}" if s.get('poison') else ""),
-            "",
-            "<b>🦴 ارتقای اعضا:</b>",
-        ]
-        lines += [f"　{label} — <b>{lvl}</b>" for label, lvl in d["parts"]]
-        lines.append("")
-        if d["gear"]:
-            lines.append("<b>🎒 تجهیزات:</b>")
-            lines += [f"　{g['slot']} — {g['name']} +{g['level']} ({g['rarity']})" for g in d["gear"]]
-        else:
-            lines.append("<i>🎒 هیچ تجهیزاتی نداره.</i>")
-        text = "\n".join(lines)
-    keyboard = InlineKeyboardMarkup([[btn("↩️ بازگشت به حریف", style=NAV, callback_data="arena_opp_back")]])
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        lines.append("<i>🎒 هیچ تجهیزاتی نداره.</i>")
+    return "\n".join(lines)
 
 
 def _opponent_reshow_sync(tg_user, pending):
