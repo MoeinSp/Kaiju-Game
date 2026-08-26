@@ -47,7 +47,12 @@ def worker_bonus(building: Building) -> float:
     Scales with creature *level*, so stationing a well-raised creature is
     meaningfully better than parking a fresh one — the point of the feature.
     Capped so a late-game player can't turn a mine into their whole economy."""
-    total = sum(c.level for c in assigned_creatures(building))
+    # each worker contributes level × its rarity multiplier, so a rare/mythic miner
+    # is worth several commons of the same level
+    total = sum(
+        c.level * constants.WORKER_RARITY_MULT.get(c.rarity, 1.0)
+        for c in assigned_creatures(building)
+    )
     return min(
         constants.WORKER_BONUS_CAP,
         total * constants.WORKER_BONUS_PER_CREATURE_LEVEL,

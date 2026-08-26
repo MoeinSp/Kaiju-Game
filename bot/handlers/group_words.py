@@ -341,7 +341,7 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
         f"<blockquote>{target['name']} — {target['tier_label']}\n"
         f"{constants.element_label(target['element'])} · 💪 قدرت {target['power']}</blockquote>\n"
         f"{get_emoji('coin')} جایزه‌ی تقریبی: {lo}–{hi}\n"
-        f"{get_emoji('energy')} هزینه: ۱ (داری: {energy})"
+        f"{get_emoji('energy')} هزینه‌ی حمله: ۱ (داری: {energy}) · «بعدی»: {target.get('scout_cost', 0)} {get_emoji('coin')}"
     )
     rows = [
         [
@@ -593,13 +593,16 @@ def _card_sync(tg_user, chat, action):
         data["energy"] = sync_energy(user)
     elif action == "hunt":
         _require_creature(creature)
-        from game.hunt import HUNT_TIERS, estimated_reward, scout_one
+        from game.creature import creature_power
+        from game.hunt import HUNT_TIERS, estimated_reward, scout_cost, scout_one
 
         data["energy"] = sync_energy(user)
+        my_power = creature_power(creature, get_equipped_items(creature))
         target = scout_one(creature)
         # scout_one returns the raw roll; the card needs it labelled and priced
         target["tier_label"] = HUNT_TIERS[target["tier"]]["label"]
-        target["reward"] = estimated_reward(target["tier"], creature.level)
+        target["reward"] = estimated_reward(target["tier"], my_power)
+        target["scout_cost"] = scout_cost(creature)
         data["target"] = target
     elif action == "arena":
         from game import arena
@@ -1038,6 +1041,14 @@ def _do_sync(tg_user, chat, action, arg):
                 "card": _card_sync(tg_user, chat, "select")}
 
     if action == "hunt_next":
+        from game.hunt import scout_cost
+
+        _require_creature(creature)
+        cost = scout_cost(creature)
+        if user.coins < cost:
+            raise GameError(f"برای جستجوی دوباره {cost} طلا لازمه (الان {user.coins} داری).")
+        user.coins -= cost
+        user.save(update_fields=["coins"])
         return {"kind": "card", "card": _card_sync(tg_user, chat, "hunt")}
 
     if action == "hunt_go":

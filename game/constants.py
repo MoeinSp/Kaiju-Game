@@ -621,7 +621,10 @@ EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL = 5
 # The cap stops a full late-game roster from turning idle income into the whole
 # economy; hunting and raiding have to stay worth doing.
 WORKER_BONUS_PER_CREATURE_LEVEL = 0.06  # 3× stronger — a stationed worker matters a lot now
-WORKER_BONUS_CAP = 4.0  # up to +400% output from stationed creatures
+WORKER_BONUS_CAP = 6.0  # up to +600% output from stationed creatures (raised so rarity has room to matter)
+# a stationed worker's contribution is multiplied by its rarity — a mythic worker is
+# worth several commons of the same level, so rarer monsters are better miners
+WORKER_RARITY_MULT = {"common": 1.0, "rare": 1.4, "epic": 2.0, "legendary": 3.0, "mythic": 4.5}
 
 # ── Monster Cave / egg incubation (game/breeding.py) ──────────────────────────
 # Two phases, deliberately decoupled:

@@ -99,11 +99,28 @@ def _shield_render(diamonds: int, shield_secs: int) -> tuple[str, InlineKeyboard
             f"{cfg['label']} — {cfg['diamonds']} 💎",
             style=SHOP, callback_data=f"shield_buy:{tier}",
         )])
-    rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
+    rows.append([back_btn("menu:shield_shop", "بازگشت")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 async def shield_shop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """The «خرید سپر» entry — first choose which shield to buy (arena vs group)."""
+    sh = get_emoji("shield")
+    text = (
+        f"{sh} <b>خرید سپر</b>\n"
+        "<blockquote>🛡 <b>سپر آرنا</b>: جلوی غارت‌شدن توی آرنا رو می‌گیره.\n"
+        "🛡 <b>سپر گروه</b>: جلوی «اتک»‌خوردن توی گروه رو می‌گیره (ارزون‌تر).</blockquote>\n"
+        "کدوم رو می‌خوای؟"
+    )
+    rows = InlineKeyboardMarkup([
+        [btn("🛡 سپر آرنا", style=SHOP, callback_data="shield_arena")],
+        [btn("🛡 سپر گروه", style=SHOP, callback_data="gshield_shop")],
+        [back_btn("menu:cat_shop", "بازگشت به فروشگاه")],
+    ])
+    await send_screen(update, text, parse_mode="HTML", reply_markup=rows)
+
+
+async def shield_arena_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     diamonds, shield_secs = await run_db(_shield_state_sync, update.effective_user)
     text, keyboard = _shield_render(diamonds, shield_secs)
     await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
@@ -221,7 +238,7 @@ def _gshield_render(diamonds: int, shield_secs: int) -> tuple[str, InlineKeyboar
     for tier, cfg in constants.GROUP_SHIELD_SHOP_TIERS.items():
         rows.append([btn(f"{cfg['label']} — {cfg['diamonds']} 💎",
                          style=SHOP, callback_data=f"gshield_buy:{tier}")])
-    rows.append([back_btn("menu:arena", "بازگشت به آرنا")])
+    rows.append([back_btn("menu:shield_shop", "بازگشت")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -261,6 +278,7 @@ def register(application) -> None:
     application.add_handler(CommandHandler("shop", shop_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(shop_buy_callback, pattern=r"^shop_buy:"))
     application.add_handler(CommandHandler("shield", shield_shop_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CallbackQueryHandler(shield_arena_panel, pattern=r"^shield_arena$"))
     application.add_handler(CallbackQueryHandler(shield_buy_callback, pattern=r"^shield_buy:"))
     application.add_handler(CallbackQueryHandler(group_shield_shop_panel, pattern=r"^gshield_shop$"))
     application.add_handler(CallbackQueryHandler(group_shield_buy_callback, pattern=r"^gshield_buy:"))
