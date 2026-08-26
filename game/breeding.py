@@ -256,10 +256,9 @@ def cave_finish_price(job: BreedingJob) -> int:
 
 
 def egg_finish_price(egg: Egg) -> int:
-    """Fixed per-rarity diamond cost (much higher than a building speed-up), so
-    rushing a rare egg is a real decision. Falls back to the common price for any
-    unexpected rarity string."""
-    return constants.EGG_HATCH_DIAMOND_COST.get(egg.base_rarity, constants.EGG_HATCH_DIAMOND_COST["common"])
+    """Diamonds to hatch this egg right now — priced from the time still left (like
+    every other diamond-finish), so it drops as the egg incubates."""
+    return constants.diamond_finish_cost(egg_seconds_left(egg))
 
 
 @transaction.atomic

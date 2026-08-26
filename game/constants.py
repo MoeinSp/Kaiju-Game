@@ -326,6 +326,16 @@ BODY_PARTS = {
     "poison": {"label": "☠️ غدد سمی (زهر هر راند)", "stat": "poison", "bonus": 1},
 }
 
+# Each body part can only be upgraded up to a cap set by the creature's STAR level:
+# 1★ → 20, 2★ → 40, … 5★ → 100 (the absolute max). Raising the cap needs fusion
+# (more stars), so gear/part power can't outrun a creature's prestige tier.
+PART_UPGRADE_CAP_PER_STAR = 20
+PART_UPGRADE_MAX = PART_UPGRADE_CAP_PER_STAR * 5  # 100, at 5★
+
+
+def part_upgrade_cap(star_level: int) -> int:
+    return max(1, star_level) * PART_UPGRADE_CAP_PER_STAR
+
 # ── Equipment ────────────────────────────────────────────────────────────────
 # 4 slots per creature; at most one equipped item per slot (enforced in
 # game/equipment.py, not at the DB level, since a slot is a property of *where*

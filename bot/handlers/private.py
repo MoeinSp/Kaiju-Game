@@ -207,14 +207,29 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
         "",
         "🧩 <b>اعضای قابل ارتقا</b>" + (f" <i>(قیمت برای {step} سطح)</i>" if step > 1 else ""),
     ]
+    cap = constants.part_upgrade_cap(creature.star_level)
+    any_capped = False
     for part, cfg in constants.BODY_PARTS.items():
         level = getattr(creature, f"{part}_lvl")
-        cost = part_bulk_cost(level, step)
-        gain = _part_power_gain(creature, part, equipped_items, step)
+        if level >= cap:
+            any_capped = True
+            lines.append(f"{cfg['label']} — سطح <b>{level}/{cap}</b> · 🔒 به سقفِ {creature.star_level}⭐ رسید")
+            continue
+        buy = min(step, cap - level)
+        cost = part_bulk_cost(level, buy)
+        gain = _part_power_gain(creature, part, equipped_items, buy)
         lines.append(
-            f"{cfg['label']} — سطح <b>{level}</b> · ارتقا: {cost:,} {get_emoji('coin')} "
+            f"{cfg['label']} — سطح <b>{level}/{cap}</b> · ارتقا: {cost:,} {get_emoji('coin')} "
             f"→ <b>+{gain}</b> 💪"
         )
+    if any_capped:
+        if creature.star_level >= 5:
+            lines.append(f"\n🔒 <i>این هیولا ۵⭐ه — اعضاش به سقف نهایی <b>{constants.PART_UPGRADE_MAX}</b> رسیدن.</i>")
+        else:
+            lines.append(
+                f"\n🔒 <i>یه عضو به سقفِ {creature.star_level}⭐ (<b>{cap}</b>) رسیده — برای ارتقای بیشتر "
+                f"باید با <b>فیوژن</b> {creature.star_level + 1}⭐ بشه (هر ستاره +{constants.PART_UPGRADE_CAP_PER_STAR}، تا {constants.PART_UPGRADE_MAX} در ۵⭐).</i>"
+            )
     if slots is not None:
         lines.append("")
         lines.extend(_slot_summary_lines(slots))

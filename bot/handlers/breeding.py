@@ -214,8 +214,51 @@ def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
         lines.append("\n<i>چی توی تخم‌هاست؟ تا سر باز نکنن هیچ‌کس نمی‌دونه.</i>")
 
     lines.append(f"\n{get_emoji('diamond')} موجودی الماس: {view['user'].diamonds}")
+    rows.append([btn("📖 راهنمای کامل غار", style=NAV, callback_data="brd_guide")])
     rows.append([back_btn("menu:me")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _cave_guide_text() -> str:
+    """A full, formatted rundown of the cave for every rarity level — shown from the
+    «راهنمای کامل غار» button on the cave home screen."""
+    def fa(n) -> str:
+        return str(n).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+
+    dot = {r: constants.RARITY_LABELS[r].split()[0] for r in constants.RARITY_ORDER}
+    ro = constants.RARITY_ORDER
+    # a balanced representative pair for each index-sum 0..8
+    reps = {s: (min(s // 2, 4), min(s - s // 2, 4)) for s in range(9)}
+    time_lines = []
+    for s in range(9):
+        i, j = reps[s]
+        hours = constants.EGG_HATCH_HOURS_BY_RARITY_SUM[s]
+        time_lines.append(f"　{dot[ro[i]]}+{dot[ro[j]]} → <b>{fa(hours)} ساعت</b>")
+    dna_lines = " · ".join(f"{dot[r]} {fa(constants.BREEDING_DNA_COST[r])}" for r in ro)
+    return (
+        f"📖 <b>راهنمای کامل غار هیولا</b>\n\n"
+        "🥚 دو هیولای <b>آزاد</b> رو می‌فرستی؛ اول جفت‌گیری می‌کنن (والدها بعدش آزاد می‌شن)، "
+        "بعد یه <b>تخم</b> می‌ذارن که جدا رشد می‌کنه تا سر باز کنه.\n\n"
+        "🎲 <b>رده‌ی تخم</b>\n"
+        "<blockquote>هیچ‌وقت از والدین بالاتر نمی‌ره (مثلاً دو افسانه‌ای، اساطیری نمی‌دن).\n"
+        "شانس رسیدن به <b>سقف رده</b>: همنوع (هم‌اسم) <b>۶۰٪</b> · غیرهمنوع <b>۳۰٪</b> — "
+        "وگرنه یه رده پایین‌تر می‌آد.</blockquote>\n\n"
+        "⏱ <b>زمان رشد تخم</b> <i>(هرچی والدین نایاب‌تر، خیلی بیشتر)</i>\n"
+        + "\n".join(time_lines)
+        + "\n<i>　جفت‌گیری هم جدا ۴۵ دقیقه تا ۵ ساعت طول می‌کشه.</i>\n\n"
+        "🧬 <b>DNA لازم</b> <i>(بر اساس نایاب‌ترین والد)</i>\n"
+        f"　{dna_lines}\n\n"
+        "💎 <b>فوری‌کردن</b>: از داخل غار، بر اساس <b>زمان مونده</b> (حدود ۶ الماس هر ساعت) — "
+        "هرچی به آخرش نزدیک‌تر، ارزون‌تر.\n"
+        "⭐ نوزاد نصفِ میانگین لِوِل والدین رو به ارث می‌بره و همیشه ۱⭐ به دنیا می‌آد."
+    )
+
+
+async def breeding_guide_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    keyboard = InlineKeyboardMarkup([[back_btn("menu:breeding", "بازگشت به غار")]])
+    await safe_edit_message_text(query, _cave_guide_text(), parse_mode="HTML", reply_markup=keyboard)
 
 
 async def breeding_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -335,7 +378,6 @@ async def breeding_pick_b_callback(update: Update, context: ContextTypes.DEFAULT
     rows = [
         [btn(f"🎲 شانس رده ({pct}٪)", style=NAV, callback_data=f"brd_info:chance:{pair}"),
          btn("⏱ زمان‌ها", style=NAV, callback_data=f"brd_info:time:{pair}")],
-        [btn(f"💎 فوری‌کردن ({info['finish_gems']}💎)", style=NAV, callback_data=f"brd_info:gems:{pair}")],
         [
             btn("بذارش توی غار", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"brd_go:{parent_a.id}:{parent_b.id}"),
             btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER, callback_data="menu:breeding"),
@@ -370,20 +412,15 @@ async def breeding_info_callback(update: Update, context: ContextTypes.DEFAULT_T
                 f"همنوع بودن ⇒ ۶۰٪ · غیرهمنوع ⇒ ۳۰٪.\n"
                 "رده هیچ‌وقت از والدین بالاتر نمی‌ره (مثلاً دو افسانه‌ای، اساطیری نمی‌دن)."
             )
-    elif kind == "time":
+    else:  # time
         msg = (
             f"⏱ زمان‌ها\n\n"
             f"جفت‌گیری: {_format_remaining(info['mating_minutes'] * 60)} (بعدش والدها آزاد)\n"
             f"رشد تخم: {_format_remaining(info['hatch_minutes'] * 60)}\n\n"
             "هرچی والدین نایاب‌تر، زمان تخم بیشتر — اساطیری+اساطیری ۴۸ ساعت، "
-            "اساطیری+افسانه‌ای ۳۶ ساعت."
+            "اساطیری+افسانه‌ای ۳۶ ساعت.\n"
+            "می‌تونی بعد از فرستادن، از داخل غار با الماس فوری‌ش کنی (بر اساس زمان مونده)."
         )
-    else:  # gems
-        msg = (
-            f"💎 فوری‌کردن\n\n"
-            f"می‌تونی تخم رو با <b>{info['finish_gems']}</b> الماس آنی سر باز کنی.\n"
-            "هرچی رده بالاتر، الماس بیشتر (اساطیری = ۸۰۰)."
-        ).replace("<b>", "").replace("</b>", "")
     await query.answer(msg, show_alert=True)
 
 
@@ -564,6 +601,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(breeding_b_page_callback, pattern=r"^brd_bp:"))
     application.add_handler(CallbackQueryHandler(breeding_noop_callback, pattern=r"^brd_noop$"))
     application.add_handler(CallbackQueryHandler(breeding_info_callback, pattern=r"^brd_info:"))
+    application.add_handler(CallbackQueryHandler(breeding_guide_callback, pattern=r"^brd_guide$"))
     application.add_handler(CallbackQueryHandler(breeding_start_callback, pattern=r"^brd_go:"))
     application.add_handler(CallbackQueryHandler(breeding_lay_callback, pattern=r"^brd_lay$"))
     application.add_handler(CallbackQueryHandler(breeding_hatch_callback, pattern=r"^brd_hatch:"))
