@@ -918,7 +918,7 @@ ARENA_WIN_DNA_BASE = 2
 ARENA_WIN_DNA_PER_LEVEL = 0.2
 GROUP_ATTACK_WIN_DNA = 3   # winning a group «اتک» on a player
 RAID_HIT_DNA = 1           # every raid-boss hit drips a little DNA on top of the kill split
-ARENA_MATCH_CUP_BAND = 120  # real opponents within +/- this cup range are eligible
+ARENA_MATCH_CUP_BAND = 500  # real opponents within +/- this cup range are eligible (closer cups preferred)
 ARENA_STARTING_CUP = 0
 
 # A player's cup is soft-capped by their actual creature power: past the ceiling

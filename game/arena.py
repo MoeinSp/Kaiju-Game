@@ -205,11 +205,15 @@ def find_opponent(attacker: User) -> dict:
     exists, otherwise a bot. Returns a uniform dict either way so callers don't
     branch on opponent kind.
 
-    **Matchmaking is by cup, never by power** — on both branches. Real players are
-    filtered to the cup band; bots are sized from the attacker's cup. Pairing on
-    power would quietly undo the ladder: it would hand a weak player weak
-    opponents at every rating, so they'd keep winning and keep climbing.
+    **Matchmaking is by cup, never by power.** Real players within ±BAND cup are
+    eligible; the CLOSEST cups are preferred (we fetch ordered by cup distance and
+    pick from the nearest handful), so fights stay competitive. Real players are
+    strongly preferred over bots — a bot is only used when literally nobody real is
+    in range.
     """
+    from django.db.models import F, IntegerField
+    from django.db.models.functions import Abs, Cast
+
     if active_power(attacker) <= 0:
         raise GameError("اول یه موجود فعال انتخاب کن.")
 
@@ -224,13 +228,19 @@ def find_opponent(attacker: User) -> dict:
         .filter(Q(shield_until__isnull=True) | Q(shield_until__lte=now))
         .exclude(id=attacker.id)
         .filter(creatures__is_active=True)
-        .distinct()[:25]
+        .annotate(cup_dist=Abs(Cast(F("cup") - attacker.cup, IntegerField())))
+        .order_by("cup_dist")
+        .distinct()[:20]
     )
 
     if not candidates:
         return _fake_opponent(attacker)
 
-    target = random.choice(candidates)
+    # priority to closer cups: from the nearest handful, weight the pick by inverse
+    # cup distance so a closer rating is much likelier, but not the only outcome.
+    pool = candidates[: min(8, len(candidates))]
+    weights = [1.0 / (1 + abs(u.cup - attacker.cup)) for u in pool]
+    target = random.choices(pool, weights=weights, k=1)[0]
     target_creature = Creature.objects.filter(owner=target, is_active=True).first()
     return {
         "is_fake": False,
@@ -244,20 +254,18 @@ def find_opponent(attacker: User) -> dict:
 
 
 def expected_loot(opponent: dict, attacker_level: int = 1) -> int:
-    """Gold from one raid, HARD-capped by the attacker's own progression stage.
+    """Gold from one raid.
 
-    The cap (arena_loot_cap, keyed to the attacker's level) is the thing that keeps
-    raiding a steady trickle instead of a jackpot — it was defined for exactly this
-    but had silently stopped being applied, so a single match against a hoarder paid
-    an uncapped 10% of their whole purse (tens of thousands of gold) and a high-cup
-    bot raid paid a super-linear cup amount. Both are now clamped to the cap, so no
-    raid can ever pour abnormal gold into one wallet."""
-    cap = constants.arena_loot_cap(attacker_level)
+    * REAL opponent → exactly <b>10%</b> of their gold (floored at ARENA_LOOT_MIN).
+      Farming the same rich player is already prevented by the 8h post-raid shield +
+      the ±500 cup matchmaking, so no per-hit cap is applied.
+    * BOT opponent → a cup-scaled amount (grows with the raider's cup), the reward
+      for climbing when no real target is in range.
+    """
     if opponent.get("is_fake"):
-        raw = constants.arena_fake_loot(int(opponent.get("cup", 0)))
-    else:
-        raw = int(opponent["loot_pool"]) // 10  # 10% of the defender's gold
-    return max(constants.ARENA_LOOT_MIN, min(raw, cap))
+        return constants.arena_fake_loot(int(opponent.get("cup", 0)))
+    raw = int(opponent["loot_pool"]) // 10  # 10% of the real defender's gold
+    return max(constants.ARENA_LOOT_MIN, raw)
 
 
 @transaction.atomic
