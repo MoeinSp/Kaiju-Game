@@ -16,7 +16,7 @@ from django.db import transaction
 
 from bio_lab.models import Creature, Equipment, ShopItem, User
 from game import constants
-from game.creature import GameError
+from game.creature import GameError, InsufficientGoldError
 
 # ── rarity / element / slot vocab (accept English keys + common Persian aliases) ──
 _RARITY_ALIASES = {
@@ -324,7 +324,10 @@ def buy(user: User, item_id: int) -> dict:
             )
     user = User.objects.select_for_update().get(id=user.id)
     if user.coins < item.price_coins:
-        raise GameError(f"طلا کافی نداری! این آیتم {item.price_coins:,} طلا می‌خواد.")
+        raise InsufficientGoldError(
+            f"طلا کافی نداری! این آیتم <b>{item.price_coins:,}</b> طلا می‌خواد (الان {user.coins:,} داری).",
+            need=item.price_coins, have=user.coins,
+        )
     if user.diamonds < item.price_diamonds:
         raise GameError(f"الماس کافی نداری! این آیتم {item.price_diamonds} الماس می‌خواد.")
     if item.price_coins:

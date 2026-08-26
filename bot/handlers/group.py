@@ -103,14 +103,15 @@ def _duel_wager_challenge_sync(chat, challenger_tg, opponent_tg):
     return challenger_user, opponent_user
 
 
-async def _reply_error(message, exc) -> None:
-    """Reply an error — with the «شارژ انرژی» button when it's an out-of-energy one."""
+async def _reply_error(message, exc, owner_id: int) -> None:
+    """Reply an error — with the «شارژ انرژی» button when it's an out-of-energy one.
+    `owner_id` scopes that button so only the player it's for can tap it (group-safe)."""
     from game.energy import EnergyError
 
     if isinstance(exc, EnergyError):
         from bot.handlers.energy import energy_refill_markup
 
-        await message.reply_text(str(exc), reply_markup=energy_refill_markup())
+        await message.reply_text(str(exc), reply_markup=energy_refill_markup(owner_id))
     else:
         await message.reply_text(str(exc))
 
@@ -149,7 +150,7 @@ async def duel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 _duel_sync, update.effective_chat, challenger_tg, opponent_tg
             )
         except GameError as exc:
-            await _reply_error(update.message, exc)
+            await _reply_error(update.message, exc, update.effective_user.id)
             return
 
         dna_bit = f" · +{reward['dna']} {get_emoji('dna')}" if reward["dna"] else ""
@@ -697,7 +698,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             _attack_sync, update.effective_chat, update.effective_user
         )
     except (RaidError, GameError) as exc:
-        await _reply_error(update.message, exc)
+        await _reply_error(update.message, exc, update.effective_user.id)
         return
 
     text = (

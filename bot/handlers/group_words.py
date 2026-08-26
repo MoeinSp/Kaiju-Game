@@ -1205,7 +1205,9 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
             from bot.handlers.energy import energy_refill_markup
 
             await query.answer()
-            await safe_edit_message_text(query, str(exc), reply_markup=energy_refill_markup())
+            await safe_edit_message_text(
+                query, str(exc), reply_markup=energy_refill_markup(int(owner_id))
+            )
             return
         await query.answer(str(exc), show_alert=True)
         return

@@ -303,6 +303,10 @@ async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAUL
     try:
         view = await run_db(_start_upgrade_sync, update.effective_user, building_id)
     except GameError as exc:
+        from bot.handlers.shop import show_gold_error
+
+        if await show_gold_error(query, exc):
+            return
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("🏗 ساخت شروع شد!" if view["building"].level == 0 else "🔧 ارتقا شروع شد!")

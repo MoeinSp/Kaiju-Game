@@ -5,7 +5,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import AttackLog
 from bio_lab.repository import get_or_create_user, lab_display, mention
-from bot.buttons import BATTLE, DANGER, NAV, SHOP, back_btn, btn
+from bot.buttons import BATTLE, DANGER, NAV, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants
 import datetime
@@ -112,7 +112,6 @@ def _arena_home_keyboard(has_revenges: bool) -> InlineKeyboardMarkup:
     if has_revenges:
         rows.append([btn("⚔️ انتقام‌ها", style=DANGER, callback_data="arena_revenges")])
     rows += [
-        [btn("🛡 خرید سپر گروه (ارزون)", style=SHOP, callback_data="gshield_shop")],
         [btn("جدول این هفته", emoji_key="btn_rank", style=NAV, callback_data="arena_top")],
         [btn("🗓 نتایج هفته‌ی قبل", style=NAV, callback_data="arena_last_season")],
         [back_btn("menu:me")],

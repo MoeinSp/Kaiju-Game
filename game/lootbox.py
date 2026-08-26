@@ -4,7 +4,7 @@ from django.db import transaction
 
 from bio_lab.models import Creature, User
 from game import constants
-from game.creature import GameError
+from game.creature import GameError, InsufficientGoldError
 from game.equipment import roll_equipment
 
 
@@ -40,7 +40,11 @@ def open_biocrate(user: User, tier: str = "basic") -> dict:
     if cfg is None:
         raise GameError("این نوع باکس ژنتیکی وجود نداره.")
     if user.coins < cfg["gold"]:
-        raise GameError(f"طلا کافی نداری! این باکس {cfg['gold']:,} طلا هزینه داره.")
+        raise InsufficientGoldError(
+            f"طلا کافی نداری! این باکس <b>{cfg['gold']:,}</b> طلا می‌خواد "
+            f"(الان {user.coins:,} داری).",
+            need=cfg["gold"], have=user.coins,
+        )
     if user.dna_fragments < cfg["dna"]:
         raise GameError(
             f"{cfg['dna']} DNA لازمه (الان {user.dna_fragments} داری). "

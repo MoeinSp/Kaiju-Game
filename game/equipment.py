@@ -2,7 +2,7 @@ import random
 
 from bio_lab.models import Creature, Equipment, User
 from game import constants
-from game.creature import GameError
+from game.creature import GameError, InsufficientGoldError
 
 
 def get_equipped_items(creature: Creature) -> list[Equipment]:
@@ -162,7 +162,10 @@ def upgrade_item(user: User, item_id: int, dupe_item_id: int) -> Equipment:
         raise GameError("تجهیزات دوم باید هم‌نوع (اسلات/مدل/نایابی یکسان) باشه.")
     cost = constants.EQUIPMENT_UPGRADE_GOLD_COST * item.level
     if user.coins < cost:
-        raise GameError(f"طلا کافی نداری! ارتقا {cost} طلا هزینه داره.")
+        raise InsufficientGoldError(
+            f"طلا کافی نداری! ارتقا <b>{cost:,}</b> طلا می‌خواد (الان {user.coins:,} داری).",
+            need=cost, have=user.coins,
+        )
     user.coins -= cost
     user.save(update_fields=["coins"])
     dupe.delete()

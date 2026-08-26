@@ -93,6 +93,35 @@ def buy(user: User, key: str) -> dict:
     return offer
 
 
+# ── Always-on gold exchange (diamonds → gold) ────────────────────────────────
+# Unlike the rotating daily offers, these are ALWAYS available, so any "not enough
+# gold" dead-end can send the player straight here. Rates get slightly better in
+# bulk. Kept deliberately un-cheap so gold stays meaningful.
+GOLD_PACKS = [
+    {"gold": 1_000, "diamonds": 8},
+    {"gold": 3_000, "diamonds": 20},
+    {"gold": 8_000, "diamonds": 45},
+    {"gold": 20_000, "diamonds": 100},
+    {"gold": 50_000, "diamonds": 220},
+]
+
+
+def buy_gold_pack(user: User, idx: int) -> dict:
+    """Spend diamonds for a fixed gold pack. Always available (not day-gated)."""
+    if idx < 0 or idx >= len(GOLD_PACKS):
+        raise GameError("این بسته‌ی طلا وجود نداره.")
+    pack = GOLD_PACKS[idx]
+    if user.diamonds < pack["diamonds"]:
+        raise GameError(
+            f"الماس کافی نداری! این بسته {pack['diamonds']} الماس می‌خواد "
+            f"(الان {user.diamonds} داری)."
+        )
+    user.diamonds -= pack["diamonds"]
+    user.coins += pack["gold"]
+    user.save(update_fields=["diamonds", "coins"])
+    return pack
+
+
 def offer_reward_text(offer: dict) -> str:
     g = offer["grant"]
     if g.get("energy") == "full":

@@ -204,6 +204,8 @@ async def item_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     try:
         result, items = await run_db(_item_buy_sync, update.effective_user, item_id)
     except GameError as exc:
+        if await show_gold_error(query, exc):
+            return
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("✅ خریداری شد!")
@@ -274,8 +276,85 @@ async def group_shield_buy_callback(update: Update, context: ContextTypes.DEFAUL
     )
 
 
+# ── 💰 gold exchange (diamonds → gold), always available ──────────────────────
+def gold_shop_button():
+    """A button that jumps straight to the gold exchange — hung under any
+    'not enough gold' message so the player has an immediate way out."""
+    return btn("💰 خرید طلا با الماس", style=BUILD, callback_data="gold_shop")
+
+
+async def show_gold_error(query, exc) -> bool:
+    """If `exc` is an InsufficientGoldError, re-render the message with it + a
+    «خرید طلا با الماس» button and return True; else return False. Mirrors the
+    energy handler's show_energy_error so any diamond/gold spend can offer a way out."""
+    from game.creature import InsufficientGoldError
+
+    if isinstance(exc, InsufficientGoldError):
+        await query.answer()
+        await safe_edit_message_text(
+            query, f"{get_emoji('coin')} {exc}", parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[gold_shop_button()]]),
+        )
+        return True
+    return False
+
+
+def _gold_shop_render(coins: int, diamonds: int) -> tuple[str, InlineKeyboardMarkup]:
+    lines = [
+        f"{get_emoji('coin')} <b>خرید طلا با الماس</b>",
+        f"<blockquote>موجودی: {get_emoji('coin')} <b>{coins:,}</b> طلا · "
+        f"{get_emoji('diamond')} <b>{diamonds}</b> الماس\n"
+        "بسته‌های بزرگ‌تر کمی به‌صرفه‌ترن.</blockquote>",
+    ]
+    rows = []
+    for i, pack in enumerate(shop.GOLD_PACKS):
+        rows.append([btn(
+            f"💰 {pack['gold']:,} طلا — {pack['diamonds']} 💎",
+            style=SHOP, callback_data=f"gold_buy:{i}",
+        )])
+    rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _gold_shop_state_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    return user.coins, user.diamonds
+
+
+async def gold_shop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    coins, diamonds = await run_db(_gold_shop_state_sync, update.effective_user)
+    text, keyboard = _gold_shop_render(coins, diamonds)
+    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _gold_buy_sync(tg_user, idx):
+    user, _ = get_or_create_user(tg_user)
+    pack = shop.buy_gold_pack(user, idx)
+    return pack, user.coins, user.diamonds
+
+
+async def gold_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    idx = int(query.data.split(":")[1])
+    try:
+        pack, coins, diamonds = await run_db(_gold_buy_sync, update.effective_user, idx)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer(f"✅ {pack['gold']:,} طلا گرفتی!")
+    text, keyboard = _gold_shop_render(coins, diamonds)
+    await safe_edit_message_text(
+        query,
+        f"✅ <b>{pack['gold']:,} طلا</b> به موجودیت اضافه شد "
+        f"({pack['diamonds']} 💎 کم شد).\n\n━━━━━━━━━━\n" + text,
+        parse_mode="HTML", reply_markup=keyboard,
+    )
+
+
 def register(application) -> None:
     application.add_handler(CommandHandler("shop", shop_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CallbackQueryHandler(gold_shop_panel, pattern=r"^gold_shop$"))
+    application.add_handler(CallbackQueryHandler(gold_buy_callback, pattern=r"^gold_buy:\d+$"))
     application.add_handler(CallbackQueryHandler(shop_buy_callback, pattern=r"^shop_buy:"))
     application.add_handler(CommandHandler("shield", shield_shop_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(shield_arena_panel, pattern=r"^shield_arena$"))

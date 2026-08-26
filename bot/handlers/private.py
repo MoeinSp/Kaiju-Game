@@ -19,7 +19,7 @@ from bot.handlers.codex import codex_panel
 from bot.handlers.events import events_panel
 from bot.handlers.idle import idle_panel
 from bot.handlers.league import league_panel
-from bot.handlers.shop import item_shop_panel, shield_shop_panel, shop_panel
+from bot.handlers.shop import gold_shop_panel, item_shop_panel, shield_shop_panel, shop_panel
 from bot.handlers.casino import casino_panel
 from bot.handlers.titles import titles_panel
 from bot.handlers.referral import referral_panel
@@ -700,7 +700,7 @@ _CATEGORIES = {
         [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("جعبه‌های الماسی", "diamond_box", "s", "btn_diamond_box")],
         [("بنر ویژه", "banner", "s", "btn_banner"), ("شاپ روزانه", "shop", "s", "btn_shop")],
         [("خرید سپر", "shield_shop", "s", "btn_shield"), ("کازینو", "casino", "s", "btn_casino")],
-        [("آیتم‌های ویژه", "item_shop", "s", "btn_items")],
+        [("آیتم‌های ویژه", "item_shop", "s", "btn_items"), ("خرید طلا", "gold_shop", "s", "btn_shop")],
     ]),
     "social": ("👥 اجتماعی", [
         [("اتحاد من", "alliance_info", "n", "btn_alliance"), ("لیگ رتبه‌بندی", "league", "n", "btn_league")],
@@ -963,6 +963,10 @@ async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         result = await run_db(_lab_action_sync, update.effective_user, action, int(creature_id), step)
     except GameError as exc:
+        from bot.handlers.shop import show_gold_error
+
+        if await show_gold_error(query, exc):
+            return
         await query.answer(str(exc), show_alert=True)
         return
     if result is None:
@@ -1488,6 +1492,10 @@ async def fusion_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
             _fusion_sync, update.effective_user, int(a_id), int(b_id)
         )
     except GameError as exc:
+        from bot.handlers.shop import show_gold_error
+
+        if await show_gold_error(query, exc):
+            return
         await query.answer(str(exc), show_alert=True)
         return
     is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
@@ -2533,6 +2541,7 @@ _MENU_ACTIONS = {
     "shop": shop_panel,
     "shield_shop": shield_shop_panel,
     "item_shop": item_shop_panel,
+    "gold_shop": gold_shop_panel,
     "casino": casino_panel,
     "titles": titles_panel,
     "wheel": wheel_cmd,
@@ -2617,7 +2626,6 @@ def register(application) -> None:
     application.add_handler(CommandHandler("rank", rank, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("profile", profile, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("menu", menu, filters.ChatType.PRIVATE))
-    application.add_handler(CommandHandler("help", guide_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^menu:"))
     application.add_handler(CallbackQueryHandler(guide_page_callback, pattern=r"^guide:"))
     application.add_handler(CallbackQueryHandler(upgrade_pick_callback, pattern=r"^upg_pick:"))

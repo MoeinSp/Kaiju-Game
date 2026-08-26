@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from bio_lab.models import Building, BuildingUpgrade, SpeedupCard, User
 from game import constants, lab
-from game.creature import GameError
+from game.creature import GameError, InsufficientGoldError
 
 # small bonus chance (separate from the daily wheel's guaranteed prize) attached to
 # a handful of natural "win" moments — duel wins, raid kills, guardian defenses
@@ -259,7 +259,10 @@ def start_upgrade(user: User, building: Building) -> BuildingUpgrade:
     cost, minutes = upgrade_cost_and_minutes(building)
     if user.coins < cost:
         verb = "ساخت" if building.level == 0 else "ارتقا"
-        raise GameError(f"طلا کافی نداری! {verb} {cost} طلا هزینه داره.")
+        raise InsufficientGoldError(
+            f"طلا کافی نداری! {verb} <b>{cost:,}</b> طلا می‌خواد (الان {user.coins:,} داری).",
+            need=cost, have=user.coins,
+        )
     user.coins -= cost
     user.save(update_fields=["coins"])
 

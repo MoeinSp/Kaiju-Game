@@ -5,7 +5,7 @@ from django.db import transaction
 from bio_lab.models import Equipment, User
 from game import constants
 from game.buildings import building_level, is_built
-from game.creature import GameError
+from game.creature import GameError, InsufficientGoldError
 
 
 def equipment_cap(user: User) -> int:
@@ -62,7 +62,10 @@ def forge(user: User, item_id: int) -> dict:
         )
     cost = preview["cost"]
     if user.coins < cost:
-        raise GameError(f"طلا کافی نداری! این آهنگری {cost} طلا هزینه داره.")
+        raise InsufficientGoldError(
+            f"طلا کافی نداری! این آهنگری <b>{cost:,}</b> طلا می‌خواد (الان {user.coins:,} داری).",
+            need=cost, have=user.coins,
+        )
 
     user.coins -= cost
     user.save(update_fields=["coins"])

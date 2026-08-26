@@ -5,7 +5,7 @@ from django.db import transaction
 from bio_lab.models import Creature, User
 from game import constants, lab
 from game.buildings import is_built, star_cap
-from game.creature import GameError
+from game.creature import GameError, InsufficientGoldError
 from game.equipment import get_equipped_items
 
 FUSION_BUILDING = "fusion_lab"
@@ -102,7 +102,10 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
     rarity = parent_a.rarity
     cost = constants.fusion_cost(parent_a.star_level, rarity)
     if user.coins < cost:
-        raise GameError(f"طلا کافی نداری! فیوژن این جفت {cost} طلا هزینه داره.")
+        raise InsufficientGoldError(
+            f"طلا کافی نداری! فیوژن این جفت <b>{cost:,}</b> طلا می‌خواد (الان {user.coins:,} داری).",
+            need=cost, have=user.coins,
+        )
 
     user.coins -= cost
     user.save(update_fields=["coins"])

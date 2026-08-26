@@ -92,6 +92,10 @@ async def biocrate_buy_callback(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         result = await run_db(_biocrate_buy_sync, update.effective_user, tier)
     except GameError as exc:
+        from bot.handlers.shop import show_gold_error
+
+        if await show_gold_error(query, exc):
+            return
         await query.answer(str(exc), show_alert=True)
         return
 

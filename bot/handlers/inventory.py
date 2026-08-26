@@ -587,6 +587,10 @@ async def forge_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     try:
         user, result, preview = await run_db(_forge_do_sync, update.effective_user, item_id)
     except GameError as exc:
+        from bot.handlers.shop import show_gold_error
+
+        if await show_gold_error(query, exc):
+            return
         await query.answer(str(exc), show_alert=True)
         return
 

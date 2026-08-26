@@ -12,6 +12,16 @@ class GameError(Exception):
     """Raised for expected game-rule violations (not enough coins, cooldown, etc.)."""
 
 
+class InsufficientGoldError(GameError):
+    """A GameError specifically for 'not enough gold'. Carries the numbers so a
+    handler can edit the message and offer a «خرید طلا با الماس» button, instead of
+    the player hitting a dead end. `need`/`have` may be None for a generic message."""
+
+    def __init__(self, message: str, need: int | None = None, have: int | None = None):
+        self.need, self.have = need, have
+        super().__init__(message)
+
+
 def effective_stats(creature: Creature, equipped_items: list | None = None) -> dict[str, float]:
     """`equipped_items` must be pre-fetched by the caller (e.g. via
     game.equipment.get_equipped_items) — this function never queries the DB itself,
@@ -217,7 +227,11 @@ def devour_creatures(user: User, target_id: int, sacrifice_ids: list[int]) -> di
 
 def feed(user: User, creature: Creature) -> int:
     if user.coins < constants.FEED_COST_COINS:
-        raise GameError(f"طلا کافی نداری! هزینه تغذیه {constants.FEED_COST_COINS} طلا است.")
+        raise InsufficientGoldError(
+            f"طلا کافی نداری! هزینه تغذیه <b>{constants.FEED_COST_COINS:,}</b> طلاست "
+            f"(الان {user.coins:,} داری).",
+            need=constants.FEED_COST_COINS, have=user.coins,
+        )
     user.coins -= constants.FEED_COST_COINS
     levels_gained = add_xp(creature, constants.FEED_XP_GAIN)
     user.save(update_fields=["coins"])
@@ -297,8 +311,10 @@ def upgrade_part(user: User, creature: Creature, part: str, count: int = 1) -> t
     current_level = getattr(creature, f"{part}_lvl")
     total = part_bulk_cost(current_level, count)
     if user.coins < total:
-        raise GameError(
-            f"طلا کافی نداری! ارتقای {count} سطحِ این عضو {total} طلا هزینه داره (موجودی: {user.coins})."
+        raise InsufficientGoldError(
+            f"طلا کافی نداری! ارتقای {count} سطحِ این عضو <b>{total:,}</b> طلا می‌خواد "
+            f"(موجودی: {user.coins:,}).",
+            need=total, have=user.coins,
         )
     user.coins -= total
     setattr(creature, f"{part}_lvl", current_level + count)
