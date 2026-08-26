@@ -894,6 +894,15 @@ ARENA_STARTING_CUP = 0
 ARENA_CUP_PER_POWER = 3.0  # rescaled with the combat-accurate power metric (was 4.0)
 ARENA_OVERCAP_DAMPING = 0.25  # cup gain multiplier once you're above your deserved cup
 
+# GLOBAL diminishing returns on cup, independent of power. The deserved-cup guard
+# above only reins in players climbing ABOVE their power; a genuinely strong player
+# could still ride the ladder to 10k because their deserved cup is enormous. This
+# soft cap makes every extra cup cost more no matter how strong you are: each win's
+# gain is scaled by SOFTCAP/(SOFTCAP+cup), and losses grow the further past the
+# softcap you sit. Net effect — the ladder compresses at the top, ~5000 is a real
+# grind and ~10000 is nearly asymptotic, and the field stays in close competition.
+ARENA_CUP_SOFTCAP = 2500
+
 # Fake opponents shown when no real player sits in the cup band — their lab names
 # are obviously flavored so the roster never looks empty on a small player base.
 ARENA_FAKE_LAB_NAMES = [

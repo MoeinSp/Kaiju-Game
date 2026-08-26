@@ -136,6 +136,7 @@ def cup_delta(attacker: User, defender_cup: int, won: bool, attacker_power: int)
     someone above. Gains are damped once the attacker is already above the cup
     their power deserves."""
     gap = defender_cup - attacker.cup
+    softcap = constants.ARENA_CUP_SOFTCAP
 
     div = constants.ARENA_CUP_GAP_DIVISOR
     if won:
@@ -143,6 +144,11 @@ def cup_delta(attacker: User, defender_cup: int, won: bool, attacker_power: int)
         # pays near the floor — so a low-cup attacker who beats a high-cup defender
         # gains big (and that defender loses big).
         raw = constants.ARENA_CUP_WIN_BASE + gap / div
+        # GLOBAL diminishing returns: every extra cup you already hold shrinks the
+        # next win, no matter how strong you are. This is what actually stops the
+        # 10k-cup runaway — the deserved-cup damping below only bites players who
+        # over-climb their power.
+        raw *= softcap / (softcap + max(0, attacker.cup))
         if attacker.cup > deserved_cup(attacker_power):
             raw *= constants.ARENA_OVERCAP_DAMPING
         delta = max(constants.ARENA_CUP_MIN_DELTA, min(constants.ARENA_CUP_MAX_DELTA, round(raw)))
@@ -151,6 +157,9 @@ def cup_delta(attacker: User, defender_cup: int, won: bool, attacker_power: int)
     # losing to someone ABOVE you barely dents your cup; losing to someone far below
     # costs a lot
     raw = constants.ARENA_CUP_LOSS_BASE - gap / div
+    # the further you sit ABOVE the softcap, the harder you fall — this pulls the top
+    # of the ladder back toward the pack so competition stays close.
+    raw *= 1 + max(0, attacker.cup - softcap) / softcap
     delta = max(constants.ARENA_CUP_MIN_DELTA, min(constants.ARENA_CUP_MAX_DELTA, round(raw)))
     return -delta
 
@@ -235,13 +244,20 @@ def find_opponent(attacker: User) -> dict:
 
 
 def expected_loot(opponent: dict, attacker_level: int = 1) -> int:
-    """Real opponents pay exactly 10% of their gold (integer, small floor). Bot/fake
-    opponents instead pay a cup-scaled amount that climbs super-linearly, so a
-    high-cup raider who only ever matches bots still earns a meaningful reward."""
+    """Gold from one raid, HARD-capped by the attacker's own progression stage.
+
+    The cap (arena_loot_cap, keyed to the attacker's level) is the thing that keeps
+    raiding a steady trickle instead of a jackpot — it was defined for exactly this
+    but had silently stopped being applied, so a single match against a hoarder paid
+    an uncapped 10% of their whole purse (tens of thousands of gold) and a high-cup
+    bot raid paid a super-linear cup amount. Both are now clamped to the cap, so no
+    raid can ever pour abnormal gold into one wallet."""
+    cap = constants.arena_loot_cap(attacker_level)
     if opponent.get("is_fake"):
-        return constants.arena_fake_loot(int(opponent.get("cup", 0)))
-    raw = int(opponent["loot_pool"]) // 10  # exactly 10%, integer
-    return max(constants.ARENA_LOOT_MIN, raw)
+        raw = constants.arena_fake_loot(int(opponent.get("cup", 0)))
+    else:
+        raw = int(opponent["loot_pool"]) // 10  # 10% of the defender's gold
+    return max(constants.ARENA_LOOT_MIN, min(raw, cap))
 
 
 @transaction.atomic
