@@ -32,7 +32,7 @@ from game.raid import RaidError, attack_boss, distribute_rewards, get_active_bos
 def _speedup_note(minutes: int | None) -> str:
     if minutes is None:
         return ""
-    return f"\n{get_emoji('speedup')} جایزه‌ی شانسی: {constants.SPEEDUP_LABELS[minutes]}!"
+    return f"\n{get_emoji('speedup')} جایزه‌ی شانسی: {constants.speedup_label(minutes)}!"
 
 
 def _mission_lines(completed: list[dict]) -> str:
@@ -809,13 +809,40 @@ def _pvp_preview_sync(attacker_tg, target_tg):
         raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
     if t_creature is None:
         raise GameError("این بازیکن موجود فعالی نداره.")
+    from game.arena import group_shield_remaining_seconds
+
     return (
         display_name(attacker), _creature_power(a_creature), a_creature.element,
         display_name(target), _creature_power(t_creature), t_creature.element,
+        group_shield_remaining_seconds(target),
     )
 
 
-def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, t_power, t_elem):
+def _fmt_shield_hm(seconds: int) -> str:
+    hours, rem = divmod(max(0, int(seconds)), 3600)
+    minutes = rem // 60
+    if hours and minutes:
+        return f"{hours} ساعت و {minutes} دقیقه"
+    if hours:
+        return f"{hours} ساعت"
+    return f"{minutes} دقیقه"
+
+
+def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, t_power, t_elem, t_shield_secs=0):
+    # target is group-shielded → say it LOUDLY at the very top so the attacker
+    # doesn't waste a tap, and drop the attack button (the attack would be blocked).
+    if t_shield_secs and t_shield_secs > 0:
+        text = (
+            f"🛡 <b>{t_name} الان سپر محافظ گروه داره!</b>\n"
+            f"<b>{_fmt_shield_hm(t_shield_secs)}</b> دیگه سپرش می‌پره — تا اون‌موقع نمی‌شه بهش اتک زد.\n\n"
+            f"💪 قدرت حریف: <b>{t_power}</b> · قدرت تو: <b>{a_power}</b>"
+        )
+        keyboard = InlineKeyboardMarkup([
+            [btn("🔍 جزییات حریف", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}"),
+             btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER, callback_data=f"gatk_cancel:{attacker_id}")],
+        ])
+        return text, keyboard
+
     gap = t_power - a_power
     odds = "🟢 شانس بالا" if gap < -15 else ("🔴 خطرناک" if gap > 15 else "🟡 نزدیک")
     matchup = constants.element_matchup_note(a_elem, t_elem)
@@ -838,15 +865,11 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
 
 async def _pvp_attack_prompt(update, context, target_tg) -> None:
     try:
-        a_name, a_power, a_elem, t_name, t_power, t_elem = await run_db(
-            _pvp_preview_sync, update.effective_user, target_tg
-        )
+        data = await run_db(_pvp_preview_sync, update.effective_user, target_tg)
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
-    text, keyboard = _pvp_prompt_render(
-        update.effective_user.id, target_tg.id, a_name, a_power, a_elem, t_name, t_power, t_elem
-    )
+    text, keyboard = _pvp_prompt_render(update.effective_user.id, target_tg.id, *data)
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -861,9 +884,12 @@ def _pvp_preview_by_ids_sync(attacker_id, target_id):
     t_creature = get_active_creature(target)
     if a_creature is None or t_creature is None:
         raise GameError("یکی از دو طرف موجود فعال نداره.")
+    from game.arena import group_shield_remaining_seconds
+
     return (
         display_name(attacker), _creature_power(a_creature), a_creature.element,
         display_name(target), _creature_power(t_creature), t_creature.element,
+        group_shield_remaining_seconds(target),
     )
 
 

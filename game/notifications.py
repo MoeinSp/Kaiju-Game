@@ -108,10 +108,12 @@ def collect_due() -> list[tuple[int, str]]:
                         f"🏭 مهاجم: <b>{attacker_name}</b>{power_note}\n"
                         "می‌تونی همین‌جا حمله‌ی متقابل بزنی 👇"
                     )
+                # 4th element = the attacker's user id, for a «🔍 جزییات حریف» button
+                # on the defense report (defrep_opp:<id>).
                 if revengeable:
-                    out.append((log.defender_id, text, f"arena_revenge:{log.id}"))
+                    out.append((log.defender_id, text, f"arena_revenge:{log.id}", log.attacker_id))
                 else:
-                    out.append((log.defender_id, text))
+                    out.append((log.defender_id, text, None, log.attacker_id))
             log.defender_notified = True
             log.save(update_fields=["defender_notified"])
 

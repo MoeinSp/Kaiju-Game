@@ -754,11 +754,35 @@ SPEEDUP_LABELS = {
 SPEEDUP_PLAIN_LABELS = {
     1: "۱ دقیقه‌ای",
     5: "۵ دقیقه‌ای",
+    10: "۱۰ دقیقه‌ای",
+    15: "۱۵ دقیقه‌ای",
     30: "۳۰ دقیقه‌ای",
     60: "۱ ساعته",
     720: "۱۲ ساعته",
     1440: "۲۴ ساعته",
 }
+
+
+def _fa_digits(n) -> str:
+    return str(n).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+
+
+def speedup_label(minutes: int) -> str:
+    """SPEEDUP_LABELS lookup with a safe fallback for any minute value (so a new
+    denomination can never KeyError a screen the way `speedup: 10` once did)."""
+    if minutes in SPEEDUP_LABELS:
+        return SPEEDUP_LABELS[minutes]
+    if minutes % 60 == 0:
+        return f"⏱ {_fa_digits(minutes // 60)} ساعت"
+    return f"⏱ {_fa_digits(minutes)} دقیقه"
+
+
+def speedup_plain_label(minutes: int) -> str:
+    if minutes in SPEEDUP_PLAIN_LABELS:
+        return SPEEDUP_PLAIN_LABELS[minutes]
+    if minutes % 60 == 0:
+        return f"{_fa_digits(minutes // 60)} ساعته"
+    return f"{_fa_digits(minutes)} دقیقه‌ای"
 
 # Diamonds can also finish an upgrade outright, priced from the time still left.
 # Deliberately cheap per minute at the short end (a minimum charge stops 1-minute

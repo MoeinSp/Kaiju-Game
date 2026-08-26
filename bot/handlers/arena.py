@@ -42,6 +42,16 @@ from game.season import (
 logger = logging.getLogger(__name__)
 
 PENDING_OPPONENT_KEY = "arena_pending_opponent"
+
+
+def _fmt_hm(seconds: int) -> str:
+    hours, rem = divmod(max(0, int(seconds)), 3600)
+    minutes = rem // 60
+    if hours and minutes:
+        return f"{hours} ساعت و {minutes} دقیقه"
+    if hours:
+        return f"{hours} ساعت"
+    return f"{minutes} دقیقه"
 ARENA_DETAIL_KEY = "arena_last_detail"
 
 
@@ -352,8 +362,38 @@ def _attack_sync(tg_user, pending):
     return result, completed_missions
 
 
+def _attacker_shield_secs_sync(tg_user) -> int:
+    user, _ = get_or_create_user(tg_user)
+    return shield_remaining_seconds(user)
+
+
 async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    confirmed = query.data.split(":")[1:] == ["c"]  # "arena_attack:c" = shield warning accepted
+
+    # If the attacker currently holds a shield, warn FIRST — attacking spends
+    # SHIELD_ATTACK_COST_HOURS off it, and players kept losing their shield without
+    # realising it ("سپر مشکل داره، بازم اتک می‌خوریم"). Only attack once they accept.
+    if not confirmed:
+        if context.user_data.get(PENDING_OPPONENT_KEY) is None:
+            await query.answer("اول یه حریف پیدا کن.", show_alert=True)
+            return
+        shield_secs = await run_db(_attacker_shield_secs_sync, update.effective_user)
+        if shield_secs > 0:
+            await query.answer()
+            keyboard = InlineKeyboardMarkup([
+                [btn("✅ بله، حمله کن", style=BATTLE, callback_data="arena_attack:c")],
+                [btn("🛡 نه، سپرم بمونه", style=NAV, callback_data="arena_opp_back")],
+            ])
+            await safe_edit_message_text(
+                query,
+                f"⚠️ <b>الان سپر محافظ داری</b> ({_fmt_hm(shield_secs)} مونده).\n"
+                f"اگه حمله کنی <b>{constants.SHIELD_ATTACK_COST_HOURS} ساعت</b> از سپرت کم می‌شه "
+                "و ممکنه دوباره غارت بشی.\nبازم حمله می‌کنی؟",
+                parse_mode="HTML", reply_markup=keyboard,
+            )
+            return
+
     # CLAIM the pending opponent up front (pop before the await), so a rapid double-tap
     # on «حمله» can't attack — and loot — the same opponent twice. On failure we put it
     # back so the player can retry.
@@ -413,50 +453,93 @@ async def arena_detail_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await safe_edit_message_text(query, detail, parse_mode="HTML", reply_markup=keyboard)
 
 
+# ── shared: view any player's active-creature details (defense reports + revenge) ─
+def _user_details_sync(user_id: int) -> dict:
+    from bio_lab.models import Creature, User
+    from bio_lab.repository import lab_display
+    from game.equipment import get_equipped_items
+
+    u = User.objects.filter(id=user_id).first()
+    if u is None:
+        return {"is_fake": True, "label": "این بازیکن", "power": 0, "element": None}
+    creature = Creature.objects.filter(owner=u, is_active=True).first()
+    power = creature_power(creature, get_equipped_items(creature)) if creature else 0
+    element = creature.element if creature else None
+    return _opponent_details_sync({
+        "is_fake": creature is None, "user_id": user_id,
+        "label": lab_display(u), "power": power, "element": element,
+    })
+
+
+async def defense_opp_details_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«🔍 جزییات حریف» from a defense report or the revenge list — shows the
+    attacker's active creature (level/stars/gear/parts)."""
+    query = update.callback_query
+    user_id = int(query.data.split(":")[1])
+    await query.answer()
+    d = await run_db(_user_details_sync, user_id)
+    keyboard = InlineKeyboardMarkup([[back_btn("arena_revenges", "بازگشت به انتقام‌ها")]])
+    await safe_edit_message_text(query, opponent_details_text(d), parse_mode="HTML", reply_markup=keyboard)
+
+
 # ── Revenge panel ─────────────────────────────────────────────────────────────
 
 def _revenges_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
-    return user, revengeable_attacks(user)
+    now = tz.now()
+    items = []
+    for log in revengeable_attacks(user):
+        atk = log.attacker
+        items.append({
+            "log_id": log.id,
+            "attacker_id": log.attacker_id,
+            "name": log.attacker_label or (lab_display(atk) if atk else "یه مهاجم"),
+            "power": log.attacker_power or 0,
+            "loot": log.loot_gold or 0,
+            "won": log.attacker_won,
+            "hrs_left": max(0, int((log.created_at + datetime.timedelta(days=3) - now).total_seconds() // 3600)),
+            "shield_secs": shield_remaining_seconds(atk) if atk is not None else 0,
+        })
+    # revenge-able (unshielded) first, so the actionable ones are at the top
+    items.sort(key=lambda it: (it["shield_secs"] > 0, -it["power"]))
+    return user, items
 
 
 async def arena_revenges_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    user, revenges = await run_db(_revenges_sync, update.effective_user)
+    user, items = await run_db(_revenges_sync, update.effective_user)
 
-    if not revenges:
+    if not items:
         keyboard = InlineKeyboardMarkup([[back_btn("menu:arena")]])
         await safe_edit_message_text(
             query,
-            "⚔️ هیچ انتقام باز‌ی نداری. مهلت انتقام ۳ روزه.",
-            reply_markup=keyboard,
+            "⚔️ <b>انتقام‌ها</b>\n\nهیچ‌کس اخیراً بهت حمله نکرده — لیست خالیه.\n"
+            "<i>هر حمله‌ای که بهت بشه (چه ببازی چه دفاع کنی) تا ۳ روز اینجا قابل انتقامه.</i>",
+            parse_mode="HTML", reply_markup=keyboard,
         )
         return
 
-    now = tz.now()
-
-    lines = [f"⚔️ <b>انتقام‌های باز</b> ({len(revenges)} مورد)\n"]
+    ready = [it for it in items if it["shield_secs"] <= 0]
+    shielded = [it for it in items if it["shield_secs"] > 0]
+    lines = [f"⚔️ <b>انتقام‌ها</b> — {len(items)} مورد ({len(ready)} آماده)\n"]
     rows = []
-    for log in revenges:
-        attacker_name = log.attacker_label or lab_display(log.attacker)
-        pwr = f"  💪{log.attacker_power}" if log.attacker_power else ""
-        loot = f"  −{log.loot_gold} {get_emoji('coin')}" if log.loot_gold else ""
-        deadline = log.created_at + datetime.timedelta(days=3)
-        hrs_left = max(0, int((deadline - now).total_seconds() // 3600))
-        lines.append(f"🔴 <b>{attacker_name}</b>{pwr}{loot}  — {hrs_left}h مهلت")
-        rows.append([btn(
-            f"⚔️ انتقام از {attacker_name}",
-            style=DANGER,
-            callback_data=f"arena_revenge:{log.id}",
-        )])
+    for it in ready:
+        res = "غارتت کرد" if it["won"] else "دفاع کردی"
+        loot = f" · −{it['loot']} {get_emoji('coin')}" if it["loot"] else ""
+        lines.append(f"🔴 <b>{it['name']}</b> · 💪{it['power']} · {res}{loot} · ⏳{it['hrs_left']}h")
+        row = [btn(f"⚔️ انتقام", style=DANGER, callback_data=f"arena_revenge:{it['log_id']}")]
+        if it["attacker_id"]:
+            row.append(btn("🔍 جزییات", style=NAV, callback_data=f"defrep_opp:{it['attacker_id']}"))
+        rows.append(row)
+    if shielded:
+        lines.append("\n🛡 <b>الان سپر دارن</b> <i>(تا سپرشون نپره نمی‌شه انتقام گرفت):</i>")
+        for it in shielded:
+            lines.append(f"　🛡 <b>{it['name']}</b> · 💪{it['power']} — {_fmt_hm(it['shield_secs'])} مونده")
 
     rows.append([back_btn("menu:arena")])
     await safe_edit_message_text(
-        query,
-        "\n".join(lines),
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(rows),
+        query, "\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows),
     )
 
 
@@ -631,7 +714,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(arena_find_callback, pattern=r"^arena_find$"))
     application.add_handler(CallbackQueryHandler(arena_opp_details_callback, pattern=r"^arena_opp_details$"))
     application.add_handler(CallbackQueryHandler(arena_opp_back_callback, pattern=r"^arena_opp_back$"))
-    application.add_handler(CallbackQueryHandler(arena_attack_callback, pattern=r"^arena_attack$"))
+    application.add_handler(CallbackQueryHandler(arena_attack_callback, pattern=r"^arena_attack(:c)?$"))
     application.add_handler(CallbackQueryHandler(arena_detail_callback, pattern=r"^arena_detail$"))
     application.add_handler(CallbackQueryHandler(arena_top_callback, pattern=r"^arena_top$"))
     application.add_handler(
@@ -645,4 +728,7 @@ def register(application) -> None:
     )
     application.add_handler(
         CallbackQueryHandler(arena_revenge_attack_callback, pattern=r"^arena_revenge_atk:\d+$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(defense_opp_details_callback, pattern=r"^defrep_opp:\d+$")
     )

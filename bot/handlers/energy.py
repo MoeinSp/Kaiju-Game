@@ -99,11 +99,25 @@ async def energy_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("⚡ پر شد!")
+    # a way back so the player returns to what they were doing (arena/hunt/…) instead
+    # of a dead-end message. In the DM that's the main menu; in a group, the bot's PV.
+    is_private = update.effective_chat is not None and update.effective_chat.type == "private"
+    if is_private:
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔙 بازگشت به بازی", callback_data="menu:me"),
+        ]])
+    else:
+        from config import BOT_USERNAME
+
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔙 ادامه توی پیوی ربات", url=f"https://t.me/{BOT_USERNAME}?start=play"),
+        ]])
     await safe_edit_message_text(
         query,
         f"⚡ <b>انرژی پر شد!</b> الان {result['energy']}/{constants.MAX_ENERGY} داری "
-        f"(<b>{result['cost']}</b> الماس کم شد).",
+        f"(<b>{result['cost']}</b> الماس کم شد).\n<i>برگرد و کارتو ادامه بده 👇</i>",
         parse_mode="HTML",
+        reply_markup=keyboard,
     )
 
 

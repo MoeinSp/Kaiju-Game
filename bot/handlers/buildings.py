@@ -335,7 +335,7 @@ async def building_speedup_list_callback(update: Update, context: ContextTypes.D
     rows = []
     for c in cards:
         row = [btn(
-            f"{constants.SPEEDUP_LABELS[c.minutes]} — یکی",
+            f"{constants.speedup_label(c.minutes)} — یکی",
             style=BUILD, callback_data=f"bld_speedup_do:{building_id}:{c.minutes}",
         )]
         if c.count > 1:

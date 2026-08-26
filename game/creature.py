@@ -316,13 +316,15 @@ def upgrade_part(user: User, creature: Creature, part: str, count: int = 1) -> t
     current_level = getattr(creature, f"{part}_lvl")
     cap = constants.part_upgrade_cap(creature.star_level)
     if current_level >= cap:
+        # plain text (no HTML): these surface in a Telegram alert popup, which shows
+        # tags literally rather than rendering them.
         if creature.star_level >= 5:
             raise GameError(
-                f"⛔ این عضو به سقف نهایی <b>{constants.PART_UPGRADE_MAX}</b> رسیده — بالاتر از این نمی‌ره."
+                f"⛔ این عضو به سقف نهایی {constants.PART_UPGRADE_MAX} رسیده — بالاتر از این نمی‌ره."
             )
         raise GameError(
-            f"⛔ سقف ارتقای این عضو برای هیولای {creature.star_level}⭐ عددِ <b>{cap}</b>ه. "
-            f"برای بالاتر رفتن باید با <b>فیوژن</b> ستاره‌ی هیولا رو زیاد کنی "
+            f"⛔ سقف ارتقای این عضو برای هیولای {creature.star_level}⭐ عددِ {cap} است. "
+            f"برای بالاتر رفتن باید با فیوژن ستاره‌ی هیولا رو زیاد کنی "
             f"(هر ستاره سقف رو {constants.PART_UPGRADE_CAP_PER_STAR} تا بیشتر می‌کنه، تا {constants.PART_UPGRADE_MAX} در ۵⭐)."
         )
     # never overshoot the cap in a bulk (×5/×10) buy

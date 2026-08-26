@@ -752,7 +752,7 @@ def _reward_text(user, result: dict) -> str:
 
     kind = result["kind"]
     if kind == "speedup":
-        prize = f"<b>۱ کارت سرعت {constants.SPEEDUP_PLAIN_LABELS[result['minutes']]}</b> ⏱"
+        prize = f"<b>۱ کارت سرعت {constants.speedup_plain_label(result['minutes'])}</b> ⏱"
     elif kind == "jackpot":
         prize = f"🎰 <b>جکپات! {result['amount']:,}</b> {get_emoji('coin')}"
     elif kind == "coins":

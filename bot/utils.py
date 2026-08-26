@@ -16,7 +16,7 @@ def mission_reward_text(m: dict) -> str:
     if m.get("speedup"):
         # "+⏱ ۳۰ دقیقه" read as "this mission takes 30 minutes" or "you have 30
         # minutes left". Naming the item and what it does removes both readings.
-        parts.append(f"+۱ کارت سرعت {constants.SPEEDUP_PLAIN_LABELS[m['speedup']]} ⏱")
+        parts.append(f"+۱ کارت سرعت {constants.speedup_plain_label(m['speedup'])} ⏱")
     return " ".join(parts)
 
 
