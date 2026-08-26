@@ -1,5 +1,6 @@
 import datetime
 
+from django.db import transaction
 from django.utils import timezone
 
 from bio_lab.models import DailyActionLog, Group, GroupEventLog, MissionClaim, User
@@ -39,6 +40,29 @@ def assert_energy_available(user: User, action: str) -> None:
         return
     if get_daily_count(user, action) >= cap:
         raise GameError(f"برای امروز انرژیت برای این کار تموم شده ({cap} بار در روز). فردا دوباره تلاش کن.")
+
+
+def consume_daily(user: User, action: str) -> int:
+    """ATOMIC check-and-increment of a daily cap — the anti-double-spam version of
+    `assert_energy_available` + `record_action`. It locks today's counter row so two
+    near-simultaneous taps can't both pass the cap and grant twice; the second sees
+    the incremented count and is rejected. Call this INSIDE the same transaction that
+    grants the reward, BEFORE granting. Returns the new count.
+
+    Use this (not the check/record pair) for any daily-capped action that pays out."""
+    cap = constants.ENERGY_CAPS.get(action)
+    with transaction.atomic():
+        _get_or_create_log(user, action)  # ensure the row exists before locking it
+        log = DailyActionLog.objects.select_for_update().get(
+            user=user, action=action, day=today_str()
+        )
+        if cap is not None and log.count >= cap:
+            raise GameError(
+                f"برای امروز انرژیت برای این کار تموم شده ({cap} بار در روز). فردا دوباره تلاش کن."
+            )
+        log.count += 1
+        log.save(update_fields=["count"])
+        return log.count
 
 
 def get_daily_count(user: User, action: str) -> int:

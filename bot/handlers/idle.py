@@ -82,6 +82,7 @@ async def idle_collect_callback(update: Update, context: ContextTypes.DEFAULT_TY
 def _dungeon_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
     result = idle.run_dungeon(user)
+    user.refresh_from_db()  # run_dungeon works on a locked re-fetch; sync our instance
     return result, idle.idle_status(user), idle.dungeon_status(user)
 
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import random
 
+from django.db import transaction
 from django.utils import timezone
 
 from bio_lab.models import Creature, User
@@ -82,17 +83,24 @@ def idle_status(user: User) -> dict:
     }
 
 
+@transaction.atomic
 def collect_idle(user: User) -> dict:
     """Grant the accrued idle loot and reset the accrual clock. Returns what was
-    granted (may be zero if collected again immediately)."""
-    st = idle_status(user)
+    granted (may be zero if collected again immediately).
+
+    Locks the row (select_for_update) and recomputes the accrual INSIDE the lock, so
+    two rapid taps can't both read the same idle_since and both pay out — the second
+    tap sees the reset clock and gets ~nothing."""
+    locked = User.objects.select_for_update().get(id=user.id)
+    st = idle_status(locked)
     fields = ["idle_since"]
     if st["coins"]:
-        user.coins += st["coins"]; fields.append("coins")
+        locked.coins += st["coins"]; fields.append("coins")
     if st["dna"]:
-        user.dna_fragments += st["dna"]; fields.append("dna_fragments")
-    user.idle_since = timezone.now()
-    user.save(update_fields=fields)
+        locked.dna_fragments += st["dna"]; fields.append("dna_fragments")
+    locked.idle_since = timezone.now()
+    locked.save(update_fields=fields)
+    user.refresh_from_db()  # keep the caller's instance in sync for its follow-up reads
     return {"coins": st["coins"], "dna": st["dna"]}
 
 
@@ -147,10 +155,15 @@ def _player_power(creature: Creature) -> int:
     return creature_power(creature, get_equipped_items(creature))
 
 
+@transaction.atomic
 def run_dungeon(user: User) -> dict | None:
     """One free dungeon run per day. Requires the user's active creature for the fight.
-    Returns result dict (won, log_text, reward_or_consolation), or None if already run."""
+    Returns result dict (won, log_text, reward_or_consolation), or None if already run.
+
+    Locks the row and re-checks the daily flag INSIDE the lock, so a rapid double-tap
+    can't run the dungeon (and collect the reward) twice in one day."""
     today = today_str()
+    user = User.objects.select_for_update().get(id=user.id)
     if user.last_dungeon_day == today:
         return None
 

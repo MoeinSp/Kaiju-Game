@@ -354,7 +354,10 @@ def _attack_sync(tg_user, pending):
 
 async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    pending = context.user_data.get(PENDING_OPPONENT_KEY)
+    # CLAIM the pending opponent up front (pop before the await), so a rapid double-tap
+    # on «حمله» can't attack — and loot — the same opponent twice. On failure we put it
+    # back so the player can retry.
+    pending = context.user_data.pop(PENDING_OPPONENT_KEY, None)
     if pending is None:
         await query.answer("اول یه حریف پیدا کن.", show_alert=True)
         return
@@ -364,11 +367,11 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     except GameError as exc:
         from bot.handlers.energy import show_energy_error
 
+        context.user_data[PENDING_OPPONENT_KEY] = pending  # restore for a retry
         if not await show_energy_error(query, exc):
             await query.answer(str(exc), show_alert=True)
         return
 
-    context.user_data.pop(PENDING_OPPONENT_KEY, None)
     context.user_data[ARENA_DETAIL_KEY] = result.get("detail_log", "")
 
     if result["won"]:

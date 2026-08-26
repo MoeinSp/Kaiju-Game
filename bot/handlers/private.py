@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.utils import timezone
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
@@ -59,7 +60,7 @@ from game.creature import (
     train,
     upgrade_part,
 )
-from game.daily import apply_daily_login, assert_energy_available, check_missions, mission_status, record_action
+from game.daily import apply_daily_login, check_missions, consume_daily, mission_status, record_action
 from game.emoji import get_emoji
 from game.energy import spend_energy, sync_energy
 from game.equipment import (bonus_text, equip_item, get_equipped_items, slot_loadout,
@@ -2160,9 +2161,9 @@ def _heist_by_id_sync(tg_user, target_alliance_id):
         target = Alliance.objects.get(id=target_alliance_id)
     except Alliance.DoesNotExist:
         raise GameError("این اتحاد دیگه پیدا نشد.")
-    assert_energy_available(user, "heist")
-    result = heist(user, creature, target)
-    record_action(user, "heist")
+    with transaction.atomic():
+        consume_daily(user, "heist")  # atomic: a rapid double-tap can't heist twice
+        result = heist(user, creature, target)
     return result, target
 
 
@@ -2374,9 +2375,9 @@ def _heist_sync(tg_user, target_name):
     if target is None:
         raise GameError("همچین اتحادی پیدا نشد.")
 
-    assert_energy_available(user, "heist")
-    result = heist(user, creature, target)
-    record_action(user, "heist")
+    with transaction.atomic():
+        consume_daily(user, "heist")  # atomic: a rapid double-tap can't heist twice
+        result = heist(user, creature, target)
     return result, target
 
 

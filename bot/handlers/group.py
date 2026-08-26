@@ -1,6 +1,7 @@
 import secrets
 import time
 
+from django.db import transaction
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
@@ -20,8 +21,8 @@ from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from game import constants
 from game.buildings import maybe_award_speedup_card
 from game.combat import resolve_duel, resolve_duel_detailed
-from game.creature import GameError, add_xp, apply_random_mutation
-from game.daily import assert_energy_available, check_missions, group_event_available, mark_group_event, record_action
+from game.creature import GameError, add_xp
+from game.daily import check_missions, consume_daily, record_action
 from game.emoji import get_emoji
 from game.energy import spend_energy
 from game.guardian import challenge_guardian, ensure_guardian, get_guardian
@@ -1059,46 +1060,6 @@ async def pvp_attack_cancel_callback(update: Update, context: ContextTypes.DEFAU
     await safe_edit_message_text(query, "🚫 حمله لغو شد.")
 
 
-def _mutation_event_sync(chat, tg_user):
-    group = get_or_create_group(chat)
-    user, _ = get_or_create_user(tg_user)
-    touch_membership(group, user)
-
-    if not group_event_available(group, "mutation"):
-        raise GameError("☄️ امروز قبلاً یه رویداد جهش تو این گروه اتفاق افتاده. فردا دوباره امتحان کن.")
-
-    members = group_member_creatures(group)
-    if not members:
-        raise GameError("هنوز کسی توی این گروه موجودی ثبت نکرده.")
-
-    mark_group_event(group, "mutation")
-    results = []
-    for c in members:
-        stat, bonus = apply_random_mutation(c)
-        results.append((c.name, stat, bonus))
-    return results
-
-
-async def mutation_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    try:
-        results = await run_db(_mutation_event_sync, update.effective_chat, update.effective_user)
-    except GameError as exc:
-        await update.message.reply_text(str(exc))
-        return
-
-    lines = [
-        f"{get_emoji('comet')} <b>یه شهاب‌سنگ جهش‌زا روی گروه فرود اومد!</b> "
-        "همه‌ی موجودهای فعال این جهش رایگان رو گرفتن:\n"
-    ]
-    for name, stat, bonus in results:
-        lines.append(f"• {name}: +{bonus} {constants.MUTATION_EVENT_STAT_LABELS[stat]}")
-    await update.message.reply_text(
-        "\n".join(lines),
-        parse_mode="HTML",
-        reply_markup=group_footer_keyboard(update.effective_user.id),
-    )
-
-
 def _creature_power(c: Creature) -> int:
     from game.creature import creature_power
 
@@ -1201,12 +1162,13 @@ def _guardian_claim_sync(chat, tg_user):
     if top is None or top.owner_id != user.id:
         raise GameError("😅 تو محافظ فعلی این گروه نیستی. با «محافظ» ببین کیه.")
 
-    assert_energy_available(user, "guardian_stipend")
-
-    user.coins += constants.GUARDIAN_STIPEND_COINS
-    user.dna_fragments += constants.GUARDIAN_STIPEND_DNA
-    user.save(update_fields=["coins", "dna_fragments"])
-    record_action(user, "guardian_stipend")
+    # atomic daily consume BEFORE paying, so a rapid double-tap can't collect the
+    # stipend twice in one day (was check-then-record — spammable).
+    with transaction.atomic():
+        consume_daily(user, "guardian_stipend")
+        user.coins += constants.GUARDIAN_STIPEND_COINS
+        user.dna_fragments += constants.GUARDIAN_STIPEND_DNA
+        user.save(update_fields=["coins", "dna_fragments"])
 
 
 async def guardian_claim(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1229,7 +1191,8 @@ def register(application) -> None:
     # are gone — groups are word-driven («دوئل», «اتک», «احضار», «جدول», «نگهبان» …),
     # and the words call the same functions. /give was removed too: it bypassed the
     # priced-transfer flow (and transferred a creature by id with NO ownership check).
-    # Trading is «انتقال …» only. /mutation_event has no word equivalent, so it stays.
+    # Trading is «انتقال …» only. /mutation_event was removed — it was farmable by
+    # spamming it across many groups for free stat mutations.
     application.add_handler(CallbackQueryHandler(duel_wager_callback, pattern=r"^duelwager_"))
     application.add_handler(CallbackQueryHandler(transfer_offer_callback, pattern=r"^xfo:"))
     application.add_handler(CallbackQueryHandler(pvp_attack_callback, pattern=r"^gatk:\d+:\d+$"))
@@ -1237,4 +1200,3 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(pvp_detail_callback, pattern=r"^gatk_detail:\d+$"))
     application.add_handler(CallbackQueryHandler(gatk_opp_callback, pattern=r"^gatk_opp:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(gatk_back_callback, pattern=r"^gatk_back:\d+:\d+$"))
-    application.add_handler(CommandHandler("mutation_event", mutation_event, group_filter))

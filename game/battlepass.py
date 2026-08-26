@@ -146,10 +146,15 @@ def reward_text(reward: dict) -> str:
 
 
 @transaction.atomic
+@transaction.atomic
 def claim(user: User) -> dict:
     """Claim every reached-but-unclaimed tier on both tracks the player owns.
-    Returns {'tiers': int, 'reward': {...totals...}}."""
-    progress = _get_progress(user)
+    Returns {'tiers': int, 'reward': {...totals...}}.
+
+    The progress row is locked (select_for_update) and re-read inside the lock, so a
+    rapid double-tap can't claim the same tiers — and their rewards — twice."""
+    _get_progress(user)  # ensure the row exists before locking it
+    progress = PassProgress.objects.select_for_update().get(user=user, season_key=season_key())
     tier = tier_for_points(progress.points)
     totals: dict[str, int] = {}
     claimed_tiers = 0

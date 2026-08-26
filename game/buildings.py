@@ -13,8 +13,8 @@ from game.creature import GameError, InsufficientGoldError
 # a handful of natural "win" moments — duel wins, raid kills, guardian defenses.
 # Deliberately rare and small-denomination: building upgrades are the game's main
 # time-gate, so speed-up cards must stay scarce or the whole build pacing collapses.
-ACTIVITY_SPEEDUP_CHANCE = 0.02
-ACTIVITY_SPEEDUP_CHOICES = [(1, 70), (5, 25), (30, 5)]  # (minutes, weight) — small denominations only
+ACTIVITY_SPEEDUP_CHANCE = 0.006  # much rarer (was 0.02) — building time is the core gate
+ACTIVITY_SPEEDUP_CHOICES = [(1, 85), (5, 14), (30, 1)]  # (minutes, weight) — big cards now very rare
 
 
 def maybe_award_speedup_card(user: User) -> int | None:
@@ -146,8 +146,14 @@ def pending_amount(building: Building) -> int:
     return int(min(cap, math.floor(rate * max(elapsed_hours, 0))))
 
 
+@transaction.atomic
 def collect(user: User, building: Building) -> tuple[int, str]:
-    """Returns (amount, resource_field) collected."""
+    """Returns (amount, resource_field) collected.
+
+    Locks the building row and re-reads the accrual INSIDE the lock, so a rapid
+    double-tap on «جمع‌آوری» can't collect the same production twice — the second
+    tap sees the reset clock and gets nothing."""
+    building = Building.objects.select_for_update().get(id=building.id)
     if building.owner_id != user.id:
         raise GameError("این ساختمون مال تو نیست.")
     if not produces(building.building_type):

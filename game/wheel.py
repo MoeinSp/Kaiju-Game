@@ -1,16 +1,20 @@
 import random
 
+from django.db import transaction
+
 from bio_lab.models import User
 from game import constants
 from game.buildings import grant_speedup_card
-from game.daily import assert_energy_available, record_action
+from game.daily import consume_daily
 
 
+@transaction.atomic
 def spin(user: User) -> dict:
-    assert_energy_available(user, "wheel_spin")
+    # consume the daily spin ATOMICALLY before granting, so a rapid double-tap can't
+    # spin twice off one day's allowance (was check-then-record, which was spammable).
+    consume_daily(user, "wheel_spin")
     prize = _roll_prize()
     _apply_prize(user, prize)
-    record_action(user, "wheel_spin")
     return prize
 
 

@@ -703,9 +703,11 @@ def _leaderboard_card(user, ranked, powers) -> tuple[str, InlineKeyboardMarkup]:
     return "\n".join(lines), group_footer_keyboard(user.id, skip="leaderboard")
 
 
+# NOTE: "arena" is deliberately NOT here — «نبرد» is removed from groups (arena is
+# DM-only now). handle_group_text stays silent on it.
 _CARD_ACTIONS = {
     "creature", "equipment", "collection", "lab", "leaderboard", "select",
-    "upgrade", "hunt", "arena", "mine", "box", "wheel", "fusion", "breeding", "start",
+    "upgrade", "hunt", "mine", "box", "wheel", "fusion", "breeding", "start",
     "casino",
 }
 
@@ -1069,6 +1071,7 @@ def _do_sync(tg_user, chat, action, arg):
         _require_creature(creature)
         tier, seed = arg.split(":")
         spend_energy(user, constants.HUNT_ENERGY_COST, "شکار")
+        user.save(update_fields=["energy", "energy_updated_at"])  # persist the spend (was lost)
         result = resolve_hunt(user, creature, tier, int(seed))
         record_action(user, "hunt")
         result["missions"] = check_missions(user, "hunt")

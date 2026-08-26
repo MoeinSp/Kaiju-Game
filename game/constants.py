@@ -249,7 +249,7 @@ MISSION_DEFS = {
         "action": "hunt", "target": 3, "label": "۳ بار شکار انفرادی کن", "coins": 45, "dna": 3, "speedup": 5,
     },
     "hunt_10": {
-        "action": "hunt", "target": 10, "label": "۱۰ بار شکار انفرادی کن", "coins": 150, "dna": 10, "speedup": 60,
+        "action": "hunt", "target": 10, "label": "۱۰ بار شکار انفرادی کن", "coins": 150, "dna": 10, "speedup": 10,
     },
     "arena_attack_3": {
         "action": "arena_attack",
@@ -257,7 +257,7 @@ MISSION_DEFS = {
         "label": "۳ بار توی آرنا حمله کن",
         "coins": 70,
         "dna": 5,
-        "speedup": 30,
+        "speedup": 5,
     },
     "collect_5": {
         "action": "collect",
@@ -265,7 +265,6 @@ MISSION_DEFS = {
         "label": "۵ بار از ساختمون‌ها جمع‌آوری کن",
         "coins": 60,
         "dna": 5,
-        "speedup": 5,
     },
 }
 
@@ -822,8 +821,8 @@ WHEEL_PRIZES = [
     {"key": "dna_small", "kind": "dna", "amount": 3, "weight": 20, "label": "۳ DNA"},
     {"key": "dna_medium", "kind": "dna", "amount": 8, "weight": 8, "label": "۸ DNA"},
     {"key": "diamonds_small", "kind": "diamonds", "amount": 2, "weight": 14, "label": "۲ الماس"},
-    {"key": "speedup_5", "kind": "speedup", "amount": 5, "weight": 4, "label": "کارت سرعت ۵ دقیقه"},
-    {"key": "speedup_30", "kind": "speedup", "amount": 30, "weight": 2, "label": "کارت سرعت ۳۰ دقیقه"},
+    {"key": "speedup_5", "kind": "speedup", "amount": 5, "weight": 3, "label": "کارت سرعت ۵ دقیقه"},
+    {"key": "speedup_15", "kind": "speedup", "amount": 15, "weight": 1, "label": "کارت سرعت ۱۵ دقیقه"},
     {"key": "jackpot", "kind": "coins", "amount": 500, "weight": 1, "label": "🎉 جک‌پات ۵۰۰ طلا"},
 ]
 
@@ -942,11 +941,13 @@ ARENA_CUP_SOFTCAP = 2500
 
 # Bot (fake) opponents scale from very weak at low cup to a FULLY-MAXED lab at the
 # ceiling: at ARENA_BOT_MAX_CUP the bot's power equals a mythic 5★, level-100,
-# fully-upgraded, fully-geared creature (~6000), so even a maxed player is only ~even
-# there and can't push past — the intended hard wall around 5000 cup. The exponent
-# makes low cups easy and the climb bite near the top.
+# fully part-upgraded creature with full mythic +10 gear — measured at ~3850. Set
+# to exactly that so a genuinely maxed player is ~50/50 (a TIE) at cup 5000 and no
+# more, while everyone weaker walls out earlier where the bot first matches them.
+# (Was 6000 — above any real creature, so maxed players stalled well before 5000.)
+# The exponent makes low cups easy and the climb bite near the top.
 ARENA_BOT_MAX_CUP = 5000
-ARENA_BOT_MAX_POWER = 6000
+ARENA_BOT_MAX_POWER = 3850
 ARENA_BOT_POWER_EXP = 1.25
 
 # Fake opponents shown when no real player sits in the cup band — their lab names
