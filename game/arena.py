@@ -212,16 +212,17 @@ def _fake_opponent(attacker: User) -> dict:
     }
 
 
-def find_opponent(attacker: User) -> dict:
+def find_opponent(attacker: User, exclude_ids=None) -> dict:
     """Picks a raid target: a real, unshielded player inside the cup band if one
     exists, otherwise a bot. Returns a uniform dict either way so callers don't
     branch on opponent kind.
 
     **Matchmaking is by cup, never by power.** Real players within ±BAND cup are
-    eligible; the CLOSEST cups are preferred (we fetch ordered by cup distance and
-    pick from the nearest handful), so fights stay competitive. Real players are
-    strongly preferred over bots — a bot is only used when literally nobody real is
-    in range.
+    eligible, ordered by cup distance so the CLOSEST rating comes first. `exclude_ids`
+    is the handful this player was just shown — skipping them means «حریف بعدی» keeps
+    walking outward to fresh faces instead of re-showing the same one (which also made
+    the button look dead, since re-rendering the identical screen is a no-op edit).
+    Real players are strongly preferred; a bot is used only when nobody real is left.
     """
     from django.db.models import F, IntegerField
     from django.db.models.functions import Abs, Cast
@@ -231,26 +232,38 @@ def find_opponent(attacker: User) -> dict:
 
     now = timezone.now()
     band = constants.ARENA_MATCH_CUP_BAND
-    candidates = list(
-        User.objects.filter(
-            cup__gte=attacker.cup - band,
-            cup__lte=attacker.cup + band,
-            is_banned=False,
-        )
-        .filter(Q(shield_until__isnull=True) | Q(shield_until__lte=now))
-        .exclude(id=attacker.id)
-        .filter(creatures__is_active=True)
-        .annotate(cup_dist=Abs(Cast(F("cup") - attacker.cup, IntegerField())))
-        .order_by("cup_dist")
-        .distinct()[:20]
-    )
+    exclude = {attacker.id} | set(exclude_ids or [])
 
+    def _query(excluding):
+        return list(
+            User.objects.filter(
+                cup__gte=attacker.cup - band,
+                cup__lte=attacker.cup + band,
+                is_banned=False,
+            )
+            .filter(Q(shield_until__isnull=True) | Q(shield_until__lte=now))
+            .exclude(id__in=excluding)
+            .filter(creatures__is_active=True)
+            .annotate(cup_dist=Abs(Cast(F("cup") - attacker.cup, IntegerField())))
+            .order_by("cup_dist")
+            .distinct()[:20]
+        )
+
+    candidates = _query(exclude)
+    if not candidates:
+        # rotation exhausted — retry, but still skip the CURRENT pick (the last excluded
+        # id) so «حریف بعدی» always changes the screen. If that player was the only real
+        # option, fall through to a bot rather than re-showing them (a no-op edit).
+        current = list(exclude_ids)[-1] if exclude_ids else None
+        keep_out = {attacker.id} | ({current} if current else set())
+        candidates = _query(keep_out)
     if not candidates:
         return _fake_opponent(attacker)
 
-    # priority to closer cups: from the nearest handful, weight the pick by inverse
-    # cup distance so a closer rating is much likelier, but not the only outcome.
-    pool = candidates[: min(8, len(candidates))]
+    # closest-FIRST: pick from just the nearest 3 (weighted toward the very closest),
+    # so early searches surface the tightest matches and later ones fan outward as the
+    # closer ones get excluded.
+    pool = candidates[: min(3, len(candidates))]
     weights = [1.0 / (1 + abs(u.cup - attacker.cup)) for u in pool]
     target = random.choices(pool, weights=weights, k=1)[0]
     target_creature = Creature.objects.filter(owner=target, is_active=True).first()
@@ -294,7 +307,12 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         defender_creature = _bot_creature(opponent["power"], opponent.get("element"))
         defender_user = None
     else:
-        defender_user = opponent["user"]
+        # LOCK the defender's row and re-check the shield UNDER the lock. Without this,
+        # several attackers who all found this player a moment ago each read
+        # shield_until=None at the same instant and every one loots + re-shields —
+        # the "توی یه ثانیه ۵ تا اتک خوردم" bug. The lock serialises them: the first
+        # raid sets the shield and commits; the rest then see it and bounce.
+        defender_user = User.objects.select_for_update().get(id=opponent["user"].id)
         defender_creature = Creature.objects.filter(owner=defender_user, is_active=True).first()
         if defender_creature is None:
             raise GameError("این حریف دیگه موجود فعالی نداره.")

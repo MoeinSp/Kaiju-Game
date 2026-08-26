@@ -140,11 +140,15 @@ async def arena_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     )
 
 
-def _find_sync(tg_user):
+RECENT_OPPONENTS_KEY = "arena_recent_opps"
+_RECENT_OPPONENTS_MAX = 12  # remember this many recent picks, so «بعدی» keeps finding fresh faces
+
+
+def _find_sync(tg_user, exclude_ids=None):
     from bio_lab.models import Creature
 
     user, _ = get_or_create_user(tg_user)
-    opponent = find_opponent(user)
+    opponent = find_opponent(user, exclude_ids=exclude_ids)
     creature = Creature.objects.filter(owner=user, is_active=True).first()
     level = creature.level if creature is not None else 1
     my_element = creature.element if creature is not None else None
@@ -155,8 +159,11 @@ def _find_sync(tg_user):
 async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
+    recent = context.user_data.get(RECENT_OPPONENTS_KEY, [])
     try:
-        user, opponent, my_power, loot, my_element, dna_win = await run_db(_find_sync, update.effective_user)
+        user, opponent, my_power, loot, my_element, dna_win = await run_db(
+            _find_sync, update.effective_user, recent
+        )
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
@@ -174,6 +181,11 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         "element": opponent.get("element"),
         "loot_pool": opponent["loot_pool"],
     }
+    # remember real picks so the next «حریف بعدی» skips them (fresh faces, and no
+    # identical-screen no-op edit that made the button look dead).
+    if not opponent["is_fake"]:
+        recent = [i for i in recent if i != opponent["user"].id] + [opponent["user"].id]
+        context.user_data[RECENT_OPPONENTS_KEY] = recent[-_RECENT_OPPONENTS_MAX:]
 
     text, keyboard = _render_opponent(user, opponent, my_power, loot, my_element, dna_win)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
