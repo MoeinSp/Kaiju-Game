@@ -992,15 +992,31 @@ def _collection_sync(tg_user):
 COLLECTION_PAGE_SIZE = 8
 
 
-def _collection_render(creatures: list[Creature], page: int) -> tuple[str, InlineKeyboardMarkup]:
-    """One page of the collection. Paginated because a big roster (each creature is
-    two buttons) blew past Telegram's ~100-button keyboard limit — the whole
-    keyboard was rejected, so the screen (back button included) never rendered."""
-    total_pages = max(1, (len(creatures) + COLLECTION_PAGE_SIZE - 1) // COLLECTION_PAGE_SIZE)
-    page = max(0, min(page, total_pages - 1))
-    chunk = creatures[page * COLLECTION_PAGE_SIZE : (page + 1) * COLLECTION_PAGE_SIZE]
+def _collection_render(creatures: list[Creature], filt: str = "all", page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+    """One page of the collection, filterable by rarity via tabs (like the fusion
+    picker). Paginated because a big roster (each creature is two buttons) blew past
+    Telegram's ~100-button keyboard limit — the whole keyboard was rejected then."""
+    rarity_idx = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
+    counts: dict[str, int] = {}
+    for c in creatures:
+        counts[c.rarity] = counts.get(c.rarity, 0) + 1
 
-    rows = []
+    # rarity tabs — «همه» plus only rarities the player actually owns, rarest first
+    tabs = [btn(("• " if filt == "all" else "") + f"همه ({len(creatures)})", style=NAV,
+                callback_data="coll_page:all:0")]
+    for r in reversed(constants.RARITY_ORDER):
+        if counts.get(r):
+            label = constants.RARITY_LABELS[r].split()[0]
+            tabs.append(btn(("• " if filt == r else "") + f"{label} ({counts[r]})", style=NAV,
+                            callback_data=f"coll_page:{r}:0"))
+    rows = [tabs[i:i + 3] for i in range(0, len(tabs), 3)]
+
+    filtered = creatures if filt == "all" else [c for c in creatures if c.rarity == filt]
+    filtered = sorted(filtered, key=lambda c: (rarity_idx.get(c.rarity, 0), c.level, c.star_level), reverse=True)
+    total_pages = max(1, (len(filtered) + COLLECTION_PAGE_SIZE - 1) // COLLECTION_PAGE_SIZE)
+    page = max(0, min(page, total_pages - 1))
+    chunk = filtered[page * COLLECTION_PAGE_SIZE : (page + 1) * COLLECTION_PAGE_SIZE]
+
     for c in chunk:
         stars = "⭐" * c.star_level
         label = f"{c.name} {stars} · Lv{c.level} · {constants.RARITY_LABELS[c.rarity]}"
@@ -1010,9 +1026,9 @@ def _collection_render(creatures: list[Creature], page: int) -> tuple[str, Inlin
         rows.append(row)
     nav = []
     if page > 0:
-        nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"coll_page:{page - 1}"))
+        nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"coll_page:{filt}:{page - 1}"))
     if page < total_pages - 1:
-        nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"coll_page:{page + 1}"))
+        nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"coll_page:{filt}:{page + 1}"))
     if nav:
         rows.append(nav)
     rows.append([btn("ترکیب هیولا", emoji_key="btn_fusion", style=NAV, callback_data="menu:fusion")])
@@ -1021,7 +1037,7 @@ def _collection_render(creatures: list[Creature], page: int) -> tuple[str, Inlin
     page_note = f"  (صفحه {page + 1}/{total_pages})" if total_pages > 1 else ""
     text = (
         f"{get_emoji('collection')} <b>کلکسیون تو</b> — {len(creatures)} موجود{page_note}\n"
-        "رو هرکدوم بزن تا جزئیاتش رو ببینی:"
+        "<i>با تب‌های بالا بر اساس نایابی جدا کن.</i> رو هرکدوم بزن تا جزئیاتش رو ببینی:"
     )
     return text, InlineKeyboardMarkup(rows)
 
@@ -1032,16 +1048,21 @@ async def collection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await send_screen(update, f"📭 کلکسیونت خالیه! {get_emoji('egg')} با /start شروع کن.",
                           reply_markup=back_only_keyboard())
         return
-    text, keyboard = _collection_render(creatures, 0)
+    text, keyboard = _collection_render(creatures, "all", 0)
     await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def collection_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    page = int(query.data.split(":")[1])
+    parts = query.data.split(":")
+    # new form is coll_page:<filt>:<page>; tolerate the old coll_page:<page> too
+    if len(parts) == 3:
+        filt, page = parts[1], int(parts[2])
+    else:
+        filt, page = "all", int(parts[1])
     creatures = await run_db(_collection_sync, update.effective_user)
     await query.answer()
-    text, keyboard = _collection_render(creatures, page)
+    text, keyboard = _collection_render(creatures, filt, page)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
