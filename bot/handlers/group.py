@@ -312,7 +312,7 @@ def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
 
 
 async def gold_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE, amount: int) -> None:
-    """Word command «انتقال طلا <عدد>» — reply to the recipient. Gold only."""
+    """Word command «انتقال طلا [عدد]» — reply to the recipient. Gold only."""
     reply = update.message.reply_to_message
     if reply is None or reply.from_user is None:
         await update.message.reply_text(
@@ -371,7 +371,7 @@ def _preview_creature_sync(chat, sender_tg, receiver_id, creature_id):
 
 # ── Player-to-player trading with a seller-set price ─────────────────────────
 # A trade is a two-step, two-party handshake held in memory for 5 minutes:
-#   1) SELLER replies «انتقال هیولا/تجهیزات <کد>» → gets تعیین قیمت / رایگان / لغو
+#   1) SELLER replies «انتقال هیولا/تجهیزات [کد]» → gets تعیین قیمت / رایگان / لغو
 #   2) after a price is set, the RECEIVER sees the price + diamond fee and قبول/رد.
 # Offers live only in _PENDING_OFFERS (ephemeral — a restart drops them, which is
 # fine for something that expires in 5 min anyway).
@@ -429,14 +429,14 @@ async def _begin_offer(update, kind: str, sender, receiver, item_id: int, desc: 
 
 
 async def transfer_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, creature_id: int) -> None:
-    """Word «انتقال کایجو/هیولا <کد>» — reply to the recipient. Opens the seller's
+    """Word «انتقال کایجو/هیولا [کد]» — reply to the recipient. Opens the seller's
     price step; the receiver only pays once they accept the final offer."""
     reply = update.message.reply_to_message
     if reply is None or reply.from_user is None:
         from game import transfer
 
         await update.message.reply_text(
-            "🦖 برای انتقال هیولا، روی پیام گیرنده <b>ریپلای</b> کن و بنویس «انتقال کایجو <کد>».\n"
+            "🦖 برای انتقال هیولا، روی پیام گیرنده <b>ریپلای</b> کن و بنویس «انتقال کایجو [کد]».\n"
             "<i>کد هیولا رو از «کلکسیون» توی پیوی ربات می‌بینی. اول قیمت می‌ذاری، بعد گیرنده قیمت و "
             f"کارمزد الماس رو می‌بینه و تأیید می‌کنه؛ برای هر دو طرف {constants.TRANSFER_COOLDOWN_HOURS} ساعت کول‌داون داره.</i>\n\n"
             + transfer.creature_prices_text(),
@@ -473,14 +473,14 @@ def _preview_equip_sync(chat, sender_tg, receiver_id, equip_id):
 
 
 async def transfer_equip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, equip_id: int) -> None:
-    """Word «انتقال تجهیز/تجهیزات <کد>» — reply to the recipient. Opens the seller's
+    """Word «انتقال تجهیز/تجهیزات [کد]» — reply to the recipient. Opens the seller's
     price step; the receiver pays only on final accept."""
     reply = update.message.reply_to_message
     if reply is None or reply.from_user is None:
         from game import transfer
 
         await update.message.reply_text(
-            "🎒 برای انتقال تجهیزات، روی پیام گیرنده <b>ریپلای</b> کن و بنویس «انتقال تجهیزات <کد>».\n"
+            "🎒 برای انتقال تجهیزات، روی پیام گیرنده <b>ریپلای</b> کن و بنویس «انتقال تجهیزات [کد]».\n"
             "<i>کد تجهیزات رو از «تجهیزات» توی پیوی ربات می‌بینی. اول قیمت می‌ذاری، بعد گیرنده قیمت و "
             "کارمزد الماس رو می‌بینه و تأیید می‌کنه.</i>\n\n"
             + transfer.equip_prices_text(),

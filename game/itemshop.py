@@ -184,7 +184,7 @@ def _parse_content_line(line: str) -> dict:
         return {"type": "creature", "rarity": rarity, "element": element}
     if head in ("تجهیزات", "equipment", "آیتم", "item"):
         if len(rest) < 2 or rest[0] not in _SLOT_ALIASES or rest[1] not in _RARITY_ALIASES:
-            raise GameError(f"تجهیزات توی «{line}» باید به شکل «تجهیزات <اسلات> <نایابی>» باشه.")
+            raise GameError(f"تجهیزات توی «{line}» باید به شکل «تجهیزات [اسلات] [نایابی]» باشه.")
         return {"type": "equipment", "slot": _SLOT_ALIASES[rest[0]], "rarity": _RARITY_ALIASES[rest[1]]}
 
     raise GameError(
