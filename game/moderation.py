@@ -59,6 +59,18 @@ def deduct_resource(identifier: str, resource: str, amount: int) -> tuple[User, 
     return _adjust_resource(identifier, resource, amount, sign=-1)
 
 
+def set_lab_level(identifier: str, level: int) -> tuple[User, int]:
+    """Admin tool: set a player's lab level directly by writing the exact XP floor
+    for that level. Returns (user, new_level). Clamped to [1, LAB_MAX_LEVEL]."""
+    from game import lab
+
+    level = max(1, min(int(level), lab.LAB_MAX_LEVEL))
+    user = find_user_or_raise(identifier)
+    user.lab_xp = lab.xp_for_level(level)
+    user.save(update_fields=["lab_xp"])
+    return user, lab.lab_level(user)
+
+
 def set_banned(identifier: str, banned: bool) -> User:
     user = find_user_or_raise(identifier)
     user.is_banned = banned

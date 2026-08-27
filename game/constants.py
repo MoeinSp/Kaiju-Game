@@ -247,10 +247,6 @@ MISSION_DEFS = {
         "action": "feed", "target": 10, "label": "۱۰ بار تغذیه کن", "coins": 100, "dna": 5, "speedup": 5,
     },
     "train_1": {"action": "train", "target": 1, "label": "۱ بار تمرین کن", "coins": 30, "dna": 0, "speedup": 1},
-    "duel_win_1": {"action": "duel_win", "target": 1, "label": "۱ دوئل ببر", "coins": 50, "dna": 5},
-    "duel_win_3": {
-        "action": "duel_win", "target": 3, "label": "۳ دوئل ببر", "coins": 120, "dna": 10, "speedup": 30,
-    },
     "raid_attack_2": {"action": "raid_attack", "target": 2, "label": "۲ بار به رید حمله کن", "coins": 40, "dna": 5},
     "raid_attack_5": {
         "action": "raid_attack", "target": 5, "label": "۵ بار به رید حمله کن", "coins": 90, "dna": 8, "speedup": 30,
@@ -740,10 +736,12 @@ BREEDING_LEVEL_INHERIT = 0.5
 # ── Speed-up cards: consumable items that shave time off the active building
 # upgrade. Fixed denominations in minutes, rewarded by the daily wheel and a
 # handful of other activities rather than sold directly. ───────────────────────
-SPEEDUP_MINUTES = [1, 5, 30, 60, 720, 1440]
+SPEEDUP_MINUTES = [1, 5, 10, 15, 30, 60, 720, 1440]
 SPEEDUP_LABELS = {
     1: "⏱ ۱ دقیقه",
     5: "⏱ ۵ دقیقه",
+    10: "⏱ ۱۰ دقیقه",
+    15: "⏱ ۱۵ دقیقه",
     30: "⏱ ۳۰ دقیقه",
     60: "⏱ ۱ ساعت",
     720: "⏱ ۱۲ ساعت",

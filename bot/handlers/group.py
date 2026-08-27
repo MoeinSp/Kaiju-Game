@@ -20,7 +20,7 @@ from bot.handlers.group_words import group_footer_keyboard
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from game import constants
 from game.buildings import maybe_award_speedup_card
-from game.combat import resolve_duel, resolve_duel_detailed
+from game.combat import resolve_duel_detailed
 from game.creature import GameError, add_xp
 from game.daily import check_missions, consume_daily, record_action
 from game.emoji import get_emoji
@@ -42,255 +42,6 @@ def _mission_lines(completed: list[dict]) -> str:
     for m in completed:
         lines.append(f"{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}")
     return "\n" + "\n".join(lines)
-
-
-def _duel_sync(chat, challenger_tg, opponent_tg):
-    group = get_or_create_group(chat)
-    challenger_user, _ = get_or_create_user(challenger_tg)
-    opponent_user, _ = get_or_create_user(opponent_tg)
-    touch_membership(group, challenger_user)
-    touch_membership(group, opponent_user)
-
-    challenger_creature = get_active_creature(challenger_user)
-    opponent_creature = get_active_creature(opponent_user)
-    if challenger_creature is None:
-        raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
-    if opponent_creature is None:
-        raise GameError(f"{opponent_tg.first_name} هنوز موجودی نداره (باید /start بزنه).")
-
-    # the challenger pays energy to start the duel (defender doesn't, like the arena)
-    spend_energy(challenger_user, constants.DUEL_ENERGY_COST, "دوئل")
-    challenger_user.save(update_fields=["energy", "energy_updated_at"])
-
-    winner_creature, log_text = resolve_duel(challenger_creature, opponent_creature)
-    is_challenger_winner = winner_creature.id == challenger_creature.id
-    winner_user = challenger_user if is_challenger_winner else opponent_user
-    loser_creature = opponent_creature if is_challenger_winner else challenger_creature
-
-    reward = constants.duel_win_reward(loser_creature.level)
-    winner_user.coins += reward["coins"]
-    winner_user.dna_fragments += reward["dna"]
-    winner_levels = add_xp(winner_creature, reward["xp"])
-    add_xp(loser_creature, constants.DUEL_LOSE_XP)
-    winner_user.save(update_fields=["coins", "dna_fragments"])
-    winner_creature.save()
-    loser_creature.save()
-
-    record_action(winner_user, "duel_win")
-    completed_missions = check_missions(winner_user, "duel_win")
-    speedup_won = maybe_award_speedup_card(winner_user)
-
-    DuelLog.objects.create(
-        group_id=group.id,
-        challenger_id=challenger_user.id,
-        opponent_id=opponent_user.id,
-        winner_id=winner_user.id,
-        log_text=log_text,
-    )
-    return winner_creature, winner_levels, completed_missions, log_text, speedup_won, reward, challenger_user.energy
-
-
-def _duel_wager_challenge_sync(chat, challenger_tg, opponent_tg):
-    """Validates both sides can actually duel (used before showing the accept/decline
-    prompt for a wagered duel) without resolving combat or moving any gold yet."""
-    group = get_or_create_group(chat)
-    challenger_user, _ = get_or_create_user(challenger_tg)
-    opponent_user, _ = get_or_create_user(opponent_tg)
-    touch_membership(group, challenger_user)
-    touch_membership(group, opponent_user)
-
-    if get_active_creature(challenger_user) is None:
-        raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
-    if get_active_creature(opponent_user) is None:
-        raise GameError(f"{opponent_tg.first_name} هنوز موجودی نداره (باید /start بزنه).")
-    return challenger_user, opponent_user
-
-
-async def _reply_error(message, exc, owner_id: int) -> None:
-    """Reply an error — with the «شارژ انرژی» button when it's an out-of-energy one.
-    `owner_id` scopes that button so only the player it's for can tap it (group-safe)."""
-    from game.energy import EnergyError
-
-    if isinstance(exc, EnergyError):
-        from bot.handlers.energy import energy_refill_markup
-
-        await message.reply_text(str(exc), reply_markup=energy_refill_markup(owner_id))
-    else:
-        await message.reply_text(str(exc))
-
-
-async def duel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message.reply_to_message is None:
-        await update.message.reply_text(
-            f"{get_emoji('battle')} برای دوئل، روی پیام حریف ریپلای کن و بنویس «دوئل»\n"
-            f"برای دوئل با شرط طلا: «دوئل ۵۰» (حداکثر {constants.DUEL_WAGER_MAX})",
-            parse_mode="HTML",
-        )
-        return
-
-    opponent_tg = update.message.reply_to_message.from_user
-    challenger_tg = update.effective_user
-    if opponent_tg.id == challenger_tg.id or opponent_tg.is_bot:
-        await update.message.reply_text("🙅 نمی‌تونی با خودت یا با یه بات دوئل کنی!")
-        return
-
-    wager = 0
-    if context.args:
-        if not context.args[0].isdigit() or int(context.args[0]) <= 0:
-            await update.message.reply_text(
-                f"مقدار شرط باید عدد مثبت باشه (حداکثر {constants.DUEL_WAGER_MAX}). مثلاً: «دوئل ۵۰»",
-                parse_mode="HTML",
-            )
-            return
-        wager = int(context.args[0])
-        if wager > constants.DUEL_WAGER_MAX:
-            await update.message.reply_text(f"حداکثر شرط مجاز {constants.DUEL_WAGER_MAX} طلاست.")
-            return
-
-    if wager == 0:
-        try:
-            winner_creature, winner_levels, completed_missions, log_text, speedup_won, reward, energy_left = await run_db(
-                _duel_sync, update.effective_chat, challenger_tg, opponent_tg
-            )
-        except GameError as exc:
-            await _reply_error(update.message, exc, update.effective_user.id)
-            return
-
-        dna_bit = f" · +{reward['dna']} {get_emoji('dna')}" if reward["dna"] else ""
-        reward_text = (
-            f"\n\n{get_emoji('coin')} {winner_creature.name} +{reward['coins']} طلا · "
-            f"+{reward['xp']} XP{dna_bit}"
-        )
-        if winner_levels:
-            reward_text += f" {get_emoji('celebrate')} رسید به سطح {winner_creature.level}!"
-        reward_text += f"\n<i>⚡ ۱ انرژی کم شد (باقی‌مونده: {energy_left})</i>"
-        reward_text += _mission_lines(completed_missions) + _speedup_note(speedup_won)
-        await update.message.reply_text(
-            log_text + reward_text,
-            parse_mode="HTML",
-            reply_markup=group_footer_keyboard(update.effective_user.id),
-        )
-        return
-
-    try:
-        challenger_user, opponent_user = await run_db(
-            _duel_wager_challenge_sync, update.effective_chat, challenger_tg, opponent_tg
-        )
-    except GameError as exc:
-        await update.message.reply_text(str(exc))
-        return
-
-    keyboard = InlineKeyboardMarkup(
-        [
-            [
-                btn(
-                    "قبول می‌کنم",
-                    emoji_key="btn_confirm",
-                    style=CONFIRM,
-                    callback_data=f"duelwager_accept:{challenger_tg.id}:{opponent_tg.id}:{wager}",
-                ),
-                btn(
-                    "رد می‌کنم",
-                    emoji_key="btn_cancel",
-                    style=DANGER,
-                    callback_data=f"duelwager_decline:{challenger_tg.id}:{opponent_tg.id}",
-                ),
-            ]
-        ]
-    )
-    await update.message.reply_text(
-        f"{get_emoji('coin')} <b>{display_name(challenger_user)}</b> با شرط <b>{wager} طلا</b> به "
-        f"<b>{display_name(opponent_user)}</b> پیشنهاد دوئل داد! برنده هر دو شرط رو می‌بره.\n"
-        "قبول می‌کنی؟ 👇",
-        parse_mode="HTML",
-        reply_markup=keyboard,
-    )
-
-
-def _duel_wager_resolve_sync(chat, challenger_id, opponent_id, wager, acceptor_id):
-    if acceptor_id != opponent_id:
-        raise GameError("فقط طرف مقابل می‌تونه این دوئل رو قبول یا رد کنه.")
-
-    group = get_or_create_group(chat)
-    try:
-        challenger_user = User.objects.get(id=challenger_id)
-        opponent_user = User.objects.get(id=opponent_id)
-    except User.DoesNotExist:
-        raise GameError("یکی از بازیکن‌ها دیگه پیدا نشد.")
-
-    challenger_creature = get_active_creature(challenger_user)
-    opponent_creature = get_active_creature(opponent_user)
-    if challenger_creature is None or opponent_creature is None:
-        raise GameError("یکی از دو نفر دیگه موجود فعال نداره.")
-    if challenger_user.coins < wager or opponent_user.coins < wager:
-        raise GameError(f"یکی از دو نفر دیگه {wager} طلا نداره، دوئل لغو شد.")
-
-    # the challenger pays energy to fight (defender doesn't)
-    spend_energy(challenger_user, constants.DUEL_ENERGY_COST, "دوئل")
-
-    winner_creature, log_text = resolve_duel(challenger_creature, opponent_creature)
-    is_challenger_winner = winner_creature.id == challenger_creature.id
-    winner_user = challenger_user if is_challenger_winner else opponent_user
-    loser_user = opponent_user if is_challenger_winner else challenger_user
-    loser_creature = opponent_creature if is_challenger_winner else challenger_creature
-
-    winner_user.coins += wager
-    loser_user.coins -= wager
-    winner_levels = add_xp(winner_creature, constants.DUEL_WIN_XP)
-    add_xp(loser_creature, constants.DUEL_LOSE_XP)
-    # challenger_user always needs its energy persisted; both need coins
-    challenger_user.save(update_fields=["energy", "energy_updated_at"])
-    winner_user.save(update_fields=["coins"])
-    loser_user.save(update_fields=["coins"])
-    winner_creature.save()
-    loser_creature.save()
-
-    record_action(winner_user, "duel_win")
-    completed_missions = check_missions(winner_user, "duel_win")
-    speedup_won = maybe_award_speedup_card(winner_user)
-
-    DuelLog.objects.create(
-        group_id=group.id,
-        challenger_id=challenger_user.id,
-        opponent_id=opponent_user.id,
-        winner_id=winner_user.id,
-        wager_gold=wager,
-        log_text=log_text,
-    )
-    return winner_creature, winner_levels, completed_missions, log_text, speedup_won, challenger_user.energy
-
-
-async def duel_wager_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    action, challenger_id_str, opponent_id_str, *rest = query.data.split(":")
-    challenger_id, opponent_id = int(challenger_id_str), int(opponent_id_str)
-
-    if action == "duelwager_decline":
-        if update.effective_user.id != opponent_id:
-            await query.answer("فقط طرف مقابل می‌تونه این دوئل رو رد کنه.", show_alert=True)
-            return
-        await query.answer()
-        await safe_edit_message_text(query, f"{get_emoji('cancel')} پیشنهاد دوئل با شرط رد شد.", parse_mode="HTML")
-        return
-
-    wager = int(rest[0])
-    try:
-        winner_creature, winner_levels, completed_missions, log_text, speedup_won, energy_left = await run_db(
-            _duel_wager_resolve_sync, update.effective_chat, challenger_id, opponent_id, wager, update.effective_user.id
-        )
-    except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
-        return
-
-    await query.answer()
-    reward_text = (
-        f"\n\n{get_emoji('coin')} {winner_creature.name} +{wager} طلا (شرط) · +{constants.DUEL_WIN_XP} XP"
-        f"\n<i>⚡ ۱ انرژی از چالنجر کم شد (باقی‌مونده: {energy_left})</i>"
-    )
-    if winner_levels:
-        reward_text += f" {get_emoji('celebrate')} رسید به سطح {winner_creature.level}!"
-    reward_text += _mission_lines(completed_missions) + _speedup_note(speedup_won)
-    await safe_edit_message_text(query, log_text + reward_text, parse_mode="HTML")
 
 
 def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
@@ -1001,9 +752,9 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     # and give the target a 4h group shield so they can't be farmed in the group
     from bio_lab.models import AttackLog
     from bio_lab.repository import lab_display
-    from game.arena import apply_group_shield, creature_power
+    from game.arena import apply_group_shield
 
-    a_power = creature_power(a_creature)
+    a_power = _creature_power(a_creature)
     log = AttackLog.objects.create(
         attacker=attacker,
         attacker_label=lab_display(attacker),
@@ -1109,16 +860,24 @@ async def pvp_attack_cancel_callback(update: Update, context: ContextTypes.DEFAU
 
 
 def _creature_power(c: Creature) -> int:
+    """Canonical power INCLUDING equipped gear — the same number the PV creature
+    card, the arena matchmaker and actual combat (resolve_duel_detailed) use. Gear
+    is fetched from the DB, so this is sync-only: never call it from an async
+    handler (precompute in the *_sync layer and pass the value through instead)."""
     from game.creature import creature_power
+    from game.equipment import get_equipped_items
 
-    return creature_power(c)
+    return creature_power(c, get_equipped_items(c))
 
 
 def _leaderboard_sync(chat, tg_user):
     group = get_or_create_group(chat)
     user, _ = get_or_create_user(tg_user)
     touch_membership(group, user)
-    return sorted(group_member_creatures(group), key=_creature_power, reverse=True)[:10]
+    ranked = sorted(group_member_creatures(group), key=_creature_power, reverse=True)[:10]
+    # pair each with its (gear-inclusive) power now, in sync context, so the async
+    # render never has to touch the DB again
+    return [(c, _creature_power(c)) for c in ranked]
 
 
 async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1131,9 +890,9 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
     medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
     lines = [f"{get_emoji('trophy')} <b>برترین بازیکن‌های این گروه</b>\n"]
-    for i, c in enumerate(creatures, start=1):
+    for i, (c, power) in enumerate(creatures, start=1):
         rank = medals[i - 1] if i <= 3 else f"{i}."
-        lines.append(f"{rank} {mention(c.owner)} — 💪{_creature_power(c)}  <i>(Lv{c.level})</i>")
+        lines.append(f"{rank} {mention(c.owner)} — 💪{power}  <i>(Lv{c.level})</i>")
     await update.message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -1147,19 +906,19 @@ def _guardian_sync(chat, tg_user):
     if top is None:
         raise GameError("هنوز کسی توی این گروه موجودی ثبت نکرده.")
     owner = User.objects.filter(id=top.owner_id).first()
-    return top, display_name(owner) if owner else str(top.owner_id)
+    return top, display_name(owner) if owner else str(top.owner_id), _creature_power(top)
 
 
 async def guardian(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        top, owner_name = await run_db(_guardian_sync, update.effective_chat, update.effective_user)
+        top, owner_name, top_power = await run_db(_guardian_sync, update.effective_chat, update.effective_user)
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
     await update.message.reply_text(
         f"{get_emoji('guardian')} <b>محافظ فعلی گروه</b>\n"
         f"{top.name} ({constants.RARITY_LABELS[top.rarity]}, Lv{top.level}) — متعلق به {owner_name}\n"
-        f"قدرت کل: {_creature_power(top)}\n\n"
+        f"قدرت کل: {top_power}\n\n"
         f"{get_emoji('battle')} برای گرفتن عنوان، «تسخیر» بفرست\n"
         f"{get_emoji('gift')} محافظ فعلی هر روز با «حقوق» جایزه می‌گیره",
         parse_mode="HTML",
@@ -1235,13 +994,13 @@ async def guardian_claim(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 def register(application) -> None:
     group_filter = filters.ChatType.GROUPS
-    # The gameplay slash commands (/duel /attack /raid_spawn /leaderboard /guardian*)
-    # are gone — groups are word-driven («دوئل», «اتک», «احضار», «جدول», «نگهبان» …),
+    # The gameplay slash commands (/attack /raid_spawn /leaderboard /guardian*)
+    # are gone — groups are word-driven («اتک», «احضار», «جدول», «نگهبان» …),
     # and the words call the same functions. /give was removed too: it bypassed the
     # priced-transfer flow (and transferred a creature by id with NO ownership check).
     # Trading is «انتقال …» only. /mutation_event was removed — it was farmable by
-    # spamming it across many groups for free stat mutations.
-    application.add_handler(CallbackQueryHandler(duel_wager_callback, pattern=r"^duelwager_"))
+    # spamming it across many groups for free stat mutations. The player-vs-player
+    # «دوئل» feature was removed entirely (PvP happens via «اتک» reply-attacks now).
     application.add_handler(CallbackQueryHandler(transfer_offer_callback, pattern=r"^xfo:"))
     application.add_handler(CallbackQueryHandler(pvp_attack_callback, pattern=r"^gatk:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_attack_cancel_callback, pattern=r"^gatk_cancel:\d+$"))

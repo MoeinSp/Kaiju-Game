@@ -46,6 +46,25 @@ def _gate_applies(update: Update) -> bool:
     return True
 
 
+async def capture_referral(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Runs before every gate (group=-3). Stashes a `/start ref_<id>` payload in
+    user_data so it survives the force-join gate — which raises ApplicationHandlerStop
+    on a brand-new invitee's first message and would otherwise drop the payload,
+    leaving the referral never bound once they finally clear the gate and re-/start.
+    Never stops propagation; the ban/join gates and the /start handler still run."""
+    message = update.effective_message
+    if message is None or not message.text or not message.text.startswith("/start"):
+        return
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        return
+    from game.referral import parse_payload
+
+    ref = parse_payload(parts[1].strip())
+    if ref is not None:
+        context.user_data["pending_referrer"] = ref
+
+
 def _is_banned_sync(user_id: int) -> bool:
     return User.objects.filter(id=user_id, is_banned=True).exists()
 
@@ -174,5 +193,6 @@ async def enforce_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 def register(application) -> None:
+    application.add_handler(TypeHandler(Update, capture_referral), group=-3)
     application.add_handler(TypeHandler(Update, enforce_ban), group=-2)
     application.add_handler(TypeHandler(Update, enforce_force_join), group=-1)

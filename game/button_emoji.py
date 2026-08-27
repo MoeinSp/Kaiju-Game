@@ -61,6 +61,7 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_broadcast": ("پیام همگانی", "📢", "admin"),
     "btn_report": ("گزارش", "📊", "admin"),
     "btn_charge": ("شارژ کاربر", "⚡", "admin"),
+    "btn_lab": ("تنظیم سطح آزمایشگاه", "🔬", "admin"),
     # newer features — no Premium emoji yet, so these unicode fallbacks show until
     # the owner themes them in the panel (they're first-class keys now, so they can be)
     "btn_campaign": ("کمپین", "🗺", "features"),

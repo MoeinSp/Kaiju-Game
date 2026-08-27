@@ -44,6 +44,7 @@ from game.moderation import (
     reset_user,
     search_users,
     set_banned,
+    set_lab_level,
     user_info,
 )
 from game.report import dashboard_stats, progress_report
@@ -1012,6 +1013,7 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
                 btn("💎 کسر الماس", style=DANGER, callback_data=f"admin_deduct:{target_id}:diamonds"),
             ],
             [btn("شارژ کامل (طلا+DNA+الماس)", emoji_key="btn_charge", style=CONFIRM, callback_data=f"admin_charge:{target_id}")],
+            [btn("🔬 تنظیم سطح آزمایشگاه", emoji_key="btn_lab", style=CONFIRM, callback_data=f"admin_lablevel:{target_id}")],
             [
                 btn("📊 لاگ پیشرفت", emoji_key="btn_report", style=ADMIN, callback_data=f"admin_plog:{target_id}"),
                 btn("✉️ پیام", style=ADMIN, callback_data=f"admin_dm:{target_id}"),
@@ -1313,7 +1315,7 @@ async def reset_user_confirm_callback(update: Update, context: ContextTypes.DEFA
 
 _ACTION_LABELS = {
     "feed": "تغذیه", "train": "تمرین", "hunt": "شکار", "arena_attack": "حمله آرنا",
-    "raid_attack": "حمله رید", "duel_win": "برد دوئل", "fusion": "ادغام",
+    "raid_attack": "حمله رید", "duel_win": "برد نبرد گروهی", "fusion": "ادغام",
     "collect": "جمع‌آوری", "wheel_spin": "گردونه", "guardian_stipend": "حقوق محافظ",
     "heist": "شبیخون", "guardian_challenge": "چالش محافظ",
 }
@@ -2031,6 +2033,23 @@ async def admin_charge_callback(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 
+async def admin_lablevel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    target_id = query.data.split(":")[1]
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "set_lab_level", "target_id": target_id}
+    await query.answer()
+    from game.lab import LAB_MAX_LEVEL
+
+    await safe_edit_message_text(
+        query,
+        f"🔬 سطح آزمایشگاه جدید رو بفرست (یه عدد بین ۱ تا {LAB_MAX_LEVEL}):",
+        parse_mode="HTML",
+    )
+
+
 async def admin_ban_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not _is_admin(update):
@@ -2145,6 +2164,26 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             await message.reply_text("⚠️ نشد بفرستم — احتمالاً کاربر بات رو بلاک کرده یا استارت نزده.")
             return
         await message.reply_text(f"✅ پیام به کاربر <code>{target_id}</code> فرستاده شد.", parse_mode="HTML")
+        return
+
+    if action == "set_lab_level":
+        from game.lab import LAB_MAX_LEVEL
+
+        if not text.isdigit() or not (1 <= int(text) <= LAB_MAX_LEVEL):
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text(f"⚠️ یه عدد بین ۱ تا {LAB_MAX_LEVEL} بفرست.")
+            return
+        try:
+            user, new_level = await run_db(set_lab_level, awaiting["target_id"], int(text))
+            data = await run_db(user_info, str(user.id))
+        except GameError as exc:
+            await message.reply_text(str(exc))
+            return
+        await message.reply_text(
+            f"{get_emoji('confirm')} سطح آزمایشگاه <b>{display_name(user)}</b> روی <b>{new_level}</b> تنظیم شد.",
+            parse_mode="HTML",
+            reply_markup=_user_manage_keyboard(user.id, user.is_banned),
+        )
         return
 
     if action in ("grant", "deduct"):
@@ -2568,5 +2607,6 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(admin_grant_callback, pattern=r"^admin_grant:"))
     application.add_handler(CallbackQueryHandler(admin_deduct_callback, pattern=r"^admin_deduct:"))
     application.add_handler(CallbackQueryHandler(admin_charge_callback, pattern=r"^admin_charge:"))
+    application.add_handler(CallbackQueryHandler(admin_lablevel_callback, pattern=r"^admin_lablevel:"))
     application.add_handler(CallbackQueryHandler(admin_unban_callback, pattern=r"^admin_unban:"))
     application.add_handler(CallbackQueryHandler(admin_ban_callback, pattern=r"^admin_ban:"))

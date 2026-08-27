@@ -874,7 +874,6 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     delegates = {
         "attack": group_handlers.attack,
-        "duel": group_handlers.duel,
         "raid": group_handlers.raid_spawn,
         "guardian": group_handlers.guardian,
         "guardian_challenge": group_handlers.guardian_challenge,

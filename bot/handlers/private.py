@@ -840,6 +840,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         from game.referral import parse_payload
 
         referrer_id = parse_payload(context.args[0])
+    # The force-join gate stops the very first `/start ref_<id>` from reaching this
+    # handler, so the payload it carried is stashed in user_data by capture_referral
+    # (bot/middleware.py). Fall back to it when this /start arrives without args.
+    if referrer_id is None:
+        referrer_id = context.user_data.pop("pending_referrer", None)
+    else:
+        context.user_data.pop("pending_referrer", None)
     user, creature, is_new, login_bonus, equipped_items = await run_db(
         _start_sync, update.effective_user, referrer_id
     )
@@ -2768,7 +2775,7 @@ def _profile_text_and_keyboard(user, stats) -> tuple[str, InlineKeyboardMarkup]:
         f"📅 عضو از: {timezone.localtime(user.created_at).strftime('%Y-%m-%d')}",
         f"🔥 روزهای ورود پشت‌سرهم: {user.login_streak}",
         f"{get_emoji('creature')} موجودات ساخته‌شده: {stats['creatures_owned']}\n",
-        f"{get_emoji('battle')} دوئل‌های برده: {stats['duel_wins']}",
+        f"{get_emoji('battle')} نبردهای گروهی برده: {stats['duel_wins']}",
         f"{get_emoji('hunt')} شکارهای انجام‌شده: {stats['total_hunts']}",
         f"{get_emoji('raid_boss')} کل دمیج واردشده به رید باس‌ها: {stats['total_raid_damage']}\n",
         wallet_line(user),

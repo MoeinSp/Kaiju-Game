@@ -37,7 +37,7 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "wings": ("بال", "🦋", "body"),
     "fangs": ("نیش", "🦷", "body"),
     # battle
-    "battle": ("نبرد/دوئل", "⚔️", "battle"),
+    "battle": ("نبرد", "⚔️", "battle"),
     "attack_action": ("حمله", "🗡", "battle"),
     "skill_action": ("اسکیل", "✨", "battle"),
     "forfeit_action": ("تسلیم", "🏳", "battle"),

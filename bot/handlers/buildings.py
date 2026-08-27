@@ -348,6 +348,7 @@ async def building_speedup_list_callback(update: Update, context: ContextTypes.D
     await safe_edit_message_text(
         query,
         f"{get_emoji('speedup')} کدوم کارت سرعت؟ «یکی» یه کارت مصرف می‌کنه، «همه» تا جایی که لازمه از اون کارت می‌ذاره.",
+        parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(rows),
     )
 
