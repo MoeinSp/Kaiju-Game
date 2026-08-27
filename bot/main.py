@@ -124,6 +124,32 @@ async def _post_init(application: Application) -> None:
     await _warn_if_group_privacy_on(application)
 
 
+def _install_premium_glyph_hook(application: Application) -> None:
+    """Wrap the bot's send/edit so EVERY outgoing HTML message runs through
+    premiumize_html — literal emojis hardcoded in message strings become the owner's
+    Premium <tg-emoji> automatically, without editing hundreds of f-strings. All the
+    reply_text/edit_message_text shortcuts funnel through these two Bot methods with
+    text passed as a keyword, so this one hook covers the whole bot."""
+    from telegram.constants import ParseMode
+
+    from game.emoji import premiumize_html
+
+    bot = application.bot
+
+    def _wrap(orig):
+        async def wrapped(*args, **kwargs):
+            try:
+                if kwargs.get("parse_mode") in ("HTML", ParseMode.HTML) and isinstance(kwargs.get("text"), str):
+                    kwargs["text"] = premiumize_html(kwargs["text"])
+            except Exception:  # noqa: BLE001 — theming must never block a send
+                pass
+            return await orig(*args, **kwargs)
+        return wrapped
+
+    bot.send_message = _wrap(bot.send_message)
+    bot.edit_message_text = _wrap(bot.edit_message_text)
+
+
 def main() -> None:
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN تنظیم نشده. فایل .env رو بر اساس .env.example بساز.")
@@ -147,6 +173,7 @@ def main() -> None:
     # everyone else's taps. Paired with the thread-pool run_db (bot/utils), this is
     # what keeps the bot responsive under load — NOT any outgoing rate limit.
     application = Application.builder().token(BOT_TOKEN).concurrent_updates(True).build()
+    _install_premium_glyph_hook(application)
 
     middleware.register(application)
     private.register(application)

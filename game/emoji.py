@@ -1,4 +1,12 @@
+import re
+
 from bio_lab.models import EmojiOverride
+
+# Rarity circles stay fixed colour codes — NEVER premiumise them (rarity must read
+# instantly regardless of theme). Same for the plain check/cross used as bullet marks
+# where a themed icon would look odd mid-sentence.
+GLYPH_SKIP = {"⚪", "🔵", "🟣", "🟡", "🔴", "▓", "░", "•", "·", "━"}
+_GLYPH_PREFIX = "g:"  # EmojiOverride.key prefix for a per-GLYPH (not per-semantic-key) theme
 
 # key -> (label, default unicode emoji, category). This is the single registry for
 # every icon that's worth letting the owner re-skin with a Telegram Premium custom
@@ -101,9 +109,94 @@ def _load_cache() -> dict[str, EmojiOverride]:
     return _cache
 
 
+_glyph_map: dict[str, str] | None = None       # glyph -> custom_emoji_id
+_glyph_re: "re.Pattern | None" = None
+_TG_EMOJI_BLOCK = re.compile(r"<tg-emoji\b[^>]*>.*?</tg-emoji>", re.DOTALL)
+_TAG = re.compile(r"<[^>]+>")  # any HTML tag — never premiumise a glyph inside one
+
+
+def _load_glyph_map() -> dict[str, str]:
+    """Build {glyph: custom_emoji_id} from the g:-prefixed overrides, plus a regex that
+    matches any themed glyph (longest first, so multi-codepoint emoji win over parts)."""
+    global _glyph_map, _glyph_re
+    gm = {
+        o.key[len(_GLYPH_PREFIX):]: o.custom_emoji_id
+        for o in EmojiOverride.objects.filter(key__startswith=_GLYPH_PREFIX)
+        if o.key[len(_GLYPH_PREFIX):] not in GLYPH_SKIP
+    }
+    _glyph_map = gm
+    _glyph_re = re.compile("|".join(re.escape(g) for g in sorted(gm, key=len, reverse=True))) if gm else None
+    return gm
+
+
 def refresh_cache() -> None:
     """Call after any EmojiOverride write so lookups reflect it without a bot restart."""
     _load_cache()
+    _load_glyph_map()
+
+
+def set_glyph(glyph: str, custom_emoji_id: str) -> None:
+    EmojiOverride.objects.update_or_create(
+        key=f"{_GLYPH_PREFIX}{glyph}", defaults={"custom_emoji_id": custom_emoji_id, "placeholder": glyph}
+    )
+    refresh_cache()
+
+
+def set_glyphs_bulk(pairs: dict[str, str]) -> int:
+    """Theme many glyphs at once (glyph -> custom_emoji_id), refreshing the cache just
+    once. Skips the fixed rarity/bullet glyphs. Returns how many were set."""
+    n = 0
+    for glyph, cid in pairs.items():
+        if not glyph or glyph in GLYPH_SKIP:
+            continue
+        EmojiOverride.objects.update_or_create(
+            key=f"{_GLYPH_PREFIX}{glyph}", defaults={"custom_emoji_id": cid, "placeholder": glyph}
+        )
+        n += 1
+    refresh_cache()
+    return n
+
+
+def clear_glyphs() -> int:
+    deleted, _ = EmojiOverride.objects.filter(key__startswith=_GLYPH_PREFIX).delete()
+    refresh_cache()
+    return deleted
+
+
+def premiumize_html(text: str) -> str:
+    """Wrap every themed literal emoji in `text` with its Premium <tg-emoji>. Applied
+    to ALL outgoing HTML messages, so plain emojis hardcoded in message strings render
+    as the owner's Premium set without touching each f-string. Skips glyphs already
+    inside a <tg-emoji> block or any HTML tag, and the fixed rarity/bullet glyphs."""
+    if not text or "<tg-emoji" not in text and _glyph_map is None:
+        pass
+    gm = _glyph_map if _glyph_map is not None else _load_glyph_map()
+    if not gm or _glyph_re is None:
+        return text
+
+    def _wrap_segment(seg: str) -> str:
+        # don't touch glyphs that sit inside an HTML tag's angle brackets
+        pieces = []
+        last = 0
+        for tag in _TAG.finditer(seg):
+            pieces.append(_glyph_re.sub(lambda m: _wrap(m.group()), seg[last:tag.start()]))
+            pieces.append(tag.group())  # tag text left as-is
+            last = tag.end()
+        pieces.append(_glyph_re.sub(lambda m: _wrap(m.group()), seg[last:]))
+        return "".join(pieces)
+
+    def _wrap(g: str) -> str:
+        cid = gm.get(g)
+        return f'<tg-emoji emoji-id="{cid}">{g}</tg-emoji>' if cid else g
+
+    # leave existing <tg-emoji>…</tg-emoji> blocks untouched; premiumise only between them
+    out, last = [], 0
+    for block in _TG_EMOJI_BLOCK.finditer(text):
+        out.append(_wrap_segment(text[last:block.start()]))
+        out.append(block.group())
+        last = block.end()
+    out.append(_wrap_segment(text[last:]))
+    return "".join(out)
 
 
 def get_emoji(key: str, fallback: str | None = None) -> str:

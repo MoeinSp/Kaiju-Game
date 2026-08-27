@@ -134,8 +134,18 @@ class Command(BaseCommand):
             set_emoji(key, cid, placeholder)
             tdone += 1
 
+        # 5) per-GLYPH themes: register EVERY base emoji the owner has a Premium for,
+        # so any of them appearing LITERALLY in message text (not via get_emoji) is
+        # auto-wrapped by game.emoji.premiumize_html. This is what themes the thousands
+        # of hardcoded emojis across every screen without editing each string.
+        from game.emoji import set_glyphs_bulk
+
+        gset = set_glyphs_bulk(emap)
+
         self.stdout.write(self.style.SUCCESS(
             f"buttons: set {done}, left {skipped} untouched, unmatched {unmatched or 'none'}"))
         self.stdout.write(self.style.SUCCESS(
             f"text:    set {tdone}, left {tskipped} untouched, unmatched {tunmatched or 'none'}"))
+        self.stdout.write(self.style.SUCCESS(
+            f"glyphs:  set {gset} literal-emoji themes (auto-applied to all message text)"))
         self.stdout.write("↻ now run:  docker compose restart bot   (to reload the emoji caches)")
