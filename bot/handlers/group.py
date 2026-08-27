@@ -622,7 +622,7 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
         f"💪 قدرت حریف: <b>{t_power}</b>  ({constants.element_label(t_elem)})\n"
         f"💪 قدرت تو: <b>{a_power}</b>  ({constants.element_label(a_elem)}) — {odds}\n"
         + (f"{matchup}\n" if matchup else "")
-        + "\n<i>هر حمله ۱ ⚡ انرژی می‌بره. فقط 🏆 کاپ جابه‌جا می‌شه — طلایی غارت نمی‌شه.</i>"
+        + f"\n<i>هر حمله ۱ ⚡ انرژی می‌بره. اگه ببری تا {int(constants.GROUP_ATTACK_LOOT_PERCENT * 100)}٪ طلای حریف رو غارت می‌کنی و 🏆 کاپ می‌گیری؛ اگه ببازی فقط کاپ کم می‌شه.</i>"
     )
     return text, keyboard
 
@@ -739,8 +739,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     winner_creature_obj = a_creature if attacker_won else t_creature
     loser_creature_obj = t_creature if attacker_won else a_creature
 
-    # PvP is CUP-ONLY now: no gold changes hands. The winner gains cup and the loser
-    # loses cup (same power/gap-aware formula the arena uses); nothing is looted.
+    # Cup always moves (winner +, loser −), same power/gap-aware formula as the arena.
     from game.arena import cup_delta
 
     delta = cup_delta(attacker, target.cup, attacker_won, a_power)  # attacker's swing
@@ -748,10 +747,26 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     defender_cup_change = -delta if attacker_won else abs(delta)
     target.cup = max(0, target.cup + defender_cup_change)
 
+    # Only the ATTACKER loots, and only on a WIN: they take 10% of the target's gold
+    # (+ a little DNA). A LOSING attacker loses nothing but cup — the defender never
+    # loots the attacker.
+    loot = 0
+    dna_win = 0
+    attacker_fields = ["energy", "energy_updated_at", "cup"]
+    target_fields = ["cup"]
+    if attacker_won:
+        loot = max(0, target.coins // 10)
+        target.coins -= loot
+        attacker.coins += loot
+        dna_win = constants.GROUP_ATTACK_WIN_DNA
+        attacker.dna_fragments += dna_win
+        attacker_fields += ["coins", "dna_fragments"]
+        target_fields += ["coins"]
+
     winner_levels = add_xp(winner_creature_obj, constants.DUEL_WIN_XP)
     add_xp(loser_creature_obj, constants.DUEL_LOSE_XP)
-    attacker.save(update_fields=["energy", "energy_updated_at", "cup"])
-    target.save(update_fields=["cup"])
+    attacker.save(update_fields=attacker_fields)
+    target.save(update_fields=target_fields)
     winner_creature_obj.save()
     loser_creature_obj.save()
 
@@ -761,7 +776,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
 
     DuelLog.objects.create(
         group_id=group.id, challenger_id=attacker.id, opponent_id=target.id,
-        winner_id=winner_user.id, wager_gold=0, log_text=log_text,
+        winner_id=winner_user.id, wager_gold=loot, log_text=log_text,
     )
     # log it as a real attack too, so the target gets a report + can revenge,
     # and give the target a 4h group shield so they can't be farmed in the group
@@ -777,7 +792,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         defender_label=lab_display(target),
         is_fake_defender=False,
         attacker_won=attacker_won,
-        loot_gold=0,
+        loot_gold=loot,
         cup_delta=delta,
         defender_notified=True,  # DM'd instantly from the callback below
     )
@@ -790,6 +805,8 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         "attacker_cup_change": delta,  # attacker's own swing (+ if won, − if lost)
         "defender_cup_change": defender_cup_change,
         "attacker_new_cup": attacker.cup,
+        "loot": loot,
+        "dna": dna_win,
         "winner_level_up": bool(winner_levels),
         "winner_creature": winner_creature_obj.name,
         "winner_new_level": winner_creature_obj.level,
@@ -804,7 +821,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
             "attacker_name": lab_display(attacker),
             "attacker_power": a_power,
             "attacker_won": attacker_won,
-            "loot": 0,
+            "loot": loot,
             "attacker_cup": attacker.cup,
             "defender_cup": target.cup,
             "cup_change": defender_cup_change,
@@ -835,10 +852,12 @@ async def pvp_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
     acc = result["attacker_cup_change"]
     if result["attacker_won"]:
-        cup_line = f"🏆 +{acc} کاپ گرفتی (الان: {result['attacker_new_cup']})"
+        cup_line = f"🏆 +{acc} کاپ (الان: {result['attacker_new_cup']})"
+        reward = (f"\n\n{get_emoji('coin')} {result['loot']} طلا از حریف غارت کردی "
+                  f"· +{result.get('dna', 0)} {get_emoji('dna')} · {cup_line} · +{constants.DUEL_WIN_XP} XP")
     else:
         cup_line = f"🏆 {acc} کاپ (الان: {result['attacker_new_cup']})"
-    reward = f"\n\n{cup_line} · +{constants.DUEL_WIN_XP} XP\n<i>اتک فقط کاپه — طلایی جابه‌جا نمی‌شه.</i>"
+        reward = f"\n\n{cup_line} · +{constants.DUEL_WIN_XP} XP\n<i>باختی — کاپ کم شد ولی طلایی ازت غارت نشد.</i>"
     if result["winner_level_up"]:
         reward += f"\n{get_emoji('celebrate')} {result['winner_creature']} رسید به سطح {result['winner_new_level']}!"
     reward += f"\n⚡ ۱ انرژی کم شد (باقی‌مونده: {result['energy_left']})"

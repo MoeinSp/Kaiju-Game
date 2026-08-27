@@ -362,31 +362,37 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
     # arena shield is left untouched — group aggression uses its own 4h group shield.
     delta = cup_delta(attacker, opponent["cup"], won, attacker_power) if award_cup else 0
 
-    # PvP is CUP-ONLY: no gold is looted from the loser and no gold/DNA is minted to
-    # the winner — attacking and defending move ONLY cups. Arena (and the group «اتک»)
-    # are a ranking ladder now, not a gold source or sink.
+    # Only the ATTACKER loots, and only on a WIN: a winning attacker takes gold (and a
+    # little DNA) from the loser; a LOSING attacker loses nothing but cup. Cup always
+    # moves (per award_cup) — that part is separate from the gold loot.
     loot = 0
     dna_win = 0
+    if won:
+        loot = expected_loot(opponent, attacker_creature.level)
+        if defender_user is not None:
+            loot = min(loot, defender_user.coins)  # never push a real defender negative
+            defender_user.coins -= loot
+        attacker.coins += loot
+        dna_win = round(constants.ARENA_WIN_DNA_BASE + attacker_creature.level * constants.ARENA_WIN_DNA_PER_LEVEL)
+        attacker.dna_fragments += dna_win
 
-    attacker_fields = []
+    attacker_fields = ["coins", "dna_fragments"]
     if award_cup:
         attacker.cup = max(0, attacker.cup + delta)
         # raiding spends 8h off your shield (not the whole thing anymore), so a
         # bought shield lets you attack a handful of times before it's gone
         spend_shield_on_attack(attacker)
         attacker_fields += ["cup", "shield_until"]
-    if attacker_fields:
-        attacker.save(update_fields=attacker_fields)
+    attacker.save(update_fields=attacker_fields)
 
     if defender_user is not None:
-        defender_fields = []
+        defender_fields = ["coins"]
         if award_cup:
             # a freshly-raided defender gets arena protection so they can't be farmed
             defender_user.shield_until = timezone.now() + datetime.timedelta(hours=constants.ARENA_SHIELD_HOURS)
             defender_user.cup = max(0, defender_user.cup + (-delta if won else abs(delta)))
             defender_fields += ["cup", "shield_until"]
-        if defender_fields:
-            defender_user.save(update_fields=defender_fields)
+        defender_user.save(update_fields=defender_fields)
         _release_opponent(defender_user.id)  # raid done + shielded → free the reservation
 
     # For a REAL defender we DM them the moment this returns (see the handler), so the

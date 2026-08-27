@@ -108,8 +108,8 @@ def _arena_home_text(user, power, shield_secs, history, week, season_secs, reven
         lines.append(f"\n⚔️ <b>{len(revenges)} انتقام</b> در انتظار — مهلت ۳ روزه")
 
     lines.append(
-        f"\n<blockquote>هر حمله {constants.ARENA_ATTACK_ENERGY_COST} انرژی می‌بره و فقط 🏆 کاپ جابه‌جا می‌کنه "
-        "(نه طلا).\n"
+        f"\n<blockquote>هر حمله {constants.ARENA_ATTACK_ENERGY_COST} انرژی می‌بره. اگه ببری "
+        f"{int(constants.ARENA_LOOT_PERCENT * 100)}٪ طلای حریف رو غارت می‌کنی و کاپ می‌گیری؛ اگه ببازی فقط کاپ کم می‌شه.\n"
         "آخر هر هفته کاپ‌ها ریست می‌شن — هرچی رتبه‌ت بالاتر باشه، از کاپ بالاتری شروع می‌کنی.</blockquote>"
     )
     return "\n".join(lines)
@@ -205,8 +205,8 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win) -> tup
         f"🏭 <b>{opponent['label']}</b>{elem_tag}",
         f"{get_emoji('trophy')} کاپ تو: <b>{user.cup}</b>   ·   کاپ حریف: <b>{opponent['cup']}</b>",
         f"💪 قدرت: <b>{opponent['power']}</b>  (تو: {my_power} — {odds})",
+        f"{get_emoji('coin')} غنیمت در صورت برد: حدود <b>{loot}</b> + <b>{dna_win}</b> {get_emoji('dna')}",
         f"{get_emoji('trophy')} کاپ: برد <b>+{win_cup}</b> · باخت <b>{loss_cup}</b>",
-        "<i>آرنا فقط کاپه — نه طلایی غارت می‌شه نه از دست می‌ره.</i>",
     ]
     if my_element and opp_element:
         note = constants.element_matchup_note(my_element, opp_element)
@@ -401,7 +401,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
                 query,
                 f"⚠️ <b>الان سپر محافظ داری</b> ({_fmt_hm(shield_secs)} مونده).\n"
                 f"اگه حمله کنی <b>{constants.SHIELD_ATTACK_COST_HOURS} ساعت</b> از سپرت کم می‌شه "
-                "و ممکنه بهت حمله بشه و کاپ از دست بدی.\nبازم حمله می‌کنی؟",
+                "و ممکنه دوباره غارت بشی.\nبازم حمله می‌کنی؟",
                 parse_mode="HTML", reply_markup=keyboard,
             )
             return
@@ -434,7 +434,8 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     if result["won"]:
         summary = (
             f"{get_emoji('celebrate')} <b>بردی!</b>\n"
-            f"🏆 +{result['cup_delta']} کاپ از {result['opponent_label']} (الان: {result['new_cup']})"
+            f"{get_emoji('coin')} +{result['loot']} غنیمت + {result.get('dna', 0)} {get_emoji('dna')} از {result['opponent_label']}\n"
+            f"🏆 +{result['cup_delta']} کاپ (الان: {result['new_cup']})"
         )
     else:
         summary = (
@@ -541,8 +542,9 @@ async def arena_revenges_callback(update: Update, context: ContextTypes.DEFAULT_
     lines = [f"⚔️ <b>انتقام‌ها</b> — {len(items)} مورد ({len(ready)} آماده)\n"]
     rows = []
     for it in ready:
-        res = "بهت حمله کرد" if it["won"] else "دفاع کردی"
-        lines.append(f"🔴 <b>{it['name']}</b> · 💪{it['power']} · {res} · ⏳{it['hrs_left']}h")
+        res = "غارتت کرد" if it["won"] else "دفاع کردی"
+        loot = f" · −{it['loot']} {get_emoji('coin')}" if it["loot"] else ""
+        lines.append(f"🔴 <b>{it['name']}</b> · 💪{it['power']} · {res}{loot} · ⏳{it['hrs_left']}h")
         row = [btn(f"⚔️ انتقام", style=DANGER, callback_data=f"arena_revenge:{it['log_id']}")]
         if it["attacker_id"]:
             row.append(btn("🔍 جزییات", style=NAV, callback_data=f"defrep_opp:{it['attacker_id']}"))
@@ -594,7 +596,8 @@ async def arena_revenge_callback(update: Update, context: ContextTypes.DEFAULT_T
     lines = [
         f"⚔️ <b>انتقام از {attacker_name}</b>\n",
         f"💪 قدرت حریف: <b>{opp_power}</b>  (تو: {my_power} — {odds})",
-        f"\n<i>حمله {constants.ARENA_ATTACK_ENERGY_COST} انرژی می‌بره — برد فقط کاپ می‌ده.</i>",
+        f"{get_emoji('coin')} اون از تو {log.loot_gold} طلا دزدید",
+        f"\n<i>حمله {constants.ARENA_ATTACK_ENERGY_COST} انرژی می‌بره.</i>",
     ]
     keyboard = InlineKeyboardMarkup([
         [btn("⚔️ حمله کن!", style=BATTLE, callback_data=f"arena_revenge_atk:{log_id}")],
@@ -653,6 +656,7 @@ async def arena_revenge_attack_callback(update: Update, context: ContextTypes.DE
     if result["won"]:
         summary = (
             f"{get_emoji('celebrate')} <b>انتقام گرفتی!</b>\n"
+            f"{get_emoji('coin')} +{result['loot']} غنیمت + {result.get('dna', 0)} {get_emoji('dna')}\n"
             f"🏆 +{result['cup_delta']} کاپ (الان: {result['new_cup']})"
         )
     else:
