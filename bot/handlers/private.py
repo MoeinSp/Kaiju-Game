@@ -727,7 +727,8 @@ _CATEGORIES = {
     ]),
     "social": ("👥 اجتماعی", [
         [("اتحاد من", "alliance_info", "n", "btn_alliance"), ("لیگ رتبه‌بندی", "league", "n", "btn_league")],
-        [("رتبه‌بندی", "rank", "n", "btn_rank"), ("پروفایل من", "profile", "n", "btn_profile")],
+        [("🏰 لیگ اتحادها", "alliance_league", "n", "btn_alliance"), ("رتبه‌بندی", "rank", "n", "btn_rank")],
+        [("پروفایل من", "profile", "n", "btn_profile")],
     ]),
 }
 
@@ -2584,6 +2585,32 @@ async def alliance_top(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
+async def alliance_league_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """🏰 لیگ اتحادها — top alliances by power, with the weekly reward each rank pays
+    its members. Rewards are handed out automatically at the weekly season reset."""
+    from game.alliance import ALLIANCE_LEAGUE_REWARD_BY_RANK
+
+    ranked = await run_db(_alliance_top_sync)
+    medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
+    lines = [
+        "🏰 <b>لیگ اتحادها</b>",
+        "<blockquote>اتحادها بر اساس <b>قدرت کل اعضا</b> رتبه‌بندی می‌شن. آخر هر هفته، "
+        "۱۰ اتحاد برتر به <b>همه‌ی اعضاشون</b> جایزه می‌دن — هرچی رتبه بالاتر، جایزه بیشتر.</blockquote>",
+        "",
+    ]
+    if not ranked:
+        lines.append("<i>هنوز هیچ اتحادی ساخته نشده.</i>")
+    for i, r in enumerate(ranked, start=1):
+        rank = medals[i - 1] if i <= 3 else f"{i}."
+        rw = ALLIANCE_LEAGUE_REWARD_BY_RANK.get(i)
+        rw_txt = f"  🎁 {rw['diamonds']}💎+{rw['coins']}🪙/نفر" if rw else ""
+        lines.append(f"{rank} <b>{r['alliance'].name}</b> — 💪{r['power']} ({r['member_count']} عضو){rw_txt}")
+    await send_screen(
+        update, "\n".join(lines), parse_mode="HTML",
+        reply_markup=back_only_keyboard("menu:cat_social", "بازگشت به اجتماعی"),
+    )
+
+
 def _alliance_deposit_sync(tg_user, amount):
     user, _ = get_or_create_user(tg_user)
     return deposit_treasury(user, amount)
@@ -2827,6 +2854,7 @@ _MENU_ACTIONS = {
     "banner": banner_panel,
     "idle": idle_panel,
     "league": league_panel,
+    "alliance_league": alliance_league_panel,
     "shop": shop_panel,
     "shield_shop": shield_shop_panel,
     "item_shop": item_shop_panel,

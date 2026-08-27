@@ -89,6 +89,15 @@ def close_due_season() -> str | None:
         user.cup = new_cup
         user.save(update_fields=["cup"])
 
+    # weekly alliance-league reward: top-10 alliances by power pay their members.
+    # Inside the same week-guarded block, so it settles exactly once per week.
+    try:
+        from game import alliance as alliance_mod
+
+        alliance_mod.award_alliance_league()
+    except Exception:  # noqa: BLE001 — a league-reward hiccup must not block the cup reset
+        pass
+
     state.last_closed_week = now_week
     state.save(update_fields=["last_closed_week"])
     return closing

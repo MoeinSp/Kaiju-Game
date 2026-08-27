@@ -391,6 +391,44 @@ def top_alliances(limit: int = 10) -> list[dict]:
     return ranked[:limit]
 
 
+# End-of-week league reward per MEMBER, by the alliance's power rank (top 10 only).
+ALLIANCE_LEAGUE_REWARD_BY_RANK = {
+    1: {"diamonds": 60, "coins": 4000},
+    2: {"diamonds": 45, "coins": 3000},
+    3: {"diamonds": 35, "coins": 2200},
+    4: {"diamonds": 22, "coins": 1500},
+    5: {"diamonds": 22, "coins": 1500},
+    6: {"diamonds": 15, "coins": 1000},
+    7: {"diamonds": 10, "coins": 700},
+    8: {"diamonds": 10, "coins": 700},
+    9: {"diamonds": 8, "coins": 500},
+    10: {"diamonds": 8, "coins": 500},
+}
+
+
+def award_alliance_league() -> list[tuple[int, str]]:
+    """Grant the weekly alliance-league reward to every member of the top-10 alliances
+    (by power), scaled by the alliance's rank. Returns (user_id, text) DMs to send.
+    Called once per week from the season close, which is already idempotent."""
+    from game.battlepass import _grant
+
+    out: list[tuple[int, str]] = []
+    for rank, entry in enumerate(top_alliances(limit=10), start=1):
+        reward = ALLIANCE_LEAGUE_REWARD_BY_RANK.get(rank)
+        if not reward:
+            continue
+        alliance = entry["alliance"]
+        for member in alliance.members.all():
+            _grant(member, reward)
+            if member.notifications_on:
+                out.append((
+                    member.id,
+                    f"🏰 <b>جایزه‌ی لیگ اتحادها!</b>\nاتحاد <b>{alliance.name}</b> این هفته رتبه‌ی "
+                    f"<b>{rank}</b> شد.\n🎁 گرفتی: {reward['diamonds']} 💎 + {reward['coins']} 🪙",
+                ))
+    return out
+
+
 def deposit_treasury(user: User, amount: int) -> Alliance:
     if user.alliance_id is None:
         raise GameError("اول باید عضو یه اتحاد باشی.")
