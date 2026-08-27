@@ -118,8 +118,35 @@ class Alliance(models.Model):
     war_points = models.IntegerField(default=0)
     war_week = models.CharField(max_length=10, null=True, blank=True)
 
+    # membership gate: auto_accept=True → anyone who meets min_join_power joins
+    # instantly (the original behaviour). False → they send a request the leader or
+    # deputy approves. min_join_power is the minimum active-creature power to join/request.
+    auto_accept = models.BooleanField(default=True)
+    min_join_power = models.IntegerField(default=0)
+
     def __str__(self) -> str:
         return self.name
+
+
+class AllianceJoinRequest(models.Model):
+    """A pending request to join an alliance (only used when auto_accept is off).
+
+    A player may have several outstanding requests to different alliances at once;
+    the FIRST one accepted wins and the rest are invalidated (they've joined
+    elsewhere). Unique per (user, alliance) so re-sending is idempotent."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="join_requests")
+    alliance = models.ForeignKey(Alliance, on_delete=models.CASCADE, related_name="join_requests")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "alliance"], name="uq_alliance_join_request")
+        ]
+        ordering = ("created_at",)
+
+    def __str__(self) -> str:
+        return f"{self.user_id} → {self.alliance_id}"
 
 
 class AllianceWarState(models.Model):

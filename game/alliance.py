@@ -39,6 +39,151 @@ def join_alliance(user: User, name: str) -> Alliance:
     return alliance
 
 
+def _active_power(user: User) -> int:
+    from game.creature import creature_power
+    from game.equipment import get_equipped_items
+
+    c = Creature.objects.filter(owner=user, is_active=True).first()
+    return creature_power(c, get_equipped_items(c)) if c is not None else 0
+
+
+def _is_manager(user: User, alliance: Alliance) -> bool:
+    return alliance is not None and user.id in (alliance.leader_id, alliance.deputy_id)
+
+
+@transaction.atomic
+def request_or_join(user: User, name: str) -> dict:
+    alliance = Alliance.objects.filter(name__iexact=name.strip()).first()
+    if alliance is None:
+        raise GameError("همچین اتحادی پیدا نشد. اسم رو دقیق بنویس یا با /alliance_create یکی بساز.")
+    return _request_or_join(user, alliance)
+
+
+@transaction.atomic
+def request_or_join_by_id(user: User, alliance_id: int) -> dict:
+    alliance = Alliance.objects.filter(id=alliance_id).first()
+    if alliance is None:
+        raise GameError("این اتحاد دیگه وجود نداره.")
+    return _request_or_join(user, alliance)
+
+
+def _request_or_join(user: User, alliance: Alliance) -> dict:
+    """The «پیوستن» core. Joins instantly when the alliance is on auto-accept and the
+    min-power gate passes; otherwise files a join request the leader/deputy approve.
+    A player already in an alliance must leave first — enforced here, so no one can
+    ever end up in two at once."""
+    if user.alliance_id is not None:
+        raise GameError("تو الان توی یه اتحادی — اول باید ازش خارج شی، بعد به یکی دیگه درخواست بدی.")
+    _assert_has_room(alliance)
+    power = _active_power(user)
+    if power < alliance.min_join_power:
+        raise GameError(
+            f"حداقل قدرت لازم برای پیوستن به این اتحاد <b>{alliance.min_join_power}</b> است "
+            f"(قدرت تو {power}). اول هیولات رو قوی‌تر کن."
+        )
+    if alliance.auto_accept:
+        user.alliance = alliance
+        user.save(update_fields=["alliance"])
+        return {"joined": True, "alliance": alliance}
+
+    from bio_lab.models import AllianceJoinRequest
+
+    _, created = AllianceJoinRequest.objects.get_or_create(user=user, alliance=alliance)
+    return {
+        "joined": False, "alliance": alliance, "already": not created,
+        "requester_power": power,
+        "notify_ids": [i for i in (alliance.leader_id, alliance.deputy_id) if i],
+    }
+
+
+def pending_requests(alliance: Alliance) -> list[dict]:
+    from bio_lab.models import AllianceJoinRequest
+
+    out = []
+    for r in AllianceJoinRequest.objects.filter(alliance=alliance).select_related("user"):
+        out.append({"id": r.id, "user": r.user, "power": _active_power(r.user)})
+    out.sort(key=lambda x: -x["power"])
+    return out
+
+
+def pending_request_count(alliance: Alliance) -> int:
+    from bio_lab.models import AllianceJoinRequest
+
+    return AllianceJoinRequest.objects.filter(alliance=alliance).count()
+
+
+@transaction.atomic
+def approve_request(actor: User, request_id: int) -> dict:
+    """Leader/deputy accepts a join request. Re-checks the applicant is still free
+    (they may have been accepted elsewhere first) and, on success, deletes ALL their
+    other pending requests so they can't be double-accepted."""
+    from bio_lab.models import AllianceJoinRequest
+
+    req = (
+        AllianceJoinRequest.objects.select_for_update()
+        .select_related("user", "alliance")
+        .filter(id=request_id)
+        .first()
+    )
+    if req is None:
+        raise GameError("این درخواست دیگه معتبر نیست (شاید لغو یا قبول شده).")
+    alliance = req.alliance
+    if not _is_manager(actor, alliance):
+        raise GameError("فقط رهبر یا قائم‌مقام می‌تونه درخواست‌ها رو تأیید کنه.")
+    applicant = User.objects.select_for_update().get(id=req.user_id)
+    if applicant.alliance_id is not None:
+        req.delete()
+        raise GameError("این کاربر قبلاً به یه اتحاد دیگه پیوسته — درخواستش پاک شد.")
+    _assert_has_room(alliance)
+
+    applicant.alliance = alliance
+    applicant.save(update_fields=["alliance"])
+    # invalidate every OTHER pending request of this applicant — they've joined here
+    others = list(
+        AllianceJoinRequest.objects.filter(user=applicant).exclude(id=req.id).select_related("alliance")
+    )
+    AllianceJoinRequest.objects.filter(user=applicant).delete()
+    return {
+        "applicant": applicant,
+        "alliance": alliance,
+        "invalidated": [
+            {"manager_ids": [i for i in (o.alliance.leader_id, o.alliance.deputy_id) if i],
+             "alliance_name": o.alliance.name, "applicant_name": applicant.first_name or str(applicant.id)}
+            for o in others
+        ],
+    }
+
+
+@transaction.atomic
+def reject_request(actor: User, request_id: int) -> dict:
+    from bio_lab.models import AllianceJoinRequest
+
+    req = AllianceJoinRequest.objects.select_related("user", "alliance").filter(id=request_id).first()
+    if req is None:
+        raise GameError("این درخواست دیگه معتبر نیست.")
+    if not _is_manager(actor, req.alliance):
+        raise GameError("فقط رهبر یا قائم‌مقام می‌تونه درخواست‌ها رو رد کنه.")
+    result = {"applicant": req.user, "alliance_name": req.alliance.name}
+    req.delete()
+    return result
+
+
+def set_join_settings(actor: User, *, auto_accept: bool | None = None, min_power: int | None = None) -> Alliance:
+    alliance = actor.alliance
+    if not _is_manager(actor, alliance):
+        raise GameError("فقط رهبر یا قائم‌مقام می‌تونه تنظیمات اتحاد رو عوض کنه.")
+    fields = []
+    if auto_accept is not None:
+        alliance.auto_accept = bool(auto_accept)
+        fields.append("auto_accept")
+    if min_power is not None:
+        alliance.min_join_power = max(0, int(min_power))
+        fields.append("min_join_power")
+    if fields:
+        alliance.save(update_fields=fields)
+    return alliance
+
+
 @transaction.atomic
 def leave_alliance(user: User) -> None:
     alliance = user.alliance

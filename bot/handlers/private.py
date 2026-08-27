@@ -38,14 +38,18 @@ from config import OWNER_TELEGRAM_ID
 from game import botconfig, constants, keywords
 from game.alliance import (
     alliance_info,
+    approve_request,
     create_alliance,
     deposit_treasury,
     heist,
-    join_alliance,
-    join_alliance_by_id,
     leave_alliance,
     list_alliances_page,
+    pending_requests,
+    reject_request,
+    request_or_join,
+    request_or_join_by_id,
     search_alliances,
+    set_join_settings,
     top_alliances,
 )
 from game.buildings import get_or_create_buildings, grant_speedup_card, is_built, star_cap
@@ -1777,9 +1781,47 @@ async def alliance_create(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
 
+async def _pv_notify(context, user_id: int, text: str, keyboard=None) -> None:
+    """Fire-and-forget PV DM (alliance requests/decisions). No-ops if the user has
+    never opened the bot or blocked it."""
+    if not user_id:
+        return
+    from telegram.error import TelegramError
+
+    try:
+        await context.bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=keyboard)
+    except TelegramError:
+        pass
+
+
+async def _handle_join_result(update, context, result, *, via_query=None) -> None:
+    """Render the outcome of request_or_join (instant join vs request filed) and DM
+    the alliance's leader/deputy when a new request needs their decision."""
+    alliance = result["alliance"]
+    if result["joined"]:
+        msg = f"{get_emoji('alliance')} به اتحاد <b>{alliance.name}</b> پیوستی! 🎉"
+    elif result.get("already"):
+        msg = f"⏳ قبلاً به <b>{alliance.name}</b> درخواست دادی — منتظر تأیید رهبر/قائم‌مقام بمون."
+    else:
+        msg = (f"📨 درخواست عضویتت به <b>{alliance.name}</b> فرستاده شد.\n"
+               "رهبر یا قائم‌مقامش باید تأیید کنه؛ همین‌جا بهت خبر می‌دم.")
+        applicant = update.effective_user
+        who = applicant.first_name or str(applicant.id)
+        note = (f"📨 <b>درخواست عضویت جدید</b>\n«{who}» (قدرت {result['requester_power']}) "
+                f"می‌خواد به <b>{alliance.name}</b> بپیونده.\nاز «👥 اعضا و مدیریت ← درخواست‌ها» تأیید/رد کن.")
+        kb = InlineKeyboardMarkup([[btn("📨 درخواست‌های عضویت", style=CONFIRM, callback_data="ally_requests")]])
+        for mid in result.get("notify_ids", []):
+            await _pv_notify(context, mid, note, kb)
+    if via_query is not None:
+        await safe_edit_message_text(via_query, msg, parse_mode="HTML",
+                                     reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info")]]))
+    else:
+        await update.message.reply_text(msg, parse_mode="HTML")
+
+
 def _alliance_join_sync(tg_user, name):
     user, _ = get_or_create_user(tg_user)
-    return join_alliance(user, name)
+    return request_or_join(user, name)
 
 
 async def alliance_join(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1789,13 +1831,11 @@ async def alliance_join(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         return
     try:
-        alliance = await run_db(_alliance_join_sync, update.effective_user, " ".join(context.args))
+        result = await run_db(_alliance_join_sync, update.effective_user, " ".join(context.args))
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(str(exc), parse_mode="HTML")
         return
-    await update.message.reply_text(
-        f"{get_emoji('alliance')} به اتحاد <b>{alliance.name}</b> پیوستی!", parse_mode="HTML"
-    )
+    await _handle_join_result(update, context, result)
 
 
 def _alliance_leave_sync(tg_user):
@@ -1887,6 +1927,9 @@ def _members_sync(tg_user):
         "roster": alliance_mod.member_roster(al),
         "viewer_role": alliance_mod._role_of(al, user.id),
         "has_deputy": al.deputy_id is not None,
+        "pending": alliance_mod.pending_request_count(al),
+        "auto_accept": al.auto_accept,
+        "min_join_power": al.min_join_power,
     }
 
 
@@ -1918,7 +1961,14 @@ def _members_render(data: dict, page: int = 0) -> tuple[str, InlineKeyboardMarku
 
     role = data["viewer_role"]
     if role in ("leader", "deputy"):
-        lines.append("\n<blockquote>👑 رهبر · 🎖 قائم‌مقام. برای مدیریت، آیدیِ عضو (کد جلوی اسمش) رو بده.</blockquote>")
+        mode = "خودکار ✅" if data.get("auto_accept") else "با تأیید 📨"
+        lines.append(
+            f"\n<blockquote>👑 رهبر · 🎖 قائم‌مقام. عضوگیری: <b>{mode}</b> · حداقل قدرت: "
+            f"<b>{data.get('min_join_power', 0)}</b>. برای مدیریت، آیدیِ عضو رو بده.</blockquote>"
+        )
+        pend = data.get("pending", 0)
+        rows.append([btn(f"📨 درخواست‌های عضویت ({pend})", style=CONFIRM, callback_data="ally_requests")])
+        rows.append([btn("⚙️ تنظیمات عضوگیری", style=NAV, callback_data="ally_settings")])
         rows.append([btn("🥾 کیک با آیدی", style=DANGER, callback_data="ally_kick")])
     if role == "leader":
         rows.append([btn("🎖 تعیین قائم‌مقام با آیدی", style=PRIMARY, callback_data="ally_deputy")])
@@ -1940,6 +1990,173 @@ async def alliance_members_callback(update: Update, context: ContextTypes.DEFAUL
         return
     text, keyboard = _members_render(data, page)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+# ── join requests (leader/deputy approve/reject) ─────────────────────────────
+def _requests_sync(tg_user):
+    from game import alliance as alliance_mod
+
+    user, _ = get_or_create_user(tg_user)
+    al = user.alliance
+    if al is None or not alliance_mod._is_manager(user, al):
+        return None
+    return {"name": al.name, "requests": pending_requests(al)}
+
+
+def _requests_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
+    reqs = data["requests"]
+    lines = [f"📨 <b>درخواست‌های عضویت — {data['name']}</b> ({len(reqs)})\n"]
+    rows = []
+    if not reqs:
+        lines.append("<i>الان درخواستی نیست.</i>")
+    for r in reqs:
+        name = r["user"].first_name or str(r["user"].id)
+        lines.append(f"• <b>{name}</b> — <code>{r['user'].id}</code> · 💪{r['power']}")
+        rows.append([
+            btn(f"✅ قبول {name[:12]}", style=CONFIRM, callback_data=f"ally_approve:{r['id']}"),
+            btn("❌ رد", style=DANGER, callback_data=f"ally_reject:{r['id']}"),
+        ])
+    rows.append([back_btn("ally_members", "بازگشت به اعضا")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+async def alliance_requests_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    data = await run_db(_requests_sync, update.effective_user)
+    await query.answer()
+    if data is None:
+        await query.answer("فقط رهبر یا قائم‌مقام می‌تونه درخواست‌ها رو ببینه.", show_alert=True)
+        return
+    text, keyboard = _requests_render(data)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _approve_sync(tg_user, req_id):
+    user, _ = get_or_create_user(tg_user)
+    result = approve_request(user, req_id)
+    return result, _requests_sync(tg_user)
+
+
+async def alliance_approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    req_id = int(query.data.split(":")[1])
+    try:
+        result, data = await run_db(_approve_sync, update.effective_user, req_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        # refresh the list (the request may have vanished)
+        data = await run_db(_requests_sync, update.effective_user)
+        if data is not None:
+            text, keyboard = _requests_render(data)
+            await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        return
+    await query.answer("✅ عضو اضافه شد.")
+    # DM the new member
+    await _pv_notify(
+        context, result["applicant"].id,
+        f"{get_emoji('alliance')} درخواستت قبول شد! حالا عضو اتحاد <b>{result['alliance'].name}</b> هستی. 🎉",
+    )
+    # DM the managers of every OTHER alliance this player had requested — their request is void
+    for inv in result.get("invalidated", []):
+        note = f"ℹ️ «{inv['applicant_name']}» به اتحاد دیگری («{result['alliance'].name}») پیوست، پس درخواستش به شما لغو شد."
+        for mid in inv["manager_ids"]:
+            await _pv_notify(context, mid, note)
+    if data is not None:
+        text, keyboard = _requests_render(data)
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _reject_sync(tg_user, req_id):
+    user, _ = get_or_create_user(tg_user)
+    result = reject_request(user, req_id)
+    return result, _requests_sync(tg_user)
+
+
+async def alliance_reject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    req_id = int(query.data.split(":")[1])
+    try:
+        result, data = await run_db(_reject_sync, update.effective_user, req_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("❌ رد شد.")
+    await _pv_notify(
+        context, result["applicant"].id,
+        f"متأسفانه درخواست عضویتت به اتحاد <b>{result['alliance_name']}</b> رد شد.",
+    )
+    if data is not None:
+        text, keyboard = _requests_render(data)
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+# ── alliance join settings (auto/request + min power) ─────────────────────────
+def _settings_sync(tg_user):
+    from game import alliance as alliance_mod
+
+    user, _ = get_or_create_user(tg_user)
+    al = user.alliance
+    if al is None or not alliance_mod._is_manager(user, al):
+        return None
+    return {"name": al.name, "auto_accept": al.auto_accept, "min_join_power": al.min_join_power}
+
+
+def _settings_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
+    mode = "خودکار (هرکی شرایط داشته باشه فوری عضو می‌شه)" if data["auto_accept"] else "با تأیید (درخواست می‌دن، تو تأیید می‌کنی)"
+    text = (
+        f"⚙️ <b>تنظیمات عضوگیری — {data['name']}</b>\n\n"
+        f"حالت فعلی: <b>{mode}</b>\n"
+        f"حداقل قدرت برای عضویت: <b>{data['min_join_power']}</b>\n"
+    )
+    toggle_label = "🔁 تغییر به «با تأیید»" if data["auto_accept"] else "🔁 تغییر به «خودکار»"
+    rows = [
+        [btn(toggle_label, style=CONFIRM, callback_data="ally_toggle_auto")],
+        [btn("🎯 تنظیم حداقل قدرت", style=NAV, callback_data="ally_set_minpow")],
+        [back_btn("ally_members", "بازگشت به اعضا")],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+async def alliance_settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    data = await run_db(_settings_sync, update.effective_user)
+    await query.answer()
+    if data is None:
+        await query.answer("فقط رهبر یا قائم‌مقام می‌تونه تنظیمات رو ببینه.", show_alert=True)
+        return
+    text, keyboard = _settings_render(data)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _toggle_auto_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    cur = _settings_sync(tg_user)
+    if cur is None:
+        raise GameError("فقط رهبر یا قائم‌مقام می‌تونه تنظیمات رو عوض کنه.")
+    set_join_settings(user, auto_accept=not cur["auto_accept"])
+    return _settings_sync(tg_user)
+
+
+async def alliance_toggle_auto_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    try:
+        data = await run_db(_toggle_auto_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("✅ ذخیره شد.")
+    text, keyboard = _settings_render(data)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def alliance_set_minpow_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    context.user_data[AWAITING_PLAYER_KEY] = {"action": "ally_minpow"}
+    await query.answer()
+    await safe_edit_message_text(
+        query, "🎯 حداقل قدرت لازم برای عضویت رو به عدد بفرست (مثلاً <code>500</code>؛ برای برداشتن محدودیت 0):",
+        parse_mode="HTML",
+    )
 
 
 async def alliance_kick_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2059,7 +2276,7 @@ async def alliance_browse_callback(update: Update, context: ContextTypes.DEFAULT
 
 def _join_by_id_sync(tg_user, alliance_id: int):
     user, _ = get_or_create_user(tg_user)
-    return join_alliance_by_id(user, alliance_id)
+    return request_or_join_by_id(user, alliance_id)
 
 
 async def alliance_browse_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2067,16 +2284,11 @@ async def alliance_browse_join_callback(update: Update, context: ContextTypes.DE
     await query.answer()
     alliance_id = int(query.data.split(":")[1])
     try:
-        alliance = await run_db(_join_by_id_sync, update.effective_user, alliance_id)
+        result = await run_db(_join_by_id_sync, update.effective_user, alliance_id)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await safe_edit_message_text(
-        query,
-        f"{get_emoji('alliance')} به اتحاد <b>{alliance.name}</b> پیوستی! 🎉",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info")]]),
-    )
+    await _handle_join_result(update, context, result, via_query=query)
 
 
 async def alliance_search_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2276,14 +2488,27 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
 
     if action == "alliance_join":
         try:
-            alliance = await run_db(_alliance_join_sync, update.effective_user, text)
+            result = await run_db(_alliance_join_sync, update.effective_user, text)
         except GameError as exc:
             context.user_data[AWAITING_PLAYER_KEY] = awaiting
+            await message.reply_text(str(exc), parse_mode="HTML")
+            return
+        await _handle_join_result(update, context, result)
+        return
+
+    if action == "ally_minpow":
+        raw = (text or "").strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
+        if not raw.isdigit():
+            context.user_data[AWAITING_PLAYER_KEY] = awaiting
+            await message.reply_text("فقط یه عدد بفرست (مثلاً 500 یا 0).")
+            return
+        try:
+            al = await run_db(lambda tg: set_join_settings(get_or_create_user(tg)[0], min_power=int(raw)),
+                              update.effective_user)
+        except GameError as exc:
             await message.reply_text(str(exc))
             return
-        await message.reply_text(
-            f"{get_emoji('alliance')} به اتحاد <b>{alliance.name}</b> پیوستی!", parse_mode="HTML"
-        )
+        await message.reply_text(f"✅ حداقل قدرت عضویت روی <b>{al.min_join_power}</b> تنظیم شد.", parse_mode="HTML")
         return
 
     if action in ("ally_kick", "ally_deputy"):
@@ -2720,6 +2945,12 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(alliance_deposit_callback, pattern=r"^ally_deposit$"))
     application.add_handler(CallbackQueryHandler(alliance_top_callback, pattern=r"^ally_top$"))
     application.add_handler(CallbackQueryHandler(alliance_members_callback, pattern=r"^ally_members(:\d+)?$"))
+    application.add_handler(CallbackQueryHandler(alliance_requests_callback, pattern=r"^ally_requests$"))
+    application.add_handler(CallbackQueryHandler(alliance_approve_callback, pattern=r"^ally_approve:\d+$"))
+    application.add_handler(CallbackQueryHandler(alliance_reject_callback, pattern=r"^ally_reject:\d+$"))
+    application.add_handler(CallbackQueryHandler(alliance_settings_callback, pattern=r"^ally_settings$"))
+    application.add_handler(CallbackQueryHandler(alliance_toggle_auto_callback, pattern=r"^ally_toggle_auto$"))
+    application.add_handler(CallbackQueryHandler(alliance_set_minpow_start, pattern=r"^ally_set_minpow$"))
     application.add_handler(CallbackQueryHandler(alliance_kick_start, pattern=r"^ally_kick$"))
     application.add_handler(CallbackQueryHandler(alliance_deputy_start, pattern=r"^ally_deputy$"))
     application.add_handler(CallbackQueryHandler(alliance_deputy_off_callback, pattern=r"^ally_deputy_off$"))
