@@ -26,8 +26,9 @@ HUNT_XP_WIN = 25
 HUNT_XP_LOSE = 8
 # «بعدی» (searching for a better target) costs a little gold, scaled by power, so
 # hunting a good loot is a small deliberate spend rather than free infinite rerolls.
-HUNT_SCOUT_COST_PER_POWER = 0.012
-HUNT_SCOUT_COST_MIN = 5
+# Halved from 0.012/5 — searching for a hunt should be cheap (arena keeps its own).
+HUNT_SCOUT_COST_PER_POWER = 0.006
+HUNT_SCOUT_COST_MIN = 3
 
 
 def _player_power(creature: Creature) -> int:
@@ -77,16 +78,19 @@ def spawn_wild_creature(player_creature: Creature, tier: str = "normal", seed: i
 def scout_one(player_creature: Creature) -> dict:
     """A single previewable opponent — the player searches again ("بعدی") until they
     like what they see. Carries the seed so resolve_hunt rebuilds the exact opponent."""
+    from game.creature import creature_power
+
     tier = random.choice(list(HUNT_TIERS))
     seed = random.randrange(1_000_000)
     wild = spawn_wild_creature(player_creature, tier, seed)
-    wild_stats = effective_stats(wild)
     return {
         "tier": tier,
         "seed": seed,
         "name": wild.name,
         "element": wild.element,
-        "power": round(wild_stats["hp"] + wild_stats["atk"] + wild_stats["def"] + wild_stats["spd"]),
+        # canonical power metric (same as profile/arena), so «قدرت حریف» is comparable
+        # to the player's own shown power — not a different, smaller stat-sum.
+        "power": creature_power(wild),
         "reward_mult": HUNT_TIERS[tier]["reward_mult"],
     }
 

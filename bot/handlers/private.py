@@ -1620,8 +1620,9 @@ def _hunt_scout_sync(tg_user, charge=False):
             raise GameError(f"برای جستجوی دوباره {cost} طلا لازمه (الان {user.coins} داری).")
         user.coins -= cost
         user.save(update_fields=["coins"])
-    my_stats = effective_stats(creature, get_equipped_items(creature))
-    my_power = round(my_stats["hp"] + my_stats["atk"] + my_stats["def"] + my_stats["spd"])
+    # use the canonical power metric (same as profile/arena) — the old stat-sum showed
+    # a smaller, inconsistent number ("قدرتم کمه و باگه").
+    my_power = _creature_power(creature, get_equipped_items(creature))
     return creature, my_power, user.cup, scout_one(creature), sync_energy(user), cost
 
 
@@ -1629,27 +1630,38 @@ def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> st
     tier_label = HUNT_TIERS[target["tier"]]["label"]
     lo, hi = estimated_reward(target["tier"], cup)
     diff = target["power"] - my_power
-    odds = "🟢 شانس بالا" if diff < -15 else ("🔴 خطرناک" if diff > 15 else "🟡 سرتاسری")
+    # win chance from the power gap, phrased clearly
+    if diff < -40:
+        win = "🟢 خیلی زیاد"
+    elif diff < -10:
+        win = "🟢 زیاد"
+    elif diff <= 15:
+        win = "🟡 نزدیک / سرتاسری"
+    elif diff <= 50:
+        win = "🔴 کم"
+    else:
+        win = "🔴 خیلی کم (خطرناک)"
     return "\n".join(
         [
             f"{get_emoji('hunt')} <b>شکار انفرادی</b>",
-            f"موجودت: <b>{creature.name}</b> · 💪 {my_power}",
+            f"موجودت: <b>{creature.name}</b> · 💪 قدرت تو: <b>{my_power}</b>",
             f"{get_emoji('energy')} {energy}/{constants.MAX_ENERGY}\n",
             "🔍 <b>یه حریف پیدا شد:</b>\n",
             f"{tier_label} <b>{target['name']}</b> {constants.element_label(target['element'])}",
-            f"💪 قدرت: <b>{target['power']}</b>  ({odds})",
+            f"💪 قدرت حریف: <b>{target['power']}</b>",
+            f"🎯 شانس برد: <b>{win}</b>",
             f"{get_emoji('coin')} غنیمت در صورت برد: {lo}–{hi}",
             f"\n<blockquote>حمله {constants.HUNT_ENERGY_COST} انرژی می‌بره. "
-            f"«بعدی» برای گشتن دنبال حریف بهتر: <b>{scout_price}</b> {get_emoji('coin')}.</blockquote>",
+            f"«بعدی» برای گشتن دنبال حریف بهتر <b>{scout_price}</b> طلا می‌گیره.</blockquote>",
         ]
     )
 
 
-def _hunt_scout_keyboard(target) -> InlineKeyboardMarkup:
+def _hunt_scout_keyboard(target, scout_price=0) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [btn("حمله!", emoji_key="btn_attack", style=BATTLE, callback_data=f"hunt_go:{target['tier']}:{target['seed']}")],
-            [btn("🔍 بعدی", style=NAV, callback_data="hunt_next")],
+            [btn(f"🔍 بعدی ({scout_price} طلا)", style=NAV, callback_data="hunt_next")],
             [back_btn("menu:me")],
         ]
     )
@@ -1667,7 +1679,7 @@ async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await send_screen(update,
         _hunt_scout_text(creature, my_power, cup, target, energy, cost),
         parse_mode="HTML",
-        reply_markup=_hunt_scout_keyboard(target),
+        reply_markup=_hunt_scout_keyboard(target, cost),
     )
 
 
@@ -1683,7 +1695,7 @@ async def hunt_next_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         query,
         _hunt_scout_text(creature, my_power, cup, target, energy, cost),
         parse_mode="HTML",
-        reply_markup=_hunt_scout_keyboard(target),
+        reply_markup=_hunt_scout_keyboard(target, cost),
     )
 
 
@@ -2548,10 +2560,22 @@ def main_menu_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
     return creature_keyboard(is_owner)
 
 
-async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await send_screen(update, 
-        "📋 <b>منوی اصلی</b>\nیکی رو انتخاب کن:", parse_mode="HTML", reply_markup=main_menu_keyboard()
+def _menu_lab_line_sync(tg_user) -> str:
+    user, _ = get_or_create_user(tg_user)
+    return lab_level_line(user)
+
+
+async def _show_main_menu(update) -> None:
+    """Main menu with the lab level + 'how far to the next level' line at the top."""
+    lab_line = await run_db(_menu_lab_line_sync, update.effective_user)
+    await send_screen(
+        update, f"📋 <b>منوی اصلی</b>\n{lab_line}\n\nیکی رو انتخاب کن:",
+        parse_mode="HTML", reply_markup=main_menu_keyboard(),
     )
+
+
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _show_main_menu(update)
 
 
 _MENU_ACTIONS = {
@@ -2620,10 +2644,7 @@ async def route_private_keyword(update: Update, context: ContextTypes.DEFAULT_TY
     handler = _MENU_ACTIONS.get(_KEYWORD_TO_MENU.get(action, ""))
     if handler is None:
         # group-only combat word or brand fallback → just show the main menu
-        await send_screen(
-            update, "📋 <b>منوی اصلی</b>\nیکی رو انتخاب کن:",
-            parse_mode="HTML", reply_markup=main_menu_keyboard(),
-        )
+        await _show_main_menu(update)
         return True
     await handler(update, context)
     return True
