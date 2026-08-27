@@ -201,12 +201,15 @@ def premiumize_html(text: str) -> str:
     # and reads cramped — put a clear gap between it and what follows. Regular spaces
     # collapse to one in Telegram's renderer, so use NON-BREAKING spaces (U+00A0),
     # which it keeps.
-    return _BLOCKQUOTE_LEAD_EMOJI.sub(lambda m: m.group(1) + "  ", result)
+    return _LEAD_EMOJI.sub(lambda m: m.group("pre") + m.group("emoji") + "  ", result)
 
 
 # <blockquote> + optional whitespace + a leading <tg-emoji> block, then any trailing
 # spaces (regular or NBSP) — normalised to exactly two NBSP.
-_BLOCKQUOTE_LEAD_EMOJI = re.compile(r"(<blockquote>\s*<tg-emoji\b[^>]*>.*?</tg-emoji>)[\s ]*", re.DOTALL)
+_LEAD_EMOJI = re.compile(
+    r"(?P<pre>(?:^|<blockquote>)[^\S\n]*)(?P<emoji><tg-emoji\b[^>]*>.*?</tg-emoji>)[^\S\n]*",
+    re.DOTALL | re.MULTILINE,
+)
 
 
 def get_emoji(key: str, fallback: str | None = None) -> str:
