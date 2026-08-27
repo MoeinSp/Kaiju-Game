@@ -528,8 +528,35 @@ def creature_transfer_cost(star_level: int, rarity: str) -> int:
     return round(star_base * CREATURE_TRANSFER_RARITY_MULT.get(rarity, 1.0))
 
 
-def equip_transfer_cost(rarity: str) -> int:
-    return EQUIP_TRANSFER_COST.get(rarity, EQUIP_TRANSFER_COST["common"])
+def equip_transfer_cost(rarity: str, level: int | None = None) -> int:
+    """Diamond fee to transfer an equipment piece. The per-rarity price in
+    EQUIP_TRANSFER_COST is the *maxed* (level = EQUIPMENT_MAX_LEVEL) cost; a
+    lower-level item is discounted in 20% steps of how close it is to max, so a
+    fresh +1 is cheap to pass around while a maxed one is a real diamond sink.
+    Rarity still sets the base, so a mythic costs far more than a common at any
+    given level."""
+    base = EQUIP_TRANSFER_COST.get(rarity, EQUIP_TRANSFER_COST["common"])
+    if level is None or level >= EQUIPMENT_MAX_LEVEL:
+        return base
+    frac = max(0, level) / EQUIPMENT_MAX_LEVEL
+    if frac <= 0.25:
+        mult = 0.20
+    elif frac <= 0.50:
+        mult = 0.40
+    elif frac <= 0.75:
+        mult = 0.60
+    else:
+        mult = 0.80
+    return max(1, round(base * mult))
+
+
+def equip_transfer_blacksmith_req(level: int) -> int:
+    """Minimum blacksmith (آهنگری) level the RECEIVER must have to accept an item of
+    this level: their forge must be able to support it (cap = blacksmith × 5), so a
+    player can't suddenly receive gear far beyond what their own forge could make."""
+    import math as _math
+
+    return _math.ceil(max(1, level) / EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL)
 
 HEIST_STEAL_PERCENT = 0.20
 HEIST_COOLDOWN_HOURS = 6

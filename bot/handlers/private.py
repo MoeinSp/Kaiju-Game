@@ -21,6 +21,7 @@ from bot.handlers.events import events_panel
 from bot.handlers.idle import idle_panel
 from bot.handlers.league import league_panel
 from bot.handlers.shop import gold_shop_panel, item_shop_panel, shield_shop_panel, shop_panel
+from bot.handlers.exchange import exchange_panel
 from bot.handlers.casino import casino_panel
 from bot.handlers.titles import titles_panel
 from bot.handlers.referral import referral_panel
@@ -725,6 +726,7 @@ _CATEGORIES = {
         [("بنر ویژه", "banner", "s", "btn_banner"), ("شاپ روزانه", "shop", "s", "btn_shop")],
         [("خرید سپر", "shield_shop", "s", "btn_shield"), ("کازینو", "casino", "s", "btn_casino")],
         [("آیتم‌های ویژه", "item_shop", "s", "btn_items"), ("خرید طلا", "gold_shop", "s", "btn_shop")],
+        [("مبادله طلا و DNA", "exchange", "s", "btn_exchange")],
     ]),
     "social": ("👥 اجتماعی", [
         [("اتحاد من", "alliance_info", "n", "btn_alliance"), ("لیگ رتبه‌بندی", "league", "n", "btn_league")],
@@ -2887,6 +2889,7 @@ _MENU_ACTIONS = {
     "shield_shop": shield_shop_panel,
     "item_shop": item_shop_panel,
     "gold_shop": gold_shop_panel,
+    "exchange": exchange_panel,
     "casino": casino_panel,
     "titles": titles_panel,
     "wheel": wheel_cmd,
@@ -2908,7 +2911,7 @@ _KEYWORD_TO_MENU = {
     "reward": "idle", "alliance": "alliance_info", "leaderboard": "rank",
     "box": "biocrate", "mine": "buildings", "wheel": "wheel",
     "select": "collection", "help": "guide", "start": "guide",
-    "casino": "casino",
+    "casino": "casino", "exchange": "exchange",
 }
 
 

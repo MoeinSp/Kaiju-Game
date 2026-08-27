@@ -902,6 +902,15 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         _schedule_cleanup(context, message.chat_id, [message.message_id], action)
         return
 
+    if action == "exchange":
+        # gold↔DNA exchange, scoped to the sender (buttons carry their id). It's an
+        # interactive multi-step panel, so it's not auto-cleaned like a plain card.
+        from bot.handlers.exchange import exchange_panel
+
+        await exchange_panel(update, context)
+        _schedule_cleanup(context, message.chat_id, [message.message_id], action)
+        return
+
     if action == "alliance":
         from bot.handlers import private as private_handlers
 

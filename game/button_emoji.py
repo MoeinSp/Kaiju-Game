@@ -73,6 +73,7 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_events": ("رویداد", "⏳", "features"),
     "btn_banner": ("بنر ویژه", "🎰", "features"),
     "btn_shop": ("شاپ روزانه", "🛒", "features"),
+    "btn_exchange": ("مبادله طلا و DNA", "🔄", "features"),
     "btn_idle": ("پاداش آفلاین", "💤", "features"),
     "btn_achievements": ("دستاوردها", "🏅", "features"),
     "btn_titles": ("لقب‌ها", "👑", "features"),

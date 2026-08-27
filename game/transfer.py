@@ -55,7 +55,12 @@ def equip_prices_text() -> str:
     from game.emoji import get_emoji
 
     d = get_emoji("diamond")
-    lines = [f"{d} <b>هزینه‌ی انتقال تجهیزات</b>  <i>(الماس — گیرنده می‌ده)</i>", ""]
+    lines = [
+        f"{d} <b>هزینه‌ی انتقال تجهیزات</b>  <i>(الماس — گیرنده می‌ده)</i>",
+        "<i>قیمت‌های زیر برای آیتم مکس‌ان؛ هرچی سطح آیتم پایین‌تر باشه ارزون‌تره "
+        "(۲۰٪ تا ۸۰٪ قیمت مکس).</i>",
+        "",
+    ]
     for rarity in reversed(constants.RARITY_ORDER):
         lines.append(f"{constants.RARITY_LABELS[rarity]} — <b>{_fa(constants.equip_transfer_cost(rarity))}</b>")
     return "\n".join(lines)
@@ -83,6 +88,19 @@ def _set_cooldown(users: list[User], field: str) -> None:
     until = timezone.now() + datetime.timedelta(hours=constants.TRANSFER_COOLDOWN_HOURS)
     for u in users:
         setattr(u, field, until)
+
+
+def _check_equip_blacksmith(receiver: User, item: Equipment) -> None:
+    """The receiver's forge must be able to support the item's level (blacksmith
+    caps equipment at level×5), so nobody suddenly receives gear far beyond what
+    their own base could produce. Raises GameError if their forge is too low."""
+    bs_req = constants.equip_transfer_blacksmith_req(item.level)
+    bs = building_level(receiver, "blacksmith")
+    if bs < bs_req:
+        raise GameError(
+            f"گیرنده برای گرفتن تجهیزاتِ +{item.level} باید آهنگری سطح {bs_req} داشته باشه "
+            f"(الان {bs}). اول آهنگریش رو ارتقا بده."
+        )
 
 
 def _creature_reqs(star_level: int) -> dict:
@@ -141,7 +159,8 @@ def preview_equip_transfer(sender: User, receiver: User, equip_id: int) -> dict:
             f"گیرنده برای گرفتن تجهیزاتِ {constants.RARITY_LABELS[item.rarity]} باید تالار مِهر سطح "
             f"{mh_req} داشته باشه (الان {mh})."
         )
-    cost = constants.equip_transfer_cost(item.rarity)
+    _check_equip_blacksmith(receiver, item)
+    cost = constants.equip_transfer_cost(item.rarity, item.level)
     if receiver.diamonds < cost:
         raise TransferFundsError(cost, receiver.diamonds, "equip")
     return {"item": item, "cost": cost}
@@ -239,8 +258,9 @@ def transfer_equipment(sender: User, receiver: User, equip_id: int, price: int =
             f"گیرنده برای گرفتن تجهیزاتِ {constants.RARITY_LABELS[item.rarity]} باید تالار مِهر سطح "
             f"{mh_req} داشته باشه (الان {mh})."
         )
+    _check_equip_blacksmith(receiver, item)
 
-    cost = constants.equip_transfer_cost(item.rarity)
+    cost = constants.equip_transfer_cost(item.rarity, item.level)
     if receiver.diamonds < cost:
         raise TransferFundsError(cost, receiver.diamonds, "equip")
     if price > 0 and receiver.coins < price:

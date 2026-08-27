@@ -26,6 +26,7 @@ from bot.handlers import (
     codex,
     energy,
     events,
+    exchange,
     groupdrops,
     idle,
     league,
@@ -199,6 +200,7 @@ def main() -> None:
     idle.register(application)
     league.register(application)
     shop.register(application)
+    exchange.register(application)
     casino.register(application)
     titles.register(application)
     groupdrops.register(application)  # flash reward drops in groups (JobQueue)
