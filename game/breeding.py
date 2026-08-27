@@ -251,13 +251,16 @@ def hatch(user: User, egg_id: int) -> tuple[Creature, dict]:
 
 
 def cave_finish_price(job: BreedingJob) -> int:
-    return constants.diamond_finish_cost((job.finishes_at - timezone.now()).total_seconds())
+    # cave rushing is a premium sink — 4× the base diamond-finish price (cave only)
+    base = constants.diamond_finish_cost((job.finishes_at - timezone.now()).total_seconds())
+    return base * constants.CAVE_FINISH_MULTIPLIER
 
 
 def egg_finish_price(egg: Egg) -> int:
     """Diamonds to hatch this egg right now — priced from the time still left (like
-    every other diamond-finish), so it drops as the egg incubates."""
-    return constants.diamond_finish_cost(egg_seconds_left(egg))
+    every other diamond-finish), so it drops as the egg incubates. The cave is a
+    premium sink, so it's 4× the base finish price."""
+    return constants.diamond_finish_cost(egg_seconds_left(egg)) * constants.CAVE_FINISH_MULTIPLIER
 
 
 @transaction.atomic

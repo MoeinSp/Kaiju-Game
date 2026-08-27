@@ -147,10 +147,25 @@ def claim(drop_id: int, tg_user) -> dict:
     if user.drop_claim_ready_at is not None and user.drop_claim_ready_at > now:
         wait = int((user.drop_claim_ready_at - now).total_seconds())
         return {"status": "cooldown", "seconds_left": wait}
+    # diamond veins get a stricter gate on top: a daily cap and a 1-hour cooldown,
+    # so diamonds can't be swept across many groups. Blocked → drop stays open for
+    # someone else, exactly like the general cooldown.
+    is_vein = drop.kind == "vein"
+    if is_vein:
+        from game.daily import get_daily_count, record_action
+
+        if get_daily_count(user, "diamond_vein") >= constants.DIAMOND_VEIN_DAILY_CAP:
+            return {"status": "vein_limit", "cap": constants.DIAMOND_VEIN_DAILY_CAP}
+        if user.vein_claim_ready_at is not None and user.vein_claim_ready_at > now:
+            wait = int((user.vein_claim_ready_at - now).total_seconds())
+            return {"status": "vein_cooldown", "seconds_left": wait}
     reward = reward_for(user, drop.kind)
     # grant
     fields = ["drop_claim_ready_at"]
     user.drop_claim_ready_at = now + datetime.timedelta(minutes=CLAIM_COOLDOWN_MINUTES)
+    if is_vein:
+        user.vein_claim_ready_at = now + datetime.timedelta(minutes=constants.DIAMOND_VEIN_COOLDOWN_MINUTES)
+        fields.append("vein_claim_ready_at")
     if reward.get("coins"):
         user.coins += reward["coins"]; fields.append("coins")
     if reward.get("dna"):
@@ -163,6 +178,9 @@ def claim(drop_id: int, tg_user) -> dict:
         fields += ["energy", "energy_updated_at"]
     if fields:
         user.save(update_fields=list(set(fields)))
+    # count this vein toward today's cap AFTER the grant succeeds (same atomic txn)
+    if is_vein:
+        record_action(user, "diamond_vein")
 
     drop.claimed_by = user
     drop.claimed_at = timezone.now()

@@ -219,8 +219,14 @@ GUARDIAN_STIPEND_DNA = 3
 # regenerating stamina pool spent on feed/raid_attack — refills over real time instead
 # of resetting once a day, so there's a reason to come back every couple hours
 MAX_ENERGY = 50
+# Diamond-vein group drops are the only diamond source that scales with how many
+# groups you're in, so they get a stricter-than-normal gate on top of the general
+# drop cooldown: a per-player 1-hour cooldown AND a hard daily cap. Stops players
+# from farming diamonds by sweeping the vein drop across dozens of groups.
+DIAMOND_VEIN_COOLDOWN_MINUTES = 60
+DIAMOND_VEIN_DAILY_CAP = 5
 ENERGY_REGEN_MINUTES = 6   # empty -> full in 5 hours
-ENERGY_REFILL_DIAMOND_COST = 15  # diamonds to instantly refill energy to full
+ENERGY_REFILL_DIAMOND_COST = 25  # diamonds to instantly refill energy to full
 FEED_ENERGY_COST = 1
 RAID_ATTACK_ENERGY_COST = 1
 GUARDIAN_CHALLENGE_ENERGY_COST = 1
@@ -796,6 +802,12 @@ def diamond_finish_cost(remaining_seconds: float) -> int:
 
     hours = max(0.0, remaining_seconds) / 3600
     return max(DIAMOND_FINISH_MIN_COST, _math.ceil(hours * DIAMOND_FINISH_PER_HOUR))
+
+
+# Instantly finishing the Monster Cave (breeding) costs this many times the base
+# diamond-finish price — cave rushing is meant to be a premium sink, unlike a plain
+# building upgrade. Applies ONLY to the cave/egg finish, never building upgrades.
+CAVE_FINISH_MULTIPLIER = 4
 
 # ── Daily prize wheel: one free spin/day (capped via ENERGY_CAPS below), a
 # weighted table of small prizes across every resource plus speed-up cards. ─────

@@ -104,6 +104,20 @@ async def drop_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"⏳ به‌تازگی یه جایزه گرفتی — {m}:{s:02d} دیگه صبر کن (تا نشه توی چند گروه همزمان جمعش کرد).",
             show_alert=True,
         )
+    elif status == "vein_cooldown":
+        total_min = result["seconds_left"] // 60
+        h, m = divmod(total_min, 60)
+        wait_txt = f"{h} ساعت و {m} دقیقه" if h else f"{m} دقیقه"
+        await query.answer(
+            f"💎 رگه‌ی الماس کول‌داون داره — {wait_txt} دیگه می‌تونی یکی دیگه برداری "
+            "(تا نشه الماس رو توی چند گروه فارم کرد).",
+            show_alert=True,
+        )
+    elif status == "vein_limit":
+        await query.answer(
+            f"💎 سقف امروزت برای رگه‌ی الماس پر شده (روزی {result['cap']} تا). فردا دوباره.",
+            show_alert=True,
+        )
     elif status == "expired":
         await query.answer("⌛ زمان این جایزه تموم شده.", show_alert=True)
     else:

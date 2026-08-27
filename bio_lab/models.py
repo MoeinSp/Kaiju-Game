@@ -37,6 +37,10 @@ class User(models.Model):
     reward_total_claims = models.IntegerField(default=0)
     # global cooldown on winning a group flash-drop, for the same anti-multi-group reason
     drop_claim_ready_at = models.DateTimeField(null=True, blank=True)
+    # separate, stricter cooldown specifically for winning a DIAMOND VEIN drop — plus a
+    # daily cap (DailyActionLog "diamond_vein") — so diamonds can't be farmed by sweeping
+    # veins across dozens of groups. See game/groupdrops.claim().
+    vein_claim_ready_at = models.DateTimeField(null=True, blank=True)
 
     # trading (game/transfer.py): a creature and an equipment transfer each carry a
     # 1-day cooldown that applies to BOTH sending and receiving, so a player (or a
