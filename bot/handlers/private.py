@@ -161,6 +161,7 @@ def creature_card_text(user, creature, equipped_items: list | None = None) -> st
         lines.extend(shield_lines)
     lines.append("")
     lines.append("━━━━━━━━━━")
+    lines.append(lab_level_line(user))  # lab level + progress, shown on /start and /me
     lines.append(wallet_line(user, energy))
     return "\n".join(lines)
 

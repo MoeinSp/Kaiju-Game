@@ -1,5 +1,7 @@
 import datetime
 import random
+import threading
+import time
 
 from django.db import transaction
 from django.db.models import Q
@@ -15,6 +17,37 @@ from game.equipment import get_equipped_items
 # creature_power is the canonical strength score (game.creature) — re-exported here
 # so the many `from game.arena import creature_power` call sites keep working.
 __all__ = ["creature_power"]
+
+# ── short-lived opponent reservations ────────────────────────────────────────
+# When a player is shown a real opponent, that opponent is "held" for them for a
+# few seconds so nobody else's search can grab (and shield) them first — the
+# "همه سپر دارن چون سریع اتک می‌خورن" complaint. In-memory (single webhook process),
+# guarded by a lock because run_db uses a thread pool. Each searcher holds at most
+# one reservation at a time (finding a new opponent releases the previous one).
+ARENA_RESERVE_SECONDS = 20
+_RESERVATIONS: dict[int, tuple[int, float]] = {}  # opponent_id -> (reserver_id, expires_at)
+_RES_LOCK = threading.Lock()
+
+
+def _reserved_by_others(attacker_id: int) -> set[int]:
+    now = time.time()
+    with _RES_LOCK:
+        return {oid for oid, (rid, exp) in _RESERVATIONS.items() if exp > now and rid != attacker_id}
+
+
+def _reserve_opponent(attacker_id: int, opponent_id: int) -> None:
+    now = time.time()
+    with _RES_LOCK:
+        # this searcher holds only one reservation; drop their old one and any expired
+        stale = [oid for oid, (rid, exp) in _RESERVATIONS.items() if rid == attacker_id or exp <= now]
+        for oid in stale:
+            _RESERVATIONS.pop(oid, None)
+        _RESERVATIONS[opponent_id] = (attacker_id, now + ARENA_RESERVE_SECONDS)
+
+
+def _release_opponent(opponent_id: int) -> None:
+    with _RES_LOCK:
+        _RESERVATIONS.pop(opponent_id, None)
 
 
 def active_power(user: User) -> int:
@@ -232,7 +265,8 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
 
     now = timezone.now()
     band = constants.ARENA_MATCH_CUP_BAND
-    exclude = {attacker.id} | set(exclude_ids or [])
+    # skip who this player already saw + who's currently reserved by someone else
+    exclude = {attacker.id} | set(exclude_ids or []) | _reserved_by_others(attacker.id)
 
     def _query(excluding):
         return list(
@@ -255,7 +289,7 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
         # id) so «حریف بعدی» always changes the screen. If that player was the only real
         # option, fall through to a bot rather than re-showing them (a no-op edit).
         current = list(exclude_ids)[-1] if exclude_ids else None
-        keep_out = {attacker.id} | ({current} if current else set())
+        keep_out = {attacker.id} | ({current} if current else set()) | _reserved_by_others(attacker.id)
         candidates = _query(keep_out)
     if not candidates:
         return _fake_opponent(attacker)
@@ -266,6 +300,7 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
     pool = candidates[: min(3, len(candidates))]
     weights = [1.0 / (1 + abs(u.cup - attacker.cup)) for u in pool]
     target = random.choices(pool, weights=weights, k=1)[0]
+    _reserve_opponent(attacker.id, target.id)  # hold them for ~20s against other searchers
     target_creature = Creature.objects.filter(owner=target, is_active=True).first()
     return {
         "is_fake": False,
@@ -356,6 +391,7 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
             defender_user.cup = max(0, defender_user.cup + (-delta if won else abs(delta)))
             defender_fields += ["cup", "shield_until"]
         defender_user.save(update_fields=defender_fields)
+        _release_opponent(defender_user.id)  # raid done + shielded → free the reservation
 
     # For a REAL defender we DM them the moment this returns (see the handler), so the
     # log is pre-marked notified here — the periodic catch-up job then leaves it alone.
@@ -394,6 +430,9 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
             "attacker_power": attacker_power,
             "attacker_won": won,
             "loot": loot,
+            "attacker_cup": attacker.cup,
+            "defender_cup": defender_user.cup,
+            "cup_change": (-delta if won else abs(delta)) if award_cup else 0,
         },
     }
 

@@ -1039,6 +1039,8 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
             "attacker_power": a_power,
             "attacker_won": attacker_won,
             "loot": loot if attacker_won else 0,
+            "attacker_cup": attacker.cup,
+            "cup_change": 0,  # group «اتک» is cup-neutral
         },
     }
 

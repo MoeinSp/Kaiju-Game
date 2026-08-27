@@ -11,7 +11,7 @@ from telegram import InlineKeyboardMarkup
 from telegram.error import Forbidden, TelegramError
 from telegram.ext import ContextTypes
 
-from bot.buttons import NAV, btn
+from bot.buttons import DANGER, NAV, btn
 from bot.utils import run_db
 from game.notifications import collect_due
 
@@ -25,12 +25,27 @@ def _defense_details_button(attacker_id):
     return InlineKeyboardMarkup([[btn("🔍 جزییات حریف", style=NAV, callback_data=f"defrep_opp:{attacker_id}")]])
 
 
+def _defense_report_keyboard(defense: dict, *, group: bool):
+    """Buttons under a defense report. The labels carry a compact summary (power, the
+    attacker's cup, coins looted). Revenge is ARENA-ONLY; group «اتک» has no revenge."""
+    power = defense.get("attacker_power", 0)
+    cup = defense.get("attacker_cup")
+    loot = defense.get("loot", 0)
+    rows = []
+    if not group and defense.get("log_id"):
+        cup_bit = f" · 🏆{cup}" if cup is not None else ""
+        rows.append([btn(f"⚔️ انتقام · 💪{power}{cup_bit}", emoji_key="btn_revenge", style=DANGER,
+                         callback_data=f"arena_revenge:{defense['log_id']}")])
+    details_label = f"🔍 جزییات حریف · 💪{power}" + (f" · 💰{loot}" if loot else "")
+    rows.append([btn(details_label, style=NAV, callback_data=f"defrep_opp:{defense['attacker_id']}")])
+    return InlineKeyboardMarkup(rows)
+
+
 async def send_defense_report_now(context, defense: dict, *, group: bool = False) -> None:
     """Send the 'you were attacked' DM the INSTANT a raid resolves (no waiting for the
     5-minute catch-up job). Shows the attacker's full creature card (HP/ATK/…) inline,
-    like the group opponent-details. NO revenge button — neither arena nor group defense
-    reports offer revenge (revenge lives in the «انتقام‌ها» panel). No-ops if the
-    defender has DMs off or blocked the bot."""
+    plus inline buttons: «انتقام» (ARENA only) and «جزییات حریف», whose captions carry a
+    quick summary (power / cup / loot). No-ops if the defender has DMs off / blocked."""
     if defense is None or not defense.get("notifications_on", True):
         return
     from bot.handlers.arena import _user_details_sync, opponent_details_text
@@ -39,13 +54,19 @@ async def send_defense_report_now(context, defense: dict, *, group: bool = False
     head = defense_report_text(
         defense["attacker_name"], defense["attacker_power"], defense["attacker_won"], defense["loot"]
     )
+    cup_line = ""
+    if defense.get("cup_change"):
+        cup_line = f"\n🏆 کاپت {defense['cup_change']}- شد (الان {defense.get('defender_cup', '?')})"
     try:
         d = await run_db(_user_details_sync, defense["attacker_id"])
-        text = head + "\n\n━━━━━━━━━━\n" + opponent_details_text(d)
+        text = head + cup_line + "\n\n━━━━━━━━━━\n" + opponent_details_text(d)
     except Exception:  # noqa: BLE001 — a details hiccup must not drop the report
-        text = head
+        text = head + cup_line
     try:
-        await context.bot.send_message(chat_id=defense["defender_id"], text=text, parse_mode="HTML")
+        await context.bot.send_message(
+            chat_id=defense["defender_id"], text=text, parse_mode="HTML",
+            reply_markup=_defense_report_keyboard(defense, group=group),
+        )
     except Forbidden:
         await run_db(_opt_out, defense["defender_id"])
     except TelegramError:
