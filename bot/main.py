@@ -125,29 +125,35 @@ async def _post_init(application: Application) -> None:
 
 
 def _install_premium_glyph_hook(application: Application) -> None:
-    """Wrap the bot's send/edit so EVERY outgoing HTML message runs through
-    premiumize_html — literal emojis hardcoded in message strings become the owner's
-    Premium <tg-emoji> automatically, without editing hundreds of f-strings. All the
-    reply_text/edit_message_text shortcuts funnel through these two Bot methods with
-    text passed as a keyword, so this one hook covers the whole bot."""
+    """Make EVERY outgoing HTML message run through premiumize_html — literal emojis
+    hardcoded in message strings become the owner's Premium <tg-emoji> automatically,
+    without editing hundreds of f-strings. All reply_text/edit_message_text shortcuts
+    funnel through Bot.send_message / Bot.edit_message_text with text passed as a
+    keyword, so patching those two covers the whole bot.
+
+    Patched on the ExtBot CLASS (not the instance): PTB's Bot.__setattr__ forbids
+    setting attributes on a bot instance, but class-level assignment is fine."""
     from telegram.constants import ParseMode
+    from telegram.ext import ExtBot
 
     from game.emoji import premiumize_html
 
-    bot = application.bot
+    if getattr(ExtBot, "_premium_glyph_hooked", False):
+        return
 
     def _wrap(orig):
-        async def wrapped(*args, **kwargs):
+        async def wrapped(self, *args, **kwargs):
             try:
                 if kwargs.get("parse_mode") in ("HTML", ParseMode.HTML) and isinstance(kwargs.get("text"), str):
                     kwargs["text"] = premiumize_html(kwargs["text"])
             except Exception:  # noqa: BLE001 — theming must never block a send
                 pass
-            return await orig(*args, **kwargs)
+            return await orig(self, *args, **kwargs)
         return wrapped
 
-    bot.send_message = _wrap(bot.send_message)
-    bot.edit_message_text = _wrap(bot.edit_message_text)
+    ExtBot.send_message = _wrap(ExtBot.send_message)
+    ExtBot.edit_message_text = _wrap(ExtBot.edit_message_text)
+    ExtBot._premium_glyph_hooked = True
 
 
 def main() -> None:
