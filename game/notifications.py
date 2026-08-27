@@ -49,13 +49,11 @@ def defense_report_text(attacker_name: str, attacker_power: int, attacker_won: b
         return (
             f"⚔️ <b>به آزمایشگاهت حمله شد!</b>\n"
             f"🏭 مهاجم: <b>{attacker_name}</b>{power_note}\n"
-            f"💰 <b>{loot}</b> طلا غارت شد.\n"
-            "می‌تونی همین‌جا جواب بدی 👇"
+            f"💰 <b>{loot}</b> طلا غارت شد."
         )
     return (
         f"🛡 <b>یکی بهت حمله کرد ولی دفاعت موفق بود!</b>\n"
-        f"🏭 مهاجم: <b>{attacker_name}</b>{power_note}\n"
-        "می‌تونی همین‌جا حمله‌ی متقابل بزنی 👇"
+        f"🏭 مهاجم: <b>{attacker_name}</b>{power_note}"
     )
 
 # the once-a-day "your daily reward is waiting" nudge only fires in this local-hour
