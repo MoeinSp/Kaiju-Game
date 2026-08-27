@@ -57,14 +57,18 @@ class Command(BaseCommand):
         return json.load(urllib.request.urlopen(req, timeout=20))
 
     def handle(self, *args, **opts):
+        from bio_lab.models import EmojiOverride
+        from game.emoji import EMOJI_DEFS, set_emoji
+
         existing = {r.key: r for r in ButtonEmojiOverride.objects.all()}
-        if not existing:
-            self.stderr.write("No Premium button emojis set yet — the owner must theme at least one first "
+        text_existing = {o.key: o for o in EmojiOverride.objects.all()}
+        if not existing and not text_existing:
+            self.stderr.write("No Premium emojis set yet — the owner must theme at least one first "
                               "(the owner's sets are discovered from existing overrides).")
             return
 
-        # 1) which Premium sets does the owner draw from?
-        ids = [r.custom_emoji_id for r in existing.values()]
+        # 1) which Premium sets does the owner draw from? (both button + text overrides)
+        ids = [r.custom_emoji_id for r in existing.values()] + [o.custom_emoji_id for o in text_existing.values()]
         stickers = self._api("getCustomEmojiStickers", {"custom_emoji_ids": ids}).get("result", [])
         set_names = sorted({s.get("set_name") for s in stickers if s.get("set_name")})
 
@@ -95,6 +99,42 @@ class Command(BaseCommand):
             set_button_emoji(key, cid, want)
             done += 1
 
+        # 4) same for TEXT/message emojis (game.emoji.EMOJI_DEFS) — match each key's
+        # default unicode glyph to a Premium custom emoji from the owner's own sets,
+        # skipping any key the owner already themed (unless --force). For glyphs the
+        # owner's sets don't carry, try a few semantically-close alternatives so the
+        # key still gets a fitting Premium icon instead of staying plain.
+        TEXT_FALLBACKS = {
+            "poison": ["🐍", "💀", "🧪", "☠"], "def": ["🔰", "⛨"], "spd": ["🌪", "👟", "🏃", "⚡"],
+            "wings": ["🪽", "🕊", "🦅"], "element_earth": ["⛰", "🌍", "🟫", "🗿"],
+            "forfeit_action": ["🚩", "🏳"], "speedup": ["⏰", "⌛", "🕐", "⚡"],
+            "shop_item": ["🛒", "🎒", "🏬"], "book": ["📚", "📕", "📗"], "collection": ["📁", "🗃", "📚"],
+            "settings": ["⚙", "🔧", "🎛"], "creature": ["🐉", "🦕", "👾"], "raid_boss": ["🐉", "👹", "👾"],
+            "attack_action": ["⚔", "🔪", "🗡"], "guardian": ["🛡", "🏰", "🔰"], "shield": ["🛡", "🔰"],
+            "def_": [], "comet": ["🌠", "💫", "🪐"], "building": ["🏢", "🏭", "🧱"], "lab": ["⚗", "🔬", "🧫"],
+            "element_electric": ["🔌", "🌩", "⚡"], "element_water": ["🌊", "💦"], "element_fire": ["🔥", "🌋"],
+            "fangs": ["🦈", "🐊", "🗡"], "crit": ["💢", "🎯"], "lifesteal": ["🧛", "🩸", "❤"],
+        }
+        tdone, tskipped, tunmatched = 0, 0, []
+        for key, (_label, default, _cat) in EMOJI_DEFS.items():
+            if key in text_existing and not opts["force"]:
+                tskipped += 1
+                continue
+            cid = None
+            placeholder = default
+            for cand in [default] + TEXT_FALLBACKS.get(key, []):
+                cid = emap.get(cand) or emap.get(cand.replace(_VS16, ""))
+                if cid:
+                    placeholder = cand
+                    break
+            if not cid:
+                tunmatched.append((key, default))
+                continue
+            set_emoji(key, cid, placeholder)
+            tdone += 1
+
         self.stdout.write(self.style.SUCCESS(
-            f"set {done} button(s) | left {skipped} owner-set button(s) untouched | unmatched: {unmatched or 'none'}"))
-        self.stdout.write("↻ now run:  docker compose restart bot   (to reload the bot's emoji cache)")
+            f"buttons: set {done}, left {skipped} untouched, unmatched {unmatched or 'none'}"))
+        self.stdout.write(self.style.SUCCESS(
+            f"text:    set {tdone}, left {tskipped} untouched, unmatched {tunmatched or 'none'}"))
+        self.stdout.write("↻ now run:  docker compose restart bot   (to reload the emoji caches)")
