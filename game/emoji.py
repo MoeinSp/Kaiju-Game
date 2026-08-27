@@ -198,12 +198,15 @@ def premiumize_html(text: str) -> str:
     out.append(_wrap_segment(text[last:]))
     result = "".join(out)
     # a Premium emoji at the very start of a <blockquote> sits flush against the text
-    # and reads cramped — guarantee two spaces between it and what follows.
-    return _BLOCKQUOTE_LEAD_EMOJI.sub(r"\1  ", result)
+    # and reads cramped — put a clear gap between it and what follows. Regular spaces
+    # collapse to one in Telegram's renderer, so use NON-BREAKING spaces (U+00A0),
+    # which it keeps.
+    return _BLOCKQUOTE_LEAD_EMOJI.sub(lambda m: m.group(1) + "  ", result)
 
 
-# <blockquote> + optional whitespace + a leading <tg-emoji> block, then any spaces
-_BLOCKQUOTE_LEAD_EMOJI = re.compile(r"(<blockquote>\s*<tg-emoji\b[^>]*>.*?</tg-emoji>) *", re.DOTALL)
+# <blockquote> + optional whitespace + a leading <tg-emoji> block, then any trailing
+# spaces (regular or NBSP) — normalised to exactly two NBSP.
+_BLOCKQUOTE_LEAD_EMOJI = re.compile(r"(<blockquote>\s*<tg-emoji\b[^>]*>.*?</tg-emoji>)[\s ]*", re.DOTALL)
 
 
 def get_emoji(key: str, fallback: str | None = None) -> str:
