@@ -1092,11 +1092,17 @@ def _do_sync(tg_user, chat, action, arg):
     if action == "arena_go":
         from game import arena
         from game.daily import check_missions, record_action
+        from game.energy import spend_energy
 
         _require_creature(creature)
         opponent = arena.find_opponent(user)
         if opponent is None:
             raise GameError("حریفی پیدا نشد، دوباره امتحان کن.")
+        # spend energy BEFORE resolving — the group «نبرد» used to be FREE (no energy
+        # cost), unlike the DM arena and every other group combat word, which let it be
+        # spammed for unlimited gold loot. It costs energy now, exactly like the DM arena.
+        spend_energy(user, constants.ARENA_ATTACK_ENERGY_COST, "حمله آرنا")
+        user.save(update_fields=["energy", "energy_updated_at"])
         # the group «نبرد» is a full arena fight — same loot + cup + shields as the DM
         # arena (award_cup=True). A winning attacker loots; a loss only costs cup.
         result = arena.attack(user, opponent, award_cup=True)
