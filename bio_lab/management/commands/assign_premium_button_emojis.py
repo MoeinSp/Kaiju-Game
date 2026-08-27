@@ -114,6 +114,7 @@ class Command(BaseCommand):
             "def_": [], "comet": ["🌠", "💫", "🪐"], "building": ["🏢", "🏭", "🧱"], "lab": ["⚗", "🔬", "🧫"],
             "element_electric": ["🔌", "🌩", "⚡"], "element_water": ["🌊", "💦"], "element_fire": ["🔥", "🌋"],
             "fangs": ["🦈", "🐊", "🗡"], "crit": ["💢", "🎯"], "lifesteal": ["🧛", "🩸", "❤"],
+            "egg": ["🐣", "🐤", "🐥", "🍳"], "diamond_box": ["🔷", "🎁", "🔹", "💎", "📦"],
         }
         tdone, tskipped, tunmatched = 0, 0, []
         for key, (_label, default, _cat) in EMOJI_DEFS.items():
