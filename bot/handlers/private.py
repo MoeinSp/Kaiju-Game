@@ -2461,6 +2461,12 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
     action = awaiting["action"]
     text = (message.text or "").strip()
 
+    if action == "exchange_custom":
+        from bot.handlers.exchange import handle_custom_amount
+
+        await handle_custom_amount(update, context, awaiting)
+        return
+
     if action == "set_lab_name":
         if not text or len(text) > LAB_NAME_MAX_LEN:
             context.user_data[AWAITING_PLAYER_KEY] = awaiting
