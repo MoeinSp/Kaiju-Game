@@ -1885,15 +1885,7 @@ def _alliance_action_keyboard(in_alliance: bool) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
-async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    info = await run_db(_alliance_info_sync, update.effective_user)
-    if info is None:
-        await send_screen(update, 
-            f"{get_emoji('alliance')} توی هیچ اتحادی نیستی.",
-            parse_mode="HTML",
-            reply_markup=_alliance_action_keyboard(in_alliance=False),
-        )
-        return
+def _alliance_info_text(info: dict) -> str:
     lines = [
         f"{get_emoji('alliance')} <b>اتحاد {info['name']}</b>",
         f"{get_emoji('crown')} رهبر: {display_name(info['leader']) if info['leader'] else '—'}"
@@ -1911,8 +1903,36 @@ async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     extra = info["member_count"] - MEMBER_LIST_CAP
     if extra > 0:
         lines.append(f"<i>… و {extra} عضو دیگه</i>")
+    return "\n".join(lines)
+
+
+async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # In a GROUP the panel is a shared message, so its management buttons would let
+    # anyone tap on the person's alliance. There we show a READ-ONLY card + a «برو پیوی»
+    # link; all the interactive management stays in the DM (scoped to one person).
+    chat = update.effective_chat
+    in_group = chat is not None and chat.type in ("group", "supergroup")
+
+    info = await run_db(_alliance_info_sync, update.effective_user)
+    if in_group:
+        from config import BOT_USERNAME
+
+        pv = InlineKeyboardMarkup([[btn("🤝 مدیریت اتحاد توی پیوی", style=PRIMARY,
+                                        url=f"https://t.me/{BOT_USERNAME}?start=alliance")]])
+        text = (_alliance_info_text(info) if info is not None
+                else f"{get_emoji('alliance')} توی هیچ اتحادی نیستی. برای ساخت/پیوستن برو پیوی ربات 👇")
+        await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=pv)
+        return
+
+    if info is None:
+        await send_screen(update,
+            f"{get_emoji('alliance')} توی هیچ اتحادی نیستی.",
+            parse_mode="HTML",
+            reply_markup=_alliance_action_keyboard(in_alliance=False),
+        )
+        return
     await send_screen(update,
-        "\n".join(lines), parse_mode="HTML", reply_markup=_alliance_action_keyboard(in_alliance=True)
+        _alliance_info_text(info), parse_mode="HTML", reply_markup=_alliance_action_keyboard(in_alliance=True)
     )
 
 

@@ -146,6 +146,24 @@ def pending_amount(building: Building) -> int:
     return int(min(cap, math.floor(rate * max(elapsed_hours, 0))))
 
 
+def bank_pending(user: User, building: Building) -> int:
+    """Collect a building's accrued production into the user (no error when empty) and
+    reset its clock. Called BEFORE a worker is added/removed, so the worker bonus only
+    ever applies to the period the worker is actually present — otherwise adding a
+    strong worker a second before collecting retroactively multiplied hours of past
+    production (the 'الماس زیاد' abuse on the diamond mine)."""
+    if not produces(building.building_type) or building.level <= 0:
+        return 0
+    amount = pending_amount(building)
+    if amount > 0:
+        resource_field = constants.BUILDING_PRODUCTION[building.building_type]["resource"]
+        setattr(user, resource_field, getattr(user, resource_field) + amount)
+        user.save(update_fields=[resource_field])
+    building.last_collected_at = timezone.now()
+    building.save(update_fields=["last_collected_at"])
+    return amount
+
+
 @transaction.atomic
 def collect(user: User, building: Building) -> tuple[int, str]:
     """Returns (amount, resource_field) collected.

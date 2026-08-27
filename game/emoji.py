@@ -168,8 +168,8 @@ def premiumize_html(text: str) -> str:
     to ALL outgoing HTML messages, so plain emojis hardcoded in message strings render
     as the owner's Premium set without touching each f-string. Skips glyphs already
     inside a <tg-emoji> block or any HTML tag, and the fixed rarity/bullet glyphs."""
-    if not text or "<tg-emoji" not in text and _glyph_map is None:
-        pass
+    if not text:
+        return text
     gm = _glyph_map if _glyph_map is not None else _load_glyph_map()
     if not gm or _glyph_re is None:
         return text
@@ -196,7 +196,14 @@ def premiumize_html(text: str) -> str:
         out.append(block.group())
         last = block.end()
     out.append(_wrap_segment(text[last:]))
-    return "".join(out)
+    result = "".join(out)
+    # a Premium emoji at the very start of a <blockquote> sits flush against the text
+    # and reads cramped — guarantee two spaces between it and what follows.
+    return _BLOCKQUOTE_LEAD_EMOJI.sub(r"\1  ", result)
+
+
+# <blockquote> + optional whitespace + a leading <tg-emoji> block, then any spaces
+_BLOCKQUOTE_LEAD_EMOJI = re.compile(r"(<blockquote>\s*<tg-emoji\b[^>]*>.*?</tg-emoji>) *", re.DOTALL)
 
 
 def get_emoji(key: str, fallback: str | None = None) -> str:

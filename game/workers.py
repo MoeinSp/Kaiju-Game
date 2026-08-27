@@ -115,6 +115,11 @@ def assign(user: User, building: Building, creature: Creature) -> CreatureAssign
             f"{label} پره ({slots} جایگاه). برای جای بیشتر باید ساختمون رو ارتقا بدی."
         )
     assert_free(user, creature, for_action="بفرستی سر کار")
+    # bank whatever's accrued so far at the CURRENT bonus before the new worker's
+    # bonus takes effect — stops a strong worker retroactively boosting past hours.
+    from game.buildings import bank_pending
+
+    bank_pending(user, building)
     return CreatureAssignment.objects.create(building=building, creature=creature)
 
 
@@ -127,6 +132,9 @@ def unassign(user: User, creature: Creature) -> Building:
     if assignment is None:
         raise GameError("این موجود جایی مشغول کار نیست.")
     building = assignment.building
+    from game.buildings import bank_pending
+
+    bank_pending(user, building)  # bank at the with-worker bonus before it drops
     assignment.delete()
     return building
 
