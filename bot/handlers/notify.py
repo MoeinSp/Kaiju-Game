@@ -30,13 +30,13 @@ def _defense_report_keyboard(defense: dict, *, group: bool):
     attacker's cup, coins looted). Revenge is ARENA-ONLY; group «اتک» has no revenge."""
     power = defense.get("attacker_power", 0)
     cup = defense.get("attacker_cup")
-    loot = defense.get("loot", 0)
+    cup_change = defense.get("cup_change", 0)
     rows = []
     if not group and defense.get("log_id"):
         cup_bit = f" · 🏆{cup}" if cup is not None else ""
         rows.append([btn(f"⚔️ انتقام · 💪{power}{cup_bit}", emoji_key="btn_revenge", style=DANGER,
                          callback_data=f"arena_revenge:{defense['log_id']}")])
-    details_label = f"🔍 جزییات حریف · 💪{power}" + (f" · 💰{loot}" if loot else "")
+    details_label = f"🔍 جزییات حریف · 💪{power}" + (f" · 🏆{abs(cup_change)}" if cup_change else "")
     rows.append([btn(details_label, style=NAV, callback_data=f"defrep_opp:{defense['attacker_id']}")])
     return InlineKeyboardMarkup(rows)
 
@@ -52,16 +52,14 @@ async def send_defense_report_now(context, defense: dict, *, group: bool = False
     from game.notifications import defense_report_text
 
     head = defense_report_text(
-        defense["attacker_name"], defense["attacker_power"], defense["attacker_won"], defense["loot"]
+        defense["attacker_name"], defense["attacker_power"], defense["attacker_won"],
+        defense.get("cup_change", 0),
     )
-    cup_line = ""
-    if defense.get("cup_change"):
-        cup_line = f"\n🏆 کاپت {defense['cup_change']}- شد (الان {defense.get('defender_cup', '?')})"
     try:
         d = await run_db(_user_details_sync, defense["attacker_id"])
-        text = head + cup_line + "\n\n━━━━━━━━━━\n" + opponent_details_text(d)
+        text = head + "\n\n━━━━━━━━━━\n" + opponent_details_text(d)
     except Exception:  # noqa: BLE001 — a details hiccup must not drop the report
-        text = head + cup_line
+        text = head
     try:
         await context.bot.send_message(
             chat_id=defense["defender_id"], text=text, parse_mode="HTML",

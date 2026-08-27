@@ -44,6 +44,19 @@ def _mission_lines(completed: list[dict]) -> str:
     return "\n" + "\n".join(lines)
 
 
+async def _reply_error(message, exc, owner_id: int) -> None:
+    """Reply to a group message with an error. An out-of-energy error also gets the
+    diamond-refill button (scoped to `owner_id`) so the player can act inline. Was
+    referenced by `attack()` but never defined — its absence meant a raised
+    RaidError/GameError (e.g. «هیولات خسته‌ست») crashed the handler with a NameError
+    and no message was ever sent to the group."""
+    from bot.handlers.energy import energy_refill_markup
+    from game.energy import EnergyError
+
+    markup = energy_refill_markup(owner_id) if isinstance(exc, EnergyError) else None
+    await message.reply_text(str(exc), parse_mode="HTML", reply_markup=markup)
+
+
 def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
     group = get_or_create_group(chat)
     sender, _ = get_or_create_user(sender_tg)
@@ -609,7 +622,7 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
         f"💪 قدرت حریف: <b>{t_power}</b>  ({constants.element_label(t_elem)})\n"
         f"💪 قدرت تو: <b>{a_power}</b>  ({constants.element_label(a_elem)}) — {odds}\n"
         + (f"{matchup}\n" if matchup else "")
-        + f"\n<i>هر حمله ۱ ⚡ انرژی می‌بره. برنده تا {int(constants.GROUP_ATTACK_LOOT_PERCENT * 100)}٪ طلای بازنده رو غارت می‌کنه.</i>"
+        + "\n<i>هر حمله ۱ ⚡ انرژی می‌بره. فقط 🏆 کاپ جابه‌جا می‌شه — طلایی غارت نمی‌شه.</i>"
     )
     return text, keyboard
 
@@ -718,25 +731,27 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         raise GameError(f"این بازیکن الان محافظ گروهی داره ({secs // 3600} ساعت و {(secs % 3600) // 60} دقیقه دیگه می‌پره).")
 
     spend_energy(attacker, constants.RAID_ATTACK_ENERGY_COST, "حمله")
-    attacker.save(update_fields=["energy", "energy_updated_at"])
 
+    a_power = _creature_power(a_creature)
     winner_creature, log_text, detail_log = resolve_duel_detailed(a_creature, t_creature)
     attacker_won = winner_creature.id == a_creature.id
     winner_user = attacker if attacker_won else target
-    loser_user = target if attacker_won else attacker
     winner_creature_obj = a_creature if attacker_won else t_creature
     loser_creature_obj = t_creature if attacker_won else a_creature
 
-    # the winner loots exactly 10% of the LOSER's gold (integer, no cap, no decimals)
-    loot = max(0, loser_user.coins // 10)
-    loser_user.coins -= loot
-    winner_user.coins += loot
-    dna_win = constants.GROUP_ATTACK_WIN_DNA
-    winner_user.dna_fragments += dna_win  # a group win also pays a little DNA
+    # PvP is CUP-ONLY now: no gold changes hands. The winner gains cup and the loser
+    # loses cup (same power/gap-aware formula the arena uses); nothing is looted.
+    from game.arena import cup_delta
+
+    delta = cup_delta(attacker, target.cup, attacker_won, a_power)  # attacker's swing
+    attacker.cup = max(0, attacker.cup + delta)
+    defender_cup_change = -delta if attacker_won else abs(delta)
+    target.cup = max(0, target.cup + defender_cup_change)
+
     winner_levels = add_xp(winner_creature_obj, constants.DUEL_WIN_XP)
     add_xp(loser_creature_obj, constants.DUEL_LOSE_XP)
-    winner_user.save(update_fields=["coins", "dna_fragments"])
-    loser_user.save(update_fields=["coins"])
+    attacker.save(update_fields=["energy", "energy_updated_at", "cup"])
+    target.save(update_fields=["cup"])
     winner_creature_obj.save()
     loser_creature_obj.save()
 
@@ -746,15 +761,14 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
 
     DuelLog.objects.create(
         group_id=group.id, challenger_id=attacker.id, opponent_id=target.id,
-        winner_id=winner_user.id, wager_gold=loot, log_text=log_text,
+        winner_id=winner_user.id, wager_gold=0, log_text=log_text,
     )
-    # log it as a real attack too, so the target gets a report + can revenge (no cup),
+    # log it as a real attack too, so the target gets a report + can revenge,
     # and give the target a 4h group shield so they can't be farmed in the group
     from bio_lab.models import AttackLog
     from bio_lab.repository import lab_display
     from game.arena import apply_group_shield
 
-    a_power = _creature_power(a_creature)
     log = AttackLog.objects.create(
         attacker=attacker,
         attacker_label=lab_display(attacker),
@@ -763,8 +777,8 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         defender_label=lab_display(target),
         is_fake_defender=False,
         attacker_won=attacker_won,
-        loot_gold=loot if attacker_won else 0,
-        cup_delta=0,
+        loot_gold=0,
+        cup_delta=delta,
         defender_notified=True,  # DM'd instantly from the callback below
     )
     apply_group_shield(target)
@@ -773,8 +787,9 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         "detail_log": detail_log,
         "attacker_won": attacker_won,
         "winner_name": display_name(winner_user),
-        "loot": loot,
-        "dna": dna_win,
+        "attacker_cup_change": delta,  # attacker's own swing (+ if won, − if lost)
+        "defender_cup_change": defender_cup_change,
+        "attacker_new_cup": attacker.cup,
         "winner_level_up": bool(winner_levels),
         "winner_creature": winner_creature_obj.name,
         "winner_new_level": winner_creature_obj.level,
@@ -789,9 +804,10 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
             "attacker_name": lab_display(attacker),
             "attacker_power": a_power,
             "attacker_won": attacker_won,
-            "loot": loot if attacker_won else 0,
+            "loot": 0,
             "attacker_cup": attacker.cup,
-            "cup_change": 0,  # group «اتک» is cup-neutral
+            "defender_cup": target.cup,
+            "cup_change": defender_cup_change,
         },
     }
 
@@ -817,10 +833,14 @@ async def pvp_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         if result["attacker_won"]
         else f"💀 <b>باختی — {result['winner_name']} برنده شد.</b>"
     )
-    reward = (f"\n\n{get_emoji('coin')} برنده {result['loot']} طلا از بازنده غارت کرد "
-              f"· +{result.get('dna', 0)} {get_emoji('dna')} · +{constants.DUEL_WIN_XP} XP")
+    acc = result["attacker_cup_change"]
+    if result["attacker_won"]:
+        cup_line = f"🏆 +{acc} کاپ گرفتی (الان: {result['attacker_new_cup']})"
+    else:
+        cup_line = f"🏆 {acc} کاپ (الان: {result['attacker_new_cup']})"
+    reward = f"\n\n{cup_line} · +{constants.DUEL_WIN_XP} XP\n<i>اتک فقط کاپه — طلایی جابه‌جا نمی‌شه.</i>"
     if result["winner_level_up"]:
-        reward += f" {get_emoji('celebrate')} {result['winner_creature']} رسید به سطح {result['winner_new_level']}!"
+        reward += f"\n{get_emoji('celebrate')} {result['winner_creature']} رسید به سطح {result['winner_new_level']}!"
     reward += f"\n⚡ ۱ انرژی کم شد (باقی‌مونده: {result['energy_left']})"
     reward += _mission_lines(result["missions"]) + _speedup_note(result["speedup"])
     context.user_data["pvp_last_detail"] = result.get("detail_log", "")

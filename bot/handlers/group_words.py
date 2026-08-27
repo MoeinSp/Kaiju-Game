@@ -1097,7 +1097,9 @@ def _do_sync(tg_user, chat, action, arg):
         opponent = arena.find_opponent(user)
         if opponent is None:
             raise GameError("حریفی پیدا نشد، دوباره امتحان کن.")
-        result = arena.attack(user, opponent, award_cup=False)  # group arena is cup-neutral
+        # arena is cup-only everywhere now (no gold moves), so the group «نبرد» awards
+        # cup just like the DM arena — same ladder, same shields.
+        result = arena.attack(user, opponent, award_cup=True)
         record_action(user, "arena_attack")
         result["missions"] = check_missions(user, "arena_attack")
         return {"kind": "arena", "result": result, "card": _card_sync(tg_user, chat, "arena")}
@@ -1153,9 +1155,7 @@ def _action_note(payload: dict) -> str:
     elif kind == "arena":
         r = payload["result"]
         arrow = "▲" if r["cup_delta"] >= 0 else "▼"
-        note = (f"{get_emoji('celebrate')} <b>غارت موفق!</b> +{r['loot']:,} {get_emoji('coin')} "
-                f"+{r.get('dna', 0)} {get_emoji('dna')}"
-                if r["won"] else "🛡 <b>حمله دفع شد!</b>")
+        note = f"{get_emoji('celebrate')} <b>بردی!</b>" if r["won"] else "🛡 <b>حمله دفع شد!</b>"
         note += f"  {arrow} {abs(r['cup_delta'])} 🏆 (کاپ: {r['new_cup']})"
     elif kind == "collect":
         parts = [f"+{amount:,} {get_emoji(_RESOURCE_EMOJI[res])}" for res, amount in payload["collected"].items()]
