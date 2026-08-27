@@ -152,21 +152,28 @@ def collect(user: User, building: Building) -> tuple[int, str]:
 
     Locks the building row and re-reads the accrual INSIDE the lock, so a rapid
     double-tap on «جمع‌آوری» can't collect the same production twice — the second
-    tap sees the reset clock and gets nothing."""
-    building = Building.objects.select_for_update().get(id=building.id)
-    if building.owner_id != user.id:
+    tap sees the reset clock and gets nothing.
+
+    The CALLER's `building` instance is updated in place (its last_collected_at is
+    reset), so the screen it re-renders right after shows 0 pending — without this
+    the caller kept a stale copy and the collect button 'did nothing' until you left
+    and came back."""
+    locked = Building.objects.select_for_update().get(id=building.id)
+    if locked.owner_id != user.id:
         raise GameError("این ساختمون مال تو نیست.")
-    if not produces(building.building_type):
+    if not produces(locked.building_type):
         raise GameError("این ساختمون چیزی تولید نمی‌کنه.")
-    amount = pending_amount(building)
+    amount = pending_amount(locked)
     if amount <= 0:
         raise GameError("چیزی برای جمع‌آوری نیست، بعداً دوباره سر بزن.")
 
-    resource_field = constants.BUILDING_PRODUCTION[building.building_type]["resource"]
+    resource_field = constants.BUILDING_PRODUCTION[locked.building_type]["resource"]
     setattr(user, resource_field, getattr(user, resource_field) + amount)
     user.save(update_fields=[resource_field])
-    building.last_collected_at = timezone.now()
-    building.save(update_fields=["last_collected_at"])
+    now = timezone.now()
+    locked.last_collected_at = now
+    locked.save(update_fields=["last_collected_at"])
+    building.last_collected_at = now  # keep the caller's instance in sync for its re-render
     return amount, resource_field
 
 

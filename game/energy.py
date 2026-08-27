@@ -60,6 +60,12 @@ def spend_energy(user: User, amount: int, action_label: str) -> None:
             f"⚡ انرژیت برای {action_label} کافی نیست ({user.energy}/{constants.MAX_ENERGY}). "
             f"تا انرژی بعدی حدود {minutes_until_next_point(user)} دقیقه مونده."
         )
+    # When spending from a FULL bar, restart the regen clock NOW. At max, sync leaves
+    # energy_updated_at on its old (possibly hours-stale) value; without this reset the
+    # next read would regenerate the point we're about to spend — the "اولین اتک/شکار
+    # انرژی کم نمی‌کنه" bug (the first action from full looked free).
+    if user.energy >= constants.MAX_ENERGY:
+        user.energy_updated_at = timezone.now()
     user.energy -= amount
 
 
