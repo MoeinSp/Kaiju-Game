@@ -154,12 +154,15 @@ def devour_candidates(user: User, target_id: int) -> list[Creature]:
     from game.workers import creature_status
 
     out = []
-    for c in Creature.objects.filter(owner=user).exclude(id=target_id).order_by("rarity", "level"):
+    for c in Creature.objects.filter(owner=user).exclude(id=target_id):
         if c.is_active:
             continue
         if creature_status(user, c) is not None:
             continue
         out.append(c)
+    # rarest-then-strongest first, so the best sacrifices sit on the first page
+    rank = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
+    out.sort(key=lambda c: (rank.get(c.rarity, 0), c.star_level, c.level, c.id), reverse=True)
     return out
 
 

@@ -91,6 +91,38 @@ def resolve_duel_detailed(creature_a: Creature, creature_b: Creature) -> tuple[C
     return winner.creature, compact, detail
 
 
+def resolve_duel_report(creature_a: Creature, creature_b: Creature) -> dict:
+    """Structured result for rich battle cards — winner, round count, and each side's
+    final/max HP + element + crits. Deterministic (same seed as resolve_duel), so it
+    matches what resolve_duel() would decide for the same pairing."""
+    rng = random.Random(_matchup_seed(creature_a, creature_b))
+    fa = Fighter(creature_a, effective_stats(creature_a, get_equipped_items(creature_a)), 0)
+    fa.hp = fa.stats["hp"]
+    fb = Fighter(creature_b, effective_stats(creature_b, get_equipped_items(creature_b)), 0)
+    fb.hp = fb.stats["hp"]
+    round_num = 0
+    while fa.hp > 0 and fb.hp > 0 and round_num < MAX_ROUNDS:
+        round_num += 1
+        order = sorted([fa, fb], key=lambda f: (f.stats["spd"], rng.random()), reverse=True)
+        for attacker, defender in ((order[0], order[1]), (order[1], order[0])):
+            if attacker.hp <= 0 or defender.hp <= 0:
+                continue
+            _attack(attacker, defender, [], rng)
+    winner = _decide_winner(fa, fb)
+
+    def _side(f: Fighter) -> dict:
+        return {
+            "name": f.creature.name, "element": f.creature.element,
+            "hp": max(0, round(f.hp)), "max_hp": max(1, round(f.stats["hp"])), "crits": f.crits,
+        }
+
+    return {
+        "winner": winner.creature, "rounds": round_num,
+        "a": _side(fa), "b": _side(fb),
+        "mult": constants.element_multiplier(fa.creature.element, fb.creature.element),
+    }
+
+
 def _scoreline(f: Fighter) -> str:
     """HP bar + name. The old "(زد: N)" damage-dealt total was cryptic, so it's gone;
     a crit count only shows when there were crits."""

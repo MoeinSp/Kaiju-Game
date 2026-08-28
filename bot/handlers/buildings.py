@@ -4,7 +4,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Building, Creature
 from bio_lab.repository import get_or_create_user
-from bot.buttons import BUILD, DANGER, LIST, PRIMARY, SHOP, back_btn, back_only_keyboard, btn
+from bot.buttons import BUILD, DANGER, LIST, NAV, PRIMARY, SHOP, back_btn, back_only_keyboard, btn
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text, send_screen
 from game import constants
 from game.workers import (assign, assigned_creatures, free_creatures, unassign,
@@ -441,7 +441,10 @@ def _workers_text(building: Building, workers, slots: int, free) -> str:
     return "\n".join(lines)
 
 
-def _workers_keyboard(building: Building, workers, slots: int, free) -> InlineKeyboardMarkup:
+_WORKER_PAGE = 8
+
+
+def _workers_keyboard(building: Building, workers, slots: int, free, page: int = 0) -> InlineKeyboardMarkup:
     rows = [
         [
             btn(
@@ -453,23 +456,34 @@ def _workers_keyboard(building: Building, workers, slots: int, free) -> InlineKe
         for c in workers
     ]
     if len(workers) < slots:
-        rows.extend(
-            [
-                btn(
-                    f"➕ {c.name} · سطح {c.level} → +{c.level * constants.WORKER_BONUS_PER_CREATURE_LEVEL * 100:.0f}٪",
-                    style=BUILD,
-                    callback_data=f"bld_assign:{building.id}:{c.id}",
-                )
-            ]
-            for c in free[:10]
-        )
+        # candidates are rarity-then-strength sorted (free_creatures); paginate so a big
+        # collection stays fully selectable instead of being cut at the first handful
+        total_pages = max(1, (len(free) + _WORKER_PAGE - 1) // _WORKER_PAGE)
+        page = max(0, min(page, total_pages - 1))
+        chunk = free[page * _WORKER_PAGE:(page + 1) * _WORKER_PAGE]
+        for c in chunk:
+            gain = c.level * constants.WORKER_BONUS_PER_CREATURE_LEVEL * 100
+            rows.append([btn(
+                f"➕ [{constants.RARITY_LABELS[c.rarity]}] {c.name} · سطح {c.level} → +{gain:.0f}٪",
+                style=BUILD, callback_data=f"bld_assign:{building.id}:{c.id}",
+            )])
+        if total_pages > 1:
+            nav = []
+            if page > 0:
+                nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"bld_wpage:{building.id}:{page - 1}"))
+            if page < total_pages - 1:
+                nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"bld_wpage:{building.id}:{page + 1}"))
+            if nav:
+                rows.append(nav)
     rows.append([back_btn(f"bld_pick:{building.id}")])
     return InlineKeyboardMarkup(rows)
 
 
 async def building_workers_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    building_id = int(query.data.split(":")[1])
+    parts = query.data.split(":")
+    building_id = int(parts[1])
+    page = int(parts[2]) if len(parts) > 2 else 0
     try:
         _user, building, workers, slots, free = await run_db(
             _workers_sync, update.effective_user, building_id
@@ -482,7 +496,7 @@ async def building_workers_callback(update: Update, context: ContextTypes.DEFAUL
         query,
         _workers_text(building, workers, slots, free),
         parse_mode="HTML",
-        reply_markup=_workers_keyboard(building, workers, slots, free),
+        reply_markup=_workers_keyboard(building, workers, slots, free, page),
     )
 
 
@@ -572,7 +586,7 @@ def register(application) -> None:
         CallbackQueryHandler(building_speedup_list_callback, pattern=r"^bld_speedup_list:")
     )
     application.add_handler(CallbackQueryHandler(building_speedup_do_callback, pattern=r"^bld_speedup_(do|all):"))
-    application.add_handler(CallbackQueryHandler(building_workers_callback, pattern=r"^bld_workers:"))
+    application.add_handler(CallbackQueryHandler(building_workers_callback, pattern=r"^bld_(workers|wpage):"))
     application.add_handler(
         CallbackQueryHandler(building_assign_callback, pattern=r"^bld_(assign|unassign):")
     )

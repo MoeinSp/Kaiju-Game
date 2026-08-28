@@ -143,11 +143,10 @@ def unassign(user: User, creature: Creature) -> tuple[Building, int]:
 
 
 def free_creatures(user: User) -> list[Creature]:
-    """Idle creatures, strongest first — what any "pick a creature" list should
-    offer. Excludes the active one and anything already working or breeding."""
+    """Idle creatures, RAREST-then-strongest first — what any "pick a creature" list
+    should offer, so the best options sit on the first page. Excludes the active one
+    and anything already working or breeding."""
     busy = busy_creature_ids(user)
-    return [
-        c
-        for c in Creature.objects.filter(owner=user, is_active=False).order_by("-level", "id")
-        if c.id not in busy
-    ]
+    rank = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
+    free = [c for c in Creature.objects.filter(owner=user, is_active=False) if c.id not in busy]
+    return sorted(free, key=lambda c: (rank.get(c.rarity, 0), c.star_level, c.level, c.id), reverse=True)

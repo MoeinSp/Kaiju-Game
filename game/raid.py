@@ -90,8 +90,9 @@ def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bo
     dmg = round(base * mult * random.uniform(0.75, 1.3)) + stats["poison"]
 
     boss.current_hp = max(0, boss.current_hp - dmg)
-    # every hit drips a little DNA on top of the kill-split reward
-    user.dna_fragments += constants.RAID_HIT_DNA
+    # each hit drips DNA scaled by how HARD the strike landed (1 … 50)
+    dna_gain = constants.raid_hit_dna(dmg)
+    user.dna_fragments += dna_gain
     user.save(update_fields=["dna_fragments"])
     RaidDamageLog.objects.create(raid_id=boss.id, user_id=user.id, creature_id=creature.id, damage=dmg)
 
@@ -101,7 +102,7 @@ def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bo
         # felling a boss levels the whole group's raid up
         Group.objects.filter(id=boss.group_id).update(raid_level=F("raid_level") + 1)
     boss.save()
-    return dmg, defeated
+    return dmg, defeated, dna_gain
 
 
 def distribute_rewards(boss: RaidBoss) -> dict[int, dict[str, int]]:

@@ -497,7 +497,7 @@ def _attack_sync(chat, tg_user):
         raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
 
     spend_energy(user, constants.RAID_ATTACK_ENERGY_COST, "حمله")
-    dmg, defeated = attack_boss(user, creature, boss)
+    dmg, defeated, dna_gain = attack_boss(user, creature, boss)
     user.save(update_fields=["energy", "energy_updated_at"])
 
     record_action(user, "raid_attack")
@@ -516,7 +516,7 @@ def _attack_sync(chat, tg_user):
             )
         speedup_won = maybe_award_speedup_card(user)  # bonus chance for whoever lands the killing blow
 
-    return creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won, user.energy
+    return creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won, user.energy, dna_gain
 
 
 async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -528,19 +528,34 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     try:
-        creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won, energy_left = await run_db(
+        creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won, energy_left, dna_gain = await run_db(
             _attack_sync, update.effective_chat, update.effective_user
         )
     except (RaidError, GameError) as exc:
         await _reply_error(update.message, exc, update.effective_user.id)
         return
 
-    text = (
-        f"{get_emoji('attack_action')} <b>{creature.name}</b> به باس <b>{boss.name}</b> (لِوِل {boss.level}) "
-        f"<b>{dmg}</b> دمیج زد!\n"
-        f"{constants.render_bar(boss.current_hp, boss.max_hp, width=14)}  {max(boss.current_hp, 0)}/{boss.max_hp} HP\n"
-        f"+{constants.RAID_HIT_DNA} {get_emoji('dna')} · ⚡ ۱ انرژی کم شد (باقی‌مونده: {energy_left})"
-    )
+    from bot.handlers.private import pct_bar as _pct_bar
+
+    hp = max(boss.current_hp, 0)
+    div = "──────────────"
+    lines = [
+        f"{get_emoji('attack_action')} <b>گزارش نبرد با باس | Raid Attack</b>",
+        "",
+        f"🦅 مهاجم: <b>{creature.name}</b>",
+        f"💥 آسیب وارده: <b>{dmg:,}</b> DMG",
+        "",
+        div,
+        "",
+        f"{get_emoji('raid_boss')} وضعیت باس: <b>{boss.name}</b> [سطح {boss.level}]",
+        f"{get_emoji('hp')} سلامت باس: {_pct_bar(hp, boss.max_hp)} ({hp:,}/{boss.max_hp:,} HP)",
+        "",
+        div,
+        "",
+        f"🎁 پاداش این ضربه: +{dna_gain} {get_emoji('dna')}",
+        f"{get_emoji('energy')} انرژی باقی‌مانده: {energy_left} (-1⚡)",
+    ]
+    text = "\n".join(lines)
     text += _mission_lines(completed_missions)
     if defeated:
         text += (
@@ -550,7 +565,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         text += _speedup_note(speedup_won)
     else:
-        text += "\n<i>💡 برای حمله به یه بازیکن، روی پیامش ریپلای کن و «اتک» بفرست.</i>"
+        text += f"\n\n{div}\n💡 <i>برای حمله به بازیکن دیگه، روی پیامش ریپلای کن و «اتک» بفرست.</i>"
 
     await update.message.reply_text(
         text, parse_mode="HTML", reply_markup=group_footer_keyboard(update.effective_user.id)
@@ -574,11 +589,13 @@ def _pvp_preview_sync(attacker_tg, target_tg):
     if t_creature is None:
         raise GameError("این بازیکن موجود فعالی نداره.")
     from game.arena import group_shield_remaining_seconds
+    from game.energy import sync_energy
 
     return (
         display_name(attacker), _creature_power(a_creature), a_creature.element,
         display_name(target), _creature_power(t_creature), t_creature.element,
         group_shield_remaining_seconds(target),
+        a_creature.name, t_creature.name, sync_energy(attacker),
     )
 
 
@@ -592,14 +609,17 @@ def _fmt_shield_hm(seconds: int) -> str:
     return f"{minutes} دقیقه"
 
 
-def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, t_power, t_elem, t_shield_secs=0):
+def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, t_power, t_elem,
+                       t_shield_secs=0, a_cname="—", t_cname="—", a_energy=0):
+    from bot.handlers.private import (element_advantage_line, pct_bar, win_chance_pct, win_label)
+
     # target is group-shielded → say it LOUDLY at the very top so the attacker
     # doesn't waste a tap, and drop the attack button (the attack would be blocked).
     if t_shield_secs and t_shield_secs > 0:
         text = (
             f"🛡 <b>{t_name} الان سپر محافظ گروه داره!</b>\n"
             f"<b>{_fmt_shield_hm(t_shield_secs)}</b> دیگه سپرش می‌پره — تا اون‌موقع نمی‌شه بهش اتک زد.\n\n"
-            f"💪 قدرت حریف: <b>{t_power}</b> · قدرت تو: <b>{a_power}</b>"
+            f"💪 قدرت حریف: <b>{t_power:,}</b> · قدرت تو: <b>{a_power:,}</b>"
         )
         keyboard = InlineKeyboardMarkup([
             [btn("🔍 جزییات حریف", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}"),
@@ -607,24 +627,45 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
         ])
         return text, keyboard
 
-    gap = t_power - a_power
-    odds = "🟢 شانس بالا" if gap < -15 else ("🔴 خطرناک" if gap > 15 else "🟡 نزدیک")
-    matchup = constants.element_matchup_note(a_elem, t_elem)
+    pct = win_chance_pct(a_power, t_power)
+    adv = element_advantage_line(a_elem, t_elem)
+    a_tag = f" [{constants.element_label(a_elem)}]" if a_elem else ""
+    t_tag = f" [{constants.element_label(t_elem)}]" if t_elem else ""
+    div = "──────────────"
+    lines = [
+        f"{get_emoji('battle')} <b>حمله به بازیکن | Battle Arena</b>",
+        "",
+        f"🦅 موجود شما: <b>{a_cname}</b>{a_tag}",
+        f"💪 قدرت شما: <b>{a_power:,}</b>",
+        f"{get_emoji('energy')} انرژی: {pct_bar(a_energy, constants.MAX_ENERGY)} ({a_energy}/{constants.MAX_ENERGY})",
+        "",
+        div,
+        "",
+        f"👹 موجود حریف: <b>{t_cname}</b>{t_tag}  <i>({t_name})</i>",
+        f"💀 قدرت حریف: <b>{t_power:,}</b>",
+        "",
+        div,
+        "",
+        f"🎯 شانس پیروزی: {pct_bar(pct, 100)} {win_label(pct)}",
+    ]
+    if adv:
+        lines.append(f"🔮 مزیت عنصری: {adv}")
+    lines += [
+        "",
+        f"🎁 اگه ببری: {get_emoji('coin')} تا {int(constants.GROUP_ATTACK_LOOT_PERCENT * 100)}٪ طلای حریف + {get_emoji('dna')} بونوس",
+        f"<i>اگه ببازی هیچی ازت کم نمی‌شه · اتک گروهی کاپ نداره</i>",
+        "",
+        div,
+        f"{get_emoji('energy')} هزینه حمله: {constants.RAID_ATTACK_ENERGY_COST} انرژی",
+    ]
     keyboard = InlineKeyboardMarkup([
-        [btn("⚔️ حمله!", emoji_key="btn_attack", style=CONFIRM,
+        [btn(f"⚔️ شروع حمله (-{constants.RAID_ATTACK_ENERGY_COST}⚡)", emoji_key="btn_attack", style=CONFIRM,
              callback_data=f"gatk:{attacker_id}:{target_id}")],
         [btn("🔍 جزییات حریف", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}"),
          btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER,
              callback_data=f"gatk_cancel:{attacker_id}")],
     ])
-    text = (
-        f"{get_emoji('battle')} <b>حمله به {t_name}؟</b>\n\n"
-        f"💪 قدرت حریف: <b>{t_power}</b>  ({constants.element_label(t_elem)})\n"
-        f"💪 قدرت تو: <b>{a_power}</b>  ({constants.element_label(a_elem)}) — {odds}\n"
-        + (f"{matchup}\n" if matchup else "")
-        + f"\n<i>هر حمله ۱ ⚡ انرژی می‌بره. اگه ببری تا {int(constants.GROUP_ATTACK_LOOT_PERCENT * 100)}٪ طلای حریف رو غارت می‌کنی؛ اگه ببازی هیچی ازت کم نمی‌شه. (اتک گروهی کاپ نداره)</i>"
-    )
-    return text, keyboard
+    return "\n".join(lines), keyboard
 
 
 async def _pvp_attack_prompt(update, context, target_tg) -> None:
@@ -649,11 +690,13 @@ def _pvp_preview_by_ids_sync(attacker_id, target_id):
     if a_creature is None or t_creature is None:
         raise GameError("یکی از دو طرف موجود فعال نداره.")
     from game.arena import group_shield_remaining_seconds
+    from game.energy import sync_energy
 
     return (
         display_name(attacker), _creature_power(a_creature), a_creature.element,
         display_name(target), _creature_power(t_creature), t_creature.element,
         group_shield_remaining_seconds(target),
+        a_creature.name, t_creature.name, sync_energy(attacker),
     )
 
 
@@ -948,12 +991,21 @@ async def guardian(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
+    stars = get_emoji("star") * top.star_level
+    div = "──────────────"
     await update.message.reply_text(
-        f"{get_emoji('guardian')} <b>محافظ فعلی گروه</b>\n"
-        f"{top.name} ({constants.RARITY_LABELS[top.rarity]}, Lv{top.level}) — متعلق به {owner_name}\n"
-        f"قدرت کل: {top_power}\n\n"
-        f"{get_emoji('battle')} برای گرفتن عنوان، «تسخیر» بفرست\n"
-        f"{get_emoji('gift')} محافظ فعلی هر روز با «حقوق» جایزه می‌گیره",
+        "\n".join([
+            f"{get_emoji('guardian')} <b>جایگاه محافظ گروه | Group Guardian</b>",
+            "",
+            f"👑 مالک عنوان: <b>{owner_name}</b>",
+            f"🦅 موجود نگهبان: <b>{top.name}</b> [{constants.RARITY_LABELS[top.rarity]}] {stars}",
+            f"{constants.element_label(top.element)} ┃ 🎖 سطح {top.level} ┃ 💪 قدرت کل: <b>{top_power:,}</b>",
+            "",
+            div,
+            "",
+            f"{get_emoji('battle')} چالش جایگاه: برای تصاحب عنوان محافظ، کلمه «تسخیر» را بفرست.",
+            f"{get_emoji('gift')} پاداش سلطنت: محافظ فعال هر روز با «حقوق» غنیمت اختصاصی می‌گیره.",
+        ]),
         parse_mode="HTML",
     )
 
@@ -970,27 +1022,72 @@ def _guardian_challenge_sync(chat, tg_user):
     spend_energy(user, constants.GUARDIAN_CHALLENGE_ENERGY_COST, "چالش نگهبان")
     user.save(update_fields=["energy", "energy_updated_at"])
     ensure_guardian(group, group_member_creatures(group))
-    won, log_text = challenge_guardian(group, user, creature)
+    won, report = challenge_guardian(group, user, creature)
 
     record_action(user, "guardian_challenge")
     completed_missions = check_missions(user, "guardian_challenge")
     speedup_won = maybe_award_speedup_card(user) if won else None
-    return won, log_text, completed_missions, speedup_won
+    return won, report, completed_missions, speedup_won
+
+
+def _element_cycle_line() -> str:
+    order = ["fire", "earth", "electric", "water", "fire"]
+    return " > ".join(constants.element_label(e) for e in order)
+
+
+def _guardian_report_text(report: dict, won: bool) -> str:
+    from bot.handlers.private import pct_bar
+
+    a, b = report["a"], report["b"]
+    mult = report["mult"]
+    if mult > 1:
+        elem_status = "برتری با مهاجم (ضریب آسیب فعال)"
+    elif mult < 1:
+        elem_status = "برتری با مدافع (ضریب آسیب فعال)"
+    else:
+        elem_status = "خنثی (بدون ضریب آسیب)"
+
+    def hp_line(s: dict) -> str:
+        icon = "💀" if s["hp"] <= 0 else "❤️"
+        crit = f"  💥 {s['crits']} ضربه" if s["crits"] else ""
+        return f"{icon} {s['name']}: {pct_bar(s['hp'], s['max_hp'])} ({s['hp']:,}/{s['max_hp']:,} HP){crit}"
+
+    div = "──────────────"
+    result_line = ("✅ نتیجه نهایی: بردی و محافظ جدید گروه شدی!" if won
+                   else "❌ نتیجه نهایی: شکست خوردی! محافظ جایگاه تغییر نکرد.")
+    return "\n".join([
+        f"🗡 مهاجم: <b>{a['name']}</b> [{constants.element_label(a['element'])}]",
+        f"🛡 مدافع: <b>{b['name']}</b> [{constants.element_label(b['element'])}]",
+        f"⚖️ وضعیت عنصرها: {elem_status}",
+        "",
+        div,
+        "",
+        "📊 وضعیت سلامت مبارزان:",
+        hp_line(a),
+        hp_line(b),
+        "",
+        div,
+        "",
+        f"{get_emoji('trophy')} پیروز میدان: <b>{report['winner'].name}</b> (در {report['rounds']} راند)",
+        result_line,
+        "",
+        div,
+        "",
+        f"🔁 چرخه برتری عناصر:\n{_element_cycle_line()}",
+    ])
 
 
 async def guardian_challenge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        won, log_text, completed_missions, speedup_won = await run_db(
+        won, report, completed_missions, speedup_won = await run_db(
             _guardian_challenge_sync, update.effective_chat, update.effective_user
         )
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
-    result_text = f"{get_emoji('celebrate')} <b>بردی و محافظ جدید گروه شدی!</b>" if won else "😔 باختی، محافظ همون قبلیه."
-    await update.message.reply_text(
-        log_text + "\n\n" + result_text + _mission_lines(completed_missions) + _speedup_note(speedup_won),
-        parse_mode="HTML",
-    )
+    text = _guardian_report_text(report, won)
+    text += _mission_lines(completed_missions) + _speedup_note(speedup_won)
+    await update.message.reply_text(text, parse_mode="HTML")
 
 
 def _guardian_claim_sync(chat, tg_user):

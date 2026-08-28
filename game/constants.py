@@ -1001,7 +1001,16 @@ ARENA_CUP_GAP_DIVISOR = 5  # +1 cup per this many points of rating gap (was 8 �
 ARENA_WIN_DNA_BASE = 2
 ARENA_WIN_DNA_PER_LEVEL = 0.2
 GROUP_ATTACK_WIN_DNA = 3   # winning a group «اتک» on a player
-RAID_HIT_DNA = 1           # every raid-boss hit drips a little DNA on top of the kill split
+RAID_HIT_DNA = 1           # legacy flat drip (kept for back-compat); see raid_hit_dna()
+# per-hit DNA now scales with the STRENGTH of the strike (damage dealt): a weak poke
+# pays the floor, a full-power hit from a maxed, fully-geared kaiju pays the cap.
+RAID_HIT_DNA_PER_DAMAGE = 0.10
+RAID_HIT_DNA_MIN = 1
+RAID_HIT_DNA_MAX = 50
+
+
+def raid_hit_dna(damage: int) -> int:
+    return max(RAID_HIT_DNA_MIN, min(RAID_HIT_DNA_MAX, round(max(0, damage) * RAID_HIT_DNA_PER_DAMAGE)))
 ARENA_MATCH_CUP_BAND = 500  # real opponents within +/- this cup range are eligible (closer cups preferred)
 ARENA_STARTING_CUP = 0
 

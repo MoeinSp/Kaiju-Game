@@ -1,5 +1,5 @@
 from bio_lab.models import Creature, Group, User
-from game.combat import resolve_duel
+from game.combat import resolve_duel_report
 from game.creature import GameError
 
 
@@ -33,9 +33,9 @@ def challenge_guardian(group: Group, challenger_user: User, challenger_creature:
     if guardian.owner_id == challenger_user.id:
         raise GameError("تو خودت همین الان محافظ گروهی!")
 
-    winner_creature, log_text = resolve_duel(challenger_creature, guardian)
-    won = winner_creature.id == challenger_creature.id
+    report = resolve_duel_report(challenger_creature, guardian)
+    won = report["winner"].id == challenger_creature.id
     if won:
         group.guardian_creature = challenger_creature
         group.save(update_fields=["guardian_creature"])
-    return won, log_text
+    return won, report

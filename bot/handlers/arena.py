@@ -153,7 +153,11 @@ def _find_sync(tg_user, exclude_ids=None):
     level = creature.level if creature is not None else 1
     my_element = creature.element if creature is not None else None
     dna_win = round(constants.ARENA_WIN_DNA_BASE + level * constants.ARENA_WIN_DNA_PER_LEVEL)
-    return user, opponent, active_power(user), expected_loot(opponent, level), my_element, dna_win
+    from game.energy import sync_energy
+
+    cname = creature.name if creature is not None else "—"
+    return (user, opponent, active_power(user), expected_loot(opponent, level), my_element,
+            dna_win, cname, sync_energy(user))
 
 
 async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -161,7 +165,7 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     recent = context.user_data.get(RECENT_OPPONENTS_KEY, [])
     try:
-        user, opponent, my_power, loot, my_element, dna_win = await run_db(
+        user, opponent, my_power, loot, my_element, dna_win, cname, energy = await run_db(
             _find_sync, update.effective_user, recent
         )
     except GameError as exc:
@@ -187,40 +191,68 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         recent = [i for i in recent if i != opponent["user"].id] + [opponent["user"].id]
         context.user_data[RECENT_OPPONENTS_KEY] = recent[-_RECENT_OPPONENTS_MAX:]
 
-    text, keyboard = _render_opponent(user, opponent, my_power, loot, my_element, dna_win)
+    text, keyboard = _render_opponent(user, opponent, my_power, loot, my_element, dna_win, cname, energy)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
-def _render_opponent(user, opponent, my_power, loot, my_element, dna_win) -> tuple[str, InlineKeyboardMarkup]:
-    """The 'opponent found' screen — shared by matchmaking and the «بازگشت» from the
-    opponent-details view so the same screen is rebuilt identically."""
-    gap = opponent["power"] - my_power
-    odds = "🟢 شانس بالا" if gap < -15 else ("🔴 خطرناک" if gap > 15 else "🟡 سرتاسری")
+def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
+                     cname="—", energy=None) -> tuple[str, InlineKeyboardMarkup]:
+    """The 'opponent found' arena screen — shared by matchmaking and the «بازگشت» from
+    the opponent-details view so the same screen is rebuilt identically."""
+    from bot.handlers.private import (element_advantage_line, pct_bar, win_chance_pct, win_label)
+    from game.energy import sync_energy
+
+    if energy is None:
+        energy = sync_energy(user)
     opp_element = opponent.get("element")
-    elem_tag = f"  ({constants.element_label(opp_element)})" if opp_element else ""
+    my_elem_tag = f" [{constants.element_label(my_element)}]" if my_element else ""
+    opp_elem_tag = f" [{constants.element_label(opp_element)}]" if opp_element else ""
+    pct = win_chance_pct(my_power, opponent["power"])
+    adv = element_advantage_line(my_element, opp_element)
     win_cup = cup_delta(user, opponent["cup"], True, my_power)
     loss_cup = cup_delta(user, opponent["cup"], False, my_power)
     lines = [
-        f"{get_emoji('battle')} <b>حریف پیدا شد!</b>\n",
-        f"🏭 <b>{opponent['label']}</b>{elem_tag}",
-        f"{get_emoji('trophy')} کاپ تو: <b>{user.cup}</b>   ·   کاپ حریف: <b>{opponent['cup']}</b>",
-        f"💪 قدرت: <b>{opponent['power']}</b>  (تو: {my_power} — {odds})",
-        f"{get_emoji('coin')} غنیمت در صورت برد: حدود <b>{loot}</b> + <b>{dna_win}</b> {get_emoji('dna')}",
-        f"{get_emoji('trophy')} کاپ: برد <b>+{win_cup}</b> · باخت <b>{loss_cup}</b>",
+        f"{get_emoji('battle')} <b>حریف شناسایی شد | Battle Arena</b>",
+        "",
+        f"🦅 موجود شما: <b>{cname}</b>{my_elem_tag}",
+        f"💪 قدرت شما: <b>{my_power:,}</b>",
+        f"{get_emoji('trophy')} کاپ شما: <b>{user.cup:,}</b>",
+        f"{get_emoji('energy')} انرژی فعلی: {pct_bar(energy, constants.MAX_ENERGY)} ({energy}/{constants.MAX_ENERGY})",
+        "",
+        _ARENA_DIV,
+        "",
+        f"👹 موجود حریف: <b>{opponent['label']}</b>{opp_elem_tag}",
+        f"💀 قدرت حریف: <b>{opponent['power']:,}</b>",
+        f"{get_emoji('trophy')} کاپ حریف: <b>{opponent['cup']:,}</b>",
+        "",
+        _ARENA_DIV,
+        "",
+        "🎯 تحلیل تاکتیکی نبرد:",
+        f"شانس پیروزی: {pct_bar(pct, 100)} {win_label(pct)}",
     ]
-    if my_element and opp_element:
-        note = constants.element_matchup_note(my_element, opp_element)
-        if note:
-            lines.append(note)
+    if adv:
+        lines.append(f"🔮 مزیت عنصری: {adv}")
+    lines += [
+        "",
+        "🎁 جوایز و تغییرات نبرد:",
+        f"{get_emoji('coin')} غنیمت طلا: <b>~+{loot:,}</b>  ·  {get_emoji('dna')} دی‌ان‌ای: <b>+{dna_win:,}</b>",
+        f"{get_emoji('trophy')} تغییر کاپ: برد <b>+{win_cup}</b> | باخت <b>{loss_cup}</b>",
+        "",
+        _ARENA_DIV,
+        f"{get_emoji('energy')} هزینه حمله: {constants.ARENA_ATTACK_ENERGY_COST} انرژی",
+    ]
     keyboard = InlineKeyboardMarkup(
         [
-            [btn("حمله!", emoji_key="btn_attack", style=BATTLE, callback_data="arena_attack")],
+            [btn(f"⚔️ شروع حمله (-{constants.ARENA_ATTACK_ENERGY_COST}⚡)", emoji_key="btn_attack", style=BATTLE, callback_data="arena_attack")],
             [btn("🔍 جزییات حریف", style=NAV, callback_data="arena_opp_details"),
              btn("حریف بعدی", emoji_key="btn_recheck", style=NAV, callback_data="arena_find")],
             [back_btn("menu:arena")],
         ]
     )
     return "\n".join(lines), keyboard
+
+
+_ARENA_DIV = "──────────────"
 
 
 def _opponent_details_sync(pending: dict) -> dict:
@@ -337,7 +369,11 @@ def _opponent_reshow_sync(tg_user, pending):
     level = creature.level if creature is not None else 1
     my_element = creature.element if creature is not None else None
     dna_win = round(constants.ARENA_WIN_DNA_BASE + level * constants.ARENA_WIN_DNA_PER_LEVEL)
-    return user, active_power(user), expected_loot(pending, level), my_element, dna_win
+    from game.energy import sync_energy
+
+    cname = creature.name if creature is not None else "—"
+    return (user, active_power(user), expected_loot(pending, level), my_element, dna_win,
+            cname, sync_energy(user))
 
 
 async def arena_opp_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -347,8 +383,8 @@ async def arena_opp_back_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.answer("اول «پیدا کردن حریف» رو بزن.", show_alert=True)
         return
     await query.answer()
-    user, my_power, loot, my_element, dna_win = await run_db(_opponent_reshow_sync, update.effective_user, pending)
-    text, keyboard = _render_opponent(user, pending, my_power, loot, my_element, dna_win)
+    user, my_power, loot, my_element, dna_win, cname, energy = await run_db(_opponent_reshow_sync, update.effective_user, pending)
+    text, keyboard = _render_opponent(user, pending, my_power, loot, my_element, dna_win, cname, energy)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 

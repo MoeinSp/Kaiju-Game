@@ -118,52 +118,130 @@ def wallet_line(user, energy: int | None = None) -> str:
     )
 
 
-def creature_card_text(user, creature, equipped_items: list | None = None) -> str:
-    """Deliberately kept short: identity, one stat row, XP, wallet. Body-part levels
-    live on the separate «ارتقا» screen (upgrade_panel) so this doesn't turn into a
-    wall of numbers on every single /start.
+def pct_bar(current: int, total: int, width: int = 10) -> str:
+    """A `[■■□□□□□□□□] 42%` progress bar — the visual style used across the main
+    dashboard cards (lab XP, creature XP, energy, win chance)."""
+    total = max(int(total), 1)
+    pct = max(0, min(100, round(current / total * 100)))
+    filled = min(width, max(0, round(width * max(current, 0) / total)))
+    return f"[{'■' * filled}{'□' * (width - filled)}] {pct}%"
 
-    Every value is labelled — an unlabelled row of emoji+number reads as noise once
-    there are more than three of them."""
+
+_CARD_DIV = "──────────────"
+
+
+def win_chance_pct(my_power: int, opp_power: int) -> int:
+    """A readable win-% from the power gap. Combat itself is deterministic, so this is
+    a confidence estimate for the player, not a literal probability. Steeper than a
+    plain ratio so a clear power lead reads as a high number."""
+    my = max(1, int(my_power))
+    opp = max(1, int(opp_power))
+    r = my / (my + opp)
+    return max(3, min(97, round(50 + (r - 0.5) * 140)))
+
+
+def win_label(pct: int) -> str:
+    if pct >= 80:
+        return "🟢 (بسیار بالا)"
+    if pct >= 60:
+        return "🟢 (بالا)"
+    if pct >= 45:
+        return "🟡 (نزدیک)"
+    if pct >= 25:
+        return "🔴 (پایین)"
+    return "🔴 (خطرناک)"
+
+
+def element_advantage_line(my_elem, opp_elem) -> str:
+    """One-line elemental read for a battle card, from the player's point of view."""
+    if not my_elem or not opp_elem:
+        return ""
+    mult = constants.element_multiplier(my_elem, opp_elem)
+    if mult > 1:
+        return f"✅ برتری عنصری: {constants.element_label(my_elem)} بر {constants.element_label(opp_elem)} غلبه دارد!"
+    if mult < 1:
+        return f"⚠️ ضعف عنصری: {constants.element_label(opp_elem)} بر {constants.element_label(my_elem)} برتری دارد!"
+    return "➖ بدون مزیت عنصری میان دو عنصر"
+
+
+def creature_card_text(user, creature, equipped_items: list | None = None) -> str:
+    """The main dashboard shown on /start and /me: base + resources, the active
+    creature's identity/level/XP, its combat stats, the full gear loadout, and any
+    active defensive shields — each in its own clearly divided block."""
+    from game.arena import (group_shield_remaining_seconds, shield_remaining_seconds,
+                            _fmt_shield_remaining)
+    from game.energy import minutes_until_next_point
+    from game.equipment import equipment_power
+
     stats = effective_stats(creature, equipped_items)
     energy = sync_energy(user)
+    power = _creature_power(creature, equipped_items)
+
+    lp = lab_progress(user)
+    if lp["is_max"]:
+        lab_line = f"🧪 سطح آزمایشگاه: <b>{lp['level']}</b> (بیشینه)"
+    else:
+        lab_line = (f"🧪 سطح آزمایشگاه: <b>{lp['level']}</b> {pct_bar(lp['into'], lp['span'])} "
+                    f"({lp['into']:,}/{lp['span']:,} XP)")
+
+    if energy >= constants.MAX_ENERGY:
+        en_line = f"{get_emoji('energy')} انرژی: {pct_bar(energy, constants.MAX_ENERGY)} ({energy}/{constants.MAX_ENERGY}) ✅ پره"
+    else:
+        en_line = (f"{get_emoji('energy')} انرژی: {pct_bar(energy, constants.MAX_ENERGY)} "
+                   f"({energy}/{constants.MAX_ENERGY}) ⏳ شارژ بعدی: ~{minutes_until_next_point(user)} دقیقه")
+
     max_level = constants.creature_max_level(creature.rarity, creature.star_level)
-    is_maxed = creature.level >= max_level
     xp_needed = constants.xp_for_creature_level(creature.level)
-    xp_bar = constants.render_bar(creature.xp, xp_needed, width=10)
+    is_maxed = creature.level >= max_level
     stars = get_emoji("star") * creature.star_level
 
     lines = [
-        f"{get_emoji('creature')} <b>{creature.name}</b>  <code>#{creature.id}</code>",
-        f"{constants.RARITY_LABELS[creature.rarity]} {stars}",
-        f"{constants.element_label(creature.element)}",
+        f"🏰 پایگاه و آزمایشگاه: <b>{lab_display(user)}</b>",
         "",
-        f"📊 سطح <b>{creature.level}/{max_level}</b>" + ("  ✅ بیشینه" if is_maxed else ""),
-        ("▓" * 10 + "  بیشینه" if is_maxed else f"{xp_bar}  {creature.xp}/{xp_needed} XP"),
+        lab_line,
+        "💰 خزانه منابع:",
+        f"{get_emoji('coin')} طلا: <b>{user.coins:,}</b> ┃ {get_emoji('dna')} DNA: <b>{user.dna_fragments:,}</b> "
+        f"┃ {get_emoji('diamond')} الماس: <b>{user.diamonds:,}</b>",
+        en_line,
         "",
-        f"⚔️ <b>توانایی‌ها</b>   ·   💪 قدرت: <b>{_creature_power(creature, equipped_items)}</b>",
-        f"{get_emoji('hp')} جان: <b>{stats['hp']}</b>      {get_emoji('atk')} حمله: <b>{stats['atk']}</b>",
-        f"{get_emoji('def')} دفاع: <b>{stats['def']}</b>      {get_emoji('spd')} سرعت: <b>{stats['spd']}</b>",
+        _CARD_DIV,
+        "",
+        f"{get_emoji('creature')} موجود فعال: <b>{creature.name}</b> <code>#{creature.id}</code>",
+        f"{constants.RARITY_LABELS[creature.rarity]} {stars} ┃ {constants.element_label(creature.element)}",
+        f"🎖 سطح موجود: <b>{creature.level}/{max_level}</b>" + ("  ✅ بیشینه" if is_maxed else ""),
     ]
-    if equipped_items:
-        from game.equipment import equipment_power
+    if not is_maxed:
+        lines.append(f"📈 پیشرفت لول: {pct_bar(creature.xp, xp_needed)} ({creature.xp:,}/{xp_needed:,} XP)")
+    lines += [
+        "",
+        _CARD_DIV,
+        "",
+        f"⚔️ آمار مبارزه | توان کل: <b>{power:,}</b> 💪",
+        "",
+        f"{get_emoji('hp')} سلامت (HP): <b>{stats['hp']}</b> ┃ {get_emoji('atk')} حمله (ATK): <b>{stats['atk']}</b>",
+        f"{get_emoji('def')} دفاع (DEF): <b>{stats['def']}</b> ┃ {get_emoji('spd')} سرعت (SPD): <b>{stats['spd']}</b>",
+        "",
+        _CARD_DIV,
+        "",
+        "🎒 تجهیزات و لوداوت:",
+    ]
+    by_slot = {i.slot: i for i in (equipped_items or [])}
+    for slot in constants.EQUIPMENT_SLOTS:
+        label = constants.EQUIPMENT_SLOT_LABELS[slot]
+        it = by_slot.get(slot)
+        if it is not None:
+            lines.append(f"{label}: {it.name} [+{it.level}] (+{equipment_power(it)} 💪)")
+        else:
+            lines.append(f"{label}: <i>خالی</i>")
 
-        lines.append("")
-        lines.append("🎒 <b>تجهیزات</b>")
-        for i in equipped_items:
-            lines.append(
-                f"{constants.EQUIPMENT_SLOT_LABELS[i.slot]} {i.name} <b>+{i.level}</b> · 💪{equipment_power(i)}"
-            )
-    from game.arena import shield_status_lines
-
-    shield_lines = shield_status_lines(user)
-    if shield_lines:
-        lines.append("")
-        lines.extend(shield_lines)
-    lines.append("")
-    lines.append("━━━━━━━━━━")
-    lines.append(lab_level_line(user))  # lab level + progress, shown on /start and /me
-    lines.append(wallet_line(user, energy))
+    arena_secs = shield_remaining_seconds(user)
+    group_secs = group_shield_remaining_seconds(user)
+    if arena_secs > 0 or group_secs > 0:
+        lines += ["", _CARD_DIV, "", "🛡 پوشش سپرهای دفاعی:"]
+        if arena_secs > 0:
+            lines.append(f"🏟 آرنا: {_fmt_shield_remaining(arena_secs)} باقی‌مانده")
+        if group_secs > 0:
+            lines.append(f"👥 گروهی: {_fmt_shield_remaining(group_secs)} باقی‌مانده")
     return "\n".join(lines)
 
 
@@ -1181,25 +1259,38 @@ def _devour_list_sync(tg_user, target_id):
     return target, [(c, _devour_xp(c)) for c in candidates]
 
 
-def _devour_list_render(target, scored, selected: set[int]) -> tuple[str, InlineKeyboardMarkup]:
+_DEVOUR_PAGE = 12
+
+
+def _devour_list_render(target, scored, selected: set[int], page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
     if not scored:
         return (
             f"🍖 <b>تقویت {target.name}</b>\n\n"
             "هیچ موجود آزادی برای خوروندن نداری (موجود فعال و موجودهای مشغول قابل قربانی نیستن).",
             InlineKeyboardMarkup([[back_btn(f"coll_pick:{target.id}", "بازگشت")]]),
         )
-    shown = scored[:12]
-    valid_ids = {c.id for c, _ in shown}
-    selected = selected & valid_ids  # drop stale picks that scrolled off
+    all_ids = {c.id for c, _ in scored}
+    selected = selected & all_ids  # drop picks that are no longer valid candidates
+    total_pages = max(1, (len(scored) + _DEVOUR_PAGE - 1) // _DEVOUR_PAGE)
+    page = max(0, min(page, total_pages - 1))
+    chunk = scored[page * _DEVOUR_PAGE:(page + 1) * _DEVOUR_PAGE]
     rows = []
-    for c, xp in shown:
+    for c, xp in chunk:
         mark = "✅" if c.id in selected else "⬜️"
         rows.append([btn(
-            f"{mark} {constants.RARITY_LABELS[c.rarity]} {c.name} {'⭐' * c.star_level} Lv{c.level}  ➕{xp}",
+            f"{mark} [{constants.RARITY_LABELS[c.rarity]}] {c.name} {'⭐' * c.star_level} Lv{c.level}  ➕{xp}",
             style=LIST, callback_data=f"devour_tog:{target.id}:{c.id}",
         )])
-    total_xp = sum(xp for c, xp in shown if c.id in selected)
-    if len(selected) == len(shown):
+    if total_pages > 1:
+        nav = []
+        if page > 0:
+            nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"devour_page:{target.id}:{page - 1}"))
+        if page < total_pages - 1:
+            nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"devour_page:{target.id}:{page + 1}"))
+        if nav:
+            rows.append(nav)
+    total_xp = sum(xp for c, xp in scored if c.id in selected)
+    if selected and len(selected) >= len(all_ids):
         rows.append([btn("◻️ برداشتن همه", style=NAV, callback_data=f"devour_none:{target.id}")])
     else:
         rows.append([btn("✅ انتخاب همه", style=NAV, callback_data=f"devour_all:{target.id}")])
@@ -1209,12 +1300,20 @@ def _devour_list_render(target, scored, selected: set[int]) -> tuple[str, Inline
             style=CONFIRM, callback_data=f"devour_multi:{target.id}",
         )])
     rows.append([back_btn(f"coll_pick:{target.id}", "بازگشت")])
+    page_note = f"  <i>(صفحه {page + 1}/{total_pages})</i>" if total_pages > 1 else ""
     text = (
-        f"🍖 <b>تقویت {target.name}</b> (Lv{target.level})\n\n"
+        f"🍖 <b>تقویت {target.name}</b> (Lv{target.level}){page_note}\n\n"
         "هرچند تا موجود که می‌خوای رو <b>تیک بزن</b> تا با هم خورده بشن و XP‌شون به این منتقل شه. "
-        "<i>هرچی قربانی قوی‌تر و نایاب‌تر، XP بیشتر. قربانی‌ها برای همیشه حذف می‌شن.</i>"
+        "<i>انتخاب‌هات بین صفحه‌ها می‌مونه. هرچی قربانی قوی‌تر و نایاب‌تر، XP بیشتر. قربانی‌ها برای همیشه حذف می‌شن.</i>"
     )
     return text, InlineKeyboardMarkup(rows)
+
+
+def _devour_page(context, target_id: int, page: int | None = None) -> int:
+    store = context.user_data.setdefault("devour_page", {})
+    if page is not None:
+        store[target_id] = page
+    return store.get(target_id, 0)
 
 
 async def _devour_rerender(update, context, target_id: int) -> None:
@@ -1225,14 +1324,23 @@ async def _devour_rerender(update, context, target_id: int) -> None:
         await query.answer(str(exc), show_alert=True)
         return
     selected = _devour_selection(context, target_id)
-    text, keyboard = _devour_list_render(target, scored, selected)
+    text, keyboard = _devour_list_render(target, scored, selected, _devour_page(context, target_id))
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def devour_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    _, target_id, page = query.data.split(":")
+    _devour_page(context, int(target_id), int(page))
+    await query.answer()
+    await _devour_rerender(update, context, int(target_id))
 
 
 async def devour_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     target_id = int(query.data.split(":")[1])
     context.user_data.setdefault(_DEVOUR_SEL, {})[target_id] = set()  # fresh selection
+    _devour_page(context, target_id, 0)  # start on the first page
     await query.answer()
     await _devour_rerender(update, context, target_id)
 
@@ -1259,7 +1367,7 @@ async def devour_select_all_callback(update: Update, context: ContextTypes.DEFAU
         except GameError as exc:
             await query.answer(str(exc), show_alert=True)
             return
-        context.user_data.setdefault(_DEVOUR_SEL, {})[target_id] = {c.id for c, _ in scored[:12]}
+        context.user_data.setdefault(_DEVOUR_SEL, {})[target_id] = {c.id for c, _ in scored}
     await query.answer()
     await _devour_rerender(update, context, target_id)
 
@@ -1642,34 +1750,38 @@ def _hunt_scout_sync(tg_user, charge=False):
 
 
 def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> str:
+    from game.hunt import hunt_dna_range
+
     tier_label = HUNT_TIERS[target["tier"]]["label"]
     lo, hi = estimated_reward(target["tier"], my_power)
-    diff = target["power"] - my_power
-    # win chance from the power gap, phrased clearly
-    if diff < -40:
-        win = "🟢 خیلی زیاد"
-    elif diff < -10:
-        win = "🟢 زیاد"
-    elif diff <= 15:
-        win = "🟡 نزدیک / سرتاسری"
-    elif diff <= 50:
-        win = "🔴 کم"
-    else:
-        win = "🔴 خیلی کم (خطرناک)"
-    return "\n".join(
-        [
-            f"{get_emoji('hunt')} <b>شکار انفرادی</b>",
-            f"موجودت: <b>{creature.name}</b> · 💪 قدرت تو: <b>{my_power}</b>",
-            f"{get_emoji('energy')} {energy}/{constants.MAX_ENERGY}\n",
-            "🔍 <b>یه حریف پیدا شد:</b>\n",
-            f"{tier_label} <b>{target['name']}</b> {constants.element_label(target['element'])}",
-            f"💪 قدرت حریف: <b>{target['power']}</b>",
-            f"🎯 شانس برد: <b>{win}</b>",
-            f"{get_emoji('coin')} غنیمت در صورت برد: {lo}–{hi}",
-            f"\n<blockquote>حمله {constants.HUNT_ENERGY_COST} انرژی می‌بره. "
-            f"«بعدی» برای گشتن دنبال حریف بهتر <b>{scout_price}</b> طلا می‌گیره.</blockquote>",
-        ]
-    )
+    dlo, dhi = hunt_dna_range(my_power, target["tier"])
+    pct = win_chance_pct(my_power, target["power"])
+    adv = element_advantage_line(creature.element, target["element"])
+    lines = [
+        f"{get_emoji('hunt')} <b>حریف آماده نبرد است!</b>",
+        "",
+        f"🏰 حریف وحشی: <b>{target['name']}</b>  <i>({tier_label})</i>",
+        f"🎯 عنصر حریف: {constants.element_label(target['element'])}",
+        "",
+        _CARD_DIV,
+        "",
+        "📊 مقایسه وضعیت نبرد:",
+        f"💪 قدرت: شما <b>{my_power:,}</b> 🆚 حریف <b>{target['power']:,}</b>",
+        f"🎯 شانس پیروزی: {pct_bar(pct, 100)} {win_label(pct)}",
+        "",
+        _CARD_DIV,
+        "",
+        "🔮 مزیت تاکتیکی:",
+        adv or "➖ بدون مزیت عنصری",
+        "",
+        "🎁 جوایز نبرد (در صورت برد):",
+        f"{get_emoji('coin')} غنیمت طلا: <b>+{lo:,} تا +{hi:,}</b>",
+        f"{get_emoji('dna')} غنیمت دی‌ان‌ای: <b>+{dlo:,} تا +{dhi:,}</b>",
+        "",
+        _CARD_DIV,
+        f"{get_emoji('energy')} هزینه حمله: {constants.HUNT_ENERGY_COST} انرژی  ·  🔍 حریف بعدی: <b>{scout_price}</b> طلا",
+    ]
+    return "\n".join(lines)
 
 
 def _hunt_scout_keyboard(target, scout_price=0) -> InlineKeyboardMarkup:
@@ -2997,6 +3109,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(devour_start_callback, pattern=r"^devour_start:\d+$"))
     application.add_handler(CallbackQueryHandler(devour_toggle_callback, pattern=r"^devour_tog:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(devour_select_all_callback, pattern=r"^devour_(all|none):\d+$"))
+    application.add_handler(CallbackQueryHandler(devour_page_callback, pattern=r"^devour_page:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(devour_multi_callback, pattern=r"^devour_multi:\d+$"))
     application.add_handler(CallbackQueryHandler(fusion_pick_a_callback, pattern=r"^fus_a:"))
     application.add_handler(CallbackQueryHandler(fusion_rarity_callback, pattern=r"^fus_rarity:"))
