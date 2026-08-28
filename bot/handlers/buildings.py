@@ -21,11 +21,20 @@ from game.buildings import (
     is_unlocked,
     max_level_for,
     pending_amount,
+    production_rate,
+    storage_cap,
     unlock_level_for,
     produces,
     start_upgrade,
     upgrade_cost_and_minutes,
 )
+
+# English subtitle per producing building, for the "🏭 … | Gold Collector" header
+_COLLECTOR_EN = {
+    "gold_collector": "Gold Collector",
+    "dna_lab": "DNA Lab",
+    "diamond_collector": "Diamond Mine",
+}
 from game.creature import GameError
 from game.daily import check_missions, record_action
 from game.emoji import get_emoji
@@ -128,6 +137,13 @@ def _detail_view(user, building: Building) -> dict:
     }
 
 
+def _pbar(current, total, width: int = 10) -> str:
+    total = max(int(total), 1)
+    pct = max(0, min(100, round(current / total * 100)))
+    filled = min(width, max(0, round(width * max(current, 0) / total)))
+    return f"[{'■' * filled}{'□' * (width - filled)}] {pct}%"
+
+
 def _building_detail_text(view: dict) -> str:
     building, upgrade = view["building"], view["upgrade"]
     pending, cap = view["pending"], view["cap"]
@@ -135,6 +151,62 @@ def _building_detail_text(view: dict) -> str:
     btype = building.building_type
     label = constants.BUILDING_LABELS[btype]
     unlocked = view["unlocked"]
+    div = "──────────────"
+
+    # ── producing buildings get the rich "collector" dashboard ────────────────
+    if produces(btype) and building.level > 0:
+        cfg = constants.BUILDING_PRODUCTION[btype]
+        resource_emoji = get_emoji(_RESOURCE_EMOJI_KEY[cfg["resource"]])
+        rate = production_rate(building)
+        base_rate = cfg["rate_per_hour"] * building.level
+        cap_store = storage_cap(building)
+        en = _COLLECTOR_EN.get(btype, "")
+        lines = [
+            f"🏭 <b>{label}</b>" + (f" | {en}" if en else ""),
+            "",
+            f"🎖 سطح سازه: <b>{building.level}/{cap}</b>",
+            f"📦 ظرفیت مخزن: {_pbar(pending, cap_store)} ({pending:,}/{cap_store:,})",
+            f"{resource_emoji} در انتظار برداشت: <b>+{pending:,}</b>",
+            "",
+            div,
+            "",
+            "⚙️ راندمان استخراج:",
+            f"📈 نرخ کل: <b>{rate:.1f}</b> در ساعت",
+            f"🔹 پایه: {base_rate:g} ┃ 🔸 بونوس کارگران: +{bonus * 100:.0f}٪",
+            "",
+            div,
+            "",
+            f"👷‍♂️ کارگران مستقر ({len(workers)}/{slots}):",
+        ]
+        if workers:
+            wm = cfg.get("worker_mult", 1.0)
+            for c in workers:
+                gain = c.level * constants.WORKER_RARITY_MULT.get(c.rarity, 1.0) * constants.WORKER_BONUS_PER_CREATURE_LEVEL * wm * 100
+                lines.append(f"▫️ {c.name} [{constants.RARITY_LABELS[c.rarity]} · سطح {c.level}] ⟵ +{gain:.0f}٪")
+        else:
+            lines.append("<i>خالیه — هر کایجویی که بذاری تولید رو بیشتر می‌کنه.</i>")
+        lines.append("")
+        lines.append(div)
+        # upgrade / status block for producers
+        if upgrade is not None and upgrade.building_id == building.id:
+            remaining = (upgrade.finishes_at - timezone.now()).total_seconds()
+            lines.append(f"\n⏳ در حال ارتقا تا سطح {upgrade.target_level} — {_format_remaining(remaining)} مونده")
+            lines.append(f"<i>با کارت سرعت یا {diamond_finish_price(upgrade)} 💎 همین الان تمومش کن.</i>")
+        elif upgrade is not None:
+            lines.append("\n⏳ کارگرت الان مشغول یه ساختمون دیگه‌ست.")
+        elif building.level >= constants.BUILDING_MAX_LEVEL:
+            lines.append("\n🏆 این سازه به سقف سطح رسیده.")
+        elif building.level >= cap:
+            hall = constants.BUILDING_LABELS[constants.MAIN_BUILDING]
+            lines.append(f"\n🔒 برای ادامه اول باید {hall} رو ارتقا بدی.")
+        else:
+            cost, minutes = upgrade_cost_and_minutes(building)
+            lines.append(f"\n🔧 پیش‌نیاز ارتقا به سطح {building.level + 1}:")
+            lines.append(f"{get_emoji('coin')} هزینه: <b>{cost:,}</b> طلا ┃ ⏳ زمان ساخت: {_format_remaining(minutes * 60)}")
+        lines.append("\n💡 <i>هیولاهای فعال یا در حال تخم‌گذاری در غار قابل انتصاب به کارگری نیستن.</i>")
+        return "\n".join(lines)
+
+    # ── non-producing buildings (main hall / forge / fusion lab) keep the simple view ─
     if building.level > 0:
         level_txt = f"سطح {building.level}/{cap}"
         if btype != constants.MAIN_BUILDING and cap < constants.BUILDING_MAX_LEVEL:
@@ -144,30 +216,6 @@ def _building_detail_text(view: dict) -> str:
     else:
         level_txt = f"🔒 قفل — از سطح {unlock_level_for(btype)} تالار مِهر"
     lines = [f"{label} — {level_txt}", f"<i>{constants.BUILDING_DESCRIPTIONS[btype]}</i>", ""]
-
-    if produces(btype) and building.level > 0:
-        cfg = constants.BUILDING_PRODUCTION[btype]
-        resource_emoji = get_emoji(_RESOURCE_EMOJI_KEY[cfg["resource"]])
-        base_rate = cfg["rate_per_hour"] * building.level
-        lines.append(
-            f"⚙️ تولید: <b>{base_rate * (1 + bonus):g}</b> در ساعت "
-            f"(سقف انبار: {cfg['cap_base'] * building.level * (1 + bonus):g})"
-        )
-        if bonus:
-            lines.append(f"   <i>{base_rate:g} پایه + {bonus * 100:.0f}٪ از کارگرها</i>")
-        lines.append(f"{resource_emoji} در انتظار جمع‌آوری: <b>{pending}</b>")
-        lines.append("")
-        lines.append(f"👷 <b>کارگرها</b> ({len(workers)}/{slots})")
-        if workers:
-            for creature in workers:
-                gain = creature.level * constants.WORKER_BONUS_PER_CREATURE_LEVEL * 100
-                lines.append(f"   • {creature.name} · سطح {creature.level} → +{gain:.0f}٪")
-        else:
-            lines.append("   <i>خالیه — هر هیولایی که بذاری تولید رو بیشتر می‌کنه.</i>")
-        lines.append(
-            "<blockquote>هرچی سطح هیولا بالاتر باشه تولید بیشتره. "
-            "موجود فعال و هیولاهایی که توی غار هیولا تخم گذاشتن رو نمی‌شه سر کار گذاشت.</blockquote>"
-        )
 
     if btype == "blacksmith" and building.level > 0:
         cap_items = building.level * constants.EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL
@@ -203,11 +251,14 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
     workers, slots = view["workers"], view["slots"]
     rows = []
     if produces(building.building_type) and building.level > 0:
-        rows.append([btn("جمع‌آوری", emoji_key="btn_collect", style=BUILD, callback_data=f"bld_collect:{building.id}")])
+        res_name = _RESOURCE_NAMES.get(constants.BUILDING_PRODUCTION[building.building_type]["resource"], "")
+        pend = view.get("pending", 0)
+        rows.append([btn(f"جمع‌آوری {res_name} (+{pend:,})", emoji_key="btn_collect", style=BUILD, callback_data=f"bld_collect:{building.id}")])
         rows.append(
             [
                 btn(
-                    f"👷 کارگرها ({len(workers)}/{slots})",
+                    f"👷‍♂️ مدیریت کارگران ({len(workers)}/{slots})",
+                    emoji_key="btn_workers",
                     style=PRIMARY,
                     callback_data=f"bld_workers:{building.id}",
                 )
@@ -511,17 +562,16 @@ def _assign_sync(tg_user, building_id, creature_id, attach: bool):
     except Creature.DoesNotExist:
         raise GameError("این موجود توی کلکسیون تو نیست.")
     if attach:
-        banked = assign(user, building, creature)
+        assign(user, building, creature)
     else:
-        _building, banked = unassign(user, creature)
+        unassign(user, creature)
+    building.refresh_from_db()  # pick up the re-locked banked_pending for the re-render
     return (
         creature,
         building,
         assigned_creatures(building),
         worker_slots(building),
         free_creatures(user),
-        banked,
-        constants.BUILDING_PRODUCTION.get(building.building_type, {}).get("resource"),
     )
 
 
@@ -530,26 +580,17 @@ async def building_assign_callback(update: Update, context: ContextTypes.DEFAULT
     action, building_id, creature_id = query.data.split(":")
     attach = action == "bld_assign"
     try:
-        creature, building, workers, slots, free, banked, banked_res = await run_db(
+        creature, building, workers, slots, free = await run_db(
             _assign_sync, update.effective_user, int(building_id), int(creature_id), attach
         )
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    # moving a worker banks whatever the mine had accrued (so a strong worker can't
-    # retro-boost past hours). Tell the player it was COLLECTED, not lost.
     verb = "سر کار رفت" if attach else "برگشت"
-    if banked and banked_res:
-        await query.answer(f"{creature.name} {verb} · 🪙 {banked} {_RESOURCE_NAMES.get(banked_res, '')} جمع شد")
-    else:
-        await query.answer(f"{creature.name} {verb}")
-    text = _workers_text(building, workers, slots, free)
-    if banked and banked_res:
-        text = (f"✅ <b>{banked} {_RESOURCE_NAMES.get(banked_res, '')}</b> که جمع شده بود، خودکار برداشت شد "
-                "(با جابه‌جایی کارگر تولیدِ جمع‌شده از دست نمی‌ره).\n━━━━━━━━━━\n" + text)
+    await query.answer(f"{creature.name} {verb} · تولیدِ جمع‌شده سر جاشه ✅")
     await safe_edit_message_text(
         query,
-        text,
+        _workers_text(building, workers, slots, free),
         parse_mode="HTML",
         reply_markup=_workers_keyboard(building, workers, slots, free),
     )

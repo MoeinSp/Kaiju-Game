@@ -280,7 +280,7 @@ async def group_shield_buy_callback(update: Update, context: ContextTypes.DEFAUL
 def gold_shop_button():
     """A button that jumps straight to the gold exchange — hung under any
     'not enough gold' message so the player has an immediate way out."""
-    return btn("💰 خرید طلا با الماس", style=BUILD, callback_data="gold_shop")
+    return btn("خرید طلا با الماس", emoji_key="btn_gold_shop", style=BUILD, callback_data="gold_shop")
 
 
 async def show_gold_error(query, exc) -> bool:

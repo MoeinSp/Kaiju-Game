@@ -245,6 +245,47 @@ def creature_card_text(user, creature, equipped_items: list | None = None) -> st
     return "\n".join(lines)
 
 
+def balance_text(user) -> str:
+    """The «موجودی» / balance card — just the wallet + energy, cleanly laid out."""
+    from game.energy import minutes_until_next_point
+
+    energy = sync_energy(user)
+    if energy >= constants.MAX_ENERGY:
+        en_lines = [f"{get_emoji('energy')} انرژی: {pct_bar(energy, constants.MAX_ENERGY)} ({energy}/{constants.MAX_ENERGY}) ✅ پره"]
+    else:
+        en_lines = [
+            f"{get_emoji('energy')} انرژی: {pct_bar(energy, constants.MAX_ENERGY)} ({energy}/{constants.MAX_ENERGY})",
+            f"⏳ شارژ واحد بعدی: ~{minutes_until_next_point(user)} دقیقه",
+        ]
+    div = "──────────────"
+    return "\n".join([
+        "🏦 <b>خزانه دارایی | Balance</b>",
+        "",
+        f"👤 بازیکن: <b>{lab_display(user)}</b>",
+        "",
+        div,
+        "",
+        f"{get_emoji('coin')} طلا: <b>{user.coins:,}</b>",
+        f"{get_emoji('dna')} دی‌ان‌ای (DNA): <b>{user.dna_fragments:,}</b>",
+        f"{get_emoji('diamond')} الماس: <b>{user.diamonds:,}</b>",
+        "",
+        div,
+        "",
+        *en_lines,
+    ])
+
+
+def _balance_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    return user
+
+
+async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = await run_db(_balance_sync, update.effective_user)
+    await send_screen(update, balance_text(user), parse_mode="HTML",
+                      reply_markup=back_only_keyboard("menu:me", "بازگشت به منو"))
+
+
 def _slot_summary_lines(slots: list[dict]) -> list[str]:
     """One line per equipment slot, empty slots included — an invisible empty slot
     is a feature a player never discovers."""
@@ -453,9 +494,9 @@ def _upgrade_render(user, ranked, page: int) -> tuple[str, InlineKeyboardMarkup]
         )
     nav = []
     if page > 0:
-        nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"upg_page:{page - 1}"))
+        nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"upg_page:{page - 1}"))
     if page < total_pages - 1:
-        nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"upg_page:{page + 1}"))
+        nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"upg_page:{page + 1}"))
     if nav:
         rows.append(nav)
     rows.append([back_btn("menu:me")])
@@ -803,7 +844,7 @@ _CATEGORIES = {
         [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("جعبه‌های الماسی", "diamond_box", "s", "btn_diamond_box")],
         [("بنر ویژه", "banner", "s", "btn_banner"), ("شاپ روزانه", "shop", "s", "btn_shop")],
         [("خرید سپر", "shield_shop", "s", "btn_shield"), ("کازینو", "casino", "s", "btn_casino")],
-        [("آیتم‌های ویژه", "item_shop", "s", "btn_items"), ("خرید طلا", "gold_shop", "s", "btn_shop")],
+        [("آیتم‌های ویژه", "item_shop", "s", "btn_items"), ("خرید طلا", "gold_shop", "s", "btn_gold_shop")],
         [("مبادله طلا و DNA", "exchange", "s", "btn_exchange")],
     ]),
     "social": ("👥 اجتماعی", [
@@ -845,7 +886,7 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
     group_link = botconfig.get_group_link()
     if group_link is not None:
         url, title = group_link
-        rows.append([btn(title, style=PRIMARY, url=url)])
+        rows.append([btn(title, emoji_key="btn_join_group", style=PRIMARY, url=url)])
     if is_owner:
         rows.append([btn("پنل ادمین", emoji_key="btn_admin", style=ADMIN, callback_data="menu:admin")])
     return InlineKeyboardMarkup(rows)
@@ -1138,9 +1179,9 @@ def _collection_render(creatures: list[Creature], filt: str = "all", page: int =
         rows.append(row)
     nav = []
     if page > 0:
-        nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"coll_page:{filt}:{page - 1}"))
+        nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"coll_page:{filt}:{page - 1}"))
     if page < total_pages - 1:
-        nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"coll_page:{filt}:{page + 1}"))
+        nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"coll_page:{filt}:{page + 1}"))
     if nav:
         rows.append(nav)
     rows.append([btn("ترکیب هیولا", emoji_key="btn_fusion", style=NAV, callback_data="menu:fusion")])
@@ -1284,9 +1325,9 @@ def _devour_list_render(target, scored, selected: set[int], page: int = 0) -> tu
     if total_pages > 1:
         nav = []
         if page > 0:
-            nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"devour_page:{target.id}:{page - 1}"))
+            nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"devour_page:{target.id}:{page - 1}"))
         if page < total_pages - 1:
-            nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"devour_page:{target.id}:{page + 1}"))
+            nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"devour_page:{target.id}:{page + 1}"))
         if nav:
             rows.append(nav)
     total_xp = sum(xp for c, xp in scored if c.id in selected)
@@ -1706,9 +1747,9 @@ def _missions_render(status: list[dict], page: int) -> tuple[str, InlineKeyboard
     rows = []
     nav = []
     if page > 0:
-        nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"mission_page:{page - 1}"))
+        nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"mission_page:{page - 1}"))
     if page < total_pages - 1:
-        nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"mission_page:{page + 1}"))
+        nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"mission_page:{page + 1}"))
     if nav:
         rows.append(nav)
     rows.append([back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")])
@@ -2096,9 +2137,9 @@ def _members_render(data: dict, page: int = 0) -> tuple[str, InlineKeyboardMarku
     rows = []
     nav = []
     if page > 0:
-        nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"ally_members:{page - 1}"))
+        nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"ally_members:{page - 1}"))
     if page < total_pages - 1:
-        nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"ally_members:{page + 1}"))
+        nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"ally_members:{page + 1}"))
     if nav:
         rows.append(nav)
 
@@ -2390,7 +2431,7 @@ def _alliance_browse_render(data: dict, search_results=None, search_query: str =
 
     nav_row = []
     if data["has_prev"]:
-        nav_row.append(btn("◀️ قبلی", style=NAV, callback_data=f"ally_browse:{page - 1}"))
+        nav_row.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"ally_browse:{page - 1}"))
     if data["has_next"]:
         nav_row.append(btn("▶️ بعدی", style=NAV, callback_data=f"ally_browse:{page + 1}"))
     if nav_row:
@@ -3015,6 +3056,7 @@ _MENU_ACTIONS = {
     "rank": rank,
     "admin": admin_cmd,
     "profile": profile,
+    "balance": balance,
     "guide": guide_panel,
 }
 
@@ -3029,7 +3071,7 @@ _KEYWORD_TO_MENU = {
     "reward": "idle", "alliance": "alliance_info", "leaderboard": "rank",
     "box": "biocrate", "mine": "buildings", "wheel": "wheel",
     "select": "collection", "help": "guide", "start": "guide",
-    "casino": "casino", "exchange": "exchange",
+    "casino": "casino", "exchange": "exchange", "balance": "balance",
 }
 
 
@@ -3088,6 +3130,7 @@ def register(application) -> None:
     application.add_handler(CommandHandler("heist", heist_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("rank", rank, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("profile", profile, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("balance", balance, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("menu", menu, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^menu:"))
     application.add_handler(CallbackQueryHandler(guide_page_callback, pattern=r"^guide:"))

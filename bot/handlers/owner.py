@@ -156,8 +156,22 @@ async def set_emoji_category_callback(update: Update, context: ContextTypes.DEFA
         return
     await query.answer()
     await safe_edit_message_text(query,
-        f"{CATEGORY_LABELS[category]}\nکدوم کلید؟", reply_markup=_key_keyboard(category)
+        _text_emoji_category_caption(category), parse_mode="HTML", reply_markup=_key_keyboard(category)
     )
+
+
+def _text_emoji_category_caption(category: str) -> str:
+    """List every text-emoji key in a category with its CURRENT emoji rendered inline
+    (premium ones show the real custom emoji), so it's obvious what's set."""
+    lines = [CATEGORY_LABELS[category], "", "<b>ایموجی فعلی هر مورد:</b>"]
+    for k, (label, glyph, cat) in EMOJI_DEFS.items():
+        if cat != category:
+            continue
+        rendered = get_emoji(k)  # <tg-emoji> HTML if premium set, else the unicode default
+        is_premium = rendered.startswith("<tg-emoji")
+        lines.append(f"{rendered} {label} — {'✅ پرمیوم' if is_premium else '⬜️ پیش‌فرض'}")
+    lines.append("\nکدوم مورد رو می‌خوای عوض کنی؟")
+    return "\n".join(lines)
 
 
 async def set_emoji_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1670,10 +1684,30 @@ def _btn_emoji_category_keyboard() -> InlineKeyboardMarkup:
 
 def _btn_emoji_key_keyboard(category: str) -> InlineKeyboardMarkup:
     keys = [k for k, c in BUTTON_CATEGORY_OF.items() if c == category]
-    buttons = [btn(BUTTON_EMOJI_KEYS[k], style=LIST, callback_data=f"{BTN_EMOJI_KEY_PREFIX}{k}") for k in keys]
+    # emoji_key=k makes each button PREVIEW its own current premium icon (or the
+    # unicode fallback if none set) — so you see exactly what the button will look like
+    buttons = [btn(BUTTON_EMOJI_KEYS[k], emoji_key=k, style=LIST, callback_data=f"{BTN_EMOJI_KEY_PREFIX}{k}") for k in keys]
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
     rows.append([back_btn(BTN_EMOJI_BACK, "بازگشت به دسته‌ها")])
     return InlineKeyboardMarkup(rows)
+
+
+def _btn_emoji_category_caption(category: str) -> str:
+    """List every button in a category with its CURRENT emoji rendered inline, so the
+    owner can see at a glance what's set (premium) vs still on the unicode default."""
+    from game.button_emoji import BUTTON_EMOJI_DEFS, get_button_icon
+
+    lines = [BUTTON_CATEGORY_LABELS[category], "", "<b>ایموجی فعلی هر دکمه:</b>"]
+    for k, (label, glyph, cat) in BUTTON_EMOJI_DEFS.items():
+        if cat != category:
+            continue
+        icon = get_button_icon(k)
+        if icon:
+            lines.append(f'<tg-emoji emoji-id="{icon}">{glyph}</tg-emoji> {label} — ✅ پرمیوم')
+        else:
+            lines.append(f"{glyph} {label} — ⬜️ پیش‌فرض")
+    lines.append("\nکدوم دکمه رو می‌خوای عوض کنی؟ (ایموجی روی خودِ دکمه‌ها هم پیش‌نمایششه)")
+    return "\n".join(lines)
 
 
 async def button_emoji_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1703,7 +1737,8 @@ async def btn_emoji_category_callback(update: Update, context: ContextTypes.DEFA
     await query.answer()
     await safe_edit_message_text(
         query,
-        f"{BUTTON_CATEGORY_LABELS[category]}\nکدوم دکمه؟",
+        _btn_emoji_category_caption(category),
+        parse_mode="HTML",
         reply_markup=_btn_emoji_key_keyboard(category),
     )
 

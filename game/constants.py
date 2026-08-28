@@ -670,9 +670,12 @@ BUILDING_UPGRADE_GOLD = {1: 150, 2: 450, 3: 1200, 4: 2800, 5: 6000}
 # (main hall, blacksmith, fusion lab) are pure gates — they unlock things instead
 # of producing resources.
 BUILDING_PRODUCTION = {
-    "gold_collector": {"rate_per_hour": 20.0, "cap_base": 200, "resource": "coins"},
-    "diamond_collector": {"rate_per_hour": 0.4, "cap_base": 4, "resource": "diamonds"},
-    "dna_lab": {"rate_per_hour": 2.0, "cap_base": 20, "resource": "dna_fragments"},
+    # gold + DNA collectors were far too stingy — bumped ~4× (rate and storage), and
+    # their stationed-kaiju bonus is amplified via `worker_mult`. The diamond collector
+    # is deliberately left as-is (rate, cap AND worker_mult=1.0) — it's balanced.
+    "gold_collector": {"rate_per_hour": 80.0, "cap_base": 800, "resource": "coins", "worker_mult": 1.8},
+    "diamond_collector": {"rate_per_hour": 0.4, "cap_base": 4, "resource": "diamonds", "worker_mult": 1.0},
+    "dna_lab": {"rate_per_hour": 8.0, "cap_base": 80, "resource": "dna_fragments", "worker_mult": 1.8},
 }
 
 # each blacksmith level raises the equipment ceiling by this much, so a level-1
@@ -685,7 +688,7 @@ EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL = 5
 # creature and then putting it to work compounds — which is the point.
 # The cap stops a full late-game roster from turning idle income into the whole
 # economy; hunting and raiding have to stay worth doing.
-WORKER_BONUS_PER_CREATURE_LEVEL = 0.06  # 3× stronger — a stationed worker matters a lot now
+WORKER_BONUS_PER_CREATURE_LEVEL = 0.06  # base per-level bonus; gold/DNA amplify it via worker_mult
 WORKER_BONUS_CAP = 6.0  # up to +600% output from stationed creatures (raised so rarity has room to matter)
 # a stationed worker's contribution is multiplied by its rarity — a mythic worker is
 # worth several commons of the same level, so rarer monsters are better miners
@@ -964,18 +967,18 @@ GROUP_SHIELD_HOURS = 4  # separate anti-farm grace after being hit by a group «
 # so a week-long shield survives ~21 raids before you're exposed again.
 SHIELD_ATTACK_COST_HOURS = 8
 SHIELD_SHOP_TIERS = {
-    "8h":  {"hours": 8,   "diamonds": 20,  "label": "🛡 سپر ۸ ساعته"},
-    "24h": {"hours": 24,  "diamonds": 50,  "label": "🛡 سپر ۲۴ ساعته"},
-    "3d":  {"hours": 72,  "diamonds": 120, "label": "🛡 سپر ۳ روزه"},
-    "7d":  {"hours": 168, "diamonds": 240, "label": "🛡 سپر یک‌هفته‌ای"},
+    "8h":  {"hours": 8,   "diamonds": 40,  "label": "🛡 سپر ۸ ساعته"},
+    "24h": {"hours": 24,  "diamonds": 100, "label": "🛡 سپر ۲۴ ساعته"},
+    "3d":  {"hours": 72,  "diamonds": 240, "label": "🛡 سپر ۳ روزه"},
+    "7d":  {"hours": 168, "diamonds": 480, "label": "🛡 سپر یک‌هفته‌ای"},
 }
 # A separate, cheaper shield against group «اتک» (uses group_shield_until). Group
 # aggression is lower-stakes than arena raiding, so protection costs less.
 GROUP_SHIELD_SHOP_TIERS = {
-    "8h":  {"hours": 8,   "diamonds": 10,  "label": "🛡 سپر گروه ۸ ساعته"},
-    "24h": {"hours": 24,  "diamonds": 24,  "label": "🛡 سپر گروه ۲۴ ساعته"},
-    "3d":  {"hours": 72,  "diamonds": 60,  "label": "🛡 سپر گروه ۳ روزه"},
-    "7d":  {"hours": 168, "diamonds": 110, "label": "🛡 سپر گروه یک‌هفته‌ای"},
+    "8h":  {"hours": 8,   "diamonds": 20,  "label": "🛡 سپر گروه ۸ ساعته"},
+    "24h": {"hours": 24,  "diamonds": 48,  "label": "🛡 سپر گروه ۲۴ ساعته"},
+    "3d":  {"hours": 72,  "diamonds": 120, "label": "🛡 سپر گروه ۳ روزه"},
+    "7d":  {"hours": 168, "diamonds": 220, "label": "🛡 سپر گروه یک‌هفته‌ای"},
 }
 ARENA_ATTACK_ENERGY_COST = 1
 

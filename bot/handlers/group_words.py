@@ -975,6 +975,13 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         _schedule_cleanup(context, message.chat_id, [message.message_id], action)
         return
 
+    if action == "balance":
+        from bot.handlers import private as private_handlers
+
+        await private_handlers.balance(update, context)
+        _schedule_cleanup(context, message.chat_id, [message.message_id], action)
+        return
+
 
     if action == "alliance":
         from bot.handlers import private as private_handlers

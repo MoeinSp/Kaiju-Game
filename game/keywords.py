@@ -258,6 +258,15 @@ KEYWORD_DEFS: dict[str, tuple[str, str, str, tuple[str, ...]]] = {
             "نیمه‌شب به وقت تهران ریست می‌شن.",
         ),
     ),
+    "balance": (
+        "موجودی",
+        "coin",
+        "خزانه‌ی دارایی‌هات",
+        (
+            "طلا، DNA، الماس و انرژی‌ت رو یکجا و مرتب نشون می‌ده.",
+            "همون چیزیه که بالای منوی اصلی هم می‌بینی.",
+        ),
+    ),
     "exchange": (
         "مبادله",
         "coin",
@@ -390,7 +399,7 @@ KEYWORD_SECTIONS: tuple[tuple[str, str, str, str, tuple[str, ...]], ...] = (
         "coin",
         "اقتصاد و جایزه",
         "منبع درآمد ثابت و جایزه‌های رایگان.",
-        ("mine", "box", "wheel", "reward", "mission", "exchange"),
+        ("mine", "box", "wheel", "reward", "mission", "exchange", "balance"),
     ),
     (
         "group",

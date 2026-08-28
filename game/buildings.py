@@ -126,41 +126,68 @@ def produces(building_type: str) -> bool:
     return building_type in constants.BUILDING_PRODUCTION
 
 
-def pending_amount(building: Building) -> int:
+def production_rate(building: Building) -> float:
+    """Current output per hour (base × level × worker bonus), 0 for non-producers."""
     cfg = constants.BUILDING_PRODUCTION.get(building.building_type)
     if cfg is None or building.level <= 0:
-        return 0  # pure-gate buildings (hall/forge/fusion lab) and unbuilt ones make nothing
-    # imported here rather than at module level: game.workers imports game.creature,
-    # which imports back into this module's dependency chain
+        return 0.0
     from game.workers import worker_bonus
 
-    # Stationed creatures raise the rate *and* the storage cap. Raising only the
-    # rate looked tidier, but the cap is small enough that it binds within a few
-    # hours, so a staffed mine and a bare one paid identically to anyone who
-    # doesn't collect constantly — the bonus was invisible exactly where idle
-    # income matters. WORKER_BONUS_CAP is what keeps this bounded instead.
-    bonus = 1 + worker_bonus(building)
-    rate = cfg["rate_per_hour"] * building.level * bonus
-    cap = cfg["cap_base"] * building.level * bonus
+    return cfg["rate_per_hour"] * building.level * (1 + worker_bonus(building))
+
+
+def storage_cap(building: Building) -> int:
+    cfg = constants.BUILDING_PRODUCTION.get(building.building_type)
+    if cfg is None or building.level <= 0:
+        return 0
+    from game.workers import worker_bonus
+
+    return int(cfg["cap_base"] * building.level * (1 + worker_bonus(building)))
+
+
+def _accrued_since_collect(building: Building) -> float:
+    """Raw (uncapped) production earned since last_collected_at at the CURRENT rate."""
+    if production_rate(building) <= 0:
+        return 0.0
     elapsed_hours = (timezone.now() - building.last_collected_at).total_seconds() / 3600
-    return int(min(cap, math.floor(rate * max(elapsed_hours, 0))))
+    return production_rate(building) * max(elapsed_hours, 0)
+
+
+def pending_amount(building: Building) -> int:
+    """Total collectable now = previously-locked pending + accrual since, capped by
+    the building's storage. The lock (banked_pending) is what lets a worker swap keep
+    the pending instead of dumping it."""
+    cfg = constants.BUILDING_PRODUCTION.get(building.building_type)
+    if cfg is None or building.level <= 0:
+        return 0
+    total = (building.banked_pending or 0.0) + _accrued_since_collect(building)
+    return int(min(storage_cap(building), math.floor(total)))
+
+
+def lock_pending(building: Building) -> None:
+    """Fold the accrual-so-far into banked_pending at the CURRENT rate and reset the
+    clock — WITHOUT collecting it. Called before a worker is added/removed, so the
+    pending is preserved (never lost on a worker swap) yet a newly-added strong worker
+    still can't retro-multiply hours already earned (the 'الماس زیاد' abuse)."""
+    if not produces(building.building_type) or building.level <= 0:
+        return
+    locked = min(float(storage_cap(building)), (building.banked_pending or 0.0) + _accrued_since_collect(building))
+    building.banked_pending = locked
+    building.last_collected_at = timezone.now()
+    building.save(update_fields=["banked_pending", "last_collected_at"])
 
 
 def bank_pending(user: User, building: Building) -> int:
-    """Collect a building's accrued production into the user (no error when empty) and
-    reset its clock. Called BEFORE a worker is added/removed, so the worker bonus only
-    ever applies to the period the worker is actually present — otherwise adding a
-    strong worker a second before collecting retroactively multiplied hours of past
-    production (the 'الماس زیاد' abuse on the diamond mine)."""
-    if not produces(building.building_type) or building.level <= 0:
-        return 0
+    """Back-compat shim — worker assign/unassign now call lock_pending() instead (which
+    keeps the pending in the mine). Kept so any other caller still collects safely."""
     amount = pending_amount(building)
     if amount > 0:
         resource_field = constants.BUILDING_PRODUCTION[building.building_type]["resource"]
         setattr(user, resource_field, getattr(user, resource_field) + amount)
         user.save(update_fields=[resource_field])
+    building.banked_pending = 0.0
     building.last_collected_at = timezone.now()
-    building.save(update_fields=["last_collected_at"])
+    building.save(update_fields=["banked_pending", "last_collected_at"])
     return amount
 
 
@@ -189,9 +216,12 @@ def collect(user: User, building: Building) -> tuple[int, str]:
     setattr(user, resource_field, getattr(user, resource_field) + amount)
     user.save(update_fields=[resource_field])
     now = timezone.now()
+    locked.banked_pending = 0.0
     locked.last_collected_at = now
-    locked.save(update_fields=["last_collected_at"])
-    building.last_collected_at = now  # keep the caller's instance in sync for its re-render
+    locked.save(update_fields=["banked_pending", "last_collected_at"])
+    # keep the caller's instance in sync for its re-render
+    building.banked_pending = 0.0
+    building.last_collected_at = now
     return amount, resource_field
 
 

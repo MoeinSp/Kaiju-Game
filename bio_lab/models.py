@@ -257,6 +257,11 @@ class Building(models.Model):
     building_type = models.CharField(max_length=32)  # one of game.constants.BUILDING_TYPES
     level = models.IntegerField(default=0)  # 0 = not built yet; only the main hall starts at 1
     last_collected_at = models.DateTimeField(default=timezone.now)
+    # production accrued but not yet collected, LOCKED at the rate it was earned at.
+    # Changing workers folds the current accrual in here (instead of auto-collecting it),
+    # so a worker swap never loses the pending output AND a strong worker can't retro-
+    # boost hours already earned. total pending = banked_pending + accrual-since-last.
+    banked_pending = models.FloatField(default=0.0)
 
     class Meta:
         constraints = [

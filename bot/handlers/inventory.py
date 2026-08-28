@@ -86,9 +86,9 @@ def _inv_cat_render(slot, items: list[Equipment], page: int) -> tuple[str, Inlin
         )])
     nav = []
     if page > 0:
-        nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"inv_cat:{slot}:{page - 1}"))
+        nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"inv_cat:{slot}:{page - 1}"))
     if page < total_pages - 1:
-        nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"inv_cat:{slot}:{page + 1}"))
+        nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"inv_cat:{slot}:{page + 1}"))
     if nav:
         rows.append(nav)
     rows.append([back_btn("menu:inventory", "بازگشت به دسته‌ها")])
@@ -352,9 +352,9 @@ def _forge_cat_render(user, slot, items, page: int) -> tuple[str, InlineKeyboard
     ]
     nav = []
     if page > 0:
-        nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"forge_cat:{slot}:{page - 1}"))
+        nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"forge_cat:{slot}:{page - 1}"))
     if page < total_pages - 1:
-        nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"forge_cat:{slot}:{page + 1}"))
+        nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"forge_cat:{slot}:{page + 1}"))
     if nav:
         rows.append(nav)
     rows.append([back_btn("menu:blacksmith", "بازگشت به دسته‌ها")])

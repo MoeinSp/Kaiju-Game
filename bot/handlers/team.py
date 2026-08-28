@@ -9,14 +9,14 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Creature, Team
 from bio_lab.repository import get_or_create_user
-from bot.buttons import LIST, PRIMARY, back_btn, btn
+from bot.buttons import LIST, NAV, PRIMARY, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants
 from game.creature import GameError
 from game.teambattle import team_power
 
 MAX_SLOTS = 3
-PICK_LIMIT = 12
+TEAM_PAGE = 8
 
 
 def _team_members(team: Team) -> list[int]:
@@ -27,10 +27,12 @@ def _panel_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
     team, _ = Team.objects.get_or_create(owner=user)
     member_ids = _team_members(team)
-    creatures = list(Creature.objects.filter(owner=user).order_by("id"))
+    creatures = list(Creature.objects.filter(owner=user))
+    # rarest-then-strongest first, so the best options are on the first page
+    rank = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
     ranked = sorted(
         creatures,
-        key=lambda c: c.base_hp + c.base_atk + c.base_def + c.base_spd,
+        key=lambda c: (rank.get(c.rarity, 0), c.star_level, c.base_hp + c.base_atk + c.base_def + c.base_spd),
         reverse=True,
     )
     members = [c for c in creatures if c.id in member_ids]
@@ -39,13 +41,13 @@ def _panel_sync(tg_user):
     return {
         "member_ids": member_ids,
         "members": members,
-        "ranked": ranked[:PICK_LIMIT],
+        "ranked": ranked,  # full list — the renderer paginates
         "power": power,
         "synergy": same_element,
     }
 
 
-def _render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
+def _render(view: dict, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
     lines = [f"⚔️ <b>تیم من</b>  (برای کمپین و نبرد تیمی)"]
     if view["members"]:
         for c in view["members"]:
@@ -55,30 +57,55 @@ def _render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
             lines.append("✨ <b>هم‌افزایی عنصری فعاله!</b> (+۱۰٪ حمله چون هر ۳ هم‌عنصرن)")
     else:
         lines.append("<blockquote>هنوز کسی توی تیمت نیست. تا ۳ هیولا انتخاب کن.</blockquote>")
-    lines.append("\n<i>روی هیولا بزن تا اضافه/حذف شه (حداکثر ۳). هم‌عنصر بودنِ هر ۳ بونوس می‌ده.</i>")
+
+    ranked = view["ranked"]
+    total_pages = max(1, (len(ranked) + TEAM_PAGE - 1) // TEAM_PAGE)
+    page = max(0, min(page, total_pages - 1))
+    chunk = ranked[page * TEAM_PAGE:(page + 1) * TEAM_PAGE]
+    page_note = f"  <i>(صفحه {page + 1}/{total_pages})</i>" if total_pages > 1 else ""
+    lines.append(f"\n<i>روی هیولا بزن تا اضافه/حذف شه (حداکثر ۳).</i>{page_note}")
 
     rows = []
-    for c in view["ranked"]:
+    for c in chunk:
         in_team = c.id in view["member_ids"]
         mark = "✅ " if in_team else ""
         power = c.base_hp + c.base_atk + c.base_def + c.base_spd
-        rows.append(
-            [
-                btn(
-                    f"{mark}{c.name} · {constants.RARITY_LABELS[c.rarity]} · Lv{c.level} · 💪{power}",
-                    style=PRIMARY if in_team else LIST,
-                    callback_data=f"team_tog:{c.id}",
-                )
-            ]
-        )
+        rows.append([btn(
+            f"{mark}[{constants.RARITY_LABELS[c.rarity]}] {c.name} · Lv{c.level} · 💪{power}",
+            style=PRIMARY if in_team else LIST,
+            callback_data=f"team_tog:{c.id}",
+        )])
+    if total_pages > 1:
+        nav = []
+        if page > 0:
+            nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"team_page:{page - 1}"))
+        if page < total_pages - 1:
+            nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"team_page:{page + 1}"))
+        if nav:
+            rows.append(nav)
     rows.append([back_btn("menu:me")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
+def _team_page(context, page: int | None = None) -> int:
+    if page is not None:
+        context.user_data["team_page"] = page
+    return context.user_data.get("team_page", 0)
+
+
 async def team_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     view = await run_db(_panel_sync, update.effective_user)
-    text, keyboard = _render(view)
+    text, keyboard = _render(view, _team_page(context))
     await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def team_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    _team_page(context, int(query.data.split(":")[1]))
+    view = await run_db(_panel_sync, update.effective_user)
+    await query.answer()
+    text, keyboard = _render(view, _team_page(context))
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _toggle_sync(tg_user, creature_id):
@@ -109,10 +136,11 @@ async def team_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
-    text, keyboard = _render(view)
+    text, keyboard = _render(view, _team_page(context))
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def register(application) -> None:
     application.add_handler(CommandHandler("team", team_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(team_toggle_callback, pattern=r"^team_tog:"))
+    application.add_handler(CallbackQueryHandler(team_page_callback, pattern=r"^team_page:\d+$"))

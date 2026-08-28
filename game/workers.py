@@ -53,9 +53,11 @@ def worker_bonus(building: Building) -> float:
         c.level * constants.WORKER_RARITY_MULT.get(c.rarity, 1.0)
         for c in assigned_creatures(building)
     )
+    # gold/DNA mines amplify the stationed-kaiju effect (worker_mult); diamond = 1.0
+    mult = constants.BUILDING_PRODUCTION.get(building.building_type, {}).get("worker_mult", 1.0)
     return min(
         constants.WORKER_BONUS_CAP,
-        total * constants.WORKER_BONUS_PER_CREATURE_LEVEL,
+        total * constants.WORKER_BONUS_PER_CREATURE_LEVEL * mult,
     )
 
 
@@ -103,7 +105,7 @@ def assert_free(user: User, creature: Creature, *, for_action: str) -> None:
     raise GameError(f"«{creature.name}» الان مشغوله ({status}) — نمی‌تونی {for_action}.")
 
 
-def assign(user: User, building: Building, creature: Creature) -> int:
+def assign(user: User, building: Building, creature: Creature) -> None:
     if building.owner_id != user.id:
         raise GameError("این ساختمون مال تو نیست.")
     slots = worker_slots(building)
@@ -115,18 +117,16 @@ def assign(user: User, building: Building, creature: Creature) -> int:
             f"{label} پره ({slots} جایگاه). برای جای بیشتر باید ساختمون رو ارتقا بدی."
         )
     assert_free(user, creature, for_action="بفرستی سر کار")
-    # bank whatever's accrued so far at the CURRENT bonus before the new worker's
-    # bonus takes effect — stops a strong worker retroactively boosting past hours.
-    # Returns the banked amount so the UI can tell the player it was collected (not
-    # lost) — the "moving a worker in zeroed my mine" confusion.
-    from game.buildings import bank_pending
+    # LOCK the accrual-so-far at the current rate (keeps the pending IN the mine, never
+    # collected/lost on a worker swap) before the new worker's bonus takes effect — so a
+    # strong worker can't retro-boost hours already earned.
+    from game.buildings import lock_pending
 
-    banked = bank_pending(user, building)
+    lock_pending(building)
     CreatureAssignment.objects.create(building=building, creature=creature)
-    return banked
 
 
-def unassign(user: User, creature: Creature) -> tuple[Building, int]:
+def unassign(user: User, creature: Creature) -> Building:
     assignment = (
         CreatureAssignment.objects.filter(creature=creature, creature__owner=user)
         .select_related("building")
@@ -135,11 +135,11 @@ def unassign(user: User, creature: Creature) -> tuple[Building, int]:
     if assignment is None:
         raise GameError("این موجود جایی مشغول کار نیست.")
     building = assignment.building
-    from game.buildings import bank_pending
+    from game.buildings import lock_pending
 
-    banked = bank_pending(user, building)  # bank at the with-worker bonus before it drops
+    lock_pending(building)  # keep the pending in the mine at the with-worker rate before it drops
     assignment.delete()
-    return building, banked
+    return building
 
 
 def free_creatures(user: User) -> list[Creature]:
