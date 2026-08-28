@@ -232,13 +232,15 @@ def _fake_opponent(attacker: User) -> dict:
     swing = random.uniform(0.9, 1.15)
     power = max(1, round(power_for_cup(bot_cup) * swing))
     rarity, star = _bot_display_tier(bot_cup)
+    _bot_element = constants.random_element()
     return {
         "is_fake": True,
         "user": None,
         "label": random.choice(constants.ARENA_FAKE_LAB_NAMES),
+        "creature_name": constants.random_species_name(_bot_element),
         "cup": bot_cup,
         "power": power,
-        "element": constants.random_element(),  # fixed here so the preview matches the fight
+        "element": _bot_element,  # fixed here so the preview matches the fight
         "loot_pool": random.randint(*constants.arena_fake_loot_range(_attacker_level(attacker))),
         "bot_rarity": rarity,
         "bot_star": star,
@@ -306,6 +308,7 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
         "is_fake": False,
         "user": target,
         "label": lab_display(target),
+        "creature_name": target_creature.name if target_creature else "موجود ناشناس",
         "cup": target.cup,
         "power": active_power(target),
         "element": target_creature.element if target_creature else constants.random_element(),
@@ -367,6 +370,9 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
     # moves (per award_cup) — that part is separate from the gold loot.
     loot = 0
     dna_win = 0
+    league_coins = 0
+    league_dna = 0
+    league = constants.league_for_cup(attacker.cup)
     if won:
         loot = expected_loot(opponent, attacker_creature.level)
         if defender_user is not None:
@@ -375,6 +381,12 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         attacker.coins += loot
         dna_win = round(constants.ARENA_WIN_DNA_BASE + attacker_creature.level * constants.ARENA_WIN_DNA_PER_LEVEL)
         attacker.dna_fragments += dna_win
+        # flat league bonus per WINNING raid (only in the real ranked arena)
+        if award_cup:
+            league_coins = league["coins"]
+            league_dna = league["dna"]
+            attacker.coins += league_coins
+            attacker.dna_fragments += league_dna
 
     attacker_fields = ["coins", "dna_fragments"]
     if award_cup:
@@ -419,6 +431,10 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         "detail_log": detail_log,
         "loot": loot,
         "dna": dna_win,
+        "league_coins": league_coins,
+        "league_dna": league_dna,
+        "league_name": league["name"],
+        "league_emoji": league["emoji"],
         "cup_delta": delta,
         "opponent_label": opponent["label"],
         "new_cup": attacker.cup,

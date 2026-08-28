@@ -20,8 +20,8 @@ HUNT_TIERS = {
 # Hunt loot scales PURELY with the player creature's power — the stronger your kaiju,
 # the more it earns, independent of cup or anything else. Tier only sizes the target
 # (a risk/reward difficulty knob).
-HUNT_COIN_PER_POWER = 0.10
-HUNT_DNA_PER_POWER = 0.006
+HUNT_COIN_PER_POWER = 0.20   # doubled
+HUNT_DNA_PER_POWER = 0.012   # doubled
 HUNT_XP_WIN = 25
 HUNT_XP_LOSE = 8
 # «بعدی» (searching for a better target) costs a little gold, scaled by power, so

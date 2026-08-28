@@ -125,6 +125,7 @@ def _detail_view(user, building: Building) -> dict:
     (collect, upgrade, speed-up, diamond-finish, plain view) all re-render this
     screen afterwards, and threading seven positional values through each of them
     is how a wrong-order bug gets in."""
+    is_producer = produces(building.building_type) and building.level > 0
     return {
         "building": building,
         "upgrade": active_upgrade(user),
@@ -134,6 +135,10 @@ def _detail_view(user, building: Building) -> dict:
         "slots": worker_slots(building),
         "bonus": worker_bonus(building),
         "unlocked": is_unlocked(user, building.building_type),
+        # rate/storage query the DB (worker_bonus) — resolve them HERE in sync context,
+        # never inside the async text builder (that was the "mines won't open" crash)
+        "rate": production_rate(building) if is_producer else 0.0,
+        "store_cap": storage_cap(building) if is_producer else 0,
     }
 
 
@@ -157,9 +162,9 @@ def _building_detail_text(view: dict) -> str:
     if produces(btype) and building.level > 0:
         cfg = constants.BUILDING_PRODUCTION[btype]
         resource_emoji = get_emoji(_RESOURCE_EMOJI_KEY[cfg["resource"]])
-        rate = production_rate(building)
+        rate = view["rate"]
         base_rate = cfg["rate_per_hour"] * building.level
-        cap_store = storage_cap(building)
+        cap_store = view["store_cap"]
         en = _COLLECTOR_EN.get(btype, "")
         lines = [
             f"🏭 <b>{label}</b>" + (f" | {en}" if en else ""),
@@ -495,37 +500,30 @@ def _workers_text(building: Building, workers, slots: int, free) -> str:
 _WORKER_PAGE = 8
 
 
-def _workers_keyboard(building: Building, workers, slots: int, free, page: int = 0) -> InlineKeyboardMarkup:
+def _workers_keyboard(building: Building, workers, slots: int, free, filt: str = "all", page: int = 0) -> InlineKeyboardMarkup:
+    from bot.handlers.private import creature_picker_frame
+
+    # already-stationed workers (tap to remove) sit at the top
     rows = [
-        [
-            btn(
-                f"➖ {c.name} (سطح {c.level})",
-                style=DANGER,
-                callback_data=f"bld_unassign:{building.id}:{c.id}",
-            )
-        ]
+        [btn(f"➖ {c.name} (سطح {c.level})", style=DANGER, callback_data=f"bld_unassign:{building.id}:{c.id}")]
         for c in workers
     ]
-    if len(workers) < slots:
-        # candidates are rarity-then-strength sorted (free_creatures); paginate so a big
-        # collection stays fully selectable instead of being cut at the first handful
-        total_pages = max(1, (len(free) + _WORKER_PAGE - 1) // _WORKER_PAGE)
-        page = max(0, min(page, total_pages - 1))
-        chunk = free[page * _WORKER_PAGE:(page + 1) * _WORKER_PAGE]
+    if len(workers) < slots and free:
+        # same rarity-tab + pagination frame as the collection screen
+        tab_rows, chunk, nav_rows, _tp, page, _n = creature_picker_frame(
+            free, filt, page, _WORKER_PAGE,
+            tab_cb=lambda f: f"bld_wpage:{building.id}:{f}:0",
+            nav_cb=lambda f, p: f"bld_wpage:{building.id}:{f}:{p}",
+        )
+        rows += tab_rows
+        wm = constants.BUILDING_PRODUCTION.get(building.building_type, {}).get("worker_mult", 1.0)
         for c in chunk:
-            gain = c.level * constants.WORKER_BONUS_PER_CREATURE_LEVEL * 100
+            gain = c.level * constants.WORKER_RARITY_MULT.get(c.rarity, 1.0) * constants.WORKER_BONUS_PER_CREATURE_LEVEL * wm * 100
             rows.append([btn(
-                f"➕ [{constants.RARITY_LABELS[c.rarity]}] {c.name} · سطح {c.level} → +{gain:.0f}٪",
+                f"➕ {c.name} {'⭐' * c.star_level} · Lv{c.level} · {constants.RARITY_LABELS[c.rarity]} → +{gain:.0f}٪",
                 style=BUILD, callback_data=f"bld_assign:{building.id}:{c.id}",
             )])
-        if total_pages > 1:
-            nav = []
-            if page > 0:
-                nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"bld_wpage:{building.id}:{page - 1}"))
-            if page < total_pages - 1:
-                nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"bld_wpage:{building.id}:{page + 1}"))
-            if nav:
-                rows.append(nav)
+        rows += nav_rows
     rows.append([back_btn(f"bld_pick:{building.id}")])
     return InlineKeyboardMarkup(rows)
 
@@ -534,7 +532,9 @@ async def building_workers_callback(update: Update, context: ContextTypes.DEFAUL
     query = update.callback_query
     parts = query.data.split(":")
     building_id = int(parts[1])
-    page = int(parts[2]) if len(parts) > 2 else 0
+    # bld_workers:<id>  OR  bld_wpage:<id>:<filt>:<page>
+    filt = parts[2] if len(parts) > 3 else "all"
+    page = int(parts[3]) if len(parts) > 3 else 0
     try:
         _user, building, workers, slots, free = await run_db(
             _workers_sync, update.effective_user, building_id
@@ -547,7 +547,7 @@ async def building_workers_callback(update: Update, context: ContextTypes.DEFAUL
         query,
         _workers_text(building, workers, slots, free),
         parse_mode="HTML",
-        reply_markup=_workers_keyboard(building, workers, slots, free, page),
+        reply_markup=_workers_keyboard(building, workers, slots, free, filt, page),
     )
 
 

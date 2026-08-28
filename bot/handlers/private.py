@@ -130,6 +130,35 @@ def pct_bar(current: int, total: int, width: int = 10) -> str:
 _CARD_DIV = "──────────────"
 
 
+def creature_picker_frame(creatures, filt, page, page_size, tab_cb, nav_cb):
+    """The shared rarity-tab + pagination frame used by the collection, team and
+    worker pickers so they all look identical. `tab_cb(filt)` and `nav_cb(filt, page)`
+    return the callback_data for those buttons. Returns
+    (tab_rows, chunk, nav_rows, total_pages, page, filtered_count)."""
+    rank = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
+    counts = {}
+    for c in creatures:
+        counts[c.rarity] = counts.get(c.rarity, 0) + 1
+    tabs = [btn(("• " if filt == "all" else "") + f"همه ({len(creatures)})", style=NAV, callback_data=tab_cb("all"))]
+    for r in reversed(constants.RARITY_ORDER):
+        if counts.get(r):
+            lbl = constants.RARITY_LABELS[r].split()[0]
+            tabs.append(btn(("• " if filt == r else "") + f"{lbl} ({counts[r]})", style=NAV, callback_data=tab_cb(r)))
+    tab_rows = [tabs[i:i + 3] for i in range(0, len(tabs), 3)]
+    filtered = creatures if filt == "all" else [c for c in creatures if c.rarity == filt]
+    filtered = sorted(filtered, key=lambda c: (rank.get(c.rarity, 0), c.star_level, c.level), reverse=True)
+    total_pages = max(1, (len(filtered) + page_size - 1) // page_size)
+    page = max(0, min(page, total_pages - 1))
+    chunk = filtered[page * page_size:(page + 1) * page_size]
+    nav = []
+    if page > 0:
+        nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=nav_cb(filt, page - 1)))
+    if page < total_pages - 1:
+        nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=nav_cb(filt, page + 1)))
+    nav_rows = [nav] if nav else []
+    return tab_rows, chunk, nav_rows, total_pages, page, len(filtered)
+
+
 def win_chance_pct(my_power: int, opp_power: int) -> int:
     """A readable win-% from the power gap. Combat itself is deterministic, so this is
     a confidence estimate for the player, not a literal probability. Steeper than a
@@ -282,8 +311,12 @@ def _balance_sync(tg_user):
 
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = await run_db(_balance_sync, update.effective_user)
-    await send_screen(update, balance_text(user), parse_mode="HTML",
-                      reply_markup=back_only_keyboard("menu:me", "بازگشت به منو"))
+    chat = update.effective_chat
+    in_group = chat is not None and chat.type in ("group", "supergroup")
+    # in a group the balance is a plain readout — no «بازگشت» button (it opened the
+    # PV menu, which is broken in a group). Only the DM gets the back button.
+    keyboard = None if in_group else back_only_keyboard("menu:me", "بازگشت به منو")
+    await send_screen(update, balance_text(user), parse_mode="HTML", reply_markup=keyboard)
 
 
 def _slot_summary_lines(slots: list[dict]) -> list[str]:
@@ -1837,10 +1870,10 @@ def _hunt_scout_keyboard(target, scout_price=0) -> InlineKeyboardMarkup:
 
 async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Scouting step: shows ONE opponent at a time with its power and payout so the
-    player can judge the risk *before* any energy is spent. Searching again is free
-    ("بعدی"); only committing to a fight costs energy."""
+    player can judge the risk *before* any energy is spent. Finding an opponent costs
+    a little gold (scaled by power) — the FIRST find too, not just «بعدی»."""
     try:
-        creature, my_power, cup, target, energy, cost = await run_db(_hunt_scout_sync, update.effective_user)
+        creature, my_power, cup, target, energy, cost = await run_db(_hunt_scout_sync, update.effective_user, True)
     except GameError as exc:
         await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard())
         return

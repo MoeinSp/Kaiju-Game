@@ -1091,6 +1091,50 @@ def arena_fake_loot(cup: int) -> int:
     return round(ARENA_FAKE_LOOT_MIN + cup * 0.2 + (cup ** 1.3) / 60)
 
 
+# ── Arena leagues ───────────────────────────────────────────────────────────
+# Cup 0 → 5000 is split into named tiers (Bronze … Champion). Each WINNING arena
+# raid pays a flat league bonus on top of the loot, rising with the tier — Bronze I
+# is 100🪙/5🧬, the top league (Champion) is 2,000🪙/100🧬 per win. `min_cup` is the
+# floor to BE in that league (list is ascending; league_for_cup walks from the top).
+LEAGUES = [
+    {"min_cup": 0,    "key": "bronze_1",  "emoji": "🥉", "name": "برنز I",    "coins": 100,  "dna": 5},
+    {"min_cup": 200,  "key": "bronze_2",  "emoji": "🥉", "name": "برنز II",   "coins": 120,  "dna": 6},
+    {"min_cup": 400,  "key": "bronze_3",  "emoji": "🥉", "name": "برنز III",  "coins": 140,  "dna": 7},
+    {"min_cup": 650,  "key": "silver_1",  "emoji": "🥈", "name": "نقره I",    "coins": 180,  "dna": 10},
+    {"min_cup": 900,  "key": "silver_2",  "emoji": "🥈", "name": "نقره II",   "coins": 220,  "dna": 13},
+    {"min_cup": 1150, "key": "silver_3",  "emoji": "🥈", "name": "نقره III",  "coins": 280,  "dna": 16},
+    {"min_cup": 1450, "key": "gold_1",    "emoji": "🥇", "name": "طلا I",     "coins": 350,  "dna": 20},
+    {"min_cup": 1750, "key": "gold_2",    "emoji": "🥇", "name": "طلا II",    "coins": 430,  "dna": 25},
+    {"min_cup": 2050, "key": "gold_3",    "emoji": "🥇", "name": "طلا III",   "coins": 520,  "dna": 30},
+    {"min_cup": 2400, "key": "plat_1",    "emoji": "💠", "name": "پلاتین I",  "coins": 650,  "dna": 38},
+    {"min_cup": 2750, "key": "plat_2",    "emoji": "💠", "name": "پلاتین II", "coins": 800,  "dna": 46},
+    {"min_cup": 3100, "key": "diamond_1", "emoji": "💎", "name": "الماس I",   "coins": 950,  "dna": 55},
+    {"min_cup": 3450, "key": "diamond_2", "emoji": "💎", "name": "الماس II",  "coins": 1150, "dna": 65},
+    {"min_cup": 3850, "key": "master",    "emoji": "🔮", "name": "استاد",     "coins": 1400, "dna": 78},
+    {"min_cup": 4300, "key": "legend",    "emoji": "🏵", "name": "اسطوره",    "coins": 1700, "dna": 90},
+    {"min_cup": 4750, "key": "champion",  "emoji": "👑", "name": "قهرمان",    "coins": 2000, "dna": 100},
+]
+
+
+def league_for_cup(cup: int) -> dict:
+    """The league a given cup falls in (highest tier whose min_cup it reaches)."""
+    cup = max(0, int(cup))
+    chosen = LEAGUES[0]
+    for lg in LEAGUES:
+        if cup >= lg["min_cup"]:
+            chosen = lg
+        else:
+            break
+    return chosen
+
+
+def next_league(cup: int) -> dict | None:
+    """The next league up from the current cup, or None if already at the top."""
+    cur = league_for_cup(cup)
+    idx = LEAGUES.index(cur)
+    return LEAGUES[idx + 1] if idx + 1 < len(LEAGUES) else None
+
+
 # ── Weekly cup season ──────────────────────────────────────────────────────────
 # Resetting to zero every week would throw away a week of work; resetting to
 # nothing at all would let the first month's leaders sit on top forever. So each

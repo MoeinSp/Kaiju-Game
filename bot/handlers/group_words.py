@@ -398,7 +398,8 @@ def _arena_card(user, opponent, loot, shielded_for, data=None) -> tuple[str, Inl
         "",
         div,
         "",
-        f"👹 موجود حریف: <b>{opponent['label']}</b>{opp_tag}",
+        f"👤 حریف: <b>{opponent['label']}</b>",
+        f"👹 موجود حریف: <b>{opponent.get('creature_name', '؟')}</b>{opp_tag}",
         f"💀 قدرت حریف: <b>{opponent['power']:,}</b> · 🏆 کاپ: <b>{opponent['cup']:,}</b>",
         "",
         div,
@@ -604,6 +605,21 @@ def _start_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
 def _require_creature(creature):
     if creature is None:
         raise GameError("هنوز هیولایی نداری! توی پیوی ربات /start رو بزن.")
+
+
+def _charge_hunt_scout_sync(tg_user):
+    """Charge the scout cost for finding a hunt opponent (used on the fresh «شکار»)."""
+    from game.hunt import scout_cost
+
+    user, _ = get_or_create_user(tg_user)
+    creature = get_active_creature(user)
+    if creature is None:
+        raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
+    cost = scout_cost(creature)
+    if user.coins < cost:
+        raise GameError(f"برای پیدا کردن حریف {cost} طلا لازمه (الان {user.coins} داری).")
+    user.coins -= cost
+    user.save(update_fields=["coins"])
 
 
 def _card_sync(tg_user, chat, action):
@@ -990,6 +1006,15 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         _schedule_cleanup(context, message.chat_id, [message.message_id], action)
         return
 
+    if action == "hunt":
+        # finding a hunt opponent costs a little gold — the FIRST find too, not just «بعدی»
+        try:
+            await run_db(_charge_hunt_scout_sync, update.effective_user)
+        except GameError as exc:
+            sent = await message.reply_text(str(exc))
+            _schedule_cleanup(context, message.chat_id, [message.message_id, sent.message_id], action)
+            return
+
     if action in _CARD_ACTIONS or action == "help":
         try:
             data = await run_db(_card_sync, update.effective_user, message.chat, action)
@@ -1232,9 +1257,13 @@ def _action_note(payload: dict) -> str:
     elif kind == "arena":
         r = payload["result"]
         arrow = "▲" if r["cup_delta"] >= 0 else "▼"
-        note = (f"{get_emoji('celebrate')} <b>غارت موفق!</b> +{r['loot']:,} {get_emoji('coin')} "
-                f"+{r.get('dna', 0)} {get_emoji('dna')}"
-                if r["won"] else "🛡 <b>حمله دفع شد!</b>")
+        if r["won"]:
+            note = (f"{get_emoji('celebrate')} <b>غارت موفق!</b> +{r['loot']:,} {get_emoji('coin')} "
+                    f"+{r.get('dna', 0)} {get_emoji('dna')}")
+            if r.get("league_coins"):
+                note += f" · {r.get('league_emoji', '🏅')} پاداش لیگ: +{r['league_coins']} {get_emoji('coin')} +{r['league_dna']} {get_emoji('dna')}"
+        else:
+            note = "🛡 <b>حمله دفع شد!</b>"
         note += f"  {arrow} {abs(r['cup_delta'])} 🏆 (کاپ: {r['new_cup']})"
     elif kind == "collect":
         parts = [f"+{amount:,} {get_emoji(_RESOURCE_EMOJI[res])}" for res, amount in payload["collected"].items()]

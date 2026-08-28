@@ -86,6 +86,12 @@ def _arena_home_text(user, power, shield_secs, history, week, season_secs, reven
         f"🏆 کاپ تو: <b>{user.cup}</b>",
         f"💪 قدرت: <b>{power}</b>",
     ]
+    _lg = constants.league_for_cup(user.cup)
+    _nx = constants.next_league(user.cup)
+    lg_line = f"{_lg['emoji']} لیگ: <b>{_lg['name']}</b> — پاداش هر برد: {_lg['coins']} {get_emoji('coin')} + {_lg['dna']} {get_emoji('dna')}"
+    if _nx:
+        lg_line += f"\n<i>لیگ بعدی «{_nx['name']}» در کاپ {_nx['min_cup']}</i>"
+    lines.append(lg_line)
     ceiling = deserved_cup(power)
     if user.cup > ceiling:
         lines.append("<i>⚠️ کاپت از قدرت موجودت جلو زده — بردها کاپ کمتری می‌دن تا هیولات قوی‌تر بشه.</i>")
@@ -180,6 +186,7 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         "is_fake": opponent["is_fake"],
         "user_id": None if opponent["is_fake"] else opponent["user"].id,
         "label": opponent["label"],
+        "creature_name": opponent.get("creature_name", "؟"),
         "cup": opponent["cup"],
         "power": opponent["power"],
         "element": opponent.get("element"),
@@ -214,7 +221,8 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
     lines = [
         f"{get_emoji('battle')} <b>حریف شناسایی شد | Battle Arena</b>",
         "",
-        f"👹 موجود حریف: <b>{opponent['label']}</b>{opp_elem_tag}",
+        f"👤 حریف: <b>{opponent['label']}</b>",
+        f"👹 موجود حریف: <b>{opponent.get('creature_name', '؟')}</b>{opp_elem_tag}",
         f"💀 قدرت حریف: <b>{opponent['power']:,}</b> ┃ {get_emoji('trophy')} کاپ: <b>{opponent['cup']:,}</b>",
         "",
         _ARENA_DIV,
@@ -466,9 +474,14 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await send_defense_report_now(context, result.get("defense"))
 
     if result["won"]:
+        lg = ""
+        if result.get("league_coins"):
+            lg = (f"\n{result.get('league_emoji', '🏅')} پاداش لیگ {result.get('league_name', '')}: "
+                  f"+{result['league_coins']} {get_emoji('coin')} + {result['league_dna']} {get_emoji('dna')}")
         summary = (
             f"{get_emoji('celebrate')} <b>بردی!</b>\n"
-            f"{get_emoji('coin')} +{result['loot']} غنیمت + {result.get('dna', 0)} {get_emoji('dna')} از {result['opponent_label']}\n"
+            f"{get_emoji('coin')} +{result['loot']} غنیمت + {result.get('dna', 0)} {get_emoji('dna')} از {result['opponent_label']}"
+            f"{lg}\n"
             f"🏆 +{result['cup_delta']} کاپ (الان: {result['new_cup']})"
         )
     else:
