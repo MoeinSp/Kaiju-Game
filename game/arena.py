@@ -113,6 +113,18 @@ def apply_group_shield(user: User) -> None:
     user.save(update_fields=["group_shield_until"])
 
 
+def spend_group_shield_on_attack(user: User) -> int:
+    """Called when `user` launches a group «اتک»: burns SHIELD_ATTACK_COST_HOURS off
+    their GROUP shield. Returns the seconds left after the deduction (0 if unshielded).
+    The caller must include 'group_shield_until' in its own save()."""
+    if not is_group_shielded(user):
+        return 0
+    new_until = user.group_shield_until - datetime.timedelta(hours=constants.SHIELD_ATTACK_COST_HOURS)
+    now = timezone.now()
+    user.group_shield_until = new_until if new_until > now else now
+    return max(0, int((user.group_shield_until - now).total_seconds()))
+
+
 @transaction.atomic
 def buy_shield(user: User, tier: str) -> dict:
     """Buy an arena shield with diamonds. Stacks onto any time already left, so a

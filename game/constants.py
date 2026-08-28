@@ -674,7 +674,10 @@ BUILDING_PRODUCTION = {
     # their stationed-kaiju bonus is amplified via `worker_mult`. The diamond collector
     # is deliberately left as-is (rate, cap AND worker_mult=1.0) — it's balanced.
     "gold_collector": {"rate_per_hour": 80.0, "cap_base": 800, "resource": "coins", "worker_mult": 1.8},
-    "diamond_collector": {"rate_per_hour": 0.4, "cap_base": 4, "resource": "diamonds", "worker_mult": 1.0},
+    # Diamond is hard-tuned so the ABSOLUTE ceiling (max mine level 5 + a 7.0 worker
+    # bonus, only reachable with ~5 maxed mythic) is exactly 0.1×5×8 = 4/hr. Weak or
+    # 1-star mythic reach only a small bonus, so they produce ~1/hr, not the cap.
+    "diamond_collector": {"rate_per_hour": 0.1, "cap_base": 1, "resource": "diamonds", "worker_mult": 1.0, "worker_bonus_cap": 7.0},
     "dna_lab": {"rate_per_hour": 8.0, "cap_base": 80, "resource": "dna_fragments", "worker_mult": 1.8},
 }
 

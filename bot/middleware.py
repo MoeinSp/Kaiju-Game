@@ -65,6 +65,18 @@ async def capture_referral(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         context.user_data["pending_referrer"] = ref
 
 
+def _create_user_and_bind_referral(tg_user, referrer_id):
+    """Get-or-create the User and, if a referral payload came with this /start, bind it
+    immediately (persisted to the DB), so an invite counts even if the invitee is still
+    stuck behind the force-join gate when the bot restarts."""
+    user, was_created = get_or_create_user(tg_user)
+    if referrer_id is not None:
+        from game.referral import register_referral
+
+        register_referral(user, was_created, referrer_id)
+    return user
+
+
 def _is_banned_sync(user_id: int) -> bool:
     return User.objects.filter(id=user_id, is_banned=True).exists()
 
@@ -162,7 +174,11 @@ async def enforce_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE)
         # — the advertiser API included — would wrongly report them as absent
         # until they join. Creating the row here is free of side effects: join
         # rewards are still only granted on `just_passed`.
-        await run_db(get_or_create_user, user)
+        # Create the row AND bind the referral NOW (using the ref_<id> payload that
+        # capture_referral stashed in this same update) — so the referral survives a bot
+        # restart before the invitee finishes the join gate. In-memory user_data would
+        # otherwise be lost across a deploy and the invite would never count.
+        await run_db(_create_user_and_bind_referral, user, context.user_data.get("pending_referrer"))
         context.user_data["force_join_passed_ids"] = frozenset()
         if is_check_callback:
             await update.callback_query.answer("هنوز عضو همه‌ی کانال‌ها نشدی!", show_alert=True)

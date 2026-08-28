@@ -596,6 +596,7 @@ def _pvp_preview_sync(attacker_tg, target_tg):
         display_name(target), _creature_power(t_creature), t_creature.element,
         group_shield_remaining_seconds(target),
         a_creature.name, t_creature.name, sync_energy(attacker),
+        group_shield_remaining_seconds(attacker),
     )
 
 
@@ -610,17 +611,29 @@ def _fmt_shield_hm(seconds: int) -> str:
 
 
 def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, t_power, t_elem,
-                       t_shield_secs=0, a_cname="—", t_cname="—", a_energy=0):
+                       t_shield_secs=0, a_cname="—", t_cname="—", a_energy=0, a_shield_secs=0):
     from bot.handlers.private import (element_advantage_line, pct_bar, win_chance_pct, win_label)
 
     # target is group-shielded → say it LOUDLY at the very top so the attacker
     # doesn't waste a tap, and drop the attack button (the attack would be blocked).
     if t_shield_secs and t_shield_secs > 0:
-        text = (
-            f"🛡 <b>{t_name} الان سپر محافظ گروه داره!</b>\n"
-            f"<b>{_fmt_shield_hm(t_shield_secs)}</b> دیگه سپرش می‌پره — تا اون‌موقع نمی‌شه بهش اتک زد.\n\n"
-            f"💪 قدرت حریف: <b>{t_power:,}</b> · قدرت تو: <b>{a_power:,}</b>"
-        )
+        div = "──────────────"
+        text = "\n".join([
+            "🛡 <b>حمله ناموفق | هدف تحت حفاظت است</b>",
+            "",
+            f"👤 کاربر هدف: <b>{t_name}</b>",
+            f"⏳ مدت زمان سپر: <b>{_fmt_shield_hm(t_shield_secs)}</b> باقی‌مانده",
+            "",
+            div,
+            "",
+            "📊 مقایسه توان رزمی:",
+            f"▫️ قدرت شما: <b>{a_power:,}</b> 💪",
+            f"▫️ قدرت حریف: <b>{t_power:,}</b> 💪",
+            "",
+            div,
+            "",
+            "⚠️ تا زمان فروپاشی سپر محافظ گروه، امکان هجوم به این پایگاه وجود نداره.",
+        ])
         keyboard = InlineKeyboardMarkup([
             [btn("🔍 جزییات حریف", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}"),
              btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER, callback_data=f"gatk_cancel:{attacker_id}")],
@@ -660,6 +673,11 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
         div,
         f"{get_emoji('energy')} هزینه حمله: {constants.RAID_ATTACK_ENERGY_COST} انرژی",
     ]
+    if a_shield_secs and a_shield_secs > 0:
+        lines.append(
+            f"🛡 <i>توجه: تو الان سپر گروهی داری — با این حمله <b>{constants.SHIELD_ATTACK_COST_HOURS} ساعت</b> "
+            "از سپرت کم می‌شه.</i>"
+        )
     keyboard = InlineKeyboardMarkup([
         [btn(f"⚔️ شروع حمله (-{constants.RAID_ATTACK_ENERGY_COST}⚡)", emoji_key="btn_attack", style=CONFIRM,
              callback_data=f"gatk:{attacker_id}:{target_id}")],
@@ -699,6 +717,7 @@ def _pvp_preview_by_ids_sync(attacker_id, target_id):
         display_name(target), _creature_power(t_creature), t_creature.element,
         group_shield_remaining_seconds(target),
         a_creature.name, t_creature.name, sync_energy(attacker),
+        group_shield_remaining_seconds(attacker),
     )
 
 
@@ -791,9 +810,19 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     # Only the ATTACKER loots, and only on a WIN: they take 10% of the target's gold
     # (+ a little DNA). A LOSING attacker loses nothing at all — the defender never
     # loots the attacker.
+    # launching an attack burns 8h off the ATTACKER's own group shield (if they have
+    # one) — same rule as the arena. The «حمله» button IS the confirmation.
+    from game.arena import spend_group_shield_on_attack
+
+    attacker_fields = ["energy", "energy_updated_at"]
+    if spend_group_shield_on_attack(attacker):
+        attacker_fields.append("group_shield_until")
+    elif attacker.group_shield_until is not None:
+        # was shielded a moment ago but the 8h drop cleared it — persist the reset
+        attacker_fields.append("group_shield_until")
+
     loot = 0
     dna_win = 0
-    attacker_fields = ["energy", "energy_updated_at"]
     target_fields = []
     if attacker_won:
         loot = max(0, target.coins // 10)

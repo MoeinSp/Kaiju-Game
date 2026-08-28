@@ -53,12 +53,13 @@ def worker_bonus(building: Building) -> float:
         c.level * constants.WORKER_RARITY_MULT.get(c.rarity, 1.0)
         for c in assigned_creatures(building)
     )
-    # gold/DNA mines amplify the stationed-kaiju effect (worker_mult); diamond = 1.0
-    mult = constants.BUILDING_PRODUCTION.get(building.building_type, {}).get("worker_mult", 1.0)
-    return min(
-        constants.WORKER_BONUS_CAP,
-        total * constants.WORKER_BONUS_PER_CREATURE_LEVEL * mult,
-    )
+    # gold/DNA mines amplify the stationed-kaiju effect (worker_mult); diamond = 1.0.
+    # Each mine can also cap the bonus differently (diamond caps at 7.0 so its ceiling
+    # is exactly 4/hr; the rest use the global WORKER_BONUS_CAP).
+    cfg = constants.BUILDING_PRODUCTION.get(building.building_type, {})
+    mult = cfg.get("worker_mult", 1.0)
+    cap = cfg.get("worker_bonus_cap", constants.WORKER_BONUS_CAP)
+    return min(cap, total * constants.WORKER_BONUS_PER_CREATURE_LEVEL * mult)
 
 
 def breeding_job(user: User) -> BreedingJob | None:
