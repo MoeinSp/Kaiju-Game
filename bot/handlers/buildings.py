@@ -497,15 +497,17 @@ def _assign_sync(tg_user, building_id, creature_id, attach: bool):
     except Creature.DoesNotExist:
         raise GameError("این موجود توی کلکسیون تو نیست.")
     if attach:
-        assign(user, building, creature)
+        banked = assign(user, building, creature)
     else:
-        unassign(user, creature)
+        _building, banked = unassign(user, creature)
     return (
         creature,
         building,
         assigned_creatures(building),
         worker_slots(building),
         free_creatures(user),
+        banked,
+        constants.BUILDING_PRODUCTION.get(building.building_type, {}).get("resource"),
     )
 
 
@@ -514,16 +516,26 @@ async def building_assign_callback(update: Update, context: ContextTypes.DEFAULT
     action, building_id, creature_id = query.data.split(":")
     attach = action == "bld_assign"
     try:
-        creature, building, workers, slots, free = await run_db(
+        creature, building, workers, slots, free, banked, banked_res = await run_db(
             _assign_sync, update.effective_user, int(building_id), int(creature_id), attach
         )
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer(f"{creature.name} {'سر کار رفت' if attach else 'برگشت'}")
+    # moving a worker banks whatever the mine had accrued (so a strong worker can't
+    # retro-boost past hours). Tell the player it was COLLECTED, not lost.
+    verb = "سر کار رفت" if attach else "برگشت"
+    if banked and banked_res:
+        await query.answer(f"{creature.name} {verb} · 🪙 {banked} {_RESOURCE_NAMES.get(banked_res, '')} جمع شد")
+    else:
+        await query.answer(f"{creature.name} {verb}")
+    text = _workers_text(building, workers, slots, free)
+    if banked and banked_res:
+        text = (f"✅ <b>{banked} {_RESOURCE_NAMES.get(banked_res, '')}</b> که جمع شده بود، خودکار برداشت شد "
+                "(با جابه‌جایی کارگر تولیدِ جمع‌شده از دست نمی‌ره).\n━━━━━━━━━━\n" + text)
     await safe_edit_message_text(
         query,
-        _workers_text(building, workers, slots, free),
+        text,
         parse_mode="HTML",
         reply_markup=_workers_keyboard(building, workers, slots, free),
     )

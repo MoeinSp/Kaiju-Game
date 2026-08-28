@@ -103,7 +103,7 @@ def assert_free(user: User, creature: Creature, *, for_action: str) -> None:
     raise GameError(f"«{creature.name}» الان مشغوله ({status}) — نمی‌تونی {for_action}.")
 
 
-def assign(user: User, building: Building, creature: Creature) -> CreatureAssignment:
+def assign(user: User, building: Building, creature: Creature) -> int:
     if building.owner_id != user.id:
         raise GameError("این ساختمون مال تو نیست.")
     slots = worker_slots(building)
@@ -117,13 +117,16 @@ def assign(user: User, building: Building, creature: Creature) -> CreatureAssign
     assert_free(user, creature, for_action="بفرستی سر کار")
     # bank whatever's accrued so far at the CURRENT bonus before the new worker's
     # bonus takes effect — stops a strong worker retroactively boosting past hours.
+    # Returns the banked amount so the UI can tell the player it was collected (not
+    # lost) — the "moving a worker in zeroed my mine" confusion.
     from game.buildings import bank_pending
 
-    bank_pending(user, building)
-    return CreatureAssignment.objects.create(building=building, creature=creature)
+    banked = bank_pending(user, building)
+    CreatureAssignment.objects.create(building=building, creature=creature)
+    return banked
 
 
-def unassign(user: User, creature: Creature) -> Building:
+def unassign(user: User, creature: Creature) -> tuple[Building, int]:
     assignment = (
         CreatureAssignment.objects.filter(creature=creature, creature__owner=user)
         .select_related("building")
@@ -134,9 +137,9 @@ def unassign(user: User, creature: Creature) -> Building:
     building = assignment.building
     from game.buildings import bank_pending
 
-    bank_pending(user, building)  # bank at the with-worker bonus before it drops
+    banked = bank_pending(user, building)  # bank at the with-worker bonus before it drops
     assignment.delete()
-    return building
+    return building, banked
 
 
 def free_creatures(user: User) -> list[Creature]:

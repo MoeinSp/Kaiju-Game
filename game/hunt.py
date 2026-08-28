@@ -17,10 +17,10 @@ HUNT_TIERS = {
     "strong": {"label": "🔴 قوی", "stat_mult": 1.4, "reward_mult": 1.8},
 }
 
-# Hunt coin loot is pegged to the ARENA reward at the same cup: a «هم‌سطح» hunt pays
-# ~80% of what a same-cup bot raid pays, so when a player's cup stalls they can still
-# earn a solid trickle by hunting instead. (weak ≈ 40% of arena, strong ≈ 144%.)
-HUNT_ARENA_LOOT_FRACTION = 0.80
+# Hunt loot scales PURELY with the player creature's power — the stronger your kaiju,
+# the more it earns, independent of cup or anything else. Tier only sizes the target
+# (a risk/reward difficulty knob).
+HUNT_COIN_PER_POWER = 0.10
 HUNT_DNA_PER_POWER = 0.006
 HUNT_XP_WIN = 25
 HUNT_XP_LOSE = 8
@@ -42,10 +42,10 @@ def scout_cost(creature: Creature) -> int:
     return max(HUNT_SCOUT_COST_MIN, round(_player_power(creature) * HUNT_SCOUT_COST_PER_POWER))
 
 
-def hunt_coin_range(cup: int, tier: str) -> tuple[int, int]:
-    """Coin loot for a hunt, pegged to the arena bot-loot at this cup × 80% × tier."""
+def hunt_coin_range(power: int, tier: str) -> tuple[int, int]:
+    """Coin loot for a hunt — scales ONLY with the player creature's power (× tier)."""
     mult = HUNT_TIERS[tier]["reward_mult"]
-    base = constants.arena_fake_loot(max(0, cup)) * HUNT_ARENA_LOOT_FRACTION
+    base = max(0, power) * HUNT_COIN_PER_POWER
     return (round(base * mult * 0.85), round(base * mult * 1.15))
 
 
@@ -95,9 +95,9 @@ def scout_one(player_creature: Creature) -> dict:
     }
 
 
-def estimated_reward(tier: str, cup: int = 0) -> tuple[int, int]:
-    """(min_coins, max_coins) shown while scouting — pegged to arena loot at this cup."""
-    return hunt_coin_range(cup, tier)
+def estimated_reward(tier: str, power: int = 0) -> tuple[int, int]:
+    """(min_coins, max_coins) shown while scouting — scales with the creature's power."""
+    return hunt_coin_range(power, tier)
 
 
 def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal", seed: int | None = None) -> dict:
@@ -109,7 +109,7 @@ def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal", se
     power = _player_power(player_creature)
 
     if won:
-        coins = random.randint(*hunt_coin_range(user.cup, tier))
+        coins = random.randint(*hunt_coin_range(power, tier))
         dna = random.randint(*hunt_dna_range(power, tier))
         xp_gain = round(HUNT_XP_WIN * reward_mult)
     else:

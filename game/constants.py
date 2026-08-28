@@ -422,12 +422,15 @@ BIOCRATE_CREATURE_CHANCE = 0.04  # 4% yields a creature; the other 96% is equipm
 # and 90% equipment. Common is deliberately the overwhelming share of the creature
 # slice so a monster from the gold crate is usually a starter, not a jackpot;
 # diamond boxes stay the real way to chase rare creatures.
+# epic/legendary/mythic creature odds are 1/3 of what they were; the freed weight
+# went to common + rare, so a genetic box now mostly yields a common or a rare and a
+# high-rarity kaiju is genuinely uncommon (was: 80/12/5/2/1).
 BIOCRATE_CREATURE_RARITY_WEIGHTS = {
-    "common": 80,
-    "rare": 12,
-    "epic": 5,
-    "legendary": 2,
-    "mythic": 1,
+    "common": 83,
+    "rare": 14,
+    "epic": 1.7,
+    "legendary": 0.7,
+    "mythic": 0.3,
 }
 
 # Three Bio-Crate tiers paid with gold (+DNA). The cheapest is the original; the
@@ -442,15 +445,16 @@ BIOCRATE_TIERS = {
     "rare": {
         "label": "🎁 باکس ژنتیکی نایاب", "gold": 2000, "dna": 60,
         "creature_chance": 0.10,
-        "weights": {"common": 45, "rare": 30, "epic": 15, "legendary": 7, "mythic": 3},
+        # epic/legendary/mythic odds ÷3, freed weight → common + rare (was 45/30/15/7/3)
+        "weights": {"common": 53, "rare": 39, "epic": 5, "legendary": 2.3, "mythic": 1},
         # gear skews NAYAB: common is rare here, rare dominates
         "equip_weights": {"common": 10, "rare": 55, "epic": 25, "legendary": 8, "mythic": 2},
     },
     "epic": {
         "label": "💎 باکس ژنتیکی حماسی", "gold": 5000, "dna": 120,
         "creature_chance": 0.18,
-        # mythic kept to ~1% of all opens (0.18 × 5/98) — a rare jackpot, not routine
-        "weights": {"common": 25, "rare": 30, "epic": 26, "legendary": 12, "mythic": 5},
+        # epic/legendary/mythic odds ÷3, freed weight → common + rare (was 25/30/26/12/5)
+        "weights": {"common": 39, "rare": 45, "epic": 8.7, "legendary": 4, "mythic": 1.7},
         # gear skews HAMASI: common almost never, epic dominates
         "equip_weights": {"common": 3, "rare": 20, "epic": 50, "legendary": 20, "mythic": 7},
     },

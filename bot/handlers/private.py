@@ -1643,7 +1643,7 @@ def _hunt_scout_sync(tg_user, charge=False):
 
 def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> str:
     tier_label = HUNT_TIERS[target["tier"]]["label"]
-    lo, hi = estimated_reward(target["tier"], cup)
+    lo, hi = estimated_reward(target["tier"], my_power)
     diff = target["power"] - my_power
     # win chance from the power gap, phrased clearly
     if diff < -40:
