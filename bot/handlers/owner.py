@@ -2714,8 +2714,8 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             await message.reply_text("⚠️ یه عدد مثبت (الماس) بفرست، مثلاً <code>25</code>.", parse_mode="HTML")
             return
         await run_db(botconfig.set_energy_refill_cost, int(digits))
-        offers, energy_cost = await run_db(_dailyshop_sync)
-        text_out, keyboard = _dailyshop_render(offers, energy_cost)
+        days, energy_cost = await run_db(_dshop_home_sync)
+        text_out, keyboard = _dshop_home_render(days, energy_cost)
         await message.reply_text(
             f"✅ هزینه شارژ انرژی شد <b>{energy_cost}</b> 💎.\n\n" + text_out,
             parse_mode="HTML", reply_markup=keyboard,
