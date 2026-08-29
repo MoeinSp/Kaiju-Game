@@ -84,6 +84,10 @@ class User(models.Model):
     title = models.CharField(max_length=32, null=True, blank=True)
     last_shop_day = models.CharField(max_length=10, null=True, blank=True)
 
+    # how many building upgrades this player can run at once. Starts at 1 (the single
+    # «کارگر»); buying the 2nd builder from the shop bumps it to 2 (game/buildings.py).
+    builder_slots = models.IntegerField(default=1)
+
     alliance = models.ForeignKey(
         "Alliance", null=True, blank=True, on_delete=models.SET_NULL, related_name="members"
     )
@@ -273,10 +277,12 @@ class Building(models.Model):
 
 
 class BuildingUpgrade(models.Model):
-    """The single active upgrade job for a player. OneToOneField enforces "only one
-    worker at a time" at the database level, not just in application code."""
+    """An active upgrade job. A player may run up to User.builder_slots of these at
+    once (1 by default, 2 after buying the second builder) — the cap is enforced in
+    game/buildings.start_upgrade, and a per-building uniqueness guard stops the same
+    building being upgraded twice concurrently."""
 
-    owner = models.OneToOneField(User, on_delete=models.CASCADE, related_name="building_upgrade")
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="building_upgrades")
     building = models.ForeignKey(Building, on_delete=models.CASCADE, related_name="+")
     target_level = models.IntegerField()
     started_at = models.DateTimeField(auto_now_add=True)

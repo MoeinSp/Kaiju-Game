@@ -225,12 +225,10 @@ def collect(user: User, building: Building) -> tuple[int, str]:
     return amount, resource_field
 
 
-def check_and_apply_upgrade(user: User) -> Building | None:
-    """Lazily finishes the active upgrade if its timer already passed — same style
-    as game/energy.py's stamina regen: computed at read time, no background job."""
-    upgrade = BuildingUpgrade.objects.filter(owner=user).first()
-    if upgrade is None or timezone.now() < upgrade.finishes_at:
-        return None
+def _finish_upgrade_row(user: User, upgrade: BuildingUpgrade) -> Building | None:
+    """Apply one due upgrade: bump the building's level (clamped to its current cap),
+    award lab XP, and delete the job. Returns the building, or None if the cap moved
+    below the target in the meantime (then the job is just cancelled)."""
     building = upgrade.building
     cap = max_level_for(user, building.building_type)
     target = min(upgrade.target_level, cap)
@@ -248,9 +246,59 @@ def check_and_apply_upgrade(user: User) -> Building | None:
     return building
 
 
-def active_upgrade(user: User) -> BuildingUpgrade | None:
+def check_and_apply_upgrade(user: User) -> Building | None:
+    """Lazily finishes EVERY upgrade whose timer already passed — same style as
+    game/energy.py's stamina regen: computed at read time, no background job. A
+    player may run up to builder_slots upgrades at once, so more than one can be due.
+    Returns one finished building (back-compat) — callers that need all of them use
+    the return of the loop; the notification job reports each separately."""
+    now = timezone.now()
+    finished = None
+    for upgrade in list(BuildingUpgrade.objects.filter(owner=user, finishes_at__lte=now).select_related("building")):
+        b = _finish_upgrade_row(user, upgrade)
+        finished = finished or b
+    return finished
+
+
+def active_upgrades(user: User) -> list[BuildingUpgrade]:
+    """All of the player's in-progress upgrades (after finishing any that are due)."""
     check_and_apply_upgrade(user)
-    return BuildingUpgrade.objects.filter(owner=user).first()
+    return list(BuildingUpgrade.objects.filter(owner=user).select_related("building").order_by("finishes_at"))
+
+
+def upgrade_for_building(user: User, building: Building) -> BuildingUpgrade | None:
+    """The in-progress upgrade for THIS building, or None. Used by the per-building
+    detail screen so speed-up / diamond-finish act on the building being viewed."""
+    return BuildingUpgrade.objects.filter(owner=user, building=building).first()
+
+
+def active_upgrade(user: User) -> BuildingUpgrade | None:
+    """Back-compat single-upgrade accessor: the soonest-finishing active upgrade."""
+    check_and_apply_upgrade(user)
+    return BuildingUpgrade.objects.filter(owner=user).order_by("finishes_at").first()
+
+
+def builder_slots(user: User) -> int:
+    return max(1, user.builder_slots or 1)
+
+
+def active_upgrade_count(user: User) -> int:
+    return BuildingUpgrade.objects.filter(owner=user).count()
+
+
+@transaction.atomic
+def buy_second_builder(user: User) -> User:
+    """One-time diamond purchase that unlocks a second parallel building upgrade."""
+    user = User.objects.select_for_update().get(id=user.id)
+    if user.builder_slots >= constants.MAX_BUILDER_SLOTS:
+        raise GameError("کارگر دوم رو قبلاً گرفتی — بیشتر از این نمی‌شه.")
+    cost = constants.SECOND_BUILDER_DIAMONDS
+    if user.diamonds < cost:
+        raise GameError(f"الماس کافی نداری! کارگر دوم {cost} الماس می‌خواد (الان {user.diamonds} داری).")
+    user.diamonds -= cost
+    user.builder_slots = constants.MAX_BUILDER_SLOTS
+    user.save(update_fields=["diamonds", "builder_slots"])
+    return user
 
 
 def upgrade_cost_and_minutes(building: Building) -> tuple[int, int]:
@@ -284,9 +332,17 @@ def start_upgrade(user: User, building: Building) -> BuildingUpgrade:
     if building.owner_id != user.id:
         raise GameError("این ساختمون مال تو نیست.")
     check_and_apply_upgrade(user)
-    if BuildingUpgrade.objects.filter(owner=user).exists():
+    if BuildingUpgrade.objects.filter(owner=user, building=building).exists():
+        raise GameError("این ساختمون همین الان در حال ارتقاست.")
+    slots = builder_slots(user)
+    if BuildingUpgrade.objects.filter(owner=user).count() >= slots:
+        if slots >= constants.MAX_BUILDER_SLOTS:
+            raise GameError(
+                "هر دو کارگرت مشغولن — صبر کن یکیشون تموم بشه یا با کارت سرعت/الماس زودتر تمومش کن."
+            )
         raise GameError(
-            "همین الان یه ارتقا در حال انجامه — فقط یه کارگر داری، صبر کن تموم بشه یا با کارت سرعت بدش."
+            "همین الان یه ارتقا در حال انجامه و فقط یه کارگر داری. می‌تونی از فروشگاه کارگر دوم رو بخری "
+            "تا هم‌زمان دوتا ارتقا بزنی، یا صبر کن تموم بشه."
         )
 
     if building.level == 0 and not is_unlocked(user, building.building_type):
@@ -335,13 +391,23 @@ def start_upgrade(user: User, building: Building) -> BuildingUpgrade:
     )
 
 
-def apply_speedup(user: User, minutes: int) -> tuple[BuildingUpgrade | None, bool]:
+def _pick_upgrade(user: User, building_id: int | None):
+    """The upgrade a speed-up / finish action targets: the one for `building_id` when
+    given (the per-building detail screen always passes it), else the soonest-finishing
+    active upgrade (back-compat)."""
+    qs = BuildingUpgrade.objects.filter(owner=user)
+    if building_id is not None:
+        return qs.filter(building_id=building_id).first()
+    return qs.order_by("finishes_at").first()
+
+
+def apply_speedup(user: User, minutes: int, building_id: int | None = None) -> tuple[BuildingUpgrade | None, bool]:
     """Use ONE card. Kept for back-compat; delegates to the bulk path."""
-    upgrade, completed, _used = apply_speedup_bulk(user, minutes, 1)
+    upgrade, completed, _used = apply_speedup_bulk(user, minutes, 1, building_id)
     return upgrade, completed
 
 
-def apply_speedup_bulk(user: User, minutes: int, count: int) -> tuple[BuildingUpgrade | None, bool, int]:
+def apply_speedup_bulk(user: User, minutes: int, count: int, building_id: int | None = None) -> tuple[BuildingUpgrade | None, bool, int]:
     """Use up to `count` cards of one denomination at once — but never more than are
     needed to finish the upgrade, so cards aren't wasted past completion. Returns
     (remaining_upgrade_or_None, completed, cards_actually_used)."""
@@ -352,7 +418,7 @@ def apply_speedup_bulk(user: User, minutes: int, count: int) -> tuple[BuildingUp
     card = SpeedupCard.objects.filter(owner=user, minutes=minutes).first()
     if card is None or card.count <= 0:
         raise GameError("این کارت سرعت رو نداری.")
-    upgrade = BuildingUpgrade.objects.filter(owner=user).first()
+    upgrade = _pick_upgrade(user, building_id)
     if upgrade is None:
         raise GameError("هیچ ارتقایی در حال انجام نیست که سرعتش بدی.")
 
@@ -390,11 +456,12 @@ def diamond_finish_price(upgrade: BuildingUpgrade) -> int:
     return constants.diamond_finish_cost(remaining)
 
 
-def finish_with_diamonds(user: User) -> tuple[Building, int]:
-    """Instantly completes the active upgrade for diamonds. Returns (building, cost).
+def finish_with_diamonds(user: User, building_id: int | None = None) -> tuple[Building, int]:
+    """Instantly completes an active upgrade for diamonds. Returns (building, cost).
     Priced from the *remaining* time, so paying after waiting a while is cheaper —
-    otherwise the sensible play would always be to pay immediately."""
-    upgrade = BuildingUpgrade.objects.filter(owner=user).first()
+    otherwise the sensible play would always be to pay immediately. `building_id`
+    targets a specific upgrade when the player runs more than one at once."""
+    upgrade = _pick_upgrade(user, building_id)
     if upgrade is None:
         raise GameError("هیچ ارتقایی در حال انجام نیست.")
 

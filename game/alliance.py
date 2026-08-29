@@ -762,6 +762,22 @@ WAR_MATCH_POWER_BAND = 0.5        # opponents within ±50% of our war power are 
 WAR_WIN_TREASURY_REWARD = 3000    # winner's treasury bonus
 WAR_WIN_WAR_POINTS = 200          # winner also climbs the weekly leaderboard
 
+# Presence is what wins a war. Only a small fraction of an alliance's raw power seeds
+# the starting score — the rest MUST be earned by members «rallying». So a strong but
+# inactive alliance loses to a weaker, fully-mobilised one, and every member showing
+# up genuinely matters. (Before, the full power was auto-seeded and members barely
+# needed to participate.)
+WAR_SEED_FRACTION = 0.20
+
+# Personal war payouts, handed out when the war settles. Everyone who rallied earns
+# the participation reward win-or-lose; the winning side earns a big bonus on top; and
+# the single top contributor on the winning side is crowned MVP for premium diamonds.
+WAR_RALLY_REWARD_COINS = 400
+WAR_RALLY_REWARD_DNA = 15
+WAR_WIN_RALLY_BONUS_COINS = 1200
+WAR_WIN_RALLY_BONUS_DNA = 40
+WAR_MVP_BONUS_DIAMONDS = 25
+
 
 def _member_power(user: User) -> int:
     """Base combat power of a member's active creature (same metric as _alliance_power)."""
@@ -836,8 +852,9 @@ def start_war(user: User):
     return AllianceWar.objects.create(
         alliance_a=alliance,
         alliance_b=opponent,
-        score_a=alliance_war_power(alliance),
-        score_b=alliance_war_power(opponent),
+        # only a small head-start is seeded from raw power; members must rally the rest
+        score_a=round(alliance_war_power(alliance) * WAR_SEED_FRACTION),
+        score_b=round(alliance_war_power(opponent) * WAR_SEED_FRACTION),
         ends_at=timezone.now() + datetime.timedelta(hours=WAR_DURATION_HOURS),
     )
 
@@ -876,6 +893,19 @@ def rally_war(user: User) -> dict:
     return {"contribution": contribution, "my_score": my_score, "foe_score": foe_score}
 
 
+def war_contributors(war, alliance_id: int, limit: int = 5) -> list[dict]:
+    """Top members of `alliance_id` who rallied in this war, strongest first — the
+    'who's actually fighting' roster shown on the war screen."""
+    from bio_lab.models import AllianceWarHit
+
+    hits = (
+        AllianceWarHit.objects.filter(war=war, user__alliance_id=alliance_id)
+        .select_related("user")
+        .order_by("-power")[:limit]
+    )
+    return [{"name": _display(h.user), "power": h.power, "user_id": h.user_id} for h in hits]
+
+
 def war_view(user: User) -> dict | None:
     """Current war state from `user`'s perspective, or None if not in a war."""
     from bio_lab.models import AllianceWarHit
@@ -892,6 +922,7 @@ def war_view(user: User) -> dict | None:
         me, foe = war.alliance_b, war.alliance_a
         my_score, foe_score = war.score_b, war.score_a
     remaining = max(0, int((war.ends_at - timezone.now()).total_seconds()))
+    my_hit = AllianceWarHit.objects.filter(war=war, user=user).first()
     return {
         "war_id": war.id,
         "my_name": me.name,
@@ -900,14 +931,56 @@ def war_view(user: User) -> dict | None:
         "foe_score": foe_score,
         "remaining_seconds": remaining,
         "ended": war.ends_at <= timezone.now(),
-        "already_rallied": AllianceWarHit.objects.filter(war=war, user=user).exists(),
+        "already_rallied": my_hit is not None,
+        "my_contribution": my_hit.power if my_hit else 0,
+        "my_participants": AllianceWarHit.objects.filter(war=war, user__alliance_id=me.id).count(),
+        "foe_participants": AllianceWarHit.objects.filter(war=war, user__alliance_id=foe.id).count(),
+        "contributors": war_contributors(war, me.id),
         "is_leader": me.leader_id == user.id,
     }
 
 
+def _grant_war_rewards(war, winner) -> dict[int, dict]:
+    """Pay out the personal war rewards and return {user_id: {coins, dna, diamonds,
+    mvp, participated}} so the DMs can be personalised. Every member who rallied earns
+    the participation reward; the winning side earns a bonus on top; and the single
+    top contributor on the winning side is the MVP (premium diamonds)."""
+    from django.db.models import F
+
+    from bio_lab.models import AllianceWarHit
+
+    personal: dict[int, dict] = {}
+    hits = list(
+        AllianceWarHit.objects.filter(war=war).select_related("user").order_by("-power")
+    )
+    mvp_uid = None
+    if winner is not None:
+        for h in hits:  # hits are power-desc, so the first on the winning side is MVP
+            if h.user.alliance_id == winner.id:
+                mvp_uid = h.user_id
+                break
+
+    for h in hits:
+        won = winner is not None and h.user.alliance_id == winner.id
+        coins = WAR_RALLY_REWARD_COINS + (WAR_WIN_RALLY_BONUS_COINS if won else 0)
+        dna = WAR_RALLY_REWARD_DNA + (WAR_WIN_RALLY_BONUS_DNA if won else 0)
+        diamonds = WAR_MVP_BONUS_DIAMONDS if (won and h.user_id == mvp_uid) else 0
+        User.objects.filter(id=h.user_id).update(
+            coins=F("coins") + coins,
+            dna_fragments=F("dna_fragments") + dna,
+            diamonds=F("diamonds") + diamonds,
+        )
+        personal[h.user_id] = {
+            "coins": coins, "dna": dna, "diamonds": diamonds,
+            "mvp": h.user_id == mvp_uid and won, "participated": True,
+        }
+    return personal
+
+
 def settle_due_wars() -> list[tuple[int, str]]:
     """Settle every active war whose 24h is up: higher score wins the treasury bonus
-    and weekly war points; both sides' members get a result DM. Returns (uid, text)."""
+    and weekly war points; members who rallied earn personal rewards; both sides' get
+    a personalised result DM. Returns (uid, text)."""
     from django.db.models import F
 
     from bio_lab.models import AllianceWar
@@ -939,6 +1012,8 @@ def settle_due_wars() -> list[tuple[int, str]]:
                 )
                 _bump_war_points(winner.id, WAR_WIN_WAR_POINTS)
 
+            personal = _grant_war_rewards(war, winner)
+
         for al in (a, b):
             if winner is None:
                 head = f"⚔️ <b>جنگ اتحادها مساوی شد!</b> ({a.name} {war.score_a} - {war.score_b} {b.name})"
@@ -954,7 +1029,21 @@ def settle_due_wars() -> list[tuple[int, str]]:
                     f"امتیاز {lose_score} در برابر {win_score}. دفعه‌ی بعد قوی‌تر بیاید!"
                 )
             for uid in User.objects.filter(alliance_id=al.id, notifications_on=True).values_list("id", flat=True):
-                out.append((uid, head))
+                pers = personal.get(uid)
+                if pers:
+                    reward_bits = [f"{pers['coins']:,} طلا", f"{pers['dna']} DNA"]
+                    if pers["diamonds"]:
+                        reward_bits.append(f"{pers['diamonds']} 💎")
+                    line = "\n\n🎁 <b>پاداش مشارکتت:</b> " + " + ".join(reward_bits)
+                    if pers["mvp"]:
+                        line += "\n👑 <b>تو بهترین جنگجوی این نبرد بودی (MVP)!</b>"
+                    out.append((uid, head + line))
+                else:
+                    out.append((
+                        uid,
+                        head + "\n\n<i>تو توی این جنگ شرکت نکردی و پاداشی نگرفتی — "
+                        "دفعه‌ی بعد حتماً «شرکت» کن!</i>",
+                    ))
     return out
 
 

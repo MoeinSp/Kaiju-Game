@@ -11,7 +11,11 @@ from game.workers import (assign, assigned_creatures, free_creatures, unassign,
                           worker_bonus, worker_slots)
 from game.buildings import (
     active_upgrade,
+    active_upgrades,
+    active_upgrade_count,
     apply_speedup,
+    builder_slots,
+    buy_second_builder,
     collect,
     diamond_finish_price,
     finish_with_diamonds,
@@ -27,6 +31,7 @@ from game.buildings import (
     produces,
     start_upgrade,
     upgrade_cost_and_minutes,
+    upgrade_for_building,
 )
 
 # English subtitle per producing building, for the "🏭 … | Gold Collector" header
@@ -57,17 +62,19 @@ def _format_remaining(seconds: float) -> str:
 def _buildings_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
     buildings = get_or_create_buildings(user)
-    upgrade = active_upgrade(user)  # lazily finishes a due upgrade first
+    upgrades = active_upgrades(user)  # lazily finishes due upgrades first
+    upgrading_ids = {u.building_id for u in upgrades}
+    slots = builder_slots(user)
     # main hall first, then the rest — it's the gate everything else waits on
     buildings.sort(key=lambda b: (b.building_type != constants.MAIN_BUILDING, b.building_type))
     # pending_amount() reads the building's stationed workers, so it must be
     # resolved HERE, in sync context — the keyboard builder runs on the event loop
     # and a lazy query there raises SynchronousOnlyOperation
     rows = [(b, pending_amount(b), is_unlocked(user, b.building_type)) for b in buildings]
-    return rows, upgrade, main_hall_level(user)
+    return rows, upgrading_ids, main_hall_level(user), len(upgrades), slots, user.diamonds
 
 
-def _buildings_keyboard(building_rows, upgrade) -> InlineKeyboardMarkup:
+def _buildings_keyboard(building_rows, upgrading_ids, busy_count, slots, diamonds) -> InlineKeyboardMarkup:
     """`building_rows` is [(Building, pending_amount, is_unlocked)] — precomputed
     by _buildings_sync, because working any of it out needs the database."""
     rows = []
@@ -77,21 +84,29 @@ def _buildings_keyboard(building_rows, upgrade) -> InlineKeyboardMarkup:
             state = "🔒 ساخته‌نشده" if unlocked else f"🔒 از سطح {unlock_level_for(b.building_type)} تالار"
         else:
             state = f"Lv{b.level}" + (f" (+{pending})" if pending else "")
-        busy_tag = " ⏳" if upgrade is not None and upgrade.building_id == b.id else ""
+        busy_tag = " ⏳" if b.id in upgrading_ids else ""
         rows.append([btn(f"{label} — {state}{busy_tag}", style=LIST, callback_data=f"bld_pick:{b.id}")])
+    if slots < constants.MAX_BUILDER_SLOTS:
+        rows.append([btn(
+            f"👷‍♂️ خرید کارگر دوم ({constants.SECOND_BUILDER_DIAMONDS} 💎)",
+            style=SHOP, callback_data="bld_buy_builder",
+        )])
     rows.append([back_btn("menu:me")])
     return InlineKeyboardMarkup(rows)
 
 
-def _buildings_text(upgrade, hall_level: int) -> str:
+def _buildings_text(busy_count, slots, hall_level: int) -> str:
     hall = constants.BUILDING_LABELS[constants.MAIN_BUILDING]
     lines = [
         f"{get_emoji('building')} <b>ساختمون‌های تو</b>",
         f"{hall}: سطح <b>{hall_level}</b>/{constants.BUILDING_MAX_LEVEL}",
+        f"👷‍♂️ کارگرها: <b>{busy_count}/{slots}</b> مشغول",
         "",
     ]
-    if upgrade is not None:
-        lines.append("<i>⏳ کارگرت الان مشغول یه کاره.</i>\n")
+    if slots < constants.MAX_BUILDER_SLOTS:
+        lines.append(
+            f"<i>با خرید کارگر دوم می‌تونی هم‌زمان دو ساختمون رو ارتقا بدی و زمان ساخت‌وساز رو نصف کنی.</i>\n"
+        )
     lines.append("رو هرکدوم بزن تا جزئیاتش رو ببینی:")
     lines.append(
         f"\n<blockquote>هیچ ساختمونی نمی‌تونه از سطح {hall} جلو بزنه — "
@@ -101,11 +116,13 @@ def _buildings_text(upgrade, hall_level: int) -> str:
 
 
 async def buildings_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    building_rows, upgrade, hall_level = await run_db(_buildings_sync, update.effective_user)
-    await send_screen(update, 
-        _buildings_text(upgrade, hall_level),
+    building_rows, upgrading_ids, hall_level, busy_count, slots, diamonds = await run_db(
+        _buildings_sync, update.effective_user
+    )
+    await send_screen(update,
+        _buildings_text(busy_count, slots, hall_level),
         parse_mode="HTML",
-        reply_markup=_buildings_keyboard(building_rows, upgrade),
+        reply_markup=_buildings_keyboard(building_rows, upgrading_ids, busy_count, slots, diamonds),
     )
 
 
@@ -126,9 +143,12 @@ def _detail_view(user, building: Building) -> dict:
     screen afterwards, and threading seven positional values through each of them
     is how a wrong-order bug gets in."""
     is_producer = produces(building.building_type) and building.level > 0
+    active_upgrade(user)  # finish any due upgrades before we count/inspect
     return {
         "building": building,
-        "upgrade": active_upgrade(user),
+        "upgrade": upgrade_for_building(user, building),
+        "busy_count": active_upgrade_count(user),
+        "builder_slots": builder_slots(user),
         "pending": pending_amount(building),
         "cap": max_level_for(user, building.building_type),
         "workers": assigned_creatures(building),
@@ -153,6 +173,8 @@ def _building_detail_text(view: dict) -> str:
     building, upgrade = view["building"], view["upgrade"]
     pending, cap = view["pending"], view["cap"]
     workers, slots, bonus = view["workers"], view["slots"], view["bonus"]
+    busy_count, builder_slots_n = view["busy_count"], view["builder_slots"]
+    all_builders_busy = upgrade is None and busy_count >= builder_slots_n
     btype = building.building_type
     label = constants.BUILDING_LABELS[btype]
     unlocked = view["unlocked"]
@@ -193,12 +215,12 @@ def _building_detail_text(view: dict) -> str:
         lines.append("")
         lines.append(div)
         # upgrade / status block for producers
-        if upgrade is not None and upgrade.building_id == building.id:
+        if upgrade is not None:
             remaining = (upgrade.finishes_at - timezone.now()).total_seconds()
             lines.append(f"\n⏳ در حال ارتقا تا سطح {upgrade.target_level} — {_format_remaining(remaining)} مونده")
             lines.append(f"<i>با کارت سرعت یا {diamond_finish_price(upgrade)} 💎 همین الان تمومش کن.</i>")
-        elif upgrade is not None:
-            lines.append("\n⏳ کارگرت الان مشغول یه ساختمون دیگه‌ست.")
+        elif all_builders_busy:
+            lines.append(f"\n⏳ هر دو کارگرت مشغول ساختمون‌های دیگه‌ان ({busy_count}/{builder_slots_n}).")
         elif building.level >= constants.BUILDING_MAX_LEVEL:
             lines.append("\n🏆 این سازه به سقف سطح رسیده.")
         elif building.level >= cap:
@@ -228,7 +250,7 @@ def _building_detail_text(view: dict) -> str:
     if btype == constants.MAIN_BUILDING:
         lines.append(f"⭐ سقف ستاره‌ی هیولاها: <b>{building.level}</b>")
 
-    if upgrade is not None and upgrade.building_id == building.id:
+    if upgrade is not None:
         remaining = (upgrade.finishes_at - timezone.now()).total_seconds()
         verb = "ساخت" if building.level == 0 else "ارتقا"
         lines.append(f"\n⏳ در حال {verb} تا سطح {upgrade.target_level} — {_format_remaining(remaining)} مونده")
@@ -236,8 +258,8 @@ def _building_detail_text(view: dict) -> str:
             f"<i>می‌تونی با کارت سرعت یا {diamond_finish_price(upgrade)} 💎 همین الان تمومش کنی "
             "(هرچی بیشتر صبر کنی، ارزون‌تر می‌شه).</i>"
         )
-    elif upgrade is not None:
-        lines.append("\n⏳ کارگرت الان مشغول یه ساختمون دیگه‌ست.")
+    elif all_builders_busy:
+        lines.append(f"\n⏳ هر دو کارگرت مشغول ساختمون‌های دیگه‌ان ({busy_count}/{builder_slots_n}).")
     elif building.level >= constants.BUILDING_MAX_LEVEL:
         lines.append("\n🏆 این ساختمون به سقف سطح رسیده.")
     elif building.level >= cap:
@@ -254,6 +276,7 @@ def _building_detail_text(view: dict) -> str:
 def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
     building, upgrade, cap = view["building"], view["upgrade"], view["cap"]
     workers, slots = view["workers"], view["slots"]
+    all_builders_busy = upgrade is None and view["busy_count"] >= view["builder_slots"]
     rows = []
     if produces(building.building_type) and building.level > 0:
         res_name = _RESOURCE_NAMES.get(constants.BUILDING_PRODUCTION[building.building_type]["resource"], "")
@@ -269,7 +292,7 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
                 )
             ]
         )
-    if upgrade is not None and upgrade.building_id == building.id:
+    if upgrade is not None:
         rows.append([btn("سریع‌ترش کن", emoji_key="btn_speedup", style=SHOP, callback_data=f"bld_speedup_list:{building.id}")])
         rows.append(
             [
@@ -282,7 +305,9 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
         )
     elif building.level == 0 and not view["unlocked"]:
         pass  # locked: no build button until the hall catches up
-    elif upgrade is None and building.level < min(cap, constants.BUILDING_MAX_LEVEL):
+    elif all_builders_busy:
+        pass  # both builders are working other buildings — text explains it
+    elif building.level < min(cap, constants.BUILDING_MAX_LEVEL):
         label = "🏗 ساخت" if building.level == 0 else "🔧 شروع ارتقا"
         rows.append([btn(label, emoji_key="btn_build", style=BUILD, callback_data=f"bld_upgrade:{building.id}")])
     rows.append([back_btn("menu:buildings")])
@@ -415,7 +440,7 @@ def _finish_with_diamonds_sync(tg_user, building_id):
         building = Building.objects.get(id=building_id, owner=user)
     except Building.DoesNotExist:
         raise GameError("این ساختمون پیدا نشد.")
-    _, cost = finish_with_diamonds(user)
+    _, cost = finish_with_diamonds(user, building_id)
     building.refresh_from_db()
     return _detail_view(user, building), cost
 
@@ -443,7 +468,7 @@ def _speedup_do_sync(tg_user, building_id, minutes):
         building = Building.objects.get(id=building_id, owner=user)
     except Building.DoesNotExist:
         raise GameError("این ساختمون پیدا نشد.")
-    _, completed = apply_speedup(user, minutes)
+    _, completed = apply_speedup(user, minutes, building_id)
     building.refresh_from_db()
     return _detail_view(user, building), completed, 1
 
@@ -457,7 +482,7 @@ def _speedup_all_sync(tg_user, building_id, minutes):
     except Building.DoesNotExist:
         raise GameError("این ساختمون پیدا نشد.")
     # a big count — bulk clamps it to what's available and to what's needed to finish
-    _, completed, used = apply_speedup_bulk(user, minutes, 9999)
+    _, completed, used = apply_speedup_bulk(user, minutes, 9999, building_id)
     building.refresh_from_db()
     return _detail_view(user, building), completed, used
 
@@ -617,8 +642,39 @@ async def building_speedup_do_callback(update: Update, context: ContextTypes.DEF
     )
 
 
+def _buy_builder_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    buy_second_builder(user)
+    buildings = get_or_create_buildings(user)
+    upgrades = active_upgrades(user)
+    upgrading_ids = {u.building_id for u in upgrades}
+    slots = builder_slots(user)
+    buildings.sort(key=lambda b: (b.building_type != constants.MAIN_BUILDING, b.building_type))
+    rows = [(b, pending_amount(b), is_unlocked(user, b.building_type)) for b in buildings]
+    return rows, upgrading_ids, main_hall_level(user), len(upgrades), slots, user.diamonds
+
+
+async def building_buy_builder_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    try:
+        building_rows, upgrading_ids, hall_level, busy_count, slots, diamonds = await run_db(
+            _buy_builder_sync, update.effective_user
+        )
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("👷‍♂️ کارگر دوم فعال شد! حالا می‌تونی هم‌زمان دو ساختمون رو ارتقا بدی.", show_alert=True)
+    await safe_edit_message_text(
+        query,
+        _buildings_text(busy_count, slots, hall_level),
+        parse_mode="HTML",
+        reply_markup=_buildings_keyboard(building_rows, upgrading_ids, busy_count, slots, diamonds),
+    )
+
+
 def register(application) -> None:
     application.add_handler(CommandHandler("buildings", buildings_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CallbackQueryHandler(building_buy_builder_callback, pattern=r"^bld_buy_builder$"))
     application.add_handler(CallbackQueryHandler(building_pick_callback, pattern=r"^bld_pick:"))
     application.add_handler(CallbackQueryHandler(building_collect_callback, pattern=r"^bld_collect:"))
     application.add_handler(CallbackQueryHandler(building_upgrade_callback, pattern=r"^bld_upgrade:"))

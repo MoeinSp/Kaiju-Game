@@ -665,6 +665,12 @@ BUILDING_UPGRADE_MINUTES = {1: 48, 2: 288, 3: 1152, 4: 4320, 5: 7200}
 # fusion and the forge.
 BUILDING_UPGRADE_GOLD = {1: 150, 2: 450, 3: 1200, 4: 2800, 5: 6000}
 
+# A player runs one building upgrade at a time by default. Buying the SECOND builder
+# (a one-time diamond purchase) lets two upgrades run in parallel — halving the
+# real-time wall of a full build-out for players who invest in it.
+SECOND_BUILDER_DIAMONDS = 1000
+MAX_BUILDER_SLOTS = 2
+
 # rate_per_hour/cap_base scale by *level; diamond_collector's rate is deliberately
 # tiny since diamonds are the premium currency. Buildings absent from this table
 # (main hall, blacksmith, fusion lab) are pure gates — they unlock things instead

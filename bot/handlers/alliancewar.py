@@ -163,9 +163,10 @@ def _war1d_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
         lines = [
             "🔥 <b>جنگ یک‌روزه‌ی اتحادها</b>",
             "<blockquote>یه حریف هم‌قدرت پیدا می‌شه و ۲۴ ساعت باهاش می‌جنگید. "
-            "هر عضو یک‌بار می‌تونه «شرکت» کنه و قدرتشو به امتیاز اتحاد اضافه کنه. "
-            "برنده خزانه و امتیاز جنگ می‌گیره!\n"
-            "قدرت پایه از مجموع قوت اعضا و ساختمون «پادگان» میاد.</blockquote>",
+            "امتیاز شروع فقط یه بخش کوچیک از قدرت اتحاده — <b>بقیه‌شو باید اعضا با «شرکت» بسازن</b>. "
+            "پس هر چی اعضای بیشتری بیان، شانس بردتون بیشتره!\n\n"
+            "🎁 هر کسی که شرکت کنه پاداش می‌گیره؛ تیم برنده پاداش خیلی بیشتر، و بهترین "
+            "جنگجو (MVP) الماس جایزه می‌گیره.</blockquote>",
         ]
         rows = []
         if data["is_leader"]:
@@ -181,14 +182,22 @@ def _war1d_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
         f"\n⚔️ <b>{view['my_name']}</b>  vs  <b>{view['foe_name']}</b>",
         f"\n📊 امتیاز شما: <b>{view['my_score']}</b>  ({lead})",
         f"📊 امتیاز حریف: <b>{view['foe_score']}</b>",
-        f"\n⏳ <b>{_fmt_remaining(view['remaining_seconds'])}</b> تا پایان",
+        f"\n👥 شرکت‌کننده‌ها: شما <b>{view['my_participants']}</b> ┃ حریف <b>{view['foe_participants']}</b>",
+        f"⏳ <b>{_fmt_remaining(view['remaining_seconds'])}</b> تا پایان",
     ]
+    if view["contributors"]:
+        lines.append("\n🏅 <b>جنگجوهای اتحاد تو:</b>")
+        medals = ["🥇", "🥈", "🥉"]
+        for i, c in enumerate(view["contributors"]):
+            tag = medals[i] if i < 3 else "▫️"
+            lines.append(f"{tag} {c['name']} — <b>{c['power']:,}</b> امتیاز")
     rows = []
     if view["ended"]:
-        lines.append("\n<i>جنگ تموم شده — نتیجه به‌زودی اعلام می‌شه.</i>")
+        lines.append("\n<i>جنگ تموم شده — نتیجه و پاداش‌ها به‌زودی اعلام می‌شه.</i>")
     elif view["already_rallied"]:
-        lines.append("\n✅ تو توی این جنگ شرکت کردی. بقیه‌ی اعضا رو هم خبر کن!")
+        lines.append(f"\n✅ تو شرکت کردی و <b>{view['my_contribution']:,}</b> امتیاز اضافه کردی. بقیه‌ی اعضا رو هم خبر کن!")
     else:
+        lines.append("\n<i>هنوز شرکت نکردی — قدرتتو اضافه کن و پاداش بگیر!</i>")
         rows.append([btn("💪 شرکت در جنگ (قدرتمو اضافه کن)", style=BATTLE, callback_data="ally_war_rally")])
     rows.append([back_btn("menu:alliance_info")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)

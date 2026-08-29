@@ -177,15 +177,19 @@ def _parse_content_line(line: str) -> dict:
             raise GameError(f"نایابیِ هیولا توی «{line}» نامعتبره (مثل mythic/اساطیری).")
         rarity = _RARITY_ALIASES[rest[0]]
         element = None
-        if len(rest) > 1:
-            if rest[1] not in _ELEMENT_ALIASES:
-                raise GameError(f"عنصرِ هیولا توی «{line}» نامعتبره (fire/water/earth/electric).")
-            element = _ELEMENT_ALIASES[rest[1]]
-        return {"type": "creature", "rarity": rarity, "element": element}
+        name_toks = rest[1:]
+        if name_toks and name_toks[0] in _ELEMENT_ALIASES:
+            element = _ELEMENT_ALIASES[name_toks[0]]
+            name_toks = name_toks[1:]
+        # anything left over is a custom name: «هیولا mythic fire اژدهای آتش»
+        name = " ".join(name_toks).strip() or None
+        return {"type": "creature", "rarity": rarity, "element": element, "name": name}
     if head in ("تجهیزات", "equipment", "آیتم", "item"):
         if len(rest) < 2 or rest[0] not in _SLOT_ALIASES or rest[1] not in _RARITY_ALIASES:
             raise GameError(f"تجهیزات توی «{line}» باید به شکل «تجهیزات [اسلات] [نایابی]» باشه.")
-        return {"type": "equipment", "slot": _SLOT_ALIASES[rest[0]], "rarity": _RARITY_ALIASES[rest[1]]}
+        # anything after slot+rarity is a custom name: «تجهیزات weapon legendary شمشیر مرگ»
+        name = " ".join(rest[2:]).strip() or None
+        return {"type": "equipment", "slot": _SLOT_ALIASES[rest[0]], "rarity": _RARITY_ALIASES[rest[1]], "name": name}
 
     raise GameError(
         f"خط «{line}» رو نشناختم. کلمه‌های مجاز: سکه، جم، dna، کارت، هیولا، تجهیزات."

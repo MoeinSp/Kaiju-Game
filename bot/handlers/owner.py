@@ -607,15 +607,36 @@ async def _ish_show_home(update, context, *, edit=True):
         await target.reply_text(text, parse_mode="HTML", reply_markup=kb)
 
 
-async def _ish_ask_name(query) -> None:
-    """Offer a custom name for a creature/equipment component, or add it as-is."""
-    kb = InlineKeyboardMarkup([
-        [btn("✏️ اسم دلخواه بده", style=ADMIN, callback_data="ish:name")],
-        [btn("بدون اسم (پیش‌فرض)", style=CONFIRM, callback_data="ish:noname")],
-    ])
+def _ish_name_options(pending: dict) -> list[str]:
+    """Existing in-game names the owner can PICK for this pending creature/equipment,
+    instead of typing a free-form one: real species names for a creature (scoped to
+    the chosen element, or all of them for a random-element pick), and the real
+    equipment templates for the chosen slot."""
+    if pending.get("type") == "creature":
+        element = pending.get("element")
+        if element:
+            return list(constants.SPECIES_NAMES.get(element, []))
+        return list(constants.SPECIES.keys())
+    if pending.get("type") == "equipment":
+        return list(constants.EQUIPMENT_TEMPLATES.get(pending.get("slot"), []))
+    return []
+
+
+async def _ish_ask_name(query, context, pending: dict) -> None:
+    """Offer a name for a creature/equipment component: pick one from the existing
+    in-game names, type a fully custom one, or add it with the default random name."""
+    options = _ish_name_options(pending)
+    # stash the option list so the picker callback can reference a name by index
+    # (names are Persian and can't be safely packed into callback_data directly)
+    context.user_data["ish_name_options"] = options
+    rows = [[btn(f"🏷 {nm}", style=ADMIN, callback_data=f"ish:pname:{i}")] for i, nm in enumerate(options)]
+    rows.append([btn("✏️ اسم کاملاً دلخواه بده", style=NAV, callback_data="ish:name")])
+    rows.append([btn("🎲 بدون اسم (تصادفی)", style=CONFIRM, callback_data="ish:noname")])
     await safe_edit_message_text(
-        query, "می‌خوای اسم دلخواه روش بذاری؟ (مثلاً «اژدهای آتش» یا «شمشیر مرگ»)",
-        parse_mode="HTML", reply_markup=kb,
+        query,
+        "🏷 <b>اسم رو انتخاب کن</b>\n\nیکی از اسم‌های موجود رو بزن، یا اسم دلخواه بده، "
+        "یا بدون اسم اضافه‌اش کن:",
+        parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows),
     )
 
 
@@ -740,10 +761,11 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
         return
     if verb == "cre":
         rarity, element = parts[2], parts[3]
-        context.user_data["ish_pending"] = {"type": "creature", "rarity": rarity,
-                                            "element": None if element == "rand" else element}
+        pending = {"type": "creature", "rarity": rarity,
+                   "element": None if element == "rand" else element}
+        context.user_data["ish_pending"] = pending
         await query.answer()
-        await _ish_ask_name(query)
+        await _ish_ask_name(query, context, pending)
         return
     if verb == "eq":
         slot = parts[2]
@@ -755,15 +777,31 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
                                      reply_markup=InlineKeyboardMarkup(rows))
         return
     if verb == "eqr":
-        context.user_data["ish_pending"] = {"type": "equipment", "slot": parts[2], "rarity": parts[3]}
+        pending = {"type": "equipment", "slot": parts[2], "rarity": parts[3]}
+        context.user_data["ish_pending"] = pending
         await query.answer()
-        await _ish_ask_name(query)
+        await _ish_ask_name(query, context, pending)
         return
     if verb == "noname":  # add the pending creature/equipment without a custom name
         pending = context.user_data.pop("ish_pending", None)
+        context.user_data.pop("ish_name_options", None)
         if pending:
             draft["contents"].append(pending)
         await query.answer("اضافه شد.")
+        await _ish_show_home(update, context)
+        return
+    if verb == "pname":  # pick one of the existing in-game names for the pending item
+        pending = context.user_data.pop("ish_pending", None)
+        options = context.user_data.pop("ish_name_options", [])
+        idx = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else -1
+        if pending and 0 <= idx < len(options):
+            pending["name"] = options[idx]
+            draft["contents"].append(pending)
+            await query.answer(f"«{options[idx]}» اضافه شد.")
+        else:
+            if pending:
+                draft["contents"].append(pending)
+            await query.answer("اضافه شد.")
         await _ish_show_home(update, context)
         return
     if verb == "name":  # ask for a custom name for the pending component
