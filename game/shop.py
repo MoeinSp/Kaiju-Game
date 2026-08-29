@@ -18,47 +18,65 @@ from game.creature import GameError
 FEATURED_DISCOUNT = 0.25  # the day's featured offer is this much off
 OFFERS_PER_DAY = 4
 
-# The canonical offer definitions: title / emoji / grant, plus the DEFAULT price and
-# currency. What each offer GRANTS is fixed in code (so the admin panel can't create a
-# broken grant); the owner tunes only price / currency / on-off, stored per-key in the
-# DailyShopOffer table (see _effective_pool below).
-POOL_DEFAULTS = [
-    {"key": "speedup30", "emoji": "⏱", "title": "کارت سرعت ۳۰ دقیقه", "cost": 800, "currency": "coins", "grant": {"speedup": 30}},
-    {"key": "speedup60", "emoji": "⏱", "title": "کارت سرعت ۱ ساعت", "cost": 1500, "currency": "coins", "grant": {"speedup": 60}},
-    {"key": "speedup720", "emoji": "⏱", "title": "کارت سرعت ۱۲ ساعت", "cost": 30, "currency": "diamonds", "grant": {"speedup": 720}},
-    {"key": "dna50", "emoji": "🧬", "title": "بسته‌ی ۵۰ DNA", "cost": 15, "currency": "diamonds", "grant": {"dna": 50}},
-    {"key": "dna150", "emoji": "🧬", "title": "بسته‌ی ۱۵۰ DNA", "cost": 40, "currency": "diamonds", "grant": {"dna": 150}},
-    {"key": "gold3000", "emoji": "💰", "title": "بسته‌ی ۳۰۰۰ طلا", "cost": 20, "currency": "diamonds", "grant": {"coins": 3000}},
-    {"key": "energy", "emoji": "⚡", "title": "شارژ کامل انرژی", "cost": 10, "currency": "diamonds", "grant": {"energy": "full"}},
-]
-POOL_DEFAULTS_BY_KEY = {o["key"]: o for o in POOL_DEFAULTS}
-# back-compat alias for any old import site
-POOL = POOL_DEFAULTS
-POOL_BY_KEY = POOL_DEFAULTS_BY_KEY
-
 _VALID_CURRENCIES = ("coins", "diamonds")
 
+# The 7 built-in offers, seeded into the DailyShopItem catalog the first time the shop
+# is read. After seeding, the catalog is fully owner-managed (add / delete / edit) — so
+# these defaults are only the starting point, not a fixed list. Grants use the itemshop
+# reward-component format so a custom offer (a kaiju, equipment, a pack) uses the exact
+# same machinery.
+BUILTIN_OFFERS = [
+    {"key": "speedup30", "emoji": "⏱", "title": "کارت سرعت ۳۰ دقیقه", "cost": 800, "currency": "coins", "contents": [{"type": "speedup", "minutes": 30, "count": 1}]},
+    {"key": "speedup60", "emoji": "⏱", "title": "کارت سرعت ۱ ساعت", "cost": 1500, "currency": "coins", "contents": [{"type": "speedup", "minutes": 60, "count": 1}]},
+    {"key": "speedup720", "emoji": "⏱", "title": "کارت سرعت ۱۲ ساعت", "cost": 30, "currency": "diamonds", "contents": [{"type": "speedup", "minutes": 720, "count": 1}]},
+    {"key": "dna50", "emoji": "🧬", "title": "بسته‌ی ۵۰ DNA", "cost": 15, "currency": "diamonds", "contents": [{"type": "dna", "amount": 50}]},
+    {"key": "dna150", "emoji": "🧬", "title": "بسته‌ی ۱۵۰ DNA", "cost": 40, "currency": "diamonds", "contents": [{"type": "dna", "amount": 150}]},
+    {"key": "gold3000", "emoji": "💰", "title": "بسته‌ی ۳۰۰۰ طلا", "cost": 20, "currency": "diamonds", "contents": [{"type": "coins", "amount": 3000}]},
+    {"key": "energy", "emoji": "⚡", "title": "شارژ کامل انرژی", "cost": 10, "currency": "diamonds", "contents": [{"type": "energy"}]},
+]
 
-def _effective_pool(include_inactive: bool = False) -> list[dict]:
-    """Every offer merged with its owner override (price / currency / on-off) from the
-    DailyShopOffer table. Sync-only (the shop panel/buy run in run_db). Missing rows
-    are seeded from the code defaults so the admin panel always shows the full list."""
-    from bio_lab.models import DailyShopOffer
 
-    rows = {r.key: r for r in DailyShopOffer.objects.all()}
+def _ensure_catalog() -> None:
+    """Seed the built-in offers into the DailyShopItem catalog exactly once — when the
+    table is still empty. After that the catalog is whatever the owner has made it, so
+    a deleted built-in stays deleted (we never re-seed per-key)."""
+    import json
+
+    from bio_lab.models import DailyShopItem
+
+    if DailyShopItem.objects.exists():
+        return
+    for i, o in enumerate(BUILTIN_OFFERS):
+        DailyShopItem.objects.get_or_create(
+            key=o["key"],
+            defaults={"emoji": o["emoji"], "title": o["title"],
+                      "contents_json": json.dumps(o["contents"], ensure_ascii=False),
+                      "cost": o["cost"], "currency": o["currency"], "sort_order": i},
+        )
+
+
+def catalog_items() -> list[dict]:
+    """The full daily-shop catalog from the DB (seeded on first use). Each entry:
+    {key, emoji, title, cost, currency, contents}. Sync-only (runs inside run_db)."""
+    import json
+
+    from bio_lab.models import DailyShopItem
+
+    _ensure_catalog()
     out = []
-    for base in POOL_DEFAULTS:
-        row = rows.get(base["key"])
-        if row is None:
-            # seed a row from the default the first time we see this key
-            row = DailyShopOffer.objects.create(
-                key=base["key"], cost=base["cost"], currency=base["currency"], is_active=True
-            )
-        currency = row.currency if row.currency in _VALID_CURRENCIES else base["currency"]
-        merged = {**base, "cost": max(0, row.cost), "currency": currency, "is_active": row.is_active}
-        if include_inactive or row.is_active:
-            out.append(merged)
+    for r in DailyShopItem.objects.order_by("sort_order", "id"):
+        try:
+            contents = json.loads(r.contents_json)
+        except (ValueError, TypeError):
+            contents = []
+        out.append({"key": r.key, "emoji": r.emoji, "title": r.title, "cost": max(0, r.cost),
+                    "currency": r.currency if r.currency in _VALID_CURRENCIES else "coins",
+                    "contents": contents})
     return out
+
+
+def catalog_by_key() -> dict[str, dict]:
+    return {o["key"]: o for o in catalog_items()}
 
 
 def _day() -> int:
@@ -103,10 +121,11 @@ def _configured_offers_for_slot(slot: int) -> list[dict] | None:
         entries = json.loads(row.offers_json)
     except (ValueError, TypeError):
         entries = []
+    by_key = catalog_by_key()
     out = []
     for e in entries:
-        base = POOL_DEFAULTS_BY_KEY.get(e.get("key"))
-        if base is None:
+        base = by_key.get(e.get("key"))
+        if base is None:  # offer was deleted from the catalog since it was scheduled
             continue
         currency = e.get("currency") if e.get("currency") in _VALID_CURRENCIES else base["currency"]
         out.append({**base, "cost": max(0, int(e.get("cost", base["cost"]))), "currency": currency,
@@ -123,7 +142,7 @@ def today_offers() -> list[dict]:
     if scheduled is not None:
         return [{**o, "featured": False, "price": o["cost"], "limit": o.get("limit", 0)} for o in scheduled]
 
-    pool = _effective_pool()
+    pool = catalog_items()
     if not pool:
         return []
     day = _day()
@@ -133,7 +152,7 @@ def today_offers() -> list[dict]:
     out = []
     for i, o in enumerate(picks):
         featured = i == 0
-        out.append({**o, "featured": featured, "price": _price(o, featured)})
+        out.append({**o, "featured": featured, "price": _price(o, featured), "limit": 0})
     return out
 
 
@@ -150,13 +169,14 @@ def day_offer_states(slot: int) -> list[dict]:
 
     from bio_lab.models import DailyShopDay
 
+    by_key = catalog_by_key()
     saved = {}
     order = []
     row = DailyShopDay.objects.filter(slot=slot).first()
     if row is not None and row.configured:
         try:
             for e in json.loads(row.offers_json):
-                if e.get("key") in POOL_DEFAULTS_BY_KEY:
+                if e.get("key") in by_key:
                     saved[e["key"]] = e
                     order.append(e["key"])
         except (ValueError, TypeError):
@@ -164,8 +184,8 @@ def day_offer_states(slot: int) -> list[dict]:
 
     states = []
     # saved-and-active offers first (in their saved order), then the rest as inactive
-    for key in order + [k for k in POOL_DEFAULTS_BY_KEY if k not in saved]:
-        base = POOL_DEFAULTS_BY_KEY[key]
+    for key in order + [k for k in by_key if k not in saved]:
+        base = by_key[key]
         e = saved.get(key)
         if e is not None:
             currency = e.get("currency") if e.get("currency") in _VALID_CURRENCIES else base["currency"]
@@ -213,41 +233,53 @@ def day_is_configured(slot: int) -> bool:
     return DailyShopDay.objects.filter(slot=slot, configured=True).exists()
 
 
-# ── owner admin: tune daily-shop pricing ─────────────────────────────────────
-def admin_offer_list() -> list[dict]:
-    """Every offer (active or not) with its current price/currency, for the panel."""
-    return _effective_pool(include_inactive=True)
+# ── owner admin: catalog add / delete ────────────────────────────────────────
+def add_catalog_item(title: str, emoji: str, contents: list[dict], cost: int, currency: str) -> "object":
+    """Add a brand-new offer to the daily-shop catalog (a kaiju, equipment, a pack —
+    any itemshop contents). Returns the created DailyShopItem."""
+    import json
+    import time
 
+    from bio_lab.models import DailyShopItem
 
-def set_offer_price(key: str, cost: int, currency: str | None = None) -> None:
-    from bio_lab.models import DailyShopOffer
-
-    base = POOL_DEFAULTS_BY_KEY.get(key)
-    if base is None:
-        raise GameError("این آفر وجود نداره.")
-    row, _ = DailyShopOffer.objects.get_or_create(
-        key=key, defaults={"cost": base["cost"], "currency": base["currency"], "is_active": True}
+    _ensure_catalog()
+    if not contents:
+        raise GameError("آیتم باید حداقل یه محتوا داشته باشه.")
+    key = f"custom_{int(time.time())}_{DailyShopItem.objects.count() + 1}"
+    order = (DailyShopItem.objects.count() + 1)
+    return DailyShopItem.objects.create(
+        key=key, emoji=(emoji or "🎁")[:8], title=(title or "آیتم")[:64],
+        contents_json=json.dumps(contents, ensure_ascii=False),
+        cost=max(0, int(cost)), currency=currency if currency in _VALID_CURRENCIES else "coins",
+        sort_order=order,
     )
-    row.cost = max(0, int(cost))
-    fields = ["cost"]
-    if currency in _VALID_CURRENCIES:
-        row.currency = currency
-        fields.append("currency")
-    row.save(update_fields=fields)
 
 
-def toggle_offer(key: str) -> bool:
-    from bio_lab.models import DailyShopOffer
+def delete_catalog_item(key: str) -> None:
+    """Permanently remove an offer from the catalog and drop it from every day's
+    schedule so it can never resurface."""
+    import json
 
-    base = POOL_DEFAULTS_BY_KEY.get(key)
-    if base is None:
-        raise GameError("این آفر وجود نداره.")
-    row, _ = DailyShopOffer.objects.get_or_create(
-        key=key, defaults={"cost": base["cost"], "currency": base["currency"], "is_active": True}
-    )
-    row.is_active = not row.is_active
-    row.save(update_fields=["is_active"])
-    return row.is_active
+    from bio_lab.models import DailyShopDay, DailyShopItem
+
+    DailyShopItem.objects.filter(key=key).delete()
+    # scrub the key out of any saved day schedules
+    for row in DailyShopDay.objects.all():
+        try:
+            entries = json.loads(row.offers_json)
+        except (ValueError, TypeError):
+            continue
+        kept = [e for e in entries if e.get("key") != key]
+        if len(kept) != len(entries):
+            row.offers_json = json.dumps(kept, ensure_ascii=False)
+            row.save(update_fields=["offers_json"])
+
+
+def catalog_item_count() -> int:
+    from bio_lab.models import DailyShopItem
+
+    _ensure_catalog()
+    return DailyShopItem.objects.count()
 
 
 def _balance(user: User, currency: str) -> int:
@@ -296,28 +328,19 @@ def buy(user: User, key: str) -> dict:
             user.diamonds -= price
         else:
             user.coins -= price
-        fields = ["diamonds", "coins"]
+        user.save(update_fields=["diamonds", "coins"])
 
-        grant = offer["grant"]
-        if grant.get("coins"):
-            user.coins += grant["coins"]
-        if grant.get("dna"):
-            user.dna_fragments += grant["dna"]; fields.append("dna_fragments")
-        if grant.get("energy") == "full":
-            user.energy = constants.MAX_ENERGY
-            user.energy_updated_at = timezone.now()
-            fields += ["energy", "energy_updated_at"]
-        user.save(update_fields=list(set(fields)))
+        # grant the offer's contents (coins/dna/diamonds/energy/speedup/creature/
+        # equipment) through the shared itemshop machinery — the same one the special
+        # items and the custom daily-shop offers use.
+        from game import itemshop
 
-        if grant.get("speedup"):
-            from game.buildings import grant_speedup_card
-
-            grant_speedup_card(user, grant["speedup"], count=1)
+        notes = itemshop.grant_contents(user, offer.get("contents", []))
 
         if limit > 0:
             purchase.count += 1
             purchase.save(update_fields=["count"])
-    return offer
+    return {**offer, "notes": notes}
 
 
 # ── Always-on gold exchange (diamonds → gold) ────────────────────────────────
@@ -350,13 +373,11 @@ def buy_gold_pack(user: User, idx: int) -> dict:
 
 
 def offer_reward_text(offer: dict) -> str:
-    g = offer["grant"]
-    if g.get("energy") == "full":
-        return "انرژی کامل"
-    if g.get("speedup"):
-        return f"کارت سرعت {g['speedup']}د"
-    if g.get("dna"):
-        return f"{g['dna']} DNA"
-    if g.get("coins"):
-        return f"{g['coins']} طلا"
-    return "—"
+    """A short summary of what an offer grants — from the granted notes when available
+    (after a buy), else from the offer's contents."""
+    notes = offer.get("notes")
+    if notes:
+        return " + ".join(notes)
+    from game import itemshop
+
+    return itemshop.content_summary(offer.get("contents", []))

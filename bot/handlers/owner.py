@@ -573,28 +573,36 @@ def _ish_home_markup(draft: dict):
         price_bits.append(f"{draft['price_diamonds']} 💎")
     price = " + ".join(price_bits) or "— (تنظیم نشده)"
     contents = itemshop.content_summary(draft["contents"]) if draft["contents"] else "— (خالی)"
-    limit = draft.get("max_per_user", 0)
-    limit_txt = f"هر نفر {limit} بار" if limit else "نامحدود"
-    text = (
-        "🛠 <b>ساخت آیتم/پک (با دکمه)</b>\n\n"
-        f"{draft['emoji']} عنوان: <b>{title}</b>\n"
-        f"💰 قیمت: <b>{price}</b>\n"
-        f"🔢 محدودیت خرید: <b>{limit_txt}</b>\n"
-        f"🎁 محتوا ({len(draft['contents'])}): {contents}"
-    )
+    is_daily = draft.get("target") == "daily"
+    header = "🛒 <b>افزودن آیتم به شاپ روزانه</b>" if is_daily else "🛠 <b>ساخت آیتم/پک (با دکمه)</b>"
+    lines = [
+        header, "",
+        f"{draft['emoji']} عنوان: <b>{title}</b>",
+        f"💰 قیمت: <b>{price}</b>",
+    ]
+    if not is_daily:
+        limit = draft.get("max_per_user", 0)
+        lines.append(f"🔢 محدودیت خرید: <b>{'هر نفر ' + str(limit) + ' بار' if limit else 'نامحدود'}</b>")
+    lines.append(f"🎁 محتوا ({len(draft['contents'])}): {contents}")
+    if is_daily:
+        lines.append("\n<i>سقف خرید روزانه رو بعداً توی «تنظیم امروز/فردا» تعیین می‌کنی.</i>")
+    text = "\n".join(lines)
     rows = [
         [btn("✏️ عنوان", style=ADMIN, callback_data="ish:title"),
          btn("💰 قیمت", style=ADMIN, callback_data="ish:price")],
-        [btn("🔢 محدودیت خرید", style=ADMIN, callback_data="ish:limit")],
-        [btn("➕ افزودن محتوا", style=CONFIRM, callback_data="ish:addc")],
     ]
+    if not is_daily:
+        rows.append([btn("🔢 محدودیت خرید", style=ADMIN, callback_data="ish:limit")])
+    rows.append([btn("➕ افزودن محتوا", style=CONFIRM, callback_data="ish:addc")])
     if draft["contents"]:
         rows.append([btn("↩️ حذف آخرین محتوا", style=NAV, callback_data="ish:rmlast")])
     ready = bool(draft["title"]) and (draft["price_coins"] or draft["price_diamonds"]) and draft["contents"]
     if ready:
-        rows.append([btn("✅ ثبت و انتشار آیتم", style=CONFIRM, callback_data="ish:save")])
+        save_label = "✅ افزودن به شاپ روزانه" if is_daily else "✅ ثبت و انتشار آیتم"
+        rows.append([btn(save_label, style=CONFIRM, callback_data="ish:save")])
+    back_target = "admin_menu:dailyshop" if is_daily else "admin_menu:itemshop"
     rows.append([btn("🗑 پاک‌کردن پیش‌نویس", style=DANGER, callback_data="ish:discard"),
-                 back_btn("admin_menu:itemshop", "بازگشت")])
+                 back_btn(back_target, "بازگشت")])
     return text, InlineKeyboardMarkup(rows)
 
 
@@ -660,9 +668,13 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
         await _ish_show_home(update, context)
         return
     if verb == "discard":
+        was_daily = draft.get("target") == "daily"
         context.user_data.pop(_ISH_DRAFT, None)
         await query.answer("پیش‌نویس پاک شد.")
-        await itemshop_manage_panel(update, context)
+        if was_daily:
+            await dailyshop_panel(update, context)
+        else:
+            await itemshop_manage_panel(update, context)
         return
     if verb == "rmlast":
         if draft["contents"]:
@@ -826,6 +838,25 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
 
         if not (draft.get("title") and (draft["price_coins"] or draft["price_diamonds"]) and draft["contents"]):
             await query.answer("عنوان، قیمت و حداقل یه محتوا لازمه.", show_alert=True)
+            return
+        # the SAME builder feeds two destinations: the special-items shop (ShopItem)
+        # and the daily-shop catalog (DailyShopItem), decided by draft["target"].
+        if draft.get("target") == "daily":
+            from game import shop
+
+            cost, currency = ((draft["price_diamonds"], "diamonds") if draft["price_diamonds"]
+                              else (draft["price_coins"], "coins"))
+            item = await run_db(shop.add_catalog_item, draft["title"], draft.get("emoji", "🎁"),
+                                draft["contents"], cost, currency)
+            context.user_data.pop(_ISH_DRAFT, None)
+            await query.answer("✅ به شاپ روزانه اضافه شد!")
+            await safe_edit_message_text(
+                query,
+                f"✅ <b>آیتم به کاتالوگ شاپ روزانه اضافه شد:</b> {item.emoji} {item.title}\n"
+                "حالا توی «تنظیم امروز/فردا/پس‌فردا» می‌تونی زمان‌بندی و فعالش کنی.",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([[back_btn("admin_menu:dailyshop", "بازگشت به شاپ روزانه")]]),
+            )
             return
         item = await run_db(itemshop.create_item_from_draft, draft)
         context.user_data.pop(_ISH_DRAFT, None)
@@ -2187,6 +2218,8 @@ def _dshop_home_render(days, energy_cost) -> tuple[str, InlineKeyboardMarkup]:
     for d in days:
         tag = "✅ تنظیم‌شده" if d["configured"] else "⚪️ پیش‌فرض (چرخشی)"
         rows.append([btn(f"🗓 {d['label']} — {tag}", style=ADMIN, callback_data=f"dshop:day:{d['offset']}")])
+    rows.append([btn("➕ افزودن آیتم جدید (کایجو/تجهیز/…)", style=CONFIRM, callback_data="dshop:additem")])
+    rows.append([btn("🗑 حذف دائمی آیتم از کاتالوگ", style=DANGER, callback_data="dshop:dellist")])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -2321,6 +2354,55 @@ async def dailyshop_builder_callback(update: Update, context: ContextTypes.DEFAU
             "⚡ هزینه‌ی جدید شارژ کامل انرژی رو به <b>الماس</b> بفرست (فقط عدد، مثلاً <code>25</code>):",
             parse_mode="HTML",
         )
+        return
+
+    if verb == "additem":  # start the item builder, targeting the daily-shop catalog
+        context.user_data[_ISH_DRAFT] = {"title": None, "emoji": "🎁", "price_coins": 0,
+                                         "price_diamonds": 0, "contents": [], "max_per_user": 0,
+                                         "target": "daily"}
+        await query.answer()
+        await _ish_show_home(update, context)
+        return
+
+    if verb == "dellist":  # list catalog items to permanently delete
+        items = await run_db(shop.catalog_items)
+        rows = [[btn(f"🗑 {it['emoji']} {it['title']}", style=DANGER, callback_data=f"dshop:del:{it['key']}")]
+                for it in items]
+        rows.append([btn("↩️ بازگشت", style=NAV, callback_data="dshop:cancel")])
+        await query.answer()
+        await safe_edit_message_text(
+            query,
+            "🗑 <b>حذف دائمی آیتم از کاتالوگ شاپ روزانه</b>\n\n"
+            "<blockquote>کدوم آیتم برای همیشه حذف بشه؟ از همه‌ی روزها هم پاک می‌شه و "
+            "دیگه برنمی‌گرده.</blockquote>",
+            parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows),
+        )
+        return
+
+    if verb == "del":  # confirm delete of one catalog item
+        key = parts[2]
+        by_key = await run_db(shop.catalog_by_key)
+        it = by_key.get(key)
+        if it is None:
+            await query.answer("این آیتم دیگه نیست.", show_alert=True)
+            await dailyshop_panel_from_query(query, context)
+            return
+        await query.answer()
+        await safe_edit_message_text(
+            query,
+            f"⚠️ آیتم «{it['emoji']} {it['title']}» برای همیشه حذف بشه؟",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [btn("✅ بله، حذف کن", style=DANGER, callback_data=f"dshop:delc:{key}")],
+                [btn("❌ نه", style=NAV, callback_data="dshop:dellist")],
+            ]),
+        )
+        return
+
+    if verb == "delc":  # do the permanent delete
+        await run_db(shop.delete_catalog_item, parts[2])
+        await query.answer("🗑 حذف شد.", show_alert=True)
+        await dailyshop_panel_from_query(query, context)
         return
 
     if verb == "day":

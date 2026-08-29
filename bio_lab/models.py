@@ -890,6 +890,27 @@ class DailyShopDay(models.Model):
         return f"day-slot {self.slot} ({'set' if self.configured else 'unset'})"
 
 
+class DailyShopItem(models.Model):
+    """The daily-shop CATALOG: every offer the shop can show, owner-managed. The 7
+    built-in offers are seeded here on first use; the owner can add new ones (a kaiju,
+    equipment, packs — any itemshop contents) and permanently delete any of them.
+    `cost`/`currency` are the default price; per-day scheduling (DailyShopDay) can
+    override price/limit per slot. `contents_json` is the itemshop reward-component
+    list, granted via game.itemshop.grant_contents."""
+
+    key = models.CharField(max_length=40, unique=True)
+    emoji = models.CharField(max_length=8, default="🎁")
+    title = models.CharField(max_length=64)
+    contents_json = models.TextField(default="[]")  # itemshop components
+    cost = models.IntegerField(default=0)
+    currency = models.CharField(max_length=12, default="coins")  # "coins" | "diamonds"
+    sort_order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.key})"
+
+
 class DailyShopPurchase(models.Model):
     """How many times a player has bought a given daily-shop offer TODAY — enforces the
     owner-set per-offer purchase limit (1 / 2 / unlimited). Keyed by the game-timezone

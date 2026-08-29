@@ -207,6 +207,8 @@ def content_summary(contents: list[dict]) -> str:
             parts.append(f"{c['amount']} 💎")
         elif t == "dna":
             parts.append(f"{c['amount']} DNA")
+        elif t == "energy":
+            parts.append("انرژی کامل")
         elif t == "speedup":
             parts.append(f"{c['count']}× کارت سرعت {c['minutes']}دقیقه")
         elif t == "creature":
@@ -296,6 +298,12 @@ def grant_contents(user: User, contents: list[dict]) -> list[str]:
             user.diamonds += c["amount"]; money_fields.add("diamonds"); notes.append(f"{c['amount']} 💎")
         elif t == "dna":
             user.dna_fragments += c["amount"]; money_fields.add("dna_fragments"); notes.append(f"{c['amount']} DNA")
+        elif t == "energy":
+            from django.utils import timezone
+            user.energy = constants.MAX_ENERGY
+            user.energy_updated_at = timezone.now()
+            money_fields.update({"energy", "energy_updated_at"})
+            notes.append("انرژی کامل")
         elif t == "speedup":
             from game.buildings import grant_speedup_card
             grant_speedup_card(user, c["minutes"], count=c["count"])
