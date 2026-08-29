@@ -573,34 +573,47 @@ def _ish_home_markup(draft: dict):
         price_bits.append(f"{draft['price_diamonds']} 💎")
     price = " + ".join(price_bits) or "— (تنظیم نشده)"
     contents = itemshop.content_summary(draft["contents"]) if draft["contents"] else "— (خالی)"
-    is_daily = draft.get("target") == "daily"
-    header = "🛒 <b>افزودن آیتم به شاپ روزانه</b>" if is_daily else "🛠 <b>ساخت آیتم/پک (با دکمه)</b>"
-    lines = [
-        header, "",
-        f"{draft['emoji']} عنوان: <b>{title}</b>",
-        f"💰 قیمت: <b>{price}</b>",
-    ]
-    if not is_daily:
+    target = draft.get("target")
+    is_daily = target == "daily"
+    is_user = target == "user"
+    header = ("🎁 <b>دادن آیتم به کاربر</b>" if is_user
+              else "🛒 <b>افزودن آیتم به شاپ روزانه</b>" if is_daily
+              else "🛠 <b>ساخت آیتم/پک (با دکمه)</b>")
+    lines = [header, "", f"{draft['emoji']} عنوان: <b>{title}</b>"]
+    if not is_user:  # a direct gift to a user has no price
+        lines.append(f"💰 قیمت: <b>{price}</b>")
+    if not is_daily and not is_user:
         limit = draft.get("max_per_user", 0)
         lines.append(f"🔢 محدودیت خرید: <b>{'هر نفر ' + str(limit) + ' بار' if limit else 'نامحدود'}</b>")
     lines.append(f"🎁 محتوا ({len(draft['contents'])}): {contents}")
     if is_daily:
         lines.append("\n<i>سقف خرید روزانه رو بعداً توی «تنظیم امروز/فردا» تعیین می‌کنی.</i>")
+    if is_user:
+        lines.append("\n<i>عنوان فقط برای پیامیه که به کاربر می‌ره. محتوا رو انتخاب کن و «بده» رو بزن.</i>")
     text = "\n".join(lines)
-    rows = [
-        [btn("✏️ عنوان", style=ADMIN, callback_data="ish:title"),
-         btn("💰 قیمت", style=ADMIN, callback_data="ish:price")],
-    ]
-    if not is_daily:
+    rows = [[btn("✏️ عنوان", style=ADMIN, callback_data="ish:title")]]
+    if not is_user:
+        rows[0].append(btn("💰 قیمت", style=ADMIN, callback_data="ish:price"))
+    if not is_daily and not is_user:
         rows.append([btn("🔢 محدودیت خرید", style=ADMIN, callback_data="ish:limit")])
     rows.append([btn("➕ افزودن محتوا", style=CONFIRM, callback_data="ish:addc")])
     if draft["contents"]:
         rows.append([btn("↩️ حذف آخرین محتوا", style=NAV, callback_data="ish:rmlast")])
-    ready = bool(draft["title"]) and (draft["price_coins"] or draft["price_diamonds"]) and draft["contents"]
+    if is_user:
+        ready = bool(draft["title"]) and bool(draft["contents"])
+    else:
+        ready = bool(draft["title"]) and (draft["price_coins"] or draft["price_diamonds"]) and draft["contents"]
     if ready:
-        save_label = "✅ افزودن به شاپ روزانه" if is_daily else "✅ ثبت و انتشار آیتم"
+        save_label = ("🎁 بده به کاربر" if is_user
+                      else "✅ افزودن به شاپ روزانه" if is_daily
+                      else "✅ ثبت و انتشار آیتم")
         rows.append([btn(save_label, style=CONFIRM, callback_data="ish:save")])
-    back_target = "admin_menu:dailyshop" if is_daily else "admin_menu:itemshop"
+    if is_user:
+        back_target = f"admin_uinfo:{draft.get('target_user_id')}"
+    elif is_daily:
+        back_target = "admin_menu:dailyshop"
+    else:
+        back_target = "admin_menu:itemshop"
     rows.append([btn("🗑 پاک‌کردن پیش‌نویس", style=DANGER, callback_data="ish:discard"),
                  back_btn(back_target, "بازگشت")])
     return text, InlineKeyboardMarkup(rows)
@@ -668,10 +681,20 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
         await _ish_show_home(update, context)
         return
     if verb == "discard":
-        was_daily = draft.get("target") == "daily"
+        target = draft.get("target")
+        target_user_id = draft.get("target_user_id")
         context.user_data.pop(_ISH_DRAFT, None)
         await query.answer("پیش‌نویس پاک شد.")
-        if was_daily:
+        if target == "user" and target_user_id is not None:
+            try:
+                data = await run_db(user_info, str(target_user_id))
+                await safe_edit_message_text(
+                    query, _user_info_text(data), parse_mode="HTML",
+                    reply_markup=_user_manage_keyboard(data["user"].id, data["user"].is_banned),
+                )
+            except GameError:
+                await itemshop_manage_panel(update, context)
+        elif target == "daily":
             await dailyshop_panel(update, context)
         else:
             await itemshop_manage_panel(update, context)
@@ -835,6 +858,43 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
         return
     if verb == "save":
         from game import itemshop
+
+        # direct GIFT to one user — no price required, granted immediately + DM the user
+        if draft.get("target") == "user":
+            if not (draft.get("title") and draft["contents"]):
+                await query.answer("عنوان و حداقل یه محتوا لازمه.", show_alert=True)
+                return
+            target_id = draft.get("target_user_id")
+
+            def _give():
+                from game.moderation import find_user_or_raise
+
+                u = find_user_or_raise(str(target_id))
+                notes = itemshop.grant_contents(u, draft["contents"])
+                u.refresh_from_db()
+                return u, notes
+
+            try:
+                user, notes = await run_db(_give)
+            except GameError as exc:
+                await query.answer(str(exc), show_alert=True)
+                return
+            context.user_data.pop(_ISH_DRAFT, None)
+            # nice DM to the recipient
+            bal_lines = _balance_lines_for(user, ["coins", "dna", "diamonds"])
+            dmed = await _notify_recipient(context, user, notes, bal_lines)
+            await query.answer("🎁 داده شد!")
+            confirm = _admin_op_confirm(
+                user, f"آیتم داده شد ({' + '.join(notes)})",
+                _balance_lines_for(user, ["coins", "dna", "diamonds"]),
+            )
+            if not dmed:
+                confirm += "\n\n<i>⚠️ پیام به کاربر نرسید (بات رو استارت نزده یا بلاک کرده).</i>"
+            await safe_edit_message_text(
+                query, confirm, parse_mode="HTML",
+                reply_markup=_user_manage_keyboard(user.id, user.is_banned),
+            )
+            return
 
         if not (draft.get("title") and (draft["price_coins"] or draft["price_diamonds"]) and draft["contents"]):
             await query.answer("عنوان، قیمت و حداقل یه محتوا لازمه.", show_alert=True)
@@ -1097,6 +1157,7 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
                 btn("💎 کسر الماس", style=DANGER, callback_data=f"admin_deduct:{target_id}:diamonds"),
             ],
             [btn("شارژ کامل (طلا+DNA+الماس)", emoji_key="btn_charge", style=CONFIRM, callback_data=f"admin_charge:{target_id}")],
+            [btn("🎁 دادن آیتم/کایجو/تجهیز به این کاربر", style=CONFIRM, callback_data=f"admin_give_item:{target_id}")],
             [btn("🔬 تنظیم سطح آزمایشگاه", emoji_key="btn_lab", style=CONFIRM, callback_data=f"admin_lablevel:{target_id}")],
             [
                 btn("📊 لاگ پیشرفت", emoji_key="btn_report", style=ADMIN, callback_data=f"admin_plog:{target_id}"),
@@ -2098,6 +2159,75 @@ def _charge_summary(new_values: dict) -> str:
     )
 
 
+def _admin_op_confirm(user, change_desc: str, balance_lines: list[str]) -> str:
+    """The admin-facing 'operation done' receipt (matches the requested format)."""
+    lines = [
+        "✅ <b>عملیات با موفقیت انجام شد</b>",
+        "",
+        f"👤 کاربر هدف: <b>{display_name(user)}</b>",
+        f"🎁 تغییرات: {change_desc}",
+    ]
+    lines += balance_lines
+    return "\n".join(lines)
+
+
+def _recipient_reward_dm(user, reward_bits: list[str], balance_lines: list[str]) -> str:
+    """The gamey DM the RECIPIENT gets, so they know a reward landed."""
+    rewards = " + ".join(reward_bits) if reward_bits else "پاداش ویژه"
+    lines = [
+        "💎 <b>واریز پاداش اختصاصی!</b>",
+        "",
+        f"👤 سلام {display_name(user)} عزیز،",
+        f"🎁 خزانه‌ی شما شارژ شد و {rewards} به حسابت نشست!",
+        "",
+        "──────────────",
+    ]
+    lines += balance_lines
+    lines += [
+        "──────────────",
+        "",
+        "✨ الان وقتشه بری سراغ ارتقای موجودت یا آیتم‌های خفن فروشگاه!",
+    ]
+    return "\n".join(lines)
+
+
+def _balance_lines_for(user, resources) -> list[str]:
+    """`{glyph} موجودی فعلی {label}: {value}` for each affected resource."""
+    field = {"coins": "coins", "dna": "dna_fragments", "diamonds": "diamonds"}
+    out = []
+    for res in resources:
+        val = getattr(user, field[res])
+        out.append(f"{get_emoji(_RESOURCE_EMOJI_KEYS[res])} موجودی فعلی {_RESOURCE_LABELS[res]}: <b>{val}</b>")
+    return out
+
+
+async def _notify_recipient(context, user, reward_bits: list[str], balance_lines: list[str]) -> bool:
+    """DM the recipient their reward. Returns False if the user has blocked/not-started
+    the bot (never fatal to the admin action)."""
+    try:
+        await context.bot.send_message(
+            chat_id=user.id, text=_recipient_reward_dm(user, reward_bits, balance_lines), parse_mode="HTML"
+        )
+        return True
+    except TelegramError:
+        return False
+
+
+async def admin_give_item_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Open the same inline item builder as the shop, but targeted at ONE user: on save
+    the contents are granted straight to them (no price) and they get a reward DM."""
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    target_id = query.data.split(":")[1]
+    context.user_data[_ISH_DRAFT] = {"title": None, "emoji": "🎁", "price_coins": 0,
+                                     "price_diamonds": 0, "contents": [], "max_per_user": 0,
+                                     "target": "user", "target_user_id": target_id}
+    await query.answer()
+    await _ish_show_home(update, context)
+
+
 async def admin_grant_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not _is_admin(update):
@@ -2614,11 +2744,24 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         except GameError as exc:
             await message.reply_text(str(exc))
             return
-        verb = "اعطا شد" if action == "grant" else "کسر شد"
-        await message.reply_text(
-            f"{get_emoji('confirm')} به/از {display_name(user)} {verb}. مقدار جدید {resource}: {new_value}",
-            parse_mode="HTML",
-        )
+        label = _RESOURCE_LABELS[resource]
+        bal_lines = _balance_lines_for(user, [resource])
+        if action == "grant":
+            reward = f"{amount:,} {label}"
+            dmed = await _notify_recipient(context, user, [reward], bal_lines)
+            confirm = _admin_op_confirm(user, f"اعطا شد ({reward})", bal_lines)
+            if not dmed:
+                confirm += "\n\n<i>⚠️ پیام به کاربر نرسید (بات رو استارت نزده یا بلاک کرده).</i>"
+            await message.reply_text(
+                confirm, parse_mode="HTML",
+                reply_markup=_user_manage_keyboard(user.id, user.is_banned),
+            )
+        else:  # deduct — a takeaway, no recipient DM
+            await message.reply_text(
+                _admin_op_confirm(user, f"کسر شد ({amount:,} {label})", bal_lines),
+                parse_mode="HTML",
+                reply_markup=_user_manage_keyboard(user.id, user.is_banned),
+            )
         return
 
     if action == "charge":
@@ -2634,9 +2777,20 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
             await message.reply_text(str(exc))
             return
+        # DM the recipient about whatever was ADDED (positive amounts only)
+        amounts = {"coins": coins, "dna": dna, "diamonds": diamonds}
+        positive = [r for r in ("coins", "dna", "diamonds") if amounts[r] > 0]
+        dmed = None
+        if positive:
+            reward_bits = [f"{amounts[r]:,} {_RESOURCE_LABELS[r]}" for r in positive]
+            dmed = await _notify_recipient(context, user, reward_bits, _balance_lines_for(user, positive))
+        confirm = f"{get_emoji('confirm')} <b>{display_name(user)}</b> شارژ شد!\n\n" + _charge_summary(new_values)
+        if dmed is False:
+            confirm += "\n\n<i>⚠️ پیام به کاربر نرسید (بات رو استارت نزده یا بلاک کرده).</i>"
+        elif dmed:
+            confirm += "\n\n<i>✅ پیام اطلاع‌رسانی برای کاربر هم فرستاده شد.</i>"
         await message.reply_text(
-            f"{get_emoji('confirm')} <b>{display_name(user)}</b> شارژ شد!\n\n" + _charge_summary(new_values),
-            parse_mode="HTML",
+            confirm, parse_mode="HTML",
             reply_markup=_user_manage_keyboard(user.id, user.is_banned),
         )
         return
@@ -3014,6 +3168,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(users_browse_callback, pattern=r"^admin_users:\d+$"))
     application.add_handler(CallbackQueryHandler(user_open_callback, pattern=r"^admin_uinfo:\d+$"))
     application.add_handler(CallbackQueryHandler(dm_user_start, pattern=r"^admin_dm:\d+$"))
+    application.add_handler(CallbackQueryHandler(admin_give_item_start, pattern=r"^admin_give_item:\d+$"))
     application.add_handler(CallbackQueryHandler(admin_remove_callback, pattern=r"^admin_rm:\d+$"))
     application.add_handler(CallbackQueryHandler(dailyshop_builder_callback, pattern=r"^dshop:"))
     application.add_handler(CallbackQueryHandler(itemshop_add_start, pattern=r"^sitem_add$"))
