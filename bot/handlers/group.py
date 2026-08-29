@@ -95,7 +95,7 @@ async def gold_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE, amou
     reply = update.message.reply_to_message
     if reply is None or reply.from_user is None:
         await update.message.reply_text(
-            f"{get_emoji('gift')} برای انتقال طلا، روی پیام طرف <b>ریپلای</b> کن و بنویس «انتقال طلا ۵۰».",
+            f"{get_emoji('gift')} برای انتقال طلا، روی پیام طرف <b>ریپلای</b> کن و بنویس «انتقال طلا 50».",
             parse_mode="HTML",
         )
         return
@@ -202,7 +202,7 @@ async def _begin_offer(update, kind: str, sender, receiver, item_id: int, desc: 
         f"🤝 <b>{display_name(sender)}</b> می‌خواد {desc} رو به <b>{display_name(receiver)}</b> بده.\n"
         f"{get_emoji('diamond')} کارمزد انتقال: <b>{fee}</b> الماس (گیرنده می‌ده)\n\n"
         f"<b>{display_name(sender)}</b>، قیمت (به طلا) رو تعیین کن یا رایگان بفرست 👇\n"
-        "<i>۵ دقیقه اعتبار داره.</i>",
+        "<i>5 دقیقه اعتبار داره.</i>",
         parse_mode="HTML", reply_markup=_seller_step_keyboard(token),
     )
 
@@ -314,7 +314,7 @@ def _offer_receiver_text(offer: dict) -> str:
         f"از <b>{offer['sender_name']}</b> به <b>{offer['receiver_name']}</b>\n\n"
         f"{price_line}\n"
         f"{get_emoji('diamond')} کارمزد: <b>{offer['fee']}</b> الماس\n\n"
-        f"<b>{offer['receiver_name']}</b>، قبول می‌کنی؟ 👇  <i>(۵ دقیقه اعتبار · ۱ روز کول‌داون برای هر دو طرف)</i>"
+        f"<b>{offer['receiver_name']}</b>، قبول می‌کنی؟ 👇  <i>(5 دقیقه اعتبار · 1 روز کول‌داون برای هر دو طرف)</i>"
     )
 
 
@@ -415,7 +415,7 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
         await safe_edit_message_text(
             query,
             f"{offer['desc']}\n\n💰 <b>{offer['sender_name']}</b>، قیمت رو به طلا بفرست "
-            "(فقط یه عدد، مثلا <code>5000</code>) — یا «لغو».\n<i>۵ دقیقه اعتبار.</i>",
+            "(فقط یه عدد، مثلا <code>5000</code>) — یا «لغو».\n<i>5 دقیقه اعتبار.</i>",
             parse_mode="HTML",
         )
         return
@@ -468,7 +468,7 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
         await safe_edit_message_text(
             query,
             f"{body}{price_line}\n{get_emoji('diamond')} کارمزد <b>{result['cost']}</b> الماس پرداخت شد.\n"
-            "<i>۱ روز کول‌داون برای هر دو طرف فعال شد.</i>",
+            "<i>1 روز کول‌داون برای هر دو طرف فعال شد.</i>",
             parse_mode="HTML",
         )
 
@@ -490,9 +490,9 @@ async def raid_spawn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         f"{get_emoji('raid_boss')} <b>باس رید لِوِل {boss.level} ظاهر شد: {boss.name}!</b>\n"
         f"{constants.render_bar(boss.current_hp, boss.max_hp, width=14)}  {boss.current_hp}/{boss.max_hp} HP\n"
         f"{constants.element_label(boss.element)}\n\n"
-        f"همه «اتک» بفرستن تا به <b>باس</b> حمله کنن — هر حمله ۱ ⚡ انرژی می‌بره و "
+        f"همه «اتک» بفرستن تا به <b>باس</b> حمله کنن — هر حمله 1 ⚡ انرژی می‌بره و "
         f"هرچی سهم دمیجت بیشتر، غنیمت بیشتر! 💪\n"
-        f"<i>سقف روزانه نداره؛ ولی هر اتک، کول‌داون اتک بعدیت رو ۱ دقیقه بیشتر می‌کنه.</i>\n"
+        f"<i>سقف روزانه نداره؛ ولی هر اتک، کول‌داون اتک بعدیت رو 1 دقیقه بیشتر می‌کنه.</i>\n"
         f"باس تایم‌اوت نداره؛ می‌مونه تا بکشیدش — و بعدش لِوِل رید گروه یکی بالا می‌ره و باس بعدی قوی‌تر و پرجایزه‌تره.\n"
         f"<i>می‌خوای به یه بازیکن حمله کنی؟ روی پیامش ریپلای کن و «اتک» بفرست.</i>",
         parse_mode="HTML",
@@ -943,7 +943,7 @@ async def pvp_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         reward = "\n\n<i>باختی — ولی هیچی ازت کم نشد (اتک گروهی کاپ نداره).</i>"
     if result["winner_level_up"]:
         reward += f"\n{get_emoji('celebrate')} {result['winner_creature']} رسید به سطح {result['winner_new_level']}!"
-    reward += f"\n⚡ ۱ انرژی کم شد (باقی‌مونده: {result['energy_left']})"
+    reward += f"\n⚡ 1 انرژی کم شد (باقی‌مونده: {result['energy_left']})"
     reward += _mission_lines(result["missions"]) + _speedup_note(result["speedup"])
     context.user_data["pvp_last_detail"] = result.get("detail_log", "")
     keyboard = InlineKeyboardMarkup(

@@ -354,7 +354,7 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
         (f"🔮 {adv}" if adv else ""),
         "",
         f"🎁 جوایز برد: {get_emoji('coin')} <b>+{lo:,}–{hi:,}</b> طلا · {get_emoji('dna')} <b>+{dlo:,}–{dhi:,}</b>",
-        f"{get_emoji('energy')} هزینه: ۱ انرژی (داری: {energy}) · 🔍 بعدی: {target.get('scout_cost', 0)} طلا",
+        f"{get_emoji('energy')} هزینه: 1 انرژی (داری: {energy}) · 🔍 بعدی: {target.get('scout_cost', 0)} طلا",
     ])
     rows = [
         [
@@ -552,7 +552,7 @@ def _fusion_card(user, pairs, built, cap) -> tuple[str, InlineKeyboardMarkup]:
         lines.append("\n🔒 اول باید 🔮 تالار ادغام رو توی پیوی بسازی.")
     elif pairs:
         lines.append(f"⭐ سقف ستاره‌ی تو: <b>{cap}</b>\n")
-        lines.append("این جفت‌ها آماده‌ان — <b>هر کدوم ۱۰۰٪ موفقه</b>:")
+        lines.append("این جفت‌ها آماده‌ان — <b>هر کدوم 100٪ موفقه</b>:")
         for pair in pairs[:6]:
             rarity = constants.RARITY_LABELS[pair["rarity"]].split()[0]
             lines.append(f"• {rarity} {pair['name']} {'⭐' * pair['star']} ×{pair['count']} → {'⭐' * (pair['star'] + 1)}")
@@ -825,7 +825,7 @@ def _reward_text(user, result: dict) -> str:
 
     kind = result["kind"]
     if kind == "speedup":
-        prize = f"<b>۱ کارت سرعت {constants.speedup_plain_label(result['minutes'])}</b> ⏱"
+        prize = f"<b>1 کارت سرعت {constants.speedup_plain_label(result['minutes'])}</b> ⏱"
     elif kind == "jackpot":
         prize = f"🎰 <b>جکپات! {result['amount']:,}</b> {get_emoji('coin')}"
     elif kind == "coins":

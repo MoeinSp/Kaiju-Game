@@ -377,7 +377,7 @@ def _autobackup_panel_markup(hours: int, dest_id) -> tuple[str, InlineKeyboardMa
         "می‌تونی بازه‌ی دلخواه بذاری، مقصد رو به یه گروه/کانال تغییر بدی، همین حالا بکاپ بگیری، "
         "یا از یه فایل بکاپ بازیابی کنی.</blockquote>"
     )
-    labels = {0: "🚫 خاموش", 6: "۶ ساعت", 12: "۱۲ ساعت", 24: "۲۴ ساعت", 48: "۴۸ ساعت"}
+    labels = {0: "🚫 خاموش", 6: "6 ساعت", 12: "12 ساعت", 24: "24 ساعت", 48: "48 ساعت"}
     rows = [[btn(("✅ " if h == hours else "") + labels[h], style=(CONFIRM if h == hours else ADMIN),
                  callback_data=f"autobk_set:{h}")] for h in _BACKUP_INTERVAL_CHOICES]
     rows.append([btn("⏱ بازه‌ی دلخواه (ساعت)", style=ADMIN, callback_data="autobk_custom")])
@@ -483,13 +483,13 @@ async def cheat_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 _ITEMSHOP_HELP = (
     "🛍 <b>افزودن آیتم به فروشگاه</b>\n\n"
     "آیتم رو توی این قالب بفرست (هر خط یه چیز):\n"
-    "<blockquote>خط ۱: عنوان (می‌تونه با ایموجی شروع شه)\n"
-    "خط ۲: قیمت — مثل «قیمت: 19000 جم» یا «قیمت: 5000 سکه 50 جم»\n"
+    "<blockquote>خط 1: عنوان (می‌تونه با ایموجی شروع شه)\n"
+    "خط 2: قیمت — مثل «قیمت: 19000 جم» یا «قیمت: 5000 سکه 50 جم»\n"
     "خط‌های بعد: محتوا، هرکدوم یکی:\n"
     "• <code>سکه 10000</code>\n"
     "• <code>جم 25</code>\n"
     "• <code>dna 200</code>\n"
-    "• <code>کارت 60 3</code>  (کارت سرعت ۶۰دقیقه ×۳)\n"
+    "• <code>کارت 60 3</code>  (کارت سرعت 60دقیقه ×3)\n"
     "• <code>هیولا mythic fire</code>  (عنصر اختیاریه)\n"
     "• <code>تجهیزات weapon legendary</code></blockquote>\n"
     "<b>نمونه پک:</b>\n"
@@ -1388,8 +1388,9 @@ def _reset_confirm_text(user, creature_count: int) -> str:
         f"{get_emoji('warning')} مطمئنی می‌خوای بازیِ <b>{display_name(user)}</b> "
         f"(<code>{user.id}</code>) رو <b>کامل ریست</b> کنی؟\n\n"
         f"<blockquote>همه‌ی پیشرفتش پاک می‌شه: {creature_count} موجود، ساختمون‌ها، تجهیزات، "
-        "کاپ، سطح آزمایشگاه، کارت‌ها و کل تاریخچه. بعدش دقیقاً مثل یه بازیکن تازه شروع می‌کنه "
-        "(اسم آزمایشگاه و هدیه‌ی شروع سرجاش). این کار غیرقابل‌برگشته.</blockquote>"
+        "کاپ، سطح آزمایشگاه، کارت‌ها، کل تاریخچه، جایزه‌های جوین کانال، و <b>عضویت توی لینک دعوت</b> "
+        "(هم دعوت‌هایی که کرده هم دعوت‌شدنش) — یعنی همه‌چیزِ مربوط به این ایدی. بعدش دقیقاً مثل یه بازیکن "
+        "کاملاً تازه شروع می‌کنه (فقط اسم آزمایشگاه و هدیه‌ی شروع سرجاشن). این کار غیرقابل‌برگشته.</blockquote>"
     )
 
 
@@ -1558,11 +1559,11 @@ async def preview_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     lines = [
         "🔍 <b>پیش‌نمایش نمونه</b> (شبیه کارت موجود واقعی):\n",
         f"{get_emoji('creature')} <b>Pyrofang</b>  <code>#1</code>",
-        f"{constants.element_label('fire')} · سطح ۵",
+        f"{constants.element_label('fire')} · سطح 5",
         "",
         f"{get_emoji('hp')} 90   {get_emoji('atk')} 24   {get_emoji('def')} 18   "
         f"{get_emoji('spd')} 15   {get_emoji('poison')} 3",
-        f"{get_emoji('wings')} بال ۲ · {get_emoji('def')} زره ۱ · {get_emoji('fangs')} نیش ۳",
+        f"{get_emoji('wings')} بال 2 · {get_emoji('def')} زره 1 · {get_emoji('fangs')} نیش 3",
         "",
         f"{get_emoji('energy')} 38/50",
         f"{get_emoji('coin')} 850   {get_emoji('dna')} 40",
@@ -2483,7 +2484,7 @@ async def admin_lablevel_callback(update: Update, context: ContextTypes.DEFAULT_
 
     await safe_edit_message_text(
         query,
-        f"🔬 سطح آزمایشگاه جدید رو بفرست (یه عدد بین ۱ تا {LAB_MAX_LEVEL}):",
+        f"🔬 سطح آزمایشگاه جدید رو بفرست (یه عدد بین 1 تا {LAB_MAX_LEVEL}):",
         parse_mode="HTML",
     )
 
@@ -2542,8 +2543,8 @@ def _dshop_home_sync():
 def _dshop_home_render(days, energy_cost) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
         "🛒 <b>مدیریت شاپ روزانه</b>",
-        "<blockquote>شاپ رو برای <b>امروز، فردا و پس‌فردا</b> جدا تنظیم کن. برنامه هر ۳ روز "
-        "تکرار می‌شه؛ روزی که تنظیم نکنی، همون چیزی که ۳ روز قبل بود می‌مونه.</blockquote>",
+        "<blockquote>شاپ رو برای <b>امروز، فردا و پس‌فردا</b> جدا تنظیم کن. برنامه هر 3 روز "
+        "تکرار می‌شه؛ روزی که تنظیم نکنی، همون چیزی که 3 روز قبل بود می‌مونه.</blockquote>",
         "",
         f"⚡ <b>هزینه شارژ کامل انرژی:</b> {energy_cost} 💎",
     ]
@@ -2574,11 +2575,11 @@ def _cur_glyph(currency: str) -> str:
 
 
 def _limit_label(n: int) -> str:
-    return {1: "۱ بار/روز", 2: "۲ بار/روز"}.get(int(n or 0), "نامحدود")
+    return {1: "1 بار/روز", 2: "2 بار/روز"}.get(int(n or 0), "نامحدود")
 
 
 def _limit_tag(n: int) -> str:
-    return {1: "🛒۱", 2: "🛒۲"}.get(int(n or 0), "🛒∞")
+    return {1: "🛒1", 2: "🛒2"}.get(int(n or 0), "🛒∞")
 
 
 def _dshop_draft(context) -> dict | None:
@@ -2607,6 +2608,7 @@ def _dshop_day_render(draft: dict) -> tuple[str, InlineKeyboardMarkup]:
             btn("🟢" if s["active"] else "🔴", style=(CONFIRM if s["active"] else DANGER),
                 callback_data=f"dshop:tog:{s['key']}"),
         ])
+    rows.append([btn("📋 کپی این روز به روز دیگر", style=SHOP, callback_data="dshop:copymenu")])
     rows.append([
         btn("✅ تأیید و ذخیره", style=CONFIRM, callback_data="dshop:save"),
         btn("❌ لغو", style=DANGER, callback_data="dshop:cancel"),
@@ -2649,7 +2651,7 @@ def _dshop_price_render(draft: dict, key: str) -> tuple[str, InlineKeyboardMarku
         return btn(f"{mark}{label}", style=(CONFIRM if cur_limit == n else NAV),
                    callback_data=f"dshop:lim:{key}:{n}")
     lines.append("\n🛒 <b>تعداد قابل خرید (در روز):</b>")
-    rows.append([_lim_btn(1, "۱ بار"), _lim_btn(2, "۲ بار"), _lim_btn(0, "بی‌نهایت")])
+    rows.append([_lim_btn(1, "1 بار"), _lim_btn(2, "2 بار"), _lim_btn(0, "بی‌نهایت")])
     rows.append([btn("🔢 عدد دلخواه", style=NAV, callback_data=f"dshop:limx:{key}")])
     rows.append([btn("↩️ بازگشت به آفرها", style=NAV, callback_data="dshop:back")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
@@ -2840,6 +2842,34 @@ async def dailyshop_builder_callback(update: Update, context: ContextTypes.DEFAU
         await dailyshop_panel_from_query(query, context)
         return
 
+    if verb == "copymenu":  # pick which OTHER day to copy this whole config into
+        cur = draft["offset"]
+        rows = [[btn(f"📋 کپی به {shop.DAY_LABELS[o]}", style=SHOP, callback_data=f"dshop:copyto:{o}")]
+                for o in range(shop.DAILY_CYCLE) if o != cur]
+        rows.append([btn("↩️ بازگشت", style=NAV, callback_data="dshop:back")])
+        await query.answer()
+        await safe_edit_message_text(
+            query,
+            f"📋 <b>کپی کامل شاپ «{shop.DAY_LABELS[cur]}» به کدوم روز؟</b>\n\n"
+            "<blockquote>همه‌ی آفرها با قیمت و سقف خریدشون به اون روز کپی و ذخیره می‌شن "
+            "(محتوای فعلی اون روز جایگزین می‌شه).</blockquote>",
+            parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows),
+        )
+        return
+
+    if verb == "copyto":  # copy the current draft into another slot; save both days
+        dst = int(parts[2])
+
+        def _save_both():
+            shop.save_day(draft["slot"], draft["states"])       # keep the source as edited
+            shop.save_day(shop.slot_for_offset(dst), draft["states"])  # and copy into the target
+
+        await run_db(_save_both)
+        context.user_data.pop(_DSHOP_DRAFT, None)
+        await query.answer(f"✅ به «{shop.DAY_LABELS[dst]}» کپی و ذخیره شد!", show_alert=True)
+        await dailyshop_panel_from_query(query, context)
+        return
+
     await query.answer()
 
 
@@ -2928,7 +2958,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         if not text.isdigit() or not (1 <= int(text) <= LAB_MAX_LEVEL):
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text(f"⚠️ یه عدد بین ۱ تا {LAB_MAX_LEVEL} بفرست.")
+            await message.reply_text(f"⚠️ یه عدد بین 1 تا {LAB_MAX_LEVEL} بفرست.")
             return
         try:
             user, new_level = await run_db(set_lab_level, awaiting["target_id"], int(text))
@@ -3056,7 +3086,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         digits = text.strip()
         if not digits.isdigit() or int(digits) > 720:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text("⚠️ یه عدد ساعت بین ۰ تا ۷۲۰ بفرست (۰ = خاموش).")
+            await message.reply_text("⚠️ یه عدد ساعت بین 0 تا 720 بفرست (0 = خاموش).")
             return
         hours = int(digits)
         await run_db(botconfig.set_backup_interval, hours)
@@ -3110,7 +3140,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         digits = text.strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
         if not digits.isdigit():
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text("⚠️ یه عدد بفرست (۰ = نامحدود).")
+            await message.reply_text("⚠️ یه عدد بفرست (0 = نامحدود).")
             return
         _ish_draft(context)["max_per_user"] = int(digits)
         await _ish_show_home(update, context, edit=False)
@@ -3160,7 +3190,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         digits = text.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
         if not digits.isdigit():
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text("⚠️ یه عدد صحیح بفرست (۰ = نامحدود).")
+            await message.reply_text("⚠️ یه عدد صحیح بفرست (0 = نامحدود).")
             return
         for s in draft["states"]:
             if s["key"] == awaiting["key"]:
@@ -3171,8 +3201,6 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     if action == "energy_cost":
-        from game import botconfig
-
         digits = text.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
         if not digits.isdigit() or int(digits) <= 0:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
@@ -3256,7 +3284,7 @@ async def capture_restore_upload(update: Update, context: ContextTypes.DEFAULT_T
         return
     if document.file_size and document.file_size > 60 * 1024 * 1024:
         context.user_data.pop(AWAITING_RESTORE_KEY, None)
-        await message.reply_text("⚠️ فایل خیلی بزرگه (بیشتر از ۶۰ مگابایت).")
+        await message.reply_text("⚠️ فایل خیلی بزرگه (بیشتر از 60 مگابایت).")
         return
 
     context.user_data.pop(AWAITING_RESTORE_KEY, None)

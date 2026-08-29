@@ -225,16 +225,23 @@ def reset_user(identifier: str) -> User:
     from game.creature import create_starter_creature
 
     user = find_user_or_raise(identifier)
+    uid = user.id
     identity = {
-        "id": user.id,
+        "id": uid,
         "username": user.username,
         "first_name": user.first_name,
         "lab_name": user.lab_name,
         "is_banned": user.is_banned,
     }
     with transaction.atomic():
-        user.delete()  # cascades every owned game row
-        fresh = User.objects.create(**identity)  # resources/progress -> model defaults
+        # scrub this numeric id's INVITE footprint too — `referred_by` is a plain
+        # telegram-id field, not a cascading FK, so anyone this id invited would keep
+        # pointing at it after the wipe (and it would still count as their referrer).
+        # Clearing it makes the reset truly complete: the id is a brand-new player who
+        # has invited nobody and was invited by nobody.
+        User.objects.filter(referred_by=uid).update(referred_by=None)
+        user.delete()  # cascades every owned game row (creatures, buildings, claims, logs…)
+        fresh = User.objects.create(**identity)  # resources/progress + own referral state -> defaults
         create_starter_creature(fresh)
         for minutes, count in constants.STARTING_SPEEDUP_CARDS.items():
             grant_speedup_card(fresh, minutes, count=count)

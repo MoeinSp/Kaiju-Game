@@ -111,7 +111,7 @@ def _arena_home_text(user, power, shield_secs, history, week, season_secs, reven
             lines.append(f"{mark} <b>{attacker_name}</b>{pwr}{loot}")
 
     if revenges:
-        lines.append(f"\n⚔️ <b>{len(revenges)} انتقام</b> در انتظار — مهلت ۳ روزه")
+        lines.append(f"\n⚔️ <b>{len(revenges)} انتقام</b> در انتظار — مهلت 3 روزه")
 
     lines.append(
         f"\n<blockquote>هر حمله {constants.ARENA_ATTACK_ENERGY_COST} انرژی می‌بره. اگه ببری "
@@ -343,7 +343,7 @@ def opponent_details_text(d: dict) -> str:
             f"💪 قدرت کل: <b>{d['power']}</b>\n"
             f"{constants.element_label(d['element']) if d.get('element') else ''}\n\n"
             "<i>این یه آزمایشگاه بات هم‌ردهٔ کاپته — هرچی کاپت بالاتر، قوی‌تر و مجهزتره "
-            "(نزدیک کاپ ۵۰۰۰ کاملاً مکس و فول‌تجهیزات می‌شه).</i>"
+            "(نزدیک کاپ 5000 کاملاً مکس و فول‌تجهیزات می‌شه).</i>"
         )
     s = d["stats"]
     lines = [
@@ -579,7 +579,7 @@ async def arena_revenges_callback(update: Update, context: ContextTypes.DEFAULT_
         await safe_edit_message_text(
             query,
             "⚔️ <b>انتقام‌ها</b>\n\nهیچ‌کس اخیراً بهت حمله نکرده — لیست خالیه.\n"
-            "<i>هر حمله‌ای که بهت بشه (چه ببازی چه دفاع کنی) تا ۳ روز اینجا قابل انتقامه.</i>",
+            "<i>هر حمله‌ای که بهت بشه (چه ببازی چه دفاع کنی) تا 3 روز اینجا قابل انتقامه.</i>",
             parse_mode="HTML", reply_markup=keyboard,
         )
         return
@@ -617,7 +617,7 @@ def _revenge_find_sync(tg_user, log_id: int):
         raise GameError("این انتقام دیگه در دسترس نیست.")
 
     if log.created_at < tz.now() - datetime.timedelta(days=3):
-        raise GameError("مهلت ۳ روزه‌ی انتقام گذشته.")
+        raise GameError("مهلت 3 روزه‌ی انتقام گذشته.")
 
     my_power = active_power(user)
     opponent_power = active_power(log.attacker) if log.attacker else 0
@@ -663,7 +663,7 @@ def _revenge_attack_sync(tg_user, log_id: int):
         raise GameError("این انتقام قبلاً گرفته شده یا دیگه معتبر نیست.")
 
     if log.created_at < tz.now() - datetime.timedelta(days=3):
-        raise GameError("مهلت ۳ روزه‌ی انتقام گذشته.")
+        raise GameError("مهلت 3 روزه‌ی انتقام گذشته.")
 
     target = log.attacker
     if target is None:

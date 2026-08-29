@@ -403,11 +403,11 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
         )
     if any_capped:
         if creature.star_level >= 5:
-            lines.append(f"\n🔒 <i>این هیولا ۵⭐ه — اعضاش به سقف نهایی <b>{constants.PART_UPGRADE_MAX}</b> رسیدن.</i>")
+            lines.append(f"\n🔒 <i>این هیولا 5⭐ه — اعضاش به سقف نهایی <b>{constants.PART_UPGRADE_MAX}</b> رسیدن.</i>")
         else:
             lines.append(
                 f"\n🔒 <i>یه عضو به سقفِ {creature.star_level}⭐ (<b>{cap}</b>) رسیده — برای ارتقای بیشتر "
-                f"باید با <b>فیوژن</b> {creature.star_level + 1}⭐ بشه (هر ستاره +{constants.PART_UPGRADE_CAP_PER_STAR}، تا {constants.PART_UPGRADE_MAX} در ۵⭐).</i>"
+                f"باید با <b>فیوژن</b> {creature.star_level + 1}⭐ بشه (هر ستاره +{constants.PART_UPGRADE_CAP_PER_STAR}، تا {constants.PART_UPGRADE_MAX} در 5⭐).</i>"
             )
     if slots is not None:
         lines.append("")
@@ -469,7 +469,7 @@ def equip_panel_text(user, creature, slots: list[dict]) -> str:
                 f"{row['label']}: <i>خالی</i>"
                 + (
                     f" — {spare} تجهیزات مناسب داری" if spare > 1
-                    else " — ۱ تجهیزات مناسب داری" if spare
+                    else " — 1 تجهیزات مناسب داری" if spare
                     else " — چیزی برای این جایگاه نداری"
                 )
             )
@@ -1659,7 +1659,7 @@ def _fusion_body(user, pairs, cap, filt: str) -> tuple[str, InlineKeyboardMarkup
         f"{get_emoji('lab')} <b>تالار ادغام</b>",
         f"⭐ سقف ستاره‌ی فعلی تو: <b>{cap}</b>",
         "<blockquote>🔗 دو هیولای <b>هم‌نام + هم‌نایابی + هم‌ستاره</b> → یکی یک ستاره بالاتر. "
-        "اول ۲تا ۱★ کن ۲★، بعد ۲تا ۲★ کن ۳★ … (۵★ = ۱۶ تا ۱★).</blockquote>",
+        "اول 2تا 1★ کن 2★، بعد 2تا 2★ کن 3★ … (5★ = 16 تا 1★).</blockquote>",
     ]
     # rarity tabs — only rarities that actually have a ready pair, plus «همه»
     present = [r for r in constants.RARITY_ORDER if any(p["rarity"] == r for p in pairs)]
@@ -1680,7 +1680,7 @@ def _fusion_body(user, pairs, cap, filt: str) -> tuple[str, InlineKeyboardMarkup
     elif not shown:
         lines.append("\n📭 توی این نایابی جفت آماده‌ای نیست — یه تبِ دیگه رو ببین.")
     else:
-        lines.append("\n✅ <b>جفت‌های آماده</b> (هرکدوم ۱۰۰٪ موفق):")
+        lines.append("\n✅ <b>جفت‌های آماده</b> (هرکدوم 100٪ موفق):")
         last_star = None
         for p in sorted(shown, key=lambda x: (x["star"], x["name"])):
             if p["star"] != last_star:
@@ -2678,7 +2678,7 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
     if action == "set_lab_name":
         if not text or len(text) > LAB_NAME_MAX_LEN:
             context.user_data[AWAITING_PLAYER_KEY] = awaiting
-            await message.reply_text(f"⚠️ اسم باید بین ۱ تا {LAB_NAME_MAX_LEN} کاراکتر باشه. دوباره بفرست:")
+            await message.reply_text(f"⚠️ اسم باید بین 1 تا {LAB_NAME_MAX_LEN} کاراکتر باشه. دوباره بفرست:")
             return
         try:
             user, creature, equipped_items = await run_db(_set_lab_name_sync, update.effective_user, text)
@@ -2704,7 +2704,7 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
     if action == "rename_lab":
         if not text or len(text) > LAB_NAME_MAX_LEN:
             context.user_data[AWAITING_PLAYER_KEY] = awaiting
-            await message.reply_text(f"⚠️ اسم باید بین ۱ تا {LAB_NAME_MAX_LEN} کاراکتر باشه. دوباره بفرست:")
+            await message.reply_text(f"⚠️ اسم باید بین 1 تا {LAB_NAME_MAX_LEN} کاراکتر باشه. دوباره بفرست:")
             return
         try:
             user, cost, _newname = await run_db(_rename_lab_sync, update.effective_user, text)
@@ -2839,7 +2839,7 @@ async def alliance_league_panel(update: Update, context: ContextTypes.DEFAULT_TY
     lines = [
         "🏰 <b>لیگ اتحادها</b>",
         "<blockquote>اتحادها بر اساس <b>قدرت کل اعضا</b> رتبه‌بندی می‌شن. آخر هر هفته، "
-        "۱۰ اتحاد برتر به <b>همه‌ی اعضاشون</b> جایزه می‌دن — هرچی رتبه بالاتر، جایزه بیشتر.</blockquote>",
+        "10 اتحاد برتر به <b>همه‌ی اعضاشون</b> جایزه می‌دن — هرچی رتبه بالاتر، جایزه بیشتر.</blockquote>",
         "",
     ]
     if not ranked:

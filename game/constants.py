@@ -811,7 +811,8 @@ SPEEDUP_PLAIN_LABELS = {
 
 
 def _fa_digits(n) -> str:
-    return str(n).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+    # numbers are shown with Latin (Western) digits everywhere in the bot
+    return str(n)
 
 
 def speedup_label(minutes: int) -> str:

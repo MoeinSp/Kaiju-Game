@@ -26,12 +26,12 @@ _VALID_CURRENCIES = ("coins", "diamonds")
 # reward-component format so a custom offer (a kaiju, equipment, a pack) uses the exact
 # same machinery.
 BUILTIN_OFFERS = [
-    {"key": "speedup30", "emoji": "⏱", "title": "کارت سرعت ۳۰ دقیقه", "cost": 800, "currency": "coins", "contents": [{"type": "speedup", "minutes": 30, "count": 1}]},
-    {"key": "speedup60", "emoji": "⏱", "title": "کارت سرعت ۱ ساعت", "cost": 1500, "currency": "coins", "contents": [{"type": "speedup", "minutes": 60, "count": 1}]},
-    {"key": "speedup720", "emoji": "⏱", "title": "کارت سرعت ۱۲ ساعت", "cost": 30, "currency": "diamonds", "contents": [{"type": "speedup", "minutes": 720, "count": 1}]},
-    {"key": "dna50", "emoji": "🧬", "title": "بسته‌ی ۵۰ DNA", "cost": 15, "currency": "diamonds", "contents": [{"type": "dna", "amount": 50}]},
-    {"key": "dna150", "emoji": "🧬", "title": "بسته‌ی ۱۵۰ DNA", "cost": 40, "currency": "diamonds", "contents": [{"type": "dna", "amount": 150}]},
-    {"key": "gold3000", "emoji": "💰", "title": "بسته‌ی ۳۰۰۰ طلا", "cost": 20, "currency": "diamonds", "contents": [{"type": "coins", "amount": 3000}]},
+    {"key": "speedup30", "emoji": "⏱", "title": "کارت سرعت 30 دقیقه", "cost": 800, "currency": "coins", "contents": [{"type": "speedup", "minutes": 30, "count": 1}]},
+    {"key": "speedup60", "emoji": "⏱", "title": "کارت سرعت 1 ساعت", "cost": 1500, "currency": "coins", "contents": [{"type": "speedup", "minutes": 60, "count": 1}]},
+    {"key": "speedup720", "emoji": "⏱", "title": "کارت سرعت 12 ساعت", "cost": 30, "currency": "diamonds", "contents": [{"type": "speedup", "minutes": 720, "count": 1}]},
+    {"key": "dna50", "emoji": "🧬", "title": "بسته‌ی 50 DNA", "cost": 15, "currency": "diamonds", "contents": [{"type": "dna", "amount": 50}]},
+    {"key": "dna150", "emoji": "🧬", "title": "بسته‌ی 150 DNA", "cost": 40, "currency": "diamonds", "contents": [{"type": "dna", "amount": 150}]},
+    {"key": "gold3000", "emoji": "💰", "title": "بسته‌ی 3000 طلا", "cost": 20, "currency": "diamonds", "contents": [{"type": "coins", "amount": 3000}]},
     {"key": "energy", "emoji": "⚡", "title": "شارژ کامل انرژی", "cost": 10, "currency": "diamonds", "contents": [{"type": "energy"}]},
 ]
 

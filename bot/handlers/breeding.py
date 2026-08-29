@@ -117,7 +117,7 @@ def _parent_a_render(candidates: list, filt: str = "all", page: int = 0) -> tupl
         "🕳 <b>غار هیولا — جفت بفرست</b>\n"
         "<blockquote>دو هیولای آزاد رو بفرست توی غار. اول جفت‌گیری می‌کنن، بعد یه <b>تخم</b> "
         "می‌ذارن و آزاد می‌شن؛ تخم جدا رشد می‌کنه تا سر باز کنه.\n"
-        "هرچی والدین <b>نایاب‌تر</b>، <b>زمان جفت‌گیری</b> خیلی بیشتر (اساطیری+اساطیری تا ۳۶ ساعت). "
+        "هرچی والدین <b>نایاب‌تر</b>، <b>زمان جفت‌گیری</b> خیلی بیشتر (اساطیری+اساطیری تا 36 ساعت). "
         "رده‌ی تخم از والدین بالاتر نمی‌ره؛ همنوع‌بودن شانس رسیدن به سقف رده رو بیشتر می‌کنه.</blockquote>\n"
         "\n<b>والد اول رو انتخاب کن:</b>  <i>(با تب نایابی جدا کن)</i>"
     )
@@ -220,37 +220,29 @@ def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
 
 
 def _cave_guide_text() -> str:
-    """A full, formatted rundown of the cave for every rarity level — shown from the
-    «راهنمای کامل غار» button on the cave home screen."""
-    def fa(n) -> str:
-        return str(n).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
-
+    """A short, formatted rundown of the cave — shown from the «راهنمای کامل غار»
+    button on the cave home screen. Numbers stay Latin (Western) digits throughout."""
     dot = {r: constants.RARITY_LABELS[r].split()[0] for r in constants.RARITY_ORDER}
     ro = constants.RARITY_ORDER
-    # a balanced representative pair for each index-sum 0..8
-    reps = {s: (min(s // 2, 4), min(s - s // 2, 4)) for s in range(9)}
-    time_lines = []
-    for s in range(9):
-        i, j = reps[s]
-        hours = constants.CAVE_MATING_HOURS_BY_RARITY_SUM[s]
-        time_lines.append(f"　{dot[ro[i]]}+{dot[ro[j]]} → <b>{fa(hours)} ساعت</b>")
-    dna_lines = " · ".join(f"{dot[r]} {fa(constants.BREEDING_DNA_COST[r])}" for r in ro)
+    lo = constants.CAVE_MATING_HOURS_BY_RARITY_SUM[0]
+    hi = constants.CAVE_MATING_HOURS_BY_RARITY_SUM[8]
+    dna_lines = " · ".join(f"{dot[r]} {constants.BREEDING_DNA_COST[r]}" for r in ro)
+    gem_rate = constants.DIAMOND_FINISH_PER_HOUR * constants.CAVE_FINISH_MULTIPLIER
     return (
-        f"📖 <b>راهنمای کامل غار هیولا</b>\n\n"
-        "🥚 دو هیولای <b>آزاد</b> رو می‌فرستی؛ اول جفت‌گیری می‌کنن (والدها بعدش آزاد می‌شن)، "
-        "بعد یه <b>تخم</b> می‌ذارن که جدا رشد می‌کنه تا سر باز کنه.\n\n"
-        "🎲 <b>رده‌ی تخم</b>\n"
-        "<blockquote>هیچ‌وقت از والدین بالاتر نمی‌ره (مثلاً دو افسانه‌ای، اساطیری نمی‌دن).\n"
-        "شانس رسیدن به <b>سقف رده</b>: همنوع (هم‌اسم) <b>۶۰٪</b> · غیرهمنوع <b>۳۰٪</b> — "
-        "وگرنه یه رده پایین‌تر می‌آد.</blockquote>\n\n"
-        "⏱ <b>زمان جفت‌گیری</b> <i>(والدها قفلن — فقط یه جفت همزمان؛ گلوگاه اصلی همینه)</i>\n"
-        + "\n".join(time_lines)
-        + "\n<i>　بعدش تخم خیلی سریع رشد می‌کنه (۱۰ دقیقه تا ۱ ساعت) و چند تا تخم می‌تونن با هم رشد کنن.</i>\n\n"
-        "🧬 <b>DNA لازم</b> <i>(بر اساس نایاب‌ترین والد)</i>\n"
+        "📖 <b>راهنمای غار هیولا</b>\n\n"
+        "🥚 دو هیولای <b>آزاد</b> می‌فرستی؛ جفت‌گیری می‌کنن (والدها آزاد می‌شن) و یه <b>تخم</b> "
+        "می‌ذارن که جدا رشد می‌کنه تا سر باز کنه.\n\n"
+        "🎲 <b>رده‌ی تخم:</b> هیچ‌وقت از والدین بالاتر نمی‌ره. شانس رسیدن به سقف رده: "
+        "همنوع (هم‌اسم) <b>60%</b> · غیرهمنوع <b>30%</b> — وگرنه یه رده پایین‌تر.\n\n"
+        f"⏱ <b>جفت‌گیری:</b> بسته به نایابی والدها بین <b>{lo}</b> تا <b>{hi}</b> ساعت "
+        "(فقط یه جفت همزمان — گلوگاه اصلی همینه). بعدش رشد تخم سریعه (10 دقیقه تا 1 ساعت) و "
+        "چند تخم با هم رشد می‌کنن.\n\n"
+        "🧬 <b>DNA لازم</b> <i>(بر اساس نایاب‌ترین والد):</i>\n"
         f"　{dna_lines}\n\n"
-        "💎 <b>فوری‌کردن</b>: از داخل غار، بر اساس <b>زمان مونده</b> (حدود ۶ الماس هر ساعت) — "
+        f"💎 <b>فوری‌کردن:</b> بر اساس زمان مونده، حدود <b>{gem_rate}</b> الماس هر ساعت — "
         "هرچی به آخرش نزدیک‌تر، ارزون‌تر.\n"
-        "⭐ نوزاد نصفِ میانگین لِوِل والدین رو به ارث می‌بره و همیشه ۱⭐ به دنیا می‌آد."
+        "🐣 <b>نوزاد چیزی به ارث نمی‌بره:</b> همیشه سطح 1 و 1⭐ به دنیا می‌آد و باید از صفر بزرگش کنی؛ "
+        "فقط گونه و رده‌اش از والدهاست."
     )
 
 
@@ -409,7 +401,7 @@ async def breeding_info_callback(update: Update, context: ContextTypes.DEFAULT_T
             msg = (
                 f"🎲 شانس رده\n\n"
                 f"{top} : {pct}٪\n{fb} : {100 - pct}٪\n\n"
-                f"همنوع بودن ⇒ ۶۰٪ · غیرهمنوع ⇒ ۳۰٪.\n"
+                f"همنوع بودن ⇒ 60٪ · غیرهمنوع ⇒ 30٪.\n"
                 "رده هیچ‌وقت از والدین بالاتر نمی‌ره (مثلاً دو افسانه‌ای، اساطیری نمی‌دن)."
             )
     else:  # time
@@ -417,7 +409,7 @@ async def breeding_info_callback(update: Update, context: ContextTypes.DEFAULT_T
             f"⏱ زمان‌ها\n\n"
             f"جفت‌گیری (والدها قفل): {_format_remaining(info['mating_minutes'] * 60)}\n"
             f"رشد تخم (سریع): {_format_remaining(info['hatch_minutes'] * 60)}\n\n"
-            "زمان جفت‌گیری گلوگاه اصلیه — اساطیری+اساطیری ۳۶ ساعت، اساطیری+افسانه‌ای ۲۸ ساعت.\n"
+            "زمان جفت‌گیری گلوگاه اصلیه — اساطیری+اساطیری 36 ساعت، اساطیری+افسانه‌ای 28 ساعت.\n"
             "می‌تونی بعد از فرستادن، از داخل غار با الماس فوری‌ش کنی (بر اساس زمان مونده)."
         )
     await query.answer(msg, show_alert=True)

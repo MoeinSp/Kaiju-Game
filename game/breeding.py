@@ -172,7 +172,10 @@ def _lay_egg_from(user: User, job: BreedingJob) -> Egg:
         parent_a_element=parent_a.element,
         parent_b_name=parent_b.name,
         parent_b_element=parent_b.element,
-        inherit_level=max(1, round((parent_a.level + parent_b.level) / 2 * constants.BREEDING_LEVEL_INHERIT)),
+        # the newborn inherits NOTHING from its parents' training — it hatches at level
+        # 1 and must be raised from scratch, like any fresh creature (only its species/
+        # element and the bred rarity come from the parents, which IS the cave mechanic).
+        inherit_level=1,
         finishes_at=timezone.now() + datetime.timedelta(minutes=hatch_minutes(parent_a, parent_b)),
     )
     job.delete()  # frees both parents — the cave is open again

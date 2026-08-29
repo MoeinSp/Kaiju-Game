@@ -31,8 +31,8 @@ class TransferFundsError(GameError):
 
 
 def _fa(n: int) -> str:
-    """Latin → Persian digits, so numbers sit cleanly in the right-to-left text."""
-    return str(n).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+    """Numbers are shown with Latin (Western) digits everywhere in the bot."""
+    return str(n)
 
 
 def creature_prices_text() -> str:
