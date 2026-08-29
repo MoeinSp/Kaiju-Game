@@ -78,7 +78,9 @@ def refill_energy(user: User) -> dict:
         sync_energy(user)
         if user.energy >= constants.MAX_ENERGY:
             raise GameError("انرژیت پره، نیازی به شارژ نیست.")
-        cost = constants.ENERGY_REFILL_DIAMOND_COST
+        from game import botconfig
+
+        cost = botconfig.get_energy_refill_cost()
         if user.diamonds < cost:
             raise GameError(f"الماس کافی نداری! شارژ کامل انرژی {cost} الماس می‌خواد.")
         user.diamonds -= cost

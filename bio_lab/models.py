@@ -847,7 +847,27 @@ class BotConfig(models.Model):
     backup_last_at = models.DateTimeField(null=True, blank=True)  # last auto-backup sent
     # where auto-backups are sent; null = the owner's own DM (the default)
     backup_chat_id = models.BigIntegerField(null=True, blank=True)
+    # diamonds charged for an instant full energy refill (the «شارژ انرژی» button).
+    # Owner-tunable from the admin panel; read through the game.botconfig cache because
+    # the refill button is built inside async handler code.
+    energy_refill_diamonds = models.IntegerField(default=25)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:
         return f"group={self.group_game_url or '—'}"
+
+
+class DailyShopOffer(models.Model):
+    """Owner-editable pricing/availability for one rotating daily-shop offer. There's
+    one row per game.shop POOL key — the offer's contents/title/emoji stay defined in
+    code (keyed by `key`), and the owner only tunes price / currency / on-off from the
+    admin panel. Rows are seeded lazily from the code defaults on first read."""
+
+    key = models.CharField(max_length=32, unique=True)
+    cost = models.IntegerField(default=0)
+    currency = models.CharField(max_length=12, default="coins")  # "coins" | "diamonds"
+    is_active = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"{self.key}: {self.cost} {self.currency}{'' if self.is_active else ' (off)'}"

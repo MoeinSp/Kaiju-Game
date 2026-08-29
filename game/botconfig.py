@@ -12,9 +12,14 @@ from __future__ import annotations
 from bio_lab.models import BotConfig
 
 DEFAULT_GROUP_TITLE = "🎮 ورود به گروه بازی"
+DEFAULT_ENERGY_REFILL_DIAMONDS = 25
 
-# Starts as "no group configured"; never lazily populated on read.
-_cache: dict[str, str] = {"group_game_url": "", "group_game_title": ""}
+# Starts at defaults; never lazily populated on read.
+_cache: dict[str, object] = {
+    "group_game_url": "",
+    "group_game_title": "",
+    "energy_refill_diamonds": DEFAULT_ENERGY_REFILL_DIAMONDS,
+}
 
 
 def refresh_cache() -> None:
@@ -22,12 +27,29 @@ def refresh_cache() -> None:
     global _cache
     row = BotConfig.objects.filter(id=1).first()
     if row is None:
-        _cache = {"group_game_url": "", "group_game_title": ""}
+        _cache = {
+            "group_game_url": "",
+            "group_game_title": "",
+            "energy_refill_diamonds": DEFAULT_ENERGY_REFILL_DIAMONDS,
+        }
     else:
         _cache = {
             "group_game_url": row.group_game_url or "",
             "group_game_title": row.group_game_title or "",
+            "energy_refill_diamonds": row.energy_refill_diamonds or DEFAULT_ENERGY_REFILL_DIAMONDS,
         }
+
+
+def get_energy_refill_cost() -> int:
+    """Diamonds for an instant full energy refill. Pure in-memory read — safe from
+    async handler code (the refill button is built there)."""
+    val = _cache.get("energy_refill_diamonds") or DEFAULT_ENERGY_REFILL_DIAMONDS
+    return int(val)
+
+
+def set_energy_refill_cost(diamonds: int) -> None:
+    BotConfig.objects.update_or_create(id=1, defaults={"energy_refill_diamonds": max(1, int(diamonds))})
+    refresh_cache()
 
 
 def get_group_link() -> tuple[str, str] | None:

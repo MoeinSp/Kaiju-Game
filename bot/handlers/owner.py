@@ -287,6 +287,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             ],
             [btn("🕵 چیت‌یاب (جایزه‌گیرهای مشکوک)", style=DANGER, callback_data="admin_menu:cheat")],
             [btn("🛍 مدیریت فروشگاه (آیتم/پک)", style=ADMIN, callback_data="admin_menu:itemshop")],
+            [btn("🛒 مدیریت شاپ روزانه (قیمت‌ها)", style=ADMIN, callback_data="admin_menu:dailyshop")],
             [
                 btn("🎁 هدیه به همه", style=ADMIN, callback_data="admin_menu:gift_all"),
                 btn("ارسال همگانی", emoji_key="btn_broadcast", style=ADMIN, callback_data="admin_menu:broadcast_start"),
@@ -2159,6 +2160,94 @@ async def admin_unban_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 
+# ── daily-shop pricing admin ─────────────────────────────────────────────────
+def _dailyshop_sync():
+    from game import botconfig, shop
+
+    return shop.admin_offer_list(), botconfig.get_energy_refill_cost()
+
+
+def _dailyshop_render(offers, energy_cost) -> tuple[str, InlineKeyboardMarkup]:
+    lines = [
+        "🛒 <b>مدیریت شاپ روزانه</b>",
+        "<blockquote>قیمت و روشن/خاموش‌بودن هر آفرِ شاپ روزانه رو اینجا تنظیم کن. "
+        "محتوای هر آفر (چیزی که می‌ده) ثابته؛ فقط قیمت/ارز و فعال‌بودنش قابل تغییره.</blockquote>",
+        "",
+        f"⚡ <b>هزینه شارژ کامل انرژی:</b> {energy_cost} 💎",
+        "",
+    ]
+    rows = [[btn(f"⚡ تغییر هزینه شارژ انرژی ({energy_cost} 💎)", style=PRIMARY, callback_data="dshop:energy")]]
+    for o in offers:
+        cur = "💎" if o["currency"] == "diamonds" else "طلا"
+        state = "🟢" if o["is_active"] else "🔴"
+        lines.append(f"{state} {o['emoji']} <b>{o['title']}</b> — {o['cost']:,} {cur}")
+        rows.append([
+            btn(f"✏️ قیمت {o['title']}", style=ADMIN, callback_data=f"dshop:edit:{o['key']}"),
+            btn("🔴 خاموش" if o["is_active"] else "🟢 روشن", style=(DANGER if o["is_active"] else CONFIRM),
+                callback_data=f"dshop:toggle:{o['key']}"),
+        ])
+    rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+async def dailyshop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update):
+        return
+    offers, energy_cost = await run_db(_dailyshop_sync)
+    text, keyboard = _dailyshop_render(offers, energy_cost)
+    # works whether we arrived via a callback (edit) or a fresh message
+    if update.callback_query is not None:
+        await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=keyboard)
+    else:
+        await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def dailyshop_builder_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    parts = query.data.split(":")
+    verb = parts[1]
+    if verb == "energy":
+        context.user_data[AWAITING_ADMIN_KEY] = {"action": "energy_cost"}
+        await query.answer()
+        await query.message.reply_text(
+            "⚡ هزینه‌ی جدید شارژ کامل انرژی رو به <b>الماس</b> بفرست (فقط عدد، مثلاً <code>25</code>):",
+            parse_mode="HTML",
+        )
+        return
+    if verb == "toggle":
+        from game import shop
+
+        try:
+            await run_db(shop.toggle_offer, parts[2])
+        except GameError as exc:
+            await query.answer(str(exc), show_alert=True)
+            return
+        offers, energy_cost = await run_db(_dailyshop_sync)
+        await query.answer("وضعیت آفر عوض شد.")
+        text, keyboard = _dailyshop_render(offers, energy_cost)
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        return
+    if verb == "edit":
+        from game import shop
+
+        key = parts[2]
+        base = shop.POOL_DEFAULTS_BY_KEY.get(key)
+        if base is None:
+            await query.answer("این آفر وجود نداره.", show_alert=True)
+            return
+        context.user_data[AWAITING_ADMIN_KEY] = {"action": "dshop_price", "key": key}
+        await query.answer()
+        await query.message.reply_text(
+            f"💰 قیمت جدید «{base['title']}» رو بفرست، مثل <code>800 سکه</code> یا <code>30 جم</code>:",
+            parse_mode="HTML",
+        )
+        return
+    await query.answer()
+
+
 async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     awaiting = context.user_data.pop(AWAITING_ADMIN_KEY, None)
     if awaiting is None:
@@ -2424,6 +2513,43 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         await _ish_show_home(update, context, edit=False)
         return
 
+    if action == "dshop_price":
+        from game import itemshop, shop
+
+        try:
+            coins, diamonds = itemshop.parse_price_line(text)
+        except GameError as exc:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text(f"⚠️ {exc}")
+            return
+        # a daily offer has a single currency: whichever unit was given wins
+        if diamonds > 0:
+            cost, currency = diamonds, "diamonds"
+        else:
+            cost, currency = coins, "coins"
+        await run_db(shop.set_offer_price, awaiting["key"], cost, currency)
+        offers, energy_cost = await run_db(_dailyshop_sync)
+        text_out, keyboard = _dailyshop_render(offers, energy_cost)
+        await message.reply_text("✅ قیمت آفر به‌روز شد.\n\n" + text_out, parse_mode="HTML", reply_markup=keyboard)
+        return
+
+    if action == "energy_cost":
+        from game import botconfig
+
+        digits = text.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
+        if not digits.isdigit() or int(digits) <= 0:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text("⚠️ یه عدد مثبت (الماس) بفرست، مثلاً <code>25</code>.", parse_mode="HTML")
+            return
+        await run_db(botconfig.set_energy_refill_cost, int(digits))
+        offers, energy_cost = await run_db(_dailyshop_sync)
+        text_out, keyboard = _dailyshop_render(offers, energy_cost)
+        await message.reply_text(
+            f"✅ هزینه شارژ انرژی شد <b>{energy_cost}</b> 💎.\n\n" + text_out,
+            parse_mode="HTML", reply_markup=keyboard,
+        )
+        return
+
     if action == "ish_amount":
         digits = text.strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
         if not digits.isdigit() or int(digits) <= 0:
@@ -2608,6 +2734,7 @@ _ADMIN_MENU_ACTIONS.update(
         "autobackup": autobackup_panel,
         "cheat": cheat_panel,
         "itemshop": itemshop_manage_panel,
+        "dailyshop": dailyshop_panel,
     }
 )
 
@@ -2634,6 +2761,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(user_open_callback, pattern=r"^admin_uinfo:\d+$"))
     application.add_handler(CallbackQueryHandler(dm_user_start, pattern=r"^admin_dm:\d+$"))
     application.add_handler(CallbackQueryHandler(admin_remove_callback, pattern=r"^admin_rm:\d+$"))
+    application.add_handler(CallbackQueryHandler(dailyshop_builder_callback, pattern=r"^dshop:"))
     application.add_handler(CallbackQueryHandler(itemshop_add_start, pattern=r"^sitem_add$"))
     application.add_handler(CallbackQueryHandler(itemshop_builder_callback, pattern=r"^ish:"))
     application.add_handler(CallbackQueryHandler(itemshop_toggle_callback, pattern=r"^sitem_toggle:\d+$"))

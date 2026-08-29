@@ -1,7 +1,7 @@
 from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes
 
-from game import constants
+from game import botconfig, constants
 from game.emoji import get_emoji
 
 
@@ -76,7 +76,7 @@ def _build_help_text() -> str:
         f"{constants.TRANSFER_COOLDOWN_HOURS} ساعت کول‌داون.</blockquote>\n\n"
         f"{get_emoji('energy')} <b>انرژی:</b> شکار، آرنا و حمله به رید انرژی مصرف می‌کنن. "
         f"هر {constants.ENERGY_REGEN_MINUTES} دقیقه یه واحد شارژ می‌شه (سقف {constants.MAX_ENERGY} تا)؛ "
-        f"یا با {constants.ENERGY_REFILL_DIAMOND_COST} الماس فوری پرش کن.\n\n"
+        f"یا با {botconfig.get_energy_refill_cost()} الماس فوری پرش کن.\n\n"
         "برای شروع، برو پیوی بات و /start رو بزن 🚀"
     )
 

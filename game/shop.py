@@ -18,8 +18,11 @@ from game.creature import GameError
 FEATURED_DISCOUNT = 0.25  # the day's featured offer is this much off
 OFFERS_PER_DAY = 4
 
-# pool of everything the shop can offer; today's selection rotates through it
-POOL = [
+# The canonical offer definitions: title / emoji / grant, plus the DEFAULT price and
+# currency. What each offer GRANTS is fixed in code (so the admin panel can't create a
+# broken grant); the owner tunes only price / currency / on-off, stored per-key in the
+# DailyShopOffer table (see _effective_pool below).
+POOL_DEFAULTS = [
     {"key": "speedup30", "emoji": "⏱", "title": "کارت سرعت ۳۰ دقیقه", "cost": 800, "currency": "coins", "grant": {"speedup": 30}},
     {"key": "speedup60", "emoji": "⏱", "title": "کارت سرعت ۱ ساعت", "cost": 1500, "currency": "coins", "grant": {"speedup": 60}},
     {"key": "speedup720", "emoji": "⏱", "title": "کارت سرعت ۱۲ ساعت", "cost": 30, "currency": "diamonds", "grant": {"speedup": 720}},
@@ -28,7 +31,34 @@ POOL = [
     {"key": "gold3000", "emoji": "💰", "title": "بسته‌ی ۳۰۰۰ طلا", "cost": 20, "currency": "diamonds", "grant": {"coins": 3000}},
     {"key": "energy", "emoji": "⚡", "title": "شارژ کامل انرژی", "cost": 10, "currency": "diamonds", "grant": {"energy": "full"}},
 ]
-POOL_BY_KEY = {o["key"]: o for o in POOL}
+POOL_DEFAULTS_BY_KEY = {o["key"]: o for o in POOL_DEFAULTS}
+# back-compat alias for any old import site
+POOL = POOL_DEFAULTS
+POOL_BY_KEY = POOL_DEFAULTS_BY_KEY
+
+_VALID_CURRENCIES = ("coins", "diamonds")
+
+
+def _effective_pool(include_inactive: bool = False) -> list[dict]:
+    """Every offer merged with its owner override (price / currency / on-off) from the
+    DailyShopOffer table. Sync-only (the shop panel/buy run in run_db). Missing rows
+    are seeded from the code defaults so the admin panel always shows the full list."""
+    from bio_lab.models import DailyShopOffer
+
+    rows = {r.key: r for r in DailyShopOffer.objects.all()}
+    out = []
+    for base in POOL_DEFAULTS:
+        row = rows.get(base["key"])
+        if row is None:
+            # seed a row from the default the first time we see this key
+            row = DailyShopOffer.objects.create(
+                key=base["key"], cost=base["cost"], currency=base["currency"], is_active=True
+            )
+        currency = row.currency if row.currency in _VALID_CURRENCIES else base["currency"]
+        merged = {**base, "cost": max(0, row.cost), "currency": currency, "is_active": row.is_active}
+        if include_inactive or row.is_active:
+            out.append(merged)
+    return out
 
 
 def _day() -> int:
@@ -42,15 +72,57 @@ def _price(offer: dict, featured: bool) -> int:
 
 
 def today_offers() -> list[dict]:
-    """The rotating selection for today; the first entry is the featured deal."""
+    """The rotating selection for today; the first entry is the featured deal. Rotates
+    over only the ACTIVE offers, so an owner-disabled offer never shows or sells."""
+    pool = _effective_pool()
+    if not pool:
+        return []
     day = _day()
-    n = len(POOL)
-    picks = [POOL[(day + i) % n] for i in range(OFFERS_PER_DAY)]
+    n = len(pool)
+    count = min(OFFERS_PER_DAY, n)
+    picks = [pool[(day + i) % n] for i in range(count)]
     out = []
     for i, o in enumerate(picks):
         featured = i == 0
         out.append({**o, "featured": featured, "price": _price(o, featured)})
     return out
+
+
+# ── owner admin: tune daily-shop pricing ─────────────────────────────────────
+def admin_offer_list() -> list[dict]:
+    """Every offer (active or not) with its current price/currency, for the panel."""
+    return _effective_pool(include_inactive=True)
+
+
+def set_offer_price(key: str, cost: int, currency: str | None = None) -> None:
+    from bio_lab.models import DailyShopOffer
+
+    base = POOL_DEFAULTS_BY_KEY.get(key)
+    if base is None:
+        raise GameError("این آفر وجود نداره.")
+    row, _ = DailyShopOffer.objects.get_or_create(
+        key=key, defaults={"cost": base["cost"], "currency": base["currency"], "is_active": True}
+    )
+    row.cost = max(0, int(cost))
+    fields = ["cost"]
+    if currency in _VALID_CURRENCIES:
+        row.currency = currency
+        fields.append("currency")
+    row.save(update_fields=fields)
+
+
+def toggle_offer(key: str) -> bool:
+    from bio_lab.models import DailyShopOffer
+
+    base = POOL_DEFAULTS_BY_KEY.get(key)
+    if base is None:
+        raise GameError("این آفر وجود نداره.")
+    row, _ = DailyShopOffer.objects.get_or_create(
+        key=key, defaults={"cost": base["cost"], "currency": base["currency"], "is_active": True}
+    )
+    row.is_active = not row.is_active
+    row.save(update_fields=["is_active"])
+    return row.is_active
 
 
 def _balance(user: User, currency: str) -> int:

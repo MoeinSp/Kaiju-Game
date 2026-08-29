@@ -20,8 +20,10 @@ def energy_refill_button(owner_id: int) -> InlineKeyboardButton:
     `owner_id` is the telegram id of the player the message is for, embedded in the
     callback so that in a GROUP nobody else can tap it and spend *their own* diamonds
     on a prompt that was never shown to them (that was a real cross-player bug)."""
+    from game import botconfig
+
     return InlineKeyboardButton(
-        f"⚡ شارژ کامل انرژی ({constants.ENERGY_REFILL_DIAMOND_COST} 💎)",
+        f"⚡ شارژ کامل انرژی ({botconfig.get_energy_refill_cost()} 💎)",
         callback_data=f"enr:ask:{owner_id}",
     )
 
@@ -58,16 +60,19 @@ async def energy_ask_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.answer("این دکمه مال تو نیست 🙂", show_alert=True)
         return
     owner_id = parts[2] if len(parts) > 2 else query.from_user.id
+    from game import botconfig
+
+    cost = botconfig.get_energy_refill_cost()
     await query.answer()
     keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton(f"✅ بله ({constants.ENERGY_REFILL_DIAMOND_COST} 💎)",
+        InlineKeyboardButton(f"✅ بله ({cost} 💎)",
                              callback_data=f"enr:do:{owner_id}"),
         InlineKeyboardButton("❌ بی‌خیال", callback_data=f"enr:no:{owner_id}"),
     ]])
     await safe_edit_message_text(
         query,
         f"⚡ <b>شارژ کامل انرژی</b>\n\nانرژیت به <b>{constants.MAX_ENERGY}</b> پر می‌شه و "
-        f"<b>{constants.ENERGY_REFILL_DIAMOND_COST}</b> الماس ازت کم می‌شه. تأیید می‌کنی؟",
+        f"<b>{cost}</b> الماس ازت کم می‌شه. تأیید می‌کنی؟",
         parse_mode="HTML", reply_markup=keyboard,
     )
 
