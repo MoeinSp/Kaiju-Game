@@ -10,7 +10,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import User
 from bio_lab.repository import display_name
-from bot.buttons import ADMIN, CONFIRM, DANGER, LIST, NAV, PRIMARY, back_btn, btn
+from bot.buttons import ADMIN, CONFIRM, DANGER, LIST, NAV, PRIMARY, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text
 from game.button_emoji import (
     BUTTON_CATEGORY_LABELS,
@@ -2160,32 +2160,33 @@ async def admin_unban_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 
-# ── daily-shop pricing admin ─────────────────────────────────────────────────
-def _dailyshop_sync():
+# ── daily-shop admin: per-day scheduling with inline price buttons ────────────
+_DSHOP_DRAFT = "dshop_draft"
+
+
+def _dshop_home_sync():
     from game import botconfig, shop
 
-    return shop.admin_offer_list(), botconfig.get_energy_refill_cost()
+    days = []
+    for offset in range(shop.DAILY_CYCLE):
+        slot = shop.slot_for_offset(offset)
+        days.append({"offset": offset, "slot": slot, "label": shop.DAY_LABELS[offset],
+                     "configured": shop.day_is_configured(slot)})
+    return days, botconfig.get_energy_refill_cost()
 
 
-def _dailyshop_render(offers, energy_cost) -> tuple[str, InlineKeyboardMarkup]:
+def _dshop_home_render(days, energy_cost) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
         "🛒 <b>مدیریت شاپ روزانه</b>",
-        "<blockquote>قیمت و روشن/خاموش‌بودن هر آفرِ شاپ روزانه رو اینجا تنظیم کن. "
-        "محتوای هر آفر (چیزی که می‌ده) ثابته؛ فقط قیمت/ارز و فعال‌بودنش قابل تغییره.</blockquote>",
+        "<blockquote>شاپ رو برای <b>امروز، فردا و پس‌فردا</b> جدا تنظیم کن. برنامه هر ۳ روز "
+        "تکرار می‌شه؛ روزی که تنظیم نکنی، همون چیزی که ۳ روز قبل بود می‌مونه.</blockquote>",
         "",
         f"⚡ <b>هزینه شارژ کامل انرژی:</b> {energy_cost} 💎",
-        "",
     ]
     rows = [[btn(f"⚡ تغییر هزینه شارژ انرژی ({energy_cost} 💎)", style=PRIMARY, callback_data="dshop:energy")]]
-    for o in offers:
-        cur = "💎" if o["currency"] == "diamonds" else "طلا"
-        state = "🟢" if o["is_active"] else "🔴"
-        lines.append(f"{state} {o['emoji']} <b>{o['title']}</b> — {o['cost']:,} {cur}")
-        rows.append([
-            btn(f"✏️ قیمت {o['title']}", style=ADMIN, callback_data=f"dshop:edit:{o['key']}"),
-            btn("🔴 خاموش" if o["is_active"] else "🟢 روشن", style=(DANGER if o["is_active"] else CONFIRM),
-                callback_data=f"dshop:toggle:{o['key']}"),
-        ])
+    for d in days:
+        tag = "✅ تنظیم‌شده" if d["configured"] else "⚪️ پیش‌فرض (چرخشی)"
+        rows.append([btn(f"🗓 {d['label']} — {tag}", style=ADMIN, callback_data=f"dshop:day:{d['offset']}")])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -2193,13 +2194,114 @@ def _dailyshop_render(offers, energy_cost) -> tuple[str, InlineKeyboardMarkup]:
 async def dailyshop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_admin(update):
         return
-    offers, energy_cost = await run_db(_dailyshop_sync)
-    text, keyboard = _dailyshop_render(offers, energy_cost)
-    # works whether we arrived via a callback (edit) or a fresh message
+    context.user_data.pop(_DSHOP_DRAFT, None)
+    days, energy_cost = await run_db(_dshop_home_sync)
+    text, keyboard = _dshop_home_render(days, energy_cost)
     if update.callback_query is not None:
         await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=keyboard)
     else:
         await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _cur_glyph(currency: str) -> str:
+    return "💎" if currency == "diamonds" else "🪙"
+
+
+def _limit_label(n: int) -> str:
+    return {1: "۱ بار/روز", 2: "۲ بار/روز"}.get(int(n or 0), "نامحدود")
+
+
+def _limit_tag(n: int) -> str:
+    return {1: "🛒۱", 2: "🛒۲"}.get(int(n or 0), "🛒∞")
+
+
+def _dshop_draft(context) -> dict | None:
+    return context.user_data.get(_DSHOP_DRAFT)
+
+
+def _dshop_day_render(draft: dict) -> tuple[str, InlineKeyboardMarkup]:
+    """Screen A — the day editor: every offer as a row (price button + on/off), plus
+    confirm / cancel at the bottom. Each price button shows the offer's live price."""
+    from game import shop
+
+    label = shop.DAY_LABELS.get(draft["offset"], "")
+    active_n = sum(1 for s in draft["states"] if s["active"])
+    lines = [
+        f"🗓 <b>تنظیم شاپ {label}</b>",
+        f"<blockquote>روی قیمتِ هر آفر بزن تا عوضش کنی، و با 🟢/🔴 روشن/خاموشش کن. "
+        f"الان <b>{active_n}</b> آفر فعاله. آخرش «تأیید» رو بزن تا ذخیره شه.</blockquote>",
+    ]
+    rows = []
+    for s in draft["states"]:
+        cur = _cur_glyph(s["currency"])
+        lim = _limit_tag(s.get("limit", 0))
+        rows.append([
+            btn(f"{s['emoji']} {s['title']}: {s['cost']:,} {cur} · {lim}", style=(ADMIN if s["active"] else NAV),
+                callback_data=f"dshop:pp:{s['key']}"),
+            btn("🟢" if s["active"] else "🔴", style=(CONFIRM if s["active"] else DANGER),
+                callback_data=f"dshop:tog:{s['key']}"),
+        ])
+    rows.append([
+        btn("✅ تأیید و ذخیره", style=CONFIRM, callback_data="dshop:save"),
+        btn("❌ لغو", style=DANGER, callback_data="dshop:cancel"),
+    ])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _dshop_price_render(draft: dict, key: str) -> tuple[str, InlineKeyboardMarkup]:
+    """Screen B — the inline price picker for one offer: preset amounts for the current
+    currency, a currency switch, a custom option, and back to the day editor."""
+    from game import shop
+
+    s = next((x for x in draft["states"] if x["key"] == key), None)
+    if s is None:
+        return _dshop_day_render(draft)
+    cur = _cur_glyph(s["currency"])
+    presets = shop.DIAMOND_PRICE_PRESETS if s["currency"] == "diamonds" else shop.COIN_PRICE_PRESETS
+    cur_limit = int(s.get("limit", 0) or 0)
+    lines = [
+        f"💰 <b>قیمت «{s['title']}»</b>",
+        f"<blockquote>قیمت فعلی: <b>{s['cost']:,}</b> {cur}\n"
+        f"سقف خرید فعلی: <b>{_limit_label(cur_limit)}</b>\n"
+        "یکی از قیمت‌های زیر رو بزن یا دلخواه بده:</blockquote>",
+    ]
+    rows = []
+    row = []
+    for v in presets:
+        row.append(btn(f"{cur} {v:,}", style=ADMIN, callback_data=f"dshop:sp:{key}:{s['currency']}:{v}"))
+        if len(row) == 2:
+            rows.append(row); row = []
+    if row:
+        rows.append(row)
+    other = "coins" if s["currency"] == "diamonds" else "diamonds"
+    rows.append([btn(f"🔁 تبدیل به {'طلا' if other == 'coins' else 'الماس'}", style=SHOP,
+                     callback_data=f"dshop:sc:{key}:{other}")])
+    rows.append([btn("🔢 قیمت دلخواه", style=NAV, callback_data=f"dshop:cx:{key}")])
+    # per-day purchase limit: 1 / 2 / unlimited (the active one is marked)
+    def _lim_btn(n, label):
+        mark = "✅ " if cur_limit == n else ""
+        return btn(f"{mark}{label}", style=(CONFIRM if cur_limit == n else NAV),
+                   callback_data=f"dshop:lim:{key}:{n}")
+    lines.append("\n🛒 <b>تعداد قابل خرید (در روز):</b>")
+    rows.append([_lim_btn(1, "۱ بار"), _lim_btn(2, "۲ بار"), _lim_btn(0, "بی‌نهایت")])
+    rows.append([btn("↩️ بازگشت به آفرها", style=NAV, callback_data="dshop:back")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+async def _dshop_show_day(query, context) -> None:
+    draft = _dshop_draft(context)
+    if draft is None:
+        await dailyshop_panel_from_query(query, context)
+        return
+    text, keyboard = _dshop_day_render(draft)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def dailyshop_panel_from_query(query, context) -> None:
+    context.user_data.pop(_DSHOP_DRAFT, None)
+    days, energy_cost = await run_db(_dshop_home_sync)
+    text, keyboard = _dshop_home_render(days, energy_cost)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def dailyshop_builder_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2207,8 +2309,11 @@ async def dailyshop_builder_callback(update: Update, context: ContextTypes.DEFAU
     if not _is_admin(update):
         await query.answer()
         return
+    from game import shop
+
     parts = query.data.split(":")
     verb = parts[1]
+
     if verb == "energy":
         context.user_data[AWAITING_ADMIN_KEY] = {"action": "energy_cost"}
         await query.answer()
@@ -2217,34 +2322,99 @@ async def dailyshop_builder_callback(update: Update, context: ContextTypes.DEFAU
             parse_mode="HTML",
         )
         return
-    if verb == "toggle":
-        from game import shop
 
-        try:
-            await run_db(shop.toggle_offer, parts[2])
-        except GameError as exc:
-            await query.answer(str(exc), show_alert=True)
-            return
-        offers, energy_cost = await run_db(_dailyshop_sync)
-        await query.answer("وضعیت آفر عوض شد.")
-        text, keyboard = _dailyshop_render(offers, energy_cost)
+    if verb == "day":
+        offset = int(parts[2])
+        slot = shop.slot_for_offset(offset)
+        states = await run_db(shop.day_offer_states, slot)
+        context.user_data[_DSHOP_DRAFT] = {"offset": offset, "slot": slot, "states": states}
+        await query.answer()
+        await _dshop_show_day(query, context)
+        return
+
+    if verb == "cancel":
+        await query.answer("لغو شد.")
+        await dailyshop_panel_from_query(query, context)
+        return
+
+    if verb == "back":
+        await query.answer()
+        await _dshop_show_day(query, context)
+        return
+
+    # everything below needs an active draft
+    draft = _dshop_draft(context)
+    if draft is None:
+        await query.answer("جلسه‌ی ویرایش منقضی شده، دوباره باز کن.", show_alert=True)
+        await dailyshop_panel_from_query(query, context)
+        return
+
+    if verb == "tog":
+        for s in draft["states"]:
+            if s["key"] == parts[2]:
+                s["active"] = not s["active"]
+                break
+        await query.answer()
+        await _dshop_show_day(query, context)
+        return
+
+    if verb == "pp":  # open the price picker for one offer
+        await query.answer()
+        text, keyboard = _dshop_price_render(draft, parts[2])
         await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
         return
-    if verb == "edit":
-        from game import shop
 
-        key = parts[2]
-        base = shop.POOL_DEFAULTS_BY_KEY.get(key)
-        if base is None:
-            await query.answer("این آفر وجود نداره.", show_alert=True)
-            return
-        context.user_data[AWAITING_ADMIN_KEY] = {"action": "dshop_price", "key": key}
+    if verb == "sc":  # switch an offer's currency (then re-show presets)
+        key, currency = parts[2], parts[3]
+        for s in draft["states"]:
+            if s["key"] == key:
+                s["currency"] = currency
+                break
+        await query.answer()
+        text, keyboard = _dshop_price_render(draft, key)
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        return
+
+    if verb == "sp":  # set an offer's price from a preset
+        key, currency, amount = parts[2], parts[3], int(parts[4])
+        for s in draft["states"]:
+            if s["key"] == key:
+                s["currency"] = currency
+                s["cost"] = max(0, amount)
+                s["active"] = True  # setting a price implies it's on
+                break
+        await query.answer("قیمت ثبت شد.")
+        await _dshop_show_day(query, context)
+        return
+
+    if verb == "lim":  # set an offer's per-day purchase limit (0 = unlimited)
+        key, n = parts[2], int(parts[3])
+        for s in draft["states"]:
+            if s["key"] == key:
+                s["limit"] = max(0, n)
+                s["active"] = True
+                break
+        await query.answer("سقف خرید ثبت شد.")
+        text, keyboard = _dshop_price_render(draft, key)
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        return
+
+    if verb == "cx":  # ask for a custom price via text
+        context.user_data[AWAITING_ADMIN_KEY] = {"action": "dshop_custom", "key": parts[2]}
         await query.answer()
         await query.message.reply_text(
-            f"💰 قیمت جدید «{base['title']}» رو بفرست، مثل <code>800 سکه</code> یا <code>30 جم</code>:",
+            "🔢 قیمت دلخواه رو بفرست، مثل <code>30 جم</code> یا <code>1000 سکه</code>:",
             parse_mode="HTML",
         )
         return
+
+    if verb == "save":
+        await run_db(shop.save_day, draft["slot"], draft["states"])
+        context.user_data.pop(_DSHOP_DRAFT, None)
+        await query.answer("✅ ذخیره شد!", show_alert=True)
+        await dailyshop_panel_from_query(query, context)
+        return
+
     await query.answer()
 
 
@@ -2513,24 +2683,26 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         await _ish_show_home(update, context, edit=False)
         return
 
-    if action == "dshop_price":
-        from game import itemshop, shop
+    if action == "dshop_custom":
+        from game import itemshop
 
+        draft = context.user_data.get(_DSHOP_DRAFT)
+        if draft is None:
+            await message.reply_text("جلسه‌ی ویرایش منقضی شده. دوباره از «مدیریت شاپ روزانه» باز کن.")
+            return
         try:
             coins, diamonds = itemshop.parse_price_line(text)
         except GameError as exc:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
             await message.reply_text(f"⚠️ {exc}")
             return
-        # a daily offer has a single currency: whichever unit was given wins
-        if diamonds > 0:
-            cost, currency = diamonds, "diamonds"
-        else:
-            cost, currency = coins, "coins"
-        await run_db(shop.set_offer_price, awaiting["key"], cost, currency)
-        offers, energy_cost = await run_db(_dailyshop_sync)
-        text_out, keyboard = _dailyshop_render(offers, energy_cost)
-        await message.reply_text("✅ قیمت آفر به‌روز شد.\n\n" + text_out, parse_mode="HTML", reply_markup=keyboard)
+        cost, currency = (diamonds, "diamonds") if diamonds > 0 else (coins, "coins")
+        for s in draft["states"]:
+            if s["key"] == awaiting["key"]:
+                s["cost"], s["currency"], s["active"] = max(0, cost), currency, True
+                break
+        text_out, keyboard = _dshop_day_render(draft)
+        await message.reply_text("✅ قیمت ثبت شد.\n\n" + text_out, parse_mode="HTML", reply_markup=keyboard)
         return
 
     if action == "energy_cost":

@@ -871,3 +871,36 @@ class DailyShopOffer(models.Model):
 
     def __str__(self) -> str:
         return f"{self.key}: {self.cost} {self.currency}{'' if self.is_active else ' (off)'}"
+
+
+class DailyShopDay(models.Model):
+    """A per-day schedule for the daily shop, on a repeating 3-day cycle. `slot` is
+    `date.toordinal() % 3`, so the same slot recurs every 3 days — which is exactly
+    the "if a day isn't set, repeat what it was 3 days ago" behaviour: a configured
+    slot keeps showing until the owner reconfigures it. `offers_json` is the ordered
+    list of {key, cost, currency} shown that day (first = featured). An unconfigured
+    slot falls back to the default rotating pool."""
+
+    slot = models.IntegerField(unique=True)  # date.toordinal() % 3
+    offers_json = models.TextField(default="[]")  # [{"key","cost","currency"}]
+    configured = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"day-slot {self.slot} ({'set' if self.configured else 'unset'})"
+
+
+class DailyShopPurchase(models.Model):
+    """How many times a player has bought a given daily-shop offer TODAY — enforces the
+    owner-set per-offer purchase limit (1 / 2 / unlimited). Keyed by the game-timezone
+    day string so the limit resets each day."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    key = models.CharField(max_length=32)
+    day = models.CharField(max_length=10)  # game.daily.today_str()
+    count = models.IntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "key", "day"], name="uq_daily_shop_purchase")
+        ]

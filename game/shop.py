@@ -71,9 +71,58 @@ def _price(offer: dict, featured: bool) -> int:
     return offer["cost"]
 
 
+# ── per-day schedule (repeating 3-day cycle) ─────────────────────────────────
+# The daily shop can be scheduled per day. `slot = date.toordinal() % DAILY_CYCLE`
+# so each of the 3 slots recurs every 3 days: configuring "today / tomorrow / day
+# after" fills the whole cycle, and a slot keeps showing until it's reconfigured —
+# which is exactly the "if a day isn't set, repeat what it was 3 days ago" rule.
+DAILY_CYCLE = 3
+DAY_LABELS = {0: "امروز", 1: "فردا", 2: "پس‌فردا"}  # OFFSET (not slot) → label
+
+
+def _today_ordinal() -> int:
+    return timezone.localtime(timezone.now()).date().toordinal()
+
+
+def slot_for_offset(offset: int) -> int:
+    """The cycle slot for `offset` days from today (0=today, 1=tomorrow, 2=day after)."""
+    return (_today_ordinal() + offset) % DAILY_CYCLE
+
+
+def _configured_offers_for_slot(slot: int) -> list[dict] | None:
+    """The owner-scheduled offers for a slot, merged with each offer's fixed code
+    definition (title/emoji/grant), or None if that slot isn't configured."""
+    import json
+
+    from bio_lab.models import DailyShopDay
+
+    row = DailyShopDay.objects.filter(slot=slot, configured=True).first()
+    if row is None:
+        return None
+    try:
+        entries = json.loads(row.offers_json)
+    except (ValueError, TypeError):
+        entries = []
+    out = []
+    for e in entries:
+        base = POOL_DEFAULTS_BY_KEY.get(e.get("key"))
+        if base is None:
+            continue
+        currency = e.get("currency") if e.get("currency") in _VALID_CURRENCIES else base["currency"]
+        out.append({**base, "cost": max(0, int(e.get("cost", base["cost"]))), "currency": currency,
+                    "limit": max(0, int(e.get("limit", 0)))})
+    return out or None
+
+
 def today_offers() -> list[dict]:
-    """The rotating selection for today; the first entry is the featured deal. Rotates
-    over only the ACTIVE offers, so an owner-disabled offer never shows or sells."""
+    """Today's shop. If today's cycle slot is scheduled by the owner, those exact
+    offers/prices are shown (no featured discount — the set price is the price).
+    Otherwise it falls back to the default rotation over the active pool, whose first
+    entry is a discounted featured deal."""
+    scheduled = _configured_offers_for_slot(slot_for_offset(0))
+    if scheduled is not None:
+        return [{**o, "featured": False, "price": o["cost"], "limit": o.get("limit", 0)} for o in scheduled]
+
     pool = _effective_pool()
     if not pool:
         return []
@@ -86,6 +135,82 @@ def today_offers() -> list[dict]:
         featured = i == 0
         out.append({**o, "featured": featured, "price": _price(o, featured)})
     return out
+
+
+# ── owner admin: per-day scheduling ──────────────────────────────────────────
+DIAMOND_PRICE_PRESETS = [5, 10, 15, 20, 30, 50, 100]
+COIN_PRICE_PRESETS = [500, 800, 1000, 1500, 2000, 3000, 5000]
+
+
+def day_offer_states(slot: int) -> list[dict]:
+    """The full editable state for a slot: every pool offer with its cost/currency and
+    whether it's active for that day. Seeds from the slot's saved schedule if it has
+    one, else from the default prices with every offer active. Drives the admin editor."""
+    import json
+
+    from bio_lab.models import DailyShopDay
+
+    saved = {}
+    order = []
+    row = DailyShopDay.objects.filter(slot=slot).first()
+    if row is not None and row.configured:
+        try:
+            for e in json.loads(row.offers_json):
+                if e.get("key") in POOL_DEFAULTS_BY_KEY:
+                    saved[e["key"]] = e
+                    order.append(e["key"])
+        except (ValueError, TypeError):
+            pass
+
+    states = []
+    # saved-and-active offers first (in their saved order), then the rest as inactive
+    for key in order + [k for k in POOL_DEFAULTS_BY_KEY if k not in saved]:
+        base = POOL_DEFAULTS_BY_KEY[key]
+        e = saved.get(key)
+        if e is not None:
+            currency = e.get("currency") if e.get("currency") in _VALID_CURRENCIES else base["currency"]
+            states.append({"key": key, "emoji": base["emoji"], "title": base["title"],
+                           "cost": max(0, int(e.get("cost", base["cost"]))), "currency": currency,
+                           "limit": max(0, int(e.get("limit", 0))), "active": True})
+        else:
+            # if the slot was NEVER configured, default all offers ON; if it WAS
+            # configured, offers not in the saved list are OFF
+            active = row is None or not row.configured
+            states.append({"key": key, "emoji": base["emoji"], "title": base["title"],
+                           "cost": base["cost"], "currency": base["currency"],
+                           "limit": 0, "active": active})
+    return states
+
+
+def save_day(slot: int, states: list[dict]) -> None:
+    """Persist a slot's schedule from the editor draft. Only ACTIVE offers are stored
+    (in their given order); the first shown becomes the day's lead offer."""
+    import json
+
+    from bio_lab.models import DailyShopDay
+
+    entries = [
+        {"key": s["key"], "cost": max(0, int(s["cost"])),
+         "currency": s["currency"] if s["currency"] in _VALID_CURRENCIES else "coins",
+         "limit": max(0, int(s.get("limit", 0)))}
+        for s in states if s.get("active")
+    ]
+    DailyShopDay.objects.update_or_create(
+        slot=slot, defaults={"offers_json": json.dumps(entries, ensure_ascii=False), "configured": True}
+    )
+
+
+def clear_day(slot: int) -> None:
+    """Un-schedule a slot so it falls back to the default rotation again."""
+    from bio_lab.models import DailyShopDay
+
+    DailyShopDay.objects.filter(slot=slot).update(configured=False)
+
+
+def day_is_configured(slot: int) -> bool:
+    from bio_lab.models import DailyShopDay
+
+    return DailyShopDay.objects.filter(slot=slot, configured=True).exists()
 
 
 # ── owner admin: tune daily-shop pricing ─────────────────────────────────────
@@ -129,39 +254,69 @@ def _balance(user: User, currency: str) -> int:
     return user.diamonds if currency == "diamonds" else user.coins
 
 
+def _daily_purchase_count(user: User, key: str) -> int:
+    from bio_lab.models import DailyShopPurchase
+    from game.daily import today_str
+
+    row = DailyShopPurchase.objects.filter(user=user, key=key, day=today_str()).first()
+    return row.count if row else 0
+
+
 def buy(user: User, key: str) -> dict:
-    """Buy an offer that's in TODAY's shop. Repeatable."""
+    """Buy an offer that's in TODAY's shop. Repeatable unless the offer carries a
+    per-day purchase limit (owner-set: 1 / 2 / unlimited)."""
+    from django.db import transaction
+
     offers = {o["key"]: o for o in today_offers()}
     offer = offers.get(key)
     if offer is None:
         raise GameError("این آفر امروز توی شاپ نیست.")
+    limit = int(offer.get("limit", 0) or 0)
     price = offer["price"]
     currency = offer["currency"]
-    if _balance(user, currency) < price:
-        unit = "الماس" if currency == "diamonds" else "طلا"
-        raise GameError(f"{unit} کافی نداری! این آفر {price} {unit} می‌خواد.")
 
-    if currency == "diamonds":
-        user.diamonds -= price
-    else:
-        user.coins -= price
-    fields = ["diamonds", "coins"]
+    with transaction.atomic():
+        user = User.objects.select_for_update().get(id=user.id)
+        if limit > 0:
+            from bio_lab.models import DailyShopPurchase
+            from game.daily import today_str
 
-    grant = offer["grant"]
-    if grant.get("coins"):
-        user.coins += grant["coins"]
-    if grant.get("dna"):
-        user.dna_fragments += grant["dna"]; fields.append("dna_fragments")
-    if grant.get("energy") == "full":
-        user.energy = constants.MAX_ENERGY
-        user.energy_updated_at = timezone.now()
-        fields += ["energy", "energy_updated_at"]
-    user.save(update_fields=list(set(fields)))
+            purchase, _ = DailyShopPurchase.objects.select_for_update().get_or_create(
+                user=user, key=key, day=today_str()
+            )
+            if purchase.count >= limit:
+                raise GameError(
+                    f"این آفر محدوده — امروز فقط {limit} بار می‌شه خریدش و سقفت رو زدی. فردا دوباره سر بزن."
+                )
+        if _balance(user, currency) < price:
+            unit = "الماس" if currency == "diamonds" else "طلا"
+            raise GameError(f"{unit} کافی نداری! این آفر {price} {unit} می‌خواد.")
 
-    if grant.get("speedup"):
-        from game.buildings import grant_speedup_card
+        if currency == "diamonds":
+            user.diamonds -= price
+        else:
+            user.coins -= price
+        fields = ["diamonds", "coins"]
 
-        grant_speedup_card(user, grant["speedup"], count=1)
+        grant = offer["grant"]
+        if grant.get("coins"):
+            user.coins += grant["coins"]
+        if grant.get("dna"):
+            user.dna_fragments += grant["dna"]; fields.append("dna_fragments")
+        if grant.get("energy") == "full":
+            user.energy = constants.MAX_ENERGY
+            user.energy_updated_at = timezone.now()
+            fields += ["energy", "energy_updated_at"]
+        user.save(update_fields=list(set(fields)))
+
+        if grant.get("speedup"):
+            from game.buildings import grant_speedup_card
+
+            grant_speedup_card(user, grant["speedup"], count=1)
+
+        if limit > 0:
+            purchase.count += 1
+            purchase.save(update_fields=["count"])
     return offer
 
 
