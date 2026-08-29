@@ -301,6 +301,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             [
                 btn("📡 جوین اجباری", style=ADMIN, callback_data="admin_menu:force_join"),
                 btn("🎮 گروه بازی", style=ADMIN, callback_data="admin_menu:group_link"),
+                btn("🛒 لینک خرید درون‌بازی", style=ADMIN, callback_data="admin_menu:buy_link"),
             ],
             [btn("🌐 پنل تحت وب (رنگ دکمه‌ها، لودآوت، پشتیبان‌گیری)", style=PRIMARY, url=ADMIN_PANEL_URL)],
         ]
@@ -756,9 +757,10 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
         if kind == "equipment":
             rows = [[btn(constants.EQUIPMENT_SLOT_LABELS[s], style=ADMIN, callback_data=f"ish:eq:{s}")]
                     for s in constants.EQUIPMENT_SLOTS]
+            rows.append([btn("🎲 اسلات تصادفی", style=CONFIRM, callback_data="ish:eq:rand")])
             rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:addc")])
             await query.answer()
-            await safe_edit_message_text(query, "⚔️ اسلات تجهیزات رو انتخاب کن:", parse_mode="HTML",
+            await safe_edit_message_text(query, "⚔️ اسلات تجهیزات رو انتخاب کن (یا تصادفی):", parse_mode="HTML",
                                          reply_markup=InlineKeyboardMarkup(rows))
             return
     if verb == "amt":
@@ -789,11 +791,19 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
         rarity = parts[2]
         rows = [[btn(constants.ELEMENT_WORDS[e], style=ADMIN, callback_data=f"ish:cre:{rarity}:{e}")]
                 for e in constants.ELEMENTS]
-        rows.append([btn("🎲 تصادفی", style=NAV, callback_data=f"ish:cre:{rarity}:rand")])
+        rows.append([btn("🎲 عنصر تصادفی", style=NAV, callback_data=f"ish:cre:{rarity}:rand")])
+        # one-tap: a completely random kaiju of THIS rarity (random element + random species)
+        rows.append([btn(f"🎲 کاملاً شانسی ({constants.RARITY_LABELS[rarity]})", style=CONFIRM,
+                         callback_data=f"ish:crand:{rarity}")])
         rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:ct:creature")])
         await query.answer()
-        await safe_edit_message_text(query, "🐉 عنصرِ هیولا:", parse_mode="HTML",
+        await safe_edit_message_text(query, "🐉 عنصرِ هیولا (یا کاملاً شانسی):", parse_mode="HTML",
                                      reply_markup=InlineKeyboardMarkup(rows))
+        return
+    if verb == "crand":  # add a fully-random creature of the chosen rarity (no element/name)
+        draft["contents"].append({"type": "creature", "rarity": parts[2], "element": None})
+        await query.answer("هیولای شانسی اضافه شد.")
+        await _ish_show_home(update, context)
         return
     if verb == "cre":
         rarity, element = parts[2], parts[3]
@@ -805,11 +815,16 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
         return
     if verb == "eq":
         slot = parts[2]
+        if slot == "rand":  # resolve a concrete random slot now, so the item is real
+            import random as _random
+
+            slot = _random.choice(constants.EQUIPMENT_SLOTS)
         rows = [[btn(constants.RARITY_LABELS[r], style=ADMIN, callback_data=f"ish:eqr:{slot}:{r}")]
                 for r in constants.RARITY_ORDER]
         rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:ct:equipment")])
         await query.answer()
-        await safe_edit_message_text(query, "⚔️ نایابیِ تجهیزات:", parse_mode="HTML",
+        slot_txt = constants.EQUIPMENT_SLOT_LABELS[slot]
+        await safe_edit_message_text(query, f"⚔️ نایابیِ تجهیزات ({slot_txt}):", parse_mode="HTML",
                                      reply_markup=InlineKeyboardMarkup(rows))
         return
     if verb == "eqr":
@@ -2144,6 +2159,60 @@ async def group_link_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
 
 
+# ── in-game buy link (mirrors the game-group link) ───────────────────────────
+def _buy_link_sync() -> tuple[str, str]:
+    link = botconfig.get_buy_link()
+    if link is None:
+        return "", ""
+    return link
+
+
+def _buy_link_panel_keyboard(has_link: bool) -> InlineKeyboardMarkup:
+    rows = [[btn("✏️ تنظیم/تغییر لینک خرید", style=PRIMARY, callback_data="admin_menu:buy_link_set")]]
+    if has_link:
+        rows.append([btn("🗑 حذف دکمه‌ی خرید", style=DANGER, callback_data="admin_menu:buy_link_clear")])
+    rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def buy_link_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    url, title = await run_db(_buy_link_sync)
+    if url:
+        body = (
+            f"🛒 <b>خرید درون‌بازی</b>\n\n"
+            f"لینک فعلی: <code>{url}</code>\n"
+            f"متن دکمه: <b>{title}</b>\n\n"
+            "این دکمه ته منوی اصلیِ همه‌ی بازیکن‌ها نشون داده می‌شه (می‌تونه لینک یه پست، "
+            "کانال، بات پرداخت یا سایت باشه)."
+        )
+    else:
+        body = (
+            "🛒 <b>خرید درون‌بازی</b>\n\n"
+            "هنوز لینکی تنظیم نشده. با تنظیم لینک، یه دکمه ته منوی اصلیِ همه‌ی بازیکن‌ها اضافه می‌شه "
+            "که برای خرید درون‌بازی می‌برتشون به مقصد دلخواهت (پست، کانال، بات پرداخت یا سایت)."
+        )
+    await update.effective_message.reply_text(
+        body, parse_mode="HTML", reply_markup=_buy_link_panel_keyboard(bool(url))
+    )
+
+
+async def buy_link_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "set_buy_link"}
+    await update.effective_message.reply_text(
+        "🛒 لینک خرید رو بفرست (هر لینکی — پست کانال، بات پرداخت، سایت...).\n\n"
+        "اگه می‌خوای متن دکمه هم عوض شه، بعد از لینک یه <code>|</code> بذار و متن دلخواه رو بنویس:\n"
+        "<code>https://t.me/mychannel/12 | 💎 خرید الماس</code>",
+        parse_mode="HTML",
+    )
+
+
+async def buy_link_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await run_db(botconfig.set_buy_link, "", "")
+    await update.effective_message.reply_text(
+        "✅ دکمه‌ی خرید حذف شد.", reply_markup=_buy_link_panel_keyboard(False)
+    )
+
+
 _RESOURCE_LABELS = {"coins": "طلا", "dna": "DNA", "diamonds": "الماس"}
 _RESOURCE_EMOJI_KEYS = {"coins": "coin", "dna": "dna", "diamonds": "diamond"}
 
@@ -2211,6 +2280,140 @@ async def _notify_recipient(context, user, reward_bits: list[str], balance_lines
         return True
     except TelegramError:
         return False
+
+
+# ── grant/charge confirmation step ───────────────────────────────────────────
+_PENDING_OP = "admin_pending_op"
+
+
+def _display_name_sync(target_id) -> str:
+    from bio_lab.repository import display_name
+    from game.moderation import find_user_or_raise
+
+    return display_name(find_user_or_raise(str(target_id)))
+
+
+def _pending_op_screen(op: dict) -> tuple[str, InlineKeyboardMarkup]:
+    """The 'about to do X — confirm?' summary shown before a grant/charge is applied,
+    with a confirm, an edit-amount, and a cancel button."""
+    name = op["name"]
+    if op["kind"] == "charge":
+        lines = ["📋 <b>جمع‌بندی عملیات</b>", "", f"👤 کاربر هدف: <b>{name}</b>", "", "قراره این تغییرات اعمال شه:"]
+        for r in ("coins", "dna", "diamonds"):
+            v = op[r]
+            if v:
+                sign = "➕" if v > 0 else "➖"
+                lines.append(f"{get_emoji(_RESOURCE_EMOJI_KEYS[r])} {_RESOURCE_LABELS[r]}: <b>{sign} {abs(v):,}</b>")
+        lines.append("\nتأیید می‌کنی؟")
+    else:
+        verb = "اعطای" if op["kind"] == "grant" else "کسر"
+        label = _RESOURCE_LABELS[op["resource"]]
+        lines = [
+            "📋 <b>جمع‌بندی عملیات</b>", "",
+            f"👤 کاربر هدف: <b>{name}</b>",
+            f"🎁 {verb}: <b>{op['amount']:,} {label}</b>",
+            "\nتأیید می‌کنی؟",
+        ]
+    kb = InlineKeyboardMarkup([
+        [btn("✅ تأیید و اعمال", style=CONFIRM, callback_data="opc:confirm")],
+        [btn("✏️ تغییر مقدار", style=NAV, callback_data="opc:edit"),
+         btn("❌ لغو", style=DANGER, callback_data="opc:cancel")],
+    ])
+    return "\n".join(lines), kb
+
+
+async def _reopen_user(query, context, target_id) -> None:
+    try:
+        data = await run_db(user_info, str(target_id))
+        await safe_edit_message_text(
+            query, _user_info_text(data), parse_mode="HTML",
+            reply_markup=_user_manage_keyboard(data["user"].id, data["user"].is_banned),
+        )
+    except GameError:
+        await safe_edit_message_text(query, "انجام شد.")
+
+
+async def admin_op_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles the confirm / edit / cancel of a pending grant or charge."""
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    verb = query.data.split(":")[1]
+    op = context.user_data.get(_PENDING_OP)
+    if op is None:
+        await query.answer("این عملیات منقضی شده.", show_alert=True)
+        return
+
+    if verb == "cancel":
+        context.user_data.pop(_PENDING_OP, None)
+        await query.answer("لغو شد.")
+        await _reopen_user(query, context, op["target_id"])
+        return
+
+    if verb == "edit":
+        context.user_data.pop(_PENDING_OP, None)
+        if op["kind"] == "charge":
+            context.user_data[AWAITING_ADMIN_KEY] = {"action": "charge", "target_id": op["target_id"]}
+            await query.answer()
+            await query.message.reply_text(
+                "✏️ سه عدد جدید با فاصله بفرست: طلا DNA الماس (مثلاً <code>1000 50 20</code>).",
+                parse_mode="HTML",
+            )
+        else:
+            context.user_data[AWAITING_ADMIN_KEY] = {"action": op["kind"], "target_id": op["target_id"],
+                                                     "resource": op["resource"]}
+            await query.answer()
+            label = _RESOURCE_LABELS[op["resource"]]
+            await query.message.reply_text(f"✏️ مقدار جدید {label} رو بفرست:")
+        return
+
+    if verb == "confirm":
+        context.user_data.pop(_PENDING_OP, None)
+        await query.answer("در حال اعمال…")
+        if op["kind"] in ("grant", "deduct"):
+            func = grant_resource if op["kind"] == "grant" else deduct_resource
+            try:
+                user, _ = await run_db(func, op["target_id"], op["resource"], op["amount"])
+            except GameError as exc:
+                await safe_edit_message_text(query, str(exc))
+                return
+            label = _RESOURCE_LABELS[op["resource"]]
+            bal_lines = _balance_lines_for(user, [op["resource"]])
+            if op["kind"] == "grant":
+                reward = f"{op['amount']:,} {label}"
+                dmed = await _notify_recipient(context, user, [reward], bal_lines)
+                confirm = _admin_op_confirm(user, f"اعطا شد ({reward})", bal_lines)
+                if not dmed:
+                    confirm += "\n\n<i>⚠️ پیام به کاربر نرسید (بات رو استارت نزده یا بلاک کرده).</i>"
+            else:
+                confirm = _admin_op_confirm(user, f"کسر شد ({op['amount']:,} {label})", bal_lines)
+            await safe_edit_message_text(
+                query, confirm, parse_mode="HTML",
+                reply_markup=_user_manage_keyboard(user.id, user.is_banned),
+            )
+        else:  # charge
+            try:
+                user, new_values = await run_db(charge_user, op["target_id"], op["coins"], op["dna"], op["diamonds"])
+            except GameError as exc:
+                await safe_edit_message_text(query, str(exc))
+                return
+            amounts = {"coins": op["coins"], "dna": op["dna"], "diamonds": op["diamonds"]}
+            positive = [r for r in ("coins", "dna", "diamonds") if amounts[r] > 0]
+            dmed = None
+            if positive:
+                reward_bits = [f"{amounts[r]:,} {_RESOURCE_LABELS[r]}" for r in positive]
+                dmed = await _notify_recipient(context, user, reward_bits, _balance_lines_for(user, positive))
+            confirm = f"{get_emoji('confirm')} <b>{display_name(user)}</b> شارژ شد!\n\n" + _charge_summary(new_values)
+            if dmed is False:
+                confirm += "\n\n<i>⚠️ پیام به کاربر نرسید (بات رو استارت نزده یا بلاک کرده).</i>"
+            elif dmed:
+                confirm += "\n\n<i>✅ پیام اطلاع‌رسانی برای کاربر هم فرستاده شد.</i>"
+            await safe_edit_message_text(
+                query, confirm, parse_mode="HTML",
+                reply_markup=_user_manage_keyboard(user.id, user.is_banned),
+            )
+        return
 
 
 async def admin_give_item_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2447,6 +2650,7 @@ def _dshop_price_render(draft: dict, key: str) -> tuple[str, InlineKeyboardMarku
                    callback_data=f"dshop:lim:{key}:{n}")
     lines.append("\n🛒 <b>تعداد قابل خرید (در روز):</b>")
     rows.append([_lim_btn(1, "۱ بار"), _lim_btn(2, "۲ بار"), _lim_btn(0, "بی‌نهایت")])
+    rows.append([btn("🔢 عدد دلخواه", style=NAV, callback_data=f"dshop:limx:{key}")])
     rows.append([btn("↩️ بازگشت به آفرها", style=NAV, callback_data="dshop:back")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -2611,6 +2815,15 @@ async def dailyshop_builder_callback(update: Update, context: ContextTypes.DEFAU
         await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
         return
 
+    if verb == "limx":  # ask for a custom per-day purchase limit
+        context.user_data[AWAITING_ADMIN_KEY] = {"action": "dshop_limit", "key": parts[2]}
+        await query.answer()
+        await query.message.reply_text(
+            "🔢 سقف خرید روزانه رو به عدد بفرست (<code>0</code> = نامحدود، مثلاً <code>5</code>):",
+            parse_mode="HTML",
+        )
+        return
+
     if verb == "cx":  # ask for a custom price via text
         context.user_data[AWAITING_ADMIN_KEY] = {"action": "dshop_custom", "key": parts[2]}
         await query.answer()
@@ -2735,33 +2948,16 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
             await message.reply_text("⚠️ یه عدد مثبت بفرست.")
             return
-        amount = int(text)
-        target_id = awaiting["target_id"]
-        resource = awaiting["resource"]
-        func = grant_resource if action == "grant" else deduct_resource
         try:
-            user, new_value = await run_db(func, target_id, resource, amount)
+            name = await run_db(_display_name_sync, awaiting["target_id"])
         except GameError as exc:
             await message.reply_text(str(exc))
             return
-        label = _RESOURCE_LABELS[resource]
-        bal_lines = _balance_lines_for(user, [resource])
-        if action == "grant":
-            reward = f"{amount:,} {label}"
-            dmed = await _notify_recipient(context, user, [reward], bal_lines)
-            confirm = _admin_op_confirm(user, f"اعطا شد ({reward})", bal_lines)
-            if not dmed:
-                confirm += "\n\n<i>⚠️ پیام به کاربر نرسید (بات رو استارت نزده یا بلاک کرده).</i>"
-            await message.reply_text(
-                confirm, parse_mode="HTML",
-                reply_markup=_user_manage_keyboard(user.id, user.is_banned),
-            )
-        else:  # deduct — a takeaway, no recipient DM
-            await message.reply_text(
-                _admin_op_confirm(user, f"کسر شد ({amount:,} {label})", bal_lines),
-                parse_mode="HTML",
-                reply_markup=_user_manage_keyboard(user.id, user.is_banned),
-            )
+        op = {"kind": action, "target_id": awaiting["target_id"], "resource": awaiting["resource"],
+              "amount": int(text), "name": name}
+        context.user_data[_PENDING_OP] = op
+        op_text, kb = _pending_op_screen(op)
+        await message.reply_text(op_text, parse_mode="HTML", reply_markup=kb)
         return
 
     if action == "charge":
@@ -2771,28 +2967,20 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             await message.reply_text("⚠️ سه عدد با فاصله بفرست، مثلاً: <code>1000 50 20</code>", parse_mode="HTML")
             return
         coins, dna, diamonds = (int(p) for p in parts)
-        try:
-            user, new_values = await run_db(charge_user, awaiting["target_id"], coins, dna, diamonds)
-        except GameError as exc:
+        if coins == 0 and dna == 0 and diamonds == 0:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text("⚠️ حداقل یکی از مقدارها باید غیرصفر باشه.")
+            return
+        try:
+            name = await run_db(_display_name_sync, awaiting["target_id"])
+        except GameError as exc:
             await message.reply_text(str(exc))
             return
-        # DM the recipient about whatever was ADDED (positive amounts only)
-        amounts = {"coins": coins, "dna": dna, "diamonds": diamonds}
-        positive = [r for r in ("coins", "dna", "diamonds") if amounts[r] > 0]
-        dmed = None
-        if positive:
-            reward_bits = [f"{amounts[r]:,} {_RESOURCE_LABELS[r]}" for r in positive]
-            dmed = await _notify_recipient(context, user, reward_bits, _balance_lines_for(user, positive))
-        confirm = f"{get_emoji('confirm')} <b>{display_name(user)}</b> شارژ شد!\n\n" + _charge_summary(new_values)
-        if dmed is False:
-            confirm += "\n\n<i>⚠️ پیام به کاربر نرسید (بات رو استارت نزده یا بلاک کرده).</i>"
-        elif dmed:
-            confirm += "\n\n<i>✅ پیام اطلاع‌رسانی برای کاربر هم فرستاده شد.</i>"
-        await message.reply_text(
-            confirm, parse_mode="HTML",
-            reply_markup=_user_manage_keyboard(user.id, user.is_banned),
-        )
+        op = {"kind": "charge", "target_id": awaiting["target_id"], "coins": coins, "dna": dna,
+              "diamonds": diamonds, "name": name}
+        context.user_data[_PENDING_OP] = op
+        op_text, kb = _pending_op_screen(op)
+        await message.reply_text(op_text, parse_mode="HTML", reply_markup=kb)
         return
 
     if action == "delete_creature":
@@ -2836,6 +3024,29 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         shown_title = title or botconfig.DEFAULT_GROUP_TITLE
         await message.reply_text(
             f"✅ دکمه‌ی گروه تنظیم شد.\nلینک: <code>{url}</code>\nمتن دکمه: <b>{shown_title}</b>\n\n"
+            "حالا ته منوی اصلیِ همه‌ی بازیکن‌ها نشون داده می‌شه.",
+            parse_mode="HTML",
+        )
+        return
+
+    if action == "set_buy_link":
+        raw = text
+        url_part, title_part = (raw.split("|", 1) + [""])[:2] if "|" in raw else (raw, "")
+        url = url_part.strip()
+        title = title_part.strip()
+        if url.startswith("t.me/") or url.startswith("@"):
+            url = "https://t.me/" + url.lstrip("@").removeprefix("t.me/")
+        if not (url.startswith("http://") or url.startswith("https://")):
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text(
+                "⚠️ لینک معتبر نیست. باید با <code>https://</code> شروع شه. دوباره بفرست:",
+                parse_mode="HTML",
+            )
+            return
+        await run_db(botconfig.set_buy_link, url, title)
+        shown_title = title or botconfig.DEFAULT_BUY_TITLE
+        await message.reply_text(
+            f"✅ دکمه‌ی خرید تنظیم شد.\nلینک: <code>{url}</code>\nمتن دکمه: <b>{shown_title}</b>\n\n"
             "حالا ته منوی اصلیِ همه‌ی بازیکن‌ها نشون داده می‌شه.",
             parse_mode="HTML",
         )
@@ -2939,6 +3150,24 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
                 break
         text_out, keyboard = _dshop_day_render(draft)
         await message.reply_text("✅ قیمت ثبت شد.\n\n" + text_out, parse_mode="HTML", reply_markup=keyboard)
+        return
+
+    if action == "dshop_limit":
+        draft = context.user_data.get(_DSHOP_DRAFT)
+        if draft is None:
+            await message.reply_text("جلسه‌ی ویرایش منقضی شده. دوباره از «مدیریت شاپ روزانه» باز کن.")
+            return
+        digits = text.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
+        if not digits.isdigit():
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text("⚠️ یه عدد صحیح بفرست (۰ = نامحدود).")
+            return
+        for s in draft["states"]:
+            if s["key"] == awaiting["key"]:
+                s["limit"], s["active"] = max(0, int(digits)), True
+                break
+        text_out, keyboard = _dshop_day_render(draft)
+        await message.reply_text("✅ سقف خرید ثبت شد.\n\n" + text_out, parse_mode="HTML", reply_markup=keyboard)
         return
 
     if action == "energy_cost":
@@ -3134,6 +3363,9 @@ _ADMIN_MENU_ACTIONS.update(
         "group_link": group_link_panel,
         "group_link_set": group_link_set_start,
         "group_link_clear": group_link_clear,
+        "buy_link": buy_link_panel,
+        "buy_link_set": buy_link_set_start,
+        "buy_link_clear": buy_link_clear,
         "users": users_browse_callback,
         "gift_all": gift_all_start,
         "global_stats": global_stats_cmd,
@@ -3169,6 +3401,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(user_open_callback, pattern=r"^admin_uinfo:\d+$"))
     application.add_handler(CallbackQueryHandler(dm_user_start, pattern=r"^admin_dm:\d+$"))
     application.add_handler(CallbackQueryHandler(admin_give_item_start, pattern=r"^admin_give_item:\d+$"))
+    application.add_handler(CallbackQueryHandler(admin_op_callback, pattern=r"^opc:(confirm|edit|cancel)$"))
     application.add_handler(CallbackQueryHandler(admin_remove_callback, pattern=r"^admin_rm:\d+$"))
     application.add_handler(CallbackQueryHandler(dailyshop_builder_callback, pattern=r"^dshop:"))
     application.add_handler(CallbackQueryHandler(itemshop_add_start, pattern=r"^sitem_add$"))

@@ -12,12 +12,15 @@ from __future__ import annotations
 from bio_lab.models import BotConfig
 
 DEFAULT_GROUP_TITLE = "🎮 ورود به گروه بازی"
+DEFAULT_BUY_TITLE = "🛒 خرید درون‌بازی"
 DEFAULT_ENERGY_REFILL_DIAMONDS = 25
 
 # Starts at defaults; never lazily populated on read.
 _cache: dict[str, object] = {
     "group_game_url": "",
     "group_game_title": "",
+    "buy_url": "",
+    "buy_title": "",
     "energy_refill_diamonds": DEFAULT_ENERGY_REFILL_DIAMONDS,
 }
 
@@ -30,14 +33,36 @@ def refresh_cache() -> None:
         _cache = {
             "group_game_url": "",
             "group_game_title": "",
+            "buy_url": "",
+            "buy_title": "",
             "energy_refill_diamonds": DEFAULT_ENERGY_REFILL_DIAMONDS,
         }
     else:
         _cache = {
             "group_game_url": row.group_game_url or "",
             "group_game_title": row.group_game_title or "",
+            "buy_url": row.buy_url or "",
+            "buy_title": row.buy_title or "",
             "energy_refill_diamonds": row.energy_refill_diamonds or DEFAULT_ENERGY_REFILL_DIAMONDS,
         }
+
+
+def get_buy_link() -> tuple[str, str] | None:
+    """(url, button_title) for the in-game buy button, or None if unset. Pure in-memory
+    read — safe from async handler code."""
+    url = _cache.get("buy_url") or ""
+    if not url:
+        return None
+    title = _cache.get("buy_title") or DEFAULT_BUY_TITLE
+    return url, title
+
+
+def set_buy_link(url: str, title: str = "") -> None:
+    """Persist the in-game buy link (and optional label). Empty url clears the button."""
+    url = (url or "").strip()
+    title = (title or "").strip()[:48]
+    BotConfig.objects.update_or_create(id=1, defaults={"buy_url": url[:256], "buy_title": title})
+    refresh_cache()
 
 
 def get_energy_refill_cost() -> int:

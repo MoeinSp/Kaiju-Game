@@ -340,7 +340,7 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
     lo, hi = target["reward"]
     dlo, dhi = target.get("dna_reward", (0, 0))
     my_power = target.get("my_power", 0)
-    pct = win_chance_pct(my_power, target["power"])
+    pct = win_chance_pct(my_power, target["power"], target.get("my_element"), target["element"])
     adv = element_advantage_line(target.get("my_element"), target["element"])
     text = "\n".join([
         f"{get_emoji('hunt')} <b>حریف آماده نبرد است!</b>",
@@ -382,7 +382,7 @@ def _arena_card(user, opponent, loot, shielded_for, data=None) -> tuple[str, Inl
     my_element = data.get("my_element")
     dna_win = data.get("dna_win", 0)
     opp_element = opponent.get("element")
-    pct = win_chance_pct(my_power, opponent["power"])
+    pct = win_chance_pct(my_power, opponent["power"], my_element, opp_element)
     adv = element_advantage_line(my_element, opp_element)
     win_cup = _arena.cup_delta(user, opponent["cup"], True, my_power)
     loss_cup = _arena.cup_delta(user, opponent["cup"], False, my_power)

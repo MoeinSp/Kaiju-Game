@@ -9,19 +9,22 @@ from game.equipment import get_equipped_items
 
 MAX_ROUNDS = 12
 CRIT_MULTIPLIER = 1.5
-# Tight, deterministic variance: enough to keep the blow-by-blow looking alive, too
-# small to flip who wins. Combat is decided by stats + element, never a coin flip —
-# so the same matchup always resolves the same way (no "won, then lost the rematch").
-DMG_VARIANCE = (0.97, 1.03)
+# Real, per-fight variance. Combat used to be fully deterministic (a fixed per-matchup
+# seed + a ±3% wobble) so a given pairing ALWAYS resolved the same way — which made the
+# shown win-% a lie: the fight was already decided, yet the player saw "65%". Now every
+# fight rolls fresh, so the stronger side USUALLY wins (you can analyse and decide) but
+# a close matchup genuinely can go either way, and a rematch can flip. The spread is
+# tuned (see win_chance_pct's calibration) so a clear power lead is ~90% and parity is
+# ~50%, never a guaranteed 0/100.
+DMG_VARIANCE = (0.85, 1.15)
 
-
-def _matchup_seed(a: Creature, b: Creature) -> int:
-    """A stable seed from both creatures' composition, so a given pairing always
-    plays out identically (works for unsaved bot creatures with id=None too)."""
-    def key(c: Creature):
-        return (c.element, int(c.level), int(c.base_hp), int(c.base_atk),
-                int(c.base_def), int(c.base_spd), c.rarity, c.star_level)
-    return hash((key(a), key(b))) & 0x7FFFFFFF
+# Per-fight "form": once per duel each fighter rolls an overall offensive multiplier in
+# [1-FORM_SWING, 1+FORM_SWING]. This is what turns the fight from a near-step-function
+# (where any power edge is decisive, because atk+def+hp+spd all compound) into a smooth,
+# analysable curve: a fighter can have a good or bad day. The swing width is tuned so
+# parity ≈ 50/50 and a large power lead ≈ 90% — see win_chance_pct, which is calibrated
+# to the win-rate this produces.
+FORM_SWING = 0.55
 
 
 @dataclass
@@ -31,6 +34,7 @@ class Fighter:
     hp: float
     dmg_dealt: float = 0.0
     crits: int = 0
+    form: float = 1.0
 
 
 def resolve_duel(creature_a: Creature, creature_b: Creature) -> tuple[Creature, str]:
@@ -44,11 +48,13 @@ def resolve_duel_detailed(creature_a: Creature, creature_b: Creature) -> tuple[C
     """Like resolve_duel but also returns a detailed blow-by-blow log (one line per
     hit) for the optional «جزییات حمله» view. The compact log is the default — the
     old always-on blow-by-blow read as 24 lines of noise."""
-    rng = random.Random(_matchup_seed(creature_a, creature_b))
+    rng = random.Random()  # fresh each fight — outcomes are probabilistic, not fixed
     fa = Fighter(creature_a, effective_stats(creature_a, get_equipped_items(creature_a)), 0)
     fa.hp = fa.stats["hp"]
     fb = Fighter(creature_b, effective_stats(creature_b, get_equipped_items(creature_b)), 0)
     fb.hp = fb.stats["hp"]
+    fa.form = rng.uniform(1 - FORM_SWING, 1 + FORM_SWING)
+    fb.form = rng.uniform(1 - FORM_SWING, 1 + FORM_SWING)
 
     blow_by_blow: list[str] = []
     round_num = 0
@@ -93,13 +99,15 @@ def resolve_duel_detailed(creature_a: Creature, creature_b: Creature) -> tuple[C
 
 def resolve_duel_report(creature_a: Creature, creature_b: Creature) -> dict:
     """Structured result for rich battle cards — winner, round count, and each side's
-    final/max HP + element + crits. Deterministic (same seed as resolve_duel), so it
-    matches what resolve_duel() would decide for the same pairing."""
-    rng = random.Random(_matchup_seed(creature_a, creature_b))
+    final/max HP + element + crits. Rolls fresh like resolve_duel (probabilistic), so
+    it's one independent play-out of the matchup, not a fixed outcome."""
+    rng = random.Random()  # fresh each fight — outcomes are probabilistic, not fixed
     fa = Fighter(creature_a, effective_stats(creature_a, get_equipped_items(creature_a)), 0)
     fa.hp = fa.stats["hp"]
     fb = Fighter(creature_b, effective_stats(creature_b, get_equipped_items(creature_b)), 0)
     fb.hp = fb.stats["hp"]
+    fa.form = rng.uniform(1 - FORM_SWING, 1 + FORM_SWING)
+    fb.form = rng.uniform(1 - FORM_SWING, 1 + FORM_SWING)
     round_num = 0
     while fa.hp > 0 and fb.hp > 0 and round_num < MAX_ROUNDS:
         round_num += 1
@@ -138,7 +146,7 @@ def _attack(attacker: Fighter, defender: Fighter, detail: list[str], rng: random
     compact scoreboard) and appends one blow-by-blow line to `detail`. All randomness
     comes from the seeded `rng`, so the fight is deterministic per matchup."""
     mult = constants.element_multiplier(attacker.creature.element, defender.creature.element)
-    base = max(1.0, attacker.stats["atk"] - defender.stats["def"] * 0.5)
+    base = max(1.0, attacker.stats["atk"] * attacker.form - defender.stats["def"] * 0.5)
     is_crit = rng.random() < attacker.stats["crit_rate"]
     dmg = round(base * mult * rng.uniform(*DMG_VARIANCE) * (CRIT_MULTIPLIER if is_crit else 1.0))
     defender.hp -= dmg

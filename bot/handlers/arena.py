@@ -214,7 +214,7 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
     opp_element = opponent.get("element")
     my_elem_tag = f" [{constants.element_label(my_element)}]" if my_element else ""
     opp_elem_tag = f" [{constants.element_label(opp_element)}]" if opp_element else ""
-    pct = win_chance_pct(my_power, opponent["power"])
+    pct = win_chance_pct(my_power, opponent["power"], my_element, opp_element)
     adv = element_advantage_line(my_element, opp_element)
     win_cup = cup_delta(user, opponent["cup"], True, my_power)
     loss_cup = cup_delta(user, opponent["cup"], False, my_power)

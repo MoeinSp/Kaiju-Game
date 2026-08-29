@@ -79,6 +79,7 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_next": ("صفحه بعدی", "▶️", "nav"),
     "btn_prev": ("صفحه قبلی", "◀️", "nav"),
     "btn_join_group": ("ورود به گروه بازی", "👥", "nav"),
+    "btn_buy": ("خرید درون‌بازی", "🛒", "nav"),
     "btn_idle": ("پاداش آفلاین", "💤", "features"),
     "btn_achievements": ("دستاوردها", "🏅", "features"),
     "btn_titles": ("لقب‌ها", "👑", "features"),

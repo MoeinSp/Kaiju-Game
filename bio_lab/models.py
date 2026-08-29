@@ -843,6 +843,10 @@ class BotConfig(models.Model):
 
     group_game_url = models.CharField(max_length=256, default="", blank=True)  # https://t.me/... invite/link
     group_game_title = models.CharField(max_length=48, default="", blank=True)  # button label override
+    # owner-configurable "buy in-game" button shown at the bottom of the main menu —
+    # can point anywhere (a payment bot, a channel post, a site). Empty = no button.
+    buy_url = models.CharField(max_length=256, default="", blank=True)
+    buy_title = models.CharField(max_length=48, default="", blank=True)  # button label override
     backup_interval_hours = models.IntegerField(default=0)  # 0 = auto-backup off
     backup_last_at = models.DateTimeField(null=True, blank=True)  # last auto-backup sent
     # where auto-backups are sent; null = the owner's own DM (the default)

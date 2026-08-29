@@ -58,20 +58,35 @@ async def _reply_error(message, exc, owner_id: int) -> None:
 
 
 def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
+    from django.db import transaction
+
     group = get_or_create_group(chat)
     sender, _ = get_or_create_user(sender_tg)
     touch_membership(group, sender)
-    receiver = User.objects.filter(id=receiver_id).first()
-    if receiver is None:
-        raise GameError("این بازیکن هنوز بازی رو شروع نکرده.")
     if amount <= 0:
         raise GameError("مقدار باید بیشتر از صفر باشه.")
-    if sender.coins < amount:
-        raise GameError(f"طلا کافی نداری! فقط {sender.coins} طلا داری.")
-    sender.coins -= amount
-    receiver.coins += amount
-    sender.save(update_fields=["coins"])
-    receiver.save(update_fields=["coins"])
+    if sender.id == receiver_id:
+        raise GameError("به خودت نمی‌تونی انتقال بدی.")
+
+    # LOCK both rows and re-read their CURRENT balances inside the transaction. Without
+    # this the old code read the receiver's coins unlocked, then saved coins ± amount —
+    # so if either player's balance changed between the read and the save (a mine
+    # collect, an arena win, another transfer), that concurrent change was overwritten
+    # and gold "disappeared". Locking by ascending id also keeps the lock order
+    # consistent across transfers so two crossing transfers can't deadlock.
+    with transaction.atomic():
+        ids = sorted({sender.id, receiver_id})
+        locked = {u.id: u for u in User.objects.select_for_update().filter(id__in=ids).order_by("id")}
+        sender = locked.get(sender.id)
+        receiver = locked.get(receiver_id)
+        if receiver is None:
+            raise GameError("این بازیکن هنوز بازی رو شروع نکرده.")
+        if sender.coins < amount:
+            raise GameError(f"طلا کافی نداری! فقط {sender.coins} طلا داری.")
+        sender.coins -= amount
+        receiver.coins += amount
+        sender.save(update_fields=["coins"])
+        receiver.save(update_fields=["coins"])
     return sender, receiver
 
 
@@ -640,7 +655,7 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
         ])
         return text, keyboard
 
-    pct = win_chance_pct(a_power, t_power)
+    pct = win_chance_pct(a_power, t_power, a_elem, t_elem)
     adv = element_advantage_line(a_elem, t_elem)
     a_tag = f" [{constants.element_label(a_elem)}]" if a_elem else ""
     t_tag = f" [{constants.element_label(t_elem)}]" if t_elem else ""
