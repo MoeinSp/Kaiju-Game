@@ -241,14 +241,16 @@ def _fake_opponent(attacker: User) -> dict:
     Built from the attacker's CUP, not their power, so it enforces the ladder.
     The swing keeps individual fights uncertain without softening the trend."""
     bot_cup = max(0, attacker.cup + random.randint(-40, 90))
-    swing = random.uniform(0.9, 1.15)
-    power = max(1, round(power_for_cup(bot_cup) * swing))
+    # Power is the cup-expected value ± a flat random 300, fully random each roll —
+    # so two bots at the same cup can differ by up to ~600 and every fight is a real
+    # gamble (was a narrow ×0.9–1.15 band that made every bot feel identical).
+    power = max(1, power_for_cup(bot_cup) + random.randint(-300, 300))
     rarity, star = _bot_display_tier(bot_cup)
     _bot_element = constants.random_element()
     return {
         "is_fake": True,
         "user": None,
-        "label": random.choice(constants.ARENA_FAKE_LAB_NAMES),
+        "label": constants.random_lab_name(),
         "creature_name": constants.random_species_name(_bot_element),
         "cup": bot_cup,
         "power": power,
@@ -299,13 +301,12 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
 
     candidates = _query(exclude)
     if not candidates:
-        # rotation exhausted — retry, but still skip the CURRENT pick (the last excluded
-        # id) so «حریف بعدی» always changes the screen. If that player was the only real
-        # option, fall through to a bot rather than re-showing them (a no-op edit).
-        current = list(exclude_ids)[-1] if exclude_ids else None
-        keep_out = {attacker.id} | ({current} if current else set()) | _reserved_by_others(attacker.id)
-        candidates = _query(keep_out)
-    if not candidates:
+        # Every real player in this cup band has already been shown recently (or is
+        # reserved by another searcher). The old code retried while excluding only the
+        # CURRENT pick, which — with just two real players in band — flip-flopped
+        # A→B→A→B forever: the "هرچی بزنی بعدی همونا میاد" bug. Instead, fall through to
+        # a bot. Bots now carry a randomized name and ±300 power, so «حریف بعدی» always
+        # changes the screen and stays varied instead of looping on the same faces.
         return _fake_opponent(attacker)
 
     # closest-FIRST: pick from just the nearest 3 (weighted toward the very closest),

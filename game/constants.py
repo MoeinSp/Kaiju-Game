@@ -1038,29 +1038,53 @@ ARENA_OVERCAP_DAMPING = 0.25  # cup gain multiplier once you're above your deser
 ARENA_CUP_SOFTCAP = 2500
 
 # Bot (fake) opponents scale from very weak at low cup to a FULLY-MAXED lab at the
-# ceiling: at ARENA_BOT_MAX_CUP the bot's power equals a mythic 5★, level-100,
-# fully part-upgraded creature with full mythic +10 gear — measured at ~3850. Set
-# to exactly that so a genuinely maxed player is ~50/50 (a TIE) at cup 5000 and no
-# more, while everyone weaker walls out earlier where the bot first matches them.
-# (Was 6000 — above any real creature, so maxed players stalled well before 5000.)
+# ceiling. ARENA_BOT_MAX_POWER is the EXACT combat_rating of the strongest creature
+# a player can actually build — a mythic, 5★, level-100, all-body-parts-maxed (100)
+# creature wearing four mythic pieces at the +25 gear ceiling. That measures to 7142
+# (verified against game.creature.creature_power, not guessed). Anchoring the top of
+# the curve to the real maximum means a genuinely maxed player is ~50/50 (a TIE) at
+# cup 5000 and no higher, while everyone weaker walls out earlier where the bot first
+# matches them. (Was 3850 — far below a real maxed creature, so a maxed player faced
+# only ~half-strength bots at 5000 and blew past the intended endgame wall.)
 # The exponent makes low cups easy and the climb bite near the top.
 ARENA_BOT_MAX_CUP = 5000
-ARENA_BOT_MAX_POWER = 3850
+ARENA_BOT_MAX_POWER = 7142
 ARENA_BOT_POWER_EXP = 1.25
 
 # Fake opponents shown when no real player sits in the cup band — their lab names
-# are obviously flavored so the roster never looks empty on a small player base.
+# are generated from a facility-type × descriptor grid (+ an occasional serial
+# number) so the roster shows hundreds of distinct, flavored names instead of the
+# same handful cycling over and over on a small player base.
+ARENA_LAB_TYPES = [
+    "آزمایشگاه", "کارگاه", "پایگاه", "ایستگاه", "پناهگاه", "قرارگاه", "مرکز ژنتیک",
+    "لانه", "آشیانه", "کندوی", "دخمه", "سنگر", "برج", "مقر", "انبار", "کارخانه",
+    "تالار", "حوضچه", "معدن", "رصدخانه", "دژ", "زیستگاه", "کلونی", "بنکده",
+]
+ARENA_LAB_DESCRIPTORS = [
+    "سایه", "نور", "مه", "زنگار", "فولاد", "یخ", "آتش", "خون", "طوفان", "رعد",
+    "خاکستر", "اعماق", "سکوت", "تاریکی", "سرخ", "کبود", "زمرد", "سیاه", "طلایی",
+    "نقره‌ای", "متروک", "مخفی", "گمشده", "ممنوعه", "باستانی", "شمالی", "جنوبی",
+    "دورافتاده", "زیرزمینی", "مقدس", "منجمد", "سوزان", "وحشی", "خفته", "بی‌نام",
+    "شکسته", "واپسین", "نفرین‌شده", "درخشان", "پوشالی", "تهی", "غبار",
+]
+ARENA_LAB_SERIALS = ["۳", "۷", "۹", "۱۳", "۲۱", "۴۲", "۷۷", "۹۹", "X", "Ω", "Z"]
+
+
+def random_lab_name() -> str:
+    """A varied, flavored bot-lab name. ~20 types × ~40 descriptors (+ optional
+    serial) gives 800+ distinct names, so the arena bot roster never looks repetitive."""
+    name = f"{random.choice(ARENA_LAB_TYPES)} {random.choice(ARENA_LAB_DESCRIPTORS)}"
+    if random.random() < 0.18:
+        name += f" شماره {random.choice(ARENA_LAB_SERIALS)}"
+    return name
+
+
+# Back-compat: a few call sites still read this list directly. Kept as a small
+# static sample; the live roster uses random_lab_name() above.
 ARENA_FAKE_LAB_NAMES = [
-    "آزمایشگاه سایه",
-    "کارگاه زیستی نور",
-    "پایگاه متروکه",
-    "لانه‌ی سرد",
-    "مرکز ژنتیک آبی",
-    "پناهگاه شماره ۷",
-    "ایستگاه دورافتاده",
-    "آشیانه‌ی زنگاری",
-    "قرارگاه مه‌آلود",
-    "کندوی فولادی",
+    "آزمایشگاه سایه", "کارگاه نور", "پایگاه متروک", "لانه یخ",
+    "مرکز ژنتیک کبود", "پناهگاه شماره ۷", "ایستگاه دورافتاده", "آشیانه زنگار",
+    "قرارگاه مه", "کندوی فولاد",
 ]
 # Bot loot scales with the attacker's own level so raiding bots keeps pace with
 # progression instead of going stale — the spread stays wide so it still gambles.
@@ -1100,22 +1124,22 @@ def arena_fake_loot(cup: int) -> int:
 # is 100🪙/5🧬, the top league (Champion) is 2,000🪙/100🧬 per win. `min_cup` is the
 # floor to BE in that league (list is ascending; league_for_cup walks from the top).
 LEAGUES = [
-    {"min_cup": 0,    "key": "bronze_1",  "emoji": "🥉", "name": "برنز I",    "coins": 100,  "dna": 5},
-    {"min_cup": 200,  "key": "bronze_2",  "emoji": "🥉", "name": "برنز II",   "coins": 120,  "dna": 6},
-    {"min_cup": 400,  "key": "bronze_3",  "emoji": "🥉", "name": "برنز III",  "coins": 140,  "dna": 7},
-    {"min_cup": 650,  "key": "silver_1",  "emoji": "🥈", "name": "نقره I",    "coins": 180,  "dna": 10},
-    {"min_cup": 900,  "key": "silver_2",  "emoji": "🥈", "name": "نقره II",   "coins": 220,  "dna": 13},
-    {"min_cup": 1150, "key": "silver_3",  "emoji": "🥈", "name": "نقره III",  "coins": 280,  "dna": 16},
-    {"min_cup": 1450, "key": "gold_1",    "emoji": "🥇", "name": "طلا I",     "coins": 350,  "dna": 20},
-    {"min_cup": 1750, "key": "gold_2",    "emoji": "🥇", "name": "طلا II",    "coins": 430,  "dna": 25},
-    {"min_cup": 2050, "key": "gold_3",    "emoji": "🥇", "name": "طلا III",   "coins": 520,  "dna": 30},
-    {"min_cup": 2400, "key": "plat_1",    "emoji": "💠", "name": "پلاتین I",  "coins": 650,  "dna": 38},
-    {"min_cup": 2750, "key": "plat_2",    "emoji": "💠", "name": "پلاتین II", "coins": 800,  "dna": 46},
-    {"min_cup": 3100, "key": "diamond_1", "emoji": "💎", "name": "الماس I",   "coins": 950,  "dna": 55},
-    {"min_cup": 3450, "key": "diamond_2", "emoji": "💎", "name": "الماس II",  "coins": 1150, "dna": 65},
-    {"min_cup": 3850, "key": "master",    "emoji": "🔮", "name": "استاد",     "coins": 1400, "dna": 78},
-    {"min_cup": 4300, "key": "legend",    "emoji": "🏵", "name": "اسطوره",    "coins": 1700, "dna": 90},
-    {"min_cup": 4750, "key": "champion",  "emoji": "👑", "name": "قهرمان",    "coins": 2000, "dna": 100},
+    {"min_cup": 0,    "key": "bronze_1",  "emoji": "🥉", "name": "برنز I",    "coins": 50,   "dna": 3},
+    {"min_cup": 200,  "key": "bronze_2",  "emoji": "🥉", "name": "برنز II",   "coins": 60,   "dna": 3},
+    {"min_cup": 400,  "key": "bronze_3",  "emoji": "🥉", "name": "برنز III",  "coins": 70,   "dna": 4},
+    {"min_cup": 650,  "key": "silver_1",  "emoji": "🥈", "name": "نقره I",    "coins": 90,   "dna": 5},
+    {"min_cup": 900,  "key": "silver_2",  "emoji": "🥈", "name": "نقره II",   "coins": 110,  "dna": 7},
+    {"min_cup": 1150, "key": "silver_3",  "emoji": "🥈", "name": "نقره III",  "coins": 140,  "dna": 8},
+    {"min_cup": 1450, "key": "gold_1",    "emoji": "🥇", "name": "طلا I",     "coins": 175,  "dna": 10},
+    {"min_cup": 1750, "key": "gold_2",    "emoji": "🥇", "name": "طلا II",    "coins": 215,  "dna": 13},
+    {"min_cup": 2050, "key": "gold_3",    "emoji": "🥇", "name": "طلا III",   "coins": 260,  "dna": 15},
+    {"min_cup": 2400, "key": "plat_1",    "emoji": "💠", "name": "پلاتین I",  "coins": 325,  "dna": 19},
+    {"min_cup": 2750, "key": "plat_2",    "emoji": "💠", "name": "پلاتین II", "coins": 400,  "dna": 23},
+    {"min_cup": 3100, "key": "diamond_1", "emoji": "💎", "name": "الماس I",   "coins": 475,  "dna": 28},
+    {"min_cup": 3450, "key": "diamond_2", "emoji": "💎", "name": "الماس II",  "coins": 575,  "dna": 33},
+    {"min_cup": 3850, "key": "master",    "emoji": "🔮", "name": "استاد",     "coins": 700,  "dna": 39},
+    {"min_cup": 4300, "key": "legend",    "emoji": "🏵", "name": "اسطوره",    "coins": 850,  "dna": 45},
+    {"min_cup": 4750, "key": "champion",  "emoji": "👑", "name": "قهرمان",    "coins": 1000, "dna": 50},
 ]
 
 
