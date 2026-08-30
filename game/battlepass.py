@@ -1,5 +1,5 @@
-"""Battle Pass (پاس فصلی) — a monthly reward track that turns daily play into a
-visible, claimable ladder.
+"""Battle Pass (پاس دوهفته‌ای) — a 2-week reward track (Saturday-aligned) that turns
+daily play into a visible, claimable ladder.
 
 Why it retains: every session moves a bar toward the next tier, and there's always
 a "just one more tier" reward in sight. The premium track adds a paid goal (buy it
@@ -14,10 +14,47 @@ granting everything between the last-claimed tier and the current one.
 
 from __future__ import annotations
 
+import datetime
+
 from django.db import transaction
 from django.utils import timezone
 
 from bio_lab.models import PassProgress, User
+
+# The pass runs on a 2-WEEK cycle aligned to the start of the week (Saturday), matching
+# Iran's calendar week. A new season begins — and the old one ends — at Saturday 00:00
+# local, every second Saturday. `_PASS_EPOCH` is a reference Saturday the cycle counts
+# from; changing the cadence only means editing these two numbers.
+_PASS_EPOCH = datetime.date(2024, 1, 6)  # a Saturday
+_PASS_PERIOD_DAYS = 14
+
+
+def _week_start_saturday(d: datetime.date) -> datetime.date:
+    """The Saturday on or before `d` (start of that week)."""
+    return d - datetime.timedelta(days=(d.weekday() - 5) % 7)  # Python: Sat == 5
+
+
+def _period_index(d: datetime.date) -> int:
+    weeks = (_week_start_saturday(d) - _PASS_EPOCH).days // 7
+    return weeks // 2
+
+
+def _period_end_date(d: datetime.date) -> datetime.date:
+    """The Saturday that ENDS the 2-week period containing `d`."""
+    start = _PASS_EPOCH + datetime.timedelta(days=_period_index(d) * _PASS_PERIOD_DAYS)
+    return start + datetime.timedelta(days=_PASS_PERIOD_DAYS)
+
+
+def period_end():
+    """Aware datetime (local) when the current pass period ends — Saturday 00:00 local."""
+    now = timezone.localtime(timezone.now())
+    end_date = _period_end_date(now.date())
+    naive_end = datetime.datetime.combine(end_date, datetime.time())
+    return timezone.make_aware(naive_end, now.tzinfo)
+
+
+def seconds_until_period_end() -> int:
+    return max(0, int((period_end() - timezone.localtime(timezone.now())).total_seconds()))
 
 # Deliberately steep: each tier costs far more points than before (was 150), so the
 # pass is a season-long grind rather than something cleared in a few days. Tier
@@ -28,8 +65,8 @@ PREMIUM_COST_DIAMONDS = 150
 
 
 def season_key() -> str:
-    """The current season id — one per calendar month in the game timezone."""
-    return timezone.localtime(timezone.now()).strftime("%Y-%m")
+    """The current season id — one per 2-week cycle, aligned to Saturdays."""
+    return f"bw{_period_index(timezone.localtime(timezone.now()).date())}"
 
 
 def tier_for_points(points: int) -> int:

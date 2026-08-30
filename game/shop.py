@@ -294,18 +294,28 @@ def _daily_purchase_count(user: User, key: str) -> int:
     return row.count if row else 0
 
 
-def buy(user: User, key: str) -> dict:
+def buy(user: User, key: str, shown_price: int | None = None, shown_currency: str | None = None) -> dict:
     """Buy an offer that's in TODAY's shop. Repeatable unless the offer carries a
-    per-day purchase limit (owner-set: 1 / 2 / unlimited)."""
+    per-day purchase limit (owner-set: 1 / 2 / unlimited).
+
+    `shown_price`/`shown_currency` are what the player was actually shown (remembered
+    server-side at render time). The charge is clamped so the player is NEVER billed
+    more than the price they saw — the fix for "خریدم و پول بیشتری کم شد" reports, which
+    happened when the offer's price/rotation changed between viewing and buying (featured
+    discount, midnight rotation, an owner edit, or a deploy). The GOODS always come from
+    the offer's stable key→contents mapping, so what they get matches the offer title."""
     from django.db import transaction
 
     offers = {o["key"]: o for o in today_offers()}
     offer = offers.get(key)
     if offer is None:
-        raise GameError("این آفر امروز توی شاپ نیست.")
+        raise GameError("این آفر دیگه توی شاپ امروز نیست — دوباره شاپ رو باز کن.")
     limit = int(offer.get("limit", 0) or 0)
-    price = offer["price"]
     currency = offer["currency"]
+    price = offer["price"]
+    # never charge more than what was displayed to the player
+    if shown_price is not None and shown_currency == currency:
+        price = min(price, max(0, int(shown_price)))
 
     with transaction.atomic():
         user = User.objects.select_for_update().get(id=user.id)

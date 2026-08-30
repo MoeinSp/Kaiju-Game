@@ -875,7 +875,7 @@ def _mkbtn(spec):
 _MAIN_ROWS = [
     [("ارتقا و پرورش", "upgrade", "p", "btn_upgrade")],
     [("شکار انفرادی", "hunt", "b", "btn_hunt"), ("آرنا (کاپ)", "arena", "b", "btn_arena")],
-    [("کمپین", "campaign", "b", "btn_campaign"), ("تیم من", "team", "b", "btn_team")],
+    [("دانجن", "campaign", "b", "btn_campaign"), ("تیم من", "team", "b", "btn_team")],
     [("کلکسیون", "collection", "n", "btn_collection"), ("ترکیب هیولا", "fusion", "n", "btn_fusion")],
     [("غار هیولا", "breeding", "n", "btn_breeding"), ("ساختمون‌ها", "buildings", "n", "btn_buildings")],
     [("تجهیزات", "inventory", "n", "btn_inventory"), ("آهنگری", "blacksmith", "n", "btn_forge")],

@@ -185,7 +185,7 @@ def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
             lines.append(f"⏳ <b>{_format_remaining(view['job_seconds_left'])}</b> تا تخم‌گذاری")
             rows.append(
                 [
-                    btn(f"💎 فوری‌کن ({view['cave_finish_price']})", style=PRIMARY, callback_data="brd_cave_finish"),
+                    btn(f"💎 فوری‌کن ({view['cave_finish_price']})", style=PRIMARY, callback_data="brd_cave_finish_ask"),
                     btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data="brd_cancel"),
                 ]
             )
@@ -209,7 +209,7 @@ def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
             else:
                 lines.append(f"  🥚 تخم #{i} — ⏳ {_format_remaining(e['seconds_left'])}")
                 rows.append(
-                    [btn(f"💎 فوری‌کن تخم #{i} ({e['finish_price']})", style=PRIMARY, callback_data=f"brd_egg_finish:{e['id']}")]
+                    [btn(f"💎 فوری‌کن تخم #{i} ({e['finish_price']})", style=PRIMARY, callback_data=f"brd_egg_finish_ask:{e['id']}")]
                 )
         lines.append("\n<i>چی توی تخم‌هاست؟ تا سر باز نکنن هیچ‌کس نمی‌دونه.</i>")
 
@@ -512,6 +512,56 @@ async def breeding_hatch_callback(update: Update, context: ContextTypes.DEFAULT_
     )
 
 
+async def breeding_cave_finish_ask_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Confirm before spending diamonds to finish the mating — no accidental spends."""
+    query = update.callback_query
+    try:
+        price = await run_db(lambda tg: breeding.cave_finish_price(
+            breeding.active_job(get_or_create_user(tg)[0])), update.effective_user)
+    except Exception:  # noqa: BLE001
+        await query.answer("الان جفتی توی غار نیست.", show_alert=True)
+        return
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        f"💎 <b>فوری‌کردن جفت‌گیری</b>\n\nبا <b>{price}</b> الماس همین الان تخم گذاشته می‌شه. تأیید می‌کنی؟",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[
+            btn(f"✅ بله ({price} 💎)", style=PRIMARY, callback_data="brd_cave_finish"),
+            btn("❌ نه", style=NAV, callback_data="menu:breeding"),
+        ]]),
+    )
+
+
+async def breeding_egg_finish_ask_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    egg_id = int(query.data.split(":")[1])
+
+    def _price(tg):
+        from bio_lab.models import Egg
+        user, _ = get_or_create_user(tg)
+        egg = Egg.objects.filter(id=egg_id, owner=user).first()
+        if egg is None:
+            raise GameError("این تخم پیدا نشد.")
+        return breeding.egg_finish_price(egg)
+
+    try:
+        price = await run_db(_price, update.effective_user)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        f"💎 <b>فوری‌کردن تخم</b>\n\nبا <b>{price}</b> الماس همین الان آماده‌ی سر باز کردن می‌شه. تأیید می‌کنی؟",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[
+            btn(f"✅ بله ({price} 💎)", style=PRIMARY, callback_data=f"brd_egg_finish:{egg_id}"),
+            btn("❌ نه", style=NAV, callback_data="menu:breeding"),
+        ]]),
+    )
+
+
 def _cave_finish_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
     breeding.finish_cave_with_diamonds(user)
@@ -596,7 +646,9 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(breeding_start_callback, pattern=r"^brd_go:"))
     application.add_handler(CallbackQueryHandler(breeding_lay_callback, pattern=r"^brd_lay$"))
     application.add_handler(CallbackQueryHandler(breeding_hatch_callback, pattern=r"^brd_hatch:"))
+    application.add_handler(CallbackQueryHandler(breeding_cave_finish_ask_callback, pattern=r"^brd_cave_finish_ask$"))
     application.add_handler(CallbackQueryHandler(breeding_cave_finish_callback, pattern=r"^brd_cave_finish$"))
+    application.add_handler(CallbackQueryHandler(breeding_egg_finish_ask_callback, pattern=r"^brd_egg_finish_ask:"))
     application.add_handler(CallbackQueryHandler(breeding_egg_finish_callback, pattern=r"^brd_egg_finish:"))
     application.add_handler(CallbackQueryHandler(breeding_cancel_callback, pattern=r"^brd_cancel$"))
     application.add_handler(CallbackQueryHandler(breeding_cancel_confirm_callback, pattern=r"^brd_cancel_yes$"))

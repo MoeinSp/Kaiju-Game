@@ -322,8 +322,14 @@ TRAIN_XP_GAIN = 40
 # unchanged — and then climbs: ~400 at level 5, ~1000 at level 10, ~2750 at
 # level 20. Growth is super-linear (a linear term plus an exponential one) so
 # each level costs strictly more than the last.
-CREATURE_XP_BASE = 70
-CREATURE_XP_LINEAR = 30
+# Cut ~30% (base 70→49, linear 30→21) to make creature leveling meaningfully easier —
+# the deep-level grind read as "خیلی خیلی سخته". Creature LEVEL is a stored field that
+# only changes inside add_xp(), never re-derived from xp, so lowering the curve does NOT
+# retroactively raise anyone's level; it only makes the NEXT level-ups cheaper (a
+# creature already close to a level-up may finish it on its next feed/battle, which is
+# the intended relief). The exponent is unchanged, so higher levels still cost more.
+CREATURE_XP_BASE = 49
+CREATURE_XP_LINEAR = 21
 CREATURE_XP_EXPONENT = 1.5
 
 

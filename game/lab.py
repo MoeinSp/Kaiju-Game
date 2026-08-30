@@ -30,7 +30,11 @@ import math
 
 from bio_lab.models import User
 
-LAB_XP_COEFFICIENT = 18
+# Was 18; cut 30% (→ 12.6) so lab levels cost 30% less XP and progression is easier.
+# Existing players had their stored lab_xp scaled ×0.7 in the same change (migration
+# 0057), so both the curve and the stored XP moved together and nobody's level changed —
+# only the absolute XP numbers dropped, and future levels come 30% sooner.
+LAB_XP_COEFFICIENT = 12.6
 LAB_XP_EXPONENT = 2.6
 LAB_MAX_LEVEL = 50
 

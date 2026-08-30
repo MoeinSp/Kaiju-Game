@@ -51,7 +51,7 @@ def _inv_home_render(counts: dict) -> tuple[str, InlineKeyboardMarkup]:
     rows = []
     for i in range(0, len(slots), 2):
         row = [
-            btn(f"{constants.EQUIPMENT_SLOT_LABELS[s]} ({counts.get(s, 0)})", style=NAV, callback_data=f"inv_cat:{s}:0")
+            btn(f"{constants.EQUIPMENT_SLOT_LABELS[s]} ({counts.get(s, 0)})", style=NAV, callback_data=f"inv_cat:{s}:all:0")
             for s in slots[i : i + 2]
         ]
         rows.append(row)
@@ -67,17 +67,35 @@ def _inv_cat_sync(tg_user, slot):
     return items
 
 
-def _inv_cat_render(slot, items: list[Equipment], page: int) -> tuple[str, InlineKeyboardMarkup]:
+def _rarity_tab_rows(slot, items, filt):
+    """Rarity filter tabs for one equipment slot — only rarities the player owns here,
+    plus «همه», exactly like the collection picker so gear is split by نایابی."""
+    counts = {}
+    for i in items:
+        counts[i.rarity] = counts.get(i.rarity, 0) + 1
+    tabs = [btn(("• " if filt == "all" else "") + f"همه ({len(items)})",
+                style=NAV, callback_data=f"inv_cat:{slot}:all:0")]
+    for r in reversed(constants.RARITY_ORDER):
+        if counts.get(r):
+            mark = "• " if filt == r else ""
+            tabs.append(btn(f"{mark}{constants.RARITY_LABELS[r]} ({counts[r]})",
+                            style=NAV, callback_data=f"inv_cat:{slot}:{r}:0"))
+    return [tabs[i:i + 3] for i in range(0, len(tabs), 3)]
+
+
+def _inv_cat_render(slot, items: list[Equipment], filt: str, page: int) -> tuple[str, InlineKeyboardMarkup]:
     label = constants.EQUIPMENT_SLOT_LABELS[slot]
     if not items:
         return (
             f"{get_emoji('collection')} <b>کوله‌پشتی — {label}</b>\n\nتوی این دسته چیزی نداری.",
             InlineKeyboardMarkup([[back_btn("menu:inventory", "بازگشت به دسته‌ها")]]),
         )
-    total_pages = max(1, (len(items) + PAGE_SIZE - 1) // PAGE_SIZE)
+    tab_rows = _rarity_tab_rows(slot, items, filt)
+    shown = items if filt == "all" else [i for i in items if i.rarity == filt]
+    total_pages = max(1, (len(shown) + PAGE_SIZE - 1) // PAGE_SIZE)
     page = max(0, min(page, total_pages - 1))
-    chunk = items[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
-    rows = []
+    chunk = shown[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
+    rows = list(tab_rows)
     for i in chunk:
         tag = "⚔️ " if i.equipped_on_id else ""
         rows.append([btn(
@@ -86,14 +104,16 @@ def _inv_cat_render(slot, items: list[Equipment], page: int) -> tuple[str, Inlin
         )])
     nav = []
     if page > 0:
-        nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"inv_cat:{slot}:{page - 1}"))
+        nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"inv_cat:{slot}:{filt}:{page - 1}"))
     if page < total_pages - 1:
-        nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"inv_cat:{slot}:{page + 1}"))
+        nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"inv_cat:{slot}:{filt}:{page + 1}"))
     if nav:
         rows.append(nav)
     rows.append([back_btn("menu:inventory", "بازگشت به دسته‌ها")])
     page_note = f"  (صفحه {page + 1}/{total_pages})" if total_pages > 1 else ""
-    text = f"{get_emoji('collection')} <b>کوله‌پشتی — {label}</b>{page_note}\nرو هرکدوم بزن:"
+    rarity_note = "" if filt == "all" else f" · {constants.RARITY_LABELS[filt]}"
+    text = (f"{get_emoji('collection')} <b>کوله‌پشتی — {label}</b>{rarity_note}{page_note}\n"
+            "نایابی رو انتخاب کن، بعد رو آیتم بزن:")
     return text, InlineKeyboardMarkup(rows)
 
 
@@ -112,10 +132,16 @@ async def inventory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def inventory_cat_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    _, slot, page = query.data.split(":")
+    parts = query.data.split(":")
+    # new form: inv_cat:<slot>:<filter>:<page> ; old form (stale keyboard): inv_cat:<slot>:<page>
+    if len(parts) == 4:
+        _, slot, filt, page = parts
+    else:
+        _, slot, page = parts
+        filt = "all"
     items = await run_db(_inv_cat_sync, update.effective_user, slot)
     await query.answer()
-    text, keyboard = _inv_cat_render(slot, items, int(page))
+    text, keyboard = _inv_cat_render(slot, items, filt, int(page))
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -320,7 +346,7 @@ def _forge_home_render(user, counts: dict) -> tuple[str, InlineKeyboardMarkup]:
         for slot in slots[i : i + 2]:
             row.append(btn(
                 f"{constants.EQUIPMENT_SLOT_LABELS[slot]} ({counts.get(slot, 0)})",
-                style=NAV, callback_data=f"forge_cat:{slot}:0",
+                style=NAV, callback_data=f"forge_cat:{slot}:all:0",
             ))
         rows.append(row)
     rows.append([back_btn("menu:me")])
@@ -333,33 +359,45 @@ def _forge_cat_sync(tg_user, slot):
     return user, items
 
 
-def _forge_cat_render(user, slot, items, page: int) -> tuple[str, InlineKeyboardMarkup]:
+def _forge_cat_render(user, slot, items, filt: str, page: int) -> tuple[str, InlineKeyboardMarkup]:
     label = constants.EQUIPMENT_SLOT_LABELS[slot]
     if not items:
         return (
             f"⚒ <b>آهنگری — {label}</b>\n\nهیچ موردی برای ارتقا توی این دسته نداری.",
             InlineKeyboardMarkup([[back_btn("menu:blacksmith", "بازگشت به آهنگری")]]),
         )
-    total_pages = max(1, (len(items) + PAGE_SIZE - 1) // PAGE_SIZE)
+    # rarity tabs (only what the player owns in this slot) + «همه», like the collection
+    counts = {}
+    for i in items:
+        counts[i.rarity] = counts.get(i.rarity, 0) + 1
+    tabs = [btn(("• " if filt == "all" else "") + f"همه ({len(items)})",
+                style=NAV, callback_data=f"forge_cat:{slot}:all:0")]
+    for r in reversed(constants.RARITY_ORDER):
+        if counts.get(r):
+            mark = "• " if filt == r else ""
+            tabs.append(btn(f"{mark}{constants.RARITY_LABELS[r]} ({counts[r]})",
+                            style=NAV, callback_data=f"forge_cat:{slot}:{r}:0"))
+    rows = [tabs[i:i + 3] for i in range(0, len(tabs), 3)]
+    shown = items if filt == "all" else [i for i in items if i.rarity == filt]
+    total_pages = max(1, (len(shown) + PAGE_SIZE - 1) // PAGE_SIZE)
     page = max(0, min(page, total_pages - 1))
-    chunk = items[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
-    rows = [
-        [btn(
+    chunk = shown[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
+    for i in chunk:
+        rows.append([btn(
             f"{constants.RARITY_LABELS[i.rarity]} {i.name} +{i.level}",
             style=LIST, callback_data=f"forge_pick:{i.id}",
-        )]
-        for i in chunk
-    ]
+        )])
     nav = []
     if page > 0:
-        nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"forge_cat:{slot}:{page - 1}"))
+        nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"forge_cat:{slot}:{filt}:{page - 1}"))
     if page < total_pages - 1:
-        nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"forge_cat:{slot}:{page + 1}"))
+        nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"forge_cat:{slot}:{filt}:{page + 1}"))
     if nav:
         rows.append(nav)
     rows.append([back_btn("menu:blacksmith", "بازگشت به دسته‌ها")])
     page_note = f"  (صفحه {page + 1}/{total_pages})" if total_pages > 1 else ""
-    text = f"⚒ <b>آهنگری — {label}</b>{page_note}\nکدوم رو ارتقا بدی؟ (رنگ = نایابی)"
+    rarity_note = "" if filt == "all" else f" · {constants.RARITY_LABELS[filt]}"
+    text = f"⚒ <b>آهنگری — {label}</b>{rarity_note}{page_note}\nنایابی رو انتخاب کن، بعد رو آیتم بزن:"
     return text, InlineKeyboardMarkup(rows)
 
 
@@ -371,10 +409,15 @@ async def blacksmith_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def forge_cat_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    _, slot, page = query.data.split(":")
+    parts = query.data.split(":")
+    if len(parts) == 4:
+        _, slot, filt, page = parts
+    else:  # old form from a stale keyboard: forge_cat:<slot>:<page>
+        _, slot, page = parts
+        filt = "all"
     user, items = await run_db(_forge_cat_sync, update.effective_user, slot)
     await query.answer()
-    text, keyboard = _forge_cat_render(user, slot, items, int(page))
+    text, keyboard = _forge_cat_render(user, slot, items, filt, int(page))
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 

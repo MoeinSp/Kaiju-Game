@@ -64,7 +64,7 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_lab": ("تنظیم سطح آزمایشگاه", "🔬", "admin"),
     # newer features — no Premium emoji yet, so these unicode fallbacks show until
     # the owner themes them in the panel (they're first-class keys now, so they can be)
-    "btn_campaign": ("کمپین", "🗺", "features"),
+    "btn_campaign": ("دانجن", "🗺", "features"),
     "btn_team": ("تیم من", "🛡", "features"),
     "btn_league": ("لیگ رتبه‌بندی", "🎖", "features"),
     "btn_codex": ("دانشنامه", "📖", "features"),

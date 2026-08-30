@@ -1,4 +1,4 @@
-"""«🗺 کمپین» — the PvE stage ladder, fought with your 3v3 team."""
+"""«🗺 دانجن» — the PvE stage ladder, fought with your 3v3 team."""
 
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
@@ -47,12 +47,12 @@ def _panel_sync(tg_user):
 def _render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
     st = view["status"]
     if st["next_stage"] is None:
-        text = "🗺 <b>کمپین</b>\n\n🏆 <b>کل کمپین رو فتح کردی!</b> منتظر مراحل جدید باش."
+        text = "🗺 <b>دانجن</b>\n\n🏆 <b>کل دانجن رو فتح کردی!</b> منتظر مراحل جدید باش."
         return text, InlineKeyboardMarkup([[back_btn("menu:me")]])
 
     boss = " 👹 <b>(باس!)</b>" if st["next_is_boss"] else ""
     lines = [
-        f"🗺 <b>کمپین</b> — مرحله‌ی <b>{st['next_stage']}</b>/{st['max_stage']}{boss}",
+        f"🗺 <b>دانجن</b> — مرحله‌ی <b>{st['next_stage']}</b>/{st['max_stage']}{boss}",
         f"<blockquote>✅ فتح‌شده: {st['cleared']} مرحله\n"
         f"👾 قدرت دشمن این مرحله: <b>{st['enemy_power']}</b>\n"
         f"💪 قدرت تیم تو: <b>{view['team_power']}</b>\n"
@@ -100,7 +100,7 @@ async def campaign_fight_callback(update: Update, context: ContextTypes.DEFAULT_
             + (f"\n🛡 {result['survivors']} هیولا زنده موند." if result["survivors"] else "")
         )
         if result["cleared_all"]:
-            header = "🏆 <b>آخرین مرحله‌ی کمپین رو هم فتح کردی!</b>\n" + header
+            header = "🏆 <b>آخرین مرحله‌ی دانجن رو هم فتح کردی!</b>\n" + header
     else:
         await query.answer("💀 شکست خوردی")
         header = f"💀 <b>تیمت توی مرحله‌ی {result['stage']} شکست خورد.</b>\nتیمت رو قوی‌تر کن و دوباره امتحان کن."

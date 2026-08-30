@@ -98,11 +98,11 @@ def attempt(user: User, team_creatures: list[Creature]) -> dict:
     win, advances the campaign and pays the first-clear reward."""
     stage = user.campaign_stage + 1
     if stage > MAX_STAGE:
-        raise GameError("کل کمپین رو تموم کردی! 🏆 منتظر مراحل جدید باش.")
+        raise GameError("کل دانجن رو تموم کردی! 🏆 منتظر مراحل جدید باش.")
     if not team_creatures:
         raise GameError("اول از «⚔️ تیم من» حداقل یه هیولا توی تیمت بذار.")
 
-    spend_energy(user, ENERGY_COST, "کمپین")  # raises if not enough
+    spend_energy(user, ENERGY_COST, "دانجن")  # raises if not enough
     user.save(update_fields=["energy", "energy_updated_at"])
 
     enemies = enemy_team(stage)

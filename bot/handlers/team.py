@@ -50,7 +50,7 @@ def _panel_sync(tg_user):
 def _render(view: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
     from bot.handlers.private import creature_picker_frame
 
-    lines = [f"⚔️ <b>تیم من</b>  (برای کمپین و نبرد تیمی)"]
+    lines = [f"⚔️ <b>تیم من</b>  (برای دانجن و نبرد تیمی)"]
     if view["members"]:
         for c in view["members"]:
             lines.append(f"  {constants.RARITY_LABELS[c.rarity]} <b>{c.name}</b> {'⭐' * c.star_level} · Lv{c.level}")

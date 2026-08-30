@@ -299,7 +299,7 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
                 btn(
                     f"💎 تمومش کن ({diamond_finish_price(upgrade)} الماس)",
                     style=SHOP,
-                    callback_data=f"bld_finish:{building.id}",
+                    callback_data=f"bld_finish_ask:{building.id}",
                 )
             ]
         )
@@ -443,6 +443,36 @@ def _finish_with_diamonds_sync(tg_user, building_id):
     _, cost = finish_with_diamonds(user, building_id)
     building.refresh_from_db()
     return _detail_view(user, building), cost
+
+
+def _finish_price_sync(tg_user, building_id):
+    user, _ = get_or_create_user(tg_user)
+    upgrade = upgrade_for_building(user, Building.objects.get(id=building_id, owner=user))
+    if upgrade is None:
+        raise GameError("این ساختمون در حال ارتقا نیست.")
+    return diamond_finish_price(upgrade)
+
+
+async def building_finish_ask_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Confirm step before spending diamonds — so nobody finishes an upgrade by a
+    mis-tap and loses diamonds without meaning to."""
+    query = update.callback_query
+    building_id = int(query.data.split(":")[1])
+    try:
+        cost = await run_db(_finish_price_sync, update.effective_user, building_id)
+    except (GameError, Building.DoesNotExist):
+        await query.answer("این ساختمون در حال ارتقا نیست.", show_alert=True)
+        return
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        f"💎 <b>تمام‌کردن فوری با الماس</b>\n\nاین ارتقا با <b>{cost}</b> الماس همین الان تموم می‌شه. تأیید می‌کنی؟",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[
+            btn(f"✅ بله ({cost} 💎)", style=SHOP, callback_data=f"bld_finish:{building_id}"),
+            btn("❌ نه", style=DANGER, callback_data=f"bld_pick:{building_id}"),
+        ]]),
+    )
 
 
 async def building_finish_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -678,6 +708,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(building_pick_callback, pattern=r"^bld_pick:"))
     application.add_handler(CallbackQueryHandler(building_collect_callback, pattern=r"^bld_collect:"))
     application.add_handler(CallbackQueryHandler(building_upgrade_callback, pattern=r"^bld_upgrade:"))
+    application.add_handler(CallbackQueryHandler(building_finish_ask_callback, pattern=r"^bld_finish_ask:"))
     application.add_handler(CallbackQueryHandler(building_finish_callback, pattern=r"^bld_finish:"))
     application.add_handler(
         CallbackQueryHandler(building_speedup_list_callback, pattern=r"^bld_speedup_list:")

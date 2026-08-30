@@ -36,15 +36,27 @@ def _render(offers, coins, diamonds) -> tuple[str, InlineKeyboardMarkup]:
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
+_SHOWN_OFFERS_KEY = "shop_shown_offers"
+
+
+def _remember_offers(context, offers) -> None:
+    """Remember exactly what prices we showed this player, so a purchase can be charged
+    at the shown price and never more (see shop.buy)."""
+    context.user_data[_SHOWN_OFFERS_KEY] = {
+        o["key"]: {"price": o["price"], "currency": o["currency"]} for o in offers
+    }
+
+
 async def shop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     offers, coins, diamonds = await run_db(_panel_sync, update.effective_user)
+    _remember_offers(context, offers)
     text, keyboard = _render(offers, coins, diamonds)
     await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
 
 
-def _buy_sync(tg_user, key):
+def _buy_sync(tg_user, key, shown_price, shown_currency):
     user, _ = get_or_create_user(tg_user)
-    offer = shop.buy(user, key)
+    offer = shop.buy(user, key, shown_price=shown_price, shown_currency=shown_currency)
     user.refresh_from_db()  # buy() charges via a locked re-fetch; outer instance is stale
     return offer, shop.today_offers(), user.coins, user.diamonds
 
@@ -52,11 +64,15 @@ def _buy_sync(tg_user, key):
 async def shop_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     key = query.data.split(":")[1]
+    shown = context.user_data.get(_SHOWN_OFFERS_KEY, {}).get(key, {})
     try:
-        offer, offers, coins, diamonds = await run_db(_buy_sync, update.effective_user, key)
+        offer, offers, coins, diamonds = await run_db(
+            _buy_sync, update.effective_user, key, shown.get("price"), shown.get("currency")
+        )
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
+    _remember_offers(context, offers)
     await query.answer(f"✅ خریدی: {shop.offer_reward_text(offer)}")
     text, keyboard = _render(offers, coins, diamonds)
     await safe_edit_message_text(

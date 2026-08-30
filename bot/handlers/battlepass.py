@@ -23,13 +23,25 @@ def _panel_sync(tg_user):
     return user, battlepass.status(user)
 
 
+def _fmt_left(seconds: int) -> str:
+    days, rem = divmod(max(0, seconds), 86400)
+    hours = rem // 3600
+    if days:
+        return f"{days} روز و {hours} ساعت"
+    if hours:
+        return f"{hours} ساعت"
+    return "کمتر از یک ساعت"
+
+
 def _render(user, st: dict) -> tuple[str, InlineKeyboardMarkup]:
     bar = constants.render_bar(st["into"], st["span"], width=10)
     track = "✦ ویژه" if st["premium"] else "رایگان"
+    left = _fmt_left(battlepass.seconds_until_period_end())
     lines = [
-        f"🎟 <b>پاس فصلی</b>  <code>{st['season']}</code>",
+        f"🎟 <b>پاس دوهفته‌ای</b>",
         f"<blockquote>تراک: <b>{track}</b>\n"
-        f"مرحله <b>{st['tier']}</b>/{st['max_tier']}  {bar}  {st['into']}/{st['span']} امتیاز</blockquote>",
+        f"مرحله <b>{st['tier']}</b>/{st['max_tier']}  {bar}  {st['into']}/{st['span']} امتیاز\n"
+        f"⏳ <b>{left}</b> تا پایان پاس (شنبه ریست می‌شه)</blockquote>",
         "<i>هر فعالیتی (شکار، آرنا، ساختمون، ورود روزانه) امتیاز پاس می‌ده.</i>\n",
     ]
     # preview the next few tiers
