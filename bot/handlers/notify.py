@@ -25,6 +25,12 @@ def _defense_details_button(attacker_id):
     return InlineKeyboardMarkup([[btn("🔍 جزییات حریف", style=NAV, callback_data=f"defrep_opp:{attacker_id}")]])
 
 
+def _arena_button():
+    from bot.buttons import BATTLE
+
+    return InlineKeyboardMarkup([[btn("آرنا", emoji_key="btn_arena", style=BATTLE, callback_data="menu:arena")]])
+
+
 def _defense_report_keyboard(defense: dict, *, group: bool):
     """Buttons under a defense report. The labels carry a compact summary (power, the
     attacker's cup, coins looted). Revenge is ARENA-ONLY; group «اتک» has no revenge."""
@@ -86,8 +92,12 @@ async def notify_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         # present, attaches a «🔍 جزییات حریف» button (defense reports). No revenge
         # button — the defense report never offers revenge (that lives in «انتقام‌ها»).
         user_id, text = item[0], item[1]
+        marker = item[2] if len(item) > 2 else None
         attacker_id = item[3] if len(item) > 3 else None
-        reply_markup = _defense_details_button(attacker_id)
+        if marker == "arena":
+            reply_markup = _arena_button()
+        else:
+            reply_markup = _defense_details_button(attacker_id)
         try:
             await context.bot.send_message(
                 chat_id=user_id, text=text, parse_mode="HTML", reply_markup=reply_markup

@@ -136,7 +136,16 @@ def collect_due() -> list[tuple[int, str]]:
         for user in User.objects.filter(notifications_on=True):
             current, _ = _synced_energy_and_anchor(user)
             if current >= constants.MAX_ENERGY and not user.energy_full_notified:
-                out.append((user.id, "⚡ <b>انرژیت پر شد!</b> وقتِ شکار و آرناست."))
+                bar = "■" * 10
+                energy_text = (
+                    "⚡️ <b>مخازن انرژی تکمیل شد!</b>\n"
+                    f"🔋 وضعیت انرژی: [{bar}] 100% ({constants.MAX_ENERGY}/{constants.MAX_ENERGY})\n"
+                    "──────────────\n"
+                    "⚔️ هیولایت به اوج توان بازگشته و تشنه نبرد است!\n"
+                    "غنیمت‌های آرنا و شکارهای تازه منتظرند؛ همین حالا قلمروات را گسترش بده."
+                )
+                # 3rd element "arena" tells notify_job to hang an «آرنا» button under it
+                out.append((user.id, energy_text, "arena"))
                 user.energy_full_notified = True
                 user.save(update_fields=["energy_full_notified"])
             elif current < constants.MAX_ENERGY and user.energy_full_notified:
