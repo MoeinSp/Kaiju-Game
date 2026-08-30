@@ -25,7 +25,7 @@ from bio_lab.models import PassProgress, User
 # Iran's calendar week. A new season begins — and the old one ends — at Saturday 00:00
 # local, every second Saturday. `_PASS_EPOCH` is a reference Saturday the cycle counts
 # from; changing the cadence only means editing these two numbers.
-_PASS_EPOCH = datetime.date(2024, 1, 6)  # a Saturday
+_PASS_EPOCH = datetime.date(2024, 1, 13)  # a Saturday; phased so a period ends 2026-09-05
 _PASS_PERIOD_DAYS = 14
 
 
