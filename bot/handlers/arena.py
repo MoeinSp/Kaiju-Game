@@ -204,11 +204,15 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 def _team_choices_sync(tg_user):
     from bio_lab.repository import team_choices
+    from game.workers import creature_status
 
     user, _ = get_or_create_user(tg_user)
     out = []
     for c in team_choices(user):
-        out.append((c.id, c.name, c.element, active_power_of(c), c.is_active))
+        # a creature that's mining/breeding can't be made active — flag it so the
+        # player doesn't tap it for nothing (creature_status returns None when free)
+        busy = (not c.is_active) and creature_status(user, c) is not None
+        out.append((c.id, c.name, c.element, active_power_of(c), c.is_active, busy))
     return out
 
 
@@ -229,9 +233,10 @@ async def arena_swap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     choices = await run_db(_team_choices_sync, update.effective_user)
     await query.answer()
     rows = []
-    for cid, name, element, power, is_active in choices:
-        tag = "🟢 " if is_active else ""
-        rows.append([btn(f"{tag}{name} [{constants.element_label(element)}] · 💪{power:,}",
+    for cid, name, element, power, is_active, busy in choices:
+        tag = "🟢 " if is_active else ("⛔ " if busy else "")
+        note = " (مشغول)" if busy else ""
+        rows.append([btn(f"{tag}{name} [{constants.ELEMENT_LABELS[element]}] · 💪{power:,}{note}",
                          style=BATTLE, callback_data=f"arena_swap_pick:{cid}")])
     rows.append([btn("↩️ بازگشت به حریف", style=NAV, callback_data="arena_swap_back")])
     await safe_edit_message_text(

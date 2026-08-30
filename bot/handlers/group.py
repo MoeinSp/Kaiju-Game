@@ -790,11 +790,16 @@ async def gatk_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 def _gatk_team_choices_sync(attacker_id):
     from bio_lab.repository import team_choices
+    from game.workers import creature_status
 
     attacker = User.objects.filter(id=attacker_id).first()
     if attacker is None:
         raise GameError("پیدا نشدی.")
-    return [(c.id, c.name, c.element, _creature_power(c), c.is_active) for c in team_choices(attacker)]
+    out = []
+    for c in team_choices(attacker):
+        busy = (not c.is_active) and creature_status(attacker, c) is not None
+        out.append((c.id, c.name, c.element, _creature_power(c), c.is_active, busy))
+    return out
 
 
 async def gatk_swap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -811,9 +816,10 @@ async def gatk_swap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     await query.answer()
     rows = []
-    for cid, name, element, power, is_active in choices:
-        tag = "🟢 " if is_active else ""
-        rows.append([btn(f"{tag}{name} [{constants.element_label(element)}] · 💪{power:,}",
+    for cid, name, element, power, is_active, busy in choices:
+        tag = "🟢 " if is_active else ("⛔ " if busy else "")
+        note = " (مشغول)" if busy else ""
+        rows.append([btn(f"{tag}{name} [{constants.ELEMENT_LABELS[element]}] · 💪{power:,}{note}",
                          style=CONFIRM, callback_data=f"gatk_swap_pick:{attacker_id}:{target_id}:{cid}")])
     rows.append([btn("↩️ بازگشت به حریف", style=NAV, callback_data=f"gatk_swap_pick:{attacker_id}:{target_id}:0")])
     await safe_edit_message_text(
