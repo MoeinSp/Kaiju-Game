@@ -64,7 +64,7 @@ def team_choices(user: User, limit: int = 3) -> list[Creature]:
 
     team = Team.objects.filter(owner=user).select_related("slot1", "slot2", "slot3").first()
     if team is not None:
-        picked = [c for c in team.creatures if c is not None]
+        picked = [c for c in team.creatures() if c is not None]  # .creatures() is a method
         if picked:
             return picked[:limit]
     # no team set → the strongest few by base-stat sum (cheap proxy; the caller shows
