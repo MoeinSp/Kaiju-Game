@@ -24,7 +24,7 @@ DMG_VARIANCE = (0.85, 1.15)
 # analysable curve: a fighter can have a good or bad day. The swing width is tuned so
 # parity ≈ 50/50 and a large power lead ≈ 90% — see win_chance_pct, which is calibrated
 # to the win-rate this produces.
-FORM_SWING = 0.55
+FORM_SWING = 0.38
 
 
 @dataclass

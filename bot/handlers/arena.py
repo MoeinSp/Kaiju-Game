@@ -202,6 +202,104 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
+def _team_choices_sync(tg_user):
+    from bio_lab.repository import team_choices
+
+    user, _ = get_or_create_user(tg_user)
+    out = []
+    for c in team_choices(user):
+        out.append((c.id, c.name, c.element, active_power_of(c), c.is_active))
+    return out
+
+
+def active_power_of(creature):
+    from game.creature import creature_power
+    from game.equipment import get_equipped_items
+
+    return creature_power(creature, get_equipped_items(creature))
+
+
+async def arena_swap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show the player's team so they can fight THIS opponent with a different creature —
+    the opponent stays exactly the same, only your fighter changes."""
+    query = update.callback_query
+    if context.user_data.get(PENDING_OPPONENT_KEY) is None:
+        await query.answer("اول یه حریف پیدا کن.", show_alert=True)
+        return
+    choices = await run_db(_team_choices_sync, update.effective_user)
+    await query.answer()
+    rows = []
+    for cid, name, element, power, is_active in choices:
+        tag = "🟢 " if is_active else ""
+        rows.append([btn(f"{tag}{name} [{constants.element_label(element)}] · 💪{power:,}",
+                         style=BATTLE, callback_data=f"arena_swap_pick:{cid}")])
+    rows.append([btn("↩️ بازگشت به حریف", style=NAV, callback_data="arena_swap_back")])
+    await safe_edit_message_text(
+        query,
+        "🔄 <b>کدوم موجود با این حریف بجنگه؟</b>\n<blockquote>حریف عوض نمی‌شه؛ فقط موجودِ خودت. "
+        "عنصر مناسب رو انتخاب کن تا شانس بردت بره بالا.</blockquote>",
+        parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+def _swap_rerender_sync(tg_user, creature_id, pending):
+    from bio_lab.models import Creature
+    from game.creature import set_active_creature
+    from game.energy import sync_energy
+
+    user, _ = get_or_create_user(tg_user)
+    if creature_id is not None:
+        set_active_creature(user, creature_id)  # may raise GameError if the creature is busy
+    creature = Creature.objects.filter(owner=user, is_active=True).first()
+    if creature is None:
+        raise GameError("اول یه موجود فعال انتخاب کن.")
+    level = creature.level
+    my_power = active_power_of(creature)
+    dna_win = round(constants.ARENA_WIN_DNA_BASE + level * constants.ARENA_WIN_DNA_PER_LEVEL)
+    opponent = {
+        "is_fake": pending["is_fake"], "user": None, "label": pending["label"],
+        "creature_name": pending.get("creature_name", "؟"), "cup": pending["cup"],
+        "power": pending["power"], "element": pending.get("element"),
+        "loot_pool": pending["loot_pool"],
+    }
+    loot = expected_loot(opponent, level)
+    return user, opponent, my_power, loot, creature.element, dna_win, creature.name, sync_energy(user)
+
+
+async def arena_swap_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    pending = context.user_data.get(PENDING_OPPONENT_KEY)
+    if pending is None:
+        await query.answer("این حریف دیگه در دسترس نیست.", show_alert=True)
+        return
+    creature_id = int(query.data.split(":")[1]) if ":" in query.data else None
+    try:
+        args = await run_db(_swap_rerender_sync, update.effective_user, creature_id, pending)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("موجودت عوض شد.")
+    text, keyboard = _render_opponent(*args)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def arena_swap_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Return to the opponent screen without changing the fighter."""
+    query = update.callback_query
+    pending = context.user_data.get(PENDING_OPPONENT_KEY)
+    if pending is None:
+        await query.answer("این حریف دیگه در دسترس نیست.", show_alert=True)
+        return
+    try:
+        args = await run_db(_swap_rerender_sync, update.effective_user, None, pending)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    text, keyboard = _render_opponent(*args)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
 def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
                      cname="—", energy=None) -> tuple[str, InlineKeyboardMarkup]:
     """The 'opponent found' arena screen — shared by matchmaking and the «بازگشت» from
@@ -250,6 +348,7 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
     keyboard = InlineKeyboardMarkup(
         [
             [btn(f"⚔️ شروع حمله (-{constants.ARENA_ATTACK_ENERGY_COST}⚡)", emoji_key="btn_attack", style=BATTLE, callback_data="arena_attack")],
+            [btn("🔄 انتخاب موجود دیگر از تیم", style=NAV, callback_data="arena_swap")],
             [btn("🔍 جزییات حریف", style=NAV, callback_data="arena_opp_details"),
              btn("حریف بعدی", emoji_key="btn_recheck", style=NAV, callback_data="arena_find")],
             [back_btn("menu:arena")],
@@ -783,6 +882,9 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(arena_opp_details_callback, pattern=r"^arena_opp_details$"))
     application.add_handler(CallbackQueryHandler(arena_opp_back_callback, pattern=r"^arena_opp_back$"))
     application.add_handler(CallbackQueryHandler(arena_attack_callback, pattern=r"^arena_attack(:c)?$"))
+    application.add_handler(CallbackQueryHandler(arena_swap_callback, pattern=r"^arena_swap$"))
+    application.add_handler(CallbackQueryHandler(arena_swap_pick_callback, pattern=r"^arena_swap_pick:\d+$"))
+    application.add_handler(CallbackQueryHandler(arena_swap_back_callback, pattern=r"^arena_swap_back$"))
     application.add_handler(CallbackQueryHandler(arena_detail_callback, pattern=r"^arena_detail$"))
     application.add_handler(CallbackQueryHandler(arena_top_callback, pattern=r"^arena_top$"))
     application.add_handler(

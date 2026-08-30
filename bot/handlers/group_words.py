@@ -660,7 +660,7 @@ def _card_sync(tg_user, chat, action):
 
         data["energy"] = sync_energy(user)
         my_power = creature_power(creature, get_equipped_items(creature))
-        target = scout_one(creature)
+        target = scout_one(user, creature)
         # scout_one returns the raw roll; the card needs it labelled and priced
         target["tier_label"] = HUNT_TIERS[target["tier"]]["label"]
         target["reward"] = estimated_reward(target["tier"], my_power)

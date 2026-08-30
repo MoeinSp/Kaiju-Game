@@ -166,8 +166,8 @@ def creature_picker_frame(creatures, filt, page, page_size, tab_cb, nav_cb):
 # not a vague vibe. Bounded to [5, 95] so it's never a promised 0/100 (a fight is never
 # a sure thing). Element advantage counts as a ~1.10× effective-power edge (measured:
 # an element edge at equal power wins ~71% of the time).
-_WIN_CHANCE_EXP = 9
-ELEMENT_POWER_FACTOR = 1.10
+_WIN_CHANCE_EXP = 14
+ELEMENT_POWER_FACTOR = 1.15
 
 
 def win_chance_pct(my_power: int, opp_power: int, my_elem=None, opp_elem=None) -> int:
@@ -518,43 +518,49 @@ def _upgrade_list_sync(tg_user):
 UPGRADE_PAGE_SIZE = 8
 
 
-def _upgrade_render(user, ranked, page: int) -> tuple[str, InlineKeyboardMarkup]:
-    """One page of the strongest-first creature picker. Paginated because a player
-    with a big roster produced a keyboard tall enough to be unwieldy (and, past
-    Telegram's limits, to fail outright)."""
-    total_pages = max(1, (len(ranked) + UPGRADE_PAGE_SIZE - 1) // UPGRADE_PAGE_SIZE)
-    page = max(0, min(page, total_pages - 1))
-    chunk = ranked[page * UPGRADE_PAGE_SIZE : (page + 1) * UPGRADE_PAGE_SIZE]
+def _upgrade_render(user, ranked, filt: str, page: int) -> tuple[str, InlineKeyboardMarkup]:
+    """One page of the strongest-first creature picker, split by rarity with tabs
+    (like the collection) and paginated. `ranked` is [(creature, power)] desc."""
+    # rarity tabs from the whole roster (only rarities the player owns) + «همه»
+    counts = {}
+    for c, _p in ranked:
+        counts[c.rarity] = counts.get(c.rarity, 0) + 1
+    tabs = [btn(("• " if filt == "all" else "") + f"همه ({len(ranked)})",
+                style=NAV, callback_data="upg_page:all:0")]
+    for r in reversed(constants.RARITY_ORDER):
+        if counts.get(r):
+            mark = "• " if filt == r else ""
+            tabs.append(btn(f"{mark}{constants.RARITY_LABELS[r]} ({counts[r]})",
+                            style=NAV, callback_data=f"upg_page:{r}:0"))
+    rows = [tabs[i:i + 3] for i in range(0, len(tabs), 3)]
 
-    rows = []
+    shown = ranked if filt == "all" else [(c, p) for c, p in ranked if c.rarity == filt]
+    total_pages = max(1, (len(shown) + UPGRADE_PAGE_SIZE - 1) // UPGRADE_PAGE_SIZE)
+    page = max(0, min(page, total_pages - 1))
+    chunk = shown[page * UPGRADE_PAGE_SIZE : (page + 1) * UPGRADE_PAGE_SIZE]
+
     for creature, power in chunk:
         active_tag = "🟢 " if creature.is_active else ""
         stars = "⭐" * creature.star_level
-        # RARITY_LABELS already carries its own colour dot, which is the fastest way
-        # to read rarity at a glance in a long list
         rarity = constants.RARITY_LABELS[creature.rarity]
-        rows.append(
-            [
-                btn(
-                    f"{active_tag}{creature.name} {stars} · {rarity} · Lv{creature.level} · 💪{power}",
-                    style=LIST,
-                    callback_data=f"upg_pick:{creature.id}",
-                )
-            ]
-        )
+        rows.append([btn(
+            f"{active_tag}{creature.name} {stars} · {rarity} · Lv{creature.level} · 💪{power}",
+            style=LIST, callback_data=f"upg_pick:{creature.id}",
+        )])
     nav = []
     if page > 0:
-        nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"upg_page:{page - 1}"))
+        nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"upg_page:{filt}:{page - 1}"))
     if page < total_pages - 1:
-        nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"upg_page:{page + 1}"))
+        nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"upg_page:{filt}:{page + 1}"))
     if nav:
         rows.append(nav)
     rows.append([back_btn("menu:me")])
 
     page_note = f"  (صفحه {page + 1}/{total_pages})" if total_pages > 1 else ""
+    rarity_note = "" if filt == "all" else f" · {constants.RARITY_LABELS[filt]}"
     text = (
-        f"🔧 <b>ارتقا و پرورش</b>{page_note}\n"
-        f"هیولاهات به ترتیب قدرت مرتب شدن — کدوم رو می‌خوای قوی‌تر کنی؟\n\n{wallet_line(user)}"
+        f"🔧 <b>ارتقا و پرورش</b>{rarity_note}{page_note}\n"
+        f"نایابی رو انتخاب کن، بعد هیولا رو بزن (به ترتیب قدرت):\n\n{wallet_line(user)}"
     )
     return text, InlineKeyboardMarkup(rows)
 
@@ -567,20 +573,24 @@ async def upgrade_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except GameError as exc:
         await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard())
         return
-    text, keyboard = _upgrade_render(user, ranked, 0)
+    text, keyboard = _upgrade_render(user, ranked, "all", 0)
     await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def upgrade_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    page = int(query.data.split(":")[1])
+    parts = query.data.split(":")
+    if len(parts) == 3:  # upg_page:<filter>:<page>
+        filt, page = parts[1], int(parts[2])
+    else:  # old form from a stale keyboard: upg_page:<page>
+        filt, page = "all", int(parts[1])
     try:
         user, ranked = await run_db(_upgrade_list_sync, update.effective_user)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
-    text, keyboard = _upgrade_render(user, ranked, page)
+    text, keyboard = _upgrade_render(user, ranked, filt, page)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -640,11 +650,19 @@ async def equip_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 
+_EQUIP_SLOT_PAGE = 8
+
+
 async def equip_slot_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """The candidates for one slot, plus a way to strip whatever's in it."""
+    """The candidates for one slot — split by rarity with tabs and paginated (like the
+    blacksmith) — plus a way to strip whatever's in it."""
     query = update.callback_query
-    _, creature_id_raw, slot = query.data.split(":")
-    creature_id = int(creature_id_raw)
+    parts = query.data.split(":")
+    # upg_slot:<cid>:<slot>[:<filter>:<page>]
+    creature_id = int(parts[1])
+    slot = parts[2]
+    filt = parts[3] if len(parts) >= 5 else "all"
+    page = int(parts[4]) if len(parts) >= 5 else 0
     try:
         user, creature, slots = await run_db(_equip_panel_sync, update.effective_user, creature_id)
     except GameError as exc:
@@ -656,6 +674,7 @@ async def equip_slot_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     await query.answer()
+    candidates = row["candidates"]
     lines = [f"{row['label']} — <b>{creature.name}</b>", ""]
     if row["item"] is not None:
         lines.append(f"الان: <b>{row['item'].name} +{row['item'].level}</b>")
@@ -663,27 +682,48 @@ async def equip_slot_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         if bonus:
             lines.append(f"<i>{bonus}</i>")
         lines.append("")
-    if row["candidates"]:
-        lines.append("یکی از این‌ها رو بذار توش:")
+
+    rows = []
+    if candidates:
+        # rarity tabs (only rarities present among the candidates) + «همه»
+        counts = {}
+        for it in candidates:
+            counts[it.rarity] = counts.get(it.rarity, 0) + 1
+        tabs = [btn(("• " if filt == "all" else "") + f"همه ({len(candidates)})",
+                    style=NAV, callback_data=f"upg_slot:{creature_id}:{slot}:all:0")]
+        for r in reversed(constants.RARITY_ORDER):
+            if counts.get(r):
+                mark = "• " if filt == r else ""
+                tabs.append(btn(f"{mark}{constants.RARITY_LABELS[r]} ({counts[r]})",
+                                style=NAV, callback_data=f"upg_slot:{creature_id}:{slot}:{r}:0"))
+        rows += [tabs[i:i + 3] for i in range(0, len(tabs), 3)]
+
+        shown = candidates if filt == "all" else [it for it in candidates if it.rarity == filt]
+        total_pages = max(1, (len(shown) + _EQUIP_SLOT_PAGE - 1) // _EQUIP_SLOT_PAGE)
+        page = max(0, min(page, total_pages - 1))
+        chunk = shown[page * _EQUIP_SLOT_PAGE : (page + 1) * _EQUIP_SLOT_PAGE]
+        lines.append("نایابی رو انتخاب کن، بعد آیتم رو بذار توش:")
+        for item in chunk:
+            worn = f" (روی {item.equipped_on.name})" if item.equipped_on_id else ""
+            rows.append([btn(
+                f"{item.name} +{item.level} · {constants.RARITY_LABELS[item.rarity]}{worn}",
+                style=CONFIRM, callback_data=f"upg_equip:{creature_id}:{item.id}",
+            )])
+        nav = []
+        if page > 0:
+            nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV,
+                           callback_data=f"upg_slot:{creature_id}:{slot}:{filt}:{page - 1}"))
+        if page < total_pages - 1:
+            nav.append(btn("بعدی", emoji_key="btn_next", style=NAV,
+                           callback_data=f"upg_slot:{creature_id}:{slot}:{filt}:{page + 1}"))
+        if nav:
+            rows.append(nav)
     else:
         lines.append(
             "<blockquote>هیچ تجهیزاتی برای این جایگاه نداری. از باکس ژنتیکی و جعبه‌های الماسی "
             "می‌تونی تجهیزات به دست بیاری.</blockquote>"
         )
 
-    rows = []
-    for item in row["candidates"]:
-        # a candidate worn by another creature moves rather than duplicates, so say so
-        worn = f" (روی {item.equipped_on.name})" if item.equipped_on_id else ""
-        rows.append(
-            [
-                btn(
-                    f"{item.name} +{item.level} · {constants.RARITY_LABELS[item.rarity]}{worn}",
-                    style=CONFIRM,
-                    callback_data=f"upg_equip:{creature_id}:{item.id}",
-                )
-            ]
-        )
     if row["item"] is not None:
         rows.append(
             [btn("خالی کردن این جایگاه", emoji_key="btn_cancel", style=DANGER,
@@ -1842,7 +1882,7 @@ def _hunt_scout_sync(tg_user, charge=False):
     # use the canonical power metric (same as profile/arena) — the old stat-sum showed
     # a smaller, inconsistent number ("قدرتم کمه و باگه").
     my_power = _creature_power(creature, get_equipped_items(creature))
-    return creature, my_power, user.cup, scout_one(creature), sync_energy(user), cost
+    return creature, my_power, user.cup, scout_one(user, creature), sync_energy(user), cost
 
 
 def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> str:
@@ -1884,6 +1924,7 @@ def _hunt_scout_keyboard(target, scout_price=0) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [btn("حمله!", emoji_key="btn_attack", style=BATTLE, callback_data=f"hunt_go:{target['tier']}:{target['seed']}")],
+            [btn("🔄 انتخاب موجود دیگر از تیم", style=NAV, callback_data=f"hunt_swap:{target['tier']}:{target['seed']}")],
             [btn(f"🔍 بعدی ({scout_price} طلا)", style=NAV, callback_data="hunt_next")],
             [back_btn("menu:me")],
         ]
@@ -1914,6 +1955,68 @@ async def hunt_next_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("🔍 جستجوی دوباره…")
+    await safe_edit_message_text(
+        query,
+        _hunt_scout_text(creature, my_power, cup, target, energy, cost),
+        parse_mode="HTML",
+        reply_markup=_hunt_scout_keyboard(target, cost),
+    )
+
+
+def _hunt_team_choices_sync(tg_user):
+    from bio_lab.repository import team_choices
+
+    user, _ = get_or_create_user(tg_user)
+    return [(c.id, c.name, c.element, _creature_power(c, get_equipped_items(c)), c.is_active)
+            for c in team_choices(user)]
+
+
+async def hunt_swap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Pick a different team creature to fight THIS same wild target (same tier+seed)."""
+    query = update.callback_query
+    _, tier, seed = query.data.split(":")
+    choices = await run_db(_hunt_team_choices_sync, update.effective_user)
+    await query.answer()
+    rows = []
+    for cid, name, element, power, is_active in choices:
+        tag = "🟢 " if is_active else ""
+        rows.append([btn(f"{tag}{name} [{constants.element_label(element)}] · 💪{power:,}",
+                         style=BATTLE, callback_data=f"hunt_swap_pick:{tier}:{seed}:{cid}")])
+    rows.append([btn("↩️ بازگشت به حریف", style=NAV, callback_data=f"hunt_swap_pick:{tier}:{seed}:0")])
+    await safe_edit_message_text(
+        query,
+        "🔄 <b>کدوم موجود با این حریف بجنگه؟</b>\n<blockquote>حریف عوض نمی‌شه؛ فقط موجودِ خودت. "
+        "عنصر مناسب رو انتخاب کن تا شانس بردت بره بالا.</blockquote>",
+        parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+def _hunt_swap_pick_sync(tg_user, tier, seed, creature_id):
+    from game.creature import set_active_creature
+    from game.hunt import rebuild_target, scout_cost
+
+    user, _ = get_or_create_user(tg_user)
+    if creature_id:
+        set_active_creature(user, creature_id)  # may raise if busy
+    creature = get_active_creature(user)
+    if creature is None:
+        raise GameError("اول یه موجود فعال انتخاب کن.")
+    my_power = _creature_power(creature, get_equipped_items(creature))
+    target = rebuild_target(user, tier, int(seed))
+    return creature, my_power, user.cup, target, sync_energy(user), scout_cost(creature)
+
+
+async def hunt_swap_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    _, tier, seed, cid = query.data.split(":")
+    try:
+        creature, my_power, cup, target, energy, cost = await run_db(
+            _hunt_swap_pick_sync, update.effective_user, tier, seed, int(cid)
+        )
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("موجودت عوض شد." if int(cid) else "")
     await safe_edit_message_text(
         query,
         _hunt_scout_text(creature, my_power, cup, target, energy, cost),
@@ -3201,6 +3304,8 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(upgrade_step_callback, pattern=r"^upg_step:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(hunt_go_callback, pattern=r"^hunt_go:"))
     application.add_handler(CallbackQueryHandler(hunt_next_callback, pattern=r"^hunt_next$"))
+    application.add_handler(CallbackQueryHandler(hunt_swap_callback, pattern=r"^hunt_swap:"))
+    application.add_handler(CallbackQueryHandler(hunt_swap_pick_callback, pattern=r"^hunt_swap_pick:"))
     application.add_handler(CallbackQueryHandler(collection_pick_callback, pattern=r"^coll_pick:"))
     application.add_handler(CallbackQueryHandler(collection_page_callback, pattern=r"^coll_page:"))
     application.add_handler(CallbackQueryHandler(collection_select_callback, pattern=r"^coll_select:"))

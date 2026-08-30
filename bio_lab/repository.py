@@ -56,6 +56,24 @@ def get_active_creature(user: User) -> Creature | None:
     return Creature.objects.filter(owner=user, is_active=True).first()
 
 
+def team_choices(user: User, limit: int = 3) -> list[Creature]:
+    """The creatures a player can pick to fight with — their configured Team (up to 3),
+    or, if they haven't set one, their strongest few. The active creature may be among
+    them, which is fine. Used by the «انتخاب موجود دیگر از تیم» swap on attack screens."""
+    from bio_lab.models import Team
+
+    team = Team.objects.filter(owner=user).select_related("slot1", "slot2", "slot3").first()
+    if team is not None:
+        picked = [c for c in team.creatures if c is not None]
+        if picked:
+            return picked[:limit]
+    # no team set → the strongest few by base-stat sum (cheap proxy; the caller shows
+    # the exact power on each button)
+    creatures = list(Creature.objects.filter(owner=user))
+    creatures.sort(key=lambda c: c.base_hp + c.base_atk + c.base_def + c.base_spd, reverse=True)
+    return creatures[:limit]
+
+
 def touch_membership(group: Group, user: User) -> None:
     """Records that `user` has been active in `group`, so group-scoped features
     (leaderboard, guardian) know who to consider."""

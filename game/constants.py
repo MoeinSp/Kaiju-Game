@@ -84,8 +84,11 @@ def species_element(name: str) -> str | None:
     (e.g. a creature created before the registry existed)."""
     return SPECIES.get(name)
 
-STRONG_MULTIPLIER = 1.3
-WEAK_MULTIPLIER = 0.7
+# Element advantage is deliberately strong so picking the RIGHT element is a real,
+# match-deciding strategy (a hunt you'd lose neutral becomes winnable with the right
+# creature). Attacker with the advantage deals 1.45×; on the wrong side, 0.55×.
+STRONG_MULTIPLIER = 1.45
+WEAK_MULTIPLIER = 0.55
 
 RARITY_ORDER = ["common", "rare", "epic", "legendary", "mythic"]
 

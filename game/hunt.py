@@ -11,10 +11,16 @@ WILD_NAMES = ["Ferabeast", "Grimhide", "Rustclaw", "Mossfang", "Duskrunner"]
 # each tier scales the wild creature's stats and its payout together, so picking a
 # tougher target is a real risk/reward decision rather than a free upgrade.
 # `stat_mult` sizes the opponent (difficulty); `reward_mult` scales the loot.
+# stat_mult sizes the wild creature RELATIVE TO THE PLAYER'S STRONGEST kaiju (the
+# benchmark, see spawn_wild_creature) — never to whichever creature happens to be
+# active. So a hunt is winnable if you bring your strongest kaiju with the RIGHT
+# element: normal (0.95×) is a reliable win with element advantage and a coin-flip
+# without it, and strong (1.05×) is hard-but-possible — only the strongest kaiju with
+# the right element clears it, which is why its loot is much bigger.
 HUNT_TIERS = {
-    "weak": {"label": "🟢 ضعیف", "stat_mult": 0.8, "reward_mult": 0.5},
-    "normal": {"label": "🟡 هم‌سطح", "stat_mult": 1.0, "reward_mult": 1.0},
-    "strong": {"label": "🔴 قوی", "stat_mult": 1.4, "reward_mult": 1.8},
+    "weak": {"label": "🟢 ضعیف", "stat_mult": 0.80, "reward_mult": 0.6},
+    "normal": {"label": "🟡 هم‌سطح", "stat_mult": 0.95, "reward_mult": 1.0},
+    "strong": {"label": "🔴 قوی", "stat_mult": 1.05, "reward_mult": 2.8},
 }
 
 # Hunt loot scales PURELY with the player creature's power — the stronger your kaiju,
@@ -38,6 +44,20 @@ def _player_power(creature: Creature) -> int:
     return creature_power(creature, get_equipped_items(creature))
 
 
+def strongest_power(user: User) -> int:
+    """The power of the player's STRONGEST kaiju (gear included) — the benchmark a hunt
+    is sized against, so difficulty tracks the best creature they COULD bring, not the
+    one that's currently active. This is what makes switching to the right kaiju a real
+    strategy: the wild's power stays fixed while yours changes with the creature you pick."""
+    from game.creature import creature_power
+    from game.equipment import get_equipped_items
+
+    best = 0
+    for c in Creature.objects.filter(owner=user):
+        best = max(best, creature_power(c, get_equipped_items(c)))
+    return max(20, best)
+
+
 def scout_cost(creature: Creature) -> int:
     return max(HUNT_SCOUT_COST_MIN, round(_player_power(creature) * HUNT_SCOUT_COST_PER_POWER))
 
@@ -55,34 +75,37 @@ def hunt_dna_range(player_power: int, tier: str) -> tuple[int, int]:
     return (round(base * mult * 0.7), round((base + 1) * mult * 1.3))
 
 
-def spawn_wild_creature(player_creature: Creature, tier: str = "normal", seed: int | None = None) -> Creature:
-    """Builds an unsaved (ephemeral) Creature scaled to the player's POWER and the
-    chosen difficulty tier, purely to reuse the combat-math functions — never
-    persisted, so its id stays None. `seed` makes a scouted target reproducible."""
+def spawn_wild_creature(benchmark_power: int, tier: str = "normal", seed: int | None = None) -> Creature:
+    """Builds an unsaved (ephemeral) Creature scaled to `benchmark_power` (the player's
+    STRONGEST kaiju) and the difficulty tier, purely to reuse the combat-math functions —
+    never persisted, so its id stays None. `seed` makes a scouted target reproducible AND
+    keeps it fixed while the player swaps which creature fights it."""
     from game.creature import base_share_for_rating
 
     rng = random.Random(seed)
     cfg = HUNT_TIERS[tier]
-    variance = rng.uniform(0.9, 1.1) * cfg["stat_mult"]
-    target_power = max(20, round(_player_power(player_creature) * variance))
+    variance = rng.uniform(0.92, 1.08) * cfg["stat_mult"]
+    target_power = max(20, round(max(20, benchmark_power) * variance))
     share = base_share_for_rating(target_power)
     return Creature(
         name=rng.choice(WILD_NAMES),
         element=rng.choice(constants.ELEMENTS),
         rarity="common",
-        level=max(1, player_creature.level),
+        level=1,
         base_hp=share, base_atk=share, base_def=share, base_spd=share,
     )
 
 
-def scout_one(player_creature: Creature) -> dict:
+def scout_one(user: User, player_creature: Creature) -> dict:
     """A single previewable opponent — the player searches again ("بعدی") until they
-    like what they see. Carries the seed so resolve_hunt rebuilds the exact opponent."""
+    like what they see. Carries the seed so resolve_hunt rebuilds the exact opponent. The
+    wild is sized to the player's STRONGEST kaiju, so it stays the same if they switch
+    creatures to fight it."""
     from game.creature import creature_power
 
     tier = random.choice(list(HUNT_TIERS))
     seed = random.randrange(1_000_000)
-    wild = spawn_wild_creature(player_creature, tier, seed)
+    wild = spawn_wild_creature(strongest_power(user), tier, seed)
     return {
         "tier": tier,
         "seed": seed,
@@ -95,14 +118,29 @@ def scout_one(player_creature: Creature) -> dict:
     }
 
 
+def rebuild_target(user: User, tier: str, seed: int) -> dict:
+    """Rebuild the EXACT same scouted opponent from its (tier, seed) — used when the
+    player swaps which creature fights it, so the target stays identical."""
+    from game.creature import creature_power
+
+    wild = spawn_wild_creature(strongest_power(user), tier, seed)
+    return {
+        "tier": tier, "seed": seed, "name": wild.name, "element": wild.element,
+        "power": creature_power(wild), "reward_mult": HUNT_TIERS[tier]["reward_mult"],
+    }
+
+
 def estimated_reward(tier: str, power: int = 0) -> tuple[int, int]:
     """(min_coins, max_coins) shown while scouting — scales with the creature's power."""
     return hunt_coin_range(power, tier)
 
 
 def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal", seed: int | None = None) -> dict:
-    """Plays out one solo PvE encounter and applies rewards. Caller handles energy."""
-    wild = spawn_wild_creature(player_creature, tier, seed)
+    """Plays out one solo PvE encounter and applies rewards. Caller handles energy. The
+    wild is sized to the player's STRONGEST kaiju (fixed by the seed), so whichever
+    creature they bring fights the SAME opponent — switching to the right element is the
+    strategy, not a way to shrink the target."""
+    wild = spawn_wild_creature(strongest_power(user), tier, seed)
     winner, log_text = resolve_duel(player_creature, wild)
     won = winner is player_creature
     reward_mult = HUNT_TIERS[tier]["reward_mult"]

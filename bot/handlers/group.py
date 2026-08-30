@@ -696,6 +696,7 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
     keyboard = InlineKeyboardMarkup([
         [btn(f"⚔️ شروع حمله (-{constants.RAID_ATTACK_ENERGY_COST}⚡)", emoji_key="btn_attack", style=CONFIRM,
              callback_data=f"gatk:{attacker_id}:{target_id}")],
+        [btn("🔄 انتخاب موجود دیگر از تیم", style=NAV, callback_data=f"gatk_swap:{attacker_id}:{target_id}")],
         [btn("🔍 جزییات حریف", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}"),
          btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER,
              callback_data=f"gatk_cancel:{attacker_id}")],
@@ -783,6 +784,69 @@ async def gatk_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
+    text, keyboard = _pvp_prompt_render(int(attacker_id), int(target_id), *data)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _gatk_team_choices_sync(attacker_id):
+    from bio_lab.repository import team_choices
+
+    attacker = User.objects.filter(id=attacker_id).first()
+    if attacker is None:
+        raise GameError("پیدا نشدی.")
+    return [(c.id, c.name, c.element, _creature_power(c), c.is_active) for c in team_choices(attacker)]
+
+
+async def gatk_swap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Attacker picks a different team creature to hit THIS same target with."""
+    query = update.callback_query
+    _, attacker_id, target_id = query.data.split(":")
+    if update.effective_user.id != int(attacker_id):
+        await query.answer("این دکمه مال تو نیست 🙂", show_alert=True)
+        return
+    try:
+        choices = await run_db(_gatk_team_choices_sync, int(attacker_id))
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    rows = []
+    for cid, name, element, power, is_active in choices:
+        tag = "🟢 " if is_active else ""
+        rows.append([btn(f"{tag}{name} [{constants.element_label(element)}] · 💪{power:,}",
+                         style=CONFIRM, callback_data=f"gatk_swap_pick:{attacker_id}:{target_id}:{cid}")])
+    rows.append([btn("↩️ بازگشت به حریف", style=NAV, callback_data=f"gatk_swap_pick:{attacker_id}:{target_id}:0")])
+    await safe_edit_message_text(
+        query,
+        "🔄 <b>کدوم موجود با این حریف بجنگه؟</b>\n<blockquote>حریف عوض نمی‌شه؛ فقط موجودِ خودت. "
+        "عنصر مناسب رو انتخاب کن تا شانس بردت بره بالا.</blockquote>",
+        parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+def _gatk_swap_pick_sync(attacker_id, target_id, creature_id):
+    from game.creature import set_active_creature
+
+    attacker = User.objects.filter(id=attacker_id).first()
+    if attacker is None:
+        raise GameError("پیدا نشدی.")
+    if creature_id:
+        set_active_creature(attacker, creature_id)  # may raise if the creature is busy
+    return _pvp_preview_by_ids_sync(attacker_id, target_id)
+
+
+async def gatk_swap_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    _, attacker_id, target_id, cid = query.data.split(":")
+    if update.effective_user.id != int(attacker_id):
+        await query.answer("این دکمه مال تو نیست 🙂", show_alert=True)
+        return
+    try:
+        data = await run_db(_gatk_swap_pick_sync, int(attacker_id), int(target_id), int(cid))
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("موجودت عوض شد." if int(cid) else "")
     text, keyboard = _pvp_prompt_render(int(attacker_id), int(target_id), *data)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
@@ -979,6 +1043,12 @@ async def pvp_attack_cancel_callback(update: Update, context: ContextTypes.DEFAU
         return
     await query.answer("لغو شد.")
     await safe_edit_message_text(query, "🚫 حمله لغو شد.")
+    # tidy up: remove the cancelled-attack message after ~1 minute so the group
+    # doesn't fill up with dead prompts (default TTL is 60s)
+    from bot.handlers.group_words import _schedule_cleanup
+
+    if query.message is not None:
+        _schedule_cleanup(context, query.message.chat_id, [query.message.message_id], "pvp_cancel")
 
 
 def _creature_power(c: Creature) -> int:
@@ -1183,3 +1253,5 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(pvp_detail_callback, pattern=r"^gatk_detail:\d+$"))
     application.add_handler(CallbackQueryHandler(gatk_opp_callback, pattern=r"^gatk_opp:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(gatk_back_callback, pattern=r"^gatk_back:\d+:\d+$"))
+    application.add_handler(CallbackQueryHandler(gatk_swap_callback, pattern=r"^gatk_swap:\d+:\d+$"))
+    application.add_handler(CallbackQueryHandler(gatk_swap_pick_callback, pattern=r"^gatk_swap_pick:\d+:\d+:\d+$"))
