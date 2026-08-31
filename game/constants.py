@@ -216,8 +216,15 @@ ENERGY_CAPS = {
     "guardian_stipend": 1,
 }
 
-GUARDIAN_STIPEND_COINS = 25
-GUARDIAN_STIPEND_DNA = 3
+# The guardian's daily salary scales with the power of the guardian creature: a
+# maxed creature (power == ARENA_BOT_MAX_POWER) earns the full amount, weaker
+# guardians earn proportionally less down to a small floor (so even a fresh
+# guardian gets something worth claiming). Paid once per day PER PLAYER — the
+# daily-action log is keyed on the user, so it's shared across every group.
+GUARDIAN_SALARY_MAX_COINS = 50_000
+GUARDIAN_SALARY_MAX_DNA = 2_000
+GUARDIAN_SALARY_MIN_COINS = 500
+GUARDIAN_SALARY_MIN_DNA = 20
 
 # regenerating stamina pool spent on feed/raid_attack — refills over real time instead
 # of resetting once a day, so there's a reason to come back every couple hours
@@ -251,33 +258,33 @@ LOGIN_STREAK_DNA_BONUS = 10
 # Missions may pay "speedup": <minutes> on top of coins/dna — that's the main way
 # a player keeps a stock of build-timer cards, since they aren't sold anywhere.
 MISSION_DEFS = {
-    "feed_3": {"action": "feed", "target": 3, "label": "۳ بار تغذیه کن", "coins": 40, "dna": 0},
+    "feed_3": {"action": "feed", "target": 3, "label": "تغذیه موجودات (۳ بار)", "coins": 40, "dna": 0},
     "feed_10": {
-        "action": "feed", "target": 10, "label": "۱۰ بار تغذیه کن", "coins": 100, "dna": 5, "speedup": 5,
+        "action": "feed", "target": 10, "label": "تغذیه موجودات (۱۰ بار)", "coins": 100, "dna": 5, "speedup": 5,
     },
-    "train_1": {"action": "train", "target": 1, "label": "۱ بار تمرین کن", "coins": 30, "dna": 0, "speedup": 1},
-    "raid_attack_2": {"action": "raid_attack", "target": 2, "label": "۲ بار به رید حمله کن", "coins": 40, "dna": 5},
+    "train_1": {"action": "train", "target": 1, "label": "انجام تمرین", "coins": 30, "dna": 0, "speedup": 1},
+    "raid_attack_2": {"action": "raid_attack", "target": 2, "label": "هجوم به باس رید (۲ بار)", "coins": 40, "dna": 5},
     "raid_attack_5": {
-        "action": "raid_attack", "target": 5, "label": "۵ بار به رید حمله کن", "coins": 90, "dna": 8, "speedup": 30,
+        "action": "raid_attack", "target": 5, "label": "هجوم به باس رید (۵ بار)", "coins": 90, "dna": 8, "speedup": 30,
     },
-    "fusion_1": {"action": "fusion", "target": 1, "label": "۱ بار فیوژن کن", "coins": 60, "dna": 0, "speedup": 5},
+    "fusion_1": {"action": "fusion", "target": 1, "label": "اجرای فیوژن (ترکیب)", "coins": 60, "dna": 0, "speedup": 5},
     "guardian_challenge_1": {
         "action": "guardian_challenge",
         "target": 1,
-        "label": "۱ بار برای محافظ گروه چالش بده",
+        "label": "چالش با محافظ گروه",
         "coins": 50,
         "dna": 5,
     },
     "hunt_3": {
-        "action": "hunt", "target": 3, "label": "۳ بار شکار انفرادی کن", "coins": 45, "dna": 3, "speedup": 5,
+        "action": "hunt", "target": 3, "label": "شکار انفرادی (۳ بار)", "coins": 45, "dna": 3, "speedup": 5,
     },
     "hunt_10": {
-        "action": "hunt", "target": 10, "label": "۱۰ بار شکار انفرادی کن", "coins": 150, "dna": 10, "speedup": 10,
+        "action": "hunt", "target": 10, "label": "شکار انفرادی (۱۰ بار)", "coins": 150, "dna": 10, "speedup": 10,
     },
     "arena_attack_3": {
         "action": "arena_attack",
         "target": 3,
-        "label": "۳ بار توی آرنا حمله کن",
+        "label": "حمله در آرنا (۳ بار)",
         "coins": 70,
         "dna": 5,
         "speedup": 5,
@@ -285,7 +292,7 @@ MISSION_DEFS = {
     "collect_5": {
         "action": "collect",
         "target": 5,
-        "label": "۵ بار از ساختمون‌ها جمع‌آوری کن",
+        "label": "جمع‌آوری از ساختمان‌ها (۵ بار)",
         "coins": 60,
         "dna": 5,
     },
@@ -1241,6 +1248,15 @@ def element_advantage_lines() -> str:
     return "\n".join(lines)
 
 
+def element_cycle_block() -> str:
+    """The full superiority cycle on its own clear line, under a header — the footer
+    shown at the end of every battle report so players can read who beats whom at a
+    glance: 🔁 چرخه برتری عناصر: / 🔥 آتش › 🪨 خاک › ⚡ الکتریسیته › 💧 آب › 🔥 آتش."""
+    seq = ["fire", "earth", "electric", "water", "fire"]
+    chain = " › ".join(element_label(e) for e in seq)
+    return f"🔁 <b>چرخه برتری عناصر:</b>\n{chain}"
+
+
 def element_matchup_note(my_element: str, opp_element: str) -> str:
     """A one-line elemental heads-up for a fight preview: warns when the opponent's
     element beats yours, cheers when yours beats theirs, empty when neutral."""
@@ -1274,4 +1290,4 @@ def higher_rarity(rarity_a: str, rarity_b: str) -> str:
 def render_bar(current: int, total: int, width: int = 10) -> str:
     total = max(total, 1)
     filled = min(width, max(0, round(width * max(current, 0) / total)))
-    return "▓" * filled + "░" * (width - filled)
+    return "■" * filled + "□" * (width - filled)

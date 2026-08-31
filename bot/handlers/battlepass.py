@@ -33,28 +33,53 @@ def _fmt_left(seconds: int) -> str:
     return "کمتر از یک ساعت"
 
 
+def _panel_reward(reward: dict) -> str:
+    """A tier's reward in the panel style: «1,195 طلا 🪙 ┃ 6 الماس 💎»."""
+    parts = []
+    if reward.get("coins"):
+        parts.append(f"{reward['coins']:,} طلا {get_emoji('coin')}")
+    if reward.get("dna"):
+        parts.append(f"{reward['dna']} دی‌ان‌ای {get_emoji('dna')}")
+    if reward.get("diamonds"):
+        parts.append(f"{reward['diamonds']} الماس {get_emoji('diamond')}")
+    if reward.get("speedup"):
+        parts.append(f"۱× کارت سرعت {constants.speedup_plain_label(reward['speedup'])} ⏱")
+    return " ┃ ".join(parts) or "—"
+
+
 def _render(user, st: dict) -> tuple[str, InlineKeyboardMarkup]:
     bar = constants.render_bar(st["into"], st["span"], width=10)
-    track = "✦ ویژه" if st["premium"] else "رایگان"
+    pct = round(100 * st["into"] / max(1, st["span"]))
+    track = "✦ ویژه (Premium)" if st["premium"] else "رایگان (Free)"
     left = _fmt_left(battlepass.seconds_until_period_end())
+    div = "──────────────"
     lines = [
-        f"🎟 <b>پاس دوهفته‌ای</b>",
-        f"<blockquote>تراک: <b>{track}</b>\n"
-        f"مرحله <b>{st['tier']}</b>/{st['max_tier']}  {bar}  {st['into']}/{st['span']} امتیاز\n"
-        f"⏳ <b>{left}</b> تا پایان پاس (شنبه ریست می‌شه)</blockquote>",
-        "<i>هر فعالیتی (شکار، آرنا، ساختمون، ورود روزانه) امتیاز پاس می‌ده.</i>\n",
+        "🎟 <b>پاس دوهفته‌ای | Season Pass</b>",
+        "",
+        f"🎖 <b>مسیر فعال:</b> {track}",
+        f"📊 <b>سطح فعلی:</b> {st['tier']}/{st['max_tier']}",
+        f"📈 <b>پیشرفت مرحله:</b> [{bar}] {pct}% ({st['into']}/{st['span']} XP)",
+        f"⏳ <b>زمان باقی‌مانده:</b> {left} (ریست در روز شنبه)",
+        "", div, "",
     ]
     # preview the next few tiers
-    start = max(1, st["tier"] + 1 - 0)
     upcoming = [t for t in range(st["tier"] + 1, min(st["max_tier"], st["tier"] + _PREVIEW_TIERS) + 1)]
     if upcoming:
-        lines.append("🎁 <b>مرحله‌های بعدی:</b>")
+        lines.append("🎁 <b>جوایز مراحل پیش‌رو:</b>")
+        lines.append("")
         for t in upcoming:
-            free = battlepass.reward_text(battlepass.free_reward(t))
-            prem = battlepass.reward_text(battlepass.premium_reward(t))
-            lines.append(f"  <b>{t}</b> · رایگان: {free}  |  ✦ ویژه: {prem}")
+            final = " (جایزه نهایی)" if t == st["max_tier"] else ""
+            flourish = " 🔥" if t == st["max_tier"] else ""
+            lines.append(f"▫️ <b>سطح {t}{final}:</b>")
+            lines.append(f"🔹 رایگان: {_panel_reward(battlepass.free_reward(t))}")
+            lines.append(f"🔸 ویژه: {_panel_reward(battlepass.premium_reward(t))}{flourish}")
+            lines.append("")
     else:
         lines.append("🏆 <b>به آخرین مرحله‌ی پاس رسیدی!</b>")
+        lines.append("")
+    lines.append(div)
+    lines.append("")
+    lines.append("💡 <b>کسب امتیاز از طریق:</b> شکار، پیروزی در آرنا، ارتقای ساختمان و ورود روزانه.")
 
     rows = []
     if st["has_claimable"]:

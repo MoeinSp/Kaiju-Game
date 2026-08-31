@@ -370,21 +370,27 @@ def _part_power_gain(creature, part: str, equipped_items: list | None, step: int
 
 def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots: list | None = None, step: int = 1) -> str:
     from game.creature import part_bulk_cost
+    from game.energy import minutes_until_next_point
+    from game.equipment import equipment_power
 
     stats = effective_stats(creature, equipped_items)
     stars = get_emoji("star") * creature.star_level
-    active_tag = " · 🟢 پیش‌فرض" if creature.is_active else ""
-    step_tag = f" · هر ارتقا <b>×{step}</b>" if step > 1 else ""
+    mode = "🟢 حالت: پیش‌فرض" if creature.is_active else "⚪️ حالت: ذخیره"
     max_level = constants.creature_max_level(creature.rarity, creature.star_level)
+    div = "──────────────"
     lines = [
-        f"🔧 <b>ارتقای {creature.name}</b>",
-        f"{constants.RARITY_LABELS[creature.rarity]} {stars} · سطح {creature.level}/{max_level}{active_tag}{step_tag}",
+        f"🦅 <b>مشخصات هیولا:</b> {constants.RARITY_LABELS[creature.rarity]} {stars}",
+        f"🎖 <b>سطح موجود:</b> {creature.level}/{max_level} ┃ {mode}",
+        f"⚡️ <b>نرخ ارتقا:</b> {step}× سطحی",
+        "", div, "",
+        "📊 <b>شاخص‌های مبارزه (Base Stats):</b>",
         "",
-        f"{get_emoji('hp')} جان: <b>{stats['hp']}</b>      {get_emoji('atk')} حمله: <b>{stats['atk']}</b>",
-        f"{get_emoji('def')} دفاع: <b>{stats['def']}</b>      {get_emoji('spd')} سرعت: <b>{stats['spd']}</b>",
-        f"{get_emoji('poison')} زهر: <b>{stats['poison']}</b>",
+        f"{get_emoji('hp')} سلامت (HP): <b>{stats['hp']}</b> ┃ {get_emoji('atk')} حمله (ATK): <b>{stats['atk']}</b>",
+        f"{get_emoji('def')} دفاع (DEF): <b>{stats['def']}</b> ┃ {get_emoji('spd')} سرعت (SPD): <b>{stats['spd']}</b>",
+        f"{get_emoji('poison')} زهر (Poison): <b>{stats['poison']}</b>",
+        "", div, "",
+        "🧩 <b>وضعیت اعضای بدن (Body Parts):</b>",
         "",
-        "🧩 <b>اعضای قابل ارتقا</b>" + (f" <i>(قیمت برای {step} سطح)</i>" if step > 1 else ""),
     ]
     cap = constants.part_upgrade_cap(creature.star_level)
     any_capped = False
@@ -392,29 +398,57 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
         level = getattr(creature, f"{part}_lvl")
         if level >= cap:
             any_capped = True
-            lines.append(f"{cfg['label']} — سطح <b>{level}/{cap}</b> · 🔒 به سقفِ {creature.star_level}⭐ رسید")
+            lines.append(f"{cfg['label']}: <b>{level}/{cap}</b> 🔒 (سقف {creature.star_level} ستاره)")
             continue
         buy = min(step, cap - level)
         cost = part_bulk_cost(level, buy)
         gain = _part_power_gain(creature, part, equipped_items, buy)
         lines.append(
-            f"{cfg['label']} — سطح <b>{level}/{cap}</b> · ارتقا: {cost:,} {get_emoji('coin')} "
-            f"→ <b>+{gain}</b> 💪"
+            f"{cfg['label']}: <b>{level}/{cap}</b> → ارتقا: {cost:,} {get_emoji('coin')} (+{gain} 💪)"
         )
     if any_capped:
+        lines.append("")
         if creature.star_level >= 5:
-            lines.append(f"\n🔒 <i>این هیولا 5⭐ه — اعضاش به سقف نهایی <b>{constants.PART_UPGRADE_MAX}</b> رسیدن.</i>")
+            lines.append(
+                f"🔒 <b>قفل نهایی:</b> این هیولا 5⭐ است و اعضایش به سقف مطلق "
+                f"<b>{constants.PART_UPGRADE_MAX}</b> رسیده‌اند."
+            )
         else:
             lines.append(
-                f"\n🔒 <i>یه عضو به سقفِ {creature.star_level}⭐ (<b>{cap}</b>) رسیده — برای ارتقای بیشتر "
-                f"باید با <b>فیوژن</b> {creature.star_level + 1}⭐ بشه (هر ستاره +{constants.PART_UPGRADE_CAP_PER_STAR}، تا {constants.PART_UPGRADE_MAX} در 5⭐).</i>"
+                "⚠️ <b>قفل تکامل:</b> عضوهایی به سقف مجاز رسیده‌اند. جهت بازگشایی ارتقای بیشتر، "
+                f"موجود را از طریق <b>فیوژن</b> به {creature.star_level + 1}⭐ ارتقا بده "
+                f"(هر ستاره +{constants.PART_UPGRADE_CAP_PER_STAR}، تا {constants.PART_UPGRADE_MAX} در 5⭐)."
             )
+    # gear
+    lines += ["", div, "", "🎒 <b>تجهیزات فعال (Gear):</b>", ""]
     if slots is not None:
-        lines.append("")
-        lines.extend(_slot_summary_lines(slots))
-    lines.append("")
-    lines.append(wallet_line(user))
-    lines.append("\n<blockquote>تغذیه و تمرین XP می‌دن؛ ارتقای اعضا مستقیم استت اضافه می‌کنه.</blockquote>")
+        any_gear = False
+        for row in slots:
+            if row["is_empty"]:
+                lines.append(f"{row['label']}: <i>خالی</i>")
+            else:
+                any_gear = True
+                item = row["item"]
+                lines.append(f"{row['label']}: <b>{item.name} +{item.level}</b> (+{equipment_power(item)} 💪)")
+        if not any_gear and all(r["is_empty"] for r in slots):
+            pass  # all-empty already shown line by line
+    else:
+        lines.append("<i>—</i>")
+    # resources
+    energy = sync_energy(user)
+    if energy >= constants.MAX_ENERGY:
+        charge = "پره ✅"
+    else:
+        charge = f"⏳ شارژ بعدی: ~{minutes_until_next_point(user)} دقیقه"
+    lines += [
+        "", div, "",
+        "🏦 <b>موجودی و منابع در دسترس:</b>",
+        f"{get_emoji('coin')} طلا: <b>{user.coins:,}</b> ┃ {get_emoji('dna')} دی‌ان‌ای: <b>{user.dna_fragments:,}</b> ┃ "
+        f"{get_emoji('diamond')} الماس: <b>{user.diamonds:,}</b>",
+        f"{get_emoji('energy')} انرژی: {pct_bar(energy, constants.MAX_ENERGY)} ({energy}/{constants.MAX_ENERGY}) {charge}",
+        "", div, "",
+        "💡 <i>نکته: تغذیه و تمرین XP می‌دهند و ارتقای اعضا مستقیماً قدرت رزمی را بالا می‌برد.</i>",
+    ]
     return "\n".join(lines)
 
 
@@ -444,6 +478,7 @@ def upgrade_panel_keyboard(creature_id: int, is_active: bool = True, step: int =
         ],
         [btn("مدیریت تجهیزات", emoji_key="btn_inventory", style=PRIMARY, callback_data=f"upg_eq:{creature_id}")],
         [btn("🍖 تقویت با خوردن هیولا", style=BUILD, callback_data=f"devour_start:{creature_id}")],
+        [btn("🧬 ورود به فیوژن (ارتقا به ⭐۵)", emoji_key="btn_fusion", style=PRIMARY, callback_data=f"upg_fusion:{creature_id}")],
     ]
     if not is_active:
         # setting the default from here saves a trip through the collection screen,
@@ -1665,6 +1700,120 @@ async def fusion_pick_a_callback(update: Update, context: ContextTypes.DEFAULT_T
     )
 
 
+def _fusion_gate_sync(tg_user, creature_id):
+    """Everything the «ورود به فیوژن» guide needs to tell a player exactly which
+    requirement for raising this creature's star they're missing."""
+    from game.buildings import building_level, is_built, main_hall_level, star_cap
+    from game.fusion import FUSION_BUILDING, fusion_partners
+
+    user, _ = get_or_create_user(tg_user)
+    creature = Creature.objects.filter(id=creature_id, owner=user).first()
+    if creature is None:
+        raise GameError("این هیولا پیدا نشد.")
+    lab_built = is_built(user, FUSION_BUILDING)
+    cap = star_cap(user)
+    at_cap = creature.star_level >= cap
+    at_max = creature.star_level >= constants.STAR_MAX
+    partners = fusion_partners(user, creature)
+    cost = constants.fusion_cost(creature.star_level, creature.rarity)
+    return {
+        "id": creature.id,
+        "name": creature.name,
+        "rarity": creature.rarity,
+        "star": creature.star_level,
+        "lab_built": lab_built,
+        "lab_level": building_level(user, FUSION_BUILDING),
+        "hall_level": main_hall_level(user),
+        "cap": cap,
+        "at_cap": at_cap,
+        "at_max": at_max,
+        "partner_count": len(partners),
+        "cost": cost,
+        "coins": user.coins,
+    }
+
+
+async def upgrade_fusion_gate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """The «🧬 ورود به فیوژن» button on the upgrade card. Checks every requirement for
+    raising THIS creature a star and either routes into the partner picker (ready) or
+    shows a complete guide marking exactly what's missing and how to fix it."""
+    query = update.callback_query
+    cid = int(query.data.split(":")[1])
+    try:
+        g = await run_db(_fusion_gate_sync, update.effective_user, cid)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+
+    stars = get_emoji("star") * g["star"]
+    next_star = g["star"] + 1
+    div = "──────────────"
+    check = lambda ok: "✅" if ok else "❌"  # noqa: E731
+
+    if g["at_max"]:
+        lines = [
+            f"🧬 <b>فیوژن — {g['name']}</b> {stars}",
+            "",
+            "🏆 این هیولا به سقف <b>۵ ستاره</b> رسیده و دیگه نیازی به فیوژن نداره!",
+            "قوی‌ترین فرم ممکنه — می‌تونی روی ارتقای اعضا و تجهیزاتش تمرکز کنی.",
+        ]
+        rows = [[back_btn(f"upg_pick:{cid}", "بازگشت به ارتقا")]]
+        await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML",
+                                     reply_markup=InlineKeyboardMarkup(rows))
+        return
+
+    cap_ok = not g["at_cap"]
+    gold_ok = g["coins"] >= g["cost"]
+    partner_ok = g["partner_count"] > 0
+    ready = g["lab_built"] and cap_ok and partner_ok and gold_ok
+
+    lines = [
+        f"🧬 <b>ورود به فیوژن — ارتقای ستاره</b>",
+        f"🎯 هدف: <b>{g['name']}</b> {stars} → {get_emoji('star') * next_star}",
+        "", div, "",
+        "<b>شرایط لازم:</b>",
+        f"{check(g['lab_built'])} 🔮 ساخت <b>تالار ادغام</b> (زیربنای هر فیوژن)",
+        f"{check(cap_ok)} ⭐ سقف ستاره: سطح تالار مِهر ({g['hall_level']}) باید ≥ {next_star} باشه",
+        f"{check(partner_ok)} 👥 یک هم‌نوعِ هم‌رده و هم‌ستاره: «{g['name']}» "
+        f"[{constants.RARITY_LABELS[g['rarity']]}] {stars}",
+        f"{check(gold_ok)} {get_emoji('coin')} طلای کافی: <b>{g['cost']:,}</b> (الان: {g['coins']:,})",
+        "", div, "",
+    ]
+    # targeted explanations for whatever is missing
+    if not g["lab_built"]:
+        lines.append("🔒 <b>تالار ادغام نساخته‌ای.</b> از «🏗 ساختمون‌ها» بسازش — بدون اون هیچ فیوژنی ممکن نیست.")
+    if not cap_ok:
+        lines.append(
+            f"🔒 <b>سقف ستاره پره.</b> سقف ستاره برابر سطح تالار مِهر توئه ({g['cap']}⭐). "
+            f"برای رسیدن به {next_star}⭐ اول تالار مِهر رو ارتقا بده."
+        )
+    if g["lab_built"] and cap_ok and not partner_ok:
+        lines.append(
+            f"🔒 <b>جفت نداری.</b> برای فیوژن به <b>دو</b> «{g['name']}» با نایابی و ستاره‌ی یکسان "
+            f"({constants.RARITY_LABELS[g['rarity']]} {stars}) نیاز داری. از باکس‌ها یا غار هیولا هم‌نوع بیشتری بگیر."
+        )
+    if partner_ok and not gold_ok:
+        lines.append(f"🔒 <b>طلا کمه.</b> {g['cost'] - g['coins']:,} طلای دیگه لازم داری.")
+    if ready:
+        lines.append("✅ <b>همه‌چیز آماده‌ست!</b> برای انتخاب جفت و ترکیب، دکمه‌ی زیر رو بزن.")
+    lines.append("")
+    lines.append(
+        "<blockquote>هر فیوژن دو والد رو می‌سوزونه و یکی یک‌ستاره بالاتر می‌سازه — "
+        "استت‌ها و بهترین اعضای هر دو والد به فرزند می‌رسه و XP‌شون جمع می‌شه. مسیر تا 5⭐: "
+        "۲تا 1★→2★، ۲تا 2★→3★ … (۱۶ تا 1★ برای یک 5★).</blockquote>"
+    )
+
+    rows = []
+    if ready:
+        rows.append([btn("🔮 انتخاب جفت و ترکیب", emoji_key="btn_fusion", style=CONFIRM, callback_data=f"fus_a:{cid}")])
+    if not g["lab_built"] or not cap_ok:
+        rows.append([btn("رفتن به ساختمون‌ها", emoji_key="btn_buildings", style=PRIMARY, callback_data="menu:buildings")])
+    rows.append([back_btn(f"upg_pick:{cid}", "بازگشت به ارتقا")])
+    await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML",
+                                 reply_markup=InlineKeyboardMarkup(rows))
+
+
 def _fusion_panel_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
     return user, ready_pairs(user), is_built(user, FUSION_BUILDING), star_cap(user)
@@ -1818,26 +1967,51 @@ def _missions_sync(tg_user):
 MISSIONS_PAGE_SIZE = 7
 
 
+def _mission_panel_reward(m: dict) -> str:
+    """One mission's payout in the panel style: «+N طلا 🪙 ┃ +N دی‌ان‌ای 🧬 ┃ ۱× کارت سرعت …»."""
+    parts = []
+    if m.get("coins"):
+        parts.append(f"+{m['coins']:,} طلا {get_emoji('coin')}")
+    if m.get("dna"):
+        parts.append(f"+{m['dna']} دی‌ان‌ای {get_emoji('dna')}")
+    if m.get("speedup"):
+        parts.append(f"۱× کارت سرعت {constants.speedup_plain_label(m['speedup'])} ⏱")
+    return " ┃ ".join(parts) if parts else "—"
+
+
 def _missions_render(status: list[dict], page: int) -> tuple[str, InlineKeyboardMarkup]:
     """Missions, in-progress first then completed, split across pages. A player's
     full mission list plus reward text overran Telegram's message limit and got
     rejected outright; paging it keeps every screen short and readable."""
     ordered = sorted(status, key=lambda m: (m["done"], m["label"]))  # unfinished first
-    total_pages = max(1, (len(ordered) + MISSIONS_PAGE_SIZE - 1) // MISSIONS_PAGE_SIZE)
+    total = len(ordered)
+    total_pages = max(1, (total + MISSIONS_PAGE_SIZE - 1) // MISSIONS_PAGE_SIZE)
     page = max(0, min(page, total_pages - 1))
     chunk = ordered[page * MISSIONS_PAGE_SIZE : (page + 1) * MISSIONS_PAGE_SIZE]
 
     done_count = sum(1 for m in status if m["done"])
-    page_note = f"  (صفحه {page + 1}/{total_pages})" if total_pages > 1 else ""
-    lines = [f"{get_emoji('mission')} <b>ماموریت‌های امروز</b>  {done_count}/{len(status)}{page_note}", ""]
+    overall_bar = constants.render_bar(done_count, total, width=10)
+    overall_pct = round(100 * done_count / max(1, total))
+    div = "──────────────"
+    lines = [
+        f"{get_emoji('mission')} <b>ماموریت‌های روزانه | Daily Quests</b>",
+        "",
+        f"📊 <b>پیشرفت کل:</b> [{overall_bar}] {overall_pct}% ({done_count}/{total} ماموریت)",
+    ]
+    if total_pages > 1:
+        lines.append(f"📑 صفحه: {page + 1} از {total_pages}")
+    lines += ["", div, ""]
     for m in chunk:
         if m["done"]:
-            lines.append(f"✅ <s>{m['label']}</s>")
+            lines.append(f"✅ <b>{m['label']}:</b> <s>انجام شد</s>")
+            lines.append(f"🎁 پاداش: {_mission_panel_reward(m)}")
         else:
-            bar = constants.render_bar(m["progress"], m["target"], width=8)
-            lines.append(f"⏳ <b>{m['label']}</b>")
-            lines.append(f"    {bar} {m['progress']}/{m['target']}  🎁 <i>{mission_reward_text(m)}</i>")
-    lines.append("\n<i>ماموریت‌ها هر روز (ساعت جهانی UTC) ریست می‌شن.</i>")
+            bar = constants.render_bar(m["progress"], m["target"], width=10)
+            lines.append(f"▫️ <b>{m['label']}:</b>")
+            lines.append(f"⏳ [{bar}] {m['progress']}/{m['target']}")
+            lines.append(f"🎁 پاداش: {_mission_panel_reward(m)}")
+        lines.append("")
+    lines.append("<i>ماموریت‌ها نیمه‌شب به وقت تهران ریست می‌شن.</i>")
 
     rows = []
     nav = []
@@ -3298,6 +3472,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^menu:"))
     application.add_handler(CallbackQueryHandler(guide_page_callback, pattern=r"^guide:"))
     application.add_handler(CallbackQueryHandler(upgrade_pick_callback, pattern=r"^upg_pick:"))
+    application.add_handler(CallbackQueryHandler(upgrade_fusion_gate_callback, pattern=r"^upg_fusion:"))
     application.add_handler(CallbackQueryHandler(upgrade_page_callback, pattern=r"^upg_page:"))
     application.add_handler(CallbackQueryHandler(missions_page_callback, pattern=r"^mission_page:"))
     application.add_handler(CallbackQueryHandler(lab_rename_start_callback, pattern=r"^lab_rename$"))

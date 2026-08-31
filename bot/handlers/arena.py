@@ -788,6 +788,9 @@ def _revenge_attack_sync(tg_user, log_id: int):
     }
     result = attack(user, opponent)
     record_action(user, "arena_attack")
+    # grant any arena mission just completed — the revenge path used to record the
+    # action but skip this, so a mission finished by revenge paid out nothing
+    result["missions"] = check_missions(user, "arena_attack")
     return result
 
 

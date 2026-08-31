@@ -958,6 +958,7 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "guardian": group_handlers.guardian,
         "guardian_challenge": group_handlers.guardian_challenge,
         "guardian_claim": group_handlers.guardian_claim,
+        "guardian_resign": group_handlers.guardian_resign,
     }
     if action in delegates:
         # combat / boss / guardian results are shared group events — leave them

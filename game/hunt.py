@@ -45,16 +45,55 @@ def _player_power(creature: Creature) -> int:
 
 
 def strongest_power(user: User) -> int:
-    """The power of the player's STRONGEST kaiju (gear included) — the benchmark a hunt
-    is sized against, so difficulty tracks the best creature they COULD bring, not the
-    one that's currently active. This is what makes switching to the right kaiju a real
-    strategy: the wild's power stays fixed while yours changes with the creature you pick."""
+    """The power of the player's STRONGEST kaiju (gear included), across their whole
+    collection. Kept for callers that genuinely want the collection ceiling; hunts use
+    hunt_benchmark_power() instead so an unavailable creature doesn't inflate difficulty."""
     from game.creature import creature_power
     from game.equipment import get_equipped_items
 
     best = 0
     for c in Creature.objects.filter(owner=user):
         best = max(best, creature_power(c, get_equipped_items(c)))
+    return max(20, best)
+
+
+def hunt_benchmark_power(user: User) -> int:
+    """The benchmark a hunt is sized against: the strongest kaiju the player can
+    ACTUALLY field for this hunt right now — the active creature or one of their team
+    (the swap picker's choices), excluding any that are busy (mining or breeding).
+
+    This fixes the unfair case where the collection's strongest kaiju is locked away —
+    not selected and not in the team, or in the team but busy in a mine/cave — so it
+    can't be brought to the fight. Sizing the wild against a creature the player can't
+    deploy made hunts unwinnable; the benchmark now tracks what's genuinely available,
+    and falls back to the strongest non-busy creature if the team set is all locked."""
+    from game.creature import creature_power
+    from game.equipment import get_equipped_items
+    from game.workers import busy_creature_ids
+    from bio_lab.repository import get_active_creature, team_choices
+
+    busy = busy_creature_ids(user)
+    # fieldable = the active creature + the team roster the swap picker offers
+    fieldable: dict[int, Creature] = {}
+    active = get_active_creature(user)
+    if active is not None:
+        fieldable[active.id] = active
+    for c in team_choices(user):
+        fieldable.setdefault(c.id, c)
+
+    def _best(creatures) -> int:
+        b = 0
+        for c in creatures:
+            if c.id in busy:
+                continue
+            b = max(b, creature_power(c, get_equipped_items(c)))
+        return b
+
+    best = _best(fieldable.values())
+    if best == 0:
+        # everything fieldable is busy (or no active/team at all) — fall back to the
+        # strongest creature that isn't locked, so difficulty still tracks something real
+        best = _best(Creature.objects.filter(owner=user))
     return max(20, best)
 
 
@@ -105,7 +144,7 @@ def scout_one(user: User, player_creature: Creature) -> dict:
 
     tier = random.choice(list(HUNT_TIERS))
     seed = random.randrange(1_000_000)
-    wild = spawn_wild_creature(strongest_power(user), tier, seed)
+    wild = spawn_wild_creature(hunt_benchmark_power(user), tier, seed)
     return {
         "tier": tier,
         "seed": seed,
@@ -123,7 +162,7 @@ def rebuild_target(user: User, tier: str, seed: int) -> dict:
     player swaps which creature fights it, so the target stays identical."""
     from game.creature import creature_power
 
-    wild = spawn_wild_creature(strongest_power(user), tier, seed)
+    wild = spawn_wild_creature(hunt_benchmark_power(user), tier, seed)
     return {
         "tier": tier, "seed": seed, "name": wild.name, "element": wild.element,
         "power": creature_power(wild), "reward_mult": HUNT_TIERS[tier]["reward_mult"],
@@ -140,7 +179,7 @@ def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal", se
     wild is sized to the player's STRONGEST kaiju (fixed by the seed), so whichever
     creature they bring fights the SAME opponent — switching to the right element is the
     strategy, not a way to shrink the target."""
-    wild = spawn_wild_creature(strongest_power(user), tier, seed)
+    wild = spawn_wild_creature(hunt_benchmark_power(user), tier, seed)
     winner, log_text = resolve_duel(player_creature, wild)
     won = winner is player_creature
     reward_mult = HUNT_TIERS[tier]["reward_mult"]

@@ -335,7 +335,17 @@ KEYWORD_DEFS: dict[str, tuple[str, str, str, tuple[str, ...]]] = {
         "حقوق روزانه‌ی محافظ",
         (
             "فقط محافظ فعلی گروه می‌تونه بگیره.",
-            "روزی یک‌بار: طلا و DNA.",
+            "مبلغش به قدرت هیولای محافظ بستگی داره — محافظ مکس تا ۵۰٬۰۰۰ طلا و ۲٬۰۰۰ DNA می‌گیره.",
+            "روزی فقط یک‌بار، و بین همه‌ی گروه‌هات مشترکه (نه هر گروه جدا).",
+        ),
+    ),
+    "guardian_resign": (
+        "استعفا",
+        "guardian",
+        "کناره‌گیری از جایگاه محافظ",
+        (
+            "اگه محافظ فعلی گروهی، با این کلمه از جایگاه کنار می‌ری.",
+            "جایگاه به قوی‌ترین عضو دیگه می‌رسه (یا خالی می‌مونه).",
         ),
     ),
     "alliance": (
@@ -406,7 +416,7 @@ KEYWORD_SECTIONS: tuple[tuple[str, str, str, str, tuple[str, ...]], ...] = (
         "crown",
         "جایگاه در گروه",
         "رقابت با بقیه‌ی اعضای گروه.",
-        ("leaderboard", "guardian", "guardian_challenge", "guardian_claim", "alliance"),
+        ("leaderboard", "guardian", "guardian_challenge", "guardian_claim", "guardian_resign", "alliance"),
     ),
 )
 

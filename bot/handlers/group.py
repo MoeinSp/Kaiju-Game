@@ -20,7 +20,7 @@ from bot.handlers.group_words import group_footer_keyboard
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from game import constants
 from game.buildings import maybe_award_speedup_card
-from game.combat import resolve_duel_detailed
+from game.combat import battle_report, resolve_battle, resolve_duel_detailed
 from game.creature import GameError, add_xp
 from game.daily import check_missions, consume_daily, record_action
 from game.emoji import get_emoji
@@ -882,7 +882,9 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     spend_energy(attacker, constants.RAID_ATTACK_ENERGY_COST, "حمله")
 
     a_power = _creature_power(a_creature)
-    winner_creature, log_text, detail_log = resolve_duel_detailed(a_creature, t_creature)
+    battle = resolve_battle(a_creature, t_creature)
+    winner_creature = battle["winner"]
+    log_text, detail_log = battle["compact"], battle["detail"]
     attacker_won = winner_creature.id == a_creature.id
     winner_user = attacker if attacker_won else target
     winner_creature_obj = a_creature if attacker_won else t_creature
@@ -956,6 +958,11 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     return {
         "log_text": log_text,
         "detail_log": detail_log,
+        "battle_a": battle["a"],
+        "battle_b": battle["b"],
+        "battle_rounds": battle["rounds"],
+        "battle_mult": battle["mult"],
+        "battle_winner_name": battle["winner_name"],
         "attacker_won": attacker_won,
         "winner_name": display_name(winner_user),
         "attacker_cup_change": delta,  # attacker's own swing (+ if won, − if lost)
@@ -1001,29 +1008,30 @@ async def pvp_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     await send_defense_report_now(context, result.get("defense"), group=True)
     await query.answer("🟢 بردی!" if result["attacker_won"] else "🔴 باختی.")
-    head = (
-        f"{get_emoji('celebrate')} <b>{result['winner_name']} برد!</b>"
-        if result["attacker_won"]
-        else f"💀 <b>باختی — {result['winner_name']} برنده شد.</b>"
-    )
     if result["attacker_won"]:
-        reward = (f"\n\n{get_emoji('coin')} {result['loot']} طلا از حریف غارت کردی "
-                  f"· +{result.get('dna', 0)} {get_emoji('dna')} · +{constants.DUEL_WIN_XP} XP")
+        reward_block = (
+            f"{get_emoji('gift')} <b>غنائم کسب‌شده از حریف:</b>\n"
+            f"{get_emoji('coin')} طلا: <b>{result['loot']:,}+</b> ┃ "
+            f"{get_emoji('dna')} دی‌ان‌ای: <b>{result.get('dna', 0)}+</b> ┃ "
+            f"📈 تجربه: <b>{constants.DUEL_WIN_XP}+ XP</b>"
+        )
     else:
-        reward = "\n\n<i>باختی — ولی هیچی ازت کم نشد (اتک گروهی کاپ نداره).</i>"
+        reward_block = "😔 <b>باختی</b> — ولی هیچی ازت کم نشد (اتک گروهی کاپ نداره)."
     if result["winner_level_up"]:
-        reward += f"\n{get_emoji('celebrate')} {result['winner_creature']} رسید به سطح {result['winner_new_level']}!"
-    reward += f"\n⚡ 1 انرژی کم شد (باقی‌مونده: {result['energy_left']})"
-    reward += _mission_lines(result["missions"]) + _speedup_note(result["speedup"])
+        reward_block += f"\n{get_emoji('celebrate')} {result['winner_creature']} رسید به سطح {result['winner_new_level']}!"
+    reward_block += f"\n⚡️ انرژی باقی‌مانده: <b>{result['energy_left']}</b> (-1⚡️)"
+    reward_block += _mission_lines(result["missions"]) + _speedup_note(result["speedup"])
+    text = battle_report(
+        result["battle_a"], result["battle_b"], result["battle_winner_name"],
+        result["battle_rounds"], result["battle_mult"],
+        victor_line=result["winner_name"], reward_block=reward_block,
+    )
     context.user_data["pvp_last_detail"] = result.get("detail_log", "")
     keyboard = InlineKeyboardMarkup(
         [[btn("🔍 جزییات حمله", style=NAV, callback_data=f"gatk_detail:{update.effective_user.id}")]]
         + list(group_footer_keyboard(update.effective_user.id).inline_keyboard)
     )
-    await safe_edit_message_text(
-        query, result["log_text"] + "\n\n" + head + reward, parse_mode="HTML",
-        reply_markup=keyboard,
-    )
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def pvp_detail_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1126,7 +1134,9 @@ async def guardian(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             div,
             "",
             f"{get_emoji('battle')} چالش جایگاه: برای تصاحب عنوان محافظ، کلمه «تسخیر» را بفرست.",
-            f"{get_emoji('gift')} پاداش سلطنت: محافظ فعال هر روز با «حقوق» غنیمت اختصاصی می‌گیره.",
+            f"{get_emoji('gift')} حقوق روزانه: محافظ هر روز با «حقوق» طلا و DNA می‌گیره — "
+            f"مبلغش به قدرت هیولای محافظ بستگی داره (تا ۵۰٬۰۰۰ طلا و ۲٬۰۰۰ DNA).",
+            f"🚪 کناره‌گیری: با «استعفا» می‌تونی جایگاه رو به نفر بعدی واگذار کنی.",
         ]),
         parse_mode="HTML",
     )
@@ -1221,27 +1231,77 @@ def _guardian_claim_sync(chat, tg_user):
     if top is None or top.owner_id != user.id:
         raise GameError("😅 تو محافظ فعلی این گروه نیستی. با «محافظ» ببین کیه.")
 
+    from game.guardian import salary_for
+
+    coins, dna = salary_for(top)
     # atomic daily consume BEFORE paying, so a rapid double-tap can't collect the
-    # stipend twice in one day (was check-then-record — spammable).
+    # salary twice in one day (was check-then-record — spammable). The daily log is
+    # keyed on the USER, so this is one salary per day across EVERY group they're in.
     with transaction.atomic():
-        consume_daily(user, "guardian_stipend")
-        user.coins += constants.GUARDIAN_STIPEND_COINS
-        user.dna_fragments += constants.GUARDIAN_STIPEND_DNA
+        try:
+            consume_daily(user, "guardian_stipend")
+        except GameError:
+            raise GameError(
+                "📛 شما امروز حقوق محافظ خود را قبلاً (در همین گروه یا گروهی دیگر) دریافت کرده‌اید.\n"
+                "حقوق محافظ فقط روزی یک‌بار پرداخت می‌شود؛ فردا دوباره سر بزن."
+            )
+        user.coins += coins
+        user.dna_fragments += dna
         user.save(update_fields=["coins", "dna_fragments"])
+    return coins, dna
 
 
 async def guardian_claim(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        await run_db(_guardian_claim_sync, update.effective_chat, update.effective_user)
+        coins, dna = await run_db(_guardian_claim_sync, update.effective_chat, update.effective_user)
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
     await update.message.reply_text(
-        f"{get_emoji('guardian')} به‌عنوان محافظ گروه، امروز "
-        f"<b>{constants.GUARDIAN_STIPEND_COINS} {get_emoji('coin')}</b> و "
-        f"<b>{constants.GUARDIAN_STIPEND_DNA} {get_emoji('dna')}</b> گرفتی!",
+        f"{get_emoji('guardian')} <b>حقوق محافظ گروه پرداخت شد!</b>\n"
+        f"به پاس نگهبانی از قلمرو، امروز <b>{coins:,} {get_emoji('coin')}</b> و "
+        f"<b>{dna:,} {get_emoji('dna')}</b> دریافت کردی.\n"
+        f"<i>مبلغ حقوق بر اساس قدرت هیولای محافظ محاسبه می‌شود — هرچه قوی‌تر، حقوق بیشتر.</i>",
         parse_mode="HTML",
     )
+
+
+def _guardian_resign_sync(chat, tg_user):
+    group = get_or_create_group(chat)
+    user, _ = get_or_create_user(tg_user)
+    touch_membership(group, user)
+
+    from game.guardian import resign_guardian
+
+    current = get_guardian(group)
+    if current is None or current.owner_id != user.id:
+        raise GameError("😅 تو محافظ فعلی این گروه نیستی که بخوای استعفا بدی. با «محافظ» ببین کیه.")
+    resign_guardian(group, user, group_member_creatures(group))
+    successor = get_guardian(group)
+    if successor is None:
+        return None
+    owner = User.objects.filter(id=successor.owner_id).first()
+    return display_name(owner) if owner else str(successor.owner_id)
+
+
+async def guardian_resign(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        successor_name = await run_db(_guardian_resign_sync, update.effective_chat, update.effective_user)
+    except GameError as exc:
+        await update.message.reply_text(str(exc))
+        return
+    if successor_name:
+        text = (
+            f"{get_emoji('guardian')} <b>از جایگاه محافظ کناره‌گیری کردی.</b>\n"
+            f"👑 محافظ جدید گروه: <b>{successor_name}</b>\n"
+            f"هر وقت خواستی دوباره با «تسخیر» جایگاه رو پس بگیر."
+        )
+    else:
+        text = (
+            f"{get_emoji('guardian')} <b>از جایگاه محافظ کناره‌گیری کردی.</b>\n"
+            f"جایگاه محافظ اکنون خالیه — اولین نفری که «تسخیر» بزنه بدون جنگ محافظ می‌شه."
+        )
+    await update.message.reply_text(text, parse_mode="HTML")
 
 
 def register(application) -> None:
