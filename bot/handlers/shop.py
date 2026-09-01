@@ -15,7 +15,7 @@ from game.emoji import get_emoji
 
 def _panel_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
-    return shop.today_offers(), user.coins, user.diamonds
+    return shop.offers_with_remaining(user), user.coins, user.diamonds
 
 
 def _render(offers, coins, diamonds) -> tuple[str, InlineKeyboardMarkup]:
@@ -37,13 +37,16 @@ def _render(offers, coins, diamonds) -> tuple[str, InlineKeyboardMarkup]:
             cur = "💎" if o["currency"] == "diamonds" else "طلا"
             star = "⭐ " if o["featured"] else ""
             disc = " 🔻تخفیف امروز" if o["featured"] else ""
-            lim = int(o.get("limit", 0) or 0)
-            lim_txt = f"  <i>(محدودیت: {lim} بار در روز)</i>" if lim else ""
+            rem = o.get("remaining")
+            lim_txt = f"  <i>({rem} عدد مانده امروز)</i>" if rem is not None else ""
             lines.append(f"{star}{o['emoji']} <b>{o['title']}</b>{disc}")
-            lines.append(f"└ قیمت: <b>{o['price']:,}</b> {cur}{lim_txt}")
+            # ┘ (up-and-LEFT corner) reads as a proper sub-branch in RTL, unlike └
+            lines.append(f"┘ قیمت: <b>{o['price']:,}</b> {cur}{lim_txt}")
+            sold_out = rem == 0
+            label = (f"⛔ سقف امروز پر شد — {o['title']}" if sold_out
+                     else f"{o['emoji']} خرید {o['title']} ({o['price']:,} {cur})")
             rows.append([btn(
-                f"{o['emoji']} خرید {o['title']} ({o['price']:,} {cur})",
-                style=BUILD if o["featured"] else SHOP, callback_data=f"shop_buy:{o['key']}",
+                label, style=BUILD if o["featured"] else SHOP, callback_data=f"shop_buy:{o['key']}",
             )])
 
     _section("💎 <b>خرید با الماس:</b>", [o for o in offers if o["currency"] == "diamonds"])
@@ -76,7 +79,7 @@ def _buy_sync(tg_user, key, shown_price, shown_currency):
     user, _ = get_or_create_user(tg_user)
     offer = shop.buy(user, key, shown_price=shown_price, shown_currency=shown_currency)
     user.refresh_from_db()  # buy() charges via a locked re-fetch; outer instance is stale
-    return offer, shop.today_offers(), user.coins, user.diamonds
+    return offer, shop.offers_with_remaining(user), user.coins, user.diamonds
 
 
 async def shop_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

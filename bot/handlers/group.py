@@ -616,9 +616,57 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         text += f"\n\n{div}\n💡 <i>برای حمله به بازیکن دیگه، روی پیامش ریپلای کن و «اتک» بفرست.</i>"
 
+    # only a relevant button: the raid standings (who hit how much + their share).
+    # the boss card is gone once it's defeated, so hide the button then.
+    from bot.handlers.group_words import _pm_button
+
+    kb_rows = []
+    if not defeated:
+        kb_rows.append([btn("📊 جدول اتک به رید", style=NAV, callback_data=f"raidlb:{update.effective_chat.id}")])
+    kb_rows.append([_pm_button()])
     await update.message.reply_text(
-        text, parse_mode="HTML", reply_markup=group_footer_keyboard(update.effective_user.id)
+        text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb_rows)
     )
+
+
+async def raid_leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """The «📊 جدول اتک به رید» button: current damage standings for the active boss,
+    with each attacker's projected reward share."""
+    query = update.callback_query
+    from game.raid import damage_leaderboard
+
+    lb = await run_db(damage_leaderboard, query.message.chat_id)
+    if lb is None:
+        await query.answer("الان هیچ باسی توی گروه فعال نیست.", show_alert=True)
+        return
+    await query.answer()
+    div = "──────────────"
+    from bot.handlers.private import pct_bar as _pct_bar
+
+    lines = [
+        f"📊 <b>جدول اتک به رید — {lb['boss_name']} [سطح {lb['boss_level']}]</b>",
+        f"{get_emoji('hp')} سلامت باس: {_pct_bar(lb['hp'], lb['max_hp'])} ({lb['hp']:,}/{lb['max_hp']:,})",
+        f"💥 مجموع آسیب گروه: <b>{lb['total_damage']:,}</b>",
+        "", div, "",
+    ]
+    if not lb["rows"]:
+        lines.append("<i>هنوز کسی به این باس ضربه نزده.</i>")
+    else:
+        medals = ["🥇", "🥈", "🥉"]
+        for i, r in enumerate(lb["rows"][:15]):
+            rank = medals[i] if i < 3 else f"{i + 1}."
+            lines.append(
+                f"{rank} <b>{r['name']}</b> — 💥{r['damage']:,} ({r['share_pct']}٪)\n"
+                f"     🎁 سهم فعلی: {get_emoji('coin')}{r['coins']:,} · {get_emoji('dna')}{r['dna']:,}"
+            )
+    lines.append(f"\n<i>سهم‌ها با ادامه‌ی نبرد تغییر می‌کنن؛ وقتی باس بیفته همین نسبت پرداخت می‌شه.</i>")
+    from bot.handlers.group_words import _pm_button
+
+    kb = InlineKeyboardMarkup([
+        [btn("🔄 به‌روزرسانی", style=NAV, callback_data=f"raidlb:{query.message.chat_id}")],
+        [_pm_button()],
+    ])
+    await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=kb)
 
 
 # ── PvP: reply-to-attack another player ───────────────────────────────────────
@@ -746,6 +794,9 @@ async def _pvp_attack_prompt(update, context, target_tg) -> None:
         return
     text, keyboard = _pvp_prompt_render(update.effective_user.id, target_tg.id, *data)
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+    # remember the user's own «اتک» message so a later «لغو» can delete it too (the
+    # bot's prompt is cleaned up already; the user's command line was left behind)
+    context.user_data["pvp_prompt_user_msg"] = (update.effective_chat.id, update.message.message_id)
 
 
 def _pvp_preview_by_ids_sync(attacker_id, target_id):
@@ -1061,10 +1112,14 @@ async def pvp_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         victor_line=result["winner_name"], reward_block=reward_block,
     )
     context.user_data["pvp_last_detail"] = result.get("detail_log", "")
-    keyboard = InlineKeyboardMarkup(
-        [[btn("🔍 جزییات حمله", style=NAV, callback_data=f"gatk_detail:{update.effective_user.id}")]]
-        + list(group_footer_keyboard(update.effective_user.id).inline_keyboard)
-    )
+    # keep it uncluttered — only the relevant action (fight details) + a PM shortcut,
+    # not the generic reward/help footer that had nothing to do with this attack.
+    from bot.handlers.group_words import _pm_button
+
+    keyboard = InlineKeyboardMarkup([
+        [btn("🔍 جزییات حمله", style=NAV, callback_data=f"gatk_detail:{update.effective_user.id}")],
+        [_pm_button()],
+    ])
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -1096,7 +1151,11 @@ async def pvp_attack_cancel_callback(update: Update, context: ContextTypes.DEFAU
     from bot.handlers.group_words import _schedule_cleanup
 
     if query.message is not None:
-        _schedule_cleanup(context, query.message.chat_id, [query.message.message_id], "pvp_cancel")
+        ids = [query.message.message_id]
+        stored = context.user_data.pop("pvp_prompt_user_msg", None)
+        if stored and stored[0] == query.message.chat_id:
+            ids.append(stored[1])  # also remove the user's own «اتک» command line
+        _schedule_cleanup(context, query.message.chat_id, ids, "pvp_cancel")
 
 
 def _creature_power(c: Creature) -> int:
@@ -1351,6 +1410,7 @@ def register(application) -> None:
     # spamming it across many groups for free stat mutations. The player-vs-player
     # «دوئل» feature was removed entirely (PvP happens via «اتک» reply-attacks now).
     application.add_handler(CallbackQueryHandler(transfer_offer_callback, pattern=r"^xfo:"))
+    application.add_handler(CallbackQueryHandler(raid_leaderboard_callback, pattern=r"^raidlb:-?\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_attack_callback, pattern=r"^gatk:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_attack_cancel_callback, pattern=r"^gatk_cancel:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_detail_callback, pattern=r"^gatk_detail:\d+$"))

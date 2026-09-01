@@ -294,6 +294,23 @@ def _daily_purchase_count(user: User, key: str) -> int:
     return row.count if row else 0
 
 
+def remaining_for(user: User, offer: dict) -> int | None:
+    """How many of this offer the player may still buy TODAY, or None when the offer
+    is unlimited (no per-day limit). Drives the «N عدد مانده» line in the shop."""
+    limit = int(offer.get("limit", 0) or 0)
+    if limit <= 0:
+        return None
+    return max(0, limit - _daily_purchase_count(user, offer["key"]))
+
+
+def offers_with_remaining(user: User) -> list[dict]:
+    """Today's offers, each annotated with `remaining` (per-user, per-day)."""
+    offers = today_offers()
+    for o in offers:
+        o["remaining"] = remaining_for(user, o)
+    return offers
+
+
 def buy(user: User, key: str, shown_price: int | None = None, shown_currency: str | None = None) -> dict:
     """Buy an offer that's in TODAY's shop. Repeatable unless the offer carries a
     per-day purchase limit (owner-set: 1 / 2 / unlimited).

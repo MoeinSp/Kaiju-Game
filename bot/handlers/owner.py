@@ -1139,9 +1139,39 @@ def _user_info_text(data: dict) -> str:
         f"🔥 streak: {user.login_streak}   {get_emoji('alliance')} اتحاد: "
         f"{html.escape(data['alliance_name']) if data.get('alliance_name') else '—'}",
         f"{get_emoji('banned')} مسدود: {'بله' if user.is_banned else 'نه'}",
-        f"📅 عضو از: {timezone.localtime(user.created_at).strftime('%Y-%m-%d')}\n",
-        f"{get_emoji('creature')} <b>موجودات ({len(data['creatures'])}):</b>",
+        f"📅 عضو از: {timezone.localtime(user.created_at).strftime('%Y-%m-%d')}",
     ]
+    gains = data.get("gains")
+    if gains and gains.get("days"):
+        from game.ledger import SOURCE_LABELS
+
+        tot = gains["totals"]
+        lines.append("")
+        lines.append("💹 <b>افزایش دارایی (۳ روز اخیر):</b>")
+        lines.append(
+            f"  جمع: {get_emoji('coin')} {tot['coins']:,} · "
+            f"{get_emoji('dna')} {tot['dna']:,} · {get_emoji('diamond')} {tot['diamonds']:,}"
+        )
+        for day in gains["days"]:
+            b = gains["per_day"].get(day, {})
+            if not (b.get("coins") or b.get("dna") or b.get("diamonds")):
+                continue
+            lines.append(
+                f"  <b>{day}</b>: {get_emoji('coin')} {b['coins']:,} · "
+                f"{get_emoji('dna')} {b['dna']:,} · {get_emoji('diamond')} {b['diamonds']:,}"
+            )
+            for src, c, dn, di in sorted(b.get("sources", []), key=lambda x: -(x[1] + x[3] * 100)):
+                bits = []
+                if c:
+                    bits.append(f"{c:,}🪙")
+                if dn:
+                    bits.append(f"{dn:,}🧬")
+                if di:
+                    bits.append(f"{di:,}💎")
+                lines.append(f"     └ {SOURCE_LABELS.get(src, src)}: {' · '.join(bits)}")
+    else:
+        lines.append("💹 <i>افزایش دارایی ثبت‌شده‌ای در ۳ روز اخیر نیست.</i>")
+    lines.append(f"\n{get_emoji('creature')} <b>موجودات ({len(data['creatures'])}):</b>")
     # cap the list so a big roster can't push the message past Telegram's 4096 limit;
     # names are escaped because a creature/lab name can contain <, > or & (HTML-unsafe)
     shown = data["creatures"][:40]

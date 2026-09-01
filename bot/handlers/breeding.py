@@ -118,7 +118,7 @@ def _parent_a_render(candidates: list, filt: str = "all", page: int = 0) -> tupl
         "<blockquote>دو هیولای آزاد رو بفرست توی غار. اول جفت‌گیری می‌کنن، بعد یه <b>تخم</b> "
         "می‌ذارن و آزاد می‌شن؛ تخم جدا رشد می‌کنه تا سر باز کنه.\n"
         "هرچی والدین <b>نایاب‌تر</b>، <b>زمان جفت‌گیری</b> خیلی بیشتر (اساطیری+اساطیری تا 36 ساعت). "
-        "رده‌ی تخم از والدین بالاتر نمی‌ره؛ همنوع‌بودن شانس رسیدن به سقف رده رو بیشتر می‌کنه.</blockquote>\n"
+        "رده‌ی تخم فقط به رده‌ی والدین بستگی داره: هم‌رده ⇒ ۵۰/۵۰، متفاوت‌رده ⇒ ۹۰٪ پایین‌تر/۱۰٪ بالاتر — و هیچ‌وقت از والدین بالاتر نمی‌ره.</blockquote>\n"
         "\n<b>والد اول رو انتخاب کن:</b>  <i>(با تب نایابی جدا کن)</i>"
     )
     rows = _tab_rows(candidates, filt, lambda f: f"brd_ap:{f}:0")
@@ -232,8 +232,9 @@ def _cave_guide_text() -> str:
         "📖 <b>راهنمای غار هیولا</b>\n\n"
         "🥚 دو هیولای <b>آزاد</b> می‌فرستی؛ جفت‌گیری می‌کنن (والدها آزاد می‌شن) و یه <b>تخم</b> "
         "می‌ذارن که جدا رشد می‌کنه تا سر باز کنه.\n\n"
-        "🎲 <b>رده‌ی تخم:</b> هیچ‌وقت از والدین بالاتر نمی‌ره. شانس رسیدن به سقف رده: "
-        "همنوع (هم‌اسم) <b>60%</b> · غیرهمنوع <b>30%</b> — وگرنه یه رده پایین‌تر.\n\n"
+        "🎲 <b>رده‌ی تخم:</b> فقط به رده‌ی والدین بستگی داره و هیچ‌وقت ازشون بالاتر نمی‌ره. "
+        "والدینِ <b>هم‌رده</b> ⇒ ۵۰٪ همون رده و ۵۰٪ یک رده پایین‌تر. والدینِ <b>متفاوت‌رده</b> ⇒ "
+        "۹۰٪ رده‌ی پایین‌تر و فقط ۱۰٪ رده‌ی بالاتر.\n\n"
         f"⏱ <b>جفت‌گیری:</b> بسته به نایابی والدها بین <b>{lo}</b> تا <b>{hi}</b> ساعت "
         "(فقط یه جفت همزمان — گلوگاه اصلی همینه). بعدش رشد تخم سریعه (10 دقیقه تا 1 ساعت) و "
         "چند تخم با هم رشد می‌کنن.\n\n"
@@ -352,19 +353,23 @@ async def breeding_pick_b_callback(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
 
     top_label = constants.RARITY_LABELS[info["top_rarity"]]
+    fb_label = constants.RARITY_LABELS[info["fallback_rarity"]]
     pct = round(info["top_chance"] * 100)
-    species_note = "هم‌نژاد ✅ (شانس بالاتر)" if info["same_species"] else "غیرهم‌نژاد (شانس پایین‌تر)"
+    if info["top_rarity"] == info["fallback_rarity"]:
+        odds_line = f"🎲 رده‌ی تخم: حتماً <b>{top_label}</b>"
+    else:
+        odds_line = f"🎲 رده‌ی تخم: <b>{pct}٪ {top_label}</b> · <b>{100 - pct}٪ {fb_label}</b>"
 
     text = (
         f"🕳 <b>فرستادن به غار هیولا</b>\n\n"
         f"<blockquote>{parent_a.name} ({constants.RARITY_LABELS[parent_a.rarity]}) "
         f"+ {parent_b.name} ({constants.RARITY_LABELS[parent_b.rarity]})</blockquote>\n"
-        f"🎲 سقف رده: <b>{top_label}</b> — شانس <b>{pct}٪</b> ({species_note})\n"
+        f"{odds_line}\n"
         f"⏱ زمان کل: جفت‌گیری <b>{_format_remaining(info['mating_minutes'] * 60)}</b> + "
         f"تخم <b>{_format_remaining(info['hatch_minutes'] * 60)}</b>\n"
         f"{get_emoji('dna')} هزینه: <b>{info['dna']}</b> DNA (موجودی: {user.dna_fragments})\n\n"
         f"{get_emoji('egg')} <b>چی از تخم درمیاد؟ تا سر باز نکنه هیچ‌کس نمی‌دونه.</b>\n"
-        "<i>رده‌ی تخم هیچ‌وقت از والدین بالاتر نمی‌ره. برای جزییات کامل، دکمه‌های زیر رو بزن.</i>"
+        "<i>رده‌ی تخم فقط به رده‌ی والدین بستگی داره و هیچ‌وقت ازشون بالاتر نمی‌ره.</i>"
     )
     pair = f"{parent_a.id}:{parent_b.id}"
     rows = [
@@ -396,13 +401,19 @@ async def breeding_info_callback(update: Update, context: ContextTypes.DEFAULT_T
         top, fb = lbl[info["top_rarity"]], lbl[info["fallback_rarity"]]
         pct = round(info["top_chance"] * 100)
         if info["top_rarity"] == info["fallback_rarity"]:
-            msg = f"🎲 این تخم حتماً {top} می‌شه (پایین‌ترین رده).\nرده هیچ‌وقت از والدین بالاتر نمی‌ره."
+            msg = f"🎲 این تخم حتماً {top} می‌شه.\nرده هیچ‌وقت از والدین بالاتر نمی‌ره."
+        elif parent_a.rarity == parent_b.rarity:
+            msg = (
+                f"🎲 شانس رده (والدین هم‌رده)\n\n"
+                f"{top} : {pct}٪\n{fb} : {100 - pct}٪\n\n"
+                "دو والدِ هم‌رده ⇒ ۵۰٪ همون رده، ۵۰٪ یک رده پایین‌تر."
+            )
         else:
             msg = (
-                f"🎲 شانس رده\n\n"
-                f"{top} : {pct}٪\n{fb} : {100 - pct}٪\n\n"
-                f"همنوع بودن ⇒ 60٪ · غیرهمنوع ⇒ 30٪.\n"
-                "رده هیچ‌وقت از والدین بالاتر نمی‌ره (مثلاً دو افسانه‌ای، اساطیری نمی‌دن)."
+                f"🎲 شانس رده (والدین متفاوت‌رده)\n\n"
+                f"{fb} : {100 - pct}٪\n{top} : {pct}٪\n\n"
+                "والدین با رده‌ی متفاوت ⇒ ۹۰٪ رده‌ی پایین‌تر، ۱۰٪ رده‌ی بالاتر.\n"
+                "رده هیچ‌وقت از والدین بالاتر نمی‌ره (مثلاً اساطیری + عادی، اساطیری‌اش فقط ۱۰٪)."
             )
     else:  # time
         msg = (

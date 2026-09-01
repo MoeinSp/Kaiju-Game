@@ -427,8 +427,11 @@ class Egg(models.Model):
     or even sent back into the cave in the meantime."""
 
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="eggs")
-    base_rarity = models.CharField(max_length=16, default="common")
-    upgrade_chance = models.FloatField(default=0.0)
+    base_rarity = models.CharField(max_length=16, default="common")  # the TOP attainable rarity
+    upgrade_chance = models.FloatField(default=0.0)                  # P(hit base_rarity)
+    # what the egg becomes on a miss. Empty for legacy eggs → hatch() falls back to
+    # one tier below base_rarity (the old behaviour).
+    fallback_rarity = models.CharField(max_length=16, default="", blank=True)
     parent_a_name = models.CharField(max_length=64)
     parent_a_element = models.CharField(max_length=16)
     parent_b_name = models.CharField(max_length=64)

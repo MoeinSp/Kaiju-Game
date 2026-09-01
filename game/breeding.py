@@ -86,11 +86,16 @@ def _power(creature: Creature) -> int:
     return creature_power(creature)
 
 
+def offspring_rarities(parent_a: Creature, parent_b: Creature) -> dict:
+    """(top, fallback, p_top) for this pairing. The egg can never exceed the higher
+    parent's rarity: same-rarity parents give 50/50 (that rarity vs one below), and
+    mixed-rarity parents give 90% the LOWER rarity / 10% the higher one."""
+    return constants.cave_offspring_rarities(parent_a.rarity, parent_b.rarity)
+
+
 def top_chance(parent_a: Creature, parent_b: Creature) -> float:
-    """Probability the egg lands at the parents' TOP rarity (it can never go above
-    it). Same-species pairs are far more reliable (60%) than cross-species (30%);
-    on a miss the egg drops one tier below the top."""
-    return constants.cave_top_chance(parent_a.name == parent_b.name)
+    """Probability the egg lands at the pair's TOP rarity (see offspring_rarities)."""
+    return offspring_rarities(parent_a, parent_b)["p_top"]
 
 
 def active_eggs(user: User) -> list[Egg]:
@@ -100,16 +105,15 @@ def active_eggs(user: User) -> list[Egg]:
 
 def preview(user: User, parent_a: Creature, parent_b: Creature) -> dict:
     """Everything the confirmation screen needs, without starting anything."""
-    top = constants.higher_rarity(parent_a.rarity, parent_b.rarity)
-    p_top = top_chance(parent_a, parent_b)
-    fallback = constants.prev_rarity(top)
+    r = offspring_rarities(parent_a, parent_b)
+    top, fallback, p_top = r["top"], r["fallback"], r["p_top"]
     return {
         "mating_minutes": mating_minutes(parent_a, parent_b),
         "hatch_minutes": hatch_minutes(parent_a, parent_b),
         "dna": dna_cost(parent_a, parent_b),
         "base_rarity": top,          # the top attainable rarity (never exceeded)
         "top_rarity": top,
-        "fallback_rarity": fallback,  # what you get on a miss (one tier below top)
+        "fallback_rarity": fallback,  # what you get on a miss
         "top_chance": p_top,
         "same_element": parent_a.element == parent_b.element,
         "same_species": parent_a.name == parent_b.name,
@@ -164,13 +168,12 @@ def _lay_egg_from(user: User, job: BreedingJob) -> Egg:
     frozen onto the Egg here, so hatching later doesn't care what happens to the
     parents in the meantime."""
     parent_a, parent_b = job.parent_a, job.parent_b
-    base_rarity = constants.higher_rarity(parent_a.rarity, parent_b.rarity)
+    r = offspring_rarities(parent_a, parent_b)
     egg = Egg.objects.create(
         owner=user,
-        base_rarity=base_rarity,
-        # `upgrade_chance` now stores P(hit the top rarity); on a miss the egg drops
-        # one tier (see hatch()). Reused the existing column so no migration is needed.
-        upgrade_chance=top_chance(parent_a, parent_b),
+        base_rarity=r["top"],           # the TOP attainable rarity (never exceeded)
+        upgrade_chance=r["p_top"],      # P(hit the top); otherwise → fallback_rarity
+        fallback_rarity=r["fallback"],  # what it becomes on a miss (the lower parent, or one tier down)
         parent_a_name=parent_a.name,
         parent_a_element=parent_a.element,
         parent_b_name=parent_b.name,
@@ -220,9 +223,11 @@ def hatch(user: User, egg_id: int) -> tuple[Creature, dict]:
         raise GameError("تخم هنوز سر باز نکرده — صبر کن تایمرش تموم بشه.")
 
     # egg.base_rarity is the TOP (max parent) rarity; hit it with prob upgrade_chance,
-    # otherwise drop one tier. The egg can never exceed the parents' rarity.
+    # otherwise fall back to fallback_rarity (the lower parent, or — for legacy eggs
+    # laid before that column existed — one tier below the top). Never exceeds the top.
     hit_top = random.random() < egg.upgrade_chance
-    rarity = egg.base_rarity if hit_top else constants.prev_rarity(egg.base_rarity)
+    fallback = egg.fallback_rarity or constants.prev_rarity(egg.base_rarity)
+    rarity = egg.base_rarity if hit_top else fallback
 
     # the child is one of the two parent species, never a blend — `name` is the
     # fusion identity key, so a hybrid name would create an unfuseable species

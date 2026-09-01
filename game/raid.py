@@ -107,6 +107,42 @@ def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bo
     return dmg, defeated, dna_gain
 
 
+def damage_leaderboard(group_id: int) -> dict | None:
+    """Read-only standings for the group's ACTIVE boss: each attacker's total damage
+    and the reward they'd get if the boss fell right now (same split as
+    distribute_rewards, but nothing is granted). None when there's no active boss."""
+    from bio_lab.repository import display_name
+
+    boss = get_active_boss(group_id)
+    if boss is None:
+        return None
+    level_mult = 1 + max(0, boss.level - 1) * REWARD_PER_LEVEL
+    dna_pool = round(DNA_REWARD_POOL_BASE * level_mult)
+    coin_pool = round(COIN_REWARD_POOL_BASE * level_mult)
+
+    totals: dict[int, int] = {}
+    for entry in RaidDamageLog.objects.filter(raid_id=boss.id):
+        totals[entry.user_id] = totals.get(entry.user_id, 0) + entry.damage
+    total_damage = sum(totals.values()) or 1
+
+    rows = []
+    for uid, dmg in sorted(totals.items(), key=lambda kv: kv[1], reverse=True):
+        share = dmg / total_damage
+        user = User.objects.filter(id=uid).first()
+        rows.append({
+            "name": display_name(user) if user else str(uid),
+            "damage": dmg,
+            "share_pct": round(share * 100),
+            "dna": round(dna_pool * share),
+            "coins": round(coin_pool * share),
+        })
+    return {
+        "boss_name": boss.name, "boss_level": boss.level,
+        "hp": max(boss.current_hp, 0), "max_hp": boss.max_hp,
+        "total_damage": sum(totals.values()), "rows": rows,
+    }
+
+
 def distribute_rewards(boss: RaidBoss) -> dict[int, dict[str, int]]:
     level_mult = 1 + max(0, boss.level - 1) * REWARD_PER_LEVEL
     dna_pool = round(DNA_REWARD_POOL_BASE * level_mult)

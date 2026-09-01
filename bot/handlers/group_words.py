@@ -995,8 +995,9 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if action == "balance":
         from bot.handlers import private as private_handlers
 
+        # «موجودی» is a quick reference — leave both the command and the reply in place
+        # (no auto-cleanup), so a player can scroll back to their balance.
         await private_handlers.balance(update, context)
-        _schedule_cleanup(context, message.chat_id, [message.message_id], action)
         return
 
 

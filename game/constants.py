@@ -760,9 +760,28 @@ def egg_hatch_minutes(rarity_a: str, rarity_b: str) -> int:
     return EGG_HATCH_SHORT_MINUTES[higher_rarity(rarity_a, rarity_b)]
 
 
-# Chance the egg lands at the parents' TOP rarity (it can never exceed it — two
-# legendaries can't make a mythic). Otherwise it drops one tier. Same-species pairs
-# are far more reliable than cross-species ones.
+# ── Cave offspring rarity ─────────────────────────────────────────────────────
+# The egg's rarity is decided ENTIRELY by the two parents' rarities and can NEVER
+# exceed the higher of the two:
+#   • both parents SAME rarity R  → 50% R, 50% one tier below R.
+#   • parents of DIFFERENT rarity → 90% the LOWER rarity, 10% the HIGHER rarity.
+# This kills the old exploit where a mythic+common pair had a fat chance at a mythic;
+# now that pair is 90% common, 10% mythic.
+CAVE_SAME_RARITY_TOP_CHANCE = 0.50   # P(keep the shared rarity) when both parents match
+CAVE_MIXED_RARITY_TOP_CHANCE = 0.10  # P(reach the higher rarity) when they differ
+
+
+def cave_offspring_rarities(rarity_a: str, rarity_b: str) -> dict:
+    """(top, fallback, p_top) for a pairing — see the rules above. `p_top` is the
+    probability the egg hatches at `top`; otherwise it hatches at `fallback`."""
+    lo = rarity_a if RARITY_ORDER.index(rarity_a) <= RARITY_ORDER.index(rarity_b) else rarity_b
+    hi = higher_rarity(rarity_a, rarity_b)
+    if lo == hi:
+        return {"top": hi, "fallback": prev_rarity(hi), "p_top": CAVE_SAME_RARITY_TOP_CHANCE}
+    return {"top": hi, "fallback": lo, "p_top": CAVE_MIXED_RARITY_TOP_CHANCE}
+
+
+# (legacy — kept for any old caller; the roll now uses cave_offspring_rarities)
 CAVE_TOP_CHANCE_SAME_SPECIES = 0.60
 CAVE_TOP_CHANCE_DIFF_SPECIES = 0.30
 
