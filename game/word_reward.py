@@ -31,10 +31,12 @@ COOLDOWN_MAX_SECONDS = 6 * 60
 
 # (weight, kind, low, high) — `kind` names the resource so the caller can render
 # the right emoji without re-deriving it from the amount.
+# No diamonds here any more — the group «جایزه» pays gold / DNA / speed-up cards only
+# (diamonds stay a deliberate, capped faucet via the رگه‌ی الماس drop). The old diamond
+# weight was folded into coins.
 PRIZES: tuple[tuple[int, str, int, int], ...] = (
-    (46, "coins", 60, 220),
+    (56, "coins", 60, 220),
     (26, "dna", 3, 12),
-    (10, "diamonds", 1, 2),
     (12, "speedup", 0, 0),  # minutes chosen from SPEEDUP_CHOICES below
     (6, "jackpot", 400, 900),  # gold, but announced as a jackpot
 )

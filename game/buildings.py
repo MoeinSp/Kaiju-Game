@@ -114,8 +114,12 @@ def is_unlocked(user: User, building_type: str) -> bool:
 
 
 def star_cap(user: User) -> int:
-    """A player can only raise creatures to as many stars as their main hall level."""
-    return min(constants.STAR_MAX, max(1, main_hall_level(user)))
+    """The highest star a player can fuse a creature to = their 🔮 تالار ادغام level.
+    Fusing to N★ needs the fusion lab at level N (2★ → level 2, 3★ → level 3, …).
+    Returns 1 when the lab isn't built (level 0), so a lone 1★ creature can't fuse
+    until the lab is raised to level 2. The lab's own level is already capped by the
+    main hall, so this stays within the overall progression."""
+    return min(constants.STAR_MAX, max(1, building_level(user, "fusion_lab")))
 
 
 def is_built(user: User, building_type: str) -> bool:
@@ -215,6 +219,11 @@ def collect(user: User, building: Building) -> tuple[int, str]:
     resource_field = constants.BUILDING_PRODUCTION[locked.building_type]["resource"]
     setattr(user, resource_field, getattr(user, resource_field) + amount)
     user.save(update_fields=[resource_field])
+    from game.ledger import record_gain
+
+    _res_key = {"coins": "coins", "diamonds": "diamonds", "dna_fragments": "dna"}.get(resource_field)
+    if _res_key:
+        record_gain(user, "collect", **{_res_key: amount})
     now = timezone.now()
     locked.banked_pending = 0.0
     locked.last_collected_at = now

@@ -197,6 +197,10 @@ def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal", se
     user.coins += coins
     user.dna_fragments += dna
     user.save(update_fields=["coins", "dna_fragments"])
+    if coins or dna:
+        from game.ledger import record_gain
+
+        record_gain(user, "hunt", coins=coins, dna=dna)
     levels = add_xp(player_creature, xp_gain)
     player_creature.save()
     lab_up = lab.award(user, "hunt_win" if won else "hunt_loss")

@@ -46,7 +46,8 @@ DROP_KINDS = {
     "capsule": {"emoji": "⚡", "title": "کپسول انرژی", "flavor": "یه کپسول انرژی پیدا شد!",
                 "btn": "⚡ بگیرش!", "res": {"energy": "full", "coins": (50, 120)}, "weight": 3},
     "jackpot": {"emoji": "🌟", "title": "جک‌پات نادر", "flavor": "🌟 یه جک‌پات نادر ظاهر شد!!",
-                "btn": "🌟 شانستو امتحان کن!", "res": {"coins": (300, 600), "diamonds": (3, 10)}, "weight": 1},
+                # gem jackpots are gone from groups — the diamonds are replaced by doubled gold
+                "btn": "🌟 شانستو امتحان کن!", "res": {"coins": (600, 1200)}, "weight": 1},
 }
 
 
@@ -159,6 +160,14 @@ def claim(drop_id: int, tg_user) -> dict:
         if user.vein_claim_ready_at is not None and user.vein_claim_ready_at > now:
             wait = int((user.vein_claim_ready_at - now).total_seconds())
             return {"status": "vein_cooldown", "seconds_left": wait}
+    # the energy capsule is a free full-energy refill — cap it at ONCE PER DAY per
+    # player (across every group) so it isn't swept for unlimited energy
+    is_capsule = drop.kind == "capsule"
+    if is_capsule:
+        from game.daily import get_daily_count
+
+        if get_daily_count(user, "energy_capsule") >= 1:
+            return {"status": "capsule_limit"}
     reward = reward_for(user, drop.kind)
     # grant
     fields = ["drop_claim_ready_at"]
@@ -178,9 +187,18 @@ def claim(drop_id: int, tg_user) -> dict:
         fields += ["energy", "energy_updated_at"]
     if fields:
         user.save(update_fields=list(set(fields)))
+    if reward.get("coins") or reward.get("dna") or reward.get("diamonds"):
+        from game.ledger import record_gain
+
+        record_gain(user, "drop", coins=reward.get("coins", 0),
+                    dna=reward.get("dna", 0), diamonds=reward.get("diamonds", 0))
     # count this vein toward today's cap AFTER the grant succeeds (same atomic txn)
     if is_vein:
         record_action(user, "diamond_vein")
+    if is_capsule:
+        from game.daily import record_action as _record_action
+
+        _record_action(user, "energy_capsule")
 
     drop.claimed_by = user
     drop.claimed_at = timezone.now()

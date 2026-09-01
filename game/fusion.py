@@ -93,9 +93,9 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
 
     cap = star_cap(user)
     if parent_a.star_level >= cap:
-        hall = constants.BUILDING_LABELS[constants.MAIN_BUILDING]
         raise GameError(
-            f"سقف ستاره‌ی فعلی تو {cap}⭐ ـه — برای بالاتر رفتن باید {hall} رو ارتقا بدی."
+            f"سقف ستاره‌ی فعلی تو {cap}⭐ ـه — برای رسیدن به {parent_a.star_level + 1}⭐ باید "
+            f"🔮 تالار ادغام رو به سطح {parent_a.star_level + 1} ارتقا بدی."
         )
     # rarity is now a fixed fusion-identity dimension, so the child keeps it (no
     # random tier upgrade) — that's what makes the same-name+same-rarity pyramid work

@@ -1170,17 +1170,26 @@ def _do_sync(tg_user, chat, action, arg):
         return {"kind": "card", "card": _card_sync(tg_user, chat, "hunt")}
 
     if action == "hunt_go":
+        from django.db import transaction
+
+        from bio_lab.models import User as _User
         from game.daily import check_missions, record_action
         from game.energy import spend_energy
         from game.hunt import resolve_hunt
 
         _require_creature(creature)
         tier, seed = arg.split(":")
-        spend_energy(user, constants.HUNT_ENERGY_COST, "شکار")
-        user.save(update_fields=["energy", "energy_updated_at"])  # persist the spend (was lost)
-        result = resolve_hunt(user, creature, tier, int(seed))
-        record_action(user, "hunt")
-        result["missions"] = check_missions(user, "hunt")
+        # LOCK the user for the whole hunt so a spammed hunt button can't fire twice off
+        # one energy point (the second tap re-reads the spent energy and bounces).
+        with transaction.atomic():
+            user = _User.objects.select_for_update().get(id=user.id)
+            creature = get_active_creature(user)
+            _require_creature(creature)
+            spend_energy(user, constants.HUNT_ENERGY_COST, "شکار")
+            user.save(update_fields=["energy", "energy_updated_at"])  # persist the spend (was lost)
+            result = resolve_hunt(user, creature, tier, int(seed))
+            record_action(user, "hunt")
+            result["missions"] = check_missions(user, "hunt")
         return {"kind": "hunt", "result": result, "card": _card_sync(tg_user, chat, "hunt")}
 
     if action == "arena_find":

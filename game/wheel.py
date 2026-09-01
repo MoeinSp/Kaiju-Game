@@ -29,11 +29,20 @@ def _apply_prize(user: User, prize: dict) -> None:
     if kind == "coins":
         user.coins += amount
         user.save(update_fields=["coins"])
+        _ledger(user, coins=amount)
     elif kind == "dna":
         user.dna_fragments += amount
         user.save(update_fields=["dna_fragments"])
+        _ledger(user, dna=amount)
     elif kind == "diamonds":
         user.diamonds += amount
         user.save(update_fields=["diamonds"])
+        _ledger(user, diamonds=amount)
     elif kind == "speedup":
         grant_speedup_card(user, amount, count=1)
+
+
+def _ledger(user: User, **kw) -> None:
+    from game.ledger import record_gain
+
+    record_gain(user, "wheel", **kw)

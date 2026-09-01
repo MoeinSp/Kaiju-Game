@@ -929,3 +929,23 @@ class DailyShopPurchase(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["user", "key", "day"], name="uq_daily_shop_purchase")
         ]
+
+
+class DailyResourceGain(models.Model):
+    """How much gold / DNA / diamonds a player GAINED on a given day, broken down by
+    source. Written by game.ledger.record_gain at the main income points; read by the
+    owner's player-search to spot suspicious daily jumps (e.g. a diamond balloon).
+    Positive gains only — spending is not recorded here."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    day = models.CharField(max_length=10)  # game.daily.today_str()
+    source = models.CharField(max_length=32)  # 'hunt','arena','raid','mission','drop',…
+    coins = models.BigIntegerField(default=0)
+    dna = models.BigIntegerField(default=0)
+    diamonds = models.BigIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "day", "source"], name="uq_daily_resource_gain")
+        ]
+        indexes = [models.Index(fields=["user", "day"], name="bio_lab_dai_user_id_day_idx")]

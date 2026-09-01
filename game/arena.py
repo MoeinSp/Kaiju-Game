@@ -409,6 +409,12 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         spend_shield_on_attack(attacker)
         attacker_fields += ["cup", "shield_until"]
     attacker.save(update_fields=attacker_fields)
+    if won:
+        from game.ledger import record_gain
+
+        gained_coins = loot + (league["coins"] if award_cup else 0)
+        gained_dna = dna_win + (league["dna"] if award_cup else 0)
+        record_gain(attacker, "arena", coins=gained_coins, dna=gained_dna)
 
     if defender_user is not None:
         defender_fields = ["coins"]

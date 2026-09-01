@@ -24,11 +24,83 @@ def _adjust_resource(identifier: str, resource: str, amount: int, sign: int) -> 
     new_value = max(0, getattr(user, field) + sign * amount)
     setattr(user, field, new_value)
     user.save(update_fields=[field])
+    if sign > 0:
+        from game.ledger import record_gain
+
+        record_gain(user, "admin", **{resource: amount})
     return user, new_value
 
 
 def grant_resource(identifier: str, resource: str, amount: int) -> tuple[User, int]:
     return _adjust_resource(identifier, resource, amount, sign=1)
+
+
+# owner can type the rarity in English or Persian
+_RARITY_ALIASES = {
+    "common": "common", "معمولی": "common",
+    "rare": "rare", "نایاب": "rare",
+    "epic": "epic", "حماسی": "epic",
+    "legendary": "legendary", "افسانه": "legendary", "افسانه‌ای": "legendary", "افسانه ای": "legendary",
+    "mythic": "mythic", "اساطیری": "mythic",
+}
+
+
+def admin_give_kaiju(identifier: str, raw: str) -> dict:
+    """Owner tool: grant a custom creature to a player. `raw` is
+    «<نایابی> <سطح> <ستاره> <تعداد> <نام‌گونه…>», e.g. «mythic 100 5 3 کرکس دریا».
+    The species name may contain spaces, so it's everything after the four numbers."""
+    from django.db import transaction as _tx
+
+    from bio_lab.models import Creature
+    from game import constants
+    from game.keywords import normalize
+
+    parts = (raw or "").strip().split()
+    if len(parts) < 5:
+        raise GameError(
+            "فرمت درست: <code>&lt;نایابی&gt; &lt;سطح&gt; &lt;ستاره&gt; &lt;تعداد&gt; &lt;نام&gt;</code>\n"
+            "مثال: <code>mythic 100 5 3 کرکس دریا</code>\n"
+            "نایابی: common / rare / epic / legendary / mythic (یا معادل فارسی)."
+        )
+    rarity_key = _RARITY_ALIASES.get(parts[0].lower()) or _RARITY_ALIASES.get(normalize(parts[0]))
+    if rarity_key is None:
+        raise GameError("نایابی نامعتبره. یکی از: common / rare / epic / legendary / mythic.")
+    try:
+        level, star, count = int(parts[1]), int(parts[2]), int(parts[3])
+    except ValueError:
+        raise GameError("سطح، ستاره و تعداد باید عدد باشن.")
+    species = " ".join(parts[4:]).strip()
+    element = constants.species_element(species)
+    if element is None:
+        names = "، ".join(sorted(constants.SPECIES.keys()))
+        raise GameError(f"گونه‌ی «{species}» ناشناخته‌ست.\nگونه‌های مجاز:\n{names}")
+
+    star = max(1, min(constants.STAR_MAX, star))
+    max_level = constants.creature_max_level(rarity_key, star)
+    level = max(1, min(max_level, level))
+    count = max(1, min(50, count))
+
+    user = find_user_or_raise(identifier)
+    mult = constants.RARITY_STAT_MULTIPLIER[rarity_key]
+    # match how add_xp() builds a leveled creature: rarity-scaled starter base + flat
+    # per-level growth for each level above 1 (star/parts/gear apply in effective_stats)
+    grow = level - 1
+    base = {
+        "base_hp": round(constants.STARTER_BASE_HP * mult) + constants.LEVEL_UP_HP * grow,
+        "base_atk": round(constants.STARTER_BASE_ATK * mult) + constants.LEVEL_UP_ATK * grow,
+        "base_def": round(constants.STARTER_BASE_DEF * mult) + constants.LEVEL_UP_DEF * grow,
+        "base_spd": round(constants.STARTER_BASE_SPD * mult) + constants.LEVEL_UP_SPD * grow,
+    }
+    with _tx.atomic():
+        for _ in range(count):
+            Creature.objects.create(
+                owner=user, name=species, element=element, rarity=rarity_key,
+                star_level=star, level=level, xp=0, is_active=False, **base,
+            )
+    return {
+        "user": user, "species": species, "element": element, "rarity": rarity_key,
+        "level": level, "star": star, "count": count,
+    }
 
 
 def charge_user(identifier: str, coins: int = 0, dna: int = 0, diamonds: int = 0) -> tuple[User, dict]:
@@ -52,6 +124,10 @@ def charge_user(identifier: str, coins: int = 0, dna: int = 0, diamonds: int = 0
         new_values[resource] = new_value
 
     user.save(update_fields=updated_fields)
+    if updated_fields:
+        from game.ledger import record_gain
+
+        record_gain(user, "admin", coins=max(0, coins), dna=max(0, dna), diamonds=max(0, diamonds))
     return user, new_values
 
 
@@ -289,4 +365,14 @@ def player_progress(identifier: str) -> dict:
         "arena_total": attacks.count(),
         "recent_activity": [(r.day, r.action, r.count) for r in recent],
         "created_at": user.created_at,
+        "gains": _recent_gains_safe(user),
     }
+
+
+def _recent_gains_safe(user) -> dict:
+    try:
+        from game.ledger import recent_gains
+
+        return recent_gains(user, days=3)
+    except Exception:  # noqa: BLE001 — diagnostics must never break the lookup
+        return {"days": [], "per_day": {}, "totals": {"coins": 0, "dna": 0, "diamonds": 0}}

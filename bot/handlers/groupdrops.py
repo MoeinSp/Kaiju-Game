@@ -118,6 +118,11 @@ async def drop_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"💎 سقف امروزت برای رگه‌ی الماس پر شده (روزی {result['cap']} تا). فردا دوباره.",
             show_alert=True,
         )
+    elif status == "capsule_limit":
+        await query.answer(
+            "⚡ کپسول انرژی رو امروز قبلاً گرفتی (روزی فقط یک‌بار). فردا دوباره سر بزن.",
+            show_alert=True,
+        )
     elif status == "expired":
         await query.answer("⌛ زمان این جایزه تموم شده.", show_alert=True)
     else:

@@ -20,18 +20,36 @@ def _panel_sync(tg_user):
 
 def _render(offers, coins, diamonds) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
-        "🛒 <b>شاپ روزانه</b>",
-        f"<blockquote>هر روز آفرهای تازه. {get_emoji('coin')} {coins} طلا · {get_emoji('diamond')} {diamonds} الماس</blockquote>",
+        "🛒 <b>فروشگاه روزانه</b> — هر روز آفرهای تازه و محدود",
+        "",
+        "💰 <b>موجودی شما:</b>",
+        f"{get_emoji('coin')} طلا: <b>{coins:,}</b>",
+        f"{get_emoji('diamond')} الماس: <b>{diamonds:,}</b>",
     ]
-    rows = []
-    for o in offers:
-        cur = "💎" if o["currency"] == "diamonds" else "طلا"
-        star = "⭐ " if o["featured"] else ""
-        disc = "  🔻تخفیف امروز" if o["featured"] else ""
-        lim = int(o.get("limit", 0) or 0)
-        lim_txt = f"  🛒حداکثر {lim} بار/روز" if lim else ""
-        lines.append(f"{star}{o['emoji']} <b>{o['title']}</b> — {o['price']} {cur}{disc}{lim_txt}")
-        rows.append([btn(f"{o['emoji']} خرید {o['title']} ({o['price']} {cur})", style=BUILD if o['featured'] else SHOP, callback_data=f"shop_buy:{o['key']}")])
+    rows: list = []
+
+    def _section(header: str, group: list) -> None:
+        if not group:
+            return
+        lines.append("")
+        lines.append(header)
+        for o in group:
+            cur = "💎" if o["currency"] == "diamonds" else "طلا"
+            star = "⭐ " if o["featured"] else ""
+            disc = " 🔻تخفیف امروز" if o["featured"] else ""
+            lim = int(o.get("limit", 0) or 0)
+            lim_txt = f"  <i>(محدودیت: {lim} بار در روز)</i>" if lim else ""
+            lines.append(f"{star}{o['emoji']} <b>{o['title']}</b>{disc}")
+            lines.append(f"└ قیمت: <b>{o['price']:,}</b> {cur}{lim_txt}")
+            rows.append([btn(
+                f"{o['emoji']} خرید {o['title']} ({o['price']:,} {cur})",
+                style=BUILD if o["featured"] else SHOP, callback_data=f"shop_buy:{o['key']}",
+            )])
+
+    _section("💎 <b>خرید با الماس:</b>", [o for o in offers if o["currency"] == "diamonds"])
+    _section("🪙 <b>خرید با طلا:</b>", [o for o in offers if o["currency"] != "diamonds"])
+    if not offers:
+        lines.append("\n<i>الان آفری موجود نیست. بعداً سر بزن.</i>")
     rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 

@@ -379,6 +379,9 @@ def buy_gold_pack(user: User, idx: int) -> dict:
     user.diamonds -= pack["diamonds"]
     user.coins += pack["gold"]
     user.save(update_fields=["diamonds", "coins"])
+    from game.ledger import record_gain
+
+    record_gain(user, "shop", coins=pack["gold"])
     return pack
 
 

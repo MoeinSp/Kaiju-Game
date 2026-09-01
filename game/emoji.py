@@ -115,17 +115,31 @@ _TG_EMOJI_BLOCK = re.compile(r"<tg-emoji\b[^>]*>.*?</tg-emoji>", re.DOTALL)
 _TAG = re.compile(r"<[^>]+>")  # any HTML tag — never premiumise a glyph inside one
 
 
+def _norm_glyph(g: str) -> str:
+    """Drop the emoji variation selector (U+FE0F) so `⚡️` and `⚡`, `🛡️` and `🛡`
+    are treated as the same glyph. Without this a message that hard-codes the
+    VS-16 form of an emoji would never match a themed glyph stored in the bare form
+    (or vice-versa), so those emojis silently stayed un-skinnable — the exact
+    'some emojis in the attack/hunt message aren't configurable' bug."""
+    return g.replace("️", "")
+
+
 def _load_glyph_map() -> dict[str, str]:
-    """Build {glyph: custom_emoji_id} from the g:-prefixed overrides, plus a regex that
-    matches any themed glyph (longest first, so multi-codepoint emoji win over parts)."""
+    """Build {normalized glyph: custom_emoji_id} from the g:-prefixed overrides, plus a
+    regex that matches any themed glyph — variation-selector-insensitive, and longest
+    first so multi-codepoint emoji win over their parts."""
     global _glyph_map, _glyph_re
     gm = {
-        o.key[len(_GLYPH_PREFIX):]: o.custom_emoji_id
+        _norm_glyph(o.key[len(_GLYPH_PREFIX):]): o.custom_emoji_id
         for o in EmojiOverride.objects.filter(key__startswith=_GLYPH_PREFIX)
         if o.key[len(_GLYPH_PREFIX):] not in GLYPH_SKIP
     }
     _glyph_map = gm
-    _glyph_re = re.compile("|".join(re.escape(g) for g in sorted(gm, key=len, reverse=True))) if gm else None
+    # each glyph may appear with an optional trailing VS-16 in the text; match either
+    _glyph_re = (
+        re.compile("|".join(re.escape(g) + "️?" for g in sorted(gm, key=len, reverse=True)))
+        if gm else None
+    )
     return gm
 
 
@@ -186,7 +200,8 @@ def premiumize_html(text: str) -> str:
         return "".join(pieces)
 
     def _wrap(g: str) -> str:
-        cid = gm.get(g)
+        # look up variation-selector-insensitively, but display the exact matched glyph
+        cid = gm.get(_norm_glyph(g))
         return f'<tg-emoji emoji-id="{cid}">{g}</tg-emoji>' if cid else g
 
     # leave existing <tg-emoji>…</tg-emoji> blocks untouched; premiumise only between them

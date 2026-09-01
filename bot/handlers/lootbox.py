@@ -17,9 +17,21 @@ from game.lootbox import (
 )
 
 
+def _bulk_drop_line(roll: dict) -> str:
+    """One line describing a single drop — name + rarity (+ slot/level for gear)."""
+    rarity_dot = constants.RARITY_LABELS[roll["rarity"]].split()[0]
+    if roll["kind"] == "creature":
+        c = roll["creature"]
+        return f"{rarity_dot} {get_emoji('egg')} <b>{c.name}</b> — {constants.RARITY_LABELS[roll['rarity']]}"
+    it = roll["item"]
+    slot = constants.EQUIPMENT_SLOT_LABELS.get(it.slot, "🎒")
+    return f"{rarity_dot} {slot} <b>{it.name} +{it.level}</b> — {constants.RARITY_LABELS[roll['rarity']]}"
+
+
 def _bulk_summary_text(header: str, summary: dict) -> str:
-    """Compact reveal for a bulk (×11) open — headline the best drop, then a
-    rarity tally, so eleven results fit in one readable screen."""
+    """Full reveal for a bulk (×11) open — headline the best drop, then EVERY item
+    it produced (name + rarity), then a rarity tally."""
+    order = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
     best = summary["best"]
     if best["kind"] == "creature":
         best_line = f"{get_emoji('egg')} <b>{best['creature'].name}</b> — {constants.RARITY_LABELS[best['rarity']]}"
@@ -31,12 +43,11 @@ def _bulk_summary_text(header: str, summary: dict) -> str:
         "",
         f"🏆 بهترین: {best_line}",
         "",
+        "📜 <b>محتویات:</b>",
     ]
-    n_creatures, n_items = len(summary["creatures"]), len(summary["items"])
-    if n_creatures:
-        lines.append(f"{get_emoji('egg')} <b>{n_creatures}</b> هیولا")
-    if n_items:
-        lines.append(f"🎒 <b>{n_items}</b> تجهیزات")
+    # every drop, rarest first, numbered so 11 results still read cleanly
+    for i, roll in enumerate(sorted(summary["rolls"], key=lambda r: -order.get(r["rarity"], 0)), 1):
+        lines.append(f"{i}. {_bulk_drop_line(roll)}")
     lines.append("")
     lines.append("<b>بر اساس نایابی:</b>")
     for rarity in reversed(constants.RARITY_ORDER):

@@ -22,22 +22,24 @@ def _panel_sync(tg_user):
 
 def _render(user, view: dict) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
-        f"🏅 <b>دستاوردها</b>  ({view['done']}/{view['total']})",
-        "<blockquote>هدف‌های بلندمدت. هر کدوم رو که کامل کنی، جایزه‌ش رو یه بار می‌گیری.</blockquote>",
+        f"🏅 <b>دستاوردها</b> ({view['done']}/{view['total']})",
+        "هدف‌های بلندمدت؛ با تکمیل هر مرحله، پاداش آن را یک‌بار دریافت کنید.",
         "",
     ]
     for item in view["items"]:
         ach = item["ach"]
         reward = achievements._reward_text(ach.reward)
         if item["claimed"]:
-            status = "✅ گرفته شد"
+            status = "✔️ دریافت‌شده"
         elif item["earned"]:
-            status = "🎁 <b>آماده‌ی دریافت!</b>"
+            status = "✅ <b>آماده‌ی دریافت!</b>"
         else:
             bar = constants.render_bar(item["current"], item["target"], width=8)
             status = f"{bar} {item['current']}/{item['target']}"
         lines.append(f"{ach.emoji} <b>{ach.title}</b> — {ach.desc}")
-        lines.append(f"    {status}   🎁 <i>{reward}</i>")
+        lines.append("")
+        lines.append(f"{status} | 🎁 {reward}")
+        lines.append("")
     rows = []
     if view["claimable"]:
         rows.append(

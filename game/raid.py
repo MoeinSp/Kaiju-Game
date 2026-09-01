@@ -14,8 +14,10 @@ BOSS_HP_PER_LEVEL = 0.22       # +22% base HP per raid level (linear, always bea
 BOSS_HP_RANDOM = (0.8, 1.35)   # each spawn rolls a random size in this band
 BOSS_DEF_BASE = 12
 BOSS_DEF_PER_LEVEL = 1         # small def growth so it never becomes unkillable
-DNA_REWARD_POOL_BASE = 60
-COIN_REWARD_POOL_BASE = 300
+# The kill reward is the group's payoff for hours of coordinated raiding — bumped ×10
+# so felling a boss feels like a real jackpot shared across everyone who fought it.
+DNA_REWARD_POOL_BASE = 600
+COIN_REWARD_POOL_BASE = 3000
 REWARD_PER_LEVEL = 0.18        # +18% of the reward pool per level
 COOLDOWN_STEP_SECONDS = 60     # each raid hit today makes the next one wait 1 min longer
 
@@ -126,6 +128,10 @@ def distribute_rewards(boss: RaidBoss) -> dict[int, dict[str, int]]:
             user.dna_fragments += dna
             user.coins += coins
             user.save(update_fields=["dna_fragments", "coins"])
+            if coins or dna:
+                from game.ledger import record_gain
+
+                record_gain(user, "raid", coins=coins, dna=dna)
         rewards[user_id] = {"dna": dna, "coins": coins, "damage": dmg}
 
     return rewards

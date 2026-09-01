@@ -452,7 +452,16 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
     return "\n".join(lines)
 
 
-def upgrade_panel_keyboard(creature_id: int, is_active: bool = True, step: int = 1) -> InlineKeyboardMarkup:
+def _fusion_button_label(star_level: int) -> str:
+    """Label the fusion button with the ACTUAL next star this creature would reach
+    (1★ → «ارتقا به ⭐۲», …), or a maxed note at 5★, so the button always tells the
+    truth about what fusing does for this specific creature."""
+    if star_level >= constants.STAR_MAX:
+        return "🧬 فیوژن (به سقف ۵ ستاره رسیده)"
+    return f"🧬 ورود به فیوژن (ارتقا به {'⭐' * (star_level + 1)})"
+
+
+def upgrade_panel_keyboard(creature_id: int, is_active: bool = True, step: int = 1, star_level: int = 1) -> InlineKeyboardMarkup:
     """Every action carries the creature id, so upgrading a non-active creature
     doesn't silently swap which creature is active for hunting/arena."""
     sfx = f" ×{step}" if step > 1 else ""
@@ -478,7 +487,7 @@ def upgrade_panel_keyboard(creature_id: int, is_active: bool = True, step: int =
         ],
         [btn("مدیریت تجهیزات", emoji_key="btn_inventory", style=PRIMARY, callback_data=f"upg_eq:{creature_id}")],
         [btn("🍖 تقویت با خوردن هیولا", style=BUILD, callback_data=f"devour_start:{creature_id}")],
-        [btn("🧬 ورود به فیوژن (ارتقا به ⭐۵)", emoji_key="btn_fusion", style=PRIMARY, callback_data=f"upg_fusion:{creature_id}")],
+        [btn(_fusion_button_label(star_level), emoji_key="btn_fusion", style=PRIMARY, callback_data=f"upg_fusion:{creature_id}")],
     ]
     if not is_active:
         # setting the default from here saves a trip through the collection screen,
@@ -654,7 +663,7 @@ async def upgrade_pick_callback(update: Update, context: ContextTypes.DEFAULT_TY
         query,
         upgrade_panel_text(user, creature, equipped_items, slots, step=step),
         parse_mode="HTML",
-        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=step),
+        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=step, star_level=creature.star_level),
     )
 
 
@@ -829,7 +838,7 @@ async def upgrade_set_default_callback(update: Update, context: ContextTypes.DEF
         query,
         upgrade_panel_text(user, creature, equipped_items, slots, step=step),
         parse_mode="HTML",
-        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=step),
+        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=step, star_level=creature.star_level),
     )
 
 
@@ -1220,7 +1229,7 @@ async def upgrade_step_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await safe_edit_message_text(query,
         upgrade_panel_text(user, creature, equipped_items, slots, step=context.user_data["upg_step"]),
         parse_mode="HTML",
-        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=context.user_data["upg_step"]),
+        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=context.user_data["upg_step"], star_level=creature.star_level),
     )
 
 
@@ -1263,7 +1272,7 @@ async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await safe_edit_message_text(query,
         note + "\n\n" + upgrade_panel_text(user, creature, equipped_items, slots, step=step),
         parse_mode="HTML",
-        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=step),
+        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=step, star_level=creature.star_level),
     )
 
 
@@ -1671,7 +1680,8 @@ async def fusion_pick_a_callback(update: Update, context: ContextTypes.DEFAULT_T
         if not lab_built:
             reason = "اول باید 🔮 تالار ادغام رو از «🏗 ساختمون‌ها» بسازی."
         elif creature.star_level >= cap:
-            reason = f"سقف ستاره‌ی فعلی تو {cap}⭐ ـه — برای بالاتر رفتن تالار مِهر رو ارتقا بده."
+            reason = (f"سقف ستاره‌ی فعلی تو {cap}⭐ ـه — برای رسیدن به {creature.star_level + 1}⭐ "
+                      f"تالار ادغام رو به سطح {creature.star_level + 1} ارتقا بده.")
         else:
             reason = (
                 f"هیولای هم‌نوع دیگه‌ای با {creature.star_level}⭐ نداری.\n"
@@ -1768,41 +1778,38 @@ async def upgrade_fusion_gate_callback(update: Update, context: ContextTypes.DEF
     partner_ok = g["partner_count"] > 0
     ready = g["lab_built"] and cap_ok and partner_ok and gold_ok
 
-    lines = [
-        f"🧬 <b>ورود به فیوژن — ارتقای ستاره</b>",
-        f"🎯 هدف: <b>{g['name']}</b> {stars} → {get_emoji('star') * next_star}",
-        "", div, "",
-        "<b>شرایط لازم:</b>",
-        f"{check(g['lab_built'])} 🔮 ساخت <b>تالار ادغام</b> (زیربنای هر فیوژن)",
-        f"{check(cap_ok)} ⭐ سقف ستاره: سطح تالار مِهر ({g['hall_level']}) باید ≥ {next_star} باشه",
-        f"{check(partner_ok)} 👥 یک هم‌نوعِ هم‌رده و هم‌ستاره: «{g['name']}» "
-        f"[{constants.RARITY_LABELS[g['rarity']]}] {stars}",
-        f"{check(gold_ok)} {get_emoji('coin')} طلای کافی: <b>{g['cost']:,}</b> (الان: {g['coins']:,})",
-        "", div, "",
-    ]
-    # targeted explanations for whatever is missing
-    if not g["lab_built"]:
-        lines.append("🔒 <b>تالار ادغام نساخته‌ای.</b> از «🏗 ساختمون‌ها» بسازش — بدون اون هیچ فیوژنی ممکن نیست.")
-    if not cap_ok:
-        lines.append(
-            f"🔒 <b>سقف ستاره پره.</b> سقف ستاره برابر سطح تالار مِهر توئه ({g['cap']}⭐). "
-            f"برای رسیدن به {next_star}⭐ اول تالار مِهر رو ارتقا بده."
-        )
-    if g["lab_built"] and cap_ok and not partner_ok:
-        lines.append(
-            f"🔒 <b>جفت نداری.</b> برای فیوژن به <b>دو</b> «{g['name']}» با نایابی و ستاره‌ی یکسان "
-            f"({constants.RARITY_LABELS[g['rarity']]} {stars}) نیاز داری. از باکس‌ها یا غار هیولا هم‌نوع بیشتری بگیر."
-        )
-    if partner_ok and not gold_ok:
-        lines.append(f"🔒 <b>طلا کمه.</b> {g['cost'] - g['coins']:,} طلای دیگه لازم داری.")
+    # the single most important thing to do next — shown big at the top so the player
+    # doesn't have to parse the whole checklist to know what's blocking them
     if ready:
-        lines.append("✅ <b>همه‌چیز آماده‌ست!</b> برای انتخاب جفت و ترکیب، دکمه‌ی زیر رو بزن.")
-    lines.append("")
-    lines.append(
-        "<blockquote>هر فیوژن دو والد رو می‌سوزونه و یکی یک‌ستاره بالاتر می‌سازه — "
-        "استت‌ها و بهترین اعضای هر دو والد به فرزند می‌رسه و XP‌شون جمع می‌شه. مسیر تا 5⭐: "
-        "۲تا 1★→2★، ۲تا 2★→3★ … (۱۶ تا 1★ برای یک 5★).</blockquote>"
-    )
+        next_step = "✅ <b>همه‌چیز آماده‌ست!</b> دکمه‌ی «انتخاب جفت و ترکیب» رو بزن."
+    elif not g["lab_built"]:
+        next_step = "👉 <b>قدم بعدی:</b> 🔮 تالار ادغام رو از «🏗 ساختمون‌ها» بساز."
+    elif not cap_ok:
+        next_step = (f"👉 <b>قدم بعدی:</b> 🔮 تالار ادغام رو به سطح <b>{next_star}</b> ارتقا بده "
+                     f"(سطح فعلیش: {g['lab_level']}).")
+    elif not partner_ok:
+        next_step = (f"👉 <b>قدم بعدی:</b> یک «{g['name']}» دیگه با همین نایابی و همین ستاره پیدا کن "
+                     f"(از باکس یا غار هیولا).")
+    else:  # not gold_ok
+        next_step = f"👉 <b>قدم بعدی:</b> {g['cost'] - g['coins']:,} طلای دیگه جمع کن."
+
+    lines = [
+        "🧬 <b>ورود به فیوژن — ارتقای ستاره</b>",
+        f"🎯 هدف: <b>{g['name']}</b> {stars} → {get_emoji('star') * next_star}",
+        "",
+        next_step,
+        "", div, "",
+        "<b>شرایط لازم برای این ارتقا:</b>",
+        f"{check(g['lab_built'])} 🔮 تالار ادغام ساخته شده",
+        f"{check(cap_ok)} ⭐ تالار ادغام سطح ≥ {next_star} (الان: {g['lab_level']})",
+        f"{check(partner_ok)} 👥 یک هیولای هم‌نوع، هم‌رده و هم‌ستاره داری "
+        f"({'داری ✔' if partner_ok else 'نداری'})",
+        f"{check(gold_ok)} {get_emoji('coin')} طلای کافی: {g['cost']:,} (داری: {g['coins']:,})",
+        "", div, "",
+        "<blockquote>فیوژن = دو هیولای <b>هم‌نام + هم‌نایابی + هم‌ستاره</b> → یکی یک ستاره بالاتر. "
+        "استت‌ها و بهترین اعضای هر دو والد به فرزند می‌رسه و XP‌شون جمع می‌شه. "
+        "سطح تالار ادغام سقف ستاره‌ست: سطح ۲ برای ۲⭐، سطح ۳ برای ۳⭐ …</blockquote>",
+    ]
 
     rows = []
     if ready:
@@ -1869,7 +1876,7 @@ def _fusion_body(user, pairs, cap, filt: str) -> tuple[str, InlineKeyboardMarkup
     elif not shown:
         lines.append("\n📭 توی این نایابی جفت آماده‌ای نیست — یه تبِ دیگه رو ببین.")
     else:
-        lines.append("\n✅ <b>جفت‌های آماده</b> (هرکدوم 100٪ موفق):")
+        lines.append("\n✅ <b>هیولاهای آماده‌ی فیوژن</b> — اول هیولای اصلی رو انتخاب کن، بعد جفتش:")
         last_star = None
         for p in sorted(shown, key=lambda x: (x["star"], x["name"])):
             if p["star"] != last_star:
@@ -1877,9 +1884,11 @@ def _fusion_body(user, pairs, cap, filt: str) -> tuple[str, InlineKeyboardMarkup
                 last_star = p["star"]
             cost = constants.fusion_cost(p["star"], p["rarity"])
             rarity_dot = constants.RARITY_LABELS[p["rarity"]].split()[0]
+            extra = f" (+{p['count'] - 1} جفت)" if p["count"] > 2 else ""
+            # main-first: pick the primary creature → the partner picker (fus_a) opens next
             rows.append([btn(
-                f"{rarity_dot} {p['name']} {'⭐' * p['star']} → {'⭐' * (p['star'] + 1)}  ({cost:,}💰)",
-                style=PRIMARY, callback_data=f"fus_b:{p['parent_a'].id}:{p['parent_b'].id}",
+                f"{rarity_dot} {p['name']} {'⭐' * p['star']} → {'⭐' * (p['star'] + 1)}  ({cost:,}💰){extra}",
+                style=PRIMARY, callback_data=f"fus_a:{p['parent_a'].id}",
             )])
     rows.append([back_btn("menu:me")])
     lines.append(f"\n{wallet_line(user)}")
@@ -2206,16 +2215,21 @@ async def hunt_swap_pick_callback(update: Update, context: ContextTypes.DEFAULT_
 
 def _hunt_go_sync(tg_user, tier, seed):
     user, _ = get_or_create_user(tg_user)
-    creature = get_active_creature(user)
-    if creature is None:
-        raise GameError("اول /start رو بزن تا موجودت رو بگیری.")
+    # LOCK the user row for the whole hunt so a spammed «شکار دوباره» can't fire twice
+    # off one energy point: the second tap blocks here, then re-reads the already-spent
+    # energy and bounces, instead of both passing the check and resolving two hunts.
+    with transaction.atomic():
+        user = User.objects.select_for_update().get(id=user.id)
+        creature = get_active_creature(user)
+        if creature is None:
+            raise GameError("اول /start رو بزن تا موجودت رو بگیری.")
 
-    spend_energy(user, constants.HUNT_ENERGY_COST, "شکار")
-    user.save(update_fields=["energy", "energy_updated_at"])
+        spend_energy(user, constants.HUNT_ENERGY_COST, "شکار")
+        user.save(update_fields=["energy", "energy_updated_at"])
 
-    result = resolve_hunt(user, creature, tier, seed)
-    record_action(user, "hunt")
-    completed_missions = check_missions(user, "hunt")
+        result = resolve_hunt(user, creature, tier, seed)
+        record_action(user, "hunt")
+        completed_missions = check_missions(user, "hunt")
     return creature, result, completed_missions
 
 

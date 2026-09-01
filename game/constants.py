@@ -616,12 +616,12 @@ BUILDING_LABELS = {
     "fusion_lab": "🔮 تالار ادغام",
 }
 BUILDING_DESCRIPTIONS = {
-    "main_hall": "قلب آزمایشگاه. سقف سطح بقیه‌ی ساختمون‌ها و سقف ستاره‌ی هیولاهات رو تعیین می‌کنه.",
+    "main_hall": "قلب آزمایشگاه. سقف سطح بقیه‌ی ساختمون‌ها رو تعیین می‌کنه.",
     "gold_collector": "به‌مرور طلا تولید می‌کنه.",
     "diamond_collector": "به‌مرور الماس تولید می‌کنه (خیلی کند، چون الماس ارز ویژه‌ست).",
     "dna_lab": "به‌مرور DNA تولید می‌کنه.",
     "blacksmith": "برای ارتقای تجهیزات لازمه. هر سطحش سقف تجهیزات رو ۵ تا بالاتر می‌بره.",
-    "fusion_lab": "برای ادغام دو هیولای هم‌نوع و بالا بردن ستاره لازمه.",
+    "fusion_lab": "برای ادغام دو هیولای هم‌نوع و بالا بردن ستاره لازمه. سطحش سقف ستاره‌ی هیولاهاته (لِوِل ۲ = تا ۲⭐، لِوِل ۳ = تا ۳⭐ …).",
 }
 BUILDING_MAX_LEVEL = 5
 
@@ -645,10 +645,10 @@ BUILDING_LEVEL_LAB_REQ = {1: 0, 2: 3, 3: 7, 4: 12, 5: 18}
 # fully maxing the main hall.
 BUILDING_UNLOCK_HALL_LEVEL = {
     "gold_collector": 1,      # the first thing you build — income has to come first
+    "fusion_lab": 1,          # stars open from day one; its LEVEL is the star cap now
     "dna_lab": 2,             # DNA feeds breeding and fusion costs
     "blacksmith": 3,          # gear upgrades open once there's gold to spend on them
     "diamond_collector": 4,   # the premium mine — a real mid/late-game payoff
-    "fusion_lab": 5,          # stars & propagation: the reward for maxing the hall
 }
 
 # ── Upgrade pacing ────────────────────────────────────────────────────────────

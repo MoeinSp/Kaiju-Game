@@ -187,6 +187,28 @@ def _get_offer(token: str) -> dict | None:
     return offer
 
 
+def _sender_active_offer(sender_id: int) -> dict | None:
+    """The sender's own still-valid outgoing offer, if any. Used to stop a player
+    from opening a second transfer (or re-offering the same item) while one is
+    already live — the offer holds a claim on that item for its 5-minute window."""
+    _prune_offers()
+    now = time.time()
+    for o in _PENDING_OFFERS.values():
+        if o["sender_id"] == sender_id and o["expires_at"] >= now:
+            return o
+    return None
+
+
+def _item_active_offer(kind: str, item_id: int) -> dict | None:
+    """A live offer that already involves this exact creature/equipment."""
+    _prune_offers()
+    now = time.time()
+    for o in _PENDING_OFFERS.values():
+        if o["kind"] == kind and o["item_id"] == item_id and o["expires_at"] >= now:
+            return o
+    return None
+
+
 def _seller_step_keyboard(token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [btn("💰 تعیین قیمت", style=PRIMARY, callback_data=f"xfo:setp:{token}"),
@@ -196,6 +218,18 @@ def _seller_step_keyboard(token: str) -> InlineKeyboardMarkup:
 
 
 async def _begin_offer(update, kind: str, sender, receiver, item_id: int, desc: str, fee: int) -> None:
+    # one live offer per sender: while an offer is pending it holds a claim on its item,
+    # so the sender can't open a second transfer or re-offer the same thing elsewhere
+    # until the current one is accepted, rejected, cancelled, or expires (5 min).
+    if _sender_active_offer(sender.id) is not None:
+        await update.message.reply_text(
+            "⏳ یه پیشنهاد انتقالِ باز داری. اول همون رو کامل یا لغو کن، "
+            "یا تا ۵ دقیقه صبر کن تا خودش منقضی شه، بعد انتقال جدید بزن."
+        )
+        return
+    if _item_active_offer(kind, item_id) is not None:
+        await update.message.reply_text("⏳ این مورد همین الان توی یه پیشنهاد انتقالِ بازه.")
+        return
     token = _new_offer(kind, sender.id, receiver.id, item_id=item_id, fee=fee, desc=desc,
                        sender_name=display_name(sender), receiver_name=display_name(receiver))
     await update.message.reply_text(
@@ -1248,6 +1282,9 @@ def _guardian_claim_sync(chat, tg_user):
         user.coins += coins
         user.dna_fragments += dna
         user.save(update_fields=["coins", "dna_fragments"])
+        from game.ledger import record_gain
+
+        record_gain(user, "salary", coins=coins, dna=dna)
     return coins, dna
 
 

@@ -121,6 +121,9 @@ def preview(user: User, parent_a: Creature, parent_b: Creature) -> dict:
 def start(user: User, parent_a: Creature, parent_b: Creature) -> BreedingJob:
     """Phase 1: send two parents into the cave to mate. They're locked until the
     mating timer finishes, at which point lay_egg() frees them and lays an egg."""
+    # lock the player so a double-tapped «شروع» can't create two jobs / charge DNA
+    # twice: the second call blocks here, then sees the job the first created and bounces
+    user = User.objects.select_for_update().get(id=user.id)
     assert_available(user)
     if parent_a.id == parent_b.id:
         raise GameError("یه موجود نمی‌تونه با خودش جفت بشه — دو تای متفاوت انتخاب کن.")
@@ -185,6 +188,8 @@ def _lay_egg_from(user: User, job: BreedingJob) -> Egg:
 @transaction.atomic
 def lay_egg(user: User) -> Egg:
     """Phase 1 → 2: the mating is done, so lay the egg and free the parents."""
+    # lock the player: a double-tapped «برداشتن تخم» must not lay two eggs from one job
+    user = User.objects.select_for_update().get(id=user.id)
     job = active_job(user)
     if job is None:
         raise GameError("هیچ جفتی توی غار نیست.")
@@ -206,7 +211,9 @@ def hatch(user: User, egg_id: int) -> tuple[Creature, dict]:
     """Phase 2 → done: hatch a ready egg into a creature. The rarity/species roll
     happens HERE, from the recipe frozen on the egg — that's what keeps the egg's
     contents a genuine mystery until this moment."""
-    egg = Egg.objects.filter(id=egg_id, owner=user).first()
+    # lock the egg row so a double-tapped «باز کردن تخم» can't hatch one egg into two
+    # creatures: the second call blocks, then finds the egg already gone and bounces.
+    egg = Egg.objects.select_for_update().filter(id=egg_id, owner=user).first()
     if egg is None:
         raise GameError("این تخم پیدا نشد.")
     if not egg_ready(egg):
@@ -270,6 +277,8 @@ def egg_finish_price(egg: Egg) -> int:
 def finish_cave_with_diamonds(user: User) -> Egg:
     """Pay diamonds to end the mating right now and lay the egg. Priced from the
     time still left, like every other diamond-finish in the game."""
+    # lock the player so a double-tap can't charge diamonds twice / lay two eggs
+    user = User.objects.select_for_update().get(id=user.id)
     job = active_job(user)
     if job is None:
         raise GameError("هیچ جفتی توی غار نیست.")
@@ -286,7 +295,10 @@ def finish_cave_with_diamonds(user: User) -> Egg:
 @transaction.atomic
 def finish_egg_with_diamonds(user: User, egg_id: int) -> Egg:
     """Pay diamonds to make an egg ready to hatch right now."""
-    egg = Egg.objects.filter(id=egg_id, owner=user).first()
+    # lock BOTH the player (for the diamond charge) and the egg row, so a double-tap
+    # can't charge twice
+    user = User.objects.select_for_update().get(id=user.id)
+    egg = Egg.objects.select_for_update().filter(id=egg_id, owner=user).first()
     if egg is None:
         raise GameError("این تخم پیدا نشد.")
     if egg_ready(egg):
@@ -306,6 +318,7 @@ def cancel(user: User) -> BreedingJob:
     """Abandon the mating in progress. The DNA is not refunded — otherwise a
     player could park two creatures whenever they weren't using them and cancel
     for free. (Laid eggs can't be cancelled; they only hatch.)"""
+    user = User.objects.select_for_update().get(id=user.id)
     job = active_job(user)
     if job is None:
         raise GameError("هیچ جفتی توی غار نیست.")

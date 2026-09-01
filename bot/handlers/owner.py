@@ -1173,6 +1173,7 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
             ],
             [btn("شارژ کامل (طلا+DNA+الماس)", emoji_key="btn_charge", style=CONFIRM, callback_data=f"admin_charge:{target_id}")],
             [btn("🎁 دادن آیتم/کایجو/تجهیز به این کاربر", style=CONFIRM, callback_data=f"admin_give_item:{target_id}")],
+            [btn("🦖 اعطای کایجوی دلخواه (سطح/ستاره/تعداد)", style=CONFIRM, callback_data=f"admin_givek:{target_id}")],
             [btn("🔬 تنظیم سطح آزمایشگاه", emoji_key="btn_lab", style=CONFIRM, callback_data=f"admin_lablevel:{target_id}")],
             [
                 btn("📊 لاگ پیشرفت", emoji_key="btn_report", style=ADMIN, callback_data=f"admin_plog:{target_id}"),
@@ -1502,6 +1503,34 @@ def _player_log_text(d: dict) -> str:
         f"🏗 ساختمون‌ها: {halls}",
         f"📅 عضو از: {timezone.localtime(d['created_at']).strftime('%Y-%m-%d')}",
     ]
+    gains = d.get("gains")
+    if gains and gains.get("days"):
+        from game.ledger import SOURCE_LABELS
+
+        tot = gains["totals"]
+        lines.append("\n💹 <b>افزایش دارایی (۳ روز اخیر):</b>")
+        lines.append(
+            f"  جمع کل: {get_emoji('coin')} {tot['coins']:,} · "
+            f"{get_emoji('dna')} {tot['dna']:,} · {get_emoji('diamond')} {tot['diamonds']:,}"
+        )
+        for day in gains["days"]:
+            b = gains["per_day"].get(day, {})
+            if not (b.get("coins") or b.get("dna") or b.get("diamonds")):
+                continue
+            lines.append(
+                f"  <b>{day}</b> — {get_emoji('coin')} {b['coins']:,} · "
+                f"{get_emoji('dna')} {b['dna']:,} · {get_emoji('diamond')} {b['diamonds']:,}"
+            )
+            # per-source breakdown (ریز گزارش)
+            for src, c, dn, di in sorted(b.get("sources", []), key=lambda x: -(x[1] + x[3] * 100)):
+                bits = []
+                if c:
+                    bits.append(f"{c:,}🪙")
+                if dn:
+                    bits.append(f"{dn:,}🧬")
+                if di:
+                    bits.append(f"{di:,}💎")
+                lines.append(f"     └ {SOURCE_LABELS.get(src, src)}: {' · '.join(bits)}")
     if d["recent_activity"]:
         lines.append("\n🗒 <b>فعالیت اخیر:</b>")
         for day, action, count in d["recent_activity"]:
@@ -2432,6 +2461,27 @@ async def admin_give_item_start(update: Update, context: ContextTypes.DEFAULT_TY
     await _ish_show_home(update, context)
 
 
+async def admin_givek_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Start the custom-kaiju grant: the owner sends one line describing the creature."""
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    target_id = query.data.split(":")[1]
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "give_kaiju", "target_id": target_id}
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        "🦖 <b>اعطای کایجوی دلخواه</b>\n"
+        "یه خط بفرست به این شکل:\n"
+        "<code>&lt;نایابی&gt; &lt;سطح&gt; &lt;ستاره&gt; &lt;تعداد&gt; &lt;نام گونه&gt;</code>\n\n"
+        "مثال: <code>mythic 100 5 3 کرکس دریا</code>\n"
+        "<i>نایابی: common / rare / epic / legendary / mythic (یا معادل فارسی). "
+        "سطح و ستاره خودکار به سقفِ مجاز محدود می‌شن؛ تعداد تا ۵۰.</i>",
+        parse_mode="HTML",
+    )
+
+
 async def admin_grant_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not _is_admin(update):
@@ -2905,6 +2955,25 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         await message.reply_text(
             f"🔍 <b>{len(matches)} کاربر پیدا شد</b> — یکی رو انتخاب کن:",
             parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows),
+        )
+        return
+
+    if action == "give_kaiju":
+        from game.moderation import admin_give_kaiju
+
+        try:
+            res = await run_db(admin_give_kaiju, awaiting["target_id"], text)
+        except GameError as exc:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting  # keep waiting for a valid line
+            await message.reply_text(str(exc), parse_mode="HTML")
+            return
+        u = res["user"]
+        await message.reply_text(
+            f"{get_emoji('confirm')} <b>{res['count']}× {res['species']}</b> "
+            f"[{constants.RARITY_LABELS[res['rarity']]}] {'⭐' * res['star']} سطح {res['level']} "
+            f"به <b>{display_name(u)}</b> داده شد.",
+            parse_mode="HTML",
+            reply_markup=_user_manage_keyboard(u.id, u.is_banned),
         )
         return
 
@@ -3429,6 +3498,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(user_open_callback, pattern=r"^admin_uinfo:\d+$"))
     application.add_handler(CallbackQueryHandler(dm_user_start, pattern=r"^admin_dm:\d+$"))
     application.add_handler(CallbackQueryHandler(admin_give_item_start, pattern=r"^admin_give_item:\d+$"))
+    application.add_handler(CallbackQueryHandler(admin_givek_callback, pattern=r"^admin_givek:\d+$"))
     application.add_handler(CallbackQueryHandler(admin_op_callback, pattern=r"^opc:(confirm|edit|cancel)$"))
     application.add_handler(CallbackQueryHandler(admin_remove_callback, pattern=r"^admin_rm:\d+$"))
     application.add_handler(CallbackQueryHandler(dailyshop_builder_callback, pattern=r"^dshop:"))

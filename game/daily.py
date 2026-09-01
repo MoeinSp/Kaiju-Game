@@ -69,10 +69,29 @@ def get_daily_count(user: User, action: str) -> int:
     return _get_or_create_log(user, action).count
 
 
+# Daily-mission payouts are multiplied several-fold and scale with the player's lab
+# level, so missions stay a meaningful income even deep into the game (a level-25 lab
+# earns ~5× what a fresh one does for the same mission).
+MISSION_REWARD_BASE_MULT = 3.0
+MISSION_REWARD_LAB_SCALE = 0.08
+
+
+def mission_reward_multiplier(user: User) -> float:
+    from game import lab
+
+    return MISSION_REWARD_BASE_MULT * (1 + lab.lab_level(user) * MISSION_REWARD_LAB_SCALE)
+
+
+def scaled_mission_reward(defn: dict, mult: float) -> tuple[int, int]:
+    """(coins, dna) for a mission after the lab-scaled multiplier."""
+    return round(defn["coins"] * mult), round(defn["dna"] * mult)
+
+
 def check_missions(user: User, action: str) -> list[dict]:
     """Call right after record_action() for the same action. Grants rewards for any mission just completed."""
     day = today_str()
     completed = []
+    mult = mission_reward_multiplier(user)
     for key, defn in constants.MISSION_DEFS.items():
         if defn["action"] != action:
             continue
@@ -81,8 +100,10 @@ def check_missions(user: User, action: str) -> list[dict]:
             continue
         if get_daily_count(user, action) >= defn["target"]:
             MissionClaim.objects.create(user=user, mission_key=key, day=day)
-            user.coins += defn["coins"]
-            user.dna_fragments += defn["dna"]
+            coins_reward, dna_reward = scaled_mission_reward(defn, mult)
+            user.coins += coins_reward
+            user.dna_fragments += dna_reward
+            defn = {**defn, "coins": coins_reward, "dna": dna_reward}  # so the toast shows the real amount
             if defn.get("speedup"):
                 # imported here rather than at module level: game.buildings imports
                 # game.creature, which would make this a circular import at load time
@@ -92,6 +113,12 @@ def check_missions(user: User, action: str) -> list[dict]:
             completed.append({**defn, "key": key})
     if completed:
         user.save(update_fields=["coins", "dna_fragments"])
+        from game.ledger import record_gain
+
+        record_gain(
+            user, "mission",
+            coins=sum(m["coins"] for m in completed), dna=sum(m["dna"] for m in completed),
+        )
         # imported lazily for the same circular-import reason as grant_speedup_card
         from game import lab
 
@@ -122,6 +149,10 @@ def apply_daily_login(user: User) -> dict | None:
     user.coins += coins
     user.dna_fragments += dna
     user.save(update_fields=["login_streak", "last_login_day", "coins", "dna_fragments"])
+    if coins or dna:
+        from game.ledger import record_gain
+
+        record_gain(user, "login", coins=coins, dna=dna)
 
     # a healthy daily chunk of Battle Pass points, so even a login-only player
     # ticks the pass forward. Lazy + guarded so it can never break /start.
@@ -149,9 +180,12 @@ def mission_status(user: User) -> list[dict]:
         MissionClaim.objects.filter(user=user, day=day).values_list("mission_key", flat=True)
     )
     status = []
+    mult = mission_reward_multiplier(user)
     for key, defn in constants.MISSION_DEFS.items():
         count = get_daily_count(user, defn["action"])
+        coins_reward, dna_reward = scaled_mission_reward(defn, mult)
         status.append(
-            {**defn, "key": key, "progress": min(count, defn["target"]), "done": key in claimed_keys}
+            {**defn, "key": key, "coins": coins_reward, "dna": dna_reward,
+             "progress": min(count, defn["target"]), "done": key in claimed_keys}
         )
     return status

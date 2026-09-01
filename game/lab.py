@@ -55,7 +55,9 @@ LAB_XP_AWARDS = {
     "campaign_win": 14,
 }
 # building upgrades pay per level reached, so the level-5 grind is worth the wait
-LAB_XP_PER_BUILDING_LEVEL = 40
+# A finished building upgrade takes hours of real time, so it's the single biggest
+# lab-XP source — bumped so raising buildings visibly moves the lab level (was 40).
+LAB_XP_PER_BUILDING_LEVEL = 120
 
 
 def xp_for_level(level: int) -> int:
