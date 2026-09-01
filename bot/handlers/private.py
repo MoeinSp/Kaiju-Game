@@ -1429,20 +1429,47 @@ def _devour_selection(context, target_id: int) -> set[int]:
 
 def _devour_list_sync(tg_user, target_id):
     user, _ = get_or_create_user(tg_user)
-    from game.creature import _devour_xp
+    from game.creature import _devour_xp, xp_to_max_level
 
     try:
         target = Creature.objects.get(id=target_id, owner=user)
     except Creature.DoesNotExist:
         raise GameError("این موجود توی کلکسیون تو نیست.")
     candidates = devour_candidates(user, target_id)
-    return target, [(c, _devour_xp(c)) for c in candidates]
+    return target, [(c, _devour_xp(c)) for c in candidates], xp_to_max_level(target)
+
+
+def _devour_can_add_sync(tg_user, target_id, current_ids, sac_id):
+    """Whether the player may add one more sacrifice: blocked when the target is
+    already maxed, or when the picks already cover the XP needed to max (so the extra
+    one would be wasted). A single pick that overshoots on its own is allowed."""
+    from game.creature import _devour_xp, xp_to_max_level
+
+    user, _ = get_or_create_user(tg_user)
+    try:
+        target = Creature.objects.get(id=target_id, owner=user)
+    except Creature.DoesNotExist:
+        raise GameError("این موجود توی کلکسیون تو نیست.")
+    need = xp_to_max_level(target)
+    if need <= 0:
+        return False, "این موجود به سقف سطحش رسیده و دیگه نمی‌تونه هیولا بخوره."
+    selected_xp = sum(_devour_xp(c) for c in Creature.objects.filter(id__in=list(current_ids), owner=user))
+    if selected_xp >= need:
+        return False, "همین‌ها برای رسیدن به سقف سطح کافیه — بیشتر از این، قربانی هدر می‌ره. اول همین‌ها رو بخورون."
+    return True, ""
 
 
 _DEVOUR_PAGE = 12
 
 
-def _devour_list_render(target, scored, selected: set[int], page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+def _devour_list_render(target, scored, selected: set[int], page: int = 0, xp_to_max: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+    if xp_to_max <= 0:
+        return (
+            f"🍖 <b>تقویت {target.name}</b> (Lv{target.level})\n\n"
+            "🔒 این موجود به <b>سقف سطحش</b> رسیده و دیگه نمی‌تونه هیولا بخوره.\n"
+            "<i>برای ادامه‌ی رشد باید با فیوژن ستاره‌ش رو بالا ببری (سقف سطح بالاتر می‌ره).</i>",
+            InlineKeyboardMarkup([[back_btn(f"coll_pick:{target.id}", "بازگشت")]]),
+        )
     if not scored:
         return (
             f"🍖 <b>تقویت {target.name}</b>\n\n"
@@ -1481,10 +1508,17 @@ def _devour_list_render(target, scored, selected: set[int], page: int = 0) -> tu
         )])
     rows.append([back_btn(f"coll_pick:{target.id}", "بازگشت")])
     page_note = f"  <i>(صفحه {page + 1}/{total_pages})</i>" if total_pages > 1 else ""
+    enough = total_xp >= xp_to_max
+    cap_line = (
+        f"🎯 XP تا سقف سطح: <b>{xp_to_max:,}</b> · انتخاب‌شده: <b>{total_xp:,}</b>"
+        + ("  ✅ کافیه!" if enough else "")
+    )
     text = (
-        f"🍖 <b>تقویت {target.name}</b> (Lv{target.level}){page_note}\n\n"
+        f"🍖 <b>تقویت {target.name}</b> (Lv{target.level}){page_note}\n"
+        f"{cap_line}\n\n"
         "هرچند تا موجود که می‌خوای رو <b>تیک بزن</b> تا با هم خورده بشن و XP‌شون به این منتقل شه. "
-        "<i>انتخاب‌هات بین صفحه‌ها می‌مونه. هرچی قربانی قوی‌تر و نایاب‌تر، XP بیشتر. قربانی‌ها برای همیشه حذف می‌شن.</i>"
+        "<i>فقط تا جایی می‌تونی انتخاب کنی که به سقف سطح برسه — بیشترش هدر می‌ره. "
+        "قربانی‌ها برای همیشه حذف می‌شن.</i>"
     )
     return text, InlineKeyboardMarkup(rows)
 
@@ -1499,12 +1533,12 @@ def _devour_page(context, target_id: int, page: int | None = None) -> int:
 async def _devour_rerender(update, context, target_id: int) -> None:
     query = update.callback_query
     try:
-        target, scored = await run_db(_devour_list_sync, update.effective_user, target_id)
+        target, scored, xp_to_max = await run_db(_devour_list_sync, update.effective_user, target_id)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
     selected = _devour_selection(context, target_id)
-    text, keyboard = _devour_list_render(target, scored, selected, _devour_page(context, target_id))
+    text, keyboard = _devour_list_render(target, scored, selected, _devour_page(context, target_id), xp_to_max)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -1530,7 +1564,14 @@ async def devour_toggle_callback(update: Update, context: ContextTypes.DEFAULT_T
     _, target_id, sac_id = query.data.split(":")
     target_id, sac_id = int(target_id), int(sac_id)
     selection = _devour_selection(context, target_id)
-    selection.symmetric_difference_update({sac_id})  # toggle
+    if sac_id in selection:
+        selection.discard(sac_id)  # unticking is always allowed
+    else:
+        ok, reason = await run_db(_devour_can_add_sync, update.effective_user, target_id, set(selection), sac_id)
+        if not ok:
+            await query.answer(reason, show_alert=True)
+            return
+        selection.add(sac_id)
     await query.answer()
     await _devour_rerender(update, context, target_id)
 
@@ -1541,14 +1582,27 @@ async def devour_select_all_callback(update: Update, context: ContextTypes.DEFAU
     target_id = int(target_id)
     if action == "devour_none":
         context.user_data.setdefault(_DEVOUR_SEL, {})[target_id] = set()
+        await query.answer()
     else:
         try:
-            _target, scored = await run_db(_devour_list_sync, update.effective_user, target_id)
+            _target, scored, xp_to_max = await run_db(_devour_list_sync, update.effective_user, target_id)
         except GameError as exc:
             await query.answer(str(exc), show_alert=True)
             return
-        context.user_data.setdefault(_DEVOUR_SEL, {})[target_id] = {c.id for c, _ in scored}
-    await query.answer()
+        # «انتخاب همه» caps at the XP needed to max — pick strongest-first until the
+        # target would fill up (the one that crosses the line is included), so it never
+        # over-selects and wastes creatures.
+        picked, running = set(), 0
+        for c, xp in sorted(scored, key=lambda t: -t[1]):
+            if running >= xp_to_max:
+                break
+            picked.add(c.id)
+            running += xp
+        context.user_data.setdefault(_DEVOUR_SEL, {})[target_id] = picked
+        if len(picked) < len(scored):
+            await query.answer("فقط تا سقف سطح انتخاب شد — بقیه هدر می‌رفت.", show_alert=True)
+        else:
+            await query.answer()
     await _devour_rerender(update, context, target_id)
 
 

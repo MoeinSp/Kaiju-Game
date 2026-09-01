@@ -1206,6 +1206,10 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
             [btn("🦖 اعطای کایجوی دلخواه (سطح/ستاره/تعداد)", style=CONFIRM, callback_data=f"admin_givek:{target_id}")],
             [btn("🔬 تنظیم سطح آزمایشگاه", emoji_key="btn_lab", style=CONFIRM, callback_data=f"admin_lablevel:{target_id}")],
             [
+                btn("💎 لاگ الماس", style=ADMIN, callback_data=f"admin_reslog:{target_id}:diamonds"),
+                btn("🪙 لاگ طلا", style=ADMIN, callback_data=f"admin_reslog:{target_id}:coins"),
+            ],
+            [
                 btn("📊 لاگ پیشرفت", emoji_key="btn_report", style=ADMIN, callback_data=f"admin_plog:{target_id}"),
                 btn("✉️ پیام", style=ADMIN, callback_data=f"admin_dm:{target_id}"),
             ],
@@ -1605,6 +1609,79 @@ async def player_log_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         _player_log_text(data),
         parse_mode="HTML",
         reply_markup=_user_manage_keyboard(data["user"].id, data["user"].is_banned),
+    )
+
+
+def _resource_log_data(target_id, field):
+    from game.ledger import resource_log
+    from game.moderation import find_user_or_raise
+
+    user = find_user_or_raise(str(target_id))
+    return user, resource_log(user, field, days=7)
+
+
+_RESLOG_META = {
+    "diamonds": ("💎", "الماس"),
+    "coins": ("🪙", "طلا"),
+    "dna": ("🧬", "دی‌ان‌ای"),
+}
+
+
+async def resource_log_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«💎 لاگ الماس» / «🪙 لاگ طلا» — a focused 7-day, per-source history for one
+    resource, so the owner can trace exactly where a player's gold/diamonds came from."""
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    _, target_id, field = query.data.split(":")
+    try:
+        user, log = await run_db(_resource_log_data, target_id, field)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    from game.ledger import SOURCE_LABELS
+
+    icon, label = _RESLOG_META.get(field, ("•", field))
+    lines = [
+        f"{icon} <b>لاگ {label} — {display_name(user)}</b> (<code>{user.id}</code>)",
+        f"جمع ۷ روز اخیر: <b>{log['total']:,}</b> {label}",
+        "──────────────",
+    ]
+    any_day = False
+    for day in log["days"]:
+        entries = log["per_day"].get(day, [])
+        if not entries:
+            continue
+        any_day = True
+        day_total = sum(a for _s, a in entries)
+        lines.append(f"\n<b>{day}</b> — {icon} {day_total:,}")
+        for src, amount in entries:
+            lines.append(f"   └ {SOURCE_LABELS.get(src, src)}: {amount:,}")
+    if not any_day:
+        lines.append(f"\n<i>در ۷ روز اخیر {label} افزایش‌یافته‌ای ثبت نشده.</i>")
+    keyboard = InlineKeyboardMarkup([[back_btn(f"admin_userback:{user.id}", "بازگشت به کاربر")]])
+    await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
+
+
+async def admin_userback_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Return from a sub-view (resource log) to the user-management card."""
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    target_id = query.data.split(":")[1]
+    try:
+        data = await run_db(user_info, target_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    user = data["user"]
+    await safe_edit_message_text(
+        query, _user_info_text(data), parse_mode="HTML",
+        reply_markup=_user_manage_keyboard(user.id, user.is_banned),
     )
 
 
@@ -3546,6 +3623,8 @@ def register(application) -> None:
         CallbackQueryHandler(autobackup_restore_do_callback, pattern=r"^autobk_restore_do:")
     )
     application.add_handler(CallbackQueryHandler(player_log_callback, pattern=r"^admin_plog:"))
+    application.add_handler(CallbackQueryHandler(resource_log_callback, pattern=r"^admin_reslog:\d+:(diamonds|coins|dna)$"))
+    application.add_handler(CallbackQueryHandler(admin_userback_callback, pattern=r"^admin_userback:\d+$"))
     application.add_handler(CallbackQueryHandler(delete_creature_confirm_callback, pattern=r"^admin_del"))
     application.add_handler(CallbackQueryHandler(reset_user_start_callback, pattern=r"^admin_reset:"))
     application.add_handler(

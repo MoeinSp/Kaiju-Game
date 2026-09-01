@@ -100,6 +100,19 @@ def create_starter_creature(owner: User) -> Creature:
     return creature
 
 
+def xp_to_max_level(creature: Creature) -> int:
+    """Total XP this creature still needs to reach its max level (rarity+star). 0 when
+    already maxed. Used to stop a player over-feeding creatures into a full target —
+    every point beyond this is wasted (add_xp discards overflow)."""
+    max_level = constants.creature_max_level(creature.rarity, creature.star_level)
+    if creature.level >= max_level:
+        return 0
+    need = max(0, constants.xp_for_creature_level(creature.level) - creature.xp)
+    for lvl in range(creature.level + 1, max_level):
+        need += constants.xp_for_creature_level(lvl)
+    return need
+
+
 def add_xp(creature: Creature, amount: int) -> int:
     """Adds xp and applies level-ups in place, capped at the creature's max level
     (set by its rarity + star, see constants.creature_max_level). Once maxed, extra

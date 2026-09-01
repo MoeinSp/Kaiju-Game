@@ -17,44 +17,64 @@ from game.lootbox import (
 )
 
 
-def _bulk_drop_line(roll: dict) -> str:
-    """One line describing a single drop — name + rarity (+ slot/level for gear)."""
-    rarity_dot = constants.RARITY_LABELS[roll["rarity"]].split()[0]
-    if roll["kind"] == "creature":
-        c = roll["creature"]
-        return f"{rarity_dot} {get_emoji('egg')} <b>{c.name}</b> — {constants.RARITY_LABELS[roll['rarity']]}"
-    it = roll["item"]
-    slot = constants.EQUIPMENT_SLOT_LABELS.get(it.slot, "🎒")
-    return f"{rarity_dot} {slot} <b>{it.name} +{it.level}</b> — {constants.RARITY_LABELS[roll['rarity']]}"
+def _rarity_dot(rarity: str) -> str:
+    return constants.RARITY_LABELS[rarity].split()[0]
 
 
 def _bulk_summary_text(header: str, summary: dict) -> str:
-    """Full reveal for a bulk (×11) open — headline the best drop, then EVERY item
-    it produced (name + rarity), then a rarity tally."""
+    """Full reveal for a bulk (×11) open in the itemised format: headline the best
+    drop, then creatures and equipment in separate numbered lists, then a rarity
+    tally that notes whether each rarity was creatures or gear."""
     order = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
+    div = "──────────────"
+
     best = summary["best"]
     if best["kind"] == "creature":
-        best_line = f"{get_emoji('egg')} <b>{best['creature'].name}</b> — {constants.RARITY_LABELS[best['rarity']]}"
+        best_line = f"{_rarity_dot(best['rarity'])} <b>{best['creature'].name}</b> — {constants.RARITY_LABELS[best['rarity']]}"
     else:
-        best_line = f"{constants.EQUIPMENT_SLOT_LABELS[best['item'].slot]} <b>{best['item'].name}</b> — {constants.RARITY_LABELS[best['rarity']]}"
+        it = best["item"]
+        best_line = (f"{_rarity_dot(best['rarity'])} {constants.EQUIPMENT_SLOT_LABELS.get(it.slot, '🎒')} "
+                     f"<b>{it.name} +{it.level}</b> — {constants.RARITY_LABELS[best['rarity']]}")
+
     lines = [
-        f"{header} <b>{summary['opened']} تا باز شد!</b> "
-        f"<i>(پول {summary['paid']} تا رو دادی، یکی رایگان)</i>",
+        f"🎁 <b>نتایج گشایش {summary['opened']} {header}</b>",
+        f"<i>(پرداخت {summary['paid']} باکس + ۱ باکس هدیه)</i>",
         "",
-        f"🏆 بهترین: {best_line}",
-        "",
-        "📜 <b>محتویات:</b>",
+        "🏆 <b>ارزشمندترین دریافت:</b>",
+        f"• {best_line}",
     ]
-    # every drop, rarest first, numbered so 11 results still read cleanly
-    for i, roll in enumerate(sorted(summary["rolls"], key=lambda r: -order.get(r["rarity"], 0)), 1):
-        lines.append(f"{i}. {_bulk_drop_line(roll)}")
-    lines.append("")
-    lines.append("<b>بر اساس نایابی:</b>")
+
+    creatures = sorted(summary["creatures"], key=lambda r: -order.get(r["rarity"], 0))
+    items = sorted(summary["items"], key=lambda r: -order.get(r["rarity"], 0))
+
+    if creatures:
+        lines += ["", div, "", "🐣 <b>هیولاهای دریافتی (اضافه شده به کلکسیون):</b>"]
+        for i, r in enumerate(creatures, 1):
+            c = r["creature"]
+            lines.append(f"{i}. {_rarity_dot(r['rarity'])} {c.name} — {constants.RARITY_LABELS[r['rarity']]}")
+
+    if items:
+        lines += ["", div, "", "⚔️ <b>تجهیزات دریافتی (اضافه شده به تجهیزات):</b>"]
+        for i, r in enumerate(items, 1):
+            it = r["item"]
+            slot = constants.EQUIPMENT_SLOT_LABELS.get(it.slot, "🎒")
+            lines.append(f"{i}. {_rarity_dot(r['rarity'])} {slot} {it.name} +{it.level} — {constants.RARITY_LABELS[r['rarity']]}")
+
+    # rarity tally, annotated with what kind each rarity's drops were
+    lines += ["", div, "", "📊 <b>خلاصه به تفکیک نایابی:</b>"]
     for rarity in reversed(constants.RARITY_ORDER):
-        c = summary["by_rarity"].get(rarity, 0)
-        if c:
-            lines.append(f"　{constants.RARITY_LABELS[rarity]} — <b>{c}</b>")
-    lines.append("\n<blockquote>هیولاها توی «کلکسیون» و تجهیزات توی «تجهیزات» منتظرتن.</blockquote>")
+        n = summary["by_rarity"].get(rarity, 0)
+        if not n:
+            continue
+        n_c = sum(1 for r in summary["creatures"] if r["rarity"] == rarity)
+        n_i = sum(1 for r in summary["items"] if r["rarity"] == rarity)
+        if n_c and n_i:
+            kind = f"{n_i} تجهیزات · {n_c} هیولا"
+        elif n_i:
+            kind = "تجهیزات"
+        else:
+            kind = "هیولا"
+        lines.append(f"• {constants.RARITY_LABELS[rarity]}: {n} ({kind})")
     return "\n".join(lines)
 
 

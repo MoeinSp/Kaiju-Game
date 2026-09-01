@@ -74,3 +74,26 @@ def recent_gains(user: User, days: int = 3) -> dict:
         tot["dna"] += r.dna
         tot["diamonds"] += r.diamonds
     return {"days": day_keys, "per_day": per_day, "totals": tot}
+
+
+def resource_log(user: User, field: str, days: int = 7) -> dict:
+    """A focused, longer history for ONE resource ('coins' | 'dna' | 'diamonds') —
+    per day, broken down by source, newest first. Powers the owner's «لاگ الماس» /
+    «لاگ طلا» views."""
+    import datetime
+
+    from django.utils import timezone
+
+    day_keys = [(timezone.localdate() - datetime.timedelta(days=i)).isoformat() for i in range(days)]
+    rows = DailyResourceGain.objects.filter(user_id=user.id, day__in=day_keys)
+    per_day: dict[str, list] = {d: [] for d in day_keys}
+    total = 0
+    for r in rows:
+        amount = getattr(r, field, 0) or 0
+        if amount <= 0:
+            continue
+        per_day[r.day].append((r.source, amount))
+        total += amount
+    for d in per_day:
+        per_day[d].sort(key=lambda x: -x[1])
+    return {"days": day_keys, "per_day": per_day, "total": total, "field": field}
