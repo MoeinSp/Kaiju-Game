@@ -324,7 +324,8 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
     lines = [
         f"{get_emoji('battle')} <b>حریف شناسایی شد | Battle Arena</b>",
         "",
-        f"👤 حریف: <b>{opponent['label']}</b>",
+        f"👤 حریف: <b>{opponent['label']}</b>"
+        + (f" <i>(🤝 {opponent['alliance']})</i>" if opponent.get("alliance") else " 🚫 <i>بدون اتحاد</i>"),
         f"👹 موجود حریف: <b>{opponent.get('creature_name', '؟')}</b>{opp_elem_tag}",
         f"💀 قدرت حریف: <b>{opponent['power']:,}</b> ┃ {get_emoji('trophy')} کاپ: <b>{opponent['cup']:,}</b>",
         "",

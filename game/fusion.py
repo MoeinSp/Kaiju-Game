@@ -25,12 +25,17 @@ def ready_pairs(user: User) -> list[dict]:
     if not is_built(user, FUSION_BUILDING):
         return []
 
+    from game.workers import busy_creature_ids
+
+    busy = busy_creature_ids(user)  # creatures mining or in the cave can't be fused
     cap = star_cap(user)
     # fusion identity is (name, rarity, star): two creatures only fuse if all three
     # match, so rarity is preserved up the whole 1★→5★ pyramid (16 same-rarity base
     # creatures for one 5★).
     groups: dict[tuple[str, str, int], list[Creature]] = {}
     for creature in Creature.objects.filter(owner=user, star_level__lt=cap).order_by("-level"):
+        if creature.id in busy:
+            continue
         groups.setdefault((creature.name, creature.rarity, creature.star_level), []).append(creature)
 
     pairs = []
@@ -60,13 +65,15 @@ def fusion_partners(user: User, creature: Creature) -> list[Creature]:
         return []
     if creature.star_level >= star_cap(user):
         return []
-    return list(
-        Creature.objects.filter(
+    from game.workers import busy_creature_ids
+
+    busy = busy_creature_ids(user)
+    return [
+        c for c in Creature.objects.filter(
             owner=user, name=creature.name, rarity=creature.rarity, star_level=creature.star_level
-        )
-        .exclude(id=creature.id)
-        .order_by("-level")
-    )
+        ).exclude(id=creature.id).order_by("-level")
+        if c.id not in busy
+    ]
 
 
 @transaction.atomic
@@ -90,6 +97,19 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
         raise GameError("هر دو هیولا باید نایابیِ یکسان داشته باشن (مثلاً هر دو اساطیری).")
     if parent_a.star_level != parent_b.star_level:
         raise GameError("هر دو هیولا باید ستاره‌ی یکسان داشته باشن.")
+
+    # a busy parent (working a mine, or in the cave) can't be consumed by fusion —
+    # free it first, otherwise a stationed/breeding creature would vanish mid-task
+    from game.workers import busy_creature_ids, creature_status
+
+    busy = busy_creature_ids(user)
+    for p in (parent_a, parent_b):
+        if p.id in busy:
+            reason = creature_status(user, p) or "مشغول"
+            raise GameError(
+                f"«{p.name}» الان مشغوله ({reason}) و نمی‌شه فیوژنش کرد. "
+                "اول از معدن/غار آزادش کن، بعد دوباره امتحان کن."
+            )
 
     cap = star_cap(user)
     if parent_a.star_level >= cap:

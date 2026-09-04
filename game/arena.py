@@ -321,6 +321,7 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
         "is_fake": False,
         "user": target,
         "label": lab_display(target),
+        "alliance": target.alliance.name if target.alliance_id else None,
         "creature_name": target_creature.name if target_creature else "موجود ناشناس",
         "cup": target.cup,
         "power": active_power(target),
