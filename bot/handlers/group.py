@@ -561,10 +561,11 @@ def _attack_sync(chat, tg_user):
             member = User.objects.filter(id=uid).first()
             name = display_name(member) if member else str(uid)
             pct = round(100 * r["damage"] / total_dmg)
-            # same board style as the live «جدول رید», with ┘ (RTL-correct)
+            # same board style as the live «جدول رید»: premium icons + RTL-safe branch
             reward_lines.append(
                 f"{_raid_rank_label(i)} {name}\n"
-                f"┘ 💥 {r['damage']:,} ({pct}٪) · {get_emoji('coin')} {r['coins']:,} · {get_emoji('dna')} {r['dna']:,}"
+                f"{_RAID_BRANCH} {get_emoji('crit')} {r['damage']:,} ({pct}٪) · "
+                f"{get_emoji('gift')} {get_emoji('coin')} {r['coins']:,} · {get_emoji('dna')} {r['dna']:,}"
             )
         speedup_won = maybe_award_speedup_card(user)  # bonus chance for whoever lands the killing blow
 
@@ -633,10 +634,21 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+# RLM-prefixed bullet: forces the stats sub-line to render right-to-left so its marker
+# sits on the RIGHT (under the name) — a plain box-drawing corner (└/┘) has no strong
+# RTL char on the line, so it flipped to the wrong side. A neutral bullet can't reverse.
+_RAID_BRANCH = "‏•"
+
+
 def _raid_rank_label(i: int) -> str:
-    """Rank badge: 🥇🥈🥉 for the top three, keycap 4️⃣… up to 10, then plain N."""
-    if i < 3:
-        return ["🥇", "🥈", "🥉"][i]
+    """Rank badge: premium 🥇🥈🥉 for the top three (owner-themeable), keycap 4️⃣… to 10
+    (premiumised as literal glyphs), then plain N."""
+    if i == 0:
+        return get_emoji("medal_gold")
+    if i == 1:
+        return get_emoji("medal_silver")
+    if i == 2:
+        return get_emoji("medal_bronze")
     if i < 10:
         return f"{i + 1}️⃣"
     return f"{i + 1}."
@@ -644,13 +656,14 @@ def _raid_rank_label(i: int) -> str:
 
 def _raid_leaderboard_text(lb: dict) -> str:
     """The «📊 جدول رید» board — boss HP + total damage, then each attacker with their
-    damage share and projected/earned DNA. Uses ┘ (RTL-correct) sub-line branch."""
+    damage share and DNA reward. All icons go through get_emoji so the owner's Premium
+    set applies; the stats sub-line is RTL-forced so its marker never reverses."""
     pct = round(100 * max(lb["hp"], 0) / max(1, lb["max_hp"]))
     lines = [
         f"📊 <b>جدول رید: {lb['boss_name']} (سطح {lb['boss_level']})</b>",
         "",
         f"{get_emoji('hp')} باس: {constants.render_bar(lb['hp'], lb['max_hp'], width=10)} {pct}٪",
-        f"💥 کل آسیب: <b>{lb['total_damage']:,}</b>",
+        f"{get_emoji('crit')} کل آسیب: <b>{lb['total_damage']:,}</b>",
         "",
         "──────────────",
     ]
@@ -660,7 +673,10 @@ def _raid_leaderboard_text(lb: dict) -> str:
         for i, r in enumerate(lb["rows"][:15]):
             lines.append("")
             lines.append(f"{_raid_rank_label(i)} {r['name']}")
-            lines.append(f"┘ 💥 {r['damage']:,} ({r['share_pct']}٪) · {get_emoji('dna')} {r['dna']:,}")
+            lines.append(
+                f"{_RAID_BRANCH} {get_emoji('crit')} {r['damage']:,} ({r['share_pct']}٪) · "
+                f"{get_emoji('gift')} {r['dna']:,} {get_emoji('dna')}"
+            )
     return "\n".join(lines)
 
 

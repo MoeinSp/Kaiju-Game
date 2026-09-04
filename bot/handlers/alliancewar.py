@@ -153,8 +153,10 @@ def _war1d_sync(tg_user):
     if user.alliance_id is None:
         return {"in_alliance": False}
     view = alliance.war_view(user)
-    is_leader = Alliance.objects.filter(id=user.alliance_id, leader_id=user.id).exists()
-    return {"in_alliance": True, "view": view, "is_leader": is_leader}
+    # leader OR deputy may start the war (the deputy has the leader's full powers)
+    al = Alliance.objects.filter(id=user.alliance_id).first()
+    can_start = al is not None and user.id in (al.leader_id, al.deputy_id)
+    return {"in_alliance": True, "view": view, "is_leader": can_start}
 
 
 def _war1d_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
@@ -172,7 +174,7 @@ def _war1d_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
         if data["is_leader"]:
             rows.append([btn("🔎 پیدا کردن حریف و شروع جنگ", style=BATTLE, callback_data="ally_war_start")])
         else:
-            lines.append("\n<i>فقط رهبر اتحاد می‌تونه جنگ رو شروع کنه.</i>")
+            lines.append("\n<i>فقط رهبر یا قائم‌مقام اتحاد می‌تونه جنگ رو شروع کنه.</i>")
         rows.append([back_btn("menu:alliance_info")])
         return "\n".join(lines), InlineKeyboardMarkup(rows)
 
