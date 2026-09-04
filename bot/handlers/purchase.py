@@ -41,30 +41,37 @@ def _sellable(prices: dict) -> list[str]:
     return [res for res in ("coins", "dna", "diamonds") if prices[res] > 0]
 
 
+_RULE = "━━━━━━━━━━━━━━━━━━━━"
+_RES_TITLE = {"coins": "🪙 طلا", "dna": "🧬 دی‌ان‌ای (DNA)", "diamonds": "💎 الماس"}
+_RES_UNIT_WORD = {"coins": "طلا", "dna": "عدد", "diamonds": "عدد"}
+
+
 def _amount_screen(context) -> tuple[str, InlineKeyboardMarkup]:
     prices = botconfig.get_buy_prices()
     amounts = _amounts(context)
     sellable = _sellable(prices)
     lines = [
         "🛒 <b>خرید درون‌بازی</b>",
-        "با دکمه‌های ➖ و ➕ مقداری که می‌خوای بخری رو تنظیم کن:",
+        _RULE,
+        "مقدار مورد نظرتان را با دکمه‌های ➖ و ➕ تنظیم کنید:",
         "",
     ]
     rows = []
     for res in sellable:
         amt = amounts.get(res, 0)
-        unit = prices[res]
-        lines.append(
-            f"{purchase.RES_EMOJI[res]} {purchase.RES_LABEL[res]}: <b>{amt:,}</b>"
-            f"  <i>(هر {purchase.STEP[res]:,} = {round(unit * purchase.STEP[res]):,} تومان)</i>"
-        )
+        step = purchase.STEP[res]
+        step_price = round(prices[res] * step)
+        lines.append(f"{_RES_TITLE[res]}: <b>{amt:,}</b>")
+        lines.append(f"└ نرخ: هر {step:,} {_RES_UNIT_WORD[res]} ⟵ {step_price:,} تومان")
+        lines.append("")
         rows.append([
-            btn(f"➖ {purchase.STEP[res]:,}", style=NAV, callback_data=f"buy_adj:{res}:-"),
-            btn(f"{purchase.RES_EMOJI[res]} {purchase.RES_LABEL[res]}", style=NAV, callback_data="buy_noop"),
-            btn(f"➕ {purchase.STEP[res]:,}", style=CONFIRM, callback_data=f"buy_adj:{res}:+"),
+            btn(f"➖ {step:,}", style=NAV, callback_data=f"buy_adj:{res}:-"),
+            btn(f"{_RES_TITLE[res]}", style=NAV, callback_data="buy_noop"),
+            btn(f"➕ {step:,}", style=CONFIRM, callback_data=f"buy_adj:{res}:+"),
         ])
+        rows.append([btn(f"🔢 عدد دلخواه ({purchase.RES_LABEL[res]})", style=NAV, callback_data=f"buy_custom:{res}")])
     total = purchase.price_for(amounts["coins"], amounts["dna"], amounts["diamonds"])
-    lines += ["", f"💰 <b>مبلغ قابل پرداخت: {total:,} تومان</b>"]
+    lines += [_RULE, f"💳 <b>مبلغ قابل پرداخت: {total:,} تومان</b>"]
     if total > 0:
         rows.append([btn("✅ ثبت و مشاهده‌ی کارت", emoji_key="btn_confirm", style=PRIMARY, callback_data="buy_submit")])
         rows.append([btn("♻️ صفر کردن", style=DANGER, callback_data="buy_reset")])
@@ -105,6 +112,42 @@ async def buy_reset_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.callback_query.answer("صفر شد.")
     text, kb = _amount_screen(context)
     await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=kb)
+
+
+async def buy_custom_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«🔢 عدد دلخواه» — arm a capture so the user's next typed number sets this
+    resource's amount directly."""
+    query = update.callback_query
+    res = query.data.split(":")[1]
+    from bot.handlers.private import AWAITING_PLAYER_KEY
+
+    context.user_data[AWAITING_PLAYER_KEY] = {"action": "buy_custom", "res": res}
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        f"🔢 چه مقدار <b>{purchase.RES_LABEL[res]}</b> می‌خوای؟ عدد رو همین‌جا بفرست.\n"
+        f"<i>مثلاً <code>{purchase.STEP[res] * 3:,}</code></i>",
+        parse_mode="HTML",
+    )
+
+
+async def handle_custom_amount(update: Update, context: ContextTypes.DEFAULT_TYPE, awaiting: dict) -> None:
+    """The user typed a number after «عدد دلخواه». Set it (clamped) and re-show the
+    amount screen as a fresh message. Called from private.capture_player_text_reply."""
+    from bot.handlers.private import AWAITING_PLAYER_KEY
+
+    res = awaiting.get("res")
+    message = update.effective_message
+    raw = (message.text or "").strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789"))
+    raw = raw.replace(",", "").replace("٬", "")
+    if not raw.isdigit():
+        context.user_data[AWAITING_PLAYER_KEY] = awaiting  # keep waiting
+        await message.reply_text("فقط یه عدد بفرست (مثلاً 50000).")
+        return
+    if res in purchase.STEP:
+        _amounts(context)[res] = max(0, min(purchase.MAX_UNITS.get(res, 0), int(raw)))
+    text, kb = _amount_screen(context)
+    await message.reply_text(text, parse_mode="HTML", reply_markup=kb)
 
 
 def _create_pending_sync(tg_user, coins, dna, diamonds):
@@ -298,6 +341,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(buy_open_callback, pattern=r"^buy_open$"))
     application.add_handler(CallbackQueryHandler(buy_noop_callback, pattern=r"^buy_noop$"))
     application.add_handler(CallbackQueryHandler(buy_adjust_callback, pattern=r"^buy_adj:(coins|dna|diamonds):[+-]$"))
+    application.add_handler(CallbackQueryHandler(buy_custom_callback, pattern=r"^buy_custom:(coins|dna|diamonds)$"))
     application.add_handler(CallbackQueryHandler(buy_reset_callback, pattern=r"^buy_reset$"))
     application.add_handler(CallbackQueryHandler(buy_submit_callback, pattern=r"^buy_submit$"))
     application.add_handler(CallbackQueryHandler(buy_approve_callback, pattern=r"^buyok:\d+$"))

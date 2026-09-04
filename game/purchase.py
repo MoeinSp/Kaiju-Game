@@ -17,8 +17,8 @@ from game import botconfig
 from game.creature import GameError
 
 # stepper increments per tap, and a sane ceiling so a mis-tap can't request millions
-STEP = {"coins": 5_000, "dna": 50, "diamonds": 25}
-MAX_UNITS = {"coins": 5_000_000, "dna": 50_000, "diamonds": 100_000}
+STEP = {"coins": 10_000, "dna": 1_000, "diamonds": 50}
+MAX_UNITS = {"coins": 50_000_000, "dna": 500_000, "diamonds": 1_000_000}
 RES_LABEL = {"coins": "طلا", "dna": "DNA", "diamonds": "الماس"}
 RES_EMOJI = {"coins": "🪙", "dna": "🧬", "diamonds": "💎"}
 

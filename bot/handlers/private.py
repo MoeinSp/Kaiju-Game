@@ -3029,6 +3029,12 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         await handle_custom_amount(update, context, awaiting)
         return
 
+    if action == "buy_custom":
+        from bot.handlers.purchase import handle_custom_amount as _buy_custom
+
+        await _buy_custom(update, context, awaiting)
+        return
+
     if action == "set_lab_name":
         if not text or len(text) > LAB_NAME_MAX_LEN:
             context.user_data[AWAITING_PLAYER_KEY] = awaiting
