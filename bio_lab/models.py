@@ -868,6 +868,7 @@ class BotConfig(models.Model):
     buy_price_per_diamond = models.FloatField(default=0.0)   # Toman per 1 diamond
     buy_card_number = models.CharField(max_length=64, default="", blank=True)
     buy_card_holder = models.CharField(max_length=96, default="", blank=True)
+    buy_min_toman = models.BigIntegerField(default=0)  # minimum purchase (0 = no minimum)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:

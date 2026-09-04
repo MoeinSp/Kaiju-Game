@@ -27,6 +27,7 @@ _cache: dict[str, object] = {
     "buy_price_per_diamond": 0.0,
     "buy_card_number": "",
     "buy_card_holder": "",
+    "buy_min_toman": 0,
 }
 
 
@@ -36,7 +37,7 @@ def _row_to_cache(row) -> dict:
             "group_game_url": "", "group_game_title": "", "buy_url": "", "buy_title": "",
             "energy_refill_diamonds": DEFAULT_ENERGY_REFILL_DIAMONDS,
             "buy_price_per_gold": 0.0, "buy_price_per_dna": 0.0, "buy_price_per_diamond": 0.0,
-            "buy_card_number": "", "buy_card_holder": "",
+            "buy_card_number": "", "buy_card_holder": "", "buy_min_toman": 0,
         }
     return {
         "group_game_url": row.group_game_url or "",
@@ -49,6 +50,7 @@ def _row_to_cache(row) -> dict:
         "buy_price_per_diamond": row.buy_price_per_diamond or 0.0,
         "buy_card_number": row.buy_card_number or "",
         "buy_card_holder": row.buy_card_holder or "",
+        "buy_min_toman": row.buy_min_toman or 0,
     }
 
 
@@ -104,6 +106,16 @@ def set_buy_prices(coins: float, dna: float, diamonds: float) -> None:
         "buy_price_per_dna": max(0.0, float(dna)),
         "buy_price_per_diamond": max(0.0, float(diamonds)),
     })
+    refresh_cache()
+
+
+def get_buy_min() -> int:
+    """Minimum purchase in Toman (0 = no minimum). Pure in-memory read."""
+    return int(_cache.get("buy_min_toman") or 0)
+
+
+def set_buy_min(toman: int) -> None:
+    BotConfig.objects.update_or_create(id=1, defaults={"buy_min_toman": max(0, int(toman))})
     refresh_cache()
 
 

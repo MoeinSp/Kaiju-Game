@@ -2310,6 +2310,7 @@ def _buy_cfg_sync() -> dict:
         "url": link[0] if link else "", "title": link[1] if link else "",
         "prices": botconfig.get_buy_prices(),
         "card": botconfig.get_buy_card(),
+        "min": botconfig.get_buy_min(),
         "inbot_ready": botconfig.inbot_purchase_ready(),
     }
 
@@ -2318,6 +2319,7 @@ def _buy_link_panel_keyboard(has_link: bool) -> InlineKeyboardMarkup:
     rows = [
         [btn("💵 تنظیم قیمت‌ها (خرید درون‌ربات)", style=PRIMARY, callback_data="admin_menu:buy_prices_set")],
         [btn("💳 تنظیم کارت پرداخت", style=PRIMARY, callback_data="admin_menu:buy_card_set")],
+        [btn("🎚 تنظیم حداقل خرید", style=PRIMARY, callback_data="admin_menu:buy_min_set")],
         [btn("🔗 تنظیم/تغییر لینک خرید بیرونی", style=NAV, callback_data="admin_menu:buy_link_set")],
     ]
     if has_link:
@@ -2337,6 +2339,7 @@ async def buy_link_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         "",
         "💵 <b>قیمت هر واحد (تومان):</b>",
         f"🪙 طلا: <b>{p['coins']:g}</b> · 🧬 DNA: <b>{p['dna']:g}</b> · 💎 الماس: <b>{p['diamonds']:g}</b>",
+        f"🎚 حداقل خرید: <b>{cfg['min']:,}</b> تومان" + ("" if cfg["min"] else " (بدون حداقل)"),
         f"💳 کارت: <code>{card_num or '—'}</code>" + (f" — {card_holder}" if card_holder else ""),
         "",
         "<i>وقتی حداقل یک قیمت و یک کارت ثبت بشه، دکمه‌ی خرید توی منو کاربر رو می‌بره به فرایند "
@@ -2356,6 +2359,15 @@ async def buy_prices_set_start(update: Update, context: ContextTypes.DEFAULT_TYP
         "<code>&lt;طلا&gt; &lt;DNA&gt; &lt;الماس&gt;</code>\n\n"
         "مثال: <code>0.2 5 50</code> یعنی هر ۱ طلا ۰٫۲ تومان، هر ۱ DNA ۵ تومان، هر ۱ الماس ۵۰ تومان.\n"
         "<i>عددِ ۰ یعنی اون مورد برای فروش نیست.</i>",
+        parse_mode="HTML",
+    )
+
+
+async def buy_min_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "set_buy_min"}
+    await update.effective_message.reply_text(
+        "🎚 حداقل مبلغ خرید رو به تومان بفرست (یه عدد). مثلاً <code>50000</code>.\n"
+        "<i>عددِ ۰ یعنی حداقلی نباشه.</i>",
         parse_mode="HTML",
     )
 
@@ -3286,6 +3298,19 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
+    if action == "set_buy_min":
+        raw = text.replace(",", "").replace("،", "").replace("٬", "").strip()
+        if not raw.isdigit():
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text("⚠️ فقط یه عدد بفرست (تومان)، مثلاً <code>50000</code>.", parse_mode="HTML")
+            return
+        await run_db(botconfig.set_buy_min, int(raw))
+        note = f"حداقل خرید روی {int(raw):,} تومان تنظیم شد." if int(raw) > 0 else "حداقل خرید برداشته شد."
+        await message.reply_text(
+            f"✅ {note}", reply_markup=_buy_link_panel_keyboard(bool(botconfig.get_buy_link()))
+        )
+        return
+
     if action == "set_buy_card":
         num_part, holder_part = (text.split("|", 1) + [""])[:2] if "|" in text else (text, "")
         number = "".join(ch for ch in num_part if ch.isdigit())
@@ -3638,6 +3663,7 @@ _ADMIN_MENU_ACTIONS.update(
         "buy_link_clear": buy_link_clear,
         "buy_prices_set": buy_prices_set_start,
         "buy_card_set": buy_card_set_start,
+        "buy_min_set": buy_min_set_start,
         "users": users_browse_callback,
         "gift_all": gift_all_start,
         "global_stats": global_stats_cmd,

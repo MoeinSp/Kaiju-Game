@@ -62,7 +62,8 @@ def _amount_screen(context) -> tuple[str, InlineKeyboardMarkup]:
         step = purchase.STEP[res]
         step_price = round(prices[res] * step)
         lines.append(f"{_RES_TITLE[res]}: <b>{amt:,}</b>")
-        lines.append(f"└ نرخ: هر {step:,} {_RES_UNIT_WORD[res]} ⟵ {step_price:,} تومان")
+        # ┘ (RTL branch) and = read correctly right-to-left, unlike └ and ⟵
+        lines.append(f"┘ نرخ: هر {step:,} {_RES_UNIT_WORD[res]} = {step_price:,} تومان")
         lines.append("")
         rows.append([
             btn(f"➖ {step:,}", style=NAV, callback_data=f"buy_adj:{res}:-"),
@@ -71,9 +72,15 @@ def _amount_screen(context) -> tuple[str, InlineKeyboardMarkup]:
         ])
         rows.append([btn(f"🔢 عدد دلخواه ({purchase.RES_LABEL[res]})", style=NAV, callback_data=f"buy_custom:{res}")])
     total = purchase.price_for(amounts["coins"], amounts["dna"], amounts["diamonds"])
+    minimum = botconfig.get_buy_min()
     lines += [_RULE, f"💳 <b>مبلغ قابل پرداخت: {total:,} تومان</b>"]
-    if total > 0:
+    if minimum > 0:
+        lines.append(f"<i>حداقل خرید: {minimum:,} تومان</i>")
+    if total > 0 and total >= minimum:
         rows.append([btn("✅ ثبت و مشاهده‌ی کارت", emoji_key="btn_confirm", style=PRIMARY, callback_data="buy_submit")])
+    elif total > 0 and minimum > 0:
+        lines.append(f"⚠️ <b>برای ثبت خرید حداقل {minimum:,} تومان لازمه</b> — کمی بیشتر انتخاب کن.")
+    if total > 0:
         rows.append([btn("♻️ صفر کردن", style=DANGER, callback_data="buy_reset")])
     rows.append([back_btn("menu:me", "بازگشت به منو")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)

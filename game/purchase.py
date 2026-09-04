@@ -41,6 +41,12 @@ def create_pending(user: User, coins: int, dna: int, diamonds: int) -> PurchaseR
     price = price_for(coins, dna, diamonds)
     if price <= 0:
         raise GameError("اول مقدار چیزی که می‌خوای بخری رو انتخاب کن.")
+    minimum = botconfig.get_buy_min()
+    if minimum > 0 and price < minimum:
+        raise GameError(
+            f"حداقل مبلغ خرید {minimum:,} تومان است. الان سبد تو {price:,} تومانه — "
+            f"مقدارِ بیشتری انتخاب کن."
+        )
     # keep only one live draft per user — drop any older unfinished ones
     PurchaseRequest.objects.filter(user=user, status="awaiting_receipt").delete()
     return PurchaseRequest.objects.create(

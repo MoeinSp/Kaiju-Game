@@ -51,6 +51,14 @@ def _is_manager(user: User, alliance: Alliance) -> bool:
     return alliance is not None and user.id in (alliance.leader_id, alliance.deputy_id)
 
 
+def _assert_manager(user: User, alliance: Alliance, what: str = "این کار") -> None:
+    """Leader OR deputy may do it. The deputy has the leader's full operational powers
+    (building/perk upgrades, treasury, starting a war, approvals, kicks…) — everything
+    except disbanding the alliance and (re)assigning the deputy role itself."""
+    if not _is_manager(user, alliance):
+        raise GameError(f"فقط رهبر یا قائم‌مقام می‌تونه {what} رو انجام بده.")
+
+
 @transaction.atomic
 def request_or_join(user: User, name: str) -> dict:
     alliance = Alliance.objects.filter(name__iexact=name.strip()).first()
@@ -611,8 +619,7 @@ def buy_perk(user: User, perk_key: str) -> dict:
     if user.alliance_id is None:
         raise GameError("عضو هیچ اتحادی نیستی.")
     alliance = Alliance.objects.select_for_update().get(id=user.alliance_id)
-    if alliance.leader_id != user.id:
-        raise GameError("فقط رهبر اتحاد می‌تونه پرک بخره.")
+    _assert_manager(user, alliance, "ارتقای ساختمون/پرک اتحاد")
     field = PERKS[perk_key]["field"]
     level = getattr(alliance, field)
     if level >= PERK_MAX_LEVEL:
@@ -841,8 +848,7 @@ def start_war(user: User):
     if user.alliance_id is None:
         raise GameError("عضو هیچ اتحادی نیستی.")
     alliance = Alliance.objects.select_for_update().get(id=user.alliance_id)
-    if alliance.leader_id != user.id:
-        raise GameError("فقط رهبر اتحاد می‌تونه جنگ راه بندازه.")
+    _assert_manager(user, alliance, "شروع جنگ")
     if active_war_for(alliance.id) is not None:
         raise GameError("اتحادت همین الان توی یه جنگه — اول اون تموم بشه.")
     opponent = find_war_opponent(alliance)
