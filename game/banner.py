@@ -30,8 +30,11 @@ from game.creature import GameError
 PULL_COST_DIAMONDS = 30
 PITY_THRESHOLD = 20  # a guaranteed legendary at least this often
 FEATURED_CHANCE = 0.6  # chance an epic+ pull becomes the featured species
-# slightly kinder than the gold diamond box, since the banner is the premium chase
-WEIGHTS = {"common": 40, "rare": 35, "epic": 18, "legendary": 6, "mythic": 1}
+# Epic+ is deliberately RARE here — the guaranteed-legendary pity at 20 is the real
+# reward path, not a lucky early pull. Per pull: epic 5%, legendary 0.8%, mythic 0.2%
+# (legendary-or-better ≈ 1%), so hitting a legendary before the 20-pull pity is
+# genuinely uncommon (was epic 18% / legendary 6% / mythic 1%, which felt far too easy).
+WEIGHTS = {"common": 610, "rare": 330, "epic": 50, "legendary": 8, "mythic": 2}
 
 _LEGENDARY_IDX = constants.RARITY_ORDER.index("legendary")
 _EPIC_IDX = constants.RARITY_ORDER.index("epic")

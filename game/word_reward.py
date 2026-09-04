@@ -58,10 +58,30 @@ def seconds_left(user: User) -> int:
     return max(0, int((user.reward_ready_at - timezone.now()).total_seconds()))
 
 
+def _reward_scale(user: User) -> float:
+    """Multiplier that scales the gold/DNA/jackpot reward by the player's strength —
+    lab level and (heavily) their active creature's power — so «جایزه» stays worthwhile
+    for strong players instead of paying the same tiny flat amount to everyone."""
+    from bio_lab.repository import get_active_creature
+    from game.creature import effective_stats
+    from game.equipment import get_equipped_items
+    from game.lab import lab_level
+
+    c = get_active_creature(user)
+    power = 0
+    if c is not None:
+        s = effective_stats(c, get_equipped_items(c))
+        power = round(s["hp"] + s["atk"] + s["def"] + s["spd"])
+    return 1 + lab_level(user) * 0.06 + power * 0.0025
+
+
 def _roll_prize(user: User) -> tuple[str, int, int]:
     kind = random.choices([p[1] for p in PRIZES], weights=[p[0] for p in PRIZES], k=1)[0]
     low, high = next((lo, hi) for _w, k, lo, hi in PRIZES if k == kind)
     amount = random.randint(low, high) if high else 0
+    # gold / DNA / jackpot scale with the player's power; speed-up cards don't
+    if kind in ("coins", "jackpot", "dna"):
+        amount = round(amount * _reward_scale(user))
     minutes = 0
     if kind in ("coins", "jackpot"):
         user.coins += amount

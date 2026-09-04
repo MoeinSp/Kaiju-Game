@@ -4,7 +4,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Building, Creature
 from bio_lab.repository import get_or_create_user
-from bot.buttons import BUILD, DANGER, LIST, NAV, PRIMARY, SHOP, back_btn, back_only_keyboard, btn
+from bot.buttons import BUILD, CONFIRM, DANGER, LIST, NAV, PRIMARY, SHOP, back_btn, back_only_keyboard, btn
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text, send_screen
 from game import constants
 from game.workers import (assign, assigned_creatures, free_creatures, unassign,
@@ -684,6 +684,25 @@ def _buy_builder_sync(tg_user):
     return rows, upgrading_ids, main_hall_level(user), len(upgrades), slots, user.diamonds
 
 
+async def building_buy_builder_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«خرید کارگر دوم» — confirm first (it costs diamonds), then buy on «تأیید»."""
+    query = update.callback_query
+    await query.answer()
+    cost = constants.SECOND_BUILDER_DIAMONDS
+    keyboard = InlineKeyboardMarkup([
+        [btn(f"✅ تأیید و خرید ({cost} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="bld_buy_builder_do"),
+         btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data="menu:buildings")],
+    ])
+    await safe_edit_message_text(
+        query,
+        f"👷‍♂️ <b>خرید کارگر دوم</b>\n\n"
+        f"با خرید کارگر دوم می‌تونی <b>هم‌زمان دو ساختمون</b> رو ارتقا بدی و سرعت ساخت‌وسازت دو برابر شه.\n\n"
+        f"{get_emoji('diamond')} هزینه: <b>{cost}</b> الماس (یک‌بار برای همیشه)\n\n"
+        f"تأیید می‌کنی؟",
+        parse_mode="HTML", reply_markup=keyboard,
+    )
+
+
 async def building_buy_builder_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     try:
@@ -704,7 +723,8 @@ async def building_buy_builder_callback(update: Update, context: ContextTypes.DE
 
 def register(application) -> None:
     application.add_handler(CommandHandler("buildings", buildings_panel, filters.ChatType.PRIVATE))
-    application.add_handler(CallbackQueryHandler(building_buy_builder_callback, pattern=r"^bld_buy_builder$"))
+    application.add_handler(CallbackQueryHandler(building_buy_builder_prompt, pattern=r"^bld_buy_builder$"))
+    application.add_handler(CallbackQueryHandler(building_buy_builder_callback, pattern=r"^bld_buy_builder_do$"))
     application.add_handler(CallbackQueryHandler(building_pick_callback, pattern=r"^bld_pick:"))
     application.add_handler(CallbackQueryHandler(building_collect_callback, pattern=r"^bld_collect:"))
     application.add_handler(CallbackQueryHandler(building_upgrade_callback, pattern=r"^bld_upgrade:"))
