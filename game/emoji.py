@@ -241,17 +241,58 @@ def get_emoji(key: str, fallback: str | None = None) -> str:
     return fallback if fallback is not None else DEFAULT_EMOJI.get(key, "❓")
 
 
+def _key_glyphs(key: str, placeholder: str) -> set[str]:
+    """The literal glyph(s) that a semantic key should also theme: its default unicode
+    emoji and the placeholder the owner chose (normalized, skipping fixed glyphs)."""
+    out = set()
+    for g in (DEFAULT_EMOJI.get(key, ""), placeholder or ""):
+        g = _norm_glyph(g)
+        if g and g not in GLYPH_SKIP:
+            out.add(g)
+    return out
+
+
 def set_emoji(key: str, custom_emoji_id: str, placeholder: str) -> None:
     EmojiOverride.objects.update_or_create(
         key=key, defaults={"custom_emoji_id": custom_emoji_id, "placeholder": placeholder}
     )
+    # ALSO theme the literal glyph(s) for this key, so hard-coded emojis in message
+    # bodies (💥, 💎, ⚔️ …) render as the owner's choice EVERYWHERE — not only where
+    # get_emoji() is used. This is what keeps e.g. the diamond emoji consistent across
+    # every screen instead of differing between get_emoji() and literal 💎.
+    for g in _key_glyphs(key, placeholder):
+        EmojiOverride.objects.update_or_create(
+            key=f"{_GLYPH_PREFIX}{g}", defaults={"custom_emoji_id": custom_emoji_id, "placeholder": g}
+        )
     refresh_cache()
 
 
 def clear_emoji(key: str) -> bool:
+    # find the placeholder before deleting, so we can also drop the coupled glyph overrides
+    existing = EmojiOverride.objects.filter(key=key).first()
+    placeholder = existing.placeholder if existing else ""
     deleted, _ = EmojiOverride.objects.filter(key=key).delete()
+    glyph_keys = [f"{_GLYPH_PREFIX}{g}" for g in _key_glyphs(key, placeholder)]
+    if glyph_keys:
+        EmojiOverride.objects.filter(key__in=glyph_keys).delete()
     refresh_cache()
     return deleted > 0
+
+
+def couple_all_key_glyphs() -> int:
+    """One-shot backfill: for every semantic emoji the owner has already set, make sure
+    the matching literal glyph is themed too (so pre-existing settings for 💎/💥/… also
+    apply to hard-coded emojis in messages). Idempotent; safe to run at every startup."""
+    n = 0
+    for o in EmojiOverride.objects.exclude(key__startswith=_GLYPH_PREFIX):
+        for g in _key_glyphs(o.key, o.placeholder):
+            EmojiOverride.objects.update_or_create(
+                key=f"{_GLYPH_PREFIX}{g}", defaults={"custom_emoji_id": o.custom_emoji_id, "placeholder": g}
+            )
+            n += 1
+    if n:
+        refresh_cache()
+    return n
 
 
 def list_overrides() -> list[EmojiOverride]:

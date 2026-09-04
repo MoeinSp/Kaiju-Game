@@ -521,14 +521,13 @@ async def raid_spawn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text(str(exc))
         return
     await update.message.reply_text(
-        f"{get_emoji('raid_boss')} <b>باس رید لِوِل {boss.level} ظاهر شد: {boss.name}!</b>\n"
-        f"{constants.render_bar(boss.current_hp, boss.max_hp, width=14)}  {boss.current_hp}/{boss.max_hp} HP\n"
-        f"{constants.element_label(boss.element)}\n\n"
-        f"همه «اتک» بفرستن تا به <b>باس</b> حمله کنن — هر حمله 1 ⚡ انرژی می‌بره و "
-        f"هرچی سهم دمیجت بیشتر، غنیمت بیشتر! 💪\n"
-        f"<i>سقف روزانه نداره؛ ولی هر اتک، کول‌داون اتک بعدیت رو 1 دقیقه بیشتر می‌کنه.</i>\n"
-        f"باس تایم‌اوت نداره؛ می‌مونه تا بکشیدش — و بعدش لِوِل رید گروه یکی بالا می‌ره و باس بعدی قوی‌تر و پرجایزه‌تره.\n"
-        f"<i>می‌خوای به یه بازیکن حمله کنی؟ روی پیامش ریپلای کن و «اتک» بفرست.</i>",
+        f"👻 <b>باس رید لِوِل {boss.level} ظاهر شد: {boss.name}!</b>\n"
+        f"{constants.render_bar(boss.current_hp, boss.max_hp, width=14)} {boss.current_hp:,}/{boss.max_hp:,} HP\n"
+        f"عنصر: {constants.element_label(boss.element)}\n\n"
+        f"• {get_emoji('energy')} هزینه هر حمله: ۱ انرژی (پاداش بیشتر با دمیج بالاتر)\n"
+        f"• ⏳ بدون محدودیت روزانه (+۱ دقیقه زمان انتظار پس از هر اتک)\n"
+        f"• ⚔️ حمله به باس: ارسال کلمه «اتک»\n"
+        f"• 🎯 حمله به بازیکن: ریپلای روی پیامش و ارسال «اتک»",
         parse_mode="HTML",
     )
 
@@ -556,12 +555,16 @@ def _attack_sync(chat, tg_user):
     speedup_won = None
     if defeated:
         rewards = distribute_rewards(boss)
+        total_dmg = sum(r["damage"] for r in rewards.values()) or 1
         reward_lines = []
-        for uid, r in sorted(rewards.items(), key=lambda kv: kv[1]["damage"], reverse=True):
+        for i, (uid, r) in enumerate(sorted(rewards.items(), key=lambda kv: kv[1]["damage"], reverse=True)):
             member = User.objects.filter(id=uid).first()
             name = display_name(member) if member else str(uid)
+            pct = round(100 * r["damage"] / total_dmg)
+            # same board style as the live «جدول رید», with ┘ (RTL-correct)
             reward_lines.append(
-                f"{name} — {get_emoji('dna')}{r['dna']} {get_emoji('coin')}{r['coins']} (دمیج: {r['damage']})"
+                f"{_raid_rank_label(i)} {name}\n"
+                f"┘ 💥 {r['damage']:,} ({pct}٪) · {get_emoji('coin')} {r['coins']:,} · {get_emoji('dna')} {r['dna']:,}"
             )
         speedup_won = maybe_award_speedup_card(user)  # bonus chance for whoever lands the killing blow
 
@@ -609,8 +612,9 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if defeated:
         text += (
             f"\n\n{get_emoji('celebrate')} <b>باس لِوِل {boss.level} شکست خورد!</b> "
-            f"لِوِل رید گروه رفت رو <b>{boss.level + 1}</b> — باس بعدی قوی‌تر و پرجایزه‌تره.\n"
-            "غنایم بین همه‌ی مهاجم‌ها:\n" + "\n".join(reward_lines)
+            f"لِوِل رید گروه رفت رو <b>{boss.level + 1}</b> — باس بعدی قوی‌تر و پرجایزه‌تره.\n\n"
+            f"📊 <b>جدول نهایی رید — {boss.name}</b>\n"
+            "──────────────\n\n" + "\n\n".join(reward_lines)
         )
         text += _speedup_note(speedup_won)
     else:
@@ -629,6 +633,37 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+def _raid_rank_label(i: int) -> str:
+    """Rank badge: 🥇🥈🥉 for the top three, keycap 4️⃣… up to 10, then plain N."""
+    if i < 3:
+        return ["🥇", "🥈", "🥉"][i]
+    if i < 10:
+        return f"{i + 1}️⃣"
+    return f"{i + 1}."
+
+
+def _raid_leaderboard_text(lb: dict) -> str:
+    """The «📊 جدول رید» board — boss HP + total damage, then each attacker with their
+    damage share and projected/earned DNA. Uses ┘ (RTL-correct) sub-line branch."""
+    pct = round(100 * max(lb["hp"], 0) / max(1, lb["max_hp"]))
+    lines = [
+        f"📊 <b>جدول رید: {lb['boss_name']} (سطح {lb['boss_level']})</b>",
+        "",
+        f"{get_emoji('hp')} باس: {constants.render_bar(lb['hp'], lb['max_hp'], width=10)} {pct}٪",
+        f"💥 کل آسیب: <b>{lb['total_damage']:,}</b>",
+        "",
+        "──────────────",
+    ]
+    if not lb["rows"]:
+        lines.append("\n<i>هنوز کسی به این باس ضربه نزده.</i>")
+    else:
+        for i, r in enumerate(lb["rows"][:15]):
+            lines.append("")
+            lines.append(f"{_raid_rank_label(i)} {r['name']}")
+            lines.append(f"┘ 💥 {r['damage']:,} ({r['share_pct']}٪) · {get_emoji('dna')} {r['dna']:,}")
+    return "\n".join(lines)
+
+
 async def raid_leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """The «📊 جدول اتک به رید» button: current damage standings for the active boss,
     with each attacker's projected reward share."""
@@ -640,33 +675,14 @@ async def raid_leaderboard_callback(update: Update, context: ContextTypes.DEFAUL
         await query.answer("الان هیچ باسی توی گروه فعال نیست.", show_alert=True)
         return
     await query.answer()
-    div = "──────────────"
-    from bot.handlers.private import pct_bar as _pct_bar
-
-    lines = [
-        f"📊 <b>جدول اتک به رید — {lb['boss_name']} [سطح {lb['boss_level']}]</b>",
-        f"{get_emoji('hp')} سلامت باس: {_pct_bar(lb['hp'], lb['max_hp'])} ({lb['hp']:,}/{lb['max_hp']:,})",
-        f"💥 مجموع آسیب گروه: <b>{lb['total_damage']:,}</b>",
-        "", div, "",
-    ]
-    if not lb["rows"]:
-        lines.append("<i>هنوز کسی به این باس ضربه نزده.</i>")
-    else:
-        medals = ["🥇", "🥈", "🥉"]
-        for i, r in enumerate(lb["rows"][:15]):
-            rank = medals[i] if i < 3 else f"{i + 1}."
-            lines.append(
-                f"{rank} <b>{r['name']}</b> — 💥{r['damage']:,} ({r['share_pct']}٪)\n"
-                f"     🎁 سهم فعلی: {get_emoji('coin')}{r['coins']:,} · {get_emoji('dna')}{r['dna']:,}"
-            )
-    lines.append(f"\n<i>سهم‌ها با ادامه‌ی نبرد تغییر می‌کنن؛ وقتی باس بیفته همین نسبت پرداخت می‌شه.</i>")
+    text = _raid_leaderboard_text(lb)
     from bot.handlers.group_words import _pm_button
 
     kb = InlineKeyboardMarkup([
         [btn("🔄 به‌روزرسانی", style=NAV, callback_data=f"raidlb:{query.message.chat_id}")],
         [_pm_button()],
     ])
-    await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=kb)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
 
 
 # ── PvP: reply-to-attack another player ───────────────────────────────────────

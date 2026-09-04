@@ -825,32 +825,22 @@ def _reward_text(user, result: dict) -> str:
 
     kind = result["kind"]
     if kind == "speedup":
-        prize = f"<b>1 کارت سرعت {constants.speedup_plain_label(result['minutes'])}</b> ⏱"
+        prize = f"⏱ غنیمت: <b>کارت سرعت {constants.speedup_plain_label(result['minutes'])}</b>"
     elif kind == "jackpot":
-        prize = f"🎰 <b>جکپات! {result['amount']:,}</b> {get_emoji('coin')}"
+        prize = f"{get_emoji('coin')} غنیمت: <b>جکپات {result['amount']:,} طلا</b>"
     elif kind == "coins":
-        prize = f"<b>{result['amount']:,}</b> {get_emoji('coin')}"
+        prize = f"{get_emoji('coin')} غنیمت: <b>{result['amount']:,} طلا</b>"
     elif kind == "dna":
-        prize = f"<b>{result['amount']}</b> {get_emoji('dna')}"
+        prize = f"{get_emoji('dna')} غنیمت: <b>{result['amount']} DNA</b>"
     else:
-        prize = f"<b>{result['amount']}</b> {get_emoji('diamond')}"
+        prize = f"{get_emoji('diamond')} غنیمت: <b>{result['amount']} الماس</b>"
 
-    div = "──────────────"
     lines = [
         f"{get_emoji('gift')} <b>صندوق پاداش باز شد!</b>",
         "",
-        f"👤 دریافت‌کننده: <b>{display_name(user)}</b>",
-        f"🎁 غنیمت دریافتی: {prize}",
-        f"🎖 توالی پاداش: <b>{result['count']}</b>مین جایزه ثبت‌شده",
-    ]
-    if result["lab_up"]:
-        lines.append(f"{get_emoji('celebrate')} سطح آزمایشگاهت شد <b>{result['lab_up']['to']}</b>!")
-    lines += [
+        prize,
         "",
-        div,
-        "",
-        f"⏳ زمان شارژ مجدد: <b>{_format_mmss(result['next_wait'])}</b> دیگر",
-        "💡 دستور دریافت: ارسال مجدد کلمه «جایزه» یا «کایجو»",
+        f"⏳ شارژ مجدد: <b>{_format_mmss(result['next_wait'])}</b> دیگر",
     ]
     return "\n".join(lines)
 
@@ -888,7 +878,7 @@ async def _maybe_capture_group_reply(update: Update, context: ContextTypes.DEFAU
 # before being auto-deleted, per action. Keeps groups from filling with transient
 # cards. The leaderboard lingers longer; everything else is short-lived.
 _GROUP_TTL_DEFAULT = 60
-_GROUP_TTL = {"leaderboard": 300, "casino": 600}  # casino is a multi-step play session
+_GROUP_TTL = {"leaderboard": 300, "casino": 600, "reward": 300}  # casino is a multi-step play session
 
 
 async def _delete_msgs_job(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -968,11 +958,8 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     if action == "reward":
         user, result = await run_db(_reward_sync, update.effective_user, message.chat)
-        sent = await message.reply_text(
-            _reward_text(user, result),
-            parse_mode="HTML",
-            reply_markup=group_footer_keyboard(update.effective_user.id, skip="reward"),
-        )
+        # no inline keyboard — just the reward text; both messages auto-delete after 5 min
+        sent = await message.reply_text(_reward_text(user, result), parse_mode="HTML")
         _schedule_cleanup(context, message.chat_id, [message.message_id, sent.message_id], action)
         return
 

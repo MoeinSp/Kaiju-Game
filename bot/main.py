@@ -166,6 +166,14 @@ def main() -> None:
     # the event loop starts — get_emoji()/btn() read them from async handler code,
     # so they must never hit the DB lazily
     refresh_theme_caches()
+    # backfill: make every already-set semantic emoji also theme its literal glyph, so
+    # hard-coded emojis in messages match the panel choice (💎/💥/… consistency)
+    try:
+        from game.emoji import couple_all_key_glyphs
+
+        couple_all_key_glyphs()
+    except Exception:  # noqa: BLE001 — theming backfill must never block startup
+        pass
     botconfig.refresh_cache()  # the "join the game group" button reads this in async code
     admins.refresh_cache()  # the panel's access check reads this in async code
 
