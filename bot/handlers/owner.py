@@ -2328,8 +2328,7 @@ def _buy_link_panel_keyboard(has_link: bool) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
-async def buy_link_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    cfg = await run_db(_buy_cfg_sync)
+def _buy_panel_text(cfg: dict) -> str:
     p = cfg["prices"]
     card_num, card_holder = cfg["card"]
     status = "✅ فعال (درون‌ربات)" if cfg["inbot_ready"] else "⛔ غیرفعال (کارت یا قیمت ثبت نشده)"
@@ -2347,9 +2346,21 @@ async def buy_link_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     ]
     if cfg["url"]:
         body_lines += ["", f"🔗 لینک خرید بیرونی (فقط وقتی خرید درون‌ربات غیرفعاله): <code>{cfg['url']}</code>"]
+    return "\n".join(body_lines)
+
+
+async def _show_buy_panel(update, prefix: str = "") -> None:
+    """Re-render the FULL buy panel with every current value — used after each change
+    so the owner always sees the complete config and never thinks a field was wiped."""
+    cfg = await run_db(_buy_cfg_sync)
+    text = (prefix + "\n\n" if prefix else "") + _buy_panel_text(cfg)
     await update.effective_message.reply_text(
-        "\n".join(body_lines), parse_mode="HTML", reply_markup=_buy_link_panel_keyboard(bool(cfg["url"]))
+        text, parse_mode="HTML", reply_markup=_buy_link_panel_keyboard(bool(cfg["url"]))
     )
+
+
+async def buy_link_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _show_buy_panel(update)
 
 
 async def buy_prices_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -3292,10 +3303,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             await message.reply_text("⚠️ سه عدد با فاصله بفرست: طلا DNA الماس (مثلاً <code>0.2 5 50</code>).", parse_mode="HTML")
             return
         await run_db(botconfig.set_buy_prices, coins, dna, diamonds)
-        await message.reply_text(
-            f"✅ قیمت‌ها ثبت شد — هر ۱ طلا: {coins:g} · هر ۱ DNA: {dna:g} · هر ۱ الماس: {diamonds:g} تومان.",
-            reply_markup=_buy_link_panel_keyboard(bool(botconfig.get_buy_link())),
-        )
+        await _show_buy_panel(update, "✅ قیمت‌ها ثبت شد.")
         return
 
     if action == "set_buy_min":
@@ -3306,9 +3314,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             return
         await run_db(botconfig.set_buy_min, int(raw))
         note = f"حداقل خرید روی {int(raw):,} تومان تنظیم شد." if int(raw) > 0 else "حداقل خرید برداشته شد."
-        await message.reply_text(
-            f"✅ {note}", reply_markup=_buy_link_panel_keyboard(bool(botconfig.get_buy_link()))
-        )
+        await _show_buy_panel(update, f"✅ {note}")
         return
 
     if action == "set_buy_card":
@@ -3319,11 +3325,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             await message.reply_text("⚠️ شماره کارت معتبر نیست (حداقل ۱۲ رقم). دوباره بفرست.")
             return
         await run_db(botconfig.set_buy_card, number, holder_part.strip())
-        await message.reply_text(
-            f"✅ کارت ثبت شد: <code>{number}</code>" + (f" — {holder_part.strip()}" if holder_part.strip() else ""),
-            parse_mode="HTML",
-            reply_markup=_buy_link_panel_keyboard(bool(botconfig.get_buy_link())),
-        )
+        await _show_buy_panel(update, "✅ کارت ثبت شد.")
         return
 
     if action == "set_buy_link":

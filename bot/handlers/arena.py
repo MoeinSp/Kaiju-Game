@@ -446,7 +446,7 @@ def opponent_details_text(d: dict) -> str:
     """Render a full opponent readout from _opponent_details_sync's dict. Shared with
     the group «اتک» flow so both show the same detailed card."""
     alliance_line = (
-        f"{get_emoji('alliance')} اتحاد: <b>{d['alliance']}</b>\n" if d.get("alliance") else ""
+        f"{get_emoji('alliance')} اتحاد: <b>{d['alliance']}</b>\n" if d.get("alliance") else "🚫 بدون اتحاد\n"
     )
     if d["is_fake"]:
         tier = f"{d['rarity']} · {'⭐' * d['star_level']}\n" if d.get("rarity") else ""
@@ -463,7 +463,7 @@ def opponent_details_text(d: dict) -> str:
     lines = [
         "🔍 <b>جزییات حریف</b>",
         f"🏭 <b>{d['label']}</b>",
-        (f"{get_emoji('alliance')} اتحاد: <b>{d['alliance']}</b>\n" if d.get("alliance") else ""),
+        (f"{get_emoji('alliance')} اتحاد: <b>{d['alliance']}</b>\n" if d.get("alliance") else "🚫 بدون اتحاد\n"),
         f"{get_emoji('creature')} <b>{d['name']}</b> · {constants.element_label(d['element'])}",
         f"{d['rarity']} · {'⭐' * d['star_level']} · سطح <b>{d['level']}</b>",
         f"💪 قدرت کل: <b>{d['full_power']}</b>  <i>(از تجهیزات: +{d['gear_power']})</i>\n",
@@ -589,7 +589,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await send_defense_report_now(context, result.get("defense"))
 
     _ally = result.get("opponent_alliance")
-    opp_tag = result["opponent_label"] + (f" <i>(🤝 {_ally})</i>" if _ally else "")
+    opp_tag = result["opponent_label"] + (f" <i>(🤝 {_ally})</i>" if _ally else " 🚫 <i>بدون اتحاد</i>")
     if result["won"]:
         lg = ""
         if result.get("league_coins"):

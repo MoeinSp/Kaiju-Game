@@ -1110,7 +1110,7 @@ async def pvp_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     reward_block += f"\n⚡️ انرژی باقی‌مانده: <b>{result['energy_left']}</b> (-1⚡️)"
     reward_block += _mission_lines(result["missions"]) + _speedup_note(result["speedup"])
     _tally = result.get("target_alliance")
-    opp_tag = result.get("target_name", "") + (f" <i>(🤝 {_tally})</i>" if _tally else "")
+    opp_tag = result.get("target_name", "") + (f" <i>(🤝 {_tally})</i>" if _tally else " 🚫 <i>بدون اتحاد</i>")
     text = battle_report(
         result["battle_a"], result["battle_b"], result["battle_winner_name"],
         result["battle_rounds"], result["battle_mult"],

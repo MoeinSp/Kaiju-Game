@@ -48,7 +48,7 @@ def defense_report_text(attacker_name: str, attacker_power: int, attacker_won: b
     A successful attacker loots gold; either way the defender's cup swings, so both
     the looted gold (on a loss) and the cup change are shown."""
     power_note = f" (قدرت {attacker_power})" if attacker_power else ""
-    ally_note = f" — 🤝 اتحاد: <b>{attacker_alliance}</b>" if attacker_alliance else ""
+    ally_note = f" — 🤝 اتحاد: <b>{attacker_alliance}</b>" if attacker_alliance else " — 🚫 بدون اتحاد"
     cup_change = int(cup_change or 0)
     if attacker_won:
         loot_line = f"\n💰 <b>{loot}</b> طلا غارت شد." if loot else ""
