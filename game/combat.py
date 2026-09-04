@@ -53,7 +53,7 @@ def _simulate(creature_a: Creature, creature_b: Creature) -> tuple[Fighter, Figh
     round_num = 0
     while fa.hp > 0 and fb.hp > 0 and round_num < MAX_ROUNDS:
         round_num += 1
-        blow_by_blow.append(f"<b>راند {round_num}</b>")
+        blow_by_blow.append(f"• <b>راند {round_num}</b>")
         # faster attacks first; the tiny seeded tiebreak is deterministic
         order = sorted([fa, fb], key=lambda f: (f.stats["spd"], rng.random()), reverse=True)
         for attacker, defender in ((order[0], order[1]), (order[1], order[0])):
@@ -118,14 +118,18 @@ def battle_report(sa: dict, sb: dict, winner_name: str, rounds: int, mult: float
 
 
 def _detail_text(fa: Fighter, fb: Fighter, winner: Fighter, rounds: int, blow_by_blow: list[str]) -> str:
-    header = (
-        f"🗡 <b>مهاجم:</b> <b>{fa.creature.name}</b> {constants.element_label(fa.creature.element)}\n"
-        f"🛡 <b>مدافع:</b> <b>{fb.creature.name}</b> {constants.element_label(fb.creature.element)}"
-    )
+    div = "──────────────"
+    a_emoji = get_emoji(constants.ELEMENT_EMOJI_KEYS[fa.creature.element])
+    b_emoji = get_emoji(constants.ELEMENT_EMOJI_KEYS[fb.creature.element])
     return "\n".join([
-        f"🔍 <b>جزییات نبرد</b>\n{header}\n",
+        "🔍 <b>گزارش نبرد</b>",
+        f"🗡 <b>{fa.creature.name}</b> {a_emoji} vs 🛡 <b>{fb.creature.name}</b> {b_emoji}",
+        div,
+        "",
         "\n".join(blow_by_blow),
-        f"\n{get_emoji('trophy')} <b>برنده: {winner.creature.name}</b>  <i>· {rounds} راند</i>",
+        "",
+        div,
+        f"{get_emoji('trophy')} <b>برنده: {winner.creature.name}</b> (در {rounds} راند)",
     ])
 
 
@@ -183,28 +187,31 @@ def _attack(attacker: Fighter, defender: Fighter, detail: list[str], rng: random
     if is_crit:
         attacker.crits += 1
 
-    suffixes = []
-    if is_crit:
-        suffixes.append("💥")
+    crit_tag = " 💥" if is_crit else ""
     if mult > 1:
-        suffixes.append("🔺مؤثر")
+        eff = " (بسیار مؤثر)"
     elif mult < 1:
-        suffixes.append("🔻کم‌اثر")
+        eff = " (کم‌اثر)"
+    else:
+        eff = ""
 
+    extra = ""
     if attacker.stats["lifesteal"] > 0:
         healed = round(dmg * attacker.stats["lifesteal"])
         if healed > 0:
             attacker.hp = min(attacker.stats["hp"], attacker.hp + healed)
-            suffixes.append(f"{get_emoji('lifesteal')}+{healed}")
+            extra += f" {get_emoji('lifesteal')}+{healed}"
 
     if attacker.stats["poison"] > 0 and defender.hp > 0:
         poison_dmg = attacker.stats["poison"]
         defender.hp -= poison_dmg
         attacker.dmg_dealt += poison_dmg
-        suffixes.append(f"{get_emoji('poison')}+{poison_dmg}")
+        extra += f" {get_emoji('poison')}+{poison_dmg}"
 
-    suffix_txt = f"  <i>{' '.join(suffixes)}</i>" if suffixes else ""
-    detail.append(f"{attacker.creature.name} ➜ {defender.creature.name}  <b>−{dmg}</b>{suffix_txt}")
+    # nested per-hit line: «   • هما به تیشتر: −12 💥 (بسیار مؤثر)»
+    detail.append(
+        f"   • {attacker.creature.name} به {defender.creature.name}: <b>−{dmg}</b>{crit_tag}{eff}{extra}"
+    )
 
 
 def _power(f: Fighter) -> float:
