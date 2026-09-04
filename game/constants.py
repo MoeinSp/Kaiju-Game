@@ -519,13 +519,15 @@ TRANSFER_COOLDOWN_HOURS = 24
 
 # creature diamond cost = star base × rarity multiplier. Star base is the mythic
 # price the owner specified; lower rarities cost proportionally less.
-CREATURE_TRANSFER_STAR_COST = {1: 200, 2: 300, 3: 500, 4: 750, 5: 1000}
+# halved (was 200/300/500/750/1000) — kaiju transfer diamond fee cut by 50%
+CREATURE_TRANSFER_STAR_COST = {1: 100, 2: 150, 3: 250, 4: 375, 5: 500}
 CREATURE_TRANSFER_RARITY_MULT = {
     "common": 0.12, "rare": 0.25, "epic": 0.45, "legendary": 0.7, "mythic": 1.0,
 }
-# equipment is much cheaper — a flat per-rarity price
+# equipment is much cheaper — a flat per-rarity price. Cut to one-third (was
+# 15/35/70/130/250) — equipment transfer diamond fee reduced by ~66%.
 EQUIP_TRANSFER_COST = {
-    "common": 15, "rare": 35, "epic": 70, "legendary": 130, "mythic": 250,
+    "common": 5, "rare": 12, "epic": 23, "legendary": 43, "mythic": 83,
 }
 # receiver prerequisites by the creature's star: (main_hall level, fusion_lab level).
 # main_hall is the whole game's bottleneck (weeks to max), so this is the real

@@ -45,6 +45,7 @@ from bot.handlers import (
     misc,
     owner,
     private,
+    purchase,
     welcome,
     wheel,
 )
@@ -200,6 +201,7 @@ def main() -> None:
     idle.register(application)
     league.register(application)
     shop.register(application)
+    purchase.register(application)
     exchange.register(application)
     casino.register(application)
     titles.register(application)

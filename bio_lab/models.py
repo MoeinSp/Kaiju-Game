@@ -94,6 +94,9 @@ class User(models.Model):
 
     is_banned = models.BooleanField(default=False)
     is_admin = models.BooleanField(default=False)  # granted by the owner; full panel except admin management
+    # blocked specifically from the in-bot purchase / receipt flow (a lighter sanction
+    # than a full ban — they can still play, just can't submit payment receipts)
+    receipt_blocked = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -858,6 +861,13 @@ class BotConfig(models.Model):
     # Owner-tunable from the admin panel; read through the game.botconfig cache because
     # the refill button is built inside async handler code.
     energy_refill_diamonds = models.IntegerField(default=25)
+    # ── in-bot purchase (buy gold/DNA/diamonds with real money) ───────────────
+    # Toman price per unit the owner charges; 0 on a resource = not for sale.
+    buy_price_per_gold = models.FloatField(default=0.0)      # Toman per 1 gold
+    buy_price_per_dna = models.FloatField(default=0.0)       # Toman per 1 DNA
+    buy_price_per_diamond = models.FloatField(default=0.0)   # Toman per 1 diamond
+    buy_card_number = models.CharField(max_length=64, default="", blank=True)
+    buy_card_holder = models.CharField(max_length=96, default="", blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:
@@ -952,3 +962,29 @@ class DailyResourceGain(models.Model):
             models.UniqueConstraint(fields=["user", "day", "source"], name="uq_daily_resource_gain")
         ]
         indexes = [models.Index(fields=["user", "day"], name="bio_lab_dai_user_id_day_idx")]
+
+
+class PurchaseRequest(models.Model):
+    """One in-bot purchase: the player picks how much gold/DNA/diamonds to buy, the bot
+    quotes a Toman price and shows the owner's card, the player uploads a receipt photo,
+    and the owner approves/rejects it. Approval grants the resources."""
+
+    STATUS_CHOICES = [
+        ("awaiting_receipt", "awaiting_receipt"),
+        ("pending", "pending"),
+        ("approved", "approved"),
+        ("rejected", "rejected"),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="purchases")
+    coins = models.BigIntegerField(default=0)
+    dna = models.BigIntegerField(default=0)
+    diamonds = models.BigIntegerField(default=0)
+    price_toman = models.BigIntegerField(default=0)
+    status = models.CharField(max_length=20, default="awaiting_receipt")
+    receipt_file_id = models.CharField(max_length=256, default="", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "status"])]

@@ -22,29 +22,40 @@ _cache: dict[str, object] = {
     "buy_url": "",
     "buy_title": "",
     "energy_refill_diamonds": DEFAULT_ENERGY_REFILL_DIAMONDS,
+    "buy_price_per_gold": 0.0,
+    "buy_price_per_dna": 0.0,
+    "buy_price_per_diamond": 0.0,
+    "buy_card_number": "",
+    "buy_card_holder": "",
 }
+
+
+def _row_to_cache(row) -> dict:
+    if row is None:
+        return {
+            "group_game_url": "", "group_game_title": "", "buy_url": "", "buy_title": "",
+            "energy_refill_diamonds": DEFAULT_ENERGY_REFILL_DIAMONDS,
+            "buy_price_per_gold": 0.0, "buy_price_per_dna": 0.0, "buy_price_per_diamond": 0.0,
+            "buy_card_number": "", "buy_card_holder": "",
+        }
+    return {
+        "group_game_url": row.group_game_url or "",
+        "group_game_title": row.group_game_title or "",
+        "buy_url": row.buy_url or "",
+        "buy_title": row.buy_title or "",
+        "energy_refill_diamonds": row.energy_refill_diamonds or DEFAULT_ENERGY_REFILL_DIAMONDS,
+        "buy_price_per_gold": row.buy_price_per_gold or 0.0,
+        "buy_price_per_dna": row.buy_price_per_dna or 0.0,
+        "buy_price_per_diamond": row.buy_price_per_diamond or 0.0,
+        "buy_card_number": row.buy_card_number or "",
+        "buy_card_holder": row.buy_card_holder or "",
+    }
 
 
 def refresh_cache() -> None:
     """Reload from the DB. Sync context only (startup or right after a write)."""
     global _cache
-    row = BotConfig.objects.filter(id=1).first()
-    if row is None:
-        _cache = {
-            "group_game_url": "",
-            "group_game_title": "",
-            "buy_url": "",
-            "buy_title": "",
-            "energy_refill_diamonds": DEFAULT_ENERGY_REFILL_DIAMONDS,
-        }
-    else:
-        _cache = {
-            "group_game_url": row.group_game_url or "",
-            "group_game_title": row.group_game_title or "",
-            "buy_url": row.buy_url or "",
-            "buy_title": row.buy_title or "",
-            "energy_refill_diamonds": row.energy_refill_diamonds or DEFAULT_ENERGY_REFILL_DIAMONDS,
-        }
+    _cache = _row_to_cache(BotConfig.objects.filter(id=1).first())
 
 
 def get_buy_link() -> tuple[str, str] | None:
@@ -62,6 +73,45 @@ def set_buy_link(url: str, title: str = "") -> None:
     url = (url or "").strip()
     title = (title or "").strip()[:48]
     BotConfig.objects.update_or_create(id=1, defaults={"buy_url": url[:256], "buy_title": title})
+    refresh_cache()
+
+
+def get_buy_prices() -> dict:
+    """Toman price per unit for each resource (0 = that resource isn't for sale).
+    Pure in-memory read — safe from async handler code."""
+    return {
+        "coins": float(_cache.get("buy_price_per_gold") or 0.0),
+        "dna": float(_cache.get("buy_price_per_dna") or 0.0),
+        "diamonds": float(_cache.get("buy_price_per_diamond") or 0.0),
+    }
+
+
+def get_buy_card() -> tuple[str, str]:
+    """(card_number, holder_name) the owner registered for in-bot payments."""
+    return (str(_cache.get("buy_card_number") or ""), str(_cache.get("buy_card_holder") or ""))
+
+
+def inbot_purchase_ready() -> bool:
+    """True when the in-bot purchase flow is fully configured — a card is set and at
+    least one resource has a price. Otherwise the buy button falls back to buy_url."""
+    prices = get_buy_prices()
+    return bool(_cache.get("buy_card_number")) and any(p > 0 for p in prices.values())
+
+
+def set_buy_prices(coins: float, dna: float, diamonds: float) -> None:
+    BotConfig.objects.update_or_create(id=1, defaults={
+        "buy_price_per_gold": max(0.0, float(coins)),
+        "buy_price_per_dna": max(0.0, float(dna)),
+        "buy_price_per_diamond": max(0.0, float(diamonds)),
+    })
+    refresh_cache()
+
+
+def set_buy_card(number: str, holder: str) -> None:
+    BotConfig.objects.update_or_create(id=1, defaults={
+        "buy_card_number": (number or "").strip()[:64],
+        "buy_card_holder": (holder or "").strip()[:96],
+    })
     refresh_cache()
 
 

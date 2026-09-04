@@ -2304,32 +2304,68 @@ def _buy_link_sync() -> tuple[str, str]:
     return link
 
 
+def _buy_cfg_sync() -> dict:
+    link = botconfig.get_buy_link()
+    return {
+        "url": link[0] if link else "", "title": link[1] if link else "",
+        "prices": botconfig.get_buy_prices(),
+        "card": botconfig.get_buy_card(),
+        "inbot_ready": botconfig.inbot_purchase_ready(),
+    }
+
+
 def _buy_link_panel_keyboard(has_link: bool) -> InlineKeyboardMarkup:
-    rows = [[btn("✏️ تنظیم/تغییر لینک خرید", style=PRIMARY, callback_data="admin_menu:buy_link_set")]]
+    rows = [
+        [btn("💵 تنظیم قیمت‌ها (خرید درون‌ربات)", style=PRIMARY, callback_data="admin_menu:buy_prices_set")],
+        [btn("💳 تنظیم کارت پرداخت", style=PRIMARY, callback_data="admin_menu:buy_card_set")],
+        [btn("🔗 تنظیم/تغییر لینک خرید بیرونی", style=NAV, callback_data="admin_menu:buy_link_set")],
+    ]
     if has_link:
-        rows.append([btn("🗑 حذف دکمه‌ی خرید", style=DANGER, callback_data="admin_menu:buy_link_clear")])
+        rows.append([btn("🗑 حذف لینک خرید بیرونی", style=DANGER, callback_data="admin_menu:buy_link_clear")])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
     return InlineKeyboardMarkup(rows)
 
 
 async def buy_link_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    url, title = await run_db(_buy_link_sync)
-    if url:
-        body = (
-            f"🛒 <b>خرید درون‌بازی</b>\n\n"
-            f"لینک فعلی: <code>{url}</code>\n"
-            f"متن دکمه: <b>{title}</b>\n\n"
-            "این دکمه ته منوی اصلیِ همه‌ی بازیکن‌ها نشون داده می‌شه (می‌تونه لینک یه پست، "
-            "کانال، بات پرداخت یا سایت باشه)."
-        )
-    else:
-        body = (
-            "🛒 <b>خرید درون‌بازی</b>\n\n"
-            "هنوز لینکی تنظیم نشده. با تنظیم لینک، یه دکمه ته منوی اصلیِ همه‌ی بازیکن‌ها اضافه می‌شه "
-            "که برای خرید درون‌بازی می‌برتشون به مقصد دلخواهت (پست، کانال، بات پرداخت یا سایت)."
-        )
+    cfg = await run_db(_buy_cfg_sync)
+    p = cfg["prices"]
+    card_num, card_holder = cfg["card"]
+    status = "✅ فعال (درون‌ربات)" if cfg["inbot_ready"] else "⛔ غیرفعال (کارت یا قیمت ثبت نشده)"
+    body_lines = [
+        "🛒 <b>خرید درون‌بازی</b>",
+        f"وضعیت خرید درون‌ربات: <b>{status}</b>",
+        "",
+        "💵 <b>قیمت هر واحد (تومان):</b>",
+        f"🪙 طلا: <b>{p['coins']:g}</b> · 🧬 DNA: <b>{p['dna']:g}</b> · 💎 الماس: <b>{p['diamonds']:g}</b>",
+        f"💳 کارت: <code>{card_num or '—'}</code>" + (f" — {card_holder}" if card_holder else ""),
+        "",
+        "<i>وقتی حداقل یک قیمت و یک کارت ثبت بشه، دکمه‌ی خرید توی منو کاربر رو می‌بره به فرایند "
+        "انتخاب مقدار → پرداخت کارت‌به‌کارت → ارسال عکس رسید → تأیید تو.</i>",
+    ]
+    if cfg["url"]:
+        body_lines += ["", f"🔗 لینک خرید بیرونی (فقط وقتی خرید درون‌ربات غیرفعاله): <code>{cfg['url']}</code>"]
     await update.effective_message.reply_text(
-        body, parse_mode="HTML", reply_markup=_buy_link_panel_keyboard(bool(url))
+        "\n".join(body_lines), parse_mode="HTML", reply_markup=_buy_link_panel_keyboard(bool(cfg["url"]))
+    )
+
+
+async def buy_prices_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "set_buy_prices"}
+    await update.effective_message.reply_text(
+        "💵 قیمت هر <b>واحد</b> رو به تومان، سه عدد با فاصله بفرست:\n"
+        "<code>&lt;طلا&gt; &lt;DNA&gt; &lt;الماس&gt;</code>\n\n"
+        "مثال: <code>0.2 5 50</code> یعنی هر ۱ طلا ۰٫۲ تومان، هر ۱ DNA ۵ تومان، هر ۱ الماس ۵۰ تومان.\n"
+        "<i>عددِ ۰ یعنی اون مورد برای فروش نیست.</i>",
+        parse_mode="HTML",
+    )
+
+
+async def buy_card_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "set_buy_card"}
+    await update.effective_message.reply_text(
+        "💳 شماره کارت و نام صاحب کارت رو بفرست (با <code>|</code> جدا کن):\n"
+        "<code>6037xxxxxxxxxxxx | نام صاحب کارت</code>",
+        parse_mode="HTML",
     )
 
 
@@ -3235,6 +3271,36 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
+    if action == "set_buy_prices":
+        parts = text.replace("،", " ").split()
+        try:
+            coins, dna, diamonds = (float(parts[0]), float(parts[1]), float(parts[2]))
+        except (ValueError, IndexError):
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text("⚠️ سه عدد با فاصله بفرست: طلا DNA الماس (مثلاً <code>0.2 5 50</code>).", parse_mode="HTML")
+            return
+        await run_db(botconfig.set_buy_prices, coins, dna, diamonds)
+        await message.reply_text(
+            f"✅ قیمت‌ها ثبت شد — هر ۱ طلا: {coins:g} · هر ۱ DNA: {dna:g} · هر ۱ الماس: {diamonds:g} تومان.",
+            reply_markup=_buy_link_panel_keyboard(bool(botconfig.get_buy_link())),
+        )
+        return
+
+    if action == "set_buy_card":
+        num_part, holder_part = (text.split("|", 1) + [""])[:2] if "|" in text else (text, "")
+        number = "".join(ch for ch in num_part if ch.isdigit())
+        if len(number) < 12:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text("⚠️ شماره کارت معتبر نیست (حداقل ۱۲ رقم). دوباره بفرست.")
+            return
+        await run_db(botconfig.set_buy_card, number, holder_part.strip())
+        await message.reply_text(
+            f"✅ کارت ثبت شد: <code>{number}</code>" + (f" — {holder_part.strip()}" if holder_part.strip() else ""),
+            parse_mode="HTML",
+            reply_markup=_buy_link_panel_keyboard(bool(botconfig.get_buy_link())),
+        )
+        return
+
     if action == "set_buy_link":
         raw = text
         url_part, title_part = (raw.split("|", 1) + [""])[:2] if "|" in raw else (raw, "")
@@ -3570,6 +3636,8 @@ _ADMIN_MENU_ACTIONS.update(
         "buy_link": buy_link_panel,
         "buy_link_set": buy_link_set_start,
         "buy_link_clear": buy_link_clear,
+        "buy_prices_set": buy_prices_set_start,
+        "buy_card_set": buy_card_set_start,
         "users": users_browse_callback,
         "gift_all": gift_all_start,
         "global_stats": global_stats_cmd,

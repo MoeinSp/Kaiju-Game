@@ -378,16 +378,21 @@ def _opponent_details_sync(pending: dict) -> dict:
 
         rarity, star = _bot_display_tier(int(pending.get("cup", 0)))
         return {"is_fake": True, "label": pending["label"], "power": pending["power"],
-                "element": pending.get("element"),
+                "element": pending.get("element"), "alliance": None,
                 "rarity": constants.RARITY_LABELS.get(rarity, rarity), "star_level": star}
 
     if pending.get("is_fake") or not pending.get("user_id"):
         return _bot(pending)
 
     target = User.objects.filter(id=pending["user_id"]).first()
+    # resolve the alliance name in this sync context (a lazy FK load on the event loop
+    # would raise SynchronousOnlyOperation)
+    alliance_name = target.alliance.name if (target and target.alliance_id) else None
     creature = Creature.objects.filter(owner=target, is_active=True).first() if target else None
     if creature is None:
-        return _bot(pending)
+        d = _bot(pending)
+        d["alliance"] = alliance_name
+        return d
 
     items = get_equipped_items(creature)
     stats = effective_stats(creature, items)
@@ -411,6 +416,7 @@ def _opponent_details_sync(pending: dict) -> dict:
     return {
         "is_fake": False,
         "label": pending["label"],
+        "alliance": alliance_name,
         "name": creature.name,
         "element": creature.element,
         "rarity": constants.RARITY_LABELS.get(creature.rarity, creature.rarity),
@@ -439,10 +445,14 @@ async def arena_opp_details_callback(update: Update, context: ContextTypes.DEFAU
 def opponent_details_text(d: dict) -> str:
     """Render a full opponent readout from _opponent_details_sync's dict. Shared with
     the group «اتک» flow so both show the same detailed card."""
+    alliance_line = (
+        f"{get_emoji('alliance')} اتحاد: <b>{d['alliance']}</b>\n" if d.get("alliance") else ""
+    )
     if d["is_fake"]:
         tier = f"{d['rarity']} · {'⭐' * d['star_level']}\n" if d.get("rarity") else ""
         return (
             f"🔍 <b>جزییات حریف</b>\n\n🏭 <b>{d['label']}</b>\n"
+            f"{alliance_line}"
             f"{tier}"
             f"💪 قدرت کل: <b>{d['power']}</b>\n"
             f"{constants.element_label(d['element']) if d.get('element') else ''}\n\n"
@@ -452,7 +462,8 @@ def opponent_details_text(d: dict) -> str:
     s = d["stats"]
     lines = [
         "🔍 <b>جزییات حریف</b>",
-        f"🏭 <b>{d['label']}</b>\n",
+        f"🏭 <b>{d['label']}</b>",
+        (f"{get_emoji('alliance')} اتحاد: <b>{d['alliance']}</b>\n" if d.get("alliance") else ""),
         f"{get_emoji('creature')} <b>{d['name']}</b> · {constants.element_label(d['element'])}",
         f"{d['rarity']} · {'⭐' * d['star_level']} · سطح <b>{d['level']}</b>",
         f"💪 قدرت کل: <b>{d['full_power']}</b>  <i>(از تجهیزات: +{d['gear_power']})</i>\n",

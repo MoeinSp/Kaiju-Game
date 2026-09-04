@@ -47,6 +47,7 @@ SOURCE_LABELS = {
     "battlepass": "پاس فصلی",
     "achievement": "دستاورد",
     "admin": "اعطای ادمین",
+    "purchase": "خرید درون‌بازی",
     "other": "سایر",
 }
 

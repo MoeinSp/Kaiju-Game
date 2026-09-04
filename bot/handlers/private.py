@@ -1021,11 +1021,15 @@ def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
     if group_link is not None:
         url, title = group_link
         rows.append([btn(title, emoji_key="btn_join_group", style=PRIMARY, url=url)])
-    # the owner-configured "buy in-game" button (payment bot / channel post / site)
-    buy_link = botconfig.get_buy_link()
-    if buy_link is not None:
-        burl, btitle = buy_link
-        rows.append([btn(btitle, emoji_key="btn_buy", style=SHOP, url=burl)])
+    # in-game purchase: prefer the built-in flow when the owner has set prices + a card;
+    # otherwise fall back to the owner-configured external buy link (payment bot / site)
+    if botconfig.inbot_purchase_ready():
+        rows.append([btn(botconfig.DEFAULT_BUY_TITLE, emoji_key="btn_buy", style=SHOP, callback_data="buy_open")])
+    else:
+        buy_link = botconfig.get_buy_link()
+        if buy_link is not None:
+            burl, btitle = buy_link
+            rows.append([btn(btitle, emoji_key="btn_buy", style=SHOP, url=burl)])
     if is_owner:
         rows.append([btn("پنل ادمین", emoji_key="btn_admin", style=ADMIN, callback_data="menu:admin")])
     return InlineKeyboardMarkup(rows)
