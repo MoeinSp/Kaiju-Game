@@ -588,6 +588,8 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     await send_defense_report_now(context, result.get("defense"))
 
+    _ally = result.get("opponent_alliance")
+    opp_tag = result["opponent_label"] + (f" <i>(🤝 {_ally})</i>" if _ally else "")
     if result["won"]:
         lg = ""
         if result.get("league_coins"):
@@ -595,13 +597,15 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
                   f"+{result['league_coins']} {get_emoji('coin')} + {result['league_dna']} {get_emoji('dna')}")
         summary = (
             f"{get_emoji('celebrate')} <b>بردی!</b>\n"
-            f"{get_emoji('coin')} +{result['loot']} غنیمت + {result.get('dna', 0)} {get_emoji('dna')} از {result['opponent_label']}"
+            f"🏭 حریف: <b>{opp_tag}</b>\n"
+            f"{get_emoji('coin')} +{result['loot']} غنیمت + {result.get('dna', 0)} {get_emoji('dna')}"
             f"{lg}\n"
             f"🏆 +{result['cup_delta']} کاپ (الان: {result['new_cup']})"
         )
     else:
         summary = (
             f"😔 <b>باختی.</b>\n"
+            f"🏭 حریف: <b>{opp_tag}</b>\n"
             f"🏆 {result['cup_delta']} کاپ (الان: {result['new_cup']})"
         )
 

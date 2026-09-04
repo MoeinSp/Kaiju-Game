@@ -60,6 +60,7 @@ async def send_defense_report_now(context, defense: dict, *, group: bool = False
     head = defense_report_text(
         defense["attacker_name"], defense["attacker_power"], defense["attacker_won"],
         defense.get("loot", 0), defense.get("cup_change", 0),
+        attacker_alliance=defense.get("attacker_alliance"),
     )
     try:
         d = await run_db(_user_details_sync, defense["attacker_id"])

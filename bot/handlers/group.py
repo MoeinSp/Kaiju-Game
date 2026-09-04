@@ -1050,6 +1050,8 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         "battle_winner_name": battle["winner_name"],
         "attacker_won": attacker_won,
         "winner_name": display_name(winner_user),
+        "target_name": display_name(target),
+        "target_alliance": target.alliance.name if target.alliance_id else None,
         "attacker_cup_change": delta,  # attacker's own swing (+ if won, − if lost)
         "defender_cup_change": defender_cup_change,
         "attacker_new_cup": attacker.cup,
@@ -1067,6 +1069,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
             "log_id": log.id,
             "attacker_id": attacker.id,
             "attacker_name": lab_display(attacker),
+            "attacker_alliance": attacker.alliance.name if attacker.alliance_id else None,
             "attacker_power": a_power,
             "attacker_won": attacker_won,
             "loot": loot,
@@ -1106,11 +1109,15 @@ async def pvp_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         reward_block += f"\n{get_emoji('celebrate')} {result['winner_creature']} رسید به سطح {result['winner_new_level']}!"
     reward_block += f"\n⚡️ انرژی باقی‌مانده: <b>{result['energy_left']}</b> (-1⚡️)"
     reward_block += _mission_lines(result["missions"]) + _speedup_note(result["speedup"])
+    _tally = result.get("target_alliance")
+    opp_tag = result.get("target_name", "") + (f" <i>(🤝 {_tally})</i>" if _tally else "")
     text = battle_report(
         result["battle_a"], result["battle_b"], result["battle_winner_name"],
         result["battle_rounds"], result["battle_mult"],
         victor_line=result["winner_name"], reward_block=reward_block,
     )
+    if opp_tag.strip():
+        text = f"🏭 حریف: <b>{opp_tag}</b>\n\n" + text
     context.user_data["pvp_last_detail"] = result.get("detail_log", "")
     # keep it uncluttered — only the relevant action (fight details) + a PM shortcut,
     # not the generic reward/help footer that had nothing to do with this attack.

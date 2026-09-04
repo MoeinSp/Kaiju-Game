@@ -68,10 +68,24 @@ def _active_power(user: User) -> int:
     return round(s["hp"] + s["atk"] + s["def"] + s["spd"])
 
 
+# The diamond vein pays a flat random amount, INDEPENDENT of the claimer's power —
+# diamonds are the premium currency, so a strong player shouldn't out-mine a weak one
+# on the vein (it already has a per-hour + daily cap). Everything else DOES scale with
+# power, and strongly, so a powerful kaiju is a real edge on gold/DNA drops.
+VEIN_DIAMONDS_MIN = 10
+VEIN_DIAMONDS_MAX = 30
+# power's weight in the (non-vein) reward multiplier — doubled so a strong player earns
+# markedly more gold/DNA from drops than a weak one.
+DROP_POWER_FACTOR = 0.0030
+
+
 def reward_for(user: User, kind: str) -> dict:
-    """Random reward for `kind`, scaled by the claimer's level + power."""
+    """Random reward for `kind`. The vein is a flat, power-independent diamond roll;
+    every other drop scales with the claimer's lab level and (heavily) creature power."""
+    if kind == "vein":
+        return {"diamonds": random.randint(VEIN_DIAMONDS_MIN, VEIN_DIAMONDS_MAX)}
     cfg = DROP_KINDS[kind]
-    scale = 1 + lab.lab_level(user) * 0.06 + _active_power(user) * 0.0015
+    scale = 1 + lab.lab_level(user) * 0.06 + _active_power(user) * DROP_POWER_FACTOR
     out: dict = {}
     for res, spec in cfg["res"].items():
         if res == "energy":

@@ -456,6 +456,7 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         "league_emoji": league["emoji"],
         "cup_delta": delta,
         "opponent_label": opponent["label"],
+        "opponent_alliance": (defender_user.alliance.name if (defender_user and defender_user.alliance_id) else None),
         "new_cup": attacker.cup,
         # payload for the INSTANT defense DM (None defender_id = bot, no DM)
         "defense": None if defender_user is None else {
@@ -464,6 +465,7 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
             "log_id": log.id,
             "attacker_id": attacker.id,
             "attacker_name": lab_display(attacker),
+            "attacker_alliance": attacker.alliance.name if attacker.alliance_id else None,
             "attacker_power": attacker_power,
             "attacker_won": won,
             "loot": loot,

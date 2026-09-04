@@ -42,25 +42,26 @@ RAID_NOTIFY_WINDOW = datetime.timedelta(hours=2)
 
 
 def defense_report_text(attacker_name: str, attacker_power: int, attacker_won: bool,
-                        loot: int = 0, cup_change: int = 0) -> str:
+                        loot: int = 0, cup_change: int = 0, attacker_alliance: str | None = None) -> str:
     """The 'you were attacked' DM body — shared by the immediate send (fired the
     instant a raid resolves) and the periodic catch-up job, so both read identically.
     A successful attacker loots gold; either way the defender's cup swings, so both
     the looted gold (on a loss) and the cup change are shown."""
     power_note = f" (قدرت {attacker_power})" if attacker_power else ""
+    ally_note = f" — 🤝 اتحاد: <b>{attacker_alliance}</b>" if attacker_alliance else ""
     cup_change = int(cup_change or 0)
     if attacker_won:
         loot_line = f"\n💰 <b>{loot}</b> طلا غارت شد." if loot else ""
         cup_line = f"\n🏆 <b>{abs(cup_change)}</b> کاپ از دست دادی." if cup_change else ""
         return (
             f"⚔️ <b>به آزمایشگاهت حمله شد!</b>\n"
-            f"🏭 مهاجم: <b>{attacker_name}</b>{power_note}"
+            f"🏭 مهاجم: <b>{attacker_name}</b>{ally_note}{power_note}"
             f"{loot_line}{cup_line}"
         )
     cup_line = f"\n🏆 <b>+{cup_change}</b> کاپ گرفتی." if cup_change else ""
     return (
         f"🛡 <b>یکی بهت حمله کرد ولی دفاعت موفق بود!</b>\n"
-        f"🏭 مهاجم: <b>{attacker_name}</b>{power_note}"
+        f"🏭 مهاجم: <b>{attacker_name}</b>{ally_note}{power_note}"
         f"{cup_line}"
     )
 
@@ -119,8 +120,13 @@ def collect_due() -> list[tuple[int, str]]:
                 # AttackLog.cup_delta is the ATTACKER's swing; the defender's is the
                 # opposite when they lost, and the same magnitude gained when they won.
                 defender_cup_change = -log.cup_delta if log.attacker_won else abs(log.cup_delta)
+                attacker_alliance = (
+                    log.attacker.alliance.name if (log.attacker_id and log.attacker and log.attacker.alliance_id)
+                    else None
+                )
                 text = defense_report_text(
-                    attacker_name, log.attacker_power, log.attacker_won, log.loot_gold, defender_cup_change
+                    attacker_name, log.attacker_power, log.attacker_won, log.loot_gold, defender_cup_change,
+                    attacker_alliance=attacker_alliance,
                 )
                 revengeable = not log.is_fake_defender and log.attacker_id
                 # 4th element = the attacker's user id, for a «🔍 جزییات حریف» button
