@@ -40,15 +40,26 @@ def assigned_creatures(building: Building) -> list[Creature]:
     ]
 
 
+def creature_mine_influence(creature: Creature) -> float:
+    """One stationed kaiju's production bonus (a multiplier addend). Scales with the
+    kaiju's power (gear included) from its per-rarity floor up to +1000% for a maxed
+    mythic — see constants.mine_influence."""
+    from game.creature import creature_power
+    from game.equipment import get_equipped_items
+
+    power = creature_power(creature, get_equipped_items(creature))
+    return constants.mine_influence(creature.rarity, power)
+
+
 def worker_bonus(building: Building) -> float:
     """Extra production from the creatures stationed here, as a multiplier
     addend: 0.0 means "no help", 0.4 means "+40% output".
 
-    Each stationed kaiju adds a flat share set by its RARITY (mine_influence): mythic
-    +100%, legendary +80%, epic +60%, rare +40%, common +20%. The mine's total kaiju
-    influence is the sum across every stationed kaiju, so both rarer AND more kaiju
+    Each stationed kaiju contributes creature_mine_influence() — a per-rarity floor
+    that climbs with the kaiju's power (up to +1000% for a maxed mythic). The mine's
+    total is the sum across every stationed kaiju, so stronger AND more kaiju both
     raise output."""
-    return sum(constants.mine_influence(c.rarity) for c in assigned_creatures(building))
+    return sum(creature_mine_influence(c) for c in assigned_creatures(building))
 
 
 def breeding_job(user: User) -> BreedingJob | None:

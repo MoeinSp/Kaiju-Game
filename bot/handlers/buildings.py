@@ -7,8 +7,8 @@ from bio_lab.repository import get_or_create_user
 from bot.buttons import BUILD, CONFIRM, DANGER, LIST, NAV, PRIMARY, SHOP, back_btn, back_only_keyboard, btn
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text, send_screen
 from game import constants
-from game.workers import (assign, assigned_creatures, free_creatures, unassign,
-                          worker_bonus, worker_slots)
+from game.workers import (assign, assigned_creatures, creature_mine_influence,
+                          free_creatures, unassign, worker_bonus, worker_slots)
 from game.buildings import (
     active_upgrade,
     active_upgrades,
@@ -207,7 +207,7 @@ def _building_detail_text(view: dict) -> str:
         ]
         if workers:
             for c in workers:
-                gain = constants.mine_influence(c.rarity) * 100
+                gain = creature_mine_influence(c) * 100
                 lines.append(f"▫️ {c.name} [{constants.RARITY_LABELS[c.rarity]} · سطح {c.level}] ⟵ +{gain:.0f}٪")
         else:
             lines.append("<i>خالیه — هر کایجویی که بذاری تولید رو بیشتر می‌کنه.</i>")
@@ -527,7 +527,7 @@ def _workers_sync(tg_user, building_id):
 
 def _workers_text(building: Building, workers, slots: int, free) -> str:
     label = constants.BUILDING_LABELS[building.building_type]
-    bonus = sum(constants.mine_influence(c.rarity) for c in workers)
+    bonus = sum(creature_mine_influence(c) for c in workers)
     lines = [
         f"👷 <b>کارگرهای {label}</b>",
         f"<blockquote>{len(workers)} از {slots} جایگاه پره — هر سطح ساختمون یه جایگاه می‌ده."
@@ -537,7 +537,7 @@ def _workers_text(building: Building, workers, slots: int, free) -> str:
     if workers:
         lines.append("<b>سر کار:</b>")
         for creature in workers:
-            gain = constants.mine_influence(creature.rarity) * 100
+            gain = creature_mine_influence(creature) * 100
             lines.append(f"⛏ {creature.name} · سطح {creature.level} → +{gain:.0f}٪")
         lines.append("")
     if len(workers) >= slots:
@@ -571,7 +571,7 @@ def _workers_keyboard(building: Building, workers, slots: int, free, filt: str =
         )
         rows += tab_rows
         for c in chunk:
-            gain = constants.mine_influence(c.rarity) * 100
+            gain = creature_mine_influence(c) * 100
             rows.append([btn(
                 f"➕ {c.name} {'⭐' * c.star_level} · Lv{c.level} · {constants.RARITY_LABELS[c.rarity]} → +{gain:.0f}٪",
                 style=BUILD, callback_data=f"bld_assign:{building.id}:{c.id}",

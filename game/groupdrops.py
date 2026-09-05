@@ -73,7 +73,7 @@ def _active_power(user: User) -> int:
 # on the vein (it already has a per-hour + daily cap). Everything else DOES scale with
 # power, and strongly, so a powerful kaiju is a real edge on gold/DNA drops.
 VEIN_DIAMONDS_MIN = 10
-VEIN_DIAMONDS_MAX = 30
+VEIN_DIAMONDS_MAX = 20
 # power's weight in the (non-vein) reward multiplier — doubled so a strong player earns
 # markedly more gold/DNA from drops than a weak one.
 DROP_POWER_FACTOR = 0.0030

@@ -2449,8 +2449,24 @@ def _autohunt_sync(tg_user, energy_amount):
     }, completed_missions
 
 
+def _autohunt_confirm_kb(amount: int):
+    """Confirmation text + keyboard for spending `amount` energy on auto-hunt."""
+    hunts = amount // max(1, constants.HUNT_ENERGY_COST)
+    text = (
+        f"⚡️ <b>تأیید شکار خودکار</b>\n"
+        f"می‌خوای <b>{amount}</b> انرژی صرف <b>{hunts}</b> نبرد خودکار کنی؟\n\n"
+        f"⚠️ <i>شکار خودکار نسبت به شکار دستی <b>طلا و دی‌ان‌ای کمتری</b> می‌ده "
+        f"(نصف لوت). XP کامل می‌مونه.</i>"
+    )
+    kb = InlineKeyboardMarkup([
+        [btn("✅ تأیید و شروع", style=CONFIRM, callback_data=f"autohunt_do:{amount}")],
+        [back_btn("menu:me", "انصراف")],
+    ])
+    return text, kb
+
+
 async def autohunt_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Ask how much energy to pour into auto-hunting."""
+    """Ask how much energy to pour into auto-hunting — with all/half quick buttons."""
     query = update.callback_query
     try:
         energy = await run_db(_autohunt_info_sync, update.effective_user)
@@ -2461,16 +2477,41 @@ async def autohunt_start_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.answer(f"⚡ انرژی کافی نداری ({energy}/{constants.MAX_ENERGY}).", show_alert=True)
         return
     context.user_data[AWAITING_PLAYER_KEY] = {"action": "autohunt_energy"}
+    half = max(constants.HUNT_ENERGY_COST, energy // 2)
     await query.answer()
     await safe_edit_message_text(
         query,
         f"⚡️ <b>شکار خودکار</b>\n"
         f"چند واحد انرژی می‌خوای صرف کنی؟ (الان <b>{energy}/{constants.MAX_ENERGY}</b> داری — "
         f"هر شکار {constants.HUNT_ENERGY_COST} انرژی).\n\n"
-        f"<i>یه عدد بفرست. توجه: شکار خودکار نصف لوت شکار دستیه و طلا و دی‌ان‌ای کمتری می‌ده.</i>",
+        f"<i>یه عدد بفرست یا از دکمه‌های زیر استفاده کن. توجه: شکار خودکار نصف لوت شکار دستیه "
+        f"و طلا و دی‌ان‌ای کمتری می‌ده.</i>",
         parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([[back_btn("menu:me", "انصراف")]]),
+        reply_markup=InlineKeyboardMarkup([
+            [btn(f"⚡️ همه انرژی ({energy})", style=BATTLE, callback_data="autohunt_amt:all"),
+             btn(f"½ نصف ({half})", style=NAV, callback_data="autohunt_amt:half")],
+            [back_btn("menu:me", "انصراف")],
+        ]),
     )
+
+
+async def autohunt_amt_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«همه انرژی» / «نصف انرژی» quick picks → jump straight to the confirm screen."""
+    query = update.callback_query
+    which = query.data.split(":")[1]
+    try:
+        energy = await run_db(_autohunt_info_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    if energy < constants.HUNT_ENERGY_COST:
+        await query.answer(f"⚡ انرژی کافی نداری ({energy}/{constants.MAX_ENERGY}).", show_alert=True)
+        return
+    amount = energy if which == "all" else max(constants.HUNT_ENERGY_COST, energy // 2)
+    context.user_data.pop(AWAITING_PLAYER_KEY, None)
+    text, kb = _autohunt_confirm_kb(amount)
+    await query.answer()
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
 
 
 async def autohunt_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -3269,18 +3310,8 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         if amount < constants.HUNT_ENERGY_COST:
             await message.reply_text(f"⚡ انرژی کافی نداری ({energy}/{constants.MAX_ENERGY}).")
             return
-        hunts = amount // max(1, constants.HUNT_ENERGY_COST)
-        await message.reply_text(
-            f"⚡️ <b>تأیید شکار خودکار</b>\n"
-            f"می‌خوای <b>{amount}</b> انرژی صرف <b>{hunts}</b> نبرد خودکار کنی؟\n\n"
-            f"⚠️ <i>شکار خودکار نسبت به شکار دستی <b>طلا و دی‌ان‌ای کمتری</b> می‌ده "
-            f"(نصف لوت). XP کامل می‌مونه.</i>",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([
-                [btn("✅ تأیید و شروع", style=CONFIRM, callback_data=f"autohunt_do:{amount}")],
-                [back_btn("menu:me", "انصراف")],
-            ]),
-        )
+        text_confirm, kb_confirm = _autohunt_confirm_kb(amount)
+        await message.reply_text(text_confirm, parse_mode="HTML", reply_markup=kb_confirm)
         return
 
     if action == "rename_kaiju":
@@ -3791,6 +3822,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(upgrade_step_callback, pattern=r"^upg_step:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(hunt_go_callback, pattern=r"^hunt_go:"))
     application.add_handler(CallbackQueryHandler(autohunt_start_callback, pattern=r"^autohunt_start$"))
+    application.add_handler(CallbackQueryHandler(autohunt_amt_callback, pattern=r"^autohunt_amt:(all|half)$"))
     application.add_handler(CallbackQueryHandler(autohunt_do_callback, pattern=r"^autohunt_do:\d+$"))
     application.add_handler(CallbackQueryHandler(hunt_next_callback, pattern=r"^hunt_next$"))
     application.add_handler(CallbackQueryHandler(hunt_swap_callback, pattern=r"^hunt_swap:"))
