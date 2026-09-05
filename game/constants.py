@@ -701,7 +701,12 @@ BUILDING_PRODUCTION = {
     # Diamond is hard-tuned so the ABSOLUTE ceiling (max mine level 5 + a 7.0 worker
     # bonus, only reachable with ~5 maxed mythic) is exactly 0.1×5×8 = 4/hr. Weak or
     # 1-star mythic reach only a small bonus, so they produce ~1/hr, not the cap.
-    "diamond_collector": {"rate_per_hour": 0.1, "cap_base": 1, "resource": "diamonds", "worker_mult": 1.0, "worker_bonus_cap": 7.0},
+    # Diamond stays tightly bounded: each kaiju's mine influence is scaled WAY down
+    # (influence_mult) and the total is capped (worker_bonus_cap 7.0). At max mine level
+    # (0.1×5 = 0.5 base) the ceiling is 0.5×(1+7) = 4/hr, reachable only with 5 maxed
+    # mythic (each 10.0 influence × 0.14 = 1.4; 5×1.4 = 7.0 = the cap). The base rate
+    # (no kaiju) is untouched.
+    "diamond_collector": {"rate_per_hour": 0.1, "cap_base": 1, "resource": "diamonds", "worker_mult": 1.0, "influence_mult": 0.14, "worker_bonus_cap": 7.0},
     "dna_lab": {"rate_per_hour": 8.0, "cap_base": 80, "resource": "dna_fragments", "worker_mult": 1.8},
 }
 

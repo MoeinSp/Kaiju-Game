@@ -157,7 +157,7 @@ def _detail_view(user, building: Building) -> dict:
         "bonus": worker_bonus(building),
         # per-worker influence (queries gear) — resolve HERE in sync, never in the async
         # text builder (SynchronousOnlyOperation crash otherwise)
-        "worker_influence": {c.id: creature_mine_influence(c) for c in workers},
+        "worker_influence": {c.id: creature_mine_influence(c, building) for c in workers},
         "unlocked": is_unlocked(user, building.building_type),
         # rate/storage query the DB (worker_bonus) — resolve them HERE in sync context,
         # never inside the async text builder (that was the "mines won't open" crash)
@@ -521,10 +521,11 @@ def _speedup_all_sync(tg_user, building_id, minutes):
     return _detail_view(user, building), completed, used
 
 
-def _influence_map(creatures) -> dict:
+def _influence_map(creatures, building) -> dict:
     """{creature_id: mine_influence} precomputed in SYNC context — the workers screens
-    render in async handlers where a per-creature gear query would crash."""
-    return {c.id: creature_mine_influence(c) for c in creatures}
+    render in async handlers where a per-creature gear query would crash. Building-aware
+    so the diamond collector's scaled-down influence shows correctly."""
+    return {c.id: creature_mine_influence(c, building) for c in creatures}
 
 
 def _workers_sync(tg_user, building_id):
@@ -535,12 +536,14 @@ def _workers_sync(tg_user, building_id):
         raise GameError("این ساختمون پیدا نشد.")
     workers = assigned_creatures(building)
     free = free_creatures(user)
-    return user, building, workers, worker_slots(building), free, _influence_map([*workers, *free])
+    return user, building, workers, worker_slots(building), free, _influence_map([*workers, *free], building)
 
 
 def _workers_text(building: Building, workers, slots: int, free, influence: dict) -> str:
     label = constants.BUILDING_LABELS[building.building_type]
-    bonus = sum(influence.get(c.id, 0.0) for c in workers)
+    raw = sum(influence.get(c.id, 0.0) for c in workers)
+    cap = constants.BUILDING_PRODUCTION.get(building.building_type, {}).get("worker_bonus_cap")
+    bonus = raw if cap is None else min(cap, raw)
     lines = [
         f"👷 <b>کارگرهای {label}</b>",
         f"<blockquote>{len(workers)} از {slots} جایگاه پره — هر سطح ساختمون یه جایگاه می‌ده."
@@ -640,7 +643,7 @@ def _assign_sync(tg_user, building_id, creature_id, attach: bool):
         workers,
         worker_slots(building),
         free,
-        _influence_map([*workers, *free]),
+        _influence_map([*workers, *free], building),
     )
 
 

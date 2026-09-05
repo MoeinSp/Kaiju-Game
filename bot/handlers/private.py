@@ -2465,6 +2465,23 @@ def _autohunt_confirm_kb(amount: int):
     return text, kb
 
 
+async def _autohunt_no_energy(query, energy: int) -> None:
+    """Out-of-energy → show the diamond refill screen plus a way back to the hunt."""
+    from bot.handlers.energy import energy_refill_button
+
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        f"⚡ <b>انرژی کافی نداری</b> ({energy}/{constants.MAX_ENERGY}).\n"
+        f"برای ادامهٔ شکار می‌تونی با الماس کامل شارژ کنی:",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [energy_refill_button(query.from_user.id)],
+            [btn("🔙 بازگشت به شکار", style=NAV, callback_data="hunt_next")],
+        ]),
+    )
+
+
 async def autohunt_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Ask how much energy to pour into auto-hunting — with all/half quick buttons."""
     query = update.callback_query
@@ -2474,7 +2491,7 @@ async def autohunt_start_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.answer(str(exc), show_alert=True)
         return
     if energy < constants.HUNT_ENERGY_COST:
-        await query.answer(f"⚡ انرژی کافی نداری ({energy}/{constants.MAX_ENERGY}).", show_alert=True)
+        await _autohunt_no_energy(query, energy)
         return
     context.user_data.pop(AWAITING_PLAYER_KEY, None)  # buttons first; «دلخواه» arms text input
     half = max(constants.HUNT_ENERGY_COST, energy // 2)
@@ -2505,7 +2522,7 @@ async def autohunt_amt_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer(str(exc), show_alert=True)
         return
     if energy < constants.HUNT_ENERGY_COST:
-        await query.answer(f"⚡ انرژی کافی نداری ({energy}/{constants.MAX_ENERGY}).", show_alert=True)
+        await _autohunt_no_energy(query, energy)
         return
     if which == "custom":
         context.user_data[AWAITING_PLAYER_KEY] = {"action": "autohunt_energy"}

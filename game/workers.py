@@ -40,15 +40,21 @@ def assigned_creatures(building: Building) -> list[Creature]:
     ]
 
 
-def creature_mine_influence(creature: Creature) -> float:
+def creature_mine_influence(creature: Creature, building: Building | None = None) -> float:
     """One stationed kaiju's production bonus (a multiplier addend). Scales with the
     kaiju's power (gear included) from its per-rarity floor up to +1000% for a maxed
-    mythic — see constants.mine_influence."""
+    mythic — see constants.mine_influence. When `building` is given, its per-building
+    `influence_mult` is applied (the diamond collector scales every kaiju WAY down so
+    the mine stays tightly bounded); gold/DNA use 1.0."""
     from game.creature import creature_power
     from game.equipment import get_equipped_items
 
     power = creature_power(creature, get_equipped_items(creature))
-    return constants.mine_influence(creature.rarity, power)
+    base = constants.mine_influence(creature.rarity, power)
+    if building is not None:
+        mult = constants.BUILDING_PRODUCTION.get(building.building_type, {}).get("influence_mult", 1.0)
+        base *= mult
+    return base
 
 
 def worker_bonus(building: Building) -> float:
@@ -56,10 +62,14 @@ def worker_bonus(building: Building) -> float:
     addend: 0.0 means "no help", 0.4 means "+40% output".
 
     Each stationed kaiju contributes creature_mine_influence() — a per-rarity floor
-    that climbs with the kaiju's power (up to +1000% for a maxed mythic). The mine's
-    total is the sum across every stationed kaiju, so stronger AND more kaiju both
-    raise output."""
-    return sum(creature_mine_influence(c) for c in assigned_creatures(building))
+    that climbs with the kaiju's power. The mine's total is the sum across every
+    stationed kaiju, so stronger AND more kaiju both raise output. A mine with an
+    explicit `worker_bonus_cap` (the diamond collector) is clamped to that ceiling —
+    gold/DNA stay uncapped."""
+    cfg = constants.BUILDING_PRODUCTION.get(building.building_type, {})
+    total = sum(creature_mine_influence(c, building) for c in assigned_creatures(building))
+    cap = cfg.get("worker_bonus_cap")  # None for gold/DNA → no ceiling
+    return total if cap is None else min(cap, total)
 
 
 def breeding_job(user: User) -> BreedingJob | None:
