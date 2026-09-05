@@ -56,6 +56,14 @@ def rename_creature(user: User, creature_id: int, raw_name: str) -> dict:
         creature = Creature.objects.select_for_update().filter(id=creature_id, owner=user).first()
         if creature is None:
             raise GameError("همچین کایجویی توی کلکسیونت نیست.")
+        # names must be globally unique (case-insensitive) — no two creatures share one
+        taken = (
+            Creature.objects.exclude(id=creature.id)
+            .filter(custom_name__iexact=name)
+            .exists()
+        )
+        if taken:
+            raise GameError("این اسم قبلاً گرفته شده — یه اسم یکتای دیگه انتخاب کن.")
         cost = rename_cost(creature)
         if cost > 0 and user.diamonds < cost:
             raise GameError(

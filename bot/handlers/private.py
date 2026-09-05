@@ -498,7 +498,7 @@ def upgrade_panel_keyboard(creature_id: int, is_active: bool = True, step: int =
         ],
         [btn("مدیریت تجهیزات", emoji_key="btn_inventory", style=PRIMARY, callback_data=f"upg_eq:{creature_id}")],
         [btn("🍖 تقویت با خوردن هیولا", style=BUILD, callback_data=f"devour_start:{creature_id}")],
-        [btn("✏️ نام‌گذاری", style=NAV, callback_data=f"kaiju_rename:{creature_id}")],
+        [btn("✏️ نام‌گذاری", style=NAV, callback_data=f"kaiju_rename:{creature_id}:u")],
         [btn(_fusion_button_label(star_level), emoji_key="btn_fusion", style=PRIMARY, callback_data=f"upg_fusion:{creature_id}")],
     ]
     if not is_active:
@@ -1389,7 +1389,7 @@ def _creature_detail_keyboard(creature_id: int, is_active: bool) -> InlineKeyboa
         rows.append([btn("انتخاب به‌عنوان موجود فعال", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"coll_select:{creature_id}")])
     rows.append([btn("استفاده در فیوژن", emoji_key="btn_fusion", style=PRIMARY, callback_data=f"fus_a:{creature_id}")])
     rows.append([btn("🍖 تقویت با خوردن هیولا", style=BUILD, callback_data=f"devour_start:{creature_id}")])
-    rows.append([btn("✏️ نام‌گذاری", style=NAV, callback_data=f"kaiju_rename:{creature_id}")])
+    rows.append([btn("✏️ نام‌گذاری", style=NAV, callback_data=f"kaiju_rename:{creature_id}:c")])
     rows.append([back_btn("menu:collection", "بازگشت به کلکسیون")])
     return InlineKeyboardMarkup(rows)
 
@@ -1431,19 +1431,24 @@ async def kaiju_rename_callback(update: Update, context: ContextTypes.DEFAULT_TY
     """«✏️ نام‌گذاری» from the collection detail or the upgrade panel — ask the player
     for a nickname. Charged (rising price) on submit in capture_player_text_reply."""
     query = update.callback_query
-    creature_id = int(query.data.split(":")[1])
+    parts = query.data.split(":")
+    creature_id = int(parts[1])
+    origin = parts[2] if len(parts) > 2 else "c"
     try:
         creature, cost = await run_db(_rename_prompt_sync, update.effective_user, creature_id)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    context.user_data[AWAITING_PLAYER_KEY] = {"action": "rename_kaiju", "creature_id": creature_id}
+    context.user_data[AWAITING_PLAYER_KEY] = {
+        "action": "rename_kaiju", "creature_id": creature_id, "origin": origin,
+    }
     from game.naming import NAME_MAX_LEN
 
     price_line = (
         "🎁 اولین نام‌گذاری این کایجو <b>رایگان</b>ه."
         if cost == 0 else f"{get_emoji('diamond')} هزینه: <b>{cost}</b> الماس"
     )
+    back_cb = f"upg_pick:{creature_id}" if origin == "u" else f"coll_pick:{creature_id}"
     await query.answer()
     await safe_edit_message_text(
         query,
@@ -1451,8 +1456,9 @@ async def kaiju_rename_callback(update: Update, context: ContextTypes.DEFAULT_TY
         f"🧬 نژاد: <b>{creature.name}</b>\n"
         f"نام فعلی: <b>{creature_name(creature)}</b>\n\n"
         f"{price_line}\n"
-        f"<i>یه اسم دلخواه بفرست (حداکثر {NAME_MAX_LEN} حرف). هر بار نام‌گذاری ۱۰۰ الماس گران‌تر می‌شه.</i>",
+        f"<i>یه اسم دلخواه و یکتا بفرست (حداکثر {NAME_MAX_LEN} حرف). هر بار نام‌گذاری ۱۰۰ الماس گران‌تر می‌شه.</i>",
         parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[back_btn(back_cb, "انصراف / بازگشت")]]),
     )
 
 
@@ -3138,11 +3144,18 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         return
 
     if action == "rename_kaiju":
+        creature_id = awaiting["creature_id"]
+        origin = awaiting.get("origin", "c")
+        back_cb = f"upg_pick:{creature_id}" if origin == "u" else f"coll_pick:{creature_id}"
         try:
-            res = await run_db(_rename_kaiju_sync, update.effective_user, awaiting["creature_id"], text)
+            res = await run_db(_rename_kaiju_sync, update.effective_user, creature_id, text)
         except GameError as exc:
             context.user_data[AWAITING_PLAYER_KEY] = awaiting
-            await message.reply_text(f"⚠️ {exc}")
+            await message.reply_text(
+                f"⚠️ {exc}\n<i>یه اسم دیگه بفرست یا برگرد.</i>",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([[back_btn(back_cb, "انصراف / بازگشت")]]),
+            )
             return
         cost_note = "رایگان بود ✅" if res["cost"] == 0 else f"{res['cost']} {get_emoji('diamond')} کم شد"
         await message.reply_text(
@@ -3150,6 +3163,7 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
             f"🧬 نژاد: <b>{res['breed']}</b>\n"
             f"<i>({cost_note} · نام‌گذاری بعدی: {res['next_cost']} {get_emoji('diamond')})</i>",
             parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[back_btn(back_cb, "بازگشت به کایجو")]]),
         )
         return
 
@@ -3642,7 +3656,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(collection_pick_callback, pattern=r"^coll_pick:"))
     application.add_handler(CallbackQueryHandler(collection_page_callback, pattern=r"^coll_page:"))
     application.add_handler(CallbackQueryHandler(collection_select_callback, pattern=r"^coll_select:"))
-    application.add_handler(CallbackQueryHandler(kaiju_rename_callback, pattern=r"^kaiju_rename:\d+$"))
+    application.add_handler(CallbackQueryHandler(kaiju_rename_callback, pattern=r"^kaiju_rename:\d+(:[cu])?$"))
     application.add_handler(CallbackQueryHandler(devour_start_callback, pattern=r"^devour_start:\d+$"))
     application.add_handler(CallbackQueryHandler(devour_toggle_callback, pattern=r"^devour_tog:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(devour_select_all_callback, pattern=r"^devour_(all|none):\d+$"))
