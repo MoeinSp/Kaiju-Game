@@ -2232,6 +2232,7 @@ def _hunt_scout_keyboard(target, scout_price=0) -> InlineKeyboardMarkup:
             [btn("حمله!", emoji_key="btn_attack", style=BATTLE, callback_data=f"hunt_go:{target['tier']}:{target['seed']}")],
             [btn("🔄 انتخاب موجود دیگر از تیم", style=NAV, callback_data=f"hunt_swap:{target['tier']}:{target['seed']}")],
             [btn(f"🔍 بعدی ({scout_price} طلا)", style=NAV, callback_data="hunt_next")],
+            [btn("⚡️ شکار خودکار", style=BATTLE, callback_data="autohunt_start")],
             [back_btn("menu:me")],
         ]
     )
@@ -2394,6 +2395,116 @@ async def hunt_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         result["log_text"] + "\n\n" + f"<tg-spoiler>{reward_line}</tg-spoiler>",
         parse_mode="HTML",
         reply_markup=keyboard,
+    )
+
+
+def _autohunt_info_sync(tg_user):
+    """Current fieldable creature + live energy, for the auto-hunt prompt."""
+    user, _ = get_or_create_user(tg_user)
+    creature = get_active_creature(user)
+    if creature is None:
+        raise GameError("اول /start رو بزن تا موجودت رو بگیری.")
+    energy = sync_energy(user)
+    user.save(update_fields=["energy", "energy_updated_at"])
+    return energy
+
+
+def _autohunt_sync(tg_user, energy_amount):
+    """Run `energy_amount` auto-hunts (1 energy each) against fresh targets, each paying
+    HALF the gold/DNA of a manual hunt. Locks the user row so the whole batch spends
+    real energy exactly once. Returns aggregated totals."""
+    from game.hunt import AUTO_HUNT_LOOT_MULT, resolve_hunt
+
+    user, _ = get_or_create_user(tg_user)
+    with transaction.atomic():
+        user = User.objects.select_for_update().get(id=user.id)
+        creature = get_active_creature(user)
+        if creature is None:
+            raise GameError("اول /start رو بزن تا موجودت رو بگیری.")
+        sync_energy(user)
+        # cost is HUNT_ENERGY_COST per hunt; clamp the request to what's actually available
+        per = max(1, constants.HUNT_ENERGY_COST)
+        hunts = min(int(energy_amount), user.energy) // per
+        if hunts <= 0:
+            raise GameError(f"⚡ انرژی کافی نداری (الان {user.energy}/{constants.MAX_ENERGY}).")
+        spend_energy(user, hunts * per, "شکار خودکار")
+        user.save(update_fields=["energy", "energy_updated_at"])
+
+        wins = coins = dna = xp = levels = 0
+        lab_up = False
+        for _ in range(hunts):
+            r = resolve_hunt(user, creature, "normal", None, loot_mult=AUTO_HUNT_LOOT_MULT)
+            wins += 1 if r["won"] else 0
+            coins += r["coins"]
+            dna += r["dna"]
+            xp += r["xp"]
+            levels += r.get("levels") or 0
+            lab_up = lab_up or bool(r.get("lab_up"))
+        record_action(user, "hunt")
+        completed_missions = check_missions(user, "hunt")
+    return creature, {
+        "hunts": hunts, "wins": wins, "losses": hunts - wins,
+        "coins": coins, "dna": dna, "xp": xp, "levels": levels, "lab_up": lab_up,
+        "energy_left": user.energy,
+    }, completed_missions
+
+
+async def autohunt_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Ask how much energy to pour into auto-hunting."""
+    query = update.callback_query
+    try:
+        energy = await run_db(_autohunt_info_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    if energy < constants.HUNT_ENERGY_COST:
+        await query.answer(f"⚡ انرژی کافی نداری ({energy}/{constants.MAX_ENERGY}).", show_alert=True)
+        return
+    context.user_data[AWAITING_PLAYER_KEY] = {"action": "autohunt_energy"}
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        f"⚡️ <b>شکار خودکار</b>\n"
+        f"چند واحد انرژی می‌خوای صرف کنی؟ (الان <b>{energy}/{constants.MAX_ENERGY}</b> داری — "
+        f"هر شکار {constants.HUNT_ENERGY_COST} انرژی).\n\n"
+        f"<i>یه عدد بفرست. توجه: شکار خودکار نصف لوت شکار دستیه و طلا و دی‌ان‌ای کمتری می‌ده.</i>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:me", "انصراف")]]),
+    )
+
+
+async def autohunt_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Confirmed — run the batch and show the summary."""
+    query = update.callback_query
+    amount = int(query.data.split(":")[1])
+    try:
+        creature, res, completed_missions = await run_db(_autohunt_sync, update.effective_user, amount)
+    except GameError as exc:
+        from bot.handlers.energy import show_energy_error
+
+        if not await show_energy_error(query, exc):
+            await query.answer(str(exc), show_alert=True)
+        return
+    lines = [
+        f"⚡️ <b>نتیجه شکار خودکار</b>",
+        f"🗡 <b>{res['hunts']}</b> نبرد · 🟢 {res['wins']} برد · 🔴 {res['losses']} باخت",
+        "",
+        f"{get_emoji('coin')} طلا: <b>+{res['coins']:,}</b>",
+        f"{get_emoji('dna')} دی‌ان‌ای: <b>+{res['dna']:,}</b>",
+        f"✨ XP: <b>+{res['xp']:,}</b>" + (f" · رسید به سطح {creature.level}!" if res["levels"] else ""),
+        f"{get_emoji('energy')} انرژی باقی‌مانده: <b>{res['energy_left']}/{constants.MAX_ENERGY}</b>",
+        "",
+        "<i>یادآوری: شکار خودکار نصف لوت شکار دستی رو می‌ده.</i>",
+    ]
+    text = "\n".join(lines) + _mission_lines(completed_missions)
+    await query.answer("✅ انجام شد!")
+    await safe_edit_message_text(
+        query, text, parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [btn("⚡️ شکار خودکار دوباره", style=BATTLE, callback_data="autohunt_start")],
+            [btn("🔍 شکار دستی", style=NAV, callback_data="hunt_next")],
+            [back_btn("menu:me")],
+        ]),
     )
 
 
@@ -3143,6 +3254,35 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         )
         return
 
+    if action == "autohunt_energy":
+        raw = (text or "").strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
+        if not raw.isdigit() or int(raw) <= 0:
+            context.user_data[AWAITING_PLAYER_KEY] = awaiting
+            await message.reply_text("فقط یه عدد مثبت بفرست (مثلاً 10) — یا «انصراف».")
+            return
+        try:
+            energy = await run_db(_autohunt_info_sync, update.effective_user)
+        except GameError as exc:
+            await message.reply_text(str(exc))
+            return
+        amount = min(int(raw), energy)
+        if amount < constants.HUNT_ENERGY_COST:
+            await message.reply_text(f"⚡ انرژی کافی نداری ({energy}/{constants.MAX_ENERGY}).")
+            return
+        hunts = amount // max(1, constants.HUNT_ENERGY_COST)
+        await message.reply_text(
+            f"⚡️ <b>تأیید شکار خودکار</b>\n"
+            f"می‌خوای <b>{amount}</b> انرژی صرف <b>{hunts}</b> نبرد خودکار کنی؟\n\n"
+            f"⚠️ <i>شکار خودکار نسبت به شکار دستی <b>طلا و دی‌ان‌ای کمتری</b> می‌ده "
+            f"(نصف لوت). XP کامل می‌مونه.</i>",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [btn("✅ تأیید و شروع", style=CONFIRM, callback_data=f"autohunt_do:{amount}")],
+                [back_btn("menu:me", "انصراف")],
+            ]),
+        )
+        return
+
     if action == "rename_kaiju":
         creature_id = awaiting["creature_id"]
         origin = awaiting.get("origin", "c")
@@ -3650,6 +3790,8 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(upgrade_set_default_callback, pattern=r"^upg_default:"))
     application.add_handler(CallbackQueryHandler(upgrade_step_callback, pattern=r"^upg_step:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(hunt_go_callback, pattern=r"^hunt_go:"))
+    application.add_handler(CallbackQueryHandler(autohunt_start_callback, pattern=r"^autohunt_start$"))
+    application.add_handler(CallbackQueryHandler(autohunt_do_callback, pattern=r"^autohunt_do:\d+$"))
     application.add_handler(CallbackQueryHandler(hunt_next_callback, pattern=r"^hunt_next$"))
     application.add_handler(CallbackQueryHandler(hunt_swap_callback, pattern=r"^hunt_swap:"))
     application.add_handler(CallbackQueryHandler(hunt_swap_pick_callback, pattern=r"^hunt_swap_pick:"))

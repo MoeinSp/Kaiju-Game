@@ -174,11 +174,16 @@ def estimated_reward(tier: str, power: int = 0) -> tuple[int, int]:
     return hunt_coin_range(power, tier)
 
 
-def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal", seed: int | None = None) -> dict:
+AUTO_HUNT_LOOT_MULT = 0.5  # auto-hunt pays HALF the gold/DNA of a manual hunt
+
+
+def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal",
+                 seed: int | None = None, loot_mult: float = 1.0) -> dict:
     """Plays out one solo PvE encounter and applies rewards. Caller handles energy. The
     wild is sized to the player's STRONGEST kaiju (fixed by the seed), so whichever
     creature they bring fights the SAME opponent — switching to the right element is the
-    strategy, not a way to shrink the target."""
+    strategy, not a way to shrink the target. `loot_mult` scales the gold/DNA payout —
+    auto-hunt passes AUTO_HUNT_LOOT_MULT (0.5) so it earns half of a manual hunt."""
     wild = spawn_wild_creature(hunt_benchmark_power(user), tier, seed)
     winner, log_text = resolve_duel(player_creature, wild)
     won = winner is player_creature
@@ -186,8 +191,8 @@ def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal", se
     power = _player_power(player_creature)
 
     if won:
-        coins = random.randint(*hunt_coin_range(power, tier))
-        dna = random.randint(*hunt_dna_range(power, tier))
+        coins = round(random.randint(*hunt_coin_range(power, tier)) * loot_mult)
+        dna = round(random.randint(*hunt_dna_range(power, tier)) * loot_mult)
         xp_gain = round(HUNT_XP_WIN * reward_mult)
     else:
         coins = 0

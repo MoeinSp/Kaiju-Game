@@ -720,6 +720,17 @@ WORKER_BONUS_CAP = 6.0  # up to +600% output from stationed creatures (raised so
 # a stationed worker's contribution is multiplied by its rarity — a mythic worker is
 # worth several commons of the same level, so rarer monsters are better miners
 WORKER_RARITY_MULT = {"common": 1.0, "rare": 1.4, "epic": 2.0, "legendary": 3.0, "mythic": 4.5}
+# Each stationed kaiju adds a FLAT share of the mine's base output, set purely by its
+# RARITY (not its level): mythic +100%, legendary +80%, epic +60%, rare +40%,
+# common +20% — 20% steps per tier. Kaiju stack up to the building's slot count, so a
+# mine full of mythics can more than double its base rate.
+WORKER_MINE_INFLUENCE_BY_RARITY = {
+    "common": 0.20, "rare": 0.40, "epic": 0.60, "legendary": 0.80, "mythic": 1.00,
+}
+
+
+def mine_influence(rarity: str) -> float:
+    return WORKER_MINE_INFLUENCE_BY_RARITY.get(rarity, 0.20)
 
 # ── Monster Cave / egg incubation (game/breeding.py) ──────────────────────────
 # Two phases, deliberately decoupled:
