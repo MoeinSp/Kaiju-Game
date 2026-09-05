@@ -2692,7 +2692,27 @@ async def admin_givee_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def admin_maxbld_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Max out ALL of a player's buildings in one tap (no text step)."""
+    """Step 1 of maxing a player's buildings — ask for confirmation first."""
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    target_id = query.data.split(":")[1]
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        "🏗 <b>مکس‌کردن ساختمان‌ها</b>\n"
+        f"مطمئنی؟ همه‌ی ساختمان‌های این کاربر به سطح بیشینه می‌رسن.",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [btn("✅ آره، مکس کن", style=CONFIRM, callback_data=f"admin_maxbld_do:{target_id}")],
+            [btn("انصراف", style=DANGER, callback_data=f"admin_userback:{target_id}")],
+        ]),
+    )
+
+
+async def admin_maxbld_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Step 2 — actually max out ALL of the player's buildings after confirmation."""
     query = update.callback_query
     if not _is_admin(update):
         await query.answer()
@@ -3811,6 +3831,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(admin_givekmax_callback, pattern=r"^admin_givekmax:\d+$"))
     application.add_handler(CallbackQueryHandler(admin_givee_callback, pattern=r"^admin_givee:\d+$"))
     application.add_handler(CallbackQueryHandler(admin_maxbld_callback, pattern=r"^admin_maxbld:\d+$"))
+    application.add_handler(CallbackQueryHandler(admin_maxbld_do_callback, pattern=r"^admin_maxbld_do:\d+$"))
     application.add_handler(CallbackQueryHandler(admin_op_callback, pattern=r"^opc:(confirm|edit|cancel)$"))
     application.add_handler(CallbackQueryHandler(admin_remove_callback, pattern=r"^admin_rm:\d+$"))
     application.add_handler(CallbackQueryHandler(dailyshop_builder_callback, pattern=r"^dshop:"))
