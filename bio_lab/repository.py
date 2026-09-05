@@ -52,6 +52,22 @@ def get_or_create_group(chat) -> Group:
     return group
 
 
+def creature_name(creature: Creature) -> str:
+    """A creature's display name: the player's chosen nickname (نام) if set, else its
+    species/breed (نژاد). Custom names are validated in game/naming.py to contain no
+    HTML metacharacters, so this is safe to interpolate into parse_mode="HTML" bodies
+    exactly like the trusted species name it replaces."""
+    nick = (getattr(creature, "custom_name", "") or "").strip()
+    return nick or creature.name
+
+
+def creature_has_nickname(creature: Creature) -> bool:
+    """True when the player has given this creature a custom name distinct from its
+    breed — the cue to also show a «نژاد: …» line beneath the name on cards."""
+    nick = (getattr(creature, "custom_name", "") or "").strip()
+    return bool(nick) and nick != creature.name
+
+
 def get_active_creature(user: User) -> Creature | None:
     return Creature.objects.filter(owner=user, is_active=True).first()
 

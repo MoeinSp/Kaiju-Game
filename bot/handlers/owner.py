@@ -1204,7 +1204,10 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
             [btn("شارژ کامل (طلا+DNA+الماس)", emoji_key="btn_charge", style=CONFIRM, callback_data=f"admin_charge:{target_id}")],
             [btn("🎁 دادن آیتم/کایجو/تجهیز به این کاربر", style=CONFIRM, callback_data=f"admin_give_item:{target_id}")],
             [btn("🦖 اعطای کایجوی دلخواه (سطح/ستاره/تعداد)", style=CONFIRM, callback_data=f"admin_givek:{target_id}")],
+            [btn("🌟 اعطای کایجوی مکس (همه‌چی بیشینه)", style=CONFIRM, callback_data=f"admin_givekmax:{target_id}")],
+            [btn("⚔️ اعطای تجهیزات دلخواه (سطح دلخواه)", style=CONFIRM, callback_data=f"admin_givee:{target_id}")],
             [btn("🔬 تنظیم سطح آزمایشگاه", emoji_key="btn_lab", style=CONFIRM, callback_data=f"admin_lablevel:{target_id}")],
+            [btn("🏗 مکس‌کردن ساختمان‌ها", style=CONFIRM, callback_data=f"admin_maxbld:{target_id}")],
             [
                 btn("💎 لاگ الماس", style=ADMIN, callback_data=f"admin_reslog:{target_id}:diamonds"),
                 btn("🪙 لاگ طلا", style=ADMIN, callback_data=f"admin_reslog:{target_id}:coins"),
@@ -2648,6 +2651,71 @@ async def admin_givek_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 
+async def admin_givekmax_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Start the MAXED-kaiju grant: the owner sends «<نایابی> <تعداد> <نام‌گونه>»."""
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    target_id = query.data.split(":")[1]
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "give_maxed_kaiju", "target_id": target_id}
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        "🌟 <b>اعطای کایجوی مکس</b>\n"
+        "یه خط بفرست به این شکل:\n"
+        "<code>&lt;نایابی&gt; &lt;تعداد&gt; &lt;نام گونه&gt;</code>\n\n"
+        "مثال: <code>mythic 3 کرکس دریا</code>\n"
+        "<i>سطح، ستاره و همه‌ی ارتقاهای اعضا (نیش/بال/زره/غده) خودکار به بیشینه‌ی مطلق می‌رسن. تعداد تا ۵۰.</i>",
+        parse_mode="HTML",
+    )
+
+
+async def admin_givee_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Start the custom-equipment grant: «<جایگاه> <نایابی> <سطح> <تعداد>»."""
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    target_id = query.data.split(":")[1]
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "give_equipment", "target_id": target_id}
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        "⚔️ <b>اعطای تجهیزات دلخواه</b>\n"
+        "یه خط بفرست به این شکل:\n"
+        "<code>&lt;جایگاه&gt; &lt;نایابی&gt; &lt;سطح&gt; &lt;تعداد&gt;</code>\n\n"
+        "مثال: <code>weapon mythic 25 2</code>\n"
+        "<i>جایگاه: weapon/سلاح · armor/زره · rune/طلسم · offhand/غلاف — سطح تا سقف مطلق (۲۵). تعداد تا ۵۰.</i>",
+        parse_mode="HTML",
+    )
+
+
+async def admin_maxbld_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Max out ALL of a player's buildings in one tap (no text step)."""
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    target_id = query.data.split(":")[1]
+    from game.moderation import admin_max_buildings
+
+    try:
+        res = await run_db(admin_max_buildings, target_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    u = res["user"]
+    await query.answer("🏗 ساختمان‌ها مکس شدند!")
+    await safe_edit_message_text(
+        query,
+        f"{get_emoji('confirm')} همه‌ی <b>{res['count']}</b> ساختمانِ <b>{display_name(u)}</b> "
+        f"به سطح بیشینه ({res['max_level']}) رسیدند.",
+        parse_mode="HTML",
+        reply_markup=_user_manage_keyboard(u.id, u.is_banned),
+    )
+
+
 async def admin_grant_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not _is_admin(update):
@@ -3137,6 +3205,44 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         await message.reply_text(
             f"{get_emoji('confirm')} <b>{res['count']}× {res['species']}</b> "
             f"[{constants.RARITY_LABELS[res['rarity']]}] {'⭐' * res['star']} سطح {res['level']} "
+            f"به <b>{display_name(u)}</b> داده شد.",
+            parse_mode="HTML",
+            reply_markup=_user_manage_keyboard(u.id, u.is_banned),
+        )
+        return
+
+    if action == "give_maxed_kaiju":
+        from game.moderation import admin_give_maxed_kaiju
+
+        try:
+            res = await run_db(admin_give_maxed_kaiju, awaiting["target_id"], text)
+        except GameError as exc:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text(str(exc), parse_mode="HTML")
+            return
+        u = res["user"]
+        await message.reply_text(
+            f"{get_emoji('confirm')} <b>{res['count']}× {res['species']}</b> "
+            f"[{constants.RARITY_LABELS[res['rarity']]}] {'⭐' * res['star']} سطح {res['level']} "
+            f"🌟 <b>مکس کامل</b> (اعضا هم بیشینه) به <b>{display_name(u)}</b> داده شد.",
+            parse_mode="HTML",
+            reply_markup=_user_manage_keyboard(u.id, u.is_banned),
+        )
+        return
+
+    if action == "give_equipment":
+        from game.moderation import admin_give_equipment
+
+        try:
+            res = await run_db(admin_give_equipment, awaiting["target_id"], text)
+        except GameError as exc:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text(str(exc), parse_mode="HTML")
+            return
+        u = res["user"]
+        await message.reply_text(
+            f"{get_emoji('confirm')} <b>{res['count']}× {res['name']}</b> "
+            f"({res['slot_label']}) [{constants.RARITY_LABELS[res['rarity']]}] +{res['level']} "
             f"به <b>{display_name(u)}</b> داده شد.",
             parse_mode="HTML",
             reply_markup=_user_manage_keyboard(u.id, u.is_banned),
@@ -3702,6 +3808,9 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(dm_user_start, pattern=r"^admin_dm:\d+$"))
     application.add_handler(CallbackQueryHandler(admin_give_item_start, pattern=r"^admin_give_item:\d+$"))
     application.add_handler(CallbackQueryHandler(admin_givek_callback, pattern=r"^admin_givek:\d+$"))
+    application.add_handler(CallbackQueryHandler(admin_givekmax_callback, pattern=r"^admin_givekmax:\d+$"))
+    application.add_handler(CallbackQueryHandler(admin_givee_callback, pattern=r"^admin_givee:\d+$"))
+    application.add_handler(CallbackQueryHandler(admin_maxbld_callback, pattern=r"^admin_maxbld:\d+$"))
     application.add_handler(CallbackQueryHandler(admin_op_callback, pattern=r"^opc:(confirm|edit|cancel)$"))
     application.add_handler(CallbackQueryHandler(admin_remove_callback, pattern=r"^admin_rm:\d+$"))
     application.add_handler(CallbackQueryHandler(dailyshop_builder_callback, pattern=r"^dshop:"))

@@ -7,6 +7,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Creature, DuelLog, User
 from bio_lab.repository import (
+    creature_name,
     display_name,
     get_active_creature,
     get_or_create_group,
@@ -268,7 +269,7 @@ async def transfer_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TY
         await _reply_transfer_error(update.message, exc)
         return
     c = preview["creature"]
-    desc = f"هیولای <b>{c.name}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level}"
+    desc = f"هیولای <b>{creature_name(c)}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level}"
     await _begin_offer(update, "c", sender, receiver, c.id, desc, preview["cost"])
 
 
@@ -488,7 +489,7 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
         _PENDING_OFFERS.pop(token, None)
         if offer["kind"] == "c":
             c = result["creature"]
-            body = (f"🦖 هیولای <b>{c.name}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level} "
+            body = (f"🦖 هیولای <b>{creature_name(c)}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level} "
                     f"به <b>{display_name(receiver)}</b> منتقل شد! ✅")
         else:
             it = result["item"]

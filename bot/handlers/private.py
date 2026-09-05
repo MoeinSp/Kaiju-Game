@@ -5,6 +5,8 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Alliance, Creature, User
 from bio_lab.repository import (
+    creature_has_nickname,
+    creature_name,
     display_name,
     get_active_creature,
     get_or_create_user,
@@ -252,7 +254,11 @@ def creature_card_text(user, creature, equipped_items: list | None = None) -> st
         "",
         _CARD_DIV,
         "",
-        f"{get_emoji('creature')} موجود فعال: <b>{creature.name}</b> <code>#{creature.id}</code>",
+        f"{get_emoji('creature')} موجود فعال: <b>{creature_name(creature)}</b> <code>#{creature.id}</code>",
+    ]
+    if creature_has_nickname(creature):
+        lines.append(f"🧬 نژاد: <b>{creature.name}</b>")
+    lines += [
         f"{constants.RARITY_LABELS[creature.rarity]} {stars} ┃ {constants.element_label(creature.element)}",
         f"🎖 سطح موجود: <b>{creature.level}/{max_level}</b>" + ("  ✅ بیشینه" if is_maxed else ""),
     ]
@@ -379,7 +385,12 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
     max_level = constants.creature_max_level(creature.rarity, creature.star_level)
     div = "──────────────"
     lines = [
-        f"🦅 <b>مشخصات هیولا:</b> {constants.RARITY_LABELS[creature.rarity]} {stars}",
+        f"🦅 <b>{creature_name(creature)}</b> <code>#{creature.id}</code>",
+    ]
+    if creature_has_nickname(creature):
+        lines.append(f"🧬 نژاد: <b>{creature.name}</b>")
+    lines += [
+        f"<b>مشخصات:</b> {constants.RARITY_LABELS[creature.rarity]} {stars}",
         f"🎖 <b>سطح موجود:</b> {creature.level}/{max_level} ┃ {mode}",
         f"⚡️ <b>نرخ ارتقا:</b> {step}× سطحی",
         "", div, "",
@@ -487,6 +498,7 @@ def upgrade_panel_keyboard(creature_id: int, is_active: bool = True, step: int =
         ],
         [btn("مدیریت تجهیزات", emoji_key="btn_inventory", style=PRIMARY, callback_data=f"upg_eq:{creature_id}")],
         [btn("🍖 تقویت با خوردن هیولا", style=BUILD, callback_data=f"devour_start:{creature_id}")],
+        [btn("✏️ نام‌گذاری", style=NAV, callback_data=f"kaiju_rename:{creature_id}")],
         [btn(_fusion_button_label(star_level), emoji_key="btn_fusion", style=PRIMARY, callback_data=f"upg_fusion:{creature_id}")],
     ]
     if not is_active:
@@ -502,7 +514,7 @@ def upgrade_panel_keyboard(creature_id: int, is_active: bool = True, step: int =
 def equip_panel_text(user, creature, slots: list[dict]) -> str:
     filled = sum(1 for row in slots if not row["is_empty"])
     lines = [
-        f"🎒 <b>تجهیزات {creature.name}</b>",
+        f"🎒 <b>تجهیزات {creature_name(creature)}</b>",
         f"<blockquote>{filled} از {len(slots)} جایگاه پره — روی هر جایگاه بزن تا عوضش کنی.</blockquote>",
         "",
     ]
@@ -588,7 +600,7 @@ def _upgrade_render(user, ranked, filt: str, page: int) -> tuple[str, InlineKeyb
         stars = "⭐" * creature.star_level
         rarity = constants.RARITY_LABELS[creature.rarity]
         rows.append([btn(
-            f"{active_tag}{creature.name} {stars} · {rarity} · Lv{creature.level} · 💪{power}",
+            f"{active_tag}{creature_name(creature)} {stars} · {rarity} · Lv{creature.level} · 💪{power}",
             style=LIST, callback_data=f"upg_pick:{creature.id}",
         )])
     nav = []
@@ -1315,7 +1327,7 @@ def _collection_render(creatures: list[Creature], filt: str = "all", page: int =
 
     for c in chunk:
         stars = "⭐" * c.star_level
-        label = f"{c.name} {stars} · Lv{c.level} · {constants.RARITY_LABELS[c.rarity]}"
+        label = f"{creature_name(c)} {stars} · Lv{c.level} · {constants.RARITY_LABELS[c.rarity]}"
         row = [btn(f"{'🟢 ' if c.is_active else ''}{label}", style=LIST, callback_data=f"coll_pick:{c.id}")]
         if not c.is_active:
             row.append(btn("فعال کن", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"coll_select:{c.id}"))
@@ -1377,6 +1389,7 @@ def _creature_detail_keyboard(creature_id: int, is_active: bool) -> InlineKeyboa
         rows.append([btn("انتخاب به‌عنوان موجود فعال", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"coll_select:{creature_id}")])
     rows.append([btn("استفاده در فیوژن", emoji_key="btn_fusion", style=PRIMARY, callback_data=f"fus_a:{creature_id}")])
     rows.append([btn("🍖 تقویت با خوردن هیولا", style=BUILD, callback_data=f"devour_start:{creature_id}")])
+    rows.append([btn("✏️ نام‌گذاری", style=NAV, callback_data=f"kaiju_rename:{creature_id}")])
     rows.append([back_btn("menu:collection", "بازگشت به کلکسیون")])
     return InlineKeyboardMarkup(rows)
 
@@ -1397,6 +1410,52 @@ async def collection_pick_callback(update: Update, context: ContextTypes.DEFAULT
     )
 
 
+def _rename_prompt_sync(tg_user, creature_id):
+    user, _ = get_or_create_user(tg_user)
+    creature = Creature.objects.filter(id=creature_id, owner=user).first()
+    if creature is None:
+        raise GameError("این کایجو توی کلکسیون تو نیست.")
+    from game.naming import rename_cost
+
+    return creature, rename_cost(creature)
+
+
+def _rename_kaiju_sync(tg_user, creature_id, name):
+    user, _ = get_or_create_user(tg_user)
+    from game.naming import rename_creature
+
+    return rename_creature(user, creature_id, name)
+
+
+async def kaiju_rename_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«✏️ نام‌گذاری» from the collection detail or the upgrade panel — ask the player
+    for a nickname. Charged (rising price) on submit in capture_player_text_reply."""
+    query = update.callback_query
+    creature_id = int(query.data.split(":")[1])
+    try:
+        creature, cost = await run_db(_rename_prompt_sync, update.effective_user, creature_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    context.user_data[AWAITING_PLAYER_KEY] = {"action": "rename_kaiju", "creature_id": creature_id}
+    from game.naming import NAME_MAX_LEN
+
+    price_line = (
+        "🎁 اولین نام‌گذاری این کایجو <b>رایگان</b>ه."
+        if cost == 0 else f"{get_emoji('diamond')} هزینه: <b>{cost}</b> الماس"
+    )
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        f"✏️ <b>نام‌گذاری کایجو</b>\n"
+        f"🧬 نژاد: <b>{creature.name}</b>\n"
+        f"نام فعلی: <b>{creature_name(creature)}</b>\n\n"
+        f"{price_line}\n"
+        f"<i>یه اسم دلخواه بفرست (حداکثر {NAME_MAX_LEN} حرف). هر بار نام‌گذاری ۱۰۰ الماس گران‌تر می‌شه.</i>",
+        parse_mode="HTML",
+    )
+
+
 def _select_sync(tg_user, creature_id):
     user, _ = get_or_create_user(tg_user)
     creature = set_active_creature(user, creature_id)
@@ -1414,7 +1473,7 @@ async def collection_select_callback(update: Update, context: ContextTypes.DEFAU
     is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
     await query.answer("🟢 انتخاب شد!")
     await safe_edit_message_text(query,
-        f"🟢 <b>{creature.name}</b> حالا موجود فعالته!\n\n" + creature_card_text(user, creature, equipped_items),
+        f"🟢 <b>{creature_name(creature)}</b> حالا موجود فعالته!\n\n" + creature_card_text(user, creature, equipped_items),
         parse_mode="HTML",
         reply_markup=creature_keyboard(is_owner),
     )
@@ -1665,7 +1724,7 @@ async def select(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
     await update.message.reply_text(
-        f"🟢 <b>{creature.name}</b> حالا موجود فعالته!\n\n" + creature_card_text(user, creature, equipped_items),
+        f"🟢 <b>{creature_name(creature)}</b> حالا موجود فعالته!\n\n" + creature_card_text(user, creature, equipped_items),
         parse_mode="HTML",
         reply_markup=creature_keyboard(is_owner),
     )
@@ -3078,6 +3137,22 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         )
         return
 
+    if action == "rename_kaiju":
+        try:
+            res = await run_db(_rename_kaiju_sync, update.effective_user, awaiting["creature_id"], text)
+        except GameError as exc:
+            context.user_data[AWAITING_PLAYER_KEY] = awaiting
+            await message.reply_text(f"⚠️ {exc}")
+            return
+        cost_note = "رایگان بود ✅" if res["cost"] == 0 else f"{res['cost']} {get_emoji('diamond')} کم شد"
+        await message.reply_text(
+            f"✅ اسم کایجو روی «<b>{res['name']}</b>» تنظیم شد.\n"
+            f"🧬 نژاد: <b>{res['breed']}</b>\n"
+            f"<i>({cost_note} · نام‌گذاری بعدی: {res['next_cost']} {get_emoji('diamond')})</i>",
+            parse_mode="HTML",
+        )
+        return
+
     if action == "alliance_create":
         try:
             alliance = await run_db(_alliance_create_sync, update.effective_user, text)
@@ -3567,6 +3642,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(collection_pick_callback, pattern=r"^coll_pick:"))
     application.add_handler(CallbackQueryHandler(collection_page_callback, pattern=r"^coll_page:"))
     application.add_handler(CallbackQueryHandler(collection_select_callback, pattern=r"^coll_select:"))
+    application.add_handler(CallbackQueryHandler(kaiju_rename_callback, pattern=r"^kaiju_rename:\d+$"))
     application.add_handler(CallbackQueryHandler(devour_start_callback, pattern=r"^devour_start:\d+$"))
     application.add_handler(CallbackQueryHandler(devour_toggle_callback, pattern=r"^devour_tog:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(devour_select_all_callback, pattern=r"^devour_(all|none):\d+$"))

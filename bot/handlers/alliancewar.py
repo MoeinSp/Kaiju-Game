@@ -23,7 +23,8 @@ def _perks_sync(tg_user):
         return None
     al = Alliance.objects.get(id=user.alliance_id)
     info = alliance.buildings_info(al)
-    info["is_leader"] = al.leader_id == user.id
+    # leader OR deputy may upgrade alliance buildings (buy_perk enforces the same)
+    info["is_manager"] = alliance._is_manager(user, al)
     info["name"] = al.name
     return info
 
@@ -41,15 +42,15 @@ def _perks_render(info: dict) -> tuple[str, InlineKeyboardMarkup]:
             f"\n{b['emoji']} <b>{b['title']}</b> — سطح <b>{b['level']}</b>/{info['max_level']}{cap}\n"
             f"   <i>{b['desc']}: {b['effect']}</i>"
         )
-        if info["is_leader"] and not b["maxed"]:
+        if info["is_manager"] and not b["maxed"]:
             rows.append([btn(
                 f"{b['emoji']} ارتقای {b['title']} → {b['next_effect']} ({b['cost']} طلا)",
                 style=BUILD, callback_data=f"ally_perk_buy:{b['key']}",
             )])
     if info["vault_income"] > 0:
         rows.append([btn(f"🏦 جمع‌آوری درآمد خزانه ({info['vault_income']} طلا/روز)", style=BUILD, callback_data="ally_vault_collect")])
-    if not info["is_leader"]:
-        lines.append("\n<i>فقط رهبر اتحاد می‌تونه ساختمون ارتقا بده.</i>")
+    if not info["is_manager"]:
+        lines.append("\n<i>فقط رهبر یا قائم‌مقام اتحاد می‌تونه ساختمون ارتقا بده.</i>")
     rows.append([back_btn("menu:alliance_info")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 

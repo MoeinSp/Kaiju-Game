@@ -2,6 +2,7 @@ import random
 from dataclasses import dataclass
 
 from bio_lab.models import Creature
+from bio_lab.repository import creature_name
 from game import constants
 from game.creature import combat_rating, effective_stats
 from game.emoji import get_emoji
@@ -67,7 +68,7 @@ def _simulate(creature_a: Creature, creature_b: Creature) -> tuple[Fighter, Figh
 
 def _side(f: Fighter) -> dict:
     return {
-        "name": f.creature.name, "element": f.creature.element,
+        "name": creature_name(f.creature), "element": f.creature.element,
         "hp": max(0, round(f.hp)), "max_hp": max(1, round(f.stats["hp"])), "crits": f.crits,
     }
 
@@ -123,13 +124,13 @@ def _detail_text(fa: Fighter, fb: Fighter, winner: Fighter, rounds: int, blow_by
     b_emoji = get_emoji(constants.ELEMENT_EMOJI_KEYS[fb.creature.element])
     return "\n".join([
         "🔍 <b>گزارش نبرد</b>",
-        f"🗡 <b>{fa.creature.name}</b> {a_emoji} vs 🛡 <b>{fb.creature.name}</b> {b_emoji}",
+        f"🗡 <b>{creature_name(fa.creature)}</b> {a_emoji} vs 🛡 <b>{creature_name(fb.creature)}</b> {b_emoji}",
         div,
         "",
         "\n".join(blow_by_blow),
         "",
         div,
-        f"{get_emoji('trophy')} <b>برنده: {winner.creature.name}</b> (در {rounds} راند)",
+        f"{get_emoji('trophy')} <b>برنده: {creature_name(winner.creature)}</b> (در {rounds} راند)",
     ])
 
 
@@ -141,7 +142,7 @@ def resolve_battle(creature_a: Creature, creature_b: Creature) -> dict:
     sa, sb = _side(fa), _side(fb)
     mult = constants.element_multiplier(fa.creature.element, fb.creature.element)
     return {
-        "winner": winner.creature, "winner_name": winner.creature.name,
+        "winner": winner.creature, "winner_name": creature_name(winner.creature),
         "rounds": rounds, "mult": mult, "a": sa, "b": sb,
         "compact": battle_report(sa, sb, winner.creature.name, rounds, mult),
         "detail": _detail_text(fa, fb, winner, rounds, blow),
@@ -210,7 +211,7 @@ def _attack(attacker: Fighter, defender: Fighter, detail: list[str], rng: random
 
     # nested per-hit line: «   • هما به تیشتر: −12 💥 (بسیار مؤثر)»
     detail.append(
-        f"   • {attacker.creature.name} به {defender.creature.name}: <b>−{dmg}</b>{crit_tag}{eff}{extra}"
+        f"   • {creature_name(attacker.creature)} به {creature_name(defender.creature)}: <b>−{dmg}</b>{crit_tag}{eff}{extra}"
     )
 
 

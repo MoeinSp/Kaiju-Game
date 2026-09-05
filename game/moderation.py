@@ -45,15 +45,63 @@ _RARITY_ALIASES = {
 }
 
 
-def admin_give_kaiju(identifier: str, raw: str) -> dict:
-    """Owner tool: grant a custom creature to a player. `raw` is
-    «<نایابی> <سطح> <ستاره> <تعداد> <نام‌گونه…>», e.g. «mythic 100 5 3 کرکس دریا».
-    The species name may contain spaces, so it's everything after the four numbers."""
+def _build_creature_base(rarity_key: str, level: int) -> dict:
+    """The base stat block for a granted creature at `level` — matches how add_xp()
+    builds a leveled creature (rarity-scaled starter base + flat per-level growth)."""
+    from game import constants
+
+    mult = constants.RARITY_STAT_MULTIPLIER[rarity_key]
+    grow = level - 1
+    return {
+        "base_hp": round(constants.STARTER_BASE_HP * mult) + constants.LEVEL_UP_HP * grow,
+        "base_atk": round(constants.STARTER_BASE_ATK * mult) + constants.LEVEL_UP_ATK * grow,
+        "base_def": round(constants.STARTER_BASE_DEF * mult) + constants.LEVEL_UP_DEF * grow,
+        "base_spd": round(constants.STARTER_BASE_SPD * mult) + constants.LEVEL_UP_SPD * grow,
+    }
+
+
+def _grant_creatures(user, species, element, rarity_key, level, star, count, *, maxed_parts=False):
     from django.db import transaction as _tx
 
     from bio_lab.models import Creature
     from game import constants
+
+    base = _build_creature_base(rarity_key, level)
+    if maxed_parts:
+        cap = constants.part_upgrade_cap(star)  # 20 per star, 100 at 5★
+        base.update(wings_lvl=cap, armor_lvl=cap, fangs_lvl=cap, poison_lvl=cap)
+    with _tx.atomic():
+        for _ in range(count):
+            Creature.objects.create(
+                owner=user, name=species, element=element, rarity=rarity_key,
+                star_level=star, level=level, xp=0, is_active=False, **base,
+            )
+
+
+def _resolve_species(species: str):
+    from game import constants
+
+    element = constants.species_element(species)
+    if element is None:
+        names = "، ".join(sorted(constants.SPECIES.keys()))
+        raise GameError(f"گونه‌ی «{species}» ناشناخته‌ست.\nگونه‌های مجاز:\n{names}")
+    return element
+
+
+def _resolve_rarity(token: str) -> str:
     from game.keywords import normalize
+
+    rarity_key = _RARITY_ALIASES.get(token.lower()) or _RARITY_ALIASES.get(normalize(token))
+    if rarity_key is None:
+        raise GameError("نایابی نامعتبره. یکی از: common / rare / epic / legendary / mythic.")
+    return rarity_key
+
+
+def admin_give_kaiju(identifier: str, raw: str) -> dict:
+    """Owner tool: grant a custom creature to a player. `raw` is
+    «<نایابی> <سطح> <ستاره> <تعداد> <نام‌گونه…>», e.g. «mythic 100 5 3 کرکس دریا».
+    The species name may contain spaces, so it's everything after the four numbers."""
+    from game import constants
 
     parts = (raw or "").strip().split()
     if len(parts) < 5:
@@ -62,18 +110,13 @@ def admin_give_kaiju(identifier: str, raw: str) -> dict:
             "مثال: <code>mythic 100 5 3 کرکس دریا</code>\n"
             "نایابی: common / rare / epic / legendary / mythic (یا معادل فارسی)."
         )
-    rarity_key = _RARITY_ALIASES.get(parts[0].lower()) or _RARITY_ALIASES.get(normalize(parts[0]))
-    if rarity_key is None:
-        raise GameError("نایابی نامعتبره. یکی از: common / rare / epic / legendary / mythic.")
+    rarity_key = _resolve_rarity(parts[0])
     try:
         level, star, count = int(parts[1]), int(parts[2]), int(parts[3])
     except ValueError:
         raise GameError("سطح، ستاره و تعداد باید عدد باشن.")
     species = " ".join(parts[4:]).strip()
-    element = constants.species_element(species)
-    if element is None:
-        names = "، ".join(sorted(constants.SPECIES.keys()))
-        raise GameError(f"گونه‌ی «{species}» ناشناخته‌ست.\nگونه‌های مجاز:\n{names}")
+    element = _resolve_species(species)
 
     star = max(1, min(constants.STAR_MAX, star))
     max_level = constants.creature_max_level(rarity_key, star)
@@ -81,25 +124,98 @@ def admin_give_kaiju(identifier: str, raw: str) -> dict:
     count = max(1, min(50, count))
 
     user = find_user_or_raise(identifier)
-    mult = constants.RARITY_STAT_MULTIPLIER[rarity_key]
-    # match how add_xp() builds a leveled creature: rarity-scaled starter base + flat
-    # per-level growth for each level above 1 (star/parts/gear apply in effective_stats)
-    grow = level - 1
-    base = {
-        "base_hp": round(constants.STARTER_BASE_HP * mult) + constants.LEVEL_UP_HP * grow,
-        "base_atk": round(constants.STARTER_BASE_ATK * mult) + constants.LEVEL_UP_ATK * grow,
-        "base_def": round(constants.STARTER_BASE_DEF * mult) + constants.LEVEL_UP_DEF * grow,
-        "base_spd": round(constants.STARTER_BASE_SPD * mult) + constants.LEVEL_UP_SPD * grow,
-    }
-    with _tx.atomic():
-        for _ in range(count):
-            Creature.objects.create(
-                owner=user, name=species, element=element, rarity=rarity_key,
-                star_level=star, level=level, xp=0, is_active=False, **base,
-            )
+    _grant_creatures(user, species, element, rarity_key, level, star, count)
     return {
         "user": user, "species": species, "element": element, "rarity": rarity_key,
-        "level": level, "star": star, "count": count,
+        "level": level, "star": star, "count": count, "maxed": False,
+    }
+
+
+def admin_give_maxed_kaiju(identifier: str, raw: str) -> dict:
+    """Owner tool: grant a FULLY MAXED creature — top star, max level for that
+    star, and every body part (نیش/بال/زره/غده) at its 5★ cap. `raw` is
+    «<نایابی> <تعداد> <نام‌گونه…>», e.g. «mythic 3 کرکس دریا»."""
+    from game import constants
+
+    parts = (raw or "").strip().split()
+    if len(parts) < 3:
+        raise GameError(
+            "فرمت درست: <code>&lt;نایابی&gt; &lt;تعداد&gt; &lt;نام‌گونه&gt;</code>\n"
+            "مثال: <code>mythic 3 کرکس دریا</code>\n"
+            "<i>سطح/ستاره/ارتقای اعضا همه خودکار مکس می‌شن.</i>"
+        )
+    rarity_key = _resolve_rarity(parts[0])
+    try:
+        count = int(parts[1])
+    except ValueError:
+        raise GameError("تعداد باید عدد باشه.")
+    species = " ".join(parts[2:]).strip()
+    element = _resolve_species(species)
+
+    star = constants.STAR_MAX
+    level = constants.creature_max_level(rarity_key, star)
+    count = max(1, min(50, count))
+
+    user = find_user_or_raise(identifier)
+    _grant_creatures(user, species, element, rarity_key, level, star, count, maxed_parts=True)
+    return {
+        "user": user, "species": species, "element": element, "rarity": rarity_key,
+        "level": level, "star": star, "count": count, "maxed": True,
+    }
+
+
+# owner can name the equipment slot in English or Persian
+_SLOT_ALIASES = {
+    "weapon": "weapon", "سلاح": "weapon", "اسلحه": "weapon",
+    "armor": "armor", "زره": "armor",
+    "rune": "rune", "طلسم": "rune", "حلقه": "rune",
+    "offhand": "offhand", "غلاف": "offhand", "غده": "offhand",
+}
+
+
+def admin_give_equipment(identifier: str, raw: str) -> dict:
+    """Owner tool: grant a custom equipment piece at a chosen level. `raw` is
+    «<جایگاه> <نایابی> <سطح> <تعداد>», e.g. «weapon mythic 25 2». The slot picks a
+    random template of that kind; level is clamped to the absolute equipment cap."""
+    from django.db import transaction as _tx
+
+    from bio_lab.models import Equipment
+    from game import constants
+    from game.keywords import normalize
+
+    parts = (raw or "").strip().split()
+    if len(parts) < 4:
+        raise GameError(
+            "فرمت درست: <code>&lt;جایگاه&gt; &lt;نایابی&gt; &lt;سطح&gt; &lt;تعداد&gt;</code>\n"
+            "مثال: <code>weapon mythic 25 2</code>\n"
+            "<i>جایگاه: weapon/سلاح · armor/زره · rune/طلسم · offhand/غلاف</i>"
+        )
+    slot = _SLOT_ALIASES.get(parts[0].lower()) or _SLOT_ALIASES.get(normalize(parts[0]))
+    if slot is None:
+        raise GameError("جایگاه نامعتبره. یکی از: weapon/سلاح، armor/زره، rune/طلسم، offhand/غلاف.")
+    rarity_key = _resolve_rarity(parts[1])
+    try:
+        level, count = int(parts[2]), int(parts[3])
+    except ValueError:
+        raise GameError("سطح و تعداد باید عدد باشن.")
+    level = max(1, min(constants.EQUIPMENT_MAX_LEVEL, level))
+    count = max(1, min(50, count))
+
+    user = find_user_or_raise(identifier)
+    import random as _random
+
+    templates = constants.EQUIPMENT_TEMPLATES[slot]
+    with _tx.atomic():
+        last = None
+        for _ in range(count):
+            template = _random.choice(templates)
+            last = Equipment.objects.create(
+                owner=user, slot=slot, template_key=template, name=template,
+                rarity=rarity_key, level=level,
+            )
+    return {
+        "user": user, "slot": slot, "slot_label": constants.EQUIPMENT_SLOT_LABELS[slot],
+        "rarity": rarity_key, "level": level, "count": count, "name": last.name,
     }
 
 
@@ -133,6 +249,25 @@ def charge_user(identifier: str, coins: int = 0, dna: int = 0, diamonds: int = 0
 
 def deduct_resource(identifier: str, resource: str, amount: int) -> tuple[User, int]:
     return _adjust_resource(identifier, resource, amount, sign=-1)
+
+
+def admin_max_buildings(identifier: str) -> dict:
+    """Owner tool: set every one of a player's buildings to the absolute max level.
+    Seeds any missing building rows first, then raises them all to BUILDING_MAX_LEVEL
+    (main hall included, so the per-building cap is satisfied)."""
+    from django.db import transaction as _tx
+
+    from bio_lab.models import Building
+    from game import constants
+    from game.buildings import get_or_create_buildings
+
+    user = find_user_or_raise(identifier)
+    with _tx.atomic():
+        get_or_create_buildings(user)  # make sure all types exist
+        count = Building.objects.filter(
+            owner=user, building_type__in=constants.BUILDING_TYPES
+        ).update(level=constants.BUILDING_MAX_LEVEL)
+    return {"user": user, "count": count, "max_level": constants.BUILDING_MAX_LEVEL}
 
 
 def set_lab_level(identifier: str, level: int) -> tuple[User, int]:

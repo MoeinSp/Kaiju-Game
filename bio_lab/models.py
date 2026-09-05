@@ -209,7 +209,11 @@ class AllianceWarHit(models.Model):
 
 class Creature(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="creatures")
-    name = models.CharField(max_length=64)
+    name = models.CharField(max_length=64)  # the species/breed (نژاد) — never player-set
+    # optional player-chosen display nickname (نام). Blank = show the breed. Validated in
+    # game/naming.py to hold no HTML metacharacters, so it's safe to interpolate directly.
+    custom_name = models.CharField(max_length=24, blank=True, default="")
+    name_changes = models.IntegerField(default=0)  # renames so far — drives the rising price
     element = models.CharField(max_length=16)
     rarity = models.CharField(max_length=16, default="common")
     star_level = models.IntegerField(default=1)  # prestige tier from fusion "generations" — never player-set
