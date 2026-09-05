@@ -2476,27 +2476,27 @@ async def autohunt_start_callback(update: Update, context: ContextTypes.DEFAULT_
     if energy < constants.HUNT_ENERGY_COST:
         await query.answer(f"⚡ انرژی کافی نداری ({energy}/{constants.MAX_ENERGY}).", show_alert=True)
         return
-    context.user_data[AWAITING_PLAYER_KEY] = {"action": "autohunt_energy"}
+    context.user_data.pop(AWAITING_PLAYER_KEY, None)  # buttons first; «دلخواه» arms text input
     half = max(constants.HUNT_ENERGY_COST, energy // 2)
     await query.answer()
     await safe_edit_message_text(
         query,
         f"⚡️ <b>شکار خودکار</b>\n"
-        f"چند واحد انرژی می‌خوای صرف کنی؟ (الان <b>{energy}/{constants.MAX_ENERGY}</b> داری — "
+        f"چقدر انرژی می‌خوای صرف کنی؟ (الان <b>{energy}/{constants.MAX_ENERGY}</b> داری — "
         f"هر شکار {constants.HUNT_ENERGY_COST} انرژی).\n\n"
-        f"<i>یه عدد بفرست یا از دکمه‌های زیر استفاده کن. توجه: شکار خودکار نصف لوت شکار دستیه "
-        f"و طلا و دی‌ان‌ای کمتری می‌ده.</i>",
+        f"<i>توجه: شکار خودکار نصف لوت شکار دستیه و طلا و دی‌ان‌ای کمتری می‌ده.</i>",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
             [btn(f"⚡️ همه انرژی ({energy})", style=BATTLE, callback_data="autohunt_amt:all"),
              btn(f"½ نصف ({half})", style=NAV, callback_data="autohunt_amt:half")],
+            [btn("⌨️ انرژی دلخواه", style=NAV, callback_data="autohunt_amt:custom")],
             [back_btn("menu:me", "انصراف")],
         ]),
     )
 
 
 async def autohunt_amt_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """«همه انرژی» / «نصف انرژی» quick picks → jump straight to the confirm screen."""
+    """«همه انرژی» / «نصف» → confirm screen; «انرژی دلخواه» → ask for a number."""
     query = update.callback_query
     which = query.data.split(":")[1]
     try:
@@ -2506,6 +2506,18 @@ async def autohunt_amt_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return
     if energy < constants.HUNT_ENERGY_COST:
         await query.answer(f"⚡ انرژی کافی نداری ({energy}/{constants.MAX_ENERGY}).", show_alert=True)
+        return
+    if which == "custom":
+        context.user_data[AWAITING_PLAYER_KEY] = {"action": "autohunt_energy"}
+        await query.answer()
+        await safe_edit_message_text(
+            query,
+            f"⌨️ <b>انرژی دلخواه</b>\n"
+            f"یه عدد بفرست (بین ۱ تا <b>{energy}</b>).\n\n"
+            f"<i>شکار خودکار نصف لوت شکار دستیه.</i>",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[back_btn("menu:me", "انصراف")]]),
+        )
         return
     amount = energy if which == "all" else max(constants.HUNT_ENERGY_COST, energy // 2)
     context.user_data.pop(AWAITING_PLAYER_KEY, None)
@@ -3822,7 +3834,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(upgrade_step_callback, pattern=r"^upg_step:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(hunt_go_callback, pattern=r"^hunt_go:"))
     application.add_handler(CallbackQueryHandler(autohunt_start_callback, pattern=r"^autohunt_start$"))
-    application.add_handler(CallbackQueryHandler(autohunt_amt_callback, pattern=r"^autohunt_amt:(all|half)$"))
+    application.add_handler(CallbackQueryHandler(autohunt_amt_callback, pattern=r"^autohunt_amt:(all|half|custom)$"))
     application.add_handler(CallbackQueryHandler(autohunt_do_callback, pattern=r"^autohunt_do:\d+$"))
     application.add_handler(CallbackQueryHandler(hunt_next_callback, pattern=r"^hunt_next$"))
     application.add_handler(CallbackQueryHandler(hunt_swap_callback, pattern=r"^hunt_swap:"))

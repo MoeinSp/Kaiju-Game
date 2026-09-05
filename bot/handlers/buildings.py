@@ -144,6 +144,7 @@ def _detail_view(user, building: Building) -> dict:
     is how a wrong-order bug gets in."""
     is_producer = produces(building.building_type) and building.level > 0
     active_upgrade(user)  # finish any due upgrades before we count/inspect
+    workers = assigned_creatures(building)
     return {
         "building": building,
         "upgrade": upgrade_for_building(user, building),
@@ -151,9 +152,12 @@ def _detail_view(user, building: Building) -> dict:
         "builder_slots": builder_slots(user),
         "pending": pending_amount(building),
         "cap": max_level_for(user, building.building_type),
-        "workers": assigned_creatures(building),
+        "workers": workers,
         "slots": worker_slots(building),
         "bonus": worker_bonus(building),
+        # per-worker influence (queries gear) — resolve HERE in sync, never in the async
+        # text builder (SynchronousOnlyOperation crash otherwise)
+        "worker_influence": {c.id: creature_mine_influence(c) for c in workers},
         "unlocked": is_unlocked(user, building.building_type),
         # rate/storage query the DB (worker_bonus) — resolve them HERE in sync context,
         # never inside the async text builder (that was the "mines won't open" crash)
@@ -206,8 +210,9 @@ def _building_detail_text(view: dict) -> str:
             f"👷‍♂️ کارگران مستقر ({len(workers)}/{slots}):",
         ]
         if workers:
+            influence = view.get("worker_influence", {})
             for c in workers:
-                gain = creature_mine_influence(c) * 100
+                gain = influence.get(c.id, 0.0) * 100
                 lines.append(f"▫️ {c.name} [{constants.RARITY_LABELS[c.rarity]} · سطح {c.level}] ⟵ +{gain:.0f}٪")
         else:
             lines.append("<i>خالیه — هر کایجویی که بذاری تولید رو بیشتر می‌کنه.</i>")
@@ -516,18 +521,26 @@ def _speedup_all_sync(tg_user, building_id, minutes):
     return _detail_view(user, building), completed, used
 
 
+def _influence_map(creatures) -> dict:
+    """{creature_id: mine_influence} precomputed in SYNC context — the workers screens
+    render in async handlers where a per-creature gear query would crash."""
+    return {c.id: creature_mine_influence(c) for c in creatures}
+
+
 def _workers_sync(tg_user, building_id):
     user, _ = get_or_create_user(tg_user)
     try:
         building = Building.objects.get(id=building_id, owner=user)
     except Building.DoesNotExist:
         raise GameError("این ساختمون پیدا نشد.")
-    return user, building, assigned_creatures(building), worker_slots(building), free_creatures(user)
+    workers = assigned_creatures(building)
+    free = free_creatures(user)
+    return user, building, workers, worker_slots(building), free, _influence_map([*workers, *free])
 
 
-def _workers_text(building: Building, workers, slots: int, free) -> str:
+def _workers_text(building: Building, workers, slots: int, free, influence: dict) -> str:
     label = constants.BUILDING_LABELS[building.building_type]
-    bonus = sum(creature_mine_influence(c) for c in workers)
+    bonus = sum(influence.get(c.id, 0.0) for c in workers)
     lines = [
         f"👷 <b>کارگرهای {label}</b>",
         f"<blockquote>{len(workers)} از {slots} جایگاه پره — هر سطح ساختمون یه جایگاه می‌ده."
@@ -537,7 +550,7 @@ def _workers_text(building: Building, workers, slots: int, free) -> str:
     if workers:
         lines.append("<b>سر کار:</b>")
         for creature in workers:
-            gain = creature_mine_influence(creature) * 100
+            gain = influence.get(creature.id, 0.0) * 100
             lines.append(f"⛏ {creature.name} · سطح {creature.level} → +{gain:.0f}٪")
         lines.append("")
     if len(workers) >= slots:
@@ -554,7 +567,7 @@ def _workers_text(building: Building, workers, slots: int, free) -> str:
 _WORKER_PAGE = 8
 
 
-def _workers_keyboard(building: Building, workers, slots: int, free, filt: str = "all", page: int = 0) -> InlineKeyboardMarkup:
+def _workers_keyboard(building: Building, workers, slots: int, free, influence: dict, filt: str = "all", page: int = 0) -> InlineKeyboardMarkup:
     from bot.handlers.private import creature_picker_frame
 
     # already-stationed workers (tap to remove) sit at the top
@@ -571,7 +584,7 @@ def _workers_keyboard(building: Building, workers, slots: int, free, filt: str =
         )
         rows += tab_rows
         for c in chunk:
-            gain = creature_mine_influence(c) * 100
+            gain = influence.get(c.id, 0.0) * 100
             rows.append([btn(
                 f"➕ {c.name} {'⭐' * c.star_level} · Lv{c.level} · {constants.RARITY_LABELS[c.rarity]} → +{gain:.0f}٪",
                 style=BUILD, callback_data=f"bld_assign:{building.id}:{c.id}",
@@ -589,7 +602,7 @@ async def building_workers_callback(update: Update, context: ContextTypes.DEFAUL
     filt = parts[2] if len(parts) > 3 else "all"
     page = int(parts[3]) if len(parts) > 3 else 0
     try:
-        _user, building, workers, slots, free = await run_db(
+        _user, building, workers, slots, free, influence = await run_db(
             _workers_sync, update.effective_user, building_id
         )
     except GameError as exc:
@@ -598,9 +611,9 @@ async def building_workers_callback(update: Update, context: ContextTypes.DEFAUL
     await query.answer()
     await safe_edit_message_text(
         query,
-        _workers_text(building, workers, slots, free),
+        _workers_text(building, workers, slots, free, influence),
         parse_mode="HTML",
-        reply_markup=_workers_keyboard(building, workers, slots, free, filt, page),
+        reply_markup=_workers_keyboard(building, workers, slots, free, influence, filt, page),
     )
 
 
@@ -619,12 +632,15 @@ def _assign_sync(tg_user, building_id, creature_id, attach: bool):
     else:
         unassign(user, creature)
     building.refresh_from_db()  # pick up the re-locked banked_pending for the re-render
+    workers = assigned_creatures(building)
+    free = free_creatures(user)
     return (
         creature,
         building,
-        assigned_creatures(building),
+        workers,
         worker_slots(building),
-        free_creatures(user),
+        free,
+        _influence_map([*workers, *free]),
     )
 
 
@@ -633,7 +649,7 @@ async def building_assign_callback(update: Update, context: ContextTypes.DEFAULT
     action, building_id, creature_id = query.data.split(":")
     attach = action == "bld_assign"
     try:
-        creature, building, workers, slots, free = await run_db(
+        creature, building, workers, slots, free, influence = await run_db(
             _assign_sync, update.effective_user, int(building_id), int(creature_id), attach
         )
     except GameError as exc:
@@ -643,9 +659,9 @@ async def building_assign_callback(update: Update, context: ContextTypes.DEFAULT
     await query.answer(f"{creature.name} {verb} · تولیدِ جمع‌شده سر جاشه ✅")
     await safe_edit_message_text(
         query,
-        _workers_text(building, workers, slots, free),
+        _workers_text(building, workers, slots, free, influence),
         parse_mode="HTML",
-        reply_markup=_workers_keyboard(building, workers, slots, free),
+        reply_markup=_workers_keyboard(building, workers, slots, free, influence),
     )
 
 
