@@ -27,7 +27,8 @@ from game.daily import check_missions, consume_daily, record_action
 from game.emoji import get_emoji
 from game.energy import spend_energy
 from game.guardian import challenge_guardian, ensure_guardian, get_guardian
-from game.raid import RaidError, attack_boss, distribute_rewards, get_active_boss, spawn_boss
+from game.raid import (RAID_DAILY_ATTACKS, RaidError, attack_boss, distribute_rewards,
+                       get_active_boss, spawn_boss)
 
 
 def _speedup_note(minutes: int | None) -> str:
@@ -546,7 +547,7 @@ def _attack_sync(chat, tg_user):
         raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
 
     spend_energy(user, constants.RAID_ATTACK_ENERGY_COST, "حمله")
-    dmg, defeated, dna_gain = attack_boss(user, creature, boss)
+    dmg, defeated, dna_gain, attacks_left = attack_boss(user, creature, boss)
     user.save(update_fields=["energy", "energy_updated_at"])
 
     record_action(user, "raid_attack")
@@ -570,7 +571,7 @@ def _attack_sync(chat, tg_user):
             )
         speedup_won = maybe_award_speedup_card(user)  # bonus chance for whoever lands the killing blow
 
-    return creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won, user.energy, dna_gain
+    return creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won, user.energy, dna_gain, attacks_left
 
 
 async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -582,7 +583,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     try:
-        creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won, energy_left, dna_gain = await run_db(
+        creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won, energy_left, dna_gain, attacks_left = await run_db(
             _attack_sync, update.effective_chat, update.effective_user
         )
     except (RaidError, GameError) as exc:
@@ -608,6 +609,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "",
         f"🎁 پاداش این ضربه: +{dna_gain} {get_emoji('dna')}",
         f"{get_emoji('energy')} انرژی باقی‌مانده: {energy_left} (-1⚡)",
+        f"🔁 اتک رید باقی‌مانده‌ی امروز: <b>{attacks_left}</b> از {RAID_DAILY_ATTACKS}",
     ]
     text = "\n".join(lines)
     text += _mission_lines(completed_missions)

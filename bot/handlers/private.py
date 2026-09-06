@@ -995,8 +995,8 @@ _CATEGORIES = {
     ]),
     "social": ("👥 اجتماعی", [
         [("اتحاد من", "alliance_info", "n", "btn_alliance"), ("لیگ رتبه‌بندی", "league", "n", "btn_league")],
-        [("🏰 لیگ اتحادها", "alliance_league", "n", "btn_alliance"), ("رتبه‌بندی", "rank", "n", "btn_rank")],
-        [("پروفایل من", "profile", "n", "btn_profile")],
+        [("🏰 لیگ اتحادها", "alliance_league", "n", "btn_alliance"), ("🏦 رتبه‌بندی خزانه", "rank", "n", "btn_rank")],
+        [("🐲 رتبه‌بندی رید", "raid_rank", "n", "btn_rank"), ("پروفایل من", "profile", "n", "btn_profile")],
     ]),
 }
 
@@ -3662,30 +3662,65 @@ async def rank(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not top10:
         await send_screen(update, "هنوز هیچ اتحادی ساخته نشده.", reply_markup=back_only_keyboard())
         return
-    badges = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
     d1, d2, d3 = (DAILY_TREASURY_REWARD_BY_RANK[r] for r in (1, 2, 3))
     lines = [
         "🏦 <b>رتبه‌بندی خزانه اتحادها</b>",
+        "",
+        "⚠️ رتبه‌بندی بر اساس میانگین خزانه اتحاد در طول ۲۴ ساعت (از ساعت ۰۰:۰۰ تا ۲۴:۰۰) محاسبه می‌شود.",
+        "",
+        "🎁 <b>پاداش روزانه به خزانه:</b>",
+        f"🥇 {d1:,}🪙 │ 🥈 {d2:,}🪙 │ 🥉 {d3:,}🪙",
+        "",
         "──────────────",
-        "اتحادها بر اساس <b>خزانه</b> رتبه‌بندی می‌شن. هر روز به خزانه‌ی ۳ اتحاد برتر واریز می‌شه:",
-        f"🥇 {d1:,}🪙 · 🥈 {d2:,}🪙 · 🥉 {d3:,}🪙",
         "",
     ]
     for i, r in enumerate(top10, start=1):
-        badge = badges[i - 1] if i <= len(badges) else f"{i}."
         name = r["alliance"].name
-        reward = DAILY_TREASURY_REWARD_BY_RANK.get(i)
-        rw = f" │ 🎁 {reward:,}🪙/روز" if reward else ""
         if i <= 3:
-            lines.append(f"{badge} <b>{name}</b>")
-            lines.append(f"└ 🏦 {r['treasury']:,} طلا │ 👥 {r['member_count']} عضو{rw}")
+            reward = DAILY_TREASURY_REWARD_BY_RANK.get(i)
+            lines.append(f"{medals[i]} <b>{name}</b>")
+            lines.append(f"└ 🏦 {r['treasury']:,} طلا │ 👥 {r['member_count']} عضو │ 🎁 {reward:,}🪙")
             lines.append("")
         else:
             if i == 4:
                 lines.append("──────────────")
-            lines.append(f"{badge} {name} │ 🏦 {r['treasury']:,} │ 👥 {r['member_count']}")
+            lines.append(f"{i}. {name} │ 🏦 {r['treasury']:,} │ 👥 {r['member_count']}")
     if my_rank is not None:
         lines.append(f"\n📍 رتبه‌ی اتحاد تو: <b>{my_rank}</b> از {total}")
+    await send_screen(update, "\n".join(lines), parse_mode="HTML",
+                      reply_markup=back_only_keyboard("menu:cat_social", "بازگشت به اجتماعی"))
+
+
+async def raid_rank_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """🐲 رتبه‌بندی هفتگی رید — players by total raid damage this week, with the weekly
+    reward each rank earns (paid + reset at the weekly season close)."""
+    from game.raid import weekly_raid_leaderboard
+
+    rows = await run_db(weekly_raid_leaderboard, 10)
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    lines = [
+        "🐲 <b>رتبه‌بندی هفتگی رید</b>",
+        "",
+        "جوایز پایان هفته بر اساس مجموع آسیب به باس‌های رید به رِیدرهای برتر داده می‌شود.",
+        "",
+        "──────────────",
+        "",
+    ]
+    if not rows:
+        lines.append("<i>این هفته هنوز کسی به رید حمله نکرده.</i>")
+    for r in rows:
+        rank = r["rank"]
+        reward = r["reward"]
+        rw = f" │ 🎁 {reward['diamonds']}💎+{reward['coins']:,}🪙" if reward else ""
+        if rank <= 3:
+            lines.append(f"{medals[rank]} <b>{r['name']}</b>")
+            lines.append(f"└ 💥 {r['damage']:,} آسیب{rw}")
+            lines.append("")
+        else:
+            if rank == 4:
+                lines.append("──────────────")
+            lines.append(f"{rank}. {r['name']} │ 💥 {r['damage']:,}{rw}")
     await send_screen(update, "\n".join(lines), parse_mode="HTML",
                       reply_markup=back_only_keyboard("menu:cat_social", "بازگشت به اجتماعی"))
 
@@ -3836,6 +3871,7 @@ _MENU_ACTIONS = {
     "wheel": wheel_cmd,
     "alliance_info": alliance_info_cmd,
     "rank": rank,
+    "raid_rank": raid_rank_panel,
     "admin": admin_cmd,
     "profile": profile,
     "balance": balance,

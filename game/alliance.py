@@ -21,9 +21,16 @@ def create_alliance(user: User, name: str) -> Alliance:
         raise GameError("این اسم قبلاً گرفته شده، یه اسم دیگه امتحان کن.")
 
     alliance = Alliance.objects.create(name=name, leader=user)
-    user.alliance = alliance
-    user.save(update_fields=["alliance"])
+    _join_stamp(user, alliance)
     return alliance
+
+
+def _join_stamp(user: User, alliance: Alliance) -> None:
+    """Attach a user to an alliance and record WHEN they joined — a brand-new member is
+    gated from raid attacks and war rallies until the next midnight."""
+    user.alliance = alliance
+    user.alliance_joined_at = timezone.now()
+    user.save(update_fields=["alliance", "alliance_joined_at"])
 
 
 def join_alliance(user: User, name: str) -> Alliance:
@@ -34,8 +41,7 @@ def join_alliance(user: User, name: str) -> Alliance:
         raise GameError("همچین اتحادی پیدا نشد. اسم رو دقیق بنویس یا با /alliance_create یکی بساز.")
     _assert_has_room(alliance)
 
-    user.alliance = alliance
-    user.save(update_fields=["alliance"])
+    _join_stamp(user, alliance)
     return alliance
 
 
@@ -90,8 +96,7 @@ def _request_or_join(user: User, alliance: Alliance) -> dict:
             f"(قدرت تو {power}). اول هیولات رو قوی‌تر کن."
         )
     if alliance.auto_accept:
-        user.alliance = alliance
-        user.save(update_fields=["alliance"])
+        _join_stamp(user, alliance)
         return {"joined": True, "alliance": alliance}
 
     from bio_lab.models import AllianceJoinRequest
@@ -144,8 +149,7 @@ def approve_request(actor: User, request_id: int) -> dict:
         raise GameError("این کاربر قبلاً به یه اتحاد دیگه پیوسته — درخواستش پاک شد.")
     _assert_has_room(alliance)
 
-    applicant.alliance = alliance
-    applicant.save(update_fields=["alliance"])
+    _join_stamp(applicant, alliance)
     # invalidate every OTHER pending request of this applicant — they've joined here
     others = list(
         AllianceJoinRequest.objects.filter(user=applicant).exclude(id=req.id).select_related("alliance")
@@ -382,8 +386,7 @@ def join_alliance_by_id(user: User, alliance_id: int) -> Alliance:
     if alliance is None:
         raise GameError("این اتحاد دیگه وجود نداره.")
     _assert_has_room(alliance)
-    user.alliance = alliance
-    user.save(update_fields=["alliance"])
+    _join_stamp(user, alliance)
     return alliance
 
 
@@ -437,15 +440,46 @@ def award_alliance_league() -> list[tuple[int, str]]:
     return out
 
 
+def alliance_daily_avg(a: Alliance) -> float:
+    """The alliance's average treasury over the current day's samples (00:00–24:00).
+    Falls back to the live treasury when there are no samples yet (fresh day / brand-new
+    alliance) so the board is never blank."""
+    if a.treasury_avg_count > 0:
+        return a.treasury_avg_sum / a.treasury_avg_count
+    return float(a.treasury_gold)
+
+
+def sample_treasury_averages() -> None:
+    """Add every alliance's current treasury to today's running average. Called every
+    few minutes from notify_job; resets the accumulator when the day rolls over, so the
+    ranking is the mean treasury across the day rather than a single snapshot."""
+    from game.daily import today_str
+
+    today = today_str()
+    for a in Alliance.objects.all():
+        if a.treasury_avg_day != today:
+            a.treasury_avg_sum = 0.0
+            a.treasury_avg_count = 0
+            a.treasury_avg_day = today
+        a.treasury_avg_sum += a.treasury_gold
+        a.treasury_avg_count += 1
+        a.save(update_fields=["treasury_avg_sum", "treasury_avg_count", "treasury_avg_day"])
+
+
 def top_alliances_by_treasury(limit: int = 10) -> list[dict]:
-    """Alliances ranked by treasury gold (richest first) — the basis for the daily
-    treasury reward and the «رتبه‌بندی خزانه» board."""
-    ranked = [
-        {"alliance": a, "treasury": a.treasury_gold, "member_count": a.members.count(),
-         "power": _alliance_power(a)}
-        for a in Alliance.objects.order_by("-treasury_gold", "id")[:limit]
-    ]
-    return ranked
+    """Alliances ranked by their DAILY-AVERAGE treasury (richest first) — the basis for
+    the daily treasury reward and the «رتبه‌بندی خزانه» board. `treasury` in each row is
+    that rounded daily average."""
+    ranked = sorted(
+        (
+            {"alliance": a, "treasury": round(alliance_daily_avg(a)),
+             "member_count": a.members.count(), "power": _alliance_power(a)}
+            for a in Alliance.objects.all()
+        ),
+        key=lambda r: r["treasury"],
+        reverse=True,
+    )
+    return ranked[:limit]
 
 
 # Daily gold deposited straight into the treasury of the richest alliances (by treasury).
@@ -910,6 +944,13 @@ def rally_war(user: User) -> dict:
 
     if user.alliance_id is None:
         raise GameError("عضو هیچ اتحادی نیستی.")
+    from game.raid import _joined_alliance_today
+
+    if _joined_alliance_today(user):
+        raise GameError(
+            "⏳ چون به‌تازگی به این اتحاد پیوستی، هنوز نمی‌تونی توی جنگ شرکت کنی.\n"
+            "از فردا می‌تونی قدرتت رو به جنگ اضافه کنی."
+        )
     war = active_war_for(user.alliance_id)
     if war is None:
         raise GameError("اتحادت الان توی هیچ جنگی نیست.")

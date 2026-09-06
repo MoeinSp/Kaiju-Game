@@ -91,6 +91,9 @@ class User(models.Model):
     alliance = models.ForeignKey(
         "Alliance", null=True, blank=True, on_delete=models.SET_NULL, related_name="members"
     )
+    # when the player joined their CURRENT alliance — a brand-new member is gated from
+    # raid attacks / war rallies until the next midnight (game/raid, game/alliance)
+    alliance_joined_at = models.DateTimeField(null=True, blank=True)
 
     is_banned = models.BooleanField(default=False)
     is_admin = models.BooleanField(default=False)  # granted by the owner; full panel except admin management
@@ -111,6 +114,13 @@ class Alliance(models.Model):
     treasury_gold = models.IntegerField(default=0)
     last_heisted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # rolling daily treasury average — sampled every few minutes (game/alliance.
+    # sample_treasury_averages) so the treasury board ranks by the day's average, not a
+    # single snapshot. Resets each day; avg = sum / count.
+    treasury_avg_sum = models.FloatField(default=0.0)
+    treasury_avg_count = models.IntegerField(default=0)
+    treasury_avg_day = models.CharField(max_length=10, blank=True, default="")
 
     # treasury-funded, alliance-wide buildings (game/alliance.py) — every member
     # benefits. xp/pass are the original two; fortress/barracks/vault were added

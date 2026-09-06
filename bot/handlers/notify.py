@@ -89,7 +89,8 @@ def _opt_out(user_id: int) -> None:
 
 async def notify_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     # daily alliance-treasury reward (day-guarded; settles once per day) — do it here so
-    # it fires without needing a user to open a screen, then DM the winning members
+    # it fires without needing a user to open a screen, then DM the winning members.
+    # Runs BEFORE the average sampler so it settles on the day's finished averages.
     try:
         from game.season import settle_daily_treasury
 
@@ -102,6 +103,14 @@ async def notify_job(context: ContextTypes.DEFAULT_TYPE) -> None:
                 pass
             await asyncio.sleep(SEND_DELAY_SECONDS)
     except Exception:  # noqa: BLE001 — a treasury hiccup must not block re-engagement DMs
+        pass
+
+    # sample every alliance's treasury into today's running average (for the treasury board)
+    try:
+        from game.alliance import sample_treasury_averages
+
+        await run_db(sample_treasury_averages)
+    except Exception:  # noqa: BLE001
         pass
 
     pending = await run_db(collect_due)

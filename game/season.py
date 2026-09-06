@@ -98,6 +98,14 @@ def close_due_season() -> str | None:
     except Exception:  # noqa: BLE001 — a league-reward hiccup must not block the cup reset
         pass
 
+    # weekly raid ranking: pay the top raiders, then wipe raid progress for a fresh week
+    try:
+        from game.raid import settle_weekly_raid
+
+        settle_weekly_raid()
+    except Exception:  # noqa: BLE001 — a raid-settle hiccup must not block the cup reset
+        pass
+
     state.last_closed_week = now_week
     state.save(update_fields=["last_closed_week"])
     return closing

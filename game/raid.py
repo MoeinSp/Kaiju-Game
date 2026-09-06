@@ -19,7 +19,23 @@ BOSS_DEF_PER_LEVEL = 1         # small def growth so it never becomes unkillable
 DNA_REWARD_POOL_BASE = 600
 COIN_REWARD_POOL_BASE = 3000
 REWARD_PER_LEVEL = 0.18        # +18% of the reward pool per level
-COOLDOWN_STEP_SECONDS = 60     # each raid hit today makes the next one wait 1 min longer
+RAID_COOLDOWN_SECONDS = 300    # flat 5-minute cooldown between raid hits (never escalates)
+RAID_DAILY_ATTACKS = 10        # per-player daily raid-attack cap
+
+# Weekly raid ranking rewards — top players by total raid damage in the week, paid at
+# the weekly reset (game.season.close_due_season → settle_weekly_raid).
+RAID_WEEKLY_REWARD_BY_RANK = {
+    1: {"diamonds": 60, "coins": 5000, "dna": 300},
+    2: {"diamonds": 45, "coins": 3500, "dna": 220},
+    3: {"diamonds": 35, "coins": 2500, "dna": 160},
+    4: {"diamonds": 22, "coins": 1500, "dna": 100},
+    5: {"diamonds": 22, "coins": 1500, "dna": 100},
+    6: {"diamonds": 15, "coins": 1000, "dna": 70},
+    7: {"diamonds": 10, "coins": 700, "dna": 50},
+    8: {"diamonds": 10, "coins": 700, "dna": 50},
+    9: {"diamonds": 8, "coins": 500, "dna": 40},
+    10: {"diamonds": 8, "coins": 500, "dna": 40},
+}
 
 
 class RaidError(Exception):
@@ -61,27 +77,42 @@ def _fmt_wait(seconds: int) -> str:
     return f"{s} ثانیه"
 
 
-def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bool]:
-    # No daily cap: instead the cooldown escalates by 1 minute for every raid hit
-    # already landed today, so early hits are fast and heavy grinding slows itself.
+def _joined_alliance_today(user: User) -> bool:
+    """True if the player joined their current alliance today (before the next midnight
+    boundary). Used to gate raid attacks and war rallies for brand-new members."""
+    from game.daily import today_str
+
+    if not user.alliance_id or user.alliance_joined_at is None:
+        return False
+    return timezone.localtime(user.alliance_joined_at).date().isoformat() == today_str()
+
+
+def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bool, int, int]:
+    """Land one hit on the raid boss. Flat 5-minute cooldown between hits and a daily
+    cap of RAID_DAILY_ATTACKS. Returns (dmg, defeated, dna_gain, attacks_left_today)."""
     from game.daily import get_daily_count
 
+    # a brand-new alliance member can't raid until the next midnight (kept vague on
+    # purpose — no reason shown to the player)
+    if _joined_alliance_today(user):
+        raise RaidError("⛔ الان امکان حمله به رید برات فعال نیست. کمی بعد دوباره امتحان کن.")
+
     hits_today = get_daily_count(user, "raid_attack")
-    required = hits_today * COOLDOWN_STEP_SECONDS
-    if required > 0:
-        last_hit = (
-            RaidDamageLog.objects.filter(user_id=user.id).order_by("-created_at").first()
+    if hits_today >= RAID_DAILY_ATTACKS:
+        raise RaidError(
+            "🚫 <b>سقف اتک روزانه‌ی رید پر شده!</b>\n\n"
+            f"امروز هر <b>{RAID_DAILY_ATTACKS}</b> اتک رید‌تو زدی — فردا دوباره پر می‌شه."
         )
-        if last_hit is not None:
-            elapsed = int((timezone.now() - last_hit.created_at).total_seconds())
-            if elapsed < required:
-                nxt = (hits_today + 1) * COOLDOWN_STEP_SECONDS // 60
-                raise RaidError(
-                    "😮‍💨 <b>هیولات خسته‌ست!</b>\n\n"
-                    f"⏳ زمان تا اتک بعدی: <b>{_fmt_wait(required - elapsed)}</b>\n\n"
-                    f"🔁 اتک‌های امروز: <b>{hits_today}</b>\n\n"
-                    f"📈 زمان انتظار بعدی: <b>{nxt} دقیقه</b> (+۱ دقیقه بعد از هر اتک)"
-                )
+    # flat 5-minute cooldown since the last hit — never escalates
+    last_hit = RaidDamageLog.objects.filter(user_id=user.id).order_by("-created_at").first()
+    if last_hit is not None:
+        elapsed = int((timezone.now() - last_hit.created_at).total_seconds())
+        if elapsed < RAID_COOLDOWN_SECONDS:
+            raise RaidError(
+                "😮‍💨 <b>هیولات خسته‌ست!</b>\n\n"
+                f"⏳ زمان تا اتک بعدی: <b>{_fmt_wait(RAID_COOLDOWN_SECONDS - elapsed)}</b>\n\n"
+                f"🔁 اتک‌های امروز: <b>{hits_today}/{RAID_DAILY_ATTACKS}</b>"
+            )
 
     stats = effective_stats(creature, get_equipped_items(creature))
     mult = constants.element_multiplier(creature.element, boss.element)
@@ -102,7 +133,9 @@ def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bo
         # felling a boss levels the whole group's raid up
         Group.objects.filter(id=boss.group_id).update(raid_level=F("raid_level") + 1)
     boss.save()
-    return dmg, defeated, dna_gain
+    # attacks left AFTER this one is recorded (the caller records it right after)
+    attacks_left = max(0, RAID_DAILY_ATTACKS - hits_today - 1)
+    return dmg, defeated, dna_gain, attacks_left
 
 
 def damage_leaderboard(group_id: int) -> dict | None:
@@ -139,6 +172,66 @@ def damage_leaderboard(group_id: int) -> dict | None:
         "hp": max(boss.current_hp, 0), "max_hp": boss.max_hp,
         "total_damage": sum(totals.values()), "rows": rows,
     }
+
+
+def weekly_raid_leaderboard(limit: int = 10) -> list[dict]:
+    """Players ranked by TOTAL raid damage this week. RaidDamageLog is wiped at the
+    weekly reset, so the whole table is the current week. Rows carry the reward each
+    rank will get at week's end."""
+    from django.db.models import Sum
+
+    from bio_lab.repository import display_name
+
+    agg = (
+        RaidDamageLog.objects.values("user_id")
+        .annotate(total=Sum("damage"))
+        .order_by("-total")[:limit]
+    )
+    rows = []
+    for i, entry in enumerate(agg, start=1):
+        u = User.objects.filter(id=entry["user_id"]).first()
+        rows.append({
+            "rank": i,
+            "user_id": entry["user_id"],
+            "name": display_name(u) if u else str(entry["user_id"]),
+            "damage": entry["total"] or 0,
+            "reward": RAID_WEEKLY_REWARD_BY_RANK.get(i),
+        })
+    return rows
+
+
+def reset_all_raids() -> None:
+    """Wipe the raid slate: despawn every active boss, reset every group's raid level
+    to 1, and clear all damage logs. Used by the weekly reset and the one-time manual
+    reset."""
+    RaidBoss.objects.filter(is_active=True).update(is_active=False)
+    Group.objects.update(raid_level=1)
+    RaidDamageLog.objects.all().delete()
+
+
+def settle_weekly_raid() -> list[tuple[int, str]]:
+    """Grant the weekly raid-ranking rewards to the top players, then reset all raids.
+    Returns (user_id, text) DMs. Called once per week from the season close."""
+    from game.battlepass import _grant
+
+    rows = weekly_raid_leaderboard(limit=len(RAID_WEEKLY_REWARD_BY_RANK))
+    out: list[tuple[int, str]] = []
+    for r in rows:
+        reward = r["reward"]
+        if not reward:
+            continue
+        u = User.objects.filter(id=r["user_id"]).first()
+        if u is None:
+            continue
+        _grant(u, reward)
+        if u.notifications_on:
+            out.append((
+                u.id,
+                f"🐲 <b>جایزه‌ی هفتگی رتبه‌بندی رید!</b>\nاین هفته رتبه‌ی <b>{r['rank']}</b> شدی.\n"
+                f"🎁 {reward['diamonds']}💎 + {reward['coins']:,}🪙 + {reward['dna']} DNA",
+            ))
+    reset_all_raids()
+    return out
 
 
 def distribute_rewards(boss: RaidBoss) -> dict[int, dict[str, int]]:
