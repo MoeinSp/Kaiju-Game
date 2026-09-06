@@ -64,7 +64,8 @@ async def send_defense_report_now(context, defense: dict, *, group: bool = False
     )
     try:
         d = await run_db(_user_details_sync, defense["attacker_id"])
-        text = head + "\n\n━━━━━━━━━━\n" + opponent_details_text(d)
+        # summary already shows the attacker's lab + alliance — omit them in the details
+        text = head + "\n\n━━━━━━━━━━\n" + opponent_details_text(d, show_header=False)
     except Exception:  # noqa: BLE001 — a details hiccup must not drop the report
         text = head
     try:

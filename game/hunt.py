@@ -175,6 +175,63 @@ def estimated_reward(tier: str, power: int = 0) -> tuple[int, int]:
 
 
 AUTO_HUNT_LOOT_MULT = 0.5  # auto-hunt pays HALF the gold/DNA of a manual hunt
+WIN_CHANCE_EXP = 14  # mirrors bot.handlers.private._WIN_CHANCE_EXP for the fast auto-hunt
+
+
+def resolve_auto_hunt(user: User, creature: Creature, hunts: int,
+                      loot_mult: float = AUTO_HUNT_LOOT_MULT) -> dict:
+    """INSTANT statistical resolution of `hunts` normal-tier hunts — no per-hunt combat
+    simulation (that made a 50-hunt batch crawl). Each hunt independently wins with the
+    calibrated power-ratio probability (targets have random elements → treated as neutral)
+    and rolls half loot on a win. Applies aggregated gold/DNA/XP/lab in one shot and
+    returns the totals. Caller handles energy + mission counting."""
+    from game.ledger import record_gain
+
+    hunts = max(0, int(hunts))
+    benchmark = hunt_benchmark_power(user)
+    player_power = _player_power(creature)
+    target_power = max(20, round(benchmark * HUNT_TIERS["normal"]["stat_mult"]))
+    ratio = max(1, player_power) / max(1, target_power)
+    rk = ratio ** WIN_CHANCE_EXP
+    p = max(0.05, min(0.95, rk / (1 + rk)))
+
+    wins = coins = dna = 0
+    for _ in range(hunts):
+        if random.random() < p:
+            wins += 1
+            coins += round(random.randint(*hunt_coin_range(player_power, "normal")) * loot_mult)
+            dna += round(random.randint(*hunt_dna_range(player_power, "normal")) * loot_mult)
+    losses = hunts - wins
+    xp = wins * HUNT_XP_WIN + losses * HUNT_XP_LOSE
+
+    user.coins += coins
+    user.dna_fragments += dna
+    user.save(update_fields=["coins", "dna_fragments"])
+    if coins or dna:
+        record_gain(user, "hunt", coins=coins, dna=dna)
+    levels = add_xp(creature, xp)
+    creature.save()
+
+    # lab / battle-pass / war points aggregated (mirrors lab.award per hunt, but instant)
+    lab_xp = wins * lab.LAB_XP_AWARDS["hunt_win"] + losses * lab.LAB_XP_AWARDS["hunt_loss"]
+    lab_up = lab.add_lab_xp(user, lab_xp)
+    try:
+        from game import battlepass
+
+        battlepass.award(user, lab_xp)
+    except Exception:  # pragma: no cover - pass points are non-critical
+        pass
+    try:
+        from game import alliance
+
+        alliance.add_war_points(user, lab_xp)
+    except Exception:  # pragma: no cover
+        pass
+
+    return {
+        "hunts": hunts, "wins": wins, "losses": losses,
+        "coins": coins, "dna": dna, "xp": xp, "levels": levels, "lab_up": bool(lab_up),
+    }
 
 
 def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal",

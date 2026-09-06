@@ -4,7 +4,7 @@ from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bio_lab.models import AttackLog
-from bio_lab.repository import get_or_create_user, lab_display, mention
+from bio_lab.repository import creature_name, get_or_create_user, lab_display, mention
 from bot.buttons import BATTLE, DANGER, NAV, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants
@@ -418,7 +418,8 @@ def _opponent_details_sync(pending: dict) -> dict:
         "is_fake": False,
         "label": pending["label"],
         "alliance": alliance_name,
-        "name": creature.name,
+        "name": creature_name(creature),
+        "breed": creature.name,
         "element": creature.element,
         "rarity": constants.RARITY_LABELS.get(creature.rarity, creature.rarity),
         "level": creature.level,
@@ -443,17 +444,19 @@ async def arena_opp_details_callback(update: Update, context: ContextTypes.DEFAU
     await safe_edit_message_text(query, opponent_details_text(d), parse_mode="HTML", reply_markup=keyboard)
 
 
-def opponent_details_text(d: dict) -> str:
+def opponent_details_text(d: dict, *, show_header: bool = True) -> str:
     """Render a full opponent readout from _opponent_details_sync's dict. Shared with
-    the group «اتک» flow so both show the same detailed card."""
+    the group «اتک» flow so both show the same detailed card. `show_header` controls the
+    lab-name + alliance lines — the defense report already shows them in its summary, so
+    it passes False to avoid printing them twice."""
     alliance_line = (
         f"{get_emoji('alliance')} اتحاد: <b>{d['alliance']}</b>\n" if d.get("alliance") else "🚫 بدون اتحاد\n"
     )
+    header = (f"🏭 <b>{d['label']}</b>\n{alliance_line}") if show_header else ""
     if d["is_fake"]:
         tier = f"{d['rarity']} · {'⭐' * d['star_level']}\n" if d.get("rarity") else ""
         return (
-            f"🔍 <b>جزییات حریف</b>\n\n🏭 <b>{d['label']}</b>\n"
-            f"{alliance_line}"
+            f"🔍 <b>جزییات حریف</b>\n\n{header}"
             f"{tier}"
             f"💪 قدرت کل: <b>{d['power']}</b>\n"
             f"{constants.element_label(d['element']) if d.get('element') else ''}\n\n"
@@ -461,11 +464,15 @@ def opponent_details_text(d: dict) -> str:
             "(نزدیک کاپ 5000 کاملاً مکس و فول‌تجهیزات می‌شه).</i>"
         )
     s = d["stats"]
-    lines = [
-        "🔍 <b>جزییات حریف</b>",
-        f"🏭 <b>{d['label']}</b>",
-        (f"{get_emoji('alliance')} اتحاد: <b>{d['alliance']}</b>\n" if d.get("alliance") else "🚫 بدون اتحاد\n"),
-        f"{get_emoji('creature')} <b>{d['name']}</b> · {constants.element_label(d['element'])}",
+    lines = ["🔍 <b>جزییات حریف</b>"]
+    if show_header:
+        lines.append(f"🏭 <b>{d['label']}</b>")
+        lines.append(f"{get_emoji('alliance')} اتحاد: <b>{d['alliance']}</b>" if d.get("alliance") else "🚫 بدون اتحاد")
+    lines.append("")
+    lines.append(f"{get_emoji('creature')} <b>{d['name']}</b> · {constants.element_label(d['element'])}")
+    if d.get("breed") and d["breed"] != d["name"]:
+        lines.append(f"🧬 نژاد: <b>{d['breed']}</b>")
+    lines += [
         f"{d['rarity']} · {'⭐' * d['star_level']} · سطح <b>{d['level']}</b>",
         f"💪 قدرت کل: <b>{d['full_power']}</b>  <i>(از تجهیزات: +{d['gear_power']})</i>\n",
         f"❤️ HP <b>{s['hp']}</b> · ⚔️ ATK <b>{s['atk']}</b> · 🛡 DEF <b>{s['def']}</b> · 💨 SPD <b>{s['spd']}</b>"

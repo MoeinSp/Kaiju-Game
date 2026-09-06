@@ -79,8 +79,9 @@ def _check_cooldown(user: User, field: str, who: str) -> None:
     if ready is not None and ready > timezone.now():
         wait = int((ready - timezone.now()).total_seconds())
         raise GameError(
-            f"⏳ هر {constants.TRANSFER_COOLDOWN_HOURS} ساعت فقط یک‌بار می‌شه انتقال داد یا گرفت. "
-            f"{who} به‌تازگی یه انتقال داشته — {_fmt_wait(wait)} دیگه می‌تونه دوباره."
+            f"⏳ محدودیت انتقال (هر {constants.TRANSFER_COOLDOWN_HOURS} ساعت یک‌بار)\n\n"
+            f"{who} به‌تازگی انتقال داشته است.\n\n"
+            f"⏱ زمان مجاز بعدی: {_fmt_wait(wait)} دیگر"
         )
 
 

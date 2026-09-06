@@ -32,6 +32,17 @@ def record_action(user: User, action: str) -> int:
     return log.count
 
 
+def record_action_bulk(user: User, action: str, n: int) -> int:
+    """Add `n` to today's counter for `action` in a single write — so a batch action
+    (e.g. auto-hunt running many hunts at once) counts each toward daily missions."""
+    n = int(n)
+    log = _get_or_create_log(user, action)
+    if n > 0:
+        log.count += n
+        log.save(update_fields=["count"])
+    return log.count
+
+
 def assert_energy_available(user: User, action: str) -> None:
     """Raises GameError if `action`'s daily cap is already reached. Does not consume anything —
     call record_action() after the action actually succeeds."""

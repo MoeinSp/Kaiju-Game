@@ -1439,6 +1439,7 @@ async def kaiju_rename_callback(update: Update, context: ContextTypes.DEFAULT_TY
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
+    context.user_data.pop("pending_kaiju_rename", None)
     context.user_data[AWAITING_PLAYER_KEY] = {
         "action": "rename_kaiju", "creature_id": creature_id, "origin": origin,
     }
@@ -1448,7 +1449,6 @@ async def kaiju_rename_callback(update: Update, context: ContextTypes.DEFAULT_TY
         "🎁 اولین نام‌گذاری این کایجو <b>رایگان</b>ه."
         if cost == 0 else f"{get_emoji('diamond')} هزینه: <b>{cost}</b> الماس"
     )
-    back_cb = f"upg_pick:{creature_id}" if origin == "u" else f"coll_pick:{creature_id}"
     await query.answer()
     await safe_edit_message_text(
         query,
@@ -1456,9 +1456,55 @@ async def kaiju_rename_callback(update: Update, context: ContextTypes.DEFAULT_TY
         f"🧬 نژاد: <b>{creature.name}</b>\n"
         f"نام فعلی: <b>{creature_name(creature)}</b>\n\n"
         f"{price_line}\n"
-        f"<i>یه اسم دلخواه و یکتا بفرست (حداکثر {NAME_MAX_LEN} حرف). هر بار نام‌گذاری ۱۰۰ الماس گران‌تر می‌شه.</i>",
+        f"<i>یه اسم دلخواه بفرست (حداکثر {NAME_MAX_LEN} حرف). بعد از فرستادن، تأیید می‌گیرم.</i>",
         parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([[back_btn(back_cb, "انصراف / بازگشت")]]),
+        reply_markup=InlineKeyboardMarkup([[btn("❌ لغو", style=DANGER, callback_data=f"kaiju_rename_cancel:{creature_id}:{origin}")]]),
+    )
+
+
+async def kaiju_rename_ok_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Confirmed rename — apply the pending name (charged in rename_creature)."""
+    query = update.callback_query
+    creature_id = int(query.data.split(":")[1])
+    pending = context.user_data.get("pending_kaiju_rename")
+    if not pending or pending.get("creature_id") != creature_id:
+        await query.answer("⌛ منقضی شد — دوباره از «نام‌گذاری» شروع کن.", show_alert=True)
+        return
+    origin = pending.get("origin", "c")
+    try:
+        res = await run_db(_rename_kaiju_sync, update.effective_user, creature_id, pending["name"])
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    context.user_data.pop("pending_kaiju_rename", None)
+    back_cb = f"upg_pick:{creature_id}" if origin == "u" else f"coll_pick:{creature_id}"
+    cost_note = "رایگان بود ✅" if res["cost"] == 0 else f"{res['cost']} {get_emoji('diamond')} کم شد"
+    await query.answer("✅ ثبت شد!")
+    await safe_edit_message_text(
+        query,
+        f"✅ اسم کایجو روی «<b>{res['name']}</b>» تنظیم شد.\n"
+        f"🧬 نژاد: <b>{res['breed']}</b>\n"
+        f"<i>({cost_note} · نام‌گذاری بعدی: {res['next_cost']} {get_emoji('diamond')})</i>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[back_btn(back_cb, "بازگشت به کایجو")]]),
+    )
+
+
+async def kaiju_rename_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Cancel naming from any step — clears the awaited text/pending name and goes back."""
+    query = update.callback_query
+    parts = query.data.split(":")
+    creature_id = int(parts[1])
+    origin = parts[2] if len(parts) > 2 else "c"
+    context.user_data.pop("pending_kaiju_rename", None)
+    awaiting = context.user_data.get(AWAITING_PLAYER_KEY)
+    if awaiting and awaiting.get("action") == "rename_kaiju":
+        context.user_data.pop(AWAITING_PLAYER_KEY, None)
+    back_cb = f"upg_pick:{creature_id}" if origin == "u" else f"coll_pick:{creature_id}"
+    await query.answer("لغو شد.")
+    await safe_edit_message_text(
+        query, "❌ نام‌گذاری لغو شد.",
+        reply_markup=InlineKeyboardMarkup([[back_btn(back_cb, "بازگشت به کایجو")]]),
     )
 
 
@@ -2411,9 +2457,11 @@ def _autohunt_info_sync(tg_user):
 
 def _autohunt_sync(tg_user, energy_amount):
     """Run `energy_amount` auto-hunts (1 energy each) against fresh targets, each paying
-    HALF the gold/DNA of a manual hunt. Locks the user row so the whole batch spends
-    real energy exactly once. Returns aggregated totals."""
-    from game.hunt import AUTO_HUNT_LOOT_MULT, resolve_hunt
+    HALF the gold/DNA of a manual hunt. Resolved INSTANTLY via statistics (no per-hunt
+    combat sim). Locks the user row so the whole batch spends energy exactly once, and
+    counts every hunt toward the daily hunt missions."""
+    from game.daily import record_action_bulk
+    from game.hunt import resolve_auto_hunt
 
     user, _ = get_or_create_user(tg_user)
     with transaction.atomic():
@@ -2430,23 +2478,10 @@ def _autohunt_sync(tg_user, energy_amount):
         spend_energy(user, hunts * per, "شکار خودکار")
         user.save(update_fields=["energy", "energy_updated_at"])
 
-        wins = coins = dna = xp = levels = 0
-        lab_up = False
-        for _ in range(hunts):
-            r = resolve_hunt(user, creature, "normal", None, loot_mult=AUTO_HUNT_LOOT_MULT)
-            wins += 1 if r["won"] else 0
-            coins += r["coins"]
-            dna += r["dna"]
-            xp += r["xp"]
-            levels += r.get("levels") or 0
-            lab_up = lab_up or bool(r.get("lab_up"))
-        record_action(user, "hunt")
+        res = resolve_auto_hunt(user, creature, hunts)
+        record_action_bulk(user, "hunt", hunts)  # each hunt counts toward hunt missions
         completed_missions = check_missions(user, "hunt")
-    return creature, {
-        "hunts": hunts, "wins": wins, "losses": hunts - wins,
-        "coins": coins, "dna": dna, "xp": xp, "levels": levels, "lab_up": lab_up,
-        "energy_left": user.energy,
-    }, completed_missions
+    return creature, {**res, "energy_left": user.energy}, completed_missions
 
 
 def _autohunt_confirm_kb(amount: int):
@@ -3346,24 +3381,48 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
     if action == "rename_kaiju":
         creature_id = awaiting["creature_id"]
         origin = awaiting.get("origin", "c")
-        back_cb = f"upg_pick:{creature_id}" if origin == "u" else f"coll_pick:{creature_id}"
+        cancel_kb = InlineKeyboardMarkup([[btn("❌ لغو", style=DANGER, callback_data=f"kaiju_rename_cancel:{creature_id}:{origin}")]])
+        # a slash-command or an empty message isn't a name — keep waiting, don't consume it
+        if not text or text.startswith("/"):
+            context.user_data[AWAITING_PLAYER_KEY] = awaiting
+            await message.reply_text(
+                "یه <b>اسم</b> برای کایجو بفرست (نه دستور)، یا «لغو» رو بزن.",
+                parse_mode="HTML", reply_markup=cancel_kb,
+            )
+            return
         try:
-            res = await run_db(_rename_kaiju_sync, update.effective_user, creature_id, text)
+            from game.naming import validate_name
+
+            name = validate_name(text)
+            creature, cost = await run_db(_rename_prompt_sync, update.effective_user, creature_id)
         except GameError as exc:
             context.user_data[AWAITING_PLAYER_KEY] = awaiting
             await message.reply_text(
-                f"⚠️ {exc}\n<i>یه اسم دیگه بفرست یا برگرد.</i>",
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup([[back_btn(back_cb, "انصراف / بازگشت")]]),
+                f"⚠️ {exc}\n<i>یه اسم دیگه بفرست یا «لغو» رو بزن.</i>",
+                parse_mode="HTML", reply_markup=cancel_kb,
             )
             return
-        cost_note = "رایگان بود ✅" if res["cost"] == 0 else f"{res['cost']} {get_emoji('diamond')} کم شد"
+        # valid name → stop awaiting text and ask for confirmation (callback-based, so
+        # no more stray messages get captured as the name)
+        context.user_data.pop(AWAITING_PLAYER_KEY, None)
+        context.user_data["pending_kaiju_rename"] = {
+            "creature_id": creature_id, "name": name, "origin": origin,
+        }
+        cost_line = (
+            "🎁 رایگان (اولین نام‌گذاری)" if cost == 0
+            else f"{get_emoji('diamond')} هزینه: <b>{cost}</b> الماس"
+        )
         await message.reply_text(
-            f"✅ اسم کایجو روی «<b>{res['name']}</b>» تنظیم شد.\n"
-            f"🧬 نژاد: <b>{res['breed']}</b>\n"
-            f"<i>({cost_note} · نام‌گذاری بعدی: {res['next_cost']} {get_emoji('diamond')})</i>",
+            f"✏️ <b>تأیید نام‌گذاری</b>\n"
+            f"اسم جدید: «<b>{name}</b>»\n"
+            f"🧬 نژاد: <b>{creature.name}</b>\n"
+            f"{cost_line}\n\n"
+            f"تأیید می‌کنی؟",
             parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([[back_btn(back_cb, "بازگشت به کایجو")]]),
+            reply_markup=InlineKeyboardMarkup([
+                [btn("✅ تأیید و ثبت", style=CONFIRM, callback_data=f"kaiju_rename_ok:{creature_id}")],
+                [btn("❌ لغو", style=DANGER, callback_data=f"kaiju_rename_cancel:{creature_id}:{origin}")],
+            ]),
         )
         return
 
@@ -3860,6 +3919,8 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(collection_page_callback, pattern=r"^coll_page:"))
     application.add_handler(CallbackQueryHandler(collection_select_callback, pattern=r"^coll_select:"))
     application.add_handler(CallbackQueryHandler(kaiju_rename_callback, pattern=r"^kaiju_rename:\d+(:[cu])?$"))
+    application.add_handler(CallbackQueryHandler(kaiju_rename_ok_callback, pattern=r"^kaiju_rename_ok:\d+$"))
+    application.add_handler(CallbackQueryHandler(kaiju_rename_cancel_callback, pattern=r"^kaiju_rename_cancel:\d+:[cu]$"))
     application.add_handler(CallbackQueryHandler(devour_start_callback, pattern=r"^devour_start:\d+$"))
     application.add_handler(CallbackQueryHandler(devour_toggle_callback, pattern=r"^devour_tog:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(devour_select_all_callback, pattern=r"^devour_(all|none):\d+$"))
