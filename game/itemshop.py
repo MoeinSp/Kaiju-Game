@@ -143,6 +143,33 @@ def create_item_from_draft(draft: dict) -> ShopItem:
     )
 
 
+def update_item_from_draft(item_id: int, draft: dict) -> ShopItem:
+    """Re-save an existing shop item from an edited draft (button-driven edit flow)."""
+    item = ShopItem.objects.filter(id=item_id).first()
+    if item is None:
+        raise GameError("این آیتم دیگه وجود نداره.")
+    item.title = draft["title"][:64]
+    item.emoji = draft.get("emoji", "🎁")
+    item.price_coins = draft.get("price_coins", 0)
+    item.price_diamonds = draft.get("price_diamonds", 0)
+    item.contents_json = json.dumps(draft["contents"], ensure_ascii=False)
+    item.max_per_user = max(0, int(draft.get("max_per_user", 0)))
+    item.save(update_fields=["title", "emoji", "price_coins", "price_diamonds",
+                             "contents_json", "max_per_user"])
+    return item
+
+
+def item_to_draft(item: ShopItem) -> dict:
+    """Load an existing item back into the builder-draft shape so the owner can edit it
+    with the same button flow, then re-save (draft carries edit_id)."""
+    return {
+        "title": item.title, "emoji": item.emoji or "🎁",
+        "price_coins": item.price_coins, "price_diamonds": item.price_diamonds,
+        "contents": json.loads(item.contents_json), "max_per_user": item.max_per_user,
+        "edit_id": item.id,
+    }
+
+
 def _parse_content_line(line: str) -> dict:
     toks = line.split()
     head = toks[0].lower()

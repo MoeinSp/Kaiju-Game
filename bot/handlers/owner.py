@@ -525,7 +525,8 @@ async def itemshop_manage_panel(update: Update, context: ContextTypes.DEFAULT_TY
         state = "🟢" if it["active"] else "🔴"
         lines.append(f"\n{state} {it['emoji']} <b>{it['title']}</b> — {it['price']}\n   <i>{it['contents']}</i>")
         rows.append([
-            btn(("🔴 غیرفعال" if it["active"] else "🟢 فعال") + f" {it['title'][:14]}",
+            btn("✏️ ویرایش", style=CONFIRM, callback_data=f"sitem_edit:{it['id']}"),
+            btn(("🔴 غیرفعال" if it["active"] else "🟢 فعال"),
                 style=ADMIN, callback_data=f"sitem_toggle:{it['id']}"),
             btn("🗑 حذف", style=DANGER, callback_data=f"sitem_del:{it['id']}"),
         ])
@@ -551,6 +552,9 @@ _ISH_PRESETS = {
     "diamonds": [10, 50, 100, 500, 1000],
     "dna": [50, 100, 200, 500, 1000],
 }
+# quick price presets for the button-driven price picker (💎 and 🪙)
+_ISH_PRICE_DIAMONDS = [10, 50, 100, 200, 300, 500, 800, 1000, 2000]
+_ISH_PRICE_COINS = [1000, 5000, 10000, 50000, 100000, 500000, 1000000]
 _ISH_CTYPE_LABELS = {
     "coins": "🪙 سکه", "diamonds": "💎 جم", "dna": "🧬 DNA",
     "speedup": "⏱ کارت سرعت", "creature": "🐉 هیولا", "equipment": "⚔️ تجهیزات",
@@ -579,6 +583,7 @@ def _ish_home_markup(draft: dict):
     is_user = target == "user"
     header = ("🎁 <b>دادن آیتم به کاربر</b>" if is_user
               else "🛒 <b>افزودن آیتم به شاپ روزانه</b>" if is_daily
+              else "✏️ <b>ویرایش آیتم (با دکمه)</b>" if draft.get("edit_id")
               else "🛠 <b>ساخت آیتم/پک (با دکمه)</b>")
     lines = [header, "", f"{draft['emoji']} عنوان: <b>{title}</b>"]
     if not is_user:  # a direct gift to a user has no price
@@ -607,6 +612,7 @@ def _ish_home_markup(draft: dict):
     if ready:
         save_label = ("🎁 بده به کاربر" if is_user
                       else "✅ افزودن به شاپ روزانه" if is_daily
+                      else "💾 ذخیره‌ی تغییرات" if draft.get("edit_id")
                       else "✅ ثبت و انتشار آیتم")
         rows.append([btn(save_label, style=CONFIRM, callback_data="ish:save")])
     if is_user:
@@ -712,12 +718,58 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
         await query.message.reply_text("✏️ عنوان آیتم رو بفرست (می‌تونه با ایموجی شروع شه):")
         return
     if verb == "price":
-        context.user_data[AWAITING_ADMIN_KEY] = {"action": "ish_price"}
+        cur = []
+        if draft["price_coins"]:
+            cur.append(f"{draft['price_coins']:,} طلا")
+        if draft["price_diamonds"]:
+            cur.append(f"{draft['price_diamonds']} 💎")
+        cur_txt = " + ".join(cur) or "— (تنظیم نشده)"
+        rows = [
+            [btn("💎 قیمت جم", style=ADMIN, callback_data="ish:pd"),
+             btn("🪙 قیمت طلا", style=ADMIN, callback_data="ish:pc")],
+        ]
+        if draft["price_coins"] or draft["price_diamonds"]:
+            rows.append([btn("🧹 پاک‌کردن قیمت", style=DANGER, callback_data="ish:pclr")])
+        rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:home")])
         await query.answer()
-        await query.message.reply_text(
-            "💰 قیمت رو بفرست، مثل: <code>19000 جم</code> یا <code>5000 سکه</code> یا <code>5000 سکه 50 جم</code>",
-            parse_mode="HTML",
+        await safe_edit_message_text(
+            query, f"💰 <b>قیمت‌گذاری</b>\nقیمت فعلی: <b>{cur_txt}</b>\n\nکدوم ارز رو تنظیم کنم؟",
+            parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows),
         )
+        return
+    if verb in ("pd", "pc"):
+        is_dia = verb == "pd"
+        presets = _ISH_PRICE_DIAMONDS if is_dia else _ISH_PRICE_COINS
+        label = "💎 جم" if is_dia else "🪙 طلا"
+        rows = [[btn(f"{v:,}", style=ADMIN, callback_data=f"ish:{'pdv' if is_dia else 'pcv'}:{v}")]
+                for v in presets]
+        rows.append([btn("🔢 مقدار دلخواه", style=NAV, callback_data=f"ish:{'pdx' if is_dia else 'pcx'}")])
+        rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:price")])
+        await query.answer()
+        await safe_edit_message_text(query, f"قیمت به {label} رو انتخاب کن:", parse_mode="HTML",
+                                     reply_markup=InlineKeyboardMarkup(rows))
+        return
+    if verb == "pdv":
+        draft["price_diamonds"] = int(parts[2])
+        await query.answer("قیمت جم تنظیم شد.")
+        await _ish_show_home(update, context)
+        return
+    if verb == "pcv":
+        draft["price_coins"] = int(parts[2])
+        await query.answer("قیمت طلا تنظیم شد.")
+        await _ish_show_home(update, context)
+        return
+    if verb in ("pdx", "pcx"):
+        context.user_data[AWAITING_ADMIN_KEY] = {"action": "ish_price_one",
+                                                 "field": "price_diamonds" if verb == "pdx" else "price_coins"}
+        await query.answer()
+        await query.message.reply_text("🔢 مقدار قیمت رو به عدد بفرست:")
+        return
+    if verb == "pclr":
+        draft["price_coins"] = 0
+        draft["price_diamonds"] = 0
+        await query.answer("قیمت پاک شد.")
+        await _ish_show_home(update, context)
         return
     if verb == "addc":
         rows = [[btn(_ISH_CTYPE_LABELS[k], style=ADMIN, callback_data=f"ish:ct:{k}")]
@@ -933,18 +985,50 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
                 reply_markup=InlineKeyboardMarkup([[back_btn("admin_menu:dailyshop", "بازگشت به شاپ روزانه")]]),
             )
             return
-        item = await run_db(itemshop.create_item_from_draft, draft)
+        edit_id = draft.get("edit_id")
+        if edit_id:
+            item = await run_db(itemshop.update_item_from_draft, edit_id, draft)
+            verb_txt = "ویرایش شد"
+        else:
+            item = await run_db(itemshop.create_item_from_draft, draft)
+            verb_txt = "ساخته شد"
         context.user_data.pop(_ISH_DRAFT, None)
         await query.answer("✅ ثبت شد!")
         await safe_edit_message_text(
             query,
-            f"✅ <b>آیتم ساخته شد:</b> {item.emoji} {item.title}\n"
+            f"✅ <b>آیتم {verb_txt}:</b> {item.emoji} {item.title}\n"
             "حالا توی «🛍 آیتم‌های ویژه»ی فروشگاه دیده می‌شه.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[back_btn("admin_menu:itemshop", "بازگشت به مدیریت فروشگاه")]]),
         )
         return
     await query.answer()
+
+
+def _itemshop_load_draft_sync(item_id: int) -> dict:
+    from bio_lab.models import ShopItem
+    from game import itemshop
+
+    item = ShopItem.objects.filter(id=item_id).first()
+    if item is None:
+        raise GameError("این آیتم دیگه وجود نداره.")
+    return itemshop.item_to_draft(item)
+
+
+async def itemshop_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«✏️ ویرایش» — load an existing item into the button builder for editing, then save."""
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    try:
+        draft = await run_db(_itemshop_load_draft_sync, int(query.data.split(":")[1]))
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    context.user_data[_ISH_DRAFT] = draft
+    await query.answer("✏️ حالت ویرایش")
+    await _ish_show_home(update, context)
 
 
 async def itemshop_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -3555,6 +3639,16 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         await _ish_show_home(update, context, edit=False)
         return
 
+    if action == "ish_price_one":
+        digits = (text or "").strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
+        if not digits.isdigit():
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text("فقط یه عدد بفرست (مثلاً 500).")
+            return
+        _ish_draft(context)[awaiting["field"]] = int(digits)
+        await _ish_show_home(update, context, edit=False)
+        return
+
     if action == "dshop_custom":
         from game import itemshop
 
@@ -3837,6 +3931,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(dailyshop_builder_callback, pattern=r"^dshop:"))
     application.add_handler(CallbackQueryHandler(itemshop_add_start, pattern=r"^sitem_add$"))
     application.add_handler(CallbackQueryHandler(itemshop_builder_callback, pattern=r"^ish:"))
+    application.add_handler(CallbackQueryHandler(itemshop_edit_callback, pattern=r"^sitem_edit:\d+$"))
     application.add_handler(CallbackQueryHandler(itemshop_toggle_callback, pattern=r"^sitem_toggle:\d+$"))
     application.add_handler(CallbackQueryHandler(itemshop_delete_callback, pattern=r"^sitem_del:\d+$"))
     application.add_handler(CallbackQueryHandler(autobackup_set_callback, pattern=r"^autobk_set:\d+$"))
