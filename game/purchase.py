@@ -87,7 +87,8 @@ def approve(req_id: int) -> dict:
 
     record_gain(user, "purchase", coins=req.coins, dna=req.dna, diamonds=req.diamonds)
     return {"user_id": user.id, "coins": req.coins, "dna": req.dna, "diamonds": req.diamonds,
-            "price": req.price_toman}
+            "price": req.price_toman, "channel_chat_id": req.channel_chat_id,
+            "channel_message_id": req.channel_message_id}
 
 
 @transaction.atomic
@@ -100,7 +101,17 @@ def reject(req_id: int) -> dict:
     req.status = "rejected"
     req.reviewed_at = timezone.now()
     req.save(update_fields=["status", "reviewed_at"])
-    return {"user_id": req.user_id, "price": req.price_toman}
+    return {"user_id": req.user_id, "price": req.price_toman,
+            "coins": req.coins, "dna": req.dna, "diamonds": req.diamonds,
+            "channel_chat_id": req.channel_chat_id, "channel_message_id": req.channel_message_id}
+
+
+def set_channel_message(req_id: int, chat_id: int, message_id: int) -> None:
+    """Remember the purchase-report message posted to the channel so approve/reject can
+    edit it to reflect the final status."""
+    PurchaseRequest.objects.filter(id=req_id).update(
+        channel_chat_id=chat_id, channel_message_id=message_id
+    )
 
 
 def set_receipt_block(user_id: int, blocked: bool) -> User:

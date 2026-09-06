@@ -28,6 +28,7 @@ _cache: dict[str, object] = {
     "buy_card_number": "",
     "buy_card_holder": "",
     "buy_min_toman": 0,
+    "buy_channel_id": None,
 }
 
 
@@ -38,6 +39,7 @@ def _row_to_cache(row) -> dict:
             "energy_refill_diamonds": DEFAULT_ENERGY_REFILL_DIAMONDS,
             "buy_price_per_gold": 0.0, "buy_price_per_dna": 0.0, "buy_price_per_diamond": 0.0,
             "buy_card_number": "", "buy_card_holder": "", "buy_min_toman": 0,
+            "buy_channel_id": None,
         }
     return {
         "group_game_url": row.group_game_url or "",
@@ -51,6 +53,7 @@ def _row_to_cache(row) -> dict:
         "buy_card_number": row.buy_card_number or "",
         "buy_card_holder": row.buy_card_holder or "",
         "buy_min_toman": row.buy_min_toman or 0,
+        "buy_channel_id": row.buy_channel_id,
     }
 
 
@@ -116,6 +119,18 @@ def get_buy_min() -> int:
 
 def set_buy_min(toman: int) -> None:
     BotConfig.objects.update_or_create(id=1, defaults={"buy_min_toman": max(0, int(toman))})
+    refresh_cache()
+
+
+def get_buy_channel_id() -> int | None:
+    """Chat id of the purchase-report channel (None = only the owner's DM). In-memory read."""
+    return _cache.get("buy_channel_id")
+
+
+def set_buy_channel_id(channel_id: int | None) -> None:
+    """Persist the purchase-report channel id. Pass None/0 to clear it."""
+    val = int(channel_id) if channel_id else None
+    BotConfig.objects.update_or_create(id=1, defaults={"buy_channel_id": val})
     refresh_cache()
 
 

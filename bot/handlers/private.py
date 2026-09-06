@@ -2713,12 +2713,60 @@ def _alliance_info_sync(tg_user):
     return alliance_info(user.alliance)
 
 
+def _ally_raidtable_sync(tg_user):
+    from bio_lab.models import Alliance
+    from game.raid import alliance_raid_members, get_active_boss
+
+    user, _ = get_or_create_user(tg_user)
+    if user.alliance_id is None:
+        return None
+    al = Alliance.objects.get(id=user.alliance_id)
+    boss = get_active_boss(user.alliance_id)
+    return {
+        "name": al.name, "raid_level": al.raid_level,
+        "boss": ({"name": boss.name, "level": boss.level, "hp": max(0, boss.current_hp),
+                  "max_hp": boss.max_hp} if boss else None),
+        "members": alliance_raid_members(user.alliance_id, 10),
+    }
+
+
+async def ally_raidtable_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """🐲 جدول رید اتحاد — the alliance's raid level, its active boss, and its top-10 raiders."""
+    query = update.callback_query
+    data = await run_db(_ally_raidtable_sync, update.effective_user)
+    await query.answer()
+    if data is None:
+        await safe_edit_message_text(query, "عضو هیچ اتحادی نیستی.",
+                                     reply_markup=back_only_keyboard("menu:alliance_info", "بازگشت"))
+        return
+    lines = [
+        f"🐲 <b>جدول رید اتحاد {data['name']}</b>",
+        f"🐉 لِوِل رید اتحاد: <b>{data['raid_level']}</b>",
+    ]
+    if data["boss"]:
+        b = data["boss"]
+        lines.append(f"{get_emoji('raid_boss')} باس فعال: <b>{b['name']}</b> (لِوِل {b['level']}) — "
+                     f"{b['hp']:,}/{b['max_hp']:,} HP")
+    else:
+        lines.append("<i>الان باس فعالی نیست — یکی از اعضا توی گروه «احضار» بزنه.</i>")
+    lines += ["", "🏆 <b>۱۰ رِیدرِ برترِ این هفته:</b>"]
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    if not data["members"]:
+        lines.append("<i>این هفته هنوز کسی اتک رید نزده.</i>")
+    for m in data["members"]:
+        badge = medals.get(m["rank"], f"{m['rank']}.")
+        lines.append(f"{badge} {m['name']} │ 💥 {m['damage']:,}")
+    await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML",
+                                 reply_markup=back_only_keyboard("menu:alliance_info", "بازگشت به اتحاد"))
+
+
 def _alliance_action_keyboard(in_alliance: bool) -> InlineKeyboardMarkup:
     if in_alliance:
         rows = [
             [btn("👥 اعضا و مدیریت", style=NAV, callback_data="ally_members")],
             [btn("واریز به خزانه", emoji_key="btn_deposit", style=BUILD, callback_data="ally_deposit")],
             [btn("🏰 ساختمون‌های اتحاد", style=PRIMARY, callback_data="ally_perks")],
+            [btn("🐲 جدول رید اتحاد", style=NAV, callback_data="ally_raidtable")],
             [
                 btn("🔥 جنگ یک‌روزه", style=BATTLE, callback_data="ally_war1d"),
                 btn("⚔️ جنگ هفتگی", style=BATTLE, callback_data="ally_war"),
@@ -3692,35 +3740,41 @@ async def rank(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                       reply_markup=back_only_keyboard("menu:cat_social", "بازگشت به اجتماعی"))
 
 
-async def raid_rank_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """🐲 رتبه‌بندی هفتگی رید — players by total raid damage this week, with the weekly
-    reward each rank earns (paid + reset at the weekly season close)."""
-    from game.raid import weekly_raid_leaderboard
+def _raid_rank_sync():
+    from game.raid import RAID_WEEKLY_REWARD_BY_RANK, alliance_raid_ranking
 
-    rows = await run_db(weekly_raid_leaderboard, 10)
+    return alliance_raid_ranking(limit=10), RAID_WEEKLY_REWARD_BY_RANK
+
+
+async def raid_rank_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """🐲 رتبه‌بندی رید — alliances ranked by raid level. At week's end the 10 best
+    raiders of each of the top-3 alliances split that rank's reward equally."""
+    rows, reward_by_rank = await run_db(_raid_rank_sync)
     medals = {1: "🥇", 2: "🥈", 3: "🥉"}
     lines = [
-        "🐲 <b>رتبه‌بندی هفتگی رید</b>",
+        "🐲 <b>رتبه‌بندی رید اتحادها</b>",
         "",
-        "جوایز پایان هفته بر اساس مجموع آسیب به باس‌های رید به رِیدرهای برتر داده می‌شود.",
+        "رتبه‌بندی بر اساس <b>لِوِل رید اتحاد</b>. آخر هفته، جایزهٔ هر رتبه به‌طور مساوی بین "
+        "<b>۱۰ رِیدرِ برترِ</b> اون اتحاد پخش می‌شه.",
         "",
         "──────────────",
         "",
     ]
     if not rows:
-        lines.append("<i>این هفته هنوز کسی به رید حمله نکرده.</i>")
+        lines.append("<i>هنوز هیچ اتحادی رید نکرده.</i>")
     for r in rows:
         rank = r["rank"]
-        reward = r["reward"]
-        rw = f" │ 🎁 {reward['diamonds']}💎+{reward['coins']:,}🪙" if reward else ""
+        name = r["alliance"].name
+        reward = reward_by_rank.get(rank)
+        rw = f" │ 🎁 {reward['diamonds']}💎+{reward['coins']:,}🪙 (بین ۱۰ نفر)" if reward else ""
         if rank <= 3:
-            lines.append(f"{medals[rank]} <b>{r['name']}</b>")
-            lines.append(f"└ 💥 {r['damage']:,} آسیب{rw}")
+            lines.append(f"{medals[rank]} <b>{name}</b>")
+            lines.append(f"└ 🐉 لِوِل رید: <b>{r['raid_level']}</b> │ 👥 {r['member_count']} عضو{rw}")
             lines.append("")
         else:
             if rank == 4:
                 lines.append("──────────────")
-            lines.append(f"{rank}. {r['name']} │ 💥 {r['damage']:,}{rw}")
+            lines.append(f"{rank}. {name} │ 🐉 لِوِل {r['raid_level']} │ 👥 {r['member_count']}")
     await send_screen(update, "\n".join(lines), parse_mode="HTML",
                       reply_markup=back_only_keyboard("menu:cat_social", "بازگشت به اجتماعی"))
 
@@ -3992,6 +4046,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(alliance_search_callback, pattern=r"^ally_search$"))
     application.add_handler(CallbackQueryHandler(alliance_deposit_callback, pattern=r"^ally_deposit$"))
     application.add_handler(CallbackQueryHandler(alliance_top_callback, pattern=r"^ally_top$"))
+    application.add_handler(CallbackQueryHandler(ally_raidtable_callback, pattern=r"^ally_raidtable$"))
     application.add_handler(CallbackQueryHandler(alliance_members_callback, pattern=r"^ally_members(:\d+)?$"))
     application.add_handler(CallbackQueryHandler(alliance_requests_callback, pattern=r"^ally_requests$"))
     application.add_handler(CallbackQueryHandler(alliance_approve_callback, pattern=r"^ally_approve:\d+$"))

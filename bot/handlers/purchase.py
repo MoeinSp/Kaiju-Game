@@ -220,7 +220,7 @@ async def receipt_photo_handler(update: Update, context: ContextTypes.DEFAULT_TY
         "✅ رسیدت دریافت شد و برای تأیید ارسال شد. به‌محض تأیید، موجودی اضافه می‌شه. 🙏"
     )
     # forward the receipt to the owner with review actions
-    caption = (
+    base_caption = (
         f"🧾 <b>درخواست خرید جدید</b>\n"
         f"👤 {display_name(user)} (<code>{user.id}</code>)\n"
         f"🛒 {purchase.request_summary(req)}\n"
@@ -234,16 +234,56 @@ async def receipt_photo_handler(update: Update, context: ContextTypes.DEFAULT_TY
         [btn("👤 مدیریت کاربر", style=ADMIN, callback_data=f"buymgr:{user.id}")],
     ])
     try:
-        await context.bot.send_photo(chat_id=OWNER_TELEGRAM_ID, photo=file_id, caption=caption,
-                                     parse_mode="HTML", reply_markup=kb)
+        await context.bot.send_photo(chat_id=OWNER_TELEGRAM_ID, photo=file_id,
+                                     caption=base_caption, parse_mode="HTML", reply_markup=kb)
     except Exception:  # noqa: BLE001 — never fail the user's flow over a delivery hiccup
         pass
+
+    # also post a report to the configured purchase-report channel (no buttons — review
+    # happens in the owner's DM; the channel message is edited on approve/reject)
+    from game import botconfig
+
+    channel_id = botconfig.get_buy_channel_id()
+    if channel_id:
+        try:
+            msg = await context.bot.send_photo(
+                chat_id=channel_id, photo=file_id,
+                caption=base_caption + "\n\n⏳ <b>وضعیت: در حال انتظار</b>", parse_mode="HTML",
+            )
+            await run_db(purchase.set_channel_message, req.id, channel_id, msg.message_id)
+        except Exception:  # noqa: BLE001 — a channel delivery hiccup must not break the flow
+            pass
 
 
 # ── owner: review actions ─────────────────────────────────────────────────────
 async def _notify_user(context, user_id: int, text: str) -> None:
     try:
         await context.bot.send_message(chat_id=user_id, text=text, parse_mode="HTML")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+async def _update_channel_status(context, res: dict, status_html: str) -> None:
+    """Edit the purchase-report channel message so its status reflects approve/reject."""
+    chat_id, msg_id = res.get("channel_chat_id"), res.get("channel_message_id")
+    if not chat_id or not msg_id:
+        return
+    bits = []
+    if res.get("coins"):
+        bits.append(f"{res['coins']:,} 🪙")
+    if res.get("dna"):
+        bits.append(f"{res['dna']:,} 🧬")
+    if res.get("diamonds"):
+        bits.append(f"{res['diamonds']:,} 💎")
+    caption = (
+        f"🧾 <b>درخواست خرید</b>\n"
+        f"👤 کاربر: <code>{res['user_id']}</code>\n"
+        f"🛒 {' · '.join(bits) or '—'}\n"
+        f"💰 مبلغ: <b>{res['price']:,} تومان</b>\n\n{status_html}"
+    )
+    try:
+        await context.bot.edit_message_caption(chat_id=chat_id, message_id=msg_id,
+                                                caption=caption, parse_mode="HTML")
     except Exception:  # noqa: BLE001
         pass
 
@@ -271,10 +311,11 @@ async def buy_approve_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         context, res["user_id"],
         "✅ <b>خریدت تأیید شد!</b>\n🎁 به حسابت اضافه شد: " + " · ".join(bits),
     )
-    if query.message is not None:
+    if query.message is not None and query.message.caption is not None:
         await query.edit_message_caption(
             caption=(query.message.caption or "") + "\n\n✅ <b>تأیید شد.</b>", parse_mode="HTML"
         )
+    await _update_channel_status(context, res, "✅ <b>وضعیت: تأیید شد</b>")
 
 
 async def buy_reject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -293,10 +334,11 @@ async def buy_reject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         context, res["user_id"],
         "❌ <b>رسید خریدت تأیید نشد.</b> اگه فکر می‌کنی اشتباهی رخ داده، با پشتیبانی در تماس باش.",
     )
-    if query.message is not None:
+    if query.message is not None and query.message.caption is not None:
         await query.edit_message_caption(
             caption=(query.message.caption or "") + "\n\n❌ <b>رد شد.</b>", parse_mode="HTML"
         )
+    await _update_channel_status(context, res, "❌ <b>وضعیت: رد شد</b>")
 
 
 async def buy_block_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

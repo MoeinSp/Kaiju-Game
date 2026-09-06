@@ -42,24 +42,28 @@ class RaidError(Exception):
     pass
 
 
-def get_active_boss(group_id: int) -> RaidBoss | None:
-    return RaidBoss.objects.filter(group_id=group_id, is_active=True).first()
+def get_active_boss(alliance_id: int) -> RaidBoss | None:
+    """The alliance's single active raid boss (raids are alliance-based)."""
+    if not alliance_id:
+        return None
+    return RaidBoss.objects.filter(alliance_id=alliance_id, is_active=True).first()
 
 
 def _boss_def(level: int) -> int:
     return BOSS_DEF_BASE + max(0, level - 1) * BOSS_DEF_PER_LEVEL
 
 
-def spawn_boss(group: Group) -> RaidBoss:
-    """Spawn a boss scaled to the group's raid level, with a random size. The boss
-    never expires — it stays until the group fells it, and doing so raises the
-    group's raid level so the next one is tougher and pays more."""
-    if get_active_boss(group.id) is not None:
-        raise RaidError("یک باس همین الان توی گروهه! اول باهاش تسویه‌حساب کنید.")
-    level = max(1, group.raid_level)
+def spawn_boss(alliance, group=None) -> RaidBoss:
+    """Spawn a boss for an ALLIANCE, scaled to the alliance's raid level. Only that
+    alliance's members can fight it; felling it raises the alliance's raid level so the
+    next one is tougher and pays more. `group` is just the chat the احضار was posted in."""
+    if get_active_boss(alliance.id) is not None:
+        raise RaidError("یک باس همین الان برای اتحادتون فعاله! اول باهاش تسویه‌حساب کنید.")
+    level = max(1, alliance.raid_level)
     hp = round(BOSS_BASE_HP * (1 + (level - 1) * BOSS_HP_PER_LEVEL) * random.uniform(*BOSS_HP_RANDOM))
     return RaidBoss.objects.create(
-        group_id=group.id,
+        alliance_id=alliance.id,
+        group_id=group.id if group is not None else None,
         name=random.choice(BOSS_NAMES),
         element=constants.random_element(),
         level=level,
@@ -130,21 +134,24 @@ def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bo
     defeated = boss.current_hp <= 0
     if defeated:
         boss.is_active = False
-        # felling a boss levels the whole group's raid up
-        Group.objects.filter(id=boss.group_id).update(raid_level=F("raid_level") + 1)
+        # felling a boss levels the alliance's raid up
+        from bio_lab.models import Alliance
+
+        if boss.alliance_id:
+            Alliance.objects.filter(id=boss.alliance_id).update(raid_level=F("raid_level") + 1)
     boss.save()
     # attacks left AFTER this one is recorded (the caller records it right after)
     attacks_left = max(0, RAID_DAILY_ATTACKS - hits_today - 1)
     return dmg, defeated, dna_gain, attacks_left
 
 
-def damage_leaderboard(group_id: int) -> dict | None:
-    """Read-only standings for the group's ACTIVE boss: each attacker's total damage
+def damage_leaderboard(alliance_id: int) -> dict | None:
+    """Read-only standings for the ALLIANCE's active boss: each attacker's total damage
     and the reward they'd get if the boss fell right now (same split as
     distribute_rewards, but nothing is granted). None when there's no active boss."""
     from bio_lab.repository import display_name
 
-    boss = get_active_boss(group_id)
+    boss = get_active_boss(alliance_id)
     if boss is None:
         return None
     level_mult = 1 + max(0, boss.level - 1) * REWARD_PER_LEVEL
@@ -174,16 +181,20 @@ def damage_leaderboard(group_id: int) -> dict | None:
     }
 
 
-def weekly_raid_leaderboard(limit: int = 10) -> list[dict]:
-    """Players ranked by TOTAL raid damage this week. RaidDamageLog is wiped at the
-    weekly reset, so the whole table is the current week. Rows carry the reward each
-    rank will get at week's end."""
+RAID_WEEKLY_TOP_ALLIANCES = 3   # top-N alliances (by raid level) that get weekly rewards
+RAID_WEEKLY_MEMBERS_REWARDED = 10  # per rewarded alliance, split equally among its top raiders
+
+
+def alliance_raid_members(alliance_id: int, limit: int = 10) -> list[dict]:
+    """Top raiders WITHIN one alliance by total raid damage this week (logs wiped at the
+    weekly reset). Used by the «جدول رید» inside the alliance section."""
     from django.db.models import Sum
 
     from bio_lab.repository import display_name
 
     agg = (
-        RaidDamageLog.objects.values("user_id")
+        RaidDamageLog.objects.filter(user__alliance_id=alliance_id)
+        .values("user_id")
         .annotate(total=Sum("damage"))
         .order_by("-total")[:limit]
     )
@@ -191,45 +202,70 @@ def weekly_raid_leaderboard(limit: int = 10) -> list[dict]:
     for i, entry in enumerate(agg, start=1):
         u = User.objects.filter(id=entry["user_id"]).first()
         rows.append({
-            "rank": i,
-            "user_id": entry["user_id"],
+            "rank": i, "user_id": entry["user_id"],
             "name": display_name(u) if u else str(entry["user_id"]),
             "damage": entry["total"] or 0,
-            "reward": RAID_WEEKLY_REWARD_BY_RANK.get(i),
         })
     return rows
 
 
+def alliance_raid_ranking(limit: int = 10) -> list[dict]:
+    """Alliances ranked by their RAID LEVEL (the social «رتبه‌بندی رید» board). At week's
+    end the top-3 alliances' best raiders share the weekly reward."""
+    from bio_lab.models import Alliance
+
+    ranked = list(Alliance.objects.order_by("-raid_level", "id")[:limit])
+    return [
+        {"rank": i, "alliance": a, "raid_level": a.raid_level, "member_count": a.members.count()}
+        for i, a in enumerate(ranked, start=1)
+    ]
+
+
 def reset_all_raids() -> None:
-    """Wipe the raid slate: despawn every active boss, reset every group's raid level
-    to 1, and clear all damage logs. Used by the weekly reset and the one-time manual
-    reset."""
+    """Wipe the raid slate: despawn every active boss, reset every alliance's (and
+    group's) raid level to 1, and clear all damage logs. Used by the weekly reset and
+    the one-time manual reset."""
+    from bio_lab.models import Alliance
+
     RaidBoss.objects.filter(is_active=True).update(is_active=False)
+    Alliance.objects.update(raid_level=1)
     Group.objects.update(raid_level=1)
     RaidDamageLog.objects.all().delete()
 
 
 def settle_weekly_raid() -> list[tuple[int, str]]:
-    """Grant the weekly raid-ranking rewards to the top players, then reset all raids.
-    Returns (user_id, text) DMs. Called once per week from the season close."""
+    """Weekly raid payout: the top-3 alliances (by raid level) each have their 10 best
+    raiders split that rank's reward EQUALLY. Then reset every raid. Returns DMs."""
     from game.battlepass import _grant
 
-    rows = weekly_raid_leaderboard(limit=len(RAID_WEEKLY_REWARD_BY_RANK))
     out: list[tuple[int, str]] = []
-    for r in rows:
-        reward = r["reward"]
+    for entry in alliance_raid_ranking(limit=RAID_WEEKLY_TOP_ALLIANCES):
+        reward = RAID_WEEKLY_REWARD_BY_RANK.get(entry["rank"])
         if not reward:
             continue
-        u = User.objects.filter(id=r["user_id"]).first()
-        if u is None:
+        members = alliance_raid_members(entry["alliance"].id, limit=RAID_WEEKLY_MEMBERS_REWARDED)
+        if not members:
             continue
-        _grant(u, reward)
-        if u.notifications_on:
-            out.append((
-                u.id,
-                f"🐲 <b>جایزه‌ی هفتگی رتبه‌بندی رید!</b>\nاین هفته رتبه‌ی <b>{r['rank']}</b> شدی.\n"
-                f"🎁 {reward['diamonds']}💎 + {reward['coins']:,}🪙 + {reward['dna']} DNA",
-            ))
+        n = len(members)
+        share = {
+            "coins": reward["coins"] // n,
+            "diamonds": reward["diamonds"] // n,
+            "dna": reward["dna"] // n,
+        }
+        if not any(share.values()):
+            continue
+        for m in members:
+            u = User.objects.filter(id=m["user_id"]).first()
+            if u is None:
+                continue
+            _grant(u, share)
+            if u.notifications_on:
+                out.append((
+                    u.id,
+                    f"🐲 <b>جایزه‌ی هفتگی رید اتحاد!</b>\nاتحاد <b>{entry['alliance'].name}</b> این هفته "
+                    f"رتبه‌ی <b>{entry['rank']}</b> رید شد.\n"
+                    f"🎁 سهم تو: {share['diamonds']}💎 + {share['coins']:,}🪙 + {share['dna']} DNA",
+                ))
     reset_all_raids()
     return out
 

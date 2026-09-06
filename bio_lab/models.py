@@ -122,6 +122,10 @@ class Alliance(models.Model):
     treasury_avg_count = models.IntegerField(default=0)
     treasury_avg_day = models.CharField(max_length=10, blank=True, default="")
 
+    # raids are alliance-based: each alliance has ONE active boss at a time and its own
+    # raid level (climbs each time the alliance fells a boss). Reset weekly.
+    raid_level = models.IntegerField(default=1)
+
     # treasury-funded, alliance-wide buildings (game/alliance.py) — every member
     # benefits. xp/pass are the original two; fortress/barracks/vault were added
     # later. All share the buy_perk() upgrade machinery and a per-building level.
@@ -541,10 +545,13 @@ class GroupDrop(models.Model):
 
 
 class RaidBoss(models.Model):
-    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="raid_bosses")
+    # raids are alliance-based now: a boss belongs to ONE alliance and only its members
+    # fight it. `group` is kept (nullable) only to know which chat the احضار was posted in.
+    group = models.ForeignKey(Group, null=True, blank=True, on_delete=models.SET_NULL, related_name="raid_bosses")
+    alliance = models.ForeignKey("Alliance", null=True, blank=True, on_delete=models.CASCADE, related_name="raid_bosses")
     name = models.CharField(max_length=64)
     element = models.CharField(max_length=16)
-    level = models.IntegerField(default=1)  # the group's raid level when this boss spawned
+    level = models.IntegerField(default=1)  # the alliance's raid level when this boss spawned
     max_hp = models.IntegerField()
     current_hp = models.IntegerField()
     is_active = models.BooleanField(default=True)
@@ -886,6 +893,9 @@ class BotConfig(models.Model):
     buy_card_number = models.CharField(max_length=64, default="", blank=True)
     buy_card_holder = models.CharField(max_length=96, default="", blank=True)
     buy_min_toman = models.BigIntegerField(default=0)  # minimum purchase (0 = no minimum)
+    # channel where every in-bot purchase report is posted (0/None = only the owner's DM).
+    # The bot must be an admin of this channel to post there.
+    buy_channel_id = models.BigIntegerField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:
@@ -1001,6 +1011,10 @@ class PurchaseRequest(models.Model):
     price_toman = models.BigIntegerField(default=0)
     status = models.CharField(max_length=20, default="awaiting_receipt")
     receipt_file_id = models.CharField(max_length=256, default="", blank=True)
+    # the report message posted to the purchase-report channel, so approve/reject can
+    # edit it to reflect the new status
+    channel_chat_id = models.BigIntegerField(null=True, blank=True)
+    channel_message_id = models.BigIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
 

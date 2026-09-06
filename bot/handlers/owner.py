@@ -2407,6 +2407,7 @@ def _buy_link_panel_keyboard(has_link: bool) -> InlineKeyboardMarkup:
         [btn("💵 تنظیم قیمت‌ها (خرید درون‌ربات)", style=PRIMARY, callback_data="admin_menu:buy_prices_set")],
         [btn("💳 تنظیم کارت پرداخت", style=PRIMARY, callback_data="admin_menu:buy_card_set")],
         [btn("🎚 تنظیم حداقل خرید", style=PRIMARY, callback_data="admin_menu:buy_min_set")],
+        [btn("📢 کانال گزارش خرید", style=ADMIN, callback_data="admin_menu:buy_channel_set")],
         [btn("🔗 تنظیم/تغییر لینک خرید بیرونی", style=NAV, callback_data="admin_menu:buy_link_set")],
     ]
     if has_link:
@@ -2466,6 +2467,22 @@ async def buy_min_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await update.effective_message.reply_text(
         "🎚 حداقل مبلغ خرید رو به تومان بفرست (یه عدد). مثلاً <code>50000</code>.\n"
         "<i>عددِ ۰ یعنی حداقلی نباشه.</i>",
+        parse_mode="HTML",
+    )
+
+
+async def buy_channel_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from game import botconfig
+
+    cur = botconfig.get_buy_channel_id()
+    cur_line = f"کانال فعلی: <code>{cur}</code>\n\n" if cur else "الان کانالی تنظیم نشده (فقط به پیوی مالک می‌ره).\n\n"
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "set_buy_channel"}
+    await update.effective_message.reply_text(
+        "📢 <b>کانال گزارش خرید</b>\n"
+        f"{cur_line}"
+        "یه پیام از اون کانال رو همین‌جا <b>فوروارد</b> کن، یا آیدی عددی کانال رو بفرست "
+        "(مثل <code>-1001234567890</code>).\n"
+        "<i>ربات باید توی اون کانال ادمین باشه. برای حذف، عدد <code>0</code> بفرست.</i>",
         parse_mode="HTML",
     )
 
@@ -3527,6 +3544,39 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         await _show_buy_panel(update, f"✅ {note}")
         return
 
+    if action == "set_buy_channel":
+        fwd = getattr(message, "forward_from_chat", None)
+        if fwd is not None and getattr(fwd, "id", None):
+            channel_id = fwd.id
+        else:
+            raw = (text or "").strip().replace(" ", "")
+            if not (raw.lstrip("-").isdigit()):
+                context.user_data[AWAITING_ADMIN_KEY] = awaiting
+                await message.reply_text(
+                    "⚠️ یا یه پیام از کانال رو فوروارد کن، یا آیدی عددی کانال رو بفرست "
+                    "(مثل <code>-1001234567890</code>)، یا <code>0</code> برای حذف.",
+                    parse_mode="HTML",
+                )
+                return
+            channel_id = int(raw)
+        await run_db(botconfig.set_buy_channel_id, channel_id if channel_id else None)
+        if channel_id:
+            # verify the bot can post there
+            try:
+                probe = await context.bot.send_message(chat_id=channel_id, text="✅ کانال گزارش خرید تنظیم شد.")
+                try:
+                    await context.bot.delete_message(chat_id=channel_id, message_id=probe.message_id)
+                except Exception:  # noqa: BLE001
+                    pass
+                note = f"کانال گزارش خرید روی <code>{channel_id}</code> تنظیم شد."
+            except Exception:  # noqa: BLE001
+                note = (f"کانال روی <code>{channel_id}</code> ثبت شد، ولی نتونستم توش پیام بدم — "
+                        "مطمئن شو ربات توی کانال <b>ادمین</b> باشه.")
+        else:
+            note = "کانال گزارش خرید حذف شد (گزارش‌ها فقط به پیوی مالک می‌رن)."
+        await _show_buy_panel(update, f"✅ {note}")
+        return
+
     if action == "set_buy_card":
         num_part, holder_part = (text.split("|", 1) + [""])[:2] if "|" in text else (text, "")
         number = "".join(ch for ch in num_part if ch.isdigit())
@@ -3886,6 +3936,7 @@ _ADMIN_MENU_ACTIONS.update(
         "buy_prices_set": buy_prices_set_start,
         "buy_card_set": buy_card_set_start,
         "buy_min_set": buy_min_set_start,
+        "buy_channel_set": buy_channel_set_start,
         "users": users_browse_callback,
         "gift_all": gift_all_start,
         "global_stats": global_stats_cmd,

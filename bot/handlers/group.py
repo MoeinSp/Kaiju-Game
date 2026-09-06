@@ -5,7 +5,7 @@ from django.db import transaction
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
-from bio_lab.models import Creature, DuelLog, User
+from bio_lab.models import Alliance, Creature, DuelLog, User
 from bio_lab.repository import (
     creature_name,
     display_name,
@@ -513,22 +513,26 @@ def _raid_spawn_sync(chat, spawner_tg):
     group = get_or_create_group(chat)
     spawner_user, _ = get_or_create_user(spawner_tg)
     touch_membership(group, spawner_user)
-    return spawn_boss(group)
+    if spawner_user.alliance_id is None:
+        raise RaidError("🚫 رید اتحادیه — اول باید عضو یه اتحاد باشی.\nتوی پیوی ربات از «اتحاد من» یکی بساز یا عضو شو، بعد «احضار» بزن.")
+    alliance = Alliance.objects.get(id=spawner_user.alliance_id)
+    boss = spawn_boss(alliance, group)
+    return boss, alliance.name
 
 
 async def raid_spawn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        boss = await run_db(_raid_spawn_sync, update.effective_chat, update.effective_user)
+        boss, alliance_name = await run_db(_raid_spawn_sync, update.effective_chat, update.effective_user)
     except RaidError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(str(exc), parse_mode="HTML")
         return
     await update.message.reply_text(
-        f"👻 <b>باس رید لِوِل {boss.level} ظاهر شد: {boss.name}!</b>\n"
+        f"👻 <b>باس رید لِوِل {boss.level} برای اتحاد «{alliance_name}» ظاهر شد: {boss.name}!</b>\n"
         f"{constants.render_bar(boss.current_hp, boss.max_hp, width=14)} {boss.current_hp:,}/{boss.max_hp:,} HP\n"
         f"عنصر: {constants.element_label(boss.element)}\n\n"
         f"• {get_emoji('energy')} هزینه هر حمله: ۱ انرژی (پاداش بیشتر با دمیج بالاتر)\n"
-        f"• ⏳ بدون محدودیت روزانه (+۱ دقیقه زمان انتظار پس از هر اتک)\n"
-        f"• ⚔️ حمله به باس: ارسال کلمه «اتک»\n"
+        f"• ⏳ کول‌داون هر اتک: ۵ دقیقه · سقف روزانه: {RAID_DAILY_ATTACKS} اتک\n"
+        f"• ⚔️ فقط اعضای همین اتحاد می‌تونن با «اتک» بهش حمله کنن\n"
         f"• 🎯 حمله به بازیکن: ریپلای روی پیامش و ارسال «اتک»",
         parse_mode="HTML",
     )
@@ -536,12 +540,14 @@ async def raid_spawn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 def _attack_sync(chat, tg_user):
     group = get_or_create_group(chat)
-    boss = get_active_boss(group.id)
-    if boss is None:
-        raise GameError("😴 الان هیچ باسی توی گروه نیست. با فرستادن «احضار» یه باس بیار، بعد «اتک» بزن.")
-
     user, _ = get_or_create_user(tg_user)
     touch_membership(group, user)
+    if user.alliance_id is None:
+        raise GameError("🚫 رید اتحادیه — اول باید عضو یه اتحاد باشی تا بتونی اتک رید بزنی.")
+    boss = get_active_boss(user.alliance_id)
+    if boss is None:
+        raise GameError("😴 الان باس رید فعالی برای اتحادت نیست. یکی از اعضا «احضار» بزنه تا باس بیاد، بعد «اتک».")
+
     creature = get_active_creature(user)
     if creature is None:
         raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
@@ -574,22 +580,25 @@ def _attack_sync(chat, tg_user):
     return creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won, user.energy, dna_gain, attacks_left
 
 
-async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # replying to another player's message turns «اتک» into a PvP challenge instead
-    # of a hit on the raid boss.
-    reply = update.message.reply_to_message
-    if reply is not None and reply.from_user is not None and not reply.from_user.is_bot:
-        await _pvp_attack_prompt(update, context, reply.from_user)
-        return
+def _raid_precheck_sync(chat, tg_user):
+    """Validate a raid attack WITHOUT hitting — used to show the confirm prompt. Returns
+    (alliance_name, boss_name, boss_level). Raises with the right message when the player
+    has no alliance or the alliance has no active boss."""
+    group = get_or_create_group(chat)
+    user, _ = get_or_create_user(tg_user)
+    touch_membership(group, user)
+    if user.alliance_id is None:
+        raise GameError("🚫 <b>رید اتحادیه</b> — ابتدا در یک اتحاد عضو شوید تا بتوانید اتک رید بزنید.\n"
+                        "<i>توی پیوی ربات از «اتحاد من» یه اتحاد بساز یا عضو شو.</i>")
+    alliance = Alliance.objects.get(id=user.alliance_id)
+    boss = get_active_boss(user.alliance_id)
+    if boss is None:
+        raise GameError("😴 الان باس رید فعالی برای اتحادت نیست. یکی از اعضا «احضار» بزنه، بعد «اتک».")
+    return alliance.name, boss.name, boss.level
 
-    try:
-        creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won, energy_left, dna_gain, attacks_left = await run_db(
-            _attack_sync, update.effective_chat, update.effective_user
-        )
-    except (RaidError, GameError) as exc:
-        await _reply_error(update.message, exc, update.effective_user.id)
-        return
 
+def _raid_attack_view(creature, boss, dmg, defeated, completed_missions, reward_lines,
+                      speedup_won, energy_left, dna_gain, attacks_left) -> str:
     from bot.handlers.private import pct_bar as _pct_bar
 
     hp = max(boss.current_hp, 0)
@@ -597,7 +606,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lines = [
         f"{get_emoji('attack_action')} <b>گزارش نبرد با باس | Raid Attack</b>",
         "",
-        f"🦅 مهاجم: <b>{creature.name}</b>",
+        f"🦅 مهاجم: <b>{creature_name(creature)}</b>",
         f"💥 آسیب وارده: <b>{dmg:,}</b> DMG",
         "",
         div,
@@ -611,30 +620,75 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"{get_emoji('energy')} انرژی باقی‌مانده: {energy_left} (-1⚡)",
         f"🔁 اتک رید باقی‌مانده‌ی امروز: <b>{attacks_left}</b> از {RAID_DAILY_ATTACKS}",
     ]
-    text = "\n".join(lines)
-    text += _mission_lines(completed_missions)
+    text = "\n".join(lines) + _mission_lines(completed_missions)
     if defeated:
         text += (
             f"\n\n{get_emoji('celebrate')} <b>باس لِوِل {boss.level} شکست خورد!</b> "
-            f"لِوِل رید گروه رفت رو <b>{boss.level + 1}</b> — باس بعدی قوی‌تر و پرجایزه‌تره.\n\n"
+            f"لِوِل رید اتحاد رفت رو <b>{boss.level + 1}</b> — باس بعدی قوی‌تر و پرجایزه‌تره.\n\n"
             f"📊 <b>جدول نهایی رید — {boss.name}</b>\n"
             "──────────────\n\n" + "\n\n".join(reward_lines)
         )
         text += _speedup_note(speedup_won)
-    else:
-        text += f"\n\n{div}\n💡 <i>برای حمله به بازیکن دیگه، روی پیامش ریپلای کن و «اتک» بفرست.</i>"
+    return text
 
-    # only a relevant button: the raid standings (who hit how much + their share).
-    # the boss card is gone once it's defeated, so hide the button then.
+
+async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # replying to another player's message turns «اتک» into a PvP challenge instead
+    # of a hit on the raid boss.
+    reply = update.message.reply_to_message
+    if reply is not None and reply.from_user is not None and not reply.from_user.is_bot:
+        await _pvp_attack_prompt(update, context, reply.from_user)
+        return
+
+    # raid attack: confirm first (alliance-based), so the player sees it's a raid hit
+    try:
+        alliance_name, boss_name, boss_level = await run_db(
+            _raid_precheck_sync, update.effective_chat, update.effective_user
+        )
+    except (RaidError, GameError) as exc:
+        await _reply_error(update.message, exc, update.effective_user.id)
+        return
+    await update.message.reply_text(
+        f"🐲 <b>اتک رید</b>\n"
+        f"🤝 اتحاد: <b>{alliance_name}</b>\n"
+        f"{get_emoji('raid_boss')} باس: <b>{boss_name}</b> (لِوِل {boss_level})\n\n"
+        f"می‌خوای به باس رید اتحادت حمله کنی؟",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[
+            btn("✅ تأیید و اتک", style=BATTLE, callback_data=f"raidatk:{update.effective_user.id}")
+        ]]),
+    )
+
+
+async def raid_attack_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«✅ تأیید و اتک» — actually land the raid hit after the confirm prompt."""
+    query = update.callback_query
+    owner_id = int(query.data.split(":")[1])
+    if update.effective_user.id != owner_id:
+        await query.answer("این دکمه مال تو نیست 🙂", show_alert=True)
+        return
+    try:
+        creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won, energy_left, dna_gain, attacks_left = await run_db(
+            _attack_sync, update.effective_chat, update.effective_user
+        )
+    except (RaidError, GameError) as exc:
+        from bot.handlers.energy import show_energy_error
+
+        if not await show_energy_error(query, exc, owner_id):
+            await query.answer()
+            await safe_edit_message_text(query, str(exc), parse_mode="HTML")
+        return
+
+    text = _raid_attack_view(creature, boss, dmg, defeated, completed_missions, reward_lines,
+                             speedup_won, energy_left, dna_gain, attacks_left)
     from bot.handlers.group_words import _pm_button
 
     kb_rows = []
     if not defeated:
-        kb_rows.append([btn("📊 جدول اتک به رید", style=NAV, callback_data=f"raidlb:{update.effective_chat.id}")])
+        kb_rows.append([btn("📊 جدول اتک به رید", style=NAV, callback_data="raidlb")])
     kb_rows.append([_pm_button()])
-    await update.message.reply_text(
-        text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb_rows)
-    )
+    await query.answer("🟢 اتک زده شد!")
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb_rows))
 
 
 # RLM-prefixed bullet: forces the stats sub-line to render right-to-left so its marker
@@ -683,22 +737,29 @@ def _raid_leaderboard_text(lb: dict) -> str:
     return "\n".join(lines)
 
 
-async def raid_leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """The «📊 جدول اتک به رید» button: current damage standings for the active boss,
-    with each attacker's projected reward share."""
-    query = update.callback_query
+def _raid_lb_for_user_sync(tg_user):
     from game.raid import damage_leaderboard
 
-    lb = await run_db(damage_leaderboard, query.message.chat_id)
+    user, _ = get_or_create_user(tg_user)
+    if user.alliance_id is None:
+        return None
+    return damage_leaderboard(user.alliance_id)
+
+
+async def raid_leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """The «📊 جدول اتک به رید» button: current damage standings for the tapping user's
+    ALLIANCE boss, with each attacker's projected reward share."""
+    query = update.callback_query
+    lb = await run_db(_raid_lb_for_user_sync, update.effective_user)
     if lb is None:
-        await query.answer("الان هیچ باسی توی گروه فعال نیست.", show_alert=True)
+        await query.answer("الان باس رید فعالی برای اتحادت نیست (یا عضو اتحاد نیستی).", show_alert=True)
         return
     await query.answer()
     text = _raid_leaderboard_text(lb)
     from bot.handlers.group_words import _pm_button
 
     kb = InlineKeyboardMarkup([
-        [btn("🔄 به‌روزرسانی", style=NAV, callback_data=f"raidlb:{query.message.chat_id}")],
+        [btn("🔄 به‌روزرسانی", style=NAV, callback_data="raidlb")],
         [_pm_button()],
     ])
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
@@ -1452,7 +1513,8 @@ def register(application) -> None:
     # spamming it across many groups for free stat mutations. The player-vs-player
     # «دوئل» feature was removed entirely (PvP happens via «اتک» reply-attacks now).
     application.add_handler(CallbackQueryHandler(transfer_offer_callback, pattern=r"^xfo:"))
-    application.add_handler(CallbackQueryHandler(raid_leaderboard_callback, pattern=r"^raidlb:-?\d+$"))
+    application.add_handler(CallbackQueryHandler(raid_leaderboard_callback, pattern=r"^raidlb(:-?\d+)?$"))
+    application.add_handler(CallbackQueryHandler(raid_attack_confirm_callback, pattern=r"^raidatk:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_attack_callback, pattern=r"^gatk:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_attack_cancel_callback, pattern=r"^gatk_cancel:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_detail_callback, pattern=r"^gatk_detail:\d+$"))
