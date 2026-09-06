@@ -686,6 +686,7 @@ async def raid_attack_confirm_callback(update: Update, context: ContextTypes.DEF
     kb_rows = []
     if not defeated:
         kb_rows.append([btn("📊 جدول اتک به رید", style=NAV, callback_data="raidlb")])
+    kb_rows.append([btn("🐲 رتبه‌بندی کلی رید", style=NAV, callback_data="raidrankall")])
     kb_rows.append([_pm_button()])
     await query.answer("🟢 اتک زده شد!")
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb_rows))
@@ -735,6 +736,50 @@ def _raid_leaderboard_text(lb: dict) -> str:
     return "\n".join(lines)
 
 
+def _raid_overall_rank_sync():
+    from game.raid import RAID_WEEKLY_REWARD_BY_RANK, alliance_raid_ranking
+
+    return alliance_raid_ranking(limit=10), RAID_WEEKLY_REWARD_BY_RANK
+
+
+async def raid_overall_rank_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«🐲 رتبه‌بندی کلی رید» — alliances ranked by raid level (same board as the social
+    panel), shown inline in the group."""
+    query = update.callback_query
+    rows, reward_by_rank = await run_db(_raid_overall_rank_sync)
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    lines = [
+        "🐲 <b>رتبه‌بندی کلی رید اتحادها</b>",
+        "",
+        "بر اساس <b>لِوِل رید اتحاد</b>. آخر هفته جایزهٔ هر رتبه بین ۱۰ رِیدرِ برترِ اون اتحاد پخش می‌شه.",
+        "",
+        "──────────────",
+        "",
+    ]
+    if not rows:
+        lines.append("<i>هنوز هیچ اتحادی رید نکرده.</i>")
+    for r in rows:
+        rank, name = r["rank"], r["alliance"].name
+        reward = reward_by_rank.get(rank)
+        rw = f" │ 🎁 {reward['diamonds']}💎+{reward['coins']:,}🪙" if reward else ""
+        if rank <= 3:
+            lines.append(f"{medals[rank]} <b>{name}</b>")
+            lines.append(f"‏└ 🐉 لِوِل رید: <b>{r['raid_level']}</b> │ 👥 {r['member_count']} عضو{rw}")
+            lines.append("")
+        else:
+            if rank == 4:
+                lines.append("──────────────")
+            lines.append(f"{rank}. {name} │ 🐉 لِوِل {r['raid_level']} │ 👥 {r['member_count']}")
+    from bot.handlers.group_words import _pm_button
+
+    kb = InlineKeyboardMarkup([
+        [btn("🔄 به‌روزرسانی", style=NAV, callback_data="raidrankall")],
+        [_pm_button()],
+    ])
+    await query.answer()
+    await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=kb)
+
+
 def _raid_lb_for_user_sync(tg_user):
     from game.raid import damage_leaderboard
 
@@ -758,6 +803,7 @@ async def raid_leaderboard_callback(update: Update, context: ContextTypes.DEFAUL
 
     kb = InlineKeyboardMarkup([
         [btn("🔄 به‌روزرسانی", style=NAV, callback_data="raidlb")],
+        [btn("🐲 رتبه‌بندی کلی رید", style=NAV, callback_data="raidrankall")],
         [_pm_button()],
     ])
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
@@ -1513,6 +1559,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(transfer_offer_callback, pattern=r"^xfo:"))
     application.add_handler(CallbackQueryHandler(raid_leaderboard_callback, pattern=r"^raidlb(:-?\d+)?$"))
     application.add_handler(CallbackQueryHandler(raid_attack_confirm_callback, pattern=r"^raidatk:\d+$"))
+    application.add_handler(CallbackQueryHandler(raid_overall_rank_callback, pattern=r"^raidrankall$"))
     application.add_handler(CallbackQueryHandler(pvp_attack_callback, pattern=r"^gatk:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_attack_cancel_callback, pattern=r"^gatk_cancel:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_detail_callback, pattern=r"^gatk_detail:\d+$"))
