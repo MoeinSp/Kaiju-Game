@@ -96,10 +96,14 @@ def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bo
     cap of RAID_DAILY_ATTACKS. Returns (dmg, defeated, dna_gain, attacks_left_today)."""
     from game.daily import get_daily_count
 
-    # a brand-new alliance member can't raid until the next midnight (kept vague on
-    # purpose — no reason shown to the player)
+    # a brand-new alliance member can't raid until the next midnight. The message
+    # explains the surface reason (recently joined) + when it unlocks — not the
+    # anti-fake motive behind it.
     if _joined_alliance_today(user):
-        raise RaidError("⛔ الان امکان حمله به رید برات فعال نیست. کمی بعد دوباره امتحان کن.")
+        raise RaidError(
+            "⏳ <b>چون به‌تازگی به این اتحاد پیوستی</b>، اتک رید هنوز برات فعال نیست.\n"
+            "از نیمه‌شب امشب (ساعت ۰۰:۰۰) می‌تونی به باس رید اتحادت حمله کنی."
+        )
 
     hits_today = get_daily_count(user, "raid_attack")
     if hits_today >= RAID_DAILY_ATTACKS:
