@@ -698,16 +698,14 @@ _RAID_BRANCH = "‏•"
 
 
 def _raid_rank_label(i: int) -> str:
-    """Rank badge: premium 🥇🥈🥉 for the top three (owner-themeable), keycap 4️⃣… to 10
-    (premiumised as literal glyphs), then plain N."""
+    """Rank badge: premium 🥇🥈🥉 for the top three (owner-themeable), then a plain
+    number «4.», «5.» … (per the owner's request — no keycap-emoji ranks)."""
     if i == 0:
         return get_emoji("medal_gold")
     if i == 1:
         return get_emoji("medal_silver")
     if i == 2:
         return get_emoji("medal_bronze")
-    if i < 10:
-        return f"{i + 1}️⃣"
     return f"{i + 1}."
 
 

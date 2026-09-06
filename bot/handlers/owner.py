@@ -3545,10 +3545,17 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     if action == "set_buy_channel":
-        fwd = getattr(message, "forward_from_chat", None)
-        if fwd is not None and getattr(fwd, "id", None):
-            channel_id = fwd.id
+        # PTB 22.x exposes the forward source via `forward_origin` (MessageOriginChannel
+        # has `.chat`); `forward_from_chat` is the deprecated/removed old attribute.
+        channel_id = None
+        origin = getattr(message, "forward_origin", None)
+        if origin is not None and getattr(origin, "chat", None) is not None:
+            channel_id = origin.chat.id
         else:
+            fwd = getattr(message, "forward_from_chat", None)
+            if fwd is not None and getattr(fwd, "id", None):
+                channel_id = fwd.id
+        if channel_id is None:
             raw = (text or "").strip().replace(" ", "")
             if not (raw.lstrip("-").isdigit()):
                 context.user_data[AWAITING_ADMIN_KEY] = awaiting

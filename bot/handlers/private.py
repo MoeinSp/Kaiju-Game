@@ -3591,7 +3591,7 @@ async def alliance_league_panel(update: Update, context: ContextTypes.DEFAULT_TY
     from game.alliance import ALLIANCE_LEAGUE_REWARD_BY_RANK
 
     ranked = await run_db(_alliance_top_sync)
-    badges = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
 
     def _rw(rw):
         return f"{rw['diamonds']}💎 + {rw['coins']:,}🪙" if rw else "—"
@@ -3604,18 +3604,17 @@ async def alliance_league_panel(update: Update, context: ContextTypes.DEFAULT_TY
     if not ranked:
         lines.append("<i>هنوز هیچ اتحادی ساخته نشده.</i>")
     for i, r in enumerate(ranked, start=1):
-        badge = badges[i - 1] if i <= len(badges) else f"{i}."
         rw = ALLIANCE_LEAGUE_REWARD_BY_RANK.get(i)
         name = r["alliance"].name
         power, members = r["power"], r["member_count"]
         if i <= 3:
-            lines.append(f"{badge} <b>{name}</b>")
-            lines.append(f"└ 💪 {power:,} قدرت │ 👥 {members} عضو │ 🎁 {_rw(rw)}")
+            lines.append(f"{medals[i]} <b>{name}</b>")
+            lines.append(f"‏└ 💪 {power:,} قدرت │ 👥 {members} عضو │ 🎁 {_rw(rw)}")
             lines.append("")
         else:
             if i == 4:
                 lines.append("──────────────")
-            lines.append(f"{badge} {name} │ 💪 {power:,} │ 👥 {members} │ 🎁 {_rw(rw)}")
+            lines.append(f"{i}. {name} │ 💪 {power:,} │ 👥 {members} │ 🎁 {_rw(rw)}")
     await send_screen(
         update, "\n".join(lines), parse_mode="HTML",
         reply_markup=back_only_keyboard("menu:cat_social", "بازگشت به اجتماعی"),
@@ -3728,7 +3727,7 @@ async def rank(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if i <= 3:
             reward = DAILY_TREASURY_REWARD_BY_RANK.get(i)
             lines.append(f"{medals[i]} <b>{name}</b>")
-            lines.append(f"└ 🏦 {r['treasury']:,} طلا │ 👥 {r['member_count']} عضو │ 🎁 {reward:,}🪙")
+            lines.append(f"‏└ 🏦 {r['treasury']:,} طلا │ 👥 {r['member_count']} عضو │ 🎁 {reward:,}🪙")
             lines.append("")
         else:
             if i == 4:
@@ -3769,7 +3768,7 @@ async def raid_rank_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         rw = f" │ 🎁 {reward['diamonds']}💎+{reward['coins']:,}🪙 (بین ۱۰ نفر)" if reward else ""
         if rank <= 3:
             lines.append(f"{medals[rank]} <b>{name}</b>")
-            lines.append(f"└ 🐉 لِوِل رید: <b>{r['raid_level']}</b> │ 👥 {r['member_count']} عضو{rw}")
+            lines.append(f"‏└ 🐉 لِوِل رید: <b>{r['raid_level']}</b> │ 👥 {r['member_count']} عضو{rw}")
             lines.append("")
         else:
             if rank == 4:

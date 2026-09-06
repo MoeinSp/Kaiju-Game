@@ -31,11 +31,11 @@ def _panel_sync(tg_user):
 
 
 _DIV = "━━━━━━━━━━━━━━━━━━━━"
-_RANK_BADGES = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+_RANK_MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 
 
 def _rank_badge(rank: int) -> str:
-    return _RANK_BADGES[rank - 1] if 1 <= rank <= len(_RANK_BADGES) else f"{rank}."
+    return _RANK_MEDALS.get(rank, f"{rank}.")
 
 
 def _reward_fmt(reward: dict) -> str:
