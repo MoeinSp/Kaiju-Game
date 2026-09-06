@@ -88,6 +88,22 @@ def _opt_out(user_id: int) -> None:
 
 
 async def notify_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    # daily alliance-treasury reward (day-guarded; settles once per day) — do it here so
+    # it fires without needing a user to open a screen, then DM the winning members
+    try:
+        from game.season import settle_daily_treasury
+
+        for user_id, text in await run_db(settle_daily_treasury):
+            try:
+                await context.bot.send_message(chat_id=user_id, text=text, parse_mode="HTML")
+            except Forbidden:
+                await run_db(_opt_out, user_id)
+            except TelegramError:
+                pass
+            await asyncio.sleep(SEND_DELAY_SECONDS)
+    except Exception:  # noqa: BLE001 — a treasury hiccup must not block re-engagement DMs
+        pass
+
     pending = await run_db(collect_due)
     for item in pending:
         # items are (user_id, text[, _unused[, attacker_id]]). The 4th element, when

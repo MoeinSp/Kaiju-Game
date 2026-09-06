@@ -103,6 +103,27 @@ def close_due_season() -> str | None:
     return closing
 
 
+def settle_daily_treasury() -> list[tuple[int, str]]:
+    """Once per day, deposit the gold bonus into the treasury of the top-3 alliances
+    (by treasury). Lazy + day-guarded like close_due_season, so it pays out exactly
+    once per day no matter how often this is called. Returns DMs to send (user_id, text)."""
+    from game.daily import today_str
+
+    today = today_str()
+    with transaction.atomic():
+        state = SeasonState.objects.select_for_update().get_or_create(id=1)[0]
+        if state.last_treasury_day == today:
+            return []
+        first_run = state.last_treasury_day is None
+        state.last_treasury_day = today
+        state.save(update_fields=["last_treasury_day"])
+        if first_run:
+            return []  # adopt today silently; first payout is tomorrow
+        from game import alliance as alliance_mod
+
+        return alliance_mod.award_daily_treasury_top3()
+
+
 def last_season_results(limit: int = 10) -> tuple[str | None, list[SeasonResult]]:
     latest = SeasonResult.objects.order_by("-week_key").first()
     if latest is None:

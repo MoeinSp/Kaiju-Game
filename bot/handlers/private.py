@@ -3543,20 +3543,31 @@ async def alliance_league_panel(update: Update, context: ContextTypes.DEFAULT_TY
     from game.alliance import ALLIANCE_LEAGUE_REWARD_BY_RANK
 
     ranked = await run_db(_alliance_top_sync)
-    medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
+    badges = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+
+    def _rw(rw):
+        return f"{rw['diamonds']}💎 + {rw['coins']:,}🪙" if rw else "—"
+
     lines = [
         "🏰 <b>لیگ اتحادها</b>",
-        "<blockquote>اتحادها بر اساس <b>قدرت کل اعضا</b> رتبه‌بندی می‌شن. آخر هر هفته، "
-        "10 اتحاد برتر به <b>همه‌ی اعضاشون</b> جایزه می‌دن — هرچی رتبه بالاتر، جایزه بیشتر.</blockquote>",
+        "جوایز پایان هفته به تمام اعضای ۱۰ اتحاد برتر تعلق می‌گیرد:",
         "",
     ]
     if not ranked:
         lines.append("<i>هنوز هیچ اتحادی ساخته نشده.</i>")
     for i, r in enumerate(ranked, start=1):
-        rank = medals[i - 1] if i <= 3 else f"{i}."
+        badge = badges[i - 1] if i <= len(badges) else f"{i}."
         rw = ALLIANCE_LEAGUE_REWARD_BY_RANK.get(i)
-        rw_txt = f"  🎁 {rw['diamonds']}💎+{rw['coins']}🪙/نفر" if rw else ""
-        lines.append(f"{rank} <b>{r['alliance'].name}</b> — 💪{r['power']} ({r['member_count']} عضو){rw_txt}")
+        name = r["alliance"].name
+        power, members = r["power"], r["member_count"]
+        if i <= 3:
+            lines.append(f"{badge} <b>{name}</b>")
+            lines.append(f"└ 💪 {power:,} قدرت │ 👥 {members} عضو │ 🎁 {_rw(rw)}")
+            lines.append("")
+        else:
+            if i == 4:
+                lines.append("──────────────")
+            lines.append(f"{badge} {name} │ 💪 {power:,} │ 👥 {members} │ 🎁 {_rw(rw)}")
     await send_screen(
         update, "\n".join(lines), parse_mode="HTML",
         reply_markup=back_only_keyboard("menu:cat_social", "بازگشت به اجتماعی"),
@@ -3630,45 +3641,53 @@ async def heist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def _rank_sync(tg_user):
-    """The global table ranks *labs*, not creatures.
-
-    Ranking creatures meant the board was really a rarity-luck board: one lucky
-    crate could outrank weeks of play, and the player's own name never appeared
-    on it. Lab XP accumulates from everything a player actually does, so the
-    order reflects effort — and the row shows the lab that earned it."""
-    from django.db.models import F, Max
+    """The global board ranks ALLIANCES by their treasury gold — the richest treasuries
+    top the table, and the top 3 get a daily gold deposit (game.season.settle_daily_
+    treasury). Replaces the old lab-level board."""
+    from game.alliance import top_alliances_by_treasury
 
     user, _ = get_or_create_user(tg_user)
-    ranked = list(
-        User.objects.filter(is_banned=False)
-        .annotate(
-            best_power=Max(
-                F("creatures__base_hp")
-                + F("creatures__base_atk")
-                + F("creatures__base_def")
-                + F("creatures__base_spd")
-            )
-        )
-        .order_by("-lab_xp", "-cup", "id")
-    )
-    my_rank = next((i for i, u in enumerate(ranked, start=1) if u.id == user.id), None)
-    return ranked[:10], my_rank, len(ranked), user
+    ranked = top_alliances_by_treasury(limit=10)
+    my_rank = None
+    if user.alliance_id:
+        all_ids = list(Alliance.objects.order_by("-treasury_gold", "id").values_list("id", flat=True))
+        my_rank = next((i for i, aid in enumerate(all_ids, start=1) if aid == user.alliance_id), None)
+    return ranked, my_rank, len(ranked), user
 
 
 async def rank(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from game.alliance import DAILY_TREASURY_REWARD_BY_RANK
+
     top10, my_rank, total, me_user = await run_db(_rank_sync, update.effective_user)
     if not top10:
-        await send_screen(update, "هنوز هیچ آزمایشگاهی ثبت نشده.", reply_markup=back_only_keyboard())
+        await send_screen(update, "هنوز هیچ اتحادی ساخته نشده.", reply_markup=back_only_keyboard())
         return
-    medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
-    lines = [f"{get_emoji('trophy')} <b>رتبه‌بندی آزمایشگاه‌ها</b>", "<blockquote>بر اساس سطح کلی آزمایشگاه</blockquote>\n"]
-    for i, u in enumerate(top10, start=1):
-        rank_icon = medals[i - 1] if i <= 3 else f"<b>{i}.</b>"
-        power = f" · 💪{u.best_power}" if u.best_power else ""
-        lines.append(f"{rank_icon} {lab_display(u)} — 🔬 سطح {lab_level(u)}{power}")
+    badges = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+    d1, d2, d3 = (DAILY_TREASURY_REWARD_BY_RANK[r] for r in (1, 2, 3))
+    lines = [
+        "🏦 <b>رتبه‌بندی خزانه اتحادها</b>",
+        "──────────────",
+        "اتحادها بر اساس <b>خزانه</b> رتبه‌بندی می‌شن. هر روز به خزانه‌ی ۳ اتحاد برتر واریز می‌شه:",
+        f"🥇 {d1:,}🪙 · 🥈 {d2:,}🪙 · 🥉 {d3:,}🪙",
+        "",
+    ]
+    for i, r in enumerate(top10, start=1):
+        badge = badges[i - 1] if i <= len(badges) else f"{i}."
+        name = r["alliance"].name
+        reward = DAILY_TREASURY_REWARD_BY_RANK.get(i)
+        rw = f" │ 🎁 {reward:,}🪙/روز" if reward else ""
+        if i <= 3:
+            lines.append(f"{badge} <b>{name}</b>")
+            lines.append(f"└ 🏦 {r['treasury']:,} طلا │ 👥 {r['member_count']} عضو{rw}")
+            lines.append("")
+        else:
+            if i == 4:
+                lines.append("──────────────")
+            lines.append(f"{badge} {name} │ 🏦 {r['treasury']:,} │ 👥 {r['member_count']}")
     if my_rank is not None:
-        lines.append(f"\n📍 رتبه‌ی تو: <b>{my_rank}</b> از {total} — 🔬 سطح {lab_level(me_user)}")
-    await send_screen(update, "\n".join(lines), reply_markup=back_only_keyboard("menu:cat_social", "بازگشت به اجتماعی"))
+        lines.append(f"\n📍 رتبه‌ی اتحاد تو: <b>{my_rank}</b> از {total}")
+    await send_screen(update, "\n".join(lines), parse_mode="HTML",
+                      reply_markup=back_only_keyboard("menu:cat_social", "بازگشت به اجتماعی"))
 
 
 def _profile_sync(tg_user):

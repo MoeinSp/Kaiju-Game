@@ -30,33 +30,55 @@ def _panel_sync(tg_user):
     }
 
 
+_DIV = "━━━━━━━━━━━━━━━━━━━━"
+_RANK_BADGES = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+
+
+def _rank_badge(rank: int) -> str:
+    return _RANK_BADGES[rank - 1] if 1 <= rank <= len(_RANK_BADGES) else f"{rank}."
+
+
+def _reward_fmt(reward: dict) -> str:
+    """«2,000 طلا + 50💎» — the compact reward style used in the league layout."""
+    parts = []
+    if reward.get("coins"):
+        parts.append(f"{reward['coins']:,} طلا")
+    if reward.get("diamonds"):
+        parts.append(f"{reward['diamonds']}💎")
+    if reward.get("dna"):
+        parts.append(f"{reward['dna']} DNA")
+    return " + ".join(parts) or "—"
+
+
 async def league_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     view = await run_db(_panel_sync, update.effective_user)
     d = view["division"]
     lines = [
-        f"🏆 <b>لیگ رتبه‌بندی</b>",
-        f"<blockquote>دیویژن تو: {d['emoji']} <b>{d['title']}</b>  ·  🏆 {view['cup']} کاپ\n"
-        f"🎁 جایزه‌ی پایان فصلِ این دیویژن: {league.reward_text(view['reward'])}\n"
-        f"⏳ تا پایان فصل: <b>{_fmt_left(view['seconds_left'])}</b></blockquote>",
+        "🏆 <b>لیگ رتبه‌بندی</b>",
+        _DIV,
+        f"{d['emoji']} دیویژن تو: <b>{d['title']}</b> │ 🏆 {view['cup']} کاپ",
+        f"🎁 پاداش فصل: {_reward_fmt(view['reward'])} │ ⏳ پایان فصل: {_fmt_left(view['seconds_left'])}",
     ]
     nxt = view["next"]
     if nxt:
         need = nxt["min_cup"] - view["cup"]
-        lines.append(f"⬆️ تا دیویژن {nxt['emoji']} <b>{nxt['title']}</b>: <b>{need}</b> کاپ دیگه")
+        lines.append(f"🎯 تا {nxt['emoji']} {nxt['title']}: <b>{need}</b> کاپ دیگر")
     else:
         lines.append("👑 <b>توی بالاترین دیویژنی!</b>")
 
-    lines.append("\n🏅 <b>دیویژن‌ها:</b>")
+    lines.append("\n🏅 <b>دیویژن‌ها و پاداش‌ها:</b>")
     for div in league.DIVISIONS:
-        here = " ⬅️ تو" if div["key"] == d["key"] else ""
-        lines.append(f"  {div['emoji']} {div['title']} — از {div['min_cup']} کاپ  ({league.reward_text(league.DIVISION_REWARD[div['key']])}){here}")
+        cup_label = "0 کاپ" if div["min_cup"] == 0 else f"+{div['min_cup']} کاپ"
+        here = " 📍 (جایگاه فعلی تو)" if div["key"] == d["key"] else ""
+        lines.append(
+            f"• {div['emoji']} {div['title']}: {cup_label} ⟵ {_reward_fmt(league.DIVISION_REWARD[div['key']])}{here}"
+        )
 
-    lines.append("\n📊 <b>صدرنشین‌های این فصل:</b>")
-    medals = ["🥇", "🥈", "🥉"]
+    lines.append(f"\n{_DIV}")
+    lines.append("📊 <b>صدرنشین‌های فصل:</b>")
     for row in view["standings"]:
-        tag = medals[row["rank"] - 1] if row["rank"] <= 3 else f"{row['rank']}."
-        mine = " ⬅️" if row["user"].id == view["user_id"] else ""
-        lines.append(f"  {tag} {lab_display(row['user'])} — {row['cup']} کاپ{mine}")
+        mine = " 📍" if row["user"].id == view["user_id"] else ""
+        lines.append(f"{_rank_badge(row['rank'])} {lab_display(row['user'])} │ 🏆 {row['cup']}{mine}")
 
     await send_screen(
         update, "\n".join(lines), parse_mode="HTML",

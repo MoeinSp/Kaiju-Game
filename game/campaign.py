@@ -20,7 +20,7 @@ from bio_lab.models import Creature, User
 from game import constants, lab
 from game.creature import GameError
 from game.energy import spend_energy
-from game.teambattle import resolve, team_power
+from game.teambattle import team_power
 
 MAX_STAGE = 50
 ENERGY_COST = 1
@@ -95,7 +95,11 @@ def status(user: User) -> dict:
 
 def attempt(user: User, team_creatures: list[Creature]) -> dict:
     """Fight the next uncleared stage with the player's team. Spends energy. On a
-    win, advances the campaign and pays the first-clear reward."""
+    win, advances the campaign and pays the first-clear reward.
+
+    The dungeon outcome is decided PURELY by team power — if your team's power is at
+    least the enemy stage's power, you win. No RNG / per-hit simulation, so a stronger
+    team never loses to a weaker stage (the reported 9000-vs-6000 bug)."""
     stage = user.campaign_stage + 1
     if stage > MAX_STAGE:
         raise GameError("کل دانجن رو تموم کردی! 🏆 منتظر مراحل جدید باش.")
@@ -106,8 +110,20 @@ def attempt(user: User, team_creatures: list[Creature]) -> dict:
     user.save(update_fields=["energy", "energy_updated_at"])
 
     enemies = enemy_team(stage)
-    result = resolve(team_creatures, enemies, seed=random.randrange(1_000_000))
-    won = result["winner"] == "a"
+    my_power = team_power(team_creatures)
+    foe_power = team_power(enemies)
+    won = my_power >= foe_power
+
+    if won:
+        margin = my_power / max(1, foe_power)
+        survivors = 3 if margin >= 1.5 else (2 if margin >= 1.15 else 1)
+    else:
+        survivors = 0
+    log = [
+        f"💪 قدرت تیم تو: <b>{my_power:,}</b>",
+        f"👾 قدرت دشمن مرحله: <b>{foe_power:,}</b>",
+        ("🏆 قدرتت بیشتر بود — پیروز شدی!" if won else "💀 قدرت دشمن بیشتر بود — شکست خوردی."),
+    ]
 
     reward = {}
     if won:
@@ -122,7 +138,7 @@ def attempt(user: User, team_creatures: list[Creature]) -> dict:
         "stage": stage,
         "is_boss": is_boss(stage),
         "reward": reward,
-        "log": result["log"],
-        "survivors": result["survivors_a"],
+        "log": log,
+        "survivors": survivors,
         "cleared_all": won and stage == MAX_STAGE,
     }

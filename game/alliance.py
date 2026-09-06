@@ -437,6 +437,43 @@ def award_alliance_league() -> list[tuple[int, str]]:
     return out
 
 
+def top_alliances_by_treasury(limit: int = 10) -> list[dict]:
+    """Alliances ranked by treasury gold (richest first) — the basis for the daily
+    treasury reward and the «رتبه‌بندی خزانه» board."""
+    ranked = [
+        {"alliance": a, "treasury": a.treasury_gold, "member_count": a.members.count(),
+         "power": _alliance_power(a)}
+        for a in Alliance.objects.order_by("-treasury_gold", "id")[:limit]
+    ]
+    return ranked
+
+
+# Daily gold deposited straight into the treasury of the richest alliances (by treasury).
+DAILY_TREASURY_REWARD_BY_RANK = {1: 1_000_000, 2: 500_000, 3: 300_000}
+
+
+def award_daily_treasury_top3() -> list[tuple[int, str]]:
+    """Deposit the daily gold bonus into the treasury of the top-3 alliances (by
+    treasury) and DM their members. Called once per day from the day-guarded settle."""
+    from django.db.models import F
+
+    out: list[tuple[int, str]] = []
+    for rank, entry in enumerate(top_alliances_by_treasury(limit=3), start=1):
+        amount = DAILY_TREASURY_REWARD_BY_RANK.get(rank)
+        if not amount:
+            continue
+        alliance = entry["alliance"]
+        Alliance.objects.filter(id=alliance.id).update(treasury_gold=F("treasury_gold") + amount)
+        for member in alliance.members.all():
+            if member.notifications_on:
+                out.append((
+                    member.id,
+                    f"🏦 <b>پاداش روزانه‌ی خزانه!</b>\nاتحاد <b>{alliance.name}</b> امروز رتبه‌ی "
+                    f"<b>{rank}</b> خزانه شد و <b>{amount:,}</b> 🪙 به خزانه‌ش واریز شد.",
+                ))
+    return out
+
+
 def deposit_treasury(user: User, amount: int) -> Alliance:
     if user.alliance_id is None:
         raise GameError("اول باید عضو یه اتحاد باشی.")

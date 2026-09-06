@@ -681,6 +681,9 @@ class SeasonState(models.Model):
     season is never settled twice no matter how often the check runs."""
 
     last_closed_week = models.CharField(max_length=10, null=True, blank=True)
+    # last day the daily alliance-treasury reward was paid out (YYYY-MM-DD), so it
+    # settles exactly once per day like the weekly close settles once per week
+    last_treasury_day = models.CharField(max_length=10, null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:
