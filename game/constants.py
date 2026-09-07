@@ -234,7 +234,7 @@ MAX_ENERGY = 50
 # drop cooldown: a per-player 1-hour cooldown AND a hard daily cap. Stops players
 # from farming diamonds by sweeping the vein drop across dozens of groups.
 DIAMOND_VEIN_COOLDOWN_MINUTES = 60
-DIAMOND_VEIN_DAILY_CAP = 5
+DIAMOND_VEIN_DAILY_CAP = 1  # a player may claim at most one diamond vein per day
 ENERGY_REGEN_MINUTES = 6   # empty -> full in 5 hours
 ENERGY_REFILL_DIAMOND_COST = 25  # diamonds to instantly refill energy to full
 FEED_ENERGY_COST = 1

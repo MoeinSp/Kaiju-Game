@@ -13,9 +13,55 @@ from telegram.ext import CallbackQueryHandler, ContextTypes
 from bio_lab.models import GroupDrop
 from bot.utils import run_db, safe_edit_message_text
 from game import groupdrops
+from game.emoji import get_emoji
 
 DROPS_INTERVAL_SECONDS = 300  # a spawn check every 5 minutes
 SEND_DELAY = 0.05
+
+
+def _spawn_text(d: dict) -> str:
+    """The 'a drop appeared' message — a couple of kinds get a bespoke layout."""
+    if d["kind"] == "chest":
+        return (
+            "🎁 <b>سقوط صندوقچه‌ی گنج!</b>\n"
+            "🔥 یه صندوق پر از طلا افتاد وسط چت!\n"
+            "⚡️ اولین نفری که بزنه روی دکمه همه رو می‌بره:"
+        )
+    return (
+        f"{d['emoji']} <b>{d['title']}</b>\n{d['flavor']}\n\n"
+        "<i>اولین نفری که بزنه می‌بره! 👇</i>"
+    )
+
+
+def _win_text(kind: str, who: str, reward: dict) -> str:
+    """The 'X won' message, with a per-kind bespoke layout for the flashy drops.
+    `who` is an HTML mention of the winner."""
+    coins = reward.get("coins", 0)
+    dna = reward.get("dna", 0)
+    diamonds = reward.get("diamonds", 0)
+    if kind == "vein":
+        return (
+            "💎 <b>رگه‌ی الماس کشف شد!</b>\n"
+            f"⚡️ دست‌جنبون‌ترین معدنچی: {who}\n"
+            f"🎁 پاداش غارت: {diamonds} {get_emoji('diamond')}"
+        )
+    if kind == "capsule":
+        return (
+            f"🔋⚡️ {who} کپسول رو هوا زد!\n"
+            f"🎁 {coins} طلا و انرژی کامل واریز شد."
+        )
+    if kind == "ambush":
+        return (
+            "⚔️ <b>رویداد: شکست هیولای وحشی</b>\n\n"
+            f"🥇 قاتل هیولا: {who}\n"
+            f"{get_emoji('coin')} طلا: {coins}\n"
+            f"{get_emoji('dna')} دی‌ان‌ای: {dna}"
+        )
+    cfg = groupdrops.DROP_KINDS[kind]
+    return (
+        f"{cfg['emoji']} <b>{cfg['title']}</b>\n"
+        f"🎉 {who} اولین نفر بود و <b>{groupdrops.reward_text(reward)}</b> برد!"
+    )
 
 
 def _delete_drop(drop_id: int) -> None:
@@ -36,10 +82,7 @@ async def _delete_drop_message(context: ContextTypes.DEFAULT_TYPE) -> None:
 async def drops_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     # spawn new drops
     for d in await run_db(groupdrops.due_spawns):
-        text = (
-            f"{d['emoji']} <b>{d['title']}</b>\n{d['flavor']}\n\n"
-            "<i>اولین نفری که بزنه می‌بره! 👇</i>"
-        )
+        text = _spawn_text(d)
         keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(d["btn"], callback_data=f"gdrop:{d['id']}")]])
         try:
             msg = await context.bot.send_message(chat_id=d["group_id"], text=text, parse_mode="HTML", reply_markup=keyboard)
@@ -83,11 +126,10 @@ async def drop_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     status = result["status"]
     if status == "won":
         await query.answer(f"🎉 بردی! {groupdrops.reward_text(result['reward'])}", show_alert=True)
-        cfg = groupdrops.DROP_KINDS[result["kind"]]
+        who = result.get("winner_mention") or f"<b>{result['winner']}</b>"
         await safe_edit_message_text(
             query,
-            f"{cfg['emoji']} <b>{cfg['title']}</b>\n"
-            f"🎉 <b>{result['winner']}</b> اولین نفر بود و <b>{groupdrops.reward_text(result['reward'])}</b> برد!",
+            _win_text(result["kind"], who, result["reward"]),
             parse_mode="HTML",
         )
         # keep the "X won Y" moment up for a while, then tidy it away

@@ -51,8 +51,17 @@ DROP_KINDS = {
 }
 
 
+# vein & capsule are NOT in the general random pool — they spawn on their own per-group
+# schedule (vein once/~24h, capsule once/~12h, at a random time) handled below.
+_SCHEDULED_KINDS = {"vein", "capsule"}
+# how far ahead the next scheduled spawn is set (a random hour within the window, so
+# the drop lands at a different time each cycle)
+VEIN_WINDOW_HOURS = (22.0, 26.0)
+CAPSULE_WINDOW_HOURS = (10.0, 14.0)
+
+
 def _pick_kind() -> str:
-    keys = list(DROP_KINDS)
+    keys = [k for k in DROP_KINDS if k not in _SCHEDULED_KINDS]
     return random.choices(keys, weights=[DROP_KINDS[k]["weight"] for k in keys], k=1)[0]
 
 
@@ -73,7 +82,7 @@ def _active_power(user: User) -> int:
 # on the vein (it already has a per-hour + daily cap). Everything else DOES scale with
 # power, and strongly, so a powerful kaiju is a real edge on gold/DNA drops.
 VEIN_DIAMONDS_MIN = 10
-VEIN_DIAMONDS_MAX = 20
+VEIN_DIAMONDS_MAX = 30
 # power's weight in the (non-vein) reward multiplier — doubled so a strong player earns
 # markedly more gold/DNA from drops than a weak one.
 DROP_POWER_FACTOR = 0.0030
@@ -122,20 +131,56 @@ def due_spawns() -> list[dict]:
     )
     out = []
     for group in eligible:
-        recent = GroupDrop.objects.filter(group=group, created_at__gte=gap).exists()
         open_now = GroupDrop.objects.filter(
             group=group, claimed_by__isnull=True, expires_at__gt=now
         ).exists()
+
+        # ── scheduled special drops (vein once/~24h, capsule once/~12h) ──────────
+        scheduled = _due_scheduled_kind(group, now)
+        if scheduled is not None and not open_now:
+            out.append(_spawn(group, scheduled, now))
+            continue  # at most one drop per group per tick
+
+        recent = GroupDrop.objects.filter(group=group, created_at__gte=gap).exists()
         if recent or open_now or random.random() > SPAWN_CHANCE:
             continue
-        kind = _pick_kind()
-        drop = GroupDrop.objects.create(
-            group=group, kind=kind, expires_at=now + datetime.timedelta(minutes=EXPIRE_MINUTES)
-        )
-        cfg = DROP_KINDS[kind]
-        out.append({"id": drop.id, "group_id": group.id, "kind": kind,
-                    "emoji": cfg["emoji"], "title": cfg["title"], "flavor": cfg["flavor"], "btn": cfg["btn"]})
+        out.append(_spawn(group, _pick_kind(), now))
     return out
+
+
+def _due_scheduled_kind(group, now) -> str | None:
+    """Return 'vein' or 'capsule' if this group is due one (and set the next time), else
+    None. First time each is seeded to a random point within its window so groups don't
+    all fire together."""
+    fields = []
+    kind = None
+    if group.next_vein_at is None:
+        group.next_vein_at = now + datetime.timedelta(hours=random.uniform(0, VEIN_WINDOW_HOURS[1]))
+        fields.append("next_vein_at")
+    elif group.next_vein_at <= now:
+        group.next_vein_at = now + datetime.timedelta(hours=random.uniform(*VEIN_WINDOW_HOURS))
+        fields.append("next_vein_at")
+        kind = "vein"
+    if kind is None:
+        if group.next_capsule_at is None:
+            group.next_capsule_at = now + datetime.timedelta(hours=random.uniform(0, CAPSULE_WINDOW_HOURS[1]))
+            fields.append("next_capsule_at")
+        elif group.next_capsule_at <= now:
+            group.next_capsule_at = now + datetime.timedelta(hours=random.uniform(*CAPSULE_WINDOW_HOURS))
+            fields.append("next_capsule_at")
+            kind = "capsule"
+    if fields:
+        group.save(update_fields=fields)
+    return kind
+
+
+def _spawn(group, kind: str, now) -> dict:
+    drop = GroupDrop.objects.create(
+        group=group, kind=kind, expires_at=now + datetime.timedelta(minutes=EXPIRE_MINUTES)
+    )
+    cfg = DROP_KINDS[kind]
+    return {"id": drop.id, "group_id": group.id, "kind": kind, "emoji": cfg["emoji"],
+            "title": cfg["title"], "flavor": cfg["flavor"], "btn": cfg["btn"]}
 
 
 def set_message_id(drop_id: int, message_id: int) -> None:
@@ -146,7 +191,7 @@ def set_message_id(drop_id: int, message_id: int) -> None:
 def claim(drop_id: int, tg_user) -> dict:
     """First-writer-wins claim. Returns a result dict:
     {status: 'won'|'taken'|'expired'|'gone', ...}."""
-    from bio_lab.repository import display_name, get_or_create_user
+    from bio_lab.repository import display_name, get_or_create_user, mention
 
     drop = GroupDrop.objects.select_for_update().filter(id=drop_id).first()
     if drop is None:
@@ -218,7 +263,8 @@ def claim(drop_id: int, tg_user) -> dict:
     drop.claimed_at = timezone.now()
     drop.reward_json = json.dumps(reward)
     drop.save(update_fields=["claimed_by", "claimed_at", "reward_json"])
-    return {"status": "won", "winner": display_name(user), "reward": reward, "kind": drop.kind,
+    return {"status": "won", "winner": display_name(user), "winner_mention": mention(user),
+            "reward": reward, "kind": drop.kind,
             "drop_id": drop.id, "group_id": drop.group_id, "message_id": drop.message_id}
 
 

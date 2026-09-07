@@ -23,11 +23,24 @@ def _team_members(team: Team) -> list[int]:
     return [cid for cid in (team.slot1_id, team.slot2_id, team.slot3_id) if cid is not None]
 
 
+def _prune_team(team: Team, owned_ids: set[int]) -> list[int]:
+    """Drop any slot pointing to a creature the player no longer owns (transferred,
+    fused, devoured…). Those dangling slots used to still count toward the 3-cap, so a
+    team that really had 2 creatures reported as 'full' — the reported bug. Persists the
+    cleanup and returns the valid, ordered member ids."""
+    valid = [cid for cid in (team.slot1_id, team.slot2_id, team.slot3_id) if cid in owned_ids]
+    cleaned = (valid + [None, None, None])[:3]
+    if [team.slot1_id, team.slot2_id, team.slot3_id] != cleaned:
+        team.slot1_id, team.slot2_id, team.slot3_id = cleaned
+        team.save(update_fields=["slot1", "slot2", "slot3", "updated_at"])
+    return valid
+
+
 def _panel_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
     team, _ = Team.objects.get_or_create(owner=user)
-    member_ids = _team_members(team)
     creatures = list(Creature.objects.filter(owner=user))
+    member_ids = _prune_team(team, {c.id for c in creatures})
     # rarest-then-strongest first, so the best options are on the first page
     rank = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
     ranked = sorted(
@@ -110,7 +123,9 @@ def _toggle_sync(tg_user, creature_id):
     if creature is None:
         raise GameError("این موجود توی کلکسیون تو نیست.")
     team, _ = Team.objects.get_or_create(owner=user)
-    members = _team_members(team)
+    # prune dangling slots first, so the 3-cap counts only creatures the player owns
+    owned_ids = set(Creature.objects.filter(owner=user).values_list("id", flat=True))
+    members = _prune_team(team, owned_ids)
     if creature_id in members:
         members = [m for m in members if m != creature_id]
     else:

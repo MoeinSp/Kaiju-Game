@@ -1829,7 +1829,9 @@ def _fusion_candidates_sync(tg_user, creature_id):
         creature = Creature.objects.get(id=creature_id, owner=user)
     except Creature.DoesNotExist:
         raise GameError("این موجود توی کلکسیون تو نیست.")
-    return creature, fusion_partners(user, creature), is_built(user, FUSION_BUILDING), star_cap(user)
+    from game.fusion import fusion_partners_annotated
+
+    return creature, fusion_partners_annotated(user, creature), is_built(user, FUSION_BUILDING), star_cap(user)
 
 
 async def fusion_pick_a_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1860,22 +1862,33 @@ async def fusion_pick_a_callback(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     await query.answer()
-    rows = [
-        [
-            btn(
-                f"{c.name} {'⭐' * c.star_level} · Lv{c.level}",
-                style=PRIMARY,
-                callback_data=f"fus_b:{parent_a_id}:{c.id}",
-            )
-        ]
-        for c in candidates
-    ]
+    rows = []
+    for c, busy in candidates:
+        if busy:
+            rows.append([btn(
+                f"⛔ {creature_name(c)} {'⭐' * c.star_level} · Lv{c.level} (مشغول)",
+                style=NAV, callback_data=f"fus_busy:{c.id}",
+            )])
+        else:
+            rows.append([btn(
+                f"{creature_name(c)} {'⭐' * c.star_level} · Lv{c.level}",
+                style=PRIMARY, callback_data=f"fus_b:{parent_a_id}:{c.id}",
+            )])
     rows.append([back_btn(f"coll_pick:{parent_a_id}")])
     await safe_edit_message_text(query,
         f"{get_emoji('lab')} <b>ترکیب {creature.name}</b> {'⭐' * creature.star_level}\n"
         f"این‌ها هم‌نوع و هم‌ستاره‌ان، پس ترکیبشون <b>حتماً</b> جواب می‌ده:",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+async def fusion_busy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Tapped a busy fusion partner — explain it can't be selected while busy."""
+    query = update.callback_query
+    await query.answer(
+        "⛔ این کایجو الان مشغوله (توی معدن یا غار) — اول آزادش کن تا بتونی باهاش فیوژن کنی.",
+        show_alert=True,
     )
 
 
@@ -4035,6 +4048,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(devour_page_callback, pattern=r"^devour_page:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(devour_multi_callback, pattern=r"^devour_multi:\d+$"))
     application.add_handler(CallbackQueryHandler(fusion_pick_a_callback, pattern=r"^fus_a:"))
+    application.add_handler(CallbackQueryHandler(fusion_busy_callback, pattern=r"^fus_busy:\d+$"))
     application.add_handler(CallbackQueryHandler(fusion_rarity_callback, pattern=r"^fus_rarity:"))
     application.add_handler(CallbackQueryHandler(fusion_pick_b_callback, pattern=r"^fus_b:"))
     application.add_handler(CallbackQueryHandler(fusion_confirm_callback, pattern=r"^fus_confirm:"))

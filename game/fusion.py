@@ -56,6 +56,23 @@ def ready_pairs(user: User) -> list[dict]:
     return pairs
 
 
+def fusion_partners_annotated(user: User, creature: Creature) -> list[tuple[Creature, bool]]:
+    """Like fusion_partners but INCLUDES busy same-species/star creatures, each tagged
+    (creature, is_busy). The picker shows busy ones marked «مشغول» and unselectable
+    instead of hiding them."""
+    if not is_built(user, FUSION_BUILDING) or creature.star_level >= star_cap(user):
+        return []
+    from game.workers import busy_creature_ids
+
+    busy = busy_creature_ids(user)
+    return [
+        (c, c.id in busy)
+        for c in Creature.objects.filter(
+            owner=user, name=creature.name, rarity=creature.rarity, star_level=creature.star_level
+        ).exclude(id=creature.id).order_by("-level")
+    ]
+
+
 def fusion_partners(user: User, creature: Creature) -> list[Creature]:
     """Everything this creature can legally fuse with: same species name, same
     rarity, same star. Powers the picker UI so a player never gets offered an

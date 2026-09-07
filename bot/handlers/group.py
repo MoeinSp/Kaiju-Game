@@ -85,11 +85,15 @@ def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
             raise GameError("این بازیکن هنوز بازی رو شروع نکرده.")
         if sender.coins < amount:
             raise GameError(f"طلا کافی نداری! فقط {sender.coins} طلا داری.")
+        # 10% transfer fee, floored (rounded in the user's favour → smaller fee, more
+        # reaches the receiver). The sender pays `amount`; the receiver gets `amount-fee`.
+        fee = amount // 10
+        net = amount - fee
         sender.coins -= amount
-        receiver.coins += amount
+        receiver.coins += net
         sender.save(update_fields=["coins"])
         receiver.save(update_fields=["coins"])
-    return sender, receiver
+    return sender, receiver, amount, fee, net
 
 
 async def gold_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE, amount: int) -> None:
@@ -106,12 +110,20 @@ async def gold_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE, amou
         await update.message.reply_text("🙅 به خودت یا به یه بات نمی‌تونی انتقال بدی!")
         return
     try:
-        sender, receiver = await run_db(_gold_transfer_sync, update.effective_chat, update.effective_user, recipient.id, amount)
+        sender, receiver, amount, fee, net = await run_db(
+            _gold_transfer_sync, update.effective_chat, update.effective_user, recipient.id, amount
+        )
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
+    coin = get_emoji("coin")
     await update.message.reply_text(
-        f"{get_emoji('coin')} {display_name(sender)} مقدار <b>{amount}</b> طلا به {display_name(receiver)} انتقال داد! ✅",
+        "✅ <b>انتقال موفق طلا</b>\n\n"
+        f"• 👤 فرستنده: {mention(sender)}\n"
+        f"• 🎯 گیرنده: {mention(receiver)}\n"
+        f"• {coin} مبلغ ارسالی: <b>{amount:,}</b> طلا\n"
+        f"• 📉 کارمزد (۱۰٪): <b>{fee:,}</b> طلا\n"
+        f"• 📥 دریافتی خالص: <b>{net:,}</b> طلا",
         parse_mode="HTML",
     )
 

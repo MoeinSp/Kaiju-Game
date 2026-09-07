@@ -517,6 +517,10 @@ class Group(models.Model):
         Creature, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
     )
     raid_level = models.IntegerField(default=1)  # climbs each time the group fells a raid boss
+    # per-group scheduled special drops at a randomised time: the diamond vein once per
+    # ~24h and the energy capsule once per ~12h (game/groupdrops.due_spawns)
+    next_vein_at = models.DateTimeField(null=True, blank=True)
+    next_capsule_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:
