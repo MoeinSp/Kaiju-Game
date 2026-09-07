@@ -489,15 +489,15 @@ def upgrade_panel_keyboard(creature_id: int, is_active: bool = True, step: int =
         ],
         step_row,
         [
-            btn(f"🦋 بال{sfx}", style=BUILD, callback_data=f"lab:up_wings:{creature_id}"),
-            btn(f"🛡 زره{sfx}", style=BUILD, callback_data=f"lab:up_armor:{creature_id}"),
+            btn(f"🦋 بال{sfx}", emoji_key="btn_wings", style=BUILD, callback_data=f"lab:up_wings:{creature_id}"),
+            btn(f"🛡 زره{sfx}", emoji_key="btn_armor", style=BUILD, callback_data=f"lab:up_armor:{creature_id}"),
         ],
         [
-            btn(f"🦷 نیش{sfx}", style=BUILD, callback_data=f"lab:up_fangs:{creature_id}"),
-            btn(f"☠️ زهر{sfx}", style=BUILD, callback_data=f"lab:up_poison:{creature_id}"),
+            btn(f"🦷 نیش{sfx}", emoji_key="btn_fangs", style=BUILD, callback_data=f"lab:up_fangs:{creature_id}"),
+            btn(f"☠️ زهر{sfx}", emoji_key="btn_poison", style=BUILD, callback_data=f"lab:up_poison:{creature_id}"),
         ],
         [btn("مدیریت تجهیزات", emoji_key="btn_inventory", style=PRIMARY, callback_data=f"upg_eq:{creature_id}")],
-        [btn("🍖 تقویت با خوردن هیولا", style=BUILD, callback_data=f"devour_start:{creature_id}")],
+        [btn("تقویت با خوردن هیولا", emoji_key="btn_devour", style=BUILD, callback_data=f"devour_start:{creature_id}")],
         [btn("✏️ نام‌گذاری", style=NAV, callback_data=f"kaiju_rename:{creature_id}:u")],
         [btn(_fusion_button_label(star_level), emoji_key="btn_fusion", style=PRIMARY, callback_data=f"upg_fusion:{creature_id}")],
     ]
@@ -1388,7 +1388,7 @@ def _creature_detail_keyboard(creature_id: int, is_active: bool) -> InlineKeyboa
     if not is_active:
         rows.append([btn("انتخاب به‌عنوان موجود فعال", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"coll_select:{creature_id}")])
     rows.append([btn("استفاده در فیوژن", emoji_key="btn_fusion", style=PRIMARY, callback_data=f"fus_a:{creature_id}")])
-    rows.append([btn("🍖 تقویت با خوردن هیولا", style=BUILD, callback_data=f"devour_start:{creature_id}")])
+    rows.append([btn("تقویت با خوردن هیولا", emoji_key="btn_devour", style=BUILD, callback_data=f"devour_start:{creature_id}")])
     rows.append([btn("✏️ نام‌گذاری", style=NAV, callback_data=f"kaiju_rename:{creature_id}:c")])
     rows.append([back_btn("menu:collection", "بازگشت به کلکسیون")])
     return InlineKeyboardMarkup(rows)

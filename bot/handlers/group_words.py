@@ -18,7 +18,7 @@ from telegram.error import TelegramError
 from telegram.ext import (CallbackQueryHandler, CommandHandler, ContextTypes,
                           MessageHandler, filters)
 
-from bio_lab.repository import display_name, get_active_creature, get_or_create_group, get_or_create_user, lab_display, mention
+from bio_lab.repository import creature_name, display_name, get_active_creature, get_or_create_group, get_or_create_user, lab_display, mention
 from bot.buttons import BACK, BATTLE, BUILD, CONFIRM, NAV, PRIMARY, SHOP, btn
 from bot.utils import run_db, safe_edit_message_text
 from config import BOT_USERNAME
@@ -309,24 +309,47 @@ def _act(action: str, user_id: int, arg: str = "") -> str:
 
 
 def _upgrade_card(user, creature, energy) -> tuple[str, InlineKeyboardMarkup]:
-    text = (
-        f"{get_emoji('settings')} <b>ارتقای {creature.name}</b>\n"
-        f"سطح <b>{creature.level}</b> · XP {creature.xp}/{constants.xp_for_creature_level(creature.level)}\n\n"
-        f"{get_emoji('coin')} تغذیه: {constants.FEED_COST_COINS} طلا → "
-        f"{constants.FEED_XP_GAIN} XP\n"
-        f"🏋️ تمرین: رایگان → {constants.TRAIN_XP_GAIN} XP "
-        f"(هر {constants.TRAIN_COOLDOWN_HOURS} ساعت)\n\n"
-        f"{get_emoji('coin')} {user.coins:,}   {get_emoji('energy')} {energy}/{constants.MAX_ENERGY}"
-    )
+    """A compact but COMPLETE group upgrade panel: feed/train + the four body-part
+    upgrades (each +1), with live levels and gold costs. Full management (×5/×10, gear,
+    fusion) still lives in the DM."""
+    from game.creature import part_bulk_cost
+
+    cap = constants.part_upgrade_cap(creature.star_level)
+    max_level = constants.creature_max_level(creature.rarity, creature.star_level)
+    lines = [
+        f"{get_emoji('settings')} <b>ارتقای {creature_name(creature)}</b>",
+        f"🎖 سطح {creature.level}/{max_level} · XP {creature.xp}/{constants.xp_for_creature_level(creature.level)}",
+        "",
+        "🧩 <b>اعضای بدن</b> (هر دکمه = +۱ سطح):",
+    ]
+    for part, cfg in constants.BODY_PARTS.items():
+        lvl = getattr(creature, f"{part}_lvl")
+        if lvl >= cap:
+            lines.append(f"{cfg['label']}: <b>{lvl}/{cap}</b> 🔒")
+        else:
+            lines.append(f"{cfg['label']}: <b>{lvl}/{cap}</b> — +۱: {part_bulk_cost(lvl, 1):,} {get_emoji('coin')}")
+    lines += [
+        "",
+        f"🍖 تغذیه: {constants.FEED_COST_COINS} 🪙 → {constants.FEED_XP_GAIN} XP · 🏋️ تمرین: رایگان (هر {constants.TRAIN_COOLDOWN_HOURS}س)",
+        f"{get_emoji('coin')} {user.coins:,}   {get_emoji('energy')} {energy}/{constants.MAX_ENERGY}",
+    ]
     rows = [
         [
             btn("تغذیه", emoji_key="btn_feed", style=BUILD, callback_data=_act("feed", user.id)),
             btn("تمرین", emoji_key="btn_train", style=BUILD, callback_data=_act("train", user.id)),
         ],
+        [
+            btn("بال", emoji_key="btn_wings", style=BUILD, callback_data=_act("up_wings", user.id)),
+            btn("زره", emoji_key="btn_armor", style=BUILD, callback_data=_act("up_armor", user.id)),
+        ],
+        [
+            btn("نیش", emoji_key="btn_fangs", style=BUILD, callback_data=_act("up_fangs", user.id)),
+            btn("زهر", emoji_key="btn_poison", style=BUILD, callback_data=_act("up_poison", user.id)),
+        ],
         [btn("هیولا", emoji_key="btn_creature", style=NAV, callback_data=_scoped("creature", user.id))],
-        [_pm_button("ارتقای اعضای بدن در پیوی")],
+        [_pm_button("ارتقای کامل (×۵/۱۰)، تجهیزات و فیوژن در پیوی")],
     ]
-    return text, InlineKeyboardMarkup(rows)
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
@@ -1139,6 +1162,15 @@ def _do_sync(tg_user, chat, action, arg):
         return {"kind": action, "levels": levels, "creature": creature,
                 "card": _card_sync(tg_user, chat, "upgrade")}
 
+    if action in ("up_wings", "up_armor", "up_fangs", "up_poison"):
+        from game.creature import upgrade_part
+
+        _require_creature(creature)
+        part = action[3:]  # "wings" / "armor" / "fangs" / "poison"
+        new_level, cost = upgrade_part(user, creature, part, 1)
+        return {"kind": "part", "part": part, "new_level": new_level, "cost": cost,
+                "creature": creature, "card": _card_sync(tg_user, chat, "upgrade")}
+
     if action == "setactive":
         from game.creature import set_active_creature
 
@@ -1245,6 +1277,9 @@ def _action_note(payload: dict) -> str:
         note = f"{get_emoji('coin')} <b>تغذیه شد!</b>"
     elif kind == "train":
         note = "🏋️ <b>تمرین کرد!</b>"
+    elif kind == "part":
+        label = constants.BODY_PARTS.get(payload["part"], {}).get("label", payload["part"])
+        note = f"🧩 <b>{label} → سطح {payload['new_level']}</b> (−{payload['cost']:,} {get_emoji('coin')})"
     elif kind == "hunt":
         r = payload["result"]
         if r["won"]:

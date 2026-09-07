@@ -36,6 +36,12 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_arena": ("آرنا", "🏆", "action"),
     "btn_feed": ("تغذیه", "🍖", "action"),
     "btn_train": ("تمرین", "🏋️", "action"),
+    # kaiju body-part upgrades (the «ارتقا» panel)
+    "btn_wings": ("ارتقای بال‌ها", "🦋", "action"),
+    "btn_armor": ("ارتقای زره", "🛡", "action"),
+    "btn_fangs": ("ارتقای نیش", "🦷", "action"),
+    "btn_poison": ("ارتقای غده‌ی سمی", "☠️", "action"),
+    "btn_devour": ("خوردن هیولا", "🍖", "action"),
     "btn_fusion": ("فیوژن/ادغام", "🧪", "action"),
     "btn_breeding": ("غار هیولا", "🕳", "action"),
     "btn_forge": ("آهنگری", "⚒", "action"),
