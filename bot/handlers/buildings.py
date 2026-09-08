@@ -88,7 +88,7 @@ def _buildings_keyboard(building_rows, upgrading_ids, busy_count, slots, diamond
         else:
             state = f"Lv{b.level}" + (f" (+{pending})" if pending else "")
         busy_tag = " ⏳" if b.id in upgrading_ids else ""
-        rows.append([btn(f"{label} — {state}{busy_tag}", style=LIST, callback_data=f"bld_pick:{b.id}")])
+        rows.append([btn(f"{label} — {state}{busy_tag}", emoji_key=f"btn_bld_{b.building_type}", style=LIST, callback_data=f"bld_pick:{b.id}")])
     if slots < constants.MAX_BUILDER_SLOTS:
         rows.append([btn(
             f"👷‍♂️ خرید کارگر دوم ({constants.SECOND_BUILDER_DIAMONDS} 💎)",

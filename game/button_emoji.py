@@ -56,6 +56,16 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_collect": ("جمع‌آوری", "💰", "action"),
     "btn_build": ("ساخت/ارتقای ساختمون", "🏗", "action"),
     "btn_speedup": ("سریع‌تر کردن", "⚡", "action"),
+    # buildings — one key per building type, so each building's tile in the
+    # «ساختمون‌ها» screen can carry its own Premium icon (settable in the admin panel).
+    "btn_bld_main_hall": ("ساختمون: تالار مِهر", "🏛", "buildings"),
+    "btn_bld_gold_collector": ("ساختمون: جمع‌کننده طلا", "🏭", "buildings"),
+    "btn_bld_diamond_collector": ("ساختمون: جمع‌کننده الماس", "💎", "buildings"),
+    "btn_bld_dna_lab": ("ساختمون: آزمایشگاه DNA", "🧬", "buildings"),
+    "btn_bld_blacksmith": ("ساختمون: آهنگری", "⚒", "buildings"),
+    "btn_bld_fusion_lab": ("ساختمون: تالار ادغام", "🔮", "buildings"),
+    "btn_bld_trade_hall": ("ساختمون: تالار تجارت", "🤝", "buildings"),
+    "btn_bld_research_lab": ("ساختمون: آزمایشگاه", "🔬", "buildings"),
     # economy
     "btn_biocrate": ("باکس ژنتیکی", "📦", "economy"),
     "btn_diamond_box": ("جعبه‌ی الماسی", "💠", "economy"),
@@ -112,6 +122,7 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
 BUTTON_CATEGORY_LABELS: dict[str, str] = {
     "nav": "🧭 ناوبری",
     "action": "⚔️ اکشن‌ها",
+    "buildings": "🏗 ساختمون‌ها",
     "economy": "💰 اقتصاد",
     "features": "🎮 قابلیت‌های جدید",
     "confirm": "✅ تأیید و حذف",

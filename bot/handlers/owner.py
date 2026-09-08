@@ -2181,11 +2181,21 @@ async def capture_button_emoji_reply(update: Update, context: ContextTypes.DEFAU
 
     custom_emoji_id, placeholder = extracted
     await run_db(set_button_emoji, key, custom_emoji_id, placeholder)
+    from game.button_emoji import BUTTON_CATEGORY_OF
+
+    cat = BUTTON_CATEGORY_OF.get(key)
+    rows = [[btn("نمونه", emoji_key=key, style=PRIMARY, callback_data="btnemoji_noop")]]
+    # a back button so the owner drops straight back into the same emoji category to set
+    # the next one, instead of dead-ending on the sample
+    if cat is not None:
+        rows.append([back_btn(f"{BTN_EMOJI_CAT_PREFIX}{cat}", "بازگشت به ایموجی‌ها")])
+    else:
+        rows.append([back_btn(BTN_EMOJI_BACK, "بازگشت به دسته‌ها")])
     await message.reply_text(
         f"{get_emoji('confirm')} ایموجی دکمه‌ی «{BUTTON_EMOJI_KEYS[key]}» تنظیم شد.\n"
         "یه نمونه از همون دکمه 👇",
         parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([[btn("نمونه", emoji_key=key, style=PRIMARY, callback_data="btnemoji_noop")]]),
+        reply_markup=InlineKeyboardMarkup(rows),
     )
 
 
