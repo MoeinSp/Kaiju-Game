@@ -39,7 +39,7 @@ def _panel_sync(tg_user):
     for key, d in research.RESEARCH_DEFS.items():
         up = upgrading.get(key)
         rows.append({
-            "key": key, "emoji": d["emoji"], "label": d["label"],
+            "key": key, "emoji": d["emoji"], "btn_key": d["btn_key"], "label": d["label"],
             "level": levels.get(key, 0),
             "remaining": (up.finishes_at - now).total_seconds() if up else None,
             "target": up.target_level if up else None,
@@ -73,7 +73,7 @@ def _panel_keyboard(lab_level: int, rows) -> InlineKeyboardMarkup:
                 tag = "🏆 مکس"
             else:
                 tag = f"سطح {r['level']}/{lab_level}"
-            kb.append([btn(f"{r['emoji']} {r['label']} — {tag}", style=LIST, callback_data=f"rsch:pick:{r['key']}")])
+            kb.append([btn(f"{r['label']} — {tag}", emoji_key=r["btn_key"], style=LIST, callback_data=f"rsch:pick:{r['key']}")])
     kb.append([back_btn("menu:buildings", "بازگشت به ساختمون‌ها")])
     return InlineKeyboardMarkup(kb)
 

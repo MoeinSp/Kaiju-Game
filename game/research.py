@@ -28,14 +28,12 @@ from game.creature import GameError, InsufficientGoldError
 # key -> definition. `kind` decides how the level is applied; `per_level` is the bonus
 # gained per research level. All bonuses are permanent and stack additively per level.
 RESEARCH_DEFS: dict[str, dict] = {
-    "elem_fire":     {"label": "قدرت آتش", "emoji": "🔥", "kind": "element", "element": "fire", "per_level": 0.02},
-    "elem_water":    {"label": "قدرت آب", "emoji": "💧", "kind": "element", "element": "water", "per_level": 0.02},
-    "elem_earth":    {"label": "قدرت خاک", "emoji": "🪨", "kind": "element", "element": "earth", "per_level": 0.02},
-    "elem_electric": {"label": "قدرت برق", "emoji": "⚡", "kind": "element", "element": "electric", "per_level": 0.02},
-    "might":      {"label": "خشمِ باستانی", "emoji": "⚔️", "kind": "atk", "per_level": 0.03},
-    "vigor":      {"label": "سرزندگی", "emoji": "❤️", "kind": "hp", "per_level": 0.04},
-    "precision":  {"label": "دقتِ کشنده", "emoji": "🎯", "kind": "crit", "per_level": 0.02},
-    "leech":      {"label": "خون‌آشامی", "emoji": "🩸", "kind": "lifesteal", "per_level": 0.02},
+    "elem_fire":     {"label": "قدرت آتش", "emoji": "🔥", "btn_key": "btn_rsch_fire", "kind": "element", "element": "fire", "per_level": 0.02},
+    "elem_water":    {"label": "قدرت آب", "emoji": "💧", "btn_key": "btn_rsch_water", "kind": "element", "element": "water", "per_level": 0.02},
+    "elem_earth":    {"label": "قدرت خاک", "emoji": "🪨", "btn_key": "btn_rsch_earth", "kind": "element", "element": "earth", "per_level": 0.02},
+    "elem_electric": {"label": "قدرت برق", "emoji": "⚡", "btn_key": "btn_rsch_electric", "kind": "element", "element": "electric", "per_level": 0.02},
+    "might":      {"label": "خشمِ باستانی", "emoji": "⚔️", "btn_key": "btn_rsch_might", "kind": "atk", "per_level": 0.03},
+    "vigor":      {"label": "سرزندگی", "emoji": "❤️", "btn_key": "btn_rsch_vigor", "kind": "hp", "per_level": 0.04},
 }
 
 # a human sentence describing each track's payoff (shown in the panel)
@@ -46,8 +44,6 @@ RESEARCH_DESC: dict[str, str] = {
     "elem_electric": "قدرتِ همه‌ی هیولاهای عنصرِ برق رو هر لِوِل ۲٪ بیشتر می‌کنه.",
     "might": "حمله‌ی همه‌ی هیولاهات رو هر لِوِل ۳٪ بیشتر می‌کنه.",
     "vigor": "جانِ (HP) همه‌ی هیولاهات رو هر لِوِل ۴٪ بیشتر می‌کنه.",
-    "precision": "شانسِ ضربه‌ی بحرانی همه‌ی هیولاهات رو هر لِوِل ۲٪ بیشتر می‌کنه.",
-    "leech": "خون‌آشامیِ (جذبِ جان) همه‌ی هیولاهات رو هر لِوِل ۲٪ بیشتر می‌کنه.",
 }
 
 RESEARCH_KEYS = list(RESEARCH_DEFS)
@@ -142,6 +138,14 @@ def start_research(user: User, key: str) -> ResearchUpgrade:
         raise GameError("اول باید ساختمونِ «🔬 آزمایشگاه» رو بسازی (از سطح ۵ تالار مِهر باز می‌شه).")
     if ResearchUpgrade.objects.filter(owner=user, key=key).exists():
         raise GameError("این پژوهش همین الان در حال انجامه.")
+    # only ONE research may run at a time across all tracks
+    other = ResearchUpgrade.objects.exclude(key=key).filter(owner=user).first()
+    if other is not None:
+        od = RESEARCH_DEFS.get(other.key, {})
+        raise GameError(
+            f"همزمان فقط یک پژوهش می‌شه انجام داد — الان «{od.get('emoji','')} {od.get('label', other.key)}» "
+            "در حال انجامه. اول اون تموم بشه (یا با الماس تمومش کن)."
+        )
     current = Research.objects.filter(owner=user, key=key).first()
     level = current.level if current else 0
     if level >= constants.RESEARCH_MAX_LEVEL:
@@ -204,8 +208,8 @@ def combat_bonuses(levels: dict[str, int], element: str) -> dict:
         "atk_mult": 1 + elem_pct + atk_extra,
         "def_mult": 1 + elem_pct,
         "spd_mult": 1 + elem_pct,
-        "crit_add": levels.get("precision", 0) * RESEARCH_DEFS["precision"]["per_level"],
-        "leech_add": levels.get("leech", 0) * RESEARCH_DEFS["leech"]["per_level"],
+        "crit_add": 0.0,
+        "leech_add": 0.0,
     }
 
 
