@@ -322,6 +322,16 @@ def upgrade_cost_and_minutes(building: Building) -> tuple[int, int]:
     )
 
 
+def upgrade_seconds(building: Building) -> int:
+    """Real-time seconds the next step takes. First CONSTRUCTION (level 0 → 1) is only
+    a few seconds so a fresh base takes shape immediately; every level-up (2→5) keeps
+    its full minute-based timer, which is where the multi-week build gate lives."""
+    target = min(building.level + 1, constants.BUILDING_MAX_LEVEL)
+    if target <= 1:
+        return constants.BUILDING_CONSTRUCT_SECONDS
+    return constants.BUILDING_UPGRADE_MINUTES[target] * 60
+
+
 def full_buildout_estimate() -> tuple[int, int]:
     """(total gold, total minutes) to take every building from scratch to max.
 
@@ -384,7 +394,7 @@ def start_upgrade(user: User, building: Building) -> BuildingUpgrade:
                 f"(الان {lvl}). با بازی‌کردن و فعالیت، سطح آزمایشگاه بالا می‌ره."
             )
 
-    cost, minutes = upgrade_cost_and_minutes(building)
+    cost, _minutes = upgrade_cost_and_minutes(building)
     if user.coins < cost:
         verb = "ساخت" if building.level == 0 else "ارتقا"
         raise InsufficientGoldError(
@@ -394,7 +404,7 @@ def start_upgrade(user: User, building: Building) -> BuildingUpgrade:
     user.coins -= cost
     user.save(update_fields=["coins"])
 
-    finishes_at = timezone.now() + datetime.timedelta(minutes=minutes)
+    finishes_at = timezone.now() + datetime.timedelta(seconds=upgrade_seconds(building))
     return BuildingUpgrade.objects.create(
         owner=user, building=building, target_level=target, finishes_at=finishes_at
     )

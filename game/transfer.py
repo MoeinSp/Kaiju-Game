@@ -91,6 +91,28 @@ def _set_cooldown(users: list[User], field: str) -> None:
         setattr(u, field, until)
 
 
+def _check_trade_hall_built(user: User, who: str) -> None:
+    """Both sides need «تالار تجارت» built (level ≥ 1) before ANY trade — it's the
+    dedicated trading building (game.constants)."""
+    if building_level(user, "trade_hall") < 1:
+        raise GameError(
+            f"{who} باید اول «🤝 تالار تجارت» رو بسازه تا بشه انتقال داد یا گرفت "
+            "(از بخش «ساختمون‌ها» توی پیوی ربات)."
+        )
+
+
+def _check_creature_trade_gate(sender: User, receiver: User, star_level: int) -> None:
+    """An N★ creature can only change hands when BOTH sides have «تالار تجارت» at
+    level ≥ N — so trading a high-star creature needs a mature trade hall on both ends."""
+    for u, who in ((sender, "فرستنده"), (receiver, "گیرنده")):
+        th = building_level(u, "trade_hall")
+        if th < star_level:
+            raise GameError(
+                f"برای انتقال هیولای {star_level}⭐ باید «🤝 تالار تجارت» {who} حداقل سطح "
+                f"{star_level} باشه (الان {th}). اول تالار تجارت رو ارتقا بدین."
+            )
+
+
 def _check_equip_blacksmith(receiver: User, item: Equipment) -> None:
     """The receiver's forge must be able to support the item's level (blacksmith
     caps equipment at level×5), so nobody suddenly receives gear far beyond what
@@ -128,6 +150,7 @@ def preview_creature_transfer(sender: User, receiver: User, creature_id: int) ->
     status = creature_status(sender, creature)
     if status is not None:
         raise GameError(f"«{creature.name}» الان مشغوله ({status}) — اول آزادش کن.")
+    _check_creature_trade_gate(sender, receiver, creature.star_level)
     reqs = _creature_reqs(creature.star_level)
     mh, fl = building_level(receiver, "main_hall"), building_level(receiver, "fusion_lab")
     if mh < reqs["main_hall"] or fl < reqs["fusion_lab"]:
@@ -153,6 +176,8 @@ def preview_equip_transfer(sender: User, receiver: User, equip_id: int) -> dict:
     item = Equipment.objects.filter(id=equip_id, owner=sender).first()
     if item is None:
         raise GameError("همچین تجهیزاتی با این کد توی انبارت نیست.")
+    _check_trade_hall_built(sender, "فرستنده")
+    _check_trade_hall_built(receiver, "گیرنده")
     mh_req = constants.EQUIP_TRANSFER_MAIN_HALL_REQ.get(item.rarity, 1)
     mh = building_level(receiver, "main_hall")
     if mh < mh_req:
@@ -178,14 +203,22 @@ def transfer_creature(sender: User, receiver: User, creature_id: int, price: int
     sender's inventory first, so the transferred creature carries no trace of the
     sender's data (no equipped items, not active, not a worker)."""
     price = max(0, int(price))
-    sender = User.objects.select_for_update().get(id=sender.id)
-    receiver = User.objects.select_for_update().get(id=receiver.id)
     if sender.id == receiver.id:
         raise GameError("نمی‌تونی به خودت منتقل کنی.")
+    # Lock BOTH user rows in a stable id order (not sender-then-receiver), so two
+    # crossing transfers — A→B and B→A firing at once — can't grab the rows in
+    # opposite orders and deadlock.
+    ids = sorted({sender.id, receiver.id})
+    locked = {u.id: u for u in User.objects.select_for_update().filter(id__in=ids).order_by("id")}
+    sender, receiver = locked[sender.id], locked[receiver.id]
     _check_cooldown(sender, "kaiju_transfer_ready_at", "فرستنده")
     _check_cooldown(receiver, "kaiju_transfer_ready_at", "گیرنده")
 
-    creature = Creature.objects.filter(id=creature_id, owner=sender).first()
+    # Lock the creature row too (owner-filtered): with the sender row already locked
+    # this fully serialises concurrent transfers of the SAME creature — the second one
+    # re-reads owner=sender and finds nothing once the first has moved it, so a single
+    # creature can never be handed to two people or used to dodge the cooldown.
+    creature = Creature.objects.select_for_update().filter(id=creature_id, owner=sender).first()
     if creature is None:
         raise GameError("همچین هیولایی با این کد توی کلکسیونت نیست.")
     if creature.is_active:
@@ -195,6 +228,8 @@ def transfer_creature(sender: User, receiver: User, creature_id: int, price: int
     status = creature_status(sender, creature)
     if status is not None:
         raise GameError(f"«{creature.name}» الان مشغوله ({status}) — اول آزادش کن.")
+
+    _check_creature_trade_gate(sender, receiver, creature.star_level)
 
     # receiver must have a mature enough base for this star
     reqs = constants.CREATURE_TRANSFER_REQS.get(
@@ -225,9 +260,15 @@ def transfer_creature(sender: User, receiver: User, creature_id: int, price: int
     if price > 0:
         receiver.coins -= price
         sender.coins += price
+    # A transferred creature is reset to a fresh statline for the new owner: level → 1,
+    # every body-part upgrade cleared, base stats reset for its rarity — only the STAR
+    # survives. Both parties are warned of this before they confirm (see bot handlers).
+    from game.creature import reset_progression_for_transfer
+
+    reset_progression_for_transfer(creature)
     creature.owner = receiver
     creature.is_active = False
-    creature.save(update_fields=["owner", "is_active"])
+    creature.save()  # full save — the reset touched level, xp, base stats and parts
 
     _set_cooldown([sender, receiver], "kaiju_transfer_ready_at")
     sender.save(update_fields=["kaiju_transfer_ready_at", "coins"])
@@ -241,16 +282,21 @@ def transfer_equipment(sender: User, receiver: User, equip_id: int, price: int =
     diamond fee (sink) plus, if set, `price` gold to the seller. Auto-unequips it
     from the sender's creature first, so nothing of the sender's remains on it."""
     price = max(0, int(price))
-    sender = User.objects.select_for_update().get(id=sender.id)
-    receiver = User.objects.select_for_update().get(id=receiver.id)
     if sender.id == receiver.id:
         raise GameError("نمی‌تونی به خودت منتقل کنی.")
+    # stable id-ordered lock (see transfer_creature) to avoid crossing-transfer deadlocks
+    ids = sorted({sender.id, receiver.id})
+    locked = {u.id: u for u in User.objects.select_for_update().filter(id__in=ids).order_by("id")}
+    sender, receiver = locked[sender.id], locked[receiver.id]
     _check_cooldown(sender, "equip_transfer_ready_at", "فرستنده")
     _check_cooldown(receiver, "equip_transfer_ready_at", "گیرنده")
 
-    item = Equipment.objects.filter(id=equip_id, owner=sender).first()
+    # lock the item row (owner-filtered) so the same piece can't be transferred twice
+    item = Equipment.objects.select_for_update().filter(id=equip_id, owner=sender).first()
     if item is None:
         raise GameError("همچین تجهیزاتی با این کد توی انبارت نیست.")
+    _check_trade_hall_built(sender, "فرستنده")
+    _check_trade_hall_built(receiver, "گیرنده")
 
     mh_req = constants.EQUIP_TRANSFER_MAIN_HALL_REQ.get(item.rarity, 1)
     mh = building_level(receiver, "main_hall")

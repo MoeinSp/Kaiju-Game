@@ -6,6 +6,8 @@ import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "telgame_site.settings")
 django.setup()
 
+from bot import _memtrace  # noqa: E402,F401 — opt-in leak profiler, inert unless KAIJU_MEMTRACE=1
+
 from telegram import (  # noqa: E402
     BotCommand,
     BotCommandScopeAllGroupChats,

@@ -20,7 +20,7 @@ from bot.buttons import BATTLE, CONFIRM, DANGER, NAV, PRIMARY, back_btn, btn
 from bot.handlers.group_words import group_footer_keyboard
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from game import constants
-from game.buildings import maybe_award_speedup_card
+from game.buildings import building_level, maybe_award_speedup_card
 from game.combat import battle_report, resolve_battle, resolve_duel_detailed
 from game.creature import GameError, add_xp
 from game.daily import check_missions, consume_daily, record_action
@@ -83,6 +83,23 @@ def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
         receiver = locked.get(receiver_id)
         if receiver is None:
             raise GameError("این بازیکن هنوز بازی رو شروع نکرده.")
+        # «تالار تجارت» gate: both sides must have it built, and the transfer is bounded
+        # by the SMALLER of their two per-level gold caps — so both benefit from
+        # levelling it up (see constants.trade_hall_gold_cap).
+        s_cap = constants.trade_hall_gold_cap(building_level(sender, "trade_hall"))
+        r_cap = constants.trade_hall_gold_cap(building_level(receiver, "trade_hall"))
+        if s_cap <= 0:
+            raise GameError(
+                "برای انتقال طلا باید اول «🤝 تالار تجارت» رو بسازی (از بخش «ساختمون‌ها» توی پیوی ربات)."
+            )
+        if r_cap <= 0:
+            raise GameError("گیرنده هنوز «🤝 تالار تجارت» نساخته و نمی‌تونه طلا بگیره.")
+        cap = min(s_cap, r_cap)
+        if amount > cap:
+            raise GameError(
+                f"سقف انتقال طلا الان {cap:,} طلاست (به سطح «تالار تجارت» هر دو طرف بستگی داره). "
+                "برای انتقال بیشتر، تالار تجارت رو ارتقا بدین."
+            )
         if sender.coins < amount:
             raise GameError(f"طلا کافی نداری! فقط {sender.coins} طلا داری.")
         # 10% transfer fee, floored (rounded in the user's favour → smaller fee, more
@@ -246,9 +263,11 @@ async def _begin_offer(update, kind: str, sender, receiver, item_id: int, desc: 
         return
     token = _new_offer(kind, sender.id, receiver.id, item_id=item_id, fee=fee, desc=desc,
                        sender_name=display_name(sender), receiver_name=display_name(receiver))
+    reset_line = f"\n{_CREATURE_RESET_NOTE}\n" if kind == "c" else ""
     await update.message.reply_text(
         f"🤝 <b>{display_name(sender)}</b> می‌خواد {desc} رو به <b>{display_name(receiver)}</b> بده.\n"
-        f"{get_emoji('diamond')} کارمزد انتقال: <b>{fee}</b> الماس (گیرنده می‌ده)\n\n"
+        f"{get_emoji('diamond')} کارمزد انتقال: <b>{fee}</b> الماس (گیرنده می‌ده)\n"
+        f"{reset_line}\n"
         f"<b>{display_name(sender)}</b>، قیمت (به طلا) رو تعیین کن یا رایگان بفرست 👇\n"
         "<i>5 دقیقه اعتبار داره.</i>",
         parse_mode="HTML", reply_markup=_seller_step_keyboard(token),
@@ -265,7 +284,9 @@ async def transfer_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text(
             "🦖 برای انتقال هیولا، روی پیام گیرنده <b>ریپلای</b> کن و بنویس «انتقال کایجو [کد]».\n"
             "<i>کد هیولا رو از «کلکسیون» توی پیوی ربات می‌بینی. اول قیمت می‌ذاری، بعد گیرنده قیمت و "
-            f"کارمزد الماس رو می‌بینه و تأیید می‌کنه؛ برای هر دو طرف {constants.TRANSFER_COOLDOWN_HOURS} ساعت کول‌داون داره.</i>\n\n"
+            f"کارمزد الماس رو می‌بینه و تأیید می‌کنه؛ برای هر دو طرف {constants.TRANSFER_COOLDOWN_HOURS} ساعت کول‌داون داره.</i>\n"
+            f"{_CREATURE_RESET_NOTE}\n"
+            "<i>🤝 انتقال به «تالار تجارت» نیاز داره؛ برای هیولای N⭐ باید هر دو طرف تالار تجارت سطح N داشته باشن.</i>\n\n"
             + transfer.creature_prices_text(),
             parse_mode="HTML",
         )
@@ -350,18 +371,26 @@ def _offer_receiver_keyboard(token: str) -> InlineKeyboardMarkup:
     ])
 
 
+_CREATURE_RESET_NOTE = (
+    "⚠️ <b>توجه:</b> با انتقال، این هیولا ریست می‌شه — لِوِلش به ۱ برمی‌گرده و همه‌ی "
+    "ارتقاهای بدنی (بال/زره/نیش/زهر) صفر می‌شن. فقط <b>ستاره‌هاش</b> حفظ می‌مونه."
+)
+
+
 def _offer_receiver_text(offer: dict) -> str:
     price = offer["price"]
     price_line = (
         f"{get_emoji('coin')} قیمت: <b>{price:,}</b> طلا (به فروشنده می‌رسه)"
         if price > 0 else f"{get_emoji('gift')} <b>رایگان</b> (بدون قیمت)"
     )
+    reset_line = f"\n\n{_CREATURE_RESET_NOTE}" if offer.get("kind") == "c" else ""
     return (
         f"🤝 <b>پیشنهاد انتقال</b>\n"
         f"{offer['desc']}\n"
         f"از <b>{offer['sender_name']}</b> به <b>{offer['receiver_name']}</b>\n\n"
         f"{price_line}\n"
-        f"{get_emoji('diamond')} کارمزد: <b>{offer['fee']}</b> الماس\n\n"
+        f"{get_emoji('diamond')} کارمزد: <b>{offer['fee']}</b> الماس"
+        f"{reset_line}\n\n"
         f"<b>{offer['receiver_name']}</b>، قبول می‌کنی؟ 👇  <i>(5 دقیقه اعتبار · 1 روز کول‌داون برای هر دو طرف)</i>"
     )
 
@@ -503,7 +532,8 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
         if offer["kind"] == "c":
             c = result["creature"]
             body = (f"🦖 هیولای <b>{creature_name(c)}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level} "
-                    f"به <b>{display_name(receiver)}</b> منتقل شد! ✅")
+                    f"به <b>{display_name(receiver)}</b> منتقل شد! ✅\n"
+                    f"<i>♻️ لِوِل و ارتقاهای بدنی ریست شد؛ فقط ستاره‌ها موند.</i>")
         else:
             it = result["item"]
             body = (f"🎒 تجهیزاتِ <b>{it.name} +{it.level}</b> {constants.RARITY_LABELS[it.rarity]} "

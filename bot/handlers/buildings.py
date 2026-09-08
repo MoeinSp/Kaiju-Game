@@ -31,6 +31,7 @@ from game.buildings import (
     produces,
     start_upgrade,
     upgrade_cost_and_minutes,
+    upgrade_seconds,
     upgrade_for_building,
 )
 
@@ -231,9 +232,9 @@ def _building_detail_text(view: dict) -> str:
             hall = constants.BUILDING_LABELS[constants.MAIN_BUILDING]
             lines.append(f"\n🔒 برای ادامه اول باید {hall} رو ارتقا بدی.")
         else:
-            cost, minutes = upgrade_cost_and_minutes(building)
+            cost, _minutes = upgrade_cost_and_minutes(building)
             lines.append(f"\n🔧 پیش‌نیاز ارتقا به سطح {building.level + 1}:")
-            lines.append(f"{get_emoji('coin')} هزینه: <b>{cost:,}</b> طلا ┃ ⏳ زمان ساخت: {_format_remaining(minutes * 60)}")
+            lines.append(f"{get_emoji('coin')} هزینه: <b>{cost:,}</b> طلا ┃ ⏳ زمان ساخت: {_format_remaining(upgrade_seconds(building))}")
         lines.append("\n💡 <i>هیولاهای فعال یا در حال تخم‌گذاری در غار قابل انتصاب به کارگری نیستن.</i>")
         return "\n".join(lines)
 
@@ -270,10 +271,10 @@ def _building_detail_text(view: dict) -> str:
         hall = constants.BUILDING_LABELS[constants.MAIN_BUILDING]
         lines.append(f"\n🔒 برای ادامه اول باید {hall} رو ارتقا بدی.")
     else:
-        cost, minutes = upgrade_cost_and_minutes(building)
+        cost, _minutes = upgrade_cost_and_minutes(building)
         verb = "🏗 ساخت" if building.level == 0 else "🔧 ارتقا به سطح"
         target = "" if building.level == 0 else f" {building.level + 1}"
-        lines.append(f"\n{verb}{target}: {cost} {get_emoji('coin')} · {_format_remaining(minutes * 60)}")
+        lines.append(f"\n{verb}{target}: {cost} {get_emoji('coin')} · {_format_remaining(upgrade_seconds(building))}")
     return "\n".join(lines)
 
 

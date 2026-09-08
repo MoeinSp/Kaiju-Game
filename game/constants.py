@@ -608,6 +608,7 @@ BUILDING_TYPES = [
     "dna_lab",
     "blacksmith",
     "fusion_lab",
+    "trade_hall",
 ]
 BUILDING_LABELS = {
     "main_hall": "🏛 تالار مِهر",  # the main hall; everything else is capped by its level
@@ -616,6 +617,7 @@ BUILDING_LABELS = {
     "dna_lab": "🧬 آزمایشگاه DNA",
     "blacksmith": "⚒ آهنگری",
     "fusion_lab": "🔮 تالار ادغام",
+    "trade_hall": "🤝 تالار تجارت",
 }
 BUILDING_DESCRIPTIONS = {
     "main_hall": "قلب آزمایشگاه. سقف سطح بقیه‌ی ساختمون‌ها رو تعیین می‌کنه.",
@@ -624,6 +626,7 @@ BUILDING_DESCRIPTIONS = {
     "dna_lab": "به‌مرور DNA تولید می‌کنه.",
     "blacksmith": "برای ارتقای تجهیزات لازمه. هر سطحش سقف تجهیزات رو ۵ تا بالاتر می‌بره.",
     "fusion_lab": "برای ادغام دو هیولای هم‌نوع و بالا بردن ستاره لازمه. سطحش سقف ستاره‌ی هیولاهاته (لِوِل ۲ = تا ۲⭐، لِوِل ۳ = تا ۳⭐ …).",
+    "trade_hall": "برای انتقال طلا، هیولا و تجهیزات لازمه. هرچی سطحش بالاتر بره سقف انتقال و دریافت طلا بیشتر می‌شه. برای انتقال هیولای N⭐ باید هم فرستنده هم گیرنده این تالار رو حداقل سطح N داشته باشن.",
 }
 BUILDING_MAX_LEVEL = 5
 
@@ -651,6 +654,7 @@ BUILDING_UNLOCK_HALL_LEVEL = {
     "dna_lab": 2,             # DNA feeds breeding and fusion costs
     "blacksmith": 3,          # gear upgrades open once there's gold to spend on them
     "diamond_collector": 4,   # the premium mine — a real mid/late-game payoff
+    "trade_hall": 2,          # trading opens once a player has a small foothold
 }
 
 # ── Upgrade pacing ────────────────────────────────────────────────────────────
@@ -682,6 +686,24 @@ BUILDING_UPGRADE_MINUTES = {1: 48, 2: 288, 3: 1152, 4: 4320, 5: 7200}
 # moderately active player earns over those 13 days, leaving the rest for crates,
 # fusion and the forge.
 BUILDING_UPGRADE_GOLD = {1: 150, 2: 450, 3: 1200, 4: 2800, 5: 6000}
+
+# First CONSTRUCTION (level 0 → 1) of a not-yet-built building takes only a few
+# seconds — a new player shouldn't stare at an empty lot for hours before the base
+# takes shape. The real multi-week gate lives entirely in the LEVEL-UP steps (2→5),
+# whose minutes are unchanged. Only the 0→1 step reads this value.
+BUILDING_CONSTRUCT_SECONDS = 5
+
+# ── Trade hall (تالار تجارت): the gate for ALL player-to-player trading ──────────
+# Must be BUILT (level ≥ 1) before a player can send OR receive gold / creatures /
+# equipment. Its level raises the per-transfer GOLD cap — a transfer is bounded by
+# the SMALLER of the two sides' caps, so both parties benefit from levelling it. It
+# also gates creature transfers by star: moving an N★ creature needs BOTH sides at
+# trade-hall level ≥ N. Like every building it can't exceed the main hall's level.
+TRADE_HALL_GOLD_CAP = {0: 0, 1: 5_000, 2: 25_000, 3: 100_000, 4: 500_000, 5: 2_000_000}
+
+
+def trade_hall_gold_cap(level: int) -> int:
+    return TRADE_HALL_GOLD_CAP.get(max(0, min(int(level or 0), BUILDING_MAX_LEVEL)), 0)
 
 # A player runs one building upgrade at a time by default. Buying the SECOND builder
 # (a one-time diamond purchase) lets two upgrades run in parallel — halving the
@@ -1257,7 +1279,31 @@ def forge_fail_chance(target_level: int) -> float:
 
 
 def upgrade_cost(current_level: int) -> int:
+    # NOTE: this is NO LONGER the price of a body-part upgrade (that's
+    # part_upgrade_cost below). It survives only as the FIXED reference curve behind
+    # game.creature._part_invested_gold, which turns a devoured creature's part levels
+    # into refunded XP. Keeping it independent of the live part price means retuning
+    # part_upgrade_cost can never destabilise devour XP.
     return 50 * (current_level + 1)
+
+
+def part_upgrade_cost(current_level: int) -> int:
+    """Gold to raise a body part from `current_level` to the next level.
+
+    Quadratic escalation (was a gentle linear `50*(L+1)`, which made high levels
+    trivially cheap and left part power badly under-priced). The FIRST few levels stay
+    cheap so new players can still tinker, but the cost ramps hard so maxing a part is
+    a real long-term gold sink instead of pocket change:
+
+        L 0→1  : 40        L 20→21 : 9,240
+        L 5→6  : 840       L 50→51 : 54,600
+        L 10→11: 2,640     L 99→100: 202,000
+
+    Cumulative-to-cap per part: 1★(20) ≈ 61.6k, 3★(60) ≈ 1.51M, 5★(100) ≈ 6.87M —
+    so a fully-maxed 5★ (all four parts) is ~27.5M gold, a genuine endgame goal.
+    """
+    lvl = max(0, current_level)
+    return 20 * (lvl + 1) * (lvl + 2)
 
 
 def random_element() -> str:

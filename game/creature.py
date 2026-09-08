@@ -319,7 +319,31 @@ def set_active_creature(user: User, creature_id: int) -> Creature:
 def part_bulk_cost(current_level: int, count: int) -> int:
     """Total gold to raise a body part `count` levels from `current_level` — the sum
     of the escalating per-level costs, so a ×5 buy is priced exactly as five ×1s."""
-    return sum(constants.upgrade_cost(current_level + i) for i in range(max(1, count)))
+    return sum(constants.part_upgrade_cost(current_level + i) for i in range(max(1, count)))
+
+
+def reset_progression_for_transfer(creature: Creature) -> None:
+    """Strip a creature down to a fresh statline when it changes hands (see
+    game.transfer.transfer_creature). Level → 1, all XP and body-part upgrades cleared,
+    and base stats reset to a just-hatched creature of the SAME rarity. Only the STAR
+    (fusion prestige) and identity (breed / element / rarity) survive — the new owner
+    re-levels and re-upgrades it from scratch. The nickname is cleared and the rename
+    counter reset, so the new owner gets a fresh (first-rename-free) name.
+
+    The caller is responsible for saving the row (transfer_creature does a full save)."""
+    mult = constants.RARITY_STAT_MULTIPLIER.get(creature.rarity, 1.0)
+    creature.level = 1
+    creature.xp = 0
+    creature.base_hp = round(constants.STARTER_BASE_HP * mult)
+    creature.base_atk = round(constants.STARTER_BASE_ATK * mult)
+    creature.base_def = round(constants.STARTER_BASE_DEF * mult)
+    creature.base_spd = round(constants.STARTER_BASE_SPD * mult)
+    creature.wings_lvl = 0
+    creature.armor_lvl = 0
+    creature.fangs_lvl = 0
+    creature.poison_lvl = 0
+    creature.custom_name = ""
+    creature.name_changes = 0
 
 
 def upgrade_part(user: User, creature: Creature, part: str, count: int = 1) -> tuple[int, int]:
