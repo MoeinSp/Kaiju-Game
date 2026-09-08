@@ -339,6 +339,8 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
     elif building.level < min(cap, constants.BUILDING_MAX_LEVEL):
         label = "🏗 ساخت" if building.level == 0 else "🔧 شروع ارتقا"
         rows.append([btn(label, emoji_key="btn_build", style=BUILD, callback_data=f"bld_upgrade:{building.id}")])
+    if building.building_type == "research_lab" and building.level > 0:
+        rows.append([btn("🔬 پژوهش‌ها", style=PRIMARY, callback_data="menu:research")])
     rows.append([back_btn("menu:buildings")])
     return InlineKeyboardMarkup(rows)
 

@@ -22,6 +22,7 @@ from bot.handlers.codex import codex_panel
 from bot.handlers.events import events_panel
 from bot.handlers.idle import idle_panel
 from bot.handlers.league import league_panel
+from bot.handlers.research import research_panel
 from bot.handlers.shop import gold_shop_panel, item_shop_panel, shield_shop_panel, shop_panel
 from bot.handlers.exchange import exchange_panel
 from bot.handlers.casino import casino_panel
@@ -1021,6 +1022,7 @@ SECTION_HALL_REQ = {
     "shield_shop": 2, "titles": 2,
     "campaign": 3, "casino": 3, "item_shop": 3, "alliance_league": 3,
     "raid_rank": 3, "banner": 3,
+    "research": 5,  # the research lab itself only exists at main-hall 5
 }
 
 
@@ -1190,10 +1192,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 def _me_sync(tg_user):
     from game.buildings import main_hall_level
+    from game import research
 
     user, _ = get_or_create_user(tg_user)
     creature = get_active_creature(user)
     equipped_items = get_equipped_items(creature) if creature else []
+    research.attach_research(user, creature)  # buffed power shows on the card
     return user, creature, equipped_items, main_hall_level(user)
 
 
@@ -3950,6 +3954,7 @@ _MENU_ACTIONS = {
     "fusion": fusion_panel,
     "breeding": breeding_panel,
     "buildings": buildings_panel,
+    "research": research_panel,
     "achievements": achievements_panel,
     "battlepass": battlepass_panel,
     "codex": codex_panel,

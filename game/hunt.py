@@ -241,6 +241,10 @@ def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal",
     creature they bring fights the SAME opponent — switching to the right element is the
     strategy, not a way to shrink the target. `loot_mult` scales the gold/DNA payout —
     auto-hunt passes AUTO_HUNT_LOOT_MULT (0.5) so it earns half of a manual hunt."""
+    # apply the owner's 🔬 research combat buffs to the player's kaiju for this fight
+    from game import research
+
+    research.attach_research(user, player_creature)
     wild = spawn_wild_creature(hunt_benchmark_power(user), tier, seed)
     winner, log_text = resolve_duel(player_creature, wild)
     won = winner is player_creature

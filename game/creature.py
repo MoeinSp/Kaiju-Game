@@ -33,7 +33,7 @@ def effective_stats(creature: Creature, equipped_items: list | None = None) -> d
     # star_level is a fusion-generation prestige counter (never player-set — see
     # game.fusion.fuse) that scales the creature's own stats, not its gear's bonus
     star_mult = 1 + (creature.star_level - 1) * constants.STAR_STAT_BONUS_PCT
-    return {
+    stats = {
         "hp": round(creature.base_hp * star_mult) + round(bonus.get("hp", 0)),
         "atk": round((creature.base_atk + creature.fangs_lvl * constants.BODY_PARTS["fangs"]["bonus"]) * star_mult)
         + round(bonus.get("atk", 0)),
@@ -45,6 +45,26 @@ def effective_stats(creature: Creature, equipped_items: list | None = None) -> d
         "crit_rate": constants.BASE_CRIT_CHANCE + bonus.get("crit_rate", 0),
         "lifesteal": constants.BASE_LIFESTEAL + bonus.get("lifesteal", 0),
     }
+    # 🔬 research-lab buffs. Prefer a transient dict the sync layer attached; otherwise
+    # fall back to the process-level research cache (pure in-memory read — game.research
+    # never lets this hit the DB). Both are absent/empty for players without research, so
+    # this stays a no-op there. Guarded so a buff lookup can never break stat math.
+    r = getattr(creature, "_research", None)
+    if r is None:
+        try:
+            from game import research
+
+            r = research.combat_bonuses_for(creature.owner_id, creature.element)
+        except Exception:  # noqa: BLE001 — a buff hiccup must never break combat/power
+            r = None
+    if r:
+        stats["hp"] = round(stats["hp"] * r["hp_mult"])
+        stats["atk"] = round(stats["atk"] * r["atk_mult"])
+        stats["def"] = round(stats["def"] * r["def_mult"])
+        stats["spd"] = round(stats["spd"] * r["spd_mult"])
+        stats["crit_rate"] += r["crit_add"]
+        stats["lifesteal"] += r["leech_add"]
+    return stats
 
 
 def combat_rating(stats: dict) -> int:

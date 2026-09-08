@@ -609,6 +609,7 @@ BUILDING_TYPES = [
     "blacksmith",
     "fusion_lab",
     "trade_hall",
+    "research_lab",
 ]
 BUILDING_LABELS = {
     "main_hall": "🏛 تالار مِهر",  # the main hall; everything else is capped by its level
@@ -618,6 +619,7 @@ BUILDING_LABELS = {
     "blacksmith": "⚒ آهنگری",
     "fusion_lab": "🔮 تالار ادغام",
     "trade_hall": "🤝 تالار تجارت",
+    "research_lab": "🔬 آزمایشگاه",
 }
 BUILDING_DESCRIPTIONS = {
     "main_hall": "قلبِ آزمایشگاته و سقفِ سطحِ بقیه‌ی ساختمون‌ها رو تعیین می‌کنه.",
@@ -627,6 +629,7 @@ BUILDING_DESCRIPTIONS = {
     "blacksmith": "برای ارتقای تجهیزات لازمه؛ هر سطحش سقفِ سطحِ تجهیزات رو ۵ تا بالاتر می‌بره.",
     "fusion_lab": "اینجا هیولاهای تکراری رو یکی می‌کنی تا ستاره‌شون بره بالا.",
     "trade_hall": "برای انتقال طلا، هیولا و تجهیزات به این ساختمون نیاز داری.",
+    "research_lab": "قلبِ پژوهش‌های پیشرفته. اینجا روی عناصر و توانایی‌ها تحقیق می‌کنی و به همه‌ی هیولاهات بونوس دائمی می‌دی.",
 }
 # One-line "why upgrade this" — shown as the «📈 مزیت ارتقا» bullet on each building card.
 BUILDING_UPGRADE_BENEFIT = {
@@ -637,11 +640,13 @@ BUILDING_UPGRADE_BENEFIT = {
     "blacksmith": "سقفِ سطحِ تجهیزات بالاتر می‌ره (هر سطح +۵).",
     "fusion_lab": "سقفِ ستاره‌ی هیولاهات بالاتر می‌ره.",
     "trade_hall": "افزایش سقف انتقال و دریافت طلا.",
+    "research_lab": "سقفِ سطحِ پژوهش‌ها بالاتر می‌ره (لِوِلِ ساختمون = بیشترین لِوِلی که هر پژوهش می‌تونه بره).",
 }
 # Optional extra rule bullet (already carries its own leading icon), shown after the benefit.
 BUILDING_RULE_NOTE = {
     "trade_hall": "⭐ قانون انتقال هیولا: سطح تالار هر دو نفر باید حداقل به‌اندازه‌ی تعداد ستاره‌های هیولا باشه (مثلاً واسه هیولای ۳ ستاره، تالار هر دو طرف باید سطح ۳ یا بالاتر باشه).",
     "fusion_lab": "💡 نکته: برای داشتن هیولای با ستاره‌ی بالاتر، اول باید لِوِلِ این ساختمون رو ببری بالا (مثلاً هیولای ۴ ستاره، ساختمون سطح ۴ می‌خواد).",
+    "research_lab": "🔬 نکته: لِوِلِ هر پژوهش نمی‌تونه از لِوِلِ این ساختمون جلو بزنه (ساختمون سطح ۳ ⟵ پژوهش تا سطح ۳). برای «آزمایشگاه» باید تالار مِهر سطح ۵ باشه.",
 }
 BUILDING_MAX_LEVEL = 5
 
@@ -670,6 +675,7 @@ BUILDING_UNLOCK_HALL_LEVEL = {
     "blacksmith": 3,          # gear upgrades open once there's gold to spend on them
     "diamond_collector": 4,   # the premium mine — a real mid/late-game payoff
     "trade_hall": 2,          # trading opens once a player has a small foothold
+    "research_lab": 5,        # the endgame prize — opens only at a maxed main hall
 }
 
 # ── Upgrade pacing ────────────────────────────────────────────────────────────
@@ -719,6 +725,22 @@ TRADE_HALL_GOLD_CAP = {0: 0, 1: 100_000, 2: 300_000, 3: 500_000, 4: 1_000_000, 5
 
 def trade_hall_gold_cap(level: int) -> int:
     return TRADE_HALL_GOLD_CAP.get(max(0, min(int(level or 0), BUILDING_MAX_LEVEL)), 0)
+
+
+# ── 🔬 آزمایشگاه (research lab) tracks ───────────────────────────────────────────
+# Research is the endgame gold+DNA sink: costs are deliberately high, each level takes
+# 24h + 12h per level of REAL time, and — unlike buildings — a research job can only be
+# rushed with diamonds (speed-up cards are refused). Every track tops out at level 5 and
+# can never exceed the research-lab building's own level. `key` levels being reached.
+RESEARCH_MAX_LEVEL = 5
+RESEARCH_GOLD_COST = {1: 200_000, 2: 400_000, 3: 700_000, 4: 1_100_000, 5: 1_600_000}
+RESEARCH_DNA_COST = {1: 500, 2: 900, 3: 1_400, 4: 2_000, 5: 2_700}
+
+
+def research_seconds(target_level: int) -> int:
+    """Real-time for a research level: 24h for level 1, +12h for each level after."""
+    lvl = max(1, min(int(target_level), RESEARCH_MAX_LEVEL))
+    return (24 + 12 * (lvl - 1)) * 3600
 
 # A player runs one building upgrade at a time by default. Buying the SECOND builder
 # (a one-time diamond purchase) lets two upgrades run in parallel — halving the

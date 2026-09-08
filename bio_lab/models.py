@@ -314,6 +314,42 @@ class BuildingUpgrade(models.Model):
         return f"{self.building.building_type} -> Lv{self.target_level} ({self.owner_id})"
 
 
+class Research(models.Model):
+    """One research track a player has invested in at the 🔬 آزمایشگاه (research lab).
+    `key` is one of game.research.RESEARCH_DEFS; `level` (0 = not researched) is capped
+    by the research-lab building's own level. Effects (elemental/global stat buffs and
+    economy bonuses) are read from these rows — see game/research.py."""
+
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="research")
+    key = models.CharField(max_length=32)
+    level = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = ("owner", "key")
+
+    def __str__(self) -> str:
+        return f"{self.key} Lv{self.level} ({self.owner_id})"
+
+
+class ResearchUpgrade(models.Model):
+    """An in-progress research job (mirrors BuildingUpgrade). Research is slow (24h +
+    12h per level) and can ONLY be finished early with diamonds — speed-up cards are
+    deliberately not accepted here."""
+
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="research_upgrades")
+    key = models.CharField(max_length=32)
+    target_level = models.IntegerField()
+    started_at = models.DateTimeField(auto_now_add=True)
+    finishes_at = models.DateTimeField()
+    notified = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ("owner", "key")
+
+    def __str__(self) -> str:
+        return f"{self.key} -> Lv{self.target_level} ({self.owner_id})"
+
+
 class CreatureAssignment(models.Model):
     """A creature stationed in a production building to raise its output.
 
