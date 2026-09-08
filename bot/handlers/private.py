@@ -960,8 +960,12 @@ async def guide_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 _STYLE_MAP = {"p": PRIMARY, "b": BATTLE, "n": NAV, "s": SHOP, "c": CONFIRM}
 
 
-def _mkbtn(spec):
+def _mkbtn(spec, locked=frozenset()):
     label, action, style, ekey = spec
+    # a section the player hasn't unlocked yet shows a lock icon instead of its own
+    # emoji; the callback stays the same and menu_callback explains the requirement.
+    if action in locked:
+        return btn(label, emoji_key="btn_locked", style=_STYLE_MAP[style], callback_data=f"menu:{action}")
     return btn(label, emoji_key=ekey, style=_STYLE_MAP[style], callback_data=f"menu:{action}")
 
 
@@ -1007,9 +1011,28 @@ _CATEGORY_BUTTONS = [
     ("اجتماعی", "cat_social", "btn_cat_social"),
 ]
 
+# Progressive unlocks: advanced sections open at higher main-hall levels, so a brand-new
+# player isn't dropped in front of the whole feature set at once. Anything NOT listed
+# here is available from level 1 — the core loop (hunt, arena, collection, fusion,
+# breeding, buildings, boxes, wheel, daily shop, alliance…) stays open from the start so
+# the early game is still rich; only the deeper/late systems wait a bit.
+SECTION_HALL_REQ = {
+    "battlepass": 2, "team": 2, "events": 2, "league": 2, "exchange": 2,
+    "shield_shop": 2, "titles": 2,
+    "campaign": 3, "casino": 3, "item_shop": 3, "alliance_league": 3,
+    "raid_rank": 3, "banner": 3,
+}
 
-def _main_menu_rows() -> list:
-    rows = [[_mkbtn(spec) for spec in row] for row in _MAIN_ROWS]
+
+def _locked_actions_for(hall_level) -> frozenset:
+    """The menu actions the player can't open yet at this main-hall level."""
+    if hall_level is None:
+        return frozenset()
+    return frozenset(a for a, req in SECTION_HALL_REQ.items() if hall_level < req)
+
+
+def _main_menu_rows(locked=frozenset()) -> list:
+    rows = [[_mkbtn(spec, locked) for spec in row] for row in _MAIN_ROWS]
     rows.append(
         [btn(label, emoji_key=ekey, style=SHOP, callback_data=f"menu:{action}") for (label, action, ekey) in _CATEGORY_BUTTONS]
     )
@@ -1017,17 +1040,18 @@ def _main_menu_rows() -> list:
     return rows
 
 
-def _category_keyboard(cat_key: str) -> tuple[str, InlineKeyboardMarkup]:
+def _category_keyboard(cat_key: str, locked=frozenset()) -> tuple[str, InlineKeyboardMarkup]:
     title, rows_def = _CATEGORIES[cat_key]
-    rows = [[_mkbtn(spec) for spec in row] for row in rows_def]
+    rows = [[_mkbtn(spec, locked) for spec in row] for row in rows_def]
     rows.append([back_btn("menu:me", "بازگشت به منو")])
     return title, InlineKeyboardMarkup(rows)
 
 
-def creature_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
+def creature_keyboard(is_owner: bool = False, locked=frozenset()) -> InlineKeyboardMarkup:
     """Categorised navigation under the creature card — core loop direct, the rest
-    in three category submenus."""
-    rows = _main_menu_rows()
+    in three category submenus. `locked` (from _locked_actions_for) marks sections the
+    player hasn't unlocked yet, which render with a lock icon."""
+    rows = _main_menu_rows(locked)
     # the owner-configured "join the game group" button, always last (in-memory read)
     group_link = botconfig.get_group_link()
     if group_link is not None:
@@ -1068,7 +1092,9 @@ def _start_sync(tg_user, referrer_id=None):
     login_bonus = apply_daily_login(user)
     equipped_items = get_equipped_items(creature)
     get_or_create_buildings(user)
-    return user, creature, is_new, login_bonus, equipped_items
+    from game.buildings import main_hall_level
+
+    return user, creature, is_new, login_bonus, equipped_items, main_hall_level(user)
 
 
 def _set_lab_name_sync(tg_user, name):
@@ -1123,7 +1149,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         referrer_id = context.user_data.pop("pending_referrer", None)
     else:
         context.user_data.pop("pending_referrer", None)
-    user, creature, is_new, login_bonus, equipped_items = await run_db(
+    user, creature, is_new, login_bonus, equipped_items, hall_level = await run_db(
         _start_sync, update.effective_user, referrer_id
     )
 
@@ -1154,7 +1180,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lines.append(creature_card_text(user, creature, equipped_items))
     is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
     await update.message.reply_text(
-        "\n".join(lines), parse_mode="HTML", reply_markup=creature_keyboard(is_owner)
+        "\n".join(lines), parse_mode="HTML",
+        reply_markup=creature_keyboard(is_owner, _locked_actions_for(hall_level)),
     )
 
     if is_new:
@@ -1162,24 +1189,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def _me_sync(tg_user):
+    from game.buildings import main_hall_level
+
     user, _ = get_or_create_user(tg_user)
     creature = get_active_creature(user)
     equipped_items = get_equipped_items(creature) if creature else []
-    return user, creature, equipped_items
+    return user, creature, equipped_items, main_hall_level(user)
 
 
 async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user, creature, equipped_items = await run_db(_me_sync, update.effective_user)
+    user, creature, equipped_items, hall_level = await run_db(_me_sync, update.effective_user)
     if creature is None:
-        await send_screen(update, 
+        await send_screen(update,
             "😅 هنوز موجودی نداری! دستور /start رو بزن تا از آزمایشگاه شروع کنی."
         )
         return
     is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
-    await send_screen(update, 
+    await send_screen(update,
         creature_card_text(user, creature, equipped_items),
         parse_mode="HTML",
-        reply_markup=creature_keyboard(is_owner),
+        reply_markup=creature_keyboard(is_owner, _locked_actions_for(hall_level)),
     )
 
 
@@ -3878,23 +3907,28 @@ async def lab_rename_start_callback(update: Update, context: ContextTypes.DEFAUL
     )
 
 
-def main_menu_keyboard(is_owner: bool = False) -> InlineKeyboardMarkup:
+def main_menu_keyboard(is_owner: bool = False, hall_level: int | None = None) -> InlineKeyboardMarkup:
     """The /menu command's keyboard — same compact categorised layout as the
-    creature-card menu, so the two can't drift."""
-    return creature_keyboard(is_owner)
+    creature-card menu, so the two can't drift. `hall_level` (when known) locks the
+    sections that haven't unlocked yet."""
+    return creature_keyboard(is_owner, _locked_actions_for(hall_level))
 
 
-def _menu_lab_line_sync(tg_user) -> str:
+def _menu_lab_line_sync(tg_user):
+    """Returns (lab-level line, main-hall level) — the hall level drives which menu
+    sections show as locked."""
+    from game.buildings import main_hall_level
+
     user, _ = get_or_create_user(tg_user)
-    return lab_level_line(user)
+    return lab_level_line(user), main_hall_level(user)
 
 
 async def _show_main_menu(update) -> None:
     """Main menu with the lab level + 'how far to the next level' line at the top."""
-    lab_line = await run_db(_menu_lab_line_sync, update.effective_user)
+    lab_line, hall_level = await run_db(_menu_lab_line_sync, update.effective_user)
     await send_screen(
         update, f"📋 <b>منوی اصلی</b>\n{lab_line}\n\nیکی رو انتخاب کن:",
-        parse_mode="HTML", reply_markup=main_menu_keyboard(),
+        parse_mode="HTML", reply_markup=main_menu_keyboard(hall_level=hall_level),
     )
 
 
@@ -3969,24 +4003,53 @@ async def route_private_keyword(update: Update, context: ContextTypes.DEFAULT_TY
     action = keywords.match(message.text)
     if action is None:
         return False
-    handler = _MENU_ACTIONS.get(_KEYWORD_TO_MENU.get(action, ""))
+    menu_action = _KEYWORD_TO_MENU.get(action, "")
+    handler = _MENU_ACTIONS.get(menu_action)
     if handler is None:
         # group-only combat word or brand fallback → just show the main menu
         await _show_main_menu(update)
         return True
+    # same unlock gate as the menu buttons, so a keyword can't bypass it
+    req = SECTION_HALL_REQ.get(menu_action)
+    if req is not None:
+        hall = await run_db(_hall_level_sync, update.effective_user)
+        if hall < req:
+            await update.effective_message.reply_text(
+                f"🔒 این بخش از سطح {req} «تالار مِهر» باز می‌شه. اول تالار مِهرت رو ارتقا بده."
+            )
+            return True
     await handler(update, context)
     return True
 
 
+def _hall_level_sync(tg_user) -> int:
+    from game.buildings import main_hall_level
+
+    user, _ = get_or_create_user(tg_user)
+    return main_hall_level(user)
+
+
 async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    await query.answer()
     action = query.data.split(":", 1)[1]
+    # one cheap read drives BOTH the lock gate and the lock icons in submenus
+    hall_level = await run_db(_hall_level_sync, update.effective_user)
+    # the authoritative gate: a section that hasn't unlocked yet never opens, even if
+    # a stale keyboard still shows it — the player is told which hall level it needs.
+    req = SECTION_HALL_REQ.get(action)
+    if req is not None and hall_level < req:
+        await query.answer(
+            f"🔒 این بخش از سطح {req} «تالار مِهر» باز می‌شه (الان سطح {hall_level}). "
+            "اول تالار مِهرت رو ارتقا بده.",
+            show_alert=True,
+        )
+        return
+    await query.answer()
     # a category button drills into its submenu (rendered in place)
     if action.startswith("cat_"):
         cat_key = action[4:]
         if cat_key in _CATEGORIES:
-            title, keyboard = _category_keyboard(cat_key)
+            title, keyboard = _category_keyboard(cat_key, _locked_actions_for(hall_level))
             await safe_edit_message_text(
                 query, f"{title}\n<i>یکی رو انتخاب کن:</i>", parse_mode="HTML", reply_markup=keyboard
             )

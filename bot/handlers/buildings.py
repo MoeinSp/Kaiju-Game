@@ -240,43 +240,55 @@ def _building_detail_text(view: dict) -> str:
         lines.append("\n💡 <i>هیولاهای فعال یا در حال تخم‌گذاری در غار قابل انتصاب به کارگری نیستن.</i>")
         return "\n".join(lines)
 
-    # ── non-producing buildings (main hall / forge / fusion lab) keep the simple view ─
-    if building.level > 0:
-        level_txt = f"سطح {building.level}/{cap}"
-        if btype != constants.MAIN_BUILDING and cap < constants.BUILDING_MAX_LEVEL:
-            level_txt += f" (سقف با تالار مِهر)"
-    elif unlocked:
-        level_txt = "🔒 ساخته‌نشده"
+    # ── non-producing / not-yet-built buildings: a clean, consistent "info card" ─────
+    hall = constants.BUILDING_LABELS[constants.MAIN_BUILDING]
+    # header status tag
+    if building.level == 0:
+        status_tag = "🔒 (قفل)" if not unlocked else "🔒 (ساخته‌نشده)"
     else:
-        level_txt = f"🔒 قفل — از سطح {unlock_level_for(btype)} تالار مِهر"
-    lines = [f"{label} — {level_txt}", f"<i>{constants.BUILDING_DESCRIPTIONS[btype]}</i>", ""]
+        status_tag = f"— سطح {building.level}/{cap}"
+        if btype != constants.MAIN_BUILDING and cap < constants.BUILDING_MAX_LEVEL:
+            status_tag += " (سقف با تالار مِهر)"
+    lines = [f"{label} {status_tag}", "", constants.BUILDING_DESCRIPTIONS[btype], ""]
 
+    # info bullets — each begins with its own icon so it reads as a bullet list
+    if building.level == 0 and not unlocked:
+        lines.append(f"🔓 پیش‌نیاز باز شدن: {hall} (سطح {unlock_level_for(btype)})")
+    benefit = constants.BUILDING_UPGRADE_BENEFIT.get(btype)
+    if benefit:
+        lines.append(f"📈 مزیت ارتقا: {benefit}")
+    note = constants.BUILDING_RULE_NOTE.get(btype)
+    if note:
+        lines.append(note)
+    # live built-state extras
     if btype == "blacksmith" and building.level > 0:
-        cap_items = building.level * constants.EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL
-        lines.append(f"🔨 سقف سطح تجهیزات: <b>+{cap_items}</b>")
-    if btype == constants.MAIN_BUILDING:
-        lines.append(f"⭐ سقف ستاره‌ی هیولاها: <b>{building.level}</b>")
+        lines.append(f"🔨 سقفِ فعلیِ سطحِ تجهیزات: <b>+{building.level * constants.EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL}</b>")
+    if btype == constants.MAIN_BUILDING and building.level > 0:
+        lines.append(f"⭐ سقفِ فعلیِ ستاره‌ی هیولاها: <b>{building.level}</b>")
 
+    lines += ["", div]
+    # footer: current build/upgrade state
     if upgrade is not None:
         remaining = (upgrade.finishes_at - timezone.now()).total_seconds()
         verb = "ساخت" if building.level == 0 else "ارتقا"
-        lines.append(f"\n⏳ در حال {verb} تا سطح {upgrade.target_level} — {_format_remaining(remaining)} مونده")
+        lines.append(f"⏳ در حال {verb} تا سطح {upgrade.target_level} — {_format_remaining(remaining)} مونده")
         lines.append(
             f"<i>می‌تونی با کارت سرعت یا {diamond_finish_price(upgrade)} 💎 همین الان تمومش کنی "
             "(هرچی بیشتر صبر کنی، ارزون‌تر می‌شه).</i>"
         )
+    elif building.level == 0 and not unlocked:
+        lines.append(f"🔒 هنوز قفله — از سطح {unlock_level_for(btype)} {hall} باز می‌شه.")
     elif all_builders_busy:
-        lines.append(f"\n⏳ هر دو کارگرت مشغول ساختمون‌های دیگه‌ان ({busy_count}/{builder_slots_n}).")
+        lines.append(f"⏳ کارگرها: هر دو کارگرت مشغول ساختمون‌های دیگه‌ان ({busy_count}/{builder_slots_n}).")
     elif building.level >= constants.BUILDING_MAX_LEVEL:
-        lines.append("\n🏆 این ساختمون به سقف سطح رسیده.")
+        lines.append("🏆 این ساختمون به سقف سطح رسیده.")
     elif building.level >= cap:
-        hall = constants.BUILDING_LABELS[constants.MAIN_BUILDING]
-        lines.append(f"\n🔒 برای ادامه اول باید {hall} رو ارتقا بدی.")
+        lines.append(f"🔒 برای ادامه اول باید {hall} رو ارتقا بدی.")
     else:
         cost, _minutes = upgrade_cost_and_minutes(building)
         verb = "🏗 ساخت" if building.level == 0 else "🔧 ارتقا به سطح"
         target = "" if building.level == 0 else f" {building.level + 1}"
-        lines.append(f"\n{verb}{target}: {cost} {get_emoji('coin')} · {_format_remaining(upgrade_seconds(building))}")
+        lines.append(f"{verb}{target}: {cost:,} {get_emoji('coin')} · {_format_remaining(upgrade_seconds(building))}")
     return "\n".join(lines)
 
 

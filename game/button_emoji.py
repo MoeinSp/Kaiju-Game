@@ -56,6 +56,9 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_alliance": ("اتحاد", "🤝", "economy"),
     "btn_deposit": ("واریز به خزانه", "💰", "economy"),
     "btn_heist": ("شبیخون", "🏴‍☠️", "economy"),
+    # a section still locked behind a higher main-hall level — shown instead of the
+    # section's own icon; tapping it explains the requirement rather than opening it
+    "btn_locked": ("بخش قفل", "🔒", "nav"),
     # confirm / destructive
     "btn_confirm": ("تأیید", "✅", "confirm"),
     "btn_cancel": ("لغو", "❌", "confirm"),
