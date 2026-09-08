@@ -1302,24 +1302,38 @@ def upgrade_cost(current_level: int) -> int:
     return 50 * (current_level + 1)
 
 
+def _part_cost_discount(level: int) -> float:
+    """Fraction of the base price actually charged at this level (a per-band discount
+    applied ON TOP of the base curve). New players quit if the early grind bites, so
+    the 10-20 band is slashed hard; the discount tapers back to almost nothing at the
+    top, where a player has plenty of gold. Below level 10 is already cheap → no cut."""
+    if level < 10:
+        return 1.00
+    if level < 20:
+        return 0.30   # «خیلی کاهش» — new-player band, 70% off
+    if level < 40:
+        return 0.50   # 50% off
+    if level < 60:
+        return 0.60   # 40% off
+    if level < 80:
+        return 0.80   # 20% off
+    return 0.90        # 80-100 → 10% off
+
+
 def part_upgrade_cost(current_level: int) -> int:
     """Gold to raise a body part from `current_level` to the next level.
 
-    A power curve `40*(L+1)^1.5`. It still escalates (the old linear `50*(L+1)` left
-    part power badly under-priced), but with a 1.5 exponent it *decelerates* — so the
-    high levels stay affordable instead of the brutal quadratic that priced a single
-    top-level upgrade at 200k+. The early levels are cheap enough for a new player to
-    tinker with:
+    A power curve `40*(L+1)^1.5` with per-band discounts (see _part_cost_discount) so
+    the mid-game — especially the new-player 10-20 band — isn't a wall. Sample prices:
 
-        L 0→1  : 40        L 20→21 : 3,578
-        L 5→6  : 588       L 50→51 : 14,142
-        L 10→11: 1,459     L 99→100: 40,000
+        L 0→1  : 40        L 20→21 : 1,789
+        L 10→11: 438       L 50→51 : 8,485
+        L 15→16 : 792      L 80→81 : 26,127   L 99→100: 36,000
 
-    Cumulative-to-cap per part: 1★(20) ≈ 29k, 3★(60) ≈ 447k, 5★(100) ≈ 1.6M — so a
-    fully-maxed 5★ (all four parts) is ~6.4M gold: a real sink, but not punishing.
+    Cumulative-to-cap per part drops accordingly (roughly: 1★≈14k, 3★≈250k, 5★≈1.0M).
     """
     lvl = max(0, current_level)
-    return round(40 * (lvl + 1) ** 1.5)
+    return max(1, round(40 * (lvl + 1) ** 1.5 * _part_cost_discount(lvl)))
 
 
 def random_element() -> str:
