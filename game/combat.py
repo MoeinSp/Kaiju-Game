@@ -63,6 +63,22 @@ def _simulate(creature_a: Creature, creature_b: Creature) -> tuple[Fighter, Figh
             _attack(attacker, defender, blow_by_blow, rng)
 
     winner = _decide_winner(fa, fb)
+    # Same-element rule: NO upsets. When both fighters share an element there's no
+    # elemental factor to muddy things, so the higher-power creature must win every
+    # time (the shown win-chance is 100/0 to match — see win_chance_pct). We force the
+    # intended winner AND make the HP report agree, so a "100% but lost" bug is
+    # impossible. Different elements stay probabilistic — advantage can beat power there.
+    if creature_a.element == creature_b.element:
+        pa, pb = combat_rating(fa.stats), combat_rating(fb.stats)
+        if pa != pb:
+            intended = fa if pa > pb else fb
+            loser = fb if intended is fa else fa
+            if winner is not intended:
+                winner = intended
+                if loser.hp > 0:
+                    loser.hp = 0
+                if intended.hp <= 0:
+                    intended.hp = max(1, round(intended.stats["hp"] * 0.15))
     return fa, fb, winner, round_num, blow_by_blow
 
 

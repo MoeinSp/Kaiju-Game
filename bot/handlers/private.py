@@ -176,6 +176,15 @@ ELEMENT_POWER_FACTOR = 1.15
 def win_chance_pct(my_power: int, opp_power: int, my_elem=None, opp_elem=None) -> int:
     my = max(1, int(my_power))
     opp = max(1, int(opp_power))
+    # Same-element fights are decided purely by power (see combat._simulate): the
+    # stronger side wins for certain, so the shown chance is an honest 100 / 0 (50 only
+    # on an exact power tie), never a misleading middle number.
+    if my_elem and opp_elem and my_elem == opp_elem:
+        if my > opp:
+            return 100
+        if my < opp:
+            return 0
+        return 50
     my_eff, opp_eff = float(my), float(opp)
     if my_elem and opp_elem:
         mult = constants.element_multiplier(my_elem, opp_elem)
