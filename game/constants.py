@@ -685,7 +685,7 @@ BUILDING_UPGRADE_MINUTES = {1: 48, 2: 288, 3: 1152, 4: 4320, 5: 7200}
 # broken the 1–2 week target. Full build-out is now ~63k, roughly 80% of what a
 # moderately active player earns over those 13 days, leaving the rest for crates,
 # fusion and the forge.
-BUILDING_UPGRADE_GOLD = {1: 250, 2: 1500, 3: 6000, 4: 25000, 5: 80000}
+BUILDING_UPGRADE_GOLD = {1: 250, 2: 1500, 3: 8000, 4: 80000, 5: 250000}
 
 # First CONSTRUCTION (level 0 → 1) of a not-yet-built building takes only a few
 # seconds — a new player shouldn't stare at an empty lot for hours before the base
