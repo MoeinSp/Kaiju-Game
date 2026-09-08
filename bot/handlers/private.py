@@ -422,7 +422,7 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
             lines.append(f"{cfg['label']}: <b>{level}/{cap}</b> 🔒 (سقف {creature.star_level} ستاره)")
             continue
         buy = min(step, cap - level)
-        cost = part_bulk_cost(level, buy)
+        cost = part_bulk_cost(level, buy, creature.rarity)
         gain = _part_power_gain(creature, part, equipped_items, buy)
         lines.append(
             f"{cfg['label']}: <b>{level}/{cap}</b> → ارتقا: {cost:,} {get_emoji('coin')} (+{gain} 💪)"

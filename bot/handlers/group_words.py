@@ -327,7 +327,7 @@ def _upgrade_card(user, creature, energy) -> tuple[str, InlineKeyboardMarkup]:
         if lvl >= cap:
             lines.append(f"{cfg['label']}: <b>{lvl}/{cap}</b> 🔒")
         else:
-            lines.append(f"{cfg['label']}: <b>{lvl}/{cap}</b> — +۱: {part_bulk_cost(lvl, 1):,} {get_emoji('coin')}")
+            lines.append(f"{cfg['label']}: <b>{lvl}/{cap}</b> — +۱: {part_bulk_cost(lvl, 1, creature.rarity):,} {get_emoji('coin')}")
     lines += [
         "",
         f"🍖 تغذیه: {constants.FEED_COST_COINS} 🪙 → {constants.FEED_XP_GAIN} XP · 🏋️ تمرین: رایگان (هر {constants.TRAIN_COOLDOWN_HOURS}س)",

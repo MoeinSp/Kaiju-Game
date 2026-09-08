@@ -371,6 +371,18 @@ PART_UPGRADE_MAX = PART_UPGRADE_CAP_PER_STAR * 5  # 100, at 5★
 def part_upgrade_cap(star_level: int) -> int:
     return max(1, star_level) * PART_UPGRADE_CAP_PER_STAR
 
+
+# A silent per-rarity discount on body-part upgrades: lower rarities pay less (they're
+# the ones a newer/casual player is upgrading), mythic pays the full price. Applied on
+# top of part_upgrade_cost; deliberately NOT surfaced anywhere in the UI.
+PART_COST_RARITY_MULT = {
+    "common": 0.5, "rare": 0.6, "epic": 0.7, "legendary": 0.8, "mythic": 1.0,
+}
+
+
+def part_cost_rarity_mult(rarity: str) -> float:
+    return PART_COST_RARITY_MULT.get(rarity, 1.0)
+
 # ── Equipment ────────────────────────────────────────────────────────────────
 # 4 slots per creature; at most one equipped item per slot (enforced in
 # game/equipment.py, not at the DB level, since a slot is a property of *where*

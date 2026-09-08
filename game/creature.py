@@ -336,10 +336,12 @@ def set_active_creature(user: User, creature_id: int) -> Creature:
     return target
 
 
-def part_bulk_cost(current_level: int, count: int) -> int:
-    """Total gold to raise a body part `count` levels from `current_level` — the sum
-    of the escalating per-level costs, so a ×5 buy is priced exactly as five ×1s."""
-    return sum(constants.part_upgrade_cost(current_level + i) for i in range(max(1, count)))
+def part_bulk_cost(current_level: int, count: int, rarity: str = "mythic") -> int:
+    """Total gold to raise a body part `count` levels from `current_level` — the sum of
+    the escalating per-level costs (so a ×5 buy is priced exactly as five ×1s), times a
+    silent per-rarity discount (lower rarities pay less; mythic pays full)."""
+    base = sum(constants.part_upgrade_cost(current_level + i) for i in range(max(1, count)))
+    return max(1, round(base * constants.part_cost_rarity_mult(rarity)))
 
 
 def reset_progression_for_transfer(creature: Creature) -> None:
@@ -389,7 +391,7 @@ def upgrade_part(user: User, creature: Creature, part: str, count: int = 1) -> t
         )
     # never overshoot the cap in a bulk (×5/×10) buy
     count = min(count, cap - current_level)
-    total = part_bulk_cost(current_level, count)
+    total = part_bulk_cost(current_level, count, creature.rarity)
     if user.coins < total:
         raise InsufficientGoldError(
             f"طلا کافی نداری! ارتقای {count} سطحِ این عضو <b>{total:,}</b> طلا می‌خواد "
