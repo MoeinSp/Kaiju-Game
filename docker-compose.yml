@@ -35,6 +35,13 @@ services:
     environment: &app_env
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY is required}
       DJANGO_DEBUG: "false"
+      # Cap glibc's per-thread malloc arenas. The bot runs a thread pool (run_db /
+      # sync_to_async), and glibc's default of up to 8×CPU arenas each retains freed
+      # chunks — under the bot's heavy per-request alloc/free churn that ballooned RSS
+      # to ~1GB (looked like a leak, was fragmentation) and OOM-killed it every few
+      # minutes. Two arenas + an aggressive trim threshold keep RSS flat (~100MB).
+      MALLOC_ARENA_MAX: "2"
+      MALLOC_TRIM_THRESHOLD_: "131072"
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-*}
       DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
       DJANGO_BEHIND_PROXY: ${DJANGO_BEHIND_PROXY:-true}

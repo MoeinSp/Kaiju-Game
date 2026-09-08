@@ -16,6 +16,8 @@ from game.buildings import (
     apply_speedup,
     builder_slots,
     buy_second_builder,
+    cancel_refund,
+    cancel_upgrade,
     collect,
     diamond_finish_price,
     finish_with_diamonds,
@@ -308,6 +310,16 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
                 )
             ]
         )
+        rows.append(
+            [
+                btn(
+                    f"❌ لغو ارتقا (نصف طلا برمی‌گرده: +{cancel_refund(upgrade):,})",
+                    emoji_key="btn_cancel",
+                    style=DANGER,
+                    callback_data=f"bld_cancel_ask:{building.id}",
+                )
+            ]
+        )
     elif building.level == 0 and not view["unlocked"]:
         pass  # locked: no build button until the hall catches up
     elif all_builders_busy:
@@ -492,6 +504,67 @@ async def building_finish_callback(update: Update, context: ContextTypes.DEFAULT
     await safe_edit_message_text(
         query,
         f"💎 <b>با {cost} الماس تموم شد!</b>\n\n" + _building_detail_text(view),
+        parse_mode="HTML",
+        reply_markup=_building_detail_keyboard(view),
+    )
+
+
+def _cancel_price_sync(tg_user, building_id):
+    user, _ = get_or_create_user(tg_user)
+    upgrade = upgrade_for_building(user, Building.objects.get(id=building_id, owner=user))
+    if upgrade is None:
+        raise GameError("این ساختمون در حال ارتقا نیست.")
+    return cancel_refund(upgrade), upgrade.target_level
+
+
+async def building_cancel_ask_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Confirm step before cancelling an upgrade — half the gold is refunded and the
+    build progress is lost, so it must be a deliberate choice, not a mis-tap."""
+    query = update.callback_query
+    building_id = int(query.data.split(":")[1])
+    try:
+        refund, target = await run_db(_cancel_price_sync, update.effective_user, building_id)
+    except (GameError, Building.DoesNotExist):
+        await query.answer("این ساختمون در حال ارتقا نیست.", show_alert=True)
+        return
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        f"❌ <b>لغو ارتقا</b>\n\n"
+        f"اگه این ارتقا (تا سطح {target}) رو لغو کنی، پیشرفتش از بین می‌ره و "
+        f"فقط <b>نصف</b> طلای پرداختی ({get_emoji('coin')} <b>{refund:,}</b>) بهت برمی‌گرده. مطمئنی؟",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[
+            btn(f"✅ بله، لغو کن (+{refund:,} طلا)", style=DANGER, callback_data=f"bld_cancel:{building_id}"),
+            btn("↩️ نه، ادامه بده", style=CONFIRM, callback_data=f"bld_pick:{building_id}"),
+        ]]),
+    )
+
+
+def _cancel_do_sync(tg_user, building_id):
+    user, _ = get_or_create_user(tg_user)
+    try:
+        building = Building.objects.get(id=building_id, owner=user)
+    except Building.DoesNotExist:
+        raise GameError("این ساختمون پیدا نشد.")
+    _, refund = cancel_upgrade(user, building_id)
+    building.refresh_from_db()
+    return _detail_view(user, building), refund
+
+
+async def building_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    building_id = int(query.data.split(":")[1])
+    try:
+        view, refund = await run_db(_cancel_do_sync, update.effective_user, building_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer(f"❌ ارتقا لغو شد — {refund:,} طلا برگشت.")
+    await safe_edit_message_text(
+        query,
+        f"❌ <b>ارتقا لغو شد.</b> {get_emoji('coin')} <b>{refund:,}</b> طلا (نصف هزینه) برگشت داده شد.\n\n"
+        + _building_detail_text(view),
         parse_mode="HTML",
         reply_markup=_building_detail_keyboard(view),
     )
@@ -748,6 +821,8 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(building_upgrade_callback, pattern=r"^bld_upgrade:"))
     application.add_handler(CallbackQueryHandler(building_finish_ask_callback, pattern=r"^bld_finish_ask:"))
     application.add_handler(CallbackQueryHandler(building_finish_callback, pattern=r"^bld_finish:"))
+    application.add_handler(CallbackQueryHandler(building_cancel_ask_callback, pattern=r"^bld_cancel_ask:"))
+    application.add_handler(CallbackQueryHandler(building_cancel_callback, pattern=r"^bld_cancel:"))
     application.add_handler(
         CallbackQueryHandler(building_speedup_list_callback, pattern=r"^bld_speedup_list:")
     )

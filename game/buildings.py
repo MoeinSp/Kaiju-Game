@@ -469,6 +469,35 @@ def apply_speedup_bulk(user: User, minutes: int, count: int, building_id: int | 
     return upgrade, False, use
 
 
+def cancel_refund(upgrade: BuildingUpgrade) -> int:
+    """Gold refunded when this in-progress upgrade is cancelled: HALF what was paid
+    for its target level, floored."""
+    return constants.BUILDING_UPGRADE_GOLD.get(upgrade.target_level, 0) // 2
+
+
+@transaction.atomic
+def cancel_upgrade(user: User, building_id: int) -> tuple[Building, int]:
+    """Cancel an in-progress upgrade and refund HALF the gold that was paid for it.
+    The building stays at its current level — the target is never applied — and the
+    builder slot is freed. Returns (building, refunded_gold)."""
+    user = User.objects.select_for_update().get(id=user.id)
+    upgrade = (
+        BuildingUpgrade.objects.select_for_update()
+        .select_related("building")
+        .filter(owner=user, building_id=building_id)
+        .first()
+    )
+    if upgrade is None:
+        raise GameError("این ساختمون در حال ارتقا نیست.")
+    building = upgrade.building
+    refund = cancel_refund(upgrade)
+    if refund > 0:
+        user.coins += refund
+        user.save(update_fields=["coins"])
+    upgrade.delete()
+    return building, refund
+
+
 def diamond_finish_price(upgrade: BuildingUpgrade) -> int:
     """Diamonds to finish this upgrade right now, from the time still remaining."""
     remaining = (upgrade.finishes_at - timezone.now()).total_seconds()

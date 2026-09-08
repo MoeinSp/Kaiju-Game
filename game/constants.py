@@ -685,7 +685,7 @@ BUILDING_UPGRADE_MINUTES = {1: 48, 2: 288, 3: 1152, 4: 4320, 5: 7200}
 # broken the 1–2 week target. Full build-out is now ~63k, roughly 80% of what a
 # moderately active player earns over those 13 days, leaving the rest for crates,
 # fusion and the forge.
-BUILDING_UPGRADE_GOLD = {1: 150, 2: 450, 3: 1200, 4: 2800, 5: 6000}
+BUILDING_UPGRADE_GOLD = {1: 250, 2: 1500, 3: 6000, 4: 25000, 5: 80000}
 
 # First CONSTRUCTION (level 0 → 1) of a not-yet-built building takes only a few
 # seconds — a new player shouldn't stare at an empty lot for hours before the base
@@ -699,7 +699,7 @@ BUILDING_CONSTRUCT_SECONDS = 5
 # the SMALLER of the two sides' caps, so both parties benefit from levelling it. It
 # also gates creature transfers by star: moving an N★ creature needs BOTH sides at
 # trade-hall level ≥ N. Like every building it can't exceed the main hall's level.
-TRADE_HALL_GOLD_CAP = {0: 0, 1: 5_000, 2: 25_000, 3: 100_000, 4: 500_000, 5: 2_000_000}
+TRADE_HALL_GOLD_CAP = {0: 0, 1: 100_000, 2: 300_000, 3: 500_000, 4: 1_000_000, 5: 2_000_000}
 
 
 def trade_hall_gold_cap(level: int) -> int:
@@ -1290,20 +1290,21 @@ def upgrade_cost(current_level: int) -> int:
 def part_upgrade_cost(current_level: int) -> int:
     """Gold to raise a body part from `current_level` to the next level.
 
-    Quadratic escalation (was a gentle linear `50*(L+1)`, which made high levels
-    trivially cheap and left part power badly under-priced). The FIRST few levels stay
-    cheap so new players can still tinker, but the cost ramps hard so maxing a part is
-    a real long-term gold sink instead of pocket change:
+    A power curve `40*(L+1)^1.5`. It still escalates (the old linear `50*(L+1)` left
+    part power badly under-priced), but with a 1.5 exponent it *decelerates* — so the
+    high levels stay affordable instead of the brutal quadratic that priced a single
+    top-level upgrade at 200k+. The early levels are cheap enough for a new player to
+    tinker with:
 
-        L 0→1  : 40        L 20→21 : 9,240
-        L 5→6  : 840       L 50→51 : 54,600
-        L 10→11: 2,640     L 99→100: 202,000
+        L 0→1  : 40        L 20→21 : 3,578
+        L 5→6  : 588       L 50→51 : 14,142
+        L 10→11: 1,459     L 99→100: 40,000
 
-    Cumulative-to-cap per part: 1★(20) ≈ 61.6k, 3★(60) ≈ 1.51M, 5★(100) ≈ 6.87M —
-    so a fully-maxed 5★ (all four parts) is ~27.5M gold, a genuine endgame goal.
+    Cumulative-to-cap per part: 1★(20) ≈ 29k, 3★(60) ≈ 447k, 5★(100) ≈ 1.6M — so a
+    fully-maxed 5★ (all four parts) is ~6.4M gold: a real sink, but not punishing.
     """
     lvl = max(0, current_level)
-    return 20 * (lvl + 1) * (lvl + 2)
+    return round(40 * (lvl + 1) ** 1.5)
 
 
 def random_element() -> str:
