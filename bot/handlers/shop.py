@@ -216,7 +216,7 @@ def _item_shop_render(items, coins, diamonds, gem=None) -> tuple[str, InlineKeyb
         if gem["claimed"]:
             lines.append("✅ امروز خریدیش")
         else:
-            lines.append(f"🏷 <b>{gem['price']}</b> {get_emoji('diamond')}")
+            lines.append(f"🏷 <b>{gem['price']}</b> {get_emoji('diamond')} · <i>روزی یک‌بار قابل خرید</i>")
             rows.append([btn(f"💎 خرید {gem['name']} ({gem['price']} الماس)", style=SHOP, callback_data="gemk_buy")])
     if not items:
         lines.append("\n<i>الان آیتم ویژه‌ی دیگه‌ای موجود نیست. بعداً سر بزن.</i>")
