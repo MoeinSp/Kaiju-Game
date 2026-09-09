@@ -16,6 +16,7 @@ class User(models.Model):
     dna_fragments = models.IntegerField(default=100)
     diamonds = models.IntegerField(default=100)  # premium currency: diamond collector, daily wheel, diamond boxes
     biocrate_tickets = models.IntegerField(default=0)  # earned by exchanging gear; opens genetic boxes free
+    gem_kaiju_claimed_on = models.DateField(null=True, blank=True)  # last day the daily gem-kaiju was bought
 
     energy = models.IntegerField(default=50)  # keep in sync with game.constants.MAX_ENERGY
     energy_updated_at = models.DateTimeField(default=timezone.now)

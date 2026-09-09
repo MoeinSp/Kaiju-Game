@@ -195,13 +195,13 @@ async def shield_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # ── 🛍 owner-authored item shop / packs ───────────────────────────────────────
 def _item_shop_sync(tg_user):
-    from game import itemshop
+    from game import itemshop, gemkaiju
 
     user, _ = get_or_create_user(tg_user)
-    return itemshop.list_items(active_only=True), user.coins, user.diamonds
+    return itemshop.list_items(active_only=True), user.coins, user.diamonds, gemkaiju.gem_offer(user)
 
 
-def _item_shop_render(items, coins, diamonds) -> tuple[str, InlineKeyboardMarkup]:
+def _item_shop_render(items, coins, diamonds, gem=None) -> tuple[str, InlineKeyboardMarkup]:
     from game import itemshop
 
     lines = [
@@ -209,8 +209,20 @@ def _item_shop_render(items, coins, diamonds) -> tuple[str, InlineKeyboardMarkup
         f"<blockquote>{get_emoji('coin')} {coins:,} طلا · {get_emoji('diamond')} {diamonds} الماس</blockquote>",
     ]
     rows = []
+    # 💎 daily gem-kaiju — a same-species/same-rarity twin of one of the player's top kaiju
+    if gem:
+        label = constants.RARITY_LABELS[gem["rarity"]]
+        lines.append(
+            f"\n💎 <b>کایجوی جمیِ روزانه</b> — {gem['name']} {label}\n"
+            "   <i>هم‌نوع و هم‌ردهِ یکی از قوی‌ترین کایجوهات — عالی برای فیوژن! (روزی یک‌بار)</i>"
+        )
+        if gem["claimed"]:
+            lines.append("   ✅ امروز خریدیش — فردا دوباره بیا.")
+        else:
+            lines.append(f"   قیمت: <b>{gem['price']}</b> {get_emoji('diamond')}")
+            rows.append([btn(f"💎 خرید کایجوی جمی ({gem['price']} الماس)", style=SHOP, callback_data="gemk_buy")])
     if not items:
-        lines.append("\n<i>الان آیتم ویژه‌ای موجود نیست. بعداً سر بزن.</i>")
+        lines.append("\n<i>الان آیتم ویژه‌ی دیگه‌ای موجود نیست. بعداً سر بزن.</i>")
     for it in items:
         contents = json.loads(it.contents_json)
         lines.append(
@@ -225,35 +237,66 @@ def _item_shop_render(items, coins, diamonds) -> tuple[str, InlineKeyboardMarkup
 
 
 async def item_shop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    items, coins, diamonds = await run_db(_item_shop_sync, update.effective_user)
-    text, keyboard = _item_shop_render(items, coins, diamonds)
+    items, coins, diamonds, gem = await run_db(_item_shop_sync, update.effective_user)
+    text, keyboard = _item_shop_render(items, coins, diamonds, gem)
     await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _item_buy_sync(tg_user, item_id):
-    from game import itemshop
+    from game import itemshop, gemkaiju
 
     user, _ = get_or_create_user(tg_user)
     result = itemshop.buy(user, item_id)
-    return result, itemshop.list_items(active_only=True)
+    return result, itemshop.list_items(active_only=True), gemkaiju.gem_offer(user)
 
 
 async def item_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     item_id = int(query.data.split(":")[1])
     try:
-        result, items = await run_db(_item_buy_sync, update.effective_user, item_id)
+        result, items, gem = await run_db(_item_buy_sync, update.effective_user, item_id)
     except GameError as exc:
         if await show_gold_error(query, exc):
             return
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("✅ خریداری شد!")
-    text, keyboard = _item_shop_render(items, result["coins"], result["diamonds"])
+    text, keyboard = _item_shop_render(items, result["coins"], result["diamonds"], gem)
     got = "، ".join(result["notes"])
     await safe_edit_message_text(
         query,
         f"✅ <b>خرید موفق: {result['emoji']} {result['title']}</b>\n🎁 گرفتی: {got}\n\n━━━━━━━━━━\n" + text,
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+def _gem_buy_sync(tg_user):
+    from game import gemkaiju, itemshop
+
+    user, _ = get_or_create_user(tg_user)
+    result = gemkaiju.buy_gem_kaiju(user)
+    return result, itemshop.list_items(active_only=True), gemkaiju.gem_offer(user)
+
+
+async def gem_kaiju_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    try:
+        result, items, gem = await run_db(_gem_buy_sync, update.effective_user)
+    except GameError as exc:
+        if await show_gold_error(query, exc):
+            return
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("✅ کایجوی جمی خریداری شد!")
+    c = result["creature"]
+    text, keyboard = _item_shop_render(items, result["coins"], result["diamonds"], gem)
+    await safe_edit_message_text(
+        query,
+        f"✅ <b>کایجوی جمی خریده شد!</b>\n"
+        f"🧬 <b>{c.name}</b> {constants.RARITY_LABELS[c.rarity]} به کلکسیونت اضافه شد "
+        f"(−{result['price']} {get_emoji('diamond')}).\n"
+        "<i>از «🗂 کلکسیون» می‌تونی فعالش کنی یا برای فیوژن استفاده کنی.</i>\n\n━━━━━━━━━━\n" + text,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -403,3 +446,4 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(group_shield_buy_callback, pattern=r"^gshield_buy:"))
     application.add_handler(CommandHandler("items", item_shop_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(item_buy_callback, pattern=r"^sitem_buy:\d+$"))
+    application.add_handler(CallbackQueryHandler(gem_kaiju_buy_callback, pattern=r"^gemk_buy$"))
