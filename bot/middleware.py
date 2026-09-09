@@ -209,18 +209,22 @@ async def enforce_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if is_check_callback:
         await update.callback_query.answer("✅ عضویت تأیید شد!")
-        text = "✅ <b>عضویتت تأیید شد!</b> حالا دوباره از /start یا منو استفاده کن."
+        confirm_line = "✅ <b>عضویتت تأیید شد!</b> حالا دوباره از /start یا منو استفاده کن."
         if granted:
             tot = {
                 "coin": sum(ch.reward_coins for ch in granted),
                 "dna": sum(ch.reward_dna for ch in granted),
                 "diamond": sum(ch.reward_diamonds for ch in granted),
             }
-            rlines = ["", "🎁 <b>جایزه‌ی عضویت گرفتی:</b>"]
+            # reward first (the headline), the confirm/instruction line goes last
+            lines = ["🎁 <b>جایزه‌ی عضویتت رو گرفتی:</b>"]
             for emo in ("coin", "dna", "diamond"):
                 if tot[emo]:
-                    rlines.append(f"   ◦ {get_emoji(emo)} <code>+{tot[emo]:,}</code>")
-            text += "\n" + "\n".join(rlines)
+                    lines.append(f"   ◦ {get_emoji(emo)} <code>+{tot[emo]:,}</code>")
+            lines += ["", confirm_line]
+            text = "\n".join(lines)
+        else:
+            text = confirm_line
         await safe_edit_message_text(update.callback_query, text, parse_mode="HTML")
         raise ApplicationHandlerStop
 
