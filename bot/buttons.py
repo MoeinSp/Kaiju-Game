@@ -77,9 +77,16 @@ def btn(
         if icon is not None:
             # Telegram draws the icon *before* the label, so any emoji baked into the
             # label would render a SECOND time next to the Premium icon. Strip it.
-            kwargs["icon_custom_emoji_id"] = icon
-            if label_has_emoji:
-                label = _LEADING_EMOJI.sub("", label, count=1)
+            stripped = _LEADING_EMOJI.sub("", label, count=1) if label_has_emoji else label
+            if stripped.strip():
+                # there's real text left → show the Premium icon + that text
+                kwargs["icon_custom_emoji_id"] = icon
+                label = stripped
+            # else: the label was ONLY an emoji. A button MUST have non-empty text
+            # (Telegram rejects an empty label — "button text must be non-empty"), so a
+            # Premium-icon-ONLY button is impossible: keep the plain emoji as the label
+            # and skip the icon. Without this, every themed emoji-only button broke the
+            # whole message edit (e.g. the group attack result stopped updating).
         elif not label_has_emoji:
             # no Premium icon and the label has no emoji of its own → prefix the
             # key's unicode fallback so the button still has an identifying glyph
