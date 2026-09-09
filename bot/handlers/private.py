@@ -307,49 +307,58 @@ def creature_card_text(user, creature, equipped_items: list | None = None) -> st
     return "\n".join(lines)
 
 
-def balance_text(user) -> str:
-    """The «موجودی» / balance card — just the wallet + energy, cleanly laid out."""
-    from game.energy import minutes_until_next_point
+def _fine_bar(current: int, total: int, width: int = 10) -> str:
+    """A smooth block bar using eighth-blocks for the partial cell, e.g. «█████████▊»."""
+    frac = 0.0 if total <= 0 else max(0.0, min(1.0, current / total))
+    filled = frac * width
+    full = int(filled)
+    eighths = " ▏▎▍▌▋▊▉█"
+    partial = eighths[round((filled - full) * 8)] if full < width else ""
+    bar = ("█" * full + partial)
+    return bar + "░" * (width - len(bar))
+
+
+def balance_text(user, kaiju_count: int = 0) -> str:
+    """The «موجودی» / balance card — wallet + kaiju count + energy, in a compact
+    English layout (per the owner's requested format)."""
+    from game.energy import seconds_until_next_point
 
     energy = sync_energy(user)
-    if energy >= constants.MAX_ENERGY:
-        en_lines = [f"{get_emoji('energy')} انرژی: {pct_bar(energy, constants.MAX_ENERGY)} ({energy}/{constants.MAX_ENERGY}) ✅ پره"]
+    div = "─────────────────"
+    lines = [
+        f"👤 <b>{lab_display(user)}</b>",
+        div,
+        f"{get_emoji('coin')} <b>{user.coins:,}</b> GOLD",
+        f"{get_emoji('dna')} <b>{user.dna_fragments:,}</b> DNA",
+        f"{get_emoji('diamond')} <b>{user.diamonds:,}</b> DIAMOND",
+        f"{get_emoji('creature')} <b>{kaiju_count}</b> KAIJU",
+        div,
+        f"{get_emoji('energy')} ENERGY {energy}/{constants.MAX_ENERGY}",
+        f"{_fine_bar(energy, constants.MAX_ENERGY)} {round(100 * energy / max(1, constants.MAX_ENERGY))}%",
+    ]
+    if energy < constants.MAX_ENERGY:
+        secs = seconds_until_next_point(user)
+        lines += ["", f"⏱ Recharge: {secs // 60:02d}:{secs % 60:02d}"]
     else:
-        en_lines = [
-            f"{get_emoji('energy')} انرژی: {pct_bar(energy, constants.MAX_ENERGY)} ({energy}/{constants.MAX_ENERGY})",
-            f"⏳ شارژ واحد بعدی: ~{minutes_until_next_point(user)} دقیقه",
-        ]
-    div = "──────────────"
-    return "\n".join([
-        "🏦 <b>خزانه دارایی | Balance</b>",
-        "",
-        f"👤 بازیکن: <b>{lab_display(user)}</b>",
-        "",
-        div,
-        "",
-        f"{get_emoji('coin')} طلا: <b>{user.coins:,}</b>",
-        f"{get_emoji('dna')} دی‌ان‌ای (DNA): <b>{user.dna_fragments:,}</b>",
-        f"{get_emoji('diamond')} الماس: <b>{user.diamonds:,}</b>",
-        "",
-        div,
-        "",
-        *en_lines,
-    ])
+        lines += ["", "✅ Full"]
+    return "\n".join(lines)
 
 
 def _balance_sync(tg_user):
+    from bio_lab.models import Creature
+
     user, _ = get_or_create_user(tg_user)
-    return user
+    return user, Creature.objects.filter(owner=user).count()
 
 
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = await run_db(_balance_sync, update.effective_user)
+    user, kaiju_count = await run_db(_balance_sync, update.effective_user)
     chat = update.effective_chat
     in_group = chat is not None and chat.type in ("group", "supergroup")
     # in a group the balance is a plain readout — no «بازگشت» button (it opened the
     # PV menu, which is broken in a group). Only the DM gets the back button.
     keyboard = None if in_group else back_only_keyboard("menu:me", "بازگشت به منو")
-    await send_screen(update, balance_text(user), parse_mode="HTML", reply_markup=keyboard)
+    await send_screen(update, balance_text(user, kaiju_count), parse_mode="HTML", reply_markup=keyboard)
 
 
 def _slot_summary_lines(slots: list[dict]) -> list[str]:

@@ -723,13 +723,12 @@ async def raid_attack_confirm_callback(update: Update, context: ContextTypes.DEF
 
     text = _raid_attack_view(creature, boss, dmg, defeated, completed_missions, reward_lines,
                              speedup_won, energy_left, dna_gain, attacks_left)
-    from bot.handlers.group_words import _pm_button
-
-    kb_rows = []
+    # compact: two icon-only buttons (raid table + overall raid rank), no PM shortcut
+    row = []
     if not defeated:
-        kb_rows.append([btn("📊 جدول اتک به رید", style=NAV, callback_data="raidlb")])
-    kb_rows.append([btn("🐲 رتبه‌بندی کلی رید", style=NAV, callback_data="raidrankall")])
-    kb_rows.append([_pm_button()])
+        row.append(btn("📊", emoji_key="btn_raid_table", style=NAV, callback_data="raidlb"))
+    row.append(btn("🐲", emoji_key="btn_raid_rank", style=NAV, callback_data="raidrankall"))
+    kb_rows = [row]
     await query.answer("🟢 اتک زده شد!")
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb_rows))
 
@@ -812,12 +811,7 @@ async def raid_overall_rank_callback(update: Update, context: ContextTypes.DEFAU
             if rank == 4:
                 lines.append("──────────────")
             lines.append(f"{rank}. {name} │ 🐉 لِوِل {r['raid_level']} │ 👥 {r['member_count']}")
-    from bot.handlers.group_words import _pm_button
-
-    kb = InlineKeyboardMarkup([
-        [btn("🔄 به‌روزرسانی", style=NAV, callback_data="raidrankall")],
-        [_pm_button()],
-    ])
+    kb = InlineKeyboardMarkup([[btn("🔄", emoji_key="btn_recheck", style=NAV, callback_data="raidrankall")]])
     await query.answer()
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=kb)
 
@@ -841,13 +835,10 @@ async def raid_leaderboard_callback(update: Update, context: ContextTypes.DEFAUL
         return
     await query.answer()
     text = _raid_leaderboard_text(lb)
-    from bot.handlers.group_words import _pm_button
-
-    kb = InlineKeyboardMarkup([
-        [btn("🔄 به‌روزرسانی", style=NAV, callback_data="raidlb")],
-        [btn("🐲 رتبه‌بندی کلی رید", style=NAV, callback_data="raidrankall")],
-        [_pm_button()],
-    ])
+    kb = InlineKeyboardMarkup([[
+        btn("🔄", emoji_key="btn_recheck", style=NAV, callback_data="raidlb"),
+        btn("🐲", emoji_key="btn_raid_rank", style=NAV, callback_data="raidrankall"),
+    ]])
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
 
 
@@ -1301,13 +1292,9 @@ async def pvp_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     if opp_tag.strip():
         text = f"🏭 حریف: <b>{opp_tag}</b>\n\n" + text
     context.user_data["pvp_last_detail"] = result.get("detail_log", "")
-    # keep it uncluttered — only the relevant action (fight details) + a PM shortcut,
-    # not the generic reward/help footer that had nothing to do with this attack.
-    from bot.handlers.group_words import _pm_button
-
+    # keep it uncluttered — a single icon-only «fight details» button, no PM shortcut
     keyboard = InlineKeyboardMarkup([
-        [btn("🔍 جزییات حمله", style=NAV, callback_data=f"gatk_detail:{update.effective_user.id}")],
-        [_pm_button()],
+        [btn("🔍", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_detail:{update.effective_user.id}")],
     ])
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 

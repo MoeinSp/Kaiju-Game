@@ -37,6 +37,10 @@ def _scoped(action: str, user_id: int) -> str:
     return f"grp:{action}:{user_id}"
 
 
+def _scoped_pg(action: str, user_id: int, page: int) -> str:
+    return f"grp:{action}:{user_id}:{page}"
+
+
 def group_footer_keyboard(user_id: int, *, skip: str | None = None) -> InlineKeyboardMarkup:
     """The standard coloured keyboard hung under every group reply.
 
@@ -114,23 +118,33 @@ def _equipment_card(user, creature, slots) -> tuple[str, InlineKeyboardMarkup]:
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
-def _collection_card(user, creatures) -> tuple[str, InlineKeyboardMarkup]:
-    lines = [f"{get_emoji('collection')} <b>کلکسیون {lab_display(user)}</b> — {len(creatures)} هیولا", ""]
-    for creature in creatures[:12]:
+_COLLECTION_PAGE = 8
+
+
+def _collection_card(user, creatures, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+    # paginated, 3 buttons only: ◀️ / ▶️ on one row, then «انتخاب کایجو فعال»
+    total_pages = max(1, (len(creatures) + _COLLECTION_PAGE - 1) // _COLLECTION_PAGE)
+    page = max(0, min(page, total_pages - 1))
+    chunk = creatures[page * _COLLECTION_PAGE:(page + 1) * _COLLECTION_PAGE]
+    lines = [
+        f"{get_emoji('collection')} <b>کلکسیون {lab_display(user)}</b> — {len(creatures)} هیولا"
+        + (f"  (صفحه {page + 1}/{total_pages})" if total_pages > 1 else ""),
+        "",
+    ]
+    for creature in chunk:
         tag = "🟢 " if creature.is_active else ""
         lines.append(
             f"{tag}{creature.name} {'⭐' * creature.star_level} · "
             f"{constants.RARITY_LABELS[creature.rarity]} · Lv{creature.level}"
         )
-    if len(creatures) > 12:
-        lines.append(f"<i>… و {len(creatures) - 12} تای دیگه</i>")
     rows = [
+        # row 1: prev / next — text-free arrows (they clamp at the ends)
         [
-            btn("هیولا", emoji_key="btn_creature", style=NAV, callback_data=_scoped("creature", user.id)),
-            btn("تجهیزات", emoji_key="btn_inventory", style=NAV, callback_data=_scoped("equipment", user.id)),
+            btn("◀️", style=NAV, callback_data=_scoped_pg("collection", user.id, page - 1)),
+            btn("▶️", style=NAV, callback_data=_scoped_pg("collection", user.id, page + 1)),
         ],
-        [btn("🔄 انتخاب هیولای فعال", style=NAV, callback_data=_scoped("select", user.id))],
-        [_pm_button()],
+        # row 2: activate a creature (premium icon)
+        [btn("انتخاب کایجو فعال", emoji_key="btn_creature", style=NAV, callback_data=_scoped("select", user.id))],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -749,14 +763,14 @@ def _card_sync(tg_user, chat, action):
     return data
 
 
-def _render(action: str, data: dict) -> tuple[str, InlineKeyboardMarkup]:
+def _render(action: str, data: dict, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
     user = data["user"]
     if action == "creature":
         return _creature_card(user, data["creature"], data["equipped"], data["slots"])
     if action == "equipment":
         return _equipment_card(user, data["creature"], data["slots"])
     if action == "collection":
-        return _collection_card(user, data["creatures"])
+        return _collection_card(user, data["creatures"], page)
     if action == "select":
         return _select_card(user, data["creatures"], data.get("powers", {}))
     if action == "lab":
@@ -1042,7 +1056,9 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def group_card_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Re-render a card in place. Only the person who summoned it may press."""
     query = update.callback_query
-    _, action, owner_id = query.data.split(":")
+    parts = query.data.split(":")
+    action, owner_id = parts[1], parts[2]
+    page = int(parts[3]) if len(parts) > 3 else 0  # optional pagination (collection)
     if update.effective_user.id != int(owner_id):
         await query.answer("این کارت مال تو نیست — خودت کلمه‌ش رو بفرست.", show_alert=True)
         return
@@ -1066,7 +1082,7 @@ async def group_card_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
-    text, keyboard = _render(action, data)
+    text, keyboard = _render(action, data, page)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 

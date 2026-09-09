@@ -52,6 +52,16 @@ def minutes_until_next_point(user: User) -> int:
     return max(1, round(remaining / 60))
 
 
+def seconds_until_next_point(user: User) -> int:
+    """Seconds until the next energy point regenerates (0 when full) — like
+    minutes_until_next_point but precise, for a MM:SS countdown."""
+    if user.energy >= constants.MAX_ENERGY:
+        return 0
+    elapsed_seconds = (timezone.now() - user.energy_updated_at).total_seconds()
+    remaining = constants.ENERGY_REGEN_MINUTES * 60 - (elapsed_seconds % (constants.ENERGY_REGEN_MINUTES * 60))
+    return max(1, int(remaining))
+
+
 def spend_energy(user: User, amount: int, action_label: str) -> None:
     """Raises GameError if not enough energy. Otherwise deducts it. Caller must .save() `user`."""
     sync_energy(user)

@@ -33,6 +33,10 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_hunt": ("شکار انفرادی", "🏹", "action"),
     "btn_attack": ("حمله", "⚔️", "action"),
     "btn_revenge": ("انتقام", "⚔️", "action"),
+    # compact icon-only buttons in group screens (raid + PvP)
+    "btn_raid_table": ("جدول اتک رید", "📊", "action"),
+    "btn_raid_rank": ("رتبه‌بندی کلی رید", "🐲", "action"),
+    "btn_atk_details": ("جزییات حمله", "🔍", "action"),
     "btn_arena": ("آرنا", "🏆", "action"),
     "btn_feed": ("تغذیه", "🍖", "action"),
     "btn_train": ("تمرین", "🏋️", "action"),
