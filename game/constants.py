@@ -440,8 +440,12 @@ BASE_CRIT_CHANCE = 0.10
 BASE_LIFESTEAL = 0.0
 
 # ── Economy: loot boxes, fusion, wagered duels, alliance heist ────────────────
-BIOCRATE_GOLD_COST = 250
-BIOCRATE_DNA_COST = 15  # a biocrate now also costs DNA, giving DNA a real everyday use
+BIOCRATE_GOLD_COST = 500   # doubled per owner request (was 250)
+BIOCRATE_DNA_COST = 30     # doubled per owner request (was 15)
+
+# Genetic-box TICKETS: earned by exchanging spare gear (see game/equipment.py). One
+# ticket opens one basic genetic box for free. A mythic piece is worth 2, a legendary 1.
+EQUIP_TICKET_VALUE = {"mythic": 2, "legendary": 1}
 BIOCRATE_CREATURE_CHANCE = 0.04  # 4% yields a creature; the other 96% is equipment
 
 # Rarity split used ONLY when the crate rolls a creature (the 10% above). Tuned so
@@ -471,7 +475,7 @@ BIOCRATE_TIERS = {
         "equip_weights": LOOTBOX_RARITY_WEIGHTS,  # standard: mostly common gear
     },
     "rare": {
-        "label": "🎁 باکس ژنتیکی نایاب", "gold": 2000, "dna": 60,
+        "label": "🎁 باکس ژنتیکی نایاب", "gold": 4000, "dna": 120,
         "creature_chance": 0.10,
         # epic/legendary/mythic odds ÷3, freed weight → common + rare (was 45/30/15/7/3)
         "weights": {"common": 53, "rare": 39, "epic": 5, "legendary": 2.3, "mythic": 1},
@@ -479,7 +483,7 @@ BIOCRATE_TIERS = {
         "equip_weights": {"common": 10, "rare": 55, "epic": 25, "legendary": 8, "mythic": 2},
     },
     "epic": {
-        "label": "💎 باکس ژنتیکی حماسی", "gold": 5000, "dna": 120,
+        "label": "💎 باکس ژنتیکی حماسی", "gold": 10000, "dna": 240,
         "creature_chance": 0.18,
         # epic/legendary/mythic odds ÷3, freed weight → common + rare (was 25/30/26/12/5)
         "weights": {"common": 39, "rare": 45, "epic": 8.7, "legendary": 4, "mythic": 1.7},

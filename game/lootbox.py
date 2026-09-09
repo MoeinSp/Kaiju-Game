@@ -86,6 +86,21 @@ def open_biocrate(user: User, tier: str = "basic") -> dict:
 
 
 @transaction.atomic
+def open_biocrate_with_ticket(user: User) -> dict:
+    """Open one BASIC genetic box using a ticket (no gold/DNA). Tickets come from
+    exchanging spare legendary/mythic gear (game.equipment.exchange_for_tickets)."""
+    user = User.objects.select_for_update().get(id=user.id)
+    if user.biocrate_tickets < 1:
+        raise GameError("بلیط باکس ژنتیکی نداری. از «مبادله تجهیزات» توی فروشگاه بلیط بگیر.")
+    user.biocrate_tickets -= 1
+    user.save(update_fields=["biocrate_tickets"])
+    cfg = _biocrate_cfg("basic")
+    result = _biocrate_roll_once(user, cfg, "basic")
+    result["tickets_left"] = user.biocrate_tickets
+    return result
+
+
+@transaction.atomic
 def open_biocrate_bulk(user: User, tier: str = "basic") -> dict:
     """Pay for BULK_PAY boxes, open BULK_OPEN (one free). Returns an aggregate."""
     cfg = _biocrate_cfg(tier)

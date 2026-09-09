@@ -90,11 +90,16 @@ def _biocrate_bulk_sync(tg_user, tier):
 
 def _user_coins_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
-    return user.coins, user.dna_fragments
+    return user.coins, user.dna_fragments, user.biocrate_tickets
 
 
-def _biocrate_list_keyboard() -> InlineKeyboardMarkup:
+def _biocrate_list_keyboard(tickets: int = 0) -> InlineKeyboardMarkup:
     rows = []
+    if tickets > 0:
+        rows.append([btn(
+            f"🎟 باز کردن با بلیط ({tickets} تا)",
+            style=CONFIRM, callback_data="bc_ticket",
+        )])
     for tier in constants.BIOCRATE_TIER_ORDER:
         cfg = constants.BIOCRATE_TIERS[tier]
         rows.append([btn(
@@ -106,15 +111,54 @@ def _biocrate_list_keyboard() -> InlineKeyboardMarkup:
 
 
 async def biocrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    coins, dna = await run_db(_user_coins_sync, update.effective_user)
+    coins, dna, tickets = await run_db(_user_coins_sync, update.effective_user)
+    ticket_line = f" · 🎟 {tickets} بلیط" if tickets else ""
     text = (
         f"{get_emoji('biocrate')} <b>باکس ژنتیکی</b>\n"
         "<blockquote>یه باکس شانسی — بیشترش تجهیزاته و گاهی هیولای تازه ازش درمی‌آد. "
         "هرچی گرون‌تر، شانس هیولا و نایابیش بیشتر.</blockquote>\n"
-        f"<i>موجودی: {coins:,} طلا · {dna} DNA</i>\n\n"
+        f"<i>موجودی: {coins:,} طلا · {dna} DNA{ticket_line}</i>\n\n"
         "رو یکی بزن تا شانس‌ها و خریدش رو ببینی:"
     )
-    await send_screen(update, text, parse_mode="HTML", reply_markup=_biocrate_list_keyboard())
+    await send_screen(update, text, parse_mode="HTML", reply_markup=_biocrate_list_keyboard(tickets))
+
+
+def _biocrate_ticket_sync(tg_user):
+    from game.lootbox import open_biocrate_with_ticket
+
+    user, _ = get_or_create_user(tg_user)
+    return open_biocrate_with_ticket(user)
+
+
+async def biocrate_ticket_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    try:
+        result = await run_db(_biocrate_ticket_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    rarity_label = constants.RARITY_LABELS[result["rarity"]]
+    if result["kind"] == "creature":
+        c = result["creature"]
+        reveal = f"{get_emoji('egg')} <b>{c.name}</b>\n{constants.element_label(c.element)} · {rarity_label}"
+        hint = "از «🗂 کلکسیون» توی منو می‌تونی فعالش کنی."
+    else:
+        it = result["item"]
+        reveal = f"{constants.EQUIPMENT_SLOT_LABELS[it.slot]} <b>{it.name}</b>\n{rarity_label}"
+        hint = "از «🎒 تجهیزات» توی منو می‌تونی تجهیزش کنی."
+    left = result.get("tickets_left", 0)
+    await query.answer("🎟 باز شد!")
+    rows = []
+    if left > 0:
+        rows.append([btn(f"🎟 یکی دیگه با بلیط ({left} تا)", style=CONFIRM, callback_data="bc_ticket")])
+    rows.append([back_btn("menu:biocrate", "لیست باکس‌ها")])
+    await safe_edit_message_text(
+        query,
+        f"🎟 <b>باکس ژنتیکی با بلیط باز شد!</b> (بلیطِ باقی‌مونده: {left})\n\n"
+        f"<tg-spoiler>{reveal}</tg-spoiler>\n\n<blockquote>{hint}</blockquote>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
 
 
 def _biocrate_detail_text(tier: str) -> str:
@@ -337,6 +381,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(biocrate_pick_callback, pattern=r"^bc_pick:"))
     application.add_handler(CallbackQueryHandler(biocrate_buy_callback, pattern=r"^bc_buy:"))
     application.add_handler(CallbackQueryHandler(biocrate_bulk_callback, pattern=r"^bc_bulk:"))
+    application.add_handler(CallbackQueryHandler(biocrate_ticket_callback, pattern=r"^bc_ticket$"))
     application.add_handler(CommandHandler("diamondbox", diamond_box_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(diamond_box_pick_callback, pattern=r"^dbox_pick:"))
     application.add_handler(CallbackQueryHandler(diamond_box_buy_callback, pattern=r"^dbox_buy:"))

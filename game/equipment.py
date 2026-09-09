@@ -1,5 +1,7 @@
 import random
 
+from django.db import transaction
+
 from bio_lab.models import Creature, Equipment, User
 from game import constants
 from game.creature import GameError, InsufficientGoldError
@@ -258,6 +260,45 @@ def fuse_equipment_many(user: User, target_id: int, sacrifice_ids: list[int]) ->
         "new_level": target.level,
         "capped": target.level >= cap,
     }
+
+
+def ticket_value(item: Equipment) -> int:
+    """Genetic-box tickets a piece is worth when exchanged (0 for anything below
+    legendary)."""
+    return constants.EQUIP_TICKET_VALUE.get(item.rarity, 0)
+
+
+def exchangeable_equipment(user: User) -> list[Equipment]:
+    """The player's gear that can be traded for tickets: legendary/mythic pieces that
+    are NOT currently equipped. Rarest first, then highest level."""
+    keys = list(constants.EQUIP_TICKET_VALUE)
+    return list(
+        Equipment.objects.filter(owner=user, equipped_on__isnull=True, rarity__in=keys)
+        .order_by("-rarity", "-level")
+    )
+
+
+@transaction.atomic
+def exchange_for_tickets(user: User, equip_ids: list[int]) -> dict:
+    """Trade the given equipment pieces for genetic-box tickets. Skips anything that
+    isn't owned / is equipped / isn't ticket-worthy (so a stale selection can't grant
+    tickets for gear that was meanwhile equipped or sold). Returns a summary."""
+    user = User.objects.select_for_update().get(id=user.id)
+    ids = list(dict.fromkeys(int(i) for i in equip_ids))
+    items = list(
+        Equipment.objects.select_for_update().filter(
+            id__in=ids, owner=user, equipped_on__isnull=True
+        )
+    )
+    items = [it for it in items if ticket_value(it) > 0]
+    if not items:
+        raise GameError("هیچ تجهیزِ قابل‌مبادله‌ای انتخاب نشده (فقط افسانه‌ای/اساطیریِ غیرفعال).")
+    tickets = sum(ticket_value(it) for it in items)
+    count = len(items)
+    Equipment.objects.filter(id__in=[it.id for it in items]).delete()
+    user.biocrate_tickets += tickets
+    user.save(update_fields=["biocrate_tickets"])
+    return {"tickets": tickets, "count": count, "total": user.biocrate_tickets}
 
 
 def same_slot_candidates(user: User, target_id: int) -> list[Equipment]:

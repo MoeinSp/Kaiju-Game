@@ -32,6 +32,7 @@ from bot.handlers import (
     league,
     referral,
     research,
+    equip_exchange,
     shop,
     team,
     titles,
@@ -210,6 +211,7 @@ def main() -> None:
     idle.register(application)
     league.register(application)
     research.register(application)
+    equip_exchange.register(application)
     shop.register(application)
     purchase.register(application)
     exchange.register(application)
