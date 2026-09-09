@@ -844,7 +844,8 @@ class RequiredChannel(models.Model):
     bot.middleware.enforce_force_join). Added by forwarding a message from the
     channel — chat_id/username/title come straight from that forward, never typed."""
 
-    chat_id = models.BigIntegerField(unique=True)  # telegram channel id
+    chat_id = models.BigIntegerField(unique=True)  # telegram channel/group id
+    kind = models.CharField(max_length=16, default="channel")  # "channel" or "group"
     username = models.CharField(max_length=64, null=True, blank=True)  # without '@'
     title = models.CharField(max_length=128, null=True, blank=True)
     invite_link = models.CharField(max_length=256, null=True, blank=True)

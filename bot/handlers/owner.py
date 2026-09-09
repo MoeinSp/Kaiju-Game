@@ -29,6 +29,7 @@ from game.force_join import (
     list_channels,
     remove_channel,
     set_duration,
+    set_invite_link,
     set_reward,
 )
 from game.moderation import (
@@ -1807,6 +1808,35 @@ async def preview_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 AWAITING_FORCE_JOIN_KEY = "awaiting_force_join"
 
 
+def _parse_chat_identifier(raw: str):
+    """Turn admin text into a get_chat() argument: '@username', a numeric chat_id, or a
+    public t.me/username link → '@username'. Returns None for anything unusable (e.g. a
+    private t.me/+invite, which get_chat can't resolve — the admin must send the id)."""
+    import re
+
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    if raw.startswith("@"):
+        return raw
+    if re.fullmatch(r"-?\d+", raw):
+        return int(raw)
+    m = re.search(r"t\.me/(?:@)?([A-Za-z0-9_]{4,})/?$", raw)
+    if m:
+        return "@" + m.group(1)
+    if re.fullmatch(r"[A-Za-z0-9_]{4,}", raw):
+        return "@" + raw
+    return None
+
+
+def _fj_icon(channel) -> str:
+    return "👥" if getattr(channel, "kind", "channel") == "group" else "📡"
+
+
+def _fj_kind_label(channel) -> str:
+    return "گروه" if getattr(channel, "kind", "channel") == "group" else "کانال"
+
+
 def _channel_card(channel) -> str:
     limit = "♾ نامحدود" if channel.expires_at is None else f"⏳ تا {channel.expires_at.strftime('%Y-%m-%d %H:%M')}"
     reward_parts = []
@@ -1818,21 +1848,34 @@ def _channel_card(channel) -> str:
         reward_parts.append(f"{channel.reward_diamonds} {get_emoji('diamond')}")
     reward = f"🎁 {' + '.join(reward_parts)}" if reward_parts else "🎁 بدون جایزه"
     handle = f"@{channel.username}" if channel.username else str(channel.chat_id)
+    link_line = f"🔗 لینک: {channel.invite_link}" if channel.invite_link else "🔗 لینک: <i>تنظیم نشده</i>"
     return (
-        f"📡 <b>{channel.title or handle}</b> ({handle})\n{limit}\n{reward}\n\n"
-        "<i>یادت نباشه بات رو ادمین همین کانال کنی، وگرنه نمی‌تونه عضویت رو چک کنه.</i>"
+        f"{_fj_icon(channel)} <b>{channel.title or handle}</b> ({_fj_kind_label(channel)} · {handle})\n"
+        f"{limit}\n{reward}\n{link_line}\n\n"
+        f"<i>یادت نباشه بات رو ادمینِ همین {_fj_kind_label(channel)} کنی، وگرنه نمی‌تونه عضویت رو چک کنه. "
+        "برای گروه/کانالِ خصوصی حتماً «🔗 لینک عضویت» رو ست کن تا دکمه‌ی عضویت کار کنه.</i>"
     )
 
 
 def _channel_manage_keyboard(channel_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
+            # one-tap durations + permanent
             [
-                btn("⏳ تنظیم مدت", style=ADMIN, callback_data=f"fj_dur:{channel_id}"),
-                btn("♾ نامحدود کن", style=ADMIN, callback_data=f"fj_unlim:{channel_id}"),
+                btn("۱ ساعت", style=ADMIN, callback_data=f"fj_durq:{channel_id}:1"),
+                btn("۱ روز", style=ADMIN, callback_data=f"fj_durq:{channel_id}:24"),
+                btn("۲ روز", style=ADMIN, callback_data=f"fj_durq:{channel_id}:48"),
             ],
-            [btn("🎁 تنظیم جایزه", style=CONFIRM, callback_data=f"fj_reward:{channel_id}")],
-            [btn("حذف کانال", emoji_key="btn_delete", style=DANGER, callback_data=f"fj_rm:{channel_id}")],
+            [
+                btn("۷ روز", style=ADMIN, callback_data=f"fj_durq:{channel_id}:168"),
+                btn("♾ دائمی", style=ADMIN, callback_data=f"fj_unlim:{channel_id}"),
+                btn("⏳ دلخواه", style=ADMIN, callback_data=f"fj_dur:{channel_id}"),
+            ],
+            [
+                btn("🎁 تنظیم جایزه", style=CONFIRM, callback_data=f"fj_reward:{channel_id}"),
+                btn("🔗 لینک عضویت", style=ADMIN, callback_data=f"fj_link:{channel_id}"),
+            ],
+            [btn("حذف", emoji_key="btn_delete", style=DANGER, callback_data=f"fj_rm:{channel_id}")],
             [back_btn("admin_menu:force_join", "بازگشت به لیست")],
         ]
     )
@@ -1840,18 +1883,18 @@ def _channel_manage_keyboard(channel_id: int) -> InlineKeyboardMarkup:
 
 async def force_join_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     channels = await run_db(list_channels)
-    text = f"{get_emoji('settings')} <b>کانال‌های جوین اجباری</b>\n\n"
+    text = f"{get_emoji('settings')} <b>گروه‌ها و کانال‌های جوین اجباری</b>\n\n"
     rows = []
     if not channels:
-        text += "<i>هنوز هیچ کانالی اضافه نشده.</i>"
+        text += "<i>هنوز هیچ گروه/کانالی اضافه نشده.</i>"
     else:
         text += "برای مدیریت هرکدوم روش بزن:"
         for ch in channels:
             handle = f"@{ch.username}" if ch.username else str(ch.chat_id)
             rows.append(
-                [btn(f"📡 {ch.title or handle}", style=LIST, callback_data=f"fj_manage:{ch.id}")]
+                [btn(f"{_fj_icon(ch)} {ch.title or handle}", style=LIST, callback_data=f"fj_manage:{ch.id}")]
             )
-    rows.append([btn("افزودن کانال جدید", emoji_key="btn_confirm", style=CONFIRM, callback_data="fj_add")])
+    rows.append([btn("افزودن گروه/کانال جدید", emoji_key="btn_confirm", style=CONFIRM, callback_data="fj_add")])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
     await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
@@ -1864,8 +1907,13 @@ async def force_join_add_callback(update: Update, context: ContextTypes.DEFAULT_
     context.user_data[AWAITING_FORCE_JOIN_KEY] = {"action": "add_channel"}
     await query.answer()
     await safe_edit_message_text(query,
-        "🟢 یه پیام از خودِ کانال موردنظر رو همینجا فوروارد کن (نه لینکش رو بفرستی، خودِ پیام رو فوروارد کن).\n\n"
-        "<i>برای انصراف، از منوی پنل ادمین دوباره شروع کن.</i>",
+        "🟢 <b>افزودن جوین اجباری</b>\n\n"
+        "یکی از این‌ها رو بفرست:\n"
+        "• برای <b>کانال</b>: یه پیام رو مستقیم از خودِ کانال <b>فوروارد</b> کن.\n"
+        "• برای <b>گروه</b> یا کانالِ عمومی: آی‌دی عددی (مثل <code>-1001234567890</code>) یا "
+        "<code>@username</code> یا لینکِ <code>t.me/...</code> رو بفرست.\n\n"
+        "<i>بات باید عضو/ادمینِ اون گروه یا کانال باشه تا بتونه عضویت رو چک کنه. "
+        "برای گروهِ خصوصی، بعد از افزودن «🔗 لینک عضویت» رو هم ست کن.</i>",
         parse_mode="HTML",
     )
 
@@ -1897,6 +1945,41 @@ async def force_join_duration_callback(update: Update, context: ContextTypes.DEF
     await query.answer()
     await safe_edit_message_text(query,
         "⏳ چند ساعت معتبر باشه؟ یه عدد بفرست (مثلاً <code>24</code>).", parse_mode="HTML"
+    )
+
+
+async def force_join_duration_quick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """One-tap durations (fj_durq:<id>:<hours>) — no typing needed."""
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    _, channel_id, hours = query.data.split(":")
+    channel_id, hours = int(channel_id), int(hours)
+    try:
+        channel = await run_db(set_duration, channel_id, hours if hours > 0 else None)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("⏳ مدت تنظیم شد.")
+    await safe_edit_message_text(query,
+        _channel_card(channel), parse_mode="HTML", reply_markup=_channel_manage_keyboard(channel_id)
+    )
+
+
+async def force_join_link_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«🔗 لینک عضویت» — ask for the invite link (needed for private groups)."""
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    channel_id = int(query.data.split(":")[1])
+    context.user_data[AWAITING_FORCE_JOIN_KEY] = {"action": "set_invite_link", "channel_id": channel_id}
+    await query.answer()
+    await safe_edit_message_text(query,
+        "🔗 لینکِ عضویتِ گروه/کانال رو بفرست (مثل <code>https://t.me/+AbCdEf</code> برای گروهِ خصوصی، "
+        "یا <code>https://t.me/username</code>). این لینک روی دکمه‌ی «عضویت» برای کاربرا نشون داده می‌شه.",
+        parse_mode="HTML",
     )
 
 
@@ -1972,18 +2055,59 @@ async def capture_force_join_reply(update: Update, context: ContextTypes.DEFAULT
 
     if action == "add_channel":
         origin = message.forward_origin
-        if not isinstance(origin, MessageOriginChannel):
-            context.user_data[AWAITING_FORCE_JOIN_KEY] = awaiting  # keep waiting
-            await message.reply_text(
-                "⚠️ این یه پیام فورواردشده از یه کانال نبود. یه پیام رو مستقیم از خودِ کانال فوروارد کن."
-            )
-            return
-        chat = origin.chat
-        channel = await run_db(add_channel, chat.id, chat.username, chat.title)
+        if isinstance(origin, MessageOriginChannel):
+            chat = origin.chat
+            kind = "channel"
+            invite = f"https://t.me/{chat.username}" if chat.username else None
+        else:
+            raw = (message.text or "").strip()
+            ident = _parse_chat_identifier(raw)
+            if ident is None:
+                context.user_data[AWAITING_FORCE_JOIN_KEY] = awaiting  # keep waiting
+                await message.reply_text(
+                    "⚠️ یا یه پیام رو از خودِ کانال فوروارد کن، یا آی‌دی عددی (مثل "
+                    "<code>-1001234567890</code>) / <code>@username</code> / لینک عمومیِ t.me رو بفرست. "
+                    "برای گروهِ خصوصی، آی‌دی عددیش رو بده.",
+                    parse_mode="HTML",
+                )
+                return
+            try:
+                chat = await context.bot.get_chat(ident)
+            except TelegramError as exc:
+                context.user_data[AWAITING_FORCE_JOIN_KEY] = awaiting
+                await message.reply_text(
+                    f"⚠️ نتونستم پیداش کنم ({exc}). مطمئن شو بات عضو/ادمینِ اون گروه یا کانال هست و "
+                    "آی‌دی/یوزرنیم درسته."
+                )
+                return
+            kind = "group" if chat.type in ("group", "supergroup") else "channel"
+            invite = getattr(chat, "invite_link", None) or (f"https://t.me/{chat.username}" if chat.username else None)
+            if invite is None and raw.startswith("http"):
+                invite = raw  # a t.me/+... private link the admin pasted
+        channel = await run_db(add_channel, chat.id, chat.username, chat.title, kind, invite)
         await message.reply_text(
-            f"{get_emoji('confirm')} کانال اضافه شد!\n\n" + _channel_card(channel),
+            f"{get_emoji('confirm')} {_fj_kind_label(channel)} اضافه شد!\n\n" + _channel_card(channel),
             parse_mode="HTML",
             reply_markup=_channel_manage_keyboard(channel.id),
+        )
+        return
+
+    if action == "set_invite_link":
+        channel_id = awaiting["channel_id"]
+        link = (message.text or "").strip()
+        if link.startswith("@"):
+            link = "https://t.me/" + link[1:]
+        if not (link.startswith("http") or link.startswith("t.me/")):
+            context.user_data[AWAITING_FORCE_JOIN_KEY] = awaiting
+            await message.reply_text("⚠️ یه لینک معتبر بفرست، مثل <code>https://t.me/+AbCdEf</code>.", parse_mode="HTML")
+            return
+        try:
+            channel = await run_db(set_invite_link, channel_id, link)
+        except GameError as exc:
+            await message.reply_text(str(exc))
+            return
+        await message.reply_text(
+            _channel_card(channel), parse_mode="HTML", reply_markup=_channel_manage_keyboard(channel_id)
         )
         return
 
@@ -4032,6 +4156,8 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(force_join_add_callback, pattern=r"^fj_add$"))
     application.add_handler(CallbackQueryHandler(force_join_manage_callback, pattern=r"^fj_manage:"))
     application.add_handler(CallbackQueryHandler(force_join_duration_callback, pattern=r"^fj_dur:"))
+    application.add_handler(CallbackQueryHandler(force_join_duration_quick_callback, pattern=r"^fj_durq:"))
+    application.add_handler(CallbackQueryHandler(force_join_link_callback, pattern=r"^fj_link:"))
     application.add_handler(CallbackQueryHandler(force_join_unlimited_callback, pattern=r"^fj_unlim:"))
     application.add_handler(CallbackQueryHandler(force_join_reward_callback, pattern=r"^fj_reward:"))
     application.add_handler(

@@ -17,10 +17,22 @@ def list_channels() -> list[RequiredChannel]:
     return list(RequiredChannel.objects.order_by("-created_at"))
 
 
-def add_channel(chat_id: int, username: str | None, title: str | None) -> RequiredChannel:
-    channel, _ = RequiredChannel.objects.update_or_create(
-        chat_id=chat_id, defaults={"username": username, "title": title}
-    )
+def add_channel(chat_id: int, username: str | None, title: str | None,
+                kind: str = "channel", invite_link: str | None = None) -> RequiredChannel:
+    defaults = {"username": username, "title": title, "kind": kind}
+    if invite_link:
+        defaults["invite_link"] = invite_link
+    channel, _ = RequiredChannel.objects.update_or_create(chat_id=chat_id, defaults=defaults)
+    return channel
+
+
+def set_invite_link(channel_id: int, link: str | None) -> RequiredChannel:
+    try:
+        channel = RequiredChannel.objects.get(id=channel_id)
+    except RequiredChannel.DoesNotExist:
+        raise GameError("این مورد دیگه پیدا نشد.")
+    channel.invite_link = (link or "").strip() or None
+    channel.save(update_fields=["invite_link"])
     return channel
 
 
