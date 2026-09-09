@@ -212,15 +212,12 @@ def _item_shop_render(items, coins, diamonds, gem=None) -> tuple[str, InlineKeyb
     # 💎 daily gem-kaiju — a same-species/same-rarity twin of one of the player's top kaiju
     if gem:
         label = constants.RARITY_LABELS[gem["rarity"]]
-        lines.append(
-            f"\n💎 <b>کایجوی جمیِ روزانه</b> — {gem['name']} {label}\n"
-            "   <i>هم‌نوع و هم‌ردهِ یکی از قوی‌ترین کایجوهات — عالی برای فیوژن! (روزی یک‌بار)</i>"
-        )
+        lines.append(f"\n💎 <b>{gem['name']}</b> {label}")
         if gem["claimed"]:
-            lines.append("   ✅ امروز خریدیش — فردا دوباره بیا.")
+            lines.append("✅ امروز خریدیش")
         else:
-            lines.append(f"   قیمت: <b>{gem['price']}</b> {get_emoji('diamond')}")
-            rows.append([btn(f"💎 خرید کایجوی جمی ({gem['price']} الماس)", style=SHOP, callback_data="gemk_buy")])
+            lines.append(f"🏷 <b>{gem['price']}</b> {get_emoji('diamond')}")
+            rows.append([btn(f"💎 خرید {gem['name']} ({gem['price']} الماس)", style=SHOP, callback_data="gemk_buy")])
     if not items:
         lines.append("\n<i>الان آیتم ویژه‌ی دیگه‌ای موجود نیست. بعداً سر بزن.</i>")
     for it in items:
