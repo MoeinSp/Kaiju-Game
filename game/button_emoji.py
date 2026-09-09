@@ -106,6 +106,7 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_shop": ("شاپ روزانه", "🛒", "features"),
     "btn_gold_shop": ("خرید طلا با الماس", "💰", "features"),
     "btn_exchange": ("مبادله طلا و DNA", "🔄", "features"),
+    "btn_ticket_exchange": ("مبادله تجهیزات با بلیط", "🎟", "features"),
     "btn_workers": ("مدیریت کارگران", "👷", "action"),
     "btn_next": ("صفحه بعدی", "▶️", "nav"),
     "btn_prev": ("صفحه قبلی", "◀️", "nav"),

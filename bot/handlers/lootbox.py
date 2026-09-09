@@ -153,11 +153,25 @@ def _biocrate_detail_text(tier: str) -> str:
     return "\n".join(lines)
 
 
+def _open_label(tier: str, tickets: int, count: int) -> str:
+    """Button text with the REAL cost: tickets first, then this tier's gold+DNA for the
+    boxes tickets don't cover (so a ×10 with only 3 tickets shows the money it needs)."""
+    cfg = constants.BIOCRATE_TIERS[tier]
+    ft = min(tickets, count)
+    paid = count - ft
+    parts = []
+    if ft:
+        parts.append(f"{ft}🎟")
+    if paid:
+        parts.append(f"{cfg['gold'] * paid:,}🪙 {cfg['dna'] * paid}🧬")
+    cost = " + ".join(parts) if parts else "رایگان"
+    return f"باز کردن ×{count} ({cost})"
+
+
 def _biocrate_detail_keyboard(tier: str, tickets: int = 0) -> InlineKeyboardMarkup:
-    tag = "🎟 " if tickets >= 1 else ""
     return InlineKeyboardMarkup([
-        [btn(f"{tag}باز کردن ×۱", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"bc_open:{tier}:1")],
-        [btn(f"{tag}باز کردن ×۱۰", style=SHOP, callback_data=f"bc_open:{tier}:10")],
+        [btn(_open_label(tier, tickets, 1), emoji_key="btn_confirm", style=CONFIRM, callback_data=f"bc_open:{tier}:1")],
+        [btn(_open_label(tier, tickets, 10), style=SHOP, callback_data=f"bc_open:{tier}:10")],
         [back_btn("menu:biocrate", "بازگشت به لیست")],
     ])
 
@@ -213,11 +227,7 @@ async def biocrate_open_callback(update: Update, context: ContextTypes.DEFAULT_T
 
     label = constants.BIOCRATE_TIERS[tier]["label"]
     tickets_left = summary.get("tickets_left", 0)
-    keyboard = InlineKeyboardMarkup([
-        [btn("باز کردن ×۱", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"bc_open:{tier}:1"),
-         btn("×۱۰", style=SHOP, callback_data=f"bc_open:{tier}:10")],
-        [back_btn("menu:biocrate", "لیست باکس‌ها")],
-    ])
+    keyboard = _biocrate_detail_keyboard(tier, tickets_left)
     if count == 1:
         result = summary["single"]
         rarity_label = constants.RARITY_LABELS[result["rarity"]]

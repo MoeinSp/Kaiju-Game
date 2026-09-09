@@ -79,8 +79,8 @@ def _render(tickets, items, selected: set, filt: str, page: int):
         )])
     if pages > 1:
         rows.append([
-            btn("◀️", style=NAV, callback_data=f"etx:pg:{page - 1}"),
-            btn("▶️", style=NAV, callback_data=f"etx:pg:{page + 1}"),
+            btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"etx:pg:{page - 1}"),
+            btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"etx:pg:{page + 1}"),
         ])
     rows.append([
         btn("انتخاب همه", style=NAV, callback_data="etx:all"),

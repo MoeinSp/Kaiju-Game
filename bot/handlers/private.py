@@ -1015,7 +1015,7 @@ _CATEGORIES = {
         [("بنر ویژه", "banner", "s", "btn_banner"), ("شاپ روزانه", "shop", "s", "btn_shop")],
         [("خرید سپر", "shield_shop", "s", "btn_shield"), ("کازینو", "casino", "s", "btn_casino")],
         [("آیتم‌های ویژه", "item_shop", "s", "btn_items"), ("خرید طلا", "gold_shop", "s", "btn_gold_shop")],
-        [("مبادله طلا و DNA", "exchange", "s", "btn_exchange"), ("مبادله تجهیزات با بلیط", "equip_exchange", "s", "btn_exchange")],
+        [("مبادله طلا و DNA", "exchange", "s", "btn_exchange"), ("مبادله تجهیزات با بلیط", "equip_exchange", "s", "btn_ticket_exchange")],
     ]),
     "social": ("👥 اجتماعی", [
         [("اتحاد من", "alliance_info", "n", "btn_alliance"), ("لیگ رتبه‌بندی", "league", "n", "btn_league")],
