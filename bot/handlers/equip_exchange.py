@@ -59,7 +59,7 @@ def _render(tickets, items, selected: set, filt: str, page: int):
     ]
     if not items:
         lines += ["", "<i>هیچ تجهیزِ افسانه‌ای یا اساطیریِ غیرفعالی برای مبادله نداری.</i>"]
-        return "\n".join(lines), InlineKeyboardMarkup([[back_btn("menu:shop", "بازگشت به فروشگاه")]])
+        return "\n".join(lines), InlineKeyboardMarkup([[back_btn("menu:cat_shop", "بازگشت به فروشگاه")]])
     lines.append(f"\n✅ انتخاب‌شده: <b>{len(picked)}</b> = <b>{gain}</b> 🎟" + (f"  ·  صفحه {page + 1}/{pages}" if pages > 1 else ""))
 
     rows = []
@@ -88,7 +88,7 @@ def _render(tickets, items, selected: set, filt: str, page: int):
     ])
     if picked:
         rows.append([btn(f"♻️ تبدیل به {gain} بلیط", emoji_key="btn_confirm", style=BUILD, callback_data="etx:go")])
-    rows.append([back_btn("menu:shop", "بازگشت به فروشگاه")])
+    rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
