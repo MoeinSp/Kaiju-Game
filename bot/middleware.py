@@ -121,12 +121,21 @@ def _reward_summary(channel) -> str:
 
 
 def _join_gate_text(missing_channels) -> str:
-    lines = ["📡 <b>قبل از استفاده از بات باید عضو کانال(های) زیر بشی:</b>\n"]
+    has_group = any(getattr(ch, "kind", "channel") == "group" for ch in missing_channels)
+    where = "کانال‌ها و گروه‌ها" if has_group else "کانال‌ها"
+    lines = [
+        f"📡 <b>نیازمند عضویت در {where}</b>",
+        f"برای استفاده از ربات و دریافت پاداش، ابتدا باید در تمام {where}ی زیر عضو شوید:",
+        "",
+    ]
     for ch in missing_channels:
         name = ch.title or (f"@{ch.username}" if ch.username else "کانال")
-        reward = _reward_summary(ch)
-        lines.append(f"• {name}" + (f" — 🎁 جایزه‌ی عضویت: {reward}" if reward else ""))
-    lines.append("\n<blockquote>بعد از عضویت، روی «بررسی مجدد عضویت» بزن تا جایزه‌ها رو بگیری.</blockquote>")
+        icon = "👥" if getattr(ch, "kind", "channel") == "group" else "📢"
+        lines.append(f"• {icon} <b>{name}</b>")
+        for amount, emo in ((ch.reward_coins, "coin"), (ch.reward_dna, "dna"), (ch.reward_diamonds, "diamond")):
+            if amount:
+                lines.append(f"   ◦ {get_emoji(emo)} <code>{amount:,}</code>")
+    lines += ["", "📌 پس از عضویت در تمامی موارد، روی دکمه «بررسی مجدد عضویت» کلیک کنید."]
     return "\n".join(lines)
 
 
@@ -202,8 +211,16 @@ async def enforce_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.callback_query.answer("✅ عضویت تأیید شد!")
         text = "✅ <b>عضویتت تأیید شد!</b> حالا دوباره از /start یا منو استفاده کن."
         if granted:
-            reward_lines = "\n".join(f"🎁 {_reward_summary(ch)}" for ch in granted)
-            text += f"\n\n<b>جایزه‌ی عضویت گرفتی:</b>\n{reward_lines}"
+            tot = {
+                "coin": sum(ch.reward_coins for ch in granted),
+                "dna": sum(ch.reward_dna for ch in granted),
+                "diamond": sum(ch.reward_diamonds for ch in granted),
+            }
+            rlines = ["", "🎁 <b>جایزه‌ی عضویت گرفتی:</b>"]
+            for emo in ("coin", "dna", "diamond"):
+                if tot[emo]:
+                    rlines.append(f"   ◦ {get_emoji(emo)} <code>+{tot[emo]:,}</code>")
+            text += "\n" + "\n".join(rlines)
         await safe_edit_message_text(update.callback_query, text, parse_mode="HTML")
         raise ApplicationHandlerStop
 
