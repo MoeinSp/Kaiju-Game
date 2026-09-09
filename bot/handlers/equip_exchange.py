@@ -1,8 +1,9 @@
 """🎟 مبادله تجهیزات با بلیط — trade spare legendary/mythic gear for genetic-box tickets.
 
-Multi-select panel: toggle items (or «انتخاب همه»), then «تبدیل». Equipped gear is never
-listed (can't be scrapped). If any picked item is above +1, a confirm step names those
-items and their levels first, so an upgraded piece isn't scrapped by accident.
+Rarity-tabbed, paginated multi-select panel: filter by rarity (اساطیری/افسانه‌ای), page
+through the list, toggle items (or «انتخاب همه»), then «تبدیل». Equipped gear is never
+listed. If any picked item is above +1, a confirm step names those items and their levels
+first, so an upgraded piece isn't scrapped by accident.
 """
 
 from telegram import InlineKeyboardMarkup, Update
@@ -16,14 +17,17 @@ from game.creature import GameError
 from game.emoji import get_emoji
 from game.equipment import exchangeable_equipment, exchange_for_tickets, ticket_value
 
-_SEL_KEY = "etx_sel"          # set[int] of selected equipment ids
-_MAX_SHOWN = 24               # toggle rows shown at once (select-all still covers all)
+_SEL_KEY = "etx_sel"     # set[int] of selected equipment ids
+_FILT_KEY = "etx_filt"   # rarity filter: "all" | "mythic" | "legendary"
+_PAGE_KEY = "etx_page"
+_PAGE_SIZE = 8
+# rarity tabs, rarest first (only the ticket-worthy rarities)
+_TABS = ["all"] + list(reversed(list(constants.EQUIP_TICKET_VALUE)))  # ["all","mythic","legendary"]
 
 
 def _sync(tg_user):
     user, _ = get_or_create_user(tg_user)
-    items = exchangeable_equipment(user)
-    return user.biocrate_tickets, items
+    return user.biocrate_tickets, exchangeable_equipment(user)
 
 
 def _selection(context) -> set:
@@ -34,36 +38,53 @@ def _selection(context) -> set:
     return sel
 
 
-def _render(tickets: int, items, selected: set):
-    valid_ids = {it.id for it in items}
-    selected &= valid_ids  # drop ids that are gone (converted/equipped since)
+def _render(tickets, items, selected: set, filt: str, page: int):
+    selected &= {it.id for it in items}  # drop ids that are gone (converted/equipped)
     picked = [it for it in items if it.id in selected]
     gain = sum(ticket_value(it) for it in picked)
+    counts = {"all": len(items)}
+    for r in constants.EQUIP_TICKET_VALUE:
+        counts[r] = sum(1 for it in items if it.rarity == r)
+    shown = items if filt == "all" else [it for it in items if it.rarity == filt]
+    pages = max(1, (len(shown) + _PAGE_SIZE - 1) // _PAGE_SIZE)
+    page = max(0, min(page, pages - 1))
+    chunk = shown[page * _PAGE_SIZE:(page + 1) * _PAGE_SIZE]
+
     lines = [
         "🎟 <b>مبادله تجهیزات با بلیط</b>",
         f"بلیط‌های تو: <b>{tickets}</b> 🎟",
         "",
         "هر تجهیزِ اساطیری = <b>۲</b> بلیط · هر افسانه‌ای = <b>۱</b> بلیط",
         "<i>هر بلیط = یه باکس ژنتیکیِ رایگان. تجهیزاتِ فعال قابل‌مبادله نیستن.</i>",
-        "",
     ]
     if not items:
-        lines.append("<i>هیچ تجهیزِ افسانه‌ای یا اساطیریِ غیرفعالی برای مبادله نداری.</i>")
+        lines += ["", "<i>هیچ تجهیزِ افسانه‌ای یا اساطیریِ غیرفعالی برای مبادله نداری.</i>"]
         return "\n".join(lines), InlineKeyboardMarkup([[back_btn("menu:shop", "بازگشت به فروشگاه")]])
-    lines.append(f"✅ انتخاب‌شده: <b>{len(picked)}</b> تجهیز = <b>{gain}</b> 🎟")
+    lines.append(f"\n✅ انتخاب‌شده: <b>{len(picked)}</b> = <b>{gain}</b> 🎟" + (f"  ·  صفحه {page + 1}/{pages}" if pages > 1 else ""))
+
     rows = []
-    for it in items[:_MAX_SHOWN]:
+    # rarity tabs (colored via RARITY_LABELS: 🔴 mythic, 🟠 legendary, …)
+    tab_row = []
+    for t in _TABS:
+        label = f"همه ({counts['all']})" if t == "all" else f"{constants.RARITY_LABELS[t]} ({counts[t]})"
+        tab_row.append(btn(("• " if filt == t else "") + label, style=NAV, callback_data=f"etx:tab:{t}"))
+    rows.append(tab_row)
+    # item toggles for this page
+    for it in chunk:
         mark = "✅" if it.id in selected else "⬜️"
         lvl = f" +{it.level}" if it.level > 1 else ""
         rows.append([btn(
             f"{mark} {constants.RARITY_LABELS[it.rarity]} {it.name}{lvl} → {ticket_value(it)}🎟",
             style=LIST, callback_data=f"etx:t:{it.id}",
         )])
-    if len(items) > _MAX_SHOWN:
-        lines.append(f"<i>… و {len(items) - _MAX_SHOWN} تای دیگه (با «انتخاب همه» همه‌شون حساب می‌شن).</i>")
+    if pages > 1:
+        rows.append([
+            btn("◀️", style=NAV, callback_data=f"etx:pg:{page - 1}"),
+            btn("▶️", style=NAV, callback_data=f"etx:pg:{page + 1}"),
+        ])
     rows.append([
         btn("انتخاب همه", style=NAV, callback_data="etx:all"),
-        btn("پاک‌کردن انتخاب", style=NAV, callback_data="etx:clear"),
+        btn("پاک‌کردن", style=NAV, callback_data="etx:clear"),
     ])
     if picked:
         rows.append([btn(f"♻️ تبدیل به {gain} بلیط", emoji_key="btn_confirm", style=BUILD, callback_data="etx:go")])
@@ -72,32 +93,48 @@ def _render(tickets: int, items, selected: set):
 
 
 async def equip_exchange_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    context.user_data[_SEL_KEY] = set()  # fresh selection each time the panel opens
+    context.user_data[_SEL_KEY] = set()
+    context.user_data[_FILT_KEY] = "all"
+    context.user_data[_PAGE_KEY] = 0
     tickets, items = await run_db(_sync, update.effective_user)
-    text, kb = _render(tickets, items, set())
+    text, kb = _render(tickets, items, set(), "all", 0)
     await send_screen(update, text, parse_mode="HTML", reply_markup=kb)
 
 
 async def _rerender(update, context):
     tickets, items = await run_db(_sync, update.effective_user)
-    text, kb = _render(tickets, items, _selection(context))
+    text, kb = _render(
+        tickets, items, _selection(context),
+        context.user_data.get(_FILT_KEY, "all"), context.user_data.get(_PAGE_KEY, 0),
+    )
     await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=kb)
 
 
 async def etx_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    item_id = int(query.data.split(":")[2])
+    item_id = int(update.callback_query.data.split(":")[2])
     sel = _selection(context)
     sel.discard(item_id) if item_id in sel else sel.add(item_id)
-    await query.answer()
+    await update.callback_query.answer()
+    await _rerender(update, context)
+
+
+async def etx_tab_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data[_FILT_KEY] = update.callback_query.data.split(":")[2]
+    context.user_data[_PAGE_KEY] = 0
+    await update.callback_query.answer()
+    await _rerender(update, context)
+
+
+async def etx_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data[_PAGE_KEY] = int(update.callback_query.data.split(":")[2])
+    await update.callback_query.answer()
     await _rerender(update, context)
 
 
 async def etx_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
     _tickets, items = await run_db(_sync, update.effective_user)
     context.user_data[_SEL_KEY] = {it.id for it in items}
-    await query.answer("همه انتخاب شدن.")
+    await update.callback_query.answer("همه انتخاب شدن.")
     await _rerender(update, context)
 
 
@@ -109,7 +146,7 @@ async def etx_clear_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def etx_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    tickets, items = await run_db(_sync, update.effective_user)
+    _tickets, items = await run_db(_sync, update.effective_user)
     sel = _selection(context) & {it.id for it in items}
     picked = [it for it in items if it.id in sel]
     if not picked:
@@ -118,7 +155,6 @@ async def etx_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     gain = sum(ticket_value(it) for it in picked)
     upgraded = [it for it in picked if it.level > 1]
     if upgraded:
-        # warn about above-+1 items before scrapping them
         names = "، ".join(f"«{it.name} +{it.level}»" for it in upgraded[:8])
         more = f" و {len(upgraded) - 8} مورد دیگه" if len(upgraded) > 8 else ""
         await query.answer()
@@ -149,17 +185,17 @@ async def etx_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 async def _do_exchange(update, context):
     query = update.callback_query
-    sel = list(_selection(context))
     try:
-        result = await run_db(exchange_for_tickets, update.effective_user, sel)
+        result = await run_db(exchange_for_tickets, update.effective_user, list(_selection(context)))
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         await _rerender(update, context)
         return
     context.user_data[_SEL_KEY] = set()
+    context.user_data[_PAGE_KEY] = 0
     await query.answer(f"🎟 +{result['tickets']} بلیط!")
     tickets, items = await run_db(_sync, update.effective_user)
-    text, kb = _render(tickets, items, set())
+    text, kb = _render(tickets, items, set(), context.user_data.get(_FILT_KEY, "all"), 0)
     text = (f"✅ <b>{result['count']}</b> تجهیز تبدیل شد و <b>{result['tickets']}</b> 🎟 گرفتی "
             f"(جمعاً {result['total']} بلیط).\n\n" + text)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
@@ -167,6 +203,8 @@ async def _do_exchange(update, context):
 
 def register(application) -> None:
     application.add_handler(CallbackQueryHandler(etx_toggle_callback, pattern=r"^etx:t:"))
+    application.add_handler(CallbackQueryHandler(etx_tab_callback, pattern=r"^etx:tab:"))
+    application.add_handler(CallbackQueryHandler(etx_page_callback, pattern=r"^etx:pg:"))
     application.add_handler(CallbackQueryHandler(etx_all_callback, pattern=r"^etx:all$"))
     application.add_handler(CallbackQueryHandler(etx_clear_callback, pattern=r"^etx:clear$"))
     application.add_handler(CallbackQueryHandler(etx_go_callback, pattern=r"^etx:go$"))

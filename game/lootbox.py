@@ -85,19 +85,51 @@ def open_biocrate(user: User, tier: str = "basic") -> dict:
     return _biocrate_roll_once(user, cfg, tier)
 
 
+def batch_open_cost(user: User, tier: str, count: int) -> dict:
+    """How a batch of `count` opens would be paid: tickets first (1 box each), the rest
+    with the tier's gold+DNA. Read-only — used to preview the price before opening."""
+    cfg = _biocrate_cfg(tier)
+    count = max(1, int(count))
+    from_tickets = min(user.biocrate_tickets, count)
+    paid = count - from_tickets
+    return {
+        "count": count, "from_tickets": from_tickets, "paid": paid,
+        "gold": cfg["gold"] * paid, "dna": cfg["dna"] * paid,
+    }
+
+
 @transaction.atomic
-def open_biocrate_with_ticket(user: User) -> dict:
-    """Open one BASIC genetic box using a ticket (no gold/DNA). Tickets come from
-    exchanging spare legendary/mythic gear (game.equipment.exchange_for_tickets)."""
+def open_biocrate_batch(user: User, tier: str, count: int) -> dict:
+    """Open `count` genetic boxes of `tier`, spending tickets FIRST (one box each) and
+    paying the tier's gold+DNA for the remainder. Tickets come from exchanging spare
+    legendary/mythic gear (game.equipment.exchange_for_tickets)."""
+    cfg = _biocrate_cfg(tier)
+    count = max(1, int(count))
     user = User.objects.select_for_update().get(id=user.id)
-    if user.biocrate_tickets < 1:
-        raise GameError("بلیط باکس ژنتیکی نداری. از «مبادله تجهیزات» توی فروشگاه بلیط بگیر.")
-    user.biocrate_tickets -= 1
-    user.save(update_fields=["biocrate_tickets"])
-    cfg = _biocrate_cfg("basic")
-    result = _biocrate_roll_once(user, cfg, "basic")
-    result["tickets_left"] = user.biocrate_tickets
-    return result
+    from_tickets = min(user.biocrate_tickets, count)
+    paid = count - from_tickets
+    gold, dna = cfg["gold"] * paid, cfg["dna"] * paid
+    if user.coins < gold:
+        raise InsufficientGoldError(
+            f"طلا کافی نداری! این باز کردن <b>{gold:,}</b> طلا می‌خواد (الان {user.coins:,} داری)"
+            + (f" — {from_tickets} تا با بلیط رایگانه." if from_tickets else "") + ".",
+            need=gold, have=user.coins,
+        )
+    if user.dna_fragments < dna:
+        raise GameError(f"{dna} DNA لازمه (الان {user.dna_fragments} داری).")
+    user.biocrate_tickets -= from_tickets
+    user.coins -= gold
+    user.dna_fragments -= dna
+    user.save(update_fields=["biocrate_tickets", "coins", "dna_fragments"])
+    rolls = [_biocrate_roll_once(user, cfg, tier) for _ in range(count)]
+    summary = _summarise_rolls(rolls, tier, paid=count, opened=count)
+    summary["from_tickets"] = from_tickets
+    summary["paid_boxes"] = paid
+    summary["gold_spent"] = gold
+    summary["dna_spent"] = dna
+    summary["tickets_left"] = user.biocrate_tickets
+    summary["single"] = rolls[0] if count == 1 else None
+    return summary
 
 
 @transaction.atomic
