@@ -45,6 +45,7 @@ from game.moderation import (
     reset_user,
     search_users,
     set_banned,
+    set_cup,
     set_lab_level,
     user_info,
 )
@@ -1291,7 +1292,10 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
             [btn("🦖 اعطای کایجوی دلخواه (سطح/ستاره/تعداد)", style=CONFIRM, callback_data=f"admin_givek:{target_id}")],
             [btn("🌟 اعطای کایجوی مکس (همه‌چی بیشینه)", style=CONFIRM, callback_data=f"admin_givekmax:{target_id}")],
             [btn("⚔️ اعطای تجهیزات دلخواه (سطح دلخواه)", style=CONFIRM, callback_data=f"admin_givee:{target_id}")],
-            [btn("🔬 تنظیم سطح آزمایشگاه", emoji_key="btn_lab", style=CONFIRM, callback_data=f"admin_lablevel:{target_id}")],
+            [
+                btn("🔬 تنظیم سطح آزمایشگاه", emoji_key="btn_lab", style=CONFIRM, callback_data=f"admin_lablevel:{target_id}"),
+                btn("🏆 تنظیم کاپ", style=CONFIRM, callback_data=f"admin_setcup:{target_id}"),
+            ],
             [btn("🏗 مکس‌کردن ساختمان‌ها", style=CONFIRM, callback_data=f"admin_maxbld:{target_id}")],
             [
                 btn("💎 لاگ الماس", style=ADMIN, callback_data=f"admin_reslog:{target_id}:diamonds"),
@@ -3028,6 +3032,19 @@ async def admin_lablevel_callback(update: Update, context: ContextTypes.DEFAULT_
     )
 
 
+async def admin_setcup_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    target_id = query.data.split(":")[1]
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "set_cup", "target_id": target_id}
+    await query.answer()
+    await safe_edit_message_text(
+        query, "🏆 مقدار کاپ جدید رو بفرست (یه عدد ۰ یا بیشتر):", parse_mode="HTML"
+    )
+
+
 async def admin_ban_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not _is_admin(update):
@@ -3564,6 +3581,23 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             return
         await message.reply_text(
             f"{get_emoji('confirm')} سطح آزمایشگاه <b>{display_name(user)}</b> روی <b>{new_level}</b> تنظیم شد.",
+            parse_mode="HTML",
+            reply_markup=_user_manage_keyboard(user.id, user.is_banned),
+        )
+        return
+
+    if action == "set_cup":
+        if not text.isdigit():
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text("⚠️ یه عدد ۰ یا بیشتر بفرست.")
+            return
+        try:
+            user, new_cup = await run_db(set_cup, awaiting["target_id"], int(text))
+        except GameError as exc:
+            await message.reply_text(str(exc))
+            return
+        await message.reply_text(
+            f"{get_emoji('confirm')} کاپِ <b>{display_name(user)}</b> روی <b>{new_cup:,}</b> تنظیم شد.",
             parse_mode="HTML",
             reply_markup=_user_manage_keyboard(user.id, user.is_banned),
         )
@@ -4173,5 +4207,6 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(admin_deduct_callback, pattern=r"^admin_deduct:"))
     application.add_handler(CallbackQueryHandler(admin_charge_callback, pattern=r"^admin_charge:"))
     application.add_handler(CallbackQueryHandler(admin_lablevel_callback, pattern=r"^admin_lablevel:"))
+    application.add_handler(CallbackQueryHandler(admin_setcup_callback, pattern=r"^admin_setcup:"))
     application.add_handler(CallbackQueryHandler(admin_unban_callback, pattern=r"^admin_unban:"))
     application.add_handler(CallbackQueryHandler(admin_ban_callback, pattern=r"^admin_ban:"))

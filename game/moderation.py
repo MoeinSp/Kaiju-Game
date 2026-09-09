@@ -282,6 +282,16 @@ def set_lab_level(identifier: str, level: int) -> tuple[User, int]:
     return user, lab.lab_level(user)
 
 
+def set_cup(identifier: str, cup: int) -> tuple[User, int]:
+    """Admin tool: set a player's arena cup score directly. Returns (user, new_cup).
+    Clamped to >= 0."""
+    cup = max(0, int(cup))
+    user = find_user_or_raise(identifier)
+    user.cup = cup
+    user.save(update_fields=["cup"])
+    return user, user.cup
+
+
 def set_banned(identifier: str, banned: bool) -> User:
     user = find_user_or_raise(identifier)
     user.is_banned = banned

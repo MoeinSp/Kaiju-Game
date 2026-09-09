@@ -28,6 +28,11 @@ HUNT_TIERS = {
 # (a risk/reward difficulty knob).
 HUNT_COIN_PER_POWER = 0.40   # gold income doubled again (was 0.20) per owner request
 HUNT_DNA_PER_POWER = 0.012
+# Ceiling on hunt GOLD: the best possible hunt for a max-power kaiju (~8200) tops out at
+# HUNT_MAX_COIN gold, scaled down proportionally for weaker kaiju. This ONLY lowers the
+# top of the range — the minimum (weak-tier / unlucky roll) is never raised or lowered.
+HUNT_MAX_COIN = 4000
+HUNT_POWER_FOR_MAX_COIN = 8200
 HUNT_XP_WIN = 25
 HUNT_XP_LOSE = 8
 # «بعدی» (searching for a better target) costs a little gold, scaled by power, so
@@ -102,10 +107,18 @@ def scout_cost(creature: Creature) -> int:
 
 
 def hunt_coin_range(power: int, tier: str) -> tuple[int, int]:
-    """Coin loot for a hunt — scales ONLY with the player creature's power (× tier)."""
+    """Coin loot for a hunt — scales ONLY with the player creature's power (× tier),
+    with the TOP of the range capped so the best hunt at ~max power yields HUNT_MAX_COIN
+    gold (proportionally less at lower power). The cap never raises the minimum: it only
+    trims a high roll down to the ceiling."""
     mult = HUNT_TIERS[tier]["reward_mult"]
     base = max(0, power) * HUNT_COIN_PER_POWER
-    return (round(base * mult * 0.85), round(base * mult * 1.15))
+    lo = round(base * mult * 0.85)
+    hi = round(base * mult * 1.15)
+    cap = round(HUNT_MAX_COIN * min(1.0, max(0, power) / HUNT_POWER_FOR_MAX_COIN))
+    hi = min(hi, cap)
+    lo = min(lo, hi)  # never let the floor exceed the (possibly capped) ceiling
+    return (lo, hi)
 
 
 def hunt_dna_range(player_power: int, tier: str) -> tuple[int, int]:
