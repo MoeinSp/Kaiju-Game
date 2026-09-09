@@ -14,7 +14,7 @@ from bio_lab.models import Creature, User
 from game import constants
 from game.creature import GameError
 
-GEM_PRICE = {"mythic": 700, "legendary": 400, "epic": 200}
+GEM_PRICE = {"mythic": 750, "legendary": 400, "epic": 200}
 _GEM_RARITIES = ("mythic", "legendary", "epic")
 
 
