@@ -75,14 +75,23 @@ def _creature_card(user, creature, equipped, slots) -> tuple[str, InlineKeyboard
     stats = effective_stats(creature, equipped)
     stars = "⭐" * creature.star_level
     filled = sum(1 for row in slots if not row["is_empty"])
+    nick = (getattr(creature, "custom_name", "") or "").strip()
+    div = "──────────────"
     lines = [
-        f"{get_emoji('creature')} <b>{creature.name}</b> {stars}",
-        f"{constants.RARITY_LABELS[creature.rarity]} · سطح {creature.level} · "
-        f"آزمایشگاه {lab_display(user)}",
-        "",
-        f"{get_emoji('hp')} {stats['hp']}   {get_emoji('atk')} {stats['atk']}   "
-        f"{get_emoji('def')} {stats['def']}   {get_emoji('spd')} {stats['spd']}",
-        f"💪 قدرت: <b>{combat_rating(stats)}</b>   ·   🎒 تجهیزات: <b>{filled}/{len(slots)}</b> جایگاه پر",
+        # نام (chosen) and نژاد (species) on their OWN lines
+        f"🏷 نام: <b>{nick or 'بدون نام'}</b> {stars}",
+        f"🧬 نژاد: <b>{creature.name}</b>",
+        f"{constants.RARITY_LABELS[creature.rarity]} · {constants.element_label(creature.element)} · "
+        f"سطح {creature.level} · آزمایشگاه {lab_display(user)}",
+        div,
+        # stats — each on its own line, aligned and labelled
+        f"{get_emoji('hp')} جان: <b>{stats['hp']}</b>",
+        f"{get_emoji('atk')} حمله: <b>{stats['atk']}</b>",
+        f"{get_emoji('def')} دفاع: <b>{stats['def']}</b>",
+        f"{get_emoji('spd')} سرعت: <b>{stats['spd']}</b>",
+        div,
+        f"💪 قدرت کل: <b>{combat_rating(stats)}</b>",
+        f"🎒 تجهیزات: <b>{filled}/{len(slots)}</b> جایگاه پر",
     ]
     rows = [
         [
