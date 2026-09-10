@@ -25,7 +25,9 @@ ENABLED = True
 GOLD_PER_DNA_BUY = 50    # buy_dna:  spend 50 gold to gain 1 DNA
 GOLD_PER_DNA_SELL = 25   # buy_gold: gain 25 gold for 1 DNA spent
 
-PRESET_DNA = [10, 50, 200]     # quick-pick sizes (in DNA) offered for both directions
+PRESET_DNA = [10, 50, 200]     # quick-pick sizes (in DNA) offered when BUYING DNA
+# When BUYING GOLD the player thinks in gold, so its quick-picks are gold amounts.
+PRESET_GOLD = [500, 2_500, 10_000]
 MAX_EXCHANGE_DNA = 1_000_000   # sane upper bound on a single custom exchange
 
 DIRECTIONS = ("buy_dna", "buy_gold")
@@ -39,6 +41,13 @@ def buy_gold_cost(dna: int) -> int:
 def sell_gold_gain(dna: int) -> int:
     """Gold you GET for selling `dna` DNA."""
     return int(dna) * GOLD_PER_DNA_SELL
+
+
+def dna_for_gold(gold: int) -> int:
+    """How many DNA you must sell to RECEIVE about `gold` gold (buy_gold direction).
+    Rounds to the nearest whole DNA — the atomic unit — so the received gold may differ
+    slightly from the requested amount. At least 1 DNA."""
+    return max(1, round(int(gold) / GOLD_PER_DNA_SELL))
 
 
 def describe(direction: str, dna: int) -> dict:

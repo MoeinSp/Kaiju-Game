@@ -282,8 +282,8 @@ def _diamond_box_list_keyboard() -> InlineKeyboardMarkup:
 
 async def diamond_box_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await send_screen(update, 
-        f"{get_emoji('diamond_box')} <b>جعبه‌های الماسی</b>\n"
-        "این جعبه‌ها همیشه یه موجود جدید می‌دن (نه تجهیزات) — هرچی سطح جعبه بالاتر، شانس نایاب‌بودنش بیشتره.\n\n"
+        f"{get_emoji('diamond_box')} <b>باکس هیولا</b>\n"
+        "این باکس‌ها همیشه یه موجود جدید می‌دن (نه تجهیزات) — هرچی سطح باکس بالاتر، شانس نایاب‌بودنش بیشتره.\n\n"
         "رو یکی بزن تا احتمالات دقیقش رو ببینی:",
         parse_mode="HTML",
         reply_markup=_diamond_box_list_keyboard(),

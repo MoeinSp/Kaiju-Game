@@ -325,6 +325,21 @@ FEED_XP_GAIN = 15
 TRAIN_COOLDOWN_HOURS = 4
 TRAIN_XP_GAIN = 40
 
+# 🧪 XP capsules — the ONLY way to «تغذیه» a creature now (feeding no longer costs
+# gold). Three tiers with escalating XP, bought in the daily shop. Stored per-user as
+# a {tier: count} dict on User.xp_capsules. `xp` is instant creature XP per capsule.
+# Ordered small→large; feeding «همه» consumes the biggest first so a nearly-maxed
+# creature wastes the fewest.
+XP_CAPSULES = {
+    "small":  {"emoji": "🥚", "label": "کپسول کوچک", "xp": 150},
+    "medium": {"emoji": "🧫", "label": "کپسول متوسط", "xp": 600},
+    "large":  {"emoji": "🧪", "label": "کپسول بزرگ", "xp": 2500},
+}
+XP_CAPSULE_ORDER = ("small", "medium", "large")  # small→large
+
+def xp_capsule(tier: str) -> dict:
+    return XP_CAPSULES[tier]
+
 # Creature level-up XP scales with the level so deep levels are a real grind.
 # It used to be a flat 100 per level, which made level 30 as cheap to reach as
 # level 2 and let a fed creature snowball forever. The curve is pinned so that
@@ -1064,17 +1079,17 @@ WHEEL_PRIZES = [
 # top tier deliberately skews heavily toward legendary/mythic. ─────────────────
 DIAMOND_BOX_TIERS = {
     "bronze": {
-        "label": "🥉 جعبه‌ی الماسی برنزی",
+        "label": "🥉 باکس هیولا برنزی",
         "cost_diamonds": 20,
         "weights": {"common": 70, "rare": 22, "epic": 6, "legendary": 1.8, "mythic": 0.2},
     },
     "silver": {
-        "label": "🥈 جعبه‌ی الماسی نقره‌ای",
+        "label": "🥈 باکس هیولا نقره‌ای",
         "cost_diamonds": 50,
         "weights": {"common": 50, "rare": 30, "epic": 14, "legendary": 5, "mythic": 1},
     },
     "gold": {
-        "label": "🥇 جعبه‌ی الماسی طلایی",
+        "label": "🥇 باکس هیولا طلایی",
         "cost_diamonds": 120,
         "weights": {"common": 25, "rare": 30, "epic": 25, "legendary": 15, "mythic": 5},
     },

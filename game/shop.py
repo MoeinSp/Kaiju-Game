@@ -33,7 +33,17 @@ BUILTIN_OFFERS = [
     {"key": "dna150", "emoji": "🧬", "title": "بسته‌ی 150 DNA", "cost": 40, "currency": "diamonds", "contents": [{"type": "dna", "amount": 150}]},
     {"key": "gold3000", "emoji": "💰", "title": "بسته‌ی 3000 طلا", "cost": 20, "currency": "diamonds", "contents": [{"type": "coins", "amount": 3000}]},
     {"key": "energy", "emoji": "⚡", "title": "شارژ کامل انرژی", "cost": 10, "currency": "diamonds", "contents": [{"type": "energy"}]},
+    # 🧪 XP capsules — level a kaiju fast. Priced so bulk XP via the large capsule is
+    # a little cheaper per-XP than the small one (rewards buying the big one).
+    {"key": "cap_small", "emoji": "🥚", "title": "کپسول اکسپی کوچک", "cost": 400, "currency": "coins", "contents": [{"type": "xp_capsule", "tier": "small", "count": 1}]},
+    {"key": "cap_medium", "emoji": "🧫", "title": "کپسول اکسپی متوسط", "cost": 1400, "currency": "coins", "contents": [{"type": "xp_capsule", "tier": "medium", "count": 1}]},
+    {"key": "cap_large", "emoji": "🧪", "title": "کپسول اکسپی بزرگ", "cost": 5000, "currency": "coins", "contents": [{"type": "xp_capsule", "tier": "large", "count": 1}]},
 ]
+
+# keys that should always exist in the catalog even after first-run seeding — the XP
+# capsules, added after the catalog was already live. _ensure_catalog get_or_creates
+# these every read so they appear in the shop on servers seeded before they existed.
+CORE_OFFER_KEYS = ("cap_small", "cap_medium", "cap_large")
 
 
 def _ensure_catalog() -> None:
@@ -44,14 +54,27 @@ def _ensure_catalog() -> None:
 
     from bio_lab.models import DailyShopItem
 
-    if DailyShopItem.objects.exists():
+    if not DailyShopItem.objects.exists():
+        for i, o in enumerate(BUILTIN_OFFERS):
+            DailyShopItem.objects.get_or_create(
+                key=o["key"],
+                defaults={"emoji": o["emoji"], "title": o["title"],
+                          "contents_json": json.dumps(o["contents"], ensure_ascii=False),
+                          "cost": o["cost"], "currency": o["currency"], "sort_order": i},
+            )
         return
-    for i, o in enumerate(BUILTIN_OFFERS):
+    # catalog already seeded — make sure the CORE offers (XP capsules, added later)
+    # exist too, so servers seeded before they were introduced still show them.
+    by_key = {o["key"]: o for o in BUILTIN_OFFERS}
+    for i, key in enumerate(CORE_OFFER_KEYS):
+        o = by_key.get(key)
+        if o is None:
+            continue
         DailyShopItem.objects.get_or_create(
-            key=o["key"],
+            key=key,
             defaults={"emoji": o["emoji"], "title": o["title"],
                       "contents_json": json.dumps(o["contents"], ensure_ascii=False),
-                      "cost": o["cost"], "currency": o["currency"], "sort_order": i},
+                      "cost": o["cost"], "currency": o["currency"], "sort_order": 100 + i},
         )
 
 
@@ -145,14 +168,21 @@ def today_offers() -> list[dict]:
     pool = catalog_items()
     if not pool:
         return []
+    # XP capsules are staples — always offered (so leveling is always reachable),
+    # separate from the rotating picks. The rest rotate by day-of-year.
+    core = [o for o in pool if o["key"] in CORE_OFFER_KEYS]
+    rotating = [o for o in pool if o["key"] not in CORE_OFFER_KEYS]
     day = _day()
-    n = len(pool)
-    count = min(OFFERS_PER_DAY, n)
-    picks = [pool[(day + i) % n] for i in range(count)]
     out = []
-    for i, o in enumerate(picks):
-        featured = i == 0
-        out.append({**o, "featured": featured, "price": _price(o, featured), "limit": 0})
+    if rotating:
+        n = len(rotating)
+        count = min(OFFERS_PER_DAY, n)
+        picks = [rotating[(day + i) % n] for i in range(count)]
+        for i, o in enumerate(picks):
+            featured = i == 0
+            out.append({**o, "featured": featured, "price": _price(o, featured), "limit": 0})
+    for o in core:  # capsules at full price, always present
+        out.append({**o, "featured": False, "price": o["cost"], "limit": 0})
     return out
 
 

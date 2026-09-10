@@ -57,8 +57,10 @@ def _home_render(oid: int, coins: int, dna: int, in_group: bool) -> tuple[str, I
         "می‌خوای کدوم رو بخری؟"
     )
     rows = [
-        [btn("💰 طلا", style=BUILD, callback_data=f"exch:pick:buy_gold:{oid}")],
-        [btn("🧬 دی‌ان‌ای (DNA)", style=SHOP, callback_data=f"exch:pick:buy_dna:{oid}")],
+        [btn("💰 خرید طلا (با DNA)", style=BUILD, callback_data=f"exch:pick:buy_gold:{oid}")],
+        [btn("🧬 خرید DNA (با طلا)", style=SHOP, callback_data=f"exch:pick:buy_dna:{oid}")],
+        [btn("🎟 مبادله تجهیزات با بلیط", emoji_key="btn_ticket_exchange", style=NAV,
+             callback_data=f"exch:tickets:{oid}")],
         _leave_row(in_group),
     ]
     return text, InlineKeyboardMarkup(rows)
@@ -76,10 +78,10 @@ def _amount_render(oid: int, direction: str, coins: int, dna: int, in_group: boo
     buying, paying = _dir_labels(direction)
     if direction == "buy_gold":
         rate_line = f"هر ۱ DNA که بدی → <b>{exchange.GOLD_PER_DNA_SELL}</b> طلا می‌گیری."
-        prompt = "چند DNA می‌خوای بدی؟"
+        prompt = "چند <b>طلا</b> می‌خوای بگیری؟"
     else:
         rate_line = f"هر ۱ DNA → <b>{exchange.GOLD_PER_DNA_BUY}</b> طلا می‌دی."
-        prompt = "چند DNA می‌خوای بگیری؟"
+        prompt = "چند <b>DNA</b> می‌خوای بگیری؟"
     lines = [
         f"🔄 <b>خرید {buying}</b>  <i>(با دادن {paying})</i>",
         f"<blockquote>{rate_line}\n"
@@ -88,13 +90,19 @@ def _amount_render(oid: int, direction: str, coins: int, dna: int, in_group: boo
         prompt,
     ]
     rows = []
-    for amt in exchange.PRESET_DNA:
-        pack = exchange.describe(direction, amt)
-        if direction == "buy_gold":
-            label = f"🧬 {amt} DNA  →  💰 {pack['gold']:,} طلا"
-        else:
+    if direction == "buy_gold":
+        # gold-denominated: the player picks how much GOLD to receive; we convert to the
+        # nearest whole DNA to sell and show the exact gold that yields.
+        for gold in exchange.PRESET_GOLD:
+            need_dna = exchange.dna_for_gold(gold)
+            got_gold = exchange.sell_gold_gain(need_dna)
+            label = f"💰 {got_gold:,} طلا  ←  🧬 {need_dna} DNA"
+            rows.append([btn(label, style=BUILD, callback_data=f"exch:amt:{direction}:{need_dna}:{oid}")])
+    else:
+        for amt in exchange.PRESET_DNA:
+            pack = exchange.describe(direction, amt)
             label = f"💰 {pack['gold']:,} طلا  →  🧬 {amt} DNA"
-        rows.append([btn(label, style=BUILD, callback_data=f"exch:amt:{direction}:{amt}:{oid}")])
+            rows.append([btn(label, style=BUILD, callback_data=f"exch:amt:{direction}:{amt}:{oid}")])
     rows.append([btn("✏️ عدد دلخواه", style=NAV, callback_data=f"exch:custom:{direction}:{oid}")])
     rows.append([btn("↩️ بازگشت", style=NAV, callback_data=f"exch:home:{oid}")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
@@ -152,6 +160,14 @@ async def exchange_nav_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
         return
 
+    if step == "tickets":
+        # third option on the exchange home: trade gear for genetic-box tickets
+        from bot.handlers.equip_exchange import equip_exchange_panel
+
+        await query.answer()
+        await equip_exchange_panel(update, context)
+        return
+
     if step == "pick":
         direction = parts[2]
         if direction not in exchange.DIRECTIONS:
@@ -183,15 +199,17 @@ async def exchange_nav_callback(update: Update, context: ContextTypes.DEFAULT_TY
         # group when they REPLY to this prompt — see group_words._maybe_capture...)
         from bot.handlers.private import AWAITING_PLAYER_KEY
 
+        unit = "gold" if direction == "buy_gold" else "dna"
         context.user_data[AWAITING_PLAYER_KEY] = {
-            "action": "exchange_custom", "direction": direction, "oid": str(oid),
+            "action": "exchange_custom", "direction": direction, "oid": str(oid), "unit": unit,
         }
         await query.answer()
         buying, _paying = _dir_labels(direction)
         hint = "همینجا عدد رو بفرست." if not _is_group(update) else "روی همین پیام <b>ریپلای</b> کن و عدد رو بفرست."
+        unit_word = "طلا" if unit == "gold" else "DNA"
         await safe_edit_message_text(
             query,
-            f"✏️ چند <b>DNA</b> برای «خرید {buying}»؟\n{hint}\n<i>مثلاً <code>120</code></i>",
+            f"✏️ چند <b>{unit_word}</b> می‌خوای بگیری؟\n{hint}\n<i>مثلاً <code>120</code></i>",
             parse_mode="HTML",
         )
         return
@@ -240,6 +258,7 @@ async def handle_custom_amount(update: Update, context: ContextTypes.DEFAULT_TYP
 
     direction = awaiting.get("direction")
     oid = awaiting.get("oid")
+    unit = awaiting.get("unit", "dna")
     message = update.effective_message
     raw = (message.text or "").strip()
     norm = raw.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789"))
@@ -247,8 +266,10 @@ async def handle_custom_amount(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data[AWAITING_PLAYER_KEY] = awaiting  # keep waiting
         await message.reply_text("⚠️ یه عدد درست بفرست (مثلاً 120).")
         return
+    # for buy_gold the number is GOLD to receive → convert to the whole DNA to sell
+    amount_dna = exchange.dna_for_gold(int(norm)) if unit == "gold" else int(norm)
     try:
-        pack = exchange.describe(direction, int(norm))
+        pack = exchange.describe(direction, amount_dna)
     except GameError as exc:
         context.user_data[AWAITING_PLAYER_KEY] = awaiting
         await message.reply_text(str(exc))

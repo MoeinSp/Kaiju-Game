@@ -60,10 +60,13 @@ from game.alliance import (
 from game.buildings import get_or_create_buildings, grant_speedup_card, is_built, star_cap
 from game.creature import (
     GameError,
+    capsule_counts,
     create_starter_creature,
+    creature_is_maxed,
     devour_candidates,
     effective_stats,
     feed,
+    feed_capsules,
     list_creatures,
     set_active_creature,
     train,
@@ -478,7 +481,7 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
         f"{get_emoji('diamond')} الماس: <b>{user.diamonds:,}</b>",
         f"{get_emoji('energy')} انرژی: {pct_bar(energy, constants.MAX_ENERGY)} ({energy}/{constants.MAX_ENERGY}) {charge}",
         "", div, "",
-        "💡 <i>نکته: تغذیه و تمرین XP می‌دهند و ارتقای اعضا مستقیماً قدرت رزمی را بالا می‌برد.</i>",
+        "💡 <i>نکته: «تغذیه» با کپسول اکسپی XP می‌دهد و ارتقای اعضا مستقیماً قدرت رزمی را بالا می‌برد.</i>",
     ]
     return "\n".join(lines)
 
@@ -504,8 +507,7 @@ def upgrade_panel_keyboard(creature_id: int, is_active: bool = True, step: int =
     ]
     rows = [
         [
-            btn("تغذیه", emoji_key="btn_feed", style=BUILD, callback_data=f"lab:feed:{creature_id}"),
-            btn("تمرین", emoji_key="btn_train", style=BUILD, callback_data=f"lab:train:{creature_id}"),
+            btn("🧪 تغذیه (کپسول)", emoji_key="btn_feed", style=BUILD, callback_data=f"feedcap:home:{creature_id}"),
         ],
         step_row,
         [
@@ -1011,7 +1013,7 @@ _CATEGORIES = {
         [("دانشنامه", "codex", "s", "btn_codex"), ("دعوت دوستان", "referral", "s", "btn_referral")],
     ]),
     "shop": ("🛒 فروشگاه", [
-        [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("جعبه‌های الماسی", "diamond_box", "s", "btn_diamond_box")],
+        [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("باکس هیولا", "diamond_box", "s", "btn_diamond_box")],
         [("بنر ویژه", "banner", "s", "btn_banner"), ("شاپ روزانه", "shop", "s", "btn_shop")],
         [("خرید سپر", "shield_shop", "s", "btn_shield"), ("کازینو", "casino", "s", "btn_casino")],
         [("آیتم‌های ویژه", "item_shop", "s", "btn_items"), ("خرید طلا", "gold_shop", "s", "btn_gold_shop")],
@@ -1347,6 +1349,112 @@ async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         parse_mode="HTML",
         reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=step, star_level=creature.star_level),
     )
+
+
+# ── 🧪 capsule feeding panel ──────────────────────────────────────────────────
+def _feedcap_view_sync(tg_user, creature_id):
+    user, _ = get_or_create_user(tg_user)
+    try:
+        creature = Creature.objects.get(id=creature_id, owner=user)
+    except Creature.DoesNotExist:
+        raise GameError("این موجود توی کلکسیون تو نیست.")
+    return user, creature, capsule_counts(user), creature_is_maxed(creature)
+
+
+def feedcap_text(user, creature, caps: dict, maxed: bool) -> str:
+    max_level = constants.creature_max_level(creature.rarity, creature.star_level)
+    lines = [
+        f"🧪 <b>تغذیهٔ {creature_name(creature)}</b>",
+        f"🎖 سطح {creature.level}/{max_level} · XP {creature.xp:,}/{constants.xp_for_creature_level(creature.level):,}",
+        "",
+        "<b>کپسول‌های اکسپی تو:</b>",
+    ]
+    total = 0
+    for tier in constants.XP_CAPSULE_ORDER:
+        cfg = constants.XP_CAPSULES[tier]
+        n = caps.get(tier, 0)
+        total += n
+        lines.append(f"{cfg['emoji']} {cfg['label']}: <b>{n}</b> عدد  <i>(هر کدوم +{cfg['xp']:,} XP)</i>")
+    lines.append("")
+    if maxed:
+        lines.append("🔒 <i>این کایجو به سقف سطحش رسیده — تغذیه بی‌فایده‌ست.</i>")
+    elif total == 0:
+        lines.append("<i>کپسول نداری. از «🛒 فروشگاه روزانه» کپسول اکسپی بخر.</i>")
+    else:
+        lines.append("<i>یکی رو بزن؛ «همه با هم» بزرگ‌ها رو اول مصرف می‌کنه و به سقف سطح که رسید متوقف می‌شه.</i>")
+    return "\n".join(lines)
+
+
+def feedcap_keyboard(creature, caps: dict, maxed: bool) -> InlineKeyboardMarkup:
+    cid = creature.id
+    rows = []
+    if not maxed:
+        for tier in constants.XP_CAPSULE_ORDER:
+            cfg = constants.XP_CAPSULES[tier]
+            n = caps.get(tier, 0)
+            if n <= 0:
+                continue
+            rows.append([
+                btn(f"{cfg['emoji']} +۱", style=BUILD, callback_data=f"feedcap:one:{cid}:{tier}"),
+                btn(f"همهٔ {cfg['label']} ({n})", style=BUILD, callback_data=f"feedcap:allt:{cid}:{tier}"),
+            ])
+        if sum(caps.values()) > 0:
+            rows.append([btn("🍽 مصرف همهٔ کپسول‌ها", emoji_key="btn_confirm", style=CONFIRM,
+                             callback_data=f"feedcap:all:{cid}")])
+    rows.append([btn("↩️ بازگشت", emoji_key="btn_back", style=BACK, callback_data=f"upg_pick:{cid}")])
+    return InlineKeyboardMarkup(rows)
+
+
+def _feedcap_plan(kind: str, tier: str, caps: dict) -> list:
+    if kind == "one":
+        return [(tier, 1)]
+    if kind == "allt":
+        return [(tier, caps.get(tier, 0))]
+    # all: biggest first so a nearly-maxed creature wastes the fewest
+    return [(t, caps.get(t, 0)) for t in reversed(constants.XP_CAPSULE_ORDER)]
+
+
+def _feedcap_do_sync(tg_user, creature_id, kind, tier):
+    user, _ = get_or_create_user(tg_user)
+    try:
+        creature = Creature.objects.get(id=creature_id, owner=user)
+    except Creature.DoesNotExist:
+        raise GameError("این موجود توی کلکسیون تو نیست.")
+    caps = capsule_counts(user)
+    result = feed_capsules(user, creature, _feedcap_plan(kind, tier, caps))
+    record_action(user, "feed")
+    check_missions(user, "feed")
+    return user, creature, result, capsule_counts(user), creature_is_maxed(creature)
+
+
+async def feedcap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    parts = query.data.split(":")
+    sub, creature_id = parts[1], int(parts[2])
+    if sub == "home":
+        try:
+            user, creature, caps, maxed = await run_db(_feedcap_view_sync, update.effective_user, creature_id)
+        except GameError as exc:
+            await query.answer(str(exc), show_alert=True)
+            return
+        await query.answer()
+        await safe_edit_message_text(query, feedcap_text(user, creature, caps, maxed),
+                                     parse_mode="HTML", reply_markup=feedcap_keyboard(creature, caps, maxed))
+        return
+    tier = parts[3] if len(parts) > 3 else ""
+    try:
+        user, creature, result, caps, maxed = await run_db(
+            _feedcap_do_sync, update.effective_user, creature_id, sub, tier
+        )
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    eaten = sum(result["consumed"].values())
+    lvl = f" {get_emoji('celebrate')} رسید به سطح {result['new_level']}!" if result["levels"] else ""
+    await query.answer(f"🧪 {eaten} کپسول مصرف شد · +{result['xp']:,} XP")
+    note = f"🧪 <b>{eaten} کپسول مصرف شد</b> · +{result['xp']:,} XP{lvl}\n\n"
+    await safe_edit_message_text(query, note + feedcap_text(user, creature, caps, maxed),
+                                 parse_mode="HTML", reply_markup=feedcap_keyboard(creature, caps, maxed))
 
 
 def _collection_sync(tg_user):
@@ -2689,18 +2797,22 @@ def _alliance_create_sync(tg_user, name):
 
 
 async def alliance_create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from game.alliance import ALLIANCE_CREATE_COST
+
     if not context.args:
         await update.message.reply_text(
-            "استفاده: <code>/alliance_create اسم اتحاد</code>", parse_mode="HTML"
+            "استفاده: <code>/alliance_create اسم اتحاد</code>\n"
+            f"<i>هزینه‌ی ساخت اتحاد: {ALLIANCE_CREATE_COST:,} طلا</i>", parse_mode="HTML"
         )
         return
     try:
         alliance = await run_db(_alliance_create_sync, update.effective_user, " ".join(context.args))
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(str(exc), parse_mode="HTML")
         return
     await update.message.reply_text(
-        f"{get_emoji('alliance')} اتحاد <b>{alliance.name}</b> ساخته شد! تو رهبرشی {get_emoji('crown')}",
+        f"{get_emoji('alliance')} اتحاد <b>{alliance.name}</b> ساخته شد! تو رهبرشی {get_emoji('crown')}\n"
+        f"<i>({ALLIANCE_CREATE_COST:,} طلا کم شد)</i>",
         parse_mode="HTML",
     )
 
@@ -4123,6 +4235,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(equip_do_callback, pattern=r"^upg_(equip|unequip):"))
     application.add_handler(CallbackQueryHandler(upgrade_set_default_callback, pattern=r"^upg_default:"))
     application.add_handler(CallbackQueryHandler(upgrade_step_callback, pattern=r"^upg_step:\d+:\d+$"))
+    application.add_handler(CallbackQueryHandler(feedcap_callback, pattern=r"^feedcap:"))
     application.add_handler(CallbackQueryHandler(hunt_go_callback, pattern=r"^hunt_go:"))
     application.add_handler(CallbackQueryHandler(autohunt_start_callback, pattern=r"^autohunt_start$"))
     application.add_handler(CallbackQueryHandler(autohunt_amt_callback, pattern=r"^autohunt_amt:(all|half|custom)$"))

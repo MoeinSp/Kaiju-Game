@@ -236,6 +236,9 @@ def content_summary(contents: list[dict]) -> str:
             parts.append(f"{c['amount']} DNA")
         elif t == "energy":
             parts.append("انرژی کامل")
+        elif t == "xp_capsule":
+            cap = constants.XP_CAPSULES.get(c.get("tier"), {})
+            parts.append(f"{c.get('count', 1)}× {cap.get('emoji', '🧪')} {cap.get('label', 'کپسول اکسپی')}")
         elif t == "speedup":
             parts.append(f"{c['count']}× کارت سرعت {c['minutes']}دقیقه")
         elif t == "creature":
@@ -331,6 +334,13 @@ def grant_contents(user: User, contents: list[dict]) -> list[str]:
             user.energy_updated_at = timezone.now()
             money_fields.update({"energy", "energy_updated_at"})
             notes.append("انرژی کامل")
+        elif t == "xp_capsule":
+            from game.creature import add_capsules
+            tier = c.get("tier"); count = int(c.get("count", 1))
+            add_capsules(user, tier, count)
+            money_fields.add("xp_capsules")
+            cap = constants.XP_CAPSULES.get(tier, {})
+            notes.append(f"{count}× {cap.get('emoji', '🧪')} {cap.get('label', 'کپسول اکسپی')}")
         elif t == "speedup":
             from game.buildings import grant_speedup_card
             grant_speedup_card(user, c["minutes"], count=c["count"])

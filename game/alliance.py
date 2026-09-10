@@ -9,8 +9,10 @@ from game.combat import resolve_duel
 from game.creature import GameError
 
 ALLIANCE_NAME_MAX_LEN = 32
+ALLIANCE_CREATE_COST = 50_000  # gold charged to found a new alliance
 
 
+@transaction.atomic
 def create_alliance(user: User, name: str) -> Alliance:
     name = name.strip()
     if not name or len(name) > ALLIANCE_NAME_MAX_LEN:
@@ -19,6 +21,16 @@ def create_alliance(user: User, name: str) -> Alliance:
         raise GameError("اول باید از اتحاد فعلیت با /alliance_leave خارج بشی.")
     if Alliance.objects.filter(name__iexact=name).exists():
         raise GameError("این اسم قبلاً گرفته شده، یه اسم دیگه امتحان کن.")
+    # charge the founding fee under a row lock so a rapid double-tap can't found two
+    locked = User.objects.select_for_update().get(id=user.id)
+    if locked.coins < ALLIANCE_CREATE_COST:
+        raise GameError(
+            f"ساخت اتحاد <b>{ALLIANCE_CREATE_COST:,}</b> طلا هزینه داره "
+            f"(الان {locked.coins:,} داری)."
+        )
+    locked.coins -= ALLIANCE_CREATE_COST
+    locked.save(update_fields=["coins"])
+    user.coins = locked.coins  # keep the caller's instance in sync
 
     alliance = Alliance.objects.create(name=name, leader=user)
     _join_stamp(user, alliance)

@@ -280,6 +280,88 @@ def feed(user: User, creature: Creature) -> int:
     return levels_gained
 
 
+# ── 🧪 XP-capsule feeding ─────────────────────────────────────────────────────
+# «تغذیه» now spends XP capsules (see constants.XP_CAPSULES) instead of gold. A
+# capsule gives a fixed chunk of instant XP; feeding stops the moment the creature
+# hits its level cap so no capsule is ever wasted past the max.
+
+
+def capsule_counts(user: User) -> dict[str, int]:
+    """The user's XP-capsule inventory as {tier: count}, defaulting missing tiers to 0
+    and ignoring any stray/unknown keys. Safe to call on a fresh user (empty dict)."""
+    raw = user.xp_capsules or {}
+    return {t: int(raw.get(t, 0) or 0) for t in constants.XP_CAPSULE_ORDER}
+
+
+def total_capsules(user: User) -> int:
+    return sum(capsule_counts(user).values())
+
+
+def add_capsules(user: User, tier: str, count: int) -> None:
+    """Grant `count` capsules of `tier` (used by the shop grant path). Caller saves,
+    OR pass a freshly-locked user — this only mutates the dict + marks the field."""
+    if tier not in constants.XP_CAPSULES or count <= 0:
+        return
+    inv = capsule_counts(user)
+    inv[tier] = inv.get(tier, 0) + int(count)
+    user.xp_capsules = inv
+
+
+def creature_is_maxed(creature: Creature) -> bool:
+    return creature.level >= constants.creature_max_level(creature.rarity, creature.star_level)
+
+
+@transaction.atomic
+def feed_capsules(user: User, creature: Creature, plan: list[tuple[str, int]]) -> dict:
+    """Consume capsules per `plan` (an ordered list of (tier, count)) and feed the XP to
+    `creature`, one capsule at a time, stopping the instant the creature is maxed so
+    nothing is wasted. Locks both rows. Returns a summary dict.
+
+    `plan` counts are intents; the actual consumption is clamped to what the user owns
+    and to what the creature can still absorb before its level cap."""
+    u = User.objects.select_for_update().get(id=user.id)
+    c = Creature.objects.select_for_update().get(id=creature.id)
+    inv = capsule_counts(u)
+
+    if creature_is_maxed(c):
+        raise GameError("این کایجو به سقف سطحش رسیده — تغذیه بی‌فایده‌ست. اول ستاره‌ش رو با ترکیب بالا ببر.")
+
+    consumed: dict[str, int] = {}
+    total_xp = 0
+    levels = 0
+    for tier, want in plan:
+        if tier not in constants.XP_CAPSULES:
+            continue
+        take = min(int(want), inv.get(tier, 0))
+        xp_each = constants.XP_CAPSULES[tier]["xp"]
+        for _ in range(take):
+            if creature_is_maxed(c):
+                break
+            levels += add_xp(c, xp_each)
+            total_xp += xp_each
+            inv[tier] -= 1
+            consumed[tier] = consumed.get(tier, 0) + 1
+        if creature_is_maxed(c):
+            break
+
+    if not consumed:
+        raise GameError("کپسولی برای مصرف نداری. از «فروشگاه روزانه» کپسول اکسپی بخر.")
+
+    u.xp_capsules = inv
+    u.save(update_fields=["xp_capsules"])
+    c.save()
+    # keep caller instances fresh
+    user.xp_capsules = inv
+    creature.level, creature.xp = c.level, c.xp
+    creature.base_hp, creature.base_atk = c.base_hp, c.base_atk
+    creature.base_def, creature.base_spd = c.base_def, c.base_spd
+    return {
+        "consumed": consumed, "xp": total_xp, "levels": levels,
+        "new_level": c.level, "maxed": creature_is_maxed(c),
+        "remaining": capsule_counts(u),
+    }
+
+
 def train(creature: Creature) -> int:
     now = timezone.now()
     if creature.last_trained_at is not None:

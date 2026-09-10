@@ -342,16 +342,15 @@ def _upgrade_card(user, creature, energy) -> tuple[str, InlineKeyboardMarkup]:
             lines.append(f"{cfg['label']}: <b>{lvl}/{cap}</b> 🔒")
         else:
             lines.append(f"{cfg['label']}: <b>{lvl}/{cap}</b> — +۱: {part_bulk_cost(lvl, 1, creature.rarity):,} {get_emoji('coin')}")
+    from game.creature import total_capsules
+
     lines += [
         "",
-        f"🍖 تغذیه: {constants.FEED_COST_COINS} 🪙 → {constants.FEED_XP_GAIN} XP · 🏋️ تمرین: رایگان (هر {constants.TRAIN_COOLDOWN_HOURS}س)",
+        f"🧪 تغذیه با کپسول اکسپی (داری: {total_capsules(user)}) — از «فروشگاه روزانه» بخر",
         f"{get_emoji('coin')} {user.coins:,}   {get_emoji('energy')} {energy}/{constants.MAX_ENERGY}",
     ]
     rows = [
-        [
-            btn("تغذیه", emoji_key="btn_feed", style=BUILD, callback_data=_act("feed", user.id)),
-            btn("تمرین", emoji_key="btn_train", style=BUILD, callback_data=_act("train", user.id)),
-        ],
+        [btn("🧪 تغذیه (کپسول)", emoji_key="btn_feed", style=BUILD, callback_data=_act("feedcap", user.id))],
         [
             btn("بال", emoji_key="btn_wings", style=BUILD, callback_data=_act("up_wings", user.id)),
             btn("زره", emoji_key="btn_armor", style=BUILD, callback_data=_act("up_armor", user.id)),
@@ -363,6 +362,39 @@ def _upgrade_card(user, creature, energy) -> tuple[str, InlineKeyboardMarkup]:
         [btn("هیولا", emoji_key="btn_creature", style=NAV, callback_data=_scoped("creature", user.id))],
         [_pm_button("ارتقای کامل (×۵/۱۰)، تجهیزات و فیوژن در پیوی")],
     ]
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _feedcap_group_card(user, creature, caps: dict, maxed: bool) -> tuple[str, InlineKeyboardMarkup]:
+    """Group capsule-feeding panel — scoped to the summoner. Mirrors the DM one."""
+    max_level = constants.creature_max_level(creature.rarity, creature.star_level)
+    lines = [
+        f"🧪 <b>تغذیهٔ {creature_name(creature)}</b>",
+        f"🎖 سطح {creature.level}/{max_level}",
+        "",
+        "<b>کپسول‌های اکسپی تو:</b>",
+    ]
+    for tier in constants.XP_CAPSULE_ORDER:
+        cfg = constants.XP_CAPSULES[tier]
+        lines.append(f"{cfg['emoji']} {cfg['label']}: <b>{caps.get(tier, 0)}</b>  <i>(+{cfg['xp']:,} XP)</i>")
+    rows = []
+    if maxed:
+        lines.append("\n🔒 <i>به سقف سطح رسیده — تغذیه بی‌فایده‌ست.</i>")
+    elif sum(caps.values()) == 0:
+        lines.append("\n<i>کپسول نداری. از «فروشگاه روزانه» (پیوی) بخر.</i>")
+    else:
+        for tier in constants.XP_CAPSULE_ORDER:
+            cfg = constants.XP_CAPSULES[tier]
+            n = caps.get(tier, 0)
+            if n <= 0:
+                continue
+            rows.append([
+                btn(f"{cfg['emoji']} +۱", style=BUILD, callback_data=_act("fcfeed", user.id, f"one:{tier}")),
+                btn(f"همهٔ {cfg['label']} ({n})", style=BUILD, callback_data=_act("fcfeed", user.id, f"allt:{tier}")),
+            ])
+        rows.append([btn("🍽 مصرف همه", emoji_key="btn_confirm", style=CONFIRM,
+                         callback_data=_act("fcfeed", user.id, "all:x"))])
+    rows.append([btn("↩️ ارتقا", emoji_key="btn_back", style=BACK, callback_data=_scoped("upgrade", user.id))])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -399,7 +431,8 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
                 callback_data=_act("hunt_go", user.id, f"{target['tier']}:{target['seed']}")),
             btn("بعدی", emoji_key="btn_recheck", style=NAV, callback_data=_act("hunt_next", user.id)),
         ],
-        [_pm_button()],
+        [btn(f"⚡️ شکار خودکار (همه انرژی: {energy})", emoji_key="btn_attack", style=BATTLE,
+             callback_data=_act("autohunt", user.id))],
     ]
     return text, InlineKeyboardMarkup(rows)
 
@@ -484,6 +517,23 @@ def _mine_card(user, rows_data) -> tuple[str, InlineKeyboardMarkup]:
 
 
 def _box_card(user) -> tuple[str, InlineKeyboardMarkup]:
+    """The box chooser: two kinds. Genetic box opens right here; the monster box
+    (diamonds, always gives a kaiju) lives in the DM."""
+    text = (
+        f"{get_emoji('diamond')} <b>باکس‌ها</b>\n\n"
+        "<blockquote>🧬 <b>باکس ژنتیکی</b>: با طلا/DNA باز می‌شه، شانسی هیولا یا تجهیزات می‌ده.\n"
+        "👹 <b>باکس هیولا</b>: با الماس، همیشه هیولا می‌ده و شانس درجه‌ی بالا بیشتره.</blockquote>\n"
+        "کدوم رو می‌خوای؟"
+    )
+    rows = [
+        [btn("🧬 باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data=_act("box_genetic", user.id))],
+        [btn("👹 باکس هیولا", emoji_key="btn_diamond_box", style=SHOP,
+             url=f"https://t.me/{BOT_USERNAME}?start=boxes")],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _box_genetic_card(user) -> tuple[str, InlineKeyboardMarkup]:
     text = (
         f"{get_emoji('diamond')} <b>باکس ژنتیکی</b>\n\n"
         f"<blockquote>هزینه: <b>{constants.BIOCRATE_GOLD_COST}</b> {get_emoji('coin')} + "
@@ -493,7 +543,7 @@ def _box_card(user) -> tuple[str, InlineKeyboardMarkup]:
     )
     rows = [
         [btn("باز کن", emoji_key="btn_biocrate", style=SHOP, callback_data=_act("box_open", user.id))],
-        [_pm_button("جعبه‌های الماسی در پیوی")],
+        [btn("↩️ باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_scoped("box", user.id))],
     ]
     return text, InlineKeyboardMarkup(rows)
 
@@ -659,6 +709,35 @@ def _charge_hunt_scout_sync(tg_user):
     user.save(update_fields=["coins"])
 
 
+def _grp_feedcap_view_sync(tg_user):
+    from game.creature import capsule_counts, creature_is_maxed
+
+    user, _ = get_or_create_user(tg_user)
+    creature = get_active_creature(user)
+    _require_creature(creature)
+    return user, creature, capsule_counts(user), creature_is_maxed(creature)
+
+
+def _grp_feedcap_do_sync(tg_user, kind, tier):
+    from game.creature import capsule_counts, creature_is_maxed, feed_capsules
+    from game.daily import check_missions, record_action
+
+    user, _ = get_or_create_user(tg_user)
+    creature = get_active_creature(user)
+    _require_creature(creature)
+    caps = capsule_counts(user)
+    if kind == "one":
+        plan = [(tier, 1)]
+    elif kind == "allt":
+        plan = [(tier, caps.get(tier, 0))]
+    else:  # all — biggest first
+        plan = [(t, caps.get(t, 0)) for t in reversed(constants.XP_CAPSULE_ORDER)]
+    result = feed_capsules(user, creature, plan)
+    record_action(user, "feed")
+    check_missions(user, "feed")
+    return user, creature, result, capsule_counts(user), creature_is_maxed(creature)
+
+
 def _card_sync(tg_user, chat, action):
     """One DB round-trip per card. Everything the renderers need has to be
     resolved here — they run on the event loop."""
@@ -785,6 +864,8 @@ def _render(action: str, data: dict, page: int = 0) -> tuple[str, InlineKeyboard
         return _mine_card(user, data.get("rows", []))
     if action == "box":
         return _box_card(user)
+    if action == "box_genetic":
+        return _box_genetic_card(user)
     if action == "wheel":
         return _wheel_card(user, data.get("spun_today", False))
     if action == "fusion":
@@ -1167,16 +1248,29 @@ def _do_sync(tg_user, chat, action, arg):
     user, _ = get_or_create_user(tg_user)
     creature = get_active_creature(user)
 
-    if action in ("feed", "train"):
-        from game.creature import feed, train
+    if action == "autohunt":
+        from django.db import transaction
+
+        from bio_lab.models import User as _User
         from game.daily import check_missions, record_action
+        from game.energy import spend_energy
+        from game.hunt import resolve_auto_hunt
 
         _require_creature(creature)
-        levels = feed(user, creature) if action == "feed" else train(creature)
-        record_action(user, action)
-        check_missions(user, action)
-        return {"kind": action, "levels": levels, "creature": creature,
-                "card": _card_sync(tg_user, chat, "upgrade")}
+        energy = sync_energy(user)
+        hunts = min(energy, 50)  # spend up to all current energy in one batch (cap 50)
+        if hunts <= 0:
+            raise GameError("انرژی نداری — صبر کن پر شه یا توی پیوی با الماس شارژ کن.")
+        with transaction.atomic():
+            u = _User.objects.select_for_update().get(id=user.id)
+            creature = get_active_creature(u)
+            _require_creature(creature)
+            spend_energy(u, hunts * constants.HUNT_ENERGY_COST, "شکار خودکار")
+            u.save(update_fields=["energy", "energy_updated_at"])
+            result = resolve_auto_hunt(u, creature, hunts)
+            record_action(u, "hunt")
+            result["missions"] = check_missions(u, "hunt")
+        return {"kind": "autohunt", "result": result, "card": _card_sync(tg_user, chat, "hunt")}
 
     if action in ("up_wings", "up_armor", "up_fangs", "up_poison"):
         from game.creature import upgrade_part
@@ -1289,10 +1383,10 @@ def _action_note(payload: dict) -> str:
     kind = payload["kind"]
     if kind == "setactive":
         note = f"🟢 <b>{payload['creature'].name}</b> شد هیولای فعالت!"
-    elif kind == "feed":
-        note = f"{get_emoji('coin')} <b>تغذیه شد!</b>"
-    elif kind == "train":
-        note = "🏋️ <b>تمرین کرد!</b>"
+    elif kind == "autohunt":
+        r = payload["result"]
+        note = (f"⚡️ <b>شکار خودکار:</b> {r['wins']}/{r['hunts']} برد · "
+                f"+{r['coins']:,} {get_emoji('coin')} +{r['dna']} {get_emoji('dna')} · +{r['xp']:,} XP")
     elif kind == "part":
         label = constants.BODY_PARTS.get(payload["part"], {}).get("label", payload["part"])
         note = f"🧩 <b>{label} → سطح {payload['new_level']}</b> (−{payload['cost']:,} {get_emoji('coin')})"
@@ -1348,6 +1442,40 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer("این کارت مال تو نیست — خودت کلمه‌ش رو بفرست.", show_alert=True)
         return
 
+    # ── 🧪 capsule feeding (view + consume), box chooser sub-view ──────────────
+    if action == "feedcap":
+        try:
+            user, creature, caps, maxed = await run_db(_grp_feedcap_view_sync, update.effective_user)
+        except GameError as exc:
+            await query.answer(str(exc), show_alert=True)
+            return
+        await query.answer()
+        text, keyboard = _feedcap_group_card(user, creature, caps, maxed)
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        return
+    if action == "fcfeed":
+        kind, _, tier = arg.partition(":")
+        try:
+            user, creature, result, caps, maxed = await run_db(
+                _grp_feedcap_do_sync, update.effective_user, kind, tier
+            )
+        except GameError as exc:
+            await query.answer(str(exc), show_alert=True)
+            return
+        eaten = sum(result["consumed"].values())
+        await query.answer(f"🧪 {eaten} کپسول · +{result['xp']:,} XP")
+        text, keyboard = _feedcap_group_card(user, creature, caps, maxed)
+        lvl = f" {get_emoji('celebrate')} سطح {result['new_level']}!" if result["levels"] else ""
+        note = f"🧪 <b>{eaten} کپسول مصرف شد</b> · +{result['xp']:,} XP{lvl}\n\n"
+        await safe_edit_message_text(query, note + text, parse_mode="HTML", reply_markup=keyboard)
+        return
+    if action == "box_genetic":
+        user = await run_db(_casino_home_sync, update.effective_user)  # just fetches the user
+        await query.answer()
+        text, keyboard = _box_genetic_card(user)
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        return
+
     # ── casino: a self-contained pick → confirm → play loop, all in the group ──
     if action in ("casino_pick", "casino_home", "casino_play"):
         if action == "casino_home":
@@ -1391,9 +1519,9 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
-    card_action = {"feed": "upgrade", "train": "upgrade", "hunt_go": "hunt", "hunt_next": "hunt",
+    card_action = {"autohunt": "hunt", "hunt_go": "hunt", "hunt_next": "hunt",
                    "arena_go": "arena", "arena_find": "arena", "collect_all": "mine",
-                   "box_open": "box", "wheel_spin": "wheel", "setactive": "select"}[action]
+                   "box_open": "box_genetic", "wheel_spin": "wheel", "setactive": "select"}[action]
     text, keyboard = _render(card_action, payload["card"])
     await safe_edit_message_text(
         query, _action_note(payload) + text, parse_mode="HTML", reply_markup=keyboard

@@ -89,14 +89,13 @@ def _side(f: Fighter) -> dict:
     }
 
 
-def _hp_report_line(side: dict) -> str:
-    """One creature's health at the end of the fight: bar + percent + exact HP + crits."""
+def _hp_compact(side: dict) -> str:
+    """Compact end-of-fight health for one fighter: icon + name + bar + percent."""
     hp, maxhp = side["hp"], side["max_hp"]
     icon = "💀" if hp <= 0 else "❤️"
     pct = round(100 * max(hp, 0) / max(1, maxhp))
     bar = constants.render_bar(hp, maxhp, width=10)
-    crit = f"  💥 {side['crits']} ضربه" if side["crits"] else ""
-    return f"{icon} <b>{side['name']}</b>: [{bar}] {pct}% ({hp:,}/{maxhp:,} HP){crit}"
+    return f"{icon} <code>{side['name']}</code> [{bar}] {pct}%"
 
 
 def battle_report(sa: dict, sb: dict, winner_name: str, rounds: int, mult: float,
@@ -109,28 +108,26 @@ def battle_report(sa: dict, sb: dict, winner_name: str, rounds: int, mult: float
     a_lbl = constants.element_label(sa["element"])
     b_lbl = constants.element_label(sb["element"])
     if mult > 1:
-        match = f"⚖️ <b>تطابق عناصر:</b> برتری با <b>{sa['name']}</b> (ضریب آسیب فعال)"
+        match = f"⚖️ تطابق عناصر: برتری با <code>{sa['name']}</code> (ضریب آسیب فعال)"
     elif mult < 1:
-        match = f"⚖️ <b>تطابق عناصر:</b> برتری با <b>{sb['name']}</b> (ضریب آسیب فعال)"
+        match = f"⚖️ تطابق عناصر: برتری با <code>{sb['name']}</code> (ضریب آسیب فعال)"
     else:
-        match = "⚖️ <b>تطابق عناصر:</b> خنثی (بدون ضریب آسیب)"
-    lines = [
-        f"🗡 <b>مهاجم:</b> <b>{sa['name']}</b> [{a_lbl}]",
-        f"🛡 <b>مدافع:</b> <b>{sb['name']}</b> [{b_lbl}]",
-        match,
-        "", div, "",
-        "📊 <b>وضعیت سلامت در پایان نبرد:</b>",
-        "",
-        _hp_report_line(sa),
-        _hp_report_line(sb),
-        "", div, "",
-        f"{get_emoji('trophy')} <b>فاتح نبرد:</b> <b>{winner_name}</b> (در {rounds} راند)",
-    ]
+        match = "⚖️ تطابق عناصر: خنثی (بدون ضریب آسیب)"
+    # فاتح + پیروز میدان on one line (compact); winner name in monospace
+    victor = f"{get_emoji('trophy')} فاتح نبرد: <code>{winner_name}</code> (در {rounds} راند)"
     if victor_line:
-        lines.append(f"👑 <b>پیروز میدان:</b> {victor_line} 🎉")
+        victor += f"   👑 پیروز میدان: {victor_line} 🎉"
+    lines = [
+        f"🗡 مهاجم: <code>{sa['name']}</code> [{a_lbl}]   🛡 مدافع: <code>{sb['name']}</code> [{b_lbl}]",
+        match,
+        div,
+        "📊 وضعیت سلامت در پایان نبرد:",
+        f"{_hp_compact(sa)}   {_hp_compact(sb)}",
+        div,
+        victor,
+    ]
     if reward_block:
-        lines += ["", div, "", reward_block]
-    lines += ["", div, "", constants.element_cycle_block()]
+        lines += [div, reward_block]
     return "\n".join(lines)
 
 

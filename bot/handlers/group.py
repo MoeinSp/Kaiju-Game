@@ -551,12 +551,20 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
         )
 
 
+_NO_ALLIANCE_MSG = (
+    "🚫 <b>ارور: عدم عضویت در اتحاد</b>\n\n"
+    "برای شرکت در رید اتحاد، ابتدا باید در یک اتحاد عضو شوید یا اتحاد جدیدی بسازید.\n\n"
+    "📌 <b>راهنما:</b>\n"
+    "جهت ساخت یا عضویت در اتحاد، به پیوی ربات مراجعه کرده و وارد بخش «اتحاد من» شوید."
+)
+
+
 def _raid_spawn_sync(chat, spawner_tg):
     group = get_or_create_group(chat)
     spawner_user, _ = get_or_create_user(spawner_tg)
     touch_membership(group, spawner_user)
     if spawner_user.alliance_id is None:
-        raise RaidError("🚫 رید اتحادیه — اول باید عضو یه اتحاد باشی.\nتوی پیوی ربات از «اتحاد من» یکی بساز یا عضو شو، بعد «احضار» بزن.")
+        raise RaidError(_NO_ALLIANCE_MSG)
     alliance = Alliance.objects.get(id=spawner_user.alliance_id)
     boss = spawn_boss(alliance, group)
     return boss, alliance.name
@@ -585,7 +593,7 @@ def _attack_sync(chat, tg_user):
     user, _ = get_or_create_user(tg_user)
     touch_membership(group, user)
     if user.alliance_id is None:
-        raise GameError("🚫 رید اتحادیه — اول باید عضو یه اتحاد باشی تا بتونی اتک رید بزنی.")
+        raise GameError(_NO_ALLIANCE_MSG)
     boss = get_active_boss(user.alliance_id)
     if boss is None:
         raise GameError("😴 الان باس رید فعالی برای اتحادت نیست. یکی از اعضا «احضار» بزنه تا باس بیاد، بعد «اتک».")
@@ -630,8 +638,7 @@ def _raid_precheck_sync(chat, tg_user):
     user, _ = get_or_create_user(tg_user)
     touch_membership(group, user)
     if user.alliance_id is None:
-        raise GameError("🚫 <b>رید اتحادیه</b> — ابتدا در یک اتحاد عضو شوید تا بتوانید اتک رید بزنید.\n"
-                        "<i>توی پیوی ربات از «اتحاد من» یه اتحاد بساز یا عضو شو.</i>")
+        raise GameError(_NO_ALLIANCE_MSG)
     alliance = Alliance.objects.get(id=user.alliance_id)
     boss = get_active_boss(user.alliance_id)
     if boss is None:
@@ -1271,26 +1278,27 @@ async def pvp_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer("🟢 بردی!" if result["attacker_won"] else "🔴 باختی.")
     if result["attacker_won"]:
         reward_block = (
-            f"{get_emoji('gift')} <b>غنائم کسب‌شده از حریف:</b>\n"
-            f"{get_emoji('coin')} طلا: <b>{result['loot']:,}+</b> ┃ "
-            f"{get_emoji('dna')} دی‌ان‌ای: <b>{result.get('dna', 0)}+</b> ┃ "
-            f"📈 تجربه: <b>{constants.DUEL_WIN_XP}+ XP</b>"
+            "💰 <b>پاداش دریافتی:</b>\n\n"
+            f"• {get_emoji('coin')} +{result['loot']:,}\n"
+            f"• {get_emoji('dna')} +{result.get('dna', 0)}\n"
+            f"• 📈 +{constants.DUEL_WIN_XP} XP"
         )
     else:
         reward_block = "😔 <b>باختی</b> — ولی هیچی ازت کم نشد (اتک گروهی کاپ نداره)."
     if result["winner_level_up"]:
         reward_block += f"\n{get_emoji('celebrate')} {result['winner_creature']} رسید به سطح {result['winner_new_level']}!"
-    reward_block += f"\n⚡️ انرژی باقی‌مانده: <b>{result['energy_left']}</b> (-1⚡️)"
+    reward_block += f"\n⚡️ انرژی باقی‌مانده: <b>{result['energy_left']}</b> (−1⚡️)"
     reward_block += _mission_lines(result["missions"]) + _speedup_note(result["speedup"])
     _tally = result.get("target_alliance")
-    opp_tag = result.get("target_name", "") + (f" <i>(🤝 {_tally})</i>" if _tally else " 🚫 <i>بدون اتحاد</i>")
+    _target = result.get("target_name", "")
+    ally_line = f"   👥 اتحاد: 🤝 {_tally}" if _tally else "   🚫 بدون اتحاد"
     text = battle_report(
         result["battle_a"], result["battle_b"], result["battle_winner_name"],
         result["battle_rounds"], result["battle_mult"],
         victor_line=result["winner_name"], reward_block=reward_block,
     )
-    if opp_tag.strip():
-        text = f"🏭 حریف: <b>{opp_tag}</b>\n\n" + text
+    if _target:
+        text = f"🏭 حریف: <b>{_target}</b>{ally_line}\n" + text
     context.user_data["pvp_last_detail"] = result.get("detail_log", "")
     # keep it uncluttered — a single icon-only «fight details» button, no PM shortcut
     keyboard = InlineKeyboardMarkup([
