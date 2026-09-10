@@ -2988,6 +2988,31 @@ def _alliance_info_text(info: dict) -> str:
     return "\n".join(lines)
 
 
+def _group_alliance_keyboard(in_alliance: bool) -> InlineKeyboardMarkup:
+    """The trimmed alliance menu shown when «اتحاد» is typed in a GROUP. Only the
+    actions that act on the presser's OWN alliance (war, heist, upgrades, treasury,
+    ranking) — never roster/kick/settings/leave, which need per-person scoping."""
+    if in_alliance:
+        rows = [
+            [btn("🏰 ساختمون‌ها و ارتقاها", style=PRIMARY, callback_data="ally_perks")],
+            [
+                btn("🔥 جنگ یک‌روزه", style=BATTLE, callback_data="ally_war1d"),
+                btn("⚔️ جنگ هفتگی", style=BATTLE, callback_data="ally_war"),
+            ],
+            [btn("شبیخون به اتحاد دیگه", emoji_key="btn_heist", style=BATTLE, callback_data="ally_heist_list")],
+            [btn("واریز به خزانه", emoji_key="btn_deposit", style=BUILD, callback_data="ally_deposit")],
+            [btn("🐲 جدول رید اتحاد", style=NAV, callback_data="ally_raidtable")],
+            [btn("برترین اتحادها", emoji_key="btn_rank", style=NAV, callback_data="ally_top")],
+        ]
+    else:
+        rows = [
+            [btn("ساخت اتحاد جدید", emoji_key="btn_alliance", style=BUILD, callback_data="ally_create")],
+            [btn("پیوستن به اتحاد", emoji_key="btn_alliance", style=PRIMARY, callback_data="ally_join")],
+            [btn("برترین اتحادها", emoji_key="btn_rank", style=NAV, callback_data="ally_top")],
+        ]
+    return InlineKeyboardMarkup(rows)
+
+
 async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # In a GROUP the panel is a shared message, so its management buttons would let
     # anyone tap on the person's alliance. There we show a READ-ONLY card + a «برو پیوی»
@@ -2997,13 +3022,14 @@ async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     info = await run_db(_alliance_info_sync, update.effective_user)
     if in_group:
-        from config import BOT_USERNAME
-
-        pv = InlineKeyboardMarkup([[btn("🤝 مدیریت اتحاد توی پیوی", style=PRIMARY,
-                                        url=f"https://t.me/{BOT_USERNAME}?start=alliance")]])
+        # In-group alliance menu: the ESSENTIAL actions only (war, heist, upgrades,
+        # treasury) — NOT the roster/kick/settings management, which needs one-person
+        # scoping. Each button acts on the presser's own alliance, so it's safe to
+        # leave visible to the group. No «برو پیوی» link anymore.
+        kb = _group_alliance_keyboard(in_alliance=info is not None)
         text = (_alliance_info_text(info) if info is not None
-                else f"{get_emoji('alliance')} توی هیچ اتحادی نیستی. برای ساخت/پیوستن برو پیوی ربات 👇")
-        await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=pv)
+                else f"{get_emoji('alliance')} توی هیچ اتحادی نیستی — می‌تونی همین‌جا یکی بسازی یا عضو شی 👇")
+        await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=kb)
         return
 
     if info is None:
@@ -3311,12 +3337,80 @@ def _reply_hint(update: Update) -> str:
     return ""
 
 
+def _alliance_precheck_sync(tg_user):
+    from game.alliance import validate_new_alliance
+
+    user, _ = get_or_create_user(tg_user)
+    validate_new_alliance(user)  # no name yet — just membership + affordability
+    return user.coins
+
+
+def _alliance_validate_sync(tg_user, name):
+    from game.alliance import validate_new_alliance
+
+    user, _ = get_or_create_user(tg_user)
+    validate_new_alliance(user, name)
+
+
 async def alliance_create_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from game.alliance import ALLIANCE_CREATE_COST
+
     query = update.callback_query
+    # gate on affordability BEFORE asking for a name — a broke player never even gets
+    # to the naming step (per request). InsufficientGold gets the «خرید طلا» button.
+    try:
+        await run_db(_alliance_precheck_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer()
+        await safe_edit_message_text(
+            query, str(exc), parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "بازگشت")]]),
+        )
+        return
     context.user_data[AWAITING_PLAYER_KEY] = {"action": "alliance_create"}
     await query.answer()
     await safe_edit_message_text(
-        query, f"🟢 {get_emoji('alliance')} اسم اتحاد جدیدت رو بفرست:{_reply_hint(update)}", parse_mode="HTML"
+        query,
+        f"🟢 {get_emoji('alliance')} اسم اتحاد جدیدت رو بفرست:\n"
+        f"<i>ساختش {ALLIANCE_CREATE_COST:,} طلا هزینه داره — آخرش تأیید می‌گیریم.</i>{_reply_hint(update)}",
+        parse_mode="HTML",
+    )
+
+
+async def alliance_create_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    name = context.user_data.pop("pending_alliance_name", None)
+    if not name:
+        await query.answer("اسمی ذخیره نشده — دوباره «ساخت اتحاد» رو بزن.", show_alert=True)
+        return
+    try:
+        alliance = await run_db(_alliance_create_sync, update.effective_user, name)
+    except GameError as exc:
+        await query.answer()
+        await safe_edit_message_text(
+            query, str(exc), parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "بازگشت")]]),
+        )
+        return
+    from game.alliance import ALLIANCE_CREATE_COST
+
+    await query.answer("✅ اتحاد ساخته شد!")
+    await safe_edit_message_text(
+        query,
+        f"{get_emoji('alliance')} اتحاد <b>{alliance.name}</b> ساخته شد! تو رهبرشی {get_emoji('crown')}\n"
+        f"<i>({ALLIANCE_CREATE_COST:,} طلا کم شد)</i>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "اتحاد من")]]),
+    )
+
+
+async def alliance_create_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    context.user_data.pop("pending_alliance_name", None)
+    context.user_data.pop(AWAITING_PLAYER_KEY, None)
+    await query.answer("لغو شد.")
+    await safe_edit_message_text(
+        query, "ساخت اتحاد لغو شد.", reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "بازگشت")]]),
     )
 
 
@@ -3657,15 +3751,26 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         return
 
     if action == "alliance_create":
+        from game.alliance import ALLIANCE_CREATE_COST
+
+        name = text.strip()
         try:
-            alliance = await run_db(_alliance_create_sync, update.effective_user, text)
+            await run_db(_alliance_validate_sync, update.effective_user, name)
         except GameError as exc:
-            context.user_data[AWAITING_PLAYER_KEY] = awaiting
-            await message.reply_text(str(exc))
+            context.user_data[AWAITING_PLAYER_KEY] = awaiting  # keep waiting for a valid name
+            await message.reply_text(str(exc), parse_mode="HTML")
             return
+        # valid + affordable — stash the name and take a FINAL confirmation before charging
+        context.user_data["pending_alliance_name"] = name
         await message.reply_text(
-            f"{get_emoji('alliance')} اتحاد <b>{alliance.name}</b> ساخته شد! تو رهبرشی {get_emoji('crown')}",
+            f"{get_emoji('alliance')} اتحاد <b>{name}</b>\n\n"
+            f"ساخت این اتحاد <b>{ALLIANCE_CREATE_COST:,}</b> طلا از حسابت کم می‌کنه. تأیید می‌کنی؟",
             parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                btn(f"✅ تأیید و پرداخت ({ALLIANCE_CREATE_COST:,} طلا)", emoji_key="btn_confirm",
+                    style=CONFIRM, callback_data="ally_create_confirm"),
+                btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data="ally_create_cancel"),
+            ]]),
         )
         return
 
@@ -4174,6 +4279,15 @@ def _hall_level_sync(tg_user) -> int:
 
 async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    # The full DM menu must never open inside a group. Some group-reachable panels
+    # (e.g. the ticket exchange opened from «مبادله») carry a «بازگشت به فروشگاه»
+    # button whose callback is menu:… — pressing it repeatedly used to walk the player
+    # up into the whole private menu, right there in the group. Block every menu:
+    # callback in a group and point them to the DM instead.
+    chat = update.effective_chat
+    if chat is not None and chat.type in ("group", "supergroup"):
+        await query.answer("منوی کامل ربات فقط توی پیوی ربات بازه — همون‌جا /start بزن.", show_alert=True)
+        return
     action = query.data.split(":", 1)[1]
     # one cheap read drives BOTH the lock gate and the lock icons in submenus
     hall_level = await run_db(_hall_level_sync, update.effective_user)
@@ -4260,6 +4374,8 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(fusion_pick_b_callback, pattern=r"^fus_b:"))
     application.add_handler(CallbackQueryHandler(fusion_confirm_callback, pattern=r"^fus_confirm:"))
     application.add_handler(CallbackQueryHandler(alliance_create_callback, pattern=r"^ally_create$"))
+    application.add_handler(CallbackQueryHandler(alliance_create_confirm_callback, pattern=r"^ally_create_confirm$"))
+    application.add_handler(CallbackQueryHandler(alliance_create_cancel_callback, pattern=r"^ally_create_cancel$"))
     application.add_handler(CallbackQueryHandler(alliance_join_callback, pattern=r"^ally_join$"))
     application.add_handler(CallbackQueryHandler(alliance_browse_callback, pattern=r"^ally_browse:\d+$"))
     application.add_handler(CallbackQueryHandler(alliance_browse_join_callback, pattern=r"^ally_browse_join:\d+$"))

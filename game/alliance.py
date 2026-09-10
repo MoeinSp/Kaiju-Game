@@ -12,6 +12,26 @@ ALLIANCE_NAME_MAX_LEN = 32
 ALLIANCE_CREATE_COST = 50_000  # gold charged to found a new alliance
 
 
+def validate_new_alliance(user: User, name: str | None = None) -> None:
+    """Check everything create_alliance needs WITHOUT creating anything: the user isn't
+    already in an alliance, they can afford the founding fee, and (when `name` is given)
+    it's a valid, unused name. Raises GameError on the first problem. Used to gate the
+    name-entry step and the final confirm so a broke player never even picks a name."""
+    if user.alliance_id is not None:
+        raise GameError("اول باید از اتحاد فعلیت با /alliance_leave خارج بشی.")
+    if user.coins < ALLIANCE_CREATE_COST:
+        raise GameError(
+            f"ساخت اتحاد <b>{ALLIANCE_CREATE_COST:,}</b> طلا هزینه داره "
+            f"(الان {user.coins:,} داری). اول طلا جمع کن."
+        )
+    if name is not None:
+        name = name.strip()
+        if not name or len(name) > ALLIANCE_NAME_MAX_LEN:
+            raise GameError(f"اسم اتحاد باید بین ۱ تا {ALLIANCE_NAME_MAX_LEN} کاراکتر باشه.")
+        if Alliance.objects.filter(name__iexact=name).exists():
+            raise GameError("این اسم قبلاً گرفته شده، یه اسم دیگه امتحان کن.")
+
+
 @transaction.atomic
 def create_alliance(user: User, name: str) -> Alliance:
     name = name.strip()

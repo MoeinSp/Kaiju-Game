@@ -1287,18 +1287,19 @@ async def pvp_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         reward_block = "😔 <b>باختی</b> — ولی هیچی ازت کم نشد (اتک گروهی کاپ نداره)."
     if result["winner_level_up"]:
         reward_block += f"\n{get_emoji('celebrate')} {result['winner_creature']} رسید به سطح {result['winner_new_level']}!"
-    reward_block += f"\n⚡️ انرژی باقی‌مانده: <b>{result['energy_left']}</b> (−1⚡️)"
     reward_block += _mission_lines(result["missions"]) + _speedup_note(result["speedup"])
     _tally = result.get("target_alliance")
     _target = result.get("target_name", "")
-    ally_line = f"   👥 اتحاد: 🤝 {_tally}" if _tally else "   🚫 بدون اتحاد"
+    header = ["⚔️ <b>خلاصه نبرد</b>"]
+    if _target:
+        header.append(f"🏭 حریف: <b>{_target}</b> 👥")
+        header.append(f"اتحاد: 🤝 {_tally}" if _tally else "🚫 بدون اتحاد")
     text = battle_report(
         result["battle_a"], result["battle_b"], result["battle_winner_name"],
         result["battle_rounds"], result["battle_mult"],
         victor_line=result["winner_name"], reward_block=reward_block,
     )
-    if _target:
-        text = f"🏭 حریف: <b>{_target}</b>{ally_line}\n" + text
+    text = "\n".join(header) + "\n" + text
     context.user_data["pvp_last_detail"] = result.get("detail_log", "")
     # keep it uncluttered — a single icon-only «fight details» button, no PM shortcut
     keyboard = InlineKeyboardMarkup([

@@ -113,19 +113,18 @@ def battle_report(sa: dict, sb: dict, winner_name: str, rounds: int, mult: float
         match = f"⚖️ تطابق عناصر: برتری با <code>{sb['name']}</code> (ضریب آسیب فعال)"
     else:
         match = "⚖️ تطابق عناصر: خنثی (بدون ضریب آسیب)"
-    # فاتح + پیروز میدان on one line (compact); winner name in monospace
-    victor = f"{get_emoji('trophy')} فاتح نبرد: <code>{winner_name}</code> (در {rounds} راند)"
-    if victor_line:
-        victor += f"   👑 پیروز میدان: {victor_line} 🎉"
     lines = [
-        f"🗡 مهاجم: <code>{sa['name']}</code> [{a_lbl}]   🛡 مدافع: <code>{sb['name']}</code> [{b_lbl}]",
+        f"🗡 مهاجم: <code>{sa['name']}</code> [{a_lbl}]",
+        f"🛡 مدافع: <code>{sb['name']}</code> [{b_lbl}]",
         match,
         div,
-        "📊 وضعیت سلامت در پایان نبرد:",
-        f"{_hp_compact(sa)}   {_hp_compact(sb)}",
+        _hp_compact(sa),
+        _hp_compact(sb),
         div,
-        victor,
+        f"{get_emoji('trophy')} فاتح نبرد: <code>{winner_name}</code> (در {rounds} راند)",
     ]
+    if victor_line:
+        lines.append(f"👑 پیروز میدان: {victor_line} 🎉")
     if reward_block:
         lines += [div, reward_block]
     return "\n".join(lines)
