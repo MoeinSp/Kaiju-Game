@@ -189,6 +189,14 @@ def estimated_reward(tier: str, power: int = 0) -> tuple[int, int]:
 
 AUTO_HUNT_LOOT_MULT = 0.5  # auto-hunt pays HALF the gold/DNA of a manual hunt
 WIN_CHANCE_EXP = 14  # mirrors bot.handlers.private._WIN_CHANCE_EXP for the fast auto-hunt
+# Auto-hunt is a hands-off convenience, not a real duel — the player can't pick the
+# right element per target like they do in a manual hunt, so raw power-ratio odds felt
+# unfair ("باخت‌های غیرمنطقی"). We GUARANTEE a win floor of AUTO_HUNT_WIN_FLOOR of the
+# batch (rounded down) and roll the remaining hunts at the power-ratio odds, which climb
+# to ~1.0 for a strong kaiju. So a batch of N auto-hunts wins between floor(N×0.60) and N
+# (e.g. 50 hunts → 30–50 wins), and a stronger kaiju lands nearer the top — no unlucky
+# batch ever drops below 60%.
+AUTO_HUNT_WIN_FLOOR = 0.60
 
 
 def resolve_auto_hunt(user: User, creature: Creature, hunts: int,
@@ -206,15 +214,20 @@ def resolve_auto_hunt(user: User, creature: Creature, hunts: int,
     target_power = max(20, round(benchmark * HUNT_TIERS["normal"]["stat_mult"]))
     ratio = max(1, player_power) / max(1, target_power)
     rk = ratio ** WIN_CHANCE_EXP
-    p = max(0.05, min(0.95, rk / (1 + rk)))
+    p = max(0.0, min(1.0, rk / (1 + rk)))  # raw power-ratio odds for the non-guaranteed hunts
 
-    wins = coins = dna = 0
-    for _ in range(hunts):
+    # guarantee the win floor, then roll the rest at the power-ratio odds
+    guaranteed = int(hunts * AUTO_HUNT_WIN_FLOOR)
+    wins = guaranteed
+    for _ in range(hunts - guaranteed):
         if random.random() < p:
             wins += 1
-            coins += round(random.randint(*hunt_coin_range(player_power, "normal")) * loot_mult)
-            dna += round(random.randint(*hunt_dna_range(player_power, "normal")) * loot_mult)
     losses = hunts - wins
+
+    coins = dna = 0
+    for _ in range(wins):
+        coins += round(random.randint(*hunt_coin_range(player_power, "normal")) * loot_mult)
+        dna += round(random.randint(*hunt_dna_range(player_power, "normal")) * loot_mult)
     xp = wins * HUNT_XP_WIN + losses * HUNT_XP_LOSE
 
     user.coins += coins
