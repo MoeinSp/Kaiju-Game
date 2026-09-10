@@ -354,9 +354,9 @@ def _item_active_offer(kind: str, item_id: int) -> dict | None:
 
 def _seller_step_keyboard(token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [btn("💰 تعیین قیمت", style=PRIMARY, callback_data=f"xfo:setp:{token}"),
-         btn("🎁 رایگان", style=CONFIRM, callback_data=f"xfo:free:{token}")],
-        [btn("❌ لغو", style=DANGER, callback_data=f"xfo:cancel:{token}")],
+        [btn("💰 تعیین قیمت", emoji_key="btn_charge", style=PRIMARY, callback_data=f"xfo:setp:{token}"),
+         btn("🎁 رایگان", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"xfo:free:{token}")],
+        [btn("❌ لغو", emoji_key="btn_cancel", style=DANGER, callback_data=f"xfo:cancel:{token}")],
     ])
 
 
@@ -477,8 +477,8 @@ def _transfer_do_sync(kind, sender_id, receiver_id, item_id, price):
 
 def _offer_receiver_keyboard(token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [btn("✅ قبول", style=CONFIRM, callback_data=f"xfo:acc:{token}"),
-         btn("❌ رد", style=DANGER, callback_data=f"xfo:rej:{token}")],
+        [btn("✅ قبول", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"xfo:acc:{token}"),
+         btn("❌ رد", emoji_key="btn_cancel", style=DANGER, callback_data=f"xfo:rej:{token}")],
         [btn("💎 راهنمای هزینه‌ها", style=NAV, callback_data="xfo:prices:c")],
     ])
 
@@ -823,7 +823,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"می‌خوای به باس رید اتحادت حمله کنی؟",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
-            btn("✅ تأیید و اتک", style=BATTLE, callback_data=f"raidatk:{update.effective_user.id}")
+            btn("✅ تأیید و اتک", emoji_key="btn_attack", style=BATTLE, callback_data=f"raidatk:{update.effective_user.id}")
         ]]),
     )
 
@@ -1041,9 +1041,9 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
     a_tag = f" [{constants.element_label(a_elem)}]" if a_elem else ""
     t_tag = f" [{constants.element_label(t_elem)}]" if t_elem else ""
     div = "──────────────"
+    # trimmed prompt: opponent, your side, then the tactical read — no reward/cost/shield
+    # clutter (those are explained elsewhere; the shield warning moves to the confirm step)
     lines = [
-        f"{get_emoji('battle')} <b>حمله به بازیکن | Battle Arena</b>",
-        "",
         f"👤 حریف شما: <b>{t_name}</b>",
         f"👹 موجود حریف: <b>{t_cname}</b>{t_tag}",
         f"💀 قدرت حریف: <b>{t_power:,}</b>",
@@ -1061,24 +1061,11 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
     ]
     if adv:
         lines.append(f"🔮 مزیت عنصری: {adv}")
-    lines += [
-        "",
-        f"🎁 اگه ببری: {get_emoji('coin')} تا {int(constants.GROUP_ATTACK_LOOT_PERCENT * 100)}٪ طلای حریف + {get_emoji('dna')} بونوس",
-        "<i>اگه ببازی هیچی ازت کم نمی‌شه · اتک گروهی کاپ نداره</i>",
-        "",
-        div,
-        f"{get_emoji('energy')} هزینه حمله: {constants.RAID_ATTACK_ENERGY_COST} انرژی",
-    ]
-    if a_shield_secs and a_shield_secs > 0:
-        lines.append(
-            f"🛡 <i>توجه: تو الان سپر گروهی داری — با این حمله <b>{constants.SHIELD_ATTACK_COST_HOURS} ساعت</b> "
-            "از سپرت کم می‌شه.</i>"
-        )
     keyboard = InlineKeyboardMarkup([
         [btn(f"⚔️ شروع حمله (-{constants.RAID_ATTACK_ENERGY_COST}⚡)", emoji_key="btn_attack", style=CONFIRM,
              callback_data=f"gatk:{attacker_id}:{target_id}")],
-        [btn("🔄 انتخاب موجود دیگر از تیم", style=NAV, callback_data=f"gatk_swap:{attacker_id}:{target_id}")],
-        [btn("🔍 جزییات حریف", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}"),
+        [btn("🔄 انتخاب موجود دیگر از تیم", emoji_key="btn_recheck", style=NAV, callback_data=f"gatk_swap:{attacker_id}:{target_id}")],
+        [btn("🔍 جزییات حریف", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}"),
          btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER,
              callback_data=f"gatk_cancel:{attacker_id}")],
     ])
@@ -1151,7 +1138,7 @@ async def gatk_opp_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     from bot.handlers.arena import opponent_details_text
 
     await query.answer()
-    keyboard = InlineKeyboardMarkup([[btn("↩️ بازگشت", style=NAV, callback_data=f"gatk_back:{attacker_id}:{target_id}")]])
+    keyboard = InlineKeyboardMarkup([[btn("↩️ بازگشت", emoji_key="btn_back", style=NAV, callback_data=f"gatk_back:{attacker_id}:{target_id}")]])
     await safe_edit_message_text(query, opponent_details_text(d), parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -1205,7 +1192,7 @@ async def gatk_swap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         note = " (مشغول)" if busy else ""
         rows.append([btn(f"{tag}{name} [{constants.ELEMENT_LABELS[element]}] · 💪{power:,}{note}",
                          style=CONFIRM, callback_data=f"gatk_swap_pick:{attacker_id}:{target_id}:{cid}")])
-    rows.append([btn("↩️ بازگشت به حریف", style=NAV, callback_data=f"gatk_swap_pick:{attacker_id}:{target_id}:0")])
+    rows.append([btn("↩️ بازگشت به حریف", emoji_key="btn_back", style=NAV, callback_data=f"gatk_swap_pick:{attacker_id}:{target_id}:0")])
     await safe_edit_message_text(
         query,
         "🔄 <b>کدوم موجود با این حریف بجنگه؟</b>\n<blockquote>حریف عوض نمی‌شه؛ فقط موجودِ خودت. "
@@ -1379,12 +1366,50 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     }
 
 
+def _attacker_group_shield_sync(tg_user):
+    from game.arena import group_shield_remaining_seconds
+
+    user, _ = get_or_create_user(tg_user)
+    return group_shield_remaining_seconds(user)
+
+
 async def pvp_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     _, attacker_id, target_id = query.data.split(":")
     if update.effective_user.id != int(attacker_id):
         await query.answer("این حمله مال تو نیست — خودت روی پیام حریف «اتک» بفرست.", show_alert=True)
         return
+    # If the attacker still has a group shield, attacking burns hours off it — take an
+    # explicit تایید/لغو first (only when shielded; otherwise attack straight away).
+    shield_secs = await run_db(_attacker_group_shield_sync, update.effective_user)
+    if shield_secs and shield_secs > 0:
+        await query.answer()
+        await safe_edit_message_text(
+            query,
+            f"🛡 <b>توجه:</b> تو الان سپر گروهی داری ({_fmt_shield_hm(shield_secs)}).\n"
+            f"با این حمله <b>{constants.SHIELD_ATTACK_COST_HOURS} ساعت</b> از سپرت کم می‌شه.\n\n"
+            "مطمئنی می‌خوای حمله کنی؟",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                btn("✅ تأیید و حمله", emoji_key="btn_attack", style=CONFIRM, callback_data=f"gatkc:{attacker_id}:{target_id}"),
+                btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data=f"gatk_cancel:{attacker_id}"),
+            ]]),
+        )
+        return
+    await _pvp_attack_execute(update, context, query, int(attacker_id), int(target_id))
+
+
+async def pvp_attack_confirmed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«✅ تأیید و حمله» after the shield warning — run the attack for real."""
+    query = update.callback_query
+    _, attacker_id, target_id = query.data.split(":")
+    if update.effective_user.id != int(attacker_id):
+        await query.answer("این حمله مال تو نیست.", show_alert=True)
+        return
+    await _pvp_attack_execute(update, context, query, int(attacker_id), int(target_id))
+
+
+async def _pvp_attack_execute(update, context, query, attacker_id: int, target_id: int) -> None:
     try:
         result = await run_db(_pvp_attack_sync, update.effective_chat, update.effective_user, int(target_id))
     except (RaidError, GameError) as exc:
@@ -1718,6 +1743,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(raid_attack_confirm_callback, pattern=r"^raidatk:\d+$"))
     application.add_handler(CallbackQueryHandler(raid_overall_rank_callback, pattern=r"^raidrankall$"))
     application.add_handler(CallbackQueryHandler(pvp_attack_callback, pattern=r"^gatk:\d+:\d+$"))
+    application.add_handler(CallbackQueryHandler(pvp_attack_confirmed_callback, pattern=r"^gatkc:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_attack_cancel_callback, pattern=r"^gatk_cancel:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_detail_callback, pattern=r"^gatk_detail:\d+$"))
     application.add_handler(CallbackQueryHandler(gatk_opp_callback, pattern=r"^gatk_opp:\d+:\d+$"))

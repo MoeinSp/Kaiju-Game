@@ -149,8 +149,8 @@ def _collection_card(user, creatures, page: int = 0) -> tuple[str, InlineKeyboar
     rows = [
         # row 1: prev / next — text-free arrows (they clamp at the ends)
         [
-            btn("◀️", style=NAV, callback_data=_scoped_pg("collection", user.id, page - 1)),
-            btn("▶️", style=NAV, callback_data=_scoped_pg("collection", user.id, page + 1)),
+            btn("◀️", emoji_key="btn_prev", style=NAV, callback_data=_scoped_pg("collection", user.id, page - 1)),
+            btn("▶️", emoji_key="btn_next", style=NAV, callback_data=_scoped_pg("collection", user.id, page + 1)),
         ],
         # row 2: activate a creature (premium icon)
         [btn("انتخاب کایجو فعال", emoji_key="btn_creature", style=NAV, callback_data=_scoped("select", user.id))],
@@ -331,45 +331,56 @@ def _act(action: str, user_id: int, arg: str = "") -> str:
     return f"grpa:{action}:{user_id}" + (f":{arg}" if arg else "")
 
 
-def _upgrade_card(user, creature, energy) -> tuple[str, InlineKeyboardMarkup]:
-    """A compact but COMPLETE group upgrade panel: feed/train + the four body-part
-    upgrades (each +1), with live levels and gold costs. Full management (×5/×10, gear,
-    fusion) still lives in the DM."""
-    from game.creature import part_bulk_cost
+_GRP_UPG_STEPS = (1, 5, 10)
 
+
+def _upgrade_card(user, creature, energy, step: int = 1) -> tuple[str, InlineKeyboardMarkup]:
+    """A compact but COMPLETE group upgrade panel: capsule feeding + the four body-part
+    upgrades with a ×1/×5/×10 selector (each tap buys `step` levels at once), live levels
+    and gold costs. Gear/fusion still live in the DM."""
+    from game.creature import part_bulk_cost, total_capsules
+
+    step = step if step in _GRP_UPG_STEPS else 1
+    sfx = f" ×{step}" if step > 1 else ""
     cap = constants.part_upgrade_cap(creature.star_level)
     max_level = constants.creature_max_level(creature.rarity, creature.star_level)
     lines = [
         f"{get_emoji('settings')} <b>ارتقای {creature_name(creature)}</b>",
         f"🎖 سطح {creature.level}/{max_level} · XP {creature.xp}/{constants.xp_for_creature_level(creature.level)}",
         "",
-        "🧩 <b>اعضای بدن</b> (هر دکمه = +۱ سطح):",
+        f"🧩 <b>اعضای بدن</b> (هر دکمه = +{step} سطح):",
     ]
     for part, cfg in constants.BODY_PARTS.items():
         lvl = getattr(creature, f"{part}_lvl")
         if lvl >= cap:
             lines.append(f"{cfg['label']}: <b>{lvl}/{cap}</b> 🔒")
         else:
-            lines.append(f"{cfg['label']}: <b>{lvl}/{cap}</b> — +۱: {part_bulk_cost(lvl, 1, creature.rarity):,} {get_emoji('coin')}")
-    from game.creature import total_capsules
-
+            n = min(step, cap - lvl)  # can't buy past the cap
+            lines.append(f"{cfg['label']}: <b>{lvl}/{cap}</b> — +{n}: {part_bulk_cost(lvl, n, creature.rarity):,} {get_emoji('coin')}")
     lines += [
         "",
         f"🧪 تغذیه با کپسول اکسپی (داری: {total_capsules(user)}) — از «فروشگاه روزانه» بخر",
         f"{get_emoji('coin')} {user.coins:,}   {get_emoji('energy')} {energy}/{constants.MAX_ENERGY}",
     ]
+    # ×1/×5/×10 selector — the active step gets a ✅
+    step_row = [
+        btn(("✅ " if s == step else "") + f"×{s}", style=(CONFIRM if s == step else NAV),
+            callback_data=_act("upgstep", user.id, str(s)))
+        for s in _GRP_UPG_STEPS
+    ]
     rows = [
         [btn("🧪 تغذیه (کپسول)", emoji_key="btn_feed", style=BUILD, callback_data=_act("feedcap", user.id))],
+        step_row,
         [
-            btn("بال", emoji_key="btn_wings", style=BUILD, callback_data=_act("up_wings", user.id)),
-            btn("زره", emoji_key="btn_armor", style=BUILD, callback_data=_act("up_armor", user.id)),
+            btn(f"بال{sfx}", emoji_key="btn_wings", style=BUILD, callback_data=_act("up_wings", user.id)),
+            btn(f"زره{sfx}", emoji_key="btn_armor", style=BUILD, callback_data=_act("up_armor", user.id)),
         ],
         [
-            btn("نیش", emoji_key="btn_fangs", style=BUILD, callback_data=_act("up_fangs", user.id)),
-            btn("زهر", emoji_key="btn_poison", style=BUILD, callback_data=_act("up_poison", user.id)),
+            btn(f"نیش{sfx}", emoji_key="btn_fangs", style=BUILD, callback_data=_act("up_fangs", user.id)),
+            btn(f"زهر{sfx}", emoji_key="btn_poison", style=BUILD, callback_data=_act("up_poison", user.id)),
         ],
         [btn("هیولا", emoji_key="btn_creature", style=NAV, callback_data=_scoped("creature", user.id))],
-        [_pm_button("ارتقای کامل (×۵/۱۰)، تجهیزات و فیوژن در پیوی")],
+        [_pm_button("تجهیزات و فیوژن در پیوی")],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -621,7 +632,7 @@ def _casino_confirm(owner_id: int, tier: str) -> tuple[str, InlineKeyboardMarkup
     )
     rows = [
         [btn("🎲 بچرخون!", style=CONFIRM, callback_data=_act("casino_play", owner_id, tier))],
-        [btn("↩️ میزهای دیگه", style=NAV, callback_data=_act("casino_home", owner_id))],
+        [btn("↩️ میزهای دیگه", emoji_key="btn_back", style=NAV, callback_data=_act("casino_home", owner_id))],
     ]
     return text, InlineKeyboardMarkup(rows)
 
@@ -637,7 +648,7 @@ def _casino_result(owner_id: int, tier: str, prize: dict, coins: int, diamonds: 
     )
     rows = [
         [btn("🎲 دوباره همین میز", style=SHOP, callback_data=_act("casino_pick", owner_id, tier))],
-        [btn("↩️ میزهای دیگه", style=NAV, callback_data=_act("casino_home", owner_id))],
+        [btn("↩️ میزهای دیگه", emoji_key="btn_back", style=NAV, callback_data=_act("casino_home", owner_id))],
     ]
     return text, InlineKeyboardMarkup(rows)
 
@@ -725,6 +736,23 @@ def _grp_feedcap_view_sync(tg_user):
     creature = get_active_creature(user)
     _require_creature(creature)
     return user, creature, capsule_counts(user), creature_is_maxed(creature)
+
+
+def _grp_upgrade_view_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    creature = get_active_creature(user)
+    _require_creature(creature)
+    return user, creature, sync_energy(user)
+
+
+def _grp_upgrade_part_sync(tg_user, part, step):
+    from game.creature import upgrade_part
+
+    user, _ = get_or_create_user(tg_user)
+    creature = get_active_creature(user)
+    _require_creature(creature)
+    new_level, cost = upgrade_part(user, creature, part, step)
+    return user, creature, new_level, cost, sync_energy(user)
 
 
 def _grp_feedcap_do_sync(tg_user, kind, tier):
@@ -1504,6 +1532,36 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer()
         text, keyboard = _box_genetic_card(user)
         await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        return
+
+    # ── upgrade: ×1/×5/×10 step selector + body-part upgrades (each buys `step`) ──
+    if action == "upgstep":
+        step = int(arg) if arg.isdigit() and int(arg) in _GRP_UPG_STEPS else 1
+        context.user_data["grp_upg_step"] = step
+        try:
+            user, creature, energy = await run_db(_grp_upgrade_view_sync, update.effective_user)
+        except GameError as exc:
+            await query.answer(str(exc), show_alert=True)
+            return
+        await query.answer(f"هر ارتقا حالا ×{step}")
+        text, keyboard = _upgrade_card(user, creature, energy, step)
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        return
+    if action in ("up_wings", "up_armor", "up_fangs", "up_poison"):
+        step = context.user_data.get("grp_upg_step", 1)
+        part = action[3:]
+        try:
+            user, creature, new_level, cost, energy = await run_db(
+                _grp_upgrade_part_sync, update.effective_user, part, step
+            )
+        except GameError as exc:
+            await query.answer(str(exc), show_alert=True)
+            return
+        await query.answer()
+        label = constants.BODY_PARTS.get(part, {}).get("label", part)
+        note = f"🧩 <b>{label} → سطح {new_level}</b> (−{cost:,} {get_emoji('coin')})\n\n"
+        text, keyboard = _upgrade_card(user, creature, energy, step)
+        await safe_edit_message_text(query, note + text, parse_mode="HTML", reply_markup=keyboard)
         return
 
     # ── casino: a self-contained pick → confirm → play loop, all in the group ──

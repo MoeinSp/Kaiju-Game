@@ -3036,24 +3036,32 @@ def _group_alliance_keyboard(in_alliance: bool) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
+async def _show_group_alliance(update: Update, *, edit: bool) -> None:
+    """Render the trimmed in-group alliance menu — as a fresh reply (from the «اتحاد»
+    word) or as an in-place edit (when a sub-panel's «بازگشت» returns here). This is the
+    ONLY «menu:»-style destination that resolves inside a group; everything else in the
+    private menu stays DM-only (see menu_callback's group guard)."""
+    info = await run_db(_alliance_info_sync, update.effective_user)
+    kb = _group_alliance_keyboard(in_alliance=info is not None)
+    text = (_alliance_info_text(info) if info is not None
+            else f"{get_emoji('alliance')} توی هیچ اتحادی نیستی — می‌تونی همین‌جا یکی بسازی یا عضو شی 👇")
+    if edit and update.callback_query is not None:
+        await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=kb)
+    else:
+        await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=kb)
+
+
 async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # In a GROUP the panel is a shared message, so its management buttons would let
-    # anyone tap on the person's alliance. There we show a READ-ONLY card + a «برو پیوی»
-    # link; all the interactive management stays in the DM (scoped to one person).
+    # anyone tap on the person's alliance. There we show the trimmed essential-actions
+    # menu; the roster/kick/settings management stays in the DM (scoped to one person).
     chat = update.effective_chat
     in_group = chat is not None and chat.type in ("group", "supergroup")
 
-    info = await run_db(_alliance_info_sync, update.effective_user)
     if in_group:
-        # In-group alliance menu: the ESSENTIAL actions only (war, heist, upgrades,
-        # treasury) — NOT the roster/kick/settings management, which needs one-person
-        # scoping. Each button acts on the presser's own alliance, so it's safe to
-        # leave visible to the group. No «برو پیوی» link anymore.
-        kb = _group_alliance_keyboard(in_alliance=info is not None)
-        text = (_alliance_info_text(info) if info is not None
-                else f"{get_emoji('alliance')} توی هیچ اتحادی نیستی — می‌تونی همین‌جا یکی بسازی یا عضو شی 👇")
-        await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=kb)
+        await _show_group_alliance(update, edit=False)
         return
+    info = await run_db(_alliance_info_sync, update.effective_user)
 
     if info is None:
         await send_screen(update,
@@ -4302,16 +4310,19 @@ def _hall_level_sync(tg_user) -> int:
 
 async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    # The full DM menu must never open inside a group. Some group-reachable panels
-    # (e.g. the ticket exchange opened from «مبادله») carry a «بازگشت به فروشگاه»
-    # button whose callback is menu:… — pressing it repeatedly used to walk the player
-    # up into the whole private menu, right there in the group. Block every menu:
-    # callback in a group and point them to the DM instead.
+    action = query.data.split(":", 1)[1]
+    # The full DM menu must never open inside a group — walking up categories/root there
+    # would expose the whole private menu. But group-reachable panels (alliance sub-panels,
+    # the ticket exchange) legitimately have «بازگشت» buttons. So in a group we resolve
+    # ONLY the alliance menu (the one safe in-group destination) and block everything else.
     chat = update.effective_chat
     if chat is not None and chat.type in ("group", "supergroup"):
+        if action in ("alliance_info", "cat_social"):
+            await query.answer()
+            await _show_group_alliance(update, edit=True)
+            return
         await query.answer("منوی کامل ربات فقط توی پیوی ربات بازه — همون‌جا /start بزن.", show_alert=True)
         return
-    action = query.data.split(":", 1)[1]
     # one cheap read drives BOTH the lock gate and the lock icons in submenus
     hall_level = await run_db(_hall_level_sync, update.effective_user)
     # the authoritative gate: a section that hasn't unlocked yet never opens, even if

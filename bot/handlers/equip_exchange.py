@@ -38,7 +38,20 @@ def _selection(context) -> set:
     return sel
 
 
-def _render(tickets, items, selected: set, filt: str, page: int):
+def _back_button(update: Update):
+    """The «بازگشت» button target: in a group the panel was opened from «مبادله», so it
+    returns to that exchange home (an exch: callback that works in groups); in the DM it
+    goes back to the shop category. Fixes the dead back button reported in groups."""
+    chat = update.effective_chat
+    if chat is not None and chat.type in ("group", "supergroup"):
+        return btn("↩️ بازگشت به مبادله", emoji_key="btn_back", style=NAV,
+                   callback_data=f"exch:home:{update.effective_user.id}")
+    return back_btn("menu:cat_shop", "بازگشت به فروشگاه")
+
+
+def _render(tickets, items, selected: set, filt: str, page: int, back=None):
+    if back is None:
+        back = back_btn("menu:cat_shop", "بازگشت به فروشگاه")
     selected &= {it.id for it in items}  # drop ids that are gone (converted/equipped)
     picked = [it for it in items if it.id in selected]
     gain = sum(ticket_value(it) for it in picked)
@@ -59,7 +72,7 @@ def _render(tickets, items, selected: set, filt: str, page: int):
     ]
     if not items:
         lines += ["", "<i>هیچ تجهیزِ افسانه‌ای یا اساطیریِ غیرفعالی برای مبادله نداری.</i>"]
-        return "\n".join(lines), InlineKeyboardMarkup([[back_btn("menu:cat_shop", "بازگشت به فروشگاه")]])
+        return "\n".join(lines), InlineKeyboardMarkup([[back]])
     lines.append(f"\n✅ انتخاب‌شده: <b>{len(picked)}</b> = <b>{gain}</b> 🎟" + (f"  ·  صفحه {page + 1}/{pages}" if pages > 1 else ""))
 
     rows = []
@@ -88,7 +101,7 @@ def _render(tickets, items, selected: set, filt: str, page: int):
     ])
     if picked:
         rows.append([btn(f"♻️ تبدیل به {gain} بلیط", emoji_key="btn_confirm", style=BUILD, callback_data="etx:go")])
-    rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
+    rows.append([back])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -97,7 +110,7 @@ async def equip_exchange_panel(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data[_FILT_KEY] = "all"
     context.user_data[_PAGE_KEY] = 0
     tickets, items = await run_db(_sync, update.effective_user)
-    text, kb = _render(tickets, items, set(), "all", 0)
+    text, kb = _render(tickets, items, set(), "all", 0, back=_back_button(update))
     await send_screen(update, text, parse_mode="HTML", reply_markup=kb)
 
 
@@ -106,6 +119,7 @@ async def _rerender(update, context):
     text, kb = _render(
         tickets, items, _selection(context),
         context.user_data.get(_FILT_KEY, "all"), context.user_data.get(_PAGE_KEY, 0),
+        back=_back_button(update),
     )
     await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=kb)
 
@@ -195,7 +209,7 @@ async def _do_exchange(update, context):
     context.user_data[_PAGE_KEY] = 0
     await query.answer(f"🎟 +{result['tickets']} بلیط!")
     tickets, items = await run_db(_sync, update.effective_user)
-    text, kb = _render(tickets, items, set(), context.user_data.get(_FILT_KEY, "all"), 0)
+    text, kb = _render(tickets, items, set(), context.user_data.get(_FILT_KEY, "all"), 0, back=_back_button(update))
     text = (f"✅ <b>{result['count']}</b> تجهیز تبدیل شد و <b>{result['tickets']}</b> 🎟 گرفتی "
             f"(جمعاً {result['total']} بلیط).\n\n" + text)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
