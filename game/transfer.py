@@ -91,6 +91,13 @@ def _set_cooldown(users: list[User], field: str) -> None:
         setattr(u, field, until)
 
 
+def _check_transfers_enabled(receiver: User) -> None:
+    """The receiver can switch OFF incoming transfers (group «انتقال خاموش»). When
+    off, nobody can send them gold/kaiju/equipment."""
+    if not getattr(receiver, "transfers_enabled", True):
+        raise GameError("🔒 این کاربر دریافت انتقال رو خاموش کرده — نمی‌تونی بهش چیزی منتقل کنی.")
+
+
 def _check_trade_hall_built(user: User, who: str) -> None:
     """Both sides need «تالار تجارت» built (level ≥ 1) before ANY trade — it's the
     dedicated trading building (game.constants)."""
@@ -138,6 +145,7 @@ def preview_creature_transfer(sender: User, receiver: User, creature_id: int) ->
     Returns {creature, cost}."""
     if sender.id == receiver.id:
         raise GameError("نمی‌تونی به خودت منتقل کنی.")
+    _check_transfers_enabled(receiver)
     _check_cooldown(sender, "kaiju_transfer_ready_at", "فرستنده")
     _check_cooldown(receiver, "kaiju_transfer_ready_at", "گیرنده")
     creature = Creature.objects.filter(id=creature_id, owner=sender).first()
@@ -171,6 +179,7 @@ def preview_equip_transfer(sender: User, receiver: User, equip_id: int) -> dict:
     """Validate an equipment transfer without moving anything. Returns {item, cost}."""
     if sender.id == receiver.id:
         raise GameError("نمی‌تونی به خودت منتقل کنی.")
+    _check_transfers_enabled(receiver)
     _check_cooldown(sender, "equip_transfer_ready_at", "فرستنده")
     _check_cooldown(receiver, "equip_transfer_ready_at", "گیرنده")
     item = Equipment.objects.filter(id=equip_id, owner=sender).first()
@@ -211,6 +220,7 @@ def transfer_creature(sender: User, receiver: User, creature_id: int, price: int
     ids = sorted({sender.id, receiver.id})
     locked = {u.id: u for u in User.objects.select_for_update().filter(id__in=ids).order_by("id")}
     sender, receiver = locked[sender.id], locked[receiver.id]
+    _check_transfers_enabled(receiver)
     _check_cooldown(sender, "kaiju_transfer_ready_at", "فرستنده")
     _check_cooldown(receiver, "kaiju_transfer_ready_at", "گیرنده")
 
@@ -288,6 +298,7 @@ def transfer_equipment(sender: User, receiver: User, equip_id: int, price: int =
     ids = sorted({sender.id, receiver.id})
     locked = {u.id: u for u in User.objects.select_for_update().filter(id__in=ids).order_by("id")}
     sender, receiver = locked[sender.id], locked[receiver.id]
+    _check_transfers_enabled(receiver)
     _check_cooldown(sender, "equip_transfer_ready_at", "فرستنده")
     _check_cooldown(receiver, "equip_transfer_ready_at", "گیرنده")
 

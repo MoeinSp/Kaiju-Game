@@ -61,6 +61,13 @@ class User(models.Model):
     notifications_on = models.BooleanField(default=True)
     energy_full_notified = models.BooleanField(default=False)
     last_nudge_day = models.CharField(max_length=10, null=True, blank=True)
+    # ── transfers (player-to-player, in groups) ──
+    # transfers_enabled: when False, nobody can send this user gold/kaiju/equipment
+    #   (toggled in a group with «انتقال روشن» / «انتقال خاموش»).
+    # transfer_notify: whether to DM this user when they RECEIVE a transfer (toggled
+    #   in the DM with /off and /on).
+    transfers_enabled = models.BooleanField(default=True)
+    transfer_notify = models.BooleanField(default=True)
 
     # referrals (game/referral.py). referred_by is the telegram id of whoever's
     # invite link brought this player in (set once, at their first /start);

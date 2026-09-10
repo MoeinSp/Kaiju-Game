@@ -1034,6 +1034,27 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     # «انتقال …» family: gold, kaiju/creature, or equipment — all reply-based
     norm = keywords.normalize(message.text)
+
+    # «انتقال روشن» / «انتقال خاموش» — toggle whether OTHERS can transfer TO you
+    if norm in ("انتقال روشن", "انتقال روشن کن", "انتقال on"):
+        await group_handlers.toggle_transfers(update, context, True)
+        return
+    if norm in ("انتقال خاموش", "انتقال خاموش کن", "انتقال off"):
+        await group_handlers.toggle_transfers(update, context, False)
+        return
+
+    # super-admin-only moderation (creator + creator's admins) — reply-based
+    if norm == "حذف سپر":
+        await group_handlers.admin_remove_shield(update, context)
+        return
+    if norm.startswith("کسر طلا"):
+        import re as _re
+
+        _ascii = norm.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
+        _m = _re.search(r"\d+", _ascii)
+        await group_handlers.admin_deduct_gold(update, context, int(_m.group()) if _m else 0)
+        return
+
     if norm.startswith("انتقال"):
         # the FIRST run of digits is the item code (a later number could be a price)
         import re

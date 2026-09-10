@@ -1164,6 +1164,29 @@ def _rename_lab_sync(tg_user, name):
     return user, cost, cleaned
 
 
+def _set_transfer_notify_sync(tg_user, on: bool):
+    user, _ = get_or_create_user(tg_user)
+    user.transfer_notify = on
+    user.save(update_fields=["transfer_notify"])
+
+
+async def transfer_notify_off_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/off — stop the DM you get when you RECEIVE a transfer."""
+    await run_db(_set_transfer_notify_sync, update.effective_user, False)
+    await update.effective_message.reply_text(
+        "🔕 دیگه برای انتقال‌های دریافتی بهت پیام نمی‌دم.\n"
+        "اگه بازم خواستی روشن شه، /on رو بزن.",
+    )
+
+
+async def transfer_notify_on_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/on — re-enable the received-transfer DM."""
+    await run_db(_set_transfer_notify_sync, update.effective_user, True)
+    await update.effective_message.reply_text(
+        "🔔 باشه، از این به بعد برای هر انتقالِ دریافتی بهت خبر می‌دم.",
+    )
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     referrer_id = None
     if context.args:
@@ -4318,6 +4341,8 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 def register(application) -> None:
     application.add_handler(CommandHandler("start", start, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("off", transfer_notify_off_cmd, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("on", transfer_notify_on_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("me", me, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("upgrade", upgrade_panel, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("collection", collection, filters.ChatType.PRIVATE))

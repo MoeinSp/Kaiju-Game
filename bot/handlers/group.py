@@ -100,6 +100,8 @@ def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
                 f"سقف انتقال طلا الان {cap:,} طلاست (به سطح «تالار تجارت» هر دو طرف بستگی داره). "
                 "برای انتقال بیشتر، تالار تجارت رو ارتقا بدین."
             )
+        if not getattr(receiver, "transfers_enabled", True):
+            raise GameError("🔒 این کاربر دریافت انتقال رو خاموش کرده — نمی‌تونی بهش طلا بدی.")
         if sender.coins < amount:
             raise GameError(f"طلا کافی نداری! فقط {sender.coins} طلا داری.")
         # 10% transfer fee, floored (rounded in the user's favour → smaller fee, more
@@ -111,6 +113,115 @@ def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
         sender.save(update_fields=["coins"])
         receiver.save(update_fields=["coins"])
     return sender, receiver, amount, fee, net
+
+
+def _set_transfers_sync(tg_user, enable: bool):
+    user, _ = get_or_create_user(tg_user)
+    user.transfers_enabled = enable
+    user.save(update_fields=["transfers_enabled"])
+    return enable
+
+
+async def toggle_transfers(update: Update, context: ContextTypes.DEFAULT_TYPE, enable: bool) -> None:
+    """Group words «انتقال روشن» / «انتقال خاموش» — the sender toggles whether OTHERS
+    can transfer things TO them."""
+    await run_db(_set_transfers_sync, update.effective_user, enable)
+    if enable:
+        await update.message.reply_text(
+            "✅ <b>دریافت انتقال روشن شد.</b>\nحالا بقیه می‌تونن بهت طلا، کایجو و تجهیزات بدن.",
+            parse_mode="HTML",
+        )
+    else:
+        await update.message.reply_text(
+            "🔒 <b>دریافت انتقال خاموش شد.</b>\nدیگه کسی نمی‌تونه بهت انتقال بده. "
+            "برای روشن‌کردن دوباره «انتقال روشن» بفرست.",
+            parse_mode="HTML",
+        )
+
+
+# ── super-admin-only group moderation (creator + creator's admins ONLY) ───────
+def _is_super_admin(user_id: int) -> bool:
+    """True only for the bot's OWNER or the owner's own admins (game.admins) — NEVER
+    for mere Telegram group admins."""
+    from config import OWNER_TELEGRAM_ID
+    from game import admins
+
+    return user_id == OWNER_TELEGRAM_ID or admins.is_admin(user_id)
+
+
+def _admin_deduct_gold_sync(target_id: int, amount: int):
+    u = User.objects.filter(id=target_id).first()
+    if u is None:
+        raise GameError("این کاربر هنوز بازی رو شروع نکرده.")
+    u.coins = max(0, u.coins - max(0, amount))
+    u.save(update_fields=["coins"])
+    return u.coins, display_name(u)
+
+
+def _admin_remove_shield_sync(target_id: int):
+    u = User.objects.filter(id=target_id).first()
+    if u is None:
+        raise GameError("این کاربر هنوز بازی رو شروع نکرده.")
+    u.shield_until = None
+    u.group_shield_until = None
+    u.save(update_fields=["shield_until", "group_shield_until"])
+    return display_name(u)
+
+
+async def admin_deduct_gold(update: Update, context: ContextTypes.DEFAULT_TYPE, amount: int) -> None:
+    """Group reply command «کسر طلا <عدد>» — creator/creator-admins only; silent otherwise."""
+    if not _is_super_admin(update.effective_user.id):
+        return  # not a super-admin — stay silent (don't reveal the command)
+    reply = update.message.reply_to_message
+    if reply is None or reply.from_user is None or reply.from_user.is_bot:
+        await update.message.reply_text("برای «کسر طلا»، روی پیام کاربر ریپلای کن و بنویس «کسر طلا 500».")
+        return
+    if amount <= 0:
+        await update.message.reply_text("یه عدد مثبت بده، مثلاً «کسر طلا 500».")
+        return
+    try:
+        new_coins, name = await run_db(_admin_deduct_gold_sync, reply.from_user.id, amount)
+    except GameError as exc:
+        await update.message.reply_text(str(exc))
+        return
+    await update.message.reply_text(
+        f"✅ <b>{amount:,}</b> {get_emoji('coin')} از <b>{name}</b> کم شد. موجودی جدید: <b>{new_coins:,}</b>",
+        parse_mode="HTML",
+    )
+
+
+async def admin_remove_shield(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Group reply command «حذف سپر» — creator/creator-admins only; silent otherwise."""
+    if not _is_super_admin(update.effective_user.id):
+        return
+    reply = update.message.reply_to_message
+    if reply is None or reply.from_user is None or reply.from_user.is_bot:
+        await update.message.reply_text("برای «حذف سپر»، روی پیام کاربر ریپلای کن و بنویس «حذف سپر».")
+        return
+    try:
+        name = await run_db(_admin_remove_shield_sync, reply.from_user.id)
+    except GameError as exc:
+        await update.message.reply_text(str(exc))
+        return
+    await update.message.reply_text(f"🛡❌ سپرِ <b>{name}</b> (آرنا و گروه) حذف شد.", parse_mode="HTML")
+
+
+async def _dm_transfer_received(context, receiver, sender, what: str) -> None:
+    """DM the RECEIVER that they got a transfer (from whom + what), unless they've
+    turned these off with /off. Fire-and-forget — a blocked/never-started DM is fine."""
+    if not getattr(receiver, "transfer_notify", True):
+        return
+    try:
+        await context.bot.send_message(
+            receiver.id,
+            f"{get_emoji('gift')} <b>یه انتقال دریافت کردی!</b>\n\n"
+            f"• 👤 از طرفِ: <b>{display_name(sender)}</b>\n"
+            f"• 🎁 دریافتی: {what}\n\n"
+            "<i>در صورتی که نمی‌خوای این پیام‌ها بیاد، /off رو بزن.</i>",
+            parse_mode="HTML",
+        )
+    except Exception:  # pragma: no cover - DM may be blocked / never started
+        pass
 
 
 async def gold_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE, amount: int) -> None:
@@ -143,6 +254,7 @@ async def gold_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE, amou
         f"• 📥 دریافتی خالص: <b>{net:,}</b> طلا",
         parse_mode="HTML",
     )
+    await _dm_transfer_received(context, receiver, sender, f"{coin} <b>{net:,}</b> طلا")
 
 
 async def _reply_transfer_error(message, exc) -> None:
@@ -549,6 +661,13 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
             "<i>1 روز کول‌داون برای هر دو طرف فعال شد.</i>",
             parse_mode="HTML",
         )
+        if offer["kind"] == "c":
+            c = result["creature"]
+            what = f"🦖 هیولای <b>{creature_name(c)}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level}"
+        else:
+            it = result["item"]
+            what = f"🎒 <b>{it.name} +{it.level}</b> {constants.RARITY_LABELS[it.rarity]}"
+        await _dm_transfer_received(context, receiver, sender, what)
 
 
 _NO_ALLIANCE_MSG = (
