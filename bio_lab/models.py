@@ -61,6 +61,10 @@ class User(models.Model):
     notifications_on = models.BooleanField(default=True)
     energy_full_notified = models.BooleanField(default=False)
     last_nudge_day = models.CharField(max_length=10, null=True, blank=True)
+    # highest lab level the player has already been congratulated for (the «🎉 level up»
+    # DM). 0 means uninitialised — seeded silently to the current level on first scan so
+    # existing players aren't spammed for levels they passed long ago.
+    lab_level_notified = models.IntegerField(default=0)
     # ── transfers (player-to-player, in groups) ──
     # transfers_enabled: when False, nobody can send this user gold/kaiju/equipment
     #   (toggled in a group with «انتقال روشن» / «انتقال خاموش»).

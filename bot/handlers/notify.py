@@ -31,6 +31,18 @@ def _arena_button():
     return InlineKeyboardMarkup([[btn("آرنا", emoji_key="btn_arena", style=BATTLE, callback_data="menu:arena")]])
 
 
+def _lab_unlock_keyboard(features):
+    """Buttons under the «🎉 level up» DM: one per newly-opened feature (premium-themed),
+    then a «منوی اصلی» button. `features` is a list of (emoji_key, label, menu_action)."""
+    from bot.buttons import CONFIRM, PRIMARY
+
+    rows = []
+    for emoji_key, label, action in (features or []):
+        rows.append([btn(label, emoji_key=emoji_key, style=PRIMARY, callback_data=f"menu:{action}")])
+    rows.append([btn("منوی اصلی", emoji_key="btn_lab", style=CONFIRM, callback_data="menu:me")])
+    return InlineKeyboardMarkup(rows)
+
+
 def _defense_report_keyboard(defense: dict, *, group: bool):
     """Buttons under a defense report. The labels carry a compact summary (power, the
     attacker's cup, coins looted). Revenge is ARENA-ONLY; group «اتک» has no revenge."""
@@ -120,11 +132,13 @@ async def notify_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         # button — the defense report never offers revenge (that lives in «انتقام‌ها»).
         user_id, text = item[0], item[1]
         marker = item[2] if len(item) > 2 else None
-        attacker_id = item[3] if len(item) > 3 else None
+        payload = item[3] if len(item) > 3 else None
         if marker == "arena":
             reply_markup = _arena_button()
+        elif marker == "lab_unlock":
+            reply_markup = _lab_unlock_keyboard(payload)
         else:
-            reply_markup = _defense_details_button(attacker_id)
+            reply_markup = _defense_details_button(payload)
         try:
             await context.bot.send_message(
                 chat_id=user_id, text=text, parse_mode="HTML", reply_markup=reply_markup

@@ -87,6 +87,36 @@ def lab_level(user: User) -> int:
     return level_for_xp(user.lab_xp)
 
 
+# ── lab-level milestones ──────────────────────────────────────────────────────
+# What each lab level opens up — the source of truth for the "🎉 level up" DM.
+# Each entry: lab level → list of (emoji_key, label, menu_action) features that
+# become the focus at that stage. Levels not listed are still celebrated, but the
+# message points at the next milestone level instead of listing features.
+LAB_MILESTONES: dict[int, list[tuple[str, str, str]]] = {
+    2:  [("btn_hunt", "شکار خودکار", "hunt"), ("btn_wheel", "گردونه‌ی شانس", "wheel")],
+    3:  [("btn_buildings", "ساختمون‌ها و معدن", "buildings"), ("btn_biocrate", "باکس ژنتیکی", "biocrate")],
+    4:  [("btn_exchange", "مبادله‌ی طلا و DNA", "exchange")],
+    5:  [("btn_fusion", "ترکیب و ⭐ ستاره", "fusion"), ("btn_arena", "آرنا و کاپ", "arena")],
+    7:  [("btn_breeding", "غار هیولا (تخم‌گذاری)", "breeding")],
+    9:  [("btn_forge", "آهنگری (ارتقای تجهیزات)", "blacksmith")],
+    12: [("btn_alliance", "اتحاد", "alliance_info"), ("btn_casino", "کازینو", "casino")],
+    16: [("btn_diamond_box", "باکس هیولا", "diamond_box"), ("btn_battlepass", "بتل‌پس", "battlepass")],
+    20: [("btn_campaign", "کمپین", "campaign")],
+}
+
+
+def milestones_between(from_level: int, to_level: int) -> list[tuple[int, list[tuple[str, str, str]]]]:
+    """The milestone levels crossed going from `from_level` (exclusive) to `to_level`
+    (inclusive), each with its feature list — so a multi-level jump never skips one."""
+    return [(lvl, LAB_MILESTONES[lvl]) for lvl in sorted(LAB_MILESTONES)
+            if from_level < lvl <= to_level]
+
+
+def next_milestone_level(level: int) -> int | None:
+    """The next lab level (after `level`) that unlocks something, or None if none left."""
+    return next((lvl for lvl in sorted(LAB_MILESTONES) if lvl > level), None)
+
+
 def lab_progress(user: User) -> dict:
     """Everything a progress bar needs. `into`/`span` are the XP earned and
     needed *within* the current level, so callers never re-derive the curve."""

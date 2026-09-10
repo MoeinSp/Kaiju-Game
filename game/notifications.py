@@ -76,6 +76,49 @@ def _date_str_days_ago(days: int) -> str:
     return (timezone.localtime(timezone.now()) - datetime.timedelta(days=days)).strftime("%Y-%m-%d")
 
 
+def _lab_levelup_item(user):
+    """Return a («🎉 level up») notification tuple for `user` if their lab level rose
+    since we last congratulated them, else None. Marks it handled (bumps
+    lab_level_notified). Item shape: (id, text, "lab_unlock", features) where features is
+    a list of (emoji_key, label, menu_action) for the keyboard.
+
+    A brand-new/uninitialised row (lab_level_notified == 0) is seeded silently to the
+    current level so existing high-level players aren't spammed on first scan."""
+    from game import lab
+    from game.emoji import get_emoji
+
+    current = lab.lab_level(user)
+    seen = user.lab_level_notified or 0
+    if seen == 0:  # uninitialised — seed silently, never notify for the starting level
+        user.lab_level_notified = current
+        user.save(update_fields=["lab_level_notified"])
+        return None
+    if current <= seen:
+        return None
+
+    crossed = lab.milestones_between(seen, current)
+    user.lab_level_notified = current
+    user.save(update_fields=["lab_level_notified"])
+    if not user.notifications_on:
+        return None
+
+    # merge every feature opened across the crossed levels (cap the keyboard size)
+    features: list[tuple[str, str, str]] = []
+    for _lvl, feats in crossed:
+        features.extend(feats)
+    features = features[:6]
+
+    lines = [f"{get_emoji('lab')} <b>سطح آزمایشگاه {current}!</b>", "🔬 آزمایشگاهت یه پله قوی‌تر شد. 🎉"]
+    if features:
+        lines += ["", "🔓 <b>این‌ها برات باز شد:</b>"]
+        for emoji_key, label, _action in features:
+            lines.append(f"{get_emoji(emoji_key)} {label}")
+    nxt = lab.next_milestone_level(current)
+    if nxt is not None:
+        lines += ["", "──────────────", f"🗺 قابلیت بعدی توی سطح <b>{nxt}</b> باز می‌شه."]
+    return (user.id, "\n".join(lines), "lab_unlock", features)
+
+
 def collect_due() -> list[tuple[int, str]]:
     """Find every due notification, mark it sent, and return (user_id, text) pairs.
 
@@ -157,6 +200,11 @@ def collect_due() -> list[tuple[int, str]]:
             elif current < constants.MAX_ENERGY and user.energy_full_notified:
                 user.energy_full_notified = False
                 user.save(update_fields=["energy_full_notified"])
+
+            # ── lab level-up (congratulate + show what opened up) ──────────────
+            item = _lab_levelup_item(user)
+            if item is not None:
+                out.append(item)
 
         # ── referral rewards (friend crossed the milestone → pay both) ────────
         from game import referral
