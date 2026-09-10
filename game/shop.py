@@ -156,14 +156,31 @@ def _configured_offers_for_slot(slot: int) -> list[dict] | None:
     return out or None
 
 
+def _core_capsule_offers(exclude_keys=()) -> list[dict]:
+    """The XP-capsule staples as ready-to-show offer dicts, at full price, skipping any
+    key already present (so a scheduled slot that also lists a capsule isn't doubled)."""
+    by_key = catalog_by_key()
+    out = []
+    for key in CORE_OFFER_KEYS:
+        if key in exclude_keys:
+            continue
+        base = by_key.get(key)
+        if base is None:
+            continue
+        out.append({**base, "featured": False, "price": base["cost"], "limit": 0})
+    return out
+
+
 def today_offers() -> list[dict]:
     """Today's shop. If today's cycle slot is scheduled by the owner, those exact
     offers/prices are shown (no featured discount — the set price is the price).
     Otherwise it falls back to the default rotation over the active pool, whose first
-    entry is a discounted featured deal."""
+    entry is a discounted featured deal. Either way the XP-capsule staples are always
+    appended, so leveling is always reachable regardless of the owner's schedule."""
     scheduled = _configured_offers_for_slot(slot_for_offset(0))
     if scheduled is not None:
-        return [{**o, "featured": False, "price": o["cost"], "limit": o.get("limit", 0)} for o in scheduled]
+        shown = [{**o, "featured": False, "price": o["cost"], "limit": o.get("limit", 0)} for o in scheduled]
+        return shown + _core_capsule_offers(exclude_keys={o["key"] for o in shown})
 
     pool = catalog_items()
     if not pool:
