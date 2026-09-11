@@ -557,8 +557,7 @@ def _mine_card(user, mine: dict) -> tuple[str, InlineKeyboardMarkup]:
 
 
 def _box_card(user) -> tuple[str, InlineKeyboardMarkup]:
-    """The box chooser: two kinds. Genetic box opens right here; the monster box
-    (diamonds, always gives a kaiju) lives in the DM."""
+    """The box chooser: both kinds open right here in the group (scoped to the summoner)."""
     text = (
         f"{get_emoji('diamond')} <b>باکس‌ها</b>\n\n"
         "<blockquote>🧬 <b>باکس ژنتیکی</b>: با طلا/DNA باز می‌شه، شانسی هیولا یا تجهیزات می‌ده.\n"
@@ -567,22 +566,102 @@ def _box_card(user) -> tuple[str, InlineKeyboardMarkup]:
     )
     rows = [
         [btn("🧬 باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data=_act("box_genetic", user.id))],
-        [btn("👹 باکس هیولا", emoji_key="btn_diamond_box", style=SHOP,
-             url=f"https://t.me/{BOT_USERNAME}?start=boxes")],
+        [btn("👹 باکس هیولا", emoji_key="btn_diamond_box", style=SHOP, callback_data=_act("mbox", user.id))],
     ]
     return text, InlineKeyboardMarkup(rows)
 
 
+# ── 👹 monster box (diamond box) — full flow in-group, scoped to the summoner ──
+def _mbox_list_card(user) -> tuple[str, InlineKeyboardMarkup]:
+    lines = [
+        f"{get_emoji('diamond_box')} <b>باکس هیولا</b>",
+        f"<blockquote>{get_emoji('diamond')} الماس تو: <b>{user.diamonds:,}</b>\n"
+        "هر باکس همیشه یه هیولای جدید می‌ده؛ هرچی باکس بالاتر، شانس نایاب‌بودن بیشتر.</blockquote>",
+        "یه باکس انتخاب کن:",
+    ]
+    rows = [
+        [btn(f"{cfg['label']} — {cfg['cost_diamonds']} 💎", emoji_key="btn_diamond_box", style=SHOP,
+             callback_data=_act("mbox_pick", user.id, tier))]
+        for tier, cfg in constants.DIAMOND_BOX_TIERS.items()
+    ]
+    rows.append([btn("↩️ باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_scoped("box", user.id))])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _box_open10_sync(tg_user):
+    from game.lootbox import open_biocrate_batch
+
+    user, _ = get_or_create_user(tg_user)
+    summary = open_biocrate_batch(user, "basic", 10)
+    return summary, user
+
+
+def _mbox_open_sync(tg_user, tier, mode):
+    from game.lootbox import open_diamond_box, open_diamond_box_bulk
+
+    user, _ = get_or_create_user(tg_user)
+    if mode == "bulk":
+        return "bulk", open_diamond_box_bulk(user, tier), user
+    return "one", open_diamond_box(user, tier), user
+
+
+def _mbox_result_card(user, tier: str, kind: str, result: dict) -> tuple[str, InlineKeyboardMarkup]:
+    label = constants.DIAMOND_BOX_TIERS[tier]["label"]
+    if kind == "bulk":
+        from bot.handlers.lootbox import _bulk_summary_text
+
+        text = _bulk_summary_text(label, result)
+    else:
+        c = result["creature"]
+        text = (
+            f"{label} <b>باز شد!</b>\n\n"
+            f"<tg-spoiler>{get_emoji('egg')} <b>{c.name}</b>\n"
+            f"{constants.element_label(c.element)} · {constants.RARITY_LABELS[result['rarity']]}</tg-spoiler>\n\n"
+            "<blockquote>از «کلکسیون» می‌تونی فعالش کنی.</blockquote>"
+        )
+    rows = [
+        [btn("یکی دیگه", emoji_key="btn_diamond_box", style=SHOP, callback_data=_act("mbox_pick", user.id, tier))],
+        [btn("↩️ لیست باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_act("mbox", user.id))],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _mbox_detail_card(user, tier: str) -> tuple[str, InlineKeyboardMarkup]:
+    from game.lootbox import BULK_PAY
+
+    cfg = constants.DIAMOND_BOX_TIERS[tier]
+    lines = [
+        f"{cfg['label']}",
+        f"{get_emoji('diamond')} هزینه: <b>{cfg['cost_diamonds']}</b> الماس · موجودی تو: <b>{user.diamonds:,}</b>",
+        "",
+        "📊 <b>احتمال هر رده:</b>",
+    ]
+    for rarity, weight in cfg["weights"].items():
+        lines.append(f"{constants.RARITY_LABELS[rarity]} — {weight:g}٪")
+    rows = [
+        [btn("خرید و باز کن", emoji_key="btn_confirm", style=CONFIRM, callback_data=_act("mbox_open", user.id, f"{tier}:1"))],
+        [btn(f"باز کردن ×{BULK_PAY} (+۱ رایگان 🎁)", emoji_key="btn_diamond_box", style=SHOP,
+             callback_data=_act("mbox_open", user.id, f"{tier}:bulk"))],
+        [btn("↩️ لیست باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_act("mbox", user.id))],
+    ]
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
 def _box_genetic_card(user) -> tuple[str, InlineKeyboardMarkup]:
+    tickets = getattr(user, "biocrate_tickets", 0)
     text = (
         f"{get_emoji('diamond')} <b>باکس ژنتیکی</b>\n\n"
-        f"<blockquote>هزینه: <b>{constants.BIOCRATE_GOLD_COST}</b> {get_emoji('coin')} + "
+        f"<blockquote>هزینه‌ی هر باکس: <b>{constants.BIOCRATE_GOLD_COST}</b> {get_emoji('coin')} + "
         f"<b>{constants.BIOCRATE_DNA_COST}</b> {get_emoji('dna')}\n"
-        "شانسی هیولا یا تجهیزات می‌ده، با درجه‌ی نایابی تصادفی.</blockquote>\n"
+        "شانسی هیولا یا تجهیزات می‌ده، با درجه‌ی نایابی تصادفی.\n"
+        f"🎟 بلیط: <b>{tickets}</b> (هر بلیط = یه باکس رایگان؛ ×۱۰ اول بلیط‌ها رو خرج می‌کنه).</blockquote>\n"
         f"موجودی تو: {user.coins:,} {get_emoji('coin')} · {user.dna_fragments} {get_emoji('dna')}"
     )
     rows = [
-        [btn("باز کن", emoji_key="btn_biocrate", style=SHOP, callback_data=_act("box_open", user.id))],
+        [
+            btn("باز کن", emoji_key="btn_biocrate", style=SHOP, callback_data=_act("box_open", user.id)),
+            btn("باز کردن ×۱۰", emoji_key="btn_biocrate", style=SHOP, callback_data=_act("box_open10", user.id)),
+        ],
         [btn("↩️ باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_scoped("box", user.id))],
     ]
     return text, InlineKeyboardMarkup(rows)
@@ -1577,6 +1656,56 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         user = await run_db(_casino_home_sync, update.effective_user)  # just fetches the user
         await query.answer()
         text, keyboard = _box_genetic_card(user)
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        return
+
+    if action == "box_open10":
+        try:
+            summary, user = await run_db(_box_open10_sync, update.effective_user)
+        except GameError as exc:
+            await query.answer(str(exc), show_alert=True)
+            return
+        await query.answer("🎉 باز شد!")
+        from bot.handlers.lootbox import _bulk_summary_text
+
+        text = _bulk_summary_text("🧬 باکس ژنتیکی", summary)
+        if summary.get("from_tickets"):
+            text += f"\n\n🎟 <b>{summary['from_tickets']}</b> تا با بلیط رایگان باز شد (بلیط مونده: {summary['tickets_left']})."
+        rows = InlineKeyboardMarkup([
+            [btn("باز کردن ×۱۰ دیگه", emoji_key="btn_biocrate", style=SHOP, callback_data=_act("box_open10", user.id))],
+            [btn("↩️ باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_scoped("box", user.id))],
+        ])
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=rows)
+        return
+
+    # ── 👹 monster box (diamond box), fully in-group ───────────────────────────
+    if action == "mbox":
+        user = await run_db(_casino_home_sync, update.effective_user)
+        await query.answer()
+        text, keyboard = _mbox_list_card(user)
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        return
+    if action == "mbox_pick":
+        if arg not in constants.DIAMOND_BOX_TIERS:
+            await query.answer("این باکس پیدا نشد.", show_alert=True)
+            return
+        user = await run_db(_casino_home_sync, update.effective_user)
+        await query.answer()
+        text, keyboard = _mbox_detail_card(user, arg)
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        return
+    if action == "mbox_open":
+        tier, _, mode = arg.partition(":")
+        if tier not in constants.DIAMOND_BOX_TIERS:
+            await query.answer("این باکس پیدا نشد.", show_alert=True)
+            return
+        try:
+            kind, result, user = await run_db(_mbox_open_sync, update.effective_user, tier, mode)
+        except GameError as exc:
+            await query.answer(str(exc), show_alert=True)
+            return
+        await query.answer("🎉 باز شد!")
+        text, keyboard = _mbox_result_card(user, tier, kind, result)
         await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
         return
 

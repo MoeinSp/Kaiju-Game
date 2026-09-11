@@ -36,9 +36,11 @@ def _bulk_summary_text(header: str, summary: dict) -> str:
         best_line = (f"{_rarity_dot(best['rarity'])} {constants.EQUIPMENT_SLOT_LABELS.get(it.slot, '🎒')} "
                      f"<b>{it.name} +{it.level}</b> — {constants.RARITY_LABELS[best['rarity']]}")
 
+    _gift = summary["opened"] - summary["paid"]
     lines = [
         f"🎁 <b>نتایج گشایش {summary['opened']} {header}</b>",
-        f"<i>(پرداخت {summary['paid']} باکس + ۱ باکس هدیه)</i>",
+        (f"<i>(پرداخت {summary['paid']} باکس + {_gift} باکس هدیه)</i>" if _gift > 0
+         else f"<i>({summary['opened']} باکس)</i>"),
         "",
         "🏆 <b>ارزشمندترین دریافت:</b>",
         f"• {best_line}",
