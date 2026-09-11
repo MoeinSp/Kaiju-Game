@@ -108,7 +108,19 @@ def _lab_levelup_item(user):
         features.extend(feats)
     features = features[:6]
 
-    lines = [f"{get_emoji('lab')} <b>سطح آزمایشگاه {current}!</b>", "🔬 آزمایشگاهت یه پله قوی‌تر شد. 🎉"]
+    gained = current - seen
+    if gained > 1:
+        # several levels at once (e.g. a big XP batch, or the poll coalesced them) —
+        # one message that says how many, and lists everything opened across them.
+        lines = [
+            f"{get_emoji('lab')} <b>🎉 {gained} سطح ارتقا پیدا کردی!</b>",
+            f"🔬 سطح آزمایشگاه: <b>{seen}</b> ⬅️ <b>{current}</b>",
+        ]
+    else:
+        lines = [
+            f"{get_emoji('lab')} <b>سطح آزمایشگاه {current}!</b>",
+            "🔬 آزمایشگاهت یه پله قوی‌تر شد. 🎉",
+        ]
     if features:
         lines += ["", "🔓 <b>این‌ها برات باز شد:</b>"]
         for emoji_key, label, _action in features:
@@ -202,9 +214,12 @@ def collect_due() -> list[tuple[int, str]]:
                 user.save(update_fields=["energy_full_notified"])
 
             # ── lab level-up (congratulate + show what opened up) ──────────────
-            item = _lab_levelup_item(user)
-            if item is not None:
-                out.append(item)
+            try:
+                item = _lab_levelup_item(user)
+                if item is not None:
+                    out.append(item)
+            except Exception:  # noqa: BLE001 — a level-up hiccup must not drop the whole batch
+                pass
 
         # ── referral rewards (friend crossed the milestone → pay both) ────────
         from game import referral
