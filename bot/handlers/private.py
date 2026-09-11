@@ -2469,10 +2469,11 @@ def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> st
         "",
         "🎁 جوایز نبرد (در صورت برد):",
         f"{get_emoji('coin')} غنیمت طلا: <b>+{lo:,} تا +{hi:,}</b>",
-        f"{get_emoji('dna')} غنیمت دی‌ان‌ای: <b>+{dlo:,} تا +{dhi:,}</b>",
+        f"{get_emoji('dna')} غنیمت DNA: <b>+{dlo:,} تا +{dhi:,}</b>",
         "",
         _CARD_DIV,
-        f"{get_emoji('energy')} هزینه حمله: {constants.HUNT_ENERGY_COST} انرژی  ·  🔍 حریف بعدی: <b>{scout_price}</b> طلا",
+        f"{get_emoji('energy')} هزینه حمله: {constants.HUNT_ENERGY_COST} انرژی",
+        f"🔍 حریف بعدی: <b>{scout_price}</b> طلا",
     ]
     return "\n".join(lines)
 

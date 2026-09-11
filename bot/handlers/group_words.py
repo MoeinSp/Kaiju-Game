@@ -559,7 +559,8 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
         (f"🔮 {adv}" if adv else ""),
         "",
         f"🎁 جوایز برد: {get_emoji('coin')} <b>+{lo:,}–{hi:,}</b> طلا · {get_emoji('dna')} <b>+{dlo:,}–{dhi:,}</b>",
-        f"{get_emoji('energy')} هزینه: 1 انرژی (داری: {energy}) · 🔍 بعدی: {target.get('scout_cost', 0)} طلا",
+        f"{get_emoji('energy')} هزینه: 1 انرژی (داری: {energy})",
+        f"🔍 بعدی: <b>{target.get('scout_cost', 0)}</b> طلا",
     ])
     rows = [
         [
