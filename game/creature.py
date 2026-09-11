@@ -22,6 +22,20 @@ class InsufficientGoldError(GameError):
         super().__init__(message)
 
 
+class CreatureBusyError(GameError):
+    """A creature can't be used because it's working (mining) or breeding. Carries the
+    creature id/name and whether it's `freeable` (a mining worker that a one-tap
+    «آزاد کردن» can release — breeding/active aren't), so a handler can offer a
+    release-and-resume button instead of a dead-end error."""
+
+    def __init__(self, creature: Creature, status: str, freeable: bool):
+        self.creature_id = creature.id
+        self.creature_name = creature.name
+        self.status = status
+        self.freeable = freeable
+        super().__init__(f"«{creature.name}» الان مشغوله ({status}) — اول آزادش کن.")
+
+
 def effective_stats(creature: Creature, equipped_items: list | None = None) -> dict[str, float]:
     """`equipped_items` must be pre-fetched by the caller (e.g. via
     game.equipment.get_equipped_items) — this function never queries the DB itself,

@@ -153,11 +153,13 @@ def preview_creature_transfer(sender: User, receiver: User, creature_id: int) ->
         raise GameError("همچین هیولایی با این کد توی کلکسیونت نیست.")
     if creature.is_active:
         raise GameError("هیولای فعال رو نمی‌شه منتقل کرد — اول یکی دیگه رو فعال کن.")
-    from game.workers import creature_status
+    from game.workers import creature_status, is_mining
 
     status = creature_status(sender, creature)
     if status is not None:
-        raise GameError(f"«{creature.name}» الان مشغوله ({status}) — اول آزادش کن.")
+        from game.creature import CreatureBusyError
+
+        raise CreatureBusyError(creature, status, freeable=is_mining(sender, creature))
     _check_creature_trade_gate(sender, receiver, creature.star_level)
     reqs = _creature_reqs(creature.star_level)
     mh, fl = building_level(receiver, "main_hall"), building_level(receiver, "fusion_lab")

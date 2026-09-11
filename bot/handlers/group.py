@@ -22,7 +22,7 @@ from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from game import constants
 from game.buildings import building_level, maybe_award_speedup_card
 from game.combat import battle_report, resolve_battle, resolve_duel_detailed
-from game.creature import GameError, add_xp
+from game.creature import CreatureBusyError, GameError, add_xp
 from game.daily import check_missions, consume_daily, record_action
 from game.emoji import get_emoji
 from game.energy import spend_energy
@@ -360,23 +360,25 @@ def _seller_step_keyboard(token: str) -> InlineKeyboardMarkup:
     ])
 
 
-async def _begin_offer(update, kind: str, sender, receiver, item_id: int, desc: str, fee: int) -> None:
+async def _begin_offer(message, kind: str, sender, receiver, item_id: int, desc: str, fee: int) -> None:
+    # `message` is the message to reply under (the user's command, or a callback's
+    # message when resuming after «آزاد کردن»).
     # one live offer per sender: while an offer is pending it holds a claim on its item,
     # so the sender can't open a second transfer or re-offer the same thing elsewhere
     # until the current one is accepted, rejected, cancelled, or expires (5 min).
     if _sender_active_offer(sender.id) is not None:
-        await update.message.reply_text(
+        await message.reply_text(
             "⏳ یه پیشنهاد انتقالِ باز داری. اول همون رو کامل یا لغو کن، "
             "یا تا ۵ دقیقه صبر کن تا خودش منقضی شه، بعد انتقال جدید بزن."
         )
         return
     if _item_active_offer(kind, item_id) is not None:
-        await update.message.reply_text("⏳ این مورد همین الان توی یه پیشنهاد انتقالِ بازه.")
+        await message.reply_text("⏳ این مورد همین الان توی یه پیشنهاد انتقالِ بازه.")
         return
     token = _new_offer(kind, sender.id, receiver.id, item_id=item_id, fee=fee, desc=desc,
                        sender_name=display_name(sender), receiver_name=display_name(receiver))
     reset_line = f"\n{_CREATURE_RESET_NOTE}\n" if kind == "c" else ""
-    await update.message.reply_text(
+    await message.reply_text(
         f"🤝 <b>{display_name(sender)}</b> می‌خواد {desc} رو به <b>{display_name(receiver)}</b> بده.\n"
         f"{get_emoji('diamond')} کارمزد انتقال: <b>{fee}</b> الماس (گیرنده می‌ده)\n"
         f"{reset_line}\n"
@@ -411,12 +413,108 @@ async def transfer_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TY
         sender, receiver, preview = await run_db(
             _preview_creature_sync, update.effective_chat, update.effective_user, recipient.id, creature_id
         )
+    except CreatureBusyError as exc:
+        # offer a one-tap «آزاد کردن و ادامه» when the kaiju is just mining (releasable)
+        if exc.freeable:
+            await update.message.reply_text(
+                str(exc) + "\n\n<i>می‌تونی همین‌جا آزادش کنی و انتقال رو ادامه بدی 👇</i>",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([[btn(
+                    f"🔓 آزاد کردن «{exc.creature_name}» و ادامه", emoji_key="btn_confirm", style=BUILD,
+                    callback_data=f"frcfree:ask:{update.effective_user.id}:{exc.creature_id}:{recipient.id}",
+                )]]),
+            )
+            return
+        await _reply_transfer_error(update.message, exc)
+        return
     except GameError as exc:
         await _reply_transfer_error(update.message, exc)
         return
     c = preview["creature"]
     desc = f"هیولای <b>{creature_name(c)}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level}"
-    await _begin_offer(update, "c", sender, receiver, c.id, desc, preview["cost"])
+    await _begin_offer(update.message, "c", sender, receiver, c.id, desc, preview["cost"])
+
+
+def _free_and_preview_creature_sync(chat, sender_tg, receiver_id, creature_id):
+    """Release the kaiju from its mining job, then re-run the transfer preview so the
+    offer can resume. Raises if it can't be freed or the transfer is still blocked."""
+    from django.db import transaction
+
+    from game import transfer
+    from game.workers import is_mining, unassign
+
+    group = get_or_create_group(chat)
+    sender, _ = get_or_create_user(sender_tg)
+    touch_membership(group, sender)
+    receiver = User.objects.filter(id=receiver_id).first()
+    if receiver is None:
+        raise GameError("این بازیکن هنوز بازی رو شروع نکرده.")
+    creature = Creature.objects.filter(id=creature_id, owner=sender).first()
+    if creature is None:
+        raise GameError("این هیولا توی کلکسیونت نیست.")
+    with transaction.atomic():
+        if is_mining(sender, creature):
+            unassign(sender, creature)  # frees the worker (banks its pending in the mine)
+    preview = transfer.preview_creature_transfer(sender, receiver, creature_id)
+    return sender, receiver, preview
+
+
+async def transfer_free_ask_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«🔓 آزاد کردن و ادامه» → confirm step before releasing the worker."""
+    query = update.callback_query
+    _, _, sender_id, cid, rid = query.data.split(":")
+    if update.effective_user.id != int(sender_id):
+        await query.answer("این دکمه مال تو نیست.", show_alert=True)
+        return
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        "🔓 <b>آزاد کردن کایجو</b>\n"
+        "این کایجو از کارِ فعلیش (معدن) آزاد می‌شه و تولیدِ جمع‌شده‌ش توی معدن می‌مونه. "
+        "بعدش انتقال ادامه پیدا می‌کنه. تأیید می‌کنی؟",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[
+            btn("✅ آزاد کن و ادامه", emoji_key="btn_confirm", style=CONFIRM,
+                callback_data=f"frcfree:go:{sender_id}:{cid}:{rid}"),
+            btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data=f"frcfree:cancel:{sender_id}"),
+        ]]),
+    )
+
+
+async def transfer_free_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Confirmed → free the worker, then resume the transfer offer."""
+    query = update.callback_query
+    _, _, sender_id, cid, rid = query.data.split(":")
+    if update.effective_user.id != int(sender_id):
+        await query.answer("این دکمه مال تو نیست.", show_alert=True)
+        return
+    try:
+        sender, receiver, preview = await run_db(
+            _free_and_preview_creature_sync, query.message.chat, update.effective_user, int(rid), int(cid)
+        )
+    except CreatureBusyError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("🔓 آزاد شد — انتقال ادامه پیدا کرد.")
+    c = preview["creature"]
+    await safe_edit_message_text(
+        query, f"🔓 <b>{creature_name(c)}</b> از معدن آزاد شد. حالا انتقال رو تموم کن 👇", parse_mode="HTML"
+    )
+    desc = f"هیولای <b>{creature_name(c)}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level}"
+    await _begin_offer(query.message, "c", sender, receiver, c.id, desc, preview["cost"])
+
+
+async def transfer_free_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    _, _, sender_id = query.data.split(":")
+    if update.effective_user.id != int(sender_id):
+        await query.answer()
+        return
+    await query.answer("لغو شد.")
+    await safe_edit_message_text(query, "🚫 آزاد کردن لغو شد — کایجو سرِ کارش موند.")
 
 
 def _preview_equip_sync(chat, sender_tg, receiver_id, equip_id):
@@ -460,7 +558,7 @@ async def transfer_equip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE,
         return
     it = preview["item"]
     desc = f"تجهیزاتِ <b>{it.name} +{it.level}</b> {constants.RARITY_LABELS[it.rarity]}"
-    await _begin_offer(update, "e", sender, receiver, it.id, desc, preview["cost"])
+    await _begin_offer(update.message, "e", sender, receiver, it.id, desc, preview["cost"])
 
 
 def _transfer_do_sync(kind, sender_id, receiver_id, item_id, price):
@@ -1739,6 +1837,9 @@ def register(application) -> None:
     # spamming it across many groups for free stat mutations. The player-vs-player
     # «دوئل» feature was removed entirely (PvP happens via «اتک» reply-attacks now).
     application.add_handler(CallbackQueryHandler(transfer_offer_callback, pattern=r"^xfo:"))
+    application.add_handler(CallbackQueryHandler(transfer_free_ask_callback, pattern=r"^frcfree:ask:"))
+    application.add_handler(CallbackQueryHandler(transfer_free_go_callback, pattern=r"^frcfree:go:"))
+    application.add_handler(CallbackQueryHandler(transfer_free_cancel_callback, pattern=r"^frcfree:cancel:"))
     application.add_handler(CallbackQueryHandler(raid_leaderboard_callback, pattern=r"^raidlb(:-?\d+)?$"))
     application.add_handler(CallbackQueryHandler(raid_attack_confirm_callback, pattern=r"^raidatk:\d+$"))
     application.add_handler(CallbackQueryHandler(raid_overall_rank_callback, pattern=r"^raidrankall$"))

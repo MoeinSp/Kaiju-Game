@@ -102,6 +102,12 @@ def creature_status(user: User, creature: Creature) -> str | None:
     return None
 
 
+def is_mining(user: User, creature: Creature) -> bool:
+    """True if the creature is assigned as a worker in a building — the one busy state a
+    one-tap «آزاد کردن» (unassign) can release. Breeding and 'active' are NOT this."""
+    return CreatureAssignment.objects.filter(creature=creature, creature__owner=user).exists()
+
+
 def assert_free(user: User, creature: Creature, *, for_action: str) -> None:
     """Raise unless `creature` is idle. `for_action` only shapes the message."""
     if creature.owner_id != user.id:
