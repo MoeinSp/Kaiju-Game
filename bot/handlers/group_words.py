@@ -891,13 +891,17 @@ def _card_sync(tg_user, chat, action):
         data["egg_count"] = len(breeding_mod.active_eggs(user))
     elif action == "leaderboard":
         from bot.handlers.group import _creature_power, group_member_creatures
+        from game import research
 
         if group is None:
             data["ranked"] = []
         else:
-            data["ranked"] = sorted(
-                group_member_creatures(group), key=_creature_power, reverse=True
-            )[:10]
+            members = group_member_creatures(group)
+            # stamp each member's research buffs (they span many owners, most of whom
+            # aren't in the process cache) so the ranking power INCLUDES lab effects —
+            # without this, foreign owners' research was silently dropped on a cold miss.
+            research.attach_research_multi(members)
+            data["ranked"] = sorted(members, key=_creature_power, reverse=True)[:10]
             data["powers"] = {c.id: _creature_power(c) for c in data["ranked"]}
     return data
 

@@ -217,6 +217,24 @@ def _has_any(levels: dict[str, int]) -> bool:
     return any(v > 0 for v in levels.values())
 
 
+def attach_research_multi(creatures) -> None:
+    """Like attach_research but for creatures spanning MANY owners (leaderboards, member
+    lists). Warms each distinct owner's research levels ONCE (sync/DB) and stamps every
+    creature's transient `_research`, so a power display never silently drops a foreign
+    owner's research buffs just because that owner wasn't in the process cache yet."""
+    by_owner: dict[int, list] = {}
+    for c in creatures:
+        if c is not None:
+            by_owner.setdefault(c.owner_id, []).append(c)
+    for owner_id, cs in by_owner.items():
+        have = {r.key: r.level for r in Research.objects.filter(owner_id=owner_id)}
+        levels = {k: have.get(k, 0) for k in RESEARCH_KEYS}
+        _LEVELS_CACHE[owner_id] = levels  # warm the cache too (belt-and-suspenders)
+        if _has_any(levels):
+            for c in cs:
+                c._research = combat_bonuses(levels, c.element)
+
+
 def attach_research(user: User, creatures) -> None:
     """Stamp each creature with the owner's combat research bonuses (a transient
     `_research` dict effective_stats prefers over the cache) AND warm the cache. Call in

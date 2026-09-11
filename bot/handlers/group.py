@@ -883,8 +883,7 @@ def _raid_attack_view(creature, boss, dmg, defeated, completed_missions, reward_
         div,
         "",
         f"🎁 پاداش این ضربه: +{dna_gain} {get_emoji('dna')}",
-        f"{get_emoji('energy')} انرژی باقی‌مانده: {energy_left} (-1⚡)",
-        f"🔁 اتک رید باقی‌مانده‌ی امروز: <b>{attacks_left}</b> از {RAID_DAILY_ATTACKS}",
+        f"{get_emoji('raid_attacks_left')} اتک رید باقی‌مانده‌ی امروز: <b>{attacks_left}</b> از {RAID_DAILY_ATTACKS}",
     ]
     text = "\n".join(lines) + _mission_lines(completed_missions)
     if defeated:
@@ -1597,10 +1596,14 @@ def _creature_power(c: Creature) -> int:
 
 
 def _leaderboard_sync(chat, tg_user):
+    from game import research
+
     group = get_or_create_group(chat)
     user, _ = get_or_create_user(tg_user)
     touch_membership(group, user)
-    ranked = sorted(group_member_creatures(group), key=_creature_power, reverse=True)[:10]
+    members = group_member_creatures(group)
+    research.attach_research_multi(members)  # include lab effects for every owner (see leaderboard fix)
+    ranked = sorted(members, key=_creature_power, reverse=True)[:10]
     # pair each with its (gear-inclusive) power now, in sync context, so the async
     # render never has to touch the DB again
     return [(c, _creature_power(c)) for c in ranked]

@@ -43,6 +43,7 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "forfeit_action": ("تسلیم", "🏳", "battle"),
     "raid_boss": ("هیولای وحشی", "🐲", "battle"),
     "hunt": ("شکار", "🏹", "battle"),
+    "raid_attacks_left": ("اتک رید باقی‌مانده", "🔁", "battle"),
     # social
     "alliance": ("اتحاد", "🤝", "social"),
     "gift": ("هدیه", "🎁", "social"),
