@@ -32,19 +32,20 @@ def _perks_sync(tg_user):
 def _perks_render(info: dict) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
         f"🏰 <b>ساختمون‌های اتحاد {info['name']}</b>",
-        f"<blockquote>💰 خزانه: <b>{info['treasury']}</b> طلا\n"
+        f"<blockquote>💰 خزانه: <b>{info['treasury']:,}</b> طلا\n"
         "ساختمون‌ها از خزانه ارتقا می‌گیرن و مزایاشون برای <b>همه‌ی اعضا</b>ست.</blockquote>",
     ]
     rows = []
     for b in info["buildings"]:
         cap = " (تکمیل)" if b["maxed"] else ""
+        b_max = b.get("max_level", info["max_level"])
         lines.append(
-            f"\n{b['emoji']} <b>{b['title']}</b> — سطح <b>{b['level']}</b>/{info['max_level']}{cap}\n"
+            f"\n{b['emoji']} <b>{b['title']}</b> — سطح <b>{b['level']}</b>/{b_max}{cap}\n"
             f"   <i>{b['desc']}: {b['effect']}</i>"
         )
         if info["is_manager"] and not b["maxed"]:
             rows.append([btn(
-                f"{b['emoji']} ارتقای {b['title']} → {b['next_effect']} ({b['cost']} طلا)",
+                f"{b['emoji']} ارتقای {b['title']} → {b['next_effect']} ({b['cost']:,} طلا)",
                 style=BUILD, callback_data=f"ally_perk_buy:{b['key']}",
             )])
     if info["vault_income"] > 0:

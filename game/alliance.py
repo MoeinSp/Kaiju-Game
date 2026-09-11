@@ -627,28 +627,37 @@ PASS_PERK_PER_LEVEL = 0.05    # معبد: +5% Battle Pass points per level, all 
 FORTRESS_PER_LEVEL = 0.06     # دژ: -6% gold stolen per heist, per level (cap enforced by max level)
 BARRACKS_PER_LEVEL = 0.08     # پادگان: +8% war power per level, all members
 VAULT_INCOME_PER_LEVEL = 200  # خزانه: +200 treasury gold/day per level
-CAPACITY_PER_LEVEL = 10       # تالار: +10 member slots per level
+CAPACITY_PER_LEVEL = 5        # تالار: +5 member slots per level
 PERK_MAX_LEVEL = 5
+HALL_MAX_LEVEL = 4
 WAR_WINNER_TREASURY_BONUS = 5000  # gold added to the top alliance's treasury each week
 
-# Member capacity: every alliance starts at 50 and the تالار building adds
-# CAPACITY_PER_LEVEL per level up to PERK_MAX_LEVEL → a hard ceiling of 100.
-ALLIANCE_BASE_CAPACITY = 50
-# The تالار is deliberately far more expensive than the effect-perks — its treasury
-# cost climbs steeply so growing past 50 members is a serious, long-term investment.
-HALL_COST = {1: 30000, 2: 70000, 3: 150000, 4: 300000, 5: 600000}
+# Member capacity: starts at 10 and تالار adds CAPACITY_PER_LEVEL (5) per level up to 30.
+ALLIANCE_BASE_CAPACITY = 10
+ALLIANCE_MAX_CAPACITY = 30
+
+# Building upgrade costs from treasury (substantially rebalanced)
+HALL_COST = {1: 100_000, 2: 250_000, 3: 600_000, 4: 1_200_000}
+OTHER_PERK_COST = {1: 30_000, 2: 75_000, 3: 150_000, 4: 300_000, 5: 500_000}
+
+
+def max_level_for(key: str) -> int:
+    return HALL_MAX_LEVEL if key == "hall" else PERK_MAX_LEVEL
 
 
 def max_members(alliance: Alliance) -> int:
-    """Current member ceiling: 50 base + 10 per تالار level, capped at 100."""
-    level = min(alliance.hall_level, PERK_MAX_LEVEL)
-    return ALLIANCE_BASE_CAPACITY + level * CAPACITY_PER_LEVEL
+    """Current member ceiling: 10 base + 5 per تالار level, capped at 30."""
+    level = min(alliance.hall_level, HALL_MAX_LEVEL)
+    return min(ALLIANCE_MAX_CAPACITY, ALLIANCE_BASE_CAPACITY + level * CAPACITY_PER_LEVEL)
 
 
 def _assert_has_room(alliance: Alliance) -> None:
-    if alliance.members.count() >= max_members(alliance):
+    cur_max = max_members(alliance)
+    if alliance.members.count() >= cur_max:
+        if cur_max >= ALLIANCE_MAX_CAPACITY:
+            raise GameError("این اتحاد پره (سقف حداکثر ۳۰ عضو تکمیل شده).")
         raise GameError(
-            f"این اتحاد پره ({max_members(alliance)} عضو). رهبرش باید «تالار اتحاد» رو ارتقا بده تا ظرفیت بیشتر شه."
+            f"این اتحاد پره ({cur_max} عضو). رهبرش باید «تالار اتحاد» رو ارتقا بده تا ظرفیت بیشتر شه."
         )
 
 # Treasury-funded, alliance-wide upgradeable buildings. All share the buy_perk()
@@ -666,18 +675,18 @@ PERKS = {
     "vault": {"emoji": "🏦", "title": "خزانه", "field": "vault_level", "per_level": VAULT_INCOME_PER_LEVEL,
               "desc": "درآمد روزانه‌ی طلا به خزانه", "unit": "gold"},
     "hall": {"emoji": "🏰", "title": "تالار اتحاد", "field": "hall_level", "per_level": CAPACITY_PER_LEVEL,
-             "desc": "افزایش ظرفیت اعضای اتحاد (پایه ۵۰، سقف ۱۰۰)", "unit": "capacity"},
+             "desc": "افزایش ظرفیت اعضای اتحاد (پایه ۱۰، سقف ۳۰)", "unit": "capacity"},
 }
 # order shown in the panel — تالار (capacity) first, it's the headline upgrade
 BUILDING_ORDER = ["hall", "xp", "pass", "fortress", "barracks", "vault"]
 
 
 def perk_cost(perk_key: str, level: int) -> int:
-    """Treasury gold to buy the NEXT level (level = current level, 0-based). The
-    تالار has its own steep curve; every other building shares the flat 3000×tier."""
+    """Treasury gold to buy the NEXT level (level = current level, 0-based)."""
+    next_lvl = level + 1
     if perk_key == "hall":
-        return HALL_COST.get(level + 1, HALL_COST[max(HALL_COST)])
-    return 3000 * (level + 1)
+        return HALL_COST.get(next_lvl, HALL_COST[max(HALL_COST)])
+    return OTHER_PERK_COST.get(next_lvl, OTHER_PERK_COST[max(OTHER_PERK_COST)])
 
 
 def heist_defense_multiplier(alliance: Alliance) -> float:
@@ -725,11 +734,12 @@ def buy_perk(user: User, perk_key: str) -> dict:
     _assert_manager(user, alliance, "ارتقای ساختمون/پرک اتحاد")
     field = PERKS[perk_key]["field"]
     level = getattr(alliance, field)
-    if level >= PERK_MAX_LEVEL:
-        raise GameError("این پرک به بالاترین سطح رسیده.")
+    max_lvl = max_level_for(perk_key)
+    if level >= max_lvl:
+        raise GameError("این ساختمون به بالاترین سطح رسیده.")
     cost = perk_cost(perk_key, level)
     if alliance.treasury_gold < cost:
-        raise GameError(f"خزانه‌ی اتحاد کافی نیست! این ارتقا {cost} طلا از خزانه می‌خواد.")
+        raise GameError(f"خزانه‌ی اتحاد کافی نیست! این ارتقا {cost:,} طلا از خزانه می‌خواد.")
     alliance.treasury_gold -= cost
     setattr(alliance, field, level + 1)
     alliance.save(update_fields=["treasury_gold", field])
@@ -763,7 +773,8 @@ def _building_effect_text(key: str, level: int) -> str:
     if spec["unit"] == "pct":
         return f"+{round(level * spec['per_level'] * 100)}٪"
     if spec["unit"] == "capacity":
-        return f"ظرفیت {ALLIANCE_BASE_CAPACITY + level * spec['per_level']} نفر"
+        cap = min(ALLIANCE_MAX_CAPACITY, ALLIANCE_BASE_CAPACITY + level * spec['per_level'])
+        return f"ظرفیت {cap} نفر"
     return f"{level * spec['per_level']} طلا/روز"
 
 
@@ -773,16 +784,18 @@ def buildings_info(alliance: Alliance) -> dict:
     for key in BUILDING_ORDER:
         spec = PERKS[key]
         level = getattr(alliance, spec["field"])
+        max_lvl = max_level_for(key)
         buildings.append({
             "key": key,
             "emoji": spec["emoji"],
             "title": spec["title"],
             "desc": spec["desc"],
             "level": level,
-            "maxed": level >= PERK_MAX_LEVEL,
-            "cost": perk_cost(key, level),
+            "max_level": max_lvl,
+            "maxed": level >= max_lvl,
+            "cost": perk_cost(key, level) if level < max_lvl else 0,
             "effect": _building_effect_text(key, level),
-            "next_effect": _building_effect_text(key, level + 1),
+            "next_effect": _building_effect_text(key, level + 1) if level < max_lvl else "تکمیل شده",
         })
     return {
         "buildings": buildings,

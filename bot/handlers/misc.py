@@ -67,13 +67,17 @@ def _group_help_text() -> str:
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """The single /help handler for every chat type. In a group it prints the word
-    cheat-sheet; in the DM it opens the interactive guide (same screen as the menu's
-    «راهنما»). Kept as ONE registration so handler-ordering can never leave /help
-    matching the wrong screen — or no screen — in either place."""
+    """The single /help handler for every chat type. In a group it acts exactly like
+    sending «راهنما» (interactive help card + auto-cleanup); in DM it opens the interactive guide."""
     chat = update.effective_chat
     if chat is not None and chat.type in ("group", "supergroup"):
-        await update.message.reply_text(_group_help_text(), parse_mode="HTML")
+        from bot.handlers import group_words
+        from bot.utils import run_db
+
+        data = await run_db(group_words._card_sync, update.effective_user, chat, "help")
+        text, keyboard = group_words._render("help", data)
+        sent = await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+        group_words._schedule_cleanup(context, chat.id, [update.message.message_id, sent.message_id], "help")
         return
     # DM → the rich, button-driven guide. Imported lazily: private.py imports a lot
     # and pulling it at module top would risk an import cycle.
