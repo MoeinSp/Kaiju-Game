@@ -72,6 +72,11 @@ class User(models.Model):
     #   in the DM with /off and /on).
     transfers_enabled = models.BooleanField(default=True)
     transfer_notify = models.BooleanField(default=True)
+    # "started the bot" flag for the public /api/started/ gate (used as a forced-join
+    # requirement by another bot). Set True when the user runs /start. Defaults False so a
+    # migration (or a bulk update) resets EVERYONE to "not started" — forcing a re-/start —
+    # WITHOUT touching any game data. The API checks this flag, not mere row existence.
+    started_gate = models.BooleanField(default=False)
 
     # referrals (game/referral.py). referred_by is the telegram id of whoever's
     # invite link brought this player in (set once, at their first /start);

@@ -1103,6 +1103,11 @@ LAB_NAME_MAX_LEN = 32
 
 def _start_sync(tg_user, referrer_id=None):
     user, was_created = get_or_create_user(tg_user)
+    # mark them "started" for the public /api/started/ gate (see telgame_site/api.py) —
+    # only /start flips this, so a bulk reset of the flag forces a re-/start
+    if not user.started_gate:
+        user.started_gate = True
+        user.save(update_fields=["started_gate"])
     if referrer_id is not None:
         from game.referral import register_referral
 

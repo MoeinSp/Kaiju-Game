@@ -6,9 +6,9 @@ they can verify the traffic they sent actually landed in the bot. Protected by a
 shared secret (config.AD_API_KEY); no session/login, since the caller is a
 third party, not a panel operator.
 
-"Started" == a User row exists. A row is created the first time someone interacts
-with the bot (which requires them to have opened it), so its presence is a
-reliable "this person is in the bot" signal.
+"Started" == the user's `started_gate` flag is set (turned on by /start). It's a
+resettable flag rather than mere row existence, so the whole population can be forced
+to /start again (bulk-reset the flag) without deleting anyone's data.
 """
 
 from django.http import JsonResponse
@@ -35,7 +35,7 @@ def user_started(request):
     else:
         user = User.objects.filter(username__iexact=ident).first()
 
-    if user is None:
+    if user is None or not user.started_gate:
         return JsonResponse({"started": False})
     return JsonResponse(
         {
