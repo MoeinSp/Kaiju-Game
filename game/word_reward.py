@@ -35,12 +35,16 @@ COOLDOWN_MAX_SECONDS = 6 * 60
 # (diamonds stay a deliberate, capped faucet via the رگه‌ی الماس drop). The old diamond
 # weight was folded into coins.
 PRIZES: tuple[tuple[int, str, int, int], ...] = (
-    (56, "coins", 60, 220),
-    (26, "dna", 3, 12),
-    (12, "speedup", 0, 0),  # minutes chosen from SPEEDUP_CHOICES below
-    (6, "jackpot", 400, 900),  # gold, but announced as a jackpot
+    (48, "coins", 120, 400),
+    (24, "dna", 6, 22),
+    (10, "speedup", 0, 0),   # minutes chosen from SPEEDUP_CHOICES below
+    (10, "food", 0, 0),      # a live animal to feed a kaiju — tier from FOOD_TIER_CHOICES
+    (8, "jackpot", 700, 1600),  # gold, but announced as a jackpot
 )
 SPEEDUP_CHOICES: tuple[tuple[int, int], ...] = ((1, 55), (5, 33), (30, 12))  # (minutes, weight)
+# «غذای هیولا» drop: mostly the small animal, rarely the big one (so it's a nice-but-not-
+# spammy bonus). tiers are the keys of constants.XP_CAPSULES.
+FOOD_TIER_CHOICES: tuple[tuple[str, int], ...] = (("small", 72), ("medium", 24), ("large", 4))
 
 PRIZE_LABELS = {
     "coins": "طلا",
@@ -48,6 +52,7 @@ PRIZE_LABELS = {
     "diamonds": "الماس",
     "speedup": "کارت سرعت",
     "jackpot": "جکپات طلا",
+    "food": "غذای هیولا",
 }
 
 
@@ -75,14 +80,15 @@ def _reward_scale(user: User) -> float:
     return 1 + lab_level(user) * 0.06 + power * 0.0025
 
 
-def _roll_prize(user: User) -> tuple[str, int, int]:
+def _roll_prize(user: User) -> tuple[str, int, int, str | None]:
     kind = random.choices([p[1] for p in PRIZES], weights=[p[0] for p in PRIZES], k=1)[0]
     low, high = next((lo, hi) for _w, k, lo, hi in PRIZES if k == kind)
     amount = random.randint(low, high) if high else 0
-    # gold / DNA / jackpot scale with the player's power; speed-up cards don't
+    # gold / DNA / jackpot scale with the player's power; speed-up cards & food don't
     if kind in ("coins", "jackpot", "dna"):
         amount = round(amount * _reward_scale(user))
     minutes = 0
+    food_tier = None
     if kind in ("coins", "jackpot"):
         user.coins += amount
         user.save(update_fields=["coins"])
@@ -99,7 +105,16 @@ def _roll_prize(user: User) -> tuple[str, int, int]:
             [m for m, _w in SPEEDUP_CHOICES], weights=[w for _m, w in SPEEDUP_CHOICES], k=1
         )[0]
         grant_speedup_card(user, minutes, count=1)
-    return kind, amount, minutes
+    elif kind == "food":
+        from game.creature import add_capsules
+
+        food_tier = random.choices(
+            [t for t, _w in FOOD_TIER_CHOICES], weights=[w for _t, w in FOOD_TIER_CHOICES], k=1
+        )[0]
+        add_capsules(user, food_tier, 1)
+        user.save(update_fields=["xp_capsules"])
+        amount = 1
+    return kind, amount, minutes, food_tier
 
 
 @transaction.atomic
@@ -123,7 +138,7 @@ def claim(user: User, group: Group | None = None) -> dict:
     record_action(user, "word_reward")  # for the admin cheat-finder's daily counts
 
     # every off-cooldown claim pays out — no empty results
-    kind, amount, minutes = _roll_prize(user)
+    kind, amount, minutes, food_tier = _roll_prize(user)
     user.reward_total_claims += 1
     user.save(update_fields=["reward_ready_at", "reward_total_claims"])
     lab_up = lab.add_lab_xp(user, 3)
@@ -133,6 +148,7 @@ def claim(user: User, group: Group | None = None) -> dict:
         "kind": kind,
         "amount": amount,
         "minutes": minutes,
+        "food_tier": food_tier,
         "count": user.reward_total_claims,
         "lab_up": lab_up,
         "next_wait": next_wait,

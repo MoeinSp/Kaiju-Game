@@ -120,7 +120,7 @@ def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bo
             raise RaidError(
                 "😮‍💨 <b>هیولات خسته‌ست!</b>\n\n"
                 f"⏳ زمان تا اتک بعدی: <b>{_fmt_wait(RAID_COOLDOWN_SECONDS - elapsed)}</b>\n\n"
-                f"🔁 اتک‌های امروز: <b>{hits_today}/{RAID_DAILY_ATTACKS}</b>"
+                f"🔁 اتک‌های امروز: <code>{hits_today}/{RAID_DAILY_ATTACKS}</code>"
             )
 
     stats = effective_stats(creature, get_equipped_items(creature))

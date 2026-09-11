@@ -330,10 +330,12 @@ TRAIN_XP_GAIN = 40
 # a {tier: count} dict on User.xp_capsules. `xp` is instant creature XP per capsule.
 # Ordered small→large; feeding «همه» consumes the biggest first so a nearly-maxed
 # creature wastes the fewest.
+# «غذای هیولا» — live animals your kaiju eats for XP. Three sizes (mouse/chicken/cat).
+# Keys stay small/medium/large (stored on User.xp_capsules), only the flavour changed.
 XP_CAPSULES = {
-    "small":  {"emoji": "🥚", "label": "کپسول کوچک", "xp": 150},
-    "medium": {"emoji": "🧫", "label": "کپسول متوسط", "xp": 600},
-    "large":  {"emoji": "🧪", "label": "کپسول بزرگ", "xp": 2500},
+    "small":  {"emoji": "🐭", "label": "موش", "xp": 150},
+    "medium": {"emoji": "🐔", "label": "مرغ", "xp": 600},
+    "large":  {"emoji": "🐱", "label": "گربه", "xp": 2500},
 }
 XP_CAPSULE_ORDER = ("small", "medium", "large")  # small→large
 

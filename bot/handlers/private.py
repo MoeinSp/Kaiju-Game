@@ -481,7 +481,7 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
         f"{get_emoji('diamond')} الماس: <b>{user.diamonds:,}</b>",
         f"{get_emoji('energy')} انرژی: {pct_bar(energy, constants.MAX_ENERGY)} ({energy}/{constants.MAX_ENERGY}) {charge}",
         "", div, "",
-        "💡 <i>نکته: «تغذیه» با کپسول اکسپی XP می‌دهد و ارتقای اعضا مستقیماً قدرت رزمی را بالا می‌برد.</i>",
+        "💡 <i>نکته: «تغذیه» با غذای هیولا (موش/مرغ/گربه) XP می‌دهد و ارتقای اعضا مستقیماً قدرت رزمی را بالا می‌برد.</i>",
     ]
     return "\n".join(lines)
 
@@ -507,7 +507,7 @@ def upgrade_panel_keyboard(creature_id: int, is_active: bool = True, step: int =
     ]
     rows = [
         [
-            btn("🧪 تغذیه (کپسول)", emoji_key="btn_feed", style=BUILD, callback_data=f"feedcap:home:{creature_id}"),
+            btn("🍽 تغذیه", emoji_key="btn_feed", style=BUILD, callback_data=f"feedcap:home:{creature_id}"),
         ],
         step_row,
         [
@@ -1392,24 +1392,24 @@ def _feedcap_view_sync(tg_user, creature_id):
 def feedcap_text(user, creature, caps: dict, maxed: bool) -> str:
     max_level = constants.creature_max_level(creature.rarity, creature.star_level)
     lines = [
-        f"🧪 <b>تغذیهٔ {creature_name(creature)}</b>",
+        f"🍽 <b>تغذیهٔ {creature_name(creature)}</b>",
         f"🎖 سطح {creature.level}/{max_level} · XP {creature.xp:,}/{constants.xp_for_creature_level(creature.level):,}",
         "",
-        "<b>کپسول‌های اکسپی تو:</b>",
+        "چه موجودی می‌خوای بدی هیولات بخوره؟",
     ]
     total = 0
     for tier in constants.XP_CAPSULE_ORDER:
         cfg = constants.XP_CAPSULES[tier]
         n = caps.get(tier, 0)
         total += n
-        lines.append(f"{cfg['emoji']} {cfg['label']}: <b>{n}</b> عدد  <i>(هر کدوم +{cfg['xp']:,} XP)</i>")
+        lines.append(f"{cfg['emoji']} {cfg['label']}: <b>{n}</b> تا  <i>(هر کدوم +{cfg['xp']:,} XP)</i>")
     lines.append("")
     if maxed:
         lines.append("🔒 <i>این کایجو به سقف سطحش رسیده — تغذیه بی‌فایده‌ست.</i>")
     elif total == 0:
-        lines.append("<i>کپسول نداری. از «🛒 فروشگاه روزانه» کپسول اکسپی بخر.</i>")
+        lines.append("<i>هیچ حیوونی برای تغذیه نداری. از «🛒 فروشگاه روزانه» بخر یا از جایزه‌ها بگیر.</i>")
     else:
-        lines.append("<i>یکی رو بزن؛ «همه با هم» بزرگ‌ها رو اول مصرف می‌کنه و به سقف سطح که رسید متوقف می‌شه.</i>")
+        lines.append("<i>یکی رو بزن؛ «همه با هم» بزرگ‌ها رو اول می‌ده و به سقف سطح که رسید متوقف می‌شه.</i>")
     return "\n".join(lines)
 
 
@@ -1427,7 +1427,7 @@ def feedcap_keyboard(creature, caps: dict, maxed: bool) -> InlineKeyboardMarkup:
                 btn(f"همهٔ {cfg['label']} ({n})", style=BUILD, callback_data=f"feedcap:allt:{cid}:{tier}"),
             ])
         if sum(caps.values()) > 0:
-            rows.append([btn("🍽 مصرف همهٔ کپسول‌ها", emoji_key="btn_confirm", style=CONFIRM,
+            rows.append([btn("🍽 همه رو بده بخوره", emoji_key="btn_confirm", style=CONFIRM,
                              callback_data=f"feedcap:all:{cid}")])
     rows.append([btn("↩️ بازگشت", emoji_key="btn_back", style=BACK, callback_data=f"upg_pick:{cid}")])
     return InlineKeyboardMarkup(rows)
@@ -1479,8 +1479,8 @@ async def feedcap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
     eaten = sum(result["consumed"].values())
     lvl = f" {get_emoji('celebrate')} رسید به سطح {result['new_level']}!" if result["levels"] else ""
-    await query.answer(f"🧪 {eaten} کپسول مصرف شد · +{result['xp']:,} XP")
-    note = f"🧪 <b>{eaten} کپسول مصرف شد</b> · +{result['xp']:,} XP{lvl}\n\n"
+    await query.answer(f"🍽 {eaten} تا غذا داده شد · +{result['xp']:,} XP")
+    note = f"🍽 <b>{eaten} تا غذا به هیولات دادی</b> · +{result['xp']:,} XP{lvl}\n\n"
     await safe_edit_message_text(query, note + feedcap_text(user, creature, caps, maxed),
                                  parse_mode="HTML", reply_markup=feedcap_keyboard(creature, caps, maxed))
 
@@ -2803,7 +2803,7 @@ async def autohunt_do_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         f"{get_emoji('coin')} طلا: <b>+{res['coins']:,}</b>",
         f"{get_emoji('dna')} دی‌ان‌ای: <b>+{res['dna']:,}</b>",
         f"✨ XP: <b>+{res['xp']:,}</b>" + (f" · رسید به سطح {creature.level}!" if res["levels"] else ""),
-        f"{get_emoji('energy')} انرژی باقی‌مانده: <b>{res['energy_left']}/{constants.MAX_ENERGY}</b>",
+        f"{get_emoji('energy')} انرژی باقی‌مانده: <code>{res['energy_left']}/{constants.MAX_ENERGY}</code>",
         "",
         "<i>یادآوری: شکار خودکار نصف لوت شکار دستی رو می‌ده.</i>",
     ]

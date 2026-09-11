@@ -35,9 +35,9 @@ BUILTIN_OFFERS = [
     {"key": "energy", "emoji": "⚡", "title": "شارژ کامل انرژی", "cost": 10, "currency": "diamonds", "contents": [{"type": "energy"}]},
     # 🧪 XP capsules — level a kaiju fast. Priced so bulk XP via the large capsule is
     # a little cheaper per-XP than the small one (rewards buying the big one).
-    {"key": "cap_small", "emoji": "🥚", "title": "کپسول اکسپی کوچک", "cost": 400, "currency": "coins", "contents": [{"type": "xp_capsule", "tier": "small", "count": 1}]},
-    {"key": "cap_medium", "emoji": "🧫", "title": "کپسول اکسپی متوسط", "cost": 1400, "currency": "coins", "contents": [{"type": "xp_capsule", "tier": "medium", "count": 1}]},
-    {"key": "cap_large", "emoji": "🧪", "title": "کپسول اکسپی بزرگ", "cost": 5000, "currency": "coins", "contents": [{"type": "xp_capsule", "tier": "large", "count": 1}]},
+    {"key": "cap_small", "emoji": "🐭", "title": "موش (غذای هیولا)", "cost": 400, "currency": "coins", "contents": [{"type": "xp_capsule", "tier": "small", "count": 1}]},
+    {"key": "cap_medium", "emoji": "🐔", "title": "مرغ (غذای هیولا)", "cost": 1400, "currency": "coins", "contents": [{"type": "xp_capsule", "tier": "medium", "count": 1}]},
+    {"key": "cap_large", "emoji": "🐱", "title": "گربه (غذای هیولا)", "cost": 5000, "currency": "coins", "contents": [{"type": "xp_capsule", "tier": "large", "count": 1}]},
 ]
 
 # keys that should always exist in the catalog even after first-run seeding — the XP

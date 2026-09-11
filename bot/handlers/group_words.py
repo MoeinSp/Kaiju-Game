@@ -373,7 +373,7 @@ def _upgrade_card(user, creature, energy, step: int = 1) -> tuple[str, InlineKey
             lines.append(f"{cfg['label']}: <b>{lvl}/{cap}</b> — +{n}: {part_bulk_cost(lvl, n, creature.rarity):,} {get_emoji('coin')}")
     lines += [
         "",
-        f"🧪 تغذیه با کپسول اکسپی (داری: {total_capsules(user)}) — از «فروشگاه روزانه» بخر",
+        f"🍽 غذای هیولا برای تغذیه (داری: {total_capsules(user)}) — از «فروشگاه روزانه» بخر",
         f"{get_emoji('coin')} {user.coins:,}   {get_emoji('energy')} {energy}/{constants.MAX_ENERGY}",
     ]
     # ×1/×5/×10 selector — the active step gets a ✅
@@ -383,7 +383,7 @@ def _upgrade_card(user, creature, energy, step: int = 1) -> tuple[str, InlineKey
         for s in _GRP_UPG_STEPS
     ]
     rows = [
-        [btn("🧪 تغذیه (کپسول)", emoji_key="btn_feed", style=BUILD, callback_data=_act("feedcap", user.id))],
+        [btn("🍽 تغذیه", emoji_key="btn_feed", style=BUILD, callback_data=_act("feedcap", user.id))],
         step_row,
         [
             btn(f"بال{sfx}", emoji_key="btn_wings", style=BUILD, callback_data=_act("up_wings", user.id)),
@@ -406,7 +406,7 @@ def _feedcap_group_card(user, creature, caps: dict, maxed: bool) -> tuple[str, I
         f"🧪 <b>تغذیهٔ {creature_name(creature)}</b>",
         f"🎖 سطح {creature.level}/{max_level}",
         "",
-        "<b>کپسول‌های اکسپی تو:</b>",
+        "چه موجودی بدم هیولات بخوره؟",
     ]
     for tier in constants.XP_CAPSULE_ORDER:
         cfg = constants.XP_CAPSULES[tier]
@@ -415,7 +415,7 @@ def _feedcap_group_card(user, creature, caps: dict, maxed: bool) -> tuple[str, I
     if maxed:
         lines.append("\n🔒 <i>به سقف سطح رسیده — تغذیه بی‌فایده‌ست.</i>")
     elif sum(caps.values()) == 0:
-        lines.append("\n<i>کپسول نداری. از «فروشگاه روزانه» (پیوی) بخر.</i>")
+        lines.append("\n<i>حیوونی برای تغذیه نداری. از «فروشگاه روزانه» (پیوی) بخر یا از جایزه‌ها بگیر.</i>")
     else:
         for tier in constants.XP_CAPSULE_ORDER:
             cfg = constants.XP_CAPSULES[tier]
@@ -1014,6 +1014,11 @@ def _reward_text(user, result: dict) -> str:
         prize = f"{get_emoji('coin')} غنیمت: <b>{result['amount']:,} طلا</b>"
     elif kind == "dna":
         prize = f"{get_emoji('dna')} غنیمت: <b>{result['amount']} DNA</b>"
+    elif kind == "food":
+        cfg = constants.XP_CAPSULES.get(result.get("food_tier") or "small", {})
+        prize = (f"{cfg.get('emoji', '🍖')} یه <b>{cfg.get('label', 'حیوون')}</b> گرفتی! 😋\n"
+                 f"بدش هیولات بخوره تا <b>+{cfg.get('xp', 0):,} XP</b> بگیره "
+                 f"(از «ارتقا ← تغذیه»).")
     else:
         prize = f"{get_emoji('diamond')} غنیمت: <b>{result['amount']} الماس</b>"
 
@@ -1562,10 +1567,10 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
             await query.answer(str(exc), show_alert=True)
             return
         eaten = sum(result["consumed"].values())
-        await query.answer(f"🧪 {eaten} کپسول · +{result['xp']:,} XP")
+        await query.answer(f"🍽 {eaten} تا غذا · +{result['xp']:,} XP")
         text, keyboard = _feedcap_group_card(user, creature, caps, maxed)
         lvl = f" {get_emoji('celebrate')} سطح {result['new_level']}!" if result["levels"] else ""
-        note = f"🧪 <b>{eaten} کپسول مصرف شد</b> · +{result['xp']:,} XP{lvl}\n\n"
+        note = f"🍽 <b>{eaten} تا غذا به هیولات دادی</b> · +{result['xp']:,} XP{lvl}\n\n"
         await safe_edit_message_text(query, note + text, parse_mode="HTML", reply_markup=keyboard)
         return
     if action == "box_genetic":

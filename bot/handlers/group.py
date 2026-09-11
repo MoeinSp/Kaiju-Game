@@ -883,7 +883,7 @@ def _raid_attack_view(creature, boss, dmg, defeated, completed_missions, reward_
         div,
         "",
         f"🎁 پاداش این ضربه: +{coin_gain:,} {get_emoji('coin')} · +{dna_gain} {get_emoji('dna')}",
-        f"{get_emoji('raid_attacks_left')} اتک رید باقی‌مانده‌ی امروز: <b>{attacks_left}</b> از {RAID_DAILY_ATTACKS}",
+        f"{get_emoji('raid_attacks_left')} اتک رید باقی‌مانده‌ی امروز: <code>{attacks_left}/{RAID_DAILY_ATTACKS}</code>",
     ]
     text = "\n".join(lines) + _mission_lines(completed_missions)
     if defeated:
@@ -946,11 +946,12 @@ async def raid_attack_confirm_callback(update: Update, context: ContextTypes.DEF
 
     text = _raid_attack_view(creature, boss, dmg, defeated, completed_missions, reward_lines,
                              speedup_won, energy_left, dna_gain, coin_gain, attacks_left)
-    # compact: two icon-only buttons (raid table + overall raid rank), no PM shortcut
+    # compact buttons (raid table + overall raid rank). NOTE: give them TEXT labels —
+    # an emoji-only label makes btn() drop the Premium icon (Telegram needs non-empty text).
     row = []
     if not defeated:
-        row.append(btn("📊", emoji_key="btn_raid_table", style=NAV, callback_data="raidlb"))
-    row.append(btn("🐲", emoji_key="btn_raid_rank", style=NAV, callback_data="raidrankall"))
+        row.append(btn("جدول رید", emoji_key="btn_raid_table", style=NAV, callback_data="raidlb"))
+    row.append(btn("رتبه رید", emoji_key="btn_raid_rank", style=NAV, callback_data="raidrankall"))
     kb_rows = [row]
     await query.answer("🟢 اتک زده شد!")
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(kb_rows))
@@ -1034,7 +1035,7 @@ async def raid_overall_rank_callback(update: Update, context: ContextTypes.DEFAU
             if rank == 4:
                 lines.append("──────────────")
             lines.append(f"{rank}. {name} │ 🐉 لِوِل {r['raid_level']} │ 👥 {r['member_count']}")
-    kb = InlineKeyboardMarkup([[btn("🔄", emoji_key="btn_recheck", style=NAV, callback_data="raidrankall")]])
+    kb = InlineKeyboardMarkup([[btn("بروزرسانی", emoji_key="btn_recheck", style=NAV, callback_data="raidrankall")]])
     await query.answer()
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=kb)
 
@@ -1059,8 +1060,8 @@ async def raid_leaderboard_callback(update: Update, context: ContextTypes.DEFAUL
     await query.answer()
     text = _raid_leaderboard_text(lb)
     kb = InlineKeyboardMarkup([[
-        btn("🔄", emoji_key="btn_recheck", style=NAV, callback_data="raidlb"),
-        btn("🐲", emoji_key="btn_raid_rank", style=NAV, callback_data="raidrankall"),
+        btn("بروزرسانی", emoji_key="btn_recheck", style=NAV, callback_data="raidlb"),
+        btn("رتبه رید", emoji_key="btn_raid_rank", style=NAV, callback_data="raidrankall"),
     ]])
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
 
@@ -1544,7 +1545,7 @@ async def _pvp_attack_execute(update, context, query, attacker_id: int, target_i
     context.user_data["pvp_last_detail"] = result.get("detail_log", "")
     # keep it uncluttered — a single icon-only «fight details» button, no PM shortcut
     keyboard = InlineKeyboardMarkup([
-        [btn("🔍", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_detail:{update.effective_user.id}")],
+        [btn("جزئیات نبرد", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_detail:{update.effective_user.id}")],
     ])
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
