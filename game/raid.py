@@ -124,7 +124,11 @@ def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bo
             )
 
     stats = effective_stats(creature, get_equipped_items(creature))
-    mult = constants.element_multiplier(creature.element, boss.element)
+    # Raids use your ACTIVE kaiju against a boss whose element is RANDOM and un-choosable,
+    # so an unlucky matchup shouldn't cripple a strong kaiju (the "مکس بودم ولی ۴۷۸ زدم"
+    # report). Keep the element ADVANTAGE bonus (1.45×) but floor the penalty at neutral —
+    # element still helps when it lines up, but never punishes what you can't pick.
+    mult = max(1.0, constants.element_multiplier(creature.element, boss.element))
     base = max(1.0, stats["atk"] - _boss_def(boss.level) * 0.5)
     # a wider random swing than before makes each hit feel less deterministic
     dmg = round(base * mult * random.uniform(0.75, 1.3)) + stats["poison"]
