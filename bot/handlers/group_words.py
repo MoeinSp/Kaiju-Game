@@ -1644,6 +1644,11 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
+    if action == "autohunt":
+        # a whole-energy batch — the player has no energy left, so DON'T append a «next
+        # opponent» hunt card; show only the result banner (no follow-up keyboard).
+        await safe_edit_message_text(query, _action_note(payload).rstrip(), parse_mode="HTML")
+        return
     card_action = {"autohunt": "hunt", "hunt_go": "hunt", "hunt_next": "hunt",
                    "arena_go": "arena", "arena_find": "arena", "collect_all": "mine",
                    "collect_gold": "mine", "collect_dna": "mine", "collect_diamond": "mine",
