@@ -528,25 +528,31 @@ def _arena_card(user, opponent, loot, shielded_for, data=None) -> tuple[str, Inl
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
-def _mine_card(user, rows_data) -> tuple[str, InlineKeyboardMarkup]:
-    lines = [f"{get_emoji('building')} <b>ساختمون‌های تو</b>", ""]
-    total = 0
-    for building, pending, label in rows_data:
-        state = "🔒 ساخته‌نشده" if building.level == 0 else f"سطح {building.level}"
-        extra = f" · آماده: <b>{pending}</b>" if pending else ""
-        lines.append(f"{label} — {state}{extra}")
-        total += pending
-    lines.append("")
-    lines.append(
-        f"<blockquote>مجموع آماده‌ی جمع‌آوری: <b>{total}</b></blockquote>"
-        if total
-        else "<blockquote>فعلاً چیزی برای جمع‌آوری نیست.</blockquote>"
-    )
-    rows = []
-    if total:
-        rows.append([btn("جمع‌آوری همه", emoji_key="btn_collect", style=BUILD,
-                         callback_data=_act("collect_all", user.id))])
-    rows.append([_pm_button("ساخت و ارتقا در پیوی")])
+def _mine_card(user, mine: dict) -> tuple[str, InlineKeyboardMarkup]:
+    d = mine.get("diamond_collector", {})
+    g = mine.get("gold_collector", {})
+    n = mine.get("dna_lab", {})
+
+    def _lvl(x):
+        return f"سطح {x.get('level', 0)}" if x.get("level", 0) > 0 else "🔒 ساخته‌نشده"
+
+    div = "──────────────"
+    lines = [
+        "⛏ <b>بخش معدن و استخراج</b>",
+        f"💎 جمع‌کننده الماس — {_lvl(d)}  🏭 جمع‌کننده طلا — {_lvl(g)}  🧬 آزمایشگاه DNA — {_lvl(n)}",
+        div,
+        "📦 <b>آماده‌ی جمع‌آوری:</b>",
+        "",
+        f"🏭 طلا: <code>{g.get('pending', 0):,}</code>",
+        f"🧬 دی‌ان‌ای: <code>{n.get('pending', 0):,}</code>",
+        f"💎 الماس: <code>{d.get('pending', 0):,}</code>",
+    ]
+    # one row, three separate per-resource collect buttons (premium-themed)
+    rows = [[
+        btn("طلا", emoji_key="btn_bld_gold_collector", style=BUILD, callback_data=_act("collect_gold", user.id)),
+        btn("دی‌ان‌ای", emoji_key="btn_bld_dna_lab", style=BUILD, callback_data=_act("collect_dna", user.id)),
+        btn("الماس", emoji_key="btn_bld_diamond_collector", style=BUILD, callback_data=_act("collect_diamond", user.id)),
+    ]]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -856,10 +862,13 @@ def _card_sync(tg_user, chat, action):
         from game.buildings import get_or_create_buildings, pending_amount
 
         buildings = get_or_create_buildings(user)
-        buildings.sort(key=lambda b: (b.building_type != constants.MAIN_BUILDING, b.building_type))
-        data["rows"] = [
-            (b, pending_amount(b), constants.BUILDING_LABELS[b.building_type]) for b in buildings
-        ]
+        by_type = {b.building_type: b for b in buildings}
+        # the three producing collectors, in display order (diamond, gold, dna)
+        mine = {}
+        for t in ("diamond_collector", "gold_collector", "dna_lab"):
+            b = by_type.get(t)
+            mine[t] = {"level": b.level if b else 0, "pending": pending_amount(b) if b else 0}
+        data["mine"] = mine
     elif action == "wheel":
         from game.daily import get_daily_count
 
@@ -912,7 +921,7 @@ def _render(action: str, data: dict, page: int = 0) -> tuple[str, InlineKeyboard
     if action == "arena":
         return _arena_card(user, data.get("opponent"), data.get("loot", 0), data.get("shielded_for", 0), data)
     if action == "mine":
-        return _mine_card(user, data.get("rows", []))
+        return _mine_card(user, data.get("mine", {}))
     if action == "box":
         return _box_card(user)
     if action == "box_genetic":
@@ -1418,18 +1427,25 @@ def _do_sync(tg_user, chat, action, arg):
         result["missions"] = check_missions(user, "arena_attack")
         return {"kind": "arena", "result": result, "card": _card_sync(tg_user, chat, "arena")}
 
-    if action == "collect_all":
+    if action in ("collect_all", "collect_gold", "collect_dna", "collect_diamond"):
         from game.buildings import collect, get_or_create_buildings, pending_amount
         from game.daily import check_missions, record_action
 
+        # per-resource collect (one building type) or the legacy collect-all
+        want_type = {
+            "collect_gold": "gold_collector", "collect_dna": "dna_lab",
+            "collect_diamond": "diamond_collector",
+        }.get(action)
         collected = {}
         for building in get_or_create_buildings(user):
+            if want_type is not None and building.building_type != want_type:
+                continue
             if pending_amount(building) <= 0:
                 continue
             amount, resource = collect(user, building)
             collected[resource] = collected.get(resource, 0) + amount
         if not collected:
-            raise GameError("چیزی برای جمع‌آوری نیست.")
+            raise GameError("چیزی برای جمع‌آوری نیست، بعداً دوباره سر بزن.")
         record_action(user, "collect")
         check_missions(user, "collect")
         return {"kind": "collect", "collected": collected,
@@ -1457,8 +1473,15 @@ def _action_note(payload: dict) -> str:
         note = f"🟢 <b>{payload['creature'].name}</b> شد هیولای فعالت!"
     elif kind == "autohunt":
         r = payload["result"]
-        note = (f"⚡️ <b>شکار خودکار:</b> {r['wins']}/{r['hunts']} برد · "
-                f"+{r['coins']:,} {get_emoji('coin')} +{r['dna']} {get_emoji('dna')} · +{r['xp']:,} XP")
+        note = (
+            "⚡️ <b>شکار خودکار با موفقیت انجام شد!</b>\n"
+            f"📊 خلاصه عملکرد: <code>{r['wins']}/{r['hunts']}</code> برد 📈\n"
+            "──────────────\n"
+            "💰 <b>پاداش دریافتی (لوت):</b>\n\n"
+            f"{get_emoji('coin')} +{r['coins']:,}\n"
+            f"{get_emoji('dna')} +{r['dna']:,}\n"
+            f"📈 +{r['xp']:,} XP"
+        )
     elif kind == "part":
         label = constants.BODY_PARTS.get(payload["part"], {}).get("label", payload["part"])
         note = f"🧩 <b>{label} → سطح {payload['new_level']}</b> (−{payload['cost']:,} {get_emoji('coin')})"
@@ -1623,6 +1646,7 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
     card_action = {"autohunt": "hunt", "hunt_go": "hunt", "hunt_next": "hunt",
                    "arena_go": "arena", "arena_find": "arena", "collect_all": "mine",
+                   "collect_gold": "mine", "collect_dna": "mine", "collect_diamond": "mine",
                    "box_open": "box_genetic", "wheel_spin": "wheel", "setactive": "select"}[action]
     text, keyboard = _render(card_action, payload["card"])
     await safe_edit_message_text(
