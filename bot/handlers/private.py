@@ -2971,10 +2971,10 @@ def _alliance_action_keyboard(in_alliance: bool) -> InlineKeyboardMarkup:
             [btn("👥 اعضا و مدیریت", style=NAV, callback_data="ally_members")],
             [btn("واریز به خزانه", emoji_key="btn_deposit", style=BUILD, callback_data="ally_deposit")],
             [btn("🏰 ساختمون‌های اتحاد", style=PRIMARY, callback_data="ally_perks")],
-            [btn("🐲 جدول رید اتحاد", style=NAV, callback_data="ally_raidtable")],
+            [btn("🐲 جدول رید اتحاد", emoji_key="btn_raid_table", style=NAV, callback_data="ally_raidtable")],
             [
-                btn("🔥 جنگ یک‌روزه", style=BATTLE, callback_data="ally_war1d"),
-                btn("⚔️ جنگ هفتگی", style=BATTLE, callback_data="ally_war"),
+                btn("🔥 جنگ یک‌روزه", emoji_key="btn_attack", style=BATTLE, callback_data="ally_war1d"),
+                btn("⚔️ جنگ هفتگی", emoji_key="btn_attack", style=BATTLE, callback_data="ally_war"),
             ],
             [btn("شبیخون به اتحاد دیگه", emoji_key="btn_heist", style=BATTLE, callback_data="ally_heist_list")],
             [btn("برترین اتحادها", emoji_key="btn_rank", style=NAV, callback_data="ally_top")],
@@ -3017,14 +3017,14 @@ def _group_alliance_keyboard(in_alliance: bool) -> InlineKeyboardMarkup:
     ranking) — never roster/kick/settings/leave, which need per-person scoping."""
     if in_alliance:
         rows = [
-            [btn("🏰 ساختمون‌ها و ارتقاها", style=PRIMARY, callback_data="ally_perks")],
+            [btn("🏰 ساختمون‌ها و ارتقاها", emoji_key="btn_buildings", style=PRIMARY, callback_data="ally_perks")],
             [
-                btn("🔥 جنگ یک‌روزه", style=BATTLE, callback_data="ally_war1d"),
-                btn("⚔️ جنگ هفتگی", style=BATTLE, callback_data="ally_war"),
+                btn("🔥 جنگ یک‌روزه", emoji_key="btn_attack", style=BATTLE, callback_data="ally_war1d"),
+                btn("⚔️ جنگ هفتگی", emoji_key="btn_attack", style=BATTLE, callback_data="ally_war"),
             ],
             [btn("شبیخون به اتحاد دیگه", emoji_key="btn_heist", style=BATTLE, callback_data="ally_heist_list")],
             [btn("واریز به خزانه", emoji_key="btn_deposit", style=BUILD, callback_data="ally_deposit")],
-            [btn("🐲 جدول رید اتحاد", style=NAV, callback_data="ally_raidtable")],
+            [btn("🐲 جدول رید اتحاد", emoji_key="btn_raid_table", style=NAV, callback_data="ally_raidtable")],
             [btn("برترین اتحادها", emoji_key="btn_rank", style=NAV, callback_data="ally_top")],
         ]
     else:

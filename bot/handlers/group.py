@@ -265,7 +265,7 @@ async def _reply_transfer_error(message, exc) -> None:
     if isinstance(exc, TransferFundsError):
         guide = "c" if exc.kind == "creature" else "e"
         keyboard = InlineKeyboardMarkup([[
-            btn("💎 راهنمای هزینه‌ها", style=NAV, callback_data=f"xfo:prices:{guide}"),
+            btn("💎 راهنمای هزینه‌ها", emoji_key="btn_report", style=NAV, callback_data=f"xfo:prices:{guide}"),
         ]])
         await message.reply_text(
             f"{get_emoji('diamond')} <b>الماس گیرنده کافی نیست</b>\n\n"
@@ -479,7 +479,7 @@ def _offer_receiver_keyboard(token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [btn("✅ قبول", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"xfo:acc:{token}"),
          btn("❌ رد", emoji_key="btn_cancel", style=DANGER, callback_data=f"xfo:rej:{token}")],
-        [btn("💎 راهنمای هزینه‌ها", style=NAV, callback_data="xfo:prices:c")],
+        [btn("💎 راهنمای هزینه‌ها", emoji_key="btn_report", style=NAV, callback_data="xfo:prices:c")],
     ])
 
 
@@ -571,7 +571,7 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
         other = ("🎒 هزینه‌ی تجهیزات", "xfo:prices:e") if which == "c" else ("🦖 هزینه‌ی هیولا", "xfo:prices:c")
         await safe_edit_message_text(
             query, text, parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([[btn(other[0], style=NAV, callback_data=other[1])]]),
+            reply_markup=InlineKeyboardMarkup([[btn(other[0], emoji_key="btn_report", style=NAV, callback_data=other[1])]]),
         )
         return
 
@@ -1031,7 +1031,7 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
             "⚠️ تا زمان فروپاشی سپر محافظ گروه، امکان هجوم به این پایگاه وجود نداره.",
         ])
         keyboard = InlineKeyboardMarkup([
-            [btn("🔍 جزییات حریف", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}"),
+            [btn("🔍 جزییات حریف", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}"),
              btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER, callback_data=f"gatk_cancel:{attacker_id}")],
         ])
         return text, keyboard

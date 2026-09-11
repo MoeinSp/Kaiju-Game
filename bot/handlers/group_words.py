@@ -30,7 +30,19 @@ from game.equipment import bonus_text, get_equipped_items, slot_loadout
 from game.lab import lab_bar, lab_progress
 
 def _pm_button(label: str = "برو به پیوی ربات"):
-    return btn(label, style=PRIMARY, url=f"https://t.me/{BOT_USERNAME}?start=group")
+    return btn(label, emoji_key="btn_lab", style=PRIMARY, url=f"https://t.me/{BOT_USERNAME}?start=group")
+
+
+# help-card chips → a themeable button-emoji key (the guide's own emoji keys live in a
+# different namespace from the button registry, so they're mapped explicitly here).
+_TOPIC_BTN = {
+    "beginner": "btn_report", "trading": "btn_alliance", "creatures": "btn_creature",
+    "energy": "btn_recheck", "cup": "btn_rank", "economy": "btn_biocrate", "elements": "btn_attack",
+}
+_SECTION_BTN = {
+    "start": "btn_report", "fight": "btn_attack", "grow": "btn_upgrade",
+    "economy": "btn_biocrate", "group": "btn_alliance",
+}
 
 
 def _scoped(action: str, user_id: int) -> str:
@@ -245,7 +257,8 @@ def _help_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
     topic_buttons = []
     for key, (emoji_key, title, _blurb, _rows) in keywords.HELP_TOPICS.items():
         lines.append(f"{get_emoji(emoji_key)} {title}")
-        topic_buttons.append(btn(title, style=CONFIRM, callback_data=f"grph:t_{key}:{user_id}"))
+        topic_buttons.append(btn(title, emoji_key=_TOPIC_BTN.get(key, "btn_report"), style=CONFIRM,
+                                 callback_data=f"grph:t_{key}:{user_id}"))
 
     lines.append("")
     lines.append(_RULE)
@@ -255,7 +268,8 @@ def _help_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
     word_buttons = []
     for key, emoji_key, title, blurb, actions in keywords.KEYWORD_SECTIONS:
         lines.append(f"{get_emoji(emoji_key)} {title} — <i>{blurb}</i>")
-        word_buttons.append(btn(title, style=NAV, callback_data=f"grph:{key}:{user_id}"))
+        word_buttons.append(btn(title, emoji_key=_SECTION_BTN.get(key, "btn_report"), style=NAV,
+                               callback_data=f"grph:{key}:{user_id}"))
 
     keyboard = [topic_buttons[i : i + 2] for i in range(0, len(topic_buttons), 2)]
     keyboard += [word_buttons[i : i + 2] for i in range(0, len(word_buttons), 2)]
@@ -631,7 +645,7 @@ def _casino_confirm(owner_id: int, tier: str) -> tuple[str, InlineKeyboardMarkup
         "ممکنه جایزه‌ی بزرگ ببری یا هیچی گیرت نیاد. مطمئنی؟</blockquote>"
     )
     rows = [
-        [btn("🎲 بچرخون!", style=CONFIRM, callback_data=_act("casino_play", owner_id, tier))],
+        [btn("🎲 بچرخون!", emoji_key="btn_casino", style=CONFIRM, callback_data=_act("casino_play", owner_id, tier))],
         [btn("↩️ میزهای دیگه", emoji_key="btn_back", style=NAV, callback_data=_act("casino_home", owner_id))],
     ]
     return text, InlineKeyboardMarkup(rows)
@@ -647,7 +661,7 @@ def _casino_result(owner_id: int, tier: str, prize: dict, coins: int, diamonds: 
         f"<i>موجودی: {coins:,} طلا · {diamonds} الماس</i>"
     )
     rows = [
-        [btn("🎲 دوباره همین میز", style=SHOP, callback_data=_act("casino_pick", owner_id, tier))],
+        [btn("🎲 دوباره همین میز", emoji_key="btn_casino", style=SHOP, callback_data=_act("casino_pick", owner_id, tier))],
         [btn("↩️ میزهای دیگه", emoji_key="btn_back", style=NAV, callback_data=_act("casino_home", owner_id))],
     ]
     return text, InlineKeyboardMarkup(rows)

@@ -96,8 +96,8 @@ def _render(tickets, items, selected: set, filt: str, page: int, back=None):
             btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"etx:pg:{page + 1}"),
         ])
     rows.append([
-        btn("انتخاب همه", style=NAV, callback_data="etx:all"),
-        btn("پاک‌کردن", style=NAV, callback_data="etx:clear"),
+        btn("انتخاب همه", emoji_key="btn_confirm", style=NAV, callback_data="etx:all"),
+        btn("پاک‌کردن", emoji_key="btn_cancel", style=NAV, callback_data="etx:clear"),
     ])
     if picked:
         rows.append([btn(f"♻️ تبدیل به {gain} بلیط", emoji_key="btn_confirm", style=BUILD, callback_data="etx:go")])
@@ -180,8 +180,8 @@ async def etx_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             f"<b>{gain}</b> 🎟 می‌گیری. مطمئنی؟",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
-                btn(f"✅ بله، تبدیل کن ({gain}🎟)", style=CONFIRM, callback_data="etx:confirm"),
-                btn("❌ نه", style=DANGER, callback_data="etx:back"),
+                btn(f"✅ بله، تبدیل کن ({gain}🎟)", emoji_key="btn_confirm", style=CONFIRM, callback_data="etx:confirm"),
+                btn("❌ نه", emoji_key="btn_cancel", style=DANGER, callback_data="etx:back"),
             ]]),
         )
         return

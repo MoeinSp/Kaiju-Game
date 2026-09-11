@@ -42,7 +42,7 @@ def _guard_owner(update: Update, oid) -> bool:
 
 def _leave_row(in_group: bool):
     if in_group:
-        return [btn("برو به پیوی ربات", style=PRIMARY, url=f"https://t.me/{BOT_USERNAME}?start=group")]
+        return [btn("برو به پیوی ربات", emoji_key="btn_lab", style=PRIMARY, url=f"https://t.me/{BOT_USERNAME}?start=group")]
     return [back_btn("menu:cat_shop", "بازگشت به فروشگاه")]
 
 
@@ -57,8 +57,8 @@ def _home_render(oid: int, coins: int, dna: int, in_group: bool) -> tuple[str, I
         "می‌خوای کدوم رو بخری؟"
     )
     rows = [
-        [btn("💰 خرید طلا (با DNA)", style=BUILD, callback_data=f"exch:pick:buy_gold:{oid}")],
-        [btn("🧬 خرید DNA (با طلا)", style=SHOP, callback_data=f"exch:pick:buy_dna:{oid}")],
+        [btn("💰 خرید طلا (با DNA)", emoji_key="btn_gold_shop", style=BUILD, callback_data=f"exch:pick:buy_gold:{oid}")],
+        [btn("🧬 خرید DNA (با طلا)", emoji_key="btn_exchange", style=SHOP, callback_data=f"exch:pick:buy_dna:{oid}")],
         [btn("🎟 مبادله تجهیزات با بلیط", emoji_key="btn_ticket_exchange", style=NAV,
              callback_data=f"exch:tickets:{oid}")],
         _leave_row(in_group),
@@ -97,14 +97,14 @@ def _amount_render(oid: int, direction: str, coins: int, dna: int, in_group: boo
             need_dna = exchange.dna_for_gold(gold)
             got_gold = exchange.sell_gold_gain(need_dna)
             label = f"💰 {got_gold:,} طلا  ←  🧬 {need_dna} DNA"
-            rows.append([btn(label, style=BUILD, callback_data=f"exch:amt:{direction}:{need_dna}:{oid}")])
+            rows.append([btn(label, emoji_key="btn_exchange", style=BUILD, callback_data=f"exch:amt:{direction}:{need_dna}:{oid}")])
     else:
         for amt in exchange.PRESET_DNA:
             pack = exchange.describe(direction, amt)
             label = f"💰 {pack['gold']:,} طلا  →  🧬 {amt} DNA"
-            rows.append([btn(label, style=BUILD, callback_data=f"exch:amt:{direction}:{amt}:{oid}")])
-    rows.append([btn("✏️ عدد دلخواه", style=NAV, callback_data=f"exch:custom:{direction}:{oid}")])
-    rows.append([btn("↩️ بازگشت", style=NAV, callback_data=f"exch:home:{oid}")])
+            rows.append([btn(label, emoji_key="btn_exchange", style=BUILD, callback_data=f"exch:amt:{direction}:{amt}:{oid}")])
+    rows.append([btn("✏️ عدد دلخواه", emoji_key="btn_charge", style=NAV, callback_data=f"exch:custom:{direction}:{oid}")])
+    rows.append([btn("↩️ بازگشت", emoji_key="btn_back", style=NAV, callback_data=f"exch:home:{oid}")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
