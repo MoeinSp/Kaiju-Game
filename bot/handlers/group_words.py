@@ -271,10 +271,86 @@ def _help_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
         word_buttons.append(btn(title, emoji_key=_SECTION_BTN.get(key, "btn_report"), style=NAV,
                                callback_data=f"grph:{key}:{user_id}"))
 
-    keyboard = [topic_buttons[i : i + 2] for i in range(0, len(topic_buttons), 2)]
+    # a single "all commands" overview — the tidy, copyable, categorised cheat-sheet
+    keyboard = [[btn("📋 همه‌ی دستورات گروه", emoji_key="btn_report", style=PRIMARY,
+                     callback_data=f"grph:allcmds:{user_id}")]]
+    keyboard += [topic_buttons[i : i + 2] for i in range(0, len(topic_buttons), 2)]
     keyboard += [word_buttons[i : i + 2] for i in range(0, len(word_buttons), 2)]
     keyboard.append([_pm_button()])
     return "\n".join(lines), InlineKeyboardMarkup(keyboard)
+
+
+# A single tidy, copyable, categorised overview of every group command. Category headers
+# carry a Premium emoji (get_emoji); each command word is wrapped in <code> so a tap
+# copies it, ready to paste. Kept accurate with the live game (feeding = animals, etc).
+_GROUP_CMD_CATS: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
+    ("egg", "🚀 شروع", (
+        ("شروع", "از کجا شروع کنم؟"),
+        ("راهنما", "لیست کامل کلمه‌ها"),
+        ("آزمایشگاه", "سطح آزمایشگاه و دارایی‌هات"),
+        ("هیولا", "کارت هیولای فعالت (استت‌ها و قدرت)"),
+    )),
+    ("battle", "⚔️ نبرد و درآمد", (
+        ("شکار", "شکار هیولای وحشی (دکمه‌ی «شکار خودکار» هم داره)"),
+        ("احضار", "احضار باسِ رید برای اتحادت"),
+        ("اتک", "حمله به باسِ رید؛ یا روی پیام یه بازیکن ریپلای کن و «اتک» بزن"),
+    )),
+    ("creature", "🧬 قوی‌تر کردن هیولا", (
+        ("ارتقا", "تغذیه با غذای هیولا (موش/مرغ/گربه) و ارتقای اعضا (×۱/۵/۱۰)"),
+        ("تجهیزات", "چهار جایگاه تجهیزات هیولا"),
+        ("کلکسیون", "همه‌ی هیولاهات"),
+        ("انتخاب", "عوض‌کردن هیولای فعال"),
+        ("ترکیب", "دو هیولای هم‌نام و هم‌ستاره → یکی با ⭐ بیشتر"),
+        ("غار", "غار هیولا؛ تخم بذار و هیولای تازه بگیر"),
+    )),
+    ("coin", "💰 اقتصاد و جایزه", (
+        ("معدن", "جمع‌آوری طلا / دی‌ان‌ای / الماس (هرکدوم دکمه‌ی جدا)"),
+        ("باکس", "باکس ژنتیکی و باکس هیولا"),
+        ("گردونه", "گردونه‌ی شانس روزانه (رایگان)"),
+        ("جایزه", "جایزه‌ی هر ۵ دقیقه («کایجو» هم همین‌کارو می‌کنه)"),
+        ("ماموریت", "ماموریت‌های روزانه"),
+        ("مبادله", "طلا↔دی‌ان‌ای و مبادله‌ی تجهیزات با بلیط"),
+        ("موجودی", "خلاصه‌ی دارایی‌هات"),
+    )),
+    ("trophy", "🏆 جایگاه در گروه", (
+        ("جدول", "برترین بازیکن‌های گروه"),
+        ("محافظ", "محافظ فعلی گروه"),
+        ("تسخیر", "چالش بده و محافظ شو"),
+        ("حقوق", "دریافت حقوق روزانه‌ی محافظ"),
+        ("استعفا", "کناره‌گیری از محافظی"),
+        ("اتحاد", "منوی اتحاد: جنگ، شبیخون، ارتقاها و واریز به خزانه"),
+    )),
+)
+_GROUP_CMD_TRANSFER: tuple[tuple[str, str], ...] = (
+    ("انتقال طلا ۵۰۰", "انتقال طلا به گیرنده"),
+    ("انتقال کایجو [کد]", "انتقال هیولا (کد از «کلکسیون»)"),
+    ("انتقال تجهیزات [کد]", "انتقال یه تجهیز (کد از «تجهیزات»)"),
+    ("انتقال خاموش", "کسی نتونه بهت انتقال بده  ·  «انتقال روشن» = دوباره فعال"),
+)
+
+
+def _all_commands_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
+    lines = [
+        f"{get_emoji('book')} <b>آموزش بازی داخل گروه — Kaiju Legends</b>",
+        "",
+        "توی گروه اسلش (/) لازم نیست؛ فقط خودِ کلمه رو بفرست. مثلاً <code>هیولا</code> "
+        "<i>(بزن روش تا کپی شه).</i>",
+    ]
+    for emoji_key, title, cmds in _GROUP_CMD_CATS:
+        lines.append("")
+        lines.append(_RULE)
+        lines.append(f"{get_emoji(emoji_key)} <b>{title}</b>")
+        for word, desc in cmds:
+            lines.append(f"• <code>{word}</code> — {desc}")
+    lines.append("")
+    lines.append(_RULE)
+    lines.append(f"{get_emoji('alliance')} <b>🔁 انتقال به بازیکن دیگه</b> <i>(روی پیامِ طرف ریپلای کن)</i>")
+    for word, desc in _GROUP_CMD_TRANSFER:
+        lines.append(f"• <code>{word}</code> — {desc}")
+    lines.append("")
+    lines.append(_RULE)
+    lines.append("💡 <i>بیشتر کارها همین‌جا توی گروهه؛ فقط ساخت/ارتقای ساختمون، آهنگری و فیوژن توی پیوی رباتن.</i>")
+    return "\n".join(lines), InlineKeyboardMarkup(_help_back_rows(user_id))
 
 
 def _help_back_rows(user_id: int):
@@ -1442,6 +1518,8 @@ async def group_help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     if section_key == "__menu__":
         text, keyboard = _help_card(update.effective_user.id)
+    elif section_key == "allcmds":
+        text, keyboard = _all_commands_card(update.effective_user.id)
     else:
         text, keyboard = _help_section_card(section_key, update.effective_user.id)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
