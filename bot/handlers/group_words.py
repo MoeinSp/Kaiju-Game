@@ -284,18 +284,18 @@ def _help_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
 # carry a Premium emoji (get_emoji); each command word is wrapped in <code> so a tap
 # copies it, ready to paste. Kept accurate with the live game (feeding = animals, etc).
 _GROUP_CMD_CATS: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
-    ("egg", "🚀 شروع", (
+    ("egg", "شروع", (
         ("شروع", "از کجا شروع کنم؟"),
         ("راهنما", "لیست کامل کلمه‌ها"),
         ("آزمایشگاه", "سطح آزمایشگاه و دارایی‌هات"),
         ("هیولا", "کارت هیولای فعالت (استت‌ها و قدرت)"),
     )),
-    ("battle", "⚔️ نبرد و درآمد", (
+    ("battle", "نبرد و درآمد", (
         ("شکار", "شکار هیولای وحشی (دکمه‌ی «شکار خودکار» هم داره)"),
         ("احضار", "احضار باسِ رید برای اتحادت"),
         ("اتک", "حمله به باسِ رید؛ یا روی پیام یه بازیکن ریپلای کن و «اتک» بزن"),
     )),
-    ("creature", "🧬 قوی‌تر کردن هیولا", (
+    ("creature", "قوی‌تر کردن هیولا", (
         ("ارتقا", "تغذیه با غذای هیولا (موش/مرغ/گربه) و ارتقای اعضا (×۱/۵/۱۰)"),
         ("تجهیزات", "چهار جایگاه تجهیزات هیولا"),
         ("کلکسیون", "همه‌ی هیولاهات"),
@@ -303,7 +303,7 @@ _GROUP_CMD_CATS: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
         ("ترکیب", "دو هیولای هم‌نام و هم‌ستاره → یکی با ⭐ بیشتر"),
         ("غار", "غار هیولا؛ تخم بذار و هیولای تازه بگیر"),
     )),
-    ("coin", "💰 اقتصاد و جایزه", (
+    ("coin", "اقتصاد و جایزه", (
         ("معدن", "جمع‌آوری طلا / دی‌ان‌ای / الماس (هرکدوم دکمه‌ی جدا)"),
         ("باکس", "باکس ژنتیکی و باکس هیولا"),
         ("گردونه", "گردونه‌ی شانس روزانه (رایگان)"),
@@ -312,7 +312,7 @@ _GROUP_CMD_CATS: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
         ("مبادله", "طلا↔دی‌ان‌ای و مبادله‌ی تجهیزات با بلیط"),
         ("موجودی", "خلاصه‌ی دارایی‌هات"),
     )),
-    ("trophy", "🏆 جایگاه در گروه", (
+    ("trophy", "جایگاه در گروه", (
         ("جدول", "برترین بازیکن‌های گروه"),
         ("محافظ", "محافظ فعلی گروه"),
         ("تسخیر", "چالش بده و محافظ شو"),
@@ -344,7 +344,7 @@ def _all_commands_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
             lines.append(f"• <code>{word}</code> — {desc}")
     lines.append("")
     lines.append(_RULE)
-    lines.append(f"{get_emoji('alliance')} <b>🔁 انتقال به بازیکن دیگه</b> <i>(روی پیامِ طرف ریپلای کن)</i>")
+    lines.append(f"{get_emoji('alliance')} <b>انتقال به بازیکن دیگه</b> <i>(روی پیامِ طرف ریپلای کن)</i>")
     for word, desc in _GROUP_CMD_TRANSFER:
         lines.append(f"• <code>{word}</code> — {desc}")
     lines.append("")
