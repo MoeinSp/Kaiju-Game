@@ -126,10 +126,10 @@ def _arena_home_keyboard(has_revenges: bool) -> InlineKeyboardMarkup:
         [btn("پیدا کردن حریف", emoji_key="btn_attack", style=BATTLE, callback_data="arena_find")],
     ]
     if has_revenges:
-        rows.append([btn("⚔️ انتقام‌ها", style=DANGER, callback_data="arena_revenges")])
+        rows.append([btn("انتقام‌ها", emoji_key="btn_revenges", style=DANGER, callback_data="arena_revenges")])
     rows += [
         [btn("جدول این هفته", emoji_key="btn_rank", style=NAV, callback_data="arena_top")],
-        [btn("🗓 نتایج هفته‌ی قبل", style=NAV, callback_data="arena_last_season")],
+        [btn("نتایج هفته‌ی قبل", emoji_key="btn_last_season", style=NAV, callback_data="arena_last_season")],
         [back_btn("menu:me")],
     ]
     return InlineKeyboardMarkup(rows)

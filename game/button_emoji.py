@@ -128,6 +128,8 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_swap": ("تعویض هیولا", "🔄", "action"),
     "btn_custom_amt": ("مقدار دلخواه", "🔢", "action"),
     "btn_reset": ("صفر کردن", "♻️", "action"),
+    "btn_last_season": ("نتایج هفته‌ی قبل", "🗓", "nav"),
+    "btn_revenges": ("انتقام‌ها در آرنا", "⚔️", "action"),
 }
 
 BUTTON_CATEGORY_LABELS: dict[str, str] = {
