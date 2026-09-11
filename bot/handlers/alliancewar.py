@@ -10,8 +10,8 @@ from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, ContextTypes
 
 from bio_lab.models import Alliance
-from bio_lab.repository import get_or_create_user
-from bot.buttons import BATTLE, BUILD, back_btn, btn
+from bio_lab.repository import creature_name, get_or_create_user
+from bot.buttons import BATTLE, BUILD, CONFIRM, DANGER, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text
 from game import alliance
 from game.creature import GameError
@@ -235,22 +235,82 @@ async def war_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
+def _war_rally_preview_sync(tg_user):
+    """Validate the member can rally, then auto-pick their strongest usable kaiju so the
+    confirm step can show it (and warn if the very strongest is stuck in the cave)."""
+    user, _ = get_or_create_user(tg_user)
+    view = alliance.war_view(user)
+    if view is None:
+        raise GameError("اتحادت الان توی هیچ جنگی نیست.")
+    if view.get("ended"):
+        raise GameError("این جنگ تموم شده، منتظر اعلام نتیجه باش.")
+    if view.get("already_rallied"):
+        raise GameError("تو قبلاً توی این جنگ شرکت کردی.")
+    pick = alliance.war_creature_pick(user)
+    if pick["chosen"] is None or pick["chosen_power"] <= 0:
+        raise GameError("هیچ کایجوی قابل‌استفاده‌ای نداری (شاید همه توی غارن). اول یه کایجو آزاد کن.")
+    return {
+        "chosen_name": creature_name(pick["chosen"]),
+        "chosen_power": pick["chosen_power"],
+        "strongest_name": creature_name(pick["strongest"]) if pick["strongest"] else None,
+        "strongest_power": pick["strongest_power"],
+        "strongest_in_cave": pick["strongest_in_cave"],
+    }
+
+
+def _war_rally_confirm(p: dict) -> tuple[str, InlineKeyboardMarkup]:
+    lines = ["⚔️ <b>شرکت در جنگ یک‌روزه</b>", ""]
+    if p["strongest_in_cave"]:
+        lines += [
+            f"⚠️ قوی‌ترین کایجوت «<b>{p['strongest_name']}</b>» "
+            f"(💪 {p['strongest_power']:,}) الان توی 🥚 <b>غار هیولا</b>ست و نمی‌تونه بجنگه.",
+            "برای استفاده ازش، اول غار رو تموم کن و والدها رو آزاد کن.",
+            "",
+            f"🦅 الان با این کایجو اتک می‌زنی: <b>{p['chosen_name']}</b> — 💪 قدرت <b>{p['chosen_power']:,}</b>",
+        ]
+    else:
+        lines.append(
+            f"🦅 با قوی‌ترین کایجوت اتک می‌زنی: <b>{p['chosen_name']}</b> — 💪 قدرت <b>{p['chosen_power']:,}</b>"
+        )
+    lines += ["", "تأیید می‌کنی؟"]
+    rows = InlineKeyboardMarkup([
+        [btn("✅ تأیید و شرکت", emoji_key="btn_confirm", style=CONFIRM, callback_data="ally_war_rally_go")],
+        [btn("↩️ بازگشت", emoji_key="btn_back", style=DANGER, callback_data="ally_war1d")],
+    ])
+    return "\n".join(lines), rows
+
+
+async def war_rally_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«شرکت در جنگ» → auto-pick the strongest usable kaiju and CONFIRM before rallying."""
+    query = update.callback_query
+    try:
+        p = await run_db(_war_rally_preview_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    text, keyboard = _war_rally_confirm(p)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
 def _war_rally_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
     result = alliance.rally_war(user)
     return result, _war1d_sync(tg_user)
 
 
-async def war_rally_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def war_rally_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     try:
         result, data = await run_db(_war_rally_sync, update.effective_user)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer(f"💪 +{result['contribution']} امتیاز اضافه شد!")
+    await query.answer(f"💪 +{result['contribution']} امتیاز (با {result['creature_name']})")
     text, keyboard = _war1d_render(data)
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+    note = (f"✅ با <b>{result['creature_name']}</b> (💪 {result['creature_power']:,}) شرکت کردی و "
+            f"<b>{result['contribution']:,}</b> امتیاز اضافه شد.\n\n")
+    await safe_edit_message_text(query, note + text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def register(application) -> None:
@@ -261,3 +321,4 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(war1d_panel_callback, pattern=r"^ally_war1d$"))
     application.add_handler(CallbackQueryHandler(war_start_callback, pattern=r"^ally_war_start$"))
     application.add_handler(CallbackQueryHandler(war_rally_callback, pattern=r"^ally_war_rally$"))
+    application.add_handler(CallbackQueryHandler(war_rally_go_callback, pattern=r"^ally_war_rally_go$"))

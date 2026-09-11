@@ -968,10 +968,41 @@ def start_war(user: User):
     )
 
 
+def war_creature_pick(user: User) -> dict:
+    """Auto-pick the strongest kaiju usable in a one-day war. A kaiju busy in the CAVE
+    (breeding) can't fight, so it's skipped and the next-strongest is chosen; a kaiju in a
+    MINE is still usable. Returns {chosen, chosen_power, strongest, strongest_power,
+    strongest_in_cave} (creatures may be None if the player has none)."""
+    from bio_lab.models import BreedingJob, Creature
+    from game import research
+    from game.creature import creature_power
+    from game.equipment import get_equipped_items
+
+    creatures = list(Creature.objects.filter(owner=user))
+    if not creatures:
+        return {"chosen": None, "chosen_power": 0, "strongest": None,
+                "strongest_power": 0, "strongest_in_cave": False}
+    research.attach_research(user, creatures)  # include lab buffs in the power ranking
+    powers = {c.id: creature_power(c, get_equipped_items(c)) for c in creatures}
+    creatures.sort(key=lambda c: powers[c.id], reverse=True)
+    cave_ids: set[int] = set()
+    for j in BreedingJob.objects.filter(owner=user):
+        cave_ids.update({j.parent_a_id, j.parent_b_id})
+    strongest = creatures[0]
+    usable = [c for c in creatures if c.id not in cave_ids]
+    chosen = usable[0] if usable else None
+    return {
+        "chosen": chosen, "chosen_power": powers.get(chosen.id, 0) if chosen else 0,
+        "strongest": strongest, "strongest_power": powers.get(strongest.id, 0),
+        "strongest_in_cave": strongest.id in cave_ids,
+    }
+
+
 @transaction.atomic
 def rally_war(user: User) -> dict:
-    """A member rallies once per war, adding their creature power (× barracks) to
-    their alliance's war score."""
+    """A member rallies once per war, adding the power of their strongest USABLE kaiju
+    (× barracks) to their alliance's war score. A cave-bound (breeding) kaiju is skipped;
+    a mining one still counts (see war_creature_pick)."""
     from bio_lab.models import AllianceWarHit
 
     if user.alliance_id is None:
@@ -991,9 +1022,10 @@ def rally_war(user: User) -> dict:
     if AllianceWarHit.objects.filter(war=war, user=user).exists():
         raise GameError("تو قبلاً توی این جنگ شرکت کردی.")
 
-    base = _member_power(user)
-    if base <= 0:
-        raise GameError("اول یه موجود فعال انتخاب کن.")
+    pick = war_creature_pick(user)
+    base = pick["chosen_power"]
+    if pick["chosen"] is None or base <= 0:
+        raise GameError("هیچ کایجوی قابل‌استفاده‌ای نداری (شاید همه توی غارن). اول یه کایجو آزاد کن.")
     my_alliance = Alliance.objects.get(id=user.alliance_id)
     contribution = round(base * barracks_multiplier(my_alliance))
 
@@ -1006,7 +1038,8 @@ def rally_war(user: User) -> dict:
         war.score_b += contribution
         war.save(update_fields=["score_b"])
         my_score, foe_score = war.score_b, war.score_a
-    return {"contribution": contribution, "my_score": my_score, "foe_score": foe_score}
+    return {"contribution": contribution, "my_score": my_score, "foe_score": foe_score,
+            "creature_name": pick["chosen"].name, "creature_power": base}
 
 
 def war_contributors(war, alliance_id: int, limit: int = 5) -> list[dict]:
