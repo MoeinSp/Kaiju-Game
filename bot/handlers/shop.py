@@ -6,7 +6,7 @@ from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bio_lab.repository import get_or_create_user
-from bot.buttons import BUILD, SHOP, back_btn, btn
+from bot.buttons import BUILD, NAV, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants, shop
 from game.creature import GameError
