@@ -1172,7 +1172,11 @@ RAID_HIT_DNA = 1           # legacy flat drip (kept for back-compat); see raid_h
 # damage. Calibrated so a full-max mythic + max research landing its top hit on a strong
 # boss earns the cap (500 DNA + 10,000 gold); a weak boss (HP-capped landed damage) or a
 # weak kaiju earns proportionally less — which is what pushes players toward strong bosses.
-RAID_REWARD_MAX_DAMAGE = 1000        # landed damage that maxes the per-hit reward
+# landed damage that maxes the per-hit reward. Calibrated from live data: a full-max
+# kaiju's strong hit lands ~800–1180, so 750 lets a maxed strike reliably reach the cap
+# (a mid-tier kaiju landing ~375 still gets half). Weak bosses stay low-reward because a
+# one-shot only lands their small HP once, then the boss is dead.
+RAID_REWARD_MAX_DAMAGE = 750
 RAID_HIT_DNA_MAX = 500
 RAID_HIT_DNA_MIN = 10
 RAID_HIT_COIN_MAX = 10_000
