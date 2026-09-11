@@ -237,7 +237,7 @@ def _building_detail_text(view: dict) -> str:
             cost, _minutes = upgrade_cost_and_minutes(building)
             lines.append(f"\n🔧 پیش‌نیاز ارتقا به سطح {building.level + 1}:")
             lines.append(f"{get_emoji('coin')} هزینه: <b>{cost:,}</b> طلا ┃ ⏳ زمان ساخت: {_format_remaining(upgrade_seconds(building))}")
-        lines.append("\n💡 <i>هیولاهای فعال یا در حال تخم‌گذاری در غار قابل انتصاب به کارگری نیستن.</i>")
+        lines.append("\n💡 <i>هیولای فعال و هیولاهای داخل غار نمی‌تونن کارگر بشن.</i>")
         return "\n".join(lines)
 
     # ── non-producing / not-yet-built buildings: a clean, consistent "info card" ─────

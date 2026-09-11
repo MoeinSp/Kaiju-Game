@@ -21,9 +21,9 @@ from game.equipment import (
 def _item_line(item: Equipment) -> str:
     from game.equipment import equipment_power
 
-    status = f" · روی #{item.equipped_on_id}" if item.equipped_on_id else ""
+    status = " · <i>(تجهیز شده)</i>" if item.equipped_on_id else ""
     return (
-        f"<code>#{item.id}</code> {constants.EQUIPMENT_SLOT_LABELS[item.slot]} — {item.name} "
+        f"{constants.EQUIPMENT_SLOT_LABELS[item.slot]} — {item.name} "
         f"{constants.RARITY_LABELS[item.rarity]} +{item.level} · 💪{equipment_power(item)}{status}"
     )
 
@@ -447,7 +447,7 @@ def _forge_detail_text(user, item, preview) -> str:
 def _forge_detail_keyboard(item_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [btn("بزن! (ارتقا با طلا)", emoji_key="btn_forge", style=BUILD, callback_data=f"forge_do:{item_id}")],
+            [btn("🔨 ارتقا با طلا", emoji_key="btn_forge", style=BUILD, callback_data=f"forge_do:{item_id}")],
             [btn("🔗 ترکیب هم‌نوع (قربانی تجهیزات)", style=NAV, callback_data=f"efuse_start:{item_id}")],
             [back_btn("menu:blacksmith", "بازگشت به آهنگری")],
         ]

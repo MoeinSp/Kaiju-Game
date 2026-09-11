@@ -23,7 +23,7 @@ def _panel_sync(tg_user):
 def _render(user, view: dict) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
         f"🏅 <b>دستاوردها</b> ({view['done']}/{view['total']})",
-        "هدف‌های بلندمدت؛ با تکمیل هر مرحله، پاداش آن را یک‌بار دریافت کنید.",
+        "هدف‌های بلندمدت؛ با تکمیل هر مرحله، پاداشش رو دریافت کن.",
         "",
     ]
     for item in view["items"]:

@@ -53,7 +53,7 @@ def _amount_screen(context) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
         "🛒 <b>خرید درون‌بازی</b>",
         _RULE,
-        "مقدار مورد نظرتان را با دکمه‌های ➖ و ➕ تنظیم کنید:",
+        "مقدار مورد نظرت رو با دکمه‌های ➖ و ➕ تنظیم کن:",
         "",
     ]
     rows = []

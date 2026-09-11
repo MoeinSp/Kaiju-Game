@@ -23,7 +23,7 @@ def _reward_text(reward: dict) -> str:
     if reward.get("diamonds"):
         parts.append(f"{reward['diamonds']} 💎")
     if reward.get("speedup"):
-        parts.append(f"کارت {reward['speedup']}د")
+        parts.append(f"کارت سرعت {reward['speedup']} دقیقه‌ای")
     return " + ".join(parts) or "—"
 
 
