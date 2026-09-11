@@ -39,6 +39,11 @@ _TOPIC_BTN = {
     "beginner": "btn_report", "trading": "btn_alliance", "creatures": "btn_creature",
     "energy": "btn_recheck", "cup": "btn_rank", "economy": "btn_biocrate", "elements": "btn_attack",
 }
+# SHORT button labels for the concept chips (their full titles are too long for a button).
+_TOPIC_SHORT = {
+    "beginner": "شروع سریع", "trading": "معامله", "creatures": "هیولاها",
+    "energy": "انرژی", "cup": "کاپ", "economy": "اقتصاد", "elements": "عناصر",
+}
 _SECTION_BTN = {
     "start": "btn_report", "fight": "btn_attack", "grow": "btn_upgrade",
     "economy": "btn_biocrate", "group": "btn_alliance",
@@ -245,37 +250,21 @@ def _help_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
         "یه بازی پرورش هیولاست: یه هیولا داری، قوی‌ترش می‌کنی، باهاش می‌جنگی "
         "و آزمایشگاهت رو بزرگ می‌کنی.",
         "",
-        f"<blockquote>همین‌جا توی گروه بازی کن — کافیه <b>خودِ کلمه</b> رو تنها "
-        f"بفرستی، بدون اسلش.\nمثلاً بفرست <code>{keywords.word_for('creature')}</code> "
-        f"(بزن روش تا کپی شه).</blockquote>",
+        f"<blockquote>توی گروه فقط کافیه <b>خودِ کلمه</b> رو بفرستی (بدون اسلش) — "
+        f"مثلاً <code>{keywords.word_for('creature')}</code>.</blockquote>",
         "",
-        _RULE,
-        f"{get_emoji('lab')} <b>چطور بازی می‌کنم؟</b>",
-        "<i>مفهوم‌های بازی رو توضیح می‌ده — از اینجا شروع کن.</i>",
-        "",
+        "<b>📋 دستورات گروه</b> — لیستِ کاملِ کلمه‌ها، دسته‌بندی‌شده.",
+        "<b>💡 آموزش‌ها</b> — توضیحِ مفهوم‌های بازی.",
     ]
-    topic_buttons = []
-    for key, (emoji_key, title, _blurb, _rows) in keywords.HELP_TOPICS.items():
-        lines.append(f"{get_emoji(emoji_key)} {title}")
-        topic_buttons.append(btn(title, emoji_key=_TOPIC_BTN.get(key, "btn_report"), style=CONFIRM,
-                                 callback_data=f"grph:t_{key}:{user_id}"))
-
-    lines.append("")
-    lines.append(_RULE)
-    lines.append(f"{get_emoji('settings')} <b>چی بنویسم؟</b>")
-    lines.append("<i>فهرست کلمه‌ها، دسته‌بندی‌شده.</i>")
-    lines.append("")
-    word_buttons = []
-    for key, emoji_key, title, blurb, actions in keywords.KEYWORD_SECTIONS:
-        lines.append(f"{get_emoji(emoji_key)} {title} — <i>{blurb}</i>")
-        word_buttons.append(btn(title, emoji_key=_SECTION_BTN.get(key, "btn_report"), style=NAV,
-                               callback_data=f"grph:{key}:{user_id}"))
-
-    # a single "all commands" overview — the tidy, copyable, categorised cheat-sheet
-    keyboard = [[btn("📋 همه‌ی دستورات گروه", emoji_key="btn_report", style=PRIMARY,
-                     callback_data=f"grph:allcmds:{user_id}")]]
+    # short-labelled buttons only (never overflow): one commands hub + concept chips
+    keyboard = [[btn("📋 دستورات گروه", emoji_key="btn_report", style=PRIMARY,
+                     callback_data=f"grph:cmds:{user_id}")]]
+    topic_buttons = [
+        btn(_TOPIC_SHORT.get(key, title[:16]), emoji_key=_TOPIC_BTN.get(key, "btn_report"),
+            style=CONFIRM, callback_data=f"grph:t_{key}:{user_id}")
+        for key, (emoji_key, title, _blurb, _rows) in keywords.HELP_TOPICS.items()
+    ]
     keyboard += [topic_buttons[i : i + 2] for i in range(0, len(topic_buttons), 2)]
-    keyboard += [word_buttons[i : i + 2] for i in range(0, len(word_buttons), 2)]
     keyboard.append([_pm_button()])
     return "\n".join(lines), InlineKeyboardMarkup(keyboard)
 
@@ -283,74 +272,111 @@ def _help_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
 # A single tidy, copyable, categorised overview of every group command. Category headers
 # carry a Premium emoji (get_emoji); each command word is wrapped in <code> so a tap
 # copies it, ready to paste. Kept accurate with the live game (feeding = animals, etc).
-_GROUP_CMD_CATS: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
-    ("egg", "شروع", (
+# Group commands, split into small categories. Each entry: key -> {btn (SHORT button
+# label — never long, so it never overflows), emoji (Premium header icon), title, and
+# either `items` [(word, desc)] or `body` [raw lines] (alliance is sub-sectioned).
+_CMD_CATS: dict[str, dict] = {
+    "start": {"btn": "شروع", "emoji": "egg", "title": "شروع", "items": [
         ("شروع", "از کجا شروع کنم؟"),
-        ("راهنما", "لیست کامل کلمه‌ها"),
-        ("آزمایشگاه", "سطح آزمایشگاه و دارایی‌هات"),
-        ("هیولا", "کارت هیولای فعالت (استت‌ها و قدرت)"),
-    )),
-    ("battle", "نبرد و درآمد", (
-        ("شکار", "شکار هیولای وحشی (دکمه‌ی «شکار خودکار» هم داره)"),
-        ("احضار", "احضار باسِ رید برای اتحادت"),
-        ("اتک", "حمله به باسِ رید؛ یا روی پیام یه بازیکن ریپلای کن و «اتک» بزن"),
-    )),
-    ("creature", "قوی‌تر کردن هیولا", (
-        ("ارتقا", "تغذیه با غذای هیولا (موش/مرغ/گربه) و ارتقای اعضا (×۱/۵/۱۰)"),
-        ("تجهیزات", "چهار جایگاه تجهیزات هیولا"),
+        ("راهنما", "همین راهنما"),
+        ("آزمایشگاه", "سطح و دارایی‌هات"),
+        ("هیولا", "کارت هیولای فعالت"),
+    ]},
+    "fight": {"btn": "نبرد", "emoji": "battle", "title": "نبرد", "items": [
+        ("شکار", "شکار وحشی (+ شکار خودکار)"),
+        ("احضار", "احضار باسِ رید اتحاد"),
+        ("اتک", "زدنِ باس؛ یا ریپلای روی بازیکن = حمله بهش"),
+    ]},
+    "grow": {"btn": "هیولا", "emoji": "creature", "title": "قوی‌تر کردن هیولا", "items": [
+        ("ارتقا", "تغذیه (موش/مرغ/گربه) و ارتقای اعضا"),
+        ("تجهیزات", "چهار جایگاه تجهیزات"),
         ("کلکسیون", "همه‌ی هیولاهات"),
         ("انتخاب", "عوض‌کردن هیولای فعال"),
-        ("ترکیب", "دو هیولای هم‌نام و هم‌ستاره → یکی با ⭐ بیشتر"),
-        ("غار", "غار هیولا؛ تخم بذار و هیولای تازه بگیر"),
-    )),
-    ("coin", "اقتصاد و جایزه", (
-        ("معدن", "جمع‌آوری طلا / دی‌ان‌ای / الماس (هرکدوم دکمه‌ی جدا)"),
+        ("ترکیب", "۲ هیولای هم‌نام → ⭐ بیشتر"),
+        ("غار", "تخم‌گذاری و هیولای تازه"),
+    ]},
+    "econ": {"btn": "اقتصاد", "emoji": "coin", "title": "اقتصاد و جایزه", "items": [
+        ("معدن", "جمع‌آوری طلا/DNA/الماس"),
         ("باکس", "باکس ژنتیکی و باکس هیولا"),
-        ("گردونه", "گردونه‌ی شانس روزانه (رایگان)"),
-        ("جایزه", "جایزه‌ی هر ۵ دقیقه («کایجو» هم همین‌کارو می‌کنه)"),
+        ("گردونه", "گردونه‌ی روزانه (رایگان)"),
+        ("جایزه", "جایزه‌ی هر ۵ دقیقه («کایجو» هم)"),
         ("ماموریت", "ماموریت‌های روزانه"),
-        ("مبادله", "طلا↔دی‌ان‌ای و مبادله‌ی تجهیزات با بلیط"),
-        ("موجودی", "خلاصه‌ی دارایی‌هات"),
-    )),
-    ("trophy", "جایگاه در گروه", (
-        ("جدول", "برترین بازیکن‌های گروه"),
+        ("مبادله", "طلا↔DNA و تجهیزات↔بلیط"),
+        ("موجودی", "دارایی‌هات"),
+    ]},
+    "rank": {"btn": "گروه", "emoji": "trophy", "title": "جایگاه در گروه", "items": [
+        ("جدول", "برترین‌های گروه"),
         ("محافظ", "محافظ فعلی گروه"),
         ("تسخیر", "چالش بده و محافظ شو"),
-        ("حقوق", "دریافت حقوق روزانه‌ی محافظ"),
+        ("حقوق", "حقوق روزانه‌ی محافظ"),
         ("استعفا", "کناره‌گیری از محافظی"),
-        ("اتحاد", "منوی اتحاد: جنگ، شبیخون، ارتقاها و واریز به خزانه"),
-    )),
-)
-_GROUP_CMD_TRANSFER: tuple[tuple[str, str], ...] = (
-    ("انتقال طلا ۵۰۰", "انتقال طلا به گیرنده"),
-    ("انتقال کایجو [کد]", "انتقال هیولا (کد از «کلکسیون»)"),
-    ("انتقال تجهیزات [کد]", "انتقال یه تجهیز (کد از «تجهیزات»)"),
-    ("انتقال خاموش", "کسی نتونه بهت انتقال بده  ·  «انتقال روشن» = دوباره فعال"),
-)
+    ]},
+    "xfer": {"btn": "انتقال", "emoji": "gift", "title": "انتقال به بازیکن", "items": [
+        ("انتقال طلا ۵۰۰", "انتقال طلا (ریپلای روی گیرنده)"),
+        ("انتقال کایجو [کد]", "انتقال هیولا"),
+        ("انتقال تجهیزات [کد]", "انتقال تجهیز"),
+        ("انتقال خاموش", "قطعِ دریافت («انتقال روشن» = وصل)"),
+    ]},
+    "ally": {"btn": "اتحاد", "emoji": "alliance", "title": "اتحاد", "body": None},  # built dynamically
+}
+_CMD_MENU_ORDER = ("start", "fight", "grow", "econ", "rank", "ally", "xfer")
+# per-category button-registry emoji key (Premium, themeable), distinct per category
+_CMD_BTN = {
+    "start": "btn_report", "fight": "btn_attack", "grow": "btn_upgrade",
+    "econ": "btn_biocrate", "rank": "btn_rank", "ally": "btn_alliance", "xfer": "btn_deposit",
+}
 
 
-def _all_commands_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
-    lines = [
-        f"{get_emoji('book')} <b>آموزش بازی داخل گروه — Kaiju Legends</b>",
+def _ally_cmd_body() -> list[str]:
+    return [
+        "کلمه‌ی <code>اتحاد</code> رو بفرست تا منوی اتحاد باز شه. داخلش:",
         "",
-        "توی گروه اسلش (/) لازم نیست؛ فقط خودِ کلمه رو بفرست. مثلاً <code>هیولا</code> "
-        "<i>(بزن روش تا کپی شه).</i>",
+        f"{get_emoji('battle')} <b>جنگ</b>",
+        "• جنگ یک‌روزه — حریف هم‌قدرت، ۲۴ ساعت (با قوی‌ترین کایجوت)",
+        "• جنگ هفتگی — جدول امتیاز هفتگی",
+        "",
+        f"{get_emoji('attack_action')} <b>شبیخون</b>",
+        "• غارت خزانه‌ی اتحادهای دیگه",
+        "",
+        f"{get_emoji('building')} <b>ساختمون و خزانه</b>",
+        "• ارتقای ساختمون‌های اتحاد · واریز به خزانه",
+        "",
+        f"{get_emoji('trophy')} <b>رتبه‌بندی</b>",
+        "• جدول رید اتحاد · برترین اتحادها",
+        "",
+        "<i>اگه هنوز عضو نیستی، از همون منو می‌تونی اتحاد بسازی یا عضو شی.</i>",
     ]
-    for emoji_key, title, cmds in _GROUP_CMD_CATS:
-        lines.append("")
-        lines.append(_RULE)
-        lines.append(f"{get_emoji(emoji_key)} <b>{title}</b>")
-        for word, desc in cmds:
+
+
+def _cmds_menu_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
+    """A minimal hub of command categories — SHORT button labels, two per row."""
+    text = (
+        f"{get_emoji('book')} <b>دستورات گروه</b>\n\n"
+        "توی گروه اسلش لازم نیست؛ فقط کلمه رو بفرست (مثلاً <code>هیولا</code>).\n"
+        "<i>یه دسته رو انتخاب کن:</i>"
+    )
+    btns = [btn(_CMD_CATS[k]["btn"], emoji_key=_CMD_BTN.get(k, "btn_report"),
+                style=NAV, callback_data=f"grph:c_{k}:{user_id}") for k in _CMD_MENU_ORDER]
+    rows = [btns[i:i + 2] for i in range(0, len(btns), 2)]
+    rows.append([btn("راهنمای اصلی", emoji_key="btn_back", style=BACK, callback_data=f"grph:__menu__:{user_id}")])
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _cmds_cat_card(cat_key: str, user_id: int) -> tuple[str, InlineKeyboardMarkup]:
+    cat = _CMD_CATS.get(cat_key)
+    if cat is None:
+        return _cmds_menu_card(user_id)
+    lines = [f"{get_emoji(cat['emoji'])} <b>{cat['title']}</b>", ""]
+    if cat_key == "ally":
+        lines += _ally_cmd_body()
+    else:
+        for word, desc in cat["items"]:
             lines.append(f"• <code>{word}</code> — {desc}")
-    lines.append("")
-    lines.append(_RULE)
-    lines.append(f"{get_emoji('alliance')} <b>انتقال به بازیکن دیگه</b> <i>(روی پیامِ طرف ریپلای کن)</i>")
-    for word, desc in _GROUP_CMD_TRANSFER:
-        lines.append(f"• <code>{word}</code> — {desc}")
-    lines.append("")
-    lines.append(_RULE)
-    lines.append("💡 <i>بیشتر کارها همین‌جا توی گروهه؛ فقط ساخت/ارتقای ساختمون، آهنگری و فیوژن توی پیوی رباتن.</i>")
-    return "\n".join(lines), InlineKeyboardMarkup(_help_back_rows(user_id))
+    rows = [
+        [btn("↩️ دسته‌ها", emoji_key="btn_back", style=BACK, callback_data=f"grph:cmds:{user_id}")],
+        [_pm_button()],
+    ]
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 def _help_back_rows(user_id: int):
@@ -1516,12 +1542,15 @@ async def group_help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.answer("این راهنما مال تو نیست — خودت «راهنما» رو بفرست.", show_alert=True)
         return
     await query.answer()
+    uid = update.effective_user.id
     if section_key == "__menu__":
-        text, keyboard = _help_card(update.effective_user.id)
-    elif section_key == "allcmds":
-        text, keyboard = _all_commands_card(update.effective_user.id)
+        text, keyboard = _help_card(uid)
+    elif section_key == "cmds":
+        text, keyboard = _cmds_menu_card(uid)
+    elif section_key.startswith("c_"):
+        text, keyboard = _cmds_cat_card(section_key[2:], uid)
     else:
-        text, keyboard = _help_section_card(section_key, update.effective_user.id)
+        text, keyboard = _help_section_card(section_key, uid)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
