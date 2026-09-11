@@ -76,6 +76,27 @@ def _date_str_days_ago(days: int) -> str:
     return (timezone.localtime(timezone.now()) - datetime.timedelta(days=days)).strftime("%Y-%m-%d")
 
 
+def collect_immediate_levelups() -> list[tuple]:
+    """Drain the in-memory level-up queue (filled by lab.add_lab_xp the instant a level
+    rose) and build the DM items for each user — for the per-update immediate sender.
+    Sync/ORM context (run via run_db). Idempotent: _lab_levelup_item bumps
+    lab_level_notified, so a user already handled by the 5-min poll yields nothing."""
+    from game import lab
+
+    out = []
+    for uid in lab.drain_levelup_ids():
+        user = User.objects.filter(id=uid).first()
+        if user is None:
+            continue
+        try:
+            item = _lab_levelup_item(user)
+        except Exception:  # noqa: BLE001
+            item = None
+        if item is not None:
+            out.append(item)
+    return out
+
+
 def _lab_levelup_item(user):
     """Return a («🎉 level up») notification tuple for `user` if their lab level rose
     since we last congratulated them, else None. Marks it handled (bumps

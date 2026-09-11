@@ -7,13 +7,13 @@ no external cron — one repeating job, same event loop as the webhook listener.
 
 import asyncio
 
-from telegram import InlineKeyboardMarkup
+from telegram import InlineKeyboardMarkup, Update
 from telegram.error import Forbidden, TelegramError
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, TypeHandler
 
 from bot.buttons import DANGER, NAV, btn
 from bot.utils import run_db
-from game.notifications import collect_due
+from game.notifications import collect_due, collect_immediate_levelups
 
 NOTIFY_INTERVAL_SECONDS = 300  # scan every 5 minutes — finer than any timer needs
 SEND_DELAY_SECONDS = 0.05  # ~20 msg/s, well under Telegram's flood limit
@@ -150,6 +150,34 @@ async def notify_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         await asyncio.sleep(SEND_DELAY_SECONDS)
 
 
+async def _send_levelup_items(context, items) -> None:
+    for item in items:
+        user_id, text = item[0], item[1]
+        features = item[3] if len(item) > 3 else None
+        try:
+            await context.bot.send_message(
+                chat_id=user_id, text=text, parse_mode="HTML",
+                reply_markup=_lab_unlock_keyboard(features),
+            )
+        except Forbidden:
+            await run_db(_opt_out, user_id)
+        except TelegramError:
+            pass
+
+
+async def levelup_drain_handler(update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Runs right after every update's main handler (registered in a late group). If an
+    action just raised someone's lab level, their «🎉 level up» DM goes out NOW — no wait
+    for the 5-minute notifier. A cheap in-memory flag makes this a no-op on quiet updates."""
+    from game import lab
+
+    if not lab.has_pending_levelups():
+        return
+    items = await run_db(collect_immediate_levelups)
+    if items:
+        await _send_levelup_items(context, items)
+
+
 AUTOBACKUP_CHECK_SECONDS = 1800  # check every 30 min; the interval itself gates the actual run
 
 
@@ -176,6 +204,12 @@ async def autobackup_job(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def register(application) -> None:
+    # Immediate level-up delivery: a late-group TypeHandler drains any level-up queued
+    # by the action just handled, so the DM is sent within the same interaction (no
+    # 5-minute wait). block=False → fire-and-forget, never delays the update. Registered
+    # before the job-queue guard so it works even without the job-queue extra.
+    application.add_handler(TypeHandler(Update, levelup_drain_handler, block=False), group=100)
+
     job_queue = application.job_queue
     if job_queue is None:
         # the python-telegram-bot[job-queue] extra isn't installed; run without

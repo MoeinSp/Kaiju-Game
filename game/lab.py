@@ -27,8 +27,37 @@ so a new player sees the number move, and only then does it start to bite.
 from __future__ import annotations
 
 import math
+import threading
 
 from bio_lab.models import User
+
+# ── immediate level-up delivery ───────────────────────────────────────────────
+# add_lab_xp records every level-up here the instant it happens (it runs in a sync
+# run_db thread, so it can't send a Telegram DM itself). A per-update TypeHandler
+# (bot/handlers/notify.py) drains this right after the action that caused the level-up,
+# so the «🎉 level up» DM arrives with no polling delay. The 5-minute notifier remains a
+# fallback for anything the immediate path misses.
+_pending_levelups: set[int] = set()
+_pending_lock = threading.Lock()
+
+
+def _queue_levelup(user_id: int) -> None:
+    with _pending_lock:
+        _pending_levelups.add(int(user_id))
+
+
+def has_pending_levelups() -> bool:
+    """Cheap check so the per-update drainer can no-op without taking the lock's cost
+    on every single update."""
+    return bool(_pending_levelups)
+
+
+def drain_levelup_ids() -> list[int]:
+    """Atomically take and clear the queued level-up user ids."""
+    with _pending_lock:
+        ids = list(_pending_levelups)
+        _pending_levelups.clear()
+    return ids
 
 # Was 18; cut 30% (→ 12.6) so lab levels cost 30% less XP and progression is easier.
 # Existing players had their stored lab_xp scaled ×0.7 in the same change (migration
@@ -175,7 +204,10 @@ def add_lab_xp(user: User, amount: int) -> dict | None:
     user.lab_xp = max(0, user.lab_xp + amount)
     user.save(update_fields=["lab_xp"])
     after = lab_level(user)
-    return {"from": before, "to": after} if after > before else None
+    if after > before:
+        _queue_levelup(user.id)  # drained immediately by the per-update handler
+        return {"from": before, "to": after}
+    return None
 
 
 def _award_pass_points(user: User, points: int) -> None:
