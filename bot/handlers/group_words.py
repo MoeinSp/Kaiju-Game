@@ -579,21 +579,15 @@ def _mbox_list_card(user) -> tuple[str, InlineKeyboardMarkup]:
         "هر باکس همیشه یه هیولای جدید می‌ده؛ هرچی باکس بالاتر، شانس نایاب‌بودن بیشتر.</blockquote>",
         "یه باکس انتخاب کن:",
     ]
+    # NOTE: no trailing 💎 in the label — the Premium btn_diamond_box icon already shows a
+    # diamond; a second one read as "two diamonds". Cost stays as the plain number.
     rows = [
-        [btn(f"{cfg['label']} — {cfg['cost_diamonds']} 💎", emoji_key="btn_diamond_box", style=SHOP,
+        [btn(f"{cfg['label']} — {cfg['cost_diamonds']}", emoji_key="btn_diamond_box", style=SHOP,
              callback_data=_act("mbox_pick", user.id, tier))]
         for tier, cfg in constants.DIAMOND_BOX_TIERS.items()
     ]
     rows.append([btn("↩️ باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_scoped("box", user.id))])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
-
-
-def _box_open10_sync(tg_user):
-    from game.lootbox import open_biocrate_batch
-
-    user, _ = get_or_create_user(tg_user)
-    summary = open_biocrate_batch(user, "basic", 10)
-    return summary, user
 
 
 def _mbox_open_sync(tg_user, tier, mode):
@@ -648,21 +642,70 @@ def _mbox_detail_card(user, tier: str) -> tuple[str, InlineKeyboardMarkup]:
 
 
 def _box_genetic_card(user) -> tuple[str, InlineKeyboardMarkup]:
+    """Genetic-box TIER list — same tiers/prices as the DM (basic/rare/epic)."""
     tickets = getattr(user, "biocrate_tickets", 0)
-    text = (
-        f"{get_emoji('diamond')} <b>باکس ژنتیکی</b>\n\n"
-        f"<blockquote>هزینه‌ی هر باکس: <b>{constants.BIOCRATE_GOLD_COST}</b> {get_emoji('coin')} + "
-        f"<b>{constants.BIOCRATE_DNA_COST}</b> {get_emoji('dna')}\n"
-        "شانسی هیولا یا تجهیزات می‌ده، با درجه‌ی نایابی تصادفی.\n"
-        f"🎟 بلیط: <b>{tickets}</b> (هر بلیط = یه باکس رایگان؛ ×۱۰ اول بلیط‌ها رو خرج می‌کنه).</blockquote>\n"
-        f"موجودی تو: {user.coins:,} {get_emoji('coin')} · {user.dna_fragments} {get_emoji('dna')}"
-    )
+    ticket_line = f" · 🎟 بلیط: <b>{tickets}</b>" if tickets else ""
+    lines = [
+        f"{get_emoji('biocrate')} <b>باکس ژنتیکی</b>",
+        "<blockquote>بیشترش تجهیزاته و گاهی هیولای تازه می‌ده. هرچی گرون‌تر، شانس هیولا و "
+        "نایابی بیشتر.</blockquote>",
+        f"موجودی: {user.coins:,} {get_emoji('coin')} · {user.dna_fragments} {get_emoji('dna')}{ticket_line}",
+        "یه باکس انتخاب کن:",
+    ]
     rows = [
-        [
-            btn("باز کن", emoji_key="btn_biocrate", style=SHOP, callback_data=_act("box_open", user.id)),
-            btn("باز کردن ×۱۰", emoji_key="btn_biocrate", style=SHOP, callback_data=_act("box_open10", user.id)),
-        ],
-        [btn("↩️ باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_scoped("box", user.id))],
+        [btn(f"{constants.BIOCRATE_TIERS[t]['label']} — {constants.BIOCRATE_TIERS[t]['gold']:,} طلا + "
+             f"{constants.BIOCRATE_TIERS[t]['dna']} DNA",
+             emoji_key="btn_biocrate", style=SHOP, callback_data=_act("bgx_pick", user.id, t))]
+        for t in constants.BIOCRATE_TIER_ORDER
+    ]
+    rows.append([btn("↩️ باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_scoped("box", user.id))])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _bgx_detail_card(user, tier: str) -> tuple[str, InlineKeyboardMarkup]:
+    """Genetic-box tier detail (odds) + ×1/×10 open buttons, reusing the DM's text/labels."""
+    from bot.handlers.lootbox import _biocrate_detail_text, _biocrate_ticket_note, _open_label
+
+    tickets = getattr(user, "biocrate_tickets", 0)
+    text = _biocrate_detail_text(tier) + _biocrate_ticket_note(tier, tickets)
+    rows = [
+        [btn(_open_label(tier, tickets, 1), emoji_key="btn_confirm", style=CONFIRM,
+             callback_data=_act("bgx_open", user.id, f"{tier}:1"))],
+        [btn(_open_label(tier, tickets, 10), emoji_key="btn_biocrate", style=SHOP,
+             callback_data=_act("bgx_open", user.id, f"{tier}:10"))],
+        [btn("↩️ لیست باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_act("box_genetic", user.id))],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _bgx_open_sync(tg_user, tier, count):
+    from game.lootbox import open_biocrate_batch
+
+    user, _ = get_or_create_user(tg_user)
+    return open_biocrate_batch(user, tier, count), user
+
+
+def _bgx_result_card(user, tier: str, count: int, summary: dict) -> tuple[str, InlineKeyboardMarkup]:
+    from bot.handlers.lootbox import _bulk_summary_text, _pay_line
+
+    label = constants.BIOCRATE_TIERS[tier]["label"]
+    if count == 1:
+        r = summary["single"]
+        rl = constants.RARITY_LABELS[r["rarity"]]
+        if r["kind"] == "creature":
+            c = r["creature"]
+            reveal = f"{get_emoji('egg')} <b>{c.name}</b>\n{constants.element_label(c.element)} · {rl}"
+            hint = "از «کلکسیون» می‌تونی فعالش کنی."
+        else:
+            it = r["item"]
+            reveal = f"{constants.EQUIPMENT_SLOT_LABELS[it.slot]} <b>{it.name}</b>\n{rl}"
+            hint = "از «تجهیزات» می‌تونی تجهیزش کنی."
+        text = f"{label} <b>باز شد!</b>{_pay_line(summary)}\n\n<tg-spoiler>{reveal}</tg-spoiler>\n\n<blockquote>{hint}</blockquote>"
+    else:
+        text = _bulk_summary_text(label, summary) + _pay_line(summary)
+    rows = [
+        [btn("یکی دیگه", emoji_key="btn_biocrate", style=SHOP, callback_data=_act("bgx_pick", user.id, tier))],
+        [btn("↩️ لیست باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_act("box_genetic", user.id))],
     ]
     return text, InlineKeyboardMarkup(rows)
 
@@ -1659,23 +1702,30 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
         return
 
-    if action == "box_open10":
+    # ── 🧬 genetic box: tier detail + ×1/×10 open (tickets first), like the DM ──
+    if action == "bgx_pick":
+        if arg not in constants.BIOCRATE_TIERS:
+            await query.answer("این باکس پیدا نشد.", show_alert=True)
+            return
+        user = await run_db(_casino_home_sync, update.effective_user)
+        await query.answer()
+        text, keyboard = _bgx_detail_card(user, arg)
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        return
+    if action == "bgx_open":
+        tier, _, cnt = arg.partition(":")
+        if tier not in constants.BIOCRATE_TIERS:
+            await query.answer("این باکس پیدا نشد.", show_alert=True)
+            return
+        count = 10 if cnt == "10" else 1
         try:
-            summary, user = await run_db(_box_open10_sync, update.effective_user)
+            summary, user = await run_db(_bgx_open_sync, update.effective_user, tier, count)
         except GameError as exc:
             await query.answer(str(exc), show_alert=True)
             return
-        await query.answer("🎉 باز شد!")
-        from bot.handlers.lootbox import _bulk_summary_text
-
-        text = _bulk_summary_text("🧬 باکس ژنتیکی", summary)
-        if summary.get("from_tickets"):
-            text += f"\n\n🎟 <b>{summary['from_tickets']}</b> تا با بلیط رایگان باز شد (بلیط مونده: {summary['tickets_left']})."
-        rows = InlineKeyboardMarkup([
-            [btn("باز کردن ×۱۰ دیگه", emoji_key="btn_biocrate", style=SHOP, callback_data=_act("box_open10", user.id))],
-            [btn("↩️ باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_scoped("box", user.id))],
-        ])
-        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=rows)
+        await query.answer("🎉 باز شد!" if count > 1 else "🟢 باز شد!")
+        text, keyboard = _bgx_result_card(user, tier, count, summary)
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
         return
 
     # ── 👹 monster box (diamond box), fully in-group ───────────────────────────
