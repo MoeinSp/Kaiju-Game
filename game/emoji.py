@@ -73,6 +73,9 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "shield": ("سپر محافظ", "🛡", "progress"),
     "casino": ("کازینو", "🎰", "progress"),
     "shop_item": ("آیتم ویژه فروشگاه", "🛍", "progress"),
+    "ticket": ("بلیط ژنتیکی", "🎟", "progress"),
+    "dungeon": ("دانجن و دخمه", "🗺", "progress"),
+    "lock": ("قفل", "🔒", "ui"),
     # UI
     "confirm": ("تأیید", "✅", "ui"),
     "cancel": ("لغو", "❌", "ui"),

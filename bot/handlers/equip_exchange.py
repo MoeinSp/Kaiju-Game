@@ -174,7 +174,7 @@ async def etx_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.answer()
         await safe_edit_message_text(
             query,
-            f"⚠️ <b>توجه:</b> این تجهیزات ارتقایافته‌ن (لِوِلشون بالای ۱ هست):\n"
+            f"⚠️ <b>توجه:</b> این تجهیزات ارتقایافته‌ن (سطحشون بالای ۱ هست):\n"
             f"{names}{more}\n\n"
             f"با تبدیل، همه‌ی <b>{len(picked)}</b> تجهیزِ انتخاب‌شده <b>حذف</b> می‌شن و "
             f"<b>{gain}</b> 🎟 می‌گیری. مطمئنی؟",

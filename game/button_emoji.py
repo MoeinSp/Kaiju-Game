@@ -122,6 +122,12 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_shield": ("خرید سپر", "🛡", "features"),
     "btn_casino": ("کازینو", "🎰", "features"),
     "btn_items": ("آیتم‌های ویژه", "🛍", "features"),
+    "btn_skill": ("مهارت در نبرد", "✨", "action"),
+    "btn_forfeit": ("تسلیم در نبرد", "🏳", "action"),
+    "btn_autohunt": ("شکار خودکار", "⚡️", "action"),
+    "btn_swap": ("تعویض هیولا", "🔄", "action"),
+    "btn_custom_amt": ("مقدار دلخواه", "🔢", "action"),
+    "btn_reset": ("صفر کردن", "♻️", "action"),
 }
 
 BUTTON_CATEGORY_LABELS: dict[str, str] = {

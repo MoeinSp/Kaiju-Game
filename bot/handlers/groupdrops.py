@@ -152,7 +152,7 @@ async def drop_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         wait_txt = f"{h} ساعت و {m} دقیقه" if h else f"{m} دقیقه"
         await query.answer(
             f"💎 رگه‌ی الماس کول‌داون داره — {wait_txt} دیگه می‌تونی یکی دیگه برداری "
-            "(تا نشه الماس رو توی چند گروه فارم کرد).",
+            "(تا نشه الماس رو بیش از حد از چند گروه جمع کرد).",
             show_alert=True,
         )
     elif status == "vein_limit":

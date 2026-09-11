@@ -87,7 +87,7 @@ def _render(view: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKe
         mark = "✅ " if in_team else ""
         power = c.base_hp + c.base_atk + c.base_def + c.base_spd
         rows.append([btn(
-            f"{mark}{c.name} {'⭐' * c.star_level} · Lv{c.level} · {constants.RARITY_LABELS[c.rarity]} · 💪{power}",
+            f"{mark}{c.name} {'⭐' * c.star_level} · سطح {c.level} · 💪{power:,}",
             style=PRIMARY if in_team else LIST,
             callback_data=f"team_tog:{c.id}",
         )])

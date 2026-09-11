@@ -56,7 +56,7 @@ async def league_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     lines = [
         "🏆 <b>لیگ رتبه‌بندی</b>",
         _DIV,
-        f"{d['emoji']} دیویژن تو: <b>{d['title']}</b> │ 🏆 {view['cup']} کاپ",
+        f"{d['emoji']} سطح لیگ تو: <b>{d['title']}</b> │ 🏆 {view['cup']} کاپ",
         f"🎁 پاداش فصل: {_reward_fmt(view['reward'])} │ ⏳ پایان فصل: {_fmt_left(view['seconds_left'])}",
     ]
     nxt = view["next"]
@@ -64,9 +64,9 @@ async def league_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         need = nxt["min_cup"] - view["cup"]
         lines.append(f"🎯 تا {nxt['emoji']} {nxt['title']}: <b>{need}</b> کاپ دیگر")
     else:
-        lines.append("👑 <b>توی بالاترین دیویژنی!</b>")
+        lines.append("👑 <b>توی بالاترین سطح لیگی!</b>")
 
-    lines.append("\n🏅 <b>دیویژن‌ها و پاداش‌ها:</b>")
+    lines.append("\n🏅 <b>سطوح لیگ و پاداش‌ها:</b>")
     for div in league.DIVISIONS:
         cup_label = "0 کاپ" if div["min_cup"] == 0 else f"+{div['min_cup']} کاپ"
         here = " 📍 (جایگاه فعلی تو)" if div["key"] == d["key"] else ""

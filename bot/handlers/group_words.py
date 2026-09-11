@@ -596,7 +596,7 @@ def _arena_card(user, opponent, loot, shielded_for, data=None) -> tuple[str, Inl
     opp_tag = f" [{constants.element_label(opp_element)}]" if opp_element else ""
     div = "──────────────"
     lines = [
-        f"{get_emoji('battle')} <b>حریف شناسایی شد | Battle Arena</b>",
+        f"{get_emoji('battle')} <b>حریف پیدا شد!</b>",
         "",
         f"🦅 موجود شما: <b>{data.get('my_name', '—')}</b>{my_tag}",
         f"💪 قدرت شما: <b>{my_power:,}</b> · 🏆 کاپ: <b>{user.cup:,}</b>",

@@ -51,14 +51,14 @@ def _panel_text(lab_level: int) -> str:
     if lab_level <= 0:
         return (
             f"🔬 <b>آزمایشگاه</b>\n\n"
-            "این‌جا با پژوهش روی عناصر و توانایی‌ها به <b>همه‌ی هیولاهات</b> بونوسِ دائمی می‌دی.\n\n"
+            "این‌جا با پژوهش روی عناصر و توانایی‌ها به <b>همه‌ی هیولاهات</b> تقویت همیشگی می‌دی.\n\n"
             "⛔ هنوز ساختمونِ «🔬 آزمایشگاه» رو نساختی — از سطح <b>۵ تالار مِهر</b> باز می‌شه. "
             "اول از بخش «ساختمون‌ها» بسازش."
         )
     return (
         f"🔬 <b>آزمایشگاه</b> — سطح ساختمون <b>{lab_level}/{constants.BUILDING_MAX_LEVEL}</b>\n\n"
         "روی هر پژوهش بزن تا اثر و هزینه‌ش رو ببینی و شروعش کنی.\n"
-        f"<blockquote>لِوِلِ هر پژوهش نمی‌تونه از لِوِلِ ساختمون ({lab_level}) جلو بزنه — "
+        f"<blockquote>سطح هر پژوهش نمی‌تونه از سطح ساختمون ({lab_level}) جلو بزنه — "
         "برای بالاتر رفتن اول خودِ آزمایشگاه رو ارتقا بده.</blockquote>"
     )
 
@@ -70,7 +70,7 @@ def _panel_keyboard(lab_level: int, rows) -> InlineKeyboardMarkup:
             if r["remaining"] is not None:
                 tag = f"⏳ تا سطح {r['target']}"
             elif r["level"] >= constants.RESEARCH_MAX_LEVEL:
-                tag = "🏆 مکس"
+                tag = "🏆 نهایی"
             else:
                 tag = f"سطح {r['level']}/{lab_level}"
             kb.append([btn(f"{r['label']} — {tag}", emoji_key=r["btn_key"], style=LIST, callback_data=f"rsch:pick:{r['key']}")])

@@ -17,8 +17,8 @@ def _battle_keyboard(battle: InteractiveBattle) -> InlineKeyboardMarkup:
     skill_uses = battle.skill_uses_a if battle.turn == "a" else battle.skill_uses_b
     buttons = [btn("حمله", emoji_key="btn_attack", style=BATTLE, callback_data=f"battle_action:{battle.id}:attack")]
     if skill_uses > 0:
-        buttons.append(btn("✨ اسکیل", style=PRIMARY, callback_data=f"battle_action:{battle.id}:skill"))
-    buttons.append(btn("🏳 تسلیم", style=DANGER, callback_data=f"battle_action:{battle.id}:forfeit"))
+        buttons.append(btn("مهارت", emoji_key="btn_skill", style=PRIMARY, callback_data=f"battle_action:{battle.id}:skill"))
+    buttons.append(btn("تسلیم", emoji_key="btn_forfeit", style=DANGER, callback_data=f"battle_action:{battle.id}:forfeit"))
     return InlineKeyboardMarkup([buttons])
 
 

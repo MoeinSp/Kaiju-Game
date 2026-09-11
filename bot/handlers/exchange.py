@@ -96,12 +96,12 @@ def _amount_render(oid: int, direction: str, coins: int, dna: int, in_group: boo
         for gold in exchange.PRESET_GOLD:
             need_dna = exchange.dna_for_gold(gold)
             got_gold = exchange.sell_gold_gain(need_dna)
-            label = f"💰 {got_gold:,} طلا  ←  🧬 {need_dna} DNA"
+            label = f"💰 دریافت {got_gold:,} طلا (با {need_dna} DNA)"
             rows.append([btn(label, emoji_key="btn_exchange", style=BUILD, callback_data=f"exch:amt:{direction}:{need_dna}:{oid}")])
     else:
         for amt in exchange.PRESET_DNA:
             pack = exchange.describe(direction, amt)
-            label = f"💰 {pack['gold']:,} طلا  →  🧬 {amt} DNA"
+            label = f"🧬 دریافت {amt} DNA (با {pack['gold']:,} طلا)"
             rows.append([btn(label, emoji_key="btn_exchange", style=BUILD, callback_data=f"exch:amt:{direction}:{amt}:{oid}")])
     rows.append([btn("✏️ عدد دلخواه", emoji_key="btn_charge", style=NAV, callback_data=f"exch:custom:{direction}:{oid}")])
     rows.append([btn("↩️ بازگشت", emoji_key="btn_back", style=NAV, callback_data=f"exch:home:{oid}")])
