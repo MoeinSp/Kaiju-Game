@@ -16,7 +16,7 @@ from bio_lab.repository import (
     mention,
     touch_membership,
 )
-from bot.buttons import BATTLE, CONFIRM, DANGER, NAV, PRIMARY, back_btn, btn
+from bot.buttons import BATTLE, BUILD, CONFIRM, DANGER, NAV, PRIMARY, back_btn, btn
 from bot.handlers.group_words import group_footer_keyboard
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from game import constants

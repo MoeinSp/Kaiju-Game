@@ -4106,20 +4106,23 @@ def _profile_sync(tg_user):
     total_raid_damage = RaidDamageLog.objects.filter(user=user).aggregate(t=Sum("damage"))["t"] or 0
     total_hunts = DailyActionLog.objects.filter(user=user, action="hunt").aggregate(t=Sum("count"))["t"] or 0
     creatures_owned = Creature.objects.filter(owner=user).count()
+    from game import titles
+
     return user, {
         "duel_wins": duel_wins,
         "total_raid_damage": total_raid_damage,
         "total_hunts": total_hunts,
         "creatures_owned": creatures_owned,
+        # precompute the title label HERE (sync) — it hits the DB (codex count etc.), which
+        # would raise SynchronousOnlyOperation if left to the async render path.
+        "title_label": titles.label(user),
     }
 
 
 def _profile_text_and_keyboard(user, stats) -> tuple[str, InlineKeyboardMarkup]:
-    from game import titles
-
     rename_cost = constants.lab_rename_cost(user.lab_renames)
     lines = [
-        f"{get_emoji('profile')} <b>آزمایشگاه {lab_display(user)}</b>{titles.label(user)}",
+        f"{get_emoji('profile')} <b>آزمایشگاه {lab_display(user)}</b>{stats.get('title_label', '')}",
         f"<blockquote>{lab_level_line(user)}</blockquote>\n",
         f"📅 عضو از: {timezone.localtime(user.created_at).strftime('%Y-%m-%d')}",
         f"🔥 روزهای ورود پشت‌سرهم: {user.login_streak}",
@@ -4139,9 +4142,15 @@ def _profile_text_and_keyboard(user, stats) -> tuple[str, InlineKeyboardMarkup]:
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
+def _profile_render_sync(tg_user):
+    """Whole profile render in SYNC context — titles.label / wallet_line hit the DB, so
+    building the text+keyboard must not happen on the event loop."""
+    user, stats = _profile_sync(tg_user)
+    return _profile_text_and_keyboard(user, stats)
+
+
 async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user, stats = await run_db(_profile_sync, update.effective_user)
-    text, keyboard = _profile_text_and_keyboard(user, stats)
+    text, keyboard = await run_db(_profile_render_sync, update.effective_user)
     await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -4152,11 +4161,16 @@ def _notif_toggle_sync(tg_user):
     return user, stats
 
 
+def _notif_toggle_render_sync(tg_user):
+    user, stats = _notif_toggle_sync(tg_user)
+    text, keyboard = _profile_text_and_keyboard(user, stats)
+    return user.notifications_on, text, keyboard
+
+
 async def notif_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    user, stats = await run_db(_notif_toggle_sync, update.effective_user)
-    await query.answer("🔔 اعلان‌ها روشن شد" if user.notifications_on else "🔕 اعلان‌ها خاموش شد")
-    text, keyboard = _profile_text_and_keyboard(user, stats)
+    notif_on, text, keyboard = await run_db(_notif_toggle_render_sync, update.effective_user)
+    await query.answer("🔔 اعلان‌ها روشن شد" if notif_on else "🔕 اعلان‌ها خاموش شد")
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
