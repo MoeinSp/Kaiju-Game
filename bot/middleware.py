@@ -46,15 +46,28 @@ def _gate_applies(update: Update) -> bool:
     return True
 
 
+def _mark_started_sync(tg_user) -> None:
+    """Flip the public /api/started/ flag the instant someone presses /start — done HERE
+    (before the gates) so a user who started the bot counts as 'started' even while
+    they're still stuck behind the bot's OWN force-join gate. It's a plain «did they
+    press /start», nothing about join requirements."""
+    user, _ = get_or_create_user(tg_user)
+    if not user.started_gate:
+        user.started_gate = True
+        user.save(update_fields=["started_gate"])
+
+
 async def capture_referral(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Runs before every gate (group=-3). Stashes a `/start ref_<id>` payload in
-    user_data so it survives the force-join gate — which raises ApplicationHandlerStop
-    on a brand-new invitee's first message and would otherwise drop the payload,
-    leaving the referral never bound once they finally clear the gate and re-/start.
-    Never stops propagation; the ban/join gates and the /start handler still run."""
+    """Runs before every gate (group=-3). Marks the user 'started' on the raw /start, and
+    stashes a `/start ref_<id>` payload in user_data so it survives the force-join gate —
+    which raises ApplicationHandlerStop on a brand-new invitee's first message and would
+    otherwise drop both. Never stops propagation; the ban/join gates and /start still run."""
     message = update.effective_message
     if message is None or not message.text or not message.text.startswith("/start"):
         return
+    chat = update.effective_chat
+    if chat is not None and chat.type == "private":
+        await run_db(_mark_started_sync, update.effective_user)
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
         return
