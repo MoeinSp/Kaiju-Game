@@ -267,3 +267,67 @@ def import_loadout(name: str, raw_json: str | bytes, note: str = "") -> ThemeLoa
     return ThemeLoadout.objects.create(
         name=name, note=note[:200], payload=json.dumps(clean, ensure_ascii=False)
     )
+
+
+def auto_fill_missing_emojis(kind: str = "both") -> int:
+    """Auto-fill unset emojis from existing sets on the server by matching fallback glyphs."""
+    from bio_lab.models import ButtonEmojiOverride, EmojiOverride
+    from game import button_emoji, emoji
+
+    # Build glyph candidate map from all existing overrides
+    glyph_candidates: dict[str, str] = {}
+    for o in EmojiOverride.objects.all():
+        g = o.key[len(emoji._GLYPH_PREFIX):] if o.key.startswith(emoji._GLYPH_PREFIX) else o.placeholder
+        g_norm = emoji._norm_glyph(g)
+        if g_norm and g_norm not in glyph_candidates:
+            glyph_candidates[g_norm] = o.custom_emoji_id
+    for bo in ButtonEmojiOverride.objects.all():
+        g_norm = emoji._norm_glyph(bo.placeholder)
+        if g_norm and g_norm not in glyph_candidates:
+            glyph_candidates[g_norm] = bo.custom_emoji_id
+
+    # Fallback mappings for specific glyphs if missing
+    FALLBACK_PACK_MAP = {
+        "🔁": "5816711927375602899",  # sync / repeat icon
+        "🎟": "5902293707708701317",  # ticket
+        "🗺": "5415803062738504079",  # map
+        "🔒": "5818736497649524154",  # lock
+        "✨": "5078009227847402541",  # sparkles
+        "🏳": "6008158539816636815",  # white flag
+        "⚡": "5938386156142989281",  # electric / zap
+        "⚡️": "4909137616349168655", # zap
+        "🔄": "5816711927375602899",  # reload / swap
+        "🔢": "4909280707479602714",  # numbers
+        "♻": "4997228310418162816",  # recycle
+        "♻️": "4997228310418162816", # recycle
+        "🗓": "5413879192267805083",  # calendar
+        "⚔": "4902249824541213632",  # swords
+        "⚔️": "5961026285969871296", # swords
+    }
+    for g, cid in FALLBACK_PACK_MAP.items():
+        gn = emoji._norm_glyph(g)
+        if gn not in glyph_candidates:
+            glyph_candidates[gn] = cid
+
+    filled_count = 0
+
+    if kind in ("both", "button"):
+        existing_btn = {o.key for o in ButtonEmojiOverride.objects.all()}
+        for k, (lbl, fb, _cat) in button_emoji.BUTTON_EMOJI_DEFS.items():
+            if k not in existing_btn:
+                cid = glyph_candidates.get(emoji._norm_glyph(fb))
+                if cid:
+                    button_emoji.set_button_emoji(k, cid, fb)
+                    filled_count += 1
+
+    if kind in ("both", "text"):
+        existing_txt = {o.key for o in EmojiOverride.objects.exclude(key__startswith=emoji._GLYPH_PREFIX)}
+        for k, (lbl, fb, _cat) in emoji.EMOJI_DEFS.items():
+            if k not in existing_txt:
+                cid = glyph_candidates.get(emoji._norm_glyph(fb))
+                if cid:
+                    emoji.set_emoji(k, cid, fb)
+                    filled_count += 1
+
+    refresh_theme_caches()
+    return filled_count

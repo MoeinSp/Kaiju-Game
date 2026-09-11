@@ -1,8 +1,21 @@
 {% extends "panel/base.html" %}
 {% block title %}{{ title }} — پنل Kaiju Legends{% endblock %}
 {% block content %}
-<h2>{{ title }}</h2>
-<p class="lead">{{ intro }} <b>{{ set_count }}</b> از <b>{{ total }}</b> مورد تنظیم شده.</p>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px">
+  <div>
+    <h2 style="margin:0 0 6px">{{ title }}</h2>
+    <p class="lead" style="margin:0">{{ intro }} <b>{{ set_count }}</b> از <b>{{ total }}</b> مورد تنظیم شده.</p>
+  </div>
+  {% if set_count < total %}
+    <form method="post" style="margin:0">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="auto_fill">
+      <button type="submit" class="blue" style="white-space:nowrap;padding:9px 16px">
+        ✨ تکمیل خودکار از پک‌های موجود ({{ total|add:"-"|add:set_count }} مورد)
+      </button>
+    </form>
+  {% endif %}
+</div>
 
 <div class="card">
   <p class="hint" style="margin:0">
@@ -13,7 +26,12 @@
 
 {% for group in groups %}
   <div class="card">
-    <h3>{{ group.label }}</h3>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 style="margin:0">{{ group.label }}</h3>
+      <span class="pill" style="font-size:13px;padding:4px 10px;background:var(--card-bg, #21262d)">
+        <b>{{ group.set_count }}</b> از <b>{{ group.total }}</b> تنظیم شده
+      </span>
+    </div>
     <div class="scroll">
       <table>
         <tr>

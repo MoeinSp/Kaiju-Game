@@ -187,6 +187,8 @@ def button_styles(request):
                     "key": cat,
                     "label": button_emoji.BUTTON_CATEGORY_LABELS.get(cat, cat),
                     "items": items,
+                    "override_count": sum(1 for it in items if it["overridden"]),
+                    "total": len(items),
                 }
                 for cat, items in key_groups.items()
             ],
@@ -210,6 +212,10 @@ def _emoji_page(request, *, kind: str):
 
     if request.method == "POST":
         action = _post_action(request)
+        if action == "auto_fill":
+            filled = theme.auto_fill_missing_emojis(kind="button" if is_button else "text")
+            messages.success(request, f"{filled} ایموجی تنظیم‌نشده به‌طور خودکار بر اساس پک‌های موجود ست شد.")
+            return redirect(url_name)
         key = (request.POST.get("key") or "").strip()
         if key not in defs:
             messages.error(request, "این کلید توی رجیستری نیست.")
@@ -252,6 +258,19 @@ def _emoji_page(request, *, kind: str):
                 "override": overrides.get(key),
             }
         )
+    group_list = []
+    for cat, items in groups.items():
+        grp_set = sum(1 for it in items if it["override"] is not None)
+        group_list.append(
+            {
+                "key": cat,
+                "label": cat_labels.get(cat, cat),
+                "items": items,
+                "set_count": grp_set,
+                "total": len(items),
+            }
+        )
+
     return render(
         request,
         "panel/emoji.html",
@@ -263,10 +282,7 @@ def _emoji_page(request, *, kind: str):
                 if is_button
                 else "این ایموجی‌ها داخل متن پیام‌ها با تگ <tg-emoji> رندر می‌شن. برای کاربرهای بدون پرمیوم، جایگزین یونیکد نشون داده می‌شه."
             ),
-            "groups": [
-                {"key": cat, "label": cat_labels.get(cat, cat), "items": items}
-                for cat, items in groups.items()
-            ],
+            "groups": group_list,
             "set_count": len(overrides),
             "total": len(defs),
         },

@@ -77,7 +77,10 @@
       الان <b>{{ key_override_count }}</b> دکمه رنگ اختصاصی داره.
     </p>
     {% for group in key_groups %}
-      <h4 style="margin:18px 0 6px; font-size:14px; color:var(--muted)">{{ group.label }}</h4>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:18px 0 6px">
+        <h4 style="margin:0; font-size:14px; color:var(--muted)">{{ group.label }}</h4>
+        <span class="pill" style="font-size:12px;padding:2px 8px"><b>{{ group.override_count }}</b> از <b>{{ group.total }}</b> اختصاصی</span>
+      </div>
       <div class="scroll">
         <table>
           <tr><th style="width:34%">دکمه</th><th style="width:26%">رنگ</th><th>پیش‌نمایش</th></tr>
