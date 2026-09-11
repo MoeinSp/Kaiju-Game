@@ -16,6 +16,7 @@ from game.button_emoji import (
     BUTTON_CATEGORY_LABELS,
     BUTTON_CATEGORY_OF,
     BUTTON_EMOJI_KEYS,
+    button_category_stats,
     clear_button_emoji,
     list_button_overrides,
     set_button_emoji,
@@ -23,7 +24,17 @@ from game.button_emoji import (
 from config import ADMIN_PANEL_URL, OWNER_TELEGRAM_ID
 from game import botconfig, constants
 from game.creature import GameError
-from game.emoji import EMOJI_DEFS, EMOJI_KEYS, CATEGORY_LABELS, CATEGORY_OF, clear_emoji, get_emoji, list_overrides, set_emoji
+from game.emoji import (
+    EMOJI_DEFS,
+    EMOJI_KEYS,
+    CATEGORY_LABELS,
+    CATEGORY_OF,
+    clear_emoji,
+    get_emoji,
+    list_overrides,
+    set_emoji,
+    text_category_stats,
+)
 from game.force_join import (
     add_channel,
     list_channels,
@@ -81,8 +92,9 @@ EMOJI_BACK_CALLBACK = "set_emoji_back"
 
 def _category_keyboard() -> InlineKeyboardMarkup:
     buttons = [
-        btn(label, style=ADMIN, callback_data=f"{EMOJI_CAT_CALLBACK_PREFIX}{cat}")
+        btn(f"{label} ({s_cnt}/{tot})", style=ADMIN, callback_data=f"{EMOJI_CAT_CALLBACK_PREFIX}{cat}")
         for cat, label in CATEGORY_LABELS.items()
+        for s_cnt, tot in [text_category_stats(cat)]
     ]
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
     return InlineKeyboardMarkup(rows)
@@ -165,7 +177,8 @@ async def set_emoji_category_callback(update: Update, context: ContextTypes.DEFA
 def _text_emoji_category_caption(category: str) -> str:
     """List every text-emoji key in a category with its CURRENT emoji rendered inline
     (premium ones show the real custom emoji), so it's obvious what's set."""
-    lines = [CATEGORY_LABELS[category], "", "<b>ایموجی فعلی هر مورد:</b>"]
+    s_cnt, tot = text_category_stats(category)
+    lines = [f"{CATEGORY_LABELS[category]} ({s_cnt}/{tot} تنظیم شده)", "", "<b>ایموجی فعلی هر مورد:</b>"]
     for k, (label, glyph, cat) in EMOJI_DEFS.items():
         if cat != category:
             continue
@@ -270,6 +283,8 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_admin(update):
         return
     stats = await run_db(dashboard_stats)
+    txt_set, txt_tot = text_category_stats()
+    btn_set, btn_tot = button_category_stats()
     text = (
         "🛠 <b>پنل مدیریت</b>\n\n"
         f"{get_emoji('users')} کاربران: {stats['users']}   {get_emoji('creature')} موجودات: {stats['creatures']}\n"
@@ -296,8 +311,8 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             ],
             [btn("حذف موجود", emoji_key="btn_delete", style=DANGER, callback_data="admin_menu:del_creature_start")],
             [
-                btn("🎨 ایموجی متن‌ها", style=ADMIN, callback_data="admin_menu:set_emoji_start"),
-                btn("🎛 ایموجی دکمه‌ها", style=ADMIN, callback_data="admin_menu:button_emoji"),
+                btn(f"🎨 ایموجی متن‌ها ({txt_set}/{txt_tot})", style=ADMIN, callback_data="admin_menu:set_emoji_start"),
+                btn(f"🎛 ایموجی دکمه‌ها ({btn_set}/{btn_tot})", style=ADMIN, callback_data="admin_menu:button_emoji"),
             ],
             [btn("🔍 پیش‌نمایش ایموجی‌ها", style=ADMIN, callback_data="admin_menu:preview_emoji")],
             [
@@ -2172,8 +2187,9 @@ AWAITING_BUTTON_EMOJI_KEY = "awaiting_button_emoji_key"
 
 def _btn_emoji_category_keyboard() -> InlineKeyboardMarkup:
     buttons = [
-        btn(label, style=ADMIN, callback_data=f"{BTN_EMOJI_CAT_PREFIX}{cat}")
+        btn(f"{label} ({s_cnt}/{tot})", style=ADMIN, callback_data=f"{BTN_EMOJI_CAT_PREFIX}{cat}")
         for cat, label in BUTTON_CATEGORY_LABELS.items()
+        for s_cnt, tot in [button_category_stats(cat)]
     ]
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
@@ -2195,7 +2211,8 @@ def _btn_emoji_category_caption(category: str) -> str:
     owner can see at a glance what's set (premium) vs still on the unicode default."""
     from game.button_emoji import BUTTON_EMOJI_DEFS, get_button_icon
 
-    lines = [BUTTON_CATEGORY_LABELS[category], "", "<b>ایموجی فعلی هر دکمه:</b>"]
+    s_cnt, tot = button_category_stats(category)
+    lines = [f"{BUTTON_CATEGORY_LABELS[category]} ({s_cnt}/{tot} تنظیم شده)", "", "<b>ایموجی فعلی هر دکمه:</b>"]
     for k, (label, glyph, cat) in BUTTON_EMOJI_DEFS.items():
         if cat != category:
             continue
@@ -2209,12 +2226,12 @@ def _btn_emoji_category_caption(category: str) -> str:
 
 
 async def button_emoji_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    overrides = await run_db(list_button_overrides)
+    s_cnt, tot = button_category_stats()
     lines = [
         "🎛 <b>ایموجی دکمه‌ها</b>",
         "اینجا ایموجی پرمیومی که <b>روی خودِ دکمه‌ها</b> نشون داده می‌شه رو تنظیم می‌کنی — "
         "جدا از «🎨 ایموجی متن‌ها» که برای متن پیام‌هاست.\n",
-        f"<b>الان {len(overrides)} دکمه ایموجی سفارشی داره.</b>",
+        f"<b>الان {s_cnt} از {tot} دکمه ایموجی پرمیوم داره.</b>",
         "\n<blockquote>هر دکمه فقط <b>یک</b> ایموجی می‌گیره که قبل از متنش می‌شینه. "
         "روی کلاینت‌های خیلی قدیمی ممکنه نمایش داده نشه، برای همین ایموجی معمولی هم توی متن دکمه می‌مونه.</blockquote>",
     ]

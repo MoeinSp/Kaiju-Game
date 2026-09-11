@@ -202,5 +202,15 @@ def category_stats(cat_keys: list[str]) -> tuple[int, int]:
     return set_cnt, total
 
 
+def button_category_stats(category: str | None = None) -> tuple[int, int]:
+    """Returns (set_count, total) for button emojis. Pure in-memory cache lookup."""
+    if category:
+        keys = [k for k, c in BUTTON_CATEGORY_OF.items() if c == category]
+    else:
+        keys = list(BUTTON_EMOJI_DEFS.keys())
+    set_cnt = sum(1 for k in keys if k in _cache)
+    return set_cnt, len(keys)
+
+
 def list_button_overrides() -> list[ButtonEmojiOverride]:
     return list(ButtonEmojiOverride.objects.order_by("key"))

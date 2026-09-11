@@ -113,6 +113,17 @@ def _load_cache() -> dict[str, EmojiOverride]:
     return _cache
 
 
+def text_category_stats(category: str | None = None) -> tuple[int, int]:
+    """Returns (set_count, total) for text emojis. Pure in-memory cache lookup."""
+    cache = _cache if _cache is not None else {}
+    if category:
+        keys = [k for k, c in CATEGORY_OF.items() if c == category]
+    else:
+        keys = list(EMOJI_DEFS.keys())
+    set_cnt = sum(1 for k in keys if k in cache)
+    return set_cnt, len(keys)
+
+
 _glyph_map: dict[str, str] | None = None       # glyph -> custom_emoji_id
 _glyph_re: "re.Pattern | None" = None
 _TG_EMOJI_BLOCK = re.compile(r"<tg-emoji\b[^>]*>.*?</tg-emoji>", re.DOTALL)
