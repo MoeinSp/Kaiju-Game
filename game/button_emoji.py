@@ -195,5 +195,12 @@ def clear_button_emoji(key: str) -> bool:
     return deleted > 0
 
 
+def category_stats(cat_keys: list[str]) -> tuple[int, int]:
+    """Returns (set_count, total) for the given list of button emoji keys. Reads in-memory cache."""
+    total = len(cat_keys)
+    set_cnt = sum(1 for k in cat_keys if k in _cache)
+    return set_cnt, total
+
+
 def list_button_overrides() -> list[ButtonEmojiOverride]:
     return list(ButtonEmojiOverride.objects.order_by("key"))

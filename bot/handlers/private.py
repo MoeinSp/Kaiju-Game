@@ -1054,13 +1054,27 @@ def _locked_actions_for(hall_level) -> frozenset:
 
 
 def _main_menu_rows(locked=frozenset(), research_built=False) -> list:
+    from game.button_emoji import category_stats
+
     rows = [[_mkbtn(spec, locked) for spec in row] for row in _MAIN_ROWS]
     # the 🔬 آزمایشگاه button appears only after the research-lab building is built
     if research_built:
         rows.append([btn("آزمایشگاه", emoji_key="btn_research", style=PRIMARY, callback_data="menu:research")])
-    rows.append(
-        [btn(label, emoji_key=ekey, style=SHOP, callback_data=f"menu:{action}") for (label, action, ekey) in _CATEGORY_BUTTONS]
-    )
+
+    cat_keys_map = {
+        "cat_rewards": [spec[3] for row in _CATEGORIES["rewards"][1] for spec in row],
+        "cat_shop": [spec[3] for row in _CATEGORIES["shop"][1] for spec in row],
+        "cat_social": [spec[3] for row in _CATEGORIES["social"][1] for spec in row],
+    }
+
+    cat_btns = []
+    for (label, action, ekey) in _CATEGORY_BUTTONS:
+        keys = cat_keys_map.get(action, [])
+        s_cnt, tot = category_stats(keys)
+        lbl = f"{label} ({s_cnt}/{tot})" if tot else label
+        cat_btns.append(btn(lbl, emoji_key=ekey, style=SHOP, callback_data=f"menu:{action}"))
+
+    rows.append(cat_btns)
     rows.append([btn("راهنما", emoji_key="btn_report", style=CONFIRM, callback_data="menu:guide")])
     return rows
 

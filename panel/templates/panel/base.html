@@ -96,8 +96,14 @@ must never be the reason they can't reach the restore button.
       <a href="{% url 'panel:dashboard' %}" class="{% if page == 'dashboard' %}on{% endif %}">داشبورد</a>
       <div class="sep">ظاهر بات</div>
       <a href="{% url 'panel:button_styles' %}" class="{% if page == 'button_styles' %}on{% endif %}">🎨 رنگ دکمه‌ها</a>
-      <a href="{% url 'panel:button_emoji' %}" class="{% if page == 'button_emoji' %}on{% endif %}">🎛 ایموجی دکمه‌ها</a>
-      <a href="{% url 'panel:text_emoji' %}" class="{% if page == 'text_emoji' %}on{% endif %}">✨ ایموجی متن‌ها</a>
+      <a href="{% url 'panel:button_emoji' %}" class="{% if page == 'button_emoji' %}on{% endif %}" style="display:flex;justify-content:space-between;align-items:center">
+        <span>🎛 ایموجی دکمه‌ها</span>
+        {% if nav_button_emoji_stat %}<span class="pill" style="font-size:11px;padding:1px 6px;margin:0">{{ nav_button_emoji_stat }}</span>{% endif %}
+      </a>
+      <a href="{% url 'panel:text_emoji' %}" class="{% if page == 'text_emoji' %}on{% endif %}" style="display:flex;justify-content:space-between;align-items:center">
+        <span>✨ ایموجی متن‌ها</span>
+        {% if nav_text_emoji_stat %}<span class="pill" style="font-size:11px;padding:1px 6px;margin:0">{{ nav_text_emoji_stat }}</span>{% endif %}
+      </a>
       <a href="{% url 'panel:loadouts' %}" class="{% if page == 'loadouts' %}on{% endif %}">🗂 لودآوت‌ها</a>
       <div class="sep">بازی</div>
       <a href="{% url 'panel:players' %}" class="{% if page == 'players' %}on{% endif %}">👥 بازیکنان</a>
