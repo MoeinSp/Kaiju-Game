@@ -223,7 +223,7 @@ def element_advantage_line(my_elem, opp_elem) -> str:
         return f"✅ برتری عنصری: {constants.element_label(my_elem)} بر {constants.element_label(opp_elem)} غلبه دارد!"
     if mult < 1:
         return f"⚠️ ضعف عنصری: {constants.element_label(opp_elem)} بر {constants.element_label(my_elem)} برتری دارد!"
-    return "➖ بدون مزیت عنصری میان دو عنصر"
+    return "➖ بدون مزیت عنصری"
 
 
 def creature_card_text(user, creature, equipped_items: list | None = None) -> str:
@@ -449,8 +449,8 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
             )
         else:
             lines.append(
-                "⚠️ <b>قفل تکامل:</b> عضوهایی به سقف مجاز رسیده‌اند. جهت بازگشایی ارتقای بیشتر، "
-                f"موجود را از طریق <b>فیوژن</b> به {creature.star_level + 1}⭐ ارتقا بده "
+                "⚠️ <b>قفل تکامل:</b> بعضی اعضا به سقف رسیدن! برای باز شدن سطح بیشتر، "
+                f"هیولات رو فیوژن کن و به {creature.star_level + 1}⭐ برسون "
                 f"(هر ستاره +{constants.PART_UPGRADE_CAP_PER_STAR}، تا {constants.PART_UPGRADE_MAX} در 5⭐)."
             )
     # gear
@@ -481,7 +481,7 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
         f"{get_emoji('diamond')} الماس: <b>{user.diamonds:,}</b>",
         f"{get_emoji('energy')} انرژی: {pct_bar(energy, constants.MAX_ENERGY)} ({energy}/{constants.MAX_ENERGY}) {charge}",
         "", div, "",
-        "💡 <i>نکته: «تغذیه» با غذای هیولا (موش/مرغ/گربه) XP می‌دهد و ارتقای اعضا مستقیماً قدرت رزمی را بالا می‌برد.</i>",
+        "💡 <i>غذای هیولا XP می‌ده · ارتقای اعضا قدرت رزمی رو بالا می‌بره.</i>",
     ]
     return "\n".join(lines)
 
@@ -546,8 +546,7 @@ def equip_panel_text(user, creature, slots: list[dict]) -> str:
             lines.append(
                 f"{row['label']}: <i>خالی</i>"
                 + (
-                    f" — {spare} تجهیزات مناسب داری" if spare > 1
-                    else " — 1 تجهیزات مناسب داری" if spare
+                    f" — {spare} گزینه برای تجهیز" if spare
                     else " — چیزی برای این جایگاه نداری"
                 )
             )
@@ -1395,7 +1394,7 @@ def feedcap_text(user, creature, caps: dict, maxed: bool) -> str:
         f"🍽 <b>تغذیهٔ {creature_name(creature)}</b>",
         f"🎖 سطح {creature.level}/{max_level} · XP {creature.xp:,}/{constants.xp_for_creature_level(creature.level):,}",
         "",
-        "چه موجودی می‌خوای بدی هیولات بخوره؟",
+        "چه غذایی بدی هیولات بخوره؟",
     ]
     total = 0
     for tier in constants.XP_CAPSULE_ORDER:
