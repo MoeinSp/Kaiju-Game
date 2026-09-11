@@ -1575,13 +1575,77 @@ def _creature_detail_sync(tg_user, creature_id):
     return user, creature, get_equipped_items(creature)
 
 
+def collection_creature_detail_text(creature, equipped_items: list | None = None) -> str:
+    """Detailed profile card for a specific creature viewed from the collection.
+    Exclusively displays creature-specific info (identity, element, rarity, level,
+    stats, body parts, gear) without player/lab wallet clutter."""
+    from game.equipment import equipment_power
+
+    stats = effective_stats(creature, equipped_items)
+    power = _creature_power(creature, equipped_items)
+
+    max_level = constants.creature_max_level(creature.rarity, creature.star_level)
+    xp_needed = constants.xp_for_creature_level(creature.level)
+    is_maxed = creature.level >= max_level
+    stars = get_emoji("star") * creature.star_level
+
+    status_badge = "🟢 <b>(موجود فعال شما)</b>" if creature.is_active else "⚪️ (در کلکسیون)"
+
+    lines = [
+        f"{get_emoji('creature')} <b>{creature_name(creature)}</b> <code>#{creature.id}</code> {status_badge}",
+    ]
+    if creature_has_nickname(creature):
+        lines.append(f"🧬 نژاد: <b>{creature.name}</b>")
+    lines += [
+        f"{constants.RARITY_LABELS[creature.rarity]} {stars} ┃ {constants.element_label(creature.element)}",
+        f"🎖 سطح موجود: <b>{creature.level}/{max_level}</b>" + ("  ✅ بیشینه" if is_maxed else ""),
+    ]
+    if not is_maxed:
+        lines.append(f"📈 پیشرفت لول: {pct_bar(creature.xp, xp_needed)} ({creature.xp:,}/{xp_needed:,} XP)")
+
+    parts_info = []
+    if getattr(creature, "wings_level", 0) > 0:
+        parts_info.append(f"🦋 بال‌ها: لول {creature.wings_level}")
+    if getattr(creature, "fangs_level", 0) > 0:
+        parts_info.append(f"🦷 نیش: لول {creature.fangs_level}")
+    if getattr(creature, "armor_level", 0) > 0:
+        parts_info.append(f"🛡 زره: لول {creature.armor_level}")
+    if getattr(creature, "poison_level", 0) > 0:
+        parts_info.append(f"☠️ غده سمی: لول {creature.poison_level}")
+    if parts_info:
+        lines += ["", "🧬 <b>اعضای تقویت‌شده:</b>", " ┃ ".join(parts_info)]
+
+    lines += [
+        "",
+        _CARD_DIV,
+        "",
+        f"⚔️ <b>آمار مبارزه</b> | توان کل: <b>{power:,}</b> 💪",
+        "",
+        f"{get_emoji('hp')} سلامت (HP): <b>{stats['hp']}</b> ┃ {get_emoji('atk')} حمله (ATK): <b>{stats['atk']}</b>",
+        f"{get_emoji('def')} دفاع (DEF): <b>{stats['def']}</b> ┃ {get_emoji('spd')} سرعت (SPD): <b>{stats['spd']}</b>",
+        "",
+        _CARD_DIV,
+        "",
+        "🎒 <b>تجهیزات مجهز شده:</b>",
+    ]
+    by_slot = {i.slot: i for i in (equipped_items or [])}
+    for slot in constants.EQUIPMENT_SLOTS:
+        label = constants.EQUIPMENT_SLOT_LABELS[slot]
+        it = by_slot.get(slot)
+        if it is not None:
+            lines.append(f"{label}: {it.name} [+{it.level}] (+{equipment_power(it)} 💪)")
+        else:
+            lines.append(f"{label}: <i>خالی</i>")
+    return "\n".join(lines)
+
+
 def _creature_detail_keyboard(creature_id: int, is_active: bool) -> InlineKeyboardMarkup:
     rows = []
     if not is_active:
         rows.append([btn("انتخاب به‌عنوان موجود فعال", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"coll_select:{creature_id}")])
     rows.append([btn("استفاده در فیوژن", emoji_key="btn_fusion", style=PRIMARY, callback_data=f"fus_a:{creature_id}")])
     rows.append([btn("تقویت با خوردن هیولا", emoji_key="btn_devour", style=BUILD, callback_data=f"devour_start:{creature_id}")])
-    rows.append([btn("✏️ نام‌گذاری", style=NAV, callback_data=f"kaiju_rename:{creature_id}:c")])
+    rows.append([btn("نام‌گذاری", emoji_key="btn_titles", style=NAV, callback_data=f"kaiju_rename:{creature_id}:c")])
     rows.append([back_btn("menu:collection", "بازگشت به کلکسیون")])
     return InlineKeyboardMarkup(rows)
 
@@ -1596,7 +1660,7 @@ async def collection_pick_callback(update: Update, context: ContextTypes.DEFAULT
         return
     await query.answer()
     await safe_edit_message_text(query,
-        creature_card_text(user, creature, equipped_items),
+        collection_creature_detail_text(creature, equipped_items),
         parse_mode="HTML",
         reply_markup=_creature_detail_keyboard(creature.id, creature.is_active),
     )
@@ -2482,9 +2546,9 @@ def _hunt_scout_keyboard(target, scout_price=0) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [btn("حمله!", emoji_key="btn_attack", style=BATTLE, callback_data=f"hunt_go:{target['tier']}:{target['seed']}")],
-            [btn("🔄 انتخاب موجود دیگر از تیم", style=NAV, callback_data=f"hunt_swap:{target['tier']}:{target['seed']}")],
-            [btn(f"🔍 بعدی ({scout_price} طلا)", style=NAV, callback_data="hunt_next")],
-            [btn("⚡️ شکار خودکار", style=BATTLE, callback_data="autohunt_start")],
+            [btn("انتخاب موجود دیگر از تیم", emoji_key="btn_swap", style=NAV, callback_data=f"hunt_swap:{target['tier']}:{target['seed']}")],
+            [btn(f"بعدی ({scout_price} طلا)", emoji_key="btn_scout_next", style=NAV, callback_data="hunt_next")],
+            [btn("شکار خودکار", emoji_key="btn_autohunt", style=BATTLE, callback_data="autohunt_start")],
             [back_btn("menu:me")],
         ]
     )
@@ -2545,8 +2609,8 @@ async def hunt_swap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         tag = "🟢 " if is_active else ("⛔ " if busy else "")
         note = " (مشغول)" if busy else ""
         rows.append([btn(f"{tag}{name} [{constants.ELEMENT_LABELS[element]}] · 💪{power:,}{note}",
-                         style=BATTLE, callback_data=f"hunt_swap_pick:{tier}:{seed}:{cid}")])
-    rows.append([btn("↩️ بازگشت به حریف", style=NAV, callback_data=f"hunt_swap_pick:{tier}:{seed}:0")])
+                         emoji_key="btn_creature", style=BATTLE, callback_data=f"hunt_swap_pick:{tier}:{seed}:{cid}")])
+    rows.append([back_btn(f"hunt_swap_pick:{tier}:{seed}:0", "بازگشت به حریف")])
     await safe_edit_message_text(
         query,
         "🔄 <b>کدوم موجود با این حریف بجنگه؟</b>\n<blockquote>حریف عوض نمی‌شه؛ فقط موجودِ خودت. "
@@ -2700,7 +2764,7 @@ def _autohunt_confirm_kb(amount: int):
         f"(نصف لوت). XP کامل می‌مونه.</i>"
     )
     kb = InlineKeyboardMarkup([
-        [btn("✅ تأیید و شروع", style=CONFIRM, callback_data=f"autohunt_do:{amount}")],
+        [btn("تأیید و شروع", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"autohunt_do:{amount}")],
         [back_btn("menu:me", "انصراف")],
     ])
     return text, kb
@@ -2718,7 +2782,7 @@ async def _autohunt_no_energy(query, energy: int) -> None:
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
             [energy_refill_button(query.from_user.id)],
-            [btn("🔙 بازگشت به شکار", style=NAV, callback_data="hunt_next")],
+            [btn("بازگشت به شکار", emoji_key="btn_hunt", style=NAV, callback_data="hunt_next")],
         ]),
     )
 
@@ -2745,9 +2809,9 @@ async def autohunt_start_callback(update: Update, context: ContextTypes.DEFAULT_
         f"<i>توجه: شکار خودکار نصف لوت شکار دستیه و طلا و دی‌ان‌ای کمتری می‌ده.</i>",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
-            [btn(f"⚡️ همه انرژی ({energy})", style=BATTLE, callback_data="autohunt_amt:all"),
-             btn(f"½ نصف ({half})", style=NAV, callback_data="autohunt_amt:half")],
-            [btn("⌨️ انرژی دلخواه", style=NAV, callback_data="autohunt_amt:custom")],
+            [btn(f"همه انرژی ({energy})", emoji_key="btn_autohunt", style=BATTLE, callback_data="autohunt_amt:all"),
+             btn(f"نصف ({half})", emoji_key="btn_autohunt", style=NAV, callback_data="autohunt_amt:half")],
+            [btn("انرژی دلخواه", emoji_key="btn_custom_amt", style=NAV, callback_data="autohunt_amt:custom")],
             [back_btn("menu:me", "انصراف")],
         ]),
     )
@@ -3674,6 +3738,19 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         from bot.handlers.purchase import handle_custom_amount as _buy_custom
 
         await _buy_custom(update, context, awaiting)
+        return
+
+    if action == "shop_buy_qty":
+        from bot.handlers.shop import handle_custom_qty_buy
+
+        raw = (text or "").strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
+        if not raw.isdigit() or int(raw) <= 0:
+            context.user_data[AWAITING_PLAYER_KEY] = awaiting
+            await message.reply_text("⚠️ لطفاً فقط یه عدد مثبت بفرست (مثلاً 10) — یا دستور دیگری بزن:")
+            return
+        await handle_custom_qty_buy(
+            update, context, awaiting["key"], int(raw), awaiting.get("shown_price"), awaiting.get("shown_currency")
+        )
         return
 
     if action == "set_lab_name":

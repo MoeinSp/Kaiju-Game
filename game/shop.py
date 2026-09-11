@@ -358,9 +358,16 @@ def offers_with_remaining(user: User) -> list[dict]:
     return offers
 
 
-def buy(user: User, key: str, shown_price: int | None = None, shown_currency: str | None = None) -> dict:
+def buy(
+    user: User,
+    key: str,
+    count: int = 1,
+    shown_price: int | None = None,
+    shown_currency: str | None = None,
+) -> dict:
     """Buy an offer that's in TODAY's shop. Repeatable unless the offer carries a
-    per-day purchase limit (owner-set: 1 / 2 / unlimited).
+    per-day purchase limit (owner-set: 1 / 2 / unlimited). Supports bulk purchase
+    via `count` for stackable offers (food/xp-capsules, speedup, resources).
 
     `shown_price`/`shown_currency` are what the player was actually shown (remembered
     server-side at render time). The charge is clamped so the player is NEVER billed
@@ -374,12 +381,14 @@ def buy(user: User, key: str, shown_price: int | None = None, shown_currency: st
     offer = offers.get(key)
     if offer is None:
         raise GameError("این آفر دیگه توی شاپ امروز نیست — دوباره شاپ رو باز کن.")
+    count = max(1, int(count))
     limit = int(offer.get("limit", 0) or 0)
     currency = offer["currency"]
-    price = offer["price"]
+    unit_price = offer["price"]
     # never charge more than what was displayed to the player
     if shown_price is not None and shown_currency == currency:
-        price = min(price, max(0, int(shown_price)))
+        unit_price = min(unit_price, max(0, int(shown_price)))
+    total_price = unit_price * count
 
     with transaction.atomic():
         user = User.objects.select_for_update().get(id=user.id)
@@ -390,18 +399,19 @@ def buy(user: User, key: str, shown_price: int | None = None, shown_currency: st
             purchase, _ = DailyShopPurchase.objects.select_for_update().get_or_create(
                 user=user, key=key, day=today_str()
             )
-            if purchase.count >= limit:
+            if purchase.count + count > limit:
+                rem = max(0, limit - purchase.count)
                 raise GameError(
-                    f"این آفر محدوده — امروز فقط {limit} بار می‌شه خریدش و سقفت رو زدی. فردا دوباره سر بزن."
+                    f"این آفر محدوده — امروز فقط {rem} عدد دیگه می‌تونی بخری (سقف کل روز: {limit})."
                 )
-        if _balance(user, currency) < price:
+        if _balance(user, currency) < total_price:
             unit = "الماس" if currency == "diamonds" else "طلا"
-            raise GameError(f"{unit} کافی نداری! این آفر {price} {unit} می‌خواد.")
+            raise GameError(f"{unit} کافی نداری! خرید {count:,} عدد نیاز به {total_price:,} {unit} داره (موجودی: {_balance(user, currency):,}).")
 
         if currency == "diamonds":
-            user.diamonds -= price
+            user.diamonds -= total_price
         else:
-            user.coins -= price
+            user.coins -= total_price
         user.save(update_fields=["diamonds", "coins"])
 
         # grant the offer's contents (coins/dna/diamonds/energy/speedup/creature/
@@ -409,12 +419,25 @@ def buy(user: User, key: str, shown_price: int | None = None, shown_currency: st
         # items and the custom daily-shop offers use.
         from game import itemshop
 
-        notes = itemshop.grant_contents(user, offer.get("contents", []))
+        scaled_contents = []
+        for c in offer.get("contents", []):
+            ct = c.get("type")
+            if ct == "xp_capsule":
+                scaled_contents.append({**c, "count": int(c.get("count", 1)) * count})
+            elif ct == "speedup":
+                scaled_contents.append({**c, "count": int(c.get("count", 1)) * count})
+            elif ct in ("coins", "diamonds", "dna"):
+                scaled_contents.append({**c, "amount": int(c.get("amount", 0)) * count})
+            else:
+                for _ in range(count):
+                    scaled_contents.append(c)
+
+        notes = itemshop.grant_contents(user, scaled_contents)
 
         if limit > 0:
-            purchase.count += 1
+            purchase.count += count
             purchase.save(update_fields=["count"])
-    return {**offer, "notes": notes}
+    return {**offer, "count": count, "total_price": total_price, "notes": notes}
 
 
 # ── Always-on gold exchange (diamonds → gold) ────────────────────────────────

@@ -23,9 +23,26 @@ def _item_line(item: Equipment) -> str:
 
     status = " · <i>(تجهیز شده)</i>" if item.equipped_on_id else ""
     return (
-        f"{constants.EQUIPMENT_SLOT_LABELS[item.slot]} — {item.name} "
+        f"{constants.EQUIPMENT_SLOT_LABELS[item.slot]} — {item.name} <code>#{item.id}</code> "
         f"{constants.RARITY_LABELS[item.rarity]} +{item.level} · 💪{equipment_power(item)}{status}"
     )
+
+
+def _item_detail_text(item: Equipment) -> str:
+    from game.equipment import equipment_power
+
+    status = "🟢 <b>تجهیز شده روی موجود فعال</b>" if item.equipped_on_id else "⚪️ <b>در کوله‌پشتی</b>"
+    lines = [
+        "🎒 <b>مشخصات تجهیزات</b>\n",
+        f"🏷 <b>نام:</b> {item.name}",
+        f"🆔 <b>کد تجهیز:</b> <code>#{item.id}</code>  <i>(لمس برای کپی)</i>",
+        f"📦 <b>جایگاه:</b> {constants.EQUIPMENT_SLOT_LABELS[item.slot]}",
+        f"✨ <b>نایابی:</b> {constants.RARITY_LABELS[item.rarity]}",
+        f"🎖 <b>سطح ارتقا:</b> +{item.level}/{constants.EQUIPMENT_MAX_LEVEL}",
+        f"💪 <b>قدرت افزوده:</b> +{equipment_power(item):,} توان",
+        f"📌 <b>وضعیت:</b> {status}",
+    ]
+    return "\n".join(lines)
 
 
 PAGE_SIZE = 10
@@ -180,7 +197,7 @@ async def inventory_pick_callback(update: Update, context: ContextTypes.DEFAULT_
         return
     await query.answer()
     await safe_edit_message_text(query,
-        _item_line(item), parse_mode="HTML", reply_markup=_item_detail_keyboard(item, len(dupes))
+        _item_detail_text(item), parse_mode="HTML", reply_markup=_item_detail_keyboard(item, len(dupes))
     )
 
 
@@ -202,8 +219,8 @@ async def inventory_equip_callback(update: Update, context: ContextTypes.DEFAULT
         return
     await query.answer("⚔️ تجهیز شد!")
     await safe_edit_message_text(query,
-        f"⚔️ {constants.EQUIPMENT_SLOT_LABELS[item.slot]} <b>{item.name}</b> +{item.level} روی موجود فعالت تجهیز شد!\n\n"
-        + _item_line(item),
+        f"⚔️ <b>{item.name}</b> روی موجود فعالت تجهیز شد!\n\n"
+        + _item_detail_text(item),
         parse_mode="HTML",
         reply_markup=_item_detail_keyboard(item, 0),
     )
@@ -225,7 +242,7 @@ async def inventory_unequip_callback(update: Update, context: ContextTypes.DEFAU
     _, dupes = await run_db(_item_detail_sync, update.effective_user, item_id)
     await query.answer("🎒 خارج شد.")
     await safe_edit_message_text(query,
-        f"🎒 {item.name} به کوله‌پشتی برگشت.\n\n" + _item_line(item),
+        f"🎒 <b>{item.name}</b> به کوله‌پشتی برگشت.\n\n" + _item_detail_text(item),
         parse_mode="HTML",
         reply_markup=_item_detail_keyboard(item, len(dupes)),
     )

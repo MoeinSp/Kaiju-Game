@@ -75,20 +75,85 @@ async def shop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
 
 
-def _buy_sync(tg_user, key, shown_price, shown_currency):
+def _buy_sync(tg_user, key, shown_price, shown_currency, count=1):
     user, _ = get_or_create_user(tg_user)
-    offer = shop.buy(user, key, shown_price=shown_price, shown_currency=shown_currency)
+    offer = shop.buy(user, key, count=count, shown_price=shown_price, shown_currency=shown_currency)
     user.refresh_from_db()  # buy() charges via a locked re-fetch; outer instance is stale
     return offer, shop.offers_with_remaining(user), user.coins, user.diamonds
+
+
+def is_quantity_offer(offer_or_key) -> bool:
+    key = offer_or_key if isinstance(offer_or_key, str) else offer_or_key.get("key", "")
+    return key in ("cap_small", "cap_medium", "cap_large")
+
+
+def _render_qty_picker(offer: dict, coins: int, diamonds: int) -> tuple[str, InlineKeyboardMarkup]:
+    key = offer["key"]
+    title = offer["title"]
+    emoji = offer["emoji"]
+    cur = "💎" if offer["currency"] == "diamonds" else "طلا"
+    price = offer["price"]
+    user_bal = diamonds if offer["currency"] == "diamonds" else coins
+    max_afford = user_bal // max(1, price)
+    rem = offer.get("remaining")
+    if rem is not None:
+        max_qty = min(max_afford, rem)
+    else:
+        max_qty = max_afford
+
+    lines = [
+        f"{emoji} <b>خرید {title}</b>\n",
+        f"💰 قیمت هر عدد: <b>{price:,}</b> {cur}",
+        f"👛 موجودی شما: <b>{user_bal:,}</b> {cur}",
+        f"📊 حداکثر قابل خرید با موجودی فعلی: <b>{max_qty:,}</b> عدد" + (f" <i>(سقف امروز: {rem})</i>" if rem is not None else ""),
+        "",
+        "چند عدد می‌خوای بخری؟",
+    ]
+
+    presets = [1, 5, 10, 25, 50, 100]
+    valid_presets = [p for p in presets if p <= max_qty]
+    if not valid_presets:
+        valid_presets = [1]
+
+    rows = []
+    btn_row = []
+    for p in valid_presets:
+        btn_row.append(btn(f"{p} عدد", style=SHOP, callback_data=f"shop_do_buy:{key}:{p}"))
+        if len(btn_row) == 3:
+            rows.append(btn_row)
+            btn_row = []
+    if btn_row:
+        rows.append(btn_row)
+
+    action_row = []
+    if max_qty > 1 and max_qty not in valid_presets:
+        action_row.append(btn(f"🛒 خرید حداکثر ({max_qty:,} عدد)", style=BUILD, callback_data=f"shop_do_buy:{key}:{max_qty}"))
+    action_row.append(btn("🔢 تعداد دلخواه", emoji_key="btn_custom_amt", style=NAV, callback_data=f"shop_custom_qty:{key}"))
+    rows.append(action_row)
+    rows.append([back_btn("menu:shop", "بازگشت به فروشگاه")])
+
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 async def shop_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     key = query.data.split(":")[1]
+    if is_quantity_offer(key):
+        offers, coins, diamonds = await run_db(_panel_sync, update.effective_user)
+        _remember_offers(context, offers)
+        target_offer = next((o for o in offers if o["key"] == key), None)
+        if target_offer is None:
+            await query.answer("این آفر در دسترس نیست.", show_alert=True)
+            return
+        await query.answer()
+        text, keyboard = _render_qty_picker(target_offer, coins, diamonds)
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        return
+
     shown = context.user_data.get(_SHOWN_OFFERS_KEY, {}).get(key, {})
     try:
         offer, offers, coins, diamonds = await run_db(
-            _buy_sync, update.effective_user, key, shown.get("price"), shown.get("currency")
+            _buy_sync, update.effective_user, key, shown.get("price"), shown.get("currency"), count=1
         )
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
@@ -99,6 +164,81 @@ async def shop_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await safe_edit_message_text(
         query,
         f"✅ <b>خرید موفق:</b> {offer['emoji']} {offer['title']}\n\n━━━━━━━━━━\n" + text,
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+async def shop_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    _, key, raw_count = query.data.split(":")
+    count = int(raw_count)
+    shown = context.user_data.get(_SHOWN_OFFERS_KEY, {}).get(key, {})
+    try:
+        offer, offers, coins, diamonds = await run_db(
+            _buy_sync, update.effective_user, key, shown.get("price"), shown.get("currency"), count=count
+        )
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    _remember_offers(context, offers)
+    await query.answer(f"✅ خریدی: {shop.offer_reward_text(offer)}")
+    text, keyboard = _render(offers, coins, diamonds)
+    tot_price = offer.get("total_price", offer["price"] * count)
+    cur = "💎" if offer["currency"] == "diamonds" else "طلا"
+    await safe_edit_message_text(
+        query,
+        f"✅ <b>خرید موفق ({count:,} عدد):</b> {offer['emoji']} {offer['title']}\n"
+        f"💳 کل مبلغ پرداختی: <b>{tot_price:,}</b> {cur}\n\n━━━━━━━━━━\n" + text,
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+async def shop_custom_qty_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    key = query.data.split(":")[1]
+    offers, coins, diamonds = await run_db(_panel_sync, update.effective_user)
+    _remember_offers(context, offers)
+    target_offer = next((o for o in offers if o["key"] == key), None)
+    if target_offer is None:
+        await query.answer("این آفر در دسترس نیست.", show_alert=True)
+        return
+    shown = context.user_data.get(_SHOWN_OFFERS_KEY, {}).get(key, {})
+    context.user_data["awaiting_player_input"] = {
+        "action": "shop_buy_qty",
+        "key": key,
+        "shown_price": shown.get("price"),
+        "shown_currency": shown.get("currency"),
+    }
+    await query.answer()
+    cur = "💎" if target_offer["currency"] == "diamonds" else "طلا"
+    await safe_edit_message_text(
+        query,
+        f"🔢 <b>خرید تعداد دلخواه {target_offer['emoji']} {target_offer['title']}</b>\n\n"
+        f"💰 قیمت هر عدد: <b>{target_offer['price']:,}</b> {cur}\n"
+        f"لطفاً <b>تعداد</b> مورد نظرت رو به صورت عدد انگلیسی یا فارسی بفرست (مثلاً 20):",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:shop", "انصراف")]]),
+    )
+
+
+async def handle_custom_qty_buy(update: Update, context: ContextTypes.DEFAULT_TYPE, key: str, qty: int, shown_price, shown_currency) -> None:
+    message = update.effective_message
+    try:
+        offer, offers, coins, diamonds = await run_db(
+            _buy_sync, update.effective_user, key, shown_price, shown_currency, count=qty
+        )
+    except GameError as exc:
+        await message.reply_text(f"⚠️ {exc}")
+        return
+    _remember_offers(context, offers)
+    text, keyboard = _render(offers, coins, diamonds)
+    tot_price = offer.get("total_price", offer["price"] * qty)
+    cur = "💎" if offer["currency"] == "diamonds" else "طلا"
+    await message.reply_text(
+        f"✅ <b>خرید موفق ({qty:,} عدد):</b> {offer['emoji']} {offer['title']}\n"
+        f"💳 کل مبلغ پرداختی: <b>{tot_price:,}</b> {cur}\n\n━━━━━━━━━━\n" + text,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -436,6 +576,8 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(gold_shop_panel, pattern=r"^gold_shop$"))
     application.add_handler(CallbackQueryHandler(gold_buy_callback, pattern=r"^gold_buy:\d+$"))
     application.add_handler(CallbackQueryHandler(shop_buy_callback, pattern=r"^shop_buy:"))
+    application.add_handler(CallbackQueryHandler(shop_do_buy_callback, pattern=r"^shop_do_buy:"))
+    application.add_handler(CallbackQueryHandler(shop_custom_qty_callback, pattern=r"^shop_custom_qty:"))
     application.add_handler(CommandHandler("shield", shield_shop_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(shield_arena_panel, pattern=r"^shield_arena$"))
     application.add_handler(CallbackQueryHandler(shield_buy_callback, pattern=r"^shield_buy:"))

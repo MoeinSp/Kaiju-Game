@@ -566,9 +566,9 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
         [
             btn("حمله!", emoji_key="btn_attack", style=BATTLE,
                 callback_data=_act("hunt_go", user.id, f"{target['tier']}:{target['seed']}")),
-            btn("بعدی", emoji_key="btn_recheck", style=NAV, callback_data=_act("hunt_next", user.id)),
+            btn("بعدی", emoji_key="btn_scout_next", style=NAV, callback_data=_act("hunt_next", user.id)),
         ],
-        [btn(f"⚡️ شکار خودکار (همه انرژی: {energy})", emoji_key="btn_attack", style=BATTLE,
+        [btn(f"شکار خودکار (همه انرژی: {energy})", emoji_key="btn_autohunt", style=BATTLE,
              callback_data=_act("autohunt", user.id))],
     ]
     return text, InlineKeyboardMarkup(rows)

@@ -130,6 +130,7 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_reset": ("صفر کردن", "♻️", "action"),
     "btn_last_season": ("نتایج هفته‌ی قبل", "🗓", "nav"),
     "btn_revenges": ("انتقام‌ها در آرنا", "⚔️", "action"),
+    "btn_scout_next": ("حریف بعدی", "🔍", "action"),
 }
 
 BUTTON_CATEGORY_LABELS: dict[str, str] = {
@@ -173,7 +174,13 @@ def get_button_icon(key: str) -> str | None:
     when the owner hasn't set one (the button then just shows its unicode fallback).
     Pure in-memory read — safe to call from async handler code."""
     override = _cache.get(key)
-    return override.custom_emoji_id if override is not None else None
+    if override is not None:
+        return override.custom_emoji_id
+    if key == "btn_scout_next":
+        fb = _cache.get("btn_recheck")
+        if fb is not None:
+            return fb.custom_emoji_id
+    return None
 
 
 def get_button_label_emoji(key: str) -> str:
