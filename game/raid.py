@@ -93,7 +93,8 @@ def _joined_alliance_today(user: User) -> bool:
 
 def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bool, int, int]:
     """Land one hit on the raid boss. Flat 5-minute cooldown between hits and a daily
-    cap of RAID_DAILY_ATTACKS. Returns (dmg, defeated, dna_gain, attacks_left_today)."""
+    cap of RAID_DAILY_ATTACKS. Reward (DNA + gold) is paid PER HIT, scaled by the landed
+    damage. Returns (dmg, defeated, dna_gain, coin_gain, attacks_left_today)."""
     from game.daily import get_daily_count
 
     # a brand-new alliance member can't raid until the next midnight. The message
@@ -127,12 +128,23 @@ def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bo
     base = max(1.0, stats["atk"] - _boss_def(boss.level) * 0.5)
     # a wider random swing than before makes each hit feel less deterministic
     dmg = round(base * mult * random.uniform(0.75, 1.3)) + stats["poison"]
+    # overkill doesn't count: cap the LANDED damage at the boss's remaining HP, so a huge
+    # hit on a low-HP (weak) boss lands little → small reward. This is what makes strong
+    # bosses (high HP, absorb full hits) worth far more than weak ones.
+    hp_before = boss.current_hp
+    dmg = min(dmg, hp_before)
 
-    boss.current_hp = max(0, boss.current_hp - dmg)
-    # each hit drips DNA scaled by how HARD the strike landed (1 … 50)
+    boss.current_hp = hp_before - dmg
+    # per-hit reward, paid IMMEDIATELY (no end-of-raid pool): both DNA and gold scale with
+    # the landed damage and cap at 500 DNA + 10,000 gold for a full-power hit.
     dna_gain = constants.raid_hit_dna(dmg)
+    coin_gain = constants.raid_hit_coins(dmg)
     user.dna_fragments += dna_gain
-    user.save(update_fields=["dna_fragments"])
+    user.coins += coin_gain
+    user.save(update_fields=["dna_fragments", "coins"])
+    from game.ledger import record_gain
+
+    record_gain(user, "raid", coins=coin_gain, dna=dna_gain)
     RaidDamageLog.objects.create(raid_id=boss.id, user_id=user.id, creature_id=creature.id, damage=dmg)
 
     defeated = boss.current_hp <= 0
@@ -146,42 +158,48 @@ def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bo
     boss.save()
     # attacks left AFTER this one is recorded (the caller records it right after)
     attacks_left = max(0, RAID_DAILY_ATTACKS - hits_today - 1)
-    return dmg, defeated, dna_gain, attacks_left
+    return dmg, defeated, dna_gain, coin_gain, attacks_left
+
+
+def _per_hit_totals(boss) -> dict[int, dict[str, int]]:
+    """Reconstruct each attacker's ACTUAL earned reward on this boss by summing the
+    per-hit DNA/gold over their logged hits (rewards are paid per hit now, not pooled).
+    Deterministic from the recorded landed damage, so it matches what they received."""
+    totals: dict[int, dict[str, int]] = {}
+    for e in RaidDamageLog.objects.filter(raid_id=boss.id):
+        t = totals.setdefault(e.user_id, {"damage": 0, "dna": 0, "coins": 0})
+        t["damage"] += e.damage
+        t["dna"] += constants.raid_hit_dna(e.damage)
+        t["coins"] += constants.raid_hit_coins(e.damage)
+    return totals
 
 
 def damage_leaderboard(alliance_id: int) -> dict | None:
     """Read-only standings for the ALLIANCE's active boss: each attacker's total damage
-    and the reward they'd get if the boss fell right now (same split as
-    distribute_rewards, but nothing is granted). None when there's no active boss."""
+    and the reward they've ALREADY earned from it (paid per hit). None when there's no
+    active boss."""
     from bio_lab.repository import display_name
 
     boss = get_active_boss(alliance_id)
     if boss is None:
         return None
-    level_mult = 1 + max(0, boss.level - 1) * REWARD_PER_LEVEL
-    dna_pool = round(DNA_REWARD_POOL_BASE * level_mult)
-    coin_pool = round(COIN_REWARD_POOL_BASE * level_mult)
-
-    totals: dict[int, int] = {}
-    for entry in RaidDamageLog.objects.filter(raid_id=boss.id):
-        totals[entry.user_id] = totals.get(entry.user_id, 0) + entry.damage
-    total_damage = sum(totals.values()) or 1
+    totals = _per_hit_totals(boss)
+    total_damage = sum(t["damage"] for t in totals.values()) or 1
 
     rows = []
-    for uid, dmg in sorted(totals.items(), key=lambda kv: kv[1], reverse=True):
-        share = dmg / total_damage
+    for uid, t in sorted(totals.items(), key=lambda kv: kv[1]["damage"], reverse=True):
         user = User.objects.filter(id=uid).first()
         rows.append({
             "name": display_name(user) if user else str(uid),
-            "damage": dmg,
-            "share_pct": round(share * 100),
-            "dna": round(dna_pool * share),
-            "coins": round(coin_pool * share),
+            "damage": t["damage"],
+            "share_pct": round(100 * t["damage"] / total_damage),
+            "dna": t["dna"],
+            "coins": t["coins"],
         })
     return {
         "boss_name": boss.name, "boss_level": boss.level,
         "hp": max(boss.current_hp, 0), "max_hp": boss.max_hp,
-        "total_damage": sum(totals.values()), "rows": rows,
+        "total_damage": sum(t["damage"] for t in totals.values()), "rows": rows,
     }
 
 
@@ -275,30 +293,7 @@ def settle_weekly_raid() -> list[tuple[int, str]]:
 
 
 def distribute_rewards(boss: RaidBoss) -> dict[int, dict[str, int]]:
-    level_mult = 1 + max(0, boss.level - 1) * REWARD_PER_LEVEL
-    dna_pool = round(DNA_REWARD_POOL_BASE * level_mult)
-    coin_pool = round(COIN_REWARD_POOL_BASE * level_mult)
-
-    logs = RaidDamageLog.objects.filter(raid_id=boss.id)
-    totals: dict[int, int] = {}
-    for entry in logs:
-        totals[entry.user_id] = totals.get(entry.user_id, 0) + entry.damage
-    total_damage = sum(totals.values()) or 1
-
-    rewards: dict[int, dict[str, int]] = {}
-    for user_id, dmg in totals.items():
-        share = dmg / total_damage
-        dna = round(dna_pool * share)
-        coins = round(coin_pool * share)
-        user = User.objects.filter(id=user_id).first()
-        if user is not None:
-            user.dna_fragments += dna
-            user.coins += coins
-            user.save(update_fields=["dna_fragments", "coins"])
-            if coins or dna:
-                from game.ledger import record_gain
-
-                record_gain(user, "raid", coins=coins, dna=dna)
-        rewards[user_id] = {"dna": dna, "coins": coins, "damage": dmg}
-
-    return rewards
+    """Called when the boss falls. Rewards are ALREADY paid per hit (see attack_boss),
+    so this grants NOTHING — it just returns each attacker's total damage and the DNA/gold
+    they earned across their hits, for the final-standings summary."""
+    return _per_hit_totals(boss)

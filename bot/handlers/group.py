@@ -820,7 +820,7 @@ def _attack_sync(chat, tg_user):
         raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
 
     spend_energy(user, constants.RAID_ATTACK_ENERGY_COST, "حمله")
-    dmg, defeated, dna_gain, attacks_left = attack_boss(user, creature, boss)
+    dmg, defeated, dna_gain, coin_gain, attacks_left = attack_boss(user, creature, boss)
     user.save(update_fields=["energy", "energy_updated_at"])
 
     record_action(user, "raid_attack")
@@ -844,7 +844,7 @@ def _attack_sync(chat, tg_user):
             )
         speedup_won = maybe_award_speedup_card(user)  # bonus chance for whoever lands the killing blow
 
-    return creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won, user.energy, dna_gain, attacks_left
+    return creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won, user.energy, dna_gain, coin_gain, attacks_left
 
 
 def _raid_precheck_sync(chat, tg_user):
@@ -864,7 +864,7 @@ def _raid_precheck_sync(chat, tg_user):
 
 
 def _raid_attack_view(creature, boss, dmg, defeated, completed_missions, reward_lines,
-                      speedup_won, energy_left, dna_gain, attacks_left) -> str:
+                      speedup_won, energy_left, dna_gain, coin_gain, attacks_left) -> str:
     from bot.handlers.private import pct_bar as _pct_bar
 
     hp = max(boss.current_hp, 0)
@@ -882,7 +882,7 @@ def _raid_attack_view(creature, boss, dmg, defeated, completed_missions, reward_
         "",
         div,
         "",
-        f"🎁 پاداش این ضربه: +{dna_gain} {get_emoji('dna')}",
+        f"🎁 پاداش این ضربه: +{coin_gain:,} {get_emoji('coin')} · +{dna_gain} {get_emoji('dna')}",
         f"{get_emoji('raid_attacks_left')} اتک رید باقی‌مانده‌ی امروز: <b>{attacks_left}</b> از {RAID_DAILY_ATTACKS}",
     ]
     text = "\n".join(lines) + _mission_lines(completed_missions)
@@ -933,7 +933,7 @@ async def raid_attack_confirm_callback(update: Update, context: ContextTypes.DEF
         await query.answer("این دکمه مال تو نیست 🙂", show_alert=True)
         return
     try:
-        creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won, energy_left, dna_gain, attacks_left = await run_db(
+        creature, boss, dmg, defeated, completed_missions, reward_lines, speedup_won, energy_left, dna_gain, coin_gain, attacks_left = await run_db(
             _attack_sync, update.effective_chat, update.effective_user
         )
     except (RaidError, GameError) as exc:
@@ -945,7 +945,7 @@ async def raid_attack_confirm_callback(update: Update, context: ContextTypes.DEF
         return
 
     text = _raid_attack_view(creature, boss, dmg, defeated, completed_missions, reward_lines,
-                             speedup_won, energy_left, dna_gain, attacks_left)
+                             speedup_won, energy_left, dna_gain, coin_gain, attacks_left)
     # compact: two icon-only buttons (raid table + overall raid rank), no PM shortcut
     row = []
     if not defeated:
@@ -995,7 +995,7 @@ def _raid_leaderboard_text(lb: dict) -> str:
             lines.append(f"{_raid_rank_label(i)} {r['name']}")
             lines.append(
                 f"{_RAID_BRANCH} {get_emoji('crit')} {r['damage']:,} ({r['share_pct']}٪) · "
-                f"{get_emoji('gift')} {r['dna']:,} {get_emoji('dna')}"
+                f"{get_emoji('gift')} {r['coins']:,} {get_emoji('coin')} · {r['dna']:,} {get_emoji('dna')}"
             )
     return "\n".join(lines)
 

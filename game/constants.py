@@ -1166,16 +1166,27 @@ ARENA_WIN_DNA_BASE = 2
 ARENA_WIN_DNA_PER_LEVEL = 0.2
 GROUP_ATTACK_WIN_DNA = 3   # winning a group «اتک» on a player
 RAID_HIT_DNA = 1           # legacy flat drip (kept for back-compat); see raid_hit_dna()
-# per-hit DNA now scales with the STRENGTH of the strike (damage dealt): a weak poke
-# pays the floor, a full-power hit from a maxed, fully-geared kaiju pays the cap.
-# Reward ×10 per owner request (rate/floor/cap all scaled together): floor 10, cap 500.
-RAID_HIT_DNA_PER_DAMAGE = 1.0
-RAID_HIT_DNA_MIN = 10
+# Per-hit raid reward — paid IMMEDIATELY on every hit (no end-of-raid pool). Both DNA
+# and gold scale with the damage that ACTUALLY LANDED (overkill on a low-HP boss doesn't
+# count — see attack_boss), and both hit their cap at RAID_REWARD_MAX_DAMAGE landed
+# damage. Calibrated so a full-max mythic + max research landing its top hit on a strong
+# boss earns the cap (500 DNA + 10,000 gold); a weak boss (HP-capped landed damage) or a
+# weak kaiju earns proportionally less — which is what pushes players toward strong bosses.
+RAID_REWARD_MAX_DAMAGE = 1000        # landed damage that maxes the per-hit reward
 RAID_HIT_DNA_MAX = 500
+RAID_HIT_DNA_MIN = 10
+RAID_HIT_COIN_MAX = 10_000
+RAID_HIT_COIN_MIN = 200
 
 
 def raid_hit_dna(damage: int) -> int:
-    return max(RAID_HIT_DNA_MIN, min(RAID_HIT_DNA_MAX, round(max(0, damage) * RAID_HIT_DNA_PER_DAMAGE)))
+    frac = min(1.0, max(0, damage) / RAID_REWARD_MAX_DAMAGE)
+    return max(RAID_HIT_DNA_MIN, min(RAID_HIT_DNA_MAX, round(RAID_HIT_DNA_MAX * frac)))
+
+
+def raid_hit_coins(damage: int) -> int:
+    frac = min(1.0, max(0, damage) / RAID_REWARD_MAX_DAMAGE)
+    return max(RAID_HIT_COIN_MIN, min(RAID_HIT_COIN_MAX, round(RAID_HIT_COIN_MAX * frac)))
 ARENA_MATCH_CUP_BAND = 500  # real opponents within +/- this cup range are eligible (closer cups preferred)
 ARENA_STARTING_CUP = 0
 
