@@ -226,7 +226,7 @@ def element_advantage_line(my_elem, opp_elem) -> str:
     return "➖ بدون مزیت عنصری"
 
 
-def creature_card_text(user, creature, equipped_items: list | None = None) -> str:
+def creature_card_text(user, creature, equipped_items: list | None = None, *, compact: bool = False) -> str:
     """The main dashboard shown on /start and /me: base + resources, the active
     creature's identity/level/XP, its combat stats, the full gear loadout, and any
     active defensive shields — each in its own clearly divided block."""
@@ -240,6 +240,43 @@ def creature_card_text(user, creature, equipped_items: list | None = None) -> st
     power = _creature_power(creature, equipped_items)
 
     lp = lab_progress(user)
+    max_level = constants.creature_max_level(creature.rarity, creature.star_level)
+    xp_needed = constants.xp_for_creature_level(creature.level)
+    is_maxed = creature.level >= max_level
+    stars = get_emoji("star") * creature.star_level
+
+    if compact:
+        lines = [
+            f"🏰 <b>{lab_display(user)}</b> (سطح {lp['level']})",
+            f"💰 {user.coins:,} {get_emoji('coin')} ┃ 🧬 {user.dna_fragments:,} {get_emoji('dna')} ┃ 💎 {user.diamonds:,} {get_emoji('diamond')} ┃ {get_emoji('energy')} {energy}/{constants.MAX_ENERGY}",
+            "",
+            f"{get_emoji('creature')} <b>{creature_name(creature)}</b> <code>#{creature.id}</code>",
+            f"{constants.RARITY_LABELS[creature.rarity]} {stars} ┃ {constants.element_label(creature.element)}",
+            f"🎖 سطح: <b>{creature.level}/{max_level}</b>" + ("  ✅" if is_maxed else f" ({pct_bar(creature.xp, xp_needed, 6)})"),
+            f"💪 قدرت کل: <b>{power:,}</b>",
+            f"{get_emoji('hp')} {stats['hp']}  {get_emoji('atk')} {stats['atk']}  {get_emoji('def')} {stats['def']}  {get_emoji('spd')} {stats['spd']}",
+        ]
+        by_slot = {i.slot: i for i in (equipped_items or [])}
+        gear_parts = []
+        for slot in constants.EQUIPMENT_SLOTS:
+            it = by_slot.get(slot)
+            if it:
+                gear_parts.append(f"{constants.EQUIPMENT_SLOT_LABELS[slot][:4]}: {it.name}+{it.level}")
+        if gear_parts:
+            lines.append("🎒 " + " ┃ ".join(gear_parts))
+
+        arena_secs = shield_remaining_seconds(user)
+        group_secs = group_shield_remaining_seconds(user)
+        if arena_secs > 0 or group_secs > 0:
+            shields = []
+            if arena_secs > 0:
+                shields.append(f"آرنا: {_fmt_shield_remaining(arena_secs)}")
+            if group_secs > 0:
+                shields.append(f"گروه: {_fmt_shield_remaining(group_secs)}")
+            lines.append(f"🛡 {', '.join(shields)}")
+
+        return "\n".join(lines)
+
     if lp["is_max"]:
         lab_line = f"🧪 سطح آزمایشگاه: <b>{lp['level']}</b> (بیشینه)"
     else:
@@ -251,11 +288,6 @@ def creature_card_text(user, creature, equipped_items: list | None = None) -> st
     else:
         en_line = (f"{get_emoji('energy')} انرژی: {pct_bar(energy, constants.MAX_ENERGY)} "
                    f"({energy}/{constants.MAX_ENERGY}) ⏳ شارژ بعدی: ~{minutes_until_next_point(user)} دقیقه")
-
-    max_level = constants.creature_max_level(creature.rarity, creature.star_level)
-    xp_needed = constants.xp_for_creature_level(creature.level)
-    is_maxed = creature.level >= max_level
-    stars = get_emoji("star") * creature.star_level
 
     lines = [
         f"🏰 پایگاه و آزمایشگاه: <b>{lab_display(user)}</b>",
@@ -1230,12 +1262,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         streak_line = f"🔥 <b>{login_bonus['streak']} روز پشت‌سرهم</b> اومدی! +{login_bonus['coins']} {get_emoji('coin')}"
         if login_bonus["dna"]:
             streak_line += f" +{login_bonus['dna']} {get_emoji('dna')}"
-        lines.append(streak_line + "\n")
+    from game.media import get_creature_image_path
 
-    lines.append(creature_card_text(user, creature, equipped_items))
+    creature_photo = get_creature_image_path(creature)
+    lines.append(creature_card_text(user, creature, equipped_items, compact=bool(creature_photo)))
     is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
-    await update.message.reply_text(
-        "\n".join(lines), parse_mode="HTML",
+    await send_screen(
+        update,
+        "\n".join(lines),
+        photo=creature_photo,
+        parse_mode="HTML",
         reply_markup=creature_keyboard(is_owner, _locked_actions_for(hall_level), research_built),
     )
 
@@ -1262,8 +1298,11 @@ async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
     is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
+    from game.media import get_creature_image_path
+    photo_path = get_creature_image_path(creature)
     await send_screen(update,
-        creature_card_text(user, creature, equipped_items),
+        creature_card_text(user, creature, equipped_items, compact=bool(photo_path)),
+        photo=photo_path,
         parse_mode="HTML",
         reply_markup=creature_keyboard(is_owner, _locked_actions_for(hall_level), research_built),
     )
@@ -1659,8 +1698,11 @@ async def collection_pick_callback(update: Update, context: ContextTypes.DEFAULT
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
+    from game.media import get_creature_image_path
+    photo_path = get_creature_image_path(creature)
     await safe_edit_message_text(query,
         collection_creature_detail_text(creature, equipped_items),
+        photo=photo_path,
         parse_mode="HTML",
         reply_markup=_creature_detail_keyboard(creature.id, creature.is_active),
     )
@@ -1780,8 +1822,11 @@ async def collection_select_callback(update: Update, context: ContextTypes.DEFAU
         return
     is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
     await query.answer("🟢 انتخاب شد!")
+    from game.media import get_creature_image_path
+    photo_path = get_creature_image_path(creature)
     await safe_edit_message_text(query,
-        f"🟢 <b>{creature_name(creature)}</b> حالا موجود فعالته!\n\n" + creature_card_text(user, creature, equipped_items),
+        f"🟢 <b>{creature_name(creature)}</b> حالا موجود فعالته!\n\n" + creature_card_text(user, creature, equipped_items, compact=bool(photo_path)),
+        photo=photo_path,
         parse_mode="HTML",
         reply_markup=creature_keyboard(is_owner),
     )

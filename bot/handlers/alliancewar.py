@@ -64,7 +64,11 @@ async def perks_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await safe_edit_message_text(query, "توی هیچ اتحادی نیستی.", reply_markup=InlineKeyboardMarkup([[back_btn("menu:me")]]))
         return
     text, keyboard = _perks_render(info)
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_alliance_building_image_path
+    hall_b = next((b for b in info["buildings"] if b["key"] == "hall"), None)
+    hall_lvl = hall_b["level"] if hall_b else 1
+    photo_path = get_alliance_building_image_path("hall", hall_lvl)
+    await safe_edit_message_text(query, text, photo=photo_path, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _vault_collect_sync(tg_user):
@@ -82,7 +86,9 @@ async def vault_collect_callback(update: Update, context: ContextTypes.DEFAULT_T
         return
     await query.answer(f"🏦 {result['income']} طلا به خزانه اضافه شد!")
     text, keyboard = _perks_render(info)
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_alliance_building_image_path
+    photo_path = get_alliance_building_image_path("vault", next((b["level"] for b in info["buildings"] if b["key"] == "vault"), 1))
+    await safe_edit_message_text(query, text, photo=photo_path, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _buy_sync(tg_user, perk_key):
@@ -101,7 +107,10 @@ async def perk_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
     await query.answer("✅ پرک ارتقا یافت!")
     text, keyboard = _perks_render(info)
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_alliance_building_image_path
+    b_lvl = next((b["level"] for b in info["buildings"] if b["key"] == perk_key), 1)
+    photo_path = get_alliance_building_image_path(perk_key, b_lvl)
+    await safe_edit_message_text(query, text, photo=photo_path, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _war_sync(tg_user):

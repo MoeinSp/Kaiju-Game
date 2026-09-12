@@ -354,9 +354,12 @@ async def building_pick_callback(update: Update, context: ContextTypes.DEFAULT_T
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
-    await safe_edit_message_text(
-        query,
+    from game.media import get_building_image_path
+    photo_path = get_building_image_path(view["building"].building_type, view["building"].level)
+    await send_screen(
+        update,
         _building_detail_text(view),
+        photo=photo_path,
         parse_mode="HTML",
         reply_markup=_building_detail_keyboard(view),
     )
@@ -391,9 +394,12 @@ async def building_collect_callback(update: Update, context: ContextTypes.DEFAUL
             f"{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}"
             for m in completed_missions
         )
-    await safe_edit_message_text(
-        query,
+    from game.media import get_building_image_path
+    photo_path = get_building_image_path(view["building"].building_type, view["building"].level)
+    await send_screen(
+        update,
         text,
+        photo=photo_path,
         parse_mode="HTML",
         reply_markup=_building_detail_keyboard(view),
     )
@@ -422,9 +428,12 @@ async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAUL
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("🏗 ساخت شروع شد!" if view["building"].level == 0 else "🔧 ارتقا شروع شد!")
+    from game.media import get_building_image_path
+    photo_path = get_building_image_path(view["building"].building_type, view["building"].level)
     await safe_edit_message_text(
         query,
         _building_detail_text(view),
+        photo=photo_path,
         parse_mode="HTML",
         reply_markup=_building_detail_keyboard(view),
     )
@@ -515,9 +524,12 @@ async def building_finish_callback(update: Update, context: ContextTypes.DEFAULT
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer(f"💎 −{cost} — تموم شد!")
+    from game.media import get_building_image_path
+    photo_path = get_building_image_path(view["building"].building_type, view["building"].level)
     await safe_edit_message_text(
         query,
         f"💎 <b>با {cost} الماس تموم شد!</b>\n\n" + _building_detail_text(view),
+        photo=photo_path,
         parse_mode="HTML",
         reply_markup=_building_detail_keyboard(view),
     )

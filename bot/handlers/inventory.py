@@ -196,8 +196,13 @@ async def inventory_pick_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()
+    from game.media import get_equipment_image_path
+    photo_path = get_equipment_image_path(item)
     await safe_edit_message_text(query,
-        _item_detail_text(item), parse_mode="HTML", reply_markup=_item_detail_keyboard(item, len(dupes))
+        _item_detail_text(item),
+        photo=photo_path,
+        parse_mode="HTML",
+        reply_markup=_item_detail_keyboard(item, len(dupes)),
     )
 
 
@@ -218,9 +223,12 @@ async def inventory_equip_callback(update: Update, context: ContextTypes.DEFAULT
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("⚔️ تجهیز شد!")
+    from game.media import get_equipment_image_path
+    photo_path = get_equipment_image_path(item)
     await safe_edit_message_text(query,
         f"⚔️ <b>{item.name}</b> روی موجود فعالت تجهیز شد!\n\n"
         + _item_detail_text(item),
+        photo=photo_path,
         parse_mode="HTML",
         reply_markup=_item_detail_keyboard(item, 0),
     )
@@ -241,8 +249,11 @@ async def inventory_unequip_callback(update: Update, context: ContextTypes.DEFAU
         return
     _, dupes = await run_db(_item_detail_sync, update.effective_user, item_id)
     await query.answer("🎒 خارج شد.")
+    from game.media import get_equipment_image_path
+    photo_path = get_equipment_image_path(item)
     await safe_edit_message_text(query,
         f"🎒 <b>{item.name}</b> به کوله‌پشتی برگشت.\n\n" + _item_detail_text(item),
+        photo=photo_path,
         parse_mode="HTML",
         reply_markup=_item_detail_keyboard(item, len(dupes)),
     )
@@ -287,8 +298,11 @@ async def inventory_upgrade_do_callback(update: Update, context: ContextTypes.DE
         return
     _, dupes = await run_db(_item_detail_sync, update.effective_user, int(item_id))
     await query.answer("✨ ارتقا یافت!")
+    from game.media import get_equipment_image_path
+    photo_path = get_equipment_image_path(item)
     await safe_edit_message_text(query,
         f"✨ {item.name} به <b>+{item.level}</b> ارتقا یافت!\n\n" + _item_line(item),
+        photo=photo_path,
         parse_mode="HTML",
         reply_markup=_item_detail_keyboard(item, len(dupes)),
     )

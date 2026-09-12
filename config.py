@@ -40,3 +40,5 @@ if WEBHOOK_URL and not WEBHOOK_SECRET:
         "WEBHOOK_URL is set but WEBHOOK_SECRET is empty — refusing to expose an "
         "unauthenticated webhook. Generate one with: openssl rand -hex 32"
     )
+
+PROXY_URL = os.environ.get("PROXY_URL", os.environ.get("HTTPS_PROXY", "")).strip()

@@ -51,7 +51,7 @@ from bot.handlers import (
     welcome,
     wheel,
 )
-from config import BOT_TOKEN, WEBHOOK_PORT, WEBHOOK_SECRET, WEBHOOK_URL  # noqa: E402
+from config import BOT_TOKEN, PROXY_URL, WEBHOOK_PORT, WEBHOOK_SECRET, WEBHOOK_URL  # noqa: E402
 from game import admins, botconfig  # noqa: E402
 from game.theme import refresh_theme_caches  # noqa: E402
 
@@ -190,7 +190,10 @@ def main() -> None:
     # strictly one-at-a-time, so one slow handler (or a JobQueue tick) never blocks
     # everyone else's taps. Paired with the thread-pool run_db (bot/utils), this is
     # what keeps the bot responsive under load — NOT any outgoing rate limit.
-    application = Application.builder().token(BOT_TOKEN).concurrent_updates(True).build()
+    builder = Application.builder().token(BOT_TOKEN).concurrent_updates(True)
+    if PROXY_URL:
+        builder = builder.proxy(PROXY_URL).get_updates_proxy(PROXY_URL)
+    application = builder.build()
     _install_premium_glyph_hook(application)
 
     middleware.register(application)
