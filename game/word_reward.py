@@ -87,6 +87,8 @@ def _roll_prize(user: User) -> tuple[str, int, int, str | None]:
     # gold / DNA / jackpot scale with the player's power; speed-up cards & food don't
     if kind in ("coins", "jackpot", "dna"):
         amount = round(amount * _reward_scale(user))
+        if kind == "jackpot":
+            amount = min(amount, constants.JACKPOT_DROP_MAX_COINS)
     minutes = 0
     food_tier = None
     if kind in ("coins", "jackpot"):

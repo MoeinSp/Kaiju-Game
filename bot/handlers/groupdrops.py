@@ -29,6 +29,12 @@ def _spawn_text(d: dict) -> str:
             "🔥 یه صندوق پر از طلا افتاد وسط چت!\n"
             "⚡️ اولین نفری که بزنه روی دکمه همه رو می‌بره:"
         )
+    if d["kind"] == "jackpot":
+        return (
+            "🌟 <b>ظهور جک‌پات نادر!</b>\n"
+            "💰 جایزه بزرگ طلا (تا سقف ۱۰,۰۰۰ طلا بر اساس قدرت کایجو)!\n"
+            "⚡️ اولین نفری که بزنه برنده می‌شه:"
+        )
     return (
         f"{d['emoji']} <b>{d['title']}</b>\n{d['flavor']}\n\n"
         "<i>اولین نفری که بزنه می‌بره! 👇</i>"
@@ -50,14 +56,20 @@ def _win_text(kind: str, who: str, reward: dict) -> str:
     if kind == "capsule":
         return (
             f"🔋⚡️ {who} کپسول رو هوا زد!\n"
-            f"🎁 {coins} طلا و انرژی کامل واریز شد."
+            f"🎁 {coins:,} طلا و انرژی کامل واریز شد."
         )
     if kind == "ambush":
         return (
             "⚔️ <b>رویداد: شکست هیولای وحشی</b>\n\n"
             f"🥇 قاتل هیولا: {who}\n"
-            f"{get_emoji('coin')} طلا: {coins}\n"
-            f"{get_emoji('dna')} دی‌ان‌ای: {dna}"
+            f"{get_emoji('coin')} طلا: {coins:,}\n"
+            f"{get_emoji('dna')} دی‌ان‌ای: {dna:,}"
+        )
+    if kind == "jackpot":
+        return (
+            "🌟 <b>برنده‌ی جک‌پات نادر!</b>\n\n"
+            f"🎉 {who} با مهارت تمام جک‌پات رو زد!\n"
+            f"💰 پاداش بزرگ: <b>{coins:,} طلا</b> واریز شد."
         )
     cfg = groupdrops.DROP_KINDS[kind]
     return (
@@ -192,6 +204,11 @@ async def drop_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     elif status == "capsule_limit":
         await query.answer(
             "⚡ کپسول انرژی رو امروز قبلاً گرفتی (روزی فقط یک‌بار). فردا دوباره سر بزن.",
+            show_alert=True,
+        )
+    elif status == "jackpot_limit":
+        await query.answer(
+            f"🌟 سقف امروزت برای جک‌پات پر شده (روزی حداکثر {result['cap']} بار). فردا دوباره شانس داری!",
             show_alert=True,
         )
     elif status == "expired":

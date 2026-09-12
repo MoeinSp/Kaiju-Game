@@ -47,7 +47,7 @@ DROP_KINDS = {
                 "btn": "⚡ بگیرش!", "res": {"energy": "full", "coins": (200, 480)}, "weight": 3},
     "jackpot": {"emoji": "🌟", "title": "جک‌پات نادر", "flavor": "🌟 یه جک‌پات نادر ظاهر شد!!",
                 # gem jackpots are gone from groups — the diamonds are replaced by quadrupled gold
-                "btn": "🌟 شانستو امتحان کن!", "res": {"coins": (2400, 4800)}, "weight": 1},
+                "btn": "🌟 شانستو امتحان کن!", "res": {"coins": (1200, 10000)}, "weight": 1},
 }
 
 
@@ -90,9 +90,22 @@ DROP_POWER_FACTOR = 0.0030
 
 def reward_for(user: User, kind: str) -> dict:
     """Random reward for `kind`. The vein is a flat, power-independent diamond roll;
+    rare jackpot scales with power up to a hard cap of 10,000;
     every other drop scales with the claimer's lab level and (heavily) creature power."""
     if kind == "vein":
         return {"diamonds": random.randint(VEIN_DIAMONDS_MIN, VEIN_DIAMONDS_MAX)}
+    if kind == "jackpot":
+        power = _active_power(user)
+        power_ratio = min(1.0, max(0, power) / 3500.0)
+        lab_lvl = lab.lab_level(user)
+        min_coins = round(1200 + (7500 - 1200) * power_ratio) + lab_lvl * 100
+        max_coins = round(2000 + (constants.JACKPOT_DROP_MAX_COINS - 2000) * power_ratio) + lab_lvl * 100
+        min_coins = min(min_coins, constants.JACKPOT_DROP_MAX_COINS)
+        max_coins = min(max_coins, constants.JACKPOT_DROP_MAX_COINS)
+        if min_coins > max_coins:
+            min_coins = max_coins
+        coins = min(constants.JACKPOT_DROP_MAX_COINS, random.randint(min_coins, max_coins))
+        return {"coins": coins}
     cfg = DROP_KINDS[kind]
     scale = 1 + lab.lab_level(user) * 0.06 + _active_power(user) * DROP_POWER_FACTOR
     out: dict = {}
@@ -110,11 +123,11 @@ def reward_for(user: User, kind: str) -> dict:
 def reward_text(reward: dict) -> str:
     parts = []
     if reward.get("coins"):
-        parts.append(f"{reward['coins']} طلا")
+        parts.append(f"{reward['coins']:,} طلا")
     if reward.get("dna"):
-        parts.append(f"{reward['dna']} DNA")
+        parts.append(f"{reward['dna']:,} DNA")
     if reward.get("diamonds"):
-        parts.append(f"{reward['diamonds']} 💎")
+        parts.append(f"{reward['diamonds']:,} 💎")
     if reward.get("energy") == "full":
         parts.append("انرژی کامل")
     return " + ".join(parts) or "—"
@@ -227,6 +240,13 @@ def claim(drop_id: int, tg_user) -> dict:
 
         if get_daily_count(user, "energy_capsule") >= 1:
             return {"status": "capsule_limit"}
+    # the rare jackpot has a daily limit per player
+    is_jackpot = drop.kind == "jackpot"
+    if is_jackpot:
+        from game.daily import get_daily_count
+
+        if get_daily_count(user, "group_jackpot") >= constants.JACKPOT_DROP_DAILY_CAP:
+            return {"status": "jackpot_limit", "cap": constants.JACKPOT_DROP_DAILY_CAP}
     reward = reward_for(user, drop.kind)
     # grant
     fields = ["drop_claim_ready_at"]
@@ -258,6 +278,10 @@ def claim(drop_id: int, tg_user) -> dict:
         from game.daily import record_action as _record_action
 
         _record_action(user, "energy_capsule")
+    if is_jackpot:
+        from game.daily import record_action as _record_action
+
+        _record_action(user, "group_jackpot")
 
     drop.claimed_by = user
     drop.claimed_at = timezone.now()
