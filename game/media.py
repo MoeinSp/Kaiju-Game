@@ -13,9 +13,13 @@ ALLIANCE_DIR = ASSETS_DIR / "alliance"
 EQUIPMENT_DIR = ASSETS_DIR / "equipment"
 BANNERS_DIR = ASSETS_DIR / "banners"
 CACHE_DIR = ASSETS_DIR / "cache"
+FEATURES_DIR = ASSETS_DIR / "features"
+DROPS_DIR = ASSETS_DIR / "drops"
 FONTS_DIR = BASE_DIR / "assets" / "fonts"
 
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
+FEATURES_DIR.mkdir(parents=True, exist_ok=True)
+DROPS_DIR.mkdir(parents=True, exist_ok=True)
 FONTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -680,4 +684,42 @@ def get_lab_overview_image_path(user, creature, buildings: list | None = None) -
         if default_hall.exists():
             return str(default_hall)
         return None
+
+
+def get_cave_image_path() -> str | None:
+    """Returns the path to the monster cave illustration."""
+    path = FEATURES_DIR / "cave.jpg"
+    if path.exists():
+        return str(path)
+    return None
+
+
+def get_notify_image_path(kind: str) -> str | None:
+    """Returns the notification artwork path for the given kind ('transfer', 'energy', 'war_win')."""
+    mapping = {
+        "transfer": "notify_transfer.jpg",
+        "energy": "notify_energy.jpg",
+        "energy_full": "notify_energy.jpg",
+        "war_win": "notify_war_win.jpg",
+        "war_reward": "notify_war_win.jpg",
+    }
+    filename = mapping.get(kind)
+    if filename:
+        path = FEATURES_DIR / filename
+        if path.exists():
+            return str(path)
+    return None
+
+
+def get_drop_image_path(kind: str) -> str | None:
+    """Returns the artwork path for group flash drop of the given kind ('chest', 'ambush', 'vein', etc.)."""
+    filename = f"drop_{kind}.jpg"
+    path = DROPS_DIR / filename
+    if path.exists():
+        return str(path)
+    # fallback to chest
+    fallback = DROPS_DIR / "drop_chest.jpg"
+    if fallback.exists():
+        return str(fallback)
+    return None
 

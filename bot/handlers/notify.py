@@ -6,13 +6,15 @@ no external cron — one repeating job, same event loop as the webhook listener.
 """
 
 import asyncio
+import os
 
 from telegram import InlineKeyboardMarkup, Update
 from telegram.error import Forbidden, TelegramError
 from telegram.ext import ContextTypes, TypeHandler
 
 from bot.buttons import DANGER, NAV, btn
-from bot.utils import run_db
+from bot.utils import get_cached_file_id, invalidate_cached_file_id, run_db, store_cached_file_id
+from game.media import get_notify_image_path
 from game.notifications import collect_due, collect_immediate_levelups
 
 NOTIFY_INTERVAL_SECONDS = 300  # scan every 5 minutes — finer than any timer needs
@@ -133,16 +135,40 @@ async def notify_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         user_id, text = item[0], item[1]
         marker = item[2] if len(item) > 2 else None
         payload = item[3] if len(item) > 3 else None
+        photo_path = None
         if marker == "arena":
             reply_markup = _arena_button()
+            photo_path = get_notify_image_path("energy")
         elif marker == "lab_unlock":
             reply_markup = _lab_unlock_keyboard(payload)
+        elif marker == "war_settle":
+            reply_markup = None
+            if payload:  # won
+                photo_path = get_notify_image_path("war_win")
         else:
             reply_markup = _defense_details_button(payload)
         try:
-            await context.bot.send_message(
-                chat_id=user_id, text=text, parse_mode="HTML", reply_markup=reply_markup
-            )
+            if photo_path and os.path.exists(photo_path):
+                cached_fid = get_cached_file_id(photo_path)
+                if cached_fid:
+                    try:
+                        await context.bot.send_photo(
+                            chat_id=user_id, photo=cached_fid, caption=text, parse_mode="HTML", reply_markup=reply_markup
+                        )
+                        await asyncio.sleep(SEND_DELAY_SECONDS)
+                        continue
+                    except Exception:
+                        invalidate_cached_file_id(photo_path)
+                with open(photo_path, "rb") as f:
+                    res = await context.bot.send_photo(
+                        chat_id=user_id, photo=f, caption=text, parse_mode="HTML", reply_markup=reply_markup
+                    )
+                if res and res.photo:
+                    store_cached_file_id(photo_path, res.photo[-1].file_id)
+            else:
+                await context.bot.send_message(
+                    chat_id=user_id, text=text, parse_mode="HTML", reply_markup=reply_markup
+                )
         except Forbidden:
             await run_db(_opt_out, user_id)  # blocked the bot / never opened DMs
         except TelegramError:

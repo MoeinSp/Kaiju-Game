@@ -245,10 +245,16 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
     is_maxed = creature.level >= max_level
     stars = get_emoji("star") * creature.star_level
 
+    if lp["is_max"]:
+        lab_badge = f"{get_emoji('lab')} سطح <b>{lp['level']}</b> (بیشینه)"
+    else:
+        pct = int(round((lp['into'] / lp['span']) * 100)) if lp.get('span') else 0
+        lab_badge = f"{get_emoji('lab')} سطح <b>{lp['level']}</b> ({pct}٪ <code>{lp['into']}/{lp['span']}</code>)"
+
     if compact:
         lines = [
-            f"🏰 <b>{lab_display(user)}</b> (سطح {lp['level']})",
-            f"💰 {user.coins:,} {get_emoji('coin')} ┃ 🧬 {user.dna_fragments:,} {get_emoji('dna')} ┃ 💎 {user.diamonds:,} {get_emoji('diamond')} ┃ {get_emoji('energy')} {energy}/{constants.MAX_ENERGY}",
+            f"🏰 <b>{lab_display(user)}</b> ┃ {lab_badge}",
+            f"{get_emoji('coin')} <b>{user.coins:,}</b> ┃ {get_emoji('dna')} <b>{user.dna_fragments:,}</b> ┃ {get_emoji('diamond')} <b>{user.diamonds:,}</b> ┃ {get_emoji('energy')} <b>{energy}/{constants.MAX_ENERGY}</b>",
             "",
             f"{get_emoji('creature')} <b>{creature_name(creature)}</b> <code>#{creature.id}</code>",
             f"{constants.RARITY_LABELS[creature.rarity]} {stars} ┃ {constants.element_label(creature.element)}",
@@ -278,10 +284,10 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
         return "\n".join(lines)
 
     if lp["is_max"]:
-        lab_line = f"🧪 سطح آزمایشگاه: <b>{lp['level']}</b> (بیشینه)"
+        lab_line = f"{get_emoji('lab')} سطح آزمایشگاه: <b>{lp['level']}</b> (بیشینه)"
     else:
-        lab_line = (f"🧪 سطح آزمایشگاه: <b>{lp['level']}</b> {pct_bar(lp['into'], lp['span'])} "
-                    f"({lp['into']:,}/{lp['span']:,} XP)")
+        pct = int(round((lp['into'] / lp['span']) * 100)) if lp.get('span') else 0
+        lab_line = (f"{get_emoji('lab')} سطح آزمایشگاه: <b>{lp['level']}</b> ({pct}٪ <code>{lp['into']}/{lp['span']}</code>)")
 
     if energy >= constants.MAX_ENERGY:
         en_line = f"{get_emoji('energy')} انرژی: {pct_bar(energy, constants.MAX_ENERGY)} ({energy}/{constants.MAX_ENERGY}) ✅ پره"
@@ -293,7 +299,7 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
         f"🏰 پایگاه و آزمایشگاه: <b>{lab_display(user)}</b>",
         "",
         lab_line,
-        "💰 خزانه منابع:",
+        f"{get_emoji('biocrate')} خزانه منابع:",
         f"{get_emoji('coin')} طلا: <b>{user.coins:,}</b> ┃ {get_emoji('dna')} DNA: <b>{user.dna_fragments:,}</b> "
         f"┃ {get_emoji('diamond')} الماس: <b>{user.diamonds:,}</b>",
         en_line,

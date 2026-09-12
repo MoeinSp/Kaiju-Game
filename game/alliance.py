@@ -895,11 +895,13 @@ WAR_SEED_FRACTION = 0.20
 # Personal war payouts, handed out when the war settles. Everyone who rallied earns
 # the participation reward win-or-lose; the winning side earns a big bonus on top; and
 # the single top contributor on the winning side is crowned MVP for premium diamonds.
-WAR_RALLY_REWARD_COINS = 400
-WAR_RALLY_REWARD_DNA = 15
-WAR_WIN_RALLY_BONUS_COINS = 1200
-WAR_WIN_RALLY_BONUS_DNA = 40
-WAR_MVP_BONUS_DIAMONDS = 25
+# Max rewards scale with combat power up to 25,000 gold and 2,000 DNA at max power (9,822).
+MAX_WAR_POWER = 9822.0
+WAR_MAX_WIN_COINS = 25000
+WAR_MAX_WIN_DNA = 2000
+WAR_MAX_BASE_COINS = 8500
+WAR_MAX_BASE_DNA = 700
+WAR_MVP_BONUS_DIAMONDS = 50
 
 
 def _member_power(user: User) -> int:
@@ -1124,8 +1126,13 @@ def _grant_war_rewards(war, winner) -> dict[int, dict]:
 
     for h in hits:
         won = winner is not None and h.user.alliance_id == winner.id
-        coins = WAR_RALLY_REWARD_COINS + (WAR_WIN_RALLY_BONUS_COINS if won else 0)
-        dna = WAR_RALLY_REWARD_DNA + (WAR_WIN_RALLY_BONUS_DNA if won else 0)
+        p_ratio = min(1.0, max(0.15, float(h.power) / MAX_WAR_POWER))
+        base_coins = round(WAR_MAX_BASE_COINS * p_ratio)
+        base_dna = round(WAR_MAX_BASE_DNA * p_ratio)
+        win_coins = round((WAR_MAX_WIN_COINS - WAR_MAX_BASE_COINS) * p_ratio) if won else 0
+        win_dna = round((WAR_MAX_WIN_DNA - WAR_MAX_BASE_DNA) * p_ratio) if won else 0
+        coins = base_coins + win_coins
+        dna = base_dna + win_dna
         diamonds = WAR_MVP_BONUS_DIAMONDS if (won and h.user_id == mvp_uid) else 0
         User.objects.filter(id=h.user_id).update(
             coins=F("coins") + coins,
@@ -1139,15 +1146,15 @@ def _grant_war_rewards(war, winner) -> dict[int, dict]:
     return personal
 
 
-def settle_due_wars() -> list[tuple[int, str]]:
+def settle_due_wars() -> list[tuple]:
     """Settle every active war whose 24h is up: higher score wins the treasury bonus
-    and weekly war points; members who rallied earn personal rewards; both sides' get
-    a personalised result DM. Returns (uid, text)."""
+    and weekly war points; members who rallied earn personal rewards; both sides get
+    a personalised result DM. Returns list of (uid, text, marker, is_win)."""
     from django.db.models import F
 
     from bio_lab.models import AllianceWar
 
-    out: list[tuple[int, str]] = []
+    out: list[tuple] = []
     due = AllianceWar.objects.filter(
         status=AllianceWar.ACTIVE, ends_at__lte=timezone.now()
     ).select_related("alliance_a", "alliance_b")
@@ -1177,9 +1184,10 @@ def settle_due_wars() -> list[tuple[int, str]]:
             personal = _grant_war_rewards(war, winner)
 
         for al in (a, b):
+            is_win = (winner is not None and al.id == winner.id)
             if winner is None:
                 head = f"⚔️ <b>جنگ اتحادها مساوی شد!</b> ({a.name} {war.score_a} - {war.score_b} {b.name})"
-            elif al.id == winner.id:
+            elif is_win:
                 head = (
                     f"🏆 <b>اتحادت «{al.name}» جنگ رو برد!</b>\n"
                     f"امتیاز {win_score} در برابر {lose_score} — "
@@ -1193,18 +1201,20 @@ def settle_due_wars() -> list[tuple[int, str]]:
             for uid in User.objects.filter(alliance_id=al.id, notifications_on=True).values_list("id", flat=True):
                 pers = personal.get(uid)
                 if pers:
-                    reward_bits = [f"{pers['coins']:,} طلا", f"{pers['dna']} DNA"]
+                    reward_bits = [f"{pers['coins']:,} طلا", f"{pers['dna']:,} DNA"]
                     if pers["diamonds"]:
                         reward_bits.append(f"{pers['diamonds']} 💎")
                     line = "\n\n🎁 <b>پاداش مشارکتت:</b> " + " + ".join(reward_bits)
                     if pers["mvp"]:
                         line += "\n👑 <b>تو بهترین جنگجوی این نبرد بودی (MVP)!</b>"
-                    out.append((uid, head + line))
+                    out.append((uid, head + line, "war_settle", is_win))
                 else:
                     out.append((
                         uid,
                         head + "\n\n<i>تو توی این جنگ شرکت نکردی و پاداشی نگرفتی — "
                         "دفعه‌ی بعد حتماً «شرکت» کن!</i>",
+                        "war_settle",
+                        False,
                     ))
     return out
 

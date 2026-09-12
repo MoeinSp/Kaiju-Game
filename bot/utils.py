@@ -392,10 +392,21 @@ async def safe_edit_message_text(query, text, **kwargs):
 
     if getattr(query, "message", None) and getattr(query.message, "photo", None):
         try:
-            await query.message.delete()
+            return await query.edit_message_caption(caption=text, **kwargs)
+        except BadRequest as exc:
+            if "Message is not modified" in str(exc):
+                return getattr(query, "message", None)
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            return await query.message.chat.send_message(text, **kwargs)
         except Exception:
-            pass
-        return await query.message.chat.send_message(text, **kwargs)
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            return await query.message.chat.send_message(text, **kwargs)
 
     try:
         return await query.edit_message_text(text, **kwargs)

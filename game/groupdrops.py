@@ -36,27 +36,27 @@ CLAIM_COOLDOWN_MINUTES = 10
 
 DROP_KINDS = {
     "chest":   {"emoji": "🎁", "title": "صندوقچه‌ی گنج", "flavor": "یه صندوقچه‌ی گنج وسط گروه افتاد!",
-                "btn": "🎁 بازش کن!", "res": {"coins": (120, 260), "dna": (0, 6)}, "weight": 5},
+                "btn": "🎁 بازش کن!", "res": {"coins": (480, 1040), "dna": (0, 24)}, "weight": 5},
     "ambush":  {"emoji": "⚔️", "title": "هیولای وحشی", "flavor": "یه هیولای وحشی ظاهر شد! سریع باش!",
-                "btn": "⚔️ حمله کن!", "res": {"coins": (90, 200), "dna": (2, 8)}, "weight": 5},
+                "btn": "⚔️ حمله کن!", "res": {"coins": (360, 800), "dna": (8, 32)}, "weight": 5},
     "vein":    {"emoji": "💎", "title": "رگه‌ی الماس", "flavor": "یه رگه‌ی الماس درخشید!",
-                "btn": "💎 برش دار!", "res": {"diamonds": (2, 7)}, "weight": 3},
+                "btn": "💎 برش دار!", "res": {"diamonds": (10, 30)}, "weight": 3},
     "egg":     {"emoji": "🥚", "title": "تخم رمزآلود", "flavor": "یه تخم رمزآلود از آسمون افتاد!",
-                "btn": "🥚 بردار!", "res": {"dna": (10, 26), "coins": (60, 140)}, "weight": 4},
+                "btn": "🥚 بردار!", "res": {"dna": (40, 104), "coins": (240, 560)}, "weight": 4},
     "capsule": {"emoji": "⚡", "title": "کپسول انرژی", "flavor": "یه کپسول انرژی پیدا شد!",
-                "btn": "⚡ بگیرش!", "res": {"energy": "full", "coins": (50, 120)}, "weight": 3},
+                "btn": "⚡ بگیرش!", "res": {"energy": "full", "coins": (200, 480)}, "weight": 3},
     "jackpot": {"emoji": "🌟", "title": "جک‌پات نادر", "flavor": "🌟 یه جک‌پات نادر ظاهر شد!!",
-                # gem jackpots are gone from groups — the diamonds are replaced by doubled gold
-                "btn": "🌟 شانستو امتحان کن!", "res": {"coins": (600, 1200)}, "weight": 1},
+                # gem jackpots are gone from groups — the diamonds are replaced by quadrupled gold
+                "btn": "🌟 شانستو امتحان کن!", "res": {"coins": (2400, 4800)}, "weight": 1},
 }
 
 
 # vein & capsule are NOT in the general random pool — they spawn on their own per-group
-# schedule (vein once/~24h, capsule once/~12h, at a random time) handled below.
+# schedule (vein 2x/day ~10-14h window, capsule once/~12h, at a random time) handled below.
 _SCHEDULED_KINDS = {"vein", "capsule"}
 # how far ahead the next scheduled spawn is set (a random hour within the window, so
 # the drop lands at a different time each cycle)
-VEIN_WINDOW_HOURS = (22.0, 26.0)
+VEIN_WINDOW_HOURS = (10.0, 14.0)  # 2 times per day per group at independent random times
 CAPSULE_WINDOW_HOURS = (10.0, 14.0)
 
 

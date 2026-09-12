@@ -1,3 +1,4 @@
+import os
 import secrets
 import time
 
@@ -211,15 +212,30 @@ async def _dm_transfer_received(context, receiver, sender, what: str) -> None:
     turned these off with /off. Fire-and-forget — a blocked/never-started DM is fine."""
     if not getattr(receiver, "transfer_notify", True):
         return
+    text = (
+        f"{get_emoji('gift')} <b>یه انتقال دریافت کردی!</b>\n\n"
+        f"• 👤 از طرفِ: <b>{display_name(sender)}</b>\n"
+        f"• 🎁 دریافتی: {what}\n\n"
+        "<i>در صورتی که نمی‌خوای این پیام‌ها بیاد، /off رو بزن.</i>"
+    )
+    from game.media import get_notify_image_path
+    from bot.utils import get_cached_file_id, store_cached_file_id, invalidate_cached_file_id
+    photo_path = get_notify_image_path("transfer")
     try:
-        await context.bot.send_message(
-            receiver.id,
-            f"{get_emoji('gift')} <b>یه انتقال دریافت کردی!</b>\n\n"
-            f"• 👤 از طرفِ: <b>{display_name(sender)}</b>\n"
-            f"• 🎁 دریافتی: {what}\n\n"
-            "<i>در صورتی که نمی‌خوای این پیام‌ها بیاد، /off رو بزن.</i>",
-            parse_mode="HTML",
-        )
+        if photo_path and os.path.exists(photo_path):
+            cached_fid = get_cached_file_id(photo_path)
+            if cached_fid:
+                try:
+                    await context.bot.send_photo(receiver.id, photo=cached_fid, caption=text, parse_mode="HTML")
+                    return
+                except Exception:
+                    invalidate_cached_file_id(photo_path)
+            with open(photo_path, "rb") as f:
+                res = await context.bot.send_photo(receiver.id, photo=f, caption=text, parse_mode="HTML")
+            if res and res.photo:
+                store_cached_file_id(photo_path, res.photo[-1].file_id)
+        else:
+            await context.bot.send_message(receiver.id, text, parse_mode="HTML")
     except Exception:  # pragma: no cover - DM may be blocked / never started
         pass
 

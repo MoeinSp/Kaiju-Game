@@ -23,6 +23,7 @@ from game import breeding, constants
 from game.buildings import is_built
 from game.creature import GameError
 from game.emoji import get_emoji
+from game.media import get_cave_image_path
 
 _AWAIT_KEY = "breeding_parent_a"
 
@@ -266,7 +267,7 @@ async def breeding_guide_callback(update: Update, context: ContextTypes.DEFAULT_
 async def breeding_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     view = await run_db(_panel_sync, update.effective_user)
     text, keyboard = _panel_render(view)
-    await send_screen(update, text, reply_markup=keyboard)
+    await send_screen(update, text, reply_markup=keyboard, photo=get_cave_image_path())
 
 
 def _pick_b_sync(tg_user, parent_a_id):

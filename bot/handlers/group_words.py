@@ -29,8 +29,8 @@ from game.energy import sync_energy
 from game.equipment import bonus_text, get_equipped_items, slot_loadout
 from game.lab import lab_bar, lab_progress
 
-def _pm_button(label: str = "برو به پیوی ربات"):
-    return btn(label, emoji_key="btn_lab", style=PRIMARY, url=f"https://t.me/{BOT_USERNAME}?start=group")
+def _pm_button(label: str = "برو به پیوی ربات", emoji_key: str = "btn_creature", start_param: str = "group"):
+    return btn(label, emoji_key=emoji_key, style=PRIMARY, url=f"https://t.me/{BOT_USERNAME}?start={start_param}")
 
 
 # help-card chips → a themeable button-emoji key (the guide's own emoji keys live in a
@@ -90,14 +90,14 @@ def group_footer_keyboard(user_id: int, *, skip: str | None = None) -> InlineKey
 
 def _creature_card(user, creature, equipped, slots) -> tuple[str, InlineKeyboardMarkup]:
     stats = effective_stats(creature, equipped)
-    stars = "⭐" * creature.star_level
+    stars = get_emoji("star") * creature.star_level
     filled = sum(1 for row in slots if not row["is_empty"])
     nick = (getattr(creature, "custom_name", "") or "").strip()
     div = "──────────────"
     lines = [
         # نام (chosen) and نژاد (species) on their OWN lines
-        f"🏷 نام: <b>{nick or 'بدون نام'}</b> {stars}",
-        f"🧬 نژاد: <b>{creature.name}</b>",
+        f"{get_emoji('creature')} نام: <b>{nick or 'بدون نام'}</b> {stars}",
+        f"{get_emoji('dna')} نژاد: <b>{creature.name}</b>",
         f"{constants.RARITY_LABELS[creature.rarity]} · {constants.element_label(creature.element)} · "
         f"سطح {creature.level} · آزمایشگاه {lab_display(user)}",
         div,
@@ -107,21 +107,27 @@ def _creature_card(user, creature, equipped, slots) -> tuple[str, InlineKeyboard
         f"{get_emoji('def')} دفاع: <b>{stats['def']}</b>",
         f"{get_emoji('spd')} سرعت: <b>{stats['spd']}</b>",
         div,
-        f"💪 قدرت کل: <b>{combat_rating(stats)}</b>",
-        f"🎒 تجهیزات: <b>{filled}/{len(slots)}</b> جایگاه پر",
+        f"{get_emoji('atk')} قدرت کل: <b>{combat_rating(stats):,}</b>",
+        f"{get_emoji('diamond_box')} تجهیزات: <b>{filled}/{len(slots)}</b> جایگاه پر",
     ]
     rows = [
         [
+            btn("ارتقا", emoji_key="btn_upgrade", style=BUILD, url=f"https://t.me/{BOT_USERNAME}?start=upgrade"),
             btn("تجهیزات", emoji_key="btn_inventory", style=NAV, callback_data=_scoped("equipment", user.id)),
-            btn("کلکسیون", emoji_key="btn_collection", style=NAV, callback_data=_scoped("collection", user.id)),
         ],
-        [_pm_button("ارتقا و پرورش در پیوی")],
+        [
+            btn("کلکسیون", emoji_key="btn_collection", style=NAV, callback_data=_scoped("collection", user.id)),
+            btn("تغذیه", emoji_key="btn_feed", style=BUILD, url=f"https://t.me/{BOT_USERNAME}?start=feed"),
+        ],
+        [
+            _pm_button("ورود به بازی (پیوی)", emoji_key="btn_creature", start_param="group"),
+        ],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 def _equipment_card(user, creature, slots) -> tuple[str, InlineKeyboardMarkup]:
-    lines = [f"🎒 <b>تجهیزات {creature.name}</b>", ""]
+    lines = [f"{get_emoji('diamond_box')} <b>تجهیزات {creature.name}</b>", ""]
     for row in slots:
         if row["is_empty"]:
             lines.append(f"{row['label']}: <i>خالی</i>")
@@ -131,7 +137,7 @@ def _equipment_card(user, creature, slots) -> tuple[str, InlineKeyboardMarkup]:
             from game.equipment import equipment_power
 
             lines.append(
-                f"{row['label']}: <b>{item.name} +{item.level}</b> · 💪{equipment_power(item)}"
+                f"{row['label']}: <b>{item.name} +{item.level}</b> · {get_emoji('atk')}{equipment_power(item):,}"
                 + (f" — <i>{bonus}</i>" if bonus else "")
             )
     rows = [
@@ -139,7 +145,7 @@ def _equipment_card(user, creature, slots) -> tuple[str, InlineKeyboardMarkup]:
             btn("هیولا", emoji_key="btn_creature", style=NAV, callback_data=_scoped("creature", user.id)),
             btn("کلکسیون", emoji_key="btn_collection", style=NAV, callback_data=_scoped("collection", user.id)),
         ],
-        [_pm_button("مدیریت تجهیزات در پیوی")],
+        [_pm_button("مدیریت تجهیزات در پیوی", emoji_key="btn_inventory", start_param="inventory")],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 

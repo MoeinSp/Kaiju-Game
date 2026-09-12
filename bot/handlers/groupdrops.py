@@ -5,15 +5,17 @@ lapsed ones, and settles the first-tap-wins claim.
 """
 
 import asyncio
+import os
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
 from telegram.ext import CallbackQueryHandler, ContextTypes
 
 from bio_lab.models import GroupDrop
-from bot.utils import run_db, safe_edit_message_text
+from bot.utils import get_cached_file_id, invalidate_cached_file_id, run_db, safe_edit_message_text, store_cached_file_id
 from game import groupdrops
 from game.emoji import get_emoji
+from game.media import get_drop_image_path
 
 DROPS_INTERVAL_SECONDS = 300  # a spawn check every 5 minutes
 SEND_DELAY = 0.05
@@ -84,9 +86,30 @@ async def drops_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     for d in await run_db(groupdrops.due_spawns):
         text = _spawn_text(d)
         keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(d["btn"], callback_data=f"gdrop:{d['id']}")]])
+        photo_path = get_drop_image_path(d["kind"])
+        msg = None
         try:
-            msg = await context.bot.send_message(chat_id=d["group_id"], text=text, parse_mode="HTML", reply_markup=keyboard)
-            await run_db(groupdrops.set_message_id, d["id"], msg.message_id)
+            if photo_path and os.path.exists(photo_path):
+                cached_fid = get_cached_file_id(photo_path)
+                if cached_fid:
+                    try:
+                        msg = await context.bot.send_photo(
+                            chat_id=d["group_id"], photo=cached_fid, caption=text, parse_mode="HTML", reply_markup=keyboard
+                        )
+                    except Exception:
+                        invalidate_cached_file_id(photo_path)
+                        msg = None
+                if msg is None:
+                    with open(photo_path, "rb") as f:
+                        msg = await context.bot.send_photo(
+                            chat_id=d["group_id"], photo=f, caption=text, parse_mode="HTML", reply_markup=keyboard
+                        )
+                    if msg and msg.photo:
+                        store_cached_file_id(photo_path, msg.photo[-1].file_id)
+            else:
+                msg = await context.bot.send_message(chat_id=d["group_id"], text=text, parse_mode="HTML", reply_markup=keyboard)
+            if msg:
+                await run_db(groupdrops.set_message_id, d["id"], msg.message_id)
         except TelegramError:
             await run_db(_delete_drop, d["id"])  # bot not in the group anymore, etc.
         await asyncio.sleep(SEND_DELAY)
@@ -95,10 +118,16 @@ async def drops_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     # minute later so the "time's up" note doesn't linger and clutter the group
     for e in await run_db(groupdrops.expire_due):
         try:
-            await context.bot.edit_message_text(
-                chat_id=e["group_id"], message_id=e["message_id"],
-                text="⌛ <b>زمان این جایزه تموم شد</b> — کسی به‌موقع نزد.", parse_mode="HTML",
-            )
+            try:
+                await context.bot.edit_message_caption(
+                    chat_id=e["group_id"], message_id=e["message_id"],
+                    caption="⌛ <b>زمان این جایزه تموم شد</b> — کسی به‌موقع نزد.", parse_mode="HTML"
+                )
+            except Exception:
+                await context.bot.edit_message_text(
+                    chat_id=e["group_id"], message_id=e["message_id"],
+                    text="⌛ <b>زمان این جایزه تموم شد</b> — کسی به‌موقع نزد.", parse_mode="HTML",
+                )
         except TelegramError:
             pass
         if context.job_queue is not None:
