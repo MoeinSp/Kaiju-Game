@@ -901,7 +901,7 @@ WAR_MAX_WIN_COINS = 25000
 WAR_MAX_WIN_DNA = 2000
 WAR_MAX_BASE_COINS = 8500
 WAR_MAX_BASE_DNA = 700
-WAR_MVP_BONUS_DIAMONDS = 50
+WAR_MVP_BONUS_DIAMONDS = 0  # No extra reward for MVP - normal reward only
 
 
 def _member_power(user: User) -> int:
@@ -1133,15 +1133,13 @@ def _grant_war_rewards(war, winner) -> dict[int, dict]:
         win_dna = round((WAR_MAX_WIN_DNA - WAR_MAX_BASE_DNA) * p_ratio) if won else 0
         coins = base_coins + win_coins
         dna = base_dna + win_dna
-        diamonds = WAR_MVP_BONUS_DIAMONDS if (won and h.user_id == mvp_uid) else 0
         User.objects.filter(id=h.user_id).update(
             coins=F("coins") + coins,
             dna_fragments=F("dna_fragments") + dna,
-            diamonds=F("diamonds") + diamonds,
         )
         personal[h.user_id] = {
-            "coins": coins, "dna": dna, "diamonds": diamonds,
-            "mvp": h.user_id == mvp_uid and won, "participated": True,
+            "coins": coins, "dna": dna, "diamonds": 0,
+            "mvp": False, "participated": True,
         }
     return personal
 
