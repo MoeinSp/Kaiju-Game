@@ -206,19 +206,19 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                     # Fast path 1: edit existing photo message with cached file_id
                     if cached_fid:
                         try:
-                            await query.edit_message_media(
+                            res = await query.edit_message_media(
                                 media=InputMediaPhoto(media=cached_fid, caption=caption, parse_mode=parse_mode),
                                 reply_markup=reply_markup,
                             )
-                            return
+                            return res
                         except BadRequest as ex:
                             if any(k in str(ex).lower() for k in ("parse", "entity", "tag", "start tag")):
                                 try:
-                                    await query.edit_message_media(
+                                    res = await query.edit_message_media(
                                         media=InputMediaPhoto(media=cached_fid, caption=plain_caption, parse_mode=None),
                                         reply_markup=reply_markup,
                                     )
-                                    return
+                                    return res
                                 except Exception:
                                     pass
                             logger.debug("edit_message_media with file_id failed, falling back: %s", ex)
@@ -237,7 +237,7 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                             )
                         if res and hasattr(res, "photo") and res.photo:
                             store_cached_file_id(valid_photo, res.photo[-1].file_id)
-                        return
+                        return res
                     except BadRequest as ex:
                         if any(k in str(ex).lower() for k in ("parse", "entity", "tag", "start tag")):
                             try:
@@ -248,7 +248,7 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                                     )
                                 if res and hasattr(res, "photo") and res.photo:
                                     store_cached_file_id(valid_photo, res.photo[-1].file_id)
-                                return
+                                return res
                             except Exception:
                                 pass
                     except Exception:
@@ -262,17 +262,17 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                 # Fast path 2: send new photo using cached file_id
                 if cached_fid:
                     try:
-                        await query.message.chat.send_photo(
+                        res = await query.message.chat.send_photo(
                             photo=cached_fid, caption=caption, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
                         )
-                        return
+                        return res
                     except BadRequest as ex:
                         if any(k in str(ex).lower() for k in ("parse", "entity", "tag", "start tag")):
                             try:
-                                await query.message.chat.send_photo(
+                                res = await query.message.chat.send_photo(
                                     photo=cached_fid, caption=plain_caption, reply_markup=reply_markup, parse_mode=None, **kwargs
                                 )
-                                return
+                                return res
                             except Exception:
                                 pass
                         logger.debug("send_photo with file_id failed, falling back: %s", ex)
@@ -290,7 +290,7 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                         )
                     if res and hasattr(res, "photo") and res.photo:
                         store_cached_file_id(valid_photo, res.photo[-1].file_id)
-                    return
+                    return res
                 except BadRequest as ex:
                     if any(k in str(ex).lower() for k in ("parse", "entity", "tag", "start tag")):
                         try:
@@ -300,7 +300,7 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                                 )
                             if res and hasattr(res, "photo") and res.photo:
                                 store_cached_file_id(valid_photo, res.photo[-1].file_id)
-                            return
+                            return res
                         except Exception:
                             pass
                 except Exception:
@@ -310,17 +310,17 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                 # Fast path 3: reply photo using cached file_id
                 if cached_fid:
                     try:
-                        await message.reply_photo(
+                        res = await message.reply_photo(
                             photo=cached_fid, caption=caption, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
                         )
-                        return
+                        return res
                     except BadRequest as ex:
                         if any(k in str(ex).lower() for k in ("parse", "entity", "tag", "start tag")):
                             try:
-                                await message.reply_photo(
+                                res = await message.reply_photo(
                                     photo=cached_fid, caption=plain_caption, reply_markup=reply_markup, parse_mode=None, **kwargs
                                 )
-                                return
+                                return res
                             except Exception:
                                 pass
                         logger.debug("reply_photo with file_id failed, falling back: %s", ex)
@@ -338,7 +338,7 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                         )
                     if res and hasattr(res, "photo") and res.photo:
                         store_cached_file_id(valid_photo, res.photo[-1].file_id)
-                    return
+                    return res
                 except BadRequest as ex:
                     if any(k in str(ex).lower() for k in ("parse", "entity", "tag", "start tag")):
                         try:
@@ -348,7 +348,7 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                                 )
                             if res and hasattr(res, "photo") and res.photo:
                                 store_cached_file_id(valid_photo, res.photo[-1].file_id)
-                            return
+                            return res
                         except Exception:
                             pass
                 except Exception:
@@ -364,43 +364,42 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                 await query.message.delete()
             except Exception:
                 pass
-            await query.message.chat.send_message(
+            return await query.message.chat.send_message(
                 text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
             )
-            return
         try:
-            await query.edit_message_text(
+            return await query.edit_message_text(
                 text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
             )
         except BadRequest as exc:
             if "Message is not modified" not in str(exc):
                 raise
-        return
+        return getattr(query, "message", None)
 
     if message is not None:
-        await message.reply_text(
+        return await message.reply_text(
             text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
         )
+    return None
 
 
-async def safe_edit_message_text(query, text, **kwargs) -> None:
+async def safe_edit_message_text(query, text, **kwargs):
     """query.edit_message_text(), but handles messages with existing photos (replaces with text),
     optional photo attachments, and swallows Telegram's 'Message is not modified' BadRequest."""
     photo = kwargs.pop("photo", None)
     if photo:
-        await send_screen(query, text, photo=photo, **kwargs)
-        return
+        return await send_screen(query, text, photo=photo, **kwargs)
 
     if getattr(query, "message", None) and getattr(query.message, "photo", None):
         try:
             await query.message.delete()
         except Exception:
             pass
-        await query.message.chat.send_message(text, **kwargs)
-        return
+        return await query.message.chat.send_message(text, **kwargs)
 
     try:
-        await query.edit_message_text(text, **kwargs)
+        return await query.edit_message_text(text, **kwargs)
     except BadRequest as exc:
         if "Message is not modified" not in str(exc):
             raise
+    return getattr(query, "message", None)

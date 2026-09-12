@@ -20,7 +20,7 @@ from telegram.ext import (CallbackQueryHandler, CommandHandler, ContextTypes,
 
 from bio_lab.repository import creature_name, display_name, get_active_creature, get_or_create_group, get_or_create_user, lab_display, mention
 from bot.buttons import BACK, BATTLE, BUILD, CONFIRM, NAV, PRIMARY, SHOP, btn
-from bot.utils import run_db, safe_edit_message_text
+from bot.utils import run_db, safe_edit_message_text, send_screen
 from config import BOT_USERNAME
 from game import constants, keywords, word_reward
 from game.creature import GameError, combat_rating, effective_stats
@@ -1445,8 +1445,14 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             _schedule_cleanup(context, message.chat_id, [message.message_id, sent.message_id], action)
             return
         text, keyboard = _render(action, data)
-        sent = await message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
-        _schedule_cleanup(context, message.chat_id, [message.message_id, sent.message_id], action)
+        photo_path = None
+        if action in ("creature", "upgrade") and data.get("creature"):
+            from game.media import get_creature_image_path
+
+            photo_path = get_creature_image_path(data["creature"])
+        sent = await send_screen(update, text, photo=photo_path, parse_mode="HTML", reply_markup=keyboard)
+        sent_id = getattr(sent, "message_id", None)
+        _schedule_cleanup(context, message.chat_id, [message.message_id, sent_id], action)
 
 
 async def group_card_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1479,7 +1485,12 @@ async def group_card_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
     await query.answer()
     text, keyboard = _render(action, data, page)
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+    photo_path = None
+    if action in ("creature", "upgrade") and data.get("creature"):
+        from game.media import get_creature_image_path
+
+        photo_path = get_creature_image_path(data["creature"])
+    await safe_edit_message_text(query, text, photo=photo_path, parse_mode="HTML", reply_markup=keyboard)
 
 
 PRIVACY_HELP = (
@@ -1785,7 +1796,10 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
             return
         await query.answer()
         text, keyboard = _feedcap_group_card(user, creature, caps, maxed)
-        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        from game.media import get_creature_image_path
+
+        photo_path = get_creature_image_path(creature)
+        await safe_edit_message_text(query, text, photo=photo_path, parse_mode="HTML", reply_markup=keyboard)
         return
     if action == "fcfeed":
         kind, _, tier = arg.partition(":")
@@ -1801,7 +1815,10 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         text, keyboard = _feedcap_group_card(user, creature, caps, maxed)
         lvl = f" {get_emoji('celebrate')} سطح {result['new_level']}!" if result["levels"] else ""
         note = f"🍽 <b>{eaten} تا غذا به هیولات دادی</b> · +{result['xp']:,} XP{lvl}\n\n"
-        await safe_edit_message_text(query, note + text, parse_mode="HTML", reply_markup=keyboard)
+        from game.media import get_creature_image_path
+
+        photo_path = get_creature_image_path(creature)
+        await safe_edit_message_text(query, note + text, photo=photo_path, parse_mode="HTML", reply_markup=keyboard)
         return
     if action == "box_genetic":
         user = await run_db(_casino_home_sync, update.effective_user)  # just fetches the user
@@ -1878,7 +1895,10 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
             return
         await query.answer(f"هر ارتقا حالا ×{step}")
         text, keyboard = _upgrade_card(user, creature, energy, step)
-        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        from game.media import get_creature_image_path
+
+        photo_path = get_creature_image_path(creature)
+        await safe_edit_message_text(query, text, photo=photo_path, parse_mode="HTML", reply_markup=keyboard)
         return
     if action in ("up_wings", "up_armor", "up_fangs", "up_poison"):
         step = context.user_data.get("grp_upg_step", 1)
@@ -1894,7 +1914,10 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         label = constants.BODY_PARTS.get(part, {}).get("label", part)
         note = f"🧩 <b>{label} → سطح {new_level}</b> (−{cost:,} {get_emoji('coin')})\n\n"
         text, keyboard = _upgrade_card(user, creature, energy, step)
-        await safe_edit_message_text(query, note + text, parse_mode="HTML", reply_markup=keyboard)
+        from game.media import get_creature_image_path
+
+        photo_path = get_creature_image_path(creature)
+        await safe_edit_message_text(query, note + text, photo=photo_path, parse_mode="HTML", reply_markup=keyboard)
         return
 
     # ── casino: a self-contained pick → confirm → play loop, all in the group ──
