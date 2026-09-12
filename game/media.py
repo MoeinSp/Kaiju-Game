@@ -13,8 +13,22 @@ ALLIANCE_DIR = ASSETS_DIR / "alliance"
 EQUIPMENT_DIR = ASSETS_DIR / "equipment"
 BANNERS_DIR = ASSETS_DIR / "banners"
 CACHE_DIR = ASSETS_DIR / "cache"
+FONTS_DIR = BASE_DIR / "assets" / "fonts"
 
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
+FONTS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def shape_persian_text(text: str) -> str:
+    """Shapes Persian/Arabic text for correct right-to-left connected rendering in Pillow."""
+    if not text:
+        return ""
+    try:
+        import arabic_reshaper
+        from bidi.algorithm import get_display
+        return get_display(arabic_reshaper.reshape(text))
+    except Exception:
+        return text
 
 
 SPECIES_TO_SLUG = {
@@ -109,14 +123,29 @@ def get_creature_stage(level: int) -> int:
         return 1
 
 
-def _load_ui_font(size: int, bold: bool = False):
-    candidates = [
-        "C:/Windows/Fonts/seguisym.ttf",
-        "C:/Windows/Fonts/segoeuib.ttf" if bold else "C:/Windows/Fonts/segoeui.ttf",
-        "C:/Windows/Fonts/arial.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-    ]
+def _load_ui_font(size: int, bold: bool = False, persian: bool = False):
+    candidates = []
+    if persian:
+        candidates.extend([
+            str(FONTS_DIR / ("Vazirmatn-Bold.ttf" if bold else "Vazirmatn-Regular.ttf")),
+            "C:/Windows/Fonts/tahomabd.ttf" if bold else "C:/Windows/Fonts/tahoma.ttf",
+            "C:/Windows/Fonts/arialbd.ttf" if bold else "C:/Windows/Fonts/arial.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        ])
+    else:
+        candidates.extend([
+            # 1. Bundled DejaVu font (guaranteed full support for •, ★, ☆, and Latin)
+            str(FONTS_DIR / ("DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf")),
+            # 2. Linux system fonts
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf" if bold else "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            # 3. Windows system fonts
+            "C:/Windows/Fonts/seguisym.ttf",
+            "C:/Windows/Fonts/segoeuib.ttf" if bold else "C:/Windows/Fonts/segoeui.ttf",
+            "C:/Windows/Fonts/arialbd.ttf" if bold else "C:/Windows/Fonts/arial.ttf",
+        ])
+
     for p in candidates:
         if os.path.exists(p):
             try:
@@ -352,11 +381,11 @@ def composite_building_card(
     dt = ImageDraw.Draw(comp)
 
     font_title = _load_ui_font(32, bold=True)
-    font_sub = _load_ui_font(21, bold=False)
+    font_sub = _load_ui_font(21, bold=False, persian=True)
 
     category = "اتحاد • ALLIANCE" if is_alliance else "پایگاه کایجو • BASE"
     title_text = f"{en_title}   •   LEVEL {level}"
-    sub_text = f"{fa_label}   •   {category}"
+    sub_text = shape_persian_text(f"{fa_label}   •   {category}")
 
     y1 = h - 105
     y2 = h - 60
@@ -468,14 +497,14 @@ def composite_equipment_card(
     dt = ImageDraw.Draw(comp)
 
     font_title = _load_ui_font(32, bold=True)
-    font_sub = _load_ui_font(21, bold=False)
-    font_spec = _load_ui_font(23, bold=True)
+    font_sub = _load_ui_font(21, bold=False, persian=True)
+    font_spec = _load_ui_font(23, bold=True, persian=True)
 
     r_color = cfg["border"]
     clean_label = cfg["label"].replace("★", "").replace("◆", "").replace("●", "").strip()
 
     title_text = f"{info['en']}   •   {clean_label}"
-    sub_text = f"{info['slot_label']}   •   {info['fa']}"
+    sub_text = shape_persian_text(f"{info['slot_label']}   •   {info['fa']}")
 
     y1 = h - 105
     y2 = h - 60
@@ -492,7 +521,8 @@ def composite_equipment_card(
     dt.text((w - 45 + 1, y1 + 1), lvl_text, font=font_title, fill=(0, 0, 0), anchor="ra")
     dt.text((w - 45, y1), lvl_text, font=font_title, fill=(255, 215, 50), anchor="ra")
 
-    spec_text = bonus_str if bonus_str else f"POWER {power}"
+    spec_raw = bonus_str if bonus_str else f"POWER {power}"
+    spec_text = shape_persian_text(spec_raw)
     dt.text((w - 45 + 1, y2 + 1), spec_text, font=font_spec, fill=(0, 0, 0), anchor="ra")
     dt.text((w - 45, y2), spec_text, font=font_spec, fill=(180, 230, 255), anchor="ra")
 

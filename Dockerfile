@@ -11,9 +11,9 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # psycopg[binary] ships its own libpq, so no build-essential/libpq-dev here.
-# `curl` is only for the compose healthcheck.
+# `curl` is for the compose healthcheck; fonts ensure stars, bullets, and symbols render.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl \
+ && apt-get install -y --no-install-recommends curl fonts-dejavu-core fonts-freefont-ttf \
  && rm -rf /var/lib/apt/lists/*
 
 # requirements first so a code change doesn't invalidate the dependency layer
