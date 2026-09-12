@@ -315,7 +315,10 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 btn(f"🎛 ایموجی دکمه‌ها ({btn_set}/{btn_tot})", style=ADMIN, callback_data="admin_menu:button_emoji"),
             ],
             [btn("🔍 پیش‌نمایش ایموجی‌ها", style=ADMIN, callback_data="admin_menu:preview_emoji")],
-            [btn("🖼 همه ایموجی‌ها در یک پیام", style=ADMIN, callback_data="admin_menu:all_emojis")],
+            [
+                btn("🖼 همه در یک پیام", style=ADMIN, callback_data="admin_menu:all_emojis"),
+                btn("🖼 در چند پیام", style=ADMIN, callback_data="admin_menu:all_emojis_multi"),
+            ],
             [
                 btn("📡 جوین اجباری", style=ADMIN, callback_data="admin_menu:force_join"),
                 btn("🎮 گروه بازی", style=ADMIN, callback_data="admin_menu:group_link"),
@@ -1843,13 +1846,17 @@ def _all_premium_emoji_entries_sync():
     return out
 
 
-# Telegram caps custom-emoji entities per message (~100); stay safely under it.
-_EMOJI_WALL_CHUNK = 90
+# A single message renders every custom emoji as Premium only up to Telegram's cap;
+# beyond it the extras silently fall back to their plain placeholder. The multi-message
+# option chunks well under that so EVERY emoji shows as its Premium graphic.
+_EMOJI_WALL_CHUNK = 50
 
 
-async def all_emojis_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """«همه ایموجی‌ها در یک پیام» — dump every configured Premium custom emoji as a dense
-    wall (chunked ~90 per message, Telegram's per-message custom-emoji limit)."""
+def _emoji_wall(chunk) -> str:
+    return "".join(f'<tg-emoji emoji-id="{cid}">{ph}</tg-emoji>' for cid, ph in chunk)
+
+
+async def _send_all_emojis(update: Update, context: ContextTypes.DEFAULT_TYPE, *, single: bool) -> None:
     if not _is_admin(update):
         return
     import asyncio
@@ -1860,15 +1867,39 @@ async def all_emojis_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
     chat_id = update.effective_chat.id
     total = len(entries)
+    if single:
+        # everything at once — may hit Telegram's per-message cap (then some render as
+        # their plain placeholder, or it errors → use the multi-message option instead).
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"🖼 <b>همه‌ی ایموجی‌های ست‌شده</b> (<code>{total}</code>)\n" + _emoji_wall(entries),
+                parse_mode="HTML",
+            )
+        except TelegramError as exc:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"⚠️ توی یک پیام جا نشد ({exc}).\nاز دکمه‌ی «در چند پیام» استفاده کن.",
+            )
+        return
     for i in range(0, total, _EMOJI_WALL_CHUNK):
         chunk = entries[i:i + _EMOJI_WALL_CHUNK]
-        wall = "".join(f'<tg-emoji emoji-id="{cid}">{ph}</tg-emoji>' for cid, ph in chunk)
-        header = f"🖼 <b>ایموجی‌های پرمیوم</b> — <code>{i + 1}–{i + len(chunk)}/{total}</code>\n"
+        header = f"🖼 <b>ایموجی‌های ست‌شده</b> — <code>{i + 1}–{i + len(chunk)}/{total}</code>\n"
         try:
-            await context.bot.send_message(chat_id=chat_id, text=header + wall, parse_mode="HTML")
+            await context.bot.send_message(chat_id=chat_id, text=header + _emoji_wall(chunk), parse_mode="HTML")
         except TelegramError as exc:
             await context.bot.send_message(chat_id=chat_id, text=f"⚠️ بخش {i + 1} ارسال نشد: {exc}")
         await asyncio.sleep(0.3)
+
+
+async def all_emojis_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«همه ایموجی‌ها در یک پیام» — all configured Premium emojis in ONE message."""
+    await _send_all_emojis(update, context, single=True)
+
+
+async def all_emojis_multi_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Fallback: the same set split across several messages (all render as Premium)."""
+    await _send_all_emojis(update, context, single=False)
 
 
 AWAITING_FORCE_JOIN_KEY = "awaiting_force_join"
@@ -4160,6 +4191,7 @@ _ADMIN_MENU_ACTIONS.update(
         "list_emoji": list_emoji_cmd,
         "preview_emoji": preview_emoji_cmd,
         "all_emojis": all_emojis_cmd,
+        "all_emojis_multi": all_emojis_multi_cmd,
         "force_join": force_join_panel,
         "admin_home": admin_cmd,
         "user_manage": user_manage_start,
