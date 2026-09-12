@@ -601,23 +601,41 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     _ally = result.get("opponent_alliance")
     opp_tag = result["opponent_label"] + (f" <i>(🤝 {_ally})</i>" if _ally else " 🚫 <i>بدون اتحاد</i>")
+
+    loot_gold = result.get("loot", 0)
+    loot_dna = result.get("dna", 0)
+    league_gold = result.get("league_coins", 0)
+    league_dna = result.get("league_dna", 0)
+    total_gold = loot_gold + league_gold
+    total_dna = loot_dna + league_dna
+
+    div = "──────────────"
     if result["won"]:
-        lg = ""
-        if result.get("league_coins"):
-            lg = (f"\n{result.get('league_emoji', '🏅')} پاداش لیگ {result.get('league_name', '')}: "
-                  f"+{result['league_coins']} {get_emoji('coin')} + {result['league_dna']} {get_emoji('dna')}")
-        summary = (
-            f"{get_emoji('celebrate')} <b>بردی!</b>\n"
-            f"🏭 حریف: <b>{opp_tag}</b>\n"
-            f"{get_emoji('coin')} +{result['loot']} غنیمت + {result.get('dna', 0)} {get_emoji('dna')}"
-            f"{lg}\n"
-            f"🏆 +{result['cup_delta']} کاپ (الان: {result['new_cup']})"
+        cup_sign = f"+{result['cup_delta']}" if result['cup_delta'] > 0 else str(result['cup_delta'])
+        reward_lines = [
+            f"💰 <b>مجموع غنیمت:</b> +{total_gold:,} {get_emoji('coin')} ┃ +{total_dna:,} {get_emoji('dna')}",
+        ]
+        if league_gold or league_dna:
+            reward_lines.append(
+                f"   ↳ غارت: +{loot_gold:,} {get_emoji('coin')} ┃ {result.get('league_emoji', '🏅')} لیگ {result.get('league_name', '')}: +{league_gold:,} {get_emoji('coin')} +{league_dna:,} {get_emoji('dna')}"
+            )
+        reward_lines.append(f"🏆 <b>تغییر کاپ:</b> <b>{cup_sign}</b> <i>(کاپ جدید: {result['new_cup']:,})</i>")
+
+        body = (
+            f"{get_emoji('celebrate')} <b>پیروزی در نبرد آرنا!</b>\n"
+            f"👤 حریف: <b>{opp_tag}</b>\n\n"
+            + "\n".join(reward_lines)
+            + f"\n\n{div}\n"
+            + result["log_text"]
         )
     else:
-        summary = (
-            f"😔 <b>باختی.</b>\n"
-            f"🏭 حریف: <b>{opp_tag}</b>\n"
-            f"🏆 {result['cup_delta']} کاپ (الان: {result['new_cup']})"
+        cup_str = str(result['cup_delta'])
+        body = (
+            f"😔 <b>شکست در نبرد آرنا</b>\n"
+            f"👤 حریف: <b>{opp_tag}</b>\n"
+            f"🏆 <b>تغییر کاپ:</b> <b>{cup_str}</b> <i>(کاپ جدید: {result['new_cup']:,})</i>\n\n"
+            f"{div}\n"
+            + result["log_text"]
         )
 
     keyboard = InlineKeyboardMarkup(
@@ -630,7 +648,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer("🟢 بردی!" if result["won"] else "🔴 باختی.")
     await safe_edit_message_text(
         query,
-        result["log_text"] + "\n\n" + f"<tg-spoiler>{summary}</tg-spoiler>",
+        body,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -833,16 +851,26 @@ async def arena_revenge_attack_callback(update: Update, context: ContextTypes.DE
 
     await send_defense_report_now(context, result.get("defense"))
 
+    loot_gold = result.get("loot", 0)
+    loot_dna = result.get("dna", 0)
+    div = "──────────────"
+
     if result["won"]:
-        summary = (
-            f"{get_emoji('celebrate')} <b>انتقام گرفتی!</b>\n"
-            f"{get_emoji('coin')} +{result['loot']} غنیمت + {result.get('dna', 0)} {get_emoji('dna')}\n"
-            f"🏆 +{result['cup_delta']} کاپ (الان: {result['new_cup']})"
+        cup_sign = f"+{result['cup_delta']}" if result['cup_delta'] > 0 else str(result['cup_delta'])
+        body = (
+            f"{get_emoji('celebrate')} <b>انتقام گرفتی! پیروزی در نبرد!</b>\n\n"
+            f"💰 <b>غنیمت دریافتی:</b> +{loot_gold:,} {get_emoji('coin')} ┃ +{loot_dna:,} {get_emoji('dna')}\n"
+            f"🏆 <b>تغییر کاپ:</b> <b>{cup_sign}</b> <i>(کاپ جدید: {result['new_cup']:,})</i>\n\n"
+            f"{div}\n"
+            + result["log_text"]
         )
     else:
-        summary = (
-            f"😔 <b>باختی — انتقام گرفته نشد.</b>\n"
-            f"🏆 {result['cup_delta']} کاپ (الان: {result['new_cup']})"
+        cup_str = str(result['cup_delta'])
+        body = (
+            f"😔 <b>شکست — انتقام گرفته نشد</b>\n"
+            f"🏆 <b>تغییر کاپ:</b> <b>{cup_str}</b> <i>(کاپ جدید: {result['new_cup']:,})</i>\n\n"
+            f"{div}\n"
+            + result["log_text"]
         )
 
     keyboard = InlineKeyboardMarkup([
@@ -851,7 +879,7 @@ async def arena_revenge_attack_callback(update: Update, context: ContextTypes.DE
     await query.answer("🟢 بردی!" if result["won"] else "🔴 باختی.")
     await safe_edit_message_text(
         query,
-        result["log_text"] + "\n\n" + f"<tg-spoiler>{summary}</tg-spoiler>",
+        body,
         parse_mode="HTML",
         reply_markup=keyboard,
     )

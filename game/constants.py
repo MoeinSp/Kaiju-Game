@@ -1120,7 +1120,7 @@ FORGE_MAX_FAIL_CHANCE = 0.45
 # be spent makes the build timers meaningless, and building is the spine of the
 # game, so raiding has to be a grind you work at rather than a faucet.
 ARENA_LOOT_PERCENT = 0.10
-ARENA_LOOT_MIN = 9  # a raid on a broke player still pays something, but barely
+ARENA_LOOT_MIN = 50  # guaranteed base loot for winning a raid even if defender is broke
 ARENA_SHIELD_HOURS = 8
 GROUP_SHIELD_HOURS = 4  # separate anti-farm grace after being hit by a group «اتک»
 

@@ -2777,10 +2777,11 @@ async def hunt_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             [back_btn("menu:me")],
         ]
     )
-    await query.answer("🟢 بردی!" if result["won"] else "🔴 باختی.")
+    div = "──────────────"
+    body = f"{reward_line}\n\n{div}\n{result['log_text']}"
     await safe_edit_message_text(
         query,
-        result["log_text"] + "\n\n" + f"<tg-spoiler>{reward_line}</tg-spoiler>",
+        body,
         parse_mode="HTML",
         reply_markup=keyboard,
     )

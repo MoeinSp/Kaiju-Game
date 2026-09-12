@@ -383,6 +383,7 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
     # little DNA) from the loser; a LOSING attacker loses nothing but cup. Cup always
     # moves (per award_cup) — that part is separate from the gold loot.
     loot = 0
+    taken_from_defender = 0
     dna_win = 0
     league_coins = 0
     league_dna = 0
@@ -390,8 +391,9 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
     if won:
         loot = expected_loot(opponent, attacker_creature.level)
         if defender_user is not None:
-            loot = min(loot, defender_user.coins)  # never push a real defender negative
-            defender_user.coins -= loot
+            taken_from_defender = min(loot, max(0, defender_user.coins))
+            defender_user.coins -= taken_from_defender
+            loot = max(taken_from_defender, constants.ARENA_LOOT_MIN)
         attacker.coins += loot
         dna_win = round(constants.ARENA_WIN_DNA_BASE + attacker_creature.level * constants.ARENA_WIN_DNA_PER_LEVEL)
         attacker.dna_fragments += dna_win
@@ -437,7 +439,7 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         defender_label=opponent["label"],
         is_fake_defender=opponent["is_fake"],
         attacker_won=won,
-        loot_gold=loot,
+        loot_gold=taken_from_defender if defender_user is not None else loot,
         cup_delta=delta,
         defender_notified=defender_user is not None,
     )
@@ -469,7 +471,7 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
             "attacker_alliance": attacker.alliance.name if attacker.alliance_id else None,
             "attacker_power": attacker_power,
             "attacker_won": won,
-            "loot": loot,
+            "loot": taken_from_defender if defender_user is not None else loot,
             "attacker_cup": attacker.cup,
             "defender_cup": defender_user.cup,
             "cup_change": (-delta if won else abs(delta)) if award_cup else 0,
