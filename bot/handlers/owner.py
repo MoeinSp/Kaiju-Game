@@ -200,6 +200,15 @@ async def set_emoji_back_callback(update: Update, context: ContextTypes.DEFAULT_
     )
 
 
+def _current_text_emoji_sync(key: str):
+    """The premium emoji currently SET for a text key → (custom_emoji_id, placeholder),
+    or None when it's unset (still on the default glyph)."""
+    from bio_lab.models import EmojiOverride
+
+    o = EmojiOverride.objects.filter(key=key).first()
+    return (o.custom_emoji_id, o.placeholder) if o else None
+
+
 async def set_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not _is_admin(update):
@@ -212,8 +221,12 @@ async def set_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_T
 
     context.user_data["awaiting_emoji_key"] = key
     await query.answer()
+    current = await run_db(_current_text_emoji_sync, key)
+    cur_line = (f"ایموجی فعلی: <tg-emoji emoji-id=\"{current[0]}\">{current[1]}</tg-emoji>"
+                if current else "ایموجی فعلی: <b>تنظیم نشده</b>")
     await safe_edit_message_text(query,
-        f"👌 باشه! حالا فقط <b>ایموجی پرمیوم</b> مربوط به «{EMOJI_KEYS[key]}» رو بفرست "
+        f"{cur_line}\n\n"
+        f"👌 حالا فقط <b>ایموجی پرمیوم</b> جدیدِ «{EMOJI_KEYS[key]}» رو بفرست "
         f"(تک و تنها، از کیبورد ایموجی «پرمیوم» تلگرام).\n\nبرای انصراف کافیه هر دستور دیگه‌ای بزنی.",
         parse_mode="HTML",
     )
@@ -2347,6 +2360,19 @@ async def btn_emoji_back_callback(update: Update, context: ContextTypes.DEFAULT_
     )
 
 
+def _current_button_emoji_sync(key: str):
+    """The premium emoji currently SET for a button key → (custom_emoji_id, glyph),
+    or None when it's unset (still on the default glyph)."""
+    from game.button_emoji import BUTTON_EMOJI_DEFS, get_button_icon
+
+    icon = get_button_icon(key)
+    if not icon:
+        return None
+    defs = BUTTON_EMOJI_DEFS.get(key)
+    glyph = defs[1] if defs else "🔘"
+    return (icon, glyph)
+
+
 async def btn_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not _is_admin(update):
@@ -2359,6 +2385,9 @@ async def btn_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_T
 
     context.user_data[AWAITING_BUTTON_EMOJI_KEY] = key
     await query.answer()
+    current = await run_db(_current_button_emoji_sync, key)
+    cur_line = (f"ایموجی فعلی: <tg-emoji emoji-id=\"{current[0]}\">{current[1]}</tg-emoji>"
+                if current else "ایموجی فعلی: <b>تنظیم نشده</b>")
     keyboard = InlineKeyboardMarkup(
         [
             [btn("پاک کردن (برگشت به پیش‌فرض)", emoji_key="btn_delete", style=DANGER,
@@ -2368,7 +2397,8 @@ async def btn_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_T
     )
     await safe_edit_message_text(
         query,
-        f"👌 حالا فقط <b>ایموجی پرمیوم</b> دکمه‌ی «{BUTTON_EMOJI_KEYS[key]}» رو بفرست "
+        f"{cur_line}\n\n"
+        f"👌 حالا فقط <b>ایموجی پرمیوم</b> جدیدِ دکمه‌ی «{BUTTON_EMOJI_KEYS[key]}» رو بفرست "
         "(تک و تنها، از کیبورد ایموجی پرمیوم تلگرام).",
         parse_mode="HTML",
         reply_markup=keyboard,
