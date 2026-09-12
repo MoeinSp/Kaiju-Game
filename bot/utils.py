@@ -212,6 +212,8 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                             )
                             return res
                         except BadRequest as ex:
+                            if "Message is not modified" in str(ex):
+                                return getattr(query, "message", None)
                             if any(k in str(ex).lower() for k in ("parse", "entity", "tag", "start tag")):
                                 try:
                                     res = await query.edit_message_media(
@@ -219,6 +221,9 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                                         reply_markup=reply_markup,
                                     )
                                     return res
+                                except BadRequest as inner_ex:
+                                    if "Message is not modified" in str(inner_ex):
+                                        return getattr(query, "message", None)
                                 except Exception:
                                     pass
                             logger.debug("edit_message_media with file_id failed, falling back: %s", ex)
@@ -239,6 +244,8 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                             store_cached_file_id(valid_photo, res.photo[-1].file_id)
                         return res
                     except BadRequest as ex:
+                        if "Message is not modified" in str(ex):
+                            return getattr(query, "message", None)
                         if any(k in str(ex).lower() for k in ("parse", "entity", "tag", "start tag")):
                             try:
                                 with open(valid_photo, "rb") as f:
@@ -249,6 +256,9 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                                 if res and hasattr(res, "photo") and res.photo:
                                     store_cached_file_id(valid_photo, res.photo[-1].file_id)
                                 return res
+                            except BadRequest as inner_ex:
+                                if "Message is not modified" in str(inner_ex):
+                                    return getattr(query, "message", None)
                             except Exception:
                                 pass
                     except Exception:
@@ -360,13 +370,40 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
     if query is not None and getattr(query, "message", None):
         has_photo = bool(getattr(query.message, "photo", None))
         if has_photo:
+            caption = safe_truncate_html(text, 1024) if parse_mode == "HTML" else (text[:1024] if text else "")
+            plain_caption = re.sub(r"<[^>]+>", "", caption) if caption else ""
             try:
-                await query.message.delete()
+                return await query.edit_message_caption(
+                    caption=caption, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
+                )
+            except BadRequest as exc:
+                if "Message is not modified" in str(exc):
+                    return getattr(query, "message", None)
+                if any(k in str(exc).lower() for k in ("parse", "entity", "tag", "start tag")):
+                    try:
+                        return await query.edit_message_caption(
+                            caption=plain_caption, reply_markup=reply_markup, parse_mode=None, **kwargs
+                        )
+                    except BadRequest as inner_ex:
+                        if "Message is not modified" in str(inner_ex):
+                            return getattr(query, "message", None)
+                    except Exception:
+                        pass
+                try:
+                    await query.message.delete()
+                except Exception:
+                    pass
+                return await query.message.chat.send_message(
+                    text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
+                )
             except Exception:
-                pass
-            return await query.message.chat.send_message(
-                text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
-            )
+                try:
+                    await query.message.delete()
+                except Exception:
+                    pass
+                return await query.message.chat.send_message(
+                    text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
+                )
         try:
             return await query.edit_message_text(
                 text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
@@ -384,18 +421,31 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
 
 
 async def safe_edit_message_text(query, text, **kwargs):
-    """query.edit_message_text(), but handles messages with existing photos (replaces with text),
+    """query.edit_message_text(), but handles messages with existing photos (edits caption in-place),
     optional photo attachments, and swallows Telegram's 'Message is not modified' BadRequest."""
     photo = kwargs.pop("photo", None)
     if photo:
         return await send_screen(query, text, photo=photo, **kwargs)
 
     if getattr(query, "message", None) and getattr(query.message, "photo", None):
+        parse_mode = kwargs.get("parse_mode", "HTML")
+        caption = safe_truncate_html(text, 1024) if parse_mode == "HTML" else (text[:1024] if text else "")
+        plain_caption = re.sub(r"<[^>]+>", "", caption) if caption else ""
         try:
-            return await query.edit_message_caption(caption=text, **kwargs)
+            return await query.edit_message_caption(caption=caption, **kwargs)
         except BadRequest as exc:
             if "Message is not modified" in str(exc):
                 return getattr(query, "message", None)
+            if any(k in str(exc).lower() for k in ("parse", "entity", "tag", "start tag")):
+                try:
+                    clean_kwargs = dict(kwargs)
+                    clean_kwargs["parse_mode"] = None
+                    return await query.edit_message_caption(caption=plain_caption, **clean_kwargs)
+                except BadRequest as inner_ex:
+                    if "Message is not modified" in str(inner_ex):
+                        return getattr(query, "message", None)
+                except Exception:
+                    pass
             try:
                 await query.message.delete()
             except Exception:

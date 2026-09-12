@@ -252,9 +252,16 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
         lab_badge = f"{get_emoji('lab')} سطح <b>{lp['level']}</b> ({pct}٪ <code>{lp['into']}/{lp['span']}</code>)"
 
     if compact:
+        arena_secs = shield_remaining_seconds(user)
+        group_secs = group_shield_remaining_seconds(user)
+        arena_status = _fmt_shield_remaining(arena_secs) if arena_secs > 0 else "غیرفعال"
+        group_status = _fmt_shield_remaining(group_secs) if group_secs > 0 else "غیرفعال"
+
         lines = [
             f"🏰 <b>{lab_display(user)}</b> ┃ {lab_badge}",
-            f"{get_emoji('coin')} <b>{user.coins:,}</b> ┃ {get_emoji('dna')} <b>{user.dna_fragments:,}</b> ┃ {get_emoji('diamond')} <b>{user.diamonds:,}</b> ┃ {get_emoji('energy')} <b>{energy}/{constants.MAX_ENERGY}</b>",
+            f"{get_emoji('coin')} <b>{user.coins:,}</b> ┃ {get_emoji('dna')} <b>{user.dna_fragments:,}</b> ┃ {get_emoji('diamond')} <b>{user.diamonds:,}</b>",
+            f"{get_emoji('energy')} انرژی: <b>{energy}/{constants.MAX_ENERGY}</b> ({pct_bar(energy, constants.MAX_ENERGY, 6)})",
+            f"🛡 سپر آرنا: <b>{arena_status}</b> ┃ سپر گروه: <b>{group_status}</b>",
             "",
             f"{get_emoji('creature')} <b>{creature_name(creature)}</b> <code>#{creature.id}</code>",
             f"{constants.RARITY_LABELS[creature.rarity]} {stars} ┃ {constants.element_label(creature.element)}",
@@ -270,16 +277,6 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
                 gear_parts.append(f"{constants.EQUIPMENT_SLOT_LABELS[slot][:4]}: {it.name}+{it.level}")
         if gear_parts:
             lines.append("🎒 " + " ┃ ".join(gear_parts))
-
-        arena_secs = shield_remaining_seconds(user)
-        group_secs = group_shield_remaining_seconds(user)
-        if arena_secs > 0 or group_secs > 0:
-            shields = []
-            if arena_secs > 0:
-                shields.append(f"آرنا: {_fmt_shield_remaining(arena_secs)}")
-            if group_secs > 0:
-                shields.append(f"گروه: {_fmt_shield_remaining(group_secs)}")
-            lines.append(f"🛡 {', '.join(shields)}")
 
         return "\n".join(lines)
 
@@ -340,12 +337,14 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
 
     arena_secs = shield_remaining_seconds(user)
     group_secs = group_shield_remaining_seconds(user)
-    if arena_secs > 0 or group_secs > 0:
-        lines += ["", _CARD_DIV, "", "🛡 پوشش سپرهای دفاعی:"]
-        if arena_secs > 0:
-            lines.append(f"🏟 آرنا: {_fmt_shield_remaining(arena_secs)} باقی‌مانده")
-        if group_secs > 0:
-            lines.append(f"👥 گروهی: {_fmt_shield_remaining(group_secs)} باقی‌مانده")
+    arena_status = f"{_fmt_shield_remaining(arena_secs)} باقی‌مانده" if arena_secs > 0 else "غیرفعال"
+    group_status = f"{_fmt_shield_remaining(group_secs)} باقی‌مانده" if group_secs > 0 else "غیرفعال"
+    lines += [
+        "", _CARD_DIV, "",
+        "🛡 پوشش سپرهای دفاعی:",
+        f"🏟 آرنا: <b>{arena_status}</b>",
+        f"👥 گروهی: <b>{group_status}</b>",
+    ]
     return "\n".join(lines)
 
 
