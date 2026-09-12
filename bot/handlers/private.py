@@ -731,9 +731,12 @@ async def upgrade_pick_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return
     await query.answer()
     step = context.user_data.get("upg_step", 1)
+    from game.media import get_creature_image_path
+    photo = get_creature_image_path(creature)
     await safe_edit_message_text(
         query,
         upgrade_panel_text(user, creature, equipped_items, slots, step=step),
+        photo=photo,
         parse_mode="HTML",
         reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=step, star_level=creature.star_level),
     )
@@ -906,9 +909,12 @@ async def upgrade_set_default_callback(update: Update, context: ContextTypes.DEF
         return
     await query.answer("🟢 پیش‌فرض شد!")
     step = context.user_data.get("upg_step", 1)
+    from game.media import get_creature_image_path
+    photo = get_creature_image_path(creature)
     await safe_edit_message_text(
         query,
         upgrade_panel_text(user, creature, equipped_items, slots, step=step),
+        photo=photo,
         parse_mode="HTML",
         reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=step, star_level=creature.star_level),
     )
@@ -2187,9 +2193,12 @@ async def fusion_pick_a_callback(update: Update, context: ContextTypes.DEFAULT_T
                 style=PRIMARY, callback_data=f"fus_b:{parent_a_id}:{c.id}",
             )])
     rows.append([back_btn(f"coll_pick:{parent_a_id}")])
+    from game.media import get_creature_image_path
+    photo = get_creature_image_path(creature)
     await safe_edit_message_text(query,
         f"{get_emoji('lab')} <b>ترکیب {creature.name}</b> {'⭐' * creature.star_level}\n"
         f"این‌ها هم‌نوع و هم‌ستاره‌ان، پس ترکیبشون <b>حتماً</b> جواب می‌ده:",
+        photo=photo,
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(rows),
     )

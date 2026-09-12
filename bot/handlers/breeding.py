@@ -23,7 +23,7 @@ from game import breeding, constants
 from game.buildings import is_built
 from game.creature import GameError
 from game.emoji import get_emoji
-from game.media import get_cave_image_path
+from game.media import get_cave_image_path, get_creature_image_path
 
 _AWAIT_KEY = "breeding_parent_a"
 
@@ -297,7 +297,8 @@ async def breeding_pick_a_callback(update: Update, context: ContextTypes.DEFAULT
         )
         return
     text, keyboard = _parent_b_render(parent_a, candidates)
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+    photo = get_creature_image_path(parent_a)
+    await safe_edit_message_text(query, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def breeding_a_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -313,7 +314,8 @@ async def breeding_a_page_callback(update: Update, context: ContextTypes.DEFAULT
         )
         return
     text, keyboard = _parent_a_render(candidates, filt, int(page))
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+    photo = get_cave_image_path()
+    await safe_edit_message_text(query, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def breeding_b_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -333,7 +335,8 @@ async def breeding_b_page_callback(update: Update, context: ContextTypes.DEFAULT
         )
         return
     text, keyboard = _parent_b_render(parent_a, candidates, filt, int(page))
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+    photo = get_creature_image_path(parent_a)
+    await safe_edit_message_text(query, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def breeding_noop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -390,7 +393,8 @@ async def breeding_pick_b_callback(update: Update, context: ContextTypes.DEFAULT
             btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER, callback_data="menu:breeding"),
         ],
     ]
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+    photo = get_creature_image_path(parent_b) or get_creature_image_path(parent_a)
+    await safe_edit_message_text(query, text, photo=photo, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
 
 async def breeding_info_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -457,7 +461,8 @@ async def breeding_start_callback(update: Update, context: ContextTypes.DEFAULT_
         return
     await query.answer("💞 رفتن توی غار!")
     text, keyboard = _panel_render(view)
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+    photo = get_cave_image_path()
+    await safe_edit_message_text(query, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _new_pair_sync(tg_user):
@@ -498,7 +503,8 @@ async def breeding_lay_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return
     await query.answer("🥚 تخم گذاشته شد! والدها آزاد شدن.")
     text, keyboard = _panel_render(view)
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+    photo = get_cave_image_path()
+    await safe_edit_message_text(query, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _hatch_sync(tg_user, egg_id):
@@ -651,7 +657,8 @@ async def breeding_cancel_confirm_callback(update: Update, context: ContextTypes
         return
     await query.answer("لغو شد — DNA برنمی‌گرده.")
     text, keyboard = _panel_render(view)
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+    photo = get_cave_image_path()
+    await safe_edit_message_text(query, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 def register(application) -> None:
