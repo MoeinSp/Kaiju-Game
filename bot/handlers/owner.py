@@ -315,6 +315,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 btn(f"🎛 ایموجی دکمه‌ها ({btn_set}/{btn_tot})", style=ADMIN, callback_data="admin_menu:button_emoji"),
             ],
             [btn("🔍 پیش‌نمایش ایموجی‌ها", style=ADMIN, callback_data="admin_menu:preview_emoji")],
+            [btn("🖼 همه ایموجی‌ها در یک پیام", style=ADMIN, callback_data="admin_menu:all_emojis")],
             [
                 btn("📡 جوین اجباری", style=ADMIN, callback_data="admin_menu:force_join"),
                 btn("🎮 گروه بازی", style=ADMIN, callback_data="admin_menu:group_link"),
@@ -1822,6 +1823,49 @@ async def preview_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             lines.append(f"{get_emoji(key)} {label} (<code>{key}</code>)")
 
     await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
+def _all_premium_emoji_entries_sync():
+    """Every DISTINCT premium custom-emoji the bot has configured (text-emoji overrides +
+    button-emoji overrides), as (custom_emoji_id, placeholder). Deduped by id."""
+    from bio_lab.models import ButtonEmojiOverride, EmojiOverride
+
+    seen: set[str] = set()
+    out: list[tuple[str, str]] = []
+    for o in list(EmojiOverride.objects.all()) + list(ButtonEmojiOverride.objects.all()):
+        cid = (o.custom_emoji_id or "").strip()
+        if cid and cid not in seen:
+            seen.add(cid)
+            out.append((cid, (o.placeholder or "🔹")[:16]))
+    return out
+
+
+# Telegram caps custom-emoji entities per message (~100); stay safely under it.
+_EMOJI_WALL_CHUNK = 90
+
+
+async def all_emojis_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«همه ایموجی‌ها در یک پیام» — dump every configured Premium custom emoji as a dense
+    wall (chunked ~90 per message, Telegram's per-message custom-emoji limit)."""
+    if not _is_admin(update):
+        return
+    import asyncio
+
+    entries = await run_db(_all_premium_emoji_entries_sync)
+    if not entries:
+        await update.effective_message.reply_text("هنوز هیچ ایموجی پرمیومی تنظیم نشده.")
+        return
+    chat_id = update.effective_chat.id
+    total = len(entries)
+    for i in range(0, total, _EMOJI_WALL_CHUNK):
+        chunk = entries[i:i + _EMOJI_WALL_CHUNK]
+        wall = "".join(f'<tg-emoji emoji-id="{cid}">{ph}</tg-emoji>' for cid, ph in chunk)
+        header = f"🖼 <b>ایموجی‌های پرمیوم</b> — <code>{i + 1}–{i + len(chunk)}/{total}</code>\n"
+        try:
+            await context.bot.send_message(chat_id=chat_id, text=header + wall, parse_mode="HTML")
+        except TelegramError as exc:
+            await context.bot.send_message(chat_id=chat_id, text=f"⚠️ بخش {i + 1} ارسال نشد: {exc}")
+        await asyncio.sleep(0.3)
 
 
 AWAITING_FORCE_JOIN_KEY = "awaiting_force_join"
@@ -4112,6 +4156,7 @@ _ADMIN_MENU_ACTIONS.update(
         "report": report_cmd,
         "list_emoji": list_emoji_cmd,
         "preview_emoji": preview_emoji_cmd,
+        "all_emojis": all_emojis_cmd,
         "force_join": force_join_panel,
         "admin_home": admin_cmd,
         "user_manage": user_manage_start,
