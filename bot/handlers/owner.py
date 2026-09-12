@@ -2361,16 +2361,20 @@ async def btn_emoji_back_callback(update: Update, context: ContextTypes.DEFAULT_
 
 
 def _current_button_emoji_sync(key: str):
-    """The premium emoji currently SET for a button key → (custom_emoji_id, glyph),
-    or None when it's unset (still on the default glyph)."""
-    from game.button_emoji import BUTTON_EMOJI_DEFS, get_button_icon
+    """The premium emoji currently SET for a button key → (custom_emoji_id, placeholder),
+    or None when it's unset (still on the default glyph). Queries the DB directly
+    (authoritative) rather than the in-memory icon cache."""
+    from bio_lab.models import ButtonEmojiOverride
+    from game.button_emoji import BUTTON_EMOJI_DEFS
 
-    icon = get_button_icon(key)
-    if not icon:
+    o = ButtonEmojiOverride.objects.filter(key=key).first()
+    if o is None or not o.custom_emoji_id:
         return None
-    defs = BUTTON_EMOJI_DEFS.get(key)
-    glyph = defs[1] if defs else "🔘"
-    return (icon, glyph)
+    glyph = o.placeholder
+    if not glyph:
+        defs = BUTTON_EMOJI_DEFS.get(key)
+        glyph = defs[1] if defs else "🔘"
+    return (o.custom_emoji_id, glyph)
 
 
 async def btn_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
