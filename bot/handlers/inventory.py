@@ -144,7 +144,9 @@ async def inventory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         return
     text, keyboard = _inv_home_render(counts)
-    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("inventory")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def inventory_cat_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -435,7 +437,9 @@ def _forge_cat_render(user, slot, items, filt: str, page: int) -> tuple[str, Inl
 async def blacksmith_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user, counts = await run_db(_forge_home_sync, update.effective_user)
     text, keyboard = _forge_home_render(user, counts)
-    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("blacksmith")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def forge_cat_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -80,8 +80,10 @@ def _panel_keyboard(lab_level: int, rows) -> InlineKeyboardMarkup:
 
 async def research_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lab_level, rows, _diamonds = await run_db(_panel_sync, update.effective_user)
+    from game.media import get_building_image_path
+    photo = get_building_image_path("research_lab", lab_level)
     await send_screen(
-        update, _panel_text(lab_level), parse_mode="HTML",
+        update, _panel_text(lab_level), photo=photo, parse_mode="HTML",
         reply_markup=_panel_keyboard(lab_level, rows),
     )
 

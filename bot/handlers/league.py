@@ -80,8 +80,10 @@ async def league_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         mine = " 📍" if row["user"].id == view["user_id"] else ""
         lines.append(f"{_rank_badge(row['rank'])} {lab_display(row['user'])} │ 🏆 {row['cup']}{mine}")
 
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("league")
     await send_screen(
-        update, "\n".join(lines), parse_mode="HTML",
+        update, "\n".join(lines), photo=photo, parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[back_btn("menu:cat_social", "بازگشت به اجتماعی")]]),
     )
 

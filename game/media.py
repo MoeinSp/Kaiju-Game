@@ -723,3 +723,20 @@ def get_drop_image_path(kind: str) -> str | None:
         return str(fallback)
     return None
 
+
+def get_feature_image_path(feature_name: str) -> str | None:
+    """Returns the artwork path for a bot feature/section (e.g. 'missions', 'hunt', 'arena', 'shop', etc.)."""
+    if not feature_name:
+        return None
+    if feature_name in ("breeding", "cave"):
+        p = FEATURES_DIR / "cave.jpg"
+        if p.exists():
+            return str(p)
+    filename = f"feat_{feature_name}.jpg"
+    path = FEATURES_DIR / filename
+    if path.exists():
+        return str(path)
+    return None
+
+
+

@@ -104,7 +104,9 @@ async def team_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     view = await run_db(_panel_sync, update.effective_user)
     filt, page = _team_view(context)
     text, keyboard = _render(view, filt, page)
-    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("team")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def team_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

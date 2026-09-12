@@ -111,7 +111,9 @@ async def equip_exchange_panel(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data[_PAGE_KEY] = 0
     tickets, items = await run_db(_sync, update.effective_user)
     text, kb = _render(tickets, items, set(), "all", 0, back=_back_button(update))
-    await send_screen(update, text, parse_mode="HTML", reply_markup=kb)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("equip_exchange")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=kb)
 
 
 async def _rerender(update, context):

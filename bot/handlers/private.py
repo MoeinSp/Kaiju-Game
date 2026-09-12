@@ -688,7 +688,9 @@ async def upgrade_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard())
         return
     text, keyboard = _upgrade_render(user, ranked, "all", 0)
-    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("upgrade")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def upgrade_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -986,7 +988,9 @@ async def send_first_run_guide(message) -> None:
 
 async def guide_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text, keyboard = guide_home_text_and_keyboard()
-    await send_screen(update, text, reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("guide")
+    await send_screen(update, text, photo=photo, reply_markup=keyboard)
 
 
 async def guide_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1593,7 +1597,9 @@ async def collection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                           reply_markup=back_only_keyboard())
         return
     text, keyboard = _collection_render(creatures, "all", 0)
-    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("collection")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def collection_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2333,7 +2339,9 @@ async def fusion_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     text, keyboard = _fusion_body(user, pairs, cap, "all")
-    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("fusion")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _fusion_body(user, pairs, cap, filt: str) -> tuple[str, InlineKeyboardMarkup]:
@@ -2525,7 +2533,9 @@ def _missions_render(status: list[dict], page: int) -> tuple[str, InlineKeyboard
 async def missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     status = await run_db(_missions_sync, update.effective_user)
     text, keyboard = _missions_render(status, 0)
-    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("missions")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def missions_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2613,8 +2623,11 @@ async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except GameError as exc:
         await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard())
         return
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("hunt")
     await send_screen(update,
         _hunt_scout_text(creature, my_power, cup, target, energy, cost),
+        photo=photo,
         parse_mode="HTML",
         reply_markup=_hunt_scout_keyboard(target, cost),
     )
@@ -3182,15 +3195,18 @@ async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
     info = await run_db(_alliance_info_sync, update.effective_user)
 
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("alliance")
     if info is None:
         await send_screen(update,
             f"{get_emoji('alliance')} توی هیچ اتحادی نیستی.",
+            photo=photo,
             parse_mode="HTML",
             reply_markup=_alliance_action_keyboard(in_alliance=False),
         )
         return
     await send_screen(update,
-        _alliance_info_text(info), parse_mode="HTML", reply_markup=_alliance_action_keyboard(in_alliance=True)
+        _alliance_info_text(info), photo=photo, parse_mode="HTML", reply_markup=_alliance_action_keyboard(in_alliance=True)
     )
 
 
@@ -4065,8 +4081,10 @@ async def alliance_league_panel(update: Update, context: ContextTypes.DEFAULT_TY
             if i == 4:
                 lines.append("──────────────")
             lines.append(f"{i}. {name} │ 💪 {power:,} │ 👥 {members} │ 🎁 {_rw(rw)}")
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("alliance_league")
     await send_screen(
-        update, "\n".join(lines), parse_mode="HTML",
+        update, "\n".join(lines), photo=photo, parse_mode="HTML",
         reply_markup=back_only_keyboard("menu:cat_social", "بازگشت به اجتماعی"),
     )
 
@@ -4185,7 +4203,9 @@ async def rank(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             lines.append(f"{i}. {name} │ 🏦 {r['treasury']:,} │ 👥 {r['member_count']}")
     if my_rank is not None:
         lines.append(f"\n📍 رتبه‌ی اتحاد تو: <b>{my_rank}</b> از {total}")
-    await send_screen(update, "\n".join(lines), parse_mode="HTML",
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("rank")
+    await send_screen(update, "\n".join(lines), photo=photo, parse_mode="HTML",
                       reply_markup=back_only_keyboard("menu:cat_social", "بازگشت به اجتماعی"))
 
 
@@ -4224,7 +4244,8 @@ async def raid_rank_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             if rank == 4:
                 lines.append("──────────────")
             lines.append(f"{rank}. {name} │ 🐉 لِوِل {r['raid_level']} │ 👥 {r['member_count']}")
-    await send_screen(update, "\n".join(lines), parse_mode="HTML",
+    raid_photo = get_feature_image_path("raid_rank")
+    await send_screen(update, "\n".join(lines), photo=raid_photo, parse_mode="HTML",
                       reply_markup=back_only_keyboard("menu:cat_social", "بازگشت به اجتماعی"))
 
 
@@ -4283,7 +4304,9 @@ def _profile_render_sync(tg_user):
 
 async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text, keyboard = await run_db(_profile_render_sync, update.effective_user)
-    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("profile")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _notif_toggle_sync(tg_user):
@@ -4487,8 +4510,10 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         cat_key = action[4:]
         if cat_key in _CATEGORIES:
             title, keyboard = _category_keyboard(cat_key, _locked_actions_for(hall_level))
+            from game.media import get_feature_image_path
+            photo_path = get_feature_image_path(f"cat_{cat_key}")
             await safe_edit_message_text(
-                query, f"{title}\n<i>یکی رو انتخاب کن:</i>", parse_mode="HTML", reply_markup=keyboard
+                query, f"{title}\n<i>یکی رو انتخاب کن:</i>", photo=photo_path, parse_mode="HTML", reply_markup=keyboard
             )
         return
     handler = _MENU_ACTIONS.get(action)

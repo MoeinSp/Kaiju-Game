@@ -73,7 +73,9 @@ def _render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
 async def campaign_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     view = await run_db(_panel_sync, update.effective_user)
     text, keyboard = _render(view)
-    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("campaign")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _fight_sync(tg_user):

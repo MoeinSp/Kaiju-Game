@@ -52,7 +52,9 @@ def _render(user, view: dict) -> tuple[str, InlineKeyboardMarkup]:
 async def achievements_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user, view = await run_db(_panel_sync, update.effective_user)
     text, keyboard = _render(user, view)
-    await send_screen(update, text, reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("achievements")
+    await send_screen(update, text, photo=photo, reply_markup=keyboard)
 
 
 def _claim_sync(tg_user):

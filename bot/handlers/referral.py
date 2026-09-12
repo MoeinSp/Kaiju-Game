@@ -94,7 +94,9 @@ def _render(st: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyb
 async def referral_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     st = await run_db(_panel_sync, update.effective_user)
     text, keyboard = _render(st)
-    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("referral")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def referral_view_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

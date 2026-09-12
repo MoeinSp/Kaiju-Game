@@ -117,7 +117,9 @@ async def biocrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"<i>موجودی: {coins:,} طلا · {dna} DNA{ticket_line}</i>\n\n"
         "رو یکی بزن تا شانس‌ها و خریدش رو ببینی:"
     )
-    await send_screen(update, text, parse_mode="HTML", reply_markup=_biocrate_list_keyboard(tickets))
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("biocrate")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=_biocrate_list_keyboard(tickets))
 
 
 def _biocrate_open_sync(tg_user, tier, count):
@@ -283,10 +285,13 @@ def _diamond_box_list_keyboard() -> InlineKeyboardMarkup:
 
 
 async def diamond_box_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("diamond_box")
     await send_screen(update, 
         f"{get_emoji('diamond_box')} <b>باکس هیولا</b>\n"
         "این باکس‌ها همیشه یه موجود جدید می‌دن (نه تجهیزات) — هرچی سطح باکس بالاتر، شانس نایاب‌بودنش بیشتره.\n\n"
         "رو یکی بزن تا احتمالات دقیقش رو ببینی:",
+        photo=photo,
         parse_mode="HTML",
         reply_markup=_diamond_box_list_keyboard(),
     )

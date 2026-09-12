@@ -139,8 +139,11 @@ async def arena_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user, power, shield_secs, history, week, season_secs, revenges = await run_db(
         _arena_home_sync, update.effective_user
     )
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("arena")
     await send_screen(update,
         _arena_home_text(user, power, shield_secs, history, week, season_secs, revenges),
+        photo=photo,
         parse_mode="HTML",
         reply_markup=_arena_home_keyboard(bool(revenges)),
     )

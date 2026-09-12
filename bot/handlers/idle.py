@@ -54,7 +54,9 @@ def _render(idle_st: dict, dg_st: dict) -> tuple[str, InlineKeyboardMarkup]:
 async def idle_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     idle_st, dg_st = await run_db(_panel_sync, update.effective_user)
     text, keyboard = _render(idle_st, dg_st)
-    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("idle")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _collect_sync(tg_user):

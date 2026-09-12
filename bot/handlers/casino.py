@@ -43,7 +43,9 @@ def _render(tiers, coins, diamonds, free_used) -> tuple[str, InlineKeyboardMarku
 async def casino_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     tiers, coins, diamonds, free_used = await run_db(_panel_sync, update.effective_user)
     text, keyboard = _render(tiers, coins, diamonds, free_used)
-    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("casino")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def casino_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

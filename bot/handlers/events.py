@@ -46,7 +46,9 @@ def _render(st: dict) -> tuple[str, InlineKeyboardMarkup]:
 async def events_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     st = await run_db(_panel_sync, update.effective_user)
     text, keyboard = _render(st)
-    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("events")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _claim_sync(tg_user):

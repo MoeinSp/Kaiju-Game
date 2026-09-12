@@ -72,7 +72,9 @@ async def shop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     offers, coins, diamonds = await run_db(_panel_sync, update.effective_user)
     _remember_offers(context, offers)
     text, keyboard = _render(offers, coins, diamonds)
-    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("shop")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _buy_sync(tg_user, key, shown_price, shown_currency, count=1):
@@ -297,7 +299,9 @@ async def shield_shop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         [btn("🛡 سپر گروه", style=SHOP, callback_data="gshield_shop")],
         [back_btn("menu:cat_shop", "بازگشت به فروشگاه")],
     ])
-    await send_screen(update, text, parse_mode="HTML", reply_markup=rows)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("shield_shop")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=rows)
 
 
 async def shield_arena_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -376,7 +380,9 @@ def _item_shop_render(items, coins, diamonds, gem=None) -> tuple[str, InlineKeyb
 async def item_shop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     items, coins, diamonds, gem = await run_db(_item_shop_sync, update.effective_user)
     text, keyboard = _item_shop_render(items, coins, diamonds, gem)
-    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("item_shop")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _item_buy_sync(tg_user, item_id):
@@ -544,7 +550,9 @@ def _gold_shop_state_sync(tg_user):
 async def gold_shop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     coins, diamonds = await run_db(_gold_shop_state_sync, update.effective_user)
     text, keyboard = _gold_shop_render(coins, diamonds)
-    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("gold_shop")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _gold_buy_sync(tg_user, idx):

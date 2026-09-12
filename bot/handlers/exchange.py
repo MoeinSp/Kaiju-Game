@@ -137,7 +137,9 @@ async def exchange_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
     coins, dna = await run_db(_bal_sync, update.effective_user)
     text, keyboard = _home_render(update.effective_user.id, coins, dna, _is_group(update))
-    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("exchange")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 # ── navigation callbacks (exch:…) ────────────────────────────────────────────

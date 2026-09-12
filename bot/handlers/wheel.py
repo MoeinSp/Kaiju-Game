@@ -24,10 +24,13 @@ async def wheel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     emoji = get_emoji(_KIND_EMOJI_KEY[prize["kind"]])
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("wheel")
     await send_screen(update,
         f"{get_emoji('wheel')} <b>گردونه‌ی شانس روزانه</b>\n\n"
         f"<tg-spoiler>{emoji} {prize['label']}</tg-spoiler>\n\n"
         "<blockquote>فردا دوباره سر بزن، یه چرخش دیگه منتظرته.</blockquote>",
+        photo=photo,
         parse_mode="HTML",
         reply_markup=back_only_keyboard("menu:cat_rewards", "بازگشت به جایزه‌ها"),
     )
