@@ -14,4 +14,6 @@ backups/
 # One-off VPS/ops fix scripts (not app code)
 scripts/
 assets/images/cache/
+previews/
+test_*.png
 
