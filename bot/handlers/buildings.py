@@ -122,8 +122,11 @@ async def buildings_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     building_rows, upgrading_ids, hall_level, busy_count, slots, diamonds = await run_db(
         _buildings_sync, update.effective_user
     )
+    from game.media import get_building_image_path
+    hall_photo = get_building_image_path("main_hall", hall_level)
     await send_screen(update,
         _buildings_text(busy_count, slots, hall_level),
+        photo=hall_photo,
         parse_mode="HTML",
         reply_markup=_buildings_keyboard(building_rows, upgrading_ids, busy_count, slots, diamonds),
     )
@@ -185,7 +188,7 @@ def _building_detail_text(view: dict) -> str:
     btype = building.building_type
     label = constants.BUILDING_LABELS[btype]
     unlocked = view["unlocked"]
-    div = "──────────────"
+    div = "───"
 
     # ── producing buildings get the rich "collector" dashboard ────────────────
     if produces(btype) and building.level > 0:
@@ -197,47 +200,39 @@ def _building_detail_text(view: dict) -> str:
         en = _COLLECTOR_EN.get(btype, "")
         lines = [
             f"🏭 <b>{label}</b>" + (f" | {en}" if en else ""),
-            "",
             f"🎖 سطح سازه: <b>{building.level}/{cap}</b>",
-            f"📦 ظرفیت مخزن: {_pbar(pending, cap_store)} ({pending:,}/{cap_store:,})",
-            f"{resource_emoji} در انتظار برداشت: <b>+{pending:,}</b>",
-            "",
+            f"📦 مخزن: {_pbar(pending, cap_store)} ({pending:,}/{cap_store:,})",
+            f"{resource_emoji} آماده برداشت: <b>+{pending:,}</b>",
             div,
-            "",
-            "⚙️ راندمان استخراج:",
-            f"📈 نرخ کل: <b>{rate:.1f}</b> در ساعت",
-            f"🔹 پایه: {base_rate:g} ┃ 🔸 بونوس کارگران: +{bonus * 100:.0f}٪",
-            "",
+            f"📈 نرخ کل: <b>{rate:.1f}</b>/ساعت (پایه: {base_rate:g} ┃ بونوس: +{bonus * 100:.0f}٪)",
             div,
-            "",
             f"👷‍♂️ کارگران مستقر ({len(workers)}/{slots}):",
         ]
         if workers:
             influence = view.get("worker_influence", {})
+            w_lines = []
             for c in workers:
                 gain = influence.get(c.id, 0.0) * 100
-                lines.append(f"▫️ {c.name} [{constants.RARITY_LABELS[c.rarity]} · سطح {c.level}] ⟵ +{gain:.0f}٪")
+                w_lines.append(f"▫️ {c.name} (+{gain:.0f}٪)")
+            lines.append("\n".join(w_lines))
         else:
-            lines.append("<i>خالیه — هر کایجویی که بذاری تولید رو بیشتر می‌کنه.</i>")
-        lines.append("")
+            lines.append("<i>خالیه — کایجو بذار تا تولید بیشتر بشه.</i>")
         lines.append(div)
         # upgrade / status block for producers
         if upgrade is not None:
             remaining = (upgrade.finishes_at - timezone.now()).total_seconds()
-            lines.append(f"\n⏳ در حال ارتقا تا سطح {upgrade.target_level} — {_format_remaining(remaining)} مونده")
-            lines.append(f"<i>با کارت سرعت یا {diamond_finish_price(upgrade)} 💎 همین الان تمومش کن.</i>")
+            lines.append(f"⏳ در حال ارتقا تا سطح {upgrade.target_level} — {_format_remaining(remaining)} مونده")
+            lines.append(f"<i>با کارت سرعت یا {diamond_finish_price(upgrade)} 💎 تمومش کن.</i>")
         elif all_builders_busy:
-            lines.append(f"\n⏳ هر دو کارگرت مشغول ساختمون‌های دیگه‌ان ({busy_count}/{builder_slots_n}).")
+            lines.append(f"⏳ هر دو کارگرت مشغول ساختمون‌های دیگه‌ان ({busy_count}/{builder_slots_n}).")
         elif building.level >= constants.BUILDING_MAX_LEVEL:
-            lines.append("\n🏆 این سازه به سقف سطح رسیده.")
+            lines.append("🏆 این سازه به سقف سطح رسیده.")
         elif building.level >= cap:
             hall = constants.BUILDING_LABELS[constants.MAIN_BUILDING]
-            lines.append(f"\n🔒 برای ادامه اول باید {hall} رو ارتقا بدی.")
+            lines.append(f"🔒 برای ادامه اول باید {hall} رو ارتقا بدی.")
         else:
             cost, _minutes = upgrade_cost_and_minutes(building)
-            lines.append(f"\n🔧 پیش‌نیاز ارتقا به سطح {building.level + 1}:")
-            lines.append(f"{get_emoji('coin')} هزینه: <b>{cost:,}</b> طلا ┃ ⏳ زمان ساخت: {_format_remaining(upgrade_seconds(building))}")
-        lines.append("\n💡 <i>هیولای فعال و هیولاهای داخل غار نمی‌تونن کارگر بشن.</i>")
+            lines.append(f"🔧 پیش‌نیاز سطح {building.level + 1}: {get_emoji('coin')} {cost:,} طلا ┃ ⏳ {_format_remaining(upgrade_seconds(building))}")
         return "\n".join(lines)
 
     # ── non-producing / not-yet-built buildings: a clean, consistent "info card" ─────
