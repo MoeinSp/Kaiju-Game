@@ -1826,13 +1826,16 @@ async def preview_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 def _all_premium_emoji_entries_sync():
-    """Every DISTINCT premium custom-emoji the bot has configured (text-emoji overrides +
-    button-emoji overrides), as (custom_emoji_id, placeholder). Deduped by id."""
+    """The DISTINCT premium custom-emoji SET for the theme keys — the per-key text-emoji
+    overrides + the button-emoji overrides. Excludes the bulk glyph-coupling pack (keys
+    prefixed «g:», the whole imported emoji pack), which the owner doesn't want dumped;
+    this is the ~200 they actually configured. As (custom_emoji_id, placeholder)."""
     from bio_lab.models import ButtonEmojiOverride, EmojiOverride
 
     seen: set[str] = set()
     out: list[tuple[str, str]] = []
-    for o in list(EmojiOverride.objects.all()) + list(ButtonEmojiOverride.objects.all()):
+    text_keyed = EmojiOverride.objects.exclude(key__startswith="g:")  # skip the glyph pack
+    for o in list(text_keyed) + list(ButtonEmojiOverride.objects.all()):
         cid = (o.custom_emoji_id or "").strip()
         if cid and cid not in seen:
             seen.add(cid)
