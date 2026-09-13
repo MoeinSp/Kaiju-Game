@@ -314,29 +314,25 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
     if not eligible:
         return _fake_opponent(attacker)
 
-    # Pass 1: standard in-band, excluding recently seen
-    candidates = [u for u in eligible if u.id not in exclude_set and abs(u.cup - attacker.cup) <= band]
+    # Hard Cup Band (+- 1000) & Rookie Protection:
+    # High-cup players (>=2000) must NEVER match with beginners (<1000)
+    band_eligible = [
+        u for u in eligible
+        if abs(u.cup - attacker.cup) <= band
+        and not (attacker.cup >= 2000 and u.cup < 1000)
+        and not (attacker.cup < 1000 and u.cup >= 2000)
+    ]
 
-    # Pass 2: if all were in exclude_set, shrink exclusion to only the immediate previous opponent
-    if not candidates and exclude_set:
-        last_only = set(list(exclude_ids)[-1:]) if exclude_ids else set()
-        candidates = [u for u in eligible if u.id not in last_only and abs(u.cup - attacker.cup) <= band]
+    # If no real players sit in the hard band (e.g. 5300 cup or empty bracket),
+    # strictly return a system bot. NEVER fall back to 0-cup beginners!
+    if not band_eligible:
+        return _fake_opponent(attacker)
 
-    # Pass 3: widen cup band in memory (instant 0.01ms check)
-    if not candidates:
-        last_only = set(list(exclude_ids)[-1:]) if exclude_ids else set()
-        for expanded_band in (1000, 1800, None):
-            if expanded_band is None:
-                candidates = [u for u in eligible if u.id not in last_only]
-            else:
-                candidates = [u for u in eligible if u.id not in last_only and abs(u.cup - attacker.cup) <= expanded_band]
-            if candidates:
-                break
+    # Pass 1: candidates in band not recently seen
+    candidates = [u for u in band_eligible if u.id not in exclude_set]
 
-    # Pass 4: check any real unshielded player on server
-    if not candidates:
-        candidates = eligible
-
+    # If all real players in this band have been seen in recent searches (e.g. only 2 players exist),
+    # return a system bot to break the 2-player ping-pong loop!
     if not candidates:
         return _fake_opponent(attacker)
 

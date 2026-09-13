@@ -242,6 +242,23 @@ _LEAD_EMOJI = re.compile(
 )
 
 
+CANONICAL_KEY_GLYPHS: dict[str, set[str]] = {
+    "coin": {"💰", "🪙"},
+    "dna": {"🧬"},
+    "diamond": {"💎"},
+    "energy": {"⚡", "⚡️"},
+    "hp": {"❤️", "♥️"},
+    "atk": {"⚔️", "⚔"},
+    "def": {"🛡️", "🛡"},
+    "spd": {"💨"},
+    "poison": {"☠️", "☠", "💀"},
+    "wings": {"🦋"},
+    "fangs": {"🦷"},
+    "gift": {"🎁"},
+    "egg": {"🥚"},
+}
+
+
 def get_emoji(key: str, fallback: str | None = None) -> str:
     """Returns HTML for `key`: a <tg-emoji> wrapper if the owner set a Premium custom
     emoji for it, otherwise the plain unicode default (from EMOJI_DEFS, or `fallback`
@@ -252,30 +269,68 @@ def get_emoji(key: str, fallback: str | None = None) -> str:
     cache = _cache if _cache is not None else _load_cache()
     override = cache.get(key)
     if override is not None:
-        return f'<tg-emoji emoji-id="{override.custom_emoji_id}">{override.placeholder}</tg-emoji>'
+        ph = override.placeholder
+        # If the stored placeholder conflicts with another key (e.g. coin had 🧬),
+        # fall back to the canonical emoji for the tag placeholder
+        if key in CANONICAL_KEY_GLYPHS and any(
+            _norm_glyph(ph) in {_norm_glyph(g) for g in glyphs}
+            for other_k, glyphs in CANONICAL_KEY_GLYPHS.items()
+            if other_k != key
+        ):
+            ph = DEFAULT_EMOJI.get(key, "💰")
+        return f'<tg-emoji emoji-id="{override.custom_emoji_id}">{ph}</tg-emoji>'
     return fallback if fallback is not None else DEFAULT_EMOJI.get(key, "❓")
 
 
 def _key_glyphs(key: str, placeholder: str) -> set[str]:
     """The literal glyph(s) that a semantic key should also theme: its default unicode
-    emoji and the placeholder the owner chose (normalized, skipping fixed glyphs)."""
+    emoji and the placeholder the owner chose (normalized, skipping fixed glyphs).
+    Protects canonical glyphs so an arbitrary placeholder from a custom emoji pack
+    (e.g. coin pack using 🧬) never hijacks another key's canonical glyph."""
     out = set()
-    for g in (DEFAULT_EMOJI.get(key, ""), placeholder or ""):
-        g = _norm_glyph(g)
-        if g and g not in GLYPH_SKIP:
-            out.add(g)
-    return out
+    if key in CANONICAL_KEY_GLYPHS:
+        for cg in CANONICAL_KEY_GLYPHS[key]:
+            out.add(_norm_glyph(cg))
+    else:
+        def_glyph = DEFAULT_EMOJI.get(key, "")
+        if def_glyph:
+            out.add(_norm_glyph(def_glyph))
+
+    if placeholder:
+        norm_p = _norm_glyph(placeholder)
+        if norm_p and norm_p not in GLYPH_SKIP:
+            # Reject if norm_p belongs to another key's canonical set
+            is_conflict = any(
+                norm_p in {_norm_glyph(g) for g in glyphs}
+                for other_k, glyphs in CANONICAL_KEY_GLYPHS.items()
+                if other_k != key
+            )
+            if not is_conflict:
+                out.add(norm_p)
+
+    return {g for g in out if g and g not in GLYPH_SKIP}
 
 
 def set_emoji(key: str, custom_emoji_id: str, placeholder: str) -> None:
+    # If the placeholder provided conflicts with another key (e.g. 🧬 when setting coin),
+    # use the canonical default instead of polluting the placeholder
+    clean_placeholder = placeholder
+    norm_p = _norm_glyph(placeholder)
+    if key in CANONICAL_KEY_GLYPHS and any(
+        norm_p in {_norm_glyph(g) for g in glyphs}
+        for other_k, glyphs in CANONICAL_KEY_GLYPHS.items()
+        if other_k != key
+    ):
+        clean_placeholder = DEFAULT_EMOJI.get(key, "💰")
+
     EmojiOverride.objects.update_or_create(
-        key=key, defaults={"custom_emoji_id": custom_emoji_id, "placeholder": placeholder}
+        key=key, defaults={"custom_emoji_id": custom_emoji_id, "placeholder": clean_placeholder}
     )
     # ALSO theme the literal glyph(s) for this key, so hard-coded emojis in message
     # bodies (💥, 💎, ⚔️ …) render as the owner's choice EVERYWHERE — not only where
     # get_emoji() is used. This is what keeps e.g. the diamond emoji consistent across
     # every screen instead of differing between get_emoji() and literal 💎.
-    for g in _key_glyphs(key, placeholder):
+    for g in _key_glyphs(key, clean_placeholder):
         EmojiOverride.objects.update_or_create(
             key=f"{_GLYPH_PREFIX}{g}", defaults={"custom_emoji_id": custom_emoji_id, "placeholder": g}
         )
@@ -298,6 +353,17 @@ def couple_all_key_glyphs() -> int:
     """One-shot backfill: for every semantic emoji the owner has already set, make sure
     the matching literal glyph is themed too (so pre-existing settings for 💎/💥/… also
     apply to hard-coded emojis in messages). Idempotent; safe to run at every startup."""
+    # First ensure all canonical glyphs strictly point to their own key's custom emoji
+    for other_k, glyphs in CANONICAL_KEY_GLYPHS.items():
+        override = EmojiOverride.objects.filter(key=other_k).first()
+        if override:
+            for g in glyphs:
+                norm_g = _norm_glyph(g)
+                EmojiOverride.objects.update_or_create(
+                    key=f"{_GLYPH_PREFIX}{norm_g}",
+                    defaults={"custom_emoji_id": override.custom_emoji_id, "placeholder": norm_g}
+                )
+
     n = 0
     for o in EmojiOverride.objects.exclude(key__startswith=_GLYPH_PREFIX):
         for g in _key_glyphs(o.key, o.placeholder):

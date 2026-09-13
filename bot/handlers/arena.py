@@ -150,7 +150,7 @@ async def arena_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 RECENT_OPPONENTS_KEY = "arena_recent_opps"
-_RECENT_OPPONENTS_MAX = 3  # remember this many recent picks so users cycle through real players without getting trapped in bots
+_RECENT_OPPONENTS_MAX = 5  # remember this many recent picks so users cycle through real players with high variety
 
 
 def _find_sync(tg_user, exclude_ids=None):
@@ -200,6 +200,13 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not opponent["is_fake"]:
         recent = [i for i in recent if i != opponent["user"].id] + [opponent["user"].id]
         context.user_data[RECENT_OPPONENTS_KEY] = recent[-_RECENT_OPPONENTS_MAX:]
+        context.user_data["arena_last_real_id"] = opponent["user"].id
+    else:
+        # When a bot is shown (e.g. breaking the loop after cycling through available players),
+        # keep only the very last real player in exclude so the user doesn't immediately see the same player right after the bot,
+        # but the rest of the pool is unlocked again.
+        last_real = context.user_data.get("arena_last_real_id")
+        context.user_data[RECENT_OPPONENTS_KEY] = [last_real] if last_real else []
 
     text, keyboard = _render_opponent(user, opponent, my_power, loot, my_element, dna_win, cname, energy)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
@@ -634,7 +641,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
         ]
         if league_gold or league_dna:
             reward_lines.append(
-                f"   ↳ غارت: +{loot_gold:,} {get_emoji('coin')} ┃ {result.get('league_emoji', '🏅')} لیگ {result.get('league_name', '')}: +{league_gold:,} {get_emoji('coin')} +{league_dna:,} {get_emoji('dna')}"
+                f"   ↲ غارت: +{loot_gold:,} {get_emoji('coin')} ┃ {result.get('league_emoji', '🏅')} لیگ {result.get('league_name', '')}: +{league_gold:,} {get_emoji('coin')} +{league_dna:,} {get_emoji('dna')}"
             )
         reward_lines.append(f"🏆 <b>تغییر کاپ:</b> <b>{cup_sign}</b> <i>(کاپ جدید: {result['new_cup']:,})</i>")
 

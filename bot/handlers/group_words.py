@@ -1244,7 +1244,7 @@ def _reward_text(user, result: dict) -> str:
     elif kind == "coins":
         prize = f"{get_emoji('coin')} <b>طلا:</b> <b>+{result['amount']:,}</b>"
     elif kind == "dna":
-        prize = f"{get_emoji('dna')} <b>دی‌ان‌ای:</b> <b>+{result['amount']:,}</b> DNA"
+        prize = f"{get_emoji('dna')} <b>دی‌ان‌ای:</b> <b>+{result['amount']:,}</b>"
     elif kind == "food":
         cfg = constants.XP_CAPSULES.get(result.get("food_tier") or "small", {})
         prize = (f"{cfg.get('emoji', '🍖')} <b>غذای هیولا:</b> یه <b>{cfg.get('label', 'حیوون')}</b> (+{cfg.get('xp', 0):,} XP)")
@@ -1256,7 +1256,7 @@ def _reward_text(user, result: dict) -> str:
         f"👤 بازیکن: <b>{display_name(user)}</b>",
         "",
         "📦 <b>غنیمت دریافتی:</b>",
-        f"  ↳ {prize}",
+        f"  ↲ {prize}",
         "",
         f"⏳ شارژ مجدد: <b>{_format_mmss(result['next_wait'])}</b> دیگر",
     ]

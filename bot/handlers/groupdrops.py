@@ -54,15 +54,15 @@ def _win_text(kind: str, who: str, reward: dict) -> str:
 
     reward_items = []
     if coins:
-        reward_items.append(f"🪙 طلا: <b>+{coins:,}</b>")
+        reward_items.append(f"{get_emoji('coin')} طلا: <b>+{coins:,}</b>")
     if dna:
-        reward_items.append(f"🧬 دی‌ان‌ای: <b>+{dna:,}</b>")
+        reward_items.append(f"{get_emoji('dna')} دی‌ان‌ای: <b>+{dna:,}</b>")
     if diamonds:
-        reward_items.append(f"💎 الماس: <b>+{diamonds:,}</b>")
+        reward_items.append(f"{get_emoji('diamond')} الماس: <b>+{diamonds:,}</b>")
     if energy == "full":
-        reward_items.append("⚡️ انرژی: <b>فول شارژ (۱۰۰٪)</b>")
+        reward_items.append(f"{get_emoji('energy')} انرژی: <b>فول شارژ (۱۰۰٪)</b>")
 
-    rewards_block = "\n".join(f"  ↳ {item}" for item in reward_items) if reward_items else "  ↳ بدون جایزه"
+    rewards_block = "\n".join(f"  ↲ {item}" for item in reward_items) if reward_items else "  ↲ بدون جایزه"
 
     lines = [
         f"{emoji} <b>{title}</b>",

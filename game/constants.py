@@ -1195,7 +1195,7 @@ def raid_hit_dna(damage: int) -> int:
 def raid_hit_coins(damage: int) -> int:
     frac = min(1.0, max(0, damage) / RAID_REWARD_MAX_DAMAGE)
     return max(RAID_HIT_COIN_MIN, min(RAID_HIT_COIN_MAX, round(RAID_HIT_COIN_MAX * frac)))
-ARENA_MATCH_CUP_BAND = 500  # real opponents within +/- this cup range are eligible (closer cups preferred)
+ARENA_MATCH_CUP_BAND = 1000  # real opponents within +/- this cup range are eligible (closer cups preferred)
 ARENA_STARTING_CUP = 0
 
 # A player's cup is soft-capped by their actual creature power: past the ceiling
