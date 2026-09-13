@@ -1238,25 +1238,25 @@ def _reward_text(user, result: dict) -> str:
 
     kind = result["kind"]
     if kind == "speedup":
-        prize = f"⏱ غنیمت: <b>کارت سرعت {constants.speedup_plain_label(result['minutes'])}</b>"
+        prize = f"⏱ <b>کارت سرعت:</b> +{constants.speedup_plain_label(result['minutes'])}"
     elif kind == "jackpot":
-        prize = f"{get_emoji('coin')} غنیمت: <b>جکپات {result['amount']:,} طلا</b>"
+        prize = f"{get_emoji('coin')} <b>جک‌پات بزرگ:</b> <b>+{result['amount']:,}</b> طلا"
     elif kind == "coins":
-        prize = f"{get_emoji('coin')} غنیمت: <b>{result['amount']:,} طلا</b>"
+        prize = f"{get_emoji('coin')} <b>طلا:</b> <b>+{result['amount']:,}</b>"
     elif kind == "dna":
-        prize = f"{get_emoji('dna')} غنیمت: <b>{result['amount']} DNA</b>"
+        prize = f"{get_emoji('dna')} <b>دی‌ان‌ای:</b> <b>+{result['amount']:,}</b> DNA"
     elif kind == "food":
         cfg = constants.XP_CAPSULES.get(result.get("food_tier") or "small", {})
-        prize = (f"{cfg.get('emoji', '🍖')} یه <b>{cfg.get('label', 'حیوون')}</b> گرفتی! 😋\n"
-                 f"بدش هیولات بخوره تا <b>+{cfg.get('xp', 0):,} XP</b> بگیره "
-                 f"(از «ارتقا ← تغذیه»).")
+        prize = (f"{cfg.get('emoji', '🍖')} <b>غذای هیولا:</b> یه <b>{cfg.get('label', 'حیوون')}</b> (+{cfg.get('xp', 0):,} XP)")
     else:
-        prize = f"{get_emoji('diamond')} غنیمت: <b>{result['amount']} الماس</b>"
+        prize = f"{get_emoji('diamond')} <b>الماس:</b> <b>+{result['amount']:,}</b>"
 
     lines = [
         f"{get_emoji('gift')} <b>صندوق پاداش باز شد!</b>",
+        f"👤 بازیکن: <b>{display_name(user)}</b>",
         "",
-        prize,
+        "📦 <b>غنیمت دریافتی:</b>",
+        f"  ↳ {prize}",
         "",
         f"⏳ شارژ مجدد: <b>{_format_mmss(result['next_wait'])}</b> دیگر",
     ]

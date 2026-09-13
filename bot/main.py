@@ -145,7 +145,7 @@ def _install_premium_glyph_hook(application: Application) -> None:
     if getattr(ExtBot, "_premium_glyph_hooked", False):
         return
 
-    def _wrap(orig):
+    def _wrap_text(orig):
         async def wrapped(self, *args, **kwargs):
             try:
                 if kwargs.get("parse_mode") in ("HTML", ParseMode.HTML) and isinstance(kwargs.get("text"), str):
@@ -155,8 +155,33 @@ def _install_premium_glyph_hook(application: Application) -> None:
             return await orig(self, *args, **kwargs)
         return wrapped
 
-    ExtBot.send_message = _wrap(ExtBot.send_message)
-    ExtBot.edit_message_text = _wrap(ExtBot.edit_message_text)
+    def _wrap_caption(orig):
+        async def wrapped(self, *args, **kwargs):
+            try:
+                if kwargs.get("parse_mode") in ("HTML", ParseMode.HTML) and isinstance(kwargs.get("caption"), str):
+                    kwargs["caption"] = premiumize_html(kwargs["caption"])
+            except Exception:  # noqa: BLE001 — theming must never block a send
+                pass
+            return await orig(self, *args, **kwargs)
+        return wrapped
+
+    def _wrap_media(orig):
+        async def wrapped(self, *args, **kwargs):
+            try:
+                media = kwargs.get("media")
+                if media is not None and getattr(media, "parse_mode", None) in ("HTML", ParseMode.HTML):
+                    if isinstance(getattr(media, "caption", None), str):
+                        media.caption = premiumize_html(media.caption)
+            except Exception:  # noqa: BLE001 — theming must never block a send
+                pass
+            return await orig(self, *args, **kwargs)
+        return wrapped
+
+    ExtBot.send_message = _wrap_text(ExtBot.send_message)
+    ExtBot.edit_message_text = _wrap_text(ExtBot.edit_message_text)
+    ExtBot.send_photo = _wrap_caption(ExtBot.send_photo)
+    ExtBot.edit_message_caption = _wrap_caption(ExtBot.edit_message_caption)
+    ExtBot.edit_message_media = _wrap_media(ExtBot.edit_message_media)
     ExtBot._premium_glyph_hooked = True
 
 

@@ -436,89 +436,41 @@ def _part_power_gain(creature, part: str, equipped_items: list | None, step: int
 
 def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots: list | None = None, step: int = 1) -> str:
     from game.creature import part_bulk_cost
-    from game.energy import minutes_until_next_point
-    from game.equipment import equipment_power
+    from game.energy import sync_energy
 
     stats = effective_stats(creature, equipped_items)
     stars = get_emoji("star") * creature.star_level
-    mode = "🟢 حالت: پیش‌فرض" if creature.is_active else "⚪️ حالت: ذخیره"
     max_level = constants.creature_max_level(creature.rarity, creature.star_level)
-    div = "──────────────"
+    energy = sync_energy(user)
+
     lines = [
         f"🦅 <b>{creature_name(creature)}</b> <code>#{creature.id}</code>",
-    ]
-    if creature_has_nickname(creature):
-        lines.append(f"🧬 نژاد: <b>{creature.name}</b>")
-    lines += [
-        f"<b>مشخصات:</b> {constants.RARITY_LABELS[creature.rarity]} {stars}",
-        f"🎖 <b>سطح موجود:</b> {creature.level}/{max_level} ┃ {mode}",
-        f"⚡️ <b>نرخ ارتقا:</b> {step}× سطحی",
-        "", div, "",
-        "📊 <b>شاخص‌های مبارزه (Base Stats):</b>",
+        f"مشخصات: {constants.RARITY_LABELS[creature.rarity]} {stars}",
+        f"🎖 سطح : <b>{creature.level}/{max_level}</b>",
+        f"⚡️ نرخ ارتقا: <b>{step}× سطحی</b>",
         "",
-        f"{get_emoji('hp')} سلامت (HP): <b>{stats['hp']}</b> ┃ {get_emoji('atk')} حمله (ATK): <b>{stats['atk']}</b>",
-        f"{get_emoji('def')} دفاع (DEF): <b>{stats['def']}</b> ┃ {get_emoji('spd')} سرعت (SPD): <b>{stats['spd']}</b>",
-        f"{get_emoji('poison')} زهر (Poison): <b>{stats['poison']}</b>",
-        "", div, "",
-        "🧩 <b>وضعیت اعضای بدن (Body Parts):</b>",
+        f"{get_emoji('hp')} سلامت (HP): <b>{stats['hp']:,}</b> ┃ {get_emoji('atk')} حمله (ATK): <b>{stats['atk']:,}</b>",
+        f"{get_emoji('def')} دفاع (DEF): <b>{stats['def']:,}</b> ┃ {get_emoji('spd')} سرعت (SPD): <b>{stats['spd']:,}</b>",
+        f"{get_emoji('poison')} زهر (Poison): <b>{stats['poison']:,}</b>",
         "",
     ]
+
     cap = constants.part_upgrade_cap(creature.star_level)
-    any_capped = False
     for part, cfg in constants.BODY_PARTS.items():
         level = getattr(creature, f"{part}_lvl")
         if level >= cap:
-            any_capped = True
             lines.append(f"{cfg['label']}: <b>{level}/{cap}</b> 🔒 (سقف {creature.star_level} ستاره)")
             continue
         buy = min(step, cap - level)
         cost = part_bulk_cost(level, buy, creature.rarity)
         gain = _part_power_gain(creature, part, equipped_items, buy)
         lines.append(
-            f"{cfg['label']}: <b>{level}/{cap}</b> → ارتقا: {cost:,} {get_emoji('coin')} (+{gain} 💪)"
+            f"{cfg['label']}: <b>{level}/{cap}</b> → ارتقا: <b>{cost:,}</b> {get_emoji('coin')} (+{gain} 💪)"
         )
-    if any_capped:
-        lines.append("")
-        if creature.star_level >= 5:
-            lines.append(
-                f"🔒 <b>قفل نهایی:</b> این هیولا 5⭐ است و اعضایش به سقف مطلق "
-                f"<b>{constants.PART_UPGRADE_MAX}</b> رسیده‌اند."
-            )
-        else:
-            lines.append(
-                "⚠️ <b>قفل تکامل:</b> بعضی اعضا به سقف رسیدن! برای باز شدن سطح بیشتر، "
-                f"هیولات رو فیوژن کن و به {creature.star_level + 1}⭐ برسون "
-                f"(هر ستاره +{constants.PART_UPGRADE_CAP_PER_STAR}، تا {constants.PART_UPGRADE_MAX} در 5⭐)."
-            )
-    # gear
-    lines += ["", div, "", "🎒 <b>تجهیزات فعال (Gear):</b>", ""]
-    if slots is not None:
-        any_gear = False
-        for row in slots:
-            if row["is_empty"]:
-                lines.append(f"{row['label']}: <i>خالی</i>")
-            else:
-                any_gear = True
-                item = row["item"]
-                lines.append(f"{row['label']}: <b>{item.name} +{item.level}</b> (+{equipment_power(item)} 💪)")
-        if not any_gear and all(r["is_empty"] for r in slots):
-            pass  # all-empty already shown line by line
-    else:
-        lines.append("<i>—</i>")
-    # resources
-    energy = sync_energy(user)
-    if energy >= constants.MAX_ENERGY:
-        charge = "پره ✅"
-    else:
-        charge = f"⏳ شارژ بعدی: ~{minutes_until_next_point(user)} دقیقه"
+
     lines += [
-        "", div, "",
-        "🏦 <b>موجودی و منابع در دسترس:</b>",
-        f"{get_emoji('coin')} طلا: <b>{user.coins:,}</b> ┃ {get_emoji('dna')} دی‌ان‌ای: <b>{user.dna_fragments:,}</b> ┃ "
-        f"{get_emoji('diamond')} الماس: <b>{user.diamonds:,}</b>",
-        f"{get_emoji('energy')} انرژی: {pct_bar(energy, constants.MAX_ENERGY)} ({energy}/{constants.MAX_ENERGY}) {charge}",
-        "", div, "",
-        "💡 <i>غذای هیولا XP می‌ده · ارتقای اعضا قدرت رزمی رو بالا می‌بره.</i>",
+        "",
+        f"{get_emoji('coin')} موجودی: <b>{user.coins:,}</b> طلا ┃ {get_emoji('energy')} انرژی: <b>{energy}/{constants.MAX_ENERGY}</b>",
     ]
     return "\n".join(lines)
 

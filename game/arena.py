@@ -215,13 +215,14 @@ def _attacker_level(attacker: User) -> int:
 
 
 def power_for_cup(cup: int) -> int:
-    """The power a lab at this cup rating is *expected* to have — what a bot at this
-    cup is built to. Scales from very weak at cup 0 up to a fully-maxed lab (~6000)
-    at ARENA_BOT_MAX_CUP, and no higher: past the ceiling the bot is already max, so
-    even a fully-maxed player is only ~even there and the ladder walls out ~5000.
-    """
-    frac = min(1.0, max(0, cup) / constants.ARENA_BOT_MAX_CUP)
-    return max(15, round(constants.ARENA_BOT_MAX_POWER * frac ** constants.ARENA_BOT_POWER_EXP))
+    """The power a lab at this cup rating is expected to have.
+    Walls out around 4000 cup where bots reach 11,800+ power (surpassing the 9822 player max),
+    so players cannot defeat system bots at ~4000+ cup."""
+    if cup >= constants.ARENA_BOT_MAX_CUP:
+        overflow = cup - constants.ARENA_BOT_MAX_CUP
+        return round(constants.ARENA_BOT_MAX_POWER + overflow * 6)
+    frac = max(0, cup) / constants.ARENA_BOT_MAX_CUP
+    return max(15, round(constants.ARENA_BOT_MAX_POWER * (frac ** constants.ARENA_BOT_POWER_EXP)))
 
 
 def _bot_display_tier(cup: int) -> tuple[str, int]:
@@ -237,16 +238,34 @@ def _bot_display_tier(cup: int) -> tuple[str, int]:
 
 def _fake_opponent(attacker: User) -> dict:
     """A bot defender, used when no real player sits in the attacker's cup band.
-
     Built from the attacker's CUP, not their power, so it enforces the ladder.
-    The swing keeps individual fights uncertain without softening the trend."""
+    Guarantees that bots never have elemental weakness against the player, and
+    walls out players around 4000 cup."""
     bot_cup = max(0, attacker.cup + random.randint(-40, 90))
-    # Power is the cup-expected value ± a flat random 300, fully random each roll —
-    # so two bots at the same cup can differ by up to ~600 and every fight is a real
-    # gamble (was a narrow ×0.9–1.15 band that made every bot feel identical).
-    power = max(1, power_for_cup(bot_cup) + random.randint(-300, 300))
+    expected = power_for_cup(bot_cup)
+    if bot_cup >= 3850 or attacker.cup >= 3850:
+        # Near and above the 4000 ceiling, bots strictly overpower any player (max player power is 9822)
+        power = max(10800, expected + random.randint(200, 600))
+    else:
+        power = max(1, expected + random.randint(-200, 200))
     rarity, star = _bot_display_tier(bot_cup)
-    _bot_element = constants.random_element()
+
+    # Bot element selection: MUST NOT have elemental weakness against player!
+    creature = Creature.objects.filter(owner=attacker, is_active=True).first()
+    attacker_element = creature.element if creature else None
+    if attacker_element:
+        # The element that attacker beats
+        weak_to_attacker = constants.ELEMENT_STRONG_AGAINST.get(attacker_element)
+        safe_elements = [e for e in constants.ELEMENTS if e != weak_to_attacker]
+        if attacker.cup >= 3700:
+            # At high cups, the bot specifically chooses the counter element that beats the player
+            counters = [e for e in constants.ELEMENTS if constants.ELEMENT_STRONG_AGAINST.get(e) == attacker_element]
+            _bot_element = counters[0] if counters else random.choice(safe_elements)
+        else:
+            _bot_element = random.choice(safe_elements)
+    else:
+        _bot_element = constants.random_element()
+
     return {
         "is_fake": True,
         "user": None,
@@ -254,7 +273,7 @@ def _fake_opponent(attacker: User) -> dict:
         "creature_name": constants.random_species_name(_bot_element),
         "cup": bot_cup,
         "power": power,
-        "element": _bot_element,  # fixed here so the preview matches the fight
+        "element": _bot_element,
         "loot_pool": random.randint(*constants.arena_fake_loot_range(_attacker_level(attacker))),
         "bot_rarity": rarity,
         "bot_star": star,
@@ -262,18 +281,9 @@ def _fake_opponent(attacker: User) -> dict:
 
 
 def find_opponent(attacker: User, exclude_ids=None) -> dict:
-    """Picks a raid target: a real, unshielded player inside the cup band if one
-    exists, otherwise a bot. Returns a uniform dict either way so callers don't
-    branch on opponent kind.
-
-    **Matchmaking is by cup, never by power.** Real players within ±BAND cup are
-    eligible, ordered by cup distance so the CLOSEST rating comes first. `exclude_ids`
-    is the handful this player was just shown — skipping them means «حریف بعدی» keeps
-    walking outward to fresh faces instead of re-showing the same one (which also made
-    the button look dead, since re-rendering the identical screen is a no-op edit).
-    Real players are strongly preferred; a bot is used only when nobody real is left.
-    """
-    from django.db.models import F, IntegerField
+    """Picks a raid target: strongly prefers real, unshielded players with high variety.
+    Only falls back to a bot if literally no real unshielded player exists."""
+    from django.db.models import F, IntegerField, Q
     from django.db.models.functions import Abs, Cast
 
     if active_power(attacker) <= 0:
@@ -281,41 +291,52 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
 
     now = timezone.now()
     band = constants.ARENA_MATCH_CUP_BAND
-    # skip who this player already saw + who's currently reserved by someone else
-    exclude = {attacker.id} | set(exclude_ids or []) | _reserved_by_others(attacker.id)
+    exclude_set = set(exclude_ids or [])
+    reserved = _reserved_by_others(attacker.id)
+    base_exclude = {attacker.id} | reserved
 
-    def _query(excluding):
+    def _query_band(excluding, cur_band=None):
+        qs = User.objects.filter(is_banned=False)
+        if cur_band is not None:
+            qs = qs.filter(cup__gte=attacker.cup - cur_band, cup__lte=attacker.cup + cur_band)
         return list(
-            User.objects.filter(
-                cup__gte=attacker.cup - band,
-                cup__lte=attacker.cup + band,
-                is_banned=False,
-            )
-            .filter(Q(shield_until__isnull=True) | Q(shield_until__lte=now))
+            qs.filter(Q(shield_until__isnull=True) | Q(shield_until__lte=now))
             .exclude(id__in=excluding)
             .filter(creatures__is_active=True)
             .annotate(cup_dist=Abs(Cast(F("cup") - attacker.cup, IntegerField())))
             .order_by("cup_dist")
-            .distinct()[:20]
+            .distinct()[:25]
         )
 
-    candidates = _query(exclude)
+    # Pass 1: standard search in cup band, excluding recently seen
+    candidates = _query_band(base_exclude | exclude_set, band)
+
+    # Pass 2: if all players in band were in exclude_ids, shrink exclusion to only the immediate last one
+    if not candidates and exclude_set:
+        last_only = set(list(exclude_ids)[-1:]) if exclude_ids else set()
+        candidates = _query_band(base_exclude | last_only, band)
+
+    # Pass 3: widen cup band to find other real unshielded players before giving up to bots
     if not candidates:
-        # Every real player in this cup band has already been shown recently (or is
-        # reserved by another searcher). The old code retried while excluding only the
-        # CURRENT pick, which — with just two real players in band — flip-flopped
-        # A→B→A→B forever: the "هرچی بزنی بعدی همونا میاد" bug. Instead, fall through to
-        # a bot. Bots now carry a randomized name and ±300 power, so «حریف بعدی» always
-        # changes the screen and stays varied instead of looping on the same faces.
+        for expanded_band in (1000, 1800, None):
+            last_only = set(list(exclude_ids)[-1:]) if exclude_ids else set()
+            candidates = _query_band(base_exclude | last_only, expanded_band)
+            if candidates:
+                break
+
+    # Pass 4: check any real unshielded player on the entire server
+    if not candidates:
+        candidates = _query_band(base_exclude, None)
+
+    # Only if there are genuinely zero real unshielded players with active creature, fallback to bot
+    if not candidates:
         return _fake_opponent(attacker)
 
-    # closest-FIRST: pick from just the nearest 3 (weighted toward the very closest),
-    # so early searches surface the tightest matches and later ones fan outward as the
-    # closer ones get excluded.
-    pool = candidates[: min(3, len(candidates))]
-    weights = [1.0 / (1 + abs(u.cup - attacker.cup)) for u in pool]
+    # Pick from top 8 closest candidates with weighted random to maximize player variety
+    pool = candidates[: min(8, len(candidates))]
+    weights = [1.0 / (1 + abs(u.cup - attacker.cup) * 0.05) for u in pool]
     target = random.choices(pool, weights=weights, k=1)[0]
-    _reserve_opponent(attacker.id, target.id)  # hold them for ~20s against other searchers
+    _reserve_opponent(attacker.id, target.id)
     target_creature = Creature.objects.filter(owner=target, is_active=True).first()
     return {
         "is_fake": False,

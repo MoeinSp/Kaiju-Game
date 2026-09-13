@@ -1225,9 +1225,9 @@ ARENA_CUP_SOFTCAP = 2500
 # matches them. (Was 3850 — far below a real maxed creature, so a maxed player faced
 # only ~half-strength bots at 5000 and blew past the intended endgame wall.)
 # The exponent makes low cups easy and the climb bite near the top.
-ARENA_BOT_MAX_CUP = 5000
-ARENA_BOT_MAX_POWER = 7142
-ARENA_BOT_POWER_EXP = 1.25
+ARENA_BOT_MAX_CUP = 4000
+ARENA_BOT_MAX_POWER = 11800
+ARENA_BOT_POWER_EXP = 1.35
 
 # Fake opponents shown when no real player sits in the cup band — their lab names
 # are generated from a facility-type × descriptor grid (+ an occasional serial

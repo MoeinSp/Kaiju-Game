@@ -2,7 +2,7 @@ from asgiref.sync import sync_to_async
 from telegram.error import BadRequest
 
 from game import constants
-from game.emoji import get_emoji
+from game.emoji import get_emoji, premiumize_html
 
 
 def mission_reward_text(m: dict) -> str:
@@ -191,6 +191,9 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
 
     message = getattr(update, "effective_message", None) or getattr(query, "message", None)
     valid_photo = photo if (photo and os.path.exists(photo)) else None
+
+    if parse_mode == "HTML" and isinstance(text, str):
+        text = premiumize_html(text)
 
     if valid_photo:
         if parse_mode == "HTML":
@@ -424,6 +427,9 @@ async def safe_edit_message_text(query, text, **kwargs):
     """query.edit_message_text(), but handles messages with existing photos (edits caption in-place),
     optional photo attachments, and swallows Telegram's 'Message is not modified' BadRequest."""
     photo = kwargs.pop("photo", None)
+    parse_mode = kwargs.get("parse_mode", "HTML")
+    if parse_mode == "HTML" and isinstance(text, str):
+        text = premiumize_html(text)
     if photo:
         return await send_screen(query, text, photo=photo, **kwargs)
 

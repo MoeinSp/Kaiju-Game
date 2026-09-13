@@ -150,7 +150,7 @@ async def arena_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 RECENT_OPPONENTS_KEY = "arena_recent_opps"
-_RECENT_OPPONENTS_MAX = 12  # remember this many recent picks, so «بعدی» keeps finding fresh faces
+_RECENT_OPPONENTS_MAX = 3  # remember this many recent picks so users cycle through real players without getting trapped in bots
 
 
 def _find_sync(tg_user, exclude_ids=None):
@@ -264,10 +264,26 @@ def _swap_rerender_sync(tg_user, creature_id, pending):
     level = creature.level
     my_power = active_power_of(creature)
     dna_win = round(constants.ARENA_WIN_DNA_BASE + level * constants.ARENA_WIN_DNA_PER_LEVEL)
+
+    opp_elem = pending.get("element")
+    opp_cname = pending.get("creature_name", "؟")
+    if pending.get("is_fake") and creature.element:
+        weak_to_player = constants.ELEMENT_STRONG_AGAINST.get(creature.element)
+        if opp_elem == weak_to_player or user.cup >= 3700:
+            safe_elements = [e for e in constants.ELEMENTS if e != weak_to_player]
+            if user.cup >= 3700:
+                counters = [e for e in constants.ELEMENTS if constants.ELEMENT_STRONG_AGAINST.get(e) == creature.element]
+                opp_elem = counters[0] if counters else random.choice(safe_elements)
+            else:
+                opp_elem = random.choice(safe_elements)
+            opp_cname = constants.random_species_name(opp_elem)
+            pending["element"] = opp_elem
+            pending["creature_name"] = opp_cname
+
     opponent = {
         "is_fake": pending["is_fake"], "user": None, "label": pending["label"],
-        "creature_name": pending.get("creature_name", "؟"), "cup": pending["cup"],
-        "power": pending["power"], "element": pending.get("element"),
+        "creature_name": opp_cname, "cup": pending["cup"],
+        "power": pending["power"], "element": opp_elem,
         "loot_pool": pending["loot_pool"],
     }
     loot = expected_loot(opponent, level)
@@ -464,7 +480,7 @@ def opponent_details_text(d: dict, *, show_header: bool = True) -> str:
             f"💪 قدرت کل: <b>{d['power']}</b>\n"
             f"{constants.element_label(d['element']) if d.get('element') else ''}\n\n"
             "<i>این یه آزمایشگاه بات هم‌ردهٔ کاپته — هرچی کاپت بالاتر، قوی‌تر و مجهزتره "
-            "(نزدیک کاپ 5000 کاملاً مکس و فول‌تجهیزات می‌شه).</i>"
+            "(نزدیک کاپ 4000 کاملاً مکس و شکست‌ناپذیر می‌شه).</i>"
         )
     s = d["stats"]
     lines = ["🔍 <b>جزییات حریف</b>"]

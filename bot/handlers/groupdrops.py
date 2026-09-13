@@ -42,40 +42,36 @@ def _spawn_text(d: dict) -> str:
 
 
 def _win_text(kind: str, who: str, reward: dict) -> str:
-    """The 'X won' message, with a per-kind bespoke layout for the flashy drops.
-    `who` is an HTML mention of the winner."""
+    """The 'X won' message, with a clean structured layout for all drops."""
+    cfg = groupdrops.DROP_KINDS.get(kind, {})
+    title = cfg.get("title", "جایزه گروهی")
+    emoji = cfg.get("emoji", "🎁")
+
     coins = reward.get("coins", 0)
     dna = reward.get("dna", 0)
     diamonds = reward.get("diamonds", 0)
-    if kind == "vein":
-        return (
-            "💎 <b>رگه‌ی الماس کشف شد!</b>\n"
-            f"⚡️ دست‌جنبون‌ترین معدنچی: {who}\n"
-            f"🎁 پاداش غارت: {diamonds} {get_emoji('diamond')}"
-        )
-    if kind == "capsule":
-        return (
-            f"🔋⚡️ {who} کپسول رو هوا زد!\n"
-            f"🎁 {coins:,} طلا و انرژی کامل واریز شد."
-        )
-    if kind == "ambush":
-        return (
-            "⚔️ <b>رویداد: شکست هیولای وحشی</b>\n\n"
-            f"🥇 قاتل هیولا: {who}\n"
-            f"{get_emoji('coin')} طلا: {coins:,}\n"
-            f"{get_emoji('dna')} دی‌ان‌ای: {dna:,}"
-        )
-    if kind == "jackpot":
-        return (
-            "🌟 <b>برنده‌ی جک‌پات نادر!</b>\n\n"
-            f"🎉 {who} با مهارت تمام جک‌پات رو زد!\n"
-            f"💰 پاداش بزرگ: <b>{coins:,} طلا</b> واریز شد."
-        )
-    cfg = groupdrops.DROP_KINDS[kind]
-    return (
-        f"{cfg['emoji']} <b>{cfg['title']}</b>\n"
-        f"🎉 {who} اولین نفر بود و <b>{groupdrops.reward_text(reward)}</b> برد!"
-    )
+    energy = reward.get("energy")
+
+    reward_items = []
+    if coins:
+        reward_items.append(f"🪙 طلا: <b>+{coins:,}</b>")
+    if dna:
+        reward_items.append(f"🧬 دی‌ان‌ای: <b>+{dna:,}</b>")
+    if diamonds:
+        reward_items.append(f"💎 الماس: <b>+{diamonds:,}</b>")
+    if energy == "full":
+        reward_items.append("⚡️ انرژی: <b>فول شارژ (۱۰۰٪)</b>")
+
+    rewards_block = "\n".join(f"  ↳ {item}" for item in reward_items) if reward_items else "  ↳ بدون جایزه"
+
+    lines = [
+        f"{emoji} <b>{title}</b>",
+        f"👤 برنده: {who}",
+        "",
+        "📦 <b>غنیمت دریافت شده:</b>",
+        rewards_block,
+    ]
+    return "\n".join(lines)
 
 
 def _delete_drop(drop_id: int) -> None:

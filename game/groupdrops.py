@@ -123,14 +123,14 @@ def reward_for(user: User, kind: str) -> dict:
 def reward_text(reward: dict) -> str:
     parts = []
     if reward.get("coins"):
-        parts.append(f"{reward['coins']:,} طلا")
+        parts.append(f"🪙 {reward['coins']:,} طلا")
     if reward.get("dna"):
-        parts.append(f"{reward['dna']:,} DNA")
+        parts.append(f"🧬 {reward['dna']:,} DNA")
     if reward.get("diamonds"):
-        parts.append(f"{reward['diamonds']:,} 💎")
+        parts.append(f"💎 {reward['diamonds']:,} الماس")
     if reward.get("energy") == "full":
-        parts.append("انرژی کامل")
-    return " + ".join(parts) or "—"
+        parts.append("⚡️ فول انرژی")
+    return " ┃ ".join(parts) or "—"
 
 
 def due_spawns() -> list[dict]:
