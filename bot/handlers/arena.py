@@ -597,6 +597,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     if pending is None:
         await query.answer("اول یه حریف پیدا کن.", show_alert=True)
         return
+    await query.answer()
 
     try:
         result, completed_missions = await run_db(_attack_sync, update.effective_user, pending)

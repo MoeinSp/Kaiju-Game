@@ -102,8 +102,10 @@ def hunt_benchmark_power(user: User) -> int:
     return max(20, best)
 
 
-def scout_cost(creature: Creature) -> int:
-    return max(HUNT_SCOUT_COST_MIN, round(_player_power(creature) * HUNT_SCOUT_COST_PER_POWER))
+def scout_cost(creature: Creature, power: int | None = None) -> int:
+    if power is None:
+        power = _player_power(creature)
+    return max(HUNT_SCOUT_COST_MIN, round(power * HUNT_SCOUT_COST_PER_POWER))
 
 
 def hunt_coin_range(power: int, tier: str) -> tuple[int, int]:
@@ -148,7 +150,7 @@ def spawn_wild_creature(benchmark_power: int, tier: str = "normal", seed: int | 
     )
 
 
-def scout_one(user: User, player_creature: Creature) -> dict:
+def scout_one(user: User, player_creature: Creature, benchmark_power: int | None = None) -> dict:
     """A single previewable opponent — the player searches again ("بعدی") until they
     like what they see. Carries the seed so resolve_hunt rebuilds the exact opponent. The
     wild is sized to the player's STRONGEST kaiju, so it stays the same if they switch
@@ -157,7 +159,8 @@ def scout_one(user: User, player_creature: Creature) -> dict:
 
     tier = random.choice(list(HUNT_TIERS))
     seed = random.randrange(1_000_000)
-    wild = spawn_wild_creature(hunt_benchmark_power(user), tier, seed)
+    bench = benchmark_power if benchmark_power is not None else hunt_benchmark_power(user)
+    wild = spawn_wild_creature(bench, tier, seed)
     return {
         "tier": tier,
         "seed": seed,

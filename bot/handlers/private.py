@@ -2515,16 +2515,15 @@ def _hunt_scout_sync(tg_user, charge=False):
     creature = get_active_creature(user)
     if creature is None:
         raise GameError("اول /start رو بزن تا موجودت رو بگیری.")
-    cost = scout_cost(creature)
+    equipped = get_equipped_items(creature)
+    my_power = _creature_power(creature, equipped)
+    cost = scout_cost(creature, power=my_power)
     if charge:  # «بعدی» costs a little gold, scaled by power
         if user.coins < cost:
             raise GameError(f"برای جستجوی دوباره {cost} طلا لازمه (الان {user.coins} داری).")
         user.coins -= cost
         user.save(update_fields=["coins"])
-    # use the canonical power metric (same as profile/arena) — the old stat-sum showed
-    # a smaller, inconsistent number ("قدرتم کمه و باگه").
-    my_power = _creature_power(creature, get_equipped_items(creature))
-    return creature, my_power, user.cup, scout_one(user, creature), sync_energy(user), cost
+    return creature, my_power, user.cup, scout_one(user, creature, benchmark_power=my_power), sync_energy(user), cost
 
 
 def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> str:
@@ -2596,12 +2595,12 @@ async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def hunt_next_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    await query.answer()
     try:
         creature, my_power, cup, target, energy, cost = await run_db(_hunt_scout_sync, update.effective_user, True)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer("🔍 جستجوی دوباره…")
     await safe_edit_message_text(
         query,
         _hunt_scout_text(creature, my_power, cup, target, energy, cost),
@@ -2699,6 +2698,7 @@ def _hunt_go_sync(tg_user, tier, seed):
 
 async def hunt_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    await query.answer()
     _, tier, seed = query.data.split(":")
     try:
         creature, result, completed_missions = await run_db(

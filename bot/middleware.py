@@ -90,8 +90,19 @@ def _create_user_and_bind_referral(tg_user, referrer_id):
     return user
 
 
+import time
+
+_BAN_CACHE: dict[int, tuple[bool, float]] = {}
+
+
 def _is_banned_sync(user_id: int) -> bool:
-    return User.objects.filter(id=user_id, is_banned=True).exists()
+    now = time.monotonic()
+    cached = _BAN_CACHE.get(user_id)
+    if cached is not None and now < cached[1]:
+        return cached[0]
+    banned = User.objects.filter(id=user_id, is_banned=True).exists()
+    _BAN_CACHE[user_id] = (banned, now + 60.0)
+    return banned
 
 
 async def enforce_ban(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

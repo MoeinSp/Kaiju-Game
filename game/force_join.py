@@ -1,3 +1,5 @@
+import time
+
 from django.db import IntegrityError
 from django.db.models import Q
 from django.utils import timezone
@@ -7,10 +9,25 @@ from game.creature import GameError
 
 NOT_JOINED_STATUSES = {"left", "kicked"}
 
+_CHANNELS_CACHE = None
+_CHANNELS_CACHE_TIME = 0.0
+
+
+def invalidate_channel_cache():
+    global _CHANNELS_CACHE
+    _CHANNELS_CACHE = None
+
 
 def active_channels() -> list[RequiredChannel]:
+    global _CHANNELS_CACHE, _CHANNELS_CACHE_TIME
+    now_ts = time.monotonic()
+    if _CHANNELS_CACHE is not None and (now_ts - _CHANNELS_CACHE_TIME) < 30.0:
+        return _CHANNELS_CACHE
     now = timezone.now()
-    return list(RequiredChannel.objects.filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now)))
+    channels = list(RequiredChannel.objects.filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now)))
+    _CHANNELS_CACHE = channels
+    _CHANNELS_CACHE_TIME = now_ts
+    return channels
 
 
 def list_channels() -> list[RequiredChannel]:
@@ -23,6 +40,7 @@ def add_channel(chat_id: int, username: str | None, title: str | None,
     if invite_link:
         defaults["invite_link"] = invite_link
     channel, _ = RequiredChannel.objects.update_or_create(chat_id=chat_id, defaults=defaults)
+    invalidate_channel_cache()
     return channel
 
 
@@ -33,11 +51,13 @@ def set_invite_link(channel_id: int, link: str | None) -> RequiredChannel:
         raise GameError("این مورد دیگه پیدا نشد.")
     channel.invite_link = (link or "").strip() or None
     channel.save(update_fields=["invite_link"])
+    invalidate_channel_cache()
     return channel
 
 
 def remove_channel(channel_id: int) -> None:
     RequiredChannel.objects.filter(id=channel_id).delete()
+    invalidate_channel_cache()
 
 
 def set_duration(channel_id: int, hours: int | None) -> RequiredChannel:
@@ -47,6 +67,7 @@ def set_duration(channel_id: int, hours: int | None) -> RequiredChannel:
         raise GameError("این کانال دیگه پیدا نشد.")
     channel.expires_at = None if hours is None else timezone.now() + timezone.timedelta(hours=hours)
     channel.save(update_fields=["expires_at"])
+    invalidate_channel_cache()
     return channel
 
 
@@ -59,6 +80,7 @@ def set_reward(channel_id: int, coins: int, dna: int, diamonds: int = 0) -> Requ
     channel.reward_dna = max(0, dna)
     channel.reward_diamonds = max(0, diamonds)
     channel.save(update_fields=["reward_coins", "reward_dna", "reward_diamonds"])
+    invalidate_channel_cache()
     return channel
 
 
