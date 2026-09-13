@@ -530,7 +530,7 @@ async def transfer_free_cancel_callback(update: Update, context: ContextTypes.DE
         await query.answer()
         return
     await query.answer("لغو شد.")
-    await safe_edit_message_text(query, "🚫 آزاد کردن لغو شد — کایجو سرِ کارش موند.")
+    await safe_edit_message_text(query, "🚫 آزاد کردن لغو شد — کایجو سرِ کارش موند.", parse_mode="HTML")
 
 
 def _preview_equip_sync(chat, sender_tg, receiver_id, equip_id):
@@ -693,7 +693,7 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
     offer = _get_offer(token)
     if offer is None:
         await query.answer("⌛ این پیشنهاد منقضی شد.", show_alert=True)
-        await safe_edit_message_text(query, "⌛ این پیشنهاد منقضی شد. دوباره از «انتقال …» شروع کن.")
+        await safe_edit_message_text(query, "⌛ این پیشنهاد منقضی شد. دوباره از «انتقال …» شروع کن.", parse_mode="HTML")
         return
 
     # ── seller-only steps ────────────────────────────────────────────────────
@@ -705,7 +705,7 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
             _PENDING_OFFERS.pop(token, None)
             context.user_data.pop("xfer_price_token", None)
             await query.answer("لغو شد.")
-            await safe_edit_message_text(query, "❌ انتقال لغو شد.")
+            await safe_edit_message_text(query, "❌ انتقال لغو شد.", parse_mode="HTML")
             return
         if verb == "free":
             offer["price"] = 0
@@ -730,7 +730,7 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
     if verb == "rej":
         _PENDING_OFFERS.pop(token, None)
         await query.answer("رد شد.")
-        await safe_edit_message_text(query, "❌ گیرنده پیشنهاد رو رد کرد.")
+        await safe_edit_message_text(query, "❌ گیرنده پیشنهاد رو رد کرد.", parse_mode="HTML")
         return
     if verb == "acc":
         try:
@@ -1588,7 +1588,7 @@ async def pvp_attack_cancel_callback(update: Update, context: ContextTypes.DEFAU
         await query.answer()
         return
     await query.answer("لغو شد.")
-    await safe_edit_message_text(query, "🚫 حمله لغو شد.")
+    await safe_edit_message_text(query, "🚫 حمله لغو شد.", parse_mode="HTML")
     # tidy up: remove the cancelled-attack message after ~1 minute so the group
     # doesn't fill up with dead prompts (default TTL is 60s)
     from bot.handlers.group_words import _schedule_cleanup

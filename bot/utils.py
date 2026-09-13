@@ -446,14 +446,13 @@ async def safe_edit_message_text(query, text, **kwargs):
     """query.edit_message_text(), but handles messages with existing photos (edits caption in-place),
     optional photo attachments, and swallows Telegram's 'Message is not modified' BadRequest."""
     photo = kwargs.pop("photo", None)
-    parse_mode = kwargs.get("parse_mode", "HTML")
+    parse_mode = kwargs.setdefault("parse_mode", "HTML")
     if parse_mode == "HTML" and isinstance(text, str):
         text = premiumize_html(text)
     if photo:
         return await send_screen(query, text, photo=photo, **kwargs)
 
     if getattr(query, "message", None) and getattr(query.message, "photo", None):
-        parse_mode = kwargs.get("parse_mode", "HTML")
         caption = safe_truncate_html(text, 1024) if parse_mode == "HTML" else (text[:1024] if text else "")
         plain_caption = re.sub(r"<[^>]+>", "", caption) if caption else ""
         try:
@@ -486,6 +485,18 @@ async def safe_edit_message_text(query, text, **kwargs):
     try:
         return await query.edit_message_text(text, **kwargs)
     except BadRequest as exc:
-        if "Message is not modified" not in str(exc):
-            raise
+        if "Message is not modified" in str(exc):
+            return getattr(query, "message", None)
+        if any(k in str(exc).lower() for k in ("parse", "entity", "tag", "start tag")):
+            try:
+                clean_kwargs = dict(kwargs)
+                clean_kwargs["parse_mode"] = None
+                plain_text = re.sub(r"<[^>]+>", "", text) if text else ""
+                return await query.edit_message_text(plain_text, **clean_kwargs)
+            except BadRequest as inner_ex:
+                if "Message is not modified" in str(inner_ex):
+                    return getattr(query, "message", None)
+            except Exception:
+                pass
+        raise
     return getattr(query, "message", None)
