@@ -146,16 +146,36 @@ def invalidate_cached_file_id(path: str) -> None:
 
 
 def safe_truncate_html(text: str, max_chars: int = 1000) -> str:
-    """Truncates HTML text to max_chars without breaking tags or leaving unclosed tags."""
-    if not text or len(text) <= max_chars:
-        return text or ""
+    """Truncates HTML text so that the visible (parsed) character count does not exceed
+    max_chars, preserving well-formed HTML tags and closing any unclosed tags.
+    Telegram Bot API caption limit (1024) is strictly based on characters after entities parsing,
+    so HTML tags like <tg-emoji> and <b> must not count toward the truncation limit."""
+    if not text:
+        return ""
+    plain = re.sub(r"<[^>]+>", "", text)
+    if len(plain) <= max_chars:
+        return text
 
-    cutoff = max_chars - 30
-    last_nl = text.rfind("\n", 0, cutoff)
-    if last_nl > cutoff // 2:
-        truncated = text[:last_nl]
-    else:
-        truncated = text[:cutoff]
+    target_vis = max(10, max_chars - 30)
+    visible_count = 0
+    cutoff = len(text)
+    in_tag = False
+
+    for i, c in enumerate(text):
+        if c == "<":
+            in_tag = True
+        elif c == ">" and in_tag:
+            in_tag = False
+        elif not in_tag:
+            visible_count += 1
+            if visible_count >= target_vis:
+                cutoff = i + 1
+                break
+
+    truncated = text[:cutoff]
+    last_nl = truncated.rfind("\n")
+    if last_nl > len(truncated) // 2:
+        truncated = truncated[:last_nl]
 
     last_open = truncated.rfind("<")
     last_close = truncated.rfind(">")
@@ -164,7 +184,6 @@ def safe_truncate_html(text: str, max_chars: int = 1000) -> str:
 
     tag_pattern = re.compile(r"<(/?[a-zA-Z0-9_-]+)(?:\s+[^>]*?)?>")
     open_tags = []
-
     for match in tag_pattern.finditer(truncated):
         tag_name = match.group(1)
         if tag_name.startswith("/"):
