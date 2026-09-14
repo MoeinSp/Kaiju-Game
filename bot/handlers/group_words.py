@@ -13,7 +13,7 @@ against the id baked into the callback data. Without that, tapping «تجهیز�
 someone else's card would quietly re-render it with your own gear.
 """
 
-from telegram import InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
 from telegram.ext import (CallbackQueryHandler, CommandHandler, ContextTypes,
                           MessageHandler, filters)
@@ -546,6 +546,58 @@ def _feedcap_group_card(user, creature, caps: dict, maxed: bool) -> tuple[str, I
 
 
 def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
+    from game.energy import get_max_energy
+    from game.subscription import get_subscription_info
+
+    max_energy = get_max_energy(user)
+
+    if energy <= 0:
+        sub_info = get_subscription_info(user)
+        rows = []
+        if sub_info["is_active"]:
+            sub_name = sub_info["tier_label"]
+            days_left = sub_info["days_left"]
+            hours_left = sub_info.get("hours_left", 0)
+            status_text = (
+                f"✨ <b>اشتراک {sub_name}</b> برای شما فعال است "
+                f"({days_left} روز و {hours_left} ساعت باقی‌مانده).\n\n"
+                f"<i>💡 سقف انرژی شما ۱۰۰ است. می‌توانید با الماس آن را فوراً شارژ کامل کنید:</i>"
+            )
+            rows.append([
+                InlineKeyboardButton(
+                    f"{get_emoji('diamond')} شارژ فوری با الماس (پیوی)",
+                    url=f"https://t.me/{BOT_USERNAME}?start=energy",
+                )
+            ])
+        else:
+            status_text = (
+                f"👑 <b>با تهیه اشتراک نقره‌ای:</b>\n"
+                f"  ⚡️ <b>سقف انرژیت ۲ برابر می‌شه (۱۰۰ به جای ۵۰)!</b>\n"
+                f"  📋 جعبه‌های آرنا خودکار و پشت‌سرهم باز می‌شن\n"
+                f"  🏹 درآمدت از شکار خودکار ۲۵٪ بیشتر می‌شه!\n"
+                f"  🥈 نشان پرمیوم نقره‌ای کنار اسمت قرار می‌گیره\n\n"
+                f"<i>💡 فقط با ۱۰۰ هزار تومان، محدودیت انرژی رو برای همیشه فراموش کن!</i>"
+            )
+            rows.append([
+                InlineKeyboardButton(
+                    f"{get_emoji('diamond')} شارژ کامل با الماس (پیوی)",
+                    url=f"https://t.me/{BOT_USERNAME}?start=energy",
+                )
+            ])
+            rows.append([
+                InlineKeyboardButton(
+                    "🥈 خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)",
+                    url=f"https://t.me/{BOT_USERNAME}?start=sub_silver",
+                )
+            ])
+        rows.append([_pm_button()])
+
+        full_text = (
+            f"{get_emoji('energy')} <b>انرژی شما تمام شده است!</b> ({energy}/{max_energy})\n\n"
+            f"{status_text}"
+        )
+        return full_text, InlineKeyboardMarkup(rows)
+
     if target is None:
         return (
             f"{get_emoji('hunt')} حریفی پیدا نشد — دوباره امتحان کن.",
@@ -570,7 +622,7 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
         (f"🔮 {adv}" if adv else ""),
         "",
         f"🎁 جوایز برد: {get_emoji('coin')} <b>+{lo:,}–{hi:,}</b> طلا · {get_emoji('dna')} <b>+{dlo:,}–{dhi:,}</b>",
-        f"{get_emoji('energy')} هزینه: 1 انرژی (داری: {energy})",
+        f"{get_emoji('energy')} هزینه: 1 انرژی (داری: {energy}/{max_energy})",
         f"🔍 بعدی: <b>{target.get('scout_cost', 0)}</b> طلا",
     ])
     rows = [
@@ -1621,14 +1673,15 @@ def _do_sync(tg_user, chat, action, arg):
 
         from bio_lab.models import User as _User
         from game.daily import check_missions, record_action
-        from game.energy import spend_energy
+        from game.energy import EnergyError, get_max_energy, spend_energy
         from game.hunt import resolve_auto_hunt
 
         _require_creature(creature)
         energy = sync_energy(user)
-        hunts = min(energy, 50)  # spend up to all current energy in one batch (cap 50)
+        max_en = get_max_energy(user)
+        hunts = min(energy, max_en)  # spend up to all available energy in batch (cap 100 for subscribers)
         if hunts <= 0:
-            raise GameError("انرژی نداری — صبر کن پر شه یا توی پیوی با الماس شارژ کن.")
+            raise EnergyError(f"⚡ انرژی کافی نداری (الان {energy}/{max_en}).")
         with transaction.atomic():
             u = _User.objects.select_for_update().get(id=user.id)
             creature = get_active_creature(u)
@@ -1638,7 +1691,7 @@ def _do_sync(tg_user, chat, action, arg):
             result = resolve_auto_hunt(u, creature, hunts)
             record_action(u, "hunt")
             result["missions"] = check_missions(u, "hunt")
-        return {"kind": "autohunt", "result": result, "card": _card_sync(tg_user, chat, "hunt")}
+        return {"kind": "autohunt", "result": result, "card": _card_sync(tg_user, chat, "hunt"), "user": user}
 
     if action in ("up_wings", "up_armor", "up_fangs", "up_poison"):
         from game.creature import upgrade_part
@@ -2004,11 +2057,32 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
                 return
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer()
     if action == "autohunt":
-        # a whole-energy batch — the player has no energy left, so DON'T append a «next
-        # opponent» hunt card; show only the result banner (no follow-up keyboard).
-        await safe_edit_message_text(query, _action_note(payload).rstrip(), parse_mode="HTML")
+        # a whole-energy batch — the player spent all energy; attach quick refill / subscription options
+        from game.subscription import get_subscription_info
+
+        u_obj = payload.get("user")
+        if u_obj is None:
+            from bio_lab.repository import get_or_create_user
+            u_obj, _ = get_or_create_user(update.effective_user)
+        sub_info = get_subscription_info(u_obj)
+        kb_rows = []
+        if not sub_info["is_active"]:
+            kb_rows.append([
+                InlineKeyboardButton(f"{get_emoji('diamond')} شارژ انرژی با الماس", url=f"https://t.me/{BOT_USERNAME}?start=energy"),
+                InlineKeyboardButton("🥈 خرید اشتراک (۱۰۰ تومان)", url=f"https://t.me/{BOT_USERNAME}?start=sub_silver"),
+            ])
+        else:
+            kb_rows.append([
+                InlineKeyboardButton(f"{get_emoji('diamond')} شارژ فوری با الماس", url=f"https://t.me/{BOT_USERNAME}?start=energy")
+            ])
+        kb_rows.append([_pm_button()])
+        await safe_edit_message_text(
+            query,
+            _action_note(payload).rstrip(),
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(kb_rows),
+        )
         return
     card_action = {"autohunt": "hunt", "hunt_go": "hunt", "hunt_next": "hunt",
                    "arena_go": "arena", "arena_find": "arena", "collect_all": "mine",

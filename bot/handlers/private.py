@@ -3779,8 +3779,8 @@ async def heist_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         lines.append(result["log_text"])
     if result["success"]:
         reveal = (
-            f"{get_emoji('celebrate')} <b>شبیخون موفق بود!</b> {result['stolen']} {get_emoji('coin')} از خزانه‌ی "
-            f"<b>{target.name}</b> دزدیدی!"
+            f"{get_emoji('celebrate')} <b>شبیخون موفق بود!</b> <b>+{result['stolen']:,}</b> {get_emoji('coin')} از خزانه‌ی "
+            f"<b>{target.name}</b> غارت شد و به <b>خزانه‌ی اتحاد شما</b> واریز گردید (همچنین پاداش شخصی دریافت شد)!"
         )
     else:
         reveal = f"😔 نگهبان‌های <b>{target.name}</b> دفاع کردن و شبیخونت شکست خورد."
@@ -4152,8 +4152,8 @@ async def heist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if result["success"]:
         await update.message.reply_text(
-            f"{get_emoji('celebrate')} <b>شبیخون موفق بود!</b> {result['stolen']} {get_emoji('coin')} از خزانه‌ی "
-            f"<b>{target.name}</b> دزدیدی!",
+            f"{get_emoji('celebrate')} <b>شبیخون موفق بود!</b> <b>+{result['stolen']:,}</b> {get_emoji('coin')} از خزانه‌ی "
+            f"<b>{target.name}</b> غارت شد و به <b>خزانه‌ی اتحاد شما</b> واریز گردید (همچنین پاداش شخصی دریافت شد)!",
             parse_mode="HTML",
         )
     else:

@@ -567,6 +567,8 @@ def heist(attacker: User, attacker_creature: Creature, defender_alliance: Allian
         raise GameError("اول باید عضو یه اتحاد باشی.")
     if attacker.alliance_id == defender_alliance.id:
         raise GameError("نمی‌تونی به خزانه‌ی اتحاد خودت شبیخون بزنی!")
+
+    defender_alliance = Alliance.objects.select_for_update().get(id=defender_alliance.id)
     if defender_alliance.treasury_gold <= 0:
         raise GameError(f"خزانه‌ی اتحاد {defender_alliance.name} خالیه، غارتی درکار نیست.")
 
@@ -586,12 +588,28 @@ def heist(attacker: User, attacker_creature: Creature, defender_alliance: Allian
     defender_alliance.last_heisted_at = timezone.now()
     # the دژ building softens every successful heist against this alliance
     defense = heist_defense_multiplier(defender_alliance)
-    if not defender_creatures:
-        stolen = round(defender_alliance.treasury_gold * constants.HEIST_STEAL_PERCENT * defense)
-        defender_alliance.treasury_gold -= stolen
+
+    def _transfer_loot(amount: int) -> int:
+        amt = min(defender_alliance.treasury_gold, max(1, amount))
+        defender_alliance.treasury_gold -= amt
         defender_alliance.save(update_fields=["treasury_gold", "last_heisted_at"])
-        attacker.coins += stolen
+
+        # Deposit into attacker's alliance treasury
+        if attacker.alliance_id:
+            attacker_alliance = Alliance.objects.select_for_update().get(id=attacker.alliance_id)
+            attacker_alliance.treasury_gold += amt
+            attacker_alliance.save(update_fields=["treasury_gold"])
+
+        # Also grant the attacker personal coin bounty
+        attacker.coins += amt
         attacker.save(update_fields=["coins"])
+        from game.ledger import record_gain
+        record_gain(attacker, "heist", coins=amt)
+        return amt
+
+    if not defender_creatures:
+        raw_stolen = round(defender_alliance.treasury_gold * constants.HEIST_STEAL_PERCENT * defense)
+        stolen = _transfer_loot(raw_stolen)
         return {
             "success": True,
             "stolen": stolen,
@@ -607,11 +625,10 @@ def heist(attacker: User, attacker_creature: Creature, defender_alliance: Allian
 
     stolen = 0
     if success:
-        stolen = round(defender_alliance.treasury_gold * constants.HEIST_STEAL_PERCENT * defense)
-        defender_alliance.treasury_gold -= stolen
-        attacker.coins += stolen
-        attacker.save(update_fields=["coins"])
-    defender_alliance.save(update_fields=["treasury_gold", "last_heisted_at"])
+        raw_stolen = round(defender_alliance.treasury_gold * constants.HEIST_STEAL_PERCENT * defense)
+        stolen = _transfer_loot(raw_stolen)
+    else:
+        defender_alliance.save(update_fields=["last_heisted_at"])
 
     return {
         "success": success,
