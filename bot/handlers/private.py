@@ -112,9 +112,10 @@ def wallet_line(user, energy: int | None = None) -> str:
     # one resource per line: crammed onto a single row the numbers ran together and
     # it was impossible to tell which figure belonged to which currency
     # under energy: how long until the next point (or "full")
-    from game.energy import minutes_until_next_point
+    from game.energy import get_max_energy, minutes_until_next_point
 
-    if energy >= constants.MAX_ENERGY:
+    max_energy = get_max_energy(user)
+    if energy >= max_energy:
         energy_note = "<i>پره ✅</i>"
     else:
         energy_note = f"<i>⏳ تا انرژی بعدی ~{minutes_until_next_point(user)} دقیقه</i>"
@@ -122,7 +123,7 @@ def wallet_line(user, energy: int | None = None) -> str:
         f"{get_emoji('coin')} طلا: <b>{user.coins:,}</b>\n"
         f"{get_emoji('dna')} DNA: <b>{user.dna_fragments:,}</b>\n"
         f"{get_emoji('diamond')} الماس: <b>{user.diamonds:,}</b>\n"
-        f"{get_emoji('energy')} انرژی: <b>{energy}</b>/{constants.MAX_ENERGY}   {energy_note}"
+        f"{get_emoji('energy')} انرژی: <b>{energy}</b>/{max_energy}   {energy_note}"
     )
 
 
@@ -233,11 +234,12 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
     active defensive shields — each in its own clearly divided block."""
     from game.arena import (group_shield_remaining_seconds, shield_remaining_seconds,
                             _fmt_shield_remaining)
-    from game.energy import minutes_until_next_point
+    from game.energy import get_max_energy, minutes_until_next_point
     from game.equipment import equipment_power
 
     stats = effective_stats(creature, equipped_items)
     energy = sync_energy(user)
+    max_energy = get_max_energy(user)
     power = _creature_power(creature, equipped_items)
 
     lp = lab_progress(user)
@@ -260,7 +262,7 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
         lines = [
             f"{lab_badge}",
             f"{get_emoji('coin')} <b>{user.coins:,}</b> ┃ {get_emoji('dna')} <b>{user.dna_fragments:,}</b> ┃ {get_emoji('diamond')} <b>{user.diamonds:,}</b>",
-            f"{get_emoji('energy')} انرژی: <b>{energy}/{constants.MAX_ENERGY}</b> ({pct_bar(energy, constants.MAX_ENERGY, 6)})",
+            f"{get_emoji('energy')} انرژی: <b>{energy}/{max_energy}</b> ({pct_bar(energy, max_energy, 6)})",
             f"🛡 سپر آرنا: <b>{arena_status}</b> ┃ سپر گروه: <b>{group_status}</b>",
             "",
             f"{get_emoji('creature')} <b>{creature_name(creature)}</b> <code>#{creature.id}</code>",
@@ -276,11 +278,11 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
         pct = int(round((lp['into'] / lp['span']) * 100)) if lp.get('span') else 0
         lab_line = (f"{get_emoji('lab')} سطح آزمایشگاه: <b>{lp['level']}</b> ({pct}٪ <code>{lp['into']}/{lp['span']}</code>)")
 
-    if energy >= constants.MAX_ENERGY:
-        en_line = f"{get_emoji('energy')} انرژی: {pct_bar(energy, constants.MAX_ENERGY)} ({energy}/{constants.MAX_ENERGY}) ✅ پره"
+    if energy >= max_energy:
+        en_line = f"{get_emoji('energy')} انرژی: {pct_bar(energy, max_energy)} ({energy}/{max_energy}) ✅ پره"
     else:
-        en_line = (f"{get_emoji('energy')} انرژی: {pct_bar(energy, constants.MAX_ENERGY)} "
-                   f"({energy}/{constants.MAX_ENERGY}) ⏳ شارژ بعدی: ~{minutes_until_next_point(user)} دقیقه")
+        en_line = (f"{get_emoji('energy')} انرژی: {pct_bar(energy, max_energy)} "
+                   f"({energy}/{max_energy}) ⏳ شارژ بعدی: ~{minutes_until_next_point(user)} دقیقه")
 
     lines = [
         f"🏰 پایگاه و آزمایشگاه: <b>{lab_display(user)}</b>",
@@ -352,9 +354,10 @@ def _fine_bar(current: int, total: int, width: int = 10) -> str:
 def balance_text(user, kaiju_count: int = 0) -> str:
     """The «موجودی» / balance card — wallet + kaiju count + energy, in a compact
     English layout (per the owner's requested format)."""
-    from game.energy import seconds_until_next_point
+    from game.energy import get_max_energy, seconds_until_next_point
 
     energy = sync_energy(user)
+    max_energy = get_max_energy(user)
     div = "─────────────────"
     lines = [
         f"👤 <b>{lab_display(user)}</b>",
@@ -364,10 +367,10 @@ def balance_text(user, kaiju_count: int = 0) -> str:
         f"{get_emoji('diamond')} <b>{user.diamonds:,}</b> DIAMOND",
         f"{get_emoji('creature')} <b>{kaiju_count}</b> KAIJU",
         div,
-        f"{get_emoji('energy')} ENERGY {energy}/{constants.MAX_ENERGY}",
-        f"{_fine_bar(energy, constants.MAX_ENERGY)} {round(100 * energy / max(1, constants.MAX_ENERGY))}%",
+        f"{get_emoji('energy')} ENERGY {energy}/{max_energy}",
+        f"{_fine_bar(energy, max_energy)} {round(100 * energy / max(1, max_energy))}%",
     ]
-    if energy < constants.MAX_ENERGY:
+    if energy < max_energy:
         secs = seconds_until_next_point(user)
         lines += ["", f"⏱ Recharge: {secs // 60:02d}:{secs % 60:02d}"]
     else:
@@ -426,12 +429,13 @@ def _part_power_gain(creature, part: str, equipped_items: list | None, step: int
 
 def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots: list | None = None, step: int = 1) -> str:
     from game.creature import part_bulk_cost
-    from game.energy import sync_energy
+    from game.energy import get_max_energy, sync_energy
 
     stats = effective_stats(creature, equipped_items)
     stars = get_emoji("star") * creature.star_level
     max_level = constants.creature_max_level(creature.rarity, creature.star_level)
     energy = sync_energy(user)
+    max_energy = get_max_energy(user)
 
     lines = [
         f"🦅 <b>{creature_name(creature)}</b> <code>#{creature.id}</code>",
@@ -460,7 +464,7 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
 
     lines += [
         "",
-        f"{get_emoji('coin')} موجودی: <b>{user.coins:,}</b> طلا ┃ {get_emoji('energy')} انرژی: <b>{energy}/{constants.MAX_ENERGY}</b>",
+        f"{get_emoji('coin')} موجودی: <b>{user.coins:,}</b> طلا ┃ {get_emoji('energy')} انرژی: <b>{energy}/{max_energy}</b>",
     ]
     return "\n".join(lines)
 
@@ -1182,6 +1186,21 @@ async def transfer_notify_on_cmd(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if context.args:
+        arg = context.args[0]
+        if arg == "sub_silver":
+            from bot.handlers.subscription import send_subscription_invoice
+            await send_subscription_invoice(update.effective_message, update.effective_user, "silver", context)
+            return
+        elif arg == "sub_gold":
+            from bot.handlers.subscription import send_subscription_invoice
+            await send_subscription_invoice(update.effective_message, update.effective_user, "gold", context)
+            return
+        elif arg in ("subscription", "vip"):
+            from bot.handlers.subscription import subscription_panel
+            await subscription_panel(update, context)
+            return
+
     referrer_id = None
     if context.args:
         from game.referral import parse_payload
@@ -1356,8 +1375,11 @@ async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         result = await run_db(_lab_action_sync, update.effective_user, action, int(creature_id), step)
     except GameError as exc:
+        from bot.handlers.energy import show_energy_error
         from bot.handlers.shop import show_gold_error
 
+        if await show_energy_error(query, exc):
+            return
         if await show_gold_error(query, exc):
             return
         await query.answer(str(exc), show_alert=True)
@@ -2734,13 +2756,15 @@ async def hunt_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 def _autohunt_info_sync(tg_user):
     """Current fieldable creature + live energy, for the auto-hunt prompt."""
+    from game.energy import get_max_energy, sync_energy
+
     user, _ = get_or_create_user(tg_user)
     creature = get_active_creature(user)
     if creature is None:
         raise GameError("اول /start رو بزن تا موجودت رو بگیری.")
     energy = sync_energy(user)
     user.save(update_fields=["energy", "energy_updated_at"])
-    return energy
+    return energy, get_max_energy(user)
 
 
 def _autohunt_sync(tg_user, energy_amount):
@@ -2749,6 +2773,7 @@ def _autohunt_sync(tg_user, energy_amount):
     combat sim). Locks the user row so the whole batch spends energy exactly once, and
     counts every hunt toward the daily hunt missions."""
     from game.daily import record_action_bulk
+    from game.energy import get_max_energy
     from game.hunt import resolve_auto_hunt
 
     user, _ = get_or_create_user(tg_user)
@@ -2758,18 +2783,19 @@ def _autohunt_sync(tg_user, energy_amount):
         if creature is None:
             raise GameError("اول /start رو بزن تا موجودت رو بگیری.")
         sync_energy(user)
+        max_en = get_max_energy(user)
         # cost is HUNT_ENERGY_COST per hunt; clamp the request to what's actually available
         per = max(1, constants.HUNT_ENERGY_COST)
         hunts = min(int(energy_amount), user.energy) // per
         if hunts <= 0:
-            raise GameError(f"⚡ انرژی کافی نداری (الان {user.energy}/{constants.MAX_ENERGY}).")
+            raise GameError(f"⚡ انرژی کافی نداری (الان {user.energy}/{max_en}).")
         spend_energy(user, hunts * per, "شکار خودکار")
         user.save(update_fields=["energy", "energy_updated_at"])
 
         res = resolve_auto_hunt(user, creature, hunts)
         record_action_bulk(user, "hunt", hunts)  # each hunt counts toward hunt missions
         completed_missions = check_missions(user, "hunt")
-    return creature, {**res, "energy_left": user.energy}, completed_missions
+    return creature, {**res, "energy_left": user.energy, "max_energy": max_en}, completed_missions
 
 
 def _autohunt_confirm_kb(amount: int):
@@ -2788,20 +2814,27 @@ def _autohunt_confirm_kb(amount: int):
     return text, kb
 
 
-async def _autohunt_no_energy(query, energy: int) -> None:
+async def _autohunt_no_energy(query, energy: int, max_energy: int = 50) -> None:
     """Out-of-energy → show the diamond refill screen plus a way back to the hunt."""
-    from bot.handlers.energy import energy_refill_button
+    from bot.handlers.energy import energy_refill_markup
 
     await query.answer()
+    caption = (
+        f"⚡ <b>انرژی کافی نداری</b> ({energy}/{max_energy}).\n\n"
+        f"👑 <b>با تهیه اشتراک نقره‌ای:</b>\n"
+        f"  ⚡️ <b>سقف انرژیت ۲ برابر می‌شه (۱۰۰ به جای ۵۰)!</b>\n"
+        f"  📋 جعبه‌های آرنا خودکار و پشت‌سرهم باز می‌شن\n"
+        f"  🏹 درآمدت از شکار خودکار ۲۵٪ بیشتر می‌شه!\n"
+        f"  🥈 نشان پرمیوم نقره‌ای کنار اسمت قرار می‌گیره\n\n"
+        f"<i>💡 فقط با ۱۰۰ هزار تومان، محدودیت انرژی رو برای همیشه فراموش کن!</i>"
+    )
+    markup = energy_refill_markup(query.from_user.id, is_group=False)
+    markup.inline_keyboard.append([btn("بازگشت به شکار", emoji_key="btn_hunt", style=NAV, callback_data="hunt_next")])
     await safe_edit_message_text(
         query,
-        f"⚡ <b>انرژی کافی نداری</b> ({energy}/{constants.MAX_ENERGY}).\n"
-        f"برای ادامهٔ شکار می‌تونی با الماس کامل شارژ کنی:",
+        caption,
         parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([
-            [energy_refill_button(query.from_user.id)],
-            [btn("بازگشت به شکار", emoji_key="btn_hunt", style=NAV, callback_data="hunt_next")],
-        ]),
+        reply_markup=markup,
     )
 
 
@@ -2809,12 +2842,12 @@ async def autohunt_start_callback(update: Update, context: ContextTypes.DEFAULT_
     """Ask how much energy to pour into auto-hunting — with all/half quick buttons."""
     query = update.callback_query
     try:
-        energy = await run_db(_autohunt_info_sync, update.effective_user)
+        energy, max_en = await run_db(_autohunt_info_sync, update.effective_user)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
     if energy < constants.HUNT_ENERGY_COST:
-        await _autohunt_no_energy(query, energy)
+        await _autohunt_no_energy(query, energy, max_en)
         return
     context.user_data.pop(AWAITING_PLAYER_KEY, None)  # buttons first; «دلخواه» arms text input
     half = max(constants.HUNT_ENERGY_COST, energy // 2)
@@ -2822,7 +2855,7 @@ async def autohunt_start_callback(update: Update, context: ContextTypes.DEFAULT_
     await safe_edit_message_text(
         query,
         f"⚡️ <b>شکار خودکار</b>\n"
-        f"چقدر انرژی می‌خوای صرف کنی؟ (الان <b>{energy}/{constants.MAX_ENERGY}</b> داری — "
+        f"چقدر انرژی می‌خوای صرف کنی؟ (الان <b>{energy}/{max_en}</b> داری — "
         f"هر شکار {constants.HUNT_ENERGY_COST} انرژی).\n\n"
         f"<i>توجه: شکار خودکار نصف لوت شکار دستیه و طلا و دی‌ان‌ای کمتری می‌ده.</i>",
         parse_mode="HTML",
@@ -2840,12 +2873,12 @@ async def autohunt_amt_callback(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     which = query.data.split(":")[1]
     try:
-        energy = await run_db(_autohunt_info_sync, update.effective_user)
+        energy, max_en = await run_db(_autohunt_info_sync, update.effective_user)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
     if energy < constants.HUNT_ENERGY_COST:
-        await _autohunt_no_energy(query, energy)
+        await _autohunt_no_energy(query, energy, max_en)
         return
     if which == "custom":
         context.user_data[AWAITING_PLAYER_KEY] = {"action": "autohunt_energy"}
@@ -2885,7 +2918,7 @@ async def autohunt_do_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         f"{get_emoji('coin')} طلا: <b>+{res['coins']:,}</b>",
         f"{get_emoji('dna')} دی‌ان‌ای: <b>+{res['dna']:,}</b>",
         f"✨ XP: <b>+{res['xp']:,}</b>" + (f" · رسید به سطح {creature.level}!" if res["levels"] else ""),
-        f"{get_emoji('energy')} انرژی باقی‌مانده: <code>{res['energy_left']}/{constants.MAX_ENERGY}</code>",
+        f"{get_emoji('energy')} انرژی باقی‌مانده: <code>{res['energy_left']}/{res.get('max_energy', constants.MAX_ENERGY)}</code>",
         "",
         "<i>یادآوری: شکار خودکار نصف لوت شکار دستی رو می‌ده.</i>",
     ]
@@ -3824,13 +3857,13 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
             await message.reply_text("فقط یه عدد مثبت بفرست (مثلاً 10) — یا «انصراف».")
             return
         try:
-            energy = await run_db(_autohunt_info_sync, update.effective_user)
+            energy, max_en = await run_db(_autohunt_info_sync, update.effective_user)
         except GameError as exc:
             await message.reply_text(str(exc))
             return
         amount = min(int(raw), energy)
         if amount < constants.HUNT_ENERGY_COST:
-            await message.reply_text(f"⚡ انرژی کافی نداری ({energy}/{constants.MAX_ENERGY}).")
+            await message.reply_text(f"⚡ انرژی کافی نداری ({energy}/{max_en}).")
             return
         text_confirm, kb_confirm = _autohunt_confirm_kb(amount)
         await message.reply_text(text_confirm, parse_mode="HTML", reply_markup=kb_confirm)

@@ -34,7 +34,7 @@ from django.utils import timezone
 from bio_lab.models import ArenaChest, AttackLog, BreedingJob, BuildingUpgrade, Egg, User
 from game import constants
 from game.daily import today_str
-from game.energy import _synced_energy_and_anchor
+from game.energy import _synced_energy_and_anchor, get_max_energy
 
 # raids older than this are marked notified WITHOUT sending — avoids replaying
 # history the first time the job runs (or after any downtime)
@@ -217,11 +217,12 @@ def collect_due() -> list[tuple[int, str]]:
         # ── energy full (once per drain/refill cycle) ─────────────────────────
         for user in User.objects.filter(notifications_on=True):
             current, _ = _synced_energy_and_anchor(user)
-            if current >= constants.MAX_ENERGY and not user.energy_full_notified:
+            max_en = get_max_energy(user)
+            if current >= max_en and not user.energy_full_notified:
                 bar = "■" * 10
                 energy_text = (
                     "⚡️ <b>مخازن انرژی تکمیل شد!</b>\n"
-                    f"🔋 وضعیت انرژی: [{bar}] 100% ({constants.MAX_ENERGY}/{constants.MAX_ENERGY})\n"
+                    f"🔋 وضعیت انرژی: [{bar}] 100% ({max_en}/{max_en})\n"
                     "──────────────\n"
                     "⚔️ هیولایت به اوج توان بازگشته و تشنه نبرد است!\n"
                     "غنیمت‌های آرنا و شکارهای تازه منتظرند؛ همین حالا قلمروات را گسترش بده."
@@ -230,7 +231,7 @@ def collect_due() -> list[tuple[int, str]]:
                 out.append((user.id, energy_text, "arena"))
                 user.energy_full_notified = True
                 user.save(update_fields=["energy_full_notified"])
-            elif current < constants.MAX_ENERGY and user.energy_full_notified:
+            elif current < max_en and user.energy_full_notified:
                 user.energy_full_notified = False
                 user.save(update_fields=["energy_full_notified"])
 

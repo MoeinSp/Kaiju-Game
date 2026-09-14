@@ -1264,6 +1264,7 @@ def _user_info_text(data: dict) -> str:
 
     gains = data.get("gains", {})
     from game.daily import today_str
+    from game.energy import get_max_energy
 
     t_day = today_str()
     today_b = gains.get("per_day", {}).get(t_day, {})
@@ -1274,7 +1275,7 @@ def _user_info_text(data: dict) -> str:
     lines = [
         f"{get_emoji('profile')} <b>{display_name(user)}</b>  (<code>{user.id}</code>)",
         f"{get_emoji('coin')} {user.coins:,}   {get_emoji('dna')} {user.dna_fragments:,}   "
-        f"{get_emoji('diamond')} {user.diamonds:,}   {get_emoji('energy')} {user.energy}/{constants.MAX_ENERGY}",
+        f"{get_emoji('diamond')} {user.diamonds:,}   {get_emoji('energy')} {user.energy}/{get_max_energy(user)}",
         f"🔥 استریک: <b>{user.login_streak}</b> روز   {get_emoji('alliance')} اتحاد: <b>{alliance_name}</b>",
         f"🚫 وضعیت: <b>{banned_txt}</b>   📅 عضویت: <code>{joined_txt}</code>",
         f"{get_emoji('creature')} کایجوی فعال: {active_txt} (مجموع موجودات: <b>{len(creatures)}</b>)",

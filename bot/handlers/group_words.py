@@ -209,6 +209,9 @@ def _select_card(user, creatures, powers) -> tuple[str, InlineKeyboardMarkup]:
 
 
 def _profile_card(user, creature_count, energy) -> tuple[str, InlineKeyboardMarkup]:
+    from game.energy import get_max_energy
+
+    max_energy = get_max_energy(user)
     progress = lab_progress(user)
     lines = [
         f"{get_emoji('profile')} <b>آزمایشگاه {lab_display(user)}</b>",
@@ -219,7 +222,7 @@ def _profile_card(user, creature_count, energy) -> tuple[str, InlineKeyboardMark
         f"🔥 روزهای پشت‌سرهم: <b>{user.login_streak}</b>",
         "",
         f"{get_emoji('coin')} {user.coins:,}   {get_emoji('dna')} {user.dna_fragments:,}   "
-        f"{get_emoji('diamond')} {user.diamonds:,}   {get_emoji('energy')} {energy}/{constants.MAX_ENERGY}",
+        f"{get_emoji('diamond')} {user.diamonds:,}   {get_emoji('energy')} {energy}/{max_energy}",
     ]
     from game.arena import shield_status_lines
 
@@ -461,7 +464,9 @@ def _upgrade_card(user, creature, energy, step: int = 1) -> tuple[str, InlineKey
     upgrades with a ×1/×5/×10 selector (each tap buys `step` levels at once), live levels
     and gold costs. Gear/fusion still live in the DM."""
     from game.creature import part_bulk_cost, total_capsules
+    from game.energy import get_max_energy
 
+    max_energy = get_max_energy(user)
     step = step if step in _GRP_UPG_STEPS else 1
     sfx = f" ×{step}" if step > 1 else ""
     cap = constants.part_upgrade_cap(creature.star_level)
@@ -482,7 +487,7 @@ def _upgrade_card(user, creature, energy, step: int = 1) -> tuple[str, InlineKey
     lines += [
         "",
         f"🍽 غذای هیولا برای تغذیه (داری: {total_capsules(user)}) — از «فروشگاه روزانه» بخر",
-        f"{get_emoji('coin')} {user.coins:,}   {get_emoji('energy')} {energy}/{constants.MAX_ENERGY}",
+        f"{get_emoji('coin')} {user.coins:,}   {get_emoji('energy')} {energy}/{max_energy}",
     ]
     # ×1/×5/×10 selector — the active step gets a ✅
     step_row = [
@@ -589,7 +594,9 @@ def _arena_card(user, opponent, loot, shielded_for, data=None) -> tuple[str, Inl
         )
     from bot.handlers.private import (element_advantage_line, pct_bar, win_chance_pct, win_label)
     from game import arena as _arena
+    from game.energy import get_max_energy
 
+    max_energy = get_max_energy(user)
     my_power = data.get("my_power", 0)
     energy = data.get("energy", 0)
     my_element = data.get("my_element")
@@ -607,7 +614,7 @@ def _arena_card(user, opponent, loot, shielded_for, data=None) -> tuple[str, Inl
         "",
         f"🦅 موجود شما: <b>{data.get('my_name', '—')}</b>{my_tag}",
         f"💪 قدرت شما: <b>{my_power:,}</b> · 🏆 کاپ: <b>{user.cup:,}</b>",
-        f"{get_emoji('energy')} انرژی: {pct_bar(energy, constants.MAX_ENERGY)} ({energy}/{constants.MAX_ENERGY})",
+        f"{get_emoji('energy')} انرژی: {pct_bar(energy, max_energy)} ({energy}/{max_energy})",
         "",
         div,
         "",
@@ -1990,13 +1997,10 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         from game.energy import EnergyError
 
         if isinstance(exc, EnergyError):
-            from bot.handlers.energy import energy_refill_markup
+            from bot.handlers.energy import show_energy_error
 
-            await query.answer()
-            await safe_edit_message_text(
-                query, str(exc), reply_markup=energy_refill_markup(int(owner_id))
-            )
-            return
+            if await show_energy_error(query, exc, int(owner_id)):
+                return
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer()

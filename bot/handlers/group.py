@@ -49,15 +49,24 @@ def _mission_lines(completed: list[dict]) -> str:
 
 async def _reply_error(message, exc, owner_id: int) -> None:
     """Reply to a group message with an error. An out-of-energy error also gets the
-    diamond-refill button (scoped to `owner_id`) so the player can act inline. Was
-    referenced by `attack()` but never defined — its absence meant a raised
-    RaidError/GameError (e.g. «هیولات خسته‌ست») crashed the handler with a NameError
-    and no message was ever sent to the group."""
+    diamond-refill and silver subscription buttons (scoped to `owner_id`)."""
     from bot.handlers.energy import energy_refill_markup
     from game.energy import EnergyError
 
-    markup = energy_refill_markup(owner_id) if isinstance(exc, EnergyError) else None
-    await message.reply_text(str(exc), parse_mode="HTML", reply_markup=markup)
+    if isinstance(exc, EnergyError):
+        caption = (
+            f"{str(exc)}\n\n"
+            f"👑 <b>با تهیه اشتراک نقره‌ای:</b>\n"
+            f"  ⚡️ <b>سقف انرژیت ۲ برابر می‌شه (۱۰۰ به جای ۵۰)!</b>\n"
+            f"  📋 جعبه‌های آرنا خودکار و پشت‌سرهم باز می‌شن\n"
+            f"  🏹 درآمدت از شکار خودکار ۲۵٪ بیشتر می‌شه!\n"
+            f"  🥈 نشان پرمیوم نقره‌ای کنار اسمت قرار می‌گیره\n\n"
+            f"<i>💡 فقط با ۱۰۰ هزار تومان، محدودیت انرژی رو برای همیشه فراموش کن!</i>"
+        )
+        markup = energy_refill_markup(owner_id, is_group=True)
+        await message.reply_text(caption, parse_mode="HTML", reply_markup=markup)
+    else:
+        await message.reply_text(str(exc), parse_mode="HTML")
 
 
 def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
@@ -1109,7 +1118,7 @@ def _pvp_preview_sync(attacker_tg, target_tg):
     if t_creature is None:
         raise GameError("این بازیکن موجود فعالی نداره.")
     from game.arena import group_shield_remaining_seconds
-    from game.energy import sync_energy
+    from game.energy import get_max_energy, sync_energy
 
     return (
         display_name(attacker), _creature_power(a_creature), a_creature.element,
@@ -1117,6 +1126,7 @@ def _pvp_preview_sync(attacker_tg, target_tg):
         group_shield_remaining_seconds(target),
         a_creature.name, t_creature.name, sync_energy(attacker),
         group_shield_remaining_seconds(attacker),
+        get_max_energy(attacker),
     )
 
 
@@ -1131,7 +1141,8 @@ def _fmt_shield_hm(seconds: int) -> str:
 
 
 def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, t_power, t_elem,
-                       t_shield_secs=0, a_cname="—", t_cname="—", a_energy=0, a_shield_secs=0):
+                       t_shield_secs=0, a_cname="—", t_cname="—", a_energy=0, a_shield_secs=0,
+                       a_max_energy=constants.MAX_ENERGY):
     from bot.handlers.private import (element_advantage_line, pct_bar, win_chance_pct, win_label)
 
     # target is group-shielded → say it LOUDLY at the very top so the attacker
@@ -1176,7 +1187,7 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
         "",
         f"🦅 موجود شما: <b>{a_cname}</b>{a_tag}",
         f"💪 قدرت شما: <b>{a_power:,}</b>",
-        f"{get_emoji('energy')} انرژی فعلی: {pct_bar(a_energy, constants.MAX_ENERGY)} ({a_energy}/{constants.MAX_ENERGY})",
+        f"{get_emoji('energy')} انرژی فعلی: {pct_bar(a_energy, a_max_energy)} ({a_energy}/{a_max_energy})",
         "",
         div,
         "",
@@ -1221,7 +1232,7 @@ def _pvp_preview_by_ids_sync(attacker_id, target_id):
     if a_creature is None or t_creature is None:
         raise GameError("یکی از دو طرف موجود فعال نداره.")
     from game.arena import group_shield_remaining_seconds
-    from game.energy import sync_energy
+    from game.energy import get_max_energy, sync_energy
 
     return (
         display_name(attacker), _creature_power(a_creature), a_creature.element,
@@ -1229,6 +1240,7 @@ def _pvp_preview_by_ids_sync(attacker_id, target_id):
         group_shield_remaining_seconds(target),
         a_creature.name, t_creature.name, sync_energy(attacker),
         group_shield_remaining_seconds(attacker),
+        get_max_energy(attacker),
     )
 
 

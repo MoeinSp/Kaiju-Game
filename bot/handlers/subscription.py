@@ -95,23 +95,28 @@ def _create_sub_req_sync(tg_user, tier: str):
     return purchase.create_subscription_pending(user, tier)
 
 
-async def sub_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    tier = query.data.split(":")[1]
-
+async def send_subscription_invoice(target, tg_user, tier: str, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not botconfig.inbot_purchase_ready():
-        await query.answer("سیستم پرداخت موقتاً در دسترس نیست.", show_alert=True)
+        msg = "سیستم پرداخت موقتاً در دسترس نیست."
+        if hasattr(target, "answer"):
+            await target.answer(msg, show_alert=True)
+        else:
+            await target.reply_text(msg)
         return
 
     try:
-        req = await run_db(_create_sub_req_sync, update.effective_user, tier)
+        req = await run_db(_create_sub_req_sync, tg_user, tier)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        if hasattr(target, "answer"):
+            await target.answer(str(exc), show_alert=True)
+        else:
+            await target.reply_text(str(exc))
         return
 
     context.user_data["buy_awaiting_receipt_req"] = req.id
     card_number, holder = botconfig.get_buy_card()
-    await query.answer()
+    if hasattr(target, "answer"):
+        await target.answer()
 
     sub_cfg = SUBSCRIPTION_TIERS.get(tier, {})
     lines = [
@@ -131,7 +136,17 @@ async def sub_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "<i>به‌محض تأیید رسید توسط پشتیبانی، اشتراک به مدت ۳۰ روز روی اکانتت اعمال می‌شه.</i>",
     ]
     kb = InlineKeyboardMarkup([[btn("انصراف", emoji_key="btn_cancel", style=NAV, callback_data="menu:subscription")]])
-    await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=kb)
+    text = "\n".join(lines)
+    if hasattr(target, "edit_message_text"):
+        await safe_edit_message_text(target, text, parse_mode="HTML", reply_markup=kb)
+    else:
+        await target.reply_text(text, parse_mode="HTML", reply_markup=kb)
+
+
+async def sub_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    tier = query.data.split(":")[1]
+    await send_subscription_invoice(query, update.effective_user, tier, context)
 
 
 def register(application) -> None:

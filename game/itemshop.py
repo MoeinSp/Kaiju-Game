@@ -330,7 +330,8 @@ def grant_contents(user: User, contents: list[dict]) -> list[str]:
             user.dna_fragments += c["amount"]; money_fields.add("dna_fragments"); notes.append(f"{c['amount']} DNA")
         elif t == "energy":
             from django.utils import timezone
-            user.energy = constants.MAX_ENERGY
+            from game.energy import get_max_energy
+            user.energy = get_max_energy(user)
             user.energy_updated_at = timezone.now()
             money_fields.update({"energy", "energy_updated_at"})
             notes.append("انرژی کامل")

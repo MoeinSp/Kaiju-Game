@@ -15,11 +15,6 @@ from game.creature import GameError
 
 
 def energy_refill_button(owner_id: int) -> InlineKeyboardButton:
-    """A single button to hang under any 'out of energy' message.
-
-    `owner_id` is the telegram id of the player the message is for, embedded in the
-    callback so that in a GROUP nobody else can tap it and spend *their own* diamonds
-    on a prompt that was never shown to them (that was a real cross-player bug)."""
     from game import botconfig
 
     return InlineKeyboardButton(
@@ -28,8 +23,17 @@ def energy_refill_button(owner_id: int) -> InlineKeyboardButton:
     )
 
 
-def energy_refill_markup(owner_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([[energy_refill_button(owner_id)]])
+def energy_refill_markup(owner_id: int, is_group: bool = False) -> InlineKeyboardMarkup:
+    from config import BOT_USERNAME
+    from game import botconfig
+
+    cost = botconfig.get_energy_refill_cost()
+    row1 = [InlineKeyboardButton(f"⚡ شارژ کامل با {cost} الماس 💎", callback_data=f"enr:ask:{owner_id}")]
+    if is_group:
+        row2 = [InlineKeyboardButton("🥈 خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)", url=f"https://t.me/{BOT_USERNAME}?start=sub_silver")]
+    else:
+        row2 = [InlineKeyboardButton("🥈 خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)", callback_data="sub_pick:silver")]
+    return InlineKeyboardMarkup([row1, row2])
 
 
 def _owner_ok(query, parts) -> bool:
@@ -48,9 +52,25 @@ async def show_energy_error(query, exc, owner_id: int | None = None) -> bool:
     if isinstance(exc, EnergyError):
         await query.answer()
         oid = owner_id if owner_id is not None else query.from_user.id
-        await safe_edit_message_text(query, str(exc), reply_markup=energy_refill_markup(oid))
+        is_group = query.message.chat.type in ("group", "supergroup") if query.message and query.message.chat else False
+        caption = (
+            f"{str(exc)}\n\n"
+            f"👑 <b>با تهیه اشتراک نقره‌ای:</b>\n"
+            f"  ⚡️ <b>سقف انرژیت ۲ برابر می‌شه (۱۰۰ به جای ۵۰)!</b>\n"
+            f"  📋 جعبه‌های آرنا خودکار و پشت‌سرهم باز می‌شن\n"
+            f"  🏹 درآمدت از شکار خودکار ۲۵٪ بیشتر می‌شه!\n"
+            f"  🥈 نشان پرمیوم نقره‌ای کنار اسمت قرار می‌گیره\n\n"
+            f"<i>💡 فقط با ۱۰۰ هزار تومان، محدودیت انرژی رو برای همیشه فراموش کن!</i>"
+        )
+        await safe_edit_message_text(query, caption, parse_mode="HTML", reply_markup=energy_refill_markup(oid, is_group=is_group))
         return True
     return False
+
+
+def _user_max_energy_sync(tg_user) -> int:
+    from game.energy import get_max_energy
+    user, _ = get_or_create_user(tg_user)
+    return get_max_energy(user)
 
 
 async def energy_ask_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -63,6 +83,7 @@ async def energy_ask_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     from game import botconfig
 
     cost = botconfig.get_energy_refill_cost()
+    max_en = await run_db(_user_max_energy_sync, update.effective_user)
     await query.answer()
     keyboard = InlineKeyboardMarkup([[
         InlineKeyboardButton(f"✅ بله ({cost} 💎)",
@@ -71,7 +92,7 @@ async def energy_ask_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     ]])
     await safe_edit_message_text(
         query,
-        f"⚡ <b>شارژ کامل انرژی</b>\n\nانرژیت به <b>{constants.MAX_ENERGY}</b> پر می‌شه و "
+        f"⚡ <b>شارژ کامل انرژی</b>\n\nانرژیت به <b>{max_en}</b> پر می‌شه و "
         f"<b>{cost}</b> الماس ازت کم می‌شه. تأیید می‌کنی؟",
         parse_mode="HTML", reply_markup=keyboard,
     )
@@ -104,8 +125,7 @@ async def energy_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("⚡ پر شد!")
-    # a way back so the player returns to what they were doing (arena/hunt/…) instead
-    # of a dead-end message. In the DM that's the main menu; in a group, the bot's PV.
+    max_en = await run_db(_user_max_energy_sync, update.effective_user)
     is_private = update.effective_chat is not None and update.effective_chat.type == "private"
     if is_private:
         keyboard = InlineKeyboardMarkup([[
@@ -119,7 +139,7 @@ async def energy_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         ]])
     await safe_edit_message_text(
         query,
-        f"⚡ <b>انرژی پر شد!</b> الان {result['energy']}/{constants.MAX_ENERGY} داری "
+        f"⚡ <b>انرژی پر شد!</b> الان {result['energy']}/{max_en} داری "
         f"(<b>{result['cost']}</b> الماس کم شد).\n<i>برگرد و کارتو ادامه بده 👇</i>",
         parse_mode="HTML",
         reply_markup=keyboard,

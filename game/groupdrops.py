@@ -261,7 +261,8 @@ def claim(drop_id: int, tg_user) -> dict:
     if reward.get("diamonds"):
         user.diamonds += reward["diamonds"]; fields.append("diamonds")
     if reward.get("energy") == "full":
-        user.energy = constants.MAX_ENERGY
+        from game.energy import get_max_energy
+        user.energy = get_max_energy(user)
         user.energy_updated_at = timezone.now()
         fields += ["energy", "energy_updated_at"]
     if fields:

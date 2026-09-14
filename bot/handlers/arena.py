@@ -375,10 +375,11 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
     """The 'opponent found' arena screen — shared by matchmaking and the «بازگشت» from
     the opponent-details view so the same screen is rebuilt identically."""
     from bot.handlers.private import (element_advantage_line, pct_bar, win_chance_pct, win_label)
-    from game.energy import sync_energy
+    from game.energy import get_max_energy, sync_energy
 
     if energy is None:
         energy = sync_energy(user)
+    max_en = get_max_energy(user)
     opp_element = opponent.get("element")
     my_elem_tag = f" [{constants.element_label(my_element)}]" if my_element else ""
     opp_elem_tag = f" [{constants.element_label(opp_element)}]" if opp_element else ""
@@ -395,7 +396,7 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
         _ARENA_DIV,
         f"🦅 موجود شما: <b>{cname}</b>{my_elem_tag}",
         f"💪 قدرت شما: <b>{my_power:,}</b> ┃ {get_emoji('trophy')} کاپ: <b>{user.cup:,}</b>",
-        f"{get_emoji('energy')} انرژی فعلی: {pct_bar(energy, constants.MAX_ENERGY, 10)} ({energy}/{constants.MAX_ENERGY})",
+        f"{get_emoji('energy')} انرژی فعلی: {pct_bar(energy, max_en, 10)} ({energy}/{max_en})",
         _ARENA_DIV,
         "🎯 تحلیل تاکتیکی نبرد:",
         f"شانس پیروزی: {pct_bar(pct, 100, 10)} {win_label(pct)}",
@@ -947,7 +948,10 @@ async def arena_revenge_attack_callback(update: Update, context: ContextTypes.DE
     try:
         result = await run_db(_revenge_attack_sync, update.effective_user, log_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        from bot.handlers.energy import show_energy_error
+
+        if not await show_energy_error(query, exc):
+            await query.answer(str(exc), show_alert=True)
         return
 
     from bot.handlers.notify import send_defense_report_now
@@ -1086,7 +1090,7 @@ def _render_chests_text(user, chests: list, has_sub: bool) -> str:
                 st_text = "📋 <b>در صف</b> (بعد از جعبه فعلی خودکار باز می‌شود)"
             else:
                 st_text = f"{get_emoji('lock')} <b>قفل</b> (زمان بازگشایی: {cfg.get('unlock_hours', 3)} ساعت)"
-            lines.append(f"{num_e}  <b>جایگاه {slot}: {c_emoji} {name}</b>\n   └ وضعیت: {st_text}")
+            lines.append(f"{num_e}  <b>جایگاه {slot}: {c_emoji} {name}</b>\n   ┘ وضعیت: {st_text}")
         else:
             lines.append(f"{num_e}  <b>جایگاه {slot}: 🔘 خالی</b> <i>(با پیروزی در آرنا به دست می‌آید)</i>")
 

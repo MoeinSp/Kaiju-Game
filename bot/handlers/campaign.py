@@ -90,7 +90,10 @@ async def campaign_fight_callback(update: Update, context: ContextTypes.DEFAULT_
     try:
         result, view = await run_db(_fight_sync, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        from bot.handlers.energy import show_energy_error
+
+        if not await show_energy_error(query, exc):
+            await query.answer(str(exc), show_alert=True)
         return
 
     if result["won"]:
