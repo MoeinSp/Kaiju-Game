@@ -8,7 +8,15 @@ from game.creature import GameError
 from game.emoji import get_emoji
 from game.wheel import spin
 
-_KIND_EMOJI_KEY = {"coins": "coin", "dna": "dna", "diamonds": "diamond", "speedup": "speedup"}
+_KIND_EMOJI_KEY = {
+    "coins": "coin",
+    "dna": "dna",
+    "diamonds": "diamond",
+    "speedup": "speedup",
+    "xp_capsule": "potion",
+    "creature": "creature",
+    "jackpot": "wheel",
+}
 
 
 def _wheel_sync(tg_user):
@@ -23,7 +31,8 @@ async def wheel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard())
         return
 
-    emoji = get_emoji(_KIND_EMOJI_KEY[prize["kind"]])
+    emoji_key = _KIND_EMOJI_KEY.get(prize.get("kind"), "wheel")
+    emoji = get_emoji(emoji_key)
     from game.media import get_feature_image_path
     photo = get_feature_image_path("wheel")
     await send_screen(update,

@@ -11,7 +11,15 @@ from game.creature import GameError
 from game.daily import get_daily_count
 from game.emoji import get_emoji
 
-_KIND_EMOJI_KEY = {"coins": "coin", "dna": "dna", "diamonds": "diamond", "speedup": "speedup"}
+_KIND_EMOJI_KEY = {
+    "coins": "coin",
+    "dna": "dna",
+    "diamonds": "diamond",
+    "speedup": "speedup",
+    "xp_capsule": "potion",
+    "creature": "creature",
+    "jackpot": "wheel",
+}
 
 
 def _panel_sync(tg_user):
@@ -95,7 +103,8 @@ async def casino_play_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.answer("😔 این دور نبردی.")
         reveal = "😔 <b>باختی!</b> این دور چیزی نصیبت نشد."
     else:
-        emoji = get_emoji(_KIND_EMOJI_KEY[prize["kind"]])
+        emoji_key = _KIND_EMOJI_KEY.get(prize.get("kind"), "wheel")
+        emoji = get_emoji(emoji_key)
         await query.answer("🎉 بردی!")
         reveal = f"🎉 <b>بردی!</b>\n<tg-spoiler>{emoji} {prize['label']}</tg-spoiler>"
 

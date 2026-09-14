@@ -852,13 +852,14 @@ def _bgx_result_card(user, tier: str, count: int, summary: dict) -> tuple[str, I
 def _wheel_card(user, spun_today) -> tuple[str, InlineKeyboardMarkup]:
     if spun_today:
         text = (
-            f"{get_emoji('wheel')} <b>گردونه‌ی شانس</b>\n\n"
+            f"{get_emoji('wheel')} <b>گردونه‌ی شانس روزانه</b>\n\n"
             "امروز چرخوندیش — فردا دوباره بیا."
         )
         return text, group_footer_keyboard(user.id)
     text = (
-        f"{get_emoji('wheel')} <b>گردونه‌ی شانس</b>\n\n"
-        "<blockquote>روزی یک‌بار رایگان. جایزه: طلا، DNA، الماس یا کارت سرعت.</blockquote>"
+        f"{get_emoji('wheel')} <b>گردونه‌ی شانس روزانه</b>\n\n"
+        "<blockquote>🎁 روزی یک‌بار رایگان با جوایز ارزشمند متناسب با سطح قدرت:\n"
+        "💰 طلا، 🧬 DNA، 💎 الماس، 🧪 غذای هیولا، ⏱ کارت سرعت یا 🐾 هیولای جدید!</blockquote>"
     )
     rows = [[btn("بچرخون!", emoji_key="btn_wheel", style=SHOP, callback_data=_act("wheel_spin", user.id))]]
     rows.append([_pm_button()])
