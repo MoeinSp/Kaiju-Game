@@ -118,11 +118,12 @@ def spend_group_shield_on_attack(user: User) -> int:
     their GROUP shield. Returns the seconds left after the deduction (0 if unshielded).
     The caller must include 'group_shield_until' in its own save()."""
     if not is_group_shielded(user):
+        user.group_shield_until = None
         return 0
     new_until = user.group_shield_until - datetime.timedelta(hours=constants.SHIELD_ATTACK_COST_HOURS)
     now = timezone.now()
-    user.group_shield_until = new_until if new_until > now else now
-    return max(0, int((user.group_shield_until - now).total_seconds()))
+    user.group_shield_until = new_until if new_until > now else None
+    return max(0, int((user.group_shield_until - now).total_seconds())) if user.group_shield_until else 0
 
 
 @transaction.atomic
@@ -439,6 +440,11 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         # bought shield lets you attack a handful of times before it's gone
         spend_shield_on_attack(attacker)
         attacker_fields += ["cup", "shield_until"]
+    else:
+        if is_shielded(attacker):
+            spend_shield_on_attack(attacker)
+            attacker_fields.append("shield_until")
+    attacker.save(update_fields=attacker_fields)
     awarded_chest = None
     if won and award_cup:
         from game.arena_chests import award_chest_on_win

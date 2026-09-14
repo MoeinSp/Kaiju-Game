@@ -271,7 +271,7 @@ def collect_due() -> list[tuple[int, str]]:
                 tier_cfg = ARENA_CHEST_TIERS.get(chest.chest_type, ARENA_CHEST_TIERS["silver"])
                 text = (
                     f"🎁 <b>جعبه آرنا شما آماده باز کردنه!</b>\n\n"
-                    f"✨ <b>{tier_cfg['name']}</b> (اسلات {chest.slot}) آنلاک شد. وقتشه که بازش کنی و موجودات و غنایمش رو برداری!"
+                    f"✨ <b>{tier_cfg['name']}</b> (جایگاه {chest.slot}) آنلاک شد. وقتشه که بازش کنی و موجودات و غنایمش رو برداری!"
                 )
                 out.append((chest.user_id, text, "arena_chest_ready", (chest.id, chest.chest_type)))
 

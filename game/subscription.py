@@ -129,3 +129,20 @@ def activate_subscription(user: User, tier: str, days: int = 30) -> User:
 
     user.save(update_fields=["subscription_tier", "subscription_until", "energy"])
     return user
+
+
+def extend_subscription(user: User, days: int) -> User:
+    """Admin helper to extend a subscription, or activate silver if currently inactive."""
+    if not is_subscription_active(user):
+        return activate_subscription(user, "silver", days=days)
+    user.subscription_until += datetime.timedelta(days=days)
+    user.save(update_fields=["subscription_until"])
+    return user
+
+
+def cancel_subscription(user: User) -> User:
+    """Admin helper to immediately cancel/remove a user's subscription."""
+    user.subscription_tier = ""
+    user.subscription_until = None
+    user.save(update_fields=["subscription_tier", "subscription_until"])
+    return user

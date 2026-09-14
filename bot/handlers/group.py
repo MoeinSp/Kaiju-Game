@@ -1386,13 +1386,14 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     # loots the attacker.
     # launching an attack burns 8h off the ATTACKER's own group shield (if they have
     # one) — same rule as the arena. The «حمله» button IS the confirmation.
-    from game.arena import spend_group_shield_on_attack
+    from game.arena import is_group_shielded, spend_group_shield_on_attack
 
     attacker_fields = ["energy", "energy_updated_at"]
-    if spend_group_shield_on_attack(attacker):
+    if is_group_shielded(attacker):
+        spend_group_shield_on_attack(attacker)
         attacker_fields.append("group_shield_until")
     elif attacker.group_shield_until is not None:
-        # was shielded a moment ago but the 8h drop cleared it — persist the reset
+        attacker.group_shield_until = None
         attacker_fields.append("group_shield_until")
 
     loot = 0

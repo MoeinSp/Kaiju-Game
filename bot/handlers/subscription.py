@@ -13,6 +13,7 @@ from bot.buttons import CONFIRM, NAV, PRIMARY, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import botconfig, purchase
 from game.creature import GameError
+from game.emoji import get_emoji
 from game.subscription import SUBSCRIPTION_TIERS, get_subscription_info
 
 
@@ -23,13 +24,14 @@ def _sub_panel_sync(tg_user):
 
 def _render_subscription_text(info: dict) -> str:
     lines = [
-        "⭐ <b>اشتراک‌های ویژه کایجو</b>",
+        f"{get_emoji('sub_vip')} <b>اشتراک‌های ویژه کایجو</b>",
         "━━━━━━━━━━━━━━━━━━━━",
     ]
 
     if info["is_active"]:
+        tier_emoji = get_emoji(f"sub_{info['tier']}", info['badge'])
         lines += [
-            f"✨ اشتراک فعال شما: {info['badge']} <b>{info['tier_name']}</b>",
+            f"✨ اشتراک فعال شما: {tier_emoji} <b>{info['tier_name']}</b>",
             f"⏳ زمان باقی‌مانده: <b>{info['days_left']} روز و {info['hours_left']} ساعت</b>",
             "",
             "<b>مزایای فعال شما:</b>",
@@ -50,20 +52,20 @@ def _render_subscription_text(info: dict) -> str:
     lines += [
         "",
         "━━━━━━━━━━━━━━━━━━━━",
-        "🥈 <b>اشتراک نقره‌ای (۳۰ روزه):</b>",
-        "  • 🥈 نشان اختصاصی پرمیوم نقره‌ای در کنار نام شما",
-        "  • ⚡ افزایش سقف انرژی به ۱۰۰ (به جای ۵۰)",
-        "  • 📋 امکان در صف گذاشتن یک جعبه آرنا (بازگشایی خودکار)",
-        "  • 🎯 افزایش ۲۵ درصدی جوایز و درآمد شکار خودکار",
-        "  💰 قیمت: <b>۲۵۰,۰۰۰ تومان</b>",
+        f"{get_emoji('sub_silver')} <b>اشتراک نقره‌ای (۳۰ روزه):</b>",
+        f"  • {get_emoji('sub_silver')} نشان اختصاصی پرمیوم نقره‌ای در کنار نام شما",
+        f"  • {get_emoji('energy')} افزایش سقف انرژی به ۱۰۰ (به جای ۵۰)",
+        f"  • 📋 امکان در صف گذاشتن یک جعبه آرنا (بازگشایی خودکار)",
+        f"  • {get_emoji('hunt')} افزایش ۲۵ درصدی جوایز و درآمد شکار خودکار",
+        f"  {get_emoji('coin')} قیمت: <b>۲۵۰,۰۰۰ تومان</b>",
         "",
-        "👑 <b>اشتراک طلایی (۳۰ روزه):</b>",
-        "  • 👑 نشان اختصاصی پرمیوم طلایی در کنار نام شما",
-        "  • ⚡ افزایش سقف انرژی به ۱۰۰ (به جای ۵۰)",
-        "  • 🕳 افزایش ظرفیت همزمانی غار هیولا به ۲ جفت همزمان",
-        "  • 📋 امکان در صف گذاشتن یک جعبه آرنا (بازگشایی خودکار)",
-        "  • 🎯 افزایش ۵۰ درصدی جوایز و درآمد شکار خودکار",
-        "  💰 قیمت: <b>۵۰۰,۰۰۰ تومان</b>",
+        f"{get_emoji('sub_gold')} <b>اشتراک طلایی (۳۰ روزه):</b>",
+        f"  • {get_emoji('sub_gold')} نشان اختصاصی پرمیوم طلایی در کنار نام شما",
+        f"  • {get_emoji('energy')} افزایش سقف انرژی به ۱۰۰ (به جای ۵۰)",
+        f"  • 🕳 افزایش ظرفیت همزمانی غار هیولا به ۲ جفت همزمان",
+        f"  • 📋 امکان در صف گذاشتن یک جعبه آرنا (بازگشایی خودکار)",
+        f"  • {get_emoji('hunt')} افزایش ۵۰ درصدی جوایز و درآمد شکار خودکار",
+        f"  {get_emoji('coin')} قیمت: <b>۵۰۰,۰۰۰ تومان</b>",
         "━━━━━━━━━━━━━━━━━━━━",
     ]
     return "\n".join(lines)
@@ -71,8 +73,8 @@ def _render_subscription_text(info: dict) -> str:
 
 def _render_subscription_keyboard(info: dict) -> InlineKeyboardMarkup:
     rows = [
-        [btn("🥈 خرید اشتراک نقره‌ای (۲۵۰ هزار تومان)", style=PRIMARY, callback_data="sub_pick:silver")],
-        [btn("👑 خرید اشتراک طلایی (۵۰۰ هزار تومان)", style=CONFIRM, callback_data="sub_pick:gold")],
+        [btn("🥈 خرید اشتراک نقره‌ای (۲۵۰ هزار تومان)", emoji_key="btn_sub_silver", style=PRIMARY, callback_data="sub_pick:silver")],
+        [btn("👑 خرید اشتراک طلایی (۵۰۰ هزار تومان)", emoji_key="btn_sub_gold", style=CONFIRM, callback_data="sub_pick:gold")],
         [back_btn("menu:cat_shop", "بازگشت به فروشگاه")],
     ]
     return InlineKeyboardMarkup(rows)
@@ -113,10 +115,10 @@ async def sub_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     sub_cfg = SUBSCRIPTION_TIERS.get(tier, {})
     lines = [
-        "🧾 <b>پرداخت و فعال‌سازی اشتراک ویژه</b>",
+        f"🧾 <b>پرداخت و فعال‌سازی {get_emoji('sub_vip')} اشتراک ویژه</b>",
         "",
         f"⭐ سطح انتخابی: <b>{sub_cfg.get('name', tier)}</b> (۳۰ روزه)",
-        f"💰 مبلغ قابل پرداخت: <b>{req.price_toman:,} تومان</b>",
+        f"{get_emoji('coin')} مبلغ قابل پرداخت: <b>{req.price_toman:,} تومان</b>",
         "",
         "💳 <b>مبلغ رو به این کارت واریز کن:</b>",
         f"<code>{card_number}</code>",
@@ -128,7 +130,7 @@ async def sub_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "📸 بعد از واریز، <b>عکس رسید</b> رو همین‌جا بفرست تا بلافاصله بررسی و فعال بشه.",
         "<i>به‌محض تأیید رسید توسط پشتیبانی، اشتراک به مدت ۳۰ روز روی اکانتت اعمال می‌شه.</i>",
     ]
-    kb = InlineKeyboardMarkup([[btn("انصراف", style=NAV, callback_data="menu:subscription")]])
+    kb = InlineKeyboardMarkup([[btn("انصراف", emoji_key="btn_cancel", style=NAV, callback_data="menu:subscription")]])
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=kb)
 
 

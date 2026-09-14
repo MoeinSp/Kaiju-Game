@@ -1312,6 +1312,10 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
                 btn("💎 کسر الماس", style=DANGER, callback_data=f"admin_deduct:{target_id}:diamonds"),
             ],
             [btn("⚡ شارژ کامل (طلا+DNA+الماس)", emoji_key="btn_charge", style=CONFIRM, callback_data=f"admin_charge:{target_id}")],
+            [
+                btn("⭐ مدیریت اشتراک", emoji_key="btn_sub_mgr", style=PRIMARY, callback_data=f"adm_sub_mgr:{target_id}"),
+                btn("📦 اهدای جعبه آرنا", emoji_key="btn_chest_grant", style=PRIMARY, callback_data=f"adm_chest_grant:{target_id}"),
+            ],
             [btn("🎁 دادن آیتم/کایجو/تجهیز به این کاربر", style=CONFIRM, callback_data=f"admin_give_item:{target_id}")],
             [btn("🦖 اعطای کایجوی دلخواه (سطح/ستاره/تعداد)", style=CONFIRM, callback_data=f"admin_givek:{target_id}")],
             [btn("🌟 اعطای کایجوی مکس (همه‌چی بیشینه)", style=CONFIRM, callback_data=f"admin_givekmax:{target_id}")],
@@ -2109,6 +2113,265 @@ async def admin_userback_callback(update: Update, context: ContextTypes.DEFAULT_
         query, _user_info_text(data), parse_mode="HTML",
         reply_markup=_user_manage_keyboard(user.id, user.is_banned),
     )
+
+
+# ── Admin Subscription Management ──
+
+def _sub_mgr_data_sync(target_id: int):
+    user = User.objects.filter(id=target_id).first()
+    if not user:
+        raise GameError("کاربر یافت نشد.")
+    from game.subscription import get_subscription_info
+    return user, get_subscription_info(user)
+
+
+def _render_sub_mgr_text(user: User, info: dict) -> str:
+    lines = [
+        f"{get_emoji('sub_vip')} <b>مدیریت اشتراک ویژه کاربر</b>",
+        f"👤 کاربر: <b>{display_name(user)}</b> (<code>{user.id}</code>)",
+        "━━━━━━━━━━━━━━━━━━━━",
+    ]
+    if info["is_active"]:
+        tier_emoji = get_emoji(f"sub_{info['tier']}", info['badge'])
+        lines += [
+            f"وضعیت: <b>فعال ✅</b>",
+            f"سطح اشتراک: {tier_emoji} <b>{info['tier_name']}</b>",
+            f"⏳ زمان باقی‌مانده: <b>{info['days_left']} روز و {info['hours_left']} ساعت</b>",
+            f"📅 تاریخ انقضا: <code>{info['until'].strftime('%Y-%m-%d %H:%M') if info['until'] else '-'}</code>",
+        ]
+    else:
+        lines += [
+            "وضعیت: <b>غیرفعال ❌</b> (فاقد اشتراک فعال)",
+            "<i>می‌توانید با دکمه‌های زیر اشتراک دلخواه را برای این کاربر فعال یا تمدید کنید.</i>",
+        ]
+    lines.append("━━━━━━━━━━━━━━━━━━━━")
+    return "\n".join(lines)
+
+
+def _render_sub_mgr_keyboard(target_id: int, info: dict) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            btn("🥈 فعال‌سازی نقره‌ای (۳۰ روز)", emoji_key="btn_sub_silver", style=PRIMARY, callback_data=f"adm_sub_set:{target_id}:silver:30"),
+            btn("👑 فعال‌سازی طلایی (۳۰ روز)", emoji_key="btn_sub_gold", style=CONFIRM, callback_data=f"adm_sub_set:{target_id}:gold:30"),
+        ],
+        [
+            btn("➕ تمدید ۳۰ روز", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"adm_sub_ext:{target_id}:30"),
+            btn("➕ تمدید ۷ روز", emoji_key="btn_confirm", style=PRIMARY, callback_data=f"adm_sub_ext:{target_id}:7"),
+        ],
+    ]
+    if info["is_active"]:
+        rows.append([
+            btn("❌ لغو اشتراک کاربر", emoji_key="btn_cancel", style=DANGER, callback_data=f"adm_sub_cancel:{target_id}"),
+        ])
+    rows.append([back_btn(f"admin_userback:{target_id}", "بازگشت به اطلاعات کاربر")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def adm_sub_mgr_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    target_id = int(query.data.split(":")[1])
+    try:
+        user, info = await run_db(_sub_mgr_data_sync, target_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    text = _render_sub_mgr_text(user, info)
+    kb = _render_sub_mgr_keyboard(target_id, info)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+
+
+def _sub_set_sync(target_id: int, tier: str, days: int):
+    user = User.objects.filter(id=target_id).first()
+    if not user:
+        raise GameError("کاربر یافت نشد.")
+    from game.subscription import activate_subscription, get_subscription_info
+    activate_subscription(user, tier, days=days)
+    return user, get_subscription_info(user)
+
+
+async def adm_sub_set_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    parts = query.data.split(":")
+    target_id = int(parts[1])
+    tier = parts[2]
+    days = int(parts[3])
+    try:
+        user, info = await run_db(_sub_set_sync, target_id, tier, days)
+    except Exception as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer(f"✅ اشتراک {info['tier_name']} به مدت {days} روز برای کاربر فعال شد!", show_alert=True)
+    text = _render_sub_mgr_text(user, info)
+    kb = _render_sub_mgr_keyboard(target_id, info)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+
+
+def _sub_ext_sync(target_id: int, days: int):
+    user = User.objects.filter(id=target_id).first()
+    if not user:
+        raise GameError("کاربر یافت نشد.")
+    from game.subscription import extend_subscription, get_subscription_info
+    extend_subscription(user, days=days)
+    return user, get_subscription_info(user)
+
+
+async def adm_sub_ext_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    parts = query.data.split(":")
+    target_id = int(parts[1])
+    days = int(parts[2])
+    try:
+        user, info = await run_db(_sub_ext_sync, target_id, days)
+    except Exception as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer(f"✅ اشتراک کاربر به مدت {days} روز تمدید شد!", show_alert=True)
+    text = _render_sub_mgr_text(user, info)
+    kb = _render_sub_mgr_keyboard(target_id, info)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+
+
+def _sub_cancel_sync(target_id: int):
+    user = User.objects.filter(id=target_id).first()
+    if not user:
+        raise GameError("کاربر یافت نشد.")
+    from game.subscription import cancel_subscription, get_subscription_info
+    cancel_subscription(user)
+    return user, get_subscription_info(user)
+
+
+async def adm_sub_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    target_id = int(query.data.split(":")[1])
+    try:
+        user, info = await run_db(_sub_cancel_sync, target_id)
+    except Exception as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("❌ اشتراک کاربر لغو شد.", show_alert=True)
+    text = _render_sub_mgr_text(user, info)
+    kb = _render_sub_mgr_keyboard(target_id, info)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+
+
+# ── Admin Chest Granting ──
+
+def _chest_grant_data_sync(target_id: int):
+    user = User.objects.filter(id=target_id).first()
+    if not user:
+        raise GameError("کاربر یافت نشد.")
+    from game.arena_chests import get_user_chests
+    return user, get_user_chests(user)
+
+
+def _render_chest_grant_text(user: User, chests: list) -> str:
+    from game.arena_chests import ARENA_CHEST_TIERS, seconds_until_ready, _format_remaining
+    lines = [
+        f"{get_emoji('chest_arena')} <b>اهدای جعبه آرنا به کاربر</b>",
+        f"👤 کاربر: <b>{display_name(user)}</b> (<code>{user.id}</code>)",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "<b>وضعیت جایگاه‌های کاربر (حداکثر ۴):</b>",
+    ]
+    slots_map = {c.slot: c for c in chests}
+    for slot in range(1, 5):
+        c = slots_map.get(slot)
+        if c:
+            cfg = ARENA_CHEST_TIERS.get(c.chest_type, {})
+            c_emoji = get_emoji(f"chest_{c.chest_type}", cfg.get("emoji", "📦"))
+            name = cfg.get("name", c.chest_type)
+            if c.status == "ready":
+                st = f"{get_emoji('gift')} آماده باز کردن"
+            elif c.status == "unlocking":
+                rem = seconds_until_ready(c)
+                st = f"⏳ بازگشایی ({_format_remaining(rem)})"
+            elif c.status == "queued":
+                st = "📋 در صف"
+            else:
+                st = f"{get_emoji('lock')} قفل"
+            lines.append(f"  {c_emoji} جایگاه {slot}: <b>{name}</b> ({st})")
+        else:
+            lines.append(f"  🔘 جایگاه {slot}: <i>خالی</i>")
+
+    lines += [
+        "━━━━━━━━━━━━━━━━━━━━",
+        "برای اهدای جعبه به اولین جایگاه خالی، یکی را انتخاب کنید:",
+    ]
+    return "\n".join(lines)
+
+
+def _render_chest_grant_keyboard(target_id: int) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            btn("🥈 اهدای نقره‌ای", emoji_key="btn_chest_silver", style=PRIMARY, callback_data=f"adm_chest_give:{target_id}:silver"),
+            btn("🥇 اهدای طلایی", emoji_key="btn_chest_golden", style=CONFIRM, callback_data=f"adm_chest_give:{target_id}:golden"),
+        ],
+        [
+            btn("🔮 اهدای جادویی", emoji_key="btn_chest_magical", style=PRIMARY, callback_data=f"adm_chest_give:{target_id}:magical"),
+            btn("👑 اهدای مگا", emoji_key="btn_chest_mega", style=CONFIRM, callback_data=f"adm_chest_give:{target_id}:mega"),
+        ],
+        [back_btn(f"admin_userback:{target_id}", "بازگشت به اطلاعات کاربر")],
+    ]
+    return InlineKeyboardMarkup(rows)
+
+
+async def adm_chest_grant_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    target_id = int(query.data.split(":")[1])
+    try:
+        user, chests = await run_db(_chest_grant_data_sync, target_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    text = _render_chest_grant_text(user, chests)
+    kb = _render_chest_grant_keyboard(target_id)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+
+
+def _chest_give_sync(target_id: int, chest_type: str):
+    user = User.objects.filter(id=target_id).first()
+    if not user:
+        raise GameError("کاربر یافت نشد.")
+    from game.arena_chests import admin_grant_chest, get_user_chests
+    chest = admin_grant_chest(user, chest_type)
+    return user, chest, get_user_chests(user)
+
+
+async def adm_chest_give_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    parts = query.data.split(":")
+    target_id = int(parts[1])
+    chest_type = parts[2]
+    try:
+        user, chest, chests = await run_db(_chest_give_sync, target_id, chest_type)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    from game.arena_chests import ARENA_CHEST_TIERS
+    cfg = ARENA_CHEST_TIERS.get(chest_type, {})
+    await query.answer(f"✅ جعبه {cfg.get('name', chest_type)} با موفقیت به جایگاه {chest.slot} اهدا شد!", show_alert=True)
+    text = _render_chest_grant_text(user, chests)
+    kb = _render_chest_grant_keyboard(target_id)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
 
 
 async def preview_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -4635,6 +4898,12 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(player_log_callback, pattern=r"^admin_plog:"))
     application.add_handler(CallbackQueryHandler(resource_log_callback, pattern=r"^admin_reslog:\d+:(diamonds|coins|dna)$"))
     application.add_handler(CallbackQueryHandler(admin_userback_callback, pattern=r"^admin_userback:\d+$"))
+    application.add_handler(CallbackQueryHandler(adm_sub_mgr_callback, pattern=r"^adm_sub_mgr:\d+$"))
+    application.add_handler(CallbackQueryHandler(adm_sub_set_callback, pattern=r"^adm_sub_set:\d+:[a-z]+:\d+$"))
+    application.add_handler(CallbackQueryHandler(adm_sub_ext_callback, pattern=r"^adm_sub_ext:\d+:\d+$"))
+    application.add_handler(CallbackQueryHandler(adm_sub_cancel_callback, pattern=r"^adm_sub_cancel:\d+$"))
+    application.add_handler(CallbackQueryHandler(adm_chest_grant_callback, pattern=r"^adm_chest_grant:\d+$"))
+    application.add_handler(CallbackQueryHandler(adm_chest_give_callback, pattern=r"^adm_chest_give:\d+:[a-z]+$"))
     application.add_handler(CallbackQueryHandler(admin_clist_callback, pattern=r"^admin_clist:\d+:\w+:\d+$"))
     application.add_handler(CallbackQueryHandler(admin_cview_callback, pattern=r"^admin_cview:\d+:\d+:\w+:\d+$"))
     application.add_handler(CallbackQueryHandler(admin_cweaken_callback, pattern=r"^admin_cweaken:\d+:\d+:\w+:\d+$"))

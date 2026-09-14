@@ -130,10 +130,10 @@ def _arena_home_text(user, power, shield_secs, history, week, season_secs, reven
                 st = "📋 در صف"
             else:
                 st = "🔒 قفل"
-            chest_bits.append(f"{c_emoji} اسلات {c.slot}: {st}")
-        lines.append(f"\n📦 <b>جعبه‌های آرنا ({len(chests)}/4):</b>\n" + " ┃ ".join(chest_bits))
+            chest_bits.append(f"{c_emoji} جایگاه {c.slot}: {st}")
+        lines.append(f"\n{get_emoji('chest_arena')} <b>جعبه‌های آرنا ({len(chests)}/4):</b>\n" + " ┃ ".join(chest_bits))
     else:
-        lines.append("\n📦 <b>جعبه‌های آرنا (0/4):</b> اسلات‌ها خالی است (با برد در آرنا به دست می‌آید)")
+        lines.append(f"\n{get_emoji('chest_arena')} <b>جعبه‌های آرنا (0/4):</b> جایگاه‌ها خالی است (با برد در آرنا به دست می‌آید)")
 
     if history:
         lines.append("\n<b>آخرین حمله‌ها بهت:</b>")
@@ -161,7 +161,7 @@ def _arena_home_keyboard(has_revenges: bool, chest_count: int = 0, ready_chests:
         chest_btn_text = f"🎁 {chest_btn_text} — آماده باز کردن!"
     rows = [
         [btn("پیدا کردن حریف", emoji_key="btn_attack", style=BATTLE, callback_data="arena_find")],
-        [btn(chest_btn_text, style=SHOP if ready_chests > 0 else NAV, callback_data="arena_chests")],
+        [btn(chest_btn_text, emoji_key="btn_chests", style=SHOP if ready_chests > 0 else NAV, callback_data="arena_chests")],
     ]
     if has_revenges:
         rows.append([btn("انتقام‌ها", emoji_key="btn_revenges", style=DANGER, callback_data="arena_revenges")])
@@ -679,10 +679,10 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
             awarded = result["awarded_chest"]
             awarded_cfg = ARENA_CHEST_TIERS.get(awarded.chest_type, {})
             reward_lines.append(
-                f"📦 <b>جعبه جدید دریافت شد:</b> {awarded_cfg.get('emoji', '📦')} {awarded_cfg.get('name', 'جعبه آرنا')} (اسلات {awarded.slot})"
+                f"📦 <b>جعبه جدید دریافت شد:</b> {awarded_cfg.get('emoji', '📦')} {awarded_cfg.get('name', 'جعبه آرنا')} (جایگاه {awarded.slot})"
             )
         elif result.get("slots_full"):
-            reward_lines.append("<i>⚠️ اسلات‌های جعبه‌ات پر بود — جعبه جدیدی دریافت نشد.</i>")
+            reward_lines.append("<i>⚠️ جایگاه‌های جعبه‌ات پر بود — جعبه جدیدی دریافت نشد.</i>")
 
         body = (
             f"{get_emoji('celebrate')} <b>پیروزی در نبرد آرنا!</b>\n"
@@ -1015,13 +1015,13 @@ def _chests_panel_sync(tg_user):
 
 def _render_chests_text(user, chests: list, has_sub: bool) -> str:
     lines = [
-        "📦 <b>جعبه‌های نبرد آرنا</b>",
+        f"{get_emoji('chest_arena')} <b>جعبه‌های نبرد آرنا</b>",
         "━━━━━━━━━━━━━━━━━━━━",
         "با هر پیروزی در آرنا، شانس دریافت یکی از ۴ نوع جعبه را دارید:",
-        "🥈 <b>جعبه نقره‌ای</b> (۳ ساعت) ┃ 🥇 <b>جعبه طلایی</b> (۸ ساعت)",
-        "🔮 <b>جعبه جادویی</b> (۱۲ ساعت) ┃ 👑 <b>جعبه مگا / افسانه‌ای</b> (۲۴ ساعت)",
+        f"{get_emoji('chest_silver')} <b>جعبه نقره‌ای</b> (۳ ساعت) ┃ {get_emoji('chest_golden')} <b>جعبه طلایی</b> (۸ ساعت)",
+        f"{get_emoji('chest_magical')} <b>جعبه جادویی</b> (۱۲ ساعت) ┃ {get_emoji('chest_mega')} <b>جعبه مگا / امگا</b> (۲۴ ساعت)",
         "━━━━━━━━━━━━━━━━━━━━",
-        "<b>وضعیت اسلات‌های شما (حداکثر ۴ جعبه):</b>\n",
+        "<b>وضعیت جایگاه‌های شما (حداکثر ۴ جعبه):</b>\n",
     ]
 
     slots_map = {c.slot: c for c in chests}
@@ -1029,27 +1029,27 @@ def _render_chests_text(user, chests: list, has_sub: bool) -> str:
         c = slots_map.get(slot)
         if c:
             cfg = ARENA_CHEST_TIERS.get(c.chest_type, {})
-            emoji = cfg.get("emoji", "📦")
+            c_emoji = get_emoji(f"chest_{c.chest_type}", cfg.get("emoji", "📦"))
             name = cfg.get("name", c.chest_type)
             if c.status == "ready":
-                st_text = "🎁 <b>آماده باز کردن!</b>"
+                st_text = f"{get_emoji('gift')} <b>آماده باز کردن!</b>"
             elif c.status == "unlocking":
                 rem = seconds_until_ready(c)
                 st_text = f"⏳ در حال باز شدن (<b>{_format_remaining(rem)}</b> باقی‌مانده)"
             elif c.status == "queued":
                 st_text = "📋 <b>در صف</b> (بعد از جعبه فعلی خودکار باز می‌شود)"
             else:
-                st_text = f"🔒 <b>قفل</b> (زمان بازگشایی: {cfg.get('unlock_hours', 3)} ساعت)"
-            lines.append(f"{emoji} <b>اسلات {slot}: {name}</b>\n   └ وضعیت: {st_text}")
+                st_text = f"{get_emoji('lock')} <b>قفل</b> (زمان بازگشایی: {cfg.get('unlock_hours', 3)} ساعت)"
+            lines.append(f"{c_emoji} <b>جایگاه {slot}: {name}</b>\n   └ وضعیت: {st_text}")
         else:
-            lines.append(f"🔘 <b>اسلات {slot}: خالی</b> (با پیروزی در آرنا به دست می‌آید)")
+            lines.append(f"🔘 <b>جایگاه {slot}: خالی</b> (با پیروزی در آرنا به دست می‌آید)")
 
     lines.append("")
     lines.append("━━━━━━━━━━━━━━━━━━━━")
     if has_sub:
-        lines.append("✨ <i>اشتراک ویژه فعال است — امکان در صف گذاشتن ۱ جعبه برای بازگشایی خودکار وجود دارد.</i>")
+        lines.append(f"{get_emoji('sub_vip')} <i>اشتراک ویژه فعال است — امکان در صف گذاشتن ۱ جعبه برای بازگشایی خودکار وجود دارد.</i>")
     else:
-        lines.append("💡 <i>در هر زمان ۱ جعبه باز می‌شود. با اشتراک ویژه می‌توانید ۱ جعبه را در صف بگذارید.</i>")
+        lines.append(f"💡 <i>در هر زمان ۱ جعبه باز می‌شود. با {get_emoji('sub_vip')} اشتراک ویژه می‌توانید ۱ جعبه را در صف بگذارید.</i>")
 
     return "\n".join(lines)
 
@@ -1063,9 +1063,10 @@ def _render_chests_keyboard(chests: list) -> InlineKeyboardMarkup:
             cfg = ARENA_CHEST_TIERS.get(c.chest_type, {})
             emoji = cfg.get("emoji", "📦")
             name = cfg.get("name", c.chest_type)
+            emoji_key = f"btn_chest_{c.chest_type}"
             if c.status == "ready":
-                label = f"🎁 باز کردن {name} (اسلات {slot})!"
-                rows.append([btn(label, style=SHOP, callback_data=f"arena_chest_open:{c.id}")])
+                label = f"🎁 باز کردن {name} (جایگاه {slot})!"
+                rows.append([btn(label, emoji_key="btn_chest_open", style=SHOP, callback_data=f"arena_chest_open:{c.id}")])
             else:
                 if c.status == "unlocking":
                     rem = seconds_until_ready(c)
@@ -1074,9 +1075,10 @@ def _render_chests_keyboard(chests: list) -> InlineKeyboardMarkup:
                     st = "📋 در صف"
                 else:
                     st = "🔒 قفل"
-                label = f"{emoji} اسلات {slot}: {name} ({st})"
-                rows.append([btn(label, style=NAV, callback_data=f"arena_chest_detail:{c.id}")])
+                label = f"{emoji} جایگاه {slot}: {name} ({st})"
+                rows.append([btn(label, emoji_key=emoji_key, style=NAV, callback_data=f"arena_chest_detail:{c.id}")])
 
+    rows.append([btn("📊 راهنمای جوایز لیگ‌ها", emoji_key="btn_chest_rewards", style=NAV, callback_data="arena_chest_rewards:silver")])
     rows.append([back_btn("menu:arena", "بازگشت به آرنا")])
     return InlineKeyboardMarkup(rows)
 
@@ -1124,17 +1126,17 @@ async def arena_chest_detail_callback(update: Update, context: ContextTypes.DEFA
     rarity_label = constants.RARITY_LABELS.get(guaranteed, guaranteed)
 
     lines = [
-        f"{cfg['emoji']} <b>{cfg['name']} (اسلات {chest.slot})</b>",
+        f"{get_emoji(f'chest_{chest.chest_type}', cfg['emoji'])} <b>{cfg['name']} (جایگاه {chest.slot})</b>",
         "━━━━━━━━━━━━━━━━━━━━",
         f"🏆 لیگ در زمان دریافت: <b>{lg['name']}</b> (کاپ {chest.cup_at_drop})",
         f"⏱ زمان بازگشایی پایه: <b>{cfg['unlock_hours']} ساعت</b>",
         "",
         "<b>جوایز تخمینی این جعبه:</b>",
-        f"🪙 طلا: <b>~{gold_val:,}</b> (بر اساس لیگ)",
-        f"🧬 دی‌ان‌ای: <b>~{dna_val:,}</b>",
+        f"🪙 طلا: <b>~{gold_val:,}</b> {get_emoji('coin')} (بر اساس لیگ)",
+        f"🧬 دی‌ان‌ای: <b>~{dna_val:,}</b> {get_emoji('dna')}",
     ]
     if cfg["key"] in ("magical", "mega"):
-        lines.append("💎 الماس: <b>دارد (بونس ویژه)</b>")
+        lines.append(f"💎 الماس: <b>دارد (بونس ویژه)</b> {get_emoji('diamond')}")
     lines += [
         f"👹 شانس هیولا: <b>{int(cfg['creature_chance'] * 100)}٪</b> (حداقل نایابی: <b>{rarity_label}</b>)",
         "━━━━━━━━━━━━━━━━━━━━",
@@ -1142,27 +1144,27 @@ async def arena_chest_detail_callback(update: Update, context: ContextTypes.DEFA
 
     rows = []
     if chest.status == "ready":
-        lines.append("وضعیت: 🎁 <b>آماده باز کردن است!</b>")
-        rows.append([btn("🎁 باز کردن جعبه", style=SHOP, callback_data=f"arena_chest_open:{chest.id}")])
+        lines.append(f"وضعیت: {get_emoji('gift')} <b>آماده باز کردن است!</b>")
+        rows.append([btn("🎁 باز کردن جعبه", emoji_key="btn_chest_open", style=SHOP, callback_data=f"arena_chest_open:{chest.id}")])
     elif chest.status == "unlocking":
         rem = seconds_until_ready(chest)
         lines.append(f"وضعیت: ⏳ در حال باز شدن (<b>{_format_remaining(rem)}</b> باقی‌مانده)")
-        rows.append([btn(f"⚡ پایان فوری با {cost} الماس 💎", style=SHOP, callback_data=f"arena_chest_speedup:{chest.id}")])
+        rows.append([btn(f"⚡ پایان فوری با {cost} الماس 💎", emoji_key="btn_chest_speedup", style=SHOP, callback_data=f"arena_chest_speedup:{chest.id}")])
     elif chest.status == "queued":
         lines.append("وضعیت: 📋 <b>در صف بازگشایی</b> (بعد از اتمام جعبه فعلی خودکار باز می‌شود)")
-        rows.append([btn(f"⚡ پایان فوری با {cost} الماس 💎", style=SHOP, callback_data=f"arena_chest_speedup:{chest.id}")])
+        rows.append([btn(f"⚡ پایان فوری با {cost} الماس 💎", emoji_key="btn_chest_speedup", style=SHOP, callback_data=f"arena_chest_speedup:{chest.id}")])
     else:  # locked
-        lines.append(f"وضعیت: 🔒 <b>قفل</b> (نیازمند {cfg['unlock_hours']} ساعت زمان)")
+        lines.append(f"وضعیت: {get_emoji('lock')} <b>قفل</b> (نیازمند {cfg['unlock_hours']} ساعت زمان)")
         if not active_unlocking:
-            rows.append([btn("🔓 شروع باز کردن", style=BATTLE, callback_data=f"arena_chest_start:{chest.id}")])
+            rows.append([btn("🔓 شروع باز کردن", emoji_key="btn_chest_start", style=BATTLE, callback_data=f"arena_chest_start:{chest.id}")])
         else:
             if has_sub:
-                rows.append([btn("📋 قرار دادن در صف (ویژه)", style=PRIMARY, callback_data=f"arena_chest_queue:{chest.id}")])
+                rows.append([btn("📋 قرار دادن در صف (ویژه)", emoji_key="btn_chest_queue", style=PRIMARY, callback_data=f"arena_chest_queue:{chest.id}")])
             else:
                 lines.append("<i>⚠️ جعبه دیگری در حال باز شدن است.</i>")
-        rows.append([btn(f"⚡ باز کردن فوری با {cost} الماس 💎", style=SHOP, callback_data=f"arena_chest_speedup:{chest.id}")])
+        rows.append([btn(f"⚡ باز کردن فوری با {cost} الماس 💎", emoji_key="btn_chest_speedup", style=SHOP, callback_data=f"arena_chest_speedup:{chest.id}")])
 
-    rows.append([btn("🔙 بازگشت به جعبه‌ها", style=NAV, callback_data="arena_chests")])
+    rows.append([btn("🔙 بازگشت به جعبه‌ها", emoji_key="btn_chests", style=NAV, callback_data="arena_chests")])
 
     photo = get_arena_chest_image_path(chest.chest_type, chest.status)
     await send_screen(update, "\n".join(lines), photo=photo, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
@@ -1242,14 +1244,14 @@ async def arena_chest_open_callback(update: Update, context: ContextTypes.DEFAUL
     tier = res["tier"]
 
     lines = [
-        "🎉 <b>جعبه باز شد!</b>",
-        f"{res['emoji']} <b>{res['name']} (اسلات {res['slot']})</b>",
+        f"{get_emoji('celebrate')} <b>جعبه باز شد!</b>",
+        f"{get_emoji(f'chest_{tier}', res['emoji'])} <b>{res['name']} (جایگاه {res['slot']})</b>",
         "━━━━━━━━━━━━━━━━━━━━",
-        f"🪙 طلا: <b>+{res['coins']:,}</b>",
-        f"🧬 دی‌ان‌ای: <b>+{res['dna']:,}</b>",
+        f"🪙 طلا: <b>+{res['coins']:,}</b> {get_emoji('coin')}",
+        f"🧬 دی‌ان‌ای: <b>+{res['dna']:,}</b> {get_emoji('dna')}",
     ]
     if res.get("diamonds"):
-        lines.append(f"💎 الماس: <b>+{res['diamonds']:,}</b>")
+        lines.append(f"💎 الماس: <b>+{res['diamonds']:,}</b> {get_emoji('diamond')}")
 
     creature = res.get("creature")
     item = res.get("item")
@@ -1258,7 +1260,7 @@ async def arena_chest_open_callback(update: Update, context: ContextTypes.DEFAUL
     if creature:
         lines += [
             "",
-            "👹 <b>موجود جدید از جعبه آزاد شد:</b>",
+            f"{get_emoji('creature')} <b>موجود جدید از جعبه آزاد شد:</b>",
             f"✨ <b>{creature.name}</b> [{rarity_label}]",
         ]
         if c_stats:
@@ -1275,16 +1277,82 @@ async def arena_chest_open_callback(update: Update, context: ContextTypes.DEFAUL
         next_cfg = ARENA_CHEST_TIERS.get(next_c.chest_type, {})
         lines += [
             "",
-            f"📋 <i>جعبه در صف «{next_cfg.get('name', '')}» (اسلات {next_c.slot}) خودکار شروع به باز شدن کرد!</i>",
+            f"📋 <i>جعبه در صف «{next_cfg.get('name', '')}» (جایگاه {next_c.slot}) خودکار شروع به باز شدن کرد!</i>",
         ]
 
     lines.append("━━━━━━━━━━━━━━━━━━━━")
 
     photo = get_arena_chest_image_path(tier, "open")
     kb = InlineKeyboardMarkup([
-        [btn("📦 مشاهده جعبه‌های آرنا", style=SHOP, callback_data="arena_chests")],
+        [btn("📦 مشاهده جعبه‌های آرنا", emoji_key="btn_chests", style=SHOP, callback_data="arena_chests")],
         [btn("منوی اصلی", style=NAV, callback_data="menu:me")],
     ])
+    await send_screen(update, "\n".join(lines), photo=photo, parse_mode="HTML", reply_markup=kb)
+
+
+async def arena_chest_rewards_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """League rewards guide for arena chests across all leagues."""
+    query = update.callback_query
+    data_parts = query.data.split(":")
+    tier = data_parts[1] if len(data_parts) > 1 and data_parts[1] else "silver"
+    if tier not in ARENA_CHEST_TIERS:
+        tier = "silver"
+
+    cfg = ARENA_CHEST_TIERS[tier]
+    tier_name = cfg["name"]
+    tier_emoji = get_emoji(f"chest_{tier}", cfg.get("emoji", "📦"))
+
+    # Tabs for 4 tiers
+    tier_tabs = []
+    for t_key, t_cfg in ARENA_CHEST_TIERS.items():
+        is_sel = (t_key == tier)
+        short_name = t_cfg["name"].replace("جعبه ", "")
+        label = f"• {short_name} •" if is_sel else short_name
+        tier_tabs.append(btn(label, emoji_key=f"btn_chest_{t_key}", style=PRIMARY if is_sel else NAV, callback_data=f"arena_chest_rewards:{t_key}"))
+
+    guaranteed = cfg.get("guaranteed_creature_rarity", "common")
+    rarity_label = constants.RARITY_LABELS.get(guaranteed, guaranteed)
+
+    lines = [
+        f"{tier_emoji} <b>راهنمای جوایز {tier_name} در لیگ‌ها</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"⏱ زمان بازگشایی پایه: <b>{cfg['unlock_hours']} ساعت</b>",
+        f"{get_emoji('creature')} شانس دریافت هیولا: <b>{int(cfg['creature_chance'] * 100)}٪</b> (حداقل تضمینی: <b>{rarity_label}</b>)",
+        f"🎒 تجهیزات: <b>۱ عدد تجهیزات تصادفی</b>",
+    ]
+    if cfg["key"] in ("magical", "mega"):
+        lines.append(f"{get_emoji('diamond')} الماس: <b>دارد (بونس ویژه)</b>")
+
+    lines += [
+        "",
+        "🏆 <b>میزان جوایز بر اساس لیگ و کاپ:</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+    ]
+
+    from game.arena_chests import league_multiplier
+    for lg in constants.LEAGUES:
+        min_cup = lg["min_cup"]
+        mult = league_multiplier(min_cup)
+        gold_val = round(cfg["base_gold"] * mult)
+        dna_val = round(cfg["base_dna"] * mult)
+        lg_emoji = lg.get("emoji", "🎖")
+        lines.append(
+            f"{lg_emoji} <b>{lg['name']}</b> ({min_cup:,}+ کاپ):\n"
+            f"   └ {get_emoji('coin')} <b>{gold_val:,}</b> طلا ┃ {get_emoji('dna')} <b>{dna_val:,}</b> دی‌ان‌ای"
+        )
+
+    lines += [
+        "━━━━━━━━━━━━━━━━━━━━",
+        "💡 <i>جوایز هر جعبه در لحظه پیروزی و بر اساس لیگ فعلی شما محاسبه و ثبت می‌شود.</i>",
+    ]
+
+    kb = InlineKeyboardMarkup([
+        tier_tabs,
+        [btn("🔙 بازگشت به جعبه‌ها", emoji_key="btn_chests", style=NAV, callback_data="arena_chests")],
+    ])
+
+    from game.media import get_arena_chest_image_path
+    photo = get_arena_chest_image_path(tier, "ready")
     await send_screen(update, "\n".join(lines), photo=photo, parse_mode="HTML", reply_markup=kb)
 
 
@@ -1296,6 +1364,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(arena_chest_queue_callback, pattern=r"^arena_chest_queue:\d+$"))
     application.add_handler(CallbackQueryHandler(arena_chest_speedup_callback, pattern=r"^arena_chest_speedup:\d+$"))
     application.add_handler(CallbackQueryHandler(arena_chest_open_callback, pattern=r"^arena_chest_open:\d+$"))
+    application.add_handler(CallbackQueryHandler(arena_chest_rewards_callback, pattern=r"^arena_chest_rewards(:[a-z]+)?$"))
     application.add_handler(CallbackQueryHandler(arena_find_callback, pattern=r"^arena_find$"))
     application.add_handler(CallbackQueryHandler(arena_opp_details_callback, pattern=r"^arena_opp_details$"))
     application.add_handler(CallbackQueryHandler(arena_opp_back_callback, pattern=r"^arena_opp_back$"))

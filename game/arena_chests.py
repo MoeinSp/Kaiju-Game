@@ -35,7 +35,7 @@ ARENA_CHEST_TIERS = {
         "name": "جعبه نقره‌ای",
         "emoji": "🥈",
         "unlock_hours": 3,
-        "weight": 70,  # 70% drop rate
+        "weight": 70.0,  # 70% drop rate
         "base_gold": 1200,
         "base_dna": 40,
         "creature_chance": 0.35,
@@ -48,7 +48,7 @@ ARENA_CHEST_TIERS = {
         "name": "جعبه طلایی",
         "emoji": "🥇",
         "unlock_hours": 8,
-        "weight": 20,  # 20% drop rate
+        "weight": 20.0,  # 20% drop rate
         "base_gold": 3800,
         "base_dna": 120,
         "creature_chance": 0.65,
@@ -61,7 +61,7 @@ ARENA_CHEST_TIERS = {
         "name": "جعبه جادویی",
         "emoji": "🔮",
         "unlock_hours": 12,
-        "weight": 7,  # 7% drop rate
+        "weight": 7.5,  # 7.5% drop rate
         "base_gold": 10000,
         "base_dna": 350,
         "creature_chance": 0.85,
@@ -71,10 +71,10 @@ ARENA_CHEST_TIERS = {
     },
     "mega": {
         "key": "mega",
-        "name": "جعبه مگا / افسانه‌ای",
+        "name": "جعبه مگا / امگا",
         "emoji": "👑",
         "unlock_hours": 24,
-        "weight": 3,  # 3% drop rate
+        "weight": 2.5,  # 2.5% drop rate
         "base_gold": 28000,
         "base_dna": 900,
         "creature_chance": 1.0,
@@ -320,3 +320,21 @@ def open_chest(user: User, chest_id: int) -> dict:
         "rarity": rarity,
         "next_started": next_started,
     }
+
+
+@transaction.atomic
+def admin_grant_chest(user: User, chest_type: str) -> ArenaChest:
+    """Admin tool to grant an arena chest to a player's first free slot."""
+    cfg = ARENA_CHEST_TIERS.get(chest_type)
+    if not cfg:
+        raise GameError("نوع جعبه نامعتبر است.")
+    slot = get_free_slot(user)
+    if slot is None:
+        raise GameError("تمامی ۴ جایگاه جعبه‌های این کاربر پر است.")
+    return ArenaChest.objects.create(
+        user=user,
+        slot=slot,
+        chest_type=chest_type,
+        cup_at_drop=user.cup,
+        status="locked",
+    )

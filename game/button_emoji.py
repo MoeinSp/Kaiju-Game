@@ -131,6 +131,22 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_last_season": ("نتایج هفته‌ی قبل", "🗓", "nav"),
     "btn_revenges": ("انتقام‌ها در آرنا", "⚔️", "action"),
     "btn_scout_next": ("حریف بعدی", "🔍", "action"),
+    # arena chests & subscriptions
+    "btn_chests": ("جعبه‌های آرنا", "📦", "features"),
+    "btn_chest_silver": ("جعبه نقره‌ای", "🥈", "features"),
+    "btn_chest_golden": ("جعبه طلایی", "🥇", "features"),
+    "btn_chest_magical": ("جعبه جادویی", "🔮", "features"),
+    "btn_chest_mega": ("جعبه مگا / امگا", "👑", "features"),
+    "btn_chest_open": ("باز کردن جعبه", "🎁", "action"),
+    "btn_chest_speedup": ("تسریع بازگشایی", "⚡", "action"),
+    "btn_chest_start": ("شروع بازگشایی", "⏳", "action"),
+    "btn_chest_queue": ("در صف گذاشتن جعبه", "📋", "action"),
+    "btn_chest_rewards": ("راهنمای جوایز لیگ‌ها", "📊", "features"),
+    "btn_subscription": ("اشتراک ویژه VIP", "⭐", "features"),
+    "btn_sub_silver": ("خرید اشتراک نقره‌ای", "🥈", "features"),
+    "btn_sub_gold": ("خرید اشتراک طلایی", "👑", "features"),
+    "btn_sub_mgr": ("مدیریت اشتراک", "⭐", "admin"),
+    "btn_chest_grant": ("اهدای جعبه آرنا", "📦", "admin"),
 }
 
 BUTTON_CATEGORY_LABELS: dict[str, str] = {
