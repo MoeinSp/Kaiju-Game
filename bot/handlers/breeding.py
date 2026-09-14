@@ -538,13 +538,15 @@ async def breeding_hatch_callback(update: Update, context: ContextTypes.DEFAULT_
         else "\n<i>این‌بار یه رده پایین‌تر دراومد.</i>"
     )
     text, keyboard = _panel_render(view)
+    photo = get_creature_image_path(child)
     await safe_edit_message_text(
         query,
         f"🐣 <b>تخم سر باز کرد!</b> ببین چی توش بود:\n\n"
-        f"<tg-spoiler>{child.name} · {constants.RARITY_LABELS[child.rarity]} · سطح {child.level}</tg-spoiler>"
+        f"🦖 <b>{child.name}</b> · <b>{constants.RARITY_LABELS[child.rarity]}</b> · سطح <b>{child.level}</b>"
         f"{upgrade_note}\n\n"
         f"<i>از {info['parents'][0]} و {info['parents'][1]}</i>\n\n"
         "━━━━━━━━━━\n" + text,
+        photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
