@@ -565,7 +565,7 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
             )
             rows.append([
                 InlineKeyboardButton(
-                    f"{get_emoji('diamond')} شارژ فوری با الماس (پیوی)",
+                    "💎 شارژ فوری با الماس (پیوی)",
                     url=f"https://t.me/{BOT_USERNAME}?start=energy",
                 )
             ])
@@ -580,7 +580,7 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
             )
             rows.append([
                 InlineKeyboardButton(
-                    f"{get_emoji('diamond')} شارژ کامل با الماس (پیوی)",
+                    "💎 شارژ کامل با الماس (پیوی)",
                     url=f"https://t.me/{BOT_USERNAME}?start=energy",
                 )
             ])
@@ -2088,12 +2088,12 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         kb_rows = []
         if not sub_info["is_active"]:
             kb_rows.append([
-                InlineKeyboardButton(f"{get_emoji('diamond')} شارژ انرژی با الماس", url=f"https://t.me/{BOT_USERNAME}?start=energy"),
+                InlineKeyboardButton("💎 شارژ با الماس", url=f"https://t.me/{BOT_USERNAME}?start=energy"),
                 InlineKeyboardButton("🥈 خرید اشتراک (۱۰۰ تومان)", url=f"https://t.me/{BOT_USERNAME}?start=sub_silver"),
             ])
         else:
             kb_rows.append([
-                InlineKeyboardButton(f"{get_emoji('diamond')} شارژ فوری با الماس", url=f"https://t.me/{BOT_USERNAME}?start=energy")
+                InlineKeyboardButton("💎 شارژ با الماس", url=f"https://t.me/{BOT_USERNAME}?start=energy")
             ])
         kb_rows.append([_pm_button()])
         await safe_edit_message_text(
