@@ -682,19 +682,27 @@ def _box_card(user) -> tuple[str, InlineKeyboardMarkup]:
 
 # ── 👹 monster box (diamond box) — full flow in-group, scoped to the summoner ──
 def _mbox_list_card(user) -> tuple[str, InlineKeyboardMarkup]:
+    from game.lootbox import can_claim_free_bronze_box
+
+    has_free_bronze = can_claim_free_bronze_box(user)
+    free_line = "\n🎁 <b>یک باکس برنزی رایگان امروز برای دریافت داری!</b>" if has_free_bronze else ""
     lines = [
         f"{get_emoji('diamond_box')} <b>باکس هیولا</b>",
         f"<blockquote>{get_emoji('diamond')} الماس تو: <b>{user.diamonds:,}</b>\n"
-        "هر باکس همیشه یه هیولای جدید می‌ده؛ هرچی باکس بالاتر، شانس نایاب‌بودن بیشتر.</blockquote>",
+        "هر باکس همیشه یه هیولای جدید می‌ده؛ هرچی باکس بالاتر، شانس نایاب‌بودن بیشتر.</blockquote>"
+        + free_line,
         "یه باکس انتخاب کن:",
     ]
     # NOTE: no trailing 💎 in the label — the Premium btn_diamond_box icon already shows a
     # diamond; a second one read as "two diamonds". Cost stays as the plain number.
-    rows = [
-        [btn(f"{cfg['label']} — {cfg['cost_diamonds']}", emoji_key="btn_diamond_box", style=SHOP,
-             callback_data=_act("mbox_pick", user.id, tier))]
-        for tier, cfg in constants.DIAMOND_BOX_TIERS.items()
-    ]
+    rows = []
+    for tier, cfg in constants.DIAMOND_BOX_TIERS.items():
+        if tier == "bronze" and has_free_bronze:
+            cost_str = "رایگان امروز! 🎁"
+        else:
+            cost_str = str(cfg["cost_diamonds"])
+        rows.append([btn(f"{cfg['label']} — {cost_str}", emoji_key="btn_diamond_box", style=SHOP,
+                         callback_data=_act("mbox_pick", user.id, tier))])
     rows.append([btn("↩️ باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_scoped("box", user.id))])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -716,8 +724,9 @@ def _mbox_result_card(user, tier: str, kind: str, result: dict) -> tuple[str, In
         text = _bulk_summary_text(label, result)
     else:
         c = result["creature"]
+        free_note = "\n<i>(🎁 هدیه رایگان امروز شما)</i>" if result.get("is_free") else ""
         text = (
-            f"{label} <b>باز شد!</b>\n\n"
+            f"{label} <b>باز شد!</b>{free_note}\n\n"
             f"<tg-spoiler>{get_emoji('egg')} <b>{c.name}</b>\n"
             f"{constants.element_label(c.element)} · {constants.RARITY_LABELS[result['rarity']]}</tg-spoiler>\n\n"
             "<blockquote>از «کلکسیون» می‌تونی فعالش کنی.</blockquote>"
@@ -730,19 +739,30 @@ def _mbox_result_card(user, tier: str, kind: str, result: dict) -> tuple[str, In
 
 
 def _mbox_detail_card(user, tier: str) -> tuple[str, InlineKeyboardMarkup]:
-    from game.lootbox import BULK_PAY
+    from game.lootbox import BULK_PAY, can_claim_free_bronze_box
 
     cfg = constants.DIAMOND_BOX_TIERS[tier]
+    is_free = (tier == "bronze" and can_claim_free_bronze_box(user))
+    if tier == "bronze":
+        if is_free:
+            cost_line = f"{get_emoji('diamond')} هزینه: <b>رایگان! 🎁</b> (۱ بار در روز) · موجودی تو: <b>{user.diamonds:,}</b>"
+        else:
+            cost_line = f"{get_emoji('diamond')} هزینه: <b>{cfg['cost_diamonds']}</b> الماس <i>(رایگان امروز مصرف شده)</i> · موجودی تو: <b>{user.diamonds:,}</b>"
+    else:
+        cost_line = f"{get_emoji('diamond')} هزینه: <b>{cfg['cost_diamonds']}</b> الماس · موجودی تو: <b>{user.diamonds:,}</b>"
+
     lines = [
         f"{cfg['label']}",
-        f"{get_emoji('diamond')} هزینه: <b>{cfg['cost_diamonds']}</b> الماس · موجودی تو: <b>{user.diamonds:,}</b>",
+        cost_line,
         "",
         "📊 <b>احتمال هر رده:</b>",
     ]
     for rarity, weight in cfg["weights"].items():
         lines.append(f"{constants.RARITY_LABELS[rarity]} — {weight:g}٪")
+
+    buy_label = "🎁 باز کردن رایگان امروز" if is_free else "خرید و باز کن"
     rows = [
-        [btn("خرید و باز کن", emoji_key="btn_confirm", style=CONFIRM, callback_data=_act("mbox_open", user.id, f"{tier}:1"))],
+        [btn(buy_label, emoji_key="btn_confirm", style=CONFIRM, callback_data=_act("mbox_open", user.id, f"{tier}:1"))],
         [btn(f"باز کردن ×{BULK_PAY} (+۱ رایگان 🎁)", emoji_key="btn_diamond_box", style=SHOP,
              callback_data=_act("mbox_open", user.id, f"{tier}:bulk"))],
         [btn("↩️ لیست باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_act("mbox", user.id))],
@@ -1885,9 +1905,17 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         except GameError as exc:
             await query.answer(str(exc), show_alert=True)
             return
-        await query.answer("🎉 باز شد!")
+        if kind != "bulk" and result.get("is_free"):
+            await query.answer("🎁 باکس رایگان امروز باز شد!")
+        else:
+            await query.answer("🎉 باز شد!")
         text, keyboard = _mbox_result_card(user, tier, kind, result)
-        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        photo_path = None
+        if kind != "bulk" and result.get("creature"):
+            from game.media import get_creature_image_path
+
+            photo_path = get_creature_image_path(result["creature"])
+        await safe_edit_message_text(query, text, photo=photo_path, parse_mode="HTML", reply_markup=keyboard)
         return
 
     # ── upgrade: ×1/×5/×10 step selector + body-part upgrades (each buys `step`) ──

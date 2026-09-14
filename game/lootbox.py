@@ -184,13 +184,45 @@ def _diamond_box_roll_once(user: User, cfg: dict, tier: str) -> dict:
     return {"kind": "creature", "rarity": rarity, "creature": creature, "tier": tier}
 
 
+def can_claim_free_bronze_box(user: User) -> bool:
+    """Check if the user can open their daily free bronze monster box."""
+    from bio_lab.models import DailyActionLog
+    from game.daily import today_str
+
+    return not DailyActionLog.objects.filter(
+        user=user, action="free_bronze_box", day=today_str(), count__gte=1
+    ).exists()
+
+
 @transaction.atomic
 def open_diamond_box(user: User, tier: str) -> dict:
     """Diamond boxes always yield a creature (never equipment) — this is the "open
-    a new monster with diamonds" path the gold Bio-Crate doesn't guarantee."""
+    a new monster with diamonds" path the gold Bio-Crate doesn't guarantee.
+
+    Each player receives 1 free Bronze Monster Box daily. If available, opening
+    a bronze box is free and consumes today's daily free allowance."""
     cfg = _diamond_box_cfg(tier)
-    _charge_diamond_box(user, cfg, 1)
-    return _diamond_box_roll_once(user, cfg, tier)
+    user = User.objects.select_for_update().get(id=user.id)
+    is_free = False
+    if tier == "bronze":
+        from bio_lab.models import DailyActionLog
+        from game.daily import today_str
+
+        day = today_str()
+        log, _ = DailyActionLog.objects.select_for_update().get_or_create(
+            user=user, action="free_bronze_box", day=day, defaults={"count": 0}
+        )
+        if log.count == 0:
+            log.count = 1
+            log.save(update_fields=["count"])
+            is_free = True
+
+    if not is_free:
+        _charge_diamond_box(user, cfg, 1)
+
+    result = _diamond_box_roll_once(user, cfg, tier)
+    result["is_free"] = is_free
+    return result
 
 
 @transaction.atomic

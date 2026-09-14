@@ -214,6 +214,7 @@ ELEMENT_SKILLS = {
 # throughout the day rather than dumping everything in one sitting)
 ENERGY_CAPS = {
     "guardian_stipend": 1,
+    "free_bronze_box": 1,
 }
 
 # The guardian's daily salary scales with the power of the guardian creature: a
