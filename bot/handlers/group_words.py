@@ -546,10 +546,13 @@ def _feedcap_group_card(user, creature, caps: dict, maxed: bool) -> tuple[str, I
 
 
 def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
+    from config import BOT_USERNAME
+    from game import botconfig
     from game.energy import get_max_energy
     from game.subscription import get_subscription_info
 
     max_energy = get_max_energy(user)
+    cost = botconfig.get_energy_refill_cost()
 
     if energy <= 0:
         sub_info = get_subscription_info(user)
@@ -566,8 +569,8 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
             )
             rows.append([
                 InlineKeyboardButton(
-                    "💎 شارژ فوری با الماس (پیوی)",
-                    url=f"https://t.me/{BOT_USERNAME}?start=energy",
+                    f"⚡ شارژ با {cost} الماس 💎",
+                    callback_data=f"enr:ask:{user.id}:ghunt",
                 )
             ])
         else:
@@ -581,8 +584,8 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
             )
             rows.append([
                 InlineKeyboardButton(
-                    "💎 شارژ کامل با الماس (پیوی)",
-                    url=f"https://t.me/{BOT_USERNAME}?start=energy",
+                    f"⚡ شارژ با {cost} الماس 💎",
+                    callback_data=f"enr:ask:{user.id}:ghunt",
                 )
             ])
             rows.append([
@@ -2079,12 +2082,15 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         if isinstance(exc, EnergyError):
             from bot.handlers.energy import show_energy_error
 
-            if await show_energy_error(query, exc, int(owner_id)):
+            origin = "ghunt" if "hunt" in action else None
+            if await show_energy_error(query, exc, int(owner_id), origin=origin):
                 return
         await query.answer(str(exc), show_alert=True)
         return
     if action == "autohunt":
         # a whole-energy batch — the player spent all energy; attach quick refill / subscription options
+        from config import BOT_USERNAME
+        from game import botconfig
         from game.subscription import get_subscription_info
 
         u_obj = payload.get("user")
@@ -2092,15 +2098,14 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
             from bio_lab.repository import get_or_create_user
             u_obj, _ = get_or_create_user(update.effective_user)
         sub_info = get_subscription_info(u_obj)
+        cost = botconfig.get_energy_refill_cost()
         kb_rows = []
+        kb_rows.append([
+            InlineKeyboardButton(f"⚡ شارژ با {cost} الماس 💎", callback_data=f"enr:ask:{owner_id}:ghunt")
+        ])
         if not sub_info["is_active"]:
             kb_rows.append([
-                InlineKeyboardButton("💎 شارژ با الماس", url=f"https://t.me/{BOT_USERNAME}?start=energy"),
                 InlineKeyboardButton("🥈 خرید اشتراک (۱۰۰ تومان)", url=f"https://t.me/{BOT_USERNAME}?start=sub_silver"),
-            ])
-        else:
-            kb_rows.append([
-                InlineKeyboardButton("💎 شارژ با الماس", url=f"https://t.me/{BOT_USERNAME}?start=energy")
             ])
         kb_rows.append([_pm_button()])
         await safe_edit_message_text(

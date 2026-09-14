@@ -28,7 +28,8 @@ def energy_refill_markup(owner_id: int, is_group: bool = False, origin: str | No
     from game import botconfig
 
     cost = botconfig.get_energy_refill_cost()
-    row1 = [InlineKeyboardButton(f"⚡ شارژ کامل با {cost} الماس 💎", callback_data=f"enr:ask:{owner_id}")]
+    cb_ask = f"enr:ask:{owner_id}:{origin}" if origin else f"enr:ask:{owner_id}"
+    row1 = [InlineKeyboardButton(f"⚡ شارژ کامل با {cost} الماس 💎", callback_data=cb_ask)]
     if is_group:
         row2 = [InlineKeyboardButton("🥈 خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)", url=f"https://t.me/{BOT_USERNAME}?start=sub_silver")]
     else:
@@ -64,7 +65,9 @@ async def show_energy_error(query, exc, owner_id: int | None = None, origin: str
         is_group = query.message.chat.type in ("group", "supergroup") if query.message and query.message.chat else False
         if origin is None and getattr(query, "data", None):
             qdata = str(query.data)
-            if qdata.startswith("hunt") or qdata.startswith("autohunt"):
+            if is_group and ("hunt" in qdata or "autohunt" in qdata):
+                origin = "ghunt"
+            elif qdata.startswith("hunt") or qdata.startswith("autohunt"):
                 origin = "hunt"
             elif qdata.startswith("arena"):
                 origin = "arena"
@@ -72,10 +75,13 @@ async def show_energy_error(query, exc, owner_id: int | None = None, origin: str
                 origin = "camp"
             elif qdata.startswith("feed") or qdata.startswith("lab") or qdata.startswith("up_"):
                 origin = "upg"
+        elif is_group and origin == "hunt":
+            origin = "ghunt"
 
         info = await run_db(_user_sub_info_sync, query.from_user)
         cost = botconfig.get_energy_refill_cost()
 
+        cb_ask = f"enr:ask:{oid}:{origin}" if origin else f"enr:ask:{oid}"
         if info["is_active"]:
             caption = (
                 f"{str(exc)}\n\n"
@@ -83,7 +89,7 @@ async def show_energy_error(query, exc, owner_id: int | None = None, origin: str
                 f"(<b>{info['days_left']} روز و {info['hours_left']} ساعت</b> باقی‌مانده).\n\n"
                 f"<i>💡 سقف انرژی شما ۱۰۰ است. می‌توانید با الماس آن را فوراً شارژ کامل کنید:</i>"
             )
-            rows = [[InlineKeyboardButton(f"⚡ شارژ کامل با {cost} الماس 💎", callback_data=f"enr:ask:{oid}")]]
+            rows = [[InlineKeyboardButton(f"⚡ شارژ کامل با {cost} الماس 💎", callback_data=cb_ask)]]
             if origin == "hunt":
                 rows.append([btn("بازگشت به شکار", emoji_key="btn_hunt", style=NAV, callback_data="hunt_next")])
             elif origin == "arena":
@@ -119,15 +125,19 @@ async def energy_ask_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.answer("این دکمه مال تو نیست 🙂", show_alert=True)
         return
     owner_id = parts[2] if len(parts) > 2 else query.from_user.id
+    origin = parts[3] if len(parts) > 3 else None
     from game import botconfig
 
     cost = botconfig.get_energy_refill_cost()
     max_en = await run_db(_user_max_energy_sync, update.effective_user)
     await query.answer()
+
+    cb_do = f"enr:do:{owner_id}:{origin}" if origin else f"enr:do:{owner_id}"
+    cb_no = f"enr:no:{owner_id}:{origin}" if origin else f"enr:no:{owner_id}"
+
     keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton(f"✅ بله ({cost} 💎)",
-                             callback_data=f"enr:do:{owner_id}"),
-        InlineKeyboardButton("❌ بی‌خیال", callback_data=f"enr:no:{owner_id}"),
+        InlineKeyboardButton(f"✅ بله ({cost} 💎)", callback_data=cb_do),
+        InlineKeyboardButton("❌ بی‌خیال", callback_data=cb_no),
     ]])
     await safe_edit_message_text(
         query,
@@ -139,10 +149,24 @@ async def energy_ask_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def energy_no_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _owner_ok(query, query.data.split(":")):
+    parts = query.data.split(":")
+    if not _owner_ok(query, parts):
         await query.answer("این دکمه مال تو نیست 🙂", show_alert=True)
         return
-    await query.answer()
+    owner_id = parts[2] if len(parts) > 2 else query.from_user.id
+    origin = parts[3] if len(parts) > 3 else None
+    await query.answer("منصرف شدید.")
+
+    if origin == "ghunt":
+        from bot.handlers.group_words import _card_sync, _render
+        try:
+            data = await run_db(_card_sync, update.effective_user, query.message.chat, "hunt")
+            text, keyboard = _render("hunt", data)
+            await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+            return
+        except Exception:
+            pass
+
     await safe_edit_message_text(query, "باشه، فعلاً شارژ نشد.")
 
 
@@ -155,9 +179,13 @@ def _refill_sync(tg_user):
 
 async def energy_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not _owner_ok(query, query.data.split(":")):
+    parts = query.data.split(":")
+    if not _owner_ok(query, parts):
         await query.answer("این دکمه مال تو نیست 🙂", show_alert=True)
         return
+    owner_id = parts[2] if len(parts) > 2 else query.from_user.id
+    origin = parts[3] if len(parts) > 3 else None
+
     try:
         result = await run_db(_refill_sync, update.effective_user)
     except GameError as exc:
@@ -165,8 +193,22 @@ async def energy_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     await query.answer("⚡ پر شد!")
     max_en = await run_db(_user_max_energy_sync, update.effective_user)
+
+    is_group = query.message.chat.type in ("group", "supergroup") if query.message and query.message.chat else False
+    if origin == "ghunt" or (is_group and (origin == "hunt" or not origin)):
+        from bot.handlers.group_words import _card_sync, _render
+        try:
+            data = await run_db(_card_sync, update.effective_user, query.message.chat, "hunt")
+            text, keyboard = _render("hunt", data)
+            note = f"⚡ <b>انرژی شما با موفقیت شارژ شد! ({result['energy']}/{max_en})</b> (<b>{result['cost']}</b> الماس کم شد)\n\n"
+            await safe_edit_message_text(query, note + text, parse_mode="HTML", reply_markup=keyboard)
+            return
+        except Exception:
+            pass
+
     is_private = update.effective_chat is not None and update.effective_chat.type == "private"
     if is_private:
+        from bot.buttons import NAV, btn
         keyboard = InlineKeyboardMarkup([[
             InlineKeyboardButton("🔙 بازگشت به بازی", callback_data="menu:me"),
         ]])
