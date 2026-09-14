@@ -85,6 +85,63 @@ ARENA_CHEST_TIERS = {
 }
 
 
+def get_guaranteed_rarity(chest_type: str, cup: int) -> str:
+    """Return the minimum guaranteed creature/equipment rarity based on cup count.
+
+    Mega (امگا / مگا):
+      - 0-1499: epic (حداقل حماسی)
+      - 1500-3499: legendary (حداقل افسانه‌ای)
+      - 3500+: mythic (تضمینی قطعی اساطیری)
+    Magical (جادویی):
+      - 0-1499: rare (حداقل کمیاب)
+      - 1500-3499: epic (حداقل حماسی)
+      - 3500+: legendary (حداقل افسانه‌ای)
+    Golden (طلایی):
+      - 0-1499: common (حداقل معمولی با شانس کمیاب)
+      - 1500-3499: rare (حداقل کمیاب)
+      - 3500+: epic (حداقل حماسی)
+    Silver (نقره‌ای):
+      - 0-3499: common (حداقل معمولی)
+      - 3500+: rare (حداقل کمیاب)
+    """
+    cup = max(0, int(cup))
+    if chest_type == "mega":
+        if cup >= 3500:
+            return "mythic"
+        elif cup >= 1500:
+            return "legendary"
+        return "epic"
+    elif chest_type == "magical":
+        if cup >= 3500:
+            return "legendary"
+        elif cup >= 1500:
+            return "epic"
+        return "rare"
+    elif chest_type == "golden":
+        if cup >= 3500:
+            return "epic"
+        elif cup >= 1500:
+            return "rare"
+        return "common"
+    else:  # silver
+        if cup >= 3500:
+            return "rare"
+        return "common"
+
+
+def get_chest_effective_weights(chest_type: str, cup: int, base_weights: dict[str, float]) -> dict[str, float]:
+    """Filter base weights so that any rarity below get_guaranteed_rarity is strictly excluded."""
+    guaranteed = get_guaranteed_rarity(chest_type, cup)
+    min_idx = constants.RARITY_ORDER.index(guaranteed)
+    filtered = {
+        r: w for r, w in (base_weights or {}).items()
+        if r in constants.RARITY_ORDER and constants.RARITY_ORDER.index(r) >= min_idx and w > 0
+    }
+    if not filtered:
+        return {guaranteed: 100.0}
+    return filtered
+
+
 def get_user_chests(user: User) -> list[ArenaChest]:
     """Return all chests belonging to user, sorted by slot number (1..4).
     Also refreshes any chest whose unlock timer has elapsed."""
@@ -267,12 +324,19 @@ def open_chest(user: User, chest_id: int) -> dict:
     creature = None
     item = None
     give_creature = random.random() < cfg["creature_chance"]
+    guaranteed = get_guaranteed_rarity(chest.chest_type, chest.cup_at_drop)
 
     if give_creature:
-        rarity = roll_rarity(cfg["rarity_weights"])
+        c_weights = get_chest_effective_weights(chest.chest_type, chest.cup_at_drop, cfg["rarity_weights"])
+        rarity = roll_rarity(c_weights)
+        if constants.RARITY_ORDER.index(rarity) < constants.RARITY_ORDER.index(guaranteed):
+            rarity = guaranteed
         creature = _roll_creature(user, rarity)
     else:
-        rarity = roll_rarity(cfg.get("equip_weights"))
+        e_weights = get_chest_effective_weights(chest.chest_type, chest.cup_at_drop, cfg.get("equip_weights", {}))
+        rarity = roll_rarity(e_weights)
+        if constants.RARITY_ORDER.index(rarity) < constants.RARITY_ORDER.index(guaranteed):
+            rarity = guaranteed
         item = roll_equipment(user, rarity)
 
     # Small diamond bonus on higher tier chests

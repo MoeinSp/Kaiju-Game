@@ -656,7 +656,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await send_defense_report_now(context, result.get("defense"))
 
     _ally = result.get("opponent_alliance")
-    opp_tag = result["opponent_label"] + (f" <i>(🤝 {_ally})</i>" if _ally else " 🚫 <i>بدون اتحاد</i>")
+    opp_alliance = f"🤝 <i>({_ally})</i>" if _ally else "🚫 <i>بدون اتحاد</i>"
 
     loot_gold = result.get("loot", 0)
     loot_dna = result.get("dna", 0)
@@ -664,45 +664,76 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     league_dna = result.get("league_dna", 0)
     total_gold = loot_gold + league_gold
     total_dna = loot_dna + league_dna
-    new_coins = result.get("new_coins")
+
+    def_name = result.get("defender_creature_name") or "موجود حریف"
+    def_elem = result.get("defender_element")
+    elem_lbl = constants.element_label(def_elem) if def_elem else ""
+
+    sa = result.get("sa")
+    sb = result.get("sb")
+    if sa and sb:
+        hp_a, max_a = sa["hp"], sa["max_hp"]
+        icon_a = "💀" if hp_a <= 0 else "❤️"
+        pct_a = round(100 * max(hp_a, 0) / max(1, max_a))
+        bar_a = constants.render_bar(hp_a, max_a, width=10)
+        hp_line_a = f"{icon_a}  <b>{sa['name']}</b> [{bar_a}] {pct_a}%"
+
+        hp_b, max_b = sb["hp"], sb["max_hp"]
+        icon_b = "💀" if hp_b <= 0 else "❤️"
+        pct_b = round(100 * max(hp_b, 0) / max(1, max_b))
+        bar_b = constants.render_bar(hp_b, max_b, width=10)
+        hp_line_b = f"{icon_b}  <b>{sb['name']}</b> [{bar_b}] {pct_b}%"
+    else:
+        atk_name = result.get("attacker_creature_name", "موجود شما")
+        if result["won"]:
+            hp_line_a = f"❤️  <b>{atk_name}</b> [■■■■■■■■■■] 100%"
+            hp_line_b = f"💀  <b>{def_name}</b> [□□□□□□□□□□] 0%"
+        else:
+            hp_line_a = f"💀  <b>{atk_name}</b> [□□□□□□□□□□] 0%"
+            hp_line_b = f"❤️  <b>{def_name}</b> [■■■■■■■■■■] 100%"
 
     div = "──────────────"
     if result["won"]:
         cup_sign = f"+{result['cup_delta']}" if result['cup_delta'] > 0 else str(result['cup_delta'])
-        reward_hdr = f"💰 <b>مجموع غنیمت:</b> +{total_gold:,} {get_emoji('coin')} ┃ +{total_dna:,} {get_emoji('dna')}"
-        if new_coins is not None:
-            reward_hdr += f" <i>(موجودی: {new_coins:,} {get_emoji('coin')})</i>"
-        reward_lines = [reward_hdr]
-        if league_gold or league_dna:
-            reward_lines.append(
-                f"   ▫️ غارت: +{loot_gold:,} {get_emoji('coin')} ┃ {result.get('league_emoji', '🏅')} لیگ {result.get('league_name', '')}: +{league_gold:,} {get_emoji('coin')} +{league_dna:,} {get_emoji('dna')}"
-            )
-        reward_lines.append(f"🏆 <b>تغییر کاپ:</b> <b>{cup_sign}</b> <i>(کاپ جدید: {result['new_cup']:,})</i>")
+        reward_lines = [
+            f"{get_emoji('coin')} <b>مجموع غنیمت:</b> +{total_gold:,} <i>(غارت: +{loot_gold:,} ┃ {result.get('league_emoji', '🏅')} لیگ: +{league_gold:,})</i>",
+            f"{get_emoji('dna')} <b>دی‌ان‌ای دریافتی:</b> +{total_dna:,} <i>(غارت: +{loot_dna:,} ┃ لیگ: +{league_dna:,})</i>",
+            f"{get_emoji('trophy')} <b>تغییر کاپ:</b> <b>{cup_sign}</b> <i>(کاپ جدید: {result['new_cup']:,})</i>",
+        ]
         if result.get("awarded_chest"):
             awarded = result["awarded_chest"]
             awarded_cfg = ARENA_CHEST_TIERS.get(awarded.chest_type, {})
             reward_lines.append(
-                f"📦 <b>جعبه جدید دریافت شد:</b> {awarded_cfg.get('emoji', '📦')} {awarded_cfg.get('name', 'جعبه آرنا')} (جایگاه {awarded.slot})"
+                f"{get_emoji(f'chest_{awarded.chest_type}', awarded_cfg.get('emoji', '📦'))} <b>جعبه جدید دریافت شد:</b> {awarded_cfg.get('name', 'جعبه آرنا')} (جایگاه {awarded.slot})"
             )
         elif result.get("slots_full"):
             reward_lines.append("<i>⚠️ جایگاه‌های جعبه‌ات پر بود — جعبه جدیدی دریافت نشد.</i>")
 
-        body = (
-            f"{get_emoji('celebrate')} <b>پیروزی در نبرد آرنا!</b>\n"
-            f"👤 حریف: <b>{opp_tag}</b>\n\n"
-            + "\n".join(reward_lines)
-            + f"\n\n{div}\n"
-            + result["log_text"]
-        )
+        body_lines = [
+            f"{get_emoji('celebrate')}  <b>پیروزی در نبرد آرنا!</b>",
+            "",
+            f"👤 <b>آزمایشگاه حریف:</b> {result['opponent_label']} {opp_alliance}",
+            f"🛡  <b>هیولای حریف:</b> {def_name} [{elem_lbl}]",
+            div,
+            hp_line_a,
+            hp_line_b,
+            div,
+        ] + reward_lines
+        body = "\n".join(body_lines)
     else:
         cup_str = str(result['cup_delta'])
-        body = (
-            f"😔 <b>شکست در نبرد آرنا</b>\n"
-            f"👤 حریف: <b>{opp_tag}</b>\n"
-            f"🏆 <b>تغییر کاپ:</b> <b>{cup_str}</b> <i>(کاپ جدید: {result['new_cup']:,})</i>\n\n"
-            f"{div}\n"
-            + result["log_text"]
-        )
+        body_lines = [
+            "😔  <b>شکست در نبرد آرنا!</b>",
+            "",
+            f"👤 <b>آزمایشگاه حریف:</b> {result['opponent_label']} {opp_alliance}",
+            f"🛡  <b>هیولای حریف:</b> {def_name} [{elem_lbl}]",
+            div,
+            hp_line_a,
+            hp_line_b,
+            div,
+            f"{get_emoji('trophy')} <b>تغییر کاپ:</b> <b>{cup_str}</b> <i>(کاپ جدید: {result['new_cup']:,})</i>",
+        ]
+        body = "\n".join(body_lines)
 
     buttons = [
         [btn("🔍 جزییات حمله", style=NAV, callback_data="arena_detail")],
@@ -1118,14 +1149,14 @@ async def arena_chest_detail_callback(update: Update, context: ContextTypes.DEFA
 
     await query.answer()
     cfg = ARENA_CHEST_TIERS.get(chest.chest_type, ARENA_CHEST_TIERS["silver"])
-    from game.arena_chests import league_multiplier
+    from game.arena_chests import league_multiplier, get_guaranteed_rarity
     mult = league_multiplier(chest.cup_at_drop)
     gold_val = round(cfg["base_gold"] * mult)
     dna_val = round(cfg["base_dna"] * mult)
     cost = speedup_diamond_cost(chest)
 
     lg = constants.league_for_cup(chest.cup_at_drop)
-    guaranteed = cfg.get("guaranteed_creature_rarity", "common")
+    guaranteed = get_guaranteed_rarity(chest.chest_type, chest.cup_at_drop)
     rarity_label = constants.RARITY_LABELS.get(guaranteed, guaranteed)
 
     lines = [
@@ -1140,8 +1171,12 @@ async def arena_chest_detail_callback(update: Update, context: ContextTypes.DEFA
     ]
     if cfg["key"] in ("magical", "mega"):
         lines.append(f"💎 الماس: <b>دارد (بونس ویژه)</b> {get_emoji('diamond')}")
+    if chest.chest_type == "mega" and chest.cup_at_drop >= 3500:
+        c_line = f"👹 هیولا: <b>تضمینی قطعی ۱۰۰٪ {rarity_label}</b>"
+    else:
+        c_line = f"👹 شانس هیولا: <b>{int(cfg['creature_chance'] * 100)}٪</b> (حداقل تضمینی: <b>{rarity_label}</b>)"
     lines += [
-        f"👹 شانس هیولا: <b>{int(cfg['creature_chance'] * 100)}٪</b> (حداقل نایابی: <b>{rarity_label}</b>)",
+        c_line,
         "━━━━━━━━━━━━━━━━━━━━",
     ]
 
@@ -1319,15 +1354,22 @@ async def arena_chest_rewards_callback(update: Update, context: ContextTypes.DEF
         label = f"• {short_name} •" if is_sel else short_name
         tier_tabs.append(btn(label, emoji_key=f"btn_chest_{t_key}", style=PRIMARY if is_sel else NAV, callback_data=f"arena_chest_rewards:{t_key}:{page}"))
 
-    guaranteed = cfg.get("guaranteed_creature_rarity", "common")
-    rarity_label = constants.RARITY_LABELS.get(guaranteed, guaranteed)
+    if tier == "mega":
+        min_info = "کاپ ۰+: حداقل حماسی ┃ کاپ ۱۵۰۰+: حداقل افسانه‌ای ┃ کاپ ۳۵۰۰+: تضمینی ۱۰۰٪ اساطیری"
+    elif tier == "magical":
+        min_info = "کاپ ۰+: حداقل کمیاب ┃ کاپ ۱۵۰۰+: حداقل حماسی ┃ کاپ ۳۵۰۰+: حداقل افسانه‌ای"
+    elif tier == "golden":
+        min_info = "کاپ ۰+: حداقل معمولی ┃ کاپ ۱۵۰۰+: حداقل کمیاب ┃ کاپ ۳۵۰۰+: حداقل حماسی"
+    else:  # silver
+        min_info = "کاپ ۰+: حداقل معمولی ┃ کاپ ۳۵۰۰+: حداقل کمیاب"
 
     page_label = "لیگ‌های ۱ تا ۸" if page == 1 else "لیگ‌های ۹ تا ۱۶"
     lines = [
         f"{tier_emoji} <b>راهنمای جوایز {tier_name}</b> ({page_label})",
         "───────────────────",
         f"⏱ زمان بازگشایی پایه: <b>{cfg['unlock_hours']} ساعت</b>",
-        f"{get_emoji('creature')} شانس هیولا: <b>{int(cfg['creature_chance'] * 100)}٪</b> (حداقل: <b>{rarity_label}</b>)",
+        f"{get_emoji('creature')} شانس دریافت هیولا: <b>{int(cfg['creature_chance'] * 100)}٪</b>",
+        f"🎯 نایابی تضمینی هیولا/تجهیزات:\n   ▫️ <i>{min_info}</i>",
         f"🎒 تجهیزات: <b>۱ عدد تصادفی</b>",
     ]
     if cfg["key"] in ("magical", "mega"):

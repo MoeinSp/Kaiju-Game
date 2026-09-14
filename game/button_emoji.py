@@ -143,6 +143,7 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_chest_queue": ("در صف گذاشتن جعبه", "📋", "action"),
     "btn_chest_rewards": ("راهنمای جوایز لیگ‌ها", "📊", "features"),
     "btn_subscription": ("اشتراک ویژه VIP", "⭐", "features"),
+    "btn_vip": ("اشتراک ویژه VIP", "⭐", "features"),
     "btn_sub_silver": ("خرید اشتراک نقره‌ای", "🥈", "features"),
     "btn_sub_gold": ("خرید اشتراک طلایی", "👑", "features"),
     "btn_sub_mgr": ("مدیریت اشتراک", "⭐", "admin"),
@@ -192,6 +193,14 @@ def get_button_icon(key: str) -> str | None:
     override = _cache.get(key)
     if override is not None:
         return override.custom_emoji_id
+    if key == "btn_vip":
+        fb = _cache.get("btn_subscription")
+        if fb is not None:
+            return fb.custom_emoji_id
+    elif key == "btn_subscription":
+        fb = _cache.get("btn_vip")
+        if fb is not None:
+            return fb.custom_emoji_id
     if key == "btn_scout_next":
         fb = _cache.get("btn_recheck")
         if fb is not None:

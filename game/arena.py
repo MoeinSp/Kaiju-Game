@@ -10,7 +10,7 @@ from django.utils import timezone
 from bio_lab.models import AttackLog, Creature, User
 from bio_lab.repository import lab_display
 from game import constants, lab
-from game.combat import resolve_duel, resolve_duel_detailed
+from game.combat import resolve_battle, resolve_duel, resolve_duel_detailed
 from game.creature import GameError, base_share_for_rating, creature_power
 from game.equipment import get_equipped_items
 
@@ -401,7 +401,12 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         if is_shielded(defender_user):
             raise GameError("این حریف الان سپر محافظ داره، یکی دیگه رو امتحان کن.")
 
-    winner, log_text, detail_log = resolve_duel_detailed(attacker_creature, defender_creature)
+    battle_res = resolve_battle(attacker_creature, defender_creature)
+    winner = battle_res["winner"]
+    log_text = battle_res["compact"]
+    detail_log = battle_res["detail"]
+    sa = battle_res["a"]
+    sb = battle_res["b"]
     won = winner is attacker_creature
 
     attacker_power = creature_power(attacker_creature, get_equipped_items(attacker_creature))
@@ -498,6 +503,12 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         "league_name": league["name"],
         "league_emoji": league["emoji"],
         "cup_delta": delta,
+        "sa": sa,
+        "sb": sb,
+        "attacker_creature_name": sa["name"],
+        "defender_creature_name": sb["name"],
+        "attacker_element": sa["element"],
+        "defender_element": sb["element"],
         "opponent_label": opponent["label"],
         "opponent_alliance": (defender_user.alliance.name if (defender_user and defender_user.alliance_id) else None),
         "new_cup": attacker.cup,
