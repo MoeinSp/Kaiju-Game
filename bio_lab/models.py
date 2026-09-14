@@ -106,6 +106,11 @@ class User(models.Model):
     title = models.CharField(max_length=32, null=True, blank=True)
     last_shop_day = models.CharField(max_length=10, null=True, blank=True)
 
+    # ── VIP / Subscriptions (اشتراک نقره‌ای و طلایی ۳۰ روزه) ──
+    subscription_tier = models.CharField(max_length=16, default="", blank=True)  # "silver", "gold" or ""
+    subscription_until = models.DateTimeField(null=True, blank=True)
+    last_free_box_nudge_day = models.CharField(max_length=10, null=True, blank=True)
+
     # how many building upgrades this player can run at once. Starts at 1 (the single
     # «کارگر»); buying the 2nd builder from the shop bumps it to 2 (game/buildings.py).
     builder_slots = models.IntegerField(default=1)
@@ -1078,8 +1083,42 @@ class PurchaseRequest(models.Model):
     # edit it to reflect the new status
     channel_chat_id = models.BigIntegerField(null=True, blank=True)
     channel_message_id = models.BigIntegerField(null=True, blank=True)
+    subscription_tier = models.CharField(max_length=16, default="", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         indexes = [models.Index(fields=["user", "status"])]
+
+
+class ArenaChest(models.Model):
+    """A Clash Royale-style chest won from PvP Arena duels.
+    Players have up to 4 slots. Unlocking takes real time (3h to 24h depending on tier).
+    Only 1 chest can be actively unlocking at a time, but subscribed users can queue a 2nd."""
+
+    CHEST_STATUS = [
+        ("locked", "locked"),
+        ("unlocking", "unlocking"),
+        ("queued", "queued"),
+        ("ready", "ready"),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="arena_chests")
+    slot = models.IntegerField()  # 1 to 4
+    chest_type = models.CharField(max_length=32)  # "silver", "golden", "magical", "mega"
+    cup_at_drop = models.IntegerField(default=0)  # for reward scaling based on league
+    status = models.CharField(max_length=16, choices=CHEST_STATUS, default="locked")
+    unlock_starts_at = models.DateTimeField(null=True, blank=True)
+    unlock_finishes_at = models.DateTimeField(null=True, blank=True)
+    notified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "slot"], name="uq_user_arena_chest_slot")
+        ]
+        indexes = [
+            models.Index(fields=["user", "status"]),
+            models.Index(fields=["status", "unlock_finishes_at"]),
+        ]
+

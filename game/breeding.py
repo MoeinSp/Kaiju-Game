@@ -128,10 +128,14 @@ def start(user: User, parent_a: Creature, parent_b: Creature) -> BreedingJob:
     # twice: the second call blocks here, then sees the job the first created and bounces
     user = User.objects.select_for_update().get(id=user.id)
     assert_available(user)
-    if parent_a.id == parent_b.id:
-        raise GameError("یه موجود نمی‌تونه با خودش جفت بشه — دو تای متفاوت انتخاب کن.")
-    if BreedingJob.objects.filter(owner=user).exists():
-        raise GameError("همین الان یه جفت توی غارن — صبر کن تخم بذارن، بعد جفت بعدی رو بفرست.")
+    from game.subscription import get_subscription_tier
+
+    max_jobs = 2 if get_subscription_tier(user) == "gold" else 1
+    if BreedingJob.objects.filter(owner=user).count() >= max_jobs:
+        raise GameError(
+            f"ظرفیت غار هیولا پر است ({max_jobs} جفت همزمان). صبر کن تخم بذارن، بعد جفت بعدی رو بفرست."
+            + (" (با اشتراک طلایی می‌توانی تا ۲ جفت همزمان داشته باشی)" if max_jobs == 1 else "")
+        )
 
     # both parents must be idle: not active, not mining, not already in the cave
     assert_free(user, parent_a, for_action="بفرستی توی غار هیولا")

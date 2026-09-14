@@ -139,6 +139,27 @@ async def notify_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         if marker == "arena":
             reply_markup = _arena_button()
             photo_path = get_notify_image_path("energy")
+        elif marker == "arena_chest_ready":
+            chest_id, tier = payload if isinstance(payload, (tuple, list)) else (payload, "silver")
+            from bot.buttons import CONFIRM
+            from game.media import get_arena_chest_image_path
+            reply_markup = InlineKeyboardMarkup([
+                [btn("🎁 باز کردن جعبه", style=CONFIRM, callback_data=f"arena_chest_open:{chest_id}")],
+                [btn("منوی اصلی", style=NAV, callback_data="menu:me")],
+            ])
+            photo_path = get_arena_chest_image_path(tier, "ready")
+        elif marker == "free_box_reminder":
+            from bot.buttons import SHOP
+            from game.media import get_feature_image_path
+            rows = []
+            unclaimed = payload or ["bronze", "silver"]
+            if "bronze" in unclaimed:
+                rows.append([btn("🥉 باز کردن باکس برنزی (رایگان)", style=SHOP, callback_data="dbox_pick:bronze")])
+            if "silver" in unclaimed:
+                rows.append([btn("🥈 باز کردن باکس نقره‌ای (رایگان)", style=SHOP, callback_data="dbox_pick:silver")])
+            rows.append([btn("منوی اصلی", style=NAV, callback_data="menu:me")])
+            reply_markup = InlineKeyboardMarkup(rows)
+            photo_path = get_feature_image_path("diamond_box")
         elif marker == "lab_unlock":
             reply_markup = _lab_unlock_keyboard(payload)
         elif marker == "war_settle":

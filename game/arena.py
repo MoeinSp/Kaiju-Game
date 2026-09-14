@@ -439,7 +439,11 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         # bought shield lets you attack a handful of times before it's gone
         spend_shield_on_attack(attacker)
         attacker_fields += ["cup", "shield_until"]
-    attacker.save(update_fields=attacker_fields)
+    awarded_chest = None
+    if won and award_cup:
+        from game.arena_chests import award_chest_on_win
+        awarded_chest = award_chest_on_win(attacker)
+
     if won:
         from game.ledger import record_gain
 
@@ -489,6 +493,7 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         "opponent_label": opponent["label"],
         "opponent_alliance": (defender_user.alliance.name if (defender_user and defender_user.alliance_id) else None),
         "new_cup": attacker.cup,
+        "awarded_chest": awarded_chest,
         # payload for the INSTANT defense DM (None defender_id = bot, no DM)
         "defense": None if defender_user is None else {
             "defender_id": defender_user.id,

@@ -54,6 +54,27 @@ def create_pending(user: User, coins: int, dna: int, diamonds: int) -> PurchaseR
     )
 
 
+def create_subscription_pending(user: User, tier: str) -> PurchaseRequest:
+    """Create an awaiting-receipt request for a 30-day VIP subscription."""
+    if user.receipt_blocked:
+        raise GameError("⛔ دسترسی تو به ثبت رسید خرید مسدود شده. با پشتیبانی در تماس باش.")
+    from game.subscription import SUBSCRIPTION_TIERS
+    cfg = SUBSCRIPTION_TIERS.get(tier)
+    if not cfg:
+        raise GameError("سطح اشتراک نامعتبر است.")
+    price = cfg["price_toman"]
+    PurchaseRequest.objects.filter(user=user, status="awaiting_receipt").delete()
+    return PurchaseRequest.objects.create(
+        user=user,
+        coins=0,
+        dna=0,
+        diamonds=0,
+        subscription_tier=tier,
+        price_toman=price,
+        status="awaiting_receipt",
+    )
+
+
 def attach_receipt(req_id: int, user_id: int, file_id: str) -> PurchaseRequest | None:
     """Bind the uploaded receipt photo to the request and move it to 'pending' review.
     Returns the request, or None if it's gone / not this user's / not awaiting a receipt."""
@@ -76,6 +97,9 @@ def approve(req_id: int) -> dict:
     if req.status != "pending":
         raise GameError(f"این درخواست قبلاً رسیدگی شده (وضعیت: {req.status}).")
     user = User.objects.select_for_update().get(id=req.user_id)
+    if req.subscription_tier:
+        from game.subscription import activate_subscription
+        activate_subscription(user, req.subscription_tier, days=30)
     user.coins += req.coins
     user.dna_fragments += req.dna
     user.diamonds += req.diamonds
@@ -86,9 +110,16 @@ def approve(req_id: int) -> dict:
     from game.ledger import record_gain
 
     record_gain(user, "purchase", coins=req.coins, dna=req.dna, diamonds=req.diamonds)
-    return {"user_id": user.id, "coins": req.coins, "dna": req.dna, "diamonds": req.diamonds,
-            "price": req.price_toman, "channel_chat_id": req.channel_chat_id,
-            "channel_message_id": req.channel_message_id}
+    return {
+        "user_id": user.id,
+        "coins": req.coins,
+        "dna": req.dna,
+        "diamonds": req.diamonds,
+        "subscription_tier": req.subscription_tier,
+        "price": req.price_toman,
+        "channel_chat_id": req.channel_chat_id,
+        "channel_message_id": req.channel_message_id,
+    }
 
 
 @transaction.atomic
@@ -101,9 +132,16 @@ def reject(req_id: int) -> dict:
     req.status = "rejected"
     req.reviewed_at = timezone.now()
     req.save(update_fields=["status", "reviewed_at"])
-    return {"user_id": req.user_id, "price": req.price_toman,
-            "coins": req.coins, "dna": req.dna, "diamonds": req.diamonds,
-            "channel_chat_id": req.channel_chat_id, "channel_message_id": req.channel_message_id}
+    return {
+        "user_id": req.user_id,
+        "price": req.price_toman,
+        "coins": req.coins,
+        "dna": req.dna,
+        "diamonds": req.diamonds,
+        "subscription_tier": req.subscription_tier,
+        "channel_chat_id": req.channel_chat_id,
+        "channel_message_id": req.channel_message_id,
+    }
 
 
 def set_channel_message(req_id: int, chat_id: int, message_id: int) -> None:
@@ -125,6 +163,12 @@ def set_receipt_block(user_id: int, blocked: bool) -> User:
 
 def request_summary(req: PurchaseRequest) -> str:
     """A one-line-per-resource summary of what a request buys (only non-zero items)."""
+    if getattr(req, "subscription_tier", None):
+        from game.subscription import SUBSCRIPTION_TIERS
+        sub = SUBSCRIPTION_TIERS.get(req.subscription_tier)
+        name = sub["name"] if sub else req.subscription_tier
+        badge = sub["badge"] if sub else "⭐"
+        return f"{badge} {name} (۳۰ روزه)"
     parts = []
     for res in ("coins", "dna", "diamonds"):
         amount = getattr(req, res if res != "coins" else "coins")

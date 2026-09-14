@@ -16,11 +16,13 @@ BANNERS_DIR = ASSETS_DIR / "banners"
 CACHE_DIR = ASSETS_DIR / "cache"
 FEATURES_DIR = ASSETS_DIR / "features"
 DROPS_DIR = ASSETS_DIR / "drops"
+CHESTS_DIR = ASSETS_DIR / "chests"
 FONTS_DIR = BASE_DIR / "assets" / "fonts"
 
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 FEATURES_DIR.mkdir(parents=True, exist_ok=True)
 DROPS_DIR.mkdir(parents=True, exist_ok=True)
+CHESTS_DIR.mkdir(parents=True, exist_ok=True)
 FONTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -918,6 +920,20 @@ def get_feature_image_path(feature_name: str) -> str | None:
     if path.exists():
         return str(path)
     return None
+
+
+def get_arena_chest_image_path(tier: str, state: str = "locked") -> str | None:
+    """Returns the artwork path for an arena chest in locked or open state."""
+    state_key = "open" if state in ("open", "opened", "claimed", "ready") else "locked"
+    target = CHESTS_DIR / f"{tier}_{state_key}.jpg"
+    if target.exists():
+        return str(target)
+    # fallback to locked version if open doesn't exist
+    fallback = CHESTS_DIR / f"{tier}_locked.jpg"
+    if fallback.exists():
+        return str(fallback)
+    return get_feature_image_path("arena_chests")
+
 
 
 

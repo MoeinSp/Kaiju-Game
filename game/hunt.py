@@ -203,13 +203,23 @@ AUTO_HUNT_WIN_FLOOR = 0.60
 
 
 def resolve_auto_hunt(user: User, creature: Creature, hunts: int,
-                      loot_mult: float = AUTO_HUNT_LOOT_MULT) -> dict:
+                      loot_mult: float | None = None) -> dict:
     """INSTANT statistical resolution of `hunts` normal-tier hunts — no per-hunt combat
     simulation (that made a 50-hunt batch crawl). Each hunt independently wins with the
     calibrated power-ratio probability (targets have random elements → treated as neutral)
-    and rolls half loot on a win. Applies aggregated gold/DNA/XP/lab in one shot and
-    returns the totals. Caller handles energy + mission counting."""
+    and rolls half loot on a win (plus subscription bonus if active). Applies aggregated
+    gold/DNA/XP/lab in one shot and returns the totals. Caller handles energy + mission counting."""
     from game.ledger import record_gain
+    from game.subscription import get_subscription_tier
+
+    if loot_mult is None:
+        sub_tier = get_subscription_tier(user)
+        if sub_tier == "gold":
+            loot_mult = AUTO_HUNT_LOOT_MULT * 1.50
+        elif sub_tier == "silver":
+            loot_mult = AUTO_HUNT_LOOT_MULT * 1.25
+        else:
+            loot_mult = AUTO_HUNT_LOOT_MULT
 
     hunts = max(0, int(hunts))
     benchmark = hunt_benchmark_power(user)

@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from bio_lab.models import (
     Alliance,
+    ArenaChest,
     AttackLog,
     Building,
     BuildingUpgrade,
@@ -17,6 +18,7 @@ from bio_lab.models import (
     GroupMembership,
     InteractiveBattle,
     MissionClaim,
+    PurchaseRequest,
     RaidBoss,
     RaidDamageLog,
     RequiredChannel,
@@ -189,3 +191,15 @@ class RequiredChannelAdmin(admin.ModelAdmin):
 class ChannelJoinClaimAdmin(admin.ModelAdmin):
     list_display = ("id", "user", "channel", "claimed_at")
     ordering = ("-claimed_at",)
+
+
+@admin.register(ArenaChest)
+class ArenaChestAdmin(admin.ModelAdmin):
+    list_display = ("id", "user", "slot", "chest_type", "cup_at_drop", "status", "unlock_finishes_at", "notified", "created_at")
+    list_filter = ("chest_type", "status", "notified")
+
+
+@admin.register(PurchaseRequest)
+class PurchaseRequestAdmin(admin.ModelAdmin):
+    list_display = ("id", "user", "subscription_tier", "price_toman", "status", "created_at", "reviewed_at")
+    list_filter = ("status", "subscription_tier")

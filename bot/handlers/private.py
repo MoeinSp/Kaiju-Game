@@ -14,7 +14,7 @@ from bio_lab.repository import (
     lab_name_taken,
 )
 from bot.handlers.achievements import achievements_panel
-from bot.handlers.arena import arena_panel
+from bot.handlers.arena import arena_chests_panel, arena_panel
 from bot.handlers.banner import banner_panel
 from bot.handlers.battlepass import battlepass_panel
 from bot.handlers.campaign import campaign_panel
@@ -25,6 +25,7 @@ from bot.handlers.league import league_panel
 from bot.handlers.research import research_panel
 from bot.handlers.equip_exchange import equip_exchange_panel
 from bot.handlers.shop import gold_shop_panel, item_shop_panel, shield_shop_panel, shop_panel
+from bot.handlers.subscription import subscription_panel
 from bot.handlers.exchange import exchange_panel
 from bot.handlers.casino import casino_panel
 from bot.handlers.titles import titles_panel
@@ -1001,10 +1002,11 @@ _CATEGORIES = {
     ]),
     "shop": ("🛒 فروشگاه", [
         [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("باکس هیولا", "diamond_box", "s", "btn_diamond_box")],
-        [("بنر ویژه", "banner", "s", "btn_banner"), ("شاپ روزانه", "shop", "s", "btn_shop")],
-        [("خرید سپر", "shield_shop", "s", "btn_shield"), ("کازینو", "casino", "s", "btn_casino")],
-        [("آیتم‌های ویژه", "item_shop", "s", "btn_items"), ("خرید طلا", "gold_shop", "s", "btn_gold_shop")],
-        [("مبادله طلا و DNA", "exchange", "s", "btn_exchange"), ("مبادله تجهیزات با بلیط", "equip_exchange", "s", "btn_ticket_exchange")],
+        [("اشتراک ویژه", "subscription", "s", "btn_vip"), ("شاپ روزانه", "shop", "s", "btn_shop")],
+        [("بنر ویژه", "banner", "s", "btn_banner"), ("کازینو", "casino", "s", "btn_casino")],
+        [("خرید سپر", "shield_shop", "s", "btn_shield"), ("خرید طلا", "gold_shop", "s", "btn_gold_shop")],
+        [("آیتم‌های ویژه", "item_shop", "s", "btn_items"), ("مبادله طلا و DNA", "exchange", "s", "btn_exchange")],
+        [("مبادله تجهیزات با بلیط", "equip_exchange", "s", "btn_ticket_exchange")],
     ]),
     "social": ("👥 اجتماعی", [
         [("اتحاد من", "alliance_info", "n", "btn_alliance"), ("لیگ رتبه‌بندی", "league", "n", "btn_league")],
@@ -4362,6 +4364,8 @@ _MENU_ACTIONS = {
     "league": league_panel,
     "alliance_league": alliance_league_panel,
     "shop": shop_panel,
+    "subscription": subscription_panel,
+    "arena_chests": arena_chests_panel,
     "shield_shop": shield_shop_panel,
     "item_shop": item_shop_panel,
     "gold_shop": gold_shop_panel,
@@ -4391,6 +4395,7 @@ _KEYWORD_TO_MENU = {
     "box": "biocrate", "mine": "buildings", "wheel": "wheel",
     "select": "collection", "help": "guide", "start": "guide",
     "casino": "casino", "exchange": "exchange", "balance": "balance",
+    "vip": "subscription", "subscription": "subscription", "chests": "arena_chests",
 }
 
 

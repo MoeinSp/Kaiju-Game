@@ -17,11 +17,16 @@ def get_or_create_user(tg_user) -> tuple[User, bool]:
 def display_name(user: User) -> str:
     """Escaped for direct interpolation into parse_mode="HTML" messages — usernames
     and first names are user-controlled and may contain '<', '&', etc."""
+    from game.subscription import subscription_badge
+
+    badge = subscription_badge(user)
     if user.username:
-        return f"@{html.escape(user.username)}"
-    if user.first_name:
-        return html.escape(user.first_name)
-    return f"بازیکن {user.id}"
+        base = f"@{html.escape(user.username)}"
+    elif user.first_name:
+        base = html.escape(user.first_name)
+    else:
+        base = f"بازیکن {user.id}"
+    return f"{base}{badge}"
 
 
 def mention(user: User) -> str:
@@ -42,9 +47,14 @@ def lab_display(user: User) -> str:
 
     Falls back to a stable placeholder rather than the player's @username: these
     are game-facing lists where the lab is the identity, not the person."""
+    from game.subscription import subscription_badge
+
+    badge = subscription_badge(user)
     if user.lab_name:
-        return html.escape(user.lab_name)
-    return f"آزمایشگاه {user.id}"
+        base = html.escape(user.lab_name)
+    else:
+        base = f"آزمایشگاه {user.id}"
+    return f"{base}{badge}"
 
 
 def get_or_create_group(chat) -> Group:

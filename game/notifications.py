@@ -31,7 +31,7 @@ import datetime
 from django.db import transaction
 from django.utils import timezone
 
-from bio_lab.models import AttackLog, BreedingJob, BuildingUpgrade, Egg, User
+from bio_lab.models import ArenaChest, AttackLog, BreedingJob, BuildingUpgrade, Egg, User
 from game import constants
 from game.daily import today_str
 from game.energy import _synced_energy_and_anchor
@@ -255,8 +255,59 @@ def collect_due() -> list[tuple[int, str]]:
         # ── one-day alliance wars whose 24h is up ─────────────────────────────
         out.extend(alliance.settle_due_wars())
 
-        # ── daily "come back" nudge (evening window, recently-active only) ────
+        # ── arena chests ready to open ────────────────────────────────────────
+        from game.arena_chests import ARENA_CHEST_TIERS, advance_user_chests
+        ready_chests = ArenaChest.objects.filter(
+            status="unlocking",
+            unlock_finishes_at__lte=now,
+            notified=False,
+        ).select_related("user")
+        for chest in ready_chests:
+            chest.status = "ready"
+            chest.notified = True
+            chest.save(update_fields=["status", "notified"])
+            advance_user_chests(chest.user)
+            if chest.user.notifications_on:
+                tier_cfg = ARENA_CHEST_TIERS.get(chest.chest_type, ARENA_CHEST_TIERS["silver"])
+                text = (
+                    f"🎁 <b>جعبه آرنا شما آماده باز کردنه!</b>\n\n"
+                    f"✨ <b>{tier_cfg['name']}</b> (اسلات {chest.slot}) آنلاک شد. وقتشه که بازش کنی و موجودات و غنایمش رو برداری!"
+                )
+                out.append((chest.user_id, text, "arena_chest_ready", (chest.id, chest.chest_type)))
+
+        # ── 10:00 AM daily reminder for uncollected free bronze/silver boxes ──
         local_hour = timezone.localtime(now).hour
+        FREE_BOX_NUDGE_HOUR = 10
+        if local_hour >= FREE_BOX_NUDGE_HOUR:
+            today = today_str()
+            from game.lootbox import can_claim_free_diamond_box
+            active_cutoff = _date_str_days_ago(7)
+            box_candidates = User.objects.filter(
+                notifications_on=True,
+                last_login_day__gte=active_cutoff,
+            ).exclude(last_free_box_nudge_day=today)
+            for u in box_candidates:
+                can_bronze = can_claim_free_diamond_box(u, "bronze")
+                can_silver = can_claim_free_diamond_box(u, "silver")
+                if can_bronze or can_silver:
+                    boxes = []
+                    unclaimed_tiers = []
+                    if can_bronze:
+                        boxes.append("برنزی 🥉")
+                        unclaimed_tiers.append("bronze")
+                    if can_silver:
+                        boxes.append("نقره‌ای 🥈")
+                        unclaimed_tiers.append("silver")
+                    box_str = " و ".join(boxes)
+                    nudge_text = (
+                        f"🎁 <b>باکس هیولای رایگان امروزت آماده باز کردنه!</b>\n\n"
+                        f"امروز هنوز باکس <b>{box_str}</b> رایگانت رو باز نکردی! همین الان بازش کن و موجودات جدید رو به دست بیار:"
+                    )
+                    out.append((u.id, nudge_text, "free_box_reminder", unclaimed_tiers))
+                u.last_free_box_nudge_day = today
+                u.save(update_fields=["last_free_box_nudge_day"])
+
+        # ── daily "come back" nudge (evening window, recently-active only) ────
         if NUDGE_HOUR_START <= local_hour < NUDGE_HOUR_END:
             today = today_str()
             active_cutoff = _date_str_days_ago(NUDGE_ACTIVE_WITHIN_DAYS)

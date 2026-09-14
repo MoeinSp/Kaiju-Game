@@ -34,6 +34,7 @@ from bot.handlers import (
     research,
     equip_exchange,
     shop,
+    subscription,
     team,
     titles,
     group_words,  # noqa: E402
@@ -241,6 +242,7 @@ def main() -> None:
     research.register(application)
     equip_exchange.register(application)
     shop.register(application)
+    subscription.register(application)
     purchase.register(application)
     exchange.register(application)
     casino.register(application)

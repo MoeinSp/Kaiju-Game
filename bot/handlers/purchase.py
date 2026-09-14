@@ -269,6 +269,12 @@ async def _update_channel_status(context, res: dict, status_html: str) -> None:
     if not chat_id or not msg_id:
         return
     bits = []
+    if res.get("subscription_tier"):
+        from game.subscription import SUBSCRIPTION_TIERS
+        sub = SUBSCRIPTION_TIERS.get(res["subscription_tier"])
+        name = sub["name"] if sub else res["subscription_tier"]
+        badge = sub["badge"] if sub else "⭐"
+        bits.append(f"{badge} {name} (۳۰ روزه)")
     if res.get("coins"):
         bits.append(f"{res['coins']:,} 🪙")
     if res.get("dna"):
@@ -299,17 +305,24 @@ async def buy_approve_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer("✅ تأیید شد و موجودی اضافه شد.")
+    await query.answer("✅ تأیید شد و اعمال شد.")
     bits = []
+    if res.get("subscription_tier"):
+        from game.subscription import SUBSCRIPTION_TIERS
+        sub = SUBSCRIPTION_TIERS.get(res["subscription_tier"])
+        name = sub["name"] if sub else res["subscription_tier"]
+        badge = sub["badge"] if sub else "⭐"
+        bits.append(f"{badge} <b>{name} (۳۰ روزه)</b> فعال شد! 🎉")
     if res["coins"]:
         bits.append(f"{res['coins']:,} {get_emoji('coin')}")
     if res["dna"]:
         bits.append(f"{res['dna']:,} {get_emoji('dna')}")
     if res["diamonds"]:
         bits.append(f"{res['diamonds']:,} {get_emoji('diamond')}")
+    notify_text = "✅ <b>خریدت تأیید شد!</b>\n🎁 " + ("\n".join(bits) if res.get("subscription_tier") else ("به حسابت اضافه شد: " + " · ".join(bits)))
     await _notify_user(
         context, res["user_id"],
-        "✅ <b>خریدت تأیید شد!</b>\n🎁 به حسابت اضافه شد: " + " · ".join(bits),
+        notify_text,
     )
     if query.message is not None and query.message.caption is not None:
         await query.edit_message_caption(
