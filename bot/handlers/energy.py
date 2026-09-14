@@ -45,9 +45,17 @@ def _owner_ok(query, parts) -> bool:
     return query.from_user is not None and query.from_user.id == int(parts[2])
 
 
+def _user_sub_info_sync(tg_user):
+    from game.subscription import get_subscription_info
+    user, _ = get_or_create_user(tg_user)
+    return get_subscription_info(user)
+
+
 async def show_energy_error(query, exc, owner_id: int | None = None, origin: str | None = None) -> bool:
     """If `exc` is an out-of-energy error, replace the message with it + the refill
     button and return True; otherwise return False so the caller shows it normally."""
+    from bot.buttons import NAV, btn
+    from game import botconfig
     from game.energy import EnergyError
 
     if isinstance(exc, EnergyError):
@@ -64,16 +72,36 @@ async def show_energy_error(query, exc, owner_id: int | None = None, origin: str
                 origin = "camp"
             elif qdata.startswith("feed") or qdata.startswith("lab") or qdata.startswith("up_"):
                 origin = "upg"
-        caption = (
-            f"{str(exc)}\n\n"
-            f"👑 <b>با تهیه اشتراک نقره‌ای:</b>\n"
-            f"  ⚡️ <b>سقف انرژیت ۲ برابر می‌شه (۱۰۰ به جای ۵۰)!</b>\n"
-            f"  📋 جعبه‌های آرنا خودکار و پشت‌سرهم باز می‌شن\n"
-            f"  🏹 درآمدت از شکار خودکار ۲۵٪ بیشتر می‌شه!\n"
-            f"  🥈 نشان پرمیوم نقره‌ای کنار اسمت قرار می‌گیره\n\n"
-            f"<i>💡 فقط با ۱۰۰ هزار تومان، محدودیت انرژی رو برای همیشه فراموش کن!</i>"
-        )
-        await safe_edit_message_text(query, caption, parse_mode="HTML", reply_markup=energy_refill_markup(oid, is_group=is_group, origin=origin))
+
+        info = await run_db(_user_sub_info_sync, query.from_user)
+        cost = botconfig.get_energy_refill_cost()
+
+        if info["is_active"]:
+            caption = (
+                f"{str(exc)}\n\n"
+                f"✨ <b>اشتراک {info['badge']} {info['tier_name']} برای شما فعال است</b> "
+                f"(<b>{info['days_left']} روز و {info['hours_left']} ساعت</b> باقی‌مانده).\n\n"
+                f"<i>💡 سقف انرژی شما ۱۰۰ است. می‌توانید با الماس آن را فوراً شارژ کامل کنید:</i>"
+            )
+            rows = [[InlineKeyboardButton(f"⚡ شارژ کامل با {cost} الماس 💎", callback_data=f"enr:ask:{oid}")]]
+            if origin == "hunt":
+                rows.append([btn("بازگشت به شکار", emoji_key="btn_hunt", style=NAV, callback_data="hunt_next")])
+            elif origin == "arena":
+                rows.append([btn("بازگشت به آرنا", emoji_key="btn_arena", style=NAV, callback_data="arena_find")])
+            markup = InlineKeyboardMarkup(rows)
+        else:
+            caption = (
+                f"{str(exc)}\n\n"
+                f"👑 <b>با تهیه اشتراک نقره‌ای:</b>\n"
+                f"  ⚡️ <b>سقف انرژیت ۲ برابر می‌شه (۱۰۰ به جای ۵۰)!</b>\n"
+                f"  📋 جعبه‌های آرنا خودکار و پشت‌سرهم باز می‌شن\n"
+                f"  🏹 درآمدت از شکار خودکار ۲۵٪ بیشتر می‌شه!\n"
+                f"  🥈 نشان پرمیوم نقره‌ای کنار اسمت قرار می‌گیره\n\n"
+                f"<i>💡 فقط با ۱۰۰ هزار تومان، محدودیت انرژی رو برای همیشه فراموش کن!</i>"
+            )
+            markup = energy_refill_markup(oid, is_group=is_group, origin=origin)
+
+        await safe_edit_message_text(query, caption, parse_mode="HTML", reply_markup=markup)
         return True
     return False
 

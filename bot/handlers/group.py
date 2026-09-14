@@ -51,19 +51,35 @@ async def _reply_error(message, exc, owner_id: int) -> None:
     """Reply to a group message with an error. An out-of-energy error also gets the
     diamond-refill and silver subscription buttons (scoped to `owner_id`)."""
     from bot.handlers.energy import energy_refill_markup
+    from game import botconfig
     from game.energy import EnergyError
 
     if isinstance(exc, EnergyError):
-        caption = (
-            f"{str(exc)}\n\n"
-            f"👑 <b>با تهیه اشتراک نقره‌ای:</b>\n"
-            f"  ⚡️ <b>سقف انرژیت ۲ برابر می‌شه (۱۰۰ به جای ۵۰)!</b>\n"
-            f"  📋 جعبه‌های آرنا خودکار و پشت‌سرهم باز می‌شن\n"
-            f"  🏹 درآمدت از شکار خودکار ۲۵٪ بیشتر می‌شه!\n"
-            f"  🥈 نشان پرمیوم نقره‌ای کنار اسمت قرار می‌گیره\n\n"
-            f"<i>💡 فقط با ۱۰۰ هزار تومان، محدودیت انرژی رو برای همیشه فراموش کن!</i>"
-        )
-        markup = energy_refill_markup(owner_id, is_group=True)
+        from bio_lab.models import User
+        from game.subscription import get_subscription_info
+        user = User.objects.filter(id=owner_id).first()
+        info = get_subscription_info(user) if user else {"is_active": False}
+
+        if info["is_active"]:
+            caption = (
+                f"{str(exc)}\n\n"
+                f"✨ <b>اشتراک {info['badge']} {info['tier_name']} برای شما فعال است</b> "
+                f"(<b>{info['days_left']} روز و {info['hours_left']} ساعت</b> باقی‌مانده)."
+            )
+            cost = botconfig.get_energy_refill_cost()
+            row1 = [InlineKeyboardButton(f"⚡ شارژ کامل با {cost} الماس 💎", callback_data=f"enr:ask:{owner_id}")]
+            markup = InlineKeyboardMarkup([row1])
+        else:
+            caption = (
+                f"{str(exc)}\n\n"
+                f"👑 <b>با تهیه اشتراک نقره‌ای:</b>\n"
+                f"  ⚡️ <b>سقف انرژیت ۲ برابر می‌شه (۱۰۰ به جای ۵۰)!</b>\n"
+                f"  📋 جعبه‌های آرنا خودکار و پشت‌سرهم باز می‌شن\n"
+                f"  🏹 درآمدت از شکار خودکار ۲۵٪ بیشتر می‌شه!\n"
+                f"  🥈 نشان پرمیوم نقره‌ای کنار اسمت قرار می‌گیره\n\n"
+                f"<i>💡 فقط با ۱۰۰ هزار تومان، محدودیت انرژی رو برای همیشه فراموش کن!</i>"
+            )
+            markup = energy_refill_markup(owner_id, is_group=True)
         await message.reply_text(caption, parse_mode="HTML", reply_markup=markup)
     else:
         await message.reply_text(str(exc), parse_mode="HTML")

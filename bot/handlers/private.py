@@ -2817,23 +2817,38 @@ def _autohunt_confirm_kb(amount: int):
 async def _autohunt_no_energy(query, energy: int, max_energy: int = 50) -> None:
     """Out-of-energy → show the diamond refill screen plus a way back to the hunt."""
     from bot.buttons import NAV, btn
+    from bot.handlers.energy import _user_sub_info_sync
     from game import botconfig
 
     await query.answer()
-    caption = (
-        f"⚡ <b>انرژی کافی نداری</b> ({energy}/{max_energy}).\n\n"
-        f"👑 <b>با تهیه اشتراک نقره‌ای:</b>\n"
-        f"  ⚡️ <b>سقف انرژیت ۲ برابر می‌شه (۱۰۰ به جای ۵۰)!</b>\n"
-        f"  📋 جعبه‌های آرنا خودکار و پشت‌سرهم باز می‌شن\n"
-        f"  🏹 درآمدت از شکار خودکار ۲۵٪ بیشتر می‌شه!\n"
-        f"  🥈 نشان پرمیوم نقره‌ای کنار اسمت قرار می‌گیره\n\n"
-        f"<i>💡 فقط با ۱۰۰ هزار تومان، محدودیت انرژی رو برای همیشه فراموش کن!</i>"
-    )
+    info = await run_db(_user_sub_info_sync, query.from_user)
     cost = botconfig.get_energy_refill_cost()
-    row1 = [InlineKeyboardButton(f"⚡ شارژ کامل با {cost} الماس 💎", callback_data=f"enr:ask:{query.from_user.id}")]
-    row2 = [InlineKeyboardButton("🥈 خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)", callback_data="sub_pick:silver:hunt")]
-    row3 = [btn("بازگشت به شکار", emoji_key="btn_hunt", style=NAV, callback_data="hunt_next")]
-    markup = InlineKeyboardMarkup([row1, row2, row3])
+
+    if info["is_active"]:
+        caption = (
+            f"⚡ <b>انرژی کافی نداری</b> ({energy}/{max_energy}).\n\n"
+            f"✨ <b>اشتراک {info['badge']} {info['tier_name']} برای شما فعال است</b> "
+            f"(<b>{info['days_left']} روز و {info['hours_left']} ساعت</b> باقی‌مانده).\n\n"
+            f"<i>💡 سقف انرژی شما ۱۰۰ است. می‌توانید با الماس آن را فوراً شارژ کامل کنید:</i>"
+        )
+        row1 = [InlineKeyboardButton(f"⚡ شارژ کامل با {cost} الماس 💎", callback_data=f"enr:ask:{query.from_user.id}")]
+        row2 = [btn("بازگشت به شکار", emoji_key="btn_hunt", style=NAV, callback_data="hunt_next")]
+        markup = InlineKeyboardMarkup([row1, row2])
+    else:
+        caption = (
+            f"⚡ <b>انرژی کافی نداری</b> ({energy}/{max_energy}).\n\n"
+            f"👑 <b>با تهیه اشتراک نقره‌ای:</b>\n"
+            f"  ⚡️ <b>سقف انرژیت ۲ برابر می‌شه (۱۰۰ به جای ۵۰)!</b>\n"
+            f"  📋 جعبه‌های آرنا خودکار و پشت‌سرهم باز می‌شن\n"
+            f"  🏹 درآمدت از شکار خودکار ۲۵٪ بیشتر می‌شه!\n"
+            f"  🥈 نشان پرمیوم نقره‌ای کنار اسمت قرار می‌گیره\n\n"
+            f"<i>💡 فقط با ۱۰۰ هزار تومان، محدودیت انرژی رو برای همیشه فراموش کن!</i>"
+        )
+        row1 = [InlineKeyboardButton(f"⚡ شارژ کامل با {cost} الماس 💎", callback_data=f"enr:ask:{query.from_user.id}")]
+        row2 = [InlineKeyboardButton("🥈 خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)", callback_data="sub_pick:silver:hunt")]
+        row3 = [btn("بازگشت به شکار", emoji_key="btn_hunt", style=NAV, callback_data="hunt_next")]
+        markup = InlineKeyboardMarkup([row1, row2, row3])
+
     await safe_edit_message_text(
         query,
         caption,

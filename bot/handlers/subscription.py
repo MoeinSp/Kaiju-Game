@@ -162,6 +162,54 @@ async def sub_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     parts = query.data.split(":")
     tier = parts[1]
     origin = parts[2] if len(parts) > 2 else "sub"
+
+    user, info = await run_db(_sub_panel_sync, update.effective_user)
+    if info["is_active"]:
+        sub_cfg = SUBSCRIPTION_TIERS.get(tier, {})
+        new_days = info["days_left"] + 30
+        cancel_cb = "menu:subscription"
+        if origin == "hunt":
+            cancel_cb = "hunt_next"
+        elif origin == "arena":
+            cancel_cb = "arena_find"
+        elif origin == "camp":
+            cancel_cb = "menu:campaign"
+        elif origin == "upg":
+            cancel_cb = "menu:upgrade"
+        elif origin == "me":
+            cancel_cb = "menu:me"
+        elif origin and origin.startswith("menu:"):
+            cancel_cb = origin
+
+        lines = [
+            f"⚠️ <b>تأیید تمدید {get_emoji('sub_vip')} اشتراک ویژه</b>",
+            "━━━━━━━━━━━━━━━━━━━━",
+            f"✨ اشتراک فعال شما: <b>{info['badge']} {info['tier_name']}</b>",
+            f"⏳ زمان باقی‌مانده فعلی: <b>{info['days_left']} روز و {info['hours_left']} ساعت</b>",
+            "",
+            f"📦 اشتراک انتخابی: <b>{sub_cfg.get('name', tier)}</b> (۳۰ روزه)",
+            f"{get_emoji('coin')} مبلغ: <b>{sub_cfg.get('price_toman', 0):,} تومان</b>",
+            "",
+            f"⚡️ <b>با خرید این اشتراک، ۳۰ روز افزوده شده و مدت اشتراک شما به {new_days} روز می‌رسد.</b>",
+            "━━━━━━━━━━━━━━━━━━━━",
+            "آیا مایل به دریافت اطلاعات کارت و واریز هستید؟",
+        ]
+        keyboard = InlineKeyboardMarkup([
+            [btn("✅ تأیید و رفتن به پرداخت", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"sub_conf:{tier}:{origin}")],
+            [btn("انصراف", emoji_key="btn_cancel", style=NAV, callback_data=cancel_cb)],
+        ])
+        await query.answer()
+        await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
+        return
+
+    await send_subscription_invoice(query, update.effective_user, tier, context, origin=origin)
+
+
+async def sub_conf_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    parts = query.data.split(":")
+    tier = parts[1]
+    origin = parts[2] if len(parts) > 2 else "sub"
     await send_subscription_invoice(query, update.effective_user, tier, context, origin=origin)
 
 
@@ -169,3 +217,4 @@ def register(application) -> None:
     application.add_handler(CommandHandler("subscription", subscription_panel, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("vip", subscription_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(sub_pick_callback, pattern=r"^sub_pick:(silver|gold)(:[a-z_]+)?$"))
+    application.add_handler(CallbackQueryHandler(sub_conf_callback, pattern=r"^sub_conf:(silver|gold)(:[a-z_]+)?$"))
