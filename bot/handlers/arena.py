@@ -347,35 +347,27 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
     adv = element_advantage_line(my_element, opp_element)
     win_cup = cup_delta(user, opponent["cup"], True, my_power)
     loss_cup = cup_delta(user, opponent["cup"], False, my_power)
+    alliance_str = f" <i>(🤝 {opponent['alliance']})</i>" if opponent.get("alliance") else ""
     lines = [
-        f"{get_emoji('battle')} <b>حریف پیدا شد!</b>",
-        "",
-        f"👤 حریف: <b>{opponent['label']}</b>"
-        + (f" <i>(🤝 {opponent['alliance']})</i>" if opponent.get("alliance") else " 🚫 <i>بدون اتحاد</i>"),
+        f"👤 حریف: <b>{opponent['label']}</b>{alliance_str}",
         f"👹 موجود حریف: <b>{opponent.get('creature_name', '؟')}</b>{opp_elem_tag}",
-        f"💀 قدرت حریف: <b>{opponent['power']:,}</b> ┃ {get_emoji('trophy')} کاپ: <b>{opponent['cup']:,}</b>",
-        "",
+        f"💀 قدرت حریف: <b>{opponent['power']:,}</b>",
+        f"{get_emoji('trophy')} کاپ: <b>{opponent['cup']:,}</b>",
         _ARENA_DIV,
-        "",
         f"🦅 موجود شما: <b>{cname}</b>{my_elem_tag}",
         f"💪 قدرت شما: <b>{my_power:,}</b> ┃ {get_emoji('trophy')} کاپ: <b>{user.cup:,}</b>",
-        f"{get_emoji('energy')} انرژی فعلی: {pct_bar(energy, constants.MAX_ENERGY)} ({energy}/{constants.MAX_ENERGY})",
-        "",
+        f"{get_emoji('energy')} انرژی فعلی: {pct_bar(energy, constants.MAX_ENERGY, 10)} ({energy}/{constants.MAX_ENERGY})",
         _ARENA_DIV,
-        "",
         "🎯 تحلیل تاکتیکی نبرد:",
-        f"شانس پیروزی: {pct_bar(pct, 100)} {win_label(pct)}",
+        f"شانس پیروزی: {pct_bar(pct, 100, 10)} {win_label(pct)}",
     ]
     if adv:
         lines.append(f"🔮 مزیت عنصری: {adv}")
     lines += [
         "",
-        "🎁 جوایز و تغییرات نبرد:",
-        f"{get_emoji('coin')} طلا: <b>~+{loot:,}</b> ┃ {get_emoji('dna')} DNA: <b>+{dna_win:,}</b>",
+        f"{get_emoji('coin')} <b>+{loot:,}</b>",
+        f"{get_emoji('dna')} <b>+{dna_win:,}</b>",
         f"{get_emoji('trophy')} تغییر رنک: برد <b>+{win_cup}</b> | باخت <b>{loss_cup}</b>",
-        "",
-        _ARENA_DIV,
-        f"{get_emoji('energy')} هزینه حمله: {constants.ARENA_ATTACK_ENERGY_COST} انرژی",
     ]
     keyboard = InlineKeyboardMarkup(
         [

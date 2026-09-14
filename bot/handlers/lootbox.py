@@ -15,6 +15,11 @@ from game.lootbox import (
     open_diamond_box,
     open_diamond_box_bulk,
 )
+from game.media import (
+    composite_lootbox_batch_image,
+    get_creature_image_path,
+    get_equipment_image_path,
+)
 
 
 def _rarity_dot(rarity: str) -> str:
@@ -239,17 +244,20 @@ async def biocrate_open_callback(update: Update, context: ContextTypes.DEFAULT_T
             c = result["creature"]
             reveal = f"{get_emoji('egg')} <b>{c.name}</b>\n{constants.element_label(c.element)} · {rarity_label}"
             hint = "از «🗂 کلکسیون» توی منو می‌تونی فعالش کنی."
+            photo = get_creature_image_path(c)
         else:
             it = result["item"]
             reveal = f"{constants.EQUIPMENT_SLOT_LABELS[it.slot]} <b>{it.name}</b>\n{rarity_label}"
             hint = "از «🎒 تجهیزات» توی منو می‌تونی تجهیزش کنی."
+            photo = get_equipment_image_path(it)
         await query.answer("🎟 باز شد!" if summary.get("from_tickets") else "🟢 باز شد!")
         text = (f"{label} <b>باز شد!</b>{_pay_line(summary)}\n\n"
                 f"<tg-spoiler>{reveal}</tg-spoiler>\n\n<blockquote>{hint}</blockquote>")
     else:
         await query.answer("🎉 باز شد!")
         text = _bulk_summary_text(label, summary) + _pay_line(summary)
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+        photo = composite_lootbox_batch_image(summary["rolls"], label)
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def biocrate_bulk_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -265,13 +273,15 @@ async def biocrate_bulk_callback(update: Update, context: ContextTypes.DEFAULT_T
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("🎉 باز شد!")
+    label = constants.BIOCRATE_TIERS[tier]["label"]
     keyboard = InlineKeyboardMarkup([
         [btn(f"باز کردن ×{BULK_PAY} دیگه", style=SHOP, callback_data=f"bc_bulk:{tier}")],
         [back_btn("menu:biocrate", "لیست باکس‌ها")],
     ])
-    await safe_edit_message_text(
-        query, _bulk_summary_text(constants.BIOCRATE_TIERS[tier]["label"], summary),
-        parse_mode="HTML", reply_markup=keyboard,
+    photo = composite_lootbox_batch_image(summary["rolls"], label)
+    await send_screen(
+        update, _bulk_summary_text(label, summary),
+        photo=photo, parse_mode="HTML", reply_markup=keyboard,
     )
 
 
@@ -350,13 +360,15 @@ async def diamond_box_bulk_callback(update: Update, context: ContextTypes.DEFAUL
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("🎉 باز شد!")
+    label = constants.DIAMOND_BOX_TIERS[tier]["label"]
     keyboard = InlineKeyboardMarkup([
         [btn(f"باز کردن ×{BULK_PAY} دیگه", style=SHOP, callback_data=f"dbox_bulk:{tier}")],
         [back_btn("menu:diamond_box", "لیست جعبه‌ها")],
     ])
-    await safe_edit_message_text(
-        query, _bulk_summary_text(constants.DIAMOND_BOX_TIERS[tier]["label"], summary),
-        parse_mode="HTML", reply_markup=keyboard,
+    photo = composite_lootbox_batch_image(summary["rolls"], label)
+    await send_screen(
+        update, _bulk_summary_text(label, summary),
+        photo=photo, parse_mode="HTML", reply_markup=keyboard,
     )
 
 
@@ -378,12 +390,14 @@ async def diamond_box_buy_callback(update: Update, context: ContextTypes.DEFAULT
             [back_btn("menu:diamond_box")],
         ]
     )
-    await safe_edit_message_text(
-        query,
+    photo = get_creature_image_path(creature)
+    await send_screen(
+        update,
         f"{constants.DIAMOND_BOX_TIERS[tier]['label']} <b>باز شد!</b>\n\n"
         f"<tg-spoiler>{get_emoji('egg')} <b>{creature.name}</b>\n"
         f"{constants.element_label(creature.element)} · {rarity_label}</tg-spoiler>\n\n"
         "<blockquote>از «🗂 کلکسیون» توی منو می‌تونی فعالش کنی.</blockquote>",
+        photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,
     )

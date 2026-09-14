@@ -248,8 +248,7 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
     if lp["is_max"]:
         lab_badge = f"{get_emoji('lab')} سطح <b>{lp['level']}</b> (بیشینه)"
     else:
-        pct = int(round((lp['into'] / lp['span']) * 100)) if lp.get('span') else 0
-        lab_badge = f"{get_emoji('lab')} سطح <b>{lp['level']}</b> ({pct}٪ <code>{lp['into']}/{lp['span']}</code>)"
+        lab_badge = f"{get_emoji('lab')} سطح <b>{lp['level']}</b> ({lp['into']}/{lp['span']})"
 
     if compact:
         arena_secs = shield_remaining_seconds(user)
@@ -258,7 +257,7 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
         group_status = _fmt_shield_remaining(group_secs) if group_secs > 0 else "غیرفعال"
 
         lines = [
-            f"🏰 <b>{lab_display(user)}</b> ┃ {lab_badge}",
+            f"{lab_badge}",
             f"{get_emoji('coin')} <b>{user.coins:,}</b> ┃ {get_emoji('dna')} <b>{user.dna_fragments:,}</b> ┃ {get_emoji('diamond')} <b>{user.diamonds:,}</b>",
             f"{get_emoji('energy')} انرژی: <b>{energy}/{constants.MAX_ENERGY}</b> ({pct_bar(energy, constants.MAX_ENERGY, 6)})",
             f"🛡 سپر آرنا: <b>{arena_status}</b> ┃ سپر گروه: <b>{group_status}</b>",
@@ -267,17 +266,7 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
             f"{constants.RARITY_LABELS[creature.rarity]} {stars} ┃ {constants.element_label(creature.element)}",
             f"🎖 سطح: <b>{creature.level}/{max_level}</b>" + ("  ✅" if is_maxed else f" ({pct_bar(creature.xp, xp_needed, 6)})"),
             f"💪 قدرت کل: <b>{power:,}</b>",
-            f"{get_emoji('hp')} {stats['hp']}  {get_emoji('atk')} {stats['atk']}  {get_emoji('def')} {stats['def']}  {get_emoji('spd')} {stats['spd']}",
         ]
-        by_slot = {i.slot: i for i in (equipped_items or [])}
-        gear_parts = []
-        for slot in constants.EQUIPMENT_SLOTS:
-            it = by_slot.get(slot)
-            if it:
-                gear_parts.append(f"{constants.EQUIPMENT_SLOT_LABELS[slot][:4]}: {it.name}+{it.level}")
-        if gear_parts:
-            lines.append("🎒 " + " ┃ ".join(gear_parts))
-
         return "\n".join(lines)
 
     if lp["is_max"]:
@@ -1267,8 +1256,10 @@ async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
     from game.media import get_creature_image_path
     photo_path = get_creature_image_path(creature)
+    card_txt = creature_card_text(user, creature, equipped_items, compact=bool(photo_path))
+    text = f"👋 <b>به آزمایشگاه «{lab_display(user)}» خوش برگشتی!</b>\n\n" + card_txt
     await send_screen(update,
-        creature_card_text(user, creature, equipped_items, compact=bool(photo_path)),
+        text,
         photo=photo_path,
         parse_mode="HTML",
         reply_markup=creature_keyboard(is_owner, _locked_actions_for(hall_level), research_built),

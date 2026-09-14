@@ -1,5 +1,6 @@
 """Asset and image resolution utilities for TelGame."""
 
+import hashlib
 import os
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -596,6 +597,170 @@ def get_equipment_image_path(item_or_slot, rarity: str = "common") -> str | None
             return str(base_file)
 
     return None
+
+
+def composite_lootbox_batch_image(rolls: list[dict], title: str = "باکس ژنتیکی") -> str | None:
+    """Composites a single high-quality grid image displaying all items/creatures
+    obtained from a multi-open lootbox (e.g. 10+1 or batch open)."""
+    if not rolls:
+        return None
+
+    if len(rolls) == 1:
+        r = rolls[0]
+        if r.get("kind") == "creature" and r.get("creature"):
+            return get_creature_image_path(r["creature"])
+        elif r.get("kind") == "equipment" and r.get("item"):
+            return get_equipment_image_path(r["item"])
+        return None
+
+    from game import constants
+
+    # Deterministic cache key based on items
+    key_parts = []
+    for r in rolls:
+        k = r.get("kind", "")
+        obj = r.get("creature") or r.get("item")
+        obj_id = getattr(obj, "id", "")
+        rarity = r.get("rarity", "")
+        key_parts.append(f"{k}_{obj_id}_{rarity}")
+    batch_hash = hashlib.md5("_".join(key_parts).encode()).hexdigest()[:16]
+
+    cache_file = CACHE_DIR / f"loot_batch_{batch_hash}.jpg"
+    if cache_file.exists() and cache_file.stat().st_size > 10000:
+        return str(cache_file)
+
+    # Grid dimensions calculation
+    N = len(rolls)
+    if N <= 4:
+        cols = N
+        rows = 1
+    elif N <= 8:
+        cols = 4
+        rows = (N + 3) // 4
+    elif N <= 12:
+        cols = 4
+        rows = (N + 3) // 4
+    else:
+        cols = 5
+        rows = (N + 4) // 5
+
+    card_w = 270
+    card_h = 202
+    gap_x = 20
+    gap_y = 20
+    pad_x = 40
+    pad_top = 105
+    pad_bottom = 35
+
+    canvas_w = pad_x * 2 + cols * card_w + (cols - 1) * gap_x
+    canvas_h = pad_top + rows * card_h + (rows - 1) * gap_y + pad_bottom
+
+    # Dark sci-fi gradient background
+    canvas = Image.new("RGB", (canvas_w, canvas_h), (10, 13, 20))
+    draw = ImageDraw.Draw(canvas)
+
+    # Top-to-bottom atmospheric gradient
+    for y in range(canvas_h):
+        t = y / canvas_h
+        r = int(18 * (1 - t) + 8 * t)
+        g = int(24 * (1 - t) + 10 * t)
+        b = int(38 * (1 - t) + 16 * t)
+        draw.line([(0, y), (canvas_w, y)], fill=(r, g, b))
+
+    # Ambient radial header glow
+    header_glow = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
+    glow_draw = ImageDraw.Draw(header_glow)
+    glow_draw.ellipse(
+        [(canvas_w // 2 - 350, -100), (canvas_w // 2 + 350, 180)],
+        fill=(40, 80, 160, 45),
+    )
+    canvas = Image.alpha_composite(canvas.convert("RGBA"), header_glow).convert("RGB")
+    draw = ImageDraw.Draw(canvas)
+
+    # Header texts
+    font_title = _load_ui_font(34, bold=True)
+    font_sub = _load_ui_font(20, bold=False, persian=True)
+
+    header_title = f"LOOT REVEAL   •   {N} REWARDS"
+    draw.text((canvas_w // 2 + 1, 32 + 1), header_title, font=font_title, fill=(0, 0, 0), anchor="mt")
+    draw.text((canvas_w // 2, 32), header_title, font=font_title, fill=(255, 215, 60), anchor="mt")
+
+    sub_persian = shape_persian_text(f"نتایج گشایش {title}   •   کایجو لجندز")
+    draw.text((canvas_w // 2 + 1, 72 + 1), sub_persian, font=font_sub, fill=(0, 0, 0), anchor="mt")
+    draw.text((canvas_w // 2, 72), sub_persian, font=font_sub, fill=(175, 195, 225), anchor="mt")
+
+    # Separator line under header
+    draw.line([(pad_x + 80, 100), (canvas_w - pad_x - 80, 100)], fill=(45, 60, 85), width=1)
+
+    # Pre-render item cards
+    card_mask = Image.new("L", (card_w, card_h), 0)
+    mask_draw = ImageDraw.Draw(card_mask)
+    mask_draw.rounded_rectangle([(0, 0), (card_w, card_h)], radius=12, fill=255)
+
+    order = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
+    best_item = max(rolls, key=lambda r: (order.get(r.get("rarity", "common"), 0), getattr(r.get("creature") or r.get("item"), "id", 0)))
+    font_badge = _load_ui_font(15, bold=True)
+
+    for idx, roll in enumerate(rolls):
+        r_idx = idx // cols
+
+        # Items in this specific row
+        row_start = r_idx * cols
+        row_end = min(N, (r_idx + 1) * cols)
+        items_in_row = row_end - row_start
+
+        row_w = items_in_row * card_w + (items_in_row - 1) * gap_x
+        start_x = (canvas_w - row_w) // 2
+        x = start_x + (idx - row_start) * (card_w + gap_x)
+        y = pad_top + 15 + r_idx * (card_h + gap_y)
+
+        kind = roll.get("kind")
+        rarity = roll.get("rarity", "common")
+        cfg = RARITY_STYLES.get(rarity, RARITY_STYLES["common"])
+        border_col = cfg["border"]
+
+        # Resolve card image
+        img_path = None
+        if kind == "creature" and roll.get("creature"):
+            img_path = get_creature_image_path(roll["creature"])
+        elif kind == "equipment" and roll.get("item"):
+            img_path = get_equipment_image_path(roll["item"])
+
+        if img_path and os.path.exists(img_path):
+            try:
+                card_src = Image.open(img_path).convert("RGBA")
+                card_scaled = card_src.resize((card_w, card_h), Image.Resampling.LANCZOS)
+            except Exception:
+                card_scaled = Image.new("RGBA", (card_w, card_h), (25, 30, 45, 255))
+        else:
+            card_scaled = Image.new("RGBA", (card_w, card_h), (25, 30, 45, 255))
+
+        # Paste with rounded corners
+        canvas.paste(card_scaled.convert("RGB"), (x, y), card_mask)
+
+        # Draw glowing rarity border
+        is_best = (roll is best_item and order.get(rarity, 0) >= 2)
+        border_width = 3 if is_best else 2
+
+        # Outer glow for high rarities
+        if order.get(rarity, 0) >= 2:
+            glow_col = cfg.get("glow", border_col)
+            draw.rounded_rectangle([(x - 2, y - 2), (x + card_w + 1, y + card_h + 1)], radius=14, outline=glow_col, width=1)
+
+        draw.rounded_rectangle([(x, y), (x + card_w - 1, y + card_h - 1)], radius=12, outline=border_col, width=border_width)
+
+        # Best item crown/star badge
+        if is_best:
+            badge_w, badge_h = 60, 22
+            bx, by = x + card_w - badge_w - 8, y + 8
+            draw.rounded_rectangle([(bx, by), (bx + badge_w, by + badge_h)], radius=6, fill=(20, 10, 5, 230), outline=(255, 215, 60), width=1)
+            draw.text((bx + badge_w // 2, by + 2), "TOP ★", font=font_badge, fill=(255, 220, 80), anchor="mt")
+
+    try:
+        canvas.save(cache_file, "JPEG", quality=92, progressive=True)
+        return str(cache_file)
+    except Exception:
+        return None
 
 
 def get_banner_image_path(banner_name: str) -> str | None:
