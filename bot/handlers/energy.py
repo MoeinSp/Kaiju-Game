@@ -23,7 +23,7 @@ def energy_refill_button(owner_id: int) -> InlineKeyboardButton:
     )
 
 
-def energy_refill_markup(owner_id: int, is_group: bool = False) -> InlineKeyboardMarkup:
+def energy_refill_markup(owner_id: int, is_group: bool = False, origin: str | None = None) -> InlineKeyboardMarkup:
     from config import BOT_USERNAME
     from game import botconfig
 
@@ -32,7 +32,8 @@ def energy_refill_markup(owner_id: int, is_group: bool = False) -> InlineKeyboar
     if is_group:
         row2 = [InlineKeyboardButton("🥈 خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)", url=f"https://t.me/{BOT_USERNAME}?start=sub_silver")]
     else:
-        row2 = [InlineKeyboardButton("🥈 خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)", callback_data="sub_pick:silver")]
+        cb = f"sub_pick:silver:{origin}" if origin else "sub_pick:silver"
+        row2 = [InlineKeyboardButton("🥈 خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)", callback_data=cb)]
     return InlineKeyboardMarkup([row1, row2])
 
 
@@ -44,7 +45,7 @@ def _owner_ok(query, parts) -> bool:
     return query.from_user is not None and query.from_user.id == int(parts[2])
 
 
-async def show_energy_error(query, exc, owner_id: int | None = None) -> bool:
+async def show_energy_error(query, exc, owner_id: int | None = None, origin: str | None = None) -> bool:
     """If `exc` is an out-of-energy error, replace the message with it + the refill
     button and return True; otherwise return False so the caller shows it normally."""
     from game.energy import EnergyError
@@ -53,6 +54,16 @@ async def show_energy_error(query, exc, owner_id: int | None = None) -> bool:
         await query.answer()
         oid = owner_id if owner_id is not None else query.from_user.id
         is_group = query.message.chat.type in ("group", "supergroup") if query.message and query.message.chat else False
+        if origin is None and getattr(query, "data", None):
+            qdata = str(query.data)
+            if qdata.startswith("hunt") or qdata.startswith("autohunt"):
+                origin = "hunt"
+            elif qdata.startswith("arena"):
+                origin = "arena"
+            elif qdata.startswith("camp"):
+                origin = "camp"
+            elif qdata.startswith("feed") or qdata.startswith("lab") or qdata.startswith("up_"):
+                origin = "upg"
         caption = (
             f"{str(exc)}\n\n"
             f"👑 <b>با تهیه اشتراک نقره‌ای:</b>\n"
@@ -62,7 +73,7 @@ async def show_energy_error(query, exc, owner_id: int | None = None) -> bool:
             f"  🥈 نشان پرمیوم نقره‌ای کنار اسمت قرار می‌گیره\n\n"
             f"<i>💡 فقط با ۱۰۰ هزار تومان، محدودیت انرژی رو برای همیشه فراموش کن!</i>"
         )
-        await safe_edit_message_text(query, caption, parse_mode="HTML", reply_markup=energy_refill_markup(oid, is_group=is_group))
+        await safe_edit_message_text(query, caption, parse_mode="HTML", reply_markup=energy_refill_markup(oid, is_group=is_group, origin=origin))
         return True
     return False
 

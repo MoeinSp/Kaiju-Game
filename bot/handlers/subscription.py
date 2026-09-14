@@ -95,7 +95,7 @@ def _create_sub_req_sync(tg_user, tier: str):
     return purchase.create_subscription_pending(user, tier)
 
 
-async def send_subscription_invoice(target, tg_user, tier: str, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def send_subscription_invoice(target, tg_user, tier: str, context: ContextTypes.DEFAULT_TYPE, origin: str = "sub") -> None:
     if not botconfig.inbot_purchase_ready():
         msg = "سیستم پرداخت موقتاً در دسترس نیست."
         if hasattr(target, "answer"):
@@ -135,7 +135,21 @@ async def send_subscription_invoice(target, tg_user, tier: str, context: Context
         "📸 بعد از واریز، <b>عکس رسید</b> رو همین‌جا بفرست تا بلافاصله بررسی و فعال بشه.",
         "<i>به‌محض تأیید رسید توسط پشتیبانی، اشتراک به مدت ۳۰ روز روی اکانتت اعمال می‌شه.</i>",
     ]
-    kb = InlineKeyboardMarkup([[btn("انصراف", emoji_key="btn_cancel", style=NAV, callback_data="menu:subscription")]])
+    cancel_cb = "menu:subscription"
+    if origin == "hunt":
+        cancel_cb = "hunt_next"
+    elif origin == "arena":
+        cancel_cb = "arena_find"
+    elif origin == "camp":
+        cancel_cb = "menu:campaign"
+    elif origin == "upg":
+        cancel_cb = "menu:upgrade"
+    elif origin == "me":
+        cancel_cb = "menu:me"
+    elif origin and origin.startswith("menu:"):
+        cancel_cb = origin
+
+    kb = InlineKeyboardMarkup([[btn("انصراف", emoji_key="btn_cancel", style=NAV, callback_data=cancel_cb)]])
     text = "\n".join(lines)
     if hasattr(target, "edit_message_text"):
         await safe_edit_message_text(target, text, parse_mode="HTML", reply_markup=kb)
@@ -145,11 +159,13 @@ async def send_subscription_invoice(target, tg_user, tier: str, context: Context
 
 async def sub_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    tier = query.data.split(":")[1]
-    await send_subscription_invoice(query, update.effective_user, tier, context)
+    parts = query.data.split(":")
+    tier = parts[1]
+    origin = parts[2] if len(parts) > 2 else "sub"
+    await send_subscription_invoice(query, update.effective_user, tier, context, origin=origin)
 
 
 def register(application) -> None:
     application.add_handler(CommandHandler("subscription", subscription_panel, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("vip", subscription_panel, filters.ChatType.PRIVATE))
-    application.add_handler(CallbackQueryHandler(sub_pick_callback, pattern=r"^sub_pick:(silver|gold)$"))
+    application.add_handler(CallbackQueryHandler(sub_pick_callback, pattern=r"^sub_pick:(silver|gold)(:[a-z_]+)?$"))
