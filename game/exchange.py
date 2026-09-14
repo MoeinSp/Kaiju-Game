@@ -23,7 +23,7 @@ ENABLED = True
 
 # gold per 1 DNA in each direction. BUY > SELL, so a full round-trip loses gold.
 GOLD_PER_DNA_BUY = 50    # buy_dna:  spend 50 gold to gain 1 DNA
-GOLD_PER_DNA_SELL = 25   # buy_gold: gain 25 gold for 1 DNA spent
+GOLD_PER_DNA_SELL = 10   # buy_gold: gain 10 gold for 1 DNA spent
 
 PRESET_DNA = [10, 50, 200]     # quick-pick sizes (in DNA) offered when BUYING DNA
 # When BUYING GOLD the player thinks in gold, so its quick-picks are gold amounts.
