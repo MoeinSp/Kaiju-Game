@@ -1813,15 +1813,34 @@ def _action_note(payload: dict) -> str:
         note = f"🟢 <b>{payload['creature'].name}</b> شد هیولای فعالت!"
     elif kind == "autohunt":
         r = payload["result"]
-        note = (
-            "⚡️ <b>شکار خودکار با موفقیت انجام شد!</b>\n"
-            f"📊 خلاصه عملکرد: <code>{r['wins']}/{r['hunts']}</code> برد 📈\n"
-            "──────────────\n"
-            "💰 <b>پاداش دریافتی (لوت):</b>\n\n"
-            f"{get_emoji('coin')} +{r['coins']:,}\n"
-            f"{get_emoji('dna')} +{r['dna']:,}\n"
-            f"📈 +{r['xp']:,} XP"
-        )
+        note_lines = [
+            "⚡️ <b>شکار خودکار با موفقیت انجام شد!</b>",
+            f"📊 خلاصه عملکرد: <code>{r['wins']}/{r['hunts']}</code> برد 📈",
+            "──────────────",
+            "💰 <b>مجموع غارت دریافتی (لوت):</b>",
+            f"{get_emoji('coin')} طلا: <b>+{r['coins']:,}</b>",
+            f"{get_emoji('dna')} دی‌ان‌ای: <b>+{r['dna']:,}</b>",
+            f"📈 تجربه: <b>+{r['xp']:,} XP</b>",
+        ]
+        if r.get("sub_bonus_pct"):
+            sub_title = f"اشتراک {r.get('sub_name') or 'ویژه'}"
+            pct = r['sub_bonus_pct']
+            bonus_c = r.get('bonus_coins', 0)
+            bonus_d = r.get('bonus_dna', 0)
+            base_c = r.get('base_coins', r['coins'])
+            base_d = r.get('base_dna', r['dna'])
+            note_lines.extend([
+                "──────────────",
+                f"👑 <b>با احتساب {pct}٪ سود {sub_title}:</b>",
+                f"🔹 لوت پایه: {base_c:,} طلا · {base_d:,} DNA",
+                f"🎁 <b>سود اشتراک شما:</b> +{bonus_c:,} طلا · +{bonus_d:,} DNA",
+            ])
+        else:
+            note_lines.extend([
+                "",
+                "<i>💡 با اشتراک نقره‌ای ۲۵٪ و اشتراک طلایی ۵۰٪ لوت بیشتر می‌گیری!</i>",
+            ])
+        note = "\n".join(note_lines)
     elif kind == "part":
         label = constants.BODY_PARTS.get(payload["part"], {}).get("label", payload["part"])
         note = f"🧩 <b>{label} → سطح {payload['new_level']}</b> (−{payload['cost']:,} {get_emoji('coin')})"

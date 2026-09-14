@@ -212,11 +212,21 @@ def resolve_auto_hunt(user: User, creature: Creature, hunts: int,
     from game.ledger import record_gain
     from game.subscription import get_subscription_tier
 
+    sub_tier = get_subscription_tier(user)
+    if sub_tier == "gold":
+        sub_bonus_pct = 50
+        sub_name = "طلایی"
+    elif sub_tier == "silver":
+        sub_bonus_pct = 25
+        sub_name = "نقره‌ای"
+    else:
+        sub_bonus_pct = 0
+        sub_name = None
+
     if loot_mult is None:
-        sub_tier = get_subscription_tier(user)
-        if sub_tier == "gold":
+        if sub_bonus_pct == 50:
             loot_mult = AUTO_HUNT_LOOT_MULT * 1.50
-        elif sub_tier == "silver":
+        elif sub_bonus_pct == 25:
             loot_mult = AUTO_HUNT_LOOT_MULT * 1.25
         else:
             loot_mult = AUTO_HUNT_LOOT_MULT
@@ -237,10 +247,30 @@ def resolve_auto_hunt(user: User, creature: Creature, hunts: int,
             wins += 1
     losses = hunts - wins
 
+    base_coins = base_dna = 0
     coins = dna = 0
     for _ in range(wins):
-        coins += round(random.randint(*hunt_coin_range(player_power, "normal")) * loot_mult)
-        dna += round(random.randint(*hunt_dna_range(player_power, "normal")) * loot_mult)
+        raw_c = random.randint(*hunt_coin_range(player_power, "normal"))
+        raw_d = random.randint(*hunt_dna_range(player_power, "normal"))
+
+        bc = round(raw_c * AUTO_HUNT_LOOT_MULT)
+        bd = round(raw_d * AUTO_HUNT_LOOT_MULT)
+        base_coins += bc
+        base_dna += bd
+
+        if sub_bonus_pct == 50:
+            c = round(bc * 1.50)
+            d = round(bd * 1.50)
+        elif sub_bonus_pct == 25:
+            c = round(bc * 1.25)
+            d = round(bd * 1.25)
+        else:
+            c = bc
+            d = bd
+
+        coins += c
+        dna += d
+
     xp = wins * HUNT_XP_WIN + losses * HUNT_XP_LOSE
 
     user.coins += coins
@@ -270,6 +300,9 @@ def resolve_auto_hunt(user: User, creature: Creature, hunts: int,
     return {
         "hunts": hunts, "wins": wins, "losses": losses,
         "coins": coins, "dna": dna, "xp": xp, "levels": levels, "lab_up": bool(lab_up),
+        "base_coins": base_coins, "base_dna": base_dna,
+        "bonus_coins": max(0, coins - base_coins), "bonus_dna": max(0, dna - base_dna),
+        "sub_tier": sub_tier, "sub_name": sub_name, "sub_bonus_pct": sub_bonus_pct,
     }
 
 

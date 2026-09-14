@@ -2933,14 +2933,35 @@ async def autohunt_do_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     lines = [
         f"⚡️ <b>نتیجه شکار خودکار</b>",
         f"🗡 <b>{res['hunts']}</b> نبرد · 🟢 {res['wins']} برد · 🔴 {res['losses']} باخت",
-        "",
+        "──────────────",
+        "💰 <b>مجموع غارت دریافتی:</b>",
         f"{get_emoji('coin')} طلا: <b>+{res['coins']:,}</b>",
         f"{get_emoji('dna')} دی‌ان‌ای: <b>+{res['dna']:,}</b>",
         f"✨ XP: <b>+{res['xp']:,}</b>" + (f" · رسید به سطح {creature.level}!" if res["levels"] else ""),
-        f"{get_emoji('energy')} انرژی باقی‌مانده: <code>{res['energy_left']}/{res.get('max_energy', constants.MAX_ENERGY)}</code>",
-        "",
-        "<i>یادآوری: شکار خودکار نصف لوت شکار دستی رو می‌ده.</i>",
     ]
+    if res.get("sub_bonus_pct"):
+        sub_title = f"اشتراک {res.get('sub_name') or 'ویژه'}"
+        pct = res['sub_bonus_pct']
+        bonus_c = res.get('bonus_coins', 0)
+        bonus_d = res.get('bonus_dna', 0)
+        base_c = res.get('base_coins', res['coins'])
+        base_d = res.get('base_dna', res['dna'])
+        lines.extend([
+            "──────────────",
+            f"👑 <b>با احتساب {pct}٪ سود {sub_title}:</b>",
+            f"🔹 لوت پایه: {base_c:,} طلا · {base_d:,} DNA",
+            f"🎁 <b>سود اشتراک شما:</b> +{bonus_c:,} طلا · +{bonus_d:,} DNA",
+        ])
+    else:
+        lines.extend([
+            "",
+            "<i>💡 با اشتراک نقره‌ای ۲۵٪ و اشتراک طلایی ۵۰٪ لوت بیشتر از شکار خودکار دریافت می‌کنی!</i>",
+        ])
+
+    lines.extend([
+        "",
+        f"{get_emoji('energy')} انرژی باقی‌مانده: <code>{res['energy_left']}/{res.get('max_energy', constants.MAX_ENERGY)}</code>",
+    ])
     text = "\n".join(lines) + _mission_lines(completed_missions)
     await query.answer("✅ انجام شد!")
     await safe_edit_message_text(
