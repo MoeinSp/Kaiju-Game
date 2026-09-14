@@ -546,6 +546,7 @@ def _feedcap_group_card(user, creature, caps: dict, maxed: bool) -> tuple[str, I
 
 
 def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
+    from bot.buttons import PRIMARY, SHOP, btn
     from config import BOT_USERNAME
     from game import botconfig
     from game.energy import get_max_energy
@@ -568,8 +569,10 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
                 f"<i>💡 سقف انرژی شما ۱۰۰ است. می‌توانید با الماس آن را فوراً شارژ کامل کنید:</i>"
             )
             rows.append([
-                InlineKeyboardButton(
-                    f"⚡ شارژ با {cost} الماس 💎",
+                btn(
+                    f"شارژ با {cost} الماس",
+                    emoji_key="btn_charge",
+                    style=PRIMARY,
                     callback_data=f"enr:ask:{user.id}:ghunt",
                 )
             ])
@@ -583,18 +586,21 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
                 f"<i>💡 فقط با ۱۰۰ هزار تومان، محدودیت انرژی رو برای همیشه فراموش کن!</i>"
             )
             rows.append([
-                InlineKeyboardButton(
-                    f"⚡ شارژ با {cost} الماس 💎",
+                btn(
+                    f"شارژ با {cost} الماس",
+                    emoji_key="btn_charge",
+                    style=PRIMARY,
                     callback_data=f"enr:ask:{user.id}:ghunt",
                 )
             ])
             rows.append([
-                InlineKeyboardButton(
-                    "🥈 خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)",
+                btn(
+                    "خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)",
+                    emoji_key="btn_sub_silver",
+                    style=SHOP,
                     url=f"https://t.me/{BOT_USERNAME}?start=sub_silver",
                 )
             ])
-        rows.append([_pm_button()])
 
         full_text = (
             f"{get_emoji('energy')} <b>انرژی شما تمام شده است!</b> ({energy}/{max_energy})\n\n"
@@ -2089,6 +2095,7 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return
     if action == "autohunt":
         # a whole-energy batch — the player spent all energy; attach quick refill / subscription options
+        from bot.buttons import PRIMARY, SHOP, btn
         from config import BOT_USERNAME
         from game import botconfig
         from game.subscription import get_subscription_info
@@ -2101,13 +2108,12 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         cost = botconfig.get_energy_refill_cost()
         kb_rows = []
         kb_rows.append([
-            InlineKeyboardButton(f"⚡ شارژ با {cost} الماس 💎", callback_data=f"enr:ask:{owner_id}:ghunt")
+            btn(f"شارژ با {cost} الماس", emoji_key="btn_charge", style=PRIMARY, callback_data=f"enr:ask:{owner_id}:ghunt")
         ])
         if not sub_info["is_active"]:
             kb_rows.append([
-                InlineKeyboardButton("🥈 خرید اشتراک (۱۰۰ تومان)", url=f"https://t.me/{BOT_USERNAME}?start=sub_silver"),
+                btn("خرید اشتراک (۱۰۰ تومان)", emoji_key="btn_sub_silver", style=SHOP, url=f"https://t.me/{BOT_USERNAME}?start=sub_silver"),
             ])
-        kb_rows.append([_pm_button()])
         await safe_edit_message_text(
             query,
             _action_note(payload).rstrip(),

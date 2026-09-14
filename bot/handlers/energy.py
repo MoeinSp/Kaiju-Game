@@ -24,17 +24,18 @@ def energy_refill_button(owner_id: int) -> InlineKeyboardButton:
 
 
 def energy_refill_markup(owner_id: int, is_group: bool = False, origin: str | None = None) -> InlineKeyboardMarkup:
+    from bot.buttons import PRIMARY, SHOP, btn
     from config import BOT_USERNAME
     from game import botconfig
 
     cost = botconfig.get_energy_refill_cost()
     cb_ask = f"enr:ask:{owner_id}:{origin}" if origin else f"enr:ask:{owner_id}"
-    row1 = [InlineKeyboardButton(f"⚡ شارژ کامل با {cost} الماس 💎", callback_data=cb_ask)]
+    row1 = [btn(f"شارژ کامل با {cost} الماس", emoji_key="btn_charge", style=PRIMARY, callback_data=cb_ask)]
     if is_group:
-        row2 = [InlineKeyboardButton("🥈 خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)", url=f"https://t.me/{BOT_USERNAME}?start=sub_silver")]
+        row2 = [btn("خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)", emoji_key="btn_sub_silver", style=SHOP, url=f"https://t.me/{BOT_USERNAME}?start=sub_silver")]
     else:
         cb = f"sub_pick:silver:{origin}" if origin else "sub_pick:silver"
-        row2 = [InlineKeyboardButton("🥈 خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)", callback_data=cb)]
+        row2 = [btn("خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)", emoji_key="btn_sub_silver", style=SHOP, callback_data=cb)]
     return InlineKeyboardMarkup([row1, row2])
 
 
@@ -55,7 +56,7 @@ def _user_sub_info_sync(tg_user):
 async def show_energy_error(query, exc, owner_id: int | None = None, origin: str | None = None) -> bool:
     """If `exc` is an out-of-energy error, replace the message with it + the refill
     button and return True; otherwise return False so the caller shows it normally."""
-    from bot.buttons import NAV, btn
+    from bot.buttons import NAV, PRIMARY, btn
     from game import botconfig
     from game.energy import EnergyError
 
@@ -89,7 +90,7 @@ async def show_energy_error(query, exc, owner_id: int | None = None, origin: str
                 f"(<b>{info['days_left']} روز و {info['hours_left']} ساعت</b> باقی‌مانده).\n\n"
                 f"<i>💡 سقف انرژی شما ۱۰۰ است. می‌توانید با الماس آن را فوراً شارژ کامل کنید:</i>"
             )
-            rows = [[InlineKeyboardButton(f"⚡ شارژ کامل با {cost} الماس 💎", callback_data=cb_ask)]]
+            rows = [[btn(f"شارژ کامل با {cost} الماس", emoji_key="btn_charge", style=PRIMARY, callback_data=cb_ask)]]
             if origin == "hunt":
                 rows.append([btn("بازگشت به شکار", emoji_key="btn_hunt", style=NAV, callback_data="hunt_next")])
             elif origin == "arena":
@@ -126,6 +127,7 @@ async def energy_ask_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
     owner_id = parts[2] if len(parts) > 2 else query.from_user.id
     origin = parts[3] if len(parts) > 3 else None
+    from bot.buttons import CONFIRM, DANGER, btn
     from game import botconfig
 
     cost = botconfig.get_energy_refill_cost()
@@ -136,8 +138,8 @@ async def energy_ask_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     cb_no = f"enr:no:{owner_id}:{origin}" if origin else f"enr:no:{owner_id}"
 
     keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton(f"✅ بله ({cost} 💎)", callback_data=cb_do),
-        InlineKeyboardButton("❌ بی‌خیال", callback_data=cb_no),
+        btn(f"بله ({cost} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data=cb_do),
+        btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER, callback_data=cb_no),
     ]])
     await safe_edit_message_text(
         query,

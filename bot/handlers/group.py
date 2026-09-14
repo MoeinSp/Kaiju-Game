@@ -67,7 +67,8 @@ async def _reply_error(message, exc, owner_id: int) -> None:
                 f"(<b>{info['days_left']} روز و {info['hours_left']} ساعت</b> باقی‌مانده)."
             )
             cost = botconfig.get_energy_refill_cost()
-            row1 = [InlineKeyboardButton(f"⚡ شارژ کامل با {cost} الماس 💎", callback_data=f"enr:ask:{owner_id}")]
+            from bot.buttons import PRIMARY, btn
+            row1 = [btn(f"شارژ کامل با {cost} الماس", emoji_key="btn_charge", style=PRIMARY, callback_data=f"enr:ask:{owner_id}:ghunt")]
             markup = InlineKeyboardMarkup([row1])
         else:
             caption = (
@@ -79,7 +80,7 @@ async def _reply_error(message, exc, owner_id: int) -> None:
                 f"  🥈 نشان پرمیوم نقره‌ای کنار اسمت قرار می‌گیره\n\n"
                 f"<i>💡 فقط با ۱۰۰ هزار تومان، محدودیت انرژی رو برای همیشه فراموش کن!</i>"
             )
-            markup = energy_refill_markup(owner_id, is_group=True)
+            markup = energy_refill_markup(owner_id, is_group=True, origin="ghunt")
         await message.reply_text(caption, parse_mode="HTML", reply_markup=markup)
     else:
         await message.reply_text(str(exc), parse_mode="HTML")
