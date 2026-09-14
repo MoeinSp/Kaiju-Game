@@ -554,12 +554,13 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
     if energy <= 0:
         sub_info = get_subscription_info(user)
         rows = []
-        if sub_info["is_active"]:
-            sub_name = sub_info["tier_label"]
-            days_left = sub_info["days_left"]
+        if sub_info.get("is_active"):
+            sub_name = sub_info.get("tier_name", "اشتراک ویژه")
+            badge = sub_info.get("badge", "✨")
+            days_left = sub_info.get("days_left", 0)
             hours_left = sub_info.get("hours_left", 0)
             status_text = (
-                f"✨ <b>اشتراک {sub_name}</b> برای شما فعال است "
+                f"{badge} <b>{sub_name}</b> برای شما فعال است "
                 f"({days_left} روز و {hours_left} ساعت باقی‌مانده).\n\n"
                 f"<i>💡 سقف انرژی شما ۱۰۰ است. می‌توانید با الماس آن را فوراً شارژ کامل کنید:</i>"
             )
@@ -1050,12 +1051,15 @@ def _require_creature(creature):
 
 def _charge_hunt_scout_sync(tg_user):
     """Charge the scout cost for finding a hunt opponent (used on the fresh «شکار»)."""
+    from game.energy import sync_energy
     from game.hunt import scout_cost
 
     user, _ = get_or_create_user(tg_user)
     creature = get_active_creature(user)
     if creature is None:
         raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
+    if sync_energy(user) <= 0:
+        return
     cost = scout_cost(creature)
     if user.coins < cost:
         raise GameError(f"برای پیدا کردن حریف {cost} طلا لازمه (الان {user.coins} داری).")
@@ -1146,18 +1150,21 @@ def _card_sync(tg_user, chat, action):
         from game.hunt import HUNT_TIERS, estimated_reward, scout_cost, scout_one
 
         data["energy"] = sync_energy(user)
-        my_power = creature_power(creature, get_equipped_items(creature))
-        target = scout_one(user, creature)
-        # scout_one returns the raw roll; the card needs it labelled and priced
-        target["tier_label"] = HUNT_TIERS[target["tier"]]["label"]
-        target["reward"] = estimated_reward(target["tier"], my_power)
-        from game.hunt import hunt_dna_range
+        if data["energy"] > 0:
+            my_power = creature_power(creature, get_equipped_items(creature))
+            target = scout_one(user, creature)
+            # scout_one returns the raw roll; the card needs it labelled and priced
+            target["tier_label"] = HUNT_TIERS[target["tier"]]["label"]
+            target["reward"] = estimated_reward(target["tier"], my_power)
+            from game.hunt import hunt_dna_range
 
-        target["dna_reward"] = hunt_dna_range(my_power, target["tier"])
-        target["scout_cost"] = scout_cost(creature)
-        target["my_power"] = my_power
-        target["my_element"] = creature.element
-        data["target"] = target
+            target["dna_reward"] = hunt_dna_range(my_power, target["tier"])
+            target["scout_cost"] = scout_cost(creature)
+            target["my_power"] = my_power
+            target["my_element"] = creature.element
+            data["target"] = target
+        else:
+            data["target"] = None
     elif action == "arena":
         from game import arena
         from game.creature import creature_power
