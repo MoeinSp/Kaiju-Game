@@ -591,6 +591,7 @@ def _attack_sync(tg_user, pending):
         opponent["user"] = target
 
     result = attack(user, opponent)
+    user.refresh_from_db()
     record_action(user, "arena_attack")
     completed_missions = check_missions(user, "arena_attack")
     return result, completed_missions
@@ -663,16 +664,18 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     league_dna = result.get("league_dna", 0)
     total_gold = loot_gold + league_gold
     total_dna = loot_dna + league_dna
+    new_coins = result.get("new_coins")
 
     div = "──────────────"
     if result["won"]:
         cup_sign = f"+{result['cup_delta']}" if result['cup_delta'] > 0 else str(result['cup_delta'])
-        reward_lines = [
-            f"💰 <b>مجموع غنیمت:</b> +{total_gold:,} {get_emoji('coin')} ┃ +{total_dna:,} {get_emoji('dna')}",
-        ]
+        reward_hdr = f"💰 <b>مجموع غنیمت:</b> +{total_gold:,} {get_emoji('coin')} ┃ +{total_dna:,} {get_emoji('dna')}"
+        if new_coins is not None:
+            reward_hdr += f" <i>(موجودی: {new_coins:,} {get_emoji('coin')})</i>"
+        reward_lines = [reward_hdr]
         if league_gold or league_dna:
             reward_lines.append(
-                f"   ↲ غارت: +{loot_gold:,} {get_emoji('coin')} ┃ {result.get('league_emoji', '🏅')} لیگ {result.get('league_name', '')}: +{league_gold:,} {get_emoji('coin')} +{league_dna:,} {get_emoji('dna')}"
+                f"   ▫️ غارت: +{loot_gold:,} {get_emoji('coin')} ┃ {result.get('league_emoji', '🏅')} لیگ {result.get('league_name', '')}: +{league_gold:,} {get_emoji('coin')} +{league_dna:,} {get_emoji('dna')}"
             )
         reward_lines.append(f"🏆 <b>تغییر کاپ:</b> <b>{cup_sign}</b> <i>(کاپ جدید: {result['new_cup']:,})</i>")
         if result.get("awarded_chest"):
@@ -1291,34 +1294,41 @@ async def arena_chest_open_callback(update: Update, context: ContextTypes.DEFAUL
 
 
 async def arena_chest_rewards_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """League rewards guide for arena chests across all leagues."""
+    """League rewards guide for arena chests across all leagues, paginated in 2 pages."""
     query = update.callback_query
+    await query.answer()
+
     data_parts = query.data.split(":")
     tier = data_parts[1] if len(data_parts) > 1 and data_parts[1] else "silver"
     if tier not in ARENA_CHEST_TIERS:
         tier = "silver"
 
+    page = int(data_parts[2]) if len(data_parts) > 2 and data_parts[2].isdigit() else 1
+    if page not in (1, 2):
+        page = 1
+
     cfg = ARENA_CHEST_TIERS[tier]
     tier_name = cfg["name"]
     tier_emoji = get_emoji(f"chest_{tier}", cfg.get("emoji", "📦"))
 
-    # Tabs for 4 tiers
+    # Tabs for 4 tiers — keep current page
     tier_tabs = []
     for t_key, t_cfg in ARENA_CHEST_TIERS.items():
         is_sel = (t_key == tier)
         short_name = t_cfg["name"].replace("جعبه ", "")
         label = f"• {short_name} •" if is_sel else short_name
-        tier_tabs.append(btn(label, emoji_key=f"btn_chest_{t_key}", style=PRIMARY if is_sel else NAV, callback_data=f"arena_chest_rewards:{t_key}"))
+        tier_tabs.append(btn(label, emoji_key=f"btn_chest_{t_key}", style=PRIMARY if is_sel else NAV, callback_data=f"arena_chest_rewards:{t_key}:{page}"))
 
     guaranteed = cfg.get("guaranteed_creature_rarity", "common")
     rarity_label = constants.RARITY_LABELS.get(guaranteed, guaranteed)
 
+    page_label = "لیگ‌های ۱ تا ۸" if page == 1 else "لیگ‌های ۹ تا ۱۶"
     lines = [
-        f"{tier_emoji} <b>راهنمای جوایز {tier_name} در لیگ‌ها</b>",
-        "━━━━━━━━━━━━━━━━━━━━",
+        f"{tier_emoji} <b>راهنمای جوایز {tier_name}</b> ({page_label})",
+        "───────────────────",
         f"⏱ زمان بازگشایی پایه: <b>{cfg['unlock_hours']} ساعت</b>",
-        f"{get_emoji('creature')} شانس دریافت هیولا: <b>{int(cfg['creature_chance'] * 100)}٪</b> (حداقل تضمینی: <b>{rarity_label}</b>)",
-        f"🎒 تجهیزات: <b>۱ عدد تجهیزات تصادفی</b>",
+        f"{get_emoji('creature')} شانس هیولا: <b>{int(cfg['creature_chance'] * 100)}٪</b> (حداقل: <b>{rarity_label}</b>)",
+        f"🎒 تجهیزات: <b>۱ عدد تصادفی</b>",
     ]
     if cfg["key"] in ("magical", "mega"):
         lines.append(f"{get_emoji('diamond')} الماس: <b>دارد (بونس ویژه)</b>")
@@ -1326,11 +1336,12 @@ async def arena_chest_rewards_callback(update: Update, context: ContextTypes.DEF
     lines += [
         "",
         "🏆 <b>میزان جوایز بر اساس لیگ و کاپ:</b>",
-        "━━━━━━━━━━━━━━━━━━━━",
+        "───────────────────",
     ]
 
     from game.arena_chests import league_multiplier
-    for lg in constants.LEAGUES:
+    leagues = constants.LEAGUES[:8] if page == 1 else constants.LEAGUES[8:]
+    for lg in leagues:
         min_cup = lg["min_cup"]
         mult = league_multiplier(min_cup)
         gold_val = round(cfg["base_gold"] * mult)
@@ -1338,16 +1349,23 @@ async def arena_chest_rewards_callback(update: Update, context: ContextTypes.DEF
         lg_emoji = lg.get("emoji", "🎖")
         lines.append(
             f"{lg_emoji} <b>{lg['name']}</b> ({min_cup:,}+ کاپ):\n"
-            f"   └ {get_emoji('coin')} <b>{gold_val:,}</b> طلا ┃ {get_emoji('dna')} <b>{dna_val:,}</b> دی‌ان‌ای"
+            f"▫️ <b>{gold_val:,}</b> {get_emoji('coin')} طلا ┃ <b>{dna_val:,}</b> {get_emoji('dna')} دی‌ان‌ای"
         )
 
     lines += [
-        "━━━━━━━━━━━━━━━━━━━━",
-        "💡 <i>جوایز هر جعبه در لحظه پیروزی و بر اساس لیگ فعلی شما محاسبه و ثبت می‌شود.</i>",
+        "───────────────────",
+        "💡 <i>جوایز بر اساس لیگ شما در لحظه پیروزی محاسبه می‌شوند.</i>",
     ]
+
+    # Pagination navigation row
+    if page == 1:
+        nav_row = [btn("صفحه بعدی (لیگ‌های برتر) ◀️", emoji_key="btn_next", style=PRIMARY, callback_data=f"arena_chest_rewards:{tier}:2")]
+    else:
+        nav_row = [btn("▶️ صفحه قبلی (لیگ‌های پایه)", emoji_key="btn_back", style=PRIMARY, callback_data=f"arena_chest_rewards:{tier}:1")]
 
     kb = InlineKeyboardMarkup([
         tier_tabs,
+        nav_row,
         [btn("🔙 بازگشت به جعبه‌ها", emoji_key="btn_chests", style=NAV, callback_data="arena_chests")],
     ])
 
@@ -1364,7 +1382,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(arena_chest_queue_callback, pattern=r"^arena_chest_queue:\d+$"))
     application.add_handler(CallbackQueryHandler(arena_chest_speedup_callback, pattern=r"^arena_chest_speedup:\d+$"))
     application.add_handler(CallbackQueryHandler(arena_chest_open_callback, pattern=r"^arena_chest_open:\d+$"))
-    application.add_handler(CallbackQueryHandler(arena_chest_rewards_callback, pattern=r"^arena_chest_rewards(:[a-z]+)?$"))
+    application.add_handler(CallbackQueryHandler(arena_chest_rewards_callback, pattern=r"^arena_chest_rewards(:[a-z]+)?(:\d+)?$"))
     application.add_handler(CallbackQueryHandler(arena_find_callback, pattern=r"^arena_find$"))
     application.add_handler(CallbackQueryHandler(arena_opp_details_callback, pattern=r"^arena_opp_details$"))
     application.add_handler(CallbackQueryHandler(arena_opp_back_callback, pattern=r"^arena_opp_back$"))

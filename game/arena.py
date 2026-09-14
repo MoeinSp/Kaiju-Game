@@ -378,6 +378,7 @@ def expected_loot(opponent: dict, attacker_level: int = 1) -> int:
 def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
     """Resolves one arena raid. Attacking always drops the attacker's own shield —
     you can't camp behind protection while farming other people."""
+    attacker = User.objects.select_for_update().get(id=attacker.id)
     attacker_creature = Creature.objects.filter(owner=attacker, is_active=True).first()
     if attacker_creature is None:
         raise GameError("اول یه موجود فعال انتخاب کن.")
@@ -422,7 +423,8 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         if defender_user is not None:
             taken_from_defender = min(loot, max(0, defender_user.coins))
             defender_user.coins -= taken_from_defender
-            loot = max(taken_from_defender, constants.ARENA_LOOT_MIN)
+            # Attacker always receives the full promised loot shown on the card.
+            # If defender held less than the promised loot, the system subsidises the difference.
         attacker.coins += loot
         dna_win = round(constants.ARENA_WIN_DNA_BASE + attacker_creature.level * constants.ARENA_WIN_DNA_PER_LEVEL)
         attacker.dna_fragments += dna_win
@@ -499,6 +501,8 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         "opponent_label": opponent["label"],
         "opponent_alliance": (defender_user.alliance.name if (defender_user and defender_user.alliance_id) else None),
         "new_cup": attacker.cup,
+        "new_coins": attacker.coins,
+        "new_dna": attacker.dna_fragments,
         "awarded_chest": awarded_chest,
         # payload for the INSTANT defense DM (None defender_id = bot, no DM)
         "defense": None if defender_user is None else {

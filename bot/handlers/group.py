@@ -1349,6 +1349,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     group = get_or_create_group(chat)
     attacker, _ = get_or_create_user(attacker_tg)
     touch_membership(group, attacker)
+    attacker = User.objects.select_for_update().get(id=attacker.id)
     # LOCK the target's row and re-check the group shield UNDER the lock, so two
     # attackers hitting the same person at once serialise — the first applies the 4h
     # group shield and the second bounces (was raceable: both read shield=None).
@@ -1400,13 +1401,17 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     dna_win = 0
     target_fields = []
     if attacker_won:
-        loot = max(0, target.coins // 10)
-        target.coins -= loot
+        loot = max(constants.ARENA_LOOT_MIN, target.coins // 10)
+        taken_from_target = min(loot, max(0, target.coins))
+        target.coins -= taken_from_target
         attacker.coins += loot
         dna_win = constants.GROUP_ATTACK_WIN_DNA
         attacker.dna_fragments += dna_win
         attacker_fields += ["coins", "dna_fragments"]
         target_fields += ["coins"]
+
+        from game.ledger import record_gain
+        record_gain(attacker, "duel", coins=loot, dna=dna_win)
 
     winner_levels = add_xp(winner_creature_obj, constants.DUEL_WIN_XP)
     add_xp(loser_creature_obj, constants.DUEL_LOSE_XP)
@@ -1458,6 +1463,8 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         "attacker_cup_change": delta,  # attacker's own swing (+ if won, − if lost)
         "defender_cup_change": defender_cup_change,
         "attacker_new_cup": attacker.cup,
+        "new_coins": attacker.coins,
+        "new_dna": attacker.dna_fragments,
         "loot": loot,
         "dna": dna_win,
         "winner_level_up": bool(winner_levels),
@@ -1538,9 +1545,10 @@ async def _pvp_attack_execute(update, context, query, attacker_id: int, target_i
     await send_defense_report_now(context, result.get("defense"), group=True)
     await query.answer("🟢 بردی!" if result["attacker_won"] else "🔴 باختی.")
     if result["attacker_won"]:
+        new_coins_note = f" <i>(موجودی: {result['new_coins']:,})</i>" if result.get("new_coins") is not None else ""
         reward_block = (
             "💰 <b>پاداش دریافتی:</b>\n\n"
-            f"• {get_emoji('coin')} +{result['loot']:,}\n"
+            f"• {get_emoji('coin')} +{result['loot']:,}{new_coins_note}\n"
             f"• {get_emoji('dna')} +{result.get('dna', 0)}\n"
             f"• 📈 +{constants.DUEL_WIN_XP} XP"
         )
