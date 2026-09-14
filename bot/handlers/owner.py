@@ -1250,54 +1250,40 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 def _user_info_text(data: dict) -> str:
     user = data["user"]
+    alliance_name = html.escape(data["alliance_name"]) if data.get("alliance_name") else "ندارد"
+    banned_txt = "🔴 مسدود" if user.is_banned else "🟢 فعال"
+    joined_txt = timezone.localtime(user.created_at).strftime("%Y-%m-%d")
+    creatures = data.get("creatures", [])
+    active_c = next((c for c in creatures if c.is_active), None)
+    active_txt = (
+        f"<code>#{active_c.id}</code> {html.escape(active_c.name)} Lv{active_c.level} "
+        f"({constants.RARITY_LABELS.get(active_c.rarity, active_c.rarity)})"
+        if active_c
+        else "ندارد"
+    )
+
+    gains = data.get("gains", {})
+    from game.daily import today_str
+
+    t_day = today_str()
+    today_b = gains.get("per_day", {}).get(t_day, {})
+    c_today = today_b.get("coins", 0)
+    dna_today = today_b.get("dna", 0)
+    dia_today = today_b.get("diamonds", 0)
+
     lines = [
         f"{get_emoji('profile')} <b>{display_name(user)}</b>  (<code>{user.id}</code>)",
-        f"{get_emoji('coin')} {user.coins}   {get_emoji('dna')} {user.dna_fragments}   "
-        f"{get_emoji('diamond')} {user.diamonds}   {get_emoji('energy')} {user.energy}/{constants.MAX_ENERGY}",
-        f"🔥 streak: {user.login_streak}   {get_emoji('alliance')} اتحاد: "
-        f"{html.escape(data['alliance_name']) if data.get('alliance_name') else '—'}",
-        f"{get_emoji('banned')} مسدود: {'بله' if user.is_banned else 'نه'}",
-        f"📅 عضو از: {timezone.localtime(user.created_at).strftime('%Y-%m-%d')}",
+        f"{get_emoji('coin')} {user.coins:,}   {get_emoji('dna')} {user.dna_fragments:,}   "
+        f"{get_emoji('diamond')} {user.diamonds:,}   {get_emoji('energy')} {user.energy}/{constants.MAX_ENERGY}",
+        f"🔥 استریک: <b>{user.login_streak}</b> روز   {get_emoji('alliance')} اتحاد: <b>{alliance_name}</b>",
+        f"🚫 وضعیت: <b>{banned_txt}</b>   📅 عضویت: <code>{joined_txt}</code>",
+        f"{get_emoji('creature')} کایجوی فعال: {active_txt} (مجموع موجودات: <b>{len(creatures)}</b>)",
+        "",
+        f"📊 <b>دریافتی امروز ({t_day}):</b>",
+        f"  🪙 {c_today:,} طلا  ·  🧬 {dna_today:,} دی‌ان‌ای  ·  💎 {dia_today:,} الماس",
+        "",
+        "<i>برای گزارش کامل منابع دریافتی یا مدیریت کایجوها، از دکمه‌های زیر استفاده کنید:</i>",
     ]
-    gains = data.get("gains")
-    if gains and gains.get("days"):
-        from game.ledger import SOURCE_LABELS
-
-        tot = gains["totals"]
-        lines.append("")
-        lines.append("💹 <b>افزایش دارایی (۳ روز اخیر):</b>")
-        lines.append(
-            f"  جمع: {get_emoji('coin')} {tot['coins']:,} · "
-            f"{get_emoji('dna')} {tot['dna']:,} · {get_emoji('diamond')} {tot['diamonds']:,}"
-        )
-        for day in gains["days"]:
-            b = gains["per_day"].get(day, {})
-            if not (b.get("coins") or b.get("dna") or b.get("diamonds")):
-                continue
-            lines.append(
-                f"  <b>{day}</b>: {get_emoji('coin')} {b['coins']:,} · "
-                f"{get_emoji('dna')} {b['dna']:,} · {get_emoji('diamond')} {b['diamonds']:,}"
-            )
-            for src, c, dn, di in sorted(b.get("sources", []), key=lambda x: -(x[1] + x[3] * 100)):
-                bits = []
-                if c:
-                    bits.append(f"{c:,}🪙")
-                if dn:
-                    bits.append(f"{dn:,}🧬")
-                if di:
-                    bits.append(f"{di:,}💎")
-                lines.append(f"     └ {SOURCE_LABELS.get(src, src)}: {' · '.join(bits)}")
-    else:
-        lines.append("💹 <i>افزایش دارایی ثبت‌شده‌ای در ۳ روز اخیر نیست.</i>")
-    lines.append(f"\n{get_emoji('creature')} <b>موجودات ({len(data['creatures'])}):</b>")
-    # cap the list so a big roster can't push the message past Telegram's 4096 limit;
-    # names are escaped because a creature/lab name can contain <, > or & (HTML-unsafe)
-    shown = data["creatures"][:40]
-    for c in shown:
-        active_tag = " ✅فعال" if c.is_active else ""
-        lines.append(f"  • <code>#{c.id}</code> {html.escape(c.name)} Lv{c.level} ({c.rarity}){active_tag}")
-    if len(data["creatures"]) > len(shown):
-        lines.append(f"  <i>… و {len(data['creatures']) - len(shown)} تای دیگه</i>")
     return "\n".join(lines)
 
 
@@ -1310,6 +1296,12 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
     return InlineKeyboardMarkup(
         [
             [
+                btn("📊 گزارش طلا", emoji_key="btn_report", style=NAV, callback_data=f"admin_reslog:{target_id}:coins"),
+                btn("🧬 گزارش DNA", emoji_key="btn_report", style=NAV, callback_data=f"admin_reslog:{target_id}:dna"),
+                btn("💎 گزارش الماس", emoji_key="btn_report", style=NAV, callback_data=f"admin_reslog:{target_id}:diamonds"),
+            ],
+            [btn("🦖 مدیریت موجودات (کلکسیون)", emoji_key="btn_creature", style=PRIMARY, callback_data=f"admin_clist:{target_id}:all:0")],
+            [
                 btn("💰 اعطای طلا", style=CONFIRM, callback_data=f"admin_grant:{target_id}:coins"),
                 btn("🧬 اعطای DNA", style=CONFIRM, callback_data=f"admin_grant:{target_id}:dna"),
                 btn("💎 اعطای الماس", style=CONFIRM, callback_data=f"admin_grant:{target_id}:diamonds"),
@@ -1319,7 +1311,7 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
                 btn("🧬 کسر DNA", style=DANGER, callback_data=f"admin_deduct:{target_id}:dna"),
                 btn("💎 کسر الماس", style=DANGER, callback_data=f"admin_deduct:{target_id}:diamonds"),
             ],
-            [btn("شارژ کامل (طلا+DNA+الماس)", emoji_key="btn_charge", style=CONFIRM, callback_data=f"admin_charge:{target_id}")],
+            [btn("⚡ شارژ کامل (طلا+DNA+الماس)", emoji_key="btn_charge", style=CONFIRM, callback_data=f"admin_charge:{target_id}")],
             [btn("🎁 دادن آیتم/کایجو/تجهیز به این کاربر", style=CONFIRM, callback_data=f"admin_give_item:{target_id}")],
             [btn("🦖 اعطای کایجوی دلخواه (سطح/ستاره/تعداد)", style=CONFIRM, callback_data=f"admin_givek:{target_id}")],
             [btn("🌟 اعطای کایجوی مکس (همه‌چی بیشینه)", style=CONFIRM, callback_data=f"admin_givekmax:{target_id}")],
@@ -1329,10 +1321,6 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
                 btn("🏆 تنظیم کاپ", style=CONFIRM, callback_data=f"admin_setcup:{target_id}"),
             ],
             [btn("🏗 مکس‌کردن ساختمان‌ها", style=CONFIRM, callback_data=f"admin_maxbld:{target_id}")],
-            [
-                btn("💎 لاگ الماس", style=ADMIN, callback_data=f"admin_reslog:{target_id}:diamonds"),
-                btn("🪙 لاگ طلا", style=ADMIN, callback_data=f"admin_reslog:{target_id}:coins"),
-            ],
             [
                 btn("📊 لاگ پیشرفت", emoji_key="btn_report", style=ADMIN, callback_data=f"admin_plog:{target_id}"),
                 btn("✉️ پیام", style=ADMIN, callback_data=f"admin_dm:{target_id}"),
@@ -1745,15 +1733,14 @@ def _resource_log_data(target_id, field):
 
 
 _RESLOG_META = {
-    "diamonds": ("💎", "الماس"),
-    "coins": ("🪙", "طلا"),
-    "dna": ("🧬", "دی‌ان‌ای"),
+    "diamonds": ("💎", "الماس", "الماس دریافتی"),
+    "coins": ("🪙", "طلا", "طلای دریافتی"),
+    "dna": ("🧬", "دی‌ان‌ای", "DNA دریافتی"),
 }
 
 
 async def resource_log_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """«💎 لاگ الماس» / «🪙 لاگ طلا» — a focused 7-day, per-source history for one
-    resource, so the owner can trace exactly where a player's gold/diamonds came from."""
+    """Detailed per-source currency log for coins, dna, or diamonds."""
     query = update.callback_query
     if not _is_admin(update):
         await query.answer()
@@ -1766,27 +1753,342 @@ async def resource_log_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return
     await query.answer()
     from game.ledger import SOURCE_LABELS
+    from game.daily import today_str
 
-    icon, label = _RESLOG_META.get(field, ("•", field))
+    icon, label, title = _RESLOG_META.get(field, ("•", field, f"گزارش {field}"))
+    t_day = today_str()
+    today_entries = log["per_day"].get(t_day, [])
+    today_total = sum(a for _s, a in today_entries)
+
     lines = [
-        f"{icon} <b>لاگ {label} — {display_name(user)}</b> (<code>{user.id}</code>)",
-        f"جمع ۷ روز اخیر: <b>{log['total']:,}</b> {label}",
-        "──────────────",
+        f"{icon} <b>گزارش {title} — {display_name(user)}</b> (<code>{user.id}</code>)",
+        "",
+        f"📅 <b>دریافتی امروز ({t_day}):</b>",
+        f"💰 <b>کل {label} دریافتی امروز:</b> <code>+{today_total:,}</code> {icon}",
+        "",
+        "📋 <b>ریز گزارش منابع دریافتی امروز:</b>",
     ]
-    any_day = False
-    for day in log["days"]:
+    if today_entries:
+        for src, amount in today_entries:
+            src_lbl = SOURCE_LABELS.get(src, src)
+            lines.append(f"  ↳ <b>+{amount:,}</b> از <b>{src_lbl}</b>")
+    else:
+        lines.append(f"  <i>امروز هیچ {label} دریافت نشده است.</i>")
+
+    lines.append("")
+    lines.append("──────────────")
+    lines.append("📆 <b>تاریخچه روزهای قبل:</b>")
+    past_days = [d for d in log["days"] if d != t_day]
+    has_past = False
+    for day in past_days:
         entries = log["per_day"].get(day, [])
         if not entries:
             continue
-        any_day = True
-        day_total = sum(a for _s, a in entries)
-        lines.append(f"\n<b>{day}</b> — {icon} {day_total:,}")
-        for src, amount in entries:
-            lines.append(f"   └ {SOURCE_LABELS.get(src, src)}: {amount:,}")
-    if not any_day:
-        lines.append(f"\n<i>در ۷ روز اخیر {label} افزایش‌یافته‌ای ثبت نشده.</i>")
-    keyboard = InlineKeyboardMarkup([[back_btn(f"admin_userback:{user.id}", "بازگشت به کاربر")]])
+        has_past = True
+        d_tot = sum(a for _s, a in entries)
+        sub_items = " ، ".join(f"{amount:,} ({SOURCE_LABELS.get(s, s)})" for s, amount in entries)
+        lines.append(f"• <b>{day}</b>: +{d_tot:,} {icon}\n   ↳ {sub_items}")
+    if not has_past:
+        lines.append("  <i>در روزهای گذشته دریافتی ثبت نشده است.</i>")
+
+    lines.append("")
+    lines.append(f"📊 <b>مجموع ۷ روز اخیر:</b> <code>+{log['total']:,}</code> {icon}")
+
+    c_btn = "• 🪙 طلا •" if field == "coins" else "🪙 طلا"
+    dna_btn = "• 🧬 DNA •" if field == "dna" else "🧬 DNA"
+    dia_btn = "• 💎 الماس •" if field == "diamonds" else "💎 الماس"
+
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                btn(c_btn, callback_data=f"admin_reslog:{user.id}:coins"),
+                btn(dna_btn, callback_data=f"admin_reslog:{user.id}:dna"),
+                btn(dia_btn, callback_data=f"admin_reslog:{user.id}:diamonds"),
+            ],
+            [back_btn(f"admin_userback:{user.id}", "بازگشت به کاربر")],
+        ]
+    )
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
+
+
+def _render_creatures_page(data: dict) -> tuple[str, InlineKeyboardMarkup]:
+    user = data["user"]
+    creatures = data["creatures"]
+    total_count = data["total_count"]
+    total_pages = data["total_pages"]
+    page = data["page"]
+    rarity = data["rarity"]
+    rarity_title = "همه" if rarity == "all" else constants.RARITY_LABELS.get(rarity, rarity)
+
+    lines = [
+        f"🦖 <b>کلکسیون موجودات — {display_name(user)}</b> (<code>{user.id}</code>)",
+        f"📦 تعداد کل: <b>{total_count}</b> موجود  ·  فیلتر: <b>{rarity_title}</b>",
+        f"📄 صفحه <b>{page + 1}</b> از <b>{total_pages}</b>",
+        "",
+    ]
+    if not creatures:
+        lines.append("<i>موجودی با این مشخصات یافت نشد.</i>")
+    else:
+        for idx, c in enumerate(creatures, start=page * 6 + 1):
+            active_mark = " ✅ <b>(فعال)</b>" if c["is_active"] else ""
+            stars = "⭐" * c["star_level"]
+            lines.append(
+                f"<b>{idx}. #{c['id']} {html.escape(c['name'])}</b> ({c['rarity_label']} {stars}){active_mark}\n"
+                f"   🎖 سطح: <b>{c['level']}</b> · 💪 قدرت: <b>{c['power']:,}</b> · ⚡ عنصر: <b>{c['element']}</b>"
+            )
+    lines.append("")
+    lines.append("<i>برای مشاهده جزئیات، ضعیف کردن، حذف یا انتقال، روی موجود کلیک کنید:</i>")
+
+    rarity_tabs = [
+        ("all", "همه"),
+        ("common", "عادی"),
+        ("rare", "کمیاب"),
+        ("epic", "حماسی"),
+        ("legendary", "افسانه‌ای"),
+        ("mythic", "اساطیری"),
+    ]
+    row1 = [
+        btn(f"• {lbl} •" if k == rarity else lbl, style=PRIMARY if k == rarity else ADMIN, callback_data=f"admin_clist:{user.id}:{k}:0")
+        for k, lbl in rarity_tabs[:3]
+    ]
+    row2 = [
+        btn(f"• {lbl} •" if k == rarity else lbl, style=PRIMARY if k == rarity else ADMIN, callback_data=f"admin_clist:{user.id}:{k}:0")
+        for k, lbl in rarity_tabs[3:]
+    ]
+
+    c_rows = []
+    for i in range(0, len(creatures), 2):
+        pair = []
+        for c in creatures[i : i + 2]:
+            act = " ✅" if c["is_active"] else ""
+            pair.append(btn(f"#{c['id']} {c['name']} Lv{c['level']}{act}", callback_data=f"admin_cview:{user.id}:{c['id']}:{rarity}:{page}"))
+        c_rows.append(pair)
+
+    nav_row = []
+    if page > 0:
+        nav_row.append(btn("قبلی", style=NAV, callback_data=f"admin_clist:{user.id}:{rarity}:{page - 1}"))
+    if total_pages > 1:
+        nav_row.append(btn(f"📄 {page + 1}/{total_pages}", style=ADMIN, callback_data="admin_cnoop"))
+    if page < total_pages - 1:
+        nav_row.append(btn("بعدی", style=NAV, callback_data=f"admin_clist:{user.id}:{rarity}:{page + 1}"))
+
+    rows = [row1, row2] + c_rows
+    if nav_row:
+        rows.append(nav_row)
+    rows.append([back_btn(f"admin_userback:{user.id}", "بازگشت به کاربر")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _render_creature_view(data: dict, target_id: str | int, rarity: str, page: int) -> tuple[str, InlineKeyboardMarkup]:
+    c = data["creature"]
+    owner = data["owner"]
+    stats = data["stats"]
+    power = data["power"]
+    equip = data["equipment"]
+
+    rarity_lbl = constants.RARITY_LABELS.get(c.rarity, c.rarity)
+    stars = "⭐" * (c.star_level or 1)
+    act_badge = "🟢 <b>کایجوی فعال کاربر</b>" if c.is_active else "⚪ <b>غیرفعال در کلکسیون</b>"
+
+    lines = [
+        f"🦖 <b>مدیریت موجود #{c.id} — {html.escape(c.name)}</b>",
+        f"👤 مالک: <b>{display_name(owner)}</b> (<code>{owner.id}</code>)",
+        f"🏷 نایابی: <b>{rarity_lbl}</b> · {stars} · ⚡ {c.element}",
+        f"🎖 سطح: <b>{c.level}</b> · 🧪 تجربه (XP): <b>{c.xp:,}</b>",
+        f"💪 قدرت کل: <b>{power:,}</b> · {act_badge}",
+        "",
+        "📊 <b>مشخصات رزمی:</b>",
+        f"  ❤️ سلامت: <b>{stats['hp']:,}</b> · ⚔️ حمله: <b>{stats['atk']:,}</b>",
+        f"  🛡 دفاع: <b>{stats['def']:,}</b> · ⚡ سرعت: <b>{stats['spd']:,}</b>",
+        "",
+        "🧬 <b>سطح اندام‌ها و ارتقاها:</b>",
+        f"  🦋 بال‌ها: <b>{c.wings_lvl}</b> · 🛡 زره: <b>{c.armor_lvl}</b>",
+        f"  🦷 نیش: <b>{c.fangs_lvl}</b> · ☠️ غدد سمی: <b>{c.poison_lvl}</b>",
+    ]
+    if equip:
+        lines.append("")
+        lines.append("🗡 <b>تجهیزات نصب‌شده:</b>")
+        for eq in equip:
+            eq_rarity = constants.RARITY_LABELS.get(eq.rarity, eq.rarity)
+            lines.append(f"  • {html.escape(eq.name)} +{eq.level} ({eq_rarity})")
+
+    lines.append("")
+    lines.append("<i>عملیات مورد نظر را انتخاب کنید:</i>")
+
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                btn("📉 ضعیف کردن (سطح ۱)", style=DANGER, callback_data=f"admin_cweaken:{target_id}:{c.id}:{rarity}:{page}"),
+                btn("🗑 حذف موجود", style=DANGER, callback_data=f"admin_cdel:{target_id}:{c.id}:{rarity}:{page}"),
+            ],
+            [
+                btn("🔄 انتقال به کاربر دیگر", style=CONFIRM, callback_data=f"admin_cxfer:{target_id}:{c.id}:{rarity}:{page}"),
+            ],
+            [
+                back_btn(f"admin_clist:{target_id}:{rarity}:{page}", "بازگشت به لیست موجودات"),
+            ],
+        ]
+    )
+    return "\n".join(lines), keyboard
+
+
+async def admin_clist_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    _, target_id, rarity, page_s = query.data.split(":")
+    page = int(page_s)
+    from game.moderation import admin_creatures_page_data
+
+    try:
+        data = await run_db(admin_creatures_page_data, target_id, rarity, page)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    text, kb = _render_creatures_page(data)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+
+
+async def admin_cview_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    _, target_id, cid_s, rarity, page_s = query.data.split(":")
+    cid = int(cid_s)
+    page = int(page_s)
+    from game.moderation import admin_creature_view_data
+
+    try:
+        data = await run_db(admin_creature_view_data, cid)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    text, kb = _render_creature_view(data, target_id, rarity, page)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+
+
+async def admin_cweaken_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    _, target_id, cid, rarity, page = query.data.split(":")
+    await query.answer()
+    text = (
+        f"⚠️ <b>آیا از ضعیف کردن کایجوی #{cid} مطمئن هستید؟</b>\n\n"
+        "با این اقدام:\n"
+        "• سطح کایجو به <b>۱</b> کاهش می‌یابد.\n"
+        "• تجربه (XP) <b>صفر</b> می‌شود.\n"
+        "• تمامی اندام‌ها (بال، زره، نیش، زهر) به سطح <b>۰</b> بازنشانی می‌شوند.\n"
+        "• مشخصات پایه کایجو به حداقل نایابی بازمی‌گردد."
+    )
+    keyboard = InlineKeyboardMarkup(
+        [
+            [btn("📉 بله، ضعیف کن", style=DANGER, callback_data=f"admin_cweaken_do:{target_id}:{cid}:{rarity}:{page}")],
+            [back_btn(f"admin_cview:{target_id}:{cid}:{rarity}:{page}", "انصراف و بازگشت")],
+        ]
+    )
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def admin_cweaken_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    _, target_id, cid, rarity, page = query.data.split(":")
+    from game.moderation import admin_creature_view_data, weaken_creature
+
+    try:
+        await run_db(weaken_creature, int(cid))
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("✅ کایجو با موفقیت ضعیف شد.", show_alert=True)
+    try:
+        data = await run_db(admin_creature_view_data, int(cid))
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    text, kb = _render_creature_view(data, target_id, rarity, int(page))
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+
+
+async def admin_cdel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    _, target_id, cid, rarity, page = query.data.split(":")
+    await query.answer()
+    text = (
+        f"🛑 <b>آیا از حذف دائمی کایجوی #{cid} مطمئن هستید؟</b>\n\n"
+        "⚠️ این عملیات <b>غیرقابل بازگشت</b> است و کایجو برای همیشه حذف خواهد شد!\n"
+        "(در صورت وجود تجهیزات، آنها به انبار کاربر بازمی‌گردند)"
+    )
+    keyboard = InlineKeyboardMarkup(
+        [
+            [btn("🛑 بله، برای همیشه حذف کن", style=DANGER, callback_data=f"admin_cdel_do:{target_id}:{cid}:{rarity}:{page}")],
+            [back_btn(f"admin_cview:{target_id}:{cid}:{rarity}:{page}", "انصراف و بازگشت")],
+        ]
+    )
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def admin_cdel_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    _, target_id, cid, rarity, page = query.data.split(":")
+    from game.moderation import admin_creatures_page_data, admin_delete_creature
+
+    try:
+        name, owner = await run_db(admin_delete_creature, int(cid))
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer(f"🗑 کایجوی #{cid} ({name}) حذف شد.", show_alert=True)
+    data = await run_db(admin_creatures_page_data, target_id, rarity, int(page))
+    text, kb = _render_creatures_page(data)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+
+
+async def admin_cxfer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    _, target_id, cid, rarity, page = query.data.split(":")
+    context.user_data[AWAITING_ADMIN_KEY] = {
+        "action": "admin_c_transfer",
+        "target_id": target_id,
+        "cid": cid,
+        "rarity": rarity,
+        "page": page,
+    }
+    await query.answer()
+    text = (
+        f"🔄 <b>انتقال کایجوی #{cid} به کاربر دیگر</b>\n\n"
+        "لطفاً <b>آیدی عددی</b> یا <b>یوزرنیم (@username)</b> کاربری که می‌خواهید این کایجو به او منتقل شود را ارسال کنید:\n\n"
+        "<i>(تجهیزات روی کایجو در انبار مالک فعلی باقی خواهد ماند)</i>\n"
+        "<i>(برای لغو، دستور /cancel را بفرستید)</i>"
+    )
+    keyboard = InlineKeyboardMarkup(
+        [
+            [back_btn(f"admin_cview:{target_id}:{cid}:{rarity}:{page}", "انصراف و بازگشت")],
+        ]
+    )
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def admin_cnoop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
 
 
 async def admin_userback_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -3593,6 +3895,36 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
+    if action == "admin_c_transfer":
+        cid = int(awaiting["cid"])
+        old_tid = awaiting["target_id"]
+        rarity = awaiting["rarity"]
+        page = awaiting["page"]
+        from game.moderation import admin_transfer_creature
+
+        try:
+            creature, old_owner, new_owner = await run_db(admin_transfer_creature, cid, text)
+        except GameError as exc:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text(f"❌ {exc}\nلطفاً شناسه یا یوزرنیم معتبر دیگری ارسال کنید (یا /cancel برای لغو):")
+            return
+
+        reply_kb = InlineKeyboardMarkup(
+            [
+                [btn("🔙 بازگشت به کلکسیون کاربر قبلی", callback_data=f"admin_clist:{old_owner.id}:{rarity}:{page}")],
+                [btn(f"👤 مشاهده کاربر مقصد ({new_owner.id})", callback_data=f"admin_userback:{new_owner.id}")],
+            ]
+        )
+        await message.reply_text(
+            f"✅ <b>انتقال با موفقیت انجام شد!</b>\n\n"
+            f"🦖 کایجوی <b>#{creature.id} ({html.escape(creature.name)})</b>\n"
+            f"از: <b>{display_name(old_owner)}</b> (<code>{old_owner.id}</code>)\n"
+            f"به: <b>{display_name(new_owner)}</b> (<code>{new_owner.id}</code>) با موفقیت منتقل شد.",
+            parse_mode="HTML",
+            reply_markup=reply_kb,
+        )
+        return
+
     if action == "give_kaiju":
         from game.moderation import admin_give_kaiju
 
@@ -4303,6 +4635,14 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(player_log_callback, pattern=r"^admin_plog:"))
     application.add_handler(CallbackQueryHandler(resource_log_callback, pattern=r"^admin_reslog:\d+:(diamonds|coins|dna)$"))
     application.add_handler(CallbackQueryHandler(admin_userback_callback, pattern=r"^admin_userback:\d+$"))
+    application.add_handler(CallbackQueryHandler(admin_clist_callback, pattern=r"^admin_clist:\d+:\w+:\d+$"))
+    application.add_handler(CallbackQueryHandler(admin_cview_callback, pattern=r"^admin_cview:\d+:\d+:\w+:\d+$"))
+    application.add_handler(CallbackQueryHandler(admin_cweaken_callback, pattern=r"^admin_cweaken:\d+:\d+:\w+:\d+$"))
+    application.add_handler(CallbackQueryHandler(admin_cweaken_do_callback, pattern=r"^admin_cweaken_do:\d+:\d+:\w+:\d+$"))
+    application.add_handler(CallbackQueryHandler(admin_cdel_callback, pattern=r"^admin_cdel:\d+:\d+:\w+:\d+$"))
+    application.add_handler(CallbackQueryHandler(admin_cdel_do_callback, pattern=r"^admin_cdel_do:\d+:\d+:\w+:\d+$"))
+    application.add_handler(CallbackQueryHandler(admin_cxfer_callback, pattern=r"^admin_cxfer:\d+:\d+:\w+:\d+$"))
+    application.add_handler(CallbackQueryHandler(admin_cnoop_callback, pattern=r"^admin_cnoop$"))
     application.add_handler(CallbackQueryHandler(delete_creature_confirm_callback, pattern=r"^admin_del"))
     application.add_handler(CallbackQueryHandler(reset_user_start_callback, pattern=r"^admin_reset:"))
     application.add_handler(

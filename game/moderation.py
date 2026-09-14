@@ -524,3 +524,140 @@ def _recent_gains_safe(user) -> dict:
         return recent_gains(user, days=3)
     except Exception:  # noqa: BLE001 — diagnostics must never break the lookup
         return {"days": [], "per_day": {}, "totals": {"coins": 0, "dna": 0, "diamonds": 0}}
+
+
+def weaken_creature(creature_id: int) -> Creature:
+    """Reset a creature to Lv1, XP 0, zero out all body-part upgrades, and reset base stats."""
+    from game import constants
+
+    creature = get_creature_or_raise(creature_id)
+    mult = constants.RARITY_STAT_MULTIPLIER.get(creature.rarity, 1.0)
+    creature.level = 1
+    creature.xp = 0
+    creature.base_hp = round(constants.STARTER_BASE_HP * mult)
+    creature.base_atk = round(constants.STARTER_BASE_ATK * mult)
+    creature.base_def = round(constants.STARTER_BASE_DEF * mult)
+    creature.base_spd = round(constants.STARTER_BASE_SPD * mult)
+    creature.wings_lvl = 0
+    creature.armor_lvl = 0
+    creature.fangs_lvl = 0
+    creature.poison_lvl = 0
+    creature.save()
+    return creature
+
+
+def admin_delete_creature(creature_id: int) -> tuple[str, User]:
+    """Permanently delete a creature, ensuring owner has at least one other creature.
+    Unequips gear, clears team slots, and activates another creature if needed."""
+    from bio_lab.models import Equipment, Team
+
+    creature = get_creature_or_raise(creature_id)
+    owner = creature.owner
+    if Creature.objects.filter(owner=owner).count() <= 1:
+        raise GameError("امکان حذف تنها موجود کاربر وجود ندارد!")
+
+    Equipment.objects.filter(equipped_on=creature).update(equipped_on=None)
+    Team.objects.filter(slot1=creature).update(slot1=None)
+    Team.objects.filter(slot2=creature).update(slot2=None)
+    Team.objects.filter(slot3=creature).update(slot3=None)
+
+    if creature.is_active:
+        other = Creature.objects.filter(owner=owner).exclude(id=creature.id).first()
+        if other:
+            other.is_active = True
+            other.save()
+
+    name = creature.name
+    creature.delete()
+    return name, owner
+
+
+def admin_transfer_creature(creature_id: int, to_identifier: str) -> tuple[Creature, User, User]:
+    """Transfer a creature to another user (admin tool). Unequips gear, clears team slots,
+    and updates active status appropriately."""
+    from bio_lab.models import Equipment, Team
+
+    creature = get_creature_or_raise(creature_id)
+    old_owner = creature.owner
+    new_owner = find_user_or_raise(str(to_identifier))
+    if old_owner.id == new_owner.id:
+        raise GameError("نمی‌توان موجود را به همان مالک فعلی منتقل کرد!")
+
+    Equipment.objects.filter(equipped_on=creature).update(equipped_on=None)
+    Team.objects.filter(slot1=creature).update(slot1=None)
+    Team.objects.filter(slot2=creature).update(slot2=None)
+    Team.objects.filter(slot3=creature).update(slot3=None)
+
+    if creature.is_active:
+        other = Creature.objects.filter(owner=old_owner).exclude(id=creature.id).first()
+        if other:
+            other.is_active = True
+            other.save()
+
+    creature.owner = new_owner
+    has_active = Creature.objects.filter(owner=new_owner, is_active=True).exists()
+    creature.is_active = not has_active
+    creature.save()
+    return creature, old_owner, new_owner
+
+
+def admin_creatures_page_data(target_id: str, rarity: str = "all", page: int = 0, page_size: int = 6) -> dict:
+    """Retrieve paginated creatures for admin collection view, optionally filtered by rarity."""
+    from game import constants
+    from game.creature import creature_power
+
+    user = find_user_or_raise(str(target_id))
+    qs = Creature.objects.filter(owner=user)
+    if rarity != "all":
+        qs = qs.filter(rarity=rarity)
+
+    qs = qs.order_by("-is_active", "-star_level", "-level", "-id")
+    total_count = qs.count()
+    total_pages = max(1, (total_count + page_size - 1) // page_size)
+    page = max(0, min(page, total_pages - 1))
+    items = list(qs[page * page_size : (page + 1) * page_size])
+
+    creatures = []
+    for c in items:
+        creatures.append(
+            {
+                "id": c.id,
+                "name": c.name,
+                "custom_name": c.custom_name,
+                "rarity": c.rarity,
+                "rarity_label": constants.RARITY_LABELS.get(c.rarity, c.rarity),
+                "star_level": c.star_level or 1,
+                "level": c.level,
+                "element": c.element,
+                "is_active": c.is_active,
+                "power": creature_power(c),
+            }
+        )
+
+    return {
+        "user": user,
+        "creatures": creatures,
+        "total_count": total_count,
+        "total_pages": total_pages,
+        "page": page,
+        "rarity": rarity,
+    }
+
+
+def admin_creature_view_data(creature_id: int) -> dict:
+    """Fetch full creature stats, gear and owner info for admin detail view."""
+    from bio_lab.models import Equipment
+    from game.creature import effective_stats, creature_power
+
+    creature = get_creature_or_raise(creature_id)
+    stats = effective_stats(creature)
+    power = creature_power(creature)
+    equip = list(Equipment.objects.filter(equipped_on=creature))
+    return {
+        "creature": creature,
+        "owner": creature.owner,
+        "stats": stats,
+        "power": power,
+        "equipment": equip,
+    }
+

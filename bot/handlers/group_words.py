@@ -170,10 +170,10 @@ def _collection_card(user, creatures, page: int = 0) -> tuple[str, InlineKeyboar
             f"{constants.RARITY_LABELS[creature.rarity]} · Lv{creature.level}"
         )
     rows = [
-        # row 1: prev / next — text-free arrows (they clamp at the ends)
+        # row 1: prev / next
         [
-            btn("◀️", emoji_key="btn_prev", style=NAV, callback_data=_scoped_pg("collection", user.id, page - 1)),
-            btn("▶️", emoji_key="btn_next", style=NAV, callback_data=_scoped_pg("collection", user.id, page + 1)),
+            btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=_scoped_pg("collection", user.id, page - 1)),
+            btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=_scoped_pg("collection", user.id, page + 1)),
         ],
         # row 2: activate a creature (premium icon)
         [btn("انتخاب کایجو فعال", emoji_key="btn_creature", style=NAV, callback_data=_scoped("select", user.id))],

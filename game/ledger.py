@@ -48,6 +48,7 @@ SOURCE_LABELS = {
     "achievement": "دستاورد",
     "admin": "اعطای ادمین",
     "purchase": "خرید درون‌بازی",
+    "transfer": "انتقال از بازیکن",
     "other": "سایر",
 }
 

@@ -113,6 +113,8 @@ def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
         receiver.coins += net
         sender.save(update_fields=["coins"])
         receiver.save(update_fields=["coins"])
+        from game.ledger import record_gain
+        record_gain(receiver, "transfer", coins=net)
     return sender, receiver, amount, fee, net
 
 
