@@ -656,14 +656,12 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await send_defense_report_now(context, result.get("defense"))
 
     _ally = result.get("opponent_alliance")
-    opp_alliance = f"🤝 <i>({_ally})</i>" if _ally else "🚫 <i>بدون اتحاد</i>"
+    opp_alliance = f"🤝 ({_ally})" if _ally else "🚫 بدون اتحاد"
 
     loot_gold = result.get("loot", 0)
     loot_dna = result.get("dna", 0)
     league_gold = result.get("league_coins", 0)
     league_dna = result.get("league_dna", 0)
-    total_gold = loot_gold + league_gold
-    total_dna = loot_dna + league_dna
 
     def_name = result.get("defender_creature_name") or "موجود حریف"
     def_elem = result.get("defender_element")
@@ -676,35 +674,40 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
         icon_a = "💀" if hp_a <= 0 else "❤️"
         pct_a = round(100 * max(hp_a, 0) / max(1, max_a))
         bar_a = constants.render_bar(hp_a, max_a, width=10)
-        hp_line_a = f"{icon_a}  <b>{sa['name']}</b> [{bar_a}] {pct_a}%"
+        hp_line_a = f"{icon_a}  {sa['name']} [{bar_a}] {pct_a}%"
 
         hp_b, max_b = sb["hp"], sb["max_hp"]
         icon_b = "💀" if hp_b <= 0 else "❤️"
         pct_b = round(100 * max(hp_b, 0) / max(1, max_b))
         bar_b = constants.render_bar(hp_b, max_b, width=10)
-        hp_line_b = f"{icon_b}  <b>{sb['name']}</b> [{bar_b}] {pct_b}%"
+        hp_line_b = f"{icon_b}  {sb['name']} [{bar_b}] {pct_b}%"
     else:
         atk_name = result.get("attacker_creature_name", "موجود شما")
         if result["won"]:
-            hp_line_a = f"❤️  <b>{atk_name}</b> [■■■■■■■■■■] 100%"
-            hp_line_b = f"💀  <b>{def_name}</b> [□□□□□□□□□□] 0%"
+            hp_line_a = f"❤️  {atk_name} [■■■■■■■■■■] 100%"
+            hp_line_b = f"💀  {def_name} [□□□□□□□□□□] 0%"
         else:
-            hp_line_a = f"💀  <b>{atk_name}</b> [□□□□□□□□□□] 0%"
-            hp_line_b = f"❤️  <b>{def_name}</b> [■■■■■■■■■■] 100%"
+            hp_line_a = f"💀  {atk_name} [□□□□□□□□□□] 0%"
+            hp_line_b = f"❤️  {def_name} [■■■■■■■■■■] 100%"
 
     div = "──────────────"
     if result["won"]:
         cup_sign = f"+{result['cup_delta']}" if result['cup_delta'] > 0 else str(result['cup_delta'])
         reward_lines = [
-            f"{get_emoji('coin')} <b>مجموع غنیمت:</b> +{total_gold:,} <i>(غارت: +{loot_gold:,} ┃ {result.get('league_emoji', '🏅')} لیگ: +{league_gold:,})</i>",
-            f"{get_emoji('dna')} <b>دی‌ان‌ای دریافتی:</b> +{total_dna:,} <i>(غارت: +{loot_dna:,} ┃ لیگ: +{league_dna:,})</i>",
-            f"{get_emoji('trophy')} <b>تغییر کاپ:</b> <b>{cup_sign}</b> <i>(کاپ جدید: {result['new_cup']:,})</i>",
+            f"{get_emoji('coin')}  <b>مجموع غارت :</b>\n +{loot_gold:,} {get_emoji('coin')}\n  : +{loot_dna:,}{get_emoji('dna')}"
         ]
+        if league_gold or league_dna:
+            lg_emoji = result.get("league_emoji", "🥉")
+            lg_name = result.get("league_name", "")
+            reward_lines.append(
+                f"{lg_emoji}  <b>جایزه لیگ {lg_name} :</b>\n+{league_gold:,} {get_emoji('coin')}\n+{league_dna:,} {get_emoji('dna')}"
+            )
+        reward_lines.append(f"{get_emoji('trophy')}  : <b>{cup_sign}</b> (کاپ جدید: {result['new_cup']:,})")
         if result.get("awarded_chest"):
             awarded = result["awarded_chest"]
             awarded_cfg = ARENA_CHEST_TIERS.get(awarded.chest_type, {})
             reward_lines.append(
-                f"{get_emoji(f'chest_{awarded.chest_type}', awarded_cfg.get('emoji', '📦'))} <b>جعبه جدید دریافت شد:</b> {awarded_cfg.get('name', 'جعبه آرنا')} (جایگاه {awarded.slot})"
+                f"{get_emoji(f'chest_{awarded.chest_type}', awarded_cfg.get('emoji', '📦'))}  <b>جعبه جدید دریافت شد:</b> {awarded_cfg.get('name', 'جعبه آرنا')} (جایگاه {awarded.slot})"
             )
         elif result.get("slots_full"):
             reward_lines.append("<i>⚠️ جایگاه‌های جعبه‌ات پر بود — جعبه جدیدی دریافت نشد.</i>")
@@ -712,7 +715,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
         body_lines = [
             f"{get_emoji('celebrate')}  <b>پیروزی در نبرد آرنا!</b>",
             "",
-            f"👤 <b>آزمایشگاه حریف:</b> {result['opponent_label']} {opp_alliance}",
+            f"👤  <b>آزمایشگاه حریف:</b> {result['opponent_label']} {opp_alliance}",
             f"🛡  <b>هیولای حریف:</b> {def_name} [{elem_lbl}]",
             div,
             hp_line_a,
@@ -725,13 +728,13 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
         body_lines = [
             "😔  <b>شکست در نبرد آرنا!</b>",
             "",
-            f"👤 <b>آزمایشگاه حریف:</b> {result['opponent_label']} {opp_alliance}",
+            f"👤  <b>آزمایشگاه حریف:</b> {result['opponent_label']} {opp_alliance}",
             f"🛡  <b>هیولای حریف:</b> {def_name} [{elem_lbl}]",
             div,
             hp_line_a,
             hp_line_b,
             div,
-            f"{get_emoji('trophy')} <b>تغییر کاپ:</b> <b>{cup_str}</b> <i>(کاپ جدید: {result['new_cup']:,})</i>",
+            f"{get_emoji('trophy')}  : <b>{cup_str}</b> (کاپ جدید: {result['new_cup']:,})",
         ]
         body = "\n".join(body_lines)
 
@@ -1058,9 +1061,18 @@ def _render_chests_text(user, chests: list, has_sub: bool) -> str:
         "<b>وضعیت جایگاه‌های شما (حداکثر ۴ جعبه):</b>\n",
     ]
 
+    digit_emojis = {
+        1: ("5845974321247297274", "1️⃣"),
+        2: ("5843861725618642819", "2️⃣"),
+        3: ("5843973811380167207", "3️⃣"),
+        4: ("5846158858812136854", "4️⃣"),
+    }
+
     slots_map = {c.slot: c for c in chests}
     for slot in range(1, 5):
         c = slots_map.get(slot)
+        cid, num_fallback = digit_emojis.get(slot, ("", f"{slot}️⃣"))
+        num_e = f'<tg-emoji emoji-id="{cid}">{num_fallback}</tg-emoji>' if cid else num_fallback
         if c:
             cfg = ARENA_CHEST_TIERS.get(c.chest_type, {})
             c_emoji = get_emoji(f"chest_{c.chest_type}", cfg.get("emoji", "📦"))
@@ -1074,9 +1086,9 @@ def _render_chests_text(user, chests: list, has_sub: bool) -> str:
                 st_text = "📋 <b>در صف</b> (بعد از جعبه فعلی خودکار باز می‌شود)"
             else:
                 st_text = f"{get_emoji('lock')} <b>قفل</b> (زمان بازگشایی: {cfg.get('unlock_hours', 3)} ساعت)"
-            lines.append(f"{c_emoji} <b>جایگاه {slot}: {name}</b>\n   └ وضعیت: {st_text}")
+            lines.append(f"{num_e}  <b>جایگاه {slot}: {c_emoji} {name}</b>\n   └ وضعیت: {st_text}")
         else:
-            lines.append(f"🔘 <b>جایگاه {slot}: خالی</b> (با پیروزی در آرنا به دست می‌آید)")
+            lines.append(f"{num_e}  <b>جایگاه {slot}: 🔘 خالی</b> <i>(با پیروزی در آرنا به دست می‌آید)</i>")
 
     lines.append("")
     lines.append("━━━━━━━━━━━━━━━━━━━━")

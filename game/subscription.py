@@ -23,7 +23,7 @@ SUBSCRIPTION_TIERS = {
         "key": "silver",
         "name": "اشتراک نقره‌ای",
         "badge": "🥈",
-        "price_toman": 250_000,
+        "price_toman": 100_000,
         "energy_cap": 100,
         "cave_limit": 1,
         "auto_hunt_bonus": 0.25,

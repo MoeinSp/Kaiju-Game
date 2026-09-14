@@ -887,21 +887,29 @@ def _raid_attack_view(creature, boss, dmg, defeated, completed_missions, reward_
 
     hp = max(boss.current_hp, 0)
     div = "──────────────"
+    boss_e = get_emoji("raid_boss", "👻")
+    hp_e = get_emoji("hp", "❤️")
+    coin_e = get_emoji("coin", "💰")
+    dna_e = get_emoji("dna", "🧬")
+    atk_e = get_emoji("raid_attacks_left", "🔁")
+
     lines = [
-        f"{get_emoji('attack_action')} <b>گزارش نبرد با باس | Raid Attack</b>",
+        "🗡  <b>گزارش نبرد با باس | Raid Attack</b>",
         "",
         f"🦅 مهاجم: <b>{creature_name(creature)}</b>",
-        f"💥 آسیب وارده: <b>{dmg:,}</b> DMG",
+        f"💥  آسیب وارده: <b>{dmg:,} DMG</b>",
         "",
         div,
         "",
-        f"{get_emoji('raid_boss')} وضعیت باس: <b>{boss.name}</b> [سطح {boss.level}]",
-        f"{get_emoji('hp')} سلامت باس: {_pct_bar(hp, boss.max_hp)} ({hp:,}/{boss.max_hp:,} HP)",
+        f"{boss_e}  وضعیت باس: <b>{boss.name}</b> [سطح {boss.level}]",
+        f"{hp_e}  سلامت باس: {_pct_bar(hp, boss.max_hp)} ({hp:,}/{boss.max_hp:,} HP)",
         "",
         div,
         "",
-        f"🎁 پاداش این ضربه: +{coin_gain:,} {get_emoji('coin')} · +{dna_gain} {get_emoji('dna')}",
-        f"{get_emoji('raid_attacks_left')} اتک رید باقی‌مانده‌ی امروز: <code>{attacks_left}/{RAID_DAILY_ATTACKS}</code>",
+        "پاداش 🎁",
+        f"+{coin_gain:,} {coin_e}",
+        f" +{dna_gain:,} {dna_e}",
+        f"{atk_e}  اتک رید باقیمانده‌ی امروز: {attacks_left}/{RAID_DAILY_ATTACKS}",
     ]
     text = "\n".join(lines) + _mission_lines(completed_missions)
     if defeated:

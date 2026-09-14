@@ -57,7 +57,7 @@ def _render_subscription_text(info: dict) -> str:
         f"  • {get_emoji('energy')} افزایش سقف انرژی به ۱۰۰ (به جای ۵۰)",
         f"  • 📋 امکان در صف گذاشتن یک جعبه آرنا (بازگشایی خودکار)",
         f"  • {get_emoji('hunt')} افزایش ۲۵ درصدی جوایز و درآمد شکار خودکار",
-        f"  {get_emoji('coin')} قیمت: <b>۲۵۰,۰۰۰ تومان</b>",
+        f"  {get_emoji('coin')} قیمت: <b>۱۰۰,۰۰۰ تومان</b>",
         "",
         f"{get_emoji('sub_gold')} <b>اشتراک طلایی (۳۰ روزه):</b>",
         f"  • {get_emoji('sub_gold')} نشان اختصاصی پرمیوم طلایی در کنار نام شما",
@@ -73,7 +73,7 @@ def _render_subscription_text(info: dict) -> str:
 
 def _render_subscription_keyboard(info: dict) -> InlineKeyboardMarkup:
     rows = [
-        [btn("🥈 خرید اشتراک نقره‌ای (۲۵۰ هزار تومان)", emoji_key="btn_sub_silver", style=PRIMARY, callback_data="sub_pick:silver")],
+        [btn("🥈 خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)", emoji_key="btn_sub_silver", style=PRIMARY, callback_data="sub_pick:silver")],
         [btn("👑 خرید اشتراک طلایی (۵۰۰ هزار تومان)", emoji_key="btn_sub_gold", style=CONFIRM, callback_data="sub_pick:gold")],
         [back_btn("menu:cat_shop", "بازگشت به فروشگاه")],
     ]
