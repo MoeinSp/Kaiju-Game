@@ -31,20 +31,20 @@ MIN_GAP_MINUTES = 10        # ≤ ~6/hour per group
 EXPIRE_MINUTES = 12         # unclaimed drops lapse after this
 MIN_GROUP_MEMBERS = 2       # only real, active groups
 # a GLOBAL per-player cooldown on WINNING a drop, so someone who joined the bot to
-# 30 groups can't sweep a drop in each — matches the ~per-group spawn cadence
-CLAIM_COOLDOWN_MINUTES = 10
+# multiple groups can't sweep a drop in each — 30 minutes cooldown
+CLAIM_COOLDOWN_MINUTES = 30
 
 DROP_KINDS = {
     "chest":   {"emoji": "🎁", "title": "صندوقچه‌ی گنج", "flavor": "یه صندوقچه‌ی گنج وسط گروه افتاد!",
-                "btn": "🎁 بازش کن!", "res": {"coins": (480, 1040), "dna": (0, 24)}, "weight": 5},
+                "btn": "🎁 بازش کن!", "res": {"coins": (240, 520), "dna": (0, 12)}, "weight": 5},
     "ambush":  {"emoji": "⚔️", "title": "هیولای وحشی", "flavor": "یه هیولای وحشی ظاهر شد! سریع باش!",
-                "btn": "⚔️ حمله کن!", "res": {"coins": (360, 800), "dna": (8, 32)}, "weight": 5},
+                "btn": "⚔️ حمله کن!", "res": {"coins": (180, 400), "dna": (4, 16)}, "weight": 5},
     "vein":    {"emoji": "💎", "title": "رگه‌ی الماس", "flavor": "یه رگه‌ی الماس درخشید!",
                 "btn": "💎 برش دار!", "res": {"diamonds": (10, 30)}, "weight": 3},
     "egg":     {"emoji": "🥚", "title": "تخم رمزآلود", "flavor": "یه تخم رمزآلود از آسمون افتاد!",
-                "btn": "🥚 بردار!", "res": {"dna": (40, 104), "coins": (240, 560)}, "weight": 4},
+                "btn": "🥚 بردار!", "res": {"dna": (20, 52), "coins": (120, 280)}, "weight": 4},
     "capsule": {"emoji": "⚡", "title": "کپسول انرژی", "flavor": "یه کپسول انرژی پیدا شد!",
-                "btn": "⚡ بگیرش!", "res": {"energy": "full", "coins": (200, 480)}, "weight": 3},
+                "btn": "⚡ بگیرش!", "res": {"energy": "full", "coins": (100, 240)}, "weight": 3},
     "jackpot": {"emoji": "🌟", "title": "جک‌پات نادر", "flavor": "🌟 یه جک‌پات نادر ظاهر شد!!",
                 # gem jackpots are gone from groups — the diamonds are replaced by quadrupled gold
                 "btn": "🌟 شانستو امتحان کن!", "res": {"coins": (1200, 10000)}, "weight": 1},
