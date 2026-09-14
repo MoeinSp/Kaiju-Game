@@ -285,17 +285,29 @@ async def biocrate_bulk_callback(update: Update, context: ContextTypes.DEFAULT_T
     )
 
 
-def _can_claim_free_bronze_sync(tg_user) -> bool:
-    from game.lootbox import can_claim_free_bronze_box
+def _can_claim_free_diamond_sync(tg_user, tier: str) -> bool:
+    from game.lootbox import can_claim_free_diamond_box
 
     user, _ = get_or_create_user(tg_user)
-    return can_claim_free_bronze_box(user)
+    return can_claim_free_diamond_box(user, tier)
 
 
-def _diamond_box_list_keyboard(has_free_bronze: bool = False) -> InlineKeyboardMarkup:
+def _free_diamond_boxes_sync(tg_user) -> set[str]:
+    from game.lootbox import can_claim_free_diamond_box
+
+    user, _ = get_or_create_user(tg_user)
+    free = set()
+    for t in ("bronze", "silver"):
+        if can_claim_free_diamond_box(user, t):
+            free.add(t)
+    return free
+
+
+def _diamond_box_list_keyboard(free_tiers: set[str] | None = None) -> InlineKeyboardMarkup:
+    free_tiers = free_tiers or set()
     rows = []
     for tier, cfg in constants.DIAMOND_BOX_TIERS.items():
-        if tier == "bronze" and has_free_bronze:
+        if tier in free_tiers:
             label = f"{cfg['label']} — رایگان امروز! 🎁"
         else:
             label = f"{cfg['label']} — {cfg['cost_diamonds']} 💎"
@@ -308,8 +320,16 @@ async def diamond_box_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     from game.media import get_feature_image_path
 
     photo = get_feature_image_path("diamond_box")
-    has_free_bronze = await run_db(_can_claim_free_bronze_sync, update.effective_user)
-    free_banner = "🎁 <b>یک باکس هیولا برنزی رایگان برای امروز داری!</b>\n\n" if has_free_bronze else ""
+    free_tiers = await run_db(_free_diamond_boxes_sync, update.effective_user)
+    free_banner = ""
+    if free_tiers:
+        names = []
+        if "bronze" in free_tiers:
+            names.append("برنزی")
+        if "silver" in free_tiers:
+            names.append("نقره‌ای")
+        free_banner = f"🎁 <b>باکس هیولا رایگان امروز ({' و '.join(names)}) آماده باز کردن!</b>\n\n"
+
     await send_screen(
         update,
         f"{get_emoji('diamond_box')} <b>باکس هیولا</b>\n"
@@ -318,13 +338,13 @@ async def diamond_box_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "رو یکی بزن تا احتمالات دقیقش رو ببینی:",
         photo=photo,
         parse_mode="HTML",
-        reply_markup=_diamond_box_list_keyboard(has_free_bronze),
+        reply_markup=_diamond_box_list_keyboard(free_tiers),
     )
 
 
 def _diamond_box_detail_text(tier: str, is_free: bool = False) -> str:
     cfg = constants.DIAMOND_BOX_TIERS[tier]
-    if tier == "bronze":
+    if tier in ("bronze", "silver"):
         if is_free:
             cost_line = f"{get_emoji('diamond')} هزینه: <b>رایگان! 🎁</b> (۱ بار در روز — آماده باز کردن)"
         else:
@@ -343,7 +363,7 @@ def _diamond_box_detail_text(tier: str, is_free: bool = False) -> str:
 
 
 def _diamond_box_detail_keyboard(tier: str, is_free: bool = False) -> InlineKeyboardMarkup:
-    if tier == "bronze" and is_free:
+    if tier in ("bronze", "silver") and is_free:
         open_label = "🎁 باز کردن رایگان امروز"
     else:
         open_label = "خرید و باز کن"
@@ -364,8 +384,8 @@ async def diamond_box_pick_callback(update: Update, context: ContextTypes.DEFAUL
         return
     await query.answer()
     is_free = False
-    if tier == "bronze":
-        is_free = await run_db(_can_claim_free_bronze_sync, update.effective_user)
+    if tier in ("bronze", "silver"):
+        is_free = await run_db(_can_claim_free_diamond_sync, update.effective_user, tier)
     await safe_edit_message_text(
         query, _diamond_box_detail_text(tier, is_free), parse_mode="HTML", reply_markup=_diamond_box_detail_keyboard(tier, is_free)
     )

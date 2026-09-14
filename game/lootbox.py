@@ -184,14 +184,27 @@ def _diamond_box_roll_once(user: User, cfg: dict, tier: str) -> dict:
     return {"kind": "creature", "rarity": rarity, "creature": creature, "tier": tier}
 
 
-def can_claim_free_bronze_box(user: User) -> bool:
-    """Check if the user can open their daily free bronze monster box."""
+def can_claim_free_diamond_box(user: User, tier: str) -> bool:
+    """Check if the user can open their daily free monster box of `tier` (bronze / silver)."""
+    if tier not in ("bronze", "silver"):
+        return False
     from bio_lab.models import DailyActionLog
     from game.daily import today_str
 
+    action = f"free_{tier}_box"
     return not DailyActionLog.objects.filter(
-        user=user, action="free_bronze_box", day=today_str(), count__gte=1
+        user=user, action=action, day=today_str(), count__gte=1
     ).exists()
+
+
+def can_claim_free_bronze_box(user: User) -> bool:
+    """Check if the user can open their daily free bronze monster box."""
+    return can_claim_free_diamond_box(user, "bronze")
+
+
+def can_claim_free_silver_box(user: User) -> bool:
+    """Check if the user can open their daily free silver monster box."""
+    return can_claim_free_diamond_box(user, "silver")
 
 
 @transaction.atomic
@@ -199,18 +212,19 @@ def open_diamond_box(user: User, tier: str) -> dict:
     """Diamond boxes always yield a creature (never equipment) — this is the "open
     a new monster with diamonds" path the gold Bio-Crate doesn't guarantee.
 
-    Each player receives 1 free Bronze Monster Box daily. If available, opening
-    a bronze box is free and consumes today's daily free allowance."""
+    Each player receives 1 free Bronze and 1 free Silver Monster Box daily.
+    If available, opening is free and consumes today's daily free allowance."""
     cfg = _diamond_box_cfg(tier)
     user = User.objects.select_for_update().get(id=user.id)
     is_free = False
-    if tier == "bronze":
+    if tier in ("bronze", "silver"):
         from bio_lab.models import DailyActionLog
         from game.daily import today_str
 
         day = today_str()
+        action = f"free_{tier}_box"
         log, _ = DailyActionLog.objects.select_for_update().get_or_create(
-            user=user, action="free_bronze_box", day=day, defaults={"count": 0}
+            user=user, action=action, day=day, defaults={"count": 0}
         )
         if log.count == 0:
             log.count = 1

@@ -682,10 +682,13 @@ def _box_card(user) -> tuple[str, InlineKeyboardMarkup]:
 
 # ── 👹 monster box (diamond box) — full flow in-group, scoped to the summoner ──
 def _mbox_list_card(user) -> tuple[str, InlineKeyboardMarkup]:
-    from game.lootbox import can_claim_free_bronze_box
+    from game.lootbox import can_claim_free_diamond_box
 
-    has_free_bronze = can_claim_free_bronze_box(user)
-    free_line = "\n🎁 <b>یک باکس برنزی رایگان امروز برای دریافت داری!</b>" if has_free_bronze else ""
+    free_tiers = [t for t in ("bronze", "silver") if can_claim_free_diamond_box(user, t)]
+    free_line = ""
+    if free_tiers:
+        names = ["برنزی" if t == "bronze" else "نقره‌ای" for t in free_tiers]
+        free_line = f"\n🎁 <b>باکس رایگان امروز: {' و '.join(names)} آماده دریافت!</b>"
     lines = [
         f"{get_emoji('diamond_box')} <b>باکس هیولا</b>",
         f"<blockquote>{get_emoji('diamond')} الماس تو: <b>{user.diamonds:,}</b>\n"
@@ -697,7 +700,7 @@ def _mbox_list_card(user) -> tuple[str, InlineKeyboardMarkup]:
     # diamond; a second one read as "two diamonds". Cost stays as the plain number.
     rows = []
     for tier, cfg in constants.DIAMOND_BOX_TIERS.items():
-        if tier == "bronze" and has_free_bronze:
+        if tier in free_tiers:
             cost_str = "رایگان امروز! 🎁"
         else:
             cost_str = str(cfg["cost_diamonds"])
@@ -739,11 +742,11 @@ def _mbox_result_card(user, tier: str, kind: str, result: dict) -> tuple[str, In
 
 
 def _mbox_detail_card(user, tier: str) -> tuple[str, InlineKeyboardMarkup]:
-    from game.lootbox import BULK_PAY, can_claim_free_bronze_box
+    from game.lootbox import BULK_PAY, can_claim_free_diamond_box
 
     cfg = constants.DIAMOND_BOX_TIERS[tier]
-    is_free = (tier == "bronze" and can_claim_free_bronze_box(user))
-    if tier == "bronze":
+    is_free = (tier in ("bronze", "silver") and can_claim_free_diamond_box(user, tier))
+    if tier in ("bronze", "silver"):
         if is_free:
             cost_line = f"{get_emoji('diamond')} هزینه: <b>رایگان! 🎁</b> (۱ بار در روز) · موجودی تو: <b>{user.diamonds:,}</b>"
         else:
