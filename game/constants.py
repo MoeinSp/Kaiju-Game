@@ -883,9 +883,9 @@ def egg_hatch_minutes(rarity_a: str, rarity_b: str) -> int:
 # ── Cave offspring rarity ─────────────────────────────────────────────────────
 # The egg's rarity is decided ENTIRELY by the two parents' rarities and can NEVER
 # exceed the higher of the two:
-#   • both parents SAME rarity R  → 50% R, 50% one tier below R.
+#   • both parents SAME rarity R  → 60% R, 40% one tier below R.
 #   • parents of DIFFERENT rarity → 75% the LOWER rarity, 25% the HIGHER rarity.
-CAVE_SAME_RARITY_TOP_CHANCE = 0.50   # P(keep the shared rarity) when both parents match
+CAVE_SAME_RARITY_TOP_CHANCE = 0.60   # P(keep the shared rarity) when both parents match (60% same, 40% one tier below)
 CAVE_MIXED_RARITY_TOP_CHANCE = 0.25  # P(reach the higher rarity) when they differ (25% higher, 75% lower)
 
 
