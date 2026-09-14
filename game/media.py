@@ -876,16 +876,32 @@ def get_notify_image_path(kind: str) -> str | None:
     return None
 
 
-def get_drop_image_path(kind: str) -> str | None:
-    """Returns the artwork path for group flash drop of the given kind ('chest', 'ambush', 'vein', etc.)."""
-    filename = f"drop_{kind}.jpg"
-    path = DROPS_DIR / filename
-    if path.exists():
-        return str(path)
-    # fallback to chest
-    fallback = DROPS_DIR / "drop_chest.jpg"
-    if fallback.exists():
-        return str(fallback)
+def get_drop_image_path(kind: str, state: str = "locked") -> str | None:
+    """Returns the artwork path for group flash drop of the given kind and state.
+
+    `state`:
+      - 'locked' / 'closed' / 'unclaimed': drop appeared in chat, box is locked / monster waiting.
+      - 'open' / 'opened' / 'claimed' / 'won': drop was claimed, box opened / rewards revealed.
+    """
+    state_key = "open" if state in ("open", "opened", "claimed", "won") else "locked"
+
+    # 1. State-specific drop image e.g. drop_chest_locked.jpg or drop_chest_open.jpg
+    target = DROPS_DIR / f"drop_{kind}_{state_key}.jpg"
+    if target.exists():
+        return str(target)
+
+    # 2. Base drop image e.g. drop_chest.jpg
+    legacy = DROPS_DIR / f"drop_{kind}.jpg"
+    if legacy.exists():
+        return str(legacy)
+
+    # 3. Fallbacks to chest
+    fallback_target = DROPS_DIR / f"drop_chest_{state_key}.jpg"
+    if fallback_target.exists():
+        return str(fallback_target)
+    fallback_legacy = DROPS_DIR / "drop_chest.jpg"
+    if fallback_legacy.exists():
+        return str(fallback_legacy)
     return None
 
 

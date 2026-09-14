@@ -12,7 +12,7 @@ from telegram.error import TelegramError
 from telegram.ext import CallbackQueryHandler, ContextTypes
 
 from bio_lab.models import GroupDrop
-from bot.utils import get_cached_file_id, invalidate_cached_file_id, run_db, safe_edit_message_text, store_cached_file_id
+from bot.utils import get_cached_file_id, invalidate_cached_file_id, run_db, safe_edit_message_text, send_screen, store_cached_file_id
 from game import groupdrops
 from game.emoji import get_emoji
 from game.media import get_drop_image_path
@@ -94,7 +94,7 @@ async def drops_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     for d in await run_db(groupdrops.due_spawns):
         text = _spawn_text(d)
         keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(d["btn"], callback_data=f"gdrop:{d['id']}")]])
-        photo_path = get_drop_image_path(d["kind"])
+        photo_path = get_drop_image_path(d["kind"], state="locked")
         msg = None
         try:
             if photo_path and os.path.exists(photo_path):
@@ -164,11 +164,22 @@ async def drop_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     if status == "won":
         await query.answer(f"🎉 بردی! {groupdrops.reward_text(result['reward'])}", show_alert=True)
         who = result.get("winner_mention") or f"<b>{result['winner']}</b>"
-        await safe_edit_message_text(
-            query,
-            _win_text(result["kind"], who, result["reward"]),
-            parse_mode="HTML",
-        )
+        win_text = _win_text(result["kind"], who, result["reward"])
+        open_photo = get_drop_image_path(result["kind"], state="open")
+        try:
+            await send_screen(
+                query,
+                win_text,
+                photo=open_photo,
+                reply_markup=InlineKeyboardMarkup([]),
+                parse_mode="HTML",
+            )
+        except Exception:
+            await safe_edit_message_text(
+                query,
+                win_text,
+                parse_mode="HTML",
+            )
         # keep the "X won Y" moment up for a while, then tidy it away
         if context.job_queue is not None and result.get("message_id"):
             context.job_queue.run_once(
