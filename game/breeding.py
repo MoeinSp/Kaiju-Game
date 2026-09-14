@@ -76,8 +76,7 @@ def hatch_minutes(parent_a: Creature, parent_b: Creature) -> int:
 
 
 def dna_cost(parent_a: Creature, parent_b: Creature) -> int:
-    rarity = constants.higher_rarity(parent_a.rarity, parent_b.rarity)
-    return constants.BREEDING_DNA_COST[rarity]
+    return constants.cave_dna_cost(parent_a.rarity, parent_b.rarity)
 
 
 def _power(creature: Creature) -> int:
@@ -140,7 +139,7 @@ def start(user: User, parent_a: Creature, parent_b: Creature) -> BreedingJob:
 
     cost = dna_cost(parent_a, parent_b)
     if user.dna_fragments < cost:
-        raise GameError(f"DNA کافی نداری! این جفت‌گیری {cost} DNA لازم داره.")
+        raise GameError(f"DNA کافی نداری! این جفت‌گیری {cost:,} DNA لازم داره.")
     user.dna_fragments -= cost
     user.save(update_fields=["dna_fragments"])
 

@@ -884,11 +884,9 @@ def egg_hatch_minutes(rarity_a: str, rarity_b: str) -> int:
 # The egg's rarity is decided ENTIRELY by the two parents' rarities and can NEVER
 # exceed the higher of the two:
 #   • both parents SAME rarity R  → 50% R, 50% one tier below R.
-#   • parents of DIFFERENT rarity → 90% the LOWER rarity, 10% the HIGHER rarity.
-# This kills the old exploit where a mythic+common pair had a fat chance at a mythic;
-# now that pair is 90% common, 10% mythic.
+#   • parents of DIFFERENT rarity → 75% the LOWER rarity, 25% the HIGHER rarity.
 CAVE_SAME_RARITY_TOP_CHANCE = 0.50   # P(keep the shared rarity) when both parents match
-CAVE_MIXED_RARITY_TOP_CHANCE = 0.10  # P(reach the higher rarity) when they differ
+CAVE_MIXED_RARITY_TOP_CHANCE = 0.25  # P(reach the higher rarity) when they differ (25% higher, 75% lower)
 
 
 def cave_offspring_rarities(rarity_a: str, rarity_b: str) -> dict:
@@ -918,13 +916,47 @@ EGG_HATCH_DIAMOND_COST = {
     "legendary": 650,
     "mythic": 800,
 }
-BREEDING_DNA_COST = {
-    "common": 20,
-    "rare": 45,
-    "epic": 90,
-    "legendary": 160,
-    "mythic": 260,
+
+# DNA cost for pairing by exact rarity combination (higher, lower)
+BREEDING_DNA_COST_BY_PAIR = {
+    ("mythic", "mythic"): 5_000,
+    ("mythic", "legendary"): 3_000,
+    ("mythic", "epic"): 2_200,
+    ("mythic", "rare"): 1_600,
+    ("mythic", "common"): 1_200,
+
+    ("legendary", "legendary"): 2_000,
+    ("legendary", "epic"): 1_400,
+    ("legendary", "rare"): 1_000,
+    ("legendary", "common"): 700,
+
+    ("epic", "epic"): 800,
+    ("epic", "rare"): 500,
+    ("epic", "common"): 350,
+
+    ("rare", "rare"): 300,
+    ("rare", "common"): 200,
+
+    ("common", "common"): 100,
 }
+
+# Base same-rarity costs (kept for quick lookups and guide displays)
+BREEDING_DNA_COST = {
+    "common": 100,
+    "rare": 300,
+    "epic": 800,
+    "legendary": 2_000,
+    "mythic": 5_000,
+}
+
+
+def cave_dna_cost(rarity_a: str, rarity_b: str) -> int:
+    """DNA cost to breed two creatures in the Monster Cave. Scales by both parents' rarities."""
+    idx_a = RARITY_ORDER.index(rarity_a)
+    idx_b = RARITY_ORDER.index(rarity_b)
+    hi = rarity_a if idx_a >= idx_b else rarity_b
+    lo = rarity_b if idx_a >= idx_b else rarity_a
+    return BREEDING_DNA_COST_BY_PAIR.get((hi, lo), BREEDING_DNA_COST.get(hi, 100))
 # Bonuses to the offspring's rarity-upgrade roll. They reward a *considered*
 # pairing over two random creatures — matching element, matching species, and raw
 # power all push the odds up, but the cap keeps it a roll rather than a formula.
