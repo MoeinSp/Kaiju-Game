@@ -95,7 +95,7 @@ def _store_screen(packs: list[dict], custom_ok: bool) -> tuple[str, InlineKeyboa
         lines.append("یکی از پک‌های آماده رو انتخاب کن یا مقدار دلخواه بساز:")
         lines.append("")
         for p in packs:
-            badge = f"  🔥 {p['discount']}%-" if p["discount"] > 0 else ""
+            badge = f"  🔥 {p['discount']}٪ تخفیف" if p["discount"] > 0 else ""
             lines.append(f"{p['emoji']} <b>{p['title']}</b>{badge}")
             lines.append(f"┘ {p['contents']}")
             if p["discount"] > 0:
