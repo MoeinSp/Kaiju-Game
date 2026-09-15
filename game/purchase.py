@@ -161,6 +161,58 @@ def set_receipt_block(user_id: int, blocked: bool) -> User:
     return user
 
 
+def daily_purchase_report(day) -> dict:
+    """Build the owner's daily sales report for a single local (Tehran) calendar day.
+
+    Only APPROVED purchases count — a sale is "made" the moment the owner approves the
+    receipt, so we key off ``reviewed_at`` (the approval time), and rejected / pending /
+    still-awaiting-receipt requests are deliberately excluded. Returns fully pre-rendered
+    rows + aggregates so the async handler never touches the DB while formatting.
+
+    ``day`` is a ``datetime.date`` in the game timezone.
+    """
+    import html as _html
+
+    from bio_lab.repository import display_name
+
+    qs = (
+        PurchaseRequest.objects.filter(status="approved", reviewed_at__date=day)
+        .select_related("user")
+        .order_by("reviewed_at")
+    )
+    rows: list[dict] = []
+    total_toman = 0
+    sub_counts: dict[str, int] = {}
+    res_totals = {"coins": 0, "dna": 0, "diamonds": 0}
+    for req in qs:
+        total_toman += req.price_toman or 0
+        if req.subscription_tier:
+            sub_counts[req.subscription_tier] = sub_counts.get(req.subscription_tier, 0) + 1
+        else:
+            res_totals["coins"] += req.coins
+            res_totals["dna"] += req.dna
+            res_totals["diamonds"] += req.diamonds
+        local_dt = timezone.localtime(req.reviewed_at) if req.reviewed_at else None
+        rows.append(
+            {
+                "time": local_dt.strftime("%H:%M") if local_dt else "—",
+                "name": _html.escape(display_name(req.user)),
+                "user_id": req.user_id,
+                "summary": request_summary(req),
+                "price": req.price_toman or 0,
+                "is_sub": bool(req.subscription_tier),
+            }
+        )
+    return {
+        "day": day,
+        "count": len(rows),
+        "total_toman": total_toman,
+        "sub_counts": sub_counts,
+        "res_totals": res_totals,
+        "rows": rows,
+    }
+
+
 def request_summary(req: PurchaseRequest) -> str:
     """A one-line-per-resource summary of what a request buys (only non-zero items)."""
     if getattr(req, "subscription_tier", None):

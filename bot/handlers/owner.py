@@ -311,6 +311,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 btn("📊 آمار کلی", style=ADMIN, callback_data="admin_menu:global_stats"),
                 btn("گزارش پیشرفت", emoji_key="btn_report", style=ADMIN, callback_data="admin_menu:report"),
             ],
+            [btn("🧾 گزارش خرید (روزانه)", style=ADMIN, callback_data="admin_menu:buy_report")],
             [
                 btn("👥 لیست کاربران", style=ADMIN, callback_data="admin_menu:users"),
                 btn("🔍 جستجوی کاربر", emoji_key="btn_profile", style=ADMIN, callback_data="admin_menu:user_manage"),
@@ -1214,6 +1215,140 @@ async def report_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         lines.append(f"{get_emoji('confirm')} هیچ فعالیت مشکوکی امروز پیدا نشد.")
 
     await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
+# ── purchase (sales) report ───────────────────────────────────────────────────
+
+_JALALI_MONTHS = (
+    "فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور",
+    "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند",
+)
+# python's date.weekday(): Mon=0 … Sun=6 → Persian weekday name
+_PERSIAN_WEEKDAYS = {5: "شنبه", 6: "یکشنبه", 0: "دوشنبه", 1: "سه‌شنبه", 2: "چهارشنبه", 3: "پنجشنبه", 4: "جمعه"}
+
+
+def _to_jalali(gy: int, gm: int, gd: int) -> tuple[int, int, int]:
+    """Gregorian → Jalali (canonical integer algorithm, no external dependency)."""
+    g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
+    if gy > 1600:
+        jy = 979
+        gy -= 1600
+    else:
+        jy = 0
+        gy -= 621
+    gy2 = gy + 1 if gm > 2 else gy
+    days = (365 * gy + (gy2 + 3) // 4 - (gy2 + 99) // 100 + (gy2 + 399) // 400
+            - 80 + gd + g_d_m[gm - 1])
+    jy += 33 * (days // 12053)
+    days %= 12053
+    jy += 4 * (days // 1461)
+    days %= 1461
+    if days > 365:
+        jy += (days - 1) // 365
+        days = (days - 1) % 365
+    if days < 186:
+        jm = 1 + days // 31
+        jd = 1 + days % 31
+    else:
+        jm = 7 + (days - 186) // 30
+        jd = 1 + (days - 186) % 30
+    return jy, jm, jd
+
+
+def _jalali_label(d) -> str:
+    """A friendly Persian date label like «شنبه ۲۴ شهریور ۱۴۰۳» (Latin digits)."""
+    jy, jm, jd = _to_jalali(d.year, d.month, d.day)
+    weekday = _PERSIAN_WEEKDAYS.get(d.weekday(), "")
+    return f"{weekday} {jd} {_JALALI_MONTHS[jm - 1]} {jy}"
+
+
+_BUY_REPORT_MAX_ROWS = 40  # cap listed lines so a busy day can't blow the 4096 char cap
+
+
+def _buy_report_text_kb(offset: int):
+    """(text, InlineKeyboardMarkup) for the sales report `offset` days before today.
+    Runs the DB read itself (sync) — call via run_db."""
+    import datetime
+
+    from game import purchase
+
+    offset = max(0, int(offset))
+    day = timezone.localdate() - datetime.timedelta(days=offset)
+    rep = purchase.daily_purchase_report(day)
+
+    when = "امروز" if offset == 0 else ("دیروز" if offset == 1 else f"{offset} روز پیش")
+    lines = [
+        f"🧾 <b>گزارش خرید</b> — {_jalali_label(day)}",
+        f"<i>{day.isoformat()} · {when}</i>",
+        "",
+    ]
+    if rep["count"] == 0:
+        lines.append("این روز هیچ خرید تأییدشده‌ای ثبت نشده.")
+    else:
+        lines.append(f"{get_emoji('coin')} مجموع فروش: <b>{rep['total_toman']:,}</b> تومان")
+        lines.append(f"🧾 تعداد خرید تأییدشده: <b>{rep['count']}</b>")
+        # subscription tally
+        from game.subscription import SUBSCRIPTION_TIERS
+        sub_parts = []
+        for tier, cnt in rep["sub_counts"].items():
+            cfg = SUBSCRIPTION_TIERS.get(tier)
+            badge = cfg["badge"] if cfg else "⭐"
+            name = cfg["name"] if cfg else tier
+            sub_parts.append(f"{badge} {name} ×{cnt}")
+        if sub_parts:
+            lines.append("اشتراک‌ها: " + " · ".join(sub_parts))
+        # resource totals
+        rt = rep["res_totals"]
+        res_parts = []
+        if rt["coins"]:
+            res_parts.append(f"🪙 {rt['coins']:,} طلا")
+        if rt["dna"]:
+            res_parts.append(f"🧬 {rt['dna']:,} DNA")
+        if rt["diamonds"]:
+            res_parts.append(f"💎 {rt['diamonds']:,} الماس")
+        if res_parts:
+            lines.append("منابع فروخته‌شده: " + " · ".join(res_parts))
+        lines.append("\n<b>ریز خریدها:</b>")
+        rows = rep["rows"]
+        for r in rows[:_BUY_REPORT_MAX_ROWS]:
+            lines.append(
+                f"• <code>{r['time']}</code> — {r['name']}: {r['summary']} — "
+                f"<b>{r['price']:,}</b> ت"
+            )
+        if len(rows) > _BUY_REPORT_MAX_ROWS:
+            lines.append(f"<i>… و {len(rows) - _BUY_REPORT_MAX_ROWS} مورد دیگر</i>")
+
+    nav = [btn("🔙 روز قبل", style=NAV, callback_data=f"buy_report:{offset + 1}")]
+    if offset > 0:
+        nav.append(btn("روز بعد 🔜", style=NAV, callback_data=f"buy_report:{offset - 1}"))
+    keyboard_rows = [nav]
+    if offset > 0:
+        keyboard_rows.append([btn("📅 برو به امروز", style=PRIMARY, callback_data="buy_report:0")])
+    keyboard_rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
+    return "\n".join(lines), InlineKeyboardMarkup(keyboard_rows)
+
+
+async def buy_report_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Entry from the admin panel — opens today's sales report as a fresh message."""
+    if not _is_admin(update):
+        return
+    text, keyboard = await run_db(_buy_report_text_kb, 0)
+    await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def buy_report_nav_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Calendar navigation — edits the report in place to the requested day offset."""
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    await query.answer()
+    try:
+        offset = int(query.data.split(":", 1)[1])
+    except (ValueError, IndexError):
+        offset = 0
+    text, keyboard = await run_db(_buy_report_text_kb, offset)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _all_user_ids_sync() -> list[int]:
@@ -4818,6 +4953,7 @@ async def capture_owner_text_reply(update: Update, context: ContextTypes.DEFAULT
 _ADMIN_MENU_ACTIONS.update(
     {
         "report": report_cmd,
+        "buy_report": buy_report_cmd,
         "list_emoji": list_emoji_cmd,
         "preview_emoji": preview_emoji_cmd,
         "all_emojis": all_emojis_cmd,
@@ -4870,6 +5006,7 @@ def register(application) -> None:
     application.add_handler(CommandHandler("reset_user", reset_user_cmd, private_only))
     application.add_handler(CommandHandler("player_log", player_log_cmd, private_only))
     application.add_handler(CommandHandler("preview_emoji", preview_emoji_cmd, private_only))
+    application.add_handler(CallbackQueryHandler(buy_report_nav_callback, pattern=r"^buy_report:\d+$"))
     application.add_handler(CallbackQueryHandler(users_browse_callback, pattern=r"^admin_users:\d+$"))
     application.add_handler(CallbackQueryHandler(user_open_callback, pattern=r"^admin_uinfo:\d+$"))
     application.add_handler(CallbackQueryHandler(dm_user_start, pattern=r"^admin_dm:\d+$"))
