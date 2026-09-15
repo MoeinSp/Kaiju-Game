@@ -22,7 +22,7 @@ from game.button_emoji import (
     set_button_emoji,
 )
 from config import ADMIN_PANEL_URL, OWNER_TELEGRAM_ID
-from game import botconfig, constants
+from game import botconfig, constants, purchase
 from game.creature import GameError
 from game.emoji import (
     EMOJI_DEFS,
@@ -3372,6 +3372,7 @@ def _buy_cfg_sync() -> dict:
 
 def _buy_link_panel_keyboard(has_link: bool) -> InlineKeyboardMarkup:
     rows = [
+        [btn("🎁 مدیریت پک‌ها (تخفیف/قیمت)", style=CONFIRM, callback_data="admin_menu:packs")],
         [btn("💵 تنظیم قیمت‌ها (خرید درون‌ربات)", style=PRIMARY, callback_data="admin_menu:buy_prices_set")],
         [btn("💳 تنظیم کارت پرداخت", style=PRIMARY, callback_data="admin_menu:buy_card_set")],
         [btn("🎚 تنظیم حداقل خرید", style=PRIMARY, callback_data="admin_menu:buy_min_set")],
@@ -3479,6 +3480,147 @@ async def buy_link_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.effective_message.reply_text(
         "✅ دکمه‌ی خرید حذف شد.", reply_markup=_buy_link_panel_keyboard(False)
     )
+
+
+# ── purchase pack manager ─────────────────────────────────────────────────────
+
+_PACK_HELP = (
+    "🎁 <b>ساخت پک خرید</b>\n\n"
+    "پک رو در <b>یک خط</b> بفرست، فیلدها با <code>|</code> جدا:\n"
+    "<code>عنوان | طلا | DNA | الماس | قیمت(تومان) | تخفیف٪</code>\n\n"
+    "نمونه‌ها:\n"
+    "<code>پک برنزی | 100000 | 0 | 50 | 90000 | 10</code>\n"
+    "<code>💎 پک الماس | 0 | 0 | 500 | 250000 | 20</code>\n\n"
+    "<i>• تخفیف اختیاریه (پیش‌فرض ۰). فقط برای نمایش «٪ تخفیف» و قیمتِ خط‌خورده‌ست؛ "
+    "مبلغی که کاربر می‌پردازه همون «قیمت»ه.\n"
+    "• می‌تونی عنوان رو با ایموجی شروع کنی.</i>"
+)
+
+
+def _pack_line(p: dict) -> str:
+    state = "🟢" if p["active"] else "🔴"
+    disc = f" · 🔥{p['discount']}٪" if p["discount"] > 0 else ""
+    return (f"{state} {p['emoji']} <b>{p['title']}</b> — {p['price']:,} ت{disc}\n"
+            f"   <i>{p['contents']}</i>")
+
+
+async def packs_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update):
+        if update.callback_query:
+            await update.callback_query.answer()
+        return
+    packs = await run_db(purchase.list_all_packs)
+    lines = ["🎁 <b>مدیریت پک‌های خرید</b>",
+             "<i>پک‌ها با قیمت ثابت و یک‌ضربه خریده می‌شن. برای فعال‌شدن، «کارت پرداخت» هم باید ثبت باشه.</i>", ""]
+    rows = [[btn("➕ ساخت پک جدید", style=CONFIRM, callback_data="pack_new")]]
+    if not packs:
+        lines.append("هنوز پکی نساختی.")
+    for p in packs:
+        lines.append(_pack_line(p))
+        rows.append([
+            btn("✏️ ویرایش", style=ADMIN, callback_data=f"pack_edit:{p['id']}"),
+            btn(("🔴 غیرفعال" if p["active"] else "🟢 فعال"), style=NAV, callback_data=f"pack_toggle:{p['id']}"),
+            btn("🗑 حذف", style=DANGER, callback_data=f"pack_del:{p['id']}"),
+        ])
+    rows.append([back_btn("admin_menu:buy_link", "بازگشت به تنظیمات خرید")])
+    target = update.callback_query.message if update.callback_query else update.effective_message
+    await target.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+
+
+async def pack_new_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "pack_create"}
+    await query.answer()
+    await query.message.reply_text(_PACK_HELP, parse_mode="HTML")
+
+
+async def pack_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    pack_id = int(query.data.split(":")[1])
+    p = await run_db(purchase.get_pack, pack_id)
+    if p is None:
+        await query.answer("این پک پیدا نشد.", show_alert=True)
+        return
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "pack_edit", "pack_id": pack_id}
+    await query.answer()
+    template = f"{p['title']} | {p['coins']} | {p['dna']} | {p['diamonds']} | {p['price']} | {p['discount']}"
+    await query.message.reply_text(
+        "✏️ <b>ویرایش پک</b>\n\nخط زیر رو کپی کن، مقدارها رو عوض کن و بفرست:\n"
+        f"<code>{html.escape(template)}</code>\n\n"
+        "<i>قالب: عنوان | طلا | DNA | الماس | قیمت | تخفیف٪</i>",
+        parse_mode="HTML",
+    )
+
+
+async def pack_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    pack_id = int(query.data.split(":")[1])
+    try:
+        p = await run_db(purchase.toggle_pack, pack_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("🟢 فعال شد." if p["active"] else "🔴 غیرفعال شد.")
+    await packs_panel(update, context)
+
+
+async def pack_delete_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    pack_id = int(query.data.split(":")[1])
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        "🗑 <b>حذف پک</b>\nمطمئنی؟ این کار برگشت‌ناپذیره.",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [btn("🗑 بله، حذف کن", style=DANGER, callback_data=f"pack_delok:{pack_id}")],
+            [back_btn("admin_menu:packs", "انصراف")],
+        ]),
+    )
+
+
+async def pack_delete_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    pack_id = int(query.data.split(":")[1])
+    await run_db(purchase.delete_pack, pack_id)
+    await query.answer("🗑 حذف شد.")
+    await packs_panel(update, context)
+
+
+def _parse_pack_line(text: str):
+    """Parse «عنوان | طلا | DNA | الماس | قیمت | تخفیف٪» → dict of kwargs.
+    Raises GameError with a friendly message on a malformed line."""
+    parts = [seg.strip() for seg in (text or "").split("|")]
+    if len(parts) < 5:
+        raise GameError("قالب درست نیست. باید حداقل ۵ بخش با | باشه:\nعنوان | طلا | DNA | الماس | قیمت | (تخفیف٪)")
+    title = parts[0]
+    trans = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+
+    def _num(s: str) -> int:
+        s = s.translate(trans).replace(",", "").replace("٬", "").strip()
+        if not s.lstrip("-").isdigit():
+            raise GameError(f"«{s}» عدد معتبر نیست.")
+        return int(s)
+
+    coins, dna, diamonds, price = (_num(parts[1]), _num(parts[2]), _num(parts[3]), _num(parts[4]))
+    discount = _num(parts[5]) if len(parts) >= 6 and parts[5] else 0
+    return {"title": title, "coins": coins, "dna": dna, "diamonds": diamonds,
+            "price_toman": price, "discount_percent": discount}
 
 
 _RESOURCE_LABELS = {"coins": "طلا", "dna": "DNA", "diamonds": "الماس"}
@@ -4549,6 +4691,32 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
+    if action in ("pack_create", "pack_edit"):
+        try:
+            fields = _parse_pack_line(text)
+        except GameError as exc:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text(f"⚠️ {exc}", parse_mode="HTML")
+            return
+        try:
+            if action == "pack_edit":
+                p = await run_db(purchase.update_pack, awaiting["pack_id"],
+                                 fields["title"], fields["coins"], fields["dna"], fields["diamonds"],
+                                 fields["price_toman"], fields["discount_percent"])
+                note = "✅ پک ویرایش شد."
+            else:
+                p = await run_db(purchase.create_pack,
+                                 fields["title"], fields["coins"], fields["dna"], fields["diamonds"],
+                                 fields["price_toman"], fields["discount_percent"])
+                note = "✅ پک ساخته شد."
+        except GameError as exc:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text(f"⚠️ {exc}", parse_mode="HTML")
+            return
+        await message.reply_text(f"{note}\n\n{_pack_line(p)}", parse_mode="HTML")
+        await packs_panel(update, context)
+        return
+
     if action == "set_buy_prices":
         parts = text.replace("،", " ").split()
         try:
@@ -4969,6 +5137,7 @@ _ADMIN_MENU_ACTIONS.update(
         "group_link_set": group_link_set_start,
         "group_link_clear": group_link_clear,
         "buy_link": buy_link_panel,
+        "packs": packs_panel,
         "buy_link_set": buy_link_set_start,
         "buy_link_clear": buy_link_clear,
         "buy_prices_set": buy_prices_set_start,
@@ -5007,6 +5176,11 @@ def register(application) -> None:
     application.add_handler(CommandHandler("player_log", player_log_cmd, private_only))
     application.add_handler(CommandHandler("preview_emoji", preview_emoji_cmd, private_only))
     application.add_handler(CallbackQueryHandler(buy_report_nav_callback, pattern=r"^buy_report:\d+$"))
+    application.add_handler(CallbackQueryHandler(pack_new_callback, pattern=r"^pack_new$"))
+    application.add_handler(CallbackQueryHandler(pack_edit_callback, pattern=r"^pack_edit:\d+$"))
+    application.add_handler(CallbackQueryHandler(pack_toggle_callback, pattern=r"^pack_toggle:\d+$"))
+    application.add_handler(CallbackQueryHandler(pack_delete_callback, pattern=r"^pack_del:\d+$"))
+    application.add_handler(CallbackQueryHandler(pack_delete_confirm_callback, pattern=r"^pack_delok:\d+$"))
     application.add_handler(CallbackQueryHandler(users_browse_callback, pattern=r"^admin_users:\d+$"))
     application.add_handler(CallbackQueryHandler(user_open_callback, pattern=r"^admin_uinfo:\d+$"))
     application.add_handler(CallbackQueryHandler(dm_user_start, pattern=r"^admin_dm:\d+$"))

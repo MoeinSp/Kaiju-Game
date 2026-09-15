@@ -86,15 +86,113 @@ def _amount_screen(context) -> tuple[str, InlineKeyboardMarkup]:
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
+def _store_screen(packs: list[dict], custom_ok: bool) -> tuple[str, InlineKeyboardMarkup]:
+    """The in-bot store home: owner-authored packs (one-tap buy) + a «مقدار دلخواه»
+    option for the classic stepper flow."""
+    lines = ["🛒 <b>فروشگاه درون‌بازی</b>", _RULE]
+    rows = []
+    if packs:
+        lines.append("یکی از پک‌های آماده رو انتخاب کن یا مقدار دلخواه بساز:")
+        lines.append("")
+        for p in packs:
+            badge = f"  🔥 {p['discount']}%-" if p["discount"] > 0 else ""
+            lines.append(f"{p['emoji']} <b>{p['title']}</b>{badge}")
+            lines.append(f"┘ {p['contents']}")
+            if p["discount"] > 0:
+                lines.append(f"┘ <s>{p['original']:,}</s> ← <b>{p['price']:,} تومان</b>")
+            else:
+                lines.append(f"┘ <b>{p['price']:,} تومان</b>")
+            lines.append("")
+            label = f"{p['emoji']} {p['title']} — {p['price']:,}ت"
+            rows.append([btn(label, style=SHOP, callback_data=f"buy_pack:{p['id']}")])
+    else:
+        lines.append("مقدار مورد نظرت رو بساز و پرداخت کن:")
+    if custom_ok:
+        rows.append([btn("🔢 مقدار دلخواه (خودم انتخاب می‌کنم)", style=NAV, callback_data="buy_custom_home")])
+    rows.append([back_btn("menu:me", "بازگشت به منو")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _store_state_sync() -> tuple[list[dict], bool]:
+    return purchase.list_active_packs(), botconfig.inbot_purchase_ready()
+
+
 async def buy_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not botconfig.inbot_purchase_ready():
+    if not botconfig.store_ready():
         await query.answer("خرید درون‌بازی هنوز فعال نشده.", show_alert=True)
         return
     context.user_data[_AMOUNTS_KEY] = {"coins": 0, "dna": 0, "diamonds": 0}
     context.user_data.pop(_AWAIT_RECEIPT_KEY, None)
     await query.answer()
+    packs, custom_ok = await run_db(_store_state_sync)
+    if packs:
+        text, kb = _store_screen(packs, custom_ok)
+    else:
+        # no packs → go straight to the classic stepper screen (preserves old behaviour)
+        text, kb = _amount_screen(context)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+
+
+async def buy_custom_home_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«مقدار دلخواه» — open the classic stepper amount screen."""
+    query = update.callback_query
+    if not botconfig.inbot_purchase_ready():
+        await query.answer("خرید مقدار دلخواه فعال نیست.", show_alert=True)
+        return
+    context.user_data[_AMOUNTS_KEY] = {"coins": 0, "dna": 0, "diamonds": 0}
+    await query.answer()
     text, kb = _amount_screen(context)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+
+
+def _pack_detail_screen(p: dict) -> tuple[str, InlineKeyboardMarkup]:
+    lines = [
+        f"{p['emoji']} <b>{p['title']}</b>",
+        _RULE,
+        f"🎁 محتوا: {p['contents']}",
+    ]
+    if p["discount"] > 0:
+        lines.append(f"🔥 <b>{p['discount']}٪ تخفیف</b>")
+        lines.append(f"💰 قیمت: <s>{p['original']:,}</s> ← <b>{p['price']:,} تومان</b>")
+    else:
+        lines.append(f"💰 قیمت: <b>{p['price']:,} تومان</b>")
+    lines += ["", "بعد از تأیید، کارت پرداخت رو می‌بینی و رسیدت رو می‌فرستی."]
+    kb = InlineKeyboardMarkup([
+        [btn("✅ خرید این پک", emoji_key="btn_confirm", style=PRIMARY, callback_data=f"buy_pack_go:{p['id']}")],
+        [back_btn("buy_open", "بازگشت به فروشگاه")],
+    ])
+    return "\n".join(lines), kb
+
+
+async def buy_pack_detail_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    pack_id = int(query.data.split(":")[1])
+    p = await run_db(purchase.get_pack, pack_id)
+    if p is None or not p["active"]:
+        await query.answer("این پک دیگه در دسترس نیست.", show_alert=True)
+        return
+    await query.answer()
+    text, kb = _pack_detail_screen(p)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+
+
+def _create_pack_pending_sync(tg_user, pack_id):
+    user, _ = get_or_create_user(tg_user)
+    return purchase.create_pack_pending(user, pack_id)
+
+
+async def buy_pack_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    pack_id = int(query.data.split(":")[1])
+    try:
+        req = await run_db(_create_pack_pending_sync, update.effective_user, pack_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    context.user_data[_AWAIT_RECEIPT_KEY] = req.id
+    await query.answer()
+    text, kb = _receipt_screen(req)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
 
 
@@ -162,18 +260,10 @@ def _create_pending_sync(tg_user, coins, dna, diamonds):
     return purchase.create_pending(user, coins, dna, diamonds)
 
 
-async def buy_submit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    amounts = _amounts(context)
-    try:
-        req = await run_db(_create_pending_sync, update.effective_user,
-                           amounts["coins"], amounts["dna"], amounts["diamonds"])
-    except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
-        return
-    context.user_data[_AWAIT_RECEIPT_KEY] = req.id
+def _receipt_screen(req) -> tuple[str, InlineKeyboardMarkup]:
+    """The «pay & send receipt» screen for a pending purchase — shared by the custom
+    stepper flow and the one-tap pack flow."""
     card_number, holder = botconfig.get_buy_card()
-    await query.answer()
     lines = [
         "🧾 <b>پرداخت و ارسال رسید</b>",
         "",
@@ -191,7 +281,22 @@ async def buy_submit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         "<i>پس از تأیید توسط پشتیبانی، موجودی بلافاصله به حسابت اضافه می‌شه.</i>",
     ]
     kb = InlineKeyboardMarkup([[btn("انصراف", style=BACK, callback_data="buy_open")]])
-    await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=kb)
+    return "\n".join(lines), kb
+
+
+async def buy_submit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    amounts = _amounts(context)
+    try:
+        req = await run_db(_create_pending_sync, update.effective_user,
+                           amounts["coins"], amounts["dna"], amounts["diamonds"])
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    context.user_data[_AWAIT_RECEIPT_KEY] = req.id
+    await query.answer()
+    text, kb = _receipt_screen(req)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
 
 
 # ── player: receipt photo upload ──────────────────────────────────────────────
@@ -401,6 +506,9 @@ async def buy_manage_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 def register(application) -> None:
     application.add_handler(CallbackQueryHandler(buy_open_callback, pattern=r"^buy_open$"))
+    application.add_handler(CallbackQueryHandler(buy_custom_home_callback, pattern=r"^buy_custom_home$"))
+    application.add_handler(CallbackQueryHandler(buy_pack_detail_callback, pattern=r"^buy_pack:\d+$"))
+    application.add_handler(CallbackQueryHandler(buy_pack_go_callback, pattern=r"^buy_pack_go:\d+$"))
     application.add_handler(CallbackQueryHandler(buy_noop_callback, pattern=r"^buy_noop$"))
     application.add_handler(CallbackQueryHandler(buy_adjust_callback, pattern=r"^buy_adj:(coins|dna|diamonds):[+-]$"))
     application.add_handler(CallbackQueryHandler(buy_custom_callback, pattern=r"^buy_custom:(coins|dna|diamonds)$"))

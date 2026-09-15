@@ -1122,3 +1122,31 @@ class ArenaChest(models.Model):
             models.Index(fields=["status", "unlock_finishes_at"]),
         ]
 
+
+class PurchasePack(models.Model):
+    """An owner-authored fixed-price real-money bundle (طلا/DNA/الماس) that a player
+    buys in a single tap instead of building a custom amount with steppers.
+
+    ``price_toman`` is the final price the player pays. ``discount_percent`` is a
+    marketing badge (0–95): it doesn't change the price, it just shows a «٪ تخفیف»
+    tag and a struck-through "original" price (derived as price / (1 - d/100)).
+    The custom-amount flow stays available alongside these packs.
+    """
+
+    title = models.CharField(max_length=64)
+    emoji = models.CharField(max_length=8, default="🎁", blank=True)
+    coins = models.BigIntegerField(default=0)
+    dna = models.BigIntegerField(default=0)
+    diamonds = models.BigIntegerField(default=0)
+    price_toman = models.BigIntegerField(default=0)
+    discount_percent = models.IntegerField(default=0)
+    active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.price_toman:,}ت)"
+

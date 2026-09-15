@@ -29,6 +29,7 @@ _cache: dict[str, object] = {
     "buy_card_holder": "",
     "buy_min_toman": 0,
     "buy_channel_id": None,
+    "active_pack_count": 0,
 }
 
 
@@ -61,6 +62,11 @@ def refresh_cache() -> None:
     """Reload from the DB. Sync context only (startup or right after a write)."""
     global _cache
     _cache = _row_to_cache(BotConfig.objects.filter(id=1).first())
+    # active purchase-pack count lives in a separate table — count it here so the menu
+    # (built in async handler code) can decide the buy button without a DB hit
+    from bio_lab.models import PurchasePack
+
+    _cache["active_pack_count"] = PurchasePack.objects.filter(active=True).count()
 
 
 def get_buy_link() -> tuple[str, str] | None:
@@ -97,10 +103,23 @@ def get_buy_card() -> tuple[str, str]:
 
 
 def inbot_purchase_ready() -> bool:
-    """True when the in-bot purchase flow is fully configured — a card is set and at
-    least one resource has a price. Otherwise the buy button falls back to buy_url."""
+    """True when the CUSTOM-amount in-bot flow is configured — a card is set and at
+    least one resource has a per-unit price."""
     prices = get_buy_prices()
     return bool(_cache.get("buy_card_number")) and any(p > 0 for p in prices.values())
+
+
+def packs_ready() -> bool:
+    """True when at least one active purchase pack exists and a card is set (packs carry
+    their own price, so per-unit prices aren't required for them)."""
+    return bool(_cache.get("buy_card_number")) and int(_cache.get("active_pack_count") or 0) > 0
+
+
+def store_ready() -> bool:
+    """True when the in-bot store has anything to sell — either the custom-amount flow
+    or at least one pack. Drives the in-menu buy button vs. the external buy-link
+    fallback. Pure in-memory read."""
+    return inbot_purchase_ready() or packs_ready()
 
 
 def set_buy_prices(coins: float, dna: float, diamonds: float) -> None:

@@ -75,6 +75,160 @@ def create_subscription_pending(user: User, tier: str) -> PurchaseRequest:
     )
 
 
+# ── purchase packs (owner-authored fixed-price bundles) ───────────────────────
+
+def _refresh_pack_cache() -> None:
+    """Keep botconfig's cached active-pack count in sync after a pack write, so the menu
+    (built in async code) shows/hides the buy button without a DB hit."""
+    from game import botconfig
+
+    botconfig.refresh_cache()
+
+
+def pack_original_price(price_toman: int, discount_percent: int) -> int:
+    """The struck-through "before discount" price implied by a final price + discount %.
+    Returns the final price itself when there's no discount."""
+    d = max(0, min(95, int(discount_percent or 0)))
+    if d <= 0:
+        return int(price_toman)
+    return round(int(price_toman) / (1 - d / 100))
+
+
+def _pack_to_dict(p) -> dict:
+    return {
+        "id": p.id,
+        "title": p.title,
+        "emoji": p.emoji or "🎁",
+        "coins": p.coins,
+        "dna": p.dna,
+        "diamonds": p.diamonds,
+        "price": p.price_toman,
+        "discount": p.discount_percent,
+        "original": pack_original_price(p.price_toman, p.discount_percent),
+        "active": p.active,
+        "sort_order": p.sort_order,
+        "contents": pack_contents_summary(p),
+    }
+
+
+def pack_contents_summary(p) -> str:
+    """A one-line «🪙 X · 🧬 Y · 💎 Z» summary of a pack's contents (non-zero only)."""
+    parts = []
+    for res in ("coins", "dna", "diamonds"):
+        amount = getattr(p, res)
+        if amount:
+            parts.append(f"{RES_EMOJI[res]} {amount:,} {RES_LABEL[res]}")
+    return " · ".join(parts) or "—"
+
+
+def list_active_packs() -> list[dict]:
+    """Active packs for the player-facing store, ordered by sort_order then id."""
+    from bio_lab.models import PurchasePack
+
+    return [_pack_to_dict(p) for p in PurchasePack.objects.filter(active=True)]
+
+
+def list_all_packs() -> list[dict]:
+    """Every pack (active + inactive) for the admin manager."""
+    from bio_lab.models import PurchasePack
+
+    return [_pack_to_dict(p) for p in PurchasePack.objects.all()]
+
+
+def get_pack(pack_id: int) -> dict | None:
+    from bio_lab.models import PurchasePack
+
+    p = PurchasePack.objects.filter(id=pack_id).first()
+    return _pack_to_dict(p) if p else None
+
+
+def create_pack(title, coins, dna, diamonds, price_toman, discount_percent, emoji="🎁"):
+    """Create a pack. Raises GameError on invalid input (empty contents / non-positive
+    price). Returns the new pack's dict."""
+    from bio_lab.models import PurchasePack
+
+    title = (title or "").strip()[:64]
+    if not title:
+        raise GameError("عنوان پک نمی‌تونه خالی باشه.")
+    coins, dna, diamonds = max(0, int(coins)), max(0, int(dna)), max(0, int(diamonds))
+    if coins == 0 and dna == 0 and diamonds == 0:
+        raise GameError("پک باید حداقل یکی از طلا / DNA / الماس رو داشته باشه.")
+    price_toman = int(price_toman)
+    if price_toman <= 0:
+        raise GameError("قیمت پک باید بزرگ‌تر از صفر باشه.")
+    discount_percent = max(0, min(95, int(discount_percent or 0)))
+    last = PurchasePack.objects.order_by("-sort_order").first()
+    sort_order = (last.sort_order + 1) if last else 0
+    p = PurchasePack.objects.create(
+        title=title, emoji=(emoji or "🎁")[:8], coins=coins, dna=dna, diamonds=diamonds,
+        price_toman=price_toman, discount_percent=discount_percent, sort_order=sort_order,
+    )
+    _refresh_pack_cache()
+    return _pack_to_dict(p)
+
+
+def update_pack(pack_id, title, coins, dna, diamonds, price_toman, discount_percent, emoji="🎁"):
+    from bio_lab.models import PurchasePack
+
+    p = PurchasePack.objects.filter(id=pack_id).first()
+    if p is None:
+        raise GameError("این پک پیدا نشد.")
+    title = (title or "").strip()[:64]
+    if not title:
+        raise GameError("عنوان پک نمی‌تونه خالی باشه.")
+    coins, dna, diamonds = max(0, int(coins)), max(0, int(dna)), max(0, int(diamonds))
+    if coins == 0 and dna == 0 and diamonds == 0:
+        raise GameError("پک باید حداقل یکی از طلا / DNA / الماس رو داشته باشه.")
+    price_toman = int(price_toman)
+    if price_toman <= 0:
+        raise GameError("قیمت پک باید بزرگ‌تر از صفر باشه.")
+    p.title = title
+    p.emoji = (emoji or "🎁")[:8]
+    p.coins, p.dna, p.diamonds = coins, dna, diamonds
+    p.price_toman = price_toman
+    p.discount_percent = max(0, min(95, int(discount_percent or 0)))
+    p.save(update_fields=["title", "emoji", "coins", "dna", "diamonds",
+                          "price_toman", "discount_percent"])
+    return _pack_to_dict(p)
+
+
+def toggle_pack(pack_id: int) -> dict:
+    from bio_lab.models import PurchasePack
+
+    p = PurchasePack.objects.filter(id=pack_id).first()
+    if p is None:
+        raise GameError("این پک پیدا نشد.")
+    p.active = not p.active
+    p.save(update_fields=["active"])
+    _refresh_pack_cache()
+    return _pack_to_dict(p)
+
+
+def delete_pack(pack_id: int) -> bool:
+    from bio_lab.models import PurchasePack
+
+    deleted, _ = PurchasePack.objects.filter(id=pack_id).delete()
+    _refresh_pack_cache()
+    return deleted > 0
+
+
+def create_pack_pending(user: User, pack_id: int) -> PurchaseRequest:
+    """Create an awaiting-receipt request for a fixed-price pack. Raises if the player
+    is receipt-blocked or the pack is gone/inactive."""
+    from bio_lab.models import PurchasePack
+
+    if user.receipt_blocked:
+        raise GameError("⛔ دسترسی تو به ثبت رسید خرید مسدود شده. با پشتیبانی در تماس باش.")
+    p = PurchasePack.objects.filter(id=pack_id, active=True).first()
+    if p is None:
+        raise GameError("این پک دیگه در دسترس نیست.")
+    PurchaseRequest.objects.filter(user=user, status="awaiting_receipt").delete()
+    return PurchaseRequest.objects.create(
+        user=user, coins=p.coins, dna=p.dna, diamonds=p.diamonds,
+        price_toman=p.price_toman, status="awaiting_receipt",
+    )
+
+
 def attach_receipt(req_id: int, user_id: int, file_id: str) -> PurchaseRequest | None:
     """Bind the uploaded receipt photo to the request and move it to 'pending' review.
     Returns the request, or None if it's gone / not this user's / not awaiting a receipt."""

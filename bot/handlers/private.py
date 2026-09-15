@@ -1079,7 +1079,7 @@ def creature_keyboard(is_owner: bool = False, locked=frozenset(), research_built
         rows.append([btn(title, emoji_key="btn_join_group", style=PRIMARY, url=url)])
     # in-game purchase: prefer the built-in flow when the owner has set prices + a card;
     # otherwise fall back to the owner-configured external buy link (payment bot / site)
-    if botconfig.inbot_purchase_ready():
+    if botconfig.store_ready():
         rows.append([btn(botconfig.DEFAULT_BUY_TITLE, emoji_key="btn_buy", style=SHOP, callback_data="buy_open")])
     else:
         buy_link = botconfig.get_buy_link()
