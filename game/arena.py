@@ -424,14 +424,22 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
     league_dna = 0
     league = constants.league_for_cup(attacker.cup)
     if won:
-        loot = expected_loot(opponent, attacker_creature.level)
+        # Loot is a cup-scaled random amount rolled per attack. The preview already
+        # rolled it and stashed it on the opponent dict so the card and the payout agree;
+        # fall back to a fresh roll (e.g. the group flow, which matches a new opponent at
+        # attack time) using the attacker's own cup.
+        pre_gold = opponent.get("loot_gold")
+        pre_dna = opponent.get("loot_dna")
+        if pre_gold is not None and pre_dna is not None:
+            loot, dna_win = int(pre_gold), int(pre_dna)
+        else:
+            loot, dna_win = constants.arena_loot_roll(attacker.cup)
         if defender_user is not None:
             taken_from_defender = min(loot, max(0, defender_user.coins))
             defender_user.coins -= taken_from_defender
             # Attacker always receives the full promised loot shown on the card.
             # If defender held less than the promised loot, the system subsidises the difference.
         attacker.coins += loot
-        dna_win = round(constants.ARENA_WIN_DNA_BASE + attacker_creature.level * constants.ARENA_WIN_DNA_PER_LEVEL)
         attacker.dna_fragments += dna_win
         # flat league bonus per WINNING raid (only in the real ranked arena)
         if award_cup:

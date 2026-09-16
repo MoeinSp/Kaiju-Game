@@ -1330,6 +1330,30 @@ def arena_fake_loot(cup: int) -> int:
     return round(ARENA_FAKE_LOOT_MIN + cup * 0.2 + (cup ** 1.3) / 60)
 
 
+# ── Arena win loot (cup-scaled, rolled fresh per attack) ─────────────────────
+# Gold scales linearly with the player's cup: cup 0 pays 500–1000, cup 4000+ pays
+# 5000–15000. Every attack rolls a fresh random amount inside that band, and the DNA
+# reward is roughly a twentieth of the gold (with a little jitter so it isn't a
+# tell-tale exact ratio). Applies to both real-player and bot arena wins.
+ARENA_LOOT_CUP_REF = 4000
+ARENA_LOOT_GOLD_AT_ZERO = (500, 1000)
+ARENA_LOOT_GOLD_AT_REF = (5000, 15000)
+
+
+def arena_loot_roll(cup: int) -> tuple[int, int]:
+    """Random (gold, dna) for one arena win, scaled by the player's cup. Returns a
+    freshly-rolled pair every call — roll once per attack and reuse the result for both
+    the preview and the payout so they always match."""
+    frac = max(0.0, min(1.0, max(0, int(cup)) / ARENA_LOOT_CUP_REF))
+    lo = round(ARENA_LOOT_GOLD_AT_ZERO[0] + (ARENA_LOOT_GOLD_AT_REF[0] - ARENA_LOOT_GOLD_AT_ZERO[0]) * frac)
+    hi = round(ARENA_LOOT_GOLD_AT_ZERO[1] + (ARENA_LOOT_GOLD_AT_REF[1] - ARENA_LOOT_GOLD_AT_ZERO[1]) * frac)
+    if hi < lo:
+        hi = lo
+    gold = random.randint(lo, hi)
+    dna = max(1, round(gold / 20 * random.uniform(0.9, 1.1)))
+    return gold, dna
+
+
 # ── Arena leagues ───────────────────────────────────────────────────────────
 # Cup 0 → 5000 is split into named tiers (Bronze … Champion). Each WINNING arena
 # raid pays a flat league bonus on top of the loot, rising with the tier — Bronze I

@@ -31,7 +31,6 @@ from game.arena import (
     creature_power,
     cup_delta,
     deserved_cup,
-    expected_loot,
     find_opponent,
     mark_revenge_taken,
     recent_attacks_received,
@@ -198,13 +197,14 @@ def _find_sync(tg_user, exclude_ids=None):
     user, _ = get_or_create_user(tg_user)
     opponent = find_opponent(user, exclude_ids=exclude_ids)
     creature = Creature.objects.filter(owner=user, is_active=True).first()
-    level = creature.level if creature is not None else 1
     my_element = creature.element if creature is not None else None
-    dna_win = round(constants.ARENA_WIN_DNA_BASE + level * constants.ARENA_WIN_DNA_PER_LEVEL)
+    # roll the cup-scaled loot ONCE here; it's stashed on the pending opponent so the
+    # card, any re-show/swap, and the payout all use the exact same numbers
+    loot, dna_win = constants.arena_loot_roll(user.cup)
     from game.energy import sync_energy
 
     cname = creature.name if creature is not None else "—"
-    return (user, opponent, active_power(user), expected_loot(opponent, level), my_element,
+    return (user, opponent, active_power(user), loot, my_element,
             dna_win, cname, sync_energy(user))
 
 
@@ -233,6 +233,8 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         "power": opponent["power"],
         "element": opponent.get("element"),
         "loot_pool": opponent["loot_pool"],
+        "loot_gold": loot,
+        "loot_dna": dna_win,
     }
     # remember real picks so the next «حریف بعدی» skips them (fresh faces, and no
     # identical-screen no-op edit that made the button look dead).
@@ -307,9 +309,13 @@ def _swap_rerender_sync(tg_user, creature_id, pending):
     creature = Creature.objects.filter(owner=user, is_active=True).first()
     if creature is None:
         raise GameError("اول یه موجود فعال انتخاب کن.")
-    level = creature.level
     my_power = active_power_of(creature)
-    dna_win = round(constants.ARENA_WIN_DNA_BASE + level * constants.ARENA_WIN_DNA_PER_LEVEL)
+    # keep the loot fixed to what was rolled when this opponent was found (swapping your
+    # fighter must not re-roll the prize)
+    if pending.get("loot_gold") is None:
+        loot, dna_from_pending = constants.arena_loot_roll(user.cup)
+        pending["loot_gold"], pending["loot_dna"] = loot, dna_from_pending
+    dna_win = pending["loot_dna"]
 
     opp_elem = pending.get("element")
     opp_cname = pending.get("creature_name", "؟")
@@ -331,8 +337,9 @@ def _swap_rerender_sync(tg_user, creature_id, pending):
         "creature_name": opp_cname, "cup": pending["cup"],
         "power": pending["power"], "element": opp_elem,
         "loot_pool": pending["loot_pool"],
+        "loot_gold": pending["loot_gold"], "loot_dna": pending["loot_dna"],
     }
-    loot = expected_loot(opponent, level)
+    loot = pending["loot_gold"]
     return user, opponent, my_power, loot, creature.element, dna_win, creature.name, sync_energy(user)
 
 
@@ -553,13 +560,14 @@ def _opponent_reshow_sync(tg_user, pending):
 
     user, _ = get_or_create_user(tg_user)
     creature = Creature.objects.filter(owner=user, is_active=True).first()
-    level = creature.level if creature is not None else 1
     my_element = creature.element if creature is not None else None
-    dna_win = round(constants.ARENA_WIN_DNA_BASE + level * constants.ARENA_WIN_DNA_PER_LEVEL)
+    if pending.get("loot_gold") is None:
+        loot, dna_from_pending = constants.arena_loot_roll(user.cup)
+        pending["loot_gold"], pending["loot_dna"] = loot, dna_from_pending
     from game.energy import sync_energy
 
     cname = creature.name if creature is not None else "—"
-    return (user, active_power(user), expected_loot(pending, level), my_element, dna_win,
+    return (user, active_power(user), pending["loot_gold"], my_element, pending["loot_dna"],
             cname, sync_energy(user))
 
 

@@ -28,6 +28,9 @@ HUNT_TIERS = {
 # (a risk/reward difficulty knob).
 HUNT_COIN_PER_POWER = 0.40   # gold income doubled again (was 0.20) per owner request
 HUNT_DNA_PER_POWER = 0.012
+# a flat +10% on ALL hunt loot (gold and DNA), applied on top of the ranges below so it
+# lifts both the preview and the payout together — per owner request
+HUNT_LOOT_BONUS = 1.10
 # Ceiling on hunt GOLD: the best possible hunt for a max-power kaiju (~8200) tops out at
 # HUNT_MAX_COIN gold, scaled down proportionally for weaker kaiju. This ONLY lowers the
 # top of the range — the minimum (weak-tier / unlucky roll) is never raised or lowered.
@@ -120,13 +123,28 @@ def hunt_coin_range(power: int, tier: str) -> tuple[int, int]:
     cap = round(HUNT_MAX_COIN * min(1.0, max(0, power) / HUNT_POWER_FOR_MAX_COIN))
     hi = min(hi, cap)
     lo = min(lo, hi)  # never let the floor exceed the (possibly capped) ceiling
-    return (lo, hi)
+    # +10% bonus applied AFTER the cap so the top of the range genuinely rises
+    return (round(lo * HUNT_LOOT_BONUS), round(hi * HUNT_LOOT_BONUS))
 
 
 def hunt_dna_range(player_power: int, tier: str) -> tuple[int, int]:
     mult = HUNT_TIERS[tier]["reward_mult"]
     base = max(0, player_power) * HUNT_DNA_PER_POWER
-    return (round(base * mult * 0.7), round((base + 1) * mult * 1.3))
+    return (round(base * mult * 0.7 * HUNT_LOOT_BONUS), round((base + 1) * mult * 1.3 * HUNT_LOOT_BONUS))
+
+
+def hunt_reward_roll(power: int, tier: str, seed: int | None = None,
+                     loot_mult: float = 1.0) -> tuple[int, int]:
+    """A single (coins, dna) draw for one hunt win, taken from the power×tier ranges.
+    Seeding with the scouted target's `seed` makes the number deterministic, so the
+    scout card shows exactly what the win will pay (as long as the same fighter/power
+    resolves it). `loot_mult` scales the payout (auto-hunt passes 0.5)."""
+    rng = random.Random(seed)
+    clo, chi = hunt_coin_range(power, tier)
+    dlo, dhi = hunt_dna_range(power, tier)
+    coins = round(rng.randint(clo, chi) * loot_mult)
+    dna = round(rng.randint(dlo, dhi) * loot_mult)
+    return coins, dna
 
 
 def spawn_wild_creature(benchmark_power: int, tier: str = "normal", seed: int | None = None) -> Creature:
@@ -324,8 +342,8 @@ def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal",
     power = _player_power(player_creature)
 
     if won:
-        coins = round(random.randint(*hunt_coin_range(power, tier)) * loot_mult)
-        dna = round(random.randint(*hunt_dna_range(power, tier)) * loot_mult)
+        # seed-based so the scout card's shown number equals the actual payout
+        coins, dna = hunt_reward_roll(power, tier, seed, loot_mult)
         xp_gain = round(HUNT_XP_WIN * reward_mult)
     else:
         coins = 0

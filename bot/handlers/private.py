@@ -81,7 +81,7 @@ from game.equipment import (bonus_text, equip_item, get_equipped_items, slot_loa
 from game.fusion import FUSION_BUILDING, fuse, fusion_partners, ready_pairs
 from game import guide
 from game.lab import lab_bar, lab_level, lab_progress
-from game.hunt import HUNT_TIERS, estimated_reward, resolve_hunt, scout_one
+from game.hunt import HUNT_TIERS, resolve_hunt, scout_one
 
 
 def _mission_lines(completed: list[dict]) -> str:
@@ -2542,11 +2542,11 @@ def _hunt_scout_sync(tg_user, charge=False):
 
 
 def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> str:
-    from game.hunt import hunt_dna_range
+    from game.hunt import hunt_reward_roll
 
     tier_label = HUNT_TIERS[target["tier"]]["label"]
-    lo, hi = estimated_reward(target["tier"], my_power)
-    dlo, dhi = hunt_dna_range(my_power, target["tier"])
+    # a single random (seed-based) prize instead of a range — matches the actual payout
+    coin_reward, dna_reward = hunt_reward_roll(my_power, target["tier"], target.get("seed"))
     pct = win_chance_pct(my_power, target["power"], creature.element, target["element"])
     adv = element_advantage_line(creature.element, target["element"])
     lines = [
@@ -2567,8 +2567,8 @@ def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> st
         adv or "➖ بدون مزیت عنصری",
         "",
         "🎁 جوایز نبرد (در صورت برد):",
-        f"{get_emoji('coin')} غنیمت طلا: <b>+{lo:,} تا +{hi:,}</b>",
-        f"{get_emoji('dna')} غنیمت DNA: <b>+{dlo:,} تا +{dhi:,}</b>",
+        f"{get_emoji('coin')} غنیمت طلا: <b>+{coin_reward:,}</b>",
+        f"{get_emoji('dna')} غنیمت DNA: <b>+{dna_reward:,}</b>",
         "",
         _CARD_DIV,
         f"{get_emoji('energy')} هزینه حمله: {constants.HUNT_ENERGY_COST} انرژی",

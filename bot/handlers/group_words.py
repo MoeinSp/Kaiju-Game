@@ -615,8 +615,8 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
         )
     from bot.handlers.private import (element_advantage_line, pct_bar, win_chance_pct, win_label)
 
-    lo, hi = target["reward"]
-    dlo, dhi = target.get("dna_reward", (0, 0))
+    coin_reward = target["reward"]
+    dna_reward = target.get("dna_reward", 0)
     my_power = target.get("my_power", 0)
     pct = win_chance_pct(my_power, target["power"], target.get("my_element"), target["element"])
     adv = element_advantage_line(target.get("my_element"), target["element"])
@@ -631,7 +631,7 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
         f"🎯 شانس پیروزی: {pct_bar(pct, 100)} {win_label(pct)}",
         (f"🔮 {adv}" if adv else ""),
         "",
-        f"🎁 جوایز برد: {get_emoji('coin')} <b>+{lo:,}–{hi:,}</b> طلا · {get_emoji('dna')} <b>+{dlo:,}–{dhi:,}</b>",
+        f"🎁 جوایز برد: {get_emoji('coin')} <b>+{coin_reward:,}</b> طلا · {get_emoji('dna')} <b>+{dna_reward:,}</b>",
         f"{get_emoji('energy')} هزینه: 1 انرژی (داری: {energy}/{max_energy})",
         f"🔍 بعدی: <b>{target.get('scout_cost', 0)}</b> طلا",
     ])
@@ -1156,18 +1156,18 @@ def _card_sync(tg_user, chat, action):
     elif action == "hunt":
         _require_creature(creature)
         from game.creature import creature_power
-        from game.hunt import HUNT_TIERS, estimated_reward, scout_cost, scout_one
+        from game.hunt import HUNT_TIERS, hunt_reward_roll, scout_cost, scout_one
 
         data["energy"] = sync_energy(user)
         if data["energy"] > 0:
             my_power = creature_power(creature, get_equipped_items(creature))
             target = scout_one(user, creature)
-            # scout_one returns the raw roll; the card needs it labelled and priced
+            # scout_one returns the raw roll; the card needs it labelled and priced.
+            # a single seed-based prize (not a range) — matches the actual payout
             target["tier_label"] = HUNT_TIERS[target["tier"]]["label"]
-            target["reward"] = estimated_reward(target["tier"], my_power)
-            from game.hunt import hunt_dna_range
-
-            target["dna_reward"] = hunt_dna_range(my_power, target["tier"])
+            coin_reward, dna_reward = hunt_reward_roll(my_power, target["tier"], target.get("seed"))
+            target["reward"] = coin_reward
+            target["dna_reward"] = dna_reward
             target["scout_cost"] = scout_cost(creature)
             target["my_power"] = my_power
             target["my_element"] = creature.element
@@ -1181,13 +1181,16 @@ def _card_sync(tg_user, chat, action):
         _require_creature(creature)
         opponent = arena.find_opponent(user)
         data["opponent"] = opponent
-        data["loot"] = arena.expected_loot(opponent, creature.level) if opponent else 0
+        # cup-scaled random loot preview (the actual «نبرد» re-matches a fresh opponent
+        # and rolls its own amount in the same band, so this is a representative sample)
+        loot_gold, loot_dna = constants.arena_loot_roll(user.cup)
+        data["loot"] = loot_gold if opponent else 0
         data["shielded_for"] = arena.shield_remaining_seconds(user)
         data["energy"] = sync_energy(user)
         data["my_power"] = creature_power(creature, get_equipped_items(creature))
         data["my_name"] = creature.name
         data["my_element"] = creature.element
-        data["dna_win"] = round(constants.ARENA_WIN_DNA_BASE + creature.level * constants.ARENA_WIN_DNA_PER_LEVEL)
+        data["dna_win"] = loot_dna if opponent else 0
     elif action == "mine":
         from game.buildings import get_or_create_buildings, pending_amount
 
