@@ -375,6 +375,28 @@ LEVEL_UP_ATK = 2
 LEVEL_UP_DEF = 2
 LEVEL_UP_SPD = 1
 
+
+def canonical_base_stats(rarity: str, level: int) -> dict[str, int]:
+    """The base stats a creature of a given rarity+level SHOULD have — a single curve
+    keyed ONLY on rarity and level, so two creatures of the same rarity and level always
+    have identical base stats regardless of how they were bred/fused.
+
+    This is exactly the curve a fresh creature follows: it hatches at
+    round(STARTER×rarity_mult) (level 1) and gains a flat LEVEL_UP_* per level. Star tier
+    is deliberately NOT a factor here — stars raise power through the star_mult in
+    effective_stats and unlock a higher level ceiling, so a maxed 5★ still out-powers a
+    maxed 1★ of the same rarity without needing inflated base stats. Fusion/breeding no
+    longer compound base stats on top of this, which is what let two 'maxed' mythics
+    differ by ~25% (سیمرغ 1744 vs کرکس‌دریا 1090 base HP)."""
+    mult = RARITY_STAT_MULTIPLIER.get(rarity, 1.0)
+    lvl = max(1, int(level))
+    return {
+        "base_hp": round(STARTER_BASE_HP * mult) + (lvl - 1) * LEVEL_UP_HP,
+        "base_atk": round(STARTER_BASE_ATK * mult) + (lvl - 1) * LEVEL_UP_ATK,
+        "base_def": round(STARTER_BASE_DEF * mult) + (lvl - 1) * LEVEL_UP_DEF,
+        "base_spd": round(STARTER_BASE_SPD * mult) + (lvl - 1) * LEVEL_UP_SPD,
+    }
+
 BODY_PARTS = {
     "wings": {"label": "🦋 بال‌ها (سرعت)", "stat": "spd", "bonus": 2},
     "armor": {"label": "🛡 زره (دفاع)", "stat": "def", "bonus": 3},

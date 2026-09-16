@@ -239,7 +239,9 @@ def hatch(user: User, egg_id: int) -> tuple[Creature, dict]:
     else:
         name, element = egg.parent_b_name, egg.parent_b_element
     level = egg.inherit_level
-    mult = constants.RARITY_STAT_MULTIPLIER[rarity]
+    # canonical base stats keyed on rarity+level, so a hatchling matches every other
+    # creature of the same rarity and level (no lineage-based divergence)
+    canon = constants.canonical_base_stats(rarity, level)
 
     child = Creature.objects.create(
         owner=user,
@@ -249,10 +251,10 @@ def hatch(user: User, egg_id: int) -> tuple[Creature, dict]:
         star_level=1,  # stars come only from fusion — the cave never grants them
         level=level,
         xp=0,
-        base_hp=round((constants.STARTER_BASE_HP + level * 4) * mult),
-        base_atk=round((constants.STARTER_BASE_ATK + level * 1.0) * mult),
-        base_def=round((constants.STARTER_BASE_DEF + level * 1.0) * mult),
-        base_spd=round((constants.STARTER_BASE_SPD + level * 0.6) * mult),
+        base_hp=canon["base_hp"],
+        base_atk=canon["base_atk"],
+        base_def=canon["base_def"],
+        base_spd=canon["base_spd"],
         is_active=False,  # single-active-creature rule
     )
 

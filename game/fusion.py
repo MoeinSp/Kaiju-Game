@@ -149,12 +149,12 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
 
     star_level = parent_a.star_level + 1  # both parents share a star, verified above
 
-    def _inherit_stat(attr: str) -> int:
-        """Best of both parents + a slice of the weaker + flat growth, so the child
-        is guaranteed strictly stronger than either parent on every base stat."""
-        a_val, b_val = getattr(parent_a, attr), getattr(parent_b, attr)
-        blended = max(a_val, b_val) + min(a_val, b_val) * constants.FUSION_WEAK_PARENT_SHARE
-        return round(blended + constants.FUSION_STAT_GROWTH[attr])
+    child_level = max(parent_a.level, parent_b.level)
+    # Base stats are CANONICAL for the child's rarity+level — fusion no longer compounds
+    # base stats across generations (that's what let two 'maxed' mythics differ by ~25%).
+    # Fusion's payoff is the higher star tier (star_mult in effective_stats) + the raised
+    # level ceiling + carried-over body parts + the XP refund below, not inflated bases.
+    canon = constants.canonical_base_stats(rarity, child_level)
 
     child = Creature.objects.create(
         owner=user,
@@ -162,12 +162,12 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
         element=random.choice([parent_a.element, parent_b.element]),
         rarity=rarity,
         star_level=star_level,
-        level=max(parent_a.level, parent_b.level),
+        level=child_level,
         xp=parent_a.xp + parent_b.xp,
-        base_hp=_inherit_stat("base_hp"),
-        base_atk=_inherit_stat("base_atk"),
-        base_def=_inherit_stat("base_def"),
-        base_spd=_inherit_stat("base_spd"),
+        base_hp=canon["base_hp"],
+        base_atk=canon["base_atk"],
+        base_def=canon["base_def"],
+        base_spd=canon["base_spd"],
         # carry over the BEST body-part upgrades — the old code dropped these to 0,
         # so every gold spent upgrading fangs/armor/wings/poison was lost on fusion
         fangs_lvl=max(parent_a.fangs_lvl, parent_b.fangs_lvl),
