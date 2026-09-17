@@ -88,6 +88,7 @@ def _keys_help() -> str:
 EMOJI_KEY_CALLBACK_PREFIX = "set_emoji_key:"
 EMOJI_CAT_CALLBACK_PREFIX = "set_emoji_cat:"
 EMOJI_BACK_CALLBACK = "set_emoji_back"
+EMOJI_CLEAR_PREFIX = "set_emoji_clear:"
 
 
 def _category_keyboard() -> InlineKeyboardMarkup:
@@ -97,6 +98,7 @@ def _category_keyboard() -> InlineKeyboardMarkup:
         for s_cnt, tot in [text_category_stats(cat)]
     ]
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+    rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -164,6 +166,7 @@ async def set_emoji_category_callback(update: Update, context: ContextTypes.DEFA
     if not _is_admin(update):
         await query.answer()
         return
+    context.user_data.pop("awaiting_emoji_key", None)
     category = query.data[len(EMOJI_CAT_CALLBACK_PREFIX) :]
     if category not in CATEGORY_LABELS:
         await query.answer("دسته نامعتبر شد، دوباره /set_emoji رو بزن.", show_alert=True)
@@ -194,6 +197,7 @@ async def set_emoji_back_callback(update: Update, context: ContextTypes.DEFAULT_
     if not _is_admin(update):
         await query.answer()
         return
+    context.user_data.pop("awaiting_emoji_key", None)
     await query.answer()
     await safe_edit_message_text(query,
         f"{get_emoji('settings')} یه دسته انتخاب کن:", parse_mode="HTML", reply_markup=_category_keyboard()
@@ -224,12 +228,44 @@ async def set_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_T
     current = await run_db(_current_text_emoji_sync, key)
     cur_line = (f"ایموجی فعلی: <tg-emoji emoji-id=\"{current[0]}\">{current[1]}</tg-emoji>"
                 if current else "ایموجی فعلی: <b>تنظیم نشده</b>")
+    cat = CATEGORY_OF.get(key)
+    rows = [
+        [btn("پاک کردن (برگشت به پیش‌فرض)", emoji_key="btn_delete", style=DANGER,
+             callback_data=f"{EMOJI_CLEAR_PREFIX}{key}")],
+    ]
+    if cat is not None:
+        rows.append([back_btn(f"{EMOJI_CAT_PREFIX}{cat}", "↩️ بازگشت به این دسته")])
+    rows.append([back_btn(EMOJI_BACK_CALLBACK, "❌ لغو و بازگشت به دسته‌ها")])
+    keyboard = InlineKeyboardMarkup(rows)
+
     await safe_edit_message_text(query,
         f"{cur_line}\n\n"
         f"👌 حالا فقط <b>ایموجی پرمیوم</b> جدیدِ «{EMOJI_KEYS[key]}» رو بفرست "
-        f"(تک و تنها، از کیبورد ایموجی «پرمیوم» تلگرام).\n\nبرای انصراف کافیه هر دستور دیگه‌ای بزنی.",
+        f"(تک و تنها، از کیبورد ایموجی «پرمیوم» تلگرام).\n\n"
+        "یا از دکمه‌های زیر برای پاک کردن، لغو و بازگشت استفاده کن:",
         parse_mode="HTML",
+        reply_markup=keyboard,
     )
+
+
+async def set_emoji_clear_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    key = query.data[len(EMOJI_CLEAR_PREFIX) :]
+    removed = await run_db(clear_emoji, key)
+    context.user_data.pop("awaiting_emoji_key", None)
+    await query.answer("↩️ به پیش‌فرض برگشت." if removed else "چیزی تنظیم نشده بود.")
+    cat = CATEGORY_OF.get(key)
+    if cat in CATEGORY_LABELS:
+        await safe_edit_message_text(
+            query, _text_emoji_category_caption(cat), parse_mode="HTML", reply_markup=_key_keyboard(cat)
+        )
+    else:
+        await safe_edit_message_text(
+            query, f"{get_emoji('settings')} یه دسته انتخاب کن:", parse_mode="HTML", reply_markup=_category_keyboard()
+        )
 
 
 async def capture_emoji_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -243,15 +279,29 @@ async def capture_emoji_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
     message = update.effective_message
     extracted = _extract_custom_emoji(message)
     if extracted is None:
+        context.user_data["awaiting_emoji_key"] = key  # keep waiting
+        cat = CATEGORY_OF.get(key)
+        rows = []
+        if cat is not None:
+            rows.append([back_btn(f"{EMOJI_CAT_PREFIX}{cat}", "↩️ بازگشت به این دسته")])
+        rows.append([back_btn(EMOJI_BACK_CALLBACK, "❌ لغو و بازگشت به دسته‌ها")])
         await message.reply_text(
-            "⚠️ توی این پیام ایموجی پرمیومی پیدا نکردم. دوباره /set_emoji رو بزن و امتحان کن."
+            "⚠️ توی این پیام ایموجی پرمیومی پیدا نکردم. یه ایموجی پرمیوم تک و تنها بفرست.",
+            reply_markup=InlineKeyboardMarkup(rows),
         )
         return
 
     custom_emoji_id, placeholder = extracted
     await run_db(set_emoji, key, custom_emoji_id, placeholder)
+    cat = CATEGORY_OF.get(key)
+    rows = []
+    if cat is not None:
+        rows.append([back_btn(f"{EMOJI_CAT_PREFIX}{cat}", "↩️ بازگشت به این دسته")])
+    rows.append([back_btn(EMOJI_BACK_CALLBACK, "بازگشت به دسته‌ها")])
     await message.reply_text(
-        f"{get_emoji('confirm')} ایموجی «{EMOJI_KEYS[key]}» با موفقیت تنظیم شد.", parse_mode="HTML"
+        f"{get_emoji('confirm')} ایموجی «{EMOJI_KEYS[key]}» با موفقیت تنظیم شد.",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(rows),
     )
 
 
@@ -3037,6 +3087,7 @@ async def btn_emoji_category_callback(update: Update, context: ContextTypes.DEFA
     if not _is_admin(update):
         await query.answer()
         return
+    context.user_data.pop(AWAITING_BUTTON_EMOJI_KEY, None)
     category = query.data[len(BTN_EMOJI_CAT_PREFIX) :]
     if category not in BUTTON_CATEGORY_LABELS:
         await query.answer("دسته نامعتبره.", show_alert=True)
@@ -3055,6 +3106,7 @@ async def btn_emoji_back_callback(update: Update, context: ContextTypes.DEFAULT_
     if not _is_admin(update):
         await query.answer()
         return
+    context.user_data.pop(AWAITING_BUTTON_EMOJI_KEY, None)
     await query.answer()
     await safe_edit_message_text(
         query, "🎛 یه دسته انتخاب کن:", parse_mode="HTML", reply_markup=_btn_emoji_category_keyboard()
@@ -3093,18 +3145,22 @@ async def btn_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_T
     current = await run_db(_current_button_emoji_sync, key)
     cur_line = (f"ایموجی فعلی: <tg-emoji emoji-id=\"{current[0]}\">{current[1]}</tg-emoji>"
                 if current else "ایموجی فعلی: <b>تنظیم نشده</b>")
-    keyboard = InlineKeyboardMarkup(
-        [
-            [btn("پاک کردن (برگشت به پیش‌فرض)", emoji_key="btn_delete", style=DANGER,
-                 callback_data=f"{BTN_EMOJI_CLEAR_PREFIX}{key}")],
-            [back_btn(BTN_EMOJI_BACK, "بازگشت به دسته‌ها")],
-        ]
-    )
+    cat = BUTTON_CATEGORY_OF.get(key)
+    rows = [
+        [btn("پاک کردن (برگشت به پیش‌فرض)", emoji_key="btn_delete", style=DANGER,
+             callback_data=f"{BTN_EMOJI_CLEAR_PREFIX}{key}")],
+    ]
+    if cat is not None:
+        rows.append([back_btn(f"{BTN_EMOJI_CAT_PREFIX}{cat}", "↩️ بازگشت به این دسته")])
+    rows.append([back_btn(BTN_EMOJI_BACK, "❌ لغو و بازگشت به دسته‌ها")])
+    keyboard = InlineKeyboardMarkup(rows)
+
     await safe_edit_message_text(
         query,
         f"{cur_line}\n\n"
         f"👌 حالا فقط <b>ایموجی پرمیوم</b> جدیدِ دکمه‌ی «{BUTTON_EMOJI_KEYS[key]}» رو بفرست "
-        "(تک و تنها، از کیبورد ایموجی پرمیوم تلگرام).",
+        "(تک و تنها، از کیبورد ایموجی پرمیوم تلگرام).\n\n"
+        "یا از دکمه‌های زیر برای پاک کردن، لغو و بازگشت استفاده کن:",
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -3119,9 +3175,18 @@ async def btn_emoji_clear_callback(update: Update, context: ContextTypes.DEFAULT
     removed = await run_db(clear_button_emoji, key)
     context.user_data.pop(AWAITING_BUTTON_EMOJI_KEY, None)
     await query.answer("↩️ به پیش‌فرض برگشت." if removed else "چیزی تنظیم نشده بود.")
-    await safe_edit_message_text(
-        query, "🎛 یه دسته انتخاب کن:", parse_mode="HTML", reply_markup=_btn_emoji_category_keyboard()
-    )
+    cat = BUTTON_CATEGORY_OF.get(key)
+    if cat in BUTTON_CATEGORY_LABELS:
+        await safe_edit_message_text(
+            query,
+            _btn_emoji_category_caption(cat),
+            parse_mode="HTML",
+            reply_markup=_btn_emoji_key_keyboard(cat),
+        )
+    else:
+        await safe_edit_message_text(
+            query, "🎛 یه دسته انتخاب کن:", parse_mode="HTML", reply_markup=_btn_emoji_category_keyboard()
+        )
 
 
 async def capture_button_emoji_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -3132,8 +3197,14 @@ async def capture_button_emoji_reply(update: Update, context: ContextTypes.DEFAU
     extracted = _extract_custom_emoji(message)
     if extracted is None:
         context.user_data[AWAITING_BUTTON_EMOJI_KEY] = key  # keep waiting
+        cat = BUTTON_CATEGORY_OF.get(key)
+        rows = []
+        if cat is not None:
+            rows.append([back_btn(f"{BTN_EMOJI_CAT_PREFIX}{cat}", "↩️ بازگشت به این دسته")])
+        rows.append([back_btn(BTN_EMOJI_BACK, "❌ لغو و بازگشت به دسته‌ها")])
         await message.reply_text(
-            "⚠️ توی این پیام ایموجی پرمیومی پیدا نکردم. یه ایموجی پرمیوم تک و تنها بفرست."
+            "⚠️ توی این پیام ایموجی پرمیومی پیدا نکردم. یه ایموجی پرمیوم تک و تنها بفرست.",
+            reply_markup=InlineKeyboardMarkup(rows),
         )
         return
 
@@ -5235,6 +5306,9 @@ def register(application) -> None:
     )
     application.add_handler(
         CallbackQueryHandler(set_emoji_back_callback, pattern=f"^{EMOJI_BACK_CALLBACK}$")
+    )
+    application.add_handler(
+        CallbackQueryHandler(set_emoji_clear_callback, pattern=f"^{EMOJI_CLEAR_PREFIX}")
     )
     application.add_handler(
         CallbackQueryHandler(set_emoji_key_callback, pattern=f"^{EMOJI_KEY_CALLBACK_PREFIX}")
