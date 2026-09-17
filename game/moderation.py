@@ -68,7 +68,7 @@ def _grant_creatures(user, species, element, rarity_key, level, star, count, *, 
 
     base = _build_creature_base(rarity_key, level)
     if maxed_parts:
-        cap = constants.part_upgrade_cap(star)  # 20 per star, 100 at 5★
+        cap = constants.part_upgrade_cap(rarity_key, star)  # rarity floor + 20 per star
         base.update(wings_lvl=cap, armor_lvl=cap, fangs_lvl=cap, poison_lvl=cap)
     with _tx.atomic():
         for _ in range(count):
@@ -412,7 +412,7 @@ def set_creature_star(creature_id: int, new_star: int) -> Creature:
     old_star = creature.star_level or 1
     creature.star_level = new_star
 
-    cap = constants.part_upgrade_cap(new_star)
+    cap = constants.part_upgrade_cap(creature.rarity, new_star)
     for part in constants.BODY_PARTS:
         attr = f"{part}_lvl"
         if getattr(creature, attr) > cap:

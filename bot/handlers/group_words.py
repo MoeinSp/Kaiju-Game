@@ -469,7 +469,7 @@ def _upgrade_card(user, creature, energy, step: int = 1) -> tuple[str, InlineKey
     max_energy = get_max_energy(user)
     step = step if step in _GRP_UPG_STEPS else 1
     sfx = f" ×{step}" if step > 1 else ""
-    cap = constants.part_upgrade_cap(creature.star_level)
+    cap = constants.part_upgrade_cap(creature.rarity, creature.star_level)
     max_level = constants.creature_max_level(creature.rarity, creature.star_level)
     lines = [
         f"{get_emoji('settings')} <b>ارتقای {creature_name(creature)}</b>",

@@ -404,15 +404,22 @@ BODY_PARTS = {
     "poison": {"label": "☠️ غدد سمی (زهر هر راند)", "stat": "poison", "bonus": 1},
 }
 
-# Each body part can only be upgraded up to a cap set by the creature's STAR level:
-# 1★ → 20, 2★ → 40, … 5★ → 100 (the absolute max). Raising the cap needs fusion
-# (more stars), so gear/part power can't outrun a creature's prestige tier.
+# Each body part's upgrade cap scales with BOTH rarity and star:
+#   • a rarity floor at 1★ — common 20, rare 30, epic 40, legendary 50, mythic 60
+#   • +20 per extra star on top of that floor
+# so e.g. mythic 1★ caps at 60 and mythic 5★ at the absolute max of 140, while a
+# common 5★ still caps at 100. Higher rarity AND more stars (fusion) both raise the
+# ceiling, so part power tracks a creature's whole prestige, not just its stars.
 PART_UPGRADE_CAP_PER_STAR = 20
-PART_UPGRADE_MAX = PART_UPGRADE_CAP_PER_STAR * 5  # 100, at 5★
+PART_UPGRADE_BASE_BY_RARITY = {
+    "common": 20, "rare": 30, "epic": 40, "legendary": 50, "mythic": 60,
+}
+PART_UPGRADE_MAX = 140  # mythic 5★: 60 + 4×20
 
 
-def part_upgrade_cap(star_level: int) -> int:
-    return max(1, star_level) * PART_UPGRADE_CAP_PER_STAR
+def part_upgrade_cap(rarity: str, star_level: int) -> int:
+    base = PART_UPGRADE_BASE_BY_RARITY.get(rarity, 20)
+    return base + (max(1, star_level) - 1) * PART_UPGRADE_CAP_PER_STAR
 
 
 # A silent per-rarity discount on body-part upgrades: lower rarities pay less (they're
@@ -553,6 +560,24 @@ def fusion_cost(parent_star: int, rarity: str) -> int:
     star_mult = FUSION_STAR_COST_MULT.get(parent_star, FUSION_STAR_COST_MULT[max(FUSION_STAR_COST_MULT)])
     rarity_mult = FUSION_RARITY_COST_MULT.get(rarity, 1.0)
     return round(FUSION_BASE_GOLD_COST * star_mult * rarity_mult)
+
+
+# A freshly-fused creature must now INCUBATE before it can be used — the wait scales
+# with the child's rarity (base hours below) times the number of base monsters folded
+# into it (2^(child_star-1): a 3★ = 4 monsters → ×4). So a mythic 5★ (16 monsters) is a
+# 24h×16 = 16-day commitment, while a rare 2★ is 12h×2 = 1 day. Diamonds finish it
+# early, priced from the time left (game.constants.diamond_finish_cost), so a longer
+# incubation costs proportionally more diamonds.
+FUSION_COOLDOWN_HOURS_BY_RARITY = {
+    "common": 8, "rare": 12, "epic": 16, "legendary": 20, "mythic": 24,
+}
+
+
+def fusion_cooldown_hours(rarity: str, child_star: int) -> int:
+    """Incubation hours for a newly-fused creature of `rarity` ending at `child_star`."""
+    base = FUSION_COOLDOWN_HOURS_BY_RARITY.get(rarity, 8)
+    monsters = 2 ** (max(1, int(child_star)) - 1)
+    return base * monsters
 # A fused creature must ALWAYS come out stronger than either parent — otherwise the
 # gold + the two creatures you sank into it bought a downgrade. The child inherits
 # the BEST of each parent's base stat, keeps the higher of each body-part upgrade
@@ -1486,7 +1511,15 @@ def part_upgrade_cost(current_level: int) -> int:
     Cumulative-to-cap per part drops accordingly (roughly: 1★≈14k, 3★≈250k, 5★≈1.0M).
     """
     lvl = max(0, current_level)
-    return max(1, round(40 * (lvl + 1) ** 1.5 * _part_cost_discount(lvl)))
+    cost = 40 * (lvl + 1) ** 1.5 * _part_cost_discount(lvl)
+    # Prices at/below level 100 are UNCHANGED. Past level 100 (only reachable now that
+    # high-rarity/high-star caps go up to 140) an escalating endgame surcharge kicks in
+    # so the final stretch is deliberately expensive and slow: +12% per level past 100,
+    # i.e. the 139→140 upgrade costs ~5.7× its bare-curve price on top of the curve's own
+    # rise. Nothing below 100 is affected.
+    if lvl >= 100:
+        cost *= 1 + (lvl - 100) * 0.12
+    return max(1, round(cost))
 
 
 def random_element() -> str:

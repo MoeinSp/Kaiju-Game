@@ -77,13 +77,19 @@ def breeding_job(user: User) -> BreedingJob | None:
 
 
 def busy_creature_ids(user: User) -> set[int]:
-    """Every creature that can't be reassigned right now — working or breeding."""
+    """Every creature that can't be reassigned right now — working, breeding, or still
+    incubating from a fusion."""
+    from django.utils import timezone
+
     ids = set(
         CreatureAssignment.objects.filter(creature__owner=user).values_list("creature_id", flat=True)
     )
     job = BreedingJob.objects.filter(owner=user).first()
     if job is not None:
         ids.update({job.parent_a_id, job.parent_b_id})
+    ids.update(
+        Creature.objects.filter(owner=user, fusion_ready_at__gt=timezone.now()).values_list("id", flat=True)
+    )
     return ids
 
 
@@ -99,6 +105,10 @@ def creature_status(user: User, creature: Creature) -> str | None:
     job = BreedingJob.objects.filter(owner=user).first()
     if job is not None and creature.id in (job.parent_a_id, job.parent_b_id):
         return "🥚 توی غار هیولا"
+    from django.utils import timezone
+
+    if creature.fusion_ready_at is not None and creature.fusion_ready_at > timezone.now():
+        return "🧬 در حال ادغام"
     return None
 
 
