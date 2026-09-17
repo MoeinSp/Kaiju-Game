@@ -28,9 +28,10 @@ HUNT_TIERS = {
 # (a risk/reward difficulty knob).
 HUNT_COIN_PER_POWER = 0.40   # gold income doubled again (was 0.20) per owner request
 HUNT_DNA_PER_POWER = 0.012
-# a flat +10% on ALL hunt loot (gold and DNA), applied on top of the ranges below so it
-# lifts both the preview and the payout together — per owner request
-HUNT_LOOT_BONUS = 1.10
+# a flat multiplier on ALL hunt loot (gold and DNA), applied on top of the ranges below
+# (and after the gold cap) so it lifts the preview, the payout AND the cap together.
+# Two +10% bumps per owner request → 1.10 × 1.10 = 1.21 (+21% over the base curve).
+HUNT_LOOT_BONUS = 1.21
 # Ceiling on hunt GOLD: the best possible hunt for a FULLY-maxed kaiju tops out at
 # HUNT_MAX_COIN gold, scaled down proportionally for weaker kaiju. This ONLY lowers the
 # top of the range — the minimum (weak-tier / unlucky roll) is never raised or lowered.

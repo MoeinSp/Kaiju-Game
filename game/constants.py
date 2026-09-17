@@ -1390,6 +1390,9 @@ def arena_fake_loot(cup: int) -> int:
 ARENA_LOOT_CUP_REF = 4000
 ARENA_LOOT_GOLD_AT_ZERO = (500, 1000)
 ARENA_LOOT_GOLD_AT_REF = (5000, 15000)
+# a flat multiplier on ALL arena win loot (every cup, both ends of the band and the
+# cap), applied on top of the cup-scaled range — per owner request (+10%)
+ARENA_LOOT_BONUS = 1.10
 
 
 def arena_loot_roll(cup: int) -> tuple[int, int]:
@@ -1397,8 +1400,8 @@ def arena_loot_roll(cup: int) -> tuple[int, int]:
     freshly-rolled pair every call — roll once per attack and reuse the result for both
     the preview and the payout so they always match."""
     frac = max(0.0, min(1.0, max(0, int(cup)) / ARENA_LOOT_CUP_REF))
-    lo = round(ARENA_LOOT_GOLD_AT_ZERO[0] + (ARENA_LOOT_GOLD_AT_REF[0] - ARENA_LOOT_GOLD_AT_ZERO[0]) * frac)
-    hi = round(ARENA_LOOT_GOLD_AT_ZERO[1] + (ARENA_LOOT_GOLD_AT_REF[1] - ARENA_LOOT_GOLD_AT_ZERO[1]) * frac)
+    lo = round((ARENA_LOOT_GOLD_AT_ZERO[0] + (ARENA_LOOT_GOLD_AT_REF[0] - ARENA_LOOT_GOLD_AT_ZERO[0]) * frac) * ARENA_LOOT_BONUS)
+    hi = round((ARENA_LOOT_GOLD_AT_ZERO[1] + (ARENA_LOOT_GOLD_AT_REF[1] - ARENA_LOOT_GOLD_AT_ZERO[1]) * frac) * ARENA_LOOT_BONUS)
     if hi < lo:
         hi = lo
     gold = random.randint(lo, hi)
