@@ -274,10 +274,6 @@ class Creature(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     last_trained_at = models.DateTimeField(null=True, blank=True)
-    # when a freshly-fused creature finishes incubating; while this is in the future the
-    # creature is "busy" (can't fight, mine, breed, be activated, or be fused again).
-    # Cleared (or in the past) means it's a normal, usable creature.
-    fusion_ready_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self) -> str:
         return f"{self.name} (#{self.id})"

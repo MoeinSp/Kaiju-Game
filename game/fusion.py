@@ -1,8 +1,6 @@
-import datetime
 import random
 
 from django.db import transaction
-from django.utils import timezone
 
 from bio_lab.models import Creature, User
 from game import constants, lab
@@ -176,13 +174,7 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
         armor_lvl=max(parent_a.armor_lvl, parent_b.armor_lvl),
         wings_lvl=max(parent_a.wings_lvl, parent_b.wings_lvl),
         poison_lvl=max(parent_a.poison_lvl, parent_b.poison_lvl),
-        # the child now INCUBATES: it's not active and can't be used until the timer
-        # finishes (or diamonds finish it). Cooldown scales with rarity × combined-monster
-        # count (2^(star-1)).
-        is_active=False,
-        fusion_ready_at=timezone.now() + datetime.timedelta(
-            hours=constants.fusion_cooldown_hours(rarity, star_level)
-        ),
+        is_active=True,
     )
 
     # the weaker parent's build is otherwise lost (child keeps the STRONGER one's
@@ -209,56 +201,8 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
 
     parent_a.delete()
     parent_b.delete()
-    # the child is incubating, so it can't be the active creature yet. If fusing the
-    # parents left the owner with NO active creature (one of them was active), promote
-    # the strongest still-usable creature so the player isn't stranded without a fighter.
-    if not Creature.objects.filter(owner=user, is_active=True).exists():
-        now = timezone.now()
-        from game.creature import creature_power
-
-        candidates = [
-            c for c in Creature.objects.filter(owner=user).exclude(id=child.id)
-            if c.fusion_ready_at is None or c.fusion_ready_at <= now
-        ]
-        if candidates:
-            best = max(candidates, key=creature_power)
-            Creature.objects.filter(owner=user).update(is_active=False)
-            Creature.objects.filter(id=best.id).update(is_active=True)
+    # child is the new active creature — get_active_creature() assumes exactly one
+    # is_active=True row per owner, so every other creature must yield the slot
+    Creature.objects.filter(owner=user).exclude(id=child.id).update(is_active=False)
 
     return child, inherited_item
-
-
-def is_fusing(creature: Creature) -> bool:
-    """True while a freshly-fused creature is still incubating."""
-    return creature.fusion_ready_at is not None and creature.fusion_ready_at > timezone.now()
-
-
-def fusion_seconds_left(creature: Creature) -> int:
-    if creature.fusion_ready_at is None:
-        return 0
-    return max(0, int((creature.fusion_ready_at - timezone.now()).total_seconds()))
-
-
-def fusion_finish_diamond_cost(creature: Creature) -> int:
-    """Diamonds to finish this creature's incubation right now (priced from time left,
-    like every other diamond-skip in the game, so a longer wait costs more)."""
-    return constants.diamond_finish_cost(fusion_seconds_left(creature))
-
-
-@transaction.atomic
-def finish_fusion_with_diamonds(user: User, creature_id: int) -> Creature:
-    """Spend diamonds to end a creature's incubation instantly. Returns the freed creature."""
-    user = User.objects.select_for_update().get(id=user.id)
-    creature = Creature.objects.select_for_update().filter(id=creature_id, owner=user).first()
-    if creature is None:
-        raise GameError("این موجود پیدا نشد.")
-    if not is_fusing(creature):
-        raise GameError("این موجود همین الان هم آماده‌ست.")
-    cost = fusion_finish_diamond_cost(creature)
-    if user.diamonds < cost:
-        raise GameError(f"الماس کافی نداری! تموم‌کردنِ فوری ادغام {cost} الماس می‌خواد (الان {user.diamonds} داری).")
-    user.diamonds -= cost
-    user.save(update_fields=["diamonds"])
-    creature.fusion_ready_at = None
-    creature.save(update_fields=["fusion_ready_at"])
-    return creature

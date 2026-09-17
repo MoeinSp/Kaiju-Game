@@ -2077,44 +2077,7 @@ def _fusion_sync(tg_user, id_a, id_b):
     child, inherited_item = fuse(user, parent_a, parent_b)
     record_action(user, "fusion")
     completed_missions = check_missions(user, "fusion")
-    from game.fusion import fusion_finish_diamond_cost, fusion_seconds_left
-
-    return (user, child, completed_missions, get_equipped_items(child),
-            inherited_item is not None, fusion_seconds_left(child),
-            fusion_finish_diamond_cost(child))
-
-
-def _fmt_dur(seconds: int) -> str:
-    """Human duration like «۲ روز و ۳ ساعت» / «۵ ساعت و ۱۲ دقیقه» (Latin digits)."""
-    seconds = max(0, int(seconds))
-    days, rem = divmod(seconds, 86400)
-    hours, rem = divmod(rem, 3600)
-    mins = rem // 60
-    if days:
-        return f"{days} روز" + (f" و {hours} ساعت" if hours else "")
-    if hours:
-        return f"{hours} ساعت" + (f" و {mins} دقیقه" if mins else "")
-    return f"{mins} دقیقه"
-
-
-def _fusion_result_text(user, child, equipped_items, inherited, fusing_secs, completed_missions=None):
-    inherit_note = "\n🧬 یه تجهیزات از والدین به ارث رسید!" if inherited else ""
-    head = (
-        f"{get_emoji('lab')} <b>ادغام شروع شد!</b> والدین سوزانده شدن و یه موجود جدید در حال شکل‌گیریه.{inherit_note}\n"
-        f"⏳ <b>تا آماده‌شدن: {_fmt_dur(fusing_secs)}</b>\n"
-        "<i>تا اون موقع نمی‌تونه بجنگه، توی معدن/غار کار کنه یا دوباره ادغام شه. می‌تونی با الماس فوری آماده‌ش کنی.</i>\n\n"
-    )
-    body = creature_card_text(user, child, equipped_items)
-    tail = _mission_lines(completed_missions) if completed_missions else ""
-    return head + body + tail
-
-
-def _fusion_result_keyboard(child, finish_cost, is_owner):
-    rows = [[btn(f"💎 آماده‌سازی فوری ({finish_cost} الماس)", style=PRIMARY,
-                 callback_data=f"fus_finish:{child.id}")]]
-    for row in creature_keyboard(is_owner).inline_keyboard:
-        rows.append(list(row))
-    return InlineKeyboardMarkup(rows)
+    return user, child, completed_missions, get_equipped_items(child), inherited_item is not None
 
 
 async def fusion_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2125,17 +2088,20 @@ async def fusion_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
         return
     try:
-        user, child, completed_missions, equipped_items, inherited, fusing_secs, finish_cost = await run_db(
+        user, child, completed_missions, equipped_items, inherited = await run_db(
             _fusion_sync, update.effective_user, int(context.args[0]), int(context.args[1])
         )
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
     is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
+    inherit_note = "\n🧬 یه تجهیزات از والدین به ارث رسید!" if inherited else ""
     await update.message.reply_text(
-        _fusion_result_text(user, child, equipped_items, inherited, fusing_secs, completed_missions),
+        f"{get_emoji('lab')} <b>فیوژن موفق بود!</b> والدین سوزانده شدن و یه موجود جدید متولد شد:{inherit_note}\n\n"
+        + creature_card_text(user, child, equipped_items)
+        + _mission_lines(completed_missions),
         parse_mode="HTML",
-        reply_markup=_fusion_result_keyboard(child, finish_cost, is_owner),
+        reply_markup=creature_keyboard(is_owner),
     )
 
 
@@ -2451,7 +2417,7 @@ async def fusion_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
     query = update.callback_query
     _, a_id, b_id = query.data.split(":")
     try:
-        user, child, completed_missions, equipped_items, inherited, fusing_secs, finish_cost = await run_db(
+        user, child, completed_missions, equipped_items, inherited = await run_db(
             _fusion_sync, update.effective_user, int(a_id), int(b_id)
         )
     except GameError as exc:
@@ -2462,35 +2428,13 @@ async def fusion_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.answer(str(exc), show_alert=True)
         return
     is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
-    await query.answer("🟢 ادغام شروع شد!")
+    inherit_note = "\n🧬 یه تجهیزات از والدین به ارث رسید!" if inherited else ""
+    await query.answer("🟢 فیوژن موفق بود!")
     await safe_edit_message_text(query,
-        _fusion_result_text(user, child, equipped_items, inherited, fusing_secs, completed_missions),
-        parse_mode="HTML",
-        reply_markup=_fusion_result_keyboard(child, finish_cost, is_owner),
-    )
-
-
-def _finish_fusion_sync(tg_user, creature_id):
-    user, _ = get_or_create_user(tg_user)
-    from game.fusion import finish_fusion_with_diamonds
-
-    creature = finish_fusion_with_diamonds(user, creature_id)
-    return user, creature, get_equipped_items(creature)
-
-
-async def fusion_finish_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    creature_id = int(query.data.split(":")[1])
-    try:
-        user, creature, equipped_items = await run_db(_finish_fusion_sync, update.effective_user, creature_id)
-    except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
-        return
-    is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
-    await query.answer("💎 آماده شد!")
-    await safe_edit_message_text(query,
-        f"{get_emoji('lab')} <b>ادغام کامل شد!</b> موجود جدیدت آماده‌ست:\n\n"
-        + creature_card_text(user, creature, equipped_items),
+        f"{get_emoji('lab')} <b>فیوژن موفق بود!</b> والدین سوزانده شدن و یه موجود جدید متولد شد:\n\n"
+        f"<tg-spoiler>{constants.RARITY_LABELS[child.rarity]}{inherit_note}</tg-spoiler>\n\n"
+        + creature_card_text(user, child, equipped_items)
+        + _mission_lines(completed_missions),
         parse_mode="HTML",
         reply_markup=creature_keyboard(is_owner),
     )
@@ -4666,7 +4610,6 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(fusion_busy_callback, pattern=r"^fus_busy:\d+$"))
     application.add_handler(CallbackQueryHandler(fusion_rarity_callback, pattern=r"^fus_rarity:"))
     application.add_handler(CallbackQueryHandler(fusion_pick_b_callback, pattern=r"^fus_b:"))
-    application.add_handler(CallbackQueryHandler(fusion_finish_callback, pattern=r"^fus_finish:\d+$"))
     application.add_handler(CallbackQueryHandler(fusion_confirm_callback, pattern=r"^fus_confirm:"))
     application.add_handler(CallbackQueryHandler(alliance_create_callback, pattern=r"^ally_create$"))
     application.add_handler(CallbackQueryHandler(alliance_create_confirm_callback, pattern=r"^ally_create_confirm$"))

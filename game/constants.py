@@ -560,24 +560,6 @@ def fusion_cost(parent_star: int, rarity: str) -> int:
     star_mult = FUSION_STAR_COST_MULT.get(parent_star, FUSION_STAR_COST_MULT[max(FUSION_STAR_COST_MULT)])
     rarity_mult = FUSION_RARITY_COST_MULT.get(rarity, 1.0)
     return round(FUSION_BASE_GOLD_COST * star_mult * rarity_mult)
-
-
-# A freshly-fused creature must now INCUBATE before it can be used — the wait scales
-# with the child's rarity (base hours below) times the number of base monsters folded
-# into it (2^(child_star-1): a 3★ = 4 monsters → ×4). So a mythic 5★ (16 monsters) is a
-# 24h×16 = 16-day commitment, while a rare 2★ is 12h×2 = 1 day. Diamonds finish it
-# early, priced from the time left (game.constants.diamond_finish_cost), so a longer
-# incubation costs proportionally more diamonds.
-FUSION_COOLDOWN_HOURS_BY_RARITY = {
-    "common": 8, "rare": 12, "epic": 16, "legendary": 20, "mythic": 24,
-}
-
-
-def fusion_cooldown_hours(rarity: str, child_star: int) -> int:
-    """Incubation hours for a newly-fused creature of `rarity` ending at `child_star`."""
-    base = FUSION_COOLDOWN_HOURS_BY_RARITY.get(rarity, 8)
-    monsters = 2 ** (max(1, int(child_star)) - 1)
-    return base * monsters
 # A fused creature must ALWAYS come out stronger than either parent — otherwise the
 # gold + the two creatures you sank into it bought a downgrade. The child inherits
 # the BEST of each parent's base stat, keeps the higher of each body-part upgrade
@@ -599,12 +581,28 @@ DUEL_WAGER_MAX = 500
 # what they're getting), a 1-day cooldown applies to both sides, and the receiver
 # must have progressed far enough (building levels) to hold it — so a throwaway fake
 # account can't instantly stockpile high-star creatures.
-TRANSFER_COOLDOWN_HOURS = 24
+TRANSFER_COOLDOWN_HOURS = 24  # default / equipment transfer, and the mythic base below
 
-# creature diamond cost = star base × rarity multiplier. Star base is the mythic
-# price the owner specified; lower rarities cost proportionally less.
-# halved (was 200/300/500/750/1000) — kaiju transfer diamond fee cut by 50%
-CREATURE_TRANSFER_STAR_COST = {1: 100, 2: 150, 3: 250, 4: 375, 5: 500}
+# The KAIJU transfer cooldown scales with the transferred creature's rarity AND star:
+# a per-rarity base (common 8h … mythic 24h) times the number of base monsters folded
+# into it (2^(star-1): a 3★ = 4 monsters → ×4). So handing over a mythic 3★ locks both
+# sides for 24×4 = 96h, while a common 1★ is just 8h. (Equipment transfer stays flat.)
+TRANSFER_COOLDOWN_HOURS_BY_RARITY = {
+    "common": 8, "rare": 12, "epic": 16, "legendary": 20, "mythic": 24,
+}
+
+
+def transfer_cooldown_hours(rarity: str, star_level: int) -> int:
+    """Kaiju-transfer cooldown hours for a creature of `rarity` at `star_level`."""
+    base = TRANSFER_COOLDOWN_HOURS_BY_RARITY.get(rarity, TRANSFER_COOLDOWN_HOURS)
+    monsters = 2 ** (max(1, int(star_level)) - 1)
+    return base * monsters
+
+
+# creature diamond cost = star base × rarity multiplier. The star base now grows by the
+# same combined-monster factor as the cooldown (2^(star-1)×100: 100/200/400/800/1600),
+# so a higher-star kaiju costs proportionally more diamonds to hand over.
+CREATURE_TRANSFER_STAR_COST = {1: 100, 2: 200, 3: 400, 4: 800, 5: 1600}
 CREATURE_TRANSFER_RARITY_MULT = {
     "common": 0.12, "rare": 0.25, "epic": 0.45, "legendary": 0.7, "mythic": 1.0,
 }

@@ -79,14 +79,14 @@ def _check_cooldown(user: User, field: str, who: str) -> None:
     if ready is not None and ready > timezone.now():
         wait = int((ready - timezone.now()).total_seconds())
         raise GameError(
-            f"⏳ محدودیت انتقال (هر {constants.TRANSFER_COOLDOWN_HOURS} ساعت یک‌بار)\n\n"
+            f"⏳ محدودیت انتقال فعاله\n\n"
             f"{who} به‌تازگی انتقال داشته است.\n\n"
             f"⏱ زمان مجاز بعدی: {_fmt_wait(wait)} دیگر"
         )
 
 
-def _set_cooldown(users: list[User], field: str) -> None:
-    until = timezone.now() + datetime.timedelta(hours=constants.TRANSFER_COOLDOWN_HOURS)
+def _set_cooldown(users: list[User], field: str, hours: int = constants.TRANSFER_COOLDOWN_HOURS) -> None:
+    until = timezone.now() + datetime.timedelta(hours=hours)
     for u in users:
         setattr(u, field, until)
 
@@ -282,7 +282,9 @@ def transfer_creature(sender: User, receiver: User, creature_id: int, price: int
     creature.is_active = False
     creature.save()  # full save — the reset touched level, xp, base stats and parts
 
-    _set_cooldown([sender, receiver], "kaiju_transfer_ready_at")
+    # the cooldown scales with THIS creature's rarity + star (base hours × 2^(star-1))
+    cooldown_hours = constants.transfer_cooldown_hours(creature.rarity, creature.star_level)
+    _set_cooldown([sender, receiver], "kaiju_transfer_ready_at", cooldown_hours)
     sender.save(update_fields=["kaiju_transfer_ready_at", "coins"])
     receiver.save(update_fields=["diamonds", "coins", "kaiju_transfer_ready_at"])
     return {"creature": creature, "cost": cost, "price": price}
