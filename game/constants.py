@@ -108,6 +108,17 @@ RARITY_STAT_MULTIPLIER = {
     "mythic": 2.0,
 }
 
+# ── The single power anchor the whole reward economy is balanced against ──────
+# This is the combat_rating of a FULLY-maxed kaiju: a mythic 5★ at max level, every
+# body part at its 140 cap, four mythic +25 pieces, and every research track maxed
+# (measured at 11,581 — see the shell check — rounded to a clean 11,500). Hunt's
+# max-loot power, the arena bot/guardian ceiling, and the mine-influence reference
+# all key off THIS constant, so a maxed kaiju always sits at exactly 100% of each
+# curve. It's a FIXED number on purpose: if the real achievable max later drifts a
+# little (a balance tweak, a new part cap), the reward percentages don't silently
+# move with it — everything stays balanced until this value is deliberately changed.
+MAX_KAIJU_POWER = 11500
+
 # A creature's MAX level is set by its rarity (the base ceiling) plus its star tier
 # (fusion raises the ceiling). So rarity matters twice — higher rarity has both
 # stronger per-level stats (RARITY_STAT_MULTIPLIER) AND a higher level ceiling —
@@ -874,7 +885,7 @@ WORKER_RARITY_MULT = {"common": 1.0, "rare": 1.4, "epic": 2.0, "legendary": 3.0,
 WORKER_MINE_INFLUENCE_BY_RARITY = {
     "common": 0.20, "rare": 0.40, "epic": 0.60, "legendary": 0.80, "mythic": 1.00,
 }
-MINE_INFLUENCE_REF_POWER = 8200  # power at which influence hits the +1000% ceiling
+MINE_INFLUENCE_REF_POWER = MAX_KAIJU_POWER  # a fully-maxed kaiju hits the +1000% ceiling
 MINE_INFLUENCE_MAX = 10.0  # +1000%
 
 
@@ -1294,18 +1305,14 @@ ARENA_OVERCAP_DAMPING = 0.25  # cup gain multiplier once you're above your deser
 # grind and ~10000 is nearly asymptotic, and the field stays in close competition.
 ARENA_CUP_SOFTCAP = 2500
 
-# Bot (fake) opponents scale from very weak at low cup to a FULLY-MAXED lab at the
-# ceiling. ARENA_BOT_MAX_POWER is the EXACT combat_rating of the strongest creature
-# a player can actually build — a mythic, 5★, level-100, all-body-parts-maxed (100)
-# creature wearing four mythic pieces at the +25 gear ceiling. That measures to 7142
-# (verified against game.creature.creature_power, not guessed). Anchoring the top of
-# the curve to the real maximum means a genuinely maxed player is ~50/50 (a TIE) at
-# cup 5000 and no higher, while everyone weaker walls out earlier where the bot first
-# matches them. (Was 3850 — far below a real maxed creature, so a maxed player faced
-# only ~half-strength bots at 5000 and blew past the intended endgame wall.)
+# Bot (fake) opponents scale from very weak at low cup to a FULLY-MAXED kaiju at the
+# ceiling. ARENA_BOT_MAX_POWER is anchored to MAX_KAIJU_POWER — the strongest kaiju a
+# player can actually build — so the top-cup bot is a genuine mirror match (a maxed
+# player is ~50/50 at the very top and never faces something stronger than the game's
+# real maximum), while everyone weaker walls out earlier where the bot first matches them.
 # The exponent makes low cups easy and the climb bite near the top.
 ARENA_BOT_MAX_CUP = 4000
-ARENA_BOT_MAX_POWER = 11800
+ARENA_BOT_MAX_POWER = MAX_KAIJU_POWER
 ARENA_BOT_POWER_EXP = 1.35
 
 # Fake opponents shown when no real player sits in the cup band — their lab names

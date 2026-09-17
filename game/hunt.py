@@ -31,11 +31,12 @@ HUNT_DNA_PER_POWER = 0.012
 # a flat +10% on ALL hunt loot (gold and DNA), applied on top of the ranges below so it
 # lifts both the preview and the payout together — per owner request
 HUNT_LOOT_BONUS = 1.10
-# Ceiling on hunt GOLD: the best possible hunt for a max-power kaiju (~8200) tops out at
+# Ceiling on hunt GOLD: the best possible hunt for a FULLY-maxed kaiju tops out at
 # HUNT_MAX_COIN gold, scaled down proportionally for weaker kaiju. This ONLY lowers the
 # top of the range — the minimum (weak-tier / unlucky roll) is never raised or lowered.
+# Anchored to the game-wide MAX_KAIJU_POWER so "max kaiju → max hunt loot" always holds.
 HUNT_MAX_COIN = 4000
-HUNT_POWER_FOR_MAX_COIN = 8200
+HUNT_POWER_FOR_MAX_COIN = constants.MAX_KAIJU_POWER
 HUNT_XP_WIN = 25
 HUNT_XP_LOSE = 8
 # «بعدی» (searching for a better target) costs a little gold, scaled by power, so
