@@ -600,7 +600,10 @@ async def arena_opp_back_callback(update: Update, context: ContextTypes.DEFAULT_
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
+@transaction.atomic
 def _attack_sync(tg_user, pending):
+    # atomic so a refused attack (e.g. the opponent got shielded in the meantime, or a
+    # rapid double-tap) rolls the energy spend back instead of burning it for nothing
     user, _ = get_or_create_user(tg_user)
     spend_energy(user, constants.ARENA_ATTACK_ENERGY_COST, "حمله")
     user.save(update_fields=["energy", "energy_updated_at"])
@@ -672,13 +675,6 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     confirmed = bool(parts) and parts[-1] == "c"
     ref_parts = [p for p in parts if p != "c"]
     ref = ref_parts[0] if ref_parts else None
-
-    has_pending = context.user_data.get(PENDING_OPPONENT_KEY) is not None
-    # Only truly stuck when there's neither a live pending NOR a ref to rebuild from
-    # (an ancient card from before this feature). Otherwise we can always proceed.
-    if not has_pending and ref is None:
-        await query.answer("اول یه حریف پیدا کن.", show_alert=True)
-        return
 
     # If the attacker currently holds a shield, warn FIRST — attacking spends
     # SHIELD_ATTACK_COST_HOURS off it, and players kept losing their shield without
