@@ -8,6 +8,8 @@ and a «خرید پاس ویژه» button for players still on the free track.
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from django.utils import timezone
+
 from bio_lab.repository import get_or_create_user
 from bot.buttons import CONFIRM, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
@@ -53,13 +55,19 @@ def _render(user, st: dict) -> tuple[str, InlineKeyboardMarkup]:
     track = "✦ ویژه (Premium)" if st["premium"] else "رایگان (Free)"
     left = _fmt_left(battlepass.seconds_until_period_end())
     div = "──────────────"
+
+    now_date = timezone.localtime(timezone.now()).date()
+    jy, jm, jd = battlepass.gregorian_to_jalali(now_date.year, now_date.month, now_date.day)
+    month_name = battlepass.SHAMSI_MONTH_NAMES[jm] if 1 <= jm <= 12 else ""
+    title_suffix = f" ({month_name} {jy})" if month_name else ""
+
     lines = [
-        "🎟 <b>پاس دوهفته‌ای | Season Pass</b>",
+        f"🎟 <b>پاس ماهانه | Monthly Pass{title_suffix}</b>",
         "",
         f"🎖 <b>مسیر فعال:</b> {track}",
         f"📊 <b>سطح فعلی:</b> {st['tier']}/{st['max_tier']}",
         f"📈 <b>پیشرفت مرحله:</b> [{bar}] {pct}% ({st['into']}/{st['span']} XP)",
-        f"⏳ <b>زمان باقی‌مانده:</b> {left} (ریست در روز شنبه)",
+        f"⏳ <b>زمان باقی‌مانده:</b> {left} (ریست در پایان ماه شمسی)",
         "", div, "",
     ]
     # preview the next few tiers

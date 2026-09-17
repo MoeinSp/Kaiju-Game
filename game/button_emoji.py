@@ -100,7 +100,7 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_league": ("لیگ رتبه‌بندی", "🎖", "features"),
     "btn_codex": ("دانشنامه", "📖", "features"),
     "btn_referral": ("دعوت دوستان", "🎁", "features"),
-    "btn_battlepass": ("پاس فصلی", "🎟", "features"),
+    "btn_battlepass": ("پاس ماهانه", "🎟", "features"),
     "btn_events": ("رویداد", "⏳", "features"),
     "btn_banner": ("بنر ویژه", "🎰", "features"),
     "btn_shop": ("شاپ روزانه", "🛒", "features"),

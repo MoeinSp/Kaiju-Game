@@ -28,7 +28,7 @@ EVENTS = [
     {"key": "double_xp", "emoji": "⭐", "title": "هفته‌ی XP دوبل",
      "desc": "تا آخر هفته همه‌ی XP آزمایشگاه ۲ برابره!", "xp_mult": 2, "pass_mult": 1, "reward_mult": 1},
     {"key": "double_pass", "emoji": "🎟", "title": "هفته‌ی پاس دوبل",
-     "desc": "تا آخر هفته امتیاز پاس فصلی ۲ برابره!", "xp_mult": 1, "pass_mult": 2, "reward_mult": 1},
+     "desc": "تا آخر هفته امتیاز پاس ماهانه ۲ برابره!", "xp_mult": 1, "pass_mult": 2, "reward_mult": 1},
     {"key": "bounty", "emoji": "🎁", "title": "هفته‌ی جایزه",
      "desc": "جایزه‌های روزانه‌ی رویداد این هفته دو برابرن!", "xp_mult": 1, "pass_mult": 1, "reward_mult": 2},
     {"key": "golden", "emoji": "🌟", "title": "هفته‌ی طلایی",

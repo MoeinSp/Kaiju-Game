@@ -1026,7 +1026,7 @@ _MAIN_ROWS = [
 _CATEGORIES = {
     "rewards": ("🎁 جایزه‌ها", [
         [("ماموریت‌ها", "missions", "s", "btn_missions"), ("دستاوردها", "achievements", "s", "btn_achievements")],
-        [("پاس فصلی", "battlepass", "s", "btn_battlepass"), ("رویداد", "events", "s", "btn_events")],
+        [("پاس ماهانه", "battlepass", "s", "btn_battlepass"), ("رویداد", "events", "s", "btn_events")],
         [("گردونه‌ی شانس", "wheel", "s", "btn_wheel"), ("پاداش آفلاین", "idle", "s", "btn_idle")],
         [("دانشنامه", "codex", "s", "btn_codex"), ("دعوت دوستان", "referral", "s", "btn_referral")],
     ]),

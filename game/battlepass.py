@@ -1,5 +1,5 @@
-"""Battle Pass (پاس دوهفته‌ای) — a 2-week reward track (Saturday-aligned) that turns
-daily play into a visible, claimable ladder.
+"""Battle Pass (پاس ماهانه) — a 1-month reward track aligned with the Persian (Shamsi / Jalali)
+calendar from the 1st of each month to the end of the month (29 to 31 days).
 
 Why it retains: every session moves a bar toward the next tier, and there's always
 a "just one more tier" reward in sight. The premium track adds a paid goal (buy it
@@ -21,32 +21,89 @@ from django.utils import timezone
 
 from bio_lab.models import PassProgress, User
 
-# The pass runs on a 2-WEEK cycle aligned to the start of the week (Saturday), matching
-# Iran's calendar week. A new season begins — and the old one ends — at Saturday 00:00
-# local, every second Saturday. `_PASS_EPOCH` is a reference Saturday the cycle counts
-# from; changing the cadence only means editing these two numbers.
-_PASS_EPOCH = datetime.date(2024, 1, 13)  # a Saturday; phased so a period ends 2026-09-05
-_PASS_PERIOD_DAYS = 14
+# ── Shamsi / Jalali Calendar Conversion Helpers ───────────────────────────────
+
+SHAMSI_MONTH_NAMES = [
+    "", "فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور",
+    "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند",
+]
 
 
-def _week_start_saturday(d: datetime.date) -> datetime.date:
-    """The Saturday on or before `d` (start of that week)."""
-    return d - datetime.timedelta(days=(d.weekday() - 5) % 7)  # Python: Sat == 5
+def gregorian_to_jalali(gy: int, gm: int, gd: int) -> tuple[int, int, int]:
+    g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
+    if gy > 1600:
+        jy = 979
+        gy -= 1600
+    else:
+        jy = 0
+        gy -= 621
+    gy2 = gy + 1 if gm > 2 else gy
+    days = 365 * gy + (gy2 + 3) // 4 - (gy2 + 99) // 100 + (gy2 + 399) // 400 - 80 + gd + g_d_m[gm - 1]
+    jy += 33 * (days // 12053)
+    days %= 12053
+    jy += 4 * (days // 1461)
+    days %= 1461
+    if days > 365:
+        jy += (days - 1) // 365
+        days = (days - 1) % 365
+    if days < 186:
+        jm = 1 + days // 31
+        jd = 1 + days % 31
+    else:
+        jm = 7 + (days - 186) // 30
+        jd = 1 + (days - 186) % 30
+    return jy, jm, jd
 
 
-def _period_index(d: datetime.date) -> int:
-    weeks = (_week_start_saturday(d) - _PASS_EPOCH).days // 7
-    return weeks // 2
+def jalali_to_gregorian(jy: int, jm: int, jd: int) -> tuple[int, int, int]:
+    if jy > 979:
+        gy = 1600
+        jy -= 979
+    else:
+        gy = 621
+    days = (
+        365 * jy
+        + (jy // 33) * 8
+        + (jy % 33 + 3) // 4
+        + 78
+        + jd
+        + ((jm - 1) * 31 if jm < 7 else (jm - 7) * 30 + 186)
+    )
+    gy += 400 * (days // 146097)
+    days %= 146097
+    if days > 36524:
+        days -= 1
+        gy += 100 * (days // 36524)
+        days %= 36524
+        if days >= 365:
+            days += 1
+    gy += 4 * (days // 1461)
+    days %= 1461
+    if days > 365:
+        gy += (days - 1) // 365
+        days = (days - 1) % 365
+    sal_a = [
+        0, 31, 28 + (1 if (gy % 4 == 0 and gy % 100 != 0) or (gy % 400 == 0) else 0),
+        31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+    ]
+    gm = 0
+    while gm < 13 and days >= sal_a[gm]:
+        days -= sal_a[gm]
+        gm += 1
+    gd = days + 1
+    return gy, gm, gd
 
 
 def _period_end_date(d: datetime.date) -> datetime.date:
-    """The Saturday that ENDS the 2-week period containing `d`."""
-    start = _PASS_EPOCH + datetime.timedelta(days=_period_index(d) * _PASS_PERIOD_DAYS)
-    return start + datetime.timedelta(days=_PASS_PERIOD_DAYS)
+    """The Gregorian date of 1st day of NEXT Shamsi month (end boundary of current Shamsi month)."""
+    jy, jm, jd = gregorian_to_jalali(d.year, d.month, d.day)
+    next_jy, next_jm = (jy + 1, 1) if jm == 12 else (jy, jm + 1)
+    end_gy, end_gm, end_gd = jalali_to_gregorian(next_jy, next_jm, 1)
+    return datetime.date(end_gy, end_gm, end_gd)
 
 
 def period_end():
-    """Aware datetime (local) when the current pass period ends — Saturday 00:00 local."""
+    """Aware datetime (local) when the current monthly pass period ends — 1st of next Shamsi month at 00:00 local."""
     now = timezone.localtime(timezone.now())
     end_date = _period_end_date(now.date())
     naive_end = datetime.datetime.combine(end_date, datetime.time())
@@ -64,9 +121,15 @@ MAX_TIER = 30
 PREMIUM_COST_DIAMONDS = 150
 
 
-def season_key() -> str:
-    """The current season id — one per 2-week cycle, aligned to Saturdays."""
-    return f"bw{_period_index(timezone.localtime(timezone.now()).date())}"
+def season_key(d: datetime.date | None = None) -> str:
+    """The current season id — one per Shamsi month.
+    Keeps 'bw69' for Shahrivar 1405 so existing players keep their current pass progress."""
+    if d is None:
+        d = timezone.localtime(timezone.now()).date()
+    jy, jm, jd = gregorian_to_jalali(d.year, d.month, d.day)
+    if jy == 1405 and jm == 6:
+        return "bw69"
+    return f"sh_{jy}_{jm:02d}"
 
 
 def tier_for_points(points: int) -> int:

@@ -44,7 +44,7 @@ SOURCE_LABELS = {
     "shop": "فروشگاه",
     "exchange": "مبادله",
     "referral": "دعوت دوستان",
-    "battlepass": "پاس فصلی",
+    "battlepass": "پاس ماهانه",
     "achievement": "دستاورد",
     "admin": "اعطای ادمین",
     "purchase": "خرید درون‌بازی",

@@ -129,7 +129,7 @@ LAB_MILESTONES: dict[int, list[tuple[str, str, str]]] = {
     7:  [("btn_breeding", "غار هیولا (تخم‌گذاری)", "breeding")],
     9:  [("btn_forge", "آهنگری (ارتقای تجهیزات)", "blacksmith")],
     12: [("btn_alliance", "اتحاد", "alliance_info"), ("btn_casino", "کازینو", "casino")],
-    16: [("btn_diamond_box", "باکس هیولا", "diamond_box"), ("btn_battlepass", "بتل‌پس", "battlepass")],
+    16: [("btn_diamond_box", "باکس هیولا", "diamond_box"), ("btn_battlepass", "پاس ماهانه", "battlepass")],
     20: [("btn_campaign", "کمپین", "campaign")],
 }
 

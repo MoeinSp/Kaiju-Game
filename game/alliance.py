@@ -684,7 +684,7 @@ PERKS = {
     "xp": {"emoji": "🎓", "title": "آکادمی", "field": "xp_perk_level", "per_level": XP_PERK_PER_LEVEL,
            "desc": "بونوس XP آزمایشگاه برای همه‌ی اعضا", "unit": "pct"},
     "pass": {"emoji": "⛩", "title": "معبد", "field": "pass_perk_level", "per_level": PASS_PERK_PER_LEVEL,
-             "desc": "بونوس امتیاز پاس فصلی برای همه", "unit": "pct"},
+             "desc": "بونوس امتیاز پاس ماهانه برای همه", "unit": "pct"},
     "fortress": {"emoji": "🏯", "title": "دژ", "field": "fortress_level", "per_level": FORTRESS_PER_LEVEL,
                  "desc": "کاهش طلای دزدیده‌شده در شبیخون", "unit": "pct"},
     "barracks": {"emoji": "🪖", "title": "پادگان", "field": "barracks_level", "per_level": BARRACKS_PER_LEVEL,
