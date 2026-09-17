@@ -858,7 +858,7 @@ BUILDING_PRODUCTION = {
     # (0.1×5 = 0.5 base) the ceiling is 0.5×(1+7) = 4/hr, reachable only with 5 maxed
     # mythic (each 10.0 influence × 0.14 = 1.4; 5×1.4 = 7.0 = the cap). The base rate
     # (no kaiju) is untouched.
-    "diamond_collector": {"rate_per_hour": 0.1, "cap_base": 1, "resource": "diamonds", "worker_mult": 1.0, "influence_mult": 0.14, "worker_bonus_cap": 7.0},
+    "diamond_collector": {"rate_per_hour": 0.1, "cap_base": 1, "resource": "diamonds", "worker_mult": 1.0, "influence_mult": 0.14, "worker_bonus_cap": 8.4},
     "dna_lab": {"rate_per_hour": 8.0, "cap_base": 80, "resource": "dna_fragments", "worker_mult": 1.8},
 }
 
@@ -873,27 +873,27 @@ EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL = 5
 # The cap stops a full late-game roster from turning idle income into the whole
 # economy; hunting and raiding have to stay worth doing.
 WORKER_BONUS_PER_CREATURE_LEVEL = 0.06  # base per-level bonus; gold/DNA amplify it via worker_mult
-WORKER_BONUS_CAP = 6.0  # up to +600% output from stationed creatures (raised so rarity has room to matter)
+WORKER_BONUS_CAP = 7.2  # up to +720% output from stationed creatures (raised so rarity has room to matter)
 # a stationed worker's contribution is multiplied by its rarity — a mythic worker is
 # worth several commons of the same level, so rarer monsters are better miners
 WORKER_RARITY_MULT = {"common": 1.0, "rare": 1.4, "epic": 2.0, "legendary": 3.0, "mythic": 4.5}
 # A stationed kaiju's mine influence scales with its POWER. The per-rarity values below
-# are the FLOOR (a fresh, weak kaiju of that rarity starts here): mythic +100%,
-# legendary +80%, epic +60%, rare +40%, common +20%. From there the influence climbs
-# with power, reaching the absolute ceiling of +1000% for a fully-maxed mythic with
+# are the FLOOR (a fresh, weak kaiju of that rarity starts here): mythic +120%,
+# legendary +96%, epic +72%, rare +48%, common +24%. From there the influence climbs
+# with power, reaching the absolute ceiling of +1200% for a fully-maxed mythic with
 # maxed gear (power ≈ MINE_INFLUENCE_REF_POWER). Weaker kaiju sit proportionally lower.
 WORKER_MINE_INFLUENCE_BY_RARITY = {
-    "common": 0.20, "rare": 0.40, "epic": 0.60, "legendary": 0.80, "mythic": 1.00,
+    "common": 0.24, "rare": 0.48, "epic": 0.72, "legendary": 0.96, "mythic": 1.20,
 }
-MINE_INFLUENCE_REF_POWER = MAX_KAIJU_POWER  # a fully-maxed kaiju hits the +1000% ceiling
-MINE_INFLUENCE_MAX = 10.0  # +1000%
+MINE_INFLUENCE_REF_POWER = MAX_KAIJU_POWER  # a fully-maxed kaiju hits the +1200% ceiling
+MINE_INFLUENCE_MAX = 12.0  # +1200%
 
 
 def mine_influence(rarity: str, power: float = 0.0) -> float:
-    """A stationed kaiju's production bonus as a multiplier addend (0.20 = +20%).
+    """A stationed kaiju's production bonus as a multiplier addend (0.24 = +24%).
     Scales linearly with power up to MINE_INFLUENCE_MAX at MINE_INFLUENCE_REF_POWER,
     never dropping below the kaiju's per-rarity floor."""
-    floor = WORKER_MINE_INFLUENCE_BY_RARITY.get(rarity, 0.20)
+    floor = WORKER_MINE_INFLUENCE_BY_RARITY.get(rarity, 0.24)
     scaled = MINE_INFLUENCE_MAX * min(1.0, max(0.0, power) / MINE_INFLUENCE_REF_POWER)
     return min(MINE_INFLUENCE_MAX, max(floor, scaled))
 

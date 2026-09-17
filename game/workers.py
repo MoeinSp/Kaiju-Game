@@ -42,7 +42,7 @@ def assigned_creatures(building: Building) -> list[Creature]:
 
 def creature_mine_influence(creature: Creature, building: Building | None = None) -> float:
     """One stationed kaiju's production bonus (a multiplier addend). Scales with the
-    kaiju's power (gear included) from its per-rarity floor up to +1000% for a maxed
+    kaiju's power (gear included) from its per-rarity floor up to +1200% for a maxed
     mythic — see constants.mine_influence. When `building` is given, its per-building
     `influence_mult` is applied (the diamond collector scales every kaiju WAY down so
     the mine stays tightly bounded); gold/DNA use 1.0."""
