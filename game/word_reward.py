@@ -20,7 +20,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from bio_lab.models import Group, User
-from game import lab
+from game import constants, lab
 from game.daily import record_action
 
 # The cooldown is a fresh RANDOM value in this window, chosen after every claim, and
