@@ -128,15 +128,21 @@ async def set_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     if not context.args:
-        await update.effective_message.reply_text(
+        text = (
             f"{get_emoji('settings')} <b>تنظیم ایموجی پرمیوم</b>\n"
             "اول یه دسته انتخاب کن، بعد کلید موردنظر رو، بعدش فقط همون <b>ایموجی پرمیوم</b> رو تک و تنها بفرست "
             "(از کیبورد ایموجی «پرمیوم» تلگرام، نه یونیکد معمولی).\n\n"
             "میان‌بر برای حرفه‌ای‌ها: <code>/set_emoji coin</code> 🪙 (کلید + ایموجی تو یه پیام)\n"
-            "برای دیدن نتیجه‌ی فعلی همه‌چیز: /preview_emoji",
-            parse_mode="HTML",
-            reply_markup=_category_keyboard(),
+            "برای دیدن نتیجه‌ی فعلی همه‌چیز: /preview_emoji"
         )
+        if update.callback_query:
+            await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=_category_keyboard())
+        else:
+            await update.effective_message.reply_text(
+                text,
+                parse_mode="HTML",
+                reply_markup=_category_keyboard(),
+            )
         return
 
     key = context.args[0]
@@ -3077,9 +3083,12 @@ async def button_emoji_panel(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "\n<blockquote>هر دکمه فقط <b>یک</b> ایموجی می‌گیره که قبل از متنش می‌شینه. "
         "روی کلاینت‌های خیلی قدیمی ممکنه نمایش داده نشه، برای همین ایموجی معمولی هم توی متن دکمه می‌مونه.</blockquote>",
     ]
-    await update.effective_message.reply_text(
-        "\n".join(lines), parse_mode="HTML", reply_markup=_btn_emoji_category_keyboard()
-    )
+    if update.callback_query:
+        await safe_edit_message_text(update.callback_query, "\n".join(lines), parse_mode="HTML", reply_markup=_btn_emoji_category_keyboard())
+    else:
+        await update.effective_message.reply_text(
+            "\n".join(lines), parse_mode="HTML", reply_markup=_btn_emoji_category_keyboard()
+        )
 
 
 async def btn_emoji_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
