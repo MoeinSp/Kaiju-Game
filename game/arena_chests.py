@@ -306,6 +306,18 @@ def seconds_until_ready(chest: ArenaChest) -> int:
     return max(0, int(rem))
 
 
+def _format_remaining(seconds: float | int) -> str:
+    secs = int(max(0, seconds))
+    h = secs // 3600
+    m = (secs % 3600) // 60
+    s = secs % 60
+    if h > 0:
+        return f"{h}س {m}د"
+    if m > 0:
+        return f"{m}د {s}ث"
+    return f"{s}ث"
+
+
 def speedup_diamond_cost(chest: ArenaChest) -> int:
     secs = seconds_until_ready(chest)
     if secs <= 0:
