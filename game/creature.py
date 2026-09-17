@@ -105,8 +105,28 @@ def combat_rating(stats: dict) -> int:
 def creature_power(creature: Creature, equipped_items: list | None = None) -> int:
     """Canonical strength score for any creature — the single source of truth every
     display, leaderboard and matchmaker delegates to, so a power number always
-    means the same thing and always predicts combat."""
-    return combat_rating(effective_stats(creature, equipped_items))
+    means the same thing and always predicts combat. Clamped to the game-wide
+    MAX_KAIJU_POWER ceiling so nothing ever reads above the true maximum."""
+    return min(constants.MAX_KAIJU_POWER, combat_rating(effective_stats(creature, equipped_items)))
+
+
+def creature_base_power(creature: Creature, equipped_items: list | None = None) -> int:
+    """Power WITHOUT the owner's 🔬 research-lab buffs — the creature's own
+    gear+parts+level strength. Used where we want to show the raw base separately
+    from the research-boosted number."""
+    sentinel = object()
+    prev = getattr(creature, "_research", sentinel)
+    creature._research = {}  # empty dict → effective_stats applies no research buffs
+    try:
+        return combat_rating(effective_stats(creature, equipped_items))
+    finally:
+        if prev is sentinel:
+            try:
+                del creature._research
+            except AttributeError:
+                pass
+        else:
+            creature._research = prev
 
 
 # Equal-split share S (hp=atk=def=spd=S, level 1, no gear, crit 0.10) has

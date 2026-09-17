@@ -443,6 +443,7 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
         f"🎖 سطح : <b>{creature.level}/{max_level}</b>",
         f"⚡️ نرخ ارتقا: <b>{step}× سطحی</b>",
         "",
+        _power_caption_line(creature, equipped_items),
         f"{get_emoji('hp')} سلامت (HP): <b>{stats['hp']:,}</b> ┃ {get_emoji('atk')} حمله (ATK): <b>{stats['atk']:,}</b>",
         f"{get_emoji('def')} دفاع (DEF): <b>{stats['def']:,}</b> ┃ {get_emoji('spd')} سرعت (SPD): <b>{stats['spd']:,}</b>",
         f"{get_emoji('poison')} زهر (Poison): <b>{stats['poison']:,}</b>",
@@ -562,11 +563,33 @@ def _creature_power(creature, equipped_items: list | None = None) -> int:
     return creature_power(creature, equipped_items)
 
 
+def _creature_base_power(creature, equipped_items: list | None = None) -> int:
+    """Power WITHOUT the owner's research-lab buffs (the kaiju's own strength)."""
+    from game.creature import creature_base_power
+
+    return creature_base_power(creature, equipped_items)
+
+
+def _power_caption_line(creature, equipped_items: list | None = None, label: str = "توان کل") -> str:
+    """Detail-caption power line: the EFFECTIVE power (with the lab), plus — whenever the
+    research lab actually changes it — the base power in parentheses so the player sees
+    their kaiju's own strength separate from the lab boost."""
+    full = _creature_power(creature, equipped_items)
+    base = _creature_base_power(creature, equipped_items)
+    if base != full:
+        return (f"⚔️ <b>{label}</b>: <b>{full:,}</b> 💪  "
+                f"<i>(قدرت پایه: {base:,} — بدون احتساب تاثیر آزمایشگاه)</i>")
+    return f"⚔️ <b>{label}</b>: <b>{full:,}</b> 💪"
+
+
 def _upgrade_list_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
     creatures = list_creatures(user)
     if not creatures:
         raise GameError("اول /start رو بزن تا موجودت رو بگیری.")
+    from game import research
+
+    research.attach_research(user, creatures)  # buttons always show WITH-lab power
     ranked = sorted(
         ((c, _creature_power(c, get_equipped_items(c))) for c in creatures),
         key=lambda pair: pair[1],
@@ -662,6 +685,9 @@ def _upgrade_pick_sync(tg_user, creature_id):
         creature = Creature.objects.get(id=creature_id, owner=user)
     except Creature.DoesNotExist:
         raise GameError("این موجود توی کلکسیون تو نیست.")
+    from game import research
+
+    research.attach_research(user, creature)  # so the caption's effective power includes the lab
     return user, creature, get_equipped_items(creature), slot_loadout(user, creature)
 
 
@@ -1507,16 +1533,24 @@ async def feedcap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 def _collection_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
-    return list_creatures(user)
+    creatures = list_creatures(user)
+    from game import research
+
+    research.attach_research(user, creatures)  # buttons always show WITH-lab power
+    # pair each creature with its effective (with-lab) power for the button labels
+    return [(c, _creature_power(c, get_equipped_items(c))) for c in creatures]
 
 
 COLLECTION_PAGE_SIZE = 8
 
 
-def _collection_render(creatures: list[Creature], filt: str = "all", page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+def _collection_render(ranked, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
     """One page of the collection, filterable by rarity via tabs (like the fusion
     picker). Paginated because a big roster (each creature is two buttons) blew past
-    Telegram's ~100-button keyboard limit — the whole keyboard was rejected then."""
+    Telegram's ~100-button keyboard limit — the whole keyboard was rejected then.
+    `ranked` is [(creature, power)] where power is the WITH-lab effective power."""
+    power_of = {c.id: p for c, p in ranked}
+    creatures = [c for c, _p in ranked]
     rarity_idx = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
     counts: dict[str, int] = {}
     for c in creatures:
@@ -1540,7 +1574,7 @@ def _collection_render(creatures: list[Creature], filt: str = "all", page: int =
 
     for c in chunk:
         stars = "⭐" * c.star_level
-        label = f"{creature_name(c)} {stars} · Lv{c.level} · {constants.RARITY_LABELS[c.rarity]}"
+        label = f"{creature_name(c)} {stars} · Lv{c.level} · 💪{power_of.get(c.id, 0):,}"
         row = [btn(f"{'🟢 ' if c.is_active else ''}{label}", style=LIST, callback_data=f"coll_pick:{c.id}")]
         if not c.is_active:
             row.append(btn("فعال کن", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"coll_select:{c.id}"))
@@ -1595,6 +1629,9 @@ def _creature_detail_sync(tg_user, creature_id):
         creature = Creature.objects.get(id=creature_id, owner=user)
     except Creature.DoesNotExist:
         raise GameError("این موجود توی کلکسیون تو نیست.")
+    from game import research
+
+    research.attach_research(user, creature)  # so the caption's effective power includes the lab
     return user, creature, get_equipped_items(creature)
 
 
@@ -1605,7 +1642,6 @@ def collection_creature_detail_text(creature, equipped_items: list | None = None
     from game.equipment import equipment_power
 
     stats = effective_stats(creature, equipped_items)
-    power = _creature_power(creature, equipped_items)
 
     max_level = constants.creature_max_level(creature.rarity, creature.star_level)
     xp_needed = constants.xp_for_creature_level(creature.level)
@@ -1642,7 +1678,8 @@ def collection_creature_detail_text(creature, equipped_items: list | None = None
         "",
         _CARD_DIV,
         "",
-        f"⚔️ <b>آمار مبارزه</b> | توان کل: <b>{power:,}</b> 💪",
+        "⚔️ <b>آمار مبارزه</b>",
+        _power_caption_line(creature, equipped_items),
         "",
         f"{get_emoji('hp')} سلامت (HP): <b>{stats['hp']}</b> ┃ {get_emoji('atk')} حمله (ATK): <b>{stats['atk']}</b>",
         f"{get_emoji('def')} دفاع (DEF): <b>{stats['def']}</b> ┃ {get_emoji('spd')} سرعت (SPD): <b>{stats['spd']}</b>",
