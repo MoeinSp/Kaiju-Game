@@ -71,15 +71,19 @@ def get_subscription_tier(user: User) -> str | None:
 
 
 def subscription_badge(user: User) -> str:
+    from game.emoji import get_emoji
+
     tier = get_subscription_tier(user)
     if tier == "gold":
-        return " 👑"
+        return f" {get_emoji('sub_gold', '👑')}"
     if tier == "silver":
-        return " 🥈"
+        return f" {get_emoji('sub_silver', '🥈')}"
     return ""
 
 
 def get_subscription_info(user: User) -> dict:
+    from game.emoji import get_emoji
+
     active = is_subscription_active(user)
     tier = get_subscription_tier(user)
     cfg = SUBSCRIPTION_TIERS.get(tier) if tier else None
@@ -91,11 +95,13 @@ def get_subscription_info(user: User) -> dict:
         days_left = diff.days
         hours_left = int(diff.seconds // 3600)
 
+    badge = get_emoji(f"sub_{tier}", cfg["badge"]) if cfg else ""
     return {
         "is_active": active,
         "tier": tier,
         "tier_name": cfg["name"] if cfg else "عادی",
-        "badge": cfg["badge"] if cfg else "",
+        "badge": badge,
+        "badge_plain": cfg["badge"] if cfg else "",
         "until": until,
         "days_left": days_left,
         "hours_left": hours_left,

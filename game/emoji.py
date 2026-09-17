@@ -264,6 +264,9 @@ CANONICAL_KEY_GLYPHS: dict[str, set[str]] = {
     "fangs": {"🦷"},
     "gift": {"🎁"},
     "egg": {"🥚"},
+    "sub_silver": {"🥈"},
+    "sub_gold": {"👑"},
+    "sub_vip": {"⭐"},
 }
 
 

@@ -35,6 +35,7 @@ PREFERRED = {
     "btn_referral": "🎁", "btn_battlepass": "🎟", "btn_events": "⏳", "btn_banner": "🎰",
     "btn_shop": "🛒", "btn_idle": "😴", "btn_achievements": "🏅", "btn_titles": "👑",
     "btn_cat_rewards": "🎁", "btn_cat_shop": "🏪", "btn_cat_social": "👥",
+    "btn_sub_silver": "🥈", "btn_sub_gold": "👑", "btn_subscription": "⭐", "btn_vip": "⭐",
 }
 
 _VS16 = "️"  # emoji variation selector — strip it when matching
@@ -115,6 +116,7 @@ class Command(BaseCommand):
             "element_electric": ["🔌", "🌩", "⚡"], "element_water": ["🌊", "💦"], "element_fire": ["🔥", "🌋"],
             "fangs": ["🦈", "🐊", "🗡"], "crit": ["💢", "🎯"], "lifesteal": ["🧛", "🩸", "❤"],
             "egg": ["🐣", "🐤", "🐥", "🍳"], "diamond_box": ["🔷", "🎁", "🔹", "💎", "📦"],
+            "sub_silver": ["🥈", "🪙"], "sub_gold": ["👑", "🥇", "⭐"], "sub_vip": ["⭐", "👑", "✨"],
         }
         tdone, tskipped, tunmatched = 0, 0, []
         for key, (_label, default, _cat) in EMOJI_DEFS.items():
