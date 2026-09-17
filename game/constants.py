@@ -880,25 +880,46 @@ WORKER_RARITY_MULT = {"common": 1.0, "rare": 1.4, "epic": 2.0, "legendary": 3.0,
 # progressively with power up to the per-rarity MAX ceiling (common +300%, rare +400%,
 # epic +500%, legendary +600%, mythic +800%) for a fully-maxed kaiju with maxed gear.
 WORKER_MINE_INFLUENCE_BY_RARITY = {
-    "common": 0.24, "rare": 0.48, "epic": 0.72, "legendary": 0.96, "mythic": 1.20,
+    "common": 1.0,     # +100% base
+    "rare": 1.5,       # +150% base
+    "epic": 2.0,       # +200% base
+    "legendary": 3.0,  # +300% base
+    "mythic": 4.0,     # +400% base
 }
 WORKER_MINE_INFLUENCE_MAX_BY_RARITY = {
-    "common": 3.0,     # +300% max
-    "rare": 4.0,       # +400% max
-    "epic": 5.0,       # +500% max
-    "legendary": 6.0,  # +600% max
-    "mythic": 8.0,     # +800% max
+    "common": 5.0,      # +500% max
+    "rare": 6.0,        # +600% max
+    "epic": 8.0,        # +800% max
+    "legendary": 10.0,  # +1000% max
+    "mythic": 12.0,     # +1200% max
 }
 MINE_INFLUENCE_REF_POWER = MAX_KAIJU_POWER
-MINE_INFLUENCE_MAX = 8.0  # +800% (mythic ceiling)
+MINE_INFLUENCE_MAX = 12.0  # +1200% (mythic ceiling)
 
 
 def mine_influence(rarity: str, power: float = 0.0) -> float:
-    """A stationed kaiju's production bonus as a multiplier addend (0.24 = +24%).
-    Scales progressively from the per-rarity floor at power=0 up to the per-rarity ceiling
-    (common +300%, rare +400%, epic +500%, legendary +600%, mythic +800%) at MINE_INFLUENCE_REF_POWER."""
-    floor = WORKER_MINE_INFLUENCE_BY_RARITY.get(rarity, 0.24)
-    max_val = WORKER_MINE_INFLUENCE_MAX_BY_RARITY.get(rarity, 3.0)
+    """A stationed kaiju's production bonus as a multiplier addend (1.0 = +100%).
+    Scales progressively from the per-rarity floor (common +100%, rare +150%, epic +200%, legendary +300%, mythic +400%)
+    up to the per-rarity ceiling (common +500%, rare +600%, epic +800%, legendary +1000%, mythic +1200%) at MINE_INFLUENCE_REF_POWER."""
+    floor = WORKER_MINE_INFLUENCE_BY_RARITY.get(rarity, 1.0)
+    max_val = WORKER_MINE_INFLUENCE_MAX_BY_RARITY.get(rarity, 5.0)
+    ratio = min(1.0, max(0.0, float(power)) / MINE_INFLUENCE_REF_POWER)
+    return floor + (max_val - floor) * ratio
+
+
+# Diamond mine preserves its exact percentages
+DIAMOND_WORKER_MINE_INFLUENCE_BY_RARITY = {
+    "common": 0.24 * 0.182, "rare": 0.48 * 0.182, "epic": 0.72 * 0.182, "legendary": 0.96 * 0.182, "mythic": 1.20 * 0.182,
+}
+DIAMOND_WORKER_MINE_INFLUENCE_MAX_BY_RARITY = {
+    "common": 3.0 * 0.182, "rare": 4.0 * 0.182, "epic": 5.0 * 0.182, "legendary": 6.0 * 0.182, "mythic": 8.0 * 0.182,
+}
+
+
+def diamond_mine_influence(rarity: str, power: float = 0.0) -> float:
+    """Stationed kaiju's production bonus for Diamond Collector (preserves exact tuned percentages)."""
+    floor = DIAMOND_WORKER_MINE_INFLUENCE_BY_RARITY.get(rarity, 0.24 * 0.182)
+    max_val = DIAMOND_WORKER_MINE_INFLUENCE_MAX_BY_RARITY.get(rarity, 3.0 * 0.182)
     ratio = min(1.0, max(0.0, float(power)) / MINE_INFLUENCE_REF_POWER)
     return floor + (max_val - floor) * ratio
 

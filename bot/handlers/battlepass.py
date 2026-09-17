@@ -67,7 +67,7 @@ def _render(user, st: dict) -> tuple[str, InlineKeyboardMarkup]:
         f"🎖 <b>مسیر فعال:</b> {track}",
         f"📊 <b>سطح فعلی:</b> {st['tier']}/{st['max_tier']}",
         f"📈 <b>پیشرفت مرحله:</b> [{bar}] {pct}% ({st['into']}/{st['span']} XP)",
-        f"⏳ <b>زمان باقی‌مانده:</b> {left} (ریست در پایان ماه شمسی)",
+        f"⏳ <b>زمان باقی‌مانده:</b> {left} (ریست در پایان ماه)",
         "", div, "",
     ]
     # preview the next few tiers
