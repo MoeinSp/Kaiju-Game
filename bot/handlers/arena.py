@@ -1285,19 +1285,14 @@ async def arena_chest_speedup_callback(update: Update, context: ContextTypes.DEF
 
 def _chest_open_sync(tg_user, chest_id: int):
     user, _ = get_or_create_user(tg_user)
-    res = open_chest(user, chest_id)
-    creature = res.get("creature")
-    item = res.get("item")
-    from game.creature import effective_stats
-    c_stats = effective_stats(creature, []) if creature else None
-    return res, c_stats
+    return open_chest(user, chest_id)
 
 
 async def arena_chest_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     chest_id = int(query.data.split(":")[1])
     try:
-        res, c_stats = await run_db(_chest_open_sync, update.effective_user, chest_id)
+        res = await run_db(_chest_open_sync, update.effective_user, chest_id)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
@@ -1306,14 +1301,14 @@ async def arena_chest_open_callback(update: Update, context: ContextTypes.DEFAUL
     tier = res["tier"]
 
     lines = [
-        f"{get_emoji('celebrate')} <b>جعبه باز شد!</b>",
-        f"{get_emoji(f'chest_{tier}', res['emoji'])} <b>{res['name']} (جایگاه {res['slot']})</b>",
+        f"{get_emoji('celebrate', '💝')}  <b>جعبه باز شد!</b>",
+        f"{get_emoji(f'chest_{tier}', res['emoji'])}  <b>{res['name']} (جایگاه {res['slot']})</b>",
         "━━━━━━━━━━━━━━━━━━━━",
-        f"🪙 طلا: <b>+{res['coins']:,}</b> {get_emoji('coin')}",
-        f"🧬 دی‌ان‌ای: <b>+{res['dna']:,}</b> {get_emoji('dna')}",
+        f"🪙  طلا: <b>+{res['coins']:,}</b> {get_emoji('coin', '💰')}",
+        f"🧬  دی‌ان‌ای: <b>+{res['dna']:,}</b> {get_emoji('dna', '🧬')}",
     ]
     if res.get("diamonds"):
-        lines.append(f"💎 الماس: <b>+{res['diamonds']:,}</b> {get_emoji('diamond')}")
+        lines.append(f"💎  الماس: <b>+{res['diamonds']:,}</b> {get_emoji('diamond', '💎')}")
 
     creature = res.get("creature")
     item = res.get("item")
@@ -1322,16 +1317,14 @@ async def arena_chest_open_callback(update: Update, context: ContextTypes.DEFAUL
     if creature:
         lines += [
             "",
-            f"{get_emoji('creature')} <b>موجود جدید از جعبه آزاد شد:</b>",
-            f"✨ <b>{creature.name}</b> [{rarity_label}]",
+            f"{get_emoji('creature', '🦖')}  <b>موجود جدید از جعبه آزاد شد:</b>",
+            f"✨  <b>{creature.name}</b> [{rarity_label}]",
         ]
-        if c_stats:
-            lines.append(f"❤️ HP: <b>{c_stats['hp']}</b> ┃ ⚔️ ATK: <b>{c_stats['atk']}</b> ┃ 🛡 DEF: <b>{c_stats['def']}</b>")
     elif item:
         lines += [
             "",
-            "🎒 <b>تجهیزات دریافت شده:</b>",
-            f"⚔️ <b>{item.name}</b> [{rarity_label}]",
+            "🎒  <b>تجهیزات دریافت شده:</b>",
+            f"⚔️  <b>{item.name}</b> [{rarity_label}]",
         ]
 
     if res.get("next_started"):
@@ -1339,7 +1332,7 @@ async def arena_chest_open_callback(update: Update, context: ContextTypes.DEFAUL
         next_cfg = ARENA_CHEST_TIERS.get(next_c.chest_type, {})
         lines += [
             "",
-            f"📋 <i>جعبه در صف «{next_cfg.get('name', '')}» (جایگاه {next_c.slot}) خودکار شروع به باز شدن کرد!</i>",
+            f"📋 جعبه در صف «{next_cfg.get('name', '')}» (جایگاه {next_c.slot}) خودکار شروع به باز شدن کرد!",
         ]
 
     lines.append("━━━━━━━━━━━━━━━━━━━━")

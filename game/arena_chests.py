@@ -191,22 +191,58 @@ def award_chest_on_win(user: User) -> ArenaChest | None:
 
 
 def advance_user_chests(user: User) -> None:
-    """Transition any expired unlocking chests to 'ready' and auto-start any queued chest."""
+    """Transition any expired unlocking chests to 'ready' and auto-start any queued chest.
+    Correctly accounts for elapsed time since the previous chest finished."""
     now = timezone.now()
-    unlocking = ArenaChest.objects.filter(user=user, status="unlocking").first()
-    if unlocking and unlocking.unlock_finishes_at and unlocking.unlock_finishes_at <= now:
-        unlocking.status = "ready"
-        unlocking.save(update_fields=["status"])
+    while True:
+        unlocking = ArenaChest.objects.filter(user=user, status="unlocking").first()
+        if unlocking:
+            if unlocking.unlock_finishes_at and unlocking.unlock_finishes_at <= now:
+                finish_time = unlocking.unlock_finishes_at
+                unlocking.status = "ready"
+                unlocking.save(update_fields=["status"])
 
-        # Check if there is a queued chest to auto-start
-        queued = ArenaChest.objects.filter(user=user, status="queued").first()
-        if queued:
-            cfg = ARENA_CHEST_TIERS.get(queued.chest_type, ARENA_CHEST_TIERS["silver"])
-            duration = datetime.timedelta(hours=cfg["unlock_hours"])
-            queued.status = "unlocking"
-            queued.unlock_starts_at = now
-            queued.unlock_finishes_at = now + duration
-            queued.save(update_fields=["status", "unlock_starts_at", "unlock_finishes_at"])
+                # Check if there is a queued chest to auto-start
+                queued = ArenaChest.objects.filter(user=user, status="queued").order_by("slot").first()
+                if queued:
+                    cfg = ARENA_CHEST_TIERS.get(queued.chest_type, ARENA_CHEST_TIERS["silver"])
+                    duration = datetime.timedelta(hours=cfg["unlock_hours"])
+                    start_time = finish_time
+                    fin_time = start_time + duration
+                    queued.unlock_starts_at = start_time
+                    queued.unlock_finishes_at = fin_time
+                    if fin_time <= now:
+                        queued.status = "ready"
+                        queued.save(update_fields=["status", "unlock_starts_at", "unlock_finishes_at"])
+                        continue
+                    else:
+                        queued.status = "unlocking"
+                        queued.save(update_fields=["status", "unlock_starts_at", "unlock_finishes_at"])
+                        break
+                else:
+                    break
+            else:
+                break
+        else:
+            # If no chest is actively unlocking, any queued chest should immediately start unlocking
+            queued = ArenaChest.objects.filter(user=user, status="queued").order_by("slot").first()
+            if queued:
+                cfg = ARENA_CHEST_TIERS.get(queued.chest_type, ARENA_CHEST_TIERS["silver"])
+                duration = datetime.timedelta(hours=cfg["unlock_hours"])
+                start_time = now
+                fin_time = start_time + duration
+                queued.unlock_starts_at = start_time
+                queued.unlock_finishes_at = fin_time
+                if fin_time <= now:
+                    queued.status = "ready"
+                    queued.save(update_fields=["status", "unlock_starts_at", "unlock_finishes_at"])
+                    continue
+                else:
+                    queued.status = "unlocking"
+                    queued.save(update_fields=["status", "unlock_starts_at", "unlock_finishes_at"])
+                    break
+            else:
+                break
 
 
 @transaction.atomic
@@ -298,6 +334,7 @@ def speedup_with_diamonds(user: User, chest_id: int) -> ArenaChest:
     chest.status = "ready"
     chest.unlock_finishes_at = timezone.now()
     chest.save(update_fields=["status", "unlock_finishes_at"])
+    advance_user_chests(user)
     return chest
 
 
@@ -359,17 +396,10 @@ def open_chest(user: User, chest_id: int) -> dict:
     slot_num = chest.slot
     chest.delete()
 
-    # If user has a queued chest, immediately start unlocking it!
-    queued = ArenaChest.objects.filter(user=user, status="queued").first()
-    next_started = None
-    if queued:
-        next_cfg = ARENA_CHEST_TIERS.get(queued.chest_type, ARENA_CHEST_TIERS["silver"])
-        next_duration = datetime.timedelta(hours=next_cfg["unlock_hours"])
-        queued.status = "unlocking"
-        queued.unlock_starts_at = now
-        queued.unlock_finishes_at = now + next_duration
-        queued.save(update_fields=["status", "unlock_starts_at", "unlock_finishes_at"])
-        next_started = queued
+    advance_user_chests(user)
+
+    # If there is a chest currently unlocking (or recently auto-started from queue), pass it
+    next_started = ArenaChest.objects.filter(user=user, status="unlocking").first()
 
     return {
         "tier": chest_type_key,

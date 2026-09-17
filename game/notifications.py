@@ -258,16 +258,28 @@ def collect_due() -> list[tuple[int, str]]:
 
         # ── arena chests ready to open ────────────────────────────────────────
         from game.arena_chests import ARENA_CHEST_TIERS, advance_user_chests
+        users_with_due_chests = list(
+            ArenaChest.objects.filter(
+                status="unlocking",
+                unlock_finishes_at__lte=now,
+            )
+            .values_list("user_id", flat=True)
+            .distinct()
+        )
+        for uid in users_with_due_chests:
+            try:
+                u = User.objects.get(id=uid)
+                advance_user_chests(u)
+            except Exception:
+                pass
+
         ready_chests = ArenaChest.objects.filter(
-            status="unlocking",
-            unlock_finishes_at__lte=now,
+            status="ready",
             notified=False,
         ).select_related("user")
         for chest in ready_chests:
-            chest.status = "ready"
             chest.notified = True
-            chest.save(update_fields=["status", "notified"])
-            advance_user_chests(chest.user)
+            chest.save(update_fields=["notified"])
             if chest.user.notifications_on:
                 tier_cfg = ARENA_CHEST_TIERS.get(chest.chest_type, ARENA_CHEST_TIERS["silver"])
                 text = (
