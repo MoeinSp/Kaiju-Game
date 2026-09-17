@@ -73,9 +73,16 @@ def warm(user: User) -> None:
 
 
 def combat_bonuses_for(owner_id: int, element: str) -> dict | None:
-    """Pure, cache-only (async-safe) combat buffs for a creature — or None on a cold miss
-    or when the owner has no research. Used by game.creature.effective_stats."""
+    """Combat buffs for a creature of `element`. If the owner's research is not in cache,
+    reads it from DB and caches it so it is always accurate across all features (combat, workers, etc.)."""
     levels = _LEVELS_CACHE.get(owner_id)
+    if levels is None:
+        try:
+            have = {r.key: r.level for r in Research.objects.filter(owner_id=owner_id)}
+            levels = {k: have.get(k, 0) for k in RESEARCH_KEYS}
+            _LEVELS_CACHE[owner_id] = levels
+        except Exception:
+            return None
     if not levels or not _has_any(levels):
         return None
     return combat_bonuses(levels, element)
