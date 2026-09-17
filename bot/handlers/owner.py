@@ -86,7 +86,9 @@ def _keys_help() -> str:
 
 
 EMOJI_KEY_CALLBACK_PREFIX = "set_emoji_key:"
+EMOJI_KEY_PREFIX = EMOJI_KEY_CALLBACK_PREFIX
 EMOJI_CAT_CALLBACK_PREFIX = "set_emoji_cat:"
+EMOJI_CAT_PREFIX = EMOJI_CAT_CALLBACK_PREFIX
 EMOJI_BACK_CALLBACK = "set_emoji_back"
 EMOJI_CLEAR_PREFIX = "set_emoji_clear:"
 
