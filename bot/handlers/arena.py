@@ -333,7 +333,8 @@ def _swap_rerender_sync(tg_user, creature_id, pending):
             pending["creature_name"] = opp_cname
 
     opponent = {
-        "is_fake": pending["is_fake"], "user": None, "label": pending["label"],
+        "is_fake": pending["is_fake"], "user": None, "user_id": pending.get("user_id"),
+        "label": pending["label"],
         "creature_name": opp_cname, "cup": pending["cup"],
         "power": pending["power"], "element": opp_elem,
         "loot_pool": pending["loot_pool"],
@@ -377,6 +378,19 @@ async def arena_swap_back_callback(update: Update, context: ContextTypes.DEFAULT
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
+def _opp_ref(opponent) -> str:
+    """A durable button token for an opponent: the real player's user id, or 'f' for a
+    procedurally-generated bot. Lets the attack button rebuild the opponent from the DB
+    when the in-memory pending is missing. Handles both the raw find_opponent dict
+    (has 'user') and the stored pending dict (has 'user_id')."""
+    if opponent.get("is_fake"):
+        return "f"
+    uid = opponent.get("user_id")
+    if uid is None and opponent.get("user") is not None:
+        uid = opponent["user"].id
+    return str(uid) if uid is not None else "f"
+
+
 def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
                      cname="—", energy=None) -> tuple[str, InlineKeyboardMarkup]:
     """The 'opponent found' arena screen — shared by matchmaking and the «بازگشت» from
@@ -418,7 +432,10 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
     ]
     keyboard = InlineKeyboardMarkup(
         [
-            [btn(f"⚔️ شروع حمله (-{constants.ARENA_ATTACK_ENERGY_COST}⚡)", emoji_key="btn_attack", style=BATTLE, callback_data="arena_attack")],
+            # the opponent ref is embedded in the button so the attack still works if the
+            # in-memory pending is gone (bot restarted, or an old card) — see _opp_ref /
+            # _reconstruct_pending_sync in arena_attack_callback
+            [btn(f"⚔️ شروع حمله (-{constants.ARENA_ATTACK_ENERGY_COST}⚡)", emoji_key="btn_attack", style=BATTLE, callback_data=f"arena_attack:{_opp_ref(opponent)}")],
             [btn("🔄 انتخاب موجود دیگر از تیم", style=NAV, callback_data="arena_swap")],
             [btn("🔍 جزییات حریف", style=NAV, callback_data="arena_opp_details"),
              btn("حریف بعدی", emoji_key="btn_recheck", style=NAV, callback_data="arena_find")],
@@ -611,22 +628,68 @@ def _attacker_shield_secs_sync(tg_user) -> int:
     return shield_remaining_seconds(user)
 
 
+def _reconstruct_pending_sync(tg_user, ref):
+    """Rebuild a pending-opponent dict from a durable button ref when the in-memory one
+    is gone (the bot restarted, or the player tapped an old card). `ref` is a real
+    opponent's user id, or 'f' for a bot (then we just match a fresh opponent).
+    Returns None when no opponent can be produced."""
+    from bio_lab.models import Creature
+    from bio_lab.models import User as UserModel
+
+    user, _ = get_or_create_user(tg_user)
+    loot_gold, loot_dna = constants.arena_loot_roll(user.cup)
+    if ref and ref != "f" and ref.lstrip("-").isdigit():
+        target = UserModel.objects.filter(id=int(ref)).first()
+        if target is None:
+            raise GameError("این حریف دیگه در دسترس نیست، یکی دیگه پیدا کن.")
+        tc = Creature.objects.filter(owner=target, is_active=True).first()
+        if tc is None:
+            raise GameError("این حریف دیگه موجود فعالی نداره، یکی دیگه پیدا کن.")
+        return {
+            "is_fake": False, "user_id": target.id, "label": lab_display(target),
+            "creature_name": tc.name, "cup": target.cup, "power": active_power(target),
+            "element": tc.element, "loot_pool": target.coins,
+            "loot_gold": loot_gold, "loot_dna": loot_dna,
+        }
+    # a bot (or an unparseable ref) → match a fresh opponent at the attacker's cup
+    opp = find_opponent(user)
+    if opp is None:
+        return None
+    return {
+        "is_fake": opp["is_fake"],
+        "user_id": None if opp["is_fake"] else opp["user"].id,
+        "label": opp["label"], "creature_name": opp.get("creature_name", "؟"),
+        "cup": opp["cup"], "power": opp["power"], "element": opp.get("element"),
+        "loot_pool": opp["loot_pool"], "loot_gold": loot_gold, "loot_dna": loot_dna,
+    }
+
+
 async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    confirmed = query.data.split(":")[1:] == ["c"]  # "arena_attack:c" = shield warning accepted
+    # callback_data is "arena_attack[:<ref>][:c]" — <ref> is the opponent token (real
+    # user id, or 'f' for a bot) and ":c" marks the shield-warning confirmation.
+    parts = query.data.split(":")[1:]
+    confirmed = bool(parts) and parts[-1] == "c"
+    ref_parts = [p for p in parts if p != "c"]
+    ref = ref_parts[0] if ref_parts else None
+
+    has_pending = context.user_data.get(PENDING_OPPONENT_KEY) is not None
+    # Only truly stuck when there's neither a live pending NOR a ref to rebuild from
+    # (an ancient card from before this feature). Otherwise we can always proceed.
+    if not has_pending and ref is None:
+        await query.answer("اول یه حریف پیدا کن.", show_alert=True)
+        return
 
     # If the attacker currently holds a shield, warn FIRST — attacking spends
     # SHIELD_ATTACK_COST_HOURS off it, and players kept losing their shield without
     # realising it ("سپر مشکل داره، بازم اتک می‌خوریم"). Only attack once they accept.
     if not confirmed:
-        if context.user_data.get(PENDING_OPPONENT_KEY) is None:
-            await query.answer("اول یه حریف پیدا کن.", show_alert=True)
-            return
         shield_secs = await run_db(_attacker_shield_secs_sync, update.effective_user)
         if shield_secs > 0:
             await query.answer()
+            confirm_cb = f"arena_attack:{ref}:c" if ref else "arena_attack:c"
             keyboard = InlineKeyboardMarkup([
-                [btn("✅ بله، حمله کن", style=BATTLE, callback_data="arena_attack:c")],
+                [btn("✅ بله، حمله کن", style=BATTLE, callback_data=confirm_cb)],
                 [btn("🛡 نه، سپرم بمونه", style=NAV, callback_data="arena_opp_back")],
             ])
             await safe_edit_message_text(
@@ -640,11 +703,18 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     # CLAIM the pending opponent up front (pop before the await), so a rapid double-tap
     # on «حمله» can't attack — and loot — the same opponent twice. On failure we put it
-    # back so the player can retry.
+    # back so the player can retry. If the in-memory pending is gone, rebuild it from the
+    # button's ref (survives bot restarts / stale cards — the reported bug).
     pending = context.user_data.pop(PENDING_OPPONENT_KEY, None)
     if pending is None:
-        await query.answer("اول یه حریف پیدا کن.", show_alert=True)
-        return
+        try:
+            pending = await run_db(_reconstruct_pending_sync, update.effective_user, ref)
+        except GameError as exc:
+            await query.answer(str(exc), show_alert=True)
+            return
+        if pending is None:
+            await query.answer("حریفی پیدا نشد، «حریف بعدی» رو بزن.", show_alert=True)
+            return
     await query.answer()
 
     try:
@@ -1445,7 +1515,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(arena_find_callback, pattern=r"^arena_find$"))
     application.add_handler(CallbackQueryHandler(arena_opp_details_callback, pattern=r"^arena_opp_details$"))
     application.add_handler(CallbackQueryHandler(arena_opp_back_callback, pattern=r"^arena_opp_back$"))
-    application.add_handler(CallbackQueryHandler(arena_attack_callback, pattern=r"^arena_attack(:c)?$"))
+    application.add_handler(CallbackQueryHandler(arena_attack_callback, pattern=r"^arena_attack(:.+)?$"))
     application.add_handler(CallbackQueryHandler(arena_swap_callback, pattern=r"^arena_swap$"))
     application.add_handler(CallbackQueryHandler(arena_swap_pick_callback, pattern=r"^arena_swap_pick:\d+$"))
     application.add_handler(CallbackQueryHandler(arena_swap_back_callback, pattern=r"^arena_swap_back$"))
