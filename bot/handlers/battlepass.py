@@ -139,6 +139,32 @@ def _buy_sync(tg_user):
 
 async def pass_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    user, st = await run_db(_panel_sync, update.effective_user)
+    if st["premium"]:
+        await query.answer("پاس ویژه قبلاً برای شما فعال شده است.", show_alert=True)
+        return
+    cost = st["premium_cost"]
+    if user.diamonds < cost:
+        await query.answer(f"الماس کافی نداری! خرید پاس ویژه {cost} الماس می‌خواد.", show_alert=True)
+        return
+    await query.answer()
+    keyboard = InlineKeyboardMarkup([
+        [btn(f"✅ تأیید و خرید پاس ویژه ({cost} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="pass_buy_do")],
+        [back_btn("menu:battlepass", "❌ انصراف")],
+    ])
+    await safe_edit_message_text(
+        query,
+        f"🎟 <b>خرید پاس ماهانه ویژه (Premium)</b>\n\n"
+        f"{get_emoji('diamond')} هزینه: <b>{cost} الماس</b>\n"
+        f"💎 موجودی شما: <b>{user.diamonds} الماس</b>\n\n"
+        "آیا از خرید پاس ماهانه ویژه مطمئن هستید؟",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+async def pass_buy_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
     try:
         user, st = await run_db(_buy_sync, update.effective_user)
     except GameError as exc:
@@ -159,3 +185,4 @@ def register(application) -> None:
     application.add_handler(CommandHandler("pass", battlepass_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(pass_claim_callback, pattern=r"^pass_claim$"))
     application.add_handler(CallbackQueryHandler(pass_buy_callback, pattern=r"^pass_buy$"))
+    application.add_handler(CallbackQueryHandler(pass_buy_do_callback, pattern=r"^pass_buy_do$"))

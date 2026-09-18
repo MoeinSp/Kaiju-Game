@@ -1165,6 +1165,23 @@ def _set_lab_name_sync(tg_user, name):
     return user, creature, get_equipped_items(creature) if creature else []
 
 
+def _rename_lab_check_sync(tg_user, name):
+    user, _ = get_or_create_user(tg_user)
+    cleaned = " ".join(str(name).split())[:LAB_NAME_MAX_LEN]
+    if not cleaned:
+        raise GameError("اسم نمی‌تونه خالی باشه")
+    if user.lab_name is None:
+        raise GameError("اول با /start اسم آزمایشگاهت رو بذار")
+    if cleaned.casefold() == user.lab_name.casefold():
+        raise GameError("این همون اسم فعلیته")
+    if lab_name_taken(cleaned, exclude_user_id=user.id):
+        raise GameError("این اسم آزمایشگاه قبلاً گرفته شده")
+    cost = constants.lab_rename_cost(user.lab_renames)
+    if user.diamonds < cost:
+        raise GameError(f"الماس کافی نداری! تغییر اسم {cost} الماس می‌خواد")
+    return user, cost, cleaned
+
+
 def _rename_lab_sync(tg_user, name):
     """Paid lab rename: charges diamonds (escalating each time) and enforces the
     same uniqueness as the free first-time name."""
@@ -3918,13 +3935,30 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
             await message.reply_text(f"⚠️ اسم باید بین 1 تا {LAB_NAME_MAX_LEN} کاراکتر باشه. دوباره بفرست:")
             return
         try:
-            user, cost, _newname = await run_db(_rename_lab_sync, update.effective_user, text)
+            user, cost, cleaned = await run_db(_rename_lab_check_sync, update.effective_user, text)
         except GameError as exc:
             await message.reply_text(f"⚠️ {exc}.")
             return
+        if cost == 0:
+            user, cost, _newname = await run_db(_rename_lab_sync, update.effective_user, text)
+            await message.reply_text(
+                f"✅ اسم آزمایشگاهت به «{lab_display(user)}» تغییر کرد.",
+                parse_mode="HTML",
+            )
+            return
+        context.user_data["pending_lab_rename"] = {
+            "name": cleaned,
+            "cost": cost,
+        }
         await message.reply_text(
-            f"✅ اسم آزمایشگاهت به «{lab_display(user)}» تغییر کرد. "
-            f"({cost} {get_emoji('diamond')} کم شد؛ دفعه‌ی بعد {constants.lab_rename_cost(user.lab_renames)} می‌شه)",
+            f"✏️ تغییر نام آزمایشگاه به: <b>{cleaned}</b>\n"
+            f"{get_emoji('diamond')} هزینه: <b>{cost} الماس</b>\n"
+            f"💎 موجودی شما: <b>{user.diamonds} الماس</b>\n\n"
+            "آیا از تغییر نام آزمایشگاه اطمینان دارید؟",
+            reply_markup=InlineKeyboardMarkup([
+                [btn(f"✅ تأیید و ثبت ({cost} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="lab_rename_ok")],
+                [btn("❌ لغو", emoji_key="btn_cancel", style=DANGER, callback_data="lab_rename_cancel")],
+            ]),
             parse_mode="HTML",
         )
         return
@@ -4419,6 +4453,40 @@ async def lab_rename_start_callback(update: Update, context: ContextTypes.DEFAUL
     )
 
 
+async def lab_rename_ok_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    pending = context.user_data.get("pending_lab_rename")
+    if not pending:
+        await query.answer("درخواست تغییر نام منقضی شده است.", show_alert=True)
+        return
+    try:
+        user, cost, _newname = await run_db(_rename_lab_sync, update.effective_user, pending["name"])
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    context.user_data.pop("pending_lab_rename", None)
+    await query.answer("✅ نام آزمایشگاه تغییر کرد!")
+    await safe_edit_message_text(
+        query,
+        f"✅ اسم آزمایشگاهت به «{lab_display(user)}» تغییر کرد. "
+        f"({cost} {get_emoji('diamond')} کم شد؛ دفعه‌ی بعد {constants.lab_rename_cost(user.lab_renames)} می‌شه)",
+        parse_mode="HTML",
+        reply_markup=back_only_keyboard("menu:profile"),
+    )
+
+
+async def lab_rename_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    context.user_data.pop("pending_lab_rename", None)
+    await query.answer("تغییر نام لغو شد.")
+    await safe_edit_message_text(
+        query,
+        "❌ تغییر نام آزمایشگاه لغو شد.",
+        parse_mode="HTML",
+        reply_markup=back_only_keyboard("menu:profile"),
+    )
+
+
 def main_menu_keyboard(is_owner: bool = False, hall_level: int | None = None, research_built: bool = False) -> InlineKeyboardMarkup:
     """The /menu command's keyboard — same compact categorised layout as the
     creature-card menu, so the two can't drift. `hall_level` (when known) locks the
@@ -4620,6 +4688,8 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(upgrade_page_callback, pattern=r"^upg_page:"))
     application.add_handler(CallbackQueryHandler(missions_page_callback, pattern=r"^mission_page:"))
     application.add_handler(CallbackQueryHandler(lab_rename_start_callback, pattern=r"^lab_rename$"))
+    application.add_handler(CallbackQueryHandler(lab_rename_ok_callback, pattern=r"^lab_rename_ok$"))
+    application.add_handler(CallbackQueryHandler(lab_rename_cancel_callback, pattern=r"^lab_rename_cancel$"))
     application.add_handler(CallbackQueryHandler(notif_toggle_callback, pattern=r"^notif_toggle$"))
     application.add_handler(CallbackQueryHandler(equip_panel_callback, pattern=r"^upg_eq:"))
     application.add_handler(CallbackQueryHandler(equip_slot_callback, pattern=r"^upg_slot:"))

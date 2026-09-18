@@ -5,7 +5,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import AttackLog
 from bio_lab.repository import creature_name, get_or_create_user, lab_display, mention
-from bot.buttons import BATTLE, DANGER, NAV, PRIMARY, SHOP, back_btn, btn
+from bot.buttons import BATTLE, CONFIRM, DANGER, NAV, PRIMARY, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants
 import datetime
@@ -1358,12 +1358,50 @@ async def arena_chest_queue_callback(update: Update, context: ContextTypes.DEFAU
     await arena_chest_detail_callback(update, context)
 
 
+def _chest_speedup_info_sync(tg_user, chest_id: int):
+    from bio_lab.models import ArenaChest
+    from game.arena_chests import advance_user_chests, speedup_diamond_cost, ARENA_CHEST_TIERS
+    user, _ = get_or_create_user(tg_user)
+    advance_user_chests(user)
+    chest = ArenaChest.objects.filter(id=chest_id, user=user).first()
+    if not chest:
+        raise GameError("این جعبه پیدا نشد.")
+    cost = speedup_diamond_cost(chest)
+    cfg = ARENA_CHEST_TIERS.get(chest.chest_type, ARENA_CHEST_TIERS["silver"])
+    return user, chest, cfg, cost
+
+
 def _chest_speedup_sync(tg_user, chest_id: int):
     user, _ = get_or_create_user(tg_user)
     return speedup_with_diamonds(user, chest_id)
 
 
 async def arena_chest_speedup_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    chest_id = int(query.data.split(":")[1])
+    try:
+        user, chest, cfg, cost = await run_db(_chest_speedup_info_sync, update.effective_user, chest_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer()
+    keyboard = InlineKeyboardMarkup([
+        [btn(f"✅ تأیید و باز کردن فوری ({cost} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"arena_chest_speedup_do:{chest_id}")],
+        [btn("❌ انصراف", emoji_key="btn_cancel", style=DANGER, callback_data=f"arena_chest_detail:{chest_id}")],
+    ])
+    from game.emoji import get_emoji
+    await safe_edit_message_text(
+        query,
+        f"⚡ <b>باز کردن فوری {cfg['name']} (جایگاه {chest.slot})</b>\n\n"
+        f"{get_emoji('diamond')} هزینه: <b>{cost} الماس</b>\n"
+        f"💎 موجودی شما: <b>{user.diamonds} الماس</b>\n\n"
+        "آیا از باز کردن فوری این جعبه با الماس مطمئن هستید؟",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+async def arena_chest_speedup_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     chest_id = int(query.data.split(":")[1])
     try:
@@ -1532,6 +1570,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(arena_chest_start_callback, pattern=r"^arena_chest_start:\d+$"))
     application.add_handler(CallbackQueryHandler(arena_chest_queue_callback, pattern=r"^arena_chest_queue:\d+$"))
     application.add_handler(CallbackQueryHandler(arena_chest_speedup_callback, pattern=r"^arena_chest_speedup:\d+$"))
+    application.add_handler(CallbackQueryHandler(arena_chest_speedup_do_callback, pattern=r"^arena_chest_speedup_do:\d+$"))
     application.add_handler(CallbackQueryHandler(arena_chest_open_callback, pattern=r"^arena_chest_open:\d+$"))
     application.add_handler(CallbackQueryHandler(arena_chest_rewards_callback, pattern=r"^arena_chest_rewards(:[a-z]+)?(:\d+)?$"))
     application.add_handler(CallbackQueryHandler(arena_find_callback, pattern=r"^arena_find$"))

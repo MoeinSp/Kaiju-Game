@@ -401,30 +401,8 @@ def _diamond_box_bulk_sync(tg_user, tier):
     return open_diamond_box_bulk(user, tier)
 
 
-async def diamond_box_bulk_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def _do_diamond_box_buy(update: Update, context: ContextTypes.DEFAULT_TYPE, tier: str, is_free: bool = False) -> None:
     query = update.callback_query
-    tier = query.data.split(":")[1]
-    try:
-        summary = await run_db(_diamond_box_bulk_sync, update.effective_user, tier)
-    except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
-        return
-    await query.answer("🎉 باز شد!")
-    label = constants.DIAMOND_BOX_TIERS[tier]["label"]
-    keyboard = InlineKeyboardMarkup([
-        [btn(f"باز کردن ×{BULK_PAY} دیگه", style=SHOP, callback_data=f"dbox_bulk:{tier}")],
-        [back_btn("menu:diamond_box", "لیست جعبه‌ها")],
-    ])
-    photo = composite_lootbox_batch_image(summary["rolls"], label)
-    await send_screen(
-        update, _bulk_summary_text(label, summary),
-        photo=photo, parse_mode="HTML", reply_markup=keyboard,
-    )
-
-
-async def diamond_box_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    tier = query.data.split(":")[1]
     try:
         result = await run_db(_diamond_box_buy_sync, update.effective_user, tier)
     except GameError as exc:
@@ -433,7 +411,7 @@ async def diamond_box_buy_callback(update: Update, context: ContextTypes.DEFAULT
 
     creature = result["creature"]
     rarity_label = constants.RARITY_LABELS[result["rarity"]]
-    is_free = result.get("is_free", False)
+    is_free = result.get("is_free", is_free)
     if is_free:
         await query.answer("🎁 باکس رایگان امروز باز شد!")
     else:
@@ -458,6 +436,89 @@ async def diamond_box_buy_callback(update: Update, context: ContextTypes.DEFAULT
     )
 
 
+async def diamond_box_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    tier = query.data.split(":")[1]
+    if tier not in constants.DIAMOND_BOX_TIERS:
+        await query.answer("این جعبه پیدا نشد.", show_alert=True)
+        return
+    is_free = False
+    if tier in ("bronze", "silver"):
+        is_free = await run_db(_can_claim_free_diamond_sync, update.effective_user, tier)
+    if is_free:
+        return await _do_diamond_box_buy(update, context, tier, is_free=True)
+
+    cfg = constants.DIAMOND_BOX_TIERS[tier]
+    cost = cfg["cost_diamonds"]
+    await query.answer()
+    keyboard = InlineKeyboardMarkup([
+        [btn(f"✅ تأیید و باز کردن ({cost} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"dbox_do_buy:{tier}")],
+        [back_btn(f"dbox_pick:{tier}", "❌ انصراف")],
+    ])
+    await safe_edit_message_text(
+        query,
+        f"{get_emoji('diamond_box')} <b>خرید و باز کردن {cfg['label']}</b>\n\n"
+        f"{get_emoji('diamond')} هزینه: <b>{cost} الماس</b>\n\n"
+        "آیا از خرید و باز کردن این جعبه مطمئن هستید؟",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+async def diamond_box_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    tier = query.data.split(":")[1]
+    if tier not in constants.DIAMOND_BOX_TIERS:
+        await query.answer("این جعبه پیدا نشد.", show_alert=True)
+        return
+    await _do_diamond_box_buy(update, context, tier, is_free=False)
+
+
+async def diamond_box_bulk_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    tier = query.data.split(":")[1]
+    if tier not in constants.DIAMOND_BOX_TIERS:
+        await query.answer("این جعبه پیدا نشد.", show_alert=True)
+        return
+    cfg = constants.DIAMOND_BOX_TIERS[tier]
+    cost = BULK_PAY * cfg["cost_diamonds"]
+    await query.answer()
+    keyboard = InlineKeyboardMarkup([
+        [btn(f"✅ تأیید و خرید ({cost} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"dbox_do_bulk:{tier}")],
+        [back_btn(f"dbox_pick:{tier}", "❌ انصراف")],
+    ])
+    await safe_edit_message_text(
+        query,
+        f"{get_emoji('diamond_box')} <b>خرید بسته‌ای {cfg['label']}</b>\n\n"
+        f"📦 تعداد: <b>{BULK_PAY} + ۱ رایگان 🎁</b> (روی‌هم ۱۱ جعبه)\n"
+        f"{get_emoji('diamond')} مجموع هزینه: <b>{cost} الماس</b>\n\n"
+        "آیا از خرید بسته‌ای این جعبه مطمئن هستید؟",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+async def diamond_box_do_bulk_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    tier = query.data.split(":")[1]
+    try:
+        summary = await run_db(_diamond_box_bulk_sync, update.effective_user, tier)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("🎉 باز شد!")
+    label = constants.DIAMOND_BOX_TIERS[tier]["label"]
+    keyboard = InlineKeyboardMarkup([
+        [btn(f"باز کردن ×{BULK_PAY} دیگه", style=SHOP, callback_data=f"dbox_bulk:{tier}")],
+        [back_btn("menu:diamond_box", "لیست جعبه‌ها")],
+    ])
+    photo = composite_lootbox_batch_image(summary["rolls"], label)
+    await send_screen(
+        update, _bulk_summary_text(label, summary),
+        photo=photo, parse_mode="HTML", reply_markup=keyboard,
+    )
+
+
 def register(application) -> None:
     application.add_handler(CommandHandler("biocrate", biocrate_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(biocrate_pick_callback, pattern=r"^bc_pick:"))
@@ -465,4 +526,6 @@ def register(application) -> None:
     application.add_handler(CommandHandler("diamondbox", diamond_box_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(diamond_box_pick_callback, pattern=r"^dbox_pick:"))
     application.add_handler(CallbackQueryHandler(diamond_box_buy_callback, pattern=r"^dbox_buy:"))
+    application.add_handler(CallbackQueryHandler(diamond_box_do_buy_callback, pattern=r"^dbox_do_buy:"))
     application.add_handler(CallbackQueryHandler(diamond_box_bulk_callback, pattern=r"^dbox_bulk:"))
+    application.add_handler(CallbackQueryHandler(diamond_box_do_bulk_callback, pattern=r"^dbox_do_bulk:"))

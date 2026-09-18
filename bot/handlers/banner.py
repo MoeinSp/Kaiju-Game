@@ -50,6 +50,28 @@ def _pull_sync(tg_user):
 
 async def banner_pull_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    st = await run_db(_panel_sync, update.effective_user)
+    if st["diamonds"] < st["cost"]:
+        await query.answer(f"الماس کافی نداری! کشیدن بنر {st['cost']} الماس می‌خواد.", show_alert=True)
+        return
+    await query.answer()
+    keyboard = InlineKeyboardMarkup([
+        [btn(f"✅ تأیید و کشیدن بنر ({st['cost']} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="banner_pull_do")],
+        [back_btn("menu:banner", "❌ انصراف")],
+    ])
+    await safe_edit_message_text(
+        query,
+        f"🎰 <b>کشیدن بنر ویژه ({st['featured_label']})</b>\n\n"
+        f"{get_emoji('diamond')} هزینه: <b>{st['cost']} الماس</b>\n"
+        f"💎 موجودی شما: <b>{st['diamonds']} الماس</b>\n\n"
+        "آیا از کشیدن بنر ویژه با الماس مطمئن هستید؟",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+
+async def banner_pull_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
     try:
         result, st = await run_db(_pull_sync, update.effective_user)
     except GameError as exc:
@@ -78,3 +100,4 @@ async def banner_pull_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 def register(application) -> None:
     application.add_handler(CommandHandler("banner", banner_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(banner_pull_callback, pattern=r"^banner_pull$"))
+    application.add_handler(CallbackQueryHandler(banner_pull_do_callback, pattern=r"^banner_pull_do$"))
