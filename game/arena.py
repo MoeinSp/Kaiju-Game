@@ -296,7 +296,14 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
     reserved = _reserved_by_others(attacker.id)
     base_exclude = {attacker.id} | reserved
 
-    # Fast indexed lookup of active creature owners excluding attacker & reserved
+    # If attacker belongs to an alliance, exclude all alliance members from matchmaking
+    if attacker.alliance_id:
+        alliance_member_ids = set(
+            User.objects.filter(alliance_id=attacker.alliance_id).values_list("id", flat=True)
+        )
+        base_exclude |= alliance_member_ids
+
+    # Fast indexed lookup of active creature owners excluding attacker, reserved & alliance members
     active_owner_ids = set(
         Creature.objects.filter(is_active=True).values_list("owner_id", flat=True)
     ) - base_exclude
@@ -311,6 +318,9 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
         .select_related("alliance")
         .only("id", "cup", "coins", "username", "first_name", "alliance__name", "alliance_id")
     )
+
+    if attacker.alliance_id:
+        eligible = [u for u in eligible if u.alliance_id != attacker.alliance_id]
 
     if not eligible:
         return _fake_opponent(attacker)
@@ -395,6 +405,8 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         # the "توی یه ثانیه ۵ تا اتک خوردم" bug. The lock serialises them: the first
         # raid sets the shield and commits; the rest then see it and bounce.
         defender_user = User.objects.select_for_update().get(id=opponent["user"].id)
+        if attacker.alliance_id and defender_user.alliance_id == attacker.alliance_id:
+            raise GameError("🤝 این بازیکن هم‌اتحادی شماست! امکان حمله به اعضای اتحاد خودت وجود نداره.")
         defender_creature = Creature.objects.filter(owner=defender_user, is_active=True).first()
         if defender_creature is None:
             raise GameError("این حریف دیگه موجود فعالی نداره.")

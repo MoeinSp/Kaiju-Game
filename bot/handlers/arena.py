@@ -645,6 +645,8 @@ def _reconstruct_pending_sync(tg_user, ref):
         target = UserModel.objects.filter(id=int(ref)).first()
         if target is None:
             raise GameError("این حریف دیگه در دسترس نیست، یکی دیگه پیدا کن.")
+        if user.alliance_id and target.alliance_id and user.alliance_id == target.alliance_id:
+            raise GameError("🤝 این بازیکن هم‌اتحادی شماست و امکان حمله به او وجود ندارد.")
         tc = Creature.objects.filter(owner=target, is_active=True).first()
         if tc is None:
             raise GameError("این حریف دیگه موجود فعالی نداره، یکی دیگه پیدا کن.")

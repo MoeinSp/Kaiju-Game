@@ -1128,6 +1128,8 @@ def _pvp_preview_sync(attacker_tg, target_tg):
     target = User.objects.filter(id=target_tg.id).first()
     if target is None:
         raise GameError("این بازیکن هنوز بازی رو شروع نکرده — نمی‌شه بهش حمله کرد.")
+    if attacker.alliance_id and target.alliance_id and attacker.alliance_id == target.alliance_id:
+        raise GameError("🤝 این بازیکن هم‌اتحادی توئه! امکان حمله به اعضای اتحاد خودت وجود نداره.")
     a_creature = get_active_creature(attacker)
     t_creature = get_active_creature(target)
     if a_creature is None:
@@ -1244,6 +1246,8 @@ def _pvp_preview_by_ids_sync(attacker_id, target_id):
     target = User.objects.filter(id=target_id).first()
     if attacker is None or target is None:
         raise GameError("یکی از طرف‌ها دیگه پیدا نشد.")
+    if attacker.alliance_id and target.alliance_id and attacker.alliance_id == target.alliance_id:
+        raise GameError("🤝 این بازیکن هم‌اتحادی توئه! امکان حمله به اعضای اتحاد خودت وجود نداره.")
     a_creature = get_active_creature(attacker)
     t_creature = get_active_creature(target)
     if a_creature is None or t_creature is None:
@@ -1393,6 +1397,8 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     target = User.objects.select_for_update().filter(id=target_id).first()
     if target is None:
         raise GameError("این بازیکن دیگه پیدا نشد.")
+    if attacker.alliance_id and target.alliance_id and attacker.alliance_id == target.alliance_id:
+        raise GameError("🤝 این بازیکن هم‌اتحادی توئه! امکان حمله به اعضای اتحاد خودت وجود نداره.")
     a_creature = get_active_creature(attacker)
     t_creature = get_active_creature(target)
     if a_creature is None or t_creature is None:
