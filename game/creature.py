@@ -500,10 +500,10 @@ def upgrade_part(user: User, creature: Creature, part: str, count: int = 1) -> t
             raise GameError(
                 f"⛔ این عضو به سقف نهایی {constants.PART_UPGRADE_MAX} رسیده — بالاتر از این نمی‌ره."
             )
+        # keep this SHORT — it surfaces in a Telegram callback alert, capped at 200 chars
         raise GameError(
             f"⛔ سقف ارتقای این عضو برای این هیولا ({creature.star_level}⭐) عددِ {cap} است. "
-            f"برای بالاتر رفتن باید با فیوژن ستاره‌ی هیولا رو زیاد کنی "
-            f"(هر ستاره سقف رو {constants.PART_UPGRADE_CAP_PER_STAR} تا بیشتر می‌کنه؛ نایابی بالاتر هم سقف پایه رو بیشتر می‌کنه، تا {constants.PART_UPGRADE_MAX} در اساطیریِ ۵⭐)."
+            f"با فیوژن ستاره رو بالا ببر (هر ستاره +{constants.PART_UPGRADE_CAP_PER_STAR}، تا {constants.PART_UPGRADE_MAX} در اساطیریِ ۵⭐)."
         )
     # never overshoot the cap in a bulk (×5/×10) buy
     count = min(count, cap - current_level)

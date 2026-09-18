@@ -50,6 +50,13 @@ def _release_opponent(opponent_id: int) -> None:
         _RESERVATIONS.pop(opponent_id, None)
 
 
+class OpponentUnavailableError(GameError):
+    """The specific matched opponent can't be attacked right now — they got shielded
+    (someone raided them first), lost their active creature, vanished, or turned out to
+    be a same-alliance member. The caller should AUTO-REMATCH to a fresh opponent rather
+    than dead-ending, so a found opponent never leaves the player stuck."""
+
+
 def active_power(user: User) -> int:
     creature = Creature.objects.filter(owner=user, is_active=True).first()
     if creature is None:
@@ -406,12 +413,12 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         # raid sets the shield and commits; the rest then see it and bounce.
         defender_user = User.objects.select_for_update().get(id=opponent["user"].id)
         if attacker.alliance_id and defender_user.alliance_id == attacker.alliance_id:
-            raise GameError("🤝 این بازیکن هم‌اتحادی شماست! امکان حمله به اعضای اتحاد خودت وجود نداره.")
+            raise OpponentUnavailableError("🤝 این بازیکن هم‌اتحادی شماست! امکان حمله به اعضای اتحاد خودت وجود نداره.")
         defender_creature = Creature.objects.filter(owner=defender_user, is_active=True).first()
         if defender_creature is None:
-            raise GameError("این حریف دیگه موجود فعالی نداره.")
+            raise OpponentUnavailableError("این حریف دیگه موجود فعالی نداره.")
         if is_shielded(defender_user):
-            raise GameError("این حریف الان سپر محافظ داره، یکی دیگه رو امتحان کن.")
+            raise OpponentUnavailableError("این حریف الان سپر محافظ داره، یکی دیگه رو امتحان کن.")
 
     battle_res = resolve_battle(attacker_creature, defender_creature)
     winner = battle_res["winner"]

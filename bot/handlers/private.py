@@ -1408,7 +1408,9 @@ async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             return
         if await show_gold_error(query, exc):
             return
-        await query.answer(str(exc), show_alert=True)
+        # Telegram caps callback-alert text at 200 chars — a longer message throws
+        # BadRequest("Message_too_long"), which used to crash this handler
+        await query.answer(str(exc)[:200], show_alert=True)
         return
     if result is None:
         await query.answer()

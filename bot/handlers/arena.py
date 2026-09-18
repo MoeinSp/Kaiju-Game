@@ -26,6 +26,7 @@ from game.subscription import is_subscription_active
 from game.media import get_arena_chest_image_path
 
 from game.arena import (
+    OpponentUnavailableError,
     active_power,
     attack,
     creature_power,
@@ -208,7 +209,7 @@ def _find_sync(tg_user, exclude_ids=None):
             dna_win, cname, sync_energy(user))
 
 
-async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, note: str = "") -> None:
     query = update.callback_query
     await query.answer()
     recent = context.user_data.get(RECENT_OPPONENTS_KEY, [])
@@ -250,6 +251,8 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data[RECENT_OPPONENTS_KEY] = [last_real] if last_real else []
 
     text, keyboard = _render_opponent(user, opponent, my_power, loot, my_element, dna_win, cname, energy)
+    if note:
+        text = f"{note}\n\n{text}"
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -644,12 +647,12 @@ def _reconstruct_pending_sync(tg_user, ref):
     if ref and ref != "f" and ref.lstrip("-").isdigit():
         target = UserModel.objects.filter(id=int(ref)).first()
         if target is None:
-            raise GameError("این حریف دیگه در دسترس نیست، یکی دیگه پیدا کن.")
+            raise OpponentUnavailableError("این حریف دیگه در دسترس نیست، یکی دیگه پیدا کن.")
         if user.alliance_id and target.alliance_id and user.alliance_id == target.alliance_id:
-            raise GameError("🤝 این بازیکن هم‌اتحادی شماست و امکان حمله به او وجود ندارد.")
+            raise OpponentUnavailableError("🤝 این بازیکن هم‌اتحادی شماست و امکان حمله به او وجود ندارد.")
         tc = Creature.objects.filter(owner=target, is_active=True).first()
         if tc is None:
-            raise GameError("این حریف دیگه موجود فعالی نداره، یکی دیگه پیدا کن.")
+            raise OpponentUnavailableError("این حریف دیگه موجود فعالی نداره، یکی دیگه پیدا کن.")
         return {
             "is_fake": False, "user_id": target.id, "label": lab_display(target),
             "creature_name": tc.name, "cup": target.cup, "power": active_power(target),
@@ -667,6 +670,17 @@ def _reconstruct_pending_sync(tg_user, ref):
         "cup": opp["cup"], "power": opp["power"], "element": opp.get("element"),
         "loot_pool": opp["loot_pool"], "loot_gold": loot_gold, "loot_dna": loot_dna,
     }
+
+
+async def _rematch_after_unavailable(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """The chosen opponent can't be attacked (shielded, gone, lost their creature, or an
+    ally) — drop the stale pending and show a freshly-matched opponent with a heads-up
+    note, so the player is never stuck on an un-attackable target."""
+    context.user_data.pop(PENDING_OPPONENT_KEY, None)
+    await arena_find_callback(
+        update, context,
+        note="⚠️ حریف قبلی الان قابل حمله نیست (سپر گرفت یا در دسترس نیست) — یه حریف تازه برات پیدا شد:",
+    )
 
 
 async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -707,6 +721,11 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     if pending is None:
         try:
             pending = await run_db(_reconstruct_pending_sync, update.effective_user, ref)
+        except OpponentUnavailableError:
+            # the specific opponent this (stale) card pointed at is gone/shielded/an ally
+            # now — auto-rematch to a fresh one instead of leaving the player stuck
+            await _rematch_after_unavailable(update, context)
+            return
         except GameError as exc:
             await query.answer(str(exc), show_alert=True)
             return
@@ -717,6 +736,11 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     try:
         result, completed_missions = await run_db(_attack_sync, update.effective_user, pending)
+    except OpponentUnavailableError:
+        # opponent got shielded / lost their creature between find and attack (someone
+        # raided them first) — don't dead-end; find a fresh opponent and show it
+        await _rematch_after_unavailable(update, context)
+        return
     except GameError as exc:
         from bot.handlers.energy import show_energy_error
 
