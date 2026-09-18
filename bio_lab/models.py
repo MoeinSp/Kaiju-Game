@@ -721,9 +721,12 @@ class AttackLog(models.Model):
     defender = models.ForeignKey(
         User, null=True, blank=True, on_delete=models.CASCADE, related_name="attacks_received"
     )
-    attacker_label = models.CharField(max_length=64, default="")  # attacker's lab name at raid time
+    # 255, not 64: lab_display() embeds a subscription badge as a full <tg-emoji …> tag
+    # (~45 chars) plus the HTML-escaped lab name (up to 32 raw, more once escaped), so a
+    # subscriber's label overflowed varchar(64) and every raid on them crashed silently.
+    attacker_label = models.CharField(max_length=255, default="")  # attacker's lab name at raid time
     attacker_power = models.IntegerField(default=0)              # attacker's creature power at raid time
-    defender_label = models.CharField(max_length=64)  # lab name shown at raid time (real or fake)
+    defender_label = models.CharField(max_length=255)  # lab name shown at raid time (real or fake)
     is_fake_defender = models.BooleanField(default=False)
     attacker_won = models.BooleanField()
     loot_gold = models.IntegerField(default=0)

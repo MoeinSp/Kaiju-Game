@@ -505,10 +505,10 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
     # log is pre-marked notified here — the periodic catch-up job then leaves it alone.
     log = AttackLog.objects.create(
         attacker=attacker,
-        attacker_label=lab_display(attacker),
+        attacker_label=lab_display(attacker)[:255],
         attacker_power=attacker_power,
         defender=defender_user,
-        defender_label=opponent["label"],
+        defender_label=(opponent["label"] or "")[:255],
         is_fake_defender=opponent["is_fake"],
         attacker_won=won,
         loot_gold=taken_from_defender if defender_user is not None else loot,
