@@ -63,20 +63,26 @@ async def casino_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     if cfg is None:
         await query.answer("این میز پیدا نشد.", show_alert=True)
         return
+    tiers, coins, diamonds, free_used = await run_db(_panel_sync, update.effective_user)
     await query.answer()
     if cfg["daily"]:
         cost_line = "رایگان (روزی یک‌بار)"
+        btn_label = "🎲 بچرخون! (رایگان)"
     else:
+        cur_icon = "💎" if cfg["currency"] == "diamonds" else "طلا"
         cur = get_emoji("diamond") if cfg["currency"] == "diamonds" else get_emoji("coin")
         cost_line = f"شرط: <b>{cfg['cost']}</b> {cur}"
+        btn_label = f"✅ تأیید و شرط‌بندی ({cfg['cost']} {cur_icon})"
+
+    bal_line = f"\n💎 موجودی الماس شما: <b>{diamonds}</b> الماس" if cfg.get("currency") == "diamonds" else f"\n💰 موجودی طلا: <b>{coins:,}</b> طلا"
     keyboard = InlineKeyboardMarkup([
-        [btn("🎲 بچرخون!", style=CONFIRM, callback_data=f"casino_play:{tier}")],
-        [back_btn("menu:casino", "بازگشت به کازینو")],
+        [btn(btn_label, style=CONFIRM, callback_data=f"casino_play:{tier}")],
+        [back_btn("menu:casino", "❌ انصراف")],
     ])
     await safe_edit_message_text(
         query,
-        f"{cfg['label']}\n<blockquote>{cfg['desc']}\n{cost_line}\n\n"
-        "شانسیه — ممکنه جایزه‌ی بزرگ ببری یا هیچی گیرت نیاد. مطمئنی؟</blockquote>",
+        f"{cfg['label']}\n<blockquote>{cfg['desc']}\n{cost_line}{bal_line}\n\n"
+        "شانسیه — ممکنه جایزه‌ی بزرگ ببری یا هیچی گیرت نیاد. آیا مطمئن هستید؟</blockquote>",
         parse_mode="HTML",
         reply_markup=keyboard,
     )
