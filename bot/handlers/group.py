@@ -352,13 +352,14 @@ def _prune_offers() -> None:
 
 
 def _new_offer(kind: str, sender_id: int, receiver_id: int, item_id: int, fee: int, desc: str,
-               sender_name: str, receiver_name: str) -> str:
+               sender_name: str, receiver_name: str, sender_cd: int = 24, receiver_cd: int = 24) -> str:
     _prune_offers()
     token = secrets.token_urlsafe(6)
     _PENDING_OFFERS[token] = {
         "kind": kind, "sender_id": sender_id, "receiver_id": receiver_id,
         "item_id": item_id, "fee": fee, "desc": desc, "price": 0,
         "sender_name": sender_name, "receiver_name": receiver_name,
+        "sender_cd": sender_cd, "receiver_cd": receiver_cd,
         "expires_at": time.time() + _OFFER_TTL_SECONDS,
     }
     return token
@@ -404,7 +405,8 @@ def _seller_step_keyboard(token: str) -> InlineKeyboardMarkup:
     ])
 
 
-async def _begin_offer(message, kind: str, sender, receiver, item_id: int, desc: str, fee: int) -> None:
+async def _begin_offer(message, kind: str, sender, receiver, item_id: int, desc: str, fee: int,
+                       sender_cd: int = 24, receiver_cd: int = 24) -> None:
     # `message` is the message to reply under (the user's command, or a callback's
     # message when resuming after «آزاد کردن»).
     # one live offer per sender: while an offer is pending it holds a claim on its item,
@@ -420,11 +422,14 @@ async def _begin_offer(message, kind: str, sender, receiver, item_id: int, desc:
         await message.reply_text("⏳ این مورد همین الان توی یه پیشنهاد انتقالِ بازه.")
         return
     token = _new_offer(kind, sender.id, receiver.id, item_id=item_id, fee=fee, desc=desc,
-                       sender_name=display_name(sender), receiver_name=display_name(receiver))
+                       sender_name=display_name(sender), receiver_name=display_name(receiver),
+                       sender_cd=sender_cd, receiver_cd=receiver_cd)
     reset_line = f"\n{_CREATURE_RESET_NOTE}\n" if kind == "c" else ""
+    cd_line = f"⏳ کول‌داون: فرستنده {sender_cd} ساعت | گیرنده {receiver_cd} ساعت\n" if kind == "c" else ""
     await message.reply_text(
         f"🤝 <b>{display_name(sender)}</b> می‌خواد {desc} رو به <b>{display_name(receiver)}</b> بده.\n"
         f"{get_emoji('diamond')} کارمزد انتقال: <b>{fee}</b> الماس (گیرنده می‌ده)\n"
+        f"{cd_line}"
         f"{reset_line}\n"
         f"<b>{display_name(sender)}</b>، قیمت (به طلا) رو تعیین کن یا رایگان بفرست 👇\n"
         "<i>5 دقیقه اعتبار داره.</i>",
@@ -442,7 +447,7 @@ async def transfer_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text(
             "🦖 برای انتقال هیولا، روی پیام گیرنده <b>ریپلای</b> کن و بنویس «انتقال کایجو [کد]».\n"
             "<i>کد هیولا رو از «کلکسیون» توی پیوی ربات می‌بینی. اول قیمت می‌ذاری، بعد گیرنده قیمت و "
-            f"کارمزد الماس رو می‌بینه و تأیید می‌کنه؛ برای هر دو طرف {constants.TRANSFER_COOLDOWN_HOURS} ساعت کول‌داون داره.</i>\n"
+            "کارمزد الماس رو می‌بینه و تأیید می‌کنه؛ برای فرستنده کول‌داون پایه (۸ تا ۲۴ ساعت) و برای گیرنده بر اساس ستاره‌ها (پایه × ۲ به توان ستاره) فعال می‌شه.</i>\n"
             f"{_CREATURE_RESET_NOTE}\n"
             "<i>🤝 انتقال به «تالار تجارت» نیاز داره؛ برای هیولای N⭐ باید هر دو طرف تالار تجارت سطح N داشته باشن.</i>\n\n"
             + transfer.creature_prices_text(),
@@ -476,7 +481,10 @@ async def transfer_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TY
         return
     c = preview["creature"]
     desc = f"هیولای <b>{creature_name(c)}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level}"
-    await _begin_offer(update.message, "c", sender, receiver, c.id, desc, preview["cost"])
+    await _begin_offer(
+        update.message, "c", sender, receiver, c.id, desc, preview["cost"],
+        sender_cd=preview.get("sender_cd", 24), receiver_cd=preview.get("receiver_cd", 24)
+    )
 
 
 def _free_and_preview_creature_sync(chat, sender_tg, receiver_id, creature_id):
@@ -548,7 +556,10 @@ async def transfer_free_go_callback(update: Update, context: ContextTypes.DEFAUL
         query, f"🔓 <b>{creature_name(c)}</b> از معدن آزاد شد. حالا انتقال رو تموم کن 👇", parse_mode="HTML"
     )
     desc = f"هیولای <b>{creature_name(c)}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level}"
-    await _begin_offer(query.message, "c", sender, receiver, c.id, desc, preview["cost"])
+    await _begin_offer(
+        query.message, "c", sender, receiver, c.id, desc, preview["cost"],
+        sender_cd=preview.get("sender_cd", 24), receiver_cd=preview.get("receiver_cd", 24)
+    )
 
 
 async def transfer_free_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -638,6 +649,12 @@ def _offer_receiver_text(offer: dict) -> str:
         if price > 0 else f"{get_emoji('gift')} <b>رایگان</b> (بدون قیمت)"
     )
     reset_line = f"\n\n{_CREATURE_RESET_NOTE}" if offer.get("kind") == "c" else ""
+    if offer.get("kind") == "c":
+        s_cd = offer.get("sender_cd", 24)
+        r_cd = offer.get("receiver_cd", 24)
+        cd_info = f"⏳ کول‌داون پس از انتقال: فرستنده {s_cd} ساعت · گیرنده {r_cd} ساعت"
+    else:
+        cd_info = "⏳ ۱ روز کول‌داون برای هر دو طرف"
     return (
         f"🤝 <b>پیشنهاد انتقال</b>\n"
         f"{offer['desc']}\n"
@@ -645,7 +662,8 @@ def _offer_receiver_text(offer: dict) -> str:
         f"{price_line}\n"
         f"{get_emoji('diamond')} کارمزد: <b>{offer['fee']}</b> الماس"
         f"{reset_line}\n\n"
-        f"<b>{offer['receiver_name']}</b>، قبول می‌کنی؟ 👇  <i>(5 دقیقه اعتبار · 1 روز کول‌داون برای هر دو طرف)</i>"
+        f"<b>{offer['receiver_name']}</b>، قبول می‌کنی؟ 👇  <i>(5 دقیقه اعتبار)</i>\n"
+        f"<i>{cd_info}</i>"
     )
 
 
@@ -785,11 +803,15 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
         _PENDING_OFFERS.pop(token, None)
         if offer["kind"] == "c":
             c = result["creature"]
+            s_cd = result.get("sender_cd", offer.get("sender_cd", 24))
+            r_cd = result.get("receiver_cd", offer.get("receiver_cd", 24))
+            cd_text = f"⏳ کول‌داون انتقال فعال شد: فرستنده {s_cd} ساعت | گیرنده {r_cd} ساعت"
             body = (f"🦖 هیولای <b>{creature_name(c)}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level} "
                     f"به <b>{display_name(receiver)}</b> منتقل شد! ✅\n"
                     f"<i>♻️ لِوِل و ارتقاهای بدنی ریست شد؛ فقط ستاره‌ها موند.</i>")
         else:
             it = result["item"]
+            cd_text = "⏳ ۱ روز کول‌داون برای هر دو طرف فعال شد."
             body = (f"🎒 تجهیزاتِ <b>{it.name} +{it.level}</b> {constants.RARITY_LABELS[it.rarity]} "
                     f"به <b>{display_name(receiver)}</b> منتقل شد! ✅")
         price_line = (
@@ -800,7 +822,7 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
         await safe_edit_message_text(
             query,
             f"{body}{price_line}\n{get_emoji('diamond')} کارمزد <b>{result['cost']}</b> الماس پرداخت شد.\n"
-            "<i>1 روز کول‌داون برای هر دو طرف فعال شد.</i>",
+            f"<i>{cd_text}</i>",
             parse_mode="HTML",
         )
         if offer["kind"] == "c":
@@ -1128,8 +1150,6 @@ def _pvp_preview_sync(attacker_tg, target_tg):
     target = User.objects.filter(id=target_tg.id).first()
     if target is None:
         raise GameError("این بازیکن هنوز بازی رو شروع نکرده — نمی‌شه بهش حمله کرد.")
-    if attacker.alliance_id and target.alliance_id and attacker.alliance_id == target.alliance_id:
-        raise GameError("🤝 این بازیکن هم‌اتحادی توئه! امکان حمله به اعضای اتحاد خودت وجود نداره.")
     a_creature = get_active_creature(attacker)
     t_creature = get_active_creature(target)
     if a_creature is None:
@@ -1246,8 +1266,6 @@ def _pvp_preview_by_ids_sync(attacker_id, target_id):
     target = User.objects.filter(id=target_id).first()
     if attacker is None or target is None:
         raise GameError("یکی از طرف‌ها دیگه پیدا نشد.")
-    if attacker.alliance_id and target.alliance_id and attacker.alliance_id == target.alliance_id:
-        raise GameError("🤝 این بازیکن هم‌اتحادی توئه! امکان حمله به اعضای اتحاد خودت وجود نداره.")
     a_creature = get_active_creature(attacker)
     t_creature = get_active_creature(target)
     if a_creature is None or t_creature is None:
@@ -1397,8 +1415,6 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     target = User.objects.select_for_update().filter(id=target_id).first()
     if target is None:
         raise GameError("این بازیکن دیگه پیدا نشد.")
-    if attacker.alliance_id and target.alliance_id and attacker.alliance_id == target.alliance_id:
-        raise GameError("🤝 این بازیکن هم‌اتحادی توئه! امکان حمله به اعضای اتحاد خودت وجود نداره.")
     a_creature = get_active_creature(attacker)
     t_creature = get_active_creature(target)
     if a_creature is None or t_creature is None:

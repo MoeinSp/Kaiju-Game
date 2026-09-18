@@ -603,11 +603,21 @@ TRANSFER_COOLDOWN_HOURS_BY_RARITY = {
 }
 
 
-def transfer_cooldown_hours(rarity: str, star_level: int) -> int:
-    """Kaiju-transfer cooldown hours for a creature of `rarity` at `star_level`."""
+def transfer_sender_cooldown_hours(rarity: str) -> int:
+    """Kaiju-transfer cooldown for the sender: always the 1-star base cooldown for that rarity."""
+    return TRANSFER_COOLDOWN_HOURS_BY_RARITY.get(rarity, TRANSFER_COOLDOWN_HOURS)
+
+
+def transfer_receiver_cooldown_hours(rarity: str, star_level: int) -> int:
+    """Kaiju-transfer cooldown for the receiver: scales by 2^(star-1) * base_hours."""
     base = TRANSFER_COOLDOWN_HOURS_BY_RARITY.get(rarity, TRANSFER_COOLDOWN_HOURS)
     monsters = 2 ** (max(1, int(star_level)) - 1)
     return base * monsters
+
+
+def transfer_cooldown_hours(rarity: str, star_level: int) -> int:
+    """Back-compat alias for receiver cooldown."""
+    return transfer_receiver_cooldown_hours(rarity, star_level)
 
 
 # creature diamond cost = star base × rarity multiplier. The star base now grows by the

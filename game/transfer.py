@@ -174,7 +174,9 @@ def preview_creature_transfer(sender: User, receiver: User, creature_id: int) ->
     cost = constants.creature_transfer_cost(creature.star_level, creature.rarity)
     if receiver.diamonds < cost:
         raise TransferFundsError(cost, receiver.diamonds, "creature")
-    return {"creature": creature, "cost": cost}
+    sender_cd = constants.transfer_sender_cooldown_hours(creature.rarity)
+    receiver_cd = constants.transfer_receiver_cooldown_hours(creature.rarity, creature.star_level)
+    return {"creature": creature, "cost": cost, "sender_cd": sender_cd, "receiver_cd": receiver_cd}
 
 
 def preview_equip_transfer(sender: User, receiver: User, equip_id: int) -> dict:
@@ -282,12 +284,14 @@ def transfer_creature(sender: User, receiver: User, creature_id: int, price: int
     creature.is_active = False
     creature.save()  # full save — the reset touched level, xp, base stats and parts
 
-    # the cooldown scales with THIS creature's rarity + star (base hours × 2^(star-1))
-    cooldown_hours = constants.transfer_cooldown_hours(creature.rarity, creature.star_level)
-    _set_cooldown([sender, receiver], "kaiju_transfer_ready_at", cooldown_hours)
+    # the cooldown for the sender is 1-star base hours, receiver scales by 2^(star-1)
+    sender_cd = constants.transfer_sender_cooldown_hours(creature.rarity)
+    receiver_cd = constants.transfer_receiver_cooldown_hours(creature.rarity, creature.star_level)
+    _set_cooldown([sender], "kaiju_transfer_ready_at", sender_cd)
+    _set_cooldown([receiver], "kaiju_transfer_ready_at", receiver_cd)
     sender.save(update_fields=["kaiju_transfer_ready_at", "coins"])
     receiver.save(update_fields=["diamonds", "coins", "kaiju_transfer_ready_at"])
-    return {"creature": creature, "cost": cost, "price": price}
+    return {"creature": creature, "cost": cost, "price": price, "sender_cd": sender_cd, "receiver_cd": receiver_cd}
 
 
 @transaction.atomic
