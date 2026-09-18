@@ -117,7 +117,12 @@ _cache: dict[str, EmojiOverride] | None = None
 
 def _load_cache() -> dict[str, EmojiOverride]:
     global _cache
-    _cache = {o.key: o for o in EmojiOverride.objects.all()}
+    try:
+        _cache = {o.key: o for o in EmojiOverride.objects.all()}
+    except Exception:
+        if _cache is not None:
+            return _cache
+        return {}
     return _cache
 
 
@@ -152,18 +157,23 @@ def _load_glyph_map() -> dict[str, str]:
     regex that matches any themed glyph — variation-selector-insensitive, and longest
     first so multi-codepoint emoji win over their parts."""
     global _glyph_map, _glyph_re
-    gm = {
-        _norm_glyph(o.key[len(_GLYPH_PREFIX):]): o.custom_emoji_id
-        for o in EmojiOverride.objects.filter(key__startswith=_GLYPH_PREFIX)
-        if o.key[len(_GLYPH_PREFIX):] not in GLYPH_SKIP
-    }
-    _glyph_map = gm
-    # each glyph may appear with an optional trailing VS-16 in the text; match either
-    _glyph_re = (
-        re.compile("|".join(re.escape(g) + "️?" for g in sorted(gm, key=len, reverse=True)))
-        if gm else None
-    )
-    return gm
+    try:
+        gm = {
+            _norm_glyph(o.key[len(_GLYPH_PREFIX):]): o.custom_emoji_id
+            for o in EmojiOverride.objects.filter(key__startswith=_GLYPH_PREFIX)
+            if o.key[len(_GLYPH_PREFIX):] not in GLYPH_SKIP
+        }
+        _glyph_map = gm
+        # each glyph may appear with an optional trailing VS-16 in the text; match either
+        _glyph_re = (
+            re.compile("|".join(re.escape(g) + "️?" for g in sorted(gm, key=len, reverse=True)))
+            if gm else None
+        )
+        return gm
+    except Exception:
+        if _glyph_map is not None:
+            return _glyph_map
+        return {}
 
 
 def refresh_cache() -> None:
