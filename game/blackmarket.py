@@ -96,6 +96,72 @@ def _ensure_daily_auctions() -> None:
     )
 
 
+def validate_bid_preview(user: User, auction_id: int, bid_amount: int) -> dict:
+    """Validate a bid preview before confirmation. Raises GameError on failure."""
+    now = timezone.now()
+    auction = BlackMarketAuction.objects.filter(id=auction_id, is_settled=False, ends_at__gt=now).select_related("highest_bidder").first()
+    if auction is None:
+        raise GameError("این مزایده به پایان رسیده یا پیدا نشد.")
+
+    is_vip_lot = (auction.bid_currency == "diamonds" or auction.item_type == "creature" or "(VIP)" in auction.title)
+    if is_vip_lot:
+        from game.subscription import is_subscription_active
+        if not is_subscription_active(user):
+            raise GameError("👑 این مزایده VIP است و فقط دارندگان «اشتراک نقره‌ای» یا «اشتراک طلایی» می‌توانند در آن شرکت کنند!")
+
+    other_active = BlackMarketAuction.objects.filter(
+        is_settled=False,
+        ends_at__gt=now,
+        highest_bidder_id=user.id,
+    ).exclude(id=auction.id).first()
+    if other_active:
+        raise GameError(
+            f"⚠️ شما در حال حاضر بالاترین پیشنهاد را روی «{other_active.title}» دارید!\n"
+            "برای حفظ تعادل بازار و جلوگیری از انحصار، هر بازیکن همزمان می‌تواند بالاترین پیشنهاد ۱ مزایده را داشته باشد."
+        )
+
+    if auction.highest_bidder_id is None:
+        min_required = auction.min_bid
+        step = get_min_bid_increment(auction.min_bid, auction.bid_currency)
+    else:
+        step = get_min_bid_increment(auction.current_bid, auction.bid_currency)
+        min_required = auction.current_bid + step
+
+    if bid_amount < min_required:
+        curr_label = "طلا" if auction.bid_currency == "coins" else "الماس"
+        raise GameError(
+            f"حداقل پیشنهاد بعدی باید {min_required:,} {curr_label} باشد.\n"
+            f"(حداقل افزایش با توجه به قیمت فعلی: +{step:,} {curr_label})"
+        )
+
+    prev_bidder = auction.highest_bidder
+    prev_amount = auction.current_bid
+
+    if prev_bidder is not None and prev_bidder.id == user.id:
+        cost = bid_amount - prev_amount
+        is_own_increase = True
+    else:
+        cost = bid_amount
+        is_own_increase = False
+
+    if auction.bid_currency == "coins":
+        if user.coins < cost:
+            raise GameError(f"طلای کافی نداری! (موجودی: {user.coins:,} طلا، نیاز: {cost:,})")
+    else:
+        if user.diamonds < cost:
+            raise GameError(f"الماس کافی نداری! (موجودی: {user.diamonds:,} الماس، نیاز: {cost:,})")
+
+    return {
+        "auction": auction,
+        "bid_amount": bid_amount,
+        "cost": cost,
+        "currency": auction.bid_currency,
+        "is_own_increase": is_own_increase,
+        "prev_bidder_name": auction.highest_bidder_name,
+        "prev_amount": prev_amount,
+    }
+
+
 @transaction.atomic
 def place_bid(user: User, auction_id: int, bid_amount: int) -> dict:
     """Place a bid on an auction. Refunds previous bidder and deducts currency from new bidder."""
@@ -125,7 +191,7 @@ def place_bid(user: User, auction_id: int, bid_amount: int) -> dict:
             "برای حفظ تعادل بازار و جلوگیری از انحصار، هر بازیکن همزمان می‌تواند بالاترین پیشنهاد ۱ مزایده را داشته باشد."
         )
 
-    if auction.highest_bidder is None:
+    if auction.highest_bidder_id is None:
         min_required = auction.min_bid
         step = get_min_bid_increment(auction.min_bid, auction.bid_currency)
     else:

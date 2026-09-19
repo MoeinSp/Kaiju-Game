@@ -65,6 +65,49 @@ def _render_bm_keyboard(auctions: list[BlackMarketAuction]) -> InlineKeyboardMar
     return InlineKeyboardMarkup(rows)
 
 
+def _render_confirmation_text(preview: dict) -> str:
+    auc = preview["auction"]
+    bid_amount = preview["bid_amount"]
+    cost = preview["cost"]
+    curr = "طلا" if preview["currency"] == "coins" else "الماس"
+    prev_name = preview["prev_bidder_name"] or "هنوز پیشنهادی ثبت نشده"
+    prev_amount = preview["prev_amount"]
+    
+    cost_info = f"<b>{cost:,}</b> {curr}"
+    if preview.get("is_own_increase"):
+        cost_info += f" <i>(افزایش روی پیشنهاد قبلی خودتان)</i>"
+
+    lines = [
+        "🏷 <b>تأیید نهایی ثبت پیشنهاد در مزایده</b>",
+        f"«<b>{auc.title}</b>»\n",
+        f"💵 پیشنهاد شما: <b>{bid_amount:,}</b> {curr}",
+        f"👤 بالاترین پیشنهاد قبلی: <b>{prev_name}</b> ({prev_amount:,} {curr})",
+        f"💰 مبلغ کسر از حساب: {cost_info}\n",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "⚠️ <i>آیا از ثبت این پیشنهاد با مبلغ فوق اطمینان دارید؟</i>",
+    ]
+    return "\n".join(lines)
+
+
+def _render_confirmation_keyboard(preview: dict) -> InlineKeyboardMarkup:
+    auc = preview["auction"]
+    bid_amount = preview["bid_amount"]
+    curr = "طلا" if preview["currency"] == "coins" else "الماس"
+    return InlineKeyboardMarkup([
+        [
+            btn(
+                f"✅ بله، ثبت پیشنهاد ({bid_amount:,} {curr})",
+                emoji_key="btn_confirm",
+                style=CONFIRM,
+                callback_data=f"bm_bid_go:{auc.id}:{bid_amount}",
+            )
+        ],
+        [
+            back_btn("menu:blackmarket", "❌ انصراف و بازگشت")
+        ],
+    ])
+
+
 async def blackmarket_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         user, auctions = await run_db(_bm_sync, update.effective_user)
@@ -104,34 +147,24 @@ async def bm_refresh_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def bm_bid_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    _, auc_id, amt_str = query.data.split(":")
+    parts = query.data.split(":")
+    auc_id = int(parts[1])
+    bid_amount = int(parts[2])
 
-    def _do_bid(tg_user):
+    def _validate(tg_user):
         user, _ = get_or_create_user(tg_user)
-        return blackmarket.place_bid(user, int(auc_id), int(amt_str))
+        return blackmarket.validate_bid_preview(user, auc_id, bid_amount)
 
     try:
-        res = await run_db(_do_bid, update.effective_user)
+        preview = await run_db(_validate, update.effective_user)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
 
-    curr = "طلا" if res["bid_currency"] == "coins" else "الماس"
-    await query.answer(f"✅ پیشنهاد {res['bid_amount']:,} {curr} با موفقیت ثبت شد!", show_alert=True)
-
-    outbid = res.get("outbid_info")
-    if outbid:
-        import asyncio
-        from bot.handlers.notify import send_outbid_notification_now
-        asyncio.create_task(send_outbid_notification_now(context, outbid))
-
-    user, auctions = await run_db(_bm_sync, update.effective_user)
-    await safe_edit_message_text(
-        query,
-        _render_bm_text(user, auctions),
-        parse_mode="HTML",
-        reply_markup=_render_bm_keyboard(auctions),
-    )
+    await query.answer()
+    text = _render_confirmation_text(preview)
+    reply_markup = _render_confirmation_keyboard(preview)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=reply_markup)
 
 
 async def bm_custom_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -149,7 +182,7 @@ async def bm_custom_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     from bot.handlers.private import AWAITING_PLAYER_KEY
 
     curr = "طلا" if auc.bid_currency == "coins" else "الماس"
-    if auc.highest_bidder is None:
+    if auc.highest_bidder_id is None:
         min_required = auc.min_bid
         step = blackmarket.get_min_bid_increment(auc.min_bid, auc.bid_currency)
     else:
@@ -183,7 +216,7 @@ async def handle_custom_bid_input(update: Update, context: ContextTypes.DEFAULT_
 
     message = update.effective_message
     raw = (message.text or "").strip()
-    norm = raw.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")).replace(",", "").replace("_", "").replace(" ", "")
+    norm = raw.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧۸۹", "01234567890123456789")).replace(",", "").replace("_", "").replace(" ", "")
 
     auc_id = awaiting.get("auction_id")
     if not norm.isdigit() or int(norm) <= 0:
@@ -193,19 +226,42 @@ async def handle_custom_bid_input(update: Update, context: ContextTypes.DEFAULT_
 
     bid_amount = int(norm)
 
+    def _validate(tg_user):
+        user, _ = get_or_create_user(tg_user)
+        return blackmarket.validate_bid_preview(user, int(auc_id), bid_amount)
+
+    try:
+        preview = await run_db(_validate, update.effective_user)
+    except GameError as exc:
+        context.user_data[AWAITING_PLAYER_KEY] = awaiting
+        await message.reply_text(f"⚠️ {exc}\n\nلطفاً مبلغ دیگری ارسال کنید یا انصراف دهید:", parse_mode="HTML")
+        return
+
+    # Valid preview - clear awaiting state and show confirmation screen
+    context.user_data.pop(AWAITING_PLAYER_KEY, None)
+    text = _render_confirmation_text(preview)
+    reply_markup = _render_confirmation_keyboard(preview)
+    await message.reply_text(text, parse_mode="HTML", reply_markup=reply_markup)
+
+
+async def bm_bid_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    parts = query.data.split(":")
+    auc_id = int(parts[1])
+    bid_amount = int(parts[2])
+
     def _do_bid(tg_user):
         user, _ = get_or_create_user(tg_user)
-        return blackmarket.place_bid(user, int(auc_id), bid_amount)
+        return blackmarket.place_bid(user, auc_id, bid_amount)
 
     try:
         res = await run_db(_do_bid, update.effective_user)
     except GameError as exc:
-        context.user_data[AWAITING_PLAYER_KEY] = awaiting
-        await message.reply_text(f"⚠️ {exc}\n\nلطفاً مبلغ دیگری ارسال کنید یا دستور دیگری بزنید:", parse_mode="HTML")
+        await query.answer(str(exc), show_alert=True)
         return
 
     curr = "طلا" if res["bid_currency"] == "coins" else "الماس"
-    await message.reply_text(f"✅ پیشنهاد <b>{res['bid_amount']:,}</b> {curr} با موفقیت ثبت شد!", parse_mode="HTML")
+    await query.answer(f"✅ پیشنهاد {res['bid_amount']:,} {curr} با موفقیت ثبت شد!", show_alert=True)
 
     outbid = res.get("outbid_info")
     if outbid:
@@ -229,4 +285,6 @@ def register(application) -> None:
     application.add_handler(CommandHandler(["blackmarket", "market"], blackmarket_panel))
     application.add_handler(CallbackQueryHandler(bm_refresh_callback, pattern=r"^bm:refresh$"))
     application.add_handler(CallbackQueryHandler(bm_bid_callback, pattern=r"^bm_bid:\d+:\d+$"))
+    application.add_handler(CallbackQueryHandler(bm_bid_go_callback, pattern=r"^bm_bid_go:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(bm_custom_callback, pattern=r"^bm_custom:\d+$"))
+
