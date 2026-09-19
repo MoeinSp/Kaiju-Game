@@ -28,15 +28,19 @@ def _render_bm_text(user: User, auctions: list[BlackMarketAuction]) -> str:
     if not auctions:
         lines.append("<i>در حال حاضر مزایده فعالی در بازار موجود نیست.</i>")
     else:
+        now = timezone.now()
         for a in auctions:
             curr = "طلا" if a.bid_currency == "coins" else "الماس"
             top_bidder = a.highest_bidder_name or "هنوز پیشنهادی ثبت نشده"
             deadline_str = blackmarket.format_persian_deadline(a.ends_at)
+            rem_secs = max(0, (a.ends_at - now).total_seconds())
+            rem_str = blackmarket.format_time_remaining(rem_secs)
             lines.append(
                 f"🏷 <b>{a.title}</b>\n"
                 f"  💵 بالاترین پیشنهاد: <b>{a.current_bid:,}</b> {curr}\n"
                 f"  👤 برنده فعلی: <b>{top_bidder}</b>\n"
-                f"  ⏱ <b>مهلت مزایده:</b> {deadline_str}\n"
+                f"  ⏱ <b>مهلت:</b> {deadline_str}\n"
+                f"  ⏳ <b>مهلت تا پایان:</b> <b>{rem_str}</b>\n"
             )
     return "\n".join(lines)
 
@@ -77,12 +81,17 @@ def _render_confirmation_text(preview: dict) -> str:
     if preview.get("is_own_increase"):
         cost_info += f" <i>(افزایش روی پیشنهاد قبلی خودتان)</i>"
 
+    rem_secs = max(0, (auc.ends_at - timezone.now()).total_seconds())
+    rem_str = blackmarket.format_time_remaining(rem_secs)
+    deadline_str = blackmarket.format_persian_deadline(auc.ends_at)
+
     lines = [
         "🏷 <b>تأیید نهایی ثبت پیشنهاد در مزایده</b>",
         f"«<b>{auc.title}</b>»\n",
         f"💵 پیشنهاد شما: <b>{bid_amount:,}</b> {curr}",
         f"👤 بالاترین پیشنهاد قبلی: <b>{prev_name}</b> ({prev_amount:,} {curr})",
-        f"💰 مبلغ کسر از حساب: {cost_info}\n",
+        f"💰 مبلغ کسر از حساب: {cost_info}",
+        f"⏱ <b>مهلت:</b> {deadline_str} <i>(⏳ {rem_str} تا پایان)</i>\n",
         "━━━━━━━━━━━━━━━━━━━━",
         "⚠️ <i>آیا از ثبت این پیشنهاد با مبلغ فوق اطمینان دارید؟</i>",
     ]
@@ -189,6 +198,10 @@ async def bm_custom_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         step = blackmarket.get_min_bid_increment(auc.current_bid, auc.bid_currency)
         min_required = auc.current_bid + step
 
+    rem_secs = max(0, (auc.ends_at - timezone.now()).total_seconds())
+    rem_str = blackmarket.format_time_remaining(rem_secs)
+    deadline_str = blackmarket.format_persian_deadline(auc.ends_at)
+
     context.user_data[AWAITING_PLAYER_KEY] = {
         "action": "blackmarket_custom_bid",
         "auction_id": auc.id,
@@ -199,7 +212,8 @@ async def bm_custom_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         f"«<b>{auc.title}</b>»\n\n"
         f"💵 بالاترین پیشنهاد فعلی: <b>{auc.current_bid:,}</b> {curr}\n"
         f"📈 حداقل افزایش مجاز: <b>+{step:,}</b> {curr}\n"
-        f"🎯 <b>حداقل مبلغ کل پیشنهادی:</b> <b>{min_required:,}</b> {curr}\n\n"
+        f"🎯 <b>حداقل مبلغ کل پیشنهادی:</b> <b>{min_required:,}</b> {curr}\n"
+        f"⏱ <b>مهلت:</b> {deadline_str} <i>(⏳ {rem_str} تا پایان)</i>\n\n"
         f"لطفاً مبلغ مورد نظر خود را همینجا ارسال کنید:\n"
         f"<i>(مثال: <code>{min_required}</code>)</i>"
     )

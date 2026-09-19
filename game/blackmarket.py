@@ -35,6 +35,28 @@ def format_persian_deadline(dt: datetime.datetime) -> str:
     return f"تا {time_str} شب {day_name} (به وقت ایران)"
 
 
+def format_time_remaining(seconds: float | int) -> str:
+    """Format remaining seconds into Persian string e.g. '۱ ساعت و ۲۴ دقیقه' or '۳۵ دقیقه'."""
+    s = max(0, int(seconds))
+    if s <= 0:
+        return "پایان یافته"
+    days = s // 86400
+    hours = (s % 86400) // 3600
+    mins = (s % 3600) // 60
+    secs = s % 60
+
+    parts = []
+    if days > 0:
+        parts.append(f"{days} روز")
+    if hours > 0:
+        parts.append(f"{hours} ساعت")
+    if mins > 0:
+        parts.append(f"{mins} دقیقه")
+    if not parts or (days == 0 and hours == 0 and mins < 5):
+        parts.append(f"{secs} ثانیه")
+    return " و ".join(parts)
+
+
 def get_next_blackmarket_deadline() -> datetime.datetime:
     """Calculate the next 22:30 Tehran time deadline."""
     now = timezone.now()
