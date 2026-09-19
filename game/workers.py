@@ -77,8 +77,7 @@ def busy_creature_ids(user: User) -> set[int]:
     ids = set(
         CreatureAssignment.objects.filter(creature__owner=user).values_list("creature_id", flat=True)
     )
-    job = BreedingJob.objects.filter(owner=user).first()
-    if job is not None:
+    for job in BreedingJob.objects.filter(owner=user):
         ids.update({job.parent_a_id, job.parent_b_id})
     return ids
 
@@ -92,9 +91,9 @@ def creature_status(user: User, creature: Creature) -> str | None:
     assignment = CreatureAssignment.objects.filter(creature=creature).select_related("building").first()
     if assignment is not None:
         return f"⛏ در {constants.BUILDING_LABELS[assignment.building.building_type]}"
-    job = BreedingJob.objects.filter(owner=user).first()
-    if job is not None and creature.id in (job.parent_a_id, job.parent_b_id):
-        return "🥚 توی غار هیولا"
+    for job in BreedingJob.objects.filter(owner=user):
+        if creature.id in (job.parent_a_id, job.parent_b_id):
+            return "🥚 توی غار هیولا"
     return None
 
 

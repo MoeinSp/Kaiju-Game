@@ -489,7 +489,7 @@ async def breeding_start_callback(update: Update, context: ContextTypes.DEFAULT_
     _, id_a, id_b = query.data.split(":")
     try:
         view = await run_db(_start_sync, update.effective_user, int(id_a), int(id_b))
-    except GameError as exc:
+    except Exception as exc:
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("💞 رفتن توی غار!")

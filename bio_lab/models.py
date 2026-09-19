@@ -409,7 +409,7 @@ class BreedingJob(models.Model):
     availability check keeps them out of mines and off the active slot for the
     duration."""
 
-    owner = models.OneToOneField(User, on_delete=models.CASCADE, related_name="breeding_job")
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="breeding_jobs")
     parent_a = models.ForeignKey(Creature, on_delete=models.CASCADE, related_name="+")
     parent_b = models.ForeignKey(Creature, on_delete=models.CASCADE, related_name="+")
     started_at = models.DateTimeField(auto_now_add=True)
