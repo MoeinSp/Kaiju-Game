@@ -2218,101 +2218,18 @@ def _render_expedition_card(exp_id: int, creator_name: str, target_name: str, me
 
 async def handle_expedition_word(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
-
-    def _sync(tg_user, chat):
-        user, _ = get_or_create_user(tg_user)
-        from bio_lab.models import GroupExpedition
-        from django.utils import timezone
-        existing = GroupExpedition.objects.filter(
-            group_id=chat.id,
-            status="recruiting",
-            expires_at__gt=timezone.now(),
-        ).first()
-        if existing:
-            exp = existing
-        else:
-            from game.expedition import start_expedition_recruitment
-            exp = start_expedition_recruitment(user, chat.id, chat.title or "")
-        
-        members = list(exp.members.all())
-        member_names = [display_name(m) for m in members]
-        creator_name = display_name(exp.creator)
-        return exp.id, creator_name, exp.target_name, member_names
-
-    try:
-        exp_id, creator_name, target_name, member_names = await run_db(_sync, update.effective_user, message.chat)
-    except GameError as exc:
-        sent = await message.reply_text(str(exc))
-        _schedule_cleanup(context, message.chat_id, [message.message_id, sent.message_id], "expedition")
-        return
-
-    text, kb = _render_expedition_card(exp_id, creator_name, target_name, member_names)
-    from game.media import get_feature_image_path
-    photo = get_feature_image_path("expedition")
-    sent = await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=kb)
-    sent_id = getattr(sent, "message_id", None)
-    _schedule_cleanup(context, message.chat_id, [message.message_id, sent_id], "expedition")
-
+    sent = await message.reply_text("🛠 <b>سیستم اعزام کاروان</b> به دلیل تنظیم مجدد و ارتقای سهمیه روزانه موقتاً غیرفعال شده است.")
+    _schedule_cleanup(context, message.chat_id, [message.message_id, sent.message_id], "expedition")
+    return
 
 async def expedition_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    exp_id = int(query.data.split(":")[1])
-
-    def _do_join(tg_user):
-        user, _ = get_or_create_user(tg_user)
-        from game.expedition import join_expedition
-        exp = join_expedition(user, exp_id)
-        members = list(exp.members.all())
-        member_names = [display_name(m) for m in members]
-        creator_name = display_name(exp.creator)
-        return exp.id, creator_name, exp.target_name, member_names
-
-    try:
-        exp_id, creator_name, target_name, member_names = await run_db(_do_join, update.effective_user)
-        await query.answer("✅ شما به کاروان پیوستید!", show_alert=True)
-    except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
-        return
-
-    text, kb = _render_expedition_card(exp_id, creator_name, target_name, member_names)
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+    await query.answer("🛠 این بخش موقتاً غیرفعال است.", show_alert=True)
 
 
 async def expedition_launch_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    exp_id = int(query.data.split(":")[1])
-
-    def _do_launch(tg_user):
-        user, _ = get_or_create_user(tg_user)
-        from game.expedition import launch_expedition
-        res = launch_expedition(user, exp_id)
-        members_str = "، ".join([display_name(m) for m in res["members"]])
-        return {
-            "destination": res["destination"],
-            "members_str": members_str,
-            "per_gold": res["per_gold"],
-            "per_dna": res["per_dna"],
-            "per_diamond": res["per_diamond"],
-        }
-
-    try:
-        res = await run_db(_do_launch, update.effective_user)
-        await query.answer("🚀 کاروان با موفقیت اعزام شد!")
-    except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
-        return
-
-    text = (
-        f"🏆 <b>کاروان مأموریت تیمی با موفقیت بازگشت!</b>\n\n"
-        f"📍 مقصد: <b>{res['destination']}</b>\n"
-        f"👥 دلاوران کاروان: <b>{res['members_str']}</b>\n\n"
-        f"🎁 <b>سهم غنیمت هر عضو:</b>\n"
-        f"  💰 <b>+{res['per_gold']:,}</b> طلا\n"
-        f"  🧬 <b>+{res['per_dna']}</b> DNA\n"
-        f"  💎 <b>+{res['per_diamond']}</b> الماس\n\n"
-        f"✨ غنائم به حساب تمامی اعضای کاروان واریز شد!"
-    )
-    await safe_edit_message_text(query, text, parse_mode="HTML")
+    await query.answer("🛠 این بخش موقتاً غیرفعال است.", show_alert=True)
 
 
 def register(application) -> None:
