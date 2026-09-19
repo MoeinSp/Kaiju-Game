@@ -1057,7 +1057,7 @@ _CATEGORIES = {
     "shop": ("🛒 فروشگاه", [
         [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("باکس هیولا", "diamond_box", "s", "btn_diamond_box")],
         [("اشتراک ویژه", "subscription", "s", "btn_vip"), ("شاپ روزانه", "shop", "s", "btn_shop")],
-        [("⏳ بازار سیاه", "blackmarket", "s", "btn_shop"), ("کازینو", "casino", "s", "btn_casino")],
+        [("⏳ بازار سیاه", "blackmarket", "s", "btn_blackmarket"), ("کازینو", "casino", "s", "btn_casino")],
         [("بنر ویژه", "banner", "s", "btn_banner"), ("آیتم‌های ویژه", "item_shop", "s", "btn_items")],
         [("خرید سپر", "shield_shop", "s", "btn_shield"), ("خرید طلا", "gold_shop", "s", "btn_gold_shop")],
         [("مبادله طلا و DNA", "exchange", "s", "btn_exchange"), ("مبادله تجهیزات با بلیط", "equip_exchange", "s", "btn_ticket_exchange")],
@@ -1087,7 +1087,7 @@ def _main_menu_rows(locked=frozenset(), research_built=False) -> list:
     # 2. Battle buttons (dynamically displayed without locks)
     battle_specs = [
         ("دانجن", "campaign", "b", "btn_campaign"),
-        ("🏰 برج موگن", "mugen_tower", "b", "btn_campaign"),
+        ("🏰 برج موگن", "mugen_tower", "b", "btn_mugen"),
         ("شکار انفرادی", "hunt", "b", "btn_hunt"),
         ("آرنا (کاپ)", "arena", "b", "btn_arena"),
     ]

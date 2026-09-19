@@ -148,6 +148,14 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_sub_gold": ("خرید اشتراک طلایی", "👑", "features"),
     "btn_sub_mgr": ("مدیریت اشتراک", "⭐", "admin"),
     "btn_chest_grant": ("اهدای جعبه آرنا", "📦", "admin"),
+    # mugen, black market, expeditions
+    "btn_mugen": ("برج موگن", "🏰", "features"),
+    "btn_blackmarket": ("بازار سیاه", "🏛", "features"),
+    "btn_expedition": ("اعزام کاروان", "⛵", "features"),
+    "btn_exp_join": ("پیوستن به کاروان", "➕", "action"),
+    "btn_exp_launch": ("حرکت کاروان", "🚀", "action"),
+    "btn_bm_bid": ("ثبت پیشنهاد مزایده", "🏷", "action"),
+    "btn_bm_refresh": ("بروزرسانی مزایده", "🔄", "action"),
 }
 
 BUTTON_CATEGORY_LABELS: dict[str, str] = {

@@ -83,6 +83,9 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "sub_silver": ("اشتراک نقره‌ای VIP", "🥈", "progress"),
     "sub_gold": ("اشتراک طلایی VIP", "👑", "progress"),
     "sub_vip": ("اشتراک ویژه VIP", "⭐", "progress"),
+    "mugen": ("برج موگن", "🏰", "battle"),
+    "blackmarket": ("بازار سیاه", "🏛", "progress"),
+    "expedition": ("اعزام کاروان", "⛵", "battle"),
     "lock": ("قفل", "🔒", "ui"),
     # UI
     "confirm": ("تأیید", "✅", "ui"),

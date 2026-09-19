@@ -119,7 +119,7 @@ async def mugen_fight_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
     kb = InlineKeyboardMarkup([
-        [btn("🏰 ادامه در برج موگن", emoji_key="btn_campaign", style=BATTLE, callback_data="mugen:panel")],
+        [btn("🏰 ادامه در برج موگن", emoji_key="btn_mugen", style=BATTLE, callback_data="mugen:panel")],
         [back_btn("menu:me")],
     ])
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)

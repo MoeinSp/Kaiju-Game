@@ -2196,23 +2196,21 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 
-def _render_expedition_card(exp) -> tuple[str, InlineKeyboardMarkup]:
-    members = list(exp.members.all())
-    member_names = [display_name(m) for m in members]
+def _render_expedition_card(exp_id: int, creator_name: str, target_name: str, member_names: list[str]) -> tuple[str, InlineKeyboardMarkup]:
     m_list_str = "\n".join([f"  ▫️ <b>{name}</b>" for name in member_names])
 
     text = (
-        f"⛵ <b>کاروان مأموریت تیمی: {exp.target_name}</b>\n"
+        f"⛵ <b>کاروان مأموریت تیمی: {target_name}</b>\n"
         f"<i>اعزام به مناطق دوردست برای غارت گنجینه‌ها و منابع باارزش</i>\n\n"
-        f"👑 <b>سرپرست کاروان:</b> {display_name(exp.creator)}\n"
-        f"👥 <b>اعضای حاضر ({len(members)}/4):</b>\n{m_list_str}\n\n"
+        f"👑 <b>سرپرست کاروان:</b> {creator_name}\n"
+        f"👥 <b>اعضای حاضر ({len(member_names)}/4):</b>\n{m_list_str}\n\n"
         f"⏳ وضعیت: <b>در حال عضوگیری...</b> (حداقل ۲ نفر)\n"
         f"⚠️ <i>هر بازیکن روزی ۱ بار مجاز به اعزام است.</i>"
     )
     kb = InlineKeyboardMarkup([
         [
-            btn("➕ پیوستن به کاروان", emoji_key="btn_sub_silver", style=PRIMARY, callback_data=f"exp_join:{exp.id}"),
-            btn("🚀 حرکت کاروان", emoji_key="btn_attack", style=BATTLE, callback_data=f"exp_launch:{exp.id}"),
+            btn("➕ پیوستن به کاروان", emoji_key="btn_exp_join", style=PRIMARY, callback_data=f"exp_join:{exp_id}"),
+            btn("🚀 حرکت کاروان", emoji_key="btn_exp_launch", style=BATTLE, callback_data=f"exp_launch:{exp_id}"),
         ]
     ])
     return text, kb
@@ -2231,18 +2229,24 @@ async def handle_expedition_word(update: Update, context: ContextTypes.DEFAULT_T
             expires_at__gt=timezone.now(),
         ).first()
         if existing:
-            return existing
-        from game.expedition import start_expedition_recruitment
-        return start_expedition_recruitment(user, chat.id, chat.title or "")
+            exp = existing
+        else:
+            from game.expedition import start_expedition_recruitment
+            exp = start_expedition_recruitment(user, chat.id, chat.title or "")
+        
+        members = list(exp.members.all())
+        member_names = [display_name(m) for m in members]
+        creator_name = display_name(exp.creator)
+        return exp.id, creator_name, exp.target_name, member_names
 
     try:
-        exp = await run_db(_sync, update.effective_user, message.chat)
+        exp_id, creator_name, target_name, member_names = await run_db(_sync, update.effective_user, message.chat)
     except GameError as exc:
         sent = await message.reply_text(str(exc))
         _schedule_cleanup(context, message.chat_id, [message.message_id, sent.message_id], "expedition")
         return
 
-    text, kb = _render_expedition_card(exp)
+    text, kb = _render_expedition_card(exp_id, creator_name, target_name, member_names)
     from game.media import get_feature_image_path
     photo = get_feature_image_path("expedition")
     sent = await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=kb)
@@ -2257,16 +2261,20 @@ async def expedition_join_callback(update: Update, context: ContextTypes.DEFAULT
     def _do_join(tg_user):
         user, _ = get_or_create_user(tg_user)
         from game.expedition import join_expedition
-        return join_expedition(user, exp_id)
+        exp = join_expedition(user, exp_id)
+        members = list(exp.members.all())
+        member_names = [display_name(m) for m in members]
+        creator_name = display_name(exp.creator)
+        return exp.id, creator_name, exp.target_name, member_names
 
     try:
-        exp = await run_db(_do_join, update.effective_user)
+        exp_id, creator_name, target_name, member_names = await run_db(_do_join, update.effective_user)
         await query.answer("✅ شما به کاروان پیوستید!", show_alert=True)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
 
-    text, kb = _render_expedition_card(exp)
+    text, kb = _render_expedition_card(exp_id, creator_name, target_name, member_names)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
 
 
@@ -2277,7 +2285,15 @@ async def expedition_launch_callback(update: Update, context: ContextTypes.DEFAU
     def _do_launch(tg_user):
         user, _ = get_or_create_user(tg_user)
         from game.expedition import launch_expedition
-        return launch_expedition(user, exp_id)
+        res = launch_expedition(user, exp_id)
+        members_str = "، ".join([display_name(m) for m in res["members"]])
+        return {
+            "destination": res["destination"],
+            "members_str": members_str,
+            "per_gold": res["per_gold"],
+            "per_dna": res["per_dna"],
+            "per_diamond": res["per_diamond"],
+        }
 
     try:
         res = await run_db(_do_launch, update.effective_user)
@@ -2286,11 +2302,10 @@ async def expedition_launch_callback(update: Update, context: ContextTypes.DEFAU
         await query.answer(str(exc), show_alert=True)
         return
 
-    members_str = "، ".join([display_name(m) for m in res["members"]])
     text = (
         f"🏆 <b>کاروان مأموریت تیمی با موفقیت بازگشت!</b>\n\n"
         f"📍 مقصد: <b>{res['destination']}</b>\n"
-        f"👥 دلاوران کاروان: <b>{members_str}</b>\n\n"
+        f"👥 دلاوران کاروان: <b>{res['members_str']}</b>\n\n"
         f"🎁 <b>سهم غنیمت هر عضو:</b>\n"
         f"  💰 <b>+{res['per_gold']:,}</b> طلا\n"
         f"  🧬 <b>+{res['per_dna']}</b> DNA\n"

@@ -49,10 +49,11 @@ def _render_bm_keyboard(auctions: list[BlackMarketAuction]) -> InlineKeyboardMar
         next_bid = a.current_bid + step
         rows.append([
             btn(f"➕ پیشنهاد {next_bid:,} {curr} روی {a.title[:15]}...",
+                emoji_key="btn_bm_bid",
                 style=SHOP,
                 callback_data=f"bm_bid:{a.id}:{next_bid}")
         ])
-    rows.append([btn("🔄 بروزرسانی بازار", style=NAV, callback_data="bm:refresh")])
+    rows.append([btn("🔄 بروزرسانی بازار", emoji_key="btn_bm_refresh", style=NAV, callback_data="bm:refresh")])
     rows.append([back_btn("menu:me")])
     return InlineKeyboardMarkup(rows)
 
