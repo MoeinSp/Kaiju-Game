@@ -2205,7 +2205,7 @@ def _render_expedition_card(exp_id: int, creator_name: str, target_name: str, me
         f"👑 <b>سرپرست کاروان:</b> {creator_name}\n"
         f"👥 <b>اعضای حاضر ({len(member_names)}/4):</b>\n{m_list_str}\n\n"
         f"⏳ وضعیت: <b>در حال عضوگیری...</b> (حداقل ۲ نفر)\n"
-        f"⚠️ <i>هر بازیکن فقط ۱ بار در روز مجاز به اعزام است.</i>\n"
+        f"⚠️ <i>سهمیه: ۱ بار در روز (ریست هر شب ساعت ۲۴:۰۰ بامداد).</i>\n"
         f"📊 <i>جایزه بر اساس قدرت کل تیم محاسبه می‌شود.</i>"
     )
     kb = InlineKeyboardMarkup([
