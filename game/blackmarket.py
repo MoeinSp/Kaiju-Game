@@ -28,11 +28,11 @@ PERSIAN_WEEKDAYS = {
 
 
 def format_persian_deadline(dt: datetime.datetime) -> str:
-    """Format an aware datetime into Persian deadline string e.g. 'تا 22:30 شب شنبه (به وقت ایران)'."""
+    """Format an aware datetime into Persian deadline string e.g. 'شنبه ساعت 22:30 شب'."""
     local_dt = timezone.localtime(dt)
     day_name = PERSIAN_WEEKDAYS.get(local_dt.weekday(), "")
     time_str = local_dt.strftime("%H:%M")
-    return f"تا {time_str} شب {day_name} (به وقت ایران)"
+    return f"{day_name} ساعت {time_str} شب"
 
 
 def format_time_remaining(seconds: float | int) -> str:
