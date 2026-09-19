@@ -24,17 +24,20 @@ EXPEDITION_DESTINATIONS = [
 
 
 def can_join_expedition(user: User) -> tuple[bool, str]:
-    """Check if user has used their daily expedition quota."""
-    import config
-    if getattr(user, "is_admin", False) or (getattr(config, "OWNER_TELEGRAM_ID", None) and user.id == int(config.OWNER_TELEGRAM_ID)):
-        return True, ""
+    """Check if user has used their daily expedition quota (strictly once per 24 hours)."""
     now = timezone.now()
     if user.last_expedition_at is not None:
-        # Check if within 20 hours
-        diff_hours = (now - user.last_expedition_at).total_seconds() / 3600.0
-        if diff_hours < 20:
-            remaining_h = int(20 - diff_hours)
-            return False, f"⏳ شما امروز در یک اعزام شرکت کرده‌اید! ({remaining_h} ساعت دیگر مجاز می‌شوید)"
+        diff_sec = (now - user.last_expedition_at).total_seconds()
+        cooldown_sec = 24 * 3600
+        if diff_sec < cooldown_sec:
+            rem = int(cooldown_sec - diff_sec)
+            rem_h = rem // 3600
+            rem_m = (rem % 3600) // 60
+            if rem_h > 0:
+                time_str = f"{rem_h} ساعت و {rem_m} دقیقه"
+            else:
+                time_str = f"{rem_m} دقیقه"
+            return False, f"⏳ شما در ۲۴ ساعت گذشته در یک اعزام شرکت کرده‌اید!\n({time_str} دیگر مجاز می‌شوید)"
     return True, ""
 
 
@@ -45,6 +48,15 @@ def start_expedition_recruitment(creator: User, group_id: int, group_title: str)
     ok, msg = can_join_expedition(creator)
     if not ok:
         raise GameError(msg)
+
+    # Check if user already is in an active pending expedition anywhere
+    pending = GroupExpedition.objects.filter(
+        members=creator,
+        status="recruiting",
+        expires_at__gt=timezone.now(),
+    ).first()
+    if pending:
+        raise GameError("⚠️ شما در حال حاضر در یک کاروان در حال عضوگیری حضور دارید!")
 
     # Check if there is already an active recruitment in this group
     existing = GroupExpedition.objects.filter(
@@ -84,6 +96,14 @@ def join_expedition(user: User, expedition_id: int) -> GroupExpedition:
     if exp.members.filter(id=user.id).exists():
         raise GameError("شما قبلاً به این کاروان ملحق شده‌اید!")
 
+    pending = GroupExpedition.objects.filter(
+        members=user,
+        status="recruiting",
+        expires_at__gt=timezone.now(),
+    ).exclude(id=expedition_id).first()
+    if pending:
+        raise GameError("⚠️ شما در حال حاضر در یک کاروان فعال دیگر عضو هستید!")
+
     if exp.members.count() >= 4:
         raise GameError("ظرفیت کاروان تکمیل است (حداکثر ۴ نفر)!")
 
@@ -99,11 +119,11 @@ def launch_expedition(user: User, expedition_id: int) -> dict:
         raise GameError("این کاروان پیدا نشد یا قبلاً راهی شده است.")
 
     if exp.creator_id != user.id:
-        raise GameError("فقط سرگروه (شخصی که اعزام را زد) می‌تواند دستور حرکت را صادر کند.")
+        raise GameError("فقط سرپرست کاروان (سازنده) می‌تواند دستور حرکت را صادر کند.")
 
     members = list(exp.members.select_for_update().all())
-    if len(members) < 1:
-        raise GameError("حداقل ۱ نفر باید در کاروان حضور داشته باشد.")
+    if len(members) < 2:
+        raise GameError("برای حرکت کاروان حداقل ۲ نفر باید در تیم حضور داشته باشند.")
 
     dest = next((d for d in EXPEDITION_DESTINATIONS if d["name"] == exp.target_name), EXPEDITION_DESTINATIONS[0])
 
