@@ -439,19 +439,13 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
     loot = 0
     taken_from_defender = 0
     dna_win = 0
-    league_coins = 0
-    league_dna = 0
-    league = constants.league_for_cup(attacker.cup)
-    loot = 0
-    taken_from_defender = 0
-    dna_win = 0
     taken_dna_from_defender = 0
     league_coins = 0
     league_dna = 0
+    plundered_collector_gold = 0
+    plundered_collector_dna = 0
     league = constants.league_for_cup(attacker.cup)
     if won:
-        plundered_collector_gold = 0
-        plundered_collector_dna = 0
         if defender_user is not None:
             # REAL defender -> Exactly 10% of defender's actual current gold and DNA
             loot = max(0, defender_user.coins // 10)

@@ -450,6 +450,7 @@ ALIASES: dict[str, str] = {
     "انتخاب کایجو": "select",
     "انتخاب هیولا": "select",
     "کایجو من": "select",
+    "کاروان": "expedition",
     "اعزام کاروان": "expedition",
 }
 
