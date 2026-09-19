@@ -141,31 +141,31 @@ def _check_equip_blacksmith(receiver: User, item: Equipment) -> None:
         )
 
 
-def _check_account_maturity_gate(sender: User, receiver: User) -> None:
-    """Anti-abuse gate: both sender and receiver must have an account at least 7 days old
-    and have at least 300 Arena wins."""
+def _check_account_maturity_gate(sender: User) -> None:
+    """Anti-abuse gate: sender must have an account at least 3 days old
+    and have at least 100 Arena wins.
+    This restriction ONLY applies to sending, allowing new players to freely receive items/creatures."""
     from bio_lab.models import AttackLog
 
     now = timezone.now()
-    min_age_days = 7
-    min_arena_wins = 300
+    min_age_days = 3
+    min_arena_wins = 100
 
-    for u, who in ((sender, "فرستنده"), (receiver, "گیرنده")):
-        if u.created_at:
-            age_days = (now - u.created_at).total_seconds() / 86400.0
-            if age_days < min_age_days:
-                raise GameError(
-                    f"🔒 محدودیت امنیت انتقال هیولا:\n\n"
-                    f"اکانت {who} باید حداقل {min_age_days} روز قدمت داشته باشه "
-                    f"(قدمت فعلی: {int(age_days)} روز)."
-                )
-        wins = AttackLog.objects.filter(attacker=u, attacker_won=True).count()
-        if wins < min_arena_wins:
+    if sender.created_at:
+        age_days = (now - sender.created_at).total_seconds() / 86400.0
+        if age_days < min_age_days:
             raise GameError(
-                f"🔒 محدودیت تجربه انتقال هیولا:\n\n"
-                f"حساب {who} باید حداقل {min_arena_wins} پیروزی در آرنا داشته باشه "
-                f"(پیروزی‌های فعلی: {wins} برد)."
+                f"🔒 محدودیت امنیت انتقال:\n\n"
+                f"اکانت فرستنده باید حداقل {min_age_days} روز قدمت داشته باشه "
+                f"(قدمت فعلی شما: {int(age_days)} روز)."
             )
+    wins = AttackLog.objects.filter(attacker=sender, attacker_won=True).count()
+    if wins < min_arena_wins:
+        raise GameError(
+            f"🔒 محدودیت تجربه انتقال:\n\n"
+            f"برای انتقال باید حداقل {min_arena_wins} پیروزی در آرنا داشته باشی "
+            f"(پیروزی‌های فعلی شما: {wins} برد)."
+        )
 
 
 def _creature_reqs(star_level: int) -> dict:
@@ -181,7 +181,7 @@ def preview_creature_transfer(sender: User, receiver: User, creature_id: int) ->
     if sender.id == receiver.id:
         raise GameError("نمی‌تونی به خودت منتقل کنی.")
     _check_transfers_enabled(receiver)
-    _check_account_maturity_gate(sender, receiver)
+    _check_account_maturity_gate(sender)
     _check_cooldown(sender, "kaiju_transfer_ready_at", "فرستنده")
     _check_cooldown(receiver, "kaiju_transfer_ready_at", "گیرنده")
     creature = Creature.objects.filter(id=creature_id, owner=sender).first()
@@ -220,6 +220,7 @@ def preview_equip_transfer(sender: User, receiver: User, equip_id: int) -> dict:
     if sender.id == receiver.id:
         raise GameError("نمی‌تونی به خودت منتقل کنی.")
     _check_transfers_enabled(receiver)
+    _check_account_maturity_gate(sender)
     _check_cooldown(sender, "equip_transfer_ready_at", "فرستنده")
     _check_cooldown(receiver, "equip_transfer_ready_at", "گیرنده")
     item = Equipment.objects.filter(id=equip_id, owner=sender).first()
@@ -261,7 +262,7 @@ def transfer_creature(sender: User, receiver: User, creature_id: int, price: int
     locked = {u.id: u for u in User.objects.select_for_update().filter(id__in=ids).order_by("id")}
     sender, receiver = locked[sender.id], locked[receiver.id]
     _check_transfers_enabled(receiver)
-    _check_account_maturity_gate(sender, receiver)
+    _check_account_maturity_gate(sender)
     _check_cooldown(sender, "kaiju_transfer_ready_at", "فرستنده")
     _check_cooldown(receiver, "kaiju_transfer_ready_at", "گیرنده")
 
@@ -344,6 +345,7 @@ def transfer_equipment(sender: User, receiver: User, equip_id: int, price: int =
     locked = {u.id: u for u in User.objects.select_for_update().filter(id__in=ids).order_by("id")}
     sender, receiver = locked[sender.id], locked[receiver.id]
     _check_transfers_enabled(receiver)
+    _check_account_maturity_gate(sender)
     _check_cooldown(sender, "equip_transfer_ready_at", "فرستنده")
     _check_cooldown(receiver, "equip_transfer_ready_at", "گیرنده")
 

@@ -110,6 +110,9 @@ def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
         receiver = locked.get(receiver_id)
         if receiver is None:
             raise GameError("این بازیکن هنوز بازی رو شروع نکرده.")
+        from game.transfer import _check_account_maturity_gate
+
+        _check_account_maturity_gate(sender)
         # «تالار تجارت» gate: both sides must have it built, and the transfer is bounded
         # by the SMALLER of their two per-level gold caps — so both benefit from
         # levelling it up (see constants.trade_hall_gold_cap).
