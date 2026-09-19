@@ -25,9 +25,12 @@ EXPEDITION_DESTINATIONS = [
 
 def can_join_expedition(user: User) -> tuple[bool, str]:
     """Check if user has used their daily expedition quota."""
+    import config
+    if getattr(user, "is_admin", False) or (getattr(config, "OWNER_TELEGRAM_ID", None) and user.id == int(config.OWNER_TELEGRAM_ID)):
+        return True, ""
     now = timezone.now()
     if user.last_expedition_at is not None:
-        # Check if same calendar day in local time or within 20 hours
+        # Check if within 20 hours
         diff_hours = (now - user.last_expedition_at).total_seconds() / 3600.0
         if diff_hours < 20:
             remaining_h = int(20 - diff_hours)

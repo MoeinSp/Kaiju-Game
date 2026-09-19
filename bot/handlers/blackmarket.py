@@ -111,6 +111,12 @@ async def bm_bid_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     curr = "طلا" if res["bid_currency"] == "coins" else "الماس"
     await query.answer(f"✅ پیشنهاد {res['bid_amount']:,} {curr} با موفقیت ثبت شد!", show_alert=True)
 
+    outbid = res.get("outbid_info")
+    if outbid:
+        import asyncio
+        from bot.handlers.notify import send_outbid_notification_now
+        asyncio.create_task(send_outbid_notification_now(context, outbid))
+
     user, auctions = await run_db(_bm_sync, update.effective_user)
     await safe_edit_message_text(
         query,

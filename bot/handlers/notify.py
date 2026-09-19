@@ -94,6 +94,41 @@ async def send_defense_report_now(context, defense: dict, *, group: bool = False
         pass
 
 
+def _outbid_notification_keyboard(auction_id: int):
+    from bot.buttons import CONFIRM, SHOP, btn
+    rows = [
+        [btn("➕ ثبت پیشنهاد بالاتر", emoji_key="btn_shop", style=SHOP, callback_data="menu:blackmarket")],
+        [btn("منوی اصلی", emoji_key="btn_lab", style=CONFIRM, callback_data="menu:me")],
+    ]
+    return InlineKeyboardMarkup(rows)
+
+
+async def send_outbid_notification_now(context, outbid: dict) -> None:
+    """Instantly sends DM notification to a player whose auction bid was outbid."""
+    if not outbid:
+        return
+    user_id = outbid["user_id"]
+    curr_label = "طلا 🪙" if outbid["currency"] == "coins" else "الماس 💎"
+    text = (
+        f"⚠️ <b>پیشنهاد بالاتر در بازار سیاه!</b>\n\n"
+        f"🏷 مزایده: <b>{outbid['auction_title']}</b>\n"
+        f"💵 پیشنهاد جدید: <b>{outbid['new_bid']:,}</b> {curr_label}\n"
+        f"💰 مبلغ <b>{outbid['refunded_amount']:,} {curr_label}</b> به حساب شما بازگردانده شد.\n\n"
+        f"<i>هم‌اکنون می‌توانید پیشنهاد بالاتری ثبت کنید تا برنده این غنیمت ارزشمند باشید!</i>"
+    )
+    try:
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=text,
+            parse_mode="HTML",
+            reply_markup=_outbid_notification_keyboard(outbid["auction_id"]),
+        )
+    except Forbidden:
+        await run_db(_opt_out, user_id)
+    except Exception:
+        pass
+
+
 def _opt_out(user_id: int) -> None:
     """A player who blocked the bot shouldn't be retried — turn their master
     switch off so the collector stops queueing DMs for them."""

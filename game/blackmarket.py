@@ -105,30 +105,57 @@ def place_bid(user: User, auction_id: int, bid_amount: int) -> dict:
         curr_label = "طلا" if auction.bid_currency == "coins" else "الماس"
         raise GameError(f"حداقل پیشنهاد بعدی باید {min_required:,} {curr_label} باشد.")
 
-    # Check user balance
-    if auction.bid_currency == "coins":
-        if user.coins < bid_amount:
-            raise GameError(f"طلای کافی نداری! (موجودی: {user.coins:,})")
-        user.coins -= bid_amount
-        user.save(update_fields=["coins"])
-    else:
-        if user.diamonds < bid_amount:
-            raise GameError(f"الماس کافی نداری! (موجودی: {user.diamonds:,})")
-        user.diamonds -= bid_amount
-        user.save(update_fields=["diamonds"])
-
-    # Refund previous highest bidder
     prev_bidder = auction.highest_bidder
     prev_amount = auction.current_bid
-    if prev_bidder is not None and prev_bidder.id != user.id:
-        prev_user = User.objects.select_for_update().filter(id=prev_bidder.id).first()
-        if prev_user:
+    outbid_info = None
+
+    # Handle bidding on own top bid vs outbidding someone else
+    if prev_bidder is not None and prev_bidder.id == user.id:
+        # User is increasing their OWN leading bid -> only charge the difference
+        cost = bid_amount - prev_amount
+        if cost > 0:
             if auction.bid_currency == "coins":
-                prev_user.coins += prev_amount
-                prev_user.save(update_fields=["coins"])
+                if user.coins < cost:
+                    raise GameError(f"طلای کافی برای افزایش پیشنهاد نداری! (موجودی: {user.coins:,} طلا، نیاز: {cost:,})")
+                user.coins -= cost
+                user.save(update_fields=["coins"])
             else:
-                prev_user.diamonds += prev_amount
-                prev_user.save(update_fields=["diamonds"])
+                if user.diamonds < cost:
+                    raise GameError(f"الماس کافی برای افزایش پیشنهاد نداری! (موجودی: {user.diamonds:,} الماس، نیاز: {cost:,})")
+                user.diamonds -= cost
+                user.save(update_fields=["diamonds"])
+    else:
+        # New or different bidder -> charge full bid_amount from user
+        if auction.bid_currency == "coins":
+            if user.coins < bid_amount:
+                raise GameError(f"طلای کافی نداری! (موجودی: {user.coins:,})")
+            user.coins -= bid_amount
+            user.save(update_fields=["coins"])
+        else:
+            if user.diamonds < bid_amount:
+                raise GameError(f"الماس کافی نداری! (موجودی: {user.diamonds:,})")
+            user.diamonds -= bid_amount
+            user.save(update_fields=["diamonds"])
+
+        # Refund previous highest bidder if different user
+        if prev_bidder is not None:
+            prev_user = User.objects.select_for_update().filter(id=prev_bidder.id).first()
+            if prev_user:
+                if auction.bid_currency == "coins":
+                    prev_user.coins += prev_amount
+                    prev_user.save(update_fields=["coins"])
+                else:
+                    prev_user.diamonds += prev_amount
+                    prev_user.save(update_fields=["diamonds"])
+
+                outbid_info = {
+                    "user_id": prev_user.id,
+                    "auction_id": auction.id,
+                    "auction_title": auction.title,
+                    "refunded_amount": prev_amount,
+                    "currency": auction.bid_currency,
+                    "new_bid": bid_amount,
+                }
 
     auction.highest_bidder = user
     auction.highest_bidder_name = display_name(user)
@@ -139,6 +166,7 @@ def place_bid(user: User, auction_id: int, bid_amount: int) -> dict:
         "auction": auction,
         "bid_amount": bid_amount,
         "bid_currency": auction.bid_currency,
+        "outbid_info": outbid_info,
     }
 
 
