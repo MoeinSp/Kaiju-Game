@@ -11,9 +11,37 @@ from django.db import transaction
 from django.utils import timezone
 
 from bio_lab.models import BlackMarketAuction, User
-from bio_lab.repository import display_name
+from bio_lab.repository import lab_display
 from game.creature import GameError
 from game.emoji import get_emoji
+
+
+def get_min_bid_increment(current_bid: int, currency: str = "coins") -> int:
+    """Calculate dynamic minimum bid increment based on the auction's current price."""
+    if currency == "coins":
+        if current_bid < 100_000:
+            return 5_000
+        elif current_bid < 500_000:
+            return 25_000
+        elif current_bid < 1_000_000:
+            return 50_000
+        elif current_bid < 5_000_000:
+            return 100_000
+        elif current_bid < 10_000_000:
+            return 250_000
+        else:
+            return 500_000
+    else:  # diamonds
+        if current_bid < 100:
+            return 10
+        elif current_bid < 500:
+            return 25
+        elif current_bid < 1_000:
+            return 50
+        elif current_bid < 5_000:
+            return 100
+        else:
+            return 250
 
 
 def get_active_auctions() -> list[BlackMarketAuction]:
@@ -97,13 +125,19 @@ def place_bid(user: User, auction_id: int, bid_amount: int) -> dict:
             "برای حفظ تعادل بازار و جلوگیری از انحصار، هر بازیکن همزمان می‌تواند بالاترین پیشنهاد ۱ مزایده را داشته باشد."
         )
 
-    min_required = auction.current_bid + (1000 if auction.bid_currency == "coins" else 10)
     if auction.highest_bidder is None:
         min_required = auction.min_bid
+        step = get_min_bid_increment(auction.min_bid, auction.bid_currency)
+    else:
+        step = get_min_bid_increment(auction.current_bid, auction.bid_currency)
+        min_required = auction.current_bid + step
 
     if bid_amount < min_required:
         curr_label = "طلا" if auction.bid_currency == "coins" else "الماس"
-        raise GameError(f"حداقل پیشنهاد بعدی باید {min_required:,} {curr_label} باشد.")
+        raise GameError(
+            f"حداقل پیشنهاد بعدی باید {min_required:,} {curr_label} باشد.\n"
+            f"(حداقل افزایش با توجه به قیمت فعلی: +{step:,} {curr_label})"
+        )
 
     prev_bidder = auction.highest_bidder
     prev_amount = auction.current_bid
@@ -158,7 +192,7 @@ def place_bid(user: User, auction_id: int, bid_amount: int) -> dict:
                 }
 
     auction.highest_bidder = user
-    auction.highest_bidder_name = display_name(user)
+    auction.highest_bidder_name = lab_display(user)
     auction.current_bid = bid_amount
     auction.save(update_fields=["highest_bidder", "highest_bidder_name", "current_bid"])
 

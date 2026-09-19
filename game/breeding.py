@@ -58,6 +58,16 @@ def assert_available(user: User) -> None:
         raise GameError(f"اول باید {label} رو از «🏗 ساختمون‌ها» بسازی.")
 
 
+def max_cave_jobs(user: User) -> int:
+    from game.subscription import get_subscription_tier
+
+    return 2 if get_subscription_tier(user) == "gold" else 1
+
+
+def active_jobs(user: User) -> list[BreedingJob]:
+    return list(BreedingJob.objects.filter(owner=user).select_related("parent_a", "parent_b").order_by("finishes_at"))
+
+
 def active_job(user: User) -> BreedingJob | None:
     return BreedingJob.objects.filter(owner=user).select_related("parent_a", "parent_b").first()
 
@@ -192,11 +202,14 @@ def _lay_egg_from(user: User, job: BreedingJob) -> Egg:
 
 
 @transaction.atomic
-def lay_egg(user: User) -> Egg:
+def lay_egg(user: User, job_id: int | None = None) -> Egg:
     """Phase 1 → 2: the mating is done, so lay the egg and free the parents."""
     # lock the player: a double-tapped «برداشتن تخم» must not lay two eggs from one job
     user = User.objects.select_for_update().get(id=user.id)
-    job = active_job(user)
+    if job_id is not None:
+        job = BreedingJob.objects.filter(id=job_id, owner=user).select_related("parent_a", "parent_b").first()
+    else:
+        job = active_job(user)
     if job is None:
         raise GameError("هیچ جفتی توی غار نیست.")
     if not ready(job):
@@ -284,12 +297,15 @@ def egg_finish_price(egg: Egg) -> int:
 
 
 @transaction.atomic
-def finish_cave_with_diamonds(user: User) -> Egg:
+def finish_cave_with_diamonds(user: User, job_id: int | None = None) -> Egg:
     """Pay diamonds to end the mating right now and lay the egg. Priced from the
     time still left, like every other diamond-finish in the game."""
     # lock the player so a double-tap can't charge diamonds twice / lay two eggs
     user = User.objects.select_for_update().get(id=user.id)
-    job = active_job(user)
+    if job_id is not None:
+        job = BreedingJob.objects.filter(id=job_id, owner=user).select_related("parent_a", "parent_b").first()
+    else:
+        job = active_job(user)
     if job is None:
         raise GameError("هیچ جفتی توی غار نیست.")
     if ready(job):
@@ -324,12 +340,15 @@ def finish_egg_with_diamonds(user: User, egg_id: int) -> Egg:
 
 
 @transaction.atomic
-def cancel(user: User) -> BreedingJob:
+def cancel(user: User, job_id: int | None = None) -> BreedingJob:
     """Abandon the mating in progress. The DNA is not refunded — otherwise a
     player could park two creatures whenever they weren't using them and cancel
     for free. (Laid eggs can't be cancelled; they only hatch.)"""
     user = User.objects.select_for_update().get(id=user.id)
-    job = active_job(user)
+    if job_id is not None:
+        job = BreedingJob.objects.filter(id=job_id, owner=user).first()
+    else:
+        job = active_job(user)
     if job is None:
         raise GameError("هیچ جفتی توی غار نیست.")
     job.delete()

@@ -3993,6 +3993,12 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         await handle_custom_amount(update, context, awaiting)
         return
 
+    if action == "blackmarket_custom_bid":
+        from bot.handlers.blackmarket import handle_custom_bid_input
+
+        await handle_custom_bid_input(update, context, awaiting)
+        return
+
     if action == "buy_custom":
         from bot.handlers.purchase import handle_custom_amount as _buy_custom
 

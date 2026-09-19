@@ -41,15 +41,26 @@ def _format_remaining(seconds: float) -> str:
 
 def _panel_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
-    job = breeding.active_job(user)
+    jobs = breeding.active_jobs(user)
     eggs = breeding.active_eggs(user)
+    max_jobs = breeding.max_cave_jobs(user)
+    job_views = [
+        {
+            "id": j.id,
+            "parent_a_name": j.parent_a.name,
+            "parent_b_name": j.parent_b.name,
+            "ready": breeding.ready(j),
+            "seconds_left": breeding.seconds_left(j),
+            "finish_price": breeding.cave_finish_price(j),
+        }
+        for j in jobs
+    ]
     return {
         "user": user,
         "built": is_built(user, breeding.BREEDING_BUILDING),
-        "job": job,
-        "job_ready": job is not None and breeding.ready(job),
-        "job_seconds_left": breeding.seconds_left(job) if job is not None else 0,
-        "cave_finish_price": breeding.cave_finish_price(job) if job is not None else 0,
+        "jobs": job_views,
+        "job": jobs[0] if jobs else None,
+        "max_jobs": max_jobs,
         "eggs": [
             {
                 "id": e.id,
@@ -174,22 +185,33 @@ def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
     rows: list = []
 
     # ── cave (phase 1: mating) ────────────────────────────────────────────────
-    job = view["job"]
-    if job is not None:
-        parents = f"{job.parent_a.name} + {job.parent_b.name}"
-        if view["job_ready"]:
-            lines.append(f"💞 <b>جفت‌گیری تموم شد!</b>  <blockquote>{parents}</blockquote>")
-            lines.append("بزن تا تخم بذارن و از غار آزاد شن.")
-            rows.append([btn("🥚 تخم بذار", emoji_key="btn_confirm", style=CONFIRM, callback_data="brd_lay")])
-        else:
-            lines.append(f"💞 یه جفت توی غارن:  <blockquote>{parents}</blockquote>")
-            lines.append(f"⏳ <b>{_format_remaining(view['job_seconds_left'])}</b> تا تخم‌گذاری")
-            rows.append(
-                [
-                    btn(f"💎 فوری‌کن ({view['cave_finish_price']})", style=PRIMARY, callback_data="brd_cave_finish_ask"),
-                    btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data="brd_cancel"),
-                ]
-            )
+    jobs = view.get("jobs", [])
+    max_jobs = view.get("max_jobs", 1)
+
+    if jobs:
+        for idx, j in enumerate(jobs, 1):
+            parents = f"{j['parent_a_name']} + {j['parent_b_name']}"
+            job_num = f" (جفت #{idx})" if max_jobs > 1 or len(jobs) > 1 else ""
+            if j["ready"]:
+                lines.append(f"💞 <b>جفت‌گیری تموم شد!{job_num}</b>  <blockquote>{parents}</blockquote>")
+                lines.append("بزن تا تخم بذارن و از غار آزاد شن.")
+                rows.append([btn(f"🥚 تخم بذار{job_num}", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"brd_lay:{j['id']}")])
+            else:
+                lines.append(f"💞 یه جفت توی غارن{job_num}:  <blockquote>{parents}</blockquote>")
+                lines.append(f"⏳ <b>{_format_remaining(j['seconds_left'])}</b> تا تخم‌گذاری")
+                rows.append(
+                    [
+                        btn(f"💎 فوری‌کن{job_num} ({j['finish_price']})", style=PRIMARY, callback_data=f"brd_cave_finish_ask:{j['id']}"),
+                        btn(f"لغو{job_num}", emoji_key="btn_cancel", style=DANGER, callback_data=f"brd_cancel:{j['id']}"),
+                    ]
+                )
+        if len(jobs) < max_jobs:
+            lines.append("")
+            if view["free_count"] >= 2:
+                lines.append(f"✨ ظرفیت غار: {len(jobs)}/{max_jobs} — می‌تونی یک جفت دیگر هم بفرستی!")
+                rows.append([btn(f"🐣 جفت بعدی رو بفرست غار ({len(jobs) + 1}/{max_jobs})", emoji_key="btn_confirm", style=CONFIRM, callback_data="brd_new")])
+            else:
+                lines.append(f"✨ ظرفیت غار: {len(jobs)}/{max_jobs} (برای فرستادن جفت بعدی حداقل ۲ هیولای آزاد لازم داری).")
     else:
         if view["free_count"] >= 2:
             lines.append("🕳 غار خالیه — یه جفت بفرست تا جفت‌گیری کنن و تخم بذارن.")
@@ -253,7 +275,7 @@ def _cave_guide_text() -> str:
         "• نژاد نوزاد: در صورت تفاوت نژاد، ۵۰/۵۰ به صورت تصادفی نژاد یکی از والدین منتقل می‌شود.",
         "", div, "",
         "⏱ <b>زمان‌بندی و محدودیت‌ها</b>",
-        f"• مدت جفت‌گیری: {lo} تا {hi} ساعت (بسته به نایابی والدین). فقط ۱ جفت‌گیری به‌صورت همزمان فعال است.",
+        f"• مدت جفت‌گیری: {lo} تا {hi} ساعت (بسته به نایابی والدین). ۱ جفت همزمان (با اشتراک طلایی ۲ جفت همزمان).",
         "• مدت رشد تخم: ۱۰ دقیقه تا ۱ ساعت (امکان رشد همزمان چندین تخم وجود دارد).",
         "", div, "",
         "🧬 <b>هزینه DNA</b> <i>(بر اساس ترکیب نایابی والدین)</i>",
@@ -498,17 +520,19 @@ async def breeding_new_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
-def _lay_sync(tg_user):
+def _lay_sync(tg_user, job_id=None):
     user, _ = get_or_create_user(tg_user)
-    breeding.lay_egg(user)
+    breeding.lay_egg(user, job_id=job_id)
     return _panel_sync(tg_user)
 
 
 async def breeding_lay_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Mating done → lay the egg and free the parents."""
     query = update.callback_query
+    parts = query.data.split(":")
+    job_id = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
     try:
-        view = await run_db(_lay_sync, update.effective_user)
+        view = await run_db(_lay_sync, update.effective_user, job_id)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
@@ -555,19 +579,33 @@ async def breeding_hatch_callback(update: Update, context: ContextTypes.DEFAULT_
 async def breeding_cave_finish_ask_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Confirm before spending diamonds to finish the mating — no accidental spends."""
     query = update.callback_query
+    parts = query.data.split(":")
+    job_id = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
+
+    def _get_price(tg):
+        from bio_lab.models import BreedingJob
+        user, _ = get_or_create_user(tg)
+        if job_id:
+            job = BreedingJob.objects.filter(id=job_id, owner=user).first()
+        else:
+            job = breeding.active_job(user)
+        if job is None:
+            raise GameError("الان این جفت توی غار نیست.")
+        return breeding.cave_finish_price(job)
+
     try:
-        price = await run_db(lambda tg: breeding.cave_finish_price(
-            breeding.active_job(get_or_create_user(tg)[0])), update.effective_user)
+        price = await run_db(_get_price, update.effective_user)
     except Exception:  # noqa: BLE001
         await query.answer("الان جفتی توی غار نیست.", show_alert=True)
         return
     await query.answer()
+    cb_finish = f"brd_cave_finish:{job_id}" if job_id else "brd_cave_finish"
     await safe_edit_message_text(
         query,
         f"💎 <b>فوری‌کردن جفت‌گیری</b>\n\nبا <b>{price}</b> الماس همین الان تخم گذاشته می‌شه. تأیید می‌کنی؟",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
-            btn(f"✅ بله ({price} 💎)", style=PRIMARY, callback_data="brd_cave_finish"),
+            btn(f"✅ بله ({price} 💎)", style=PRIMARY, callback_data=cb_finish),
             btn("❌ نه", style=NAV, callback_data="menu:breeding"),
         ]]),
     )
@@ -602,16 +640,18 @@ async def breeding_egg_finish_ask_callback(update: Update, context: ContextTypes
     )
 
 
-def _cave_finish_sync(tg_user):
+def _cave_finish_sync(tg_user, job_id=None):
     user, _ = get_or_create_user(tg_user)
-    breeding.finish_cave_with_diamonds(user)
+    breeding.finish_cave_with_diamonds(user, job_id=job_id)
     return _panel_sync(tg_user)
 
 
 async def breeding_cave_finish_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    parts = query.data.split(":")
+    job_id = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
     try:
-        view = await run_db(_cave_finish_sync, update.effective_user)
+        view = await run_db(_cave_finish_sync, update.effective_user, job_id)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
@@ -639,18 +679,21 @@ async def breeding_egg_finish_callback(update: Update, context: ContextTypes.DEF
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
-def _cancel_sync(tg_user):
+def _cancel_sync(tg_user, job_id=None):
     user, _ = get_or_create_user(tg_user)
-    breeding.cancel(user)
+    breeding.cancel(user, job_id=job_id)
     return _panel_sync(tg_user)
 
 
 async def breeding_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """First step: ask for confirmation, since cancelling burns the DNA."""
     query = update.callback_query
+    parts = query.data.split(":")
+    job_id = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
     await query.answer()
+    cb_yes = f"brd_cancel_yes:{job_id}" if job_id else "brd_cancel_yes"
     keyboard = InlineKeyboardMarkup([[
-        btn("✅ بله، لغو کن", style=DANGER, callback_data="brd_cancel_yes"),
+        btn("✅ بله، لغو کن", style=DANGER, callback_data=cb_yes),
         btn("انصراف", emoji_key="btn_cancel", style=NAV, callback_data="menu:breeding"),
     ]])
     await safe_edit_message_text(
@@ -663,8 +706,10 @@ async def breeding_cancel_callback(update: Update, context: ContextTypes.DEFAULT
 
 async def breeding_cancel_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    parts = query.data.split(":")
+    job_id = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
     try:
-        view = await run_db(_cancel_sync, update.effective_user)
+        view = await run_db(_cancel_sync, update.effective_user, job_id)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
@@ -685,11 +730,11 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(breeding_info_callback, pattern=r"^brd_info:"))
     application.add_handler(CallbackQueryHandler(breeding_guide_callback, pattern=r"^brd_guide$"))
     application.add_handler(CallbackQueryHandler(breeding_start_callback, pattern=r"^brd_go:"))
-    application.add_handler(CallbackQueryHandler(breeding_lay_callback, pattern=r"^brd_lay$"))
+    application.add_handler(CallbackQueryHandler(breeding_lay_callback, pattern=r"^brd_lay(:.*)?$"))
     application.add_handler(CallbackQueryHandler(breeding_hatch_callback, pattern=r"^brd_hatch:"))
-    application.add_handler(CallbackQueryHandler(breeding_cave_finish_ask_callback, pattern=r"^brd_cave_finish_ask$"))
-    application.add_handler(CallbackQueryHandler(breeding_cave_finish_callback, pattern=r"^brd_cave_finish$"))
+    application.add_handler(CallbackQueryHandler(breeding_cave_finish_ask_callback, pattern=r"^brd_cave_finish_ask(:.*)?$"))
+    application.add_handler(CallbackQueryHandler(breeding_cave_finish_callback, pattern=r"^brd_cave_finish(:.*)?$"))
     application.add_handler(CallbackQueryHandler(breeding_egg_finish_ask_callback, pattern=r"^brd_egg_finish_ask:"))
     application.add_handler(CallbackQueryHandler(breeding_egg_finish_callback, pattern=r"^brd_egg_finish:"))
-    application.add_handler(CallbackQueryHandler(breeding_cancel_callback, pattern=r"^brd_cancel$"))
-    application.add_handler(CallbackQueryHandler(breeding_cancel_confirm_callback, pattern=r"^brd_cancel_yes$"))
+    application.add_handler(CallbackQueryHandler(breeding_cancel_callback, pattern=r"^brd_cancel(:.*)?$"))
+    application.add_handler(CallbackQueryHandler(breeding_cancel_confirm_callback, pattern=r"^brd_cancel_yes(:.*)?$"))
