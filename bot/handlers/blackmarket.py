@@ -46,7 +46,7 @@ def _render_bm_keyboard(auctions: list[BlackMarketAuction]) -> InlineKeyboardMar
     for a in auctions:
         curr = "طلا" if a.bid_currency == "coins" else "💎"
         step = blackmarket.get_min_bid_increment(a.current_bid, a.bid_currency)
-        next_bid = (a.current_bid + step) if a.highest_bidder is not None else a.min_bid
+        next_bid = (a.current_bid + step) if a.highest_bidder_id is not None else a.min_bid
         short_title = a.title[:14]
         rows.append([
             btn(f"➕ پیشنهاد {next_bid:,} {curr} ({short_title}...)",
