@@ -345,6 +345,10 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
         rows.append([btn(label, emoji_key="btn_build", style=BUILD, callback_data=f"bld_upgrade:{building.id}")])
     if building.building_type == "research_lab" and building.level > 0:
         rows.append([btn("🔬 پژوهش‌ها", style=PRIMARY, callback_data="menu:research")])
+    if building.building_type == "blacksmith" and building.level > 0:
+        rows.append([btn("⚒ رفتن به آهنگری", emoji_key="btn_forge", style=PRIMARY, callback_data="menu:blacksmith")])
+    if building.building_type == "fusion_hall" and building.level > 0:
+        rows.append([btn("🧬 رفتن به تالار ادغام", emoji_key="btn_fusion", style=PRIMARY, callback_data="menu:fusion")])
     rows.append([back_btn("menu:buildings")])
     return InlineKeyboardMarkup(rows)
 

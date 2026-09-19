@@ -20,7 +20,7 @@ def _bm_sync(tg_user):
 
 def _render_bm_text(user: User, auctions: list[BlackMarketAuction]) -> str:
     lines = [
-        "⏳ <b>بازار سیاه و مزایده‌های نیمه‌شب</b>",
+        "⏳ <b>بازار سیاه و مزایده‌های شبانه</b>",
         "<i>هر شب اقلام نایاب و بسته‌های باارزش برای مزایده گذاشته می‌شوند.</i>\n",
         f"💰 موجودی شما: <b>{user.coins:,}</b> طلا · <b>{user.diamonds:,}</b> الماس\n",
         "━━━━━━━━━━━━━━━━━━━━",
@@ -31,12 +31,12 @@ def _render_bm_text(user: User, auctions: list[BlackMarketAuction]) -> str:
         for a in auctions:
             curr = "طلا" if a.bid_currency == "coins" else "الماس"
             top_bidder = a.highest_bidder_name or "هنوز پیشنهادی ثبت نشده"
-            time_left = a.ends_at.strftime("%H:%M:%S")
+            deadline_str = blackmarket.format_persian_deadline(a.ends_at)
             lines.append(
                 f"🏷 <b>{a.title}</b>\n"
                 f"  💵 بالاترین پیشنهاد: <b>{a.current_bid:,}</b> {curr}\n"
                 f"  👤 برنده فعلی: <b>{top_bidder}</b>\n"
-                f"  ⏱ مهلت تا: <b>{time_left}</b>\n"
+                f"  ⏱ <b>مهلت مزایده:</b> {deadline_str}\n"
             )
     return "\n".join(lines)
 

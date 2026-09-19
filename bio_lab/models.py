@@ -1175,6 +1175,7 @@ class BlackMarketAuction(models.Model):
     highest_bidder_name = models.CharField(max_length=128, blank=True, default="")
     ends_at = models.DateTimeField()
     is_settled = models.BooleanField(default=False)
+    winner_notified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

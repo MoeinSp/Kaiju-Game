@@ -1020,6 +1020,7 @@ SECTION_HALL_REQ = {
 
     # Level 3
     "team": 3,
+    "blacksmith": 3,
     "league": 3,
     "events": 3,
     "shield_shop": 3,
@@ -1110,6 +1111,7 @@ def _main_menu_rows(locked=frozenset(), research_built=False) -> list:
         ("کلکسیون", "collection", "n", "btn_collection"),
         ("غار هیولا", "breeding", "n", "btn_breeding"),
         ("تجهیزات", "inventory", "n", "btn_inventory"),
+        ("آهنگری", "blacksmith", "n", "btn_forge"),
         ("ساختمون‌ها", "buildings", "n", "btn_buildings"),
     ]
     unlocked_nav = [_mkbtn(s) for s in nav_specs if s[1] not in locked]
@@ -4694,6 +4696,7 @@ _KEYWORD_TO_MENU = {
     "casino": "casino", "exchange": "exchange", "balance": "balance",
     "vip": "subscription", "subscription": "subscription", "chests": "arena_chests",
     "blackmarket": "blackmarket", "mugen": "mugen_tower", "tower": "mugen_tower",
+    "blacksmith": "blacksmith", "forge": "blacksmith",
 }
 
 

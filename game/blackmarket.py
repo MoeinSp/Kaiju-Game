@@ -16,6 +16,36 @@ from game.creature import GameError
 from game.emoji import get_emoji
 
 
+PERSIAN_WEEKDAYS = {
+    0: "دوشنبه",
+    1: "سه‌شنبه",
+    2: "چهارشنبه",
+    3: "پنج‌شنبه",
+    4: "جمعه",
+    5: "شنبه",
+    6: "یک‌شنبه",
+}
+
+
+def format_persian_deadline(dt: datetime.datetime) -> str:
+    """Format an aware datetime into Persian deadline string e.g. 'تا 22:30 شب شنبه (به وقت ایران)'."""
+    local_dt = timezone.localtime(dt)
+    day_name = PERSIAN_WEEKDAYS.get(local_dt.weekday(), "")
+    time_str = local_dt.strftime("%H:%M")
+    return f"تا {time_str} شب {day_name} (به وقت ایران)"
+
+
+def get_next_blackmarket_deadline() -> datetime.datetime:
+    """Calculate the next 22:30 Tehran time deadline."""
+    now = timezone.now()
+    now_local = timezone.localtime(now)
+    today_2230 = now_local.replace(hour=22, minute=30, second=0, microsecond=0)
+    if now_local < today_2230:
+        return today_2230
+    tomorrow_local = now_local + datetime.timedelta(days=1)
+    return tomorrow_local.replace(hour=22, minute=30, second=0, microsecond=0)
+
+
 def get_min_bid_increment(current_bid: int, currency: str = "coins") -> int:
     """Calculate dynamic minimum bid increment based on the auction's current price."""
     if currency == "coins":
@@ -58,9 +88,8 @@ def _ensure_daily_auctions() -> None:
     if active_count > 0:
         return
 
-    # Midnight expiration
-    tomorrow = now.date() + datetime.timedelta(days=1)
-    ends_at = timezone.make_aware(datetime.datetime.combine(tomorrow, datetime.time(23, 59, 59)))
+    # 22:30 Tehran time deadline
+    ends_at = get_next_blackmarket_deadline()
 
     # Auction 1: 500 Diamonds
     BlackMarketAuction.objects.create(
@@ -290,6 +319,41 @@ def settle_expired_auctions() -> int:
 
 
 _settle_expired_auctions = settle_expired_auctions
+
+
+def settle_and_collect_winner_notifications() -> list[tuple[int, str]]:
+    """Settle all expired auctions and return a list of (user_telegram_id, message_text) for winners."""
+    settle_expired_auctions()
+
+    unnotified = BlackMarketAuction.objects.filter(
+        is_settled=True,
+        winner_notified=False,
+        highest_bidder__isnull=False,
+    ).select_related("highest_bidder")
+
+    notifications = []
+    for auc in unnotified:
+        with transaction.atomic():
+            auc = BlackMarketAuction.objects.select_for_update().get(id=auc.id)
+            if auc.winner_notified or auc.highest_bidder is None:
+                continue
+            winner = auc.highest_bidder
+            curr = "طلا" if auc.bid_currency == "coins" else "الماس"
+            text = (
+                "🎉 <b>تبریک! شما برنده مزایده بازار سیاه شدید!</b>\n\n"
+                f"🏷 <b>نام آیتم:</b> «<b>{auc.title}</b>»\n"
+                f"💵 <b>مبلغ نهایی ثبت شده:</b> <b>{auc.current_bid:,}</b> {curr}\n\n"
+                "🎁 <i>جایزه این مزایده به طور خودکار به حساب / انبار شما واریز گردید.</i>\n"
+                "✨ جهت شرکت در مزایده‌های جدید، به منوی «⏳ بازار سیاه» سر بزنید."
+            )
+            notifications.append((winner.id, text))
+            auc.winner_notified = True
+            auc.save(update_fields=["winner_notified"])
+
+    # Ensure fresh daily auctions are available if all expired
+    _ensure_daily_auctions()
+    return notifications
+
 
 
 def _deliver_auction_item(user: User, auction: BlackMarketAuction) -> None:

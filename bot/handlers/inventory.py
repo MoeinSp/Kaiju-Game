@@ -72,6 +72,7 @@ def _inv_home_render(counts: dict) -> tuple[str, InlineKeyboardMarkup]:
             for s in slots[i : i + 2]
         ]
         rows.append(row)
+    rows.append([btn("⚒ رفتن به آهنگری (ارتقای با طلا)", emoji_key="btn_forge", style=SHOP, callback_data="menu:blacksmith")])
     rows.append([back_btn("menu:me")])
     return text, InlineKeyboardMarkup(rows)
 

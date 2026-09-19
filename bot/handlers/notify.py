@@ -163,6 +163,22 @@ async def notify_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception:  # noqa: BLE001
         pass
 
+    # Settle expired black market auctions and notify winners in private chat (PV)
+    try:
+        from game.blackmarket import settle_and_collect_winner_notifications
+
+        bm_notifications = await run_db(settle_and_collect_winner_notifications)
+        for user_id, text in bm_notifications:
+            try:
+                await context.bot.send_message(chat_id=user_id, text=text, parse_mode="HTML")
+            except Forbidden:
+                await run_db(_opt_out, user_id)
+            except TelegramError:
+                pass
+            await asyncio.sleep(SEND_DELAY_SECONDS)
+    except Exception:  # noqa: BLE001
+        pass
+
     pending = await run_db(collect_due)
     for item in pending:
         # items are (user_id, text[, _unused[, attacker_id]]). The 4th element, when
