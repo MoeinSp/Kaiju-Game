@@ -408,8 +408,10 @@ def _deliver_auction_item(user: User, auction: BlackMarketAuction) -> None:
         rarity = p.get("rarity", "rare")
         level = p.get("level", 1)
         name = p.get("name") or f"تجهیزات مزایده ({constants.RARITY_LABELS.get(rarity, rarity)})"
+        template_key = p.get("template_key") or f"bm_{slot}_{rarity}"
         Equipment.objects.create(
             owner=user,
+            template_key=template_key,
             name=name,
             slot=slot,
             rarity=rarity,
