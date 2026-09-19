@@ -71,9 +71,17 @@ class Command(BaseCommand):
             return
 
         # 1) which Premium sets does the owner draw from? (both button + text overrides)
-        ids = [r.custom_emoji_id for r in existing.values()] + [o.custom_emoji_id for o in text_existing.values()]
-        stickers = self._api("getCustomEmojiStickers", {"custom_emoji_ids": ids}).get("result", [])
-        set_names = sorted({s.get("set_name") for s in stickers if s.get("set_name")})
+        ids = list({r.custom_emoji_id for r in existing.values() if r.custom_emoji_id} | {o.custom_emoji_id for o in text_existing.values() if o.custom_emoji_id})
+        set_names = set()
+        for cid in ids:
+            try:
+                res = self._api("getCustomEmojiStickers", {"custom_emoji_ids": [cid]})
+                for s in res.get("result", []):
+                    if s.get("set_name"):
+                        set_names.add(s["set_name"])
+            except Exception:
+                continue
+        set_names = sorted(set_names)
 
         # 2) every emoji available across those sets → base emoji : custom_emoji_id
         emap = {}
