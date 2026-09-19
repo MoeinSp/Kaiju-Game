@@ -17,17 +17,28 @@ from game.combat import resolve_duel
 from game.creature import add_xp, effective_stats
 
 
-MUGEN_GUARDIAN_TITLES = [
-    "نگهبان سایه",
-    "روح شمشیرزن",
-    "غول صخره‌ای",
-    "اژدهای جهنمی",
-    "کالبد باستانی",
-    "تایتان بلورین",
-    "ارباب رعد",
-    "اهریمن اعماق",
-    "پادشاه خاکستر",
-    "امپراتور موگن",
+MUGEN_MILESTONE_BOSSES: dict[int, tuple[str, str, str]] = {
+    10: ("تایتان خاکستری دوزخ", "fire", "epic"),
+    20: ("ارباب صاعقه‌های تاریک", "electric", "legendary"),
+    30: ("کراکن اقیانوس خونین", "water", "legendary"),
+    40: ("غول سنگی کوهستان مرگ", "earth", "legendary"),
+    50: ("پادشاه آتشین جهنم", "fire", "mythic"),
+    60: ("اژدهای توفان‌های کهن", "electric", "mythic"),
+    70: ("شبح اعماق پوچی", "water", "mythic"),
+    80: ("تایتان بلورین ویرانگر", "earth", "mythic"),
+    90: ("ارباب شعله‌های ابدی", "fire", "mythic"),
+    100: ("امپراتور بی‌همتای موگن", "electric", "mythic"),
+}
+
+GUARDIAN_PREFIXES = [
+    "نگهبان", "روح شمشیرزن", "شبح سرگردان", "کالبد سنگی", "غول زره‌پوش", "شکارچی سایه‌ها", 
+    "مار افعی", "اژدهای دوزخ", "تایتان کهن", "اهریمن باستانی", "ارباب تاریکی", "پادشاه خاکستر", 
+    "دیو ویرانگر", "کراکن اعماق", "لویاتان طوفان", "شوالیه سیاه", "ققنوس شعله‌ور", "گرگ برفی"
+]
+
+GUARDIAN_SUFFIXES = [
+    "سایه‌ها", "تاریکی مطلق", "خاکستری", "صخره‌های سرخ", "اعماق تاریک", "رعدآسا", "شعله‌ور", "مرداب سمی", 
+    "جهنمی", "بلورین", "ویرانگر", "نفرین‌شده", "باستانی", "خونین", "پوچی", "کهن", "موگن", "کوهستان"
 ]
 
 MUGEN_ENERGY_COST = 5
@@ -38,17 +49,19 @@ def floor_guardian_power(floor: int) -> int:
     return max(50, round(50 + (floor ** 1.32) * 40))
 
 
-def floor_guardian(floor: int) -> Creature:
-    """Build ephemeral Creature for floor N guardian."""
-    from game.creature import base_share_for_rating
+def get_floor_guardian_info(floor: int) -> tuple[str, str, str]:
+    """Get fixed name, element, and rarity for floor N."""
+    if floor in MUGEN_MILESTONE_BOSSES:
+        return MUGEN_MILESTONE_BOSSES[floor]
+    
+    if floor == 9:
+        return "اختاپوس اساطیری اعماق", "water", "mythic"
 
-    p = floor_guardian_power(floor)
-    share = base_share_for_rating(p)
-    element = constants.ELEMENTS[(floor - 1) % len(constants.ELEMENTS)]
-    title_idx = (floor - 1) % len(MUGEN_GUARDIAN_TITLES)
-    name = f"{MUGEN_GUARDIAN_TITLES[title_idx]} (طبقه {floor})"
+    # Deterministic elements cycle
+    elems = ["earth", "fire", "water", "electric"]
+    elem = elems[(floor * 7 + 3) % len(elems)]
 
-    rarity = "common"
+    # Deterministic rarity progression
     if floor >= 50:
         rarity = "mythic"
     elif floor >= 30:
@@ -57,9 +70,25 @@ def floor_guardian(floor: int) -> Creature:
         rarity = "epic"
     elif floor >= 5:
         rarity = "rare"
+    else:
+        rarity = "common"
+
+    p = GUARDIAN_PREFIXES[(floor * 3) % len(GUARDIAN_PREFIXES)]
+    s = GUARDIAN_SUFFIXES[(floor * 5 + 2) % len(GUARDIAN_SUFFIXES)]
+    name = f"{p} {s}"
+    return name, elem, rarity
+
+
+def floor_guardian(floor: int) -> Creature:
+    """Build ephemeral Creature for floor N guardian with fixed stats, name, element, and rarity."""
+    from game.creature import base_share_for_rating
+
+    p = floor_guardian_power(floor)
+    share = base_share_for_rating(p)
+    name, element, rarity = get_floor_guardian_info(floor)
 
     return Creature(
-        name=name,
+        name=f"{name} (طبقه {floor})",
         element=element,
         rarity=rarity,
         level=floor,
@@ -157,7 +186,12 @@ def fight_mugen_floor(user: User, player_creature: Creature) -> dict:
 
     research.attach_research(user, player_creature)
     guardian = floor_guardian(floor)
-    winner, log_text = resolve_duel(player_creature, guardian)
+    winner, log_text = resolve_duel(
+        player_creature,
+        guardian,
+        seed=floor * 10007 + player_creature.id,
+        deterministic=True,
+    )
     won = winner is player_creature
     rew = floor_rewards(floor)
     player_power = creature_power(player_creature, get_equipped_items(player_creature))

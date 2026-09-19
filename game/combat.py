@@ -38,17 +38,21 @@ class Fighter:
     form: float = 1.0
 
 
-def _simulate(creature_a: Creature, creature_b: Creature) -> tuple[Fighter, Fighter, Fighter, int, list[str]]:
-    """Play out one probabilistic duel. Returns (fa, fb, winner, rounds, blow_by_blow).
+def _simulate(creature_a: Creature, creature_b: Creature, *, seed: int | None = None, deterministic: bool = False) -> tuple[Fighter, Fighter, Fighter, int, list[str]]:
+    """Play out one duel. Returns (fa, fb, winner, rounds, blow_by_blow).
     Single source of truth so every result view (compact, detailed, structured) is the
     same fight rather than three copies of the loop that could drift apart."""
-    rng = random.Random()  # fresh each fight — outcomes are probabilistic, not fixed
+    rng = random.Random(seed) if seed is not None else random.Random()
     fa = Fighter(creature_a, effective_stats(creature_a, get_equipped_items(creature_a)), 0)
     fa.hp = fa.stats["hp"]
     fb = Fighter(creature_b, effective_stats(creature_b, get_equipped_items(creature_b)), 0)
     fb.hp = fb.stats["hp"]
-    fa.form = rng.uniform(1 - FORM_SWING, 1 + FORM_SWING)
-    fb.form = rng.uniform(1 - FORM_SWING, 1 + FORM_SWING)
+    if deterministic:
+        fa.form = 1.0
+        fb.form = 1.0
+    else:
+        fa.form = rng.uniform(1 - FORM_SWING, 1 + FORM_SWING)
+        fb.form = rng.uniform(1 - FORM_SWING, 1 + FORM_SWING)
 
     blow_by_blow: list[str] = []
     round_num = 0
@@ -146,11 +150,11 @@ def _detail_text(fa: Fighter, fb: Fighter, winner: Fighter, rounds: int, blow_by
     ])
 
 
-def resolve_battle(creature_a: Creature, creature_b: Creature) -> dict:
+def resolve_battle(creature_a: Creature, creature_b: Creature, *, seed: int | None = None, deterministic: bool = False) -> dict:
     """Rich core result for callers that want to slot rewards into the shared report
     themselves: structured sides, winner, round count, element multiplier, and the
     ready-made compact / detail strings. Attacker is `creature_a`."""
-    fa, fb, winner, rounds, blow = _simulate(creature_a, creature_b)
+    fa, fb, winner, rounds, blow = _simulate(creature_a, creature_b, seed=seed, deterministic=deterministic)
     sa, sb = _side(fa), _side(fb)
     mult = constants.element_multiplier(fa.creature.element, fb.creature.element)
     return {
@@ -161,17 +165,17 @@ def resolve_battle(creature_a: Creature, creature_b: Creature) -> dict:
     }
 
 
-def resolve_duel(creature_a: Creature, creature_b: Creature) -> tuple[Creature, str]:
+def resolve_duel(creature_a: Creature, creature_b: Creature, *, seed: int | None = None, deterministic: bool = False) -> tuple[Creature, str]:
     """Simulates a duel, returning (winner, compact_log). For the full blow-by-blow
     too, call resolve_duel_detailed()."""
-    r = resolve_battle(creature_a, creature_b)
+    r = resolve_battle(creature_a, creature_b, seed=seed, deterministic=deterministic)
     return r["winner"], r["compact"]
 
 
-def resolve_duel_detailed(creature_a: Creature, creature_b: Creature) -> tuple[Creature, str, str]:
+def resolve_duel_detailed(creature_a: Creature, creature_b: Creature, *, seed: int | None = None, deterministic: bool = False) -> tuple[Creature, str, str]:
     """Like resolve_duel but also returns a detailed blow-by-blow log (one line per
     hit) for the optional «جزییات حمله» view."""
-    r = resolve_battle(creature_a, creature_b)
+    r = resolve_battle(creature_a, creature_b, seed=seed, deterministic=deterministic)
     return r["winner"], r["compact"], r["detail"]
 
 
