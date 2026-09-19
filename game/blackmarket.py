@@ -48,7 +48,7 @@ def get_active_auctions() -> list[BlackMarketAuction]:
     """Get active non-settled auctions."""
     _settle_expired_auctions()
     _ensure_daily_auctions()
-    return list(BlackMarketAuction.objects.filter(is_settled=False, ends_at__gt=timezone.now()).order_by("id"))
+    return list(BlackMarketAuction.objects.filter(is_settled=False, ends_at__gt=timezone.now()).select_related("highest_bidder").order_by("id"))
 
 
 def _ensure_daily_auctions() -> None:
