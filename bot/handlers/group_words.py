@@ -1553,6 +1553,51 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await handle_expedition_word(update, context)
         return
 
+    if action == "mugen":
+        from bot.handlers.mugen_tower import mugen_panel
+        await mugen_panel(update, context)
+        return
+
+    if action == "blackmarket":
+        from bot.handlers.blackmarket import blackmarket_panel
+        await blackmarket_panel(update, context)
+        return
+
+    if action == "shop":
+        from bot.handlers.shop import shop_panel
+        await shop_panel(update, context)
+        return
+
+    if action == "inventory":
+        from bot.handlers.inventory import inventory_cmd
+        await inventory_cmd(update, context)
+        return
+
+    if action == "subscription":
+        from bot.handlers.subscription import subscription_panel
+        await subscription_panel(update, context)
+        return
+
+    if action == "achievements":
+        from bot.handlers.achievements import achievements_panel
+        await achievements_panel(update, context)
+        return
+
+    if action == "battlepass":
+        from bot.handlers.battlepass import battlepass_panel
+        await battlepass_panel(update, context)
+        return
+
+    if action == "titles":
+        from bot.handlers.titles import titles_panel
+        await titles_panel(update, context)
+        return
+
+    if action == "team":
+        from bot.handlers.team import team_panel
+        await team_panel(update, context)
+        return
+
     if action == "hunt":
         # finding a hunt opponent costs a little gold — the FIRST find too, not just «بعدی»
         try:

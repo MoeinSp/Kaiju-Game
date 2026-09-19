@@ -368,6 +368,89 @@ KEYWORD_DEFS: dict[str, tuple[str, str, str, tuple[str, ...]]] = {
             "سهمیه: هر بازیکن روزی یک‌بار در تمام گروه‌ها.",
         ),
     ),
+    "mugen": (
+        "برج",
+        "campaign",
+        "برج بی‌پایان موگن (Mugen Tower)",
+        (
+            "نبرد در طبقات ۱ تا ۱۰۰ با نگهبانان و باس‌های قدرتمند.",
+            "هر نبرد ۵ انرژی مصرف می‌کند و جوایز ارزشمند الماس، طلا، DNA و بلیط ژنتیک دارد.",
+            "امکان مشاهده جدول برترین فاتحان برج در هر زمان.",
+        ),
+    ),
+    "blackmarket": (
+        "بازار",
+        "shop",
+        "بازار سیاه و مزایده‌های نیمه‌شب",
+        (
+            "مزایده اقلام نایاب، الماس، بلیط ژنتیک، موجودات و تجهیزات کمیاب.",
+            "ثبت پیشنهاد با طلا یا الماس و رقابت زنده بر سر غنائم.",
+            "بخش مزایده VIP برای اعضای دارای اشتراک نقره‌ای و طلایی.",
+        ),
+    ),
+    "shop": (
+        "فروشگاه",
+        "shop",
+        "فروشگاه بازی و الماس",
+        (
+            "خرید انواع بسته‌های الماس، طلا، سپر و آیتم‌های ویژه.",
+            "مشاهده تخفیف‌ها و پیشنهادهای روزانه.",
+        ),
+    ),
+    "inventory": (
+        "انبار",
+        "inventory",
+        "کوله و انبار آیتم‌ها و تجهیزات",
+        (
+            "مشاهده تجهیزات، کارت‌های تسریع، بلیط‌های ژنتیک و آیتم‌های کسب شده.",
+            "مدیریت و استفاده مستقیم از آیتم‌ها.",
+        ),
+    ),
+    "subscription": (
+        "اشتراک",
+        "sub_gold",
+        "اشتراک نقره‌ای و طلایی (VIP)",
+        (
+            "مزایای ویژه: ۲۵٪ تا ۵۰٪ شارژ سریع‌تر انرژی، دسترسی به مزایده‌های VIP، و نشان‌های اختصاصی.",
+            "افزایش شانس لوت و غنائم اختصاصی.",
+        ),
+    ),
+    "achievements": (
+        "دستاورد",
+        "trophy",
+        "دستاوردها و افتخارات بازی",
+        (
+            "تکمیل چالش‌های بازی و دریافت الماس و جوایز ویژه.",
+            "ردیابی پیشرفت ماموریت‌های بلندمدت.",
+        ),
+    ),
+    "battlepass": (
+        "پاس",
+        "book",
+        "بتل پس و پاداش‌های فصلی",
+        (
+            "پیشرفت در رده‌های فصلی با انجام نبردها و ماموریت‌ها.",
+            "دریافت جوایز رایگان و مسیر ویژه پریمیوم.",
+        ),
+    ),
+    "titles": (
+        "لقب",
+        "crown",
+        "عناوین و القاب ویژه بازیکن",
+        (
+            "انتخاب لقب نمایشی در کنار اسم آزمایشگاه.",
+            "کسب القاب اساطیری از ایونت‌ها، برج و رتبه‌بندی‌ها.",
+        ),
+    ),
+    "team": (
+        "تیم",
+        "team",
+        "تیم ۳ تایی کایجوها",
+        (
+            "چیدمان تیم اصلی، ذخیره و پشتیبان برای نبردهای پیشرفته.",
+            "هم‌افزایی قدرت و بونوس‌های تیمی.",
+        ),
+    ),
     # ── meta ────────────────────────────────────────────────────────────────
     "start": (
         "شروع",
@@ -405,28 +488,28 @@ KEYWORD_SECTIONS: tuple[tuple[str, str, str, str, tuple[str, ...]], ...] = (
         "battle",
         "نبرد و درآمد",
         "اینجا طلا و XP در می‌آری — قلب بازی همینه.",
-        ("hunt", "arena", "raid", "attack", "expedition"),
+        ("hunt", "arena", "raid", "attack", "expedition", "mugen"),
     ),
     (
         "grow",
         "settings",
         "قوی‌تر کردن هیولا",
         "هیولات رو ارتقا بده، تجهیز کن و ستاره‌ش رو بالا ببر.",
-        ("upgrade", "equipment", "collection", "select", "fusion", "breeding"),
+        ("upgrade", "equipment", "collection", "select", "fusion", "breeding", "team"),
     ),
     (
         "economy",
         "coin",
         "اقتصاد و جایزه",
         "منبع درآمد ثابت و جایزه‌های رایگان.",
-        ("mine", "box", "wheel", "reward", "mission", "exchange", "balance"),
+        ("mine", "box", "wheel", "reward", "mission", "exchange", "balance", "blackmarket", "shop", "inventory"),
     ),
     (
         "group",
         "crown",
-        "جایگاه در گروه",
-        "رقابت با بقیه‌ی اعضای گروه.",
-        ("leaderboard", "guardian", "guardian_challenge", "guardian_claim", "guardian_resign", "alliance"),
+        "جایگاه در گروه و افتخارات",
+        "رقابت با بقیه‌ی اعضای گروه و پیشرفت شخصی.",
+        ("leaderboard", "guardian", "guardian_challenge", "guardian_claim", "guardian_resign", "alliance", "achievements", "battlepass", "titles", "subscription"),
     ),
 )
 
@@ -452,6 +535,63 @@ ALIASES: dict[str, str] = {
     "کایجو من": "select",
     "کاروان": "expedition",
     "اعزام کاروان": "expedition",
+    # Mugen
+    "برج موگن": "mugen",
+    "برج بی پایان": "mugen",
+    "برج بی‌پایان": "mugen",
+    "موگن": "mugen",
+    "mugen": "mugen",
+    "tower": "mugen",
+    # Black Market
+    "بازار سیاه": "blackmarket",
+    "بازارسیاه": "blackmarket",
+    "مزایده": "blackmarket",
+    "حراج": "blackmarket",
+    "مارکت": "blackmarket",
+    "blackmarket": "blackmarket",
+    "market": "blackmarket",
+    # Shop
+    "شاپ": "shop",
+    "خرید": "shop",
+    "shop": "shop",
+    # Inventory
+    "کوله": "inventory",
+    "آیتم": "inventory",
+    "آیتم ها": "inventory",
+    "آیتم‌ها": "inventory",
+    "تجهیزات من": "inventory",
+    "inventory": "inventory",
+    # Subscription
+    "اشتراک نقره ای": "subscription",
+    "اشتراک نقره‌ای": "subscription",
+    "اشتراک طلایی": "subscription",
+    "vip": "subscription",
+    "وی آی پی": "subscription",
+    "وی‌آی‌پی": "subscription",
+    "پریمیوم": "subscription",
+    "premium": "subscription",
+    "subscription": "subscription",
+    # Achievements
+    "دستاوردها": "achievements",
+    "افتخارات": "achievements",
+    "چالش": "achievements",
+    "achievements": "achievements",
+    # Battle Pass
+    "بتل پس": "battlepass",
+    "بتل‌پس": "battlepass",
+    "فصل": "battlepass",
+    "battlepass": "battlepass",
+    "pass": "battlepass",
+    # Titles
+    "القاب": "titles",
+    "عناوین": "titles",
+    "عنوان": "titles",
+    "titles": "titles",
+    "title": "titles",
+    # Team
+    "تیم کایجو": "team",
+    "تیم من": "team",
+    "team": "team",
 }
 
 

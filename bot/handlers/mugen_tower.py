@@ -172,7 +172,7 @@ async def mugen_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 def register(application) -> None:
-    application.add_handler(CommandHandler(["mugen", "tower"], mugen_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler(["mugen", "tower"], mugen_panel))
     application.add_handler(CallbackQueryHandler(mugen_panel_callback, pattern=r"^mugen:panel$"))
     application.add_handler(CallbackQueryHandler(mugen_fight_callback, pattern=r"^mugen:fight$"))
     application.add_handler(CallbackQueryHandler(mugen_lb_callback, pattern=r"^mugen:lb$"))

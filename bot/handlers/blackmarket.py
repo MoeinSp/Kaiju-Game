@@ -121,6 +121,6 @@ async def bm_bid_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 def register(application) -> None:
-    application.add_handler(CommandHandler(["blackmarket", "market"], blackmarket_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler(["blackmarket", "market"], blackmarket_panel))
     application.add_handler(CallbackQueryHandler(bm_refresh_callback, pattern=r"^bm:refresh$"))
     application.add_handler(CallbackQueryHandler(bm_bid_callback, pattern=r"^bm_bid:\d+:\d+$"))
