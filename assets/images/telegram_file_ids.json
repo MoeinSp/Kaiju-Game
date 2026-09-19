@@ -1,5 +1,20 @@
 {
   "kaijus/electric_tier3.jpg": "AgACAgQAAxkDAAIFkGqlDD8KTp6GVV_EgwhZmLiaAZUuAAKDEGsboo8oUaqhl6zaCTEoAQADAgADeQADPQQ",
   "buildings/bld_main_hall_lvl5.jpg": "AgACAgQAAxkDAAIFmmqlDE_0bMGlWc-A56HCEuFQbwUJAAKEEGsboo8oUZh8QsB3uE5KAQADAgADeQADPQQ",
-  "8485889221": {}
+  "8485889221": {
+    "cache/creature_shahbaz_s1_epic_star1.jpg": "AgACAgQAAxkDAAIFtWqlRrCwTKD1dhNpDbRFLHkB31AoAALBD2sboo8wUajP_mByJUVDAQADAgADeQADPQQ",
+    "features/feat_campaign.jpg": "AgACAgQAAxkDAAIFy2qtXH5BT9Fw7ZxwoUC2GpOo1ySfAAJnEGsbdoJoUTjTcTFV6YoGAQADAgADeQADPQQ",
+    "cache/creature_azhdahak_s1_common_star1.jpg": "AgACAgQAAxkDAAIF22qtcb_lCESMY_juvnvwkQJX2RSbAAK7DmsbvEFwUctk_m_4TGtvAQADAgADeQADPQQ",
+    "features/feat_arena.jpg": "AgACAgQAAxkDAAIF4GqtcfvdZP7XshMUPGitcdi6Otr5AAJ5EGsbdoJoUckwxWbKzSKnAQADAgADeQADPQQ",
+    "features/feat_cat_social.jpg": "AgACAgQAAxkDAAIF3mqtchaFN5U7YnyKiIqgeoD-ciQvAAJ6EGsbdoJoUW8cLKvSi3NsAQADAgADeQADPQQ",
+    "features/feat_cat_shop.jpg": "AgACAgQAAxkDAAIF3mqtchohlOCz50EtkiAPwP12Wl2xAAJ7EGsbdoJoUV-KToz084obAQADAgADeQADPQQ",
+    "features/feat_exchange.jpg": "AgACAgQAAxkDAAIF3mqtch014Ix63torlGGjRgZvFAxkAAJ8EGsbdoJoUYvWlDPAFZcXAQADAgADeQADPQQ",
+    "features/feat_hunt.jpg": "AgACAgQAAxkDAAIF9Gqtoa-XS8wdVyWbvaaGVMjhPHOAAAJpD2sbvEFwUUJUkHl-9ZS5AQADAgADeQADPQQ",
+    "features/feat_encounter_chest.jpg": "AgACAgQAAxkDAAIF8mqtoda2QkdgHPGf7yLgGpLnGzolAALiEGsbdoJoUf65lU8LFS9XAQADAgADeQADPQQ",
+    "features/cave.jpg": "AgACAgQAAxkDAAIF_mqtqdfrYmpyTke9bwWCzWbZ-U0KAAJxD2sbvEFwUYvtxprGv-kYAQADAgADeQADPQQ",
+    "cache/bld_card_main_hall_lvl1.jpg": "AgACAgQAAxkDAAIF_mqtqdsQJhko1Y7sVMSWicqfX_g7AAJyD2sbvEFwUX1KBJ3z20egAQADAgADeQADPQQ",
+    "cache/bld_card_fusion_lab_lvl1.jpg": "AgACAgQAAxkDAAIF_mqtqeC3ak_Bx_n0ATVzj6mIJZy7AAJzD2sbvEFwUWLpN9Eq9f0oAQADAgADeQADPQQ",
+    "features/feat_cat_rewards.jpg": "AgACAgQAAxkDAAIF-WqtqfiJt1h2D_qUON7VK9QlhItFAAL4EGsbdoJoUSgpRRN2dA1LAQADAgADeQADPQQ",
+    "features/feat_mugen_tower.jpg": "AgACAgQAAxkDAAIF-Wqtph7anwABvKo6L5Z2vwttB8TALQAC7hBrG3aCaFEw_DLqP64FyQEAAwIAA3kAAz0E"
+  }
 }

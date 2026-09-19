@@ -715,8 +715,19 @@ def _mine_card(user, mine: dict) -> tuple[str, InlineKeyboardMarkup]:
         return f"سطح {x.get('level', 0)}" if x.get("level", 0) > 0 else "🔒 ساخته‌نشده"
 
     div = "──────────────"
+    alert_txt = ""
+    if (user.plundered_alert_gold or 0) > 0 or (user.plundered_alert_dna or 0) > 0:
+        alert_txt = (
+            f"⚠️ <b>هشدار غارت معدن:</b>\n"
+            f"در حمله اخیر در آرنا، بخشی از طلا و DNA ذخیره‌شده شما شامل "
+            f"<b>{user.plundered_alert_gold:,}</b> طلا و <b>{user.plundered_alert_dna:,}</b> DNA به غارت رفت!\n{div}\n"
+        )
+        user.plundered_alert_gold = 0
+        user.plundered_alert_dna = 0
+        user.save(update_fields=["plundered_alert_gold", "plundered_alert_dna"])
+
     lines = [
-        "⛏ <b>بخش معدن و استخراج</b>",
+        f"{alert_txt}⛏ <b>بخش معدن و استخراج</b>",
         f"💎 جمع‌کننده الماس — {_lvl(d)}  🏭 جمع‌کننده طلا — {_lvl(g)}  🧬 آزمایشگاه DNA — {_lvl(n)}",
         div,
         "📦 <b>آماده‌ی جمع‌آوری:</b>",
@@ -1411,13 +1422,15 @@ async def _delete_msgs_job(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def _schedule_cleanup(context, chat_id: int, message_ids, action: str) -> None:
-    """Auto-delete the given messages (bot reply + the user's trigger) after the
-    action's TTL, so recognised word-commands don't pile up in the group."""
+    """Auto-delete messages only for leaderboard ('جدول'). All other messages
+    (attacks, rewards, monsters, etc.) are permanently kept in the group."""
+    if action != "leaderboard":
+        return
     jq = getattr(context, "job_queue", None)
     ids = [m for m in message_ids if m]
     if jq is None or not ids:
         return
-    jq.run_once(_delete_msgs_job, _GROUP_TTL.get(action, _GROUP_TTL_DEFAULT), data=(chat_id, ids))
+    jq.run_once(_delete_msgs_job, _GROUP_TTL.get(action, 300), data=(chat_id, ids))
 
 
 async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1534,6 +1547,10 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
         await private_handlers.alliance_info_cmd(update, context)
         _schedule_cleanup(context, message.chat_id, [message.message_id], action)
+        return
+
+    if action == "expedition":
+        await handle_expedition_word(update, context)
         return
 
     if action == "hunt":
@@ -2134,10 +2151,116 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 
+def _render_expedition_card(exp) -> tuple[str, InlineKeyboardMarkup]:
+    members = list(exp.members.all())
+    member_names = [display_name(m) for m in members]
+    m_list_str = "\n".join([f"  ▫️ <b>{name}</b>" for name in member_names])
+
+    text = (
+        f"⛵ <b>کاروان مأموریت تیمی: {exp.target_name}</b>\n"
+        f"<i>اعزام به مناطق دوردست برای غارت گنجینه‌ها و منابع باارزش</i>\n\n"
+        f"👑 <b>سرپرست کاروان:</b> {display_name(exp.creator)}\n"
+        f"👥 <b>اعضای حاضر ({len(members)}/4):</b>\n{m_list_str}\n\n"
+        f"⏳ وضعیت: <b>در حال عضوگیری...</b> (حداقل ۲ نفر)\n"
+        f"⚠️ <i>هر بازیکن روزی ۱ بار مجاز به اعزام است.</i>"
+    )
+    kb = InlineKeyboardMarkup([
+        [
+            btn("➕ پیوستن به کاروان", emoji_key="btn_sub_silver", style=PRIMARY, callback_data=f"exp_join:{exp.id}"),
+            btn("🚀 حرکت کاروان", emoji_key="btn_attack", style=BATTLE, callback_data=f"exp_launch:{exp.id}"),
+        ]
+    ])
+    return text, kb
+
+
+async def handle_expedition_word(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.effective_message
+
+    def _sync(tg_user, chat):
+        user, _ = get_or_create_user(tg_user)
+        from bio_lab.models import GroupExpedition
+        from django.utils import timezone
+        existing = GroupExpedition.objects.filter(
+            group_id=chat.id,
+            status="recruiting",
+            expires_at__gt=timezone.now(),
+        ).first()
+        if existing:
+            return existing
+        from game.expedition import start_expedition_recruitment
+        return start_expedition_recruitment(user, chat.id, chat.title or "")
+
+    try:
+        exp = await run_db(_sync, update.effective_user, message.chat)
+    except GameError as exc:
+        sent = await message.reply_text(str(exc))
+        _schedule_cleanup(context, message.chat_id, [message.message_id, sent.message_id], "expedition")
+        return
+
+    text, kb = _render_expedition_card(exp)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("expedition")
+    sent = await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=kb)
+    sent_id = getattr(sent, "message_id", None)
+    _schedule_cleanup(context, message.chat_id, [message.message_id, sent_id], "expedition")
+
+
+async def expedition_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    exp_id = int(query.data.split(":")[1])
+
+    def _do_join(tg_user):
+        user, _ = get_or_create_user(tg_user)
+        from game.expedition import join_expedition
+        return join_expedition(user, exp_id)
+
+    try:
+        exp = await run_db(_do_join, update.effective_user)
+        await query.answer("✅ شما به کاروان پیوستید!", show_alert=True)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+
+    text, kb = _render_expedition_card(exp)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+
+
+async def expedition_launch_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    exp_id = int(query.data.split(":")[1])
+
+    def _do_launch(tg_user):
+        user, _ = get_or_create_user(tg_user)
+        from game.expedition import launch_expedition
+        return launch_expedition(user, exp_id)
+
+    try:
+        res = await run_db(_do_launch, update.effective_user)
+        await query.answer("🚀 کاروان با موفقیت اعزام شد!")
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+
+    members_str = "، ".join([display_name(m) for m in res["members"]])
+    text = (
+        f"🏆 <b>کاروان مأموریت تیمی با موفقیت بازگشت!</b>\n\n"
+        f"📍 مقصد: <b>{res['destination']}</b>\n"
+        f"👥 دلاوران کاروان: <b>{members_str}</b>\n\n"
+        f"🎁 <b>سهم غنیمت هر عضو:</b>\n"
+        f"  💰 <b>+{res['per_gold']:,}</b> طلا\n"
+        f"  🧬 <b>+{res['per_dna']}</b> DNA\n"
+        f"  💎 <b>+{res['per_diamond']}</b> الماس\n\n"
+        f"✨ غنائم به حساب تمامی اعضای کاروان واریز شد!"
+    )
+    await safe_edit_message_text(query, text, parse_mode="HTML")
+
+
 def register(application) -> None:
     application.add_handler(CallbackQueryHandler(group_card_callback, pattern=r"^grp:"))
     application.add_handler(CallbackQueryHandler(group_help_callback, pattern=r"^grph:"))
     application.add_handler(CallbackQueryHandler(group_action_callback, pattern=r"^grpa:"))
+    application.add_handler(CallbackQueryHandler(expedition_join_callback, pattern=r"^exp_join:\d+$"))
+    application.add_handler(CallbackQueryHandler(expedition_launch_callback, pattern=r"^exp_launch:\d+$"))
     application.add_handler(
         CommandHandler("setup", group_setup, filters.ChatType.GROUPS)
     )

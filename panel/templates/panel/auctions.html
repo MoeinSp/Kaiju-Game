@@ -1,0 +1,304 @@
+{% extends "panel/base.html" %}
+
+{% block title %}مزایده‌های بازار سیاه — پنل مدیریت{% endblock %}
+
+{% block content %}
+<h2>🏛 مزایده‌های بازار سیاه و نیمه‌شب</h2>
+<p class="lead">تنظیم، زمان‌بندی تقویمی و مدیریت مزایده‌های جاری و روزهای آینده با پشتیبانی از تمامی انواع آیتم‌ها.</p>
+
+<div class="card">
+  <h3>➕ ایجاد / زمان‌بندی مزایده جدید</h3>
+  <div class="hint">می‌توانید برای امروز یا هر تاریخ در آینده مزایده تعیین کنید. در پایان مهلت تعیین شده، آیتم به طور خودکار به برترین پیشنهاد تحویل داده می‌شود.</div>
+
+  <form method="post" id="auctionForm">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="create">
+
+    <div class="grid" style="grid-template-columns: 2fr 1fr 1fr; margin-bottom: 12px;">
+      <div>
+        <label style="font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px;">عنوان مزایده:</label>
+        <input type="text" name="title" id="aucTitle" placeholder="مثال: 💎 محموله ۱۰۰۰ تایی الماس" required style="width: 100%;">
+      </div>
+
+      <div>
+        <label style="font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px;">نوع آیتم:</label>
+        <select name="item_type" id="itemTypeSelect" onchange="updateItemFields()" style="width: 100%;">
+          <option value="diamonds">💎 الماس (Diamonds)</option>
+          <option value="tickets">🎫 بلیط باکس ژنتیکی (Biocrate Tickets)</option>
+          <option value="creature">🦖 کایجو / تخم هیولا (Creature)</option>
+          <option value="coins">💰 طلا (Gold Coins)</option>
+          <option value="dna">🧬 قطعات DNA</option>
+          <option value="speedup">⚡ کارت سرعت (Speedup)</option>
+          <option value="equipment">🎒 تجهیزات نایاب (Equipment)</option>
+        </select>
+      </div>
+
+      <div>
+        <label style="font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px;">نوع ارز بید:</label>
+        <select name="bid_currency" style="width: 100%;">
+          <option value="coins">💰 طلا (Coins)</option>
+          <option value="diamonds">💎 الماس (Diamonds)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Dynamic Payload Fields based on item_type -->
+    <div id="diamondsFields" class="card" style="background: var(--panel-2); margin-bottom: 12px;">
+      <label style="font-size: 13px; color: var(--muted);">تعداد الماس:</label>
+      <input type="number" name="diamonds_amount" value="500" min="1" style="width: 180px;">
+    </div>
+
+    <div id="ticketsFields" class="card" style="background: var(--panel-2); margin-bottom: 12px; display: none;">
+      <label style="font-size: 13px; color: var(--muted);">تعداد بلیط باکس:</label>
+      <input type="number" name="tickets_amount" value="10" min="1" style="width: 180px;">
+    </div>
+
+    <div id="coinsFields" class="card" style="background: var(--panel-2); margin-bottom: 12px; display: none;">
+      <label style="font-size: 13px; color: var(--muted);">مقدار طلا:</label>
+      <input type="number" name="coins_amount" value="100000" min="100" style="width: 220px;">
+    </div>
+
+    <div id="dnaFields" class="card" style="background: var(--panel-2); margin-bottom: 12px; display: none;">
+      <label style="font-size: 13px; color: var(--muted);">مقدار قطعات DNA:</label>
+      <input type="number" name="dna_amount" value="1000" min="1" style="width: 180px;">
+    </div>
+
+    <div id="speedupFields" class="card" style="background: var(--panel-2); margin-bottom: 12px; display: none;">
+      <div class="row">
+        <div>
+          <label style="font-size: 13px; color: var(--muted);">مدت کارت (دقیقه):</label>
+          <select name="speedup_minutes">
+            <option value="15">۱۵ دقیقه</option>
+            <option value="60" selected>۱ ساعت (۶۰ دقیقه)</option>
+            <option value="180">۳ ساعت (۱۸۰ دقیقه)</option>
+            <option value="480">۸ ساعت (۴۸۰ دقیقه)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 13px; color: var(--muted);">تعداد کارت:</label>
+          <input type="number" name="speedup_count" value="5" min="1" style="width: 120px;">
+        </div>
+      </div>
+    </div>
+
+    <div id="equipmentFields" class="card" style="background: var(--panel-2); margin-bottom: 12px; display: none;">
+      <div class="row">
+        <div>
+          <label style="font-size: 13px; color: var(--muted);">نام تجهیزات:</label>
+          <input type="text" name="equip_name" placeholder="مثال: شمشیر آذرخش باستانی">
+        </div>
+        <div>
+          <label style="font-size: 13px; color: var(--muted);">جایگاه (Slot):</label>
+          <select name="equip_slot">
+            <option value="weapon">⚔️ سلاح (Weapon)</option>
+            <option value="armor">🛡 زره (Armor)</option>
+            <option value="accessory">💍 زیورآلات (Accessory)</option>
+            <option value="boots">👢 چکمه (Boots)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 13px; color: var(--muted);">کمیابی:</label>
+          <select name="equip_rarity">
+            <option value="rare">نایاب (Rare)</option>
+            <option value="epic" selected>حماسی (Epic)</option>
+            <option value="legendary">افسانه‌ای (Legendary)</option>
+            <option value="mythic">اسطوره‌ای (Mythic)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 13px; color: var(--muted);">سطح آغازین:</label>
+          <input type="number" name="equip_level" value="1" min="1" max="20" style="width: 90px;">
+        </div>
+      </div>
+    </div>
+
+    <div id="creatureFields" class="card" style="background: var(--panel-2); margin-bottom: 12px; display: none;">
+      <div class="row">
+        <div>
+          <label style="font-size: 13px; color: var(--muted);">نام کایجو:</label>
+          <input type="text" name="creature_name" placeholder="مثال: اژدهای دوزخی ۳ ستاره">
+        </div>
+        <div>
+          <label style="font-size: 13px; color: var(--muted);">کمیابی:</label>
+          <select name="creature_rarity">
+            <option value="rare">نایاب (Rare)</option>
+            <option value="epic">حماسی (Epic)</option>
+            <option value="legendary" selected>افسانه‌ای (Legendary)</option>
+            <option value="mythic">اسطوره‌ای (Mythic)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 13px; color: var(--muted);">تعداد ستاره:</label>
+          <select name="creature_star">
+            <option value="1">⭐ ۱ ستاره</option>
+            <option value="2">⭐⭐ ۲ ستاره</option>
+            <option value="3" selected>⭐⭐⭐ ۳ ستاره</option>
+            <option value="4">⭐⭐⭐⭐ ۴ ستاره</option>
+            <option value="5">⭐⭐⭐⭐⭐ ۵ ستاره</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 13px; color: var(--muted);">عنصر:</label>
+          <select name="creature_element">
+            <option value="fire">🔥 آتش</option>
+            <option value="water">💧 آب</option>
+            <option value="nature">🌿 طبیعت</option>
+            <option value="electric">⚡ الکتریک</option>
+            <option value="dark">🌑 تاریکی</option>
+            <option value="light">✨ نور</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 13px; color: var(--muted);">سطح:</label>
+          <input type="number" name="creature_level" value="1" min="1" max="100" style="width: 90px;">
+        </div>
+      </div>
+    </div>
+
+    <div class="grid" style="grid-template-columns: 1fr 1.5fr 1fr; margin-bottom: 16px;">
+      <div>
+        <label style="font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px;">حداقل شروع قیمت (Base Bid):</label>
+        <input type="number" name="min_bid" value="50000" min="1" required style="width: 100%;">
+      </div>
+
+      <div>
+        <label style="font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px;">📅 تاریخ و ساعت پایان (تقویم):</label>
+        <input type="datetime-local" name="ends_at" value="{{ default_ends_at }}" required style="width: 100%;">
+      </div>
+
+      <div style="display: flex; align-items: flex-end; padding-bottom: 4px;">
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+          <input type="checkbox" name="is_vip" value="1" style="width: 18px; height: 18px;">
+          <span>👑 مزایده ویژه VIP (فقط مشترکین نقره‌ای/طلایی)</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="row">
+      <button type="submit" class="green">🚀 ثبت و زمان‌بندی مزایده</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+    <h3 style="margin: 0;">⏱ مزایده‌های فعال و زمان‌بندی شده</h3>
+    <form method="post" style="margin: 0;">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="settle_all">
+      <button type="submit" class="blue" style="font-size: 12px; padding: 4px 10px;">⚡ تسویه خودکار سررسیدها</button>
+    </form>
+  </div>
+
+  {% if active_auctions %}
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>شناسه</th>
+            <th>عنوان</th>
+            <th>نوع آیتم</th>
+            <th>بالاترین پیشنهاد فعلی</th>
+            <th>پیشنهاد‌دهنده برتر</th>
+            <th>مهلت پایان</th>
+            <th>وضعیت</th>
+            <th>عملیات</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in active_auctions %}
+            <tr>
+              <td><code>#{{ a.id }}</code></td>
+              <td><b>{{ a.title }}</b></td>
+              <td><span class="pill" style="background: var(--panel-2);">{{ a.item_type }}</span></td>
+              <td>
+                <b>{{ a.current_bid|floatformat:0 }}</b>
+                {% if a.bid_currency == "coins" %}💰 طلا{% else %}💎 الماس{% endif %}
+              </td>
+              <td>
+                {% if a.highest_bidder %}
+                  👤 {{ a.highest_bidder_name|default:a.highest_bidder.username }} (<code>{{ a.highest_bidder_id }}</code>)
+                {% else %}
+                  <span style="color: var(--muted);">— هنوز پیشنهادی ثبت نشده —</span>
+                {% endif %}
+              </td>
+              <td dir="ltr" style="text-align: right;">{{ a.ends_at|date:"Y-m-d H:i" }}</td>
+              <td><span class="pill on">در حال برگزاری</span></td>
+              <td>
+                <div class="row">
+                  <form method="post" onsubmit="return confirm('آیا از تسویه فوری این مزایده اطمینان دارید؟');" style="margin: 0;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="settle_now">
+                    <input type="hidden" name="auction_id" value="{{ a.id }}">
+                    <button type="submit" class="blue" style="font-size: 11px; padding: 3px 7px;">تسویه فوری</button>
+                  </form>
+                  <form method="post" onsubmit="return confirm('آیا از حذف این مزایده اطمینان دارید؟');" style="margin: 0;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="auction_id" value="{{ a.id }}">
+                    <button type="submit" class="red" style="font-size: 11px; padding: 3px 7px;">حذف</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="hint">در حال حاضر مزایده فعالی در پایگاه داده ثبت نشده است. با فرم بالا اولین مزایده را ثبت کنید یا سیستم در نیمه‌شب مزایده‌های پیش‌فرض را ایجاد می‌کند.</p>
+  {% endif %}
+</div>
+
+{% if settled_auctions %}
+<div class="card">
+  <h3>📜 تاریخچه ۲۰ مزایده تسویه شده اخیر</h3>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>شناسه</th>
+          <th>عنوان</th>
+          <th>مبلغ برنده</th>
+          <th>برنده نهایی</th>
+          <th>تاریخ پایان</th>
+          <th>وضعیت</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in settled_auctions %}
+          <tr>
+            <td><code>#{{ a.id }}</code></td>
+            <td>{{ a.title }}</td>
+            <td>
+              {{ a.current_bid|floatformat:0 }}
+              {% if a.bid_currency == "coins" %}💰 طلا{% else %}💎 الماس{% endif %}
+            </td>
+            <td>
+              {% if a.highest_bidder %}
+                🏆 <b>{{ a.highest_bidder_name|default:a.highest_bidder.username }}</b>
+              {% else %}
+                <span style="color: var(--muted);">بدون برنده (منقضی شده)</span>
+              {% endif %}
+            </td>
+            <td dir="ltr" style="text-align: right;">{{ a.ends_at|date:"Y-m-d H:i" }}</td>
+            <td><span class="pill" style="background: var(--line);">تسویه شده</span></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<script>
+function updateItemFields() {
+  const sel = document.getElementById("itemTypeSelect").value;
+  const sections = ["diamonds", "tickets", "coins", "dna", "speedup", "equipment", "creature"];
+  sections.forEach(s => {
+    const el = document.getElementById(s + "Fields");
+    if (el) el.style.display = (sel === s || (sel === "material" && s === "dna")) ? "block" : "none";
+  });
+}
+</script>
+{% endblock %}

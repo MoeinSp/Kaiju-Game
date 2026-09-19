@@ -36,9 +36,11 @@ from bot.handlers.buildings import buildings_panel
 from bot.handlers.inventory import blacksmith_panel, inventory_cmd
 from bot.handlers.lootbox import biocrate_cmd, diamond_box_panel
 from bot.handlers.owner import admin_cmd
+from bot.handlers.mugen_tower import mugen_panel
+from bot.handlers.blackmarket import blackmarket_panel
 from bot.handlers.wheel import wheel_cmd
 from bot.buttons import (ADMIN, BACK, BATTLE, BUILD, CONFIRM, DANGER, LIST, NAV, PRIMARY,
-                         SHOP, back_btn, back_only_keyboard, btn)
+                         SHOP, back_btn, back_only_keyboard, btn, enforce_keyboard_symmetry, symmetric_markup)
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text, send_screen
 from config import OWNER_TELEGRAM_ID
 from game import botconfig, constants, keywords
@@ -1000,69 +1002,41 @@ async def guide_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 _STYLE_MAP = {"p": PRIMARY, "b": BATTLE, "n": NAV, "s": SHOP, "c": CONFIRM}
 
 
-def _mkbtn(spec, locked=frozenset()):
+def _mkbtn(spec):
     label, action, style, ekey = spec
-    # a section the player hasn't unlocked yet shows a lock icon instead of its own
-    # emoji; the callback stays the same and menu_callback explains the requirement.
-    if action in locked:
-        return btn(label, emoji_key="btn_locked", style=_STYLE_MAP[style], callback_data=f"menu:{action}")
     return btn(label, emoji_key=ekey, style=_STYLE_MAP[style], callback_data=f"menu:{action}")
 
 
-# shown directly on the main menu — the core loop. Every button carries an
-# emoji_key (never a literal emoji in the label), and both buttons in a row share
-# one style so each row is colour-symmetric.
-_MAIN_ROWS = [
-    [("ارتقا و پرورش", "upgrade", "p", "btn_upgrade")],
-    [("شکار انفرادی", "hunt", "b", "btn_hunt"), ("آرنا (کاپ)", "arena", "b", "btn_arena")],
-    [("دانجن", "campaign", "b", "btn_campaign"), ("تیم من", "team", "b", "btn_team")],
-    [("کلکسیون", "collection", "n", "btn_collection"), ("ترکیب هیولا", "fusion", "n", "btn_fusion")],
-    [("غار هیولا", "breeding", "n", "btn_breeding"), ("ساختمون‌ها", "buildings", "n", "btn_buildings")],
-    [("تجهیزات", "inventory", "n", "btn_inventory"), ("آهنگری", "blacksmith", "n", "btn_forge")],
-]
-
-# folded into category submenus — the long tail. Each category's buttons share one
-# style, so every row is colour-symmetric.
-_CATEGORIES = {
-    "rewards": ("🎁 جایزه‌ها", [
-        [("ماموریت‌ها", "missions", "s", "btn_missions"), ("دستاوردها", "achievements", "s", "btn_achievements")],
-        [("پاس ماهانه", "battlepass", "s", "btn_battlepass"), ("رویداد", "events", "s", "btn_events")],
-        [("گردونه‌ی شانس", "wheel", "s", "btn_wheel"), ("پاداش آفلاین", "idle", "s", "btn_idle")],
-        [("دانشنامه", "codex", "s", "btn_codex"), ("دعوت دوستان", "referral", "s", "btn_referral")],
-    ]),
-    "shop": ("🛒 فروشگاه", [
-        [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("باکس هیولا", "diamond_box", "s", "btn_diamond_box")],
-        [("اشتراک ویژه", "subscription", "s", "btn_vip"), ("شاپ روزانه", "shop", "s", "btn_shop")],
-        [("بنر ویژه", "banner", "s", "btn_banner"), ("کازینو", "casino", "s", "btn_casino")],
-        [("خرید سپر", "shield_shop", "s", "btn_shield"), ("خرید طلا", "gold_shop", "s", "btn_gold_shop")],
-        [("آیتم‌های ویژه", "item_shop", "s", "btn_items"), ("مبادله طلا و DNA", "exchange", "s", "btn_exchange")],
-        [("مبادله تجهیزات با بلیط", "equip_exchange", "s", "btn_ticket_exchange")],
-    ]),
-    "social": ("👥 اجتماعی", [
-        [("اتحاد من", "alliance_info", "n", "btn_alliance"), ("لیگ رتبه‌بندی", "league", "n", "btn_league")],
-        [("🏰 لیگ اتحادها", "alliance_league", "n", "btn_alliance"), ("🏦 رتبه‌بندی خزانه", "rank", "n", "btn_rank")],
-        [("🐲 رتبه‌بندی رید", "raid_rank", "n", "btn_rank"), ("پروفایل من", "profile", "n", "btn_profile")],
-    ]),
-}
-
-# the three category buttons on the main menu, in a single colour-symmetric row
-_CATEGORY_BUTTONS = [
-    ("جایزه‌ها", "cat_rewards", "btn_cat_rewards"),
-    ("فروشگاه", "cat_shop", "btn_cat_shop"),
-    ("اجتماعی", "cat_social", "btn_cat_social"),
-]
-
-# Progressive unlocks: advanced sections open at higher main-hall levels, so a brand-new
-# player isn't dropped in front of the whole feature set at once. Anything NOT listed
-# here is available from level 1 — the core loop (hunt, arena, collection, fusion,
-# breeding, buildings, boxes, wheel, daily shop, alliance…) stays open from the start so
-# the early game is still rich; only the deeper/late systems wait a bit.
+# Progressive unlocks: each major feature unlocks at its own specific, balanced level:
+# Level 2: Fusion (ترکیب هیولا), Battlepass, Exchange
+# Level 3: Team (تیم من), League, Events, Shield Shop
+# Level 4: Dungeon Campaign (دانجن), Black Market, Casino, Titles
+# Level 5: Mugen Tower (برج موگن), Research Lab, Special Banners, Item Shop, Alliance League, Raid Rank
 SECTION_HALL_REQ = {
-    "battlepass": 2, "team": 2, "events": 2, "league": 2, "exchange": 2,
-    "shield_shop": 2, "titles": 2,
-    "campaign": 3, "casino": 3, "item_shop": 3, "alliance_league": 3,
-    "raid_rank": 3, "banner": 3,
-    "research": 5,  # the research lab itself only exists at main-hall 5
+    # Level 2
+    "fusion": 2,
+    "battlepass": 2,
+    "exchange": 2,
+
+    # Level 3
+    "team": 3,
+    "league": 3,
+    "events": 3,
+    "shield_shop": 3,
+
+    # Level 4
+    "campaign": 4,
+    "blackmarket": 4,
+    "casino": 4,
+    "titles": 4,
+
+    # Level 5
+    "mugen_tower": 5,
+    "research": 5,
+    "banner": 5,
+    "item_shop": 5,
+    "alliance_league": 5,
+    "raid_rank": 5,
 }
 
 
@@ -1073,23 +1047,101 @@ def _locked_actions_for(hall_level) -> frozenset:
     return frozenset(a for a, req in SECTION_HALL_REQ.items() if hall_level < req)
 
 
+_CATEGORIES = {
+    "rewards": ("🎁 جایزه‌ها", [
+        [("ماموریت‌ها", "missions", "s", "btn_missions"), ("دستاوردها", "achievements", "s", "btn_achievements")],
+        [("پاس ماهانه", "battlepass", "s", "btn_battlepass"), ("رویداد", "events", "s", "btn_events")],
+        [("گردونه‌ی شانس", "wheel", "s", "btn_wheel"), ("پاداش آفلاین", "idle", "s", "btn_idle")],
+        [("دانشنامه", "codex", "s", "btn_codex"), ("دعوت دوستان", "referral", "s", "btn_referral")],
+    ]),
+    "shop": ("🛒 فروشگاه", [
+        [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("باکس هیولا", "diamond_box", "s", "btn_diamond_box")],
+        [("اشتراک ویژه", "subscription", "s", "btn_vip"), ("شاپ روزانه", "shop", "s", "btn_shop")],
+        [("⏳ بازار سیاه", "blackmarket", "s", "btn_shop"), ("کازینو", "casino", "s", "btn_casino")],
+        [("بنر ویژه", "banner", "s", "btn_banner"), ("آیتم‌های ویژه", "item_shop", "s", "btn_items")],
+        [("خرید سپر", "shield_shop", "s", "btn_shield"), ("خرید طلا", "gold_shop", "s", "btn_gold_shop")],
+        [("مبادله طلا و DNA", "exchange", "s", "btn_exchange"), ("مبادله تجهیزات با بلیط", "equip_exchange", "s", "btn_ticket_exchange")],
+    ]),
+    "social": ("👥 اجتماعی", [
+        [("اتحاد من", "alliance_info", "n", "btn_alliance"), ("لیگ رتبه‌بندی", "league", "n", "btn_league")],
+        [("🏰 لیگ اتحادها", "alliance_league", "n", "btn_alliance"), ("🏦 رتبه‌بندی خزانه", "rank", "n", "btn_rank")],
+        [("🐲 رتبه‌بندی رید", "raid_rank", "n", "btn_rank"), ("پروفایل من", "profile", "n", "btn_profile")],
+    ]),
+}
+
+_CATEGORY_BUTTONS = [
+    ("جایزه‌ها", "cat_rewards", "btn_cat_rewards"),
+    ("فروشگاه", "cat_shop", "btn_cat_shop"),
+    ("اجتماعی", "cat_social", "btn_cat_social"),
+]
+
+
 def _main_menu_rows(locked=frozenset(), research_built=False) -> list:
-    rows = [[_mkbtn(spec, locked) for spec in row] for row in _MAIN_ROWS]
-    # the 🔬 آزمایشگاه button appears only after the research-lab building is built
-    if research_built:
+    rows = []
+
+    # 1. Primary upgrade button (always open from level 1)
+    upgrade_spec = ("ارتقا و پرورش", "upgrade", "p", "btn_upgrade")
+    if "upgrade" not in locked:
+        rows.append([_mkbtn(upgrade_spec)])
+
+    # 2. Battle buttons (dynamically displayed without locks)
+    battle_specs = [
+        ("دانجن", "campaign", "b", "btn_campaign"),
+        ("🏰 برج موگن", "mugen_tower", "b", "btn_campaign"),
+        ("شکار انفرادی", "hunt", "b", "btn_hunt"),
+        ("آرنا (کاپ)", "arena", "b", "btn_arena"),
+    ]
+    unlocked_battle = [_mkbtn(s) for s in battle_specs if s[1] not in locked]
+    if len(unlocked_battle) == 4:
+        rows.append([unlocked_battle[0], unlocked_battle[1]])
+        rows.append([unlocked_battle[2], unlocked_battle[3]])
+    elif len(unlocked_battle) == 3:
+        rows.append([unlocked_battle[0]])
+        rows.append([unlocked_battle[1], unlocked_battle[2]])
+    elif len(unlocked_battle) == 2:
+        rows.append([unlocked_battle[0], unlocked_battle[1]])
+    elif len(unlocked_battle) == 1:
+        rows.append([unlocked_battle[0]])
+
+    # 3. Nav buttons (dynamically displayed without locks)
+    nav_specs = [
+        ("تیم من", "team", "n", "btn_team"),
+        ("ترکیب هیولا", "fusion", "n", "btn_fusion"),
+        ("کلکسیون", "collection", "n", "btn_collection"),
+        ("غار هیولا", "breeding", "n", "btn_breeding"),
+        ("تجهیزات", "inventory", "n", "btn_inventory"),
+        ("ساختمون‌ها", "buildings", "n", "btn_buildings"),
+    ]
+    unlocked_nav = [_mkbtn(s) for s in nav_specs if s[1] not in locked]
+    for i in range(0, len(unlocked_nav), 2):
+        rows.append(unlocked_nav[i:i + 2])
+
+    # 4. Research lab button appears only after research-lab is built (Main Hall 5)
+    if research_built and "research" not in locked:
         rows.append([btn("آزمایشگاه", emoji_key="btn_research", style=PRIMARY, callback_data="menu:research")])
+
+    # 5. Category buttons (Rewards, Shop, Social)
     rows.append(
         [btn(label, emoji_key=ekey, style=SHOP, callback_data=f"menu:{action}") for (label, action, ekey) in _CATEGORY_BUTTONS]
     )
+
+    # 6. Guide / Help button
     rows.append([btn("راهنما", emoji_key="btn_report", style=CONFIRM, callback_data="menu:guide")])
     return rows
 
 
 def _category_keyboard(cat_key: str, locked=frozenset()) -> tuple[str, InlineKeyboardMarkup]:
     title, rows_def = _CATEGORIES[cat_key]
-    rows = [[_mkbtn(spec, locked) for spec in row] for row in rows_def]
+    unlocked_btns = []
+    for row in rows_def:
+        for spec in row:
+            if spec[1] not in locked:
+                unlocked_btns.append(_mkbtn(spec))
+    rows = []
+    for i in range(0, len(unlocked_btns), 2):
+        rows.append(unlocked_btns[i:i + 2])
     rows.append([back_btn("menu:me", "بازگشت به منو")])
-    return title, InlineKeyboardMarkup(rows)
+    return title, symmetric_markup(rows)
 
 
 def creature_keyboard(is_owner: bool = False, locked=frozenset(), research_built=False) -> InlineKeyboardMarkup:
@@ -1114,7 +1166,7 @@ def creature_keyboard(is_owner: bool = False, locked=frozenset(), research_built
             rows.append([btn(btitle, emoji_key="btn_buy", style=SHOP, url=burl)])
     if is_owner:
         rows.append([btn("پنل ادمین", emoji_key="btn_admin", style=ADMIN, callback_data="menu:admin")])
-    return InlineKeyboardMarkup(rows)
+    return symmetric_markup(rows)
 
 
 LAB_NAME_MAX_LEN = 32
@@ -2598,6 +2650,19 @@ def _hunt_scout_sync(tg_user, charge=False):
 
 
 def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> str:
+    if target.get("is_encounter"):
+        lines = [
+            f"✨ <b>رویداد غیرمنتظره در شکار!</b>",
+            "",
+            f"📌 <b>{target['title']}</b>",
+            f"<blockquote>{target['desc']}</blockquote>",
+            "",
+            _CARD_DIV,
+            f"{get_emoji('energy')} انرژی فعلی: {energy}",
+            f"🔍 جستجوی بعدی: <b>{scout_price}</b> طلا",
+        ]
+        return "\n".join(lines)
+
     from game.hunt import hunt_reward_roll
 
     tier_label = HUNT_TIERS[target["tier"]]["label"]
@@ -2634,6 +2699,26 @@ def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> st
 
 
 def _hunt_scout_keyboard(target, scout_price=0) -> InlineKeyboardMarkup:
+    if target.get("is_encounter"):
+        enc_type = target["enc_type"]
+        rows = []
+        if enc_type == "chest":
+            rows.append([btn("🔓 باز کردن صندوق (شانس غنیمت بزرگ)", emoji_key="btn_confirm", style=CONFIRM, callback_data="henc:chest:open")])
+            rows.append([btn("🏃 رها کردن و ادامه", emoji_key="btn_cancel", style=NAV, callback_data="henc:chest:leave")])
+        elif enc_type == "thief":
+            rows.append([btn("⚔️ حمله به دزد و گرفتن غنایم", emoji_key="btn_attack", style=BATTLE, callback_data="henc:thief:fight")])
+            rows.append([btn("🏃 بی‌خیال شدن", emoji_key="btn_cancel", style=NAV, callback_data="henc:thief:leave")])
+        elif enc_type == "fork":
+            rows.append([btn("💎 غار کریستالی (الماس و DNA)", emoji_key="btn_diamond", style=PRIMARY, callback_data="henc:fork:crystal")])
+            rows.append([btn("🌋 دشت آتشفشانی (طلای فراوان)", emoji_key="btn_charge", style=SHOP, callback_data="henc:fork:volcano")])
+        elif enc_type == "spring":
+            rows.append([btn("✨ نوشیدن از چشمه (+15 انرژی)", emoji_key="btn_energy", style=CONFIRM, callback_data="henc:spring:drink")])
+            rows.append([btn("🏃 عبور از چشمه", emoji_key="btn_cancel", style=NAV, callback_data="henc:spring:leave")])
+
+        rows.append([btn(f"بعدی ({scout_price} طلا)", emoji_key="btn_scout_next", style=NAV, callback_data="hunt_next")])
+        rows.append([back_btn("menu:me")])
+        return InlineKeyboardMarkup(rows)
+
     return InlineKeyboardMarkup(
         [
             [btn("حمله!", emoji_key="btn_attack", style=BATTLE, callback_data=f"hunt_go:{target['tier']}:{target['seed']}")],
@@ -2643,6 +2728,26 @@ def _hunt_scout_keyboard(target, scout_price=0) -> InlineKeyboardMarkup:
             [back_btn("menu:me")],
         ]
     )
+
+
+async def hunt_encounter_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    _, enc_type, action = query.data.split(":")
+
+    def _do_enc(tg_user):
+        user, _ = get_or_create_user(tg_user)
+        creature = get_active_creature(user)
+        from game.hunt import resolve_encounter_action
+        return resolve_encounter_action(user, creature, enc_type, action)
+
+    res = await run_db(_do_enc, update.effective_user)
+    await query.answer()
+    text = res["msg"]
+    keyboard = InlineKeyboardMarkup([
+        [btn("🎯 شکار دوباره", emoji_key="btn_hunt", style=BATTLE, callback_data="hunt_next")],
+        [back_btn("menu:me")],
+    ])
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2655,7 +2760,11 @@ async def hunt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard())
         return
     from game.media import get_feature_image_path
-    photo = get_feature_image_path("hunt")
+    if target.get("is_encounter"):
+        enc = target.get("enc_type")
+        photo = get_feature_image_path(f"encounter_{enc}" if enc != "fork" else "encounter_cave")
+    else:
+        photo = get_feature_image_path("hunt")
     await send_screen(update,
         _hunt_scout_text(creature, my_power, cup, target, energy, cost),
         photo=photo,
@@ -4561,6 +4670,8 @@ _MENU_ACTIONS = {
     "profile": profile,
     "balance": balance,
     "guide": guide_panel,
+    "mugen_tower": mugen_panel,
+    "blackmarket": blackmarket_panel,
 }
 
 
@@ -4576,6 +4687,7 @@ _KEYWORD_TO_MENU = {
     "select": "collection", "help": "guide", "start": "guide",
     "casino": "casino", "exchange": "exchange", "balance": "balance",
     "vip": "subscription", "subscription": "subscription", "chests": "arena_chests",
+    "blackmarket": "blackmarket", "mugen": "mugen_tower", "tower": "mugen_tower",
 }
 
 
@@ -4698,6 +4810,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(upgrade_step_callback, pattern=r"^upg_step:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(feedcap_callback, pattern=r"^feedcap:"))
     application.add_handler(CallbackQueryHandler(hunt_go_callback, pattern=r"^hunt_go:"))
+    application.add_handler(CallbackQueryHandler(hunt_encounter_callback, pattern=r"^henc:"))
     application.add_handler(CallbackQueryHandler(autohunt_start_callback, pattern=r"^autohunt_start$"))
     application.add_handler(CallbackQueryHandler(autohunt_amt_callback, pattern=r"^autohunt_amt:(all|half|custom)$"))
     application.add_handler(CallbackQueryHandler(autohunt_do_callback, pattern=r"^autohunt_do:\d+$"))

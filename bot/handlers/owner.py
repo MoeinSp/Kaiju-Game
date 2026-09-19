@@ -1658,6 +1658,30 @@ def _delete_creature_preview_sync(creature_id: int):
     return creature, display_name(owner) if owner is not None else str(creature.owner_id)
 
 
+async def reset_xfer_cd_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin command to immediately reset transfer cooldown for self or a target user."""
+    if not _is_admin(update):
+        return
+    identifier = context.args[0] if context.args else str(update.effective_user.id)
+    try:
+        from game.moderation import find_user
+        user = await run_db(find_user, identifier)
+    except Exception as exc:
+        await update.effective_message.reply_text(f"❌ کاربر یافت نشد: {exc}")
+        return
+
+    def _do_reset():
+        user.kaiju_transfer_ready_at = None
+        user.equip_transfer_ready_at = None
+        user.save(update_fields=["kaiju_transfer_ready_at", "equip_transfer_ready_at"])
+
+    await run_db(_do_reset)
+    await update.effective_message.reply_text(
+        f"✅ کول‌داون انتقال کایجو و تجهیزات برای <b>{display_name(user)}</b> (<code>{user.id}</code>) با موفقیت صفر شد.",
+        parse_mode="HTML",
+    )
+
+
 def _delete_creature_confirm_text(creature, owner_name: str) -> str:
     return (
         f"{get_emoji('warning')} مطمئنی می‌خوای <b>{creature.name}</b> (<code>#{creature.id}</code>, "
@@ -5255,6 +5279,8 @@ def register(application) -> None:
     application.add_handler(CommandHandler("unban", unban_cmd, private_only))
     application.add_handler(CommandHandler("delete_creature", delete_creature_cmd, private_only))
     application.add_handler(CommandHandler("reset_user", reset_user_cmd, private_only))
+    application.add_handler(CommandHandler("reset_xfer_cd", reset_xfer_cd_cmd))
+    application.add_handler(CommandHandler("resetcd", reset_xfer_cd_cmd))
     application.add_handler(CommandHandler("player_log", player_log_cmd, private_only))
     application.add_handler(CommandHandler("preview_emoji", preview_emoji_cmd, private_only))
     application.add_handler(CallbackQueryHandler(buy_report_nav_callback, pattern=r"^buy_report:\d+$"))

@@ -170,6 +170,28 @@ def spawn_wild_creature(benchmark_power: int, tier: str = "normal", seed: int | 
     )
 
 
+ENCOUNTER_CHANCE = 0.02  # 2% chance for a special random encounter instead of standard wild
+
+ENCOUNTERS = {
+    "chest": {
+        "title": "🎁 صندوقچه طلسم‌شده باستانی",
+        "desc": "در حین جست‌وجو در شکاف صخره‌ها، یک صندوقچه قدیمی پوشیده از رون‌های کهن پیدا کردی!",
+    },
+    "thief": {
+        "title": "🦹 کایجوی دزد سایه‌ها",
+        "desc": "یک کایجوی چابک و دزد با کیسه‌ای پر از غنایم از پشت بوته‌ها بیرون پرید!",
+    },
+    "fork": {
+        "title": "🧭 دوراهی غار اسرارآمیز",
+        "desc": "به یک دوراهی رسیدی: سمت راست «غار کریستالی» و سمت چپ «دشت آتشفشانی»!",
+    },
+    "spring": {
+        "title": "💧 چشمه زندگی کهن",
+        "desc": "چشمه‌ای با آب زلال و درخشان پیدا کردی که هاله‌ای از انرژی پاک ازش متصاعد می‌شه.",
+    },
+}
+
+
 def scout_one(user: User, player_creature: Creature, benchmark_power: int | None = None) -> dict:
     """A single previewable opponent — the player searches again ("بعدی") until they
     like what they see. Carries the seed so resolve_hunt rebuilds the exact opponent. The
@@ -177,11 +199,28 @@ def scout_one(user: User, player_creature: Creature, benchmark_power: int | None
     creatures to fight it."""
     from game.creature import creature_power
 
+    # 2% chance for special random encounter
+    if random.random() < ENCOUNTER_CHANCE:
+        enc_type = random.choice(list(ENCOUNTERS.keys()))
+        return {
+            "is_encounter": True,
+            "enc_type": enc_type,
+            "title": ENCOUNTERS[enc_type]["title"],
+            "desc": ENCOUNTERS[enc_type]["desc"],
+            "tier": "normal",
+            "seed": random.randrange(1_000_000),
+            "name": ENCOUNTERS[enc_type]["title"],
+            "element": "neutral",
+            "power": 0,
+            "reward_mult": 1.0,
+        }
+
     tier = random.choice(list(HUNT_TIERS))
     seed = random.randrange(1_000_000)
     bench = benchmark_power if benchmark_power is not None else hunt_benchmark_power(user)
     wild = spawn_wild_creature(bench, tier, seed)
     return {
+        "is_encounter": False,
         "tier": tier,
         "seed": seed,
         "name": wild.name,
@@ -374,3 +413,101 @@ def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal",
         "xp": xp_gain,
         "levels": levels,
     }
+
+
+def resolve_encounter_action(user: User, player_creature: Creature, enc_type: str, action: str) -> dict:
+    """Resolve an action on a special random hunt encounter."""
+    from game.ledger import record_gain
+    from game.creature import creature_power
+
+    if player_creature:
+        power = max(50, creature_power(player_creature))
+    else:
+        power = 100
+
+    base_coin = max(1500, round(power * 4.2))
+    base_dna = max(50, round(power * 0.20))
+
+    xp_gain = max(30, round(power * 0.04))
+    coins = 0
+    dna = 0
+    diamonds = 0
+    energy_gain = 0
+    msg = ""
+
+    if enc_type == "chest":
+        if action == "open":
+            if random.random() < 0.65:
+                diamonds = random.randint(3, 7)
+                coins = round(base_coin * random.uniform(0.8, 1.1))
+                dna = round(base_dna * random.uniform(0.7, 1.1))
+                msg = f"🎉 <b>قفل صندوقچه باستانی شکست!</b> غنائمی معادل ۱۰ شکار کامل شامل <b>{coins:,} طلا</b>، <b>{dna} DNA</b> و <b>{diamonds} الماس</b> کشف شد!"
+            else:
+                loss = max(0, min(round(base_coin * 0.25), user.coins))
+                user.coins -= loss
+                user.save(update_fields=["coins"])
+                msg = f"💥 <b>تله انفجاری!</b> گاز سمی از صندوقچه خارج شد و در حین عقب‌نشینی <b>{loss:,} طلا</b> از دست دادی!"
+                return {"success": False, "msg": msg, "coins": -loss, "dna": 0, "diamonds": 0, "energy": 0}
+        else:
+            msg = "🏃 با احتیاط از کنار صندوقچه گذشتی و مسیرت رو ادامه دادی."
+            return {"success": True, "msg": msg, "coins": 0, "dna": 0, "diamonds": 0, "energy": 0}
+
+    elif enc_type == "thief":
+        if action == "fight":
+            coins = round(base_coin * random.uniform(0.9, 1.15))
+            dna = round(base_dna * random.uniform(0.8, 1.2))
+            xp_gain = max(50, round(power * 0.06))
+            msg = f"⚔️ <b>کایجوی دزد شکست خورد!</b> کیسه غنائم سنگینش (معادل ۱۰ شکار) شامل <b>{coins:,} طلا</b> و <b>{dna} DNA</b> به دست تو افتاد!"
+        else:
+            msg = "🏃 از کایجوی دزد فاصله گرفتی و گذاشتی در تاریکی فرار کنه."
+            return {"success": True, "msg": msg, "coins": 0, "dna": 0, "diamonds": 0, "energy": 0}
+
+    elif enc_type == "fork":
+        if action == "crystal":
+            coins = round(base_coin * random.uniform(0.7, 0.95))
+            dna = round(base_dna * random.uniform(1.0, 1.5))
+            diamonds = random.randint(2, 5)
+            msg = f"💎 <b>غار کریستالی:</b> در اعماق غار درخشان، <b>{coins:,} طلا</b>، <b>{dna} DNA</b> و <b>{diamonds} الماس</b> استخراج کردی!"
+        else:
+            coins = round(base_coin * random.uniform(1.0, 1.3))
+            dna = round(base_dna * random.uniform(0.5, 0.8))
+            msg = f"🌋 <b>دشت آتشفشانی:</b> از میان سنگ‌های مذاب عبور کردی و <b>{coins:,} طلای باستانی</b> پیدا کردی!"
+
+    elif enc_type == "spring":
+        if action == "drink":
+            energy_gain = 20
+            xp_gain = max(50, round(power * 0.08))
+            from game.energy import get_max_energy, sync_energy
+            sync_energy(user)
+            user.energy = min(get_max_energy(user), user.energy + energy_gain)
+            user.save(update_fields=["energy"])
+            msg = f"✨ <b>نوشیدن از چشمه حیات:</b> جان و روان کایجوت تازه شد! <b>+{energy_gain} انرژی فوری</b> و <b>+{xp_gain} XP</b> دریافت کردی!"
+        else:
+            msg = "🏃 از کنار چشمه آرام گذشتی."
+            return {"success": True, "msg": msg, "coins": 0, "dna": 0, "diamonds": 0, "energy": 0}
+
+    if coins > 0:
+        user.coins += coins
+    if dna > 0:
+        user.dna_fragments += dna
+    if diamonds > 0:
+        user.diamonds += diamonds
+    user.save(update_fields=["coins", "dna_fragments", "diamonds"])
+
+    if coins > 0 or dna > 0 or diamonds > 0:
+        record_gain(user, "hunt_encounter", coins=coins, dna=dna, diamonds=diamonds)
+
+    if xp_gain > 0 and player_creature:
+        add_xp(player_creature, xp_gain)
+        player_creature.save()
+
+    return {
+        "success": True,
+        "msg": msg,
+        "coins": coins,
+        "dna": dna,
+        "diamonds": diamonds,
+        "energy": energy_gain,
+        "xp": xp_gain,
+    }
+

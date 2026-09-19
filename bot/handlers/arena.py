@@ -141,15 +141,20 @@ def _arena_home_text(user, power, shield_secs, history, week, season_secs, reven
             mark = "🔴" if log.attacker_won else "🟢"
             attacker_name = log.attacker_label or lab_display(log.attacker)
             pwr = f"  💪{log.attacker_power}" if log.attacker_power else ""
-            loot = f"  −{log.loot_gold} {get_emoji('coin')}" if log.loot_gold else ""
-            lines.append(f"{mark} <b>{attacker_name}</b>{pwr}{loot}")
+            loot_bits = []
+            if log.loot_gold:
+                loot_bits.append(f"−{log.loot_gold:,} {get_emoji('coin')}")
+            if getattr(log, "loot_dna", 0):
+                loot_bits.append(f"−{log.loot_dna:,} {get_emoji('dna')}")
+            loot_str = f"  ({' '.join(loot_bits)})" if loot_bits else ""
+            lines.append(f"{mark} <b>{attacker_name}</b>{pwr}{loot_str}")
 
     if revenges:
         lines.append(f"\n⚔️ <b>{len(revenges)} انتقام</b> در انتظار — مهلت 3 روزه")
 
     lines.append(
         f"\n<blockquote>هر حمله {constants.ARENA_ATTACK_ENERGY_COST} انرژی می‌بره. اگه ببری "
-        f"{int(constants.ARENA_LOOT_PERCENT * 100)}٪ طلای حریف رو غارت می‌کنی و کاپ می‌گیری؛ اگه ببازی فقط کاپ کم می‌شه.\n"
+        f"{int(constants.ARENA_LOOT_PERCENT * 100)}٪ طلا و ۱۰٪ DNA حریف رو غارت می‌کنی و کاپ می‌گیری؛ اگه ببازی فقط کاپ کم می‌شه.\n"
         "آخر هر هفته کاپ‌ها ریست می‌شن — هرچی رتبه‌ت بالاتر باشه، از کاپ بالاتری شروع می‌کنی.</blockquote>"
     )
     return "\n".join(lines)
@@ -199,9 +204,15 @@ def _find_sync(tg_user, exclude_ids=None):
     opponent = find_opponent(user, exclude_ids=exclude_ids)
     creature = Creature.objects.filter(owner=user, is_active=True).first()
     my_element = creature.element if creature is not None else None
-    # roll the cup-scaled loot ONCE here; it's stashed on the pending opponent so the
-    # card, any re-show/swap, and the payout all use the exact same numbers
-    loot, dna_win = constants.arena_loot_roll(user.cup)
+
+    if opponent.get("is_fake"):
+        loot, dna_win = constants.arena_loot_roll(user.cup)
+    else:
+        # Exactly 10% of defender's real gold & DNA
+        target_user = opponent["user"]
+        loot = max(0, target_user.coins // 10)
+        dna_win = max(0, target_user.dna_fragments // 10)
+
     from game.energy import sync_energy
 
     cname = creature.name if creature is not None else "—"
@@ -992,10 +1003,16 @@ async def arena_revenge_callback(update: Update, context: ContextTypes.DEFAULT_T
 
     gap = opp_power - my_power
     odds = "🟢 شانس بالا" if gap < -15 else ("🔴 خطرناک" if gap > 15 else "🟡 سرتاسری")
+    stolen_bits = []
+    if log.loot_gold:
+        stolen_bits.append(f"{log.loot_gold:,} طلا {get_emoji('coin')}")
+    if getattr(log, "loot_dna", 0):
+        stolen_bits.append(f"{log.loot_dna:,} DNA {get_emoji('dna')}")
+    stolen_str = " + ".join(stolen_bits) if stolen_bits else f"{log.loot_gold:,} طلا"
     lines = [
         f"⚔️ <b>انتقام از {attacker_name}</b>\n",
         f"💪 قدرت حریف: <b>{opp_power}</b>  (تو: {my_power} — {odds})",
-        f"{get_emoji('coin')} اون از تو {log.loot_gold} طلا دزدید",
+        f"💸 اون از تو <b>{stolen_str}</b> دزدید!",
         f"\n<i>حمله {constants.ARENA_ATTACK_ENERGY_COST} انرژی می‌بره.</i>",
     ]
     keyboard = InlineKeyboardMarkup([

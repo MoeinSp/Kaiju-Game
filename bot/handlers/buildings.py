@@ -64,6 +64,15 @@ def _format_remaining(seconds: float) -> str:
 
 def _buildings_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
+    alert_txt = ""
+    if (user.plundered_alert_gold or 0) > 0 or (user.plundered_alert_dna or 0) > 0:
+        alert_txt = (
+            f"⚠️ <b>هشدار غارت معدن:</b> در حمله اخیر آرنا به شما، بخشی از منابع ذخیره‌شده شامل "
+            f"<b>{user.plundered_alert_gold:,}</b> طلا و <b>{user.plundered_alert_dna:,}</b> DNA به غارت رفت!\n\n"
+        )
+        user.plundered_alert_gold = 0
+        user.plundered_alert_dna = 0
+        user.save(update_fields=["plundered_alert_gold", "plundered_alert_dna"])
     buildings = get_or_create_buildings(user)
     upgrades = active_upgrades(user)  # lazily finishes due upgrades first
     upgrading_ids = {u.building_id for u in upgrades}
@@ -74,7 +83,7 @@ def _buildings_sync(tg_user):
     # resolved HERE, in sync context — the keyboard builder runs on the event loop
     # and a lazy query there raises SynchronousOnlyOperation
     rows = [(b, pending_amount(b), is_unlocked(user, b.building_type)) for b in buildings]
-    return rows, upgrading_ids, main_hall_level(user), len(upgrades), slots, user.diamonds
+    return rows, upgrading_ids, main_hall_level(user), len(upgrades), slots, user.diamonds, alert_txt
 
 
 def _buildings_keyboard(building_rows, upgrading_ids, busy_count, slots, diamonds) -> InlineKeyboardMarkup:
@@ -112,20 +121,20 @@ def _buildings_text(busy_count, slots, hall_level: int) -> str:
         )
     lines.append("رو هرکدوم بزن تا جزئیاتش رو ببینی:")
     lines.append(
-        f"\n<blockquote>هیچ ساختمونی نمی‌تونه از سطح {hall} جلو بزنه — "
+        f"\n<blockquote>هیچ ساختمونی نمی‌تونه از سطح {hall_level} جلو بزنه — "
         "برای باز شدن بقیه، اول اون رو ارتقا بده.</blockquote>"
     )
     return "\n".join(lines)
 
 
 async def buildings_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    building_rows, upgrading_ids, hall_level, busy_count, slots, diamonds = await run_db(
+    building_rows, upgrading_ids, hall_level, busy_count, slots, diamonds, alert_txt = await run_db(
         _buildings_sync, update.effective_user
     )
     from game.media import get_building_image_path
     hall_photo = get_building_image_path("main_hall", hall_level)
     await send_screen(update,
-        _buildings_text(busy_count, slots, hall_level),
+        alert_txt + _buildings_text(busy_count, slots, hall_level),
         photo=hall_photo,
         parse_mode="HTML",
         reply_markup=_buildings_keyboard(building_rows, upgrading_ids, busy_count, slots, diamonds),

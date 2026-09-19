@@ -22,8 +22,7 @@ colour scheme — from the web panel or a loadout — never touches a handler.
 """
 
 import re
-
-from telegram import InlineKeyboardButton
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from game.button_emoji import get_button_icon, get_button_label_emoji
 from game.button_style import resolve_style
@@ -129,3 +128,57 @@ def back_only_keyboard(callback_data: str = "menu:me", label: str = "بازگش�
     from telegram import InlineKeyboardMarkup
 
     return InlineKeyboardMarkup([[back_btn(callback_data, label)]])
+
+
+def _clone_btn_with_style(b: InlineKeyboardButton, style: str | None) -> InlineKeyboardButton:
+    kwargs = {}
+    for attr in (
+        "callback_data", "url", "web_app", "login_url",
+        "switch_inline_query", "switch_inline_query_current_chat",
+        "switch_inline_query_chosen_chat", "callback_game", "pay",
+        "icon_custom_emoji_id",
+    ):
+        val = getattr(b, attr, None)
+        if val is not None:
+            kwargs[attr] = val
+    if style is not None:
+        kwargs["style"] = style
+    return InlineKeyboardButton(b.text, **kwargs)
+
+
+def enforce_keyboard_symmetry(rows: list[list[InlineKeyboardButton]]) -> list[list[InlineKeyboardButton]]:
+    """Enforces absolute color and style symmetry across every row in a keyboard grid.
+    
+    If a row contains multiple buttons (e.g. 2 or 3 buttons), this function ensures
+    every button in that row shares the same Telegram button style (primary/success/danger/none)
+    and role, preventing color clashes or asymmetric button designs across all game levels
+    and dynamic unlock states.
+    """
+    if not rows:
+        return []
+    new_rows = []
+    for row in rows:
+        if not row:
+            continue
+        if len(row) <= 1:
+            new_rows.append(list(row))
+            continue
+        # Find dominant non-empty style in row
+        dominant_style = None
+        for b in row:
+            st = getattr(b, "style", None)
+            if st:
+                dominant_style = st
+                break
+        if dominant_style:
+            new_row = [_clone_btn_with_style(b, dominant_style) for b in row]
+            new_rows.append(new_row)
+        else:
+            new_rows.append(list(row))
+    return new_rows
+
+
+def symmetric_markup(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
+    """Builds an InlineKeyboardMarkup after strictly enforcing color symmetry across all rows."""
+    return InlineKeyboardMarkup(enforce_keyboard_symmetry(rows))
+

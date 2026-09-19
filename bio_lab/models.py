@@ -124,9 +124,16 @@ class User(models.Model):
 
     is_banned = models.BooleanField(default=False)
     is_admin = models.BooleanField(default=False)  # granted by the owner; full panel except admin management
-    # blocked specifically from the in-bot purchase / receipt flow (a lighter sanction
-    # than a full ban — they can still play, just can't submit payment receipts)
     receipt_blocked = models.BooleanField(default=False)
+    # ── Mugen Tower (برج موگن - سیاه‌چال بی‌پایان) ──
+    mugen_tower_floor = models.IntegerField(default=1)
+
+    # ── Group Expeditions (اعزام کاروان گروهی) ──
+    last_expedition_at = models.DateTimeField(null=True, blank=True)
+
+    # ── Arena Plunder Alerts for Mines (غارت ۵۰٪ منابع توسط اتک آرنا) ──
+    plundered_alert_gold = models.IntegerField(default=0)
+    plundered_alert_dna = models.IntegerField(default=0)
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -730,6 +737,7 @@ class AttackLog(models.Model):
     is_fake_defender = models.BooleanField(default=False)
     attacker_won = models.BooleanField()
     loot_gold = models.IntegerField(default=0)
+    loot_dna = models.IntegerField(default=0)
     cup_delta = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     defender_notified = models.BooleanField(default=False)  # "you were raided" DM sent to the defender
@@ -1152,4 +1160,59 @@ class PurchasePack(models.Model):
 
     def __str__(self) -> str:
         return f"{self.title} ({self.price_toman:,}ت)"
+
+
+class BlackMarketAuction(models.Model):
+    """Nightly black market auctions where players bid with gold or diamonds."""
+
+    title = models.CharField(max_length=128)
+    item_type = models.CharField(max_length=32)  # "diamonds", "lootbox", "creature", "gold", "equipment", "material"
+    item_payload = models.JSONField(default=dict, blank=True)
+    bid_currency = models.CharField(max_length=16, default="coins")  # "coins" or "diamonds"
+    min_bid = models.IntegerField(default=1000)
+    current_bid = models.IntegerField(default=0)
+    highest_bidder = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="won_auctions")
+    highest_bidder_name = models.CharField(max_length=128, blank=True, default="")
+    ends_at = models.DateTimeField()
+    is_settled = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-id"]
+
+    def __str__(self) -> str:
+        return f"{self.title} (Top Bid: {self.current_bid} {self.bid_currency})"
+
+
+class GroupExpedition(models.Model):
+    """Team expeditions started in telegram groups with 2-4 members."""
+
+    STATUS_CHOICES = [
+        ("recruiting", "در حال عضوگیری"),
+        ("in_progress", "در حال اکتشاف"),
+        ("completed", "تکمیل شده"),
+        ("failed", "شکست خورده"),
+        ("expired", "منقضی شده"),
+    ]
+
+    group_id = models.BigIntegerField(db_index=True)
+    group_title = models.CharField(max_length=256, blank=True, default="")
+    creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name="created_expeditions")
+    members = models.ManyToManyField(User, related_name="expeditions", blank=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="recruiting")
+    target_name = models.CharField(max_length=128, default="دره استخوان‌های اژدها")
+    difficulty = models.CharField(max_length=16, default="normal")
+    total_gold = models.IntegerField(default=0)
+    total_dna = models.IntegerField(default=0)
+    total_diamonds = models.IntegerField(default=0)
+    log_text = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["-id"]
+
+    def __str__(self) -> str:
+        return f"Expedition #{self.id} by {self.creator_id} in {self.group_id} ({self.status})"
+
 

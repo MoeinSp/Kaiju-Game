@@ -614,3 +614,122 @@ def channels(request):
             "now": timezone.now(),
         },
     )
+
+
+# --- black market auctions -------------------------------------------------
+
+
+@staff_member_required(login_url="panel:login")
+def auctions(request):
+    import datetime
+    from bio_lab.models import BlackMarketAuction
+    from game.blackmarket import settle_expired_auctions
+
+    if request.method == "POST":
+        action = _post_action(request)
+        try:
+            if action == "create":
+                title = (request.POST.get("title") or "").strip()
+                item_type = (request.POST.get("item_type") or "diamonds").strip()
+                bid_currency = (request.POST.get("bid_currency") or "coins").strip()
+                min_bid = max(1, _int(request, "min_bid", 1000))
+                ends_at_str = (request.POST.get("ends_at") or "").strip()
+
+                if not title:
+                    messages.error(request, "عنوان مزایده الزامی است.")
+                    return redirect("panel:auctions")
+
+                if not ends_at_str:
+                    messages.error(request, "تاریخ و ساعت پایان مزایده الزامی است.")
+                    return redirect("panel:auctions")
+
+                try:
+                    ends_at_dt = datetime.datetime.fromisoformat(ends_at_str)
+                    if timezone.is_naive(ends_at_dt):
+                        ends_at_dt = timezone.make_aware(ends_at_dt)
+                except Exception:
+                    messages.error(request, "فرمت تاریخ و زمان نامعتبر است.")
+                    return redirect("panel:auctions")
+
+                payload = {}
+                if item_type == "diamonds":
+                    payload["amount"] = _int(request, "diamonds_amount", 100)
+                elif item_type == "tickets":
+                    payload["amount"] = _int(request, "tickets_amount", 5)
+                elif item_type == "coins":
+                    payload["amount"] = _int(request, "coins_amount", 50000)
+                elif item_type in ("dna", "material"):
+                    payload["amount"] = _int(request, "dna_amount", 500)
+                elif item_type == "speedup":
+                    payload["minutes"] = _int(request, "speedup_minutes", 60)
+                    payload["count"] = _int(request, "speedup_count", 1)
+                elif item_type == "equipment":
+                    payload["slot"] = (request.POST.get("equip_slot") or "weapon").strip()
+                    payload["rarity"] = (request.POST.get("equip_rarity") or "epic").strip()
+                    payload["level"] = _int(request, "equip_level", 1)
+                    payload["name"] = (request.POST.get("equip_name") or "").strip()
+                elif item_type == "creature":
+                    payload["rarity"] = (request.POST.get("creature_rarity") or "legendary").strip()
+                    payload["star"] = max(1, min(5, _int(request, "creature_star", 3)))
+                    payload["level"] = max(1, _int(request, "creature_level", 1))
+                    payload["element"] = (request.POST.get("creature_element") or "fire").strip()
+                    payload["name"] = (request.POST.get("creature_name") or "").strip()
+
+                is_vip = request.POST.get("is_vip") == "1"
+                if is_vip and "(VIP)" not in title:
+                    title = f"{title} (VIP)"
+
+                BlackMarketAuction.objects.create(
+                    title=title,
+                    item_type=item_type,
+                    item_payload=payload,
+                    bid_currency=bid_currency,
+                    min_bid=min_bid,
+                    current_bid=min_bid,
+                    ends_at=ends_at_dt,
+                )
+                messages.success(request, f"مزایده «{title}» با موفقیت برای تاریخ و ساعت {ends_at_str} تنظیم شد.")
+
+            elif action == "delete":
+                auc_id = _int(request, "auction_id")
+                BlackMarketAuction.objects.filter(id=auc_id).delete()
+                messages.success(request, "مزایده با موفقیت حذف شد.")
+
+            elif action == "settle_now":
+                auc_id = _int(request, "auction_id")
+                auc = BlackMarketAuction.objects.filter(id=auc_id, is_settled=False).first()
+                if auc:
+                    auc.ends_at = timezone.now() - datetime.timedelta(seconds=1)
+                    auc.save(update_fields=["ends_at"])
+                    settle_expired_auctions()
+                    messages.success(request, f"مزایده «{auc.title}» تسویه شد و جوایز به برنده واریز شد.")
+                else:
+                    messages.error(request, "مزایده یافت نشد یا قبلاً تسویه شده است.")
+
+            elif action == "settle_all":
+                c = settle_expired_auctions()
+                messages.success(request, f"همه مزایده‌های منقضی شده تسویه شدند ({c} مورد).")
+
+        except Exception as exc:
+            messages.error(request, f"خطا: {exc}")
+        return redirect("panel:auctions")
+
+    now = timezone.now()
+    settle_expired_auctions()
+
+    active_auctions = BlackMarketAuction.objects.filter(is_settled=False, ends_at__gt=now).order_by("ends_at")
+    settled_auctions = BlackMarketAuction.objects.filter(is_settled=True).order_by("-ends_at")[:20]
+    tomorrow_midnight = (now + timedelta(days=1)).strftime("%Y-%m-%dT23:59")
+
+    return render(
+        request,
+        "panel/auctions.html",
+        {
+            "page": "auctions",
+            "active_auctions": active_auctions,
+            "settled_auctions": settled_auctions,
+            "now": now,
+            "default_ends_at": tomorrow_midnight,
+        },
+    )
+

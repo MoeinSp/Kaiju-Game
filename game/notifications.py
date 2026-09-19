@@ -42,21 +42,23 @@ RAID_NOTIFY_WINDOW = datetime.timedelta(hours=2)
 
 
 def defense_report_text(attacker_name: str, attacker_power: int, attacker_won: bool,
-                        loot: int = 0, cup_change: int = 0, attacker_alliance: str | None = None) -> str:
+                        loot: int = 0, cup_change: int = 0, attacker_alliance: str | None = None,
+                        loot_dna: int = 0) -> str:
     """The 'you were attacked' DM body — shared by the immediate send (fired the
     instant a raid resolves) and the periodic catch-up job, so both read identically.
-    A successful attacker loots gold; either way the defender's cup swings, so both
-    the looted gold (on a loss) and the cup change are shown."""
+    A successful attacker loots gold and DNA; either way the defender's cup swings, so both
+    the looted gold/DNA (on a loss) and the cup change are shown."""
     power_note = f" (قدرت {attacker_power})" if attacker_power else ""
     ally_note = f" — 🤝 اتحاد: <b>{attacker_alliance}</b>" if attacker_alliance else " — 🚫 بدون اتحاد"
     cup_change = int(cup_change or 0)
     if attacker_won:
-        loot_line = f"\n💰 <b>{loot}</b> طلا غارت شد." if loot else ""
+        loot_line = f"\n💰 <b>{loot:,}</b> طلا غارت شد." if loot else ""
+        dna_line = f"\n🧬 <b>{loot_dna:,}</b> DNA غارت شد." if loot_dna else ""
         cup_line = f"\n🏆 <b>{abs(cup_change)}</b> کاپ از دست دادی." if cup_change else ""
         return (
             f"⚔️ <b>به آزمایشگاهت حمله شد!</b>\n"
             f"🏭 مهاجم: <b>{attacker_name}</b>{ally_note}{power_note}"
-            f"{loot_line}{cup_line}"
+            f"{loot_line}{dna_line}{cup_line}"
         )
     cup_line = f"\n🏆 <b>+{cup_change}</b> کاپ گرفتی." if cup_change else ""
     return (
@@ -203,6 +205,7 @@ def collect_due() -> list[tuple[int, str]]:
                 text = defense_report_text(
                     attacker_name, log.attacker_power, log.attacker_won, log.loot_gold, defender_cup_change,
                     attacker_alliance=attacker_alliance,
+                    loot_dna=getattr(log, "loot_dna", 0),
                 )
                 revengeable = not log.is_fake_defender and log.attacker_id
                 # 4th element = the attacker's user id, for a «🔍 جزییات حریف» button

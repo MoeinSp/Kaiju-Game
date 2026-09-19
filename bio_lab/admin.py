@@ -4,6 +4,7 @@ from bio_lab.models import (
     Alliance,
     ArenaChest,
     AttackLog,
+    BlackMarketAuction,
     Building,
     BuildingUpgrade,
     ButtonEmojiOverride,
@@ -15,6 +16,7 @@ from bio_lab.models import (
     Equipment,
     Group,
     GroupEventLog,
+    GroupExpedition,
     GroupMembership,
     InteractiveBattle,
     MissionClaim,
@@ -203,3 +205,32 @@ class ArenaChestAdmin(admin.ModelAdmin):
 class PurchaseRequestAdmin(admin.ModelAdmin):
     list_display = ("id", "user", "subscription_tier", "price_toman", "status", "created_at", "reviewed_at")
     list_filter = ("status", "subscription_tier")
+
+
+@admin.register(BlackMarketAuction)
+class BlackMarketAuctionAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "title",
+        "item_type",
+        "bid_currency",
+        "min_bid",
+        "current_bid",
+        "highest_bidder",
+        "highest_bidder_name",
+        "ends_at",
+        "is_settled",
+        "created_at",
+    )
+    list_filter = ("item_type", "bid_currency", "is_settled", "ends_at")
+    search_fields = ("title", "highest_bidder_name", "highest_bidder__username")
+    ordering = ("-ends_at",)
+    date_hierarchy = "ends_at"
+
+
+@admin.register(GroupExpedition)
+class GroupExpeditionAdmin(admin.ModelAdmin):
+    list_display = ("id", "target_name", "group_id", "creator", "status", "total_gold", "total_dna", "total_diamonds", "created_at")
+    list_filter = ("status", "target_name")
+    search_fields = ("target_name", "group_title", "creator__username")
+

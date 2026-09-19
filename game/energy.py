@@ -19,6 +19,23 @@ def get_max_energy(user: User) -> int:
     return 100 if is_subscription_active(user) else constants.MAX_ENERGY
 
 
+def get_energy_regen_interval_seconds(user: User) -> float:
+    """Computes seconds per energy point tick.
+    Normal: base (constants.ENERGY_REGEN_MINUTES * 60)
+    Silver: +25% faster regen (interval / 1.25)
+    Gold: +50% faster regen (interval / 1.50)
+    """
+    from game.subscription import get_subscription_tier
+
+    base_sec = float(constants.ENERGY_REGEN_MINUTES * 60)
+    tier = get_subscription_tier(user)
+    if tier == "gold":
+        return base_sec / 1.50  # 50% faster regen rate
+    elif tier == "silver":
+        return base_sec / 1.25  # 25% faster regen rate
+    return base_sec
+
+
 def _synced_energy_and_anchor(user: User) -> tuple[int, datetime.datetime]:
     """Computes energy regenerated since energy_updated_at without mutating `user`."""
     max_en = get_max_energy(user)
@@ -26,7 +43,8 @@ def _synced_energy_and_anchor(user: User) -> tuple[int, datetime.datetime]:
         return max_en, user.energy_updated_at
 
     elapsed_seconds = (timezone.now() - user.energy_updated_at).total_seconds()
-    ticks = int(elapsed_seconds // (constants.ENERGY_REGEN_MINUTES * 60))
+    interval_sec = get_energy_regen_interval_seconds(user)
+    ticks = int(elapsed_seconds // interval_sec)
     if ticks <= 0:
         return user.energy, user.energy_updated_at
 
@@ -35,9 +53,9 @@ def _synced_energy_and_anchor(user: User) -> tuple[int, datetime.datetime]:
         return max_en, timezone.now()
 
     # advance the anchor by exactly the ticks consumed, so partial progress toward
-    # the next point isn't lost (e.g. 7 of 12 minutes elapsed keeps counting)
+    # the next point isn't lost
     new_anchor = user.energy_updated_at + datetime.timedelta(
-        minutes=ticks * constants.ENERGY_REGEN_MINUTES
+        seconds=ticks * interval_sec
     )
     return new_energy, new_anchor
 
@@ -53,12 +71,8 @@ def sync_energy(user: User) -> int:
 
 
 def minutes_until_next_point(user: User) -> int:
-    max_en = get_max_energy(user)
-    if user.energy >= max_en:
-        return 0
-    elapsed_seconds = (timezone.now() - user.energy_updated_at).total_seconds()
-    remaining = constants.ENERGY_REGEN_MINUTES * 60 - (elapsed_seconds % (constants.ENERGY_REGEN_MINUTES * 60))
-    return max(1, round(remaining / 60))
+    sec = seconds_until_next_point(user)
+    return max(1, round(sec / 60))
 
 
 def seconds_until_next_point(user: User) -> int:
@@ -68,7 +82,8 @@ def seconds_until_next_point(user: User) -> int:
     if user.energy >= max_en:
         return 0
     elapsed_seconds = (timezone.now() - user.energy_updated_at).total_seconds()
-    remaining = constants.ENERGY_REGEN_MINUTES * 60 - (elapsed_seconds % (constants.ENERGY_REGEN_MINUTES * 60))
+    interval_sec = get_energy_regen_interval_seconds(user)
+    remaining = interval_sec - (elapsed_seconds % interval_sec)
     return max(1, int(remaining))
 
 

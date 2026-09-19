@@ -86,9 +86,17 @@ def _check_cooldown(user: User, field: str, who: str) -> None:
 
 
 def _set_cooldown(users: list[User], field: str, hours: int = constants.TRANSFER_COOLDOWN_HOURS) -> None:
-    until = timezone.now() + datetime.timedelta(hours=hours)
+    ready = timezone.now() + datetime.timedelta(hours=hours)
     for u in users:
-        setattr(u, field, until)
+        setattr(u, field, ready)
+        u.save(update_fields=[field])
+
+
+def reset_user_transfer_cooldown(user: User) -> None:
+    """Reset both creature and equipment transfer cooldowns for a user."""
+    user.kaiju_transfer_ready_at = None
+    user.equip_transfer_ready_at = None
+    user.save(update_fields=["kaiju_transfer_ready_at", "equip_transfer_ready_at"])
 
 
 def _check_transfers_enabled(receiver: User) -> None:
@@ -133,6 +141,33 @@ def _check_equip_blacksmith(receiver: User, item: Equipment) -> None:
         )
 
 
+def _check_account_maturity_gate(sender: User, receiver: User) -> None:
+    """Anti-abuse gate: both sender and receiver must have an account at least 7 days old
+    and have at least 300 Arena wins."""
+    from bio_lab.models import AttackLog
+
+    now = timezone.now()
+    min_age_days = 7
+    min_arena_wins = 300
+
+    for u, who in ((sender, "فرستنده"), (receiver, "گیرنده")):
+        if u.created_at:
+            age_days = (now - u.created_at).total_seconds() / 86400.0
+            if age_days < min_age_days:
+                raise GameError(
+                    f"🔒 محدودیت امنیت انتقال هیولا:\n\n"
+                    f"اکانت {who} باید حداقل {min_age_days} روز قدمت داشته باشه "
+                    f"(قدمت فعلی: {int(age_days)} روز)."
+                )
+        wins = AttackLog.objects.filter(attacker=u, attacker_won=True).count()
+        if wins < min_arena_wins:
+            raise GameError(
+                f"🔒 محدودیت تجربه انتقال هیولا:\n\n"
+                f"حساب {who} باید حداقل {min_arena_wins} پیروزی در آرنا داشته باشه "
+                f"(پیروزی‌های فعلی: {wins} برد)."
+            )
+
+
 def _creature_reqs(star_level: int) -> dict:
     return constants.CREATURE_TRANSFER_REQS.get(
         star_level, constants.CREATURE_TRANSFER_REQS[max(constants.CREATURE_TRANSFER_REQS)]
@@ -142,10 +177,11 @@ def _creature_reqs(star_level: int) -> dict:
 def preview_creature_transfer(sender: User, receiver: User, creature_id: int) -> dict:
     """Validate a creature transfer WITHOUT moving anything — used to show the receiver
     a confirm prompt before their diamonds are spent. Raises GameError on any problem.
-    Returns {creature, cost}."""
+    Returns {creature, cost, sender_cd, receiver_cd}."""
     if sender.id == receiver.id:
         raise GameError("نمی‌تونی به خودت منتقل کنی.")
     _check_transfers_enabled(receiver)
+    _check_account_maturity_gate(sender, receiver)
     _check_cooldown(sender, "kaiju_transfer_ready_at", "فرستنده")
     _check_cooldown(receiver, "kaiju_transfer_ready_at", "گیرنده")
     creature = Creature.objects.filter(id=creature_id, owner=sender).first()
@@ -225,6 +261,7 @@ def transfer_creature(sender: User, receiver: User, creature_id: int, price: int
     locked = {u.id: u for u in User.objects.select_for_update().filter(id__in=ids).order_by("id")}
     sender, receiver = locked[sender.id], locked[receiver.id]
     _check_transfers_enabled(receiver)
+    _check_account_maturity_gate(sender, receiver)
     _check_cooldown(sender, "kaiju_transfer_ready_at", "فرستنده")
     _check_cooldown(receiver, "kaiju_transfer_ready_at", "گیرنده")
 

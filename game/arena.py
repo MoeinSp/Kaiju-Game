@@ -442,24 +442,63 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
     league_coins = 0
     league_dna = 0
     league = constants.league_for_cup(attacker.cup)
+    loot = 0
+    taken_from_defender = 0
+    dna_win = 0
+    taken_dna_from_defender = 0
+    league_coins = 0
+    league_dna = 0
+    league = constants.league_for_cup(attacker.cup)
     if won:
-        # Loot is a cup-scaled random amount rolled per attack. The preview already
-        # rolled it and stashed it on the opponent dict so the card and the payout agree;
-        # fall back to a fresh roll (e.g. the group flow, which matches a new opponent at
-        # attack time) using the attacker's own cup.
-        pre_gold = opponent.get("loot_gold")
-        pre_dna = opponent.get("loot_dna")
-        if pre_gold is not None and pre_dna is not None:
-            loot, dna_win = int(pre_gold), int(pre_dna)
-        else:
-            loot, dna_win = constants.arena_loot_roll(attacker.cup)
+        plundered_collector_gold = 0
+        plundered_collector_dna = 0
         if defender_user is not None:
-            taken_from_defender = min(loot, max(0, defender_user.coins))
+            # REAL defender -> Exactly 10% of defender's actual current gold and DNA
+            loot = max(0, defender_user.coins // 10)
+            dna_win = max(0, defender_user.dna_fragments // 10)
+
+            taken_from_defender = loot
+            taken_dna_from_defender = dna_win
+
             defender_user.coins -= taken_from_defender
-            # Attacker always receives the full promised loot shown on the card.
-            # If defender held less than the promised loot, the system subsidises the difference.
-        attacker.coins += loot
-        attacker.dna_fragments += dna_win
+            defender_user.dna_fragments -= taken_dna_from_defender
+
+            # 50% plunder of uncollected resources in gold_collector and dna_lab (separate from the 10% main loot)
+            from bio_lab.models import Building
+            from game.buildings import lock_pending
+
+            gold_bld = Building.objects.filter(owner=defender_user, building_type="gold_collector").first()
+            if gold_bld and gold_bld.level > 0:
+                lock_pending(gold_bld)
+                p_gold = int(gold_bld.banked_pending or 0)
+                if p_gold > 0:
+                    plundered_collector_gold = p_gold // 2
+                    gold_bld.banked_pending = float(p_gold - plundered_collector_gold)
+                    gold_bld.save(update_fields=["banked_pending"])
+
+            dna_bld = Building.objects.filter(owner=defender_user, building_type="dna_lab").first()
+            if dna_bld and dna_bld.level > 0:
+                lock_pending(dna_bld)
+                p_dna = int(dna_bld.banked_pending or 0)
+                if p_dna > 0:
+                    plundered_collector_dna = p_dna // 2
+                    dna_bld.banked_pending = float(p_dna - plundered_collector_dna)
+                    dna_bld.save(update_fields=["banked_pending"])
+
+            if plundered_collector_gold > 0 or plundered_collector_dna > 0:
+                defender_user.plundered_alert_gold = (defender_user.plundered_alert_gold or 0) + plundered_collector_gold
+                defender_user.plundered_alert_dna = (defender_user.plundered_alert_dna or 0) + plundered_collector_dna
+        else:
+            # BOT defender -> cup-scaled loot roll
+            pre_gold = opponent.get("loot_gold")
+            pre_dna = opponent.get("loot_dna")
+            if pre_gold is not None and pre_dna is not None:
+                loot, dna_win = int(pre_gold), int(pre_dna)
+            else:
+                loot, dna_win = constants.arena_loot_roll(attacker.cup)
+
+        attacker.coins += (loot + plundered_collector_gold)
+        attacker.dna_fragments += (dna_win + plundered_collector_dna)
         # flat league bonus per WINNING raid (only in the real ranked arena)
         if award_cup:
             league_coins = league["coins"]
@@ -470,8 +509,6 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
     attacker_fields = ["coins", "dna_fragments"]
     if award_cup:
         attacker.cup = max(0, attacker.cup + delta)
-        # raiding spends 8h off your shield (not the whole thing anymore), so a
-        # bought shield lets you attack a handful of times before it's gone
         spend_shield_on_attack(attacker)
         attacker_fields += ["cup", "shield_until"]
     else:
@@ -492,14 +529,14 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         record_gain(attacker, "arena", coins=gained_coins, dna=gained_dna)
 
     if defender_user is not None:
-        defender_fields = ["coins"]
+        defender_fields = ["coins", "dna_fragments", "plundered_alert_gold", "plundered_alert_dna"]
         if award_cup:
             # a freshly-raided defender gets arena protection so they can't be farmed
             defender_user.shield_until = timezone.now() + datetime.timedelta(hours=constants.ARENA_SHIELD_HOURS)
             defender_user.cup = max(0, defender_user.cup + (-delta if won else abs(delta)))
             defender_fields += ["cup", "shield_until"]
         defender_user.save(update_fields=defender_fields)
-        _release_opponent(defender_user.id)  # raid done + shielded → free the reservation
+        _release_opponent(defender_user.id)
 
     # For a REAL defender we DM them the moment this returns (see the handler), so the
     # log is pre-marked notified here — the periodic catch-up job then leaves it alone.
@@ -512,6 +549,7 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         is_fake_defender=opponent["is_fake"],
         attacker_won=won,
         loot_gold=taken_from_defender if defender_user is not None else loot,
+        loot_dna=taken_dna_from_defender if defender_user is not None else dna_win,
         cup_delta=delta,
         defender_notified=defender_user is not None,
     )
@@ -525,6 +563,8 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         "detail_log": detail_log,
         "loot": loot,
         "dna": dna_win,
+        "plundered_collector_gold": plundered_collector_gold,
+        "plundered_collector_dna": plundered_collector_dna,
         "league_coins": league_coins,
         "league_dna": league_dna,
         "league_name": league["name"],
@@ -553,6 +593,9 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
             "attacker_power": attacker_power,
             "attacker_won": won,
             "loot": taken_from_defender if defender_user is not None else loot,
+            "loot_dna": taken_dna_from_defender if defender_user is not None else dna_win,
+            "plundered_collector_gold": plundered_collector_gold,
+            "plundered_collector_dna": plundered_collector_dna,
             "attacker_cup": attacker.cup,
             "defender_cup": defender_user.cup,
             "cup_change": (-delta if won else abs(delta)) if award_cup else 0,

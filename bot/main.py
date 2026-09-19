@@ -40,12 +40,14 @@ from bot.handlers import (
     group_words,  # noqa: E402
     arena,
     battle,
+    blackmarket,
     notify,
     buildings,
     group,
     inventory,
     lootbox,
     misc,
+    mugen_tower,
     owner,
     private,
     purchase,
@@ -247,6 +249,8 @@ def main() -> None:
     exchange.register(application)
     casino.register(application)
     titles.register(application)
+    mugen_tower.register(application)
+    blackmarket.register(application)
     groupdrops.register(application)  # flash reward drops in groups (JobQueue)
     notify.register(application)  # periodic re-engagement DMs (JobQueue)
     wheel.register(application)

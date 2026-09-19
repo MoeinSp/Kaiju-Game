@@ -1460,14 +1460,16 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     dna_win = 0
     target_fields = []
     if attacker_won:
-        loot = max(constants.ARENA_LOOT_MIN, target.coins // 10)
-        taken_from_target = min(loot, max(0, target.coins))
-        target.coins -= taken_from_target
+        loot = max(0, target.coins // 10)
+        dna_win = max(0, target.dna_fragments // 10)
+
+        target.coins -= loot
+        target.dna_fragments -= dna_win
+        target_fields = ["coins", "dna_fragments"]
+
         attacker.coins += loot
-        dna_win = constants.GROUP_ATTACK_WIN_DNA
         attacker.dna_fragments += dna_win
         attacker_fields += ["coins", "dna_fragments"]
-        target_fields += ["coins"]
 
         from game.ledger import record_gain
         record_gain(attacker, "duel", coins=loot, dna=dna_win)
@@ -1503,6 +1505,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         is_fake_defender=False,
         attacker_won=attacker_won,
         loot_gold=loot,
+        loot_dna=dna_win,
         cup_delta=delta,
         defender_notified=True,  # DM'd instantly from the callback below
     )
@@ -1542,6 +1545,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
             "attacker_power": a_power,
             "attacker_won": attacker_won,
             "loot": loot,
+            "loot_dna": dna_win,
             "attacker_cup": attacker.cup,
             "defender_cup": target.cup,
             "cup_change": defender_cup_change,
