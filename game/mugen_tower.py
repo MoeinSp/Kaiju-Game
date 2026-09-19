@@ -9,6 +9,8 @@ from __future__ import annotations
 import math
 import random
 
+from django.db import transaction
+
 from bio_lab.models import Creature, User
 from game import constants, lab
 from game.combat import resolve_duel
@@ -138,8 +140,12 @@ def get_mugen_status(user: User) -> dict:
     }
 
 
+@transaction.atomic
 def fight_mugen_floor(user: User, player_creature: Creature) -> dict:
     """Fight the current floor guardian in Mugen Tower."""
+    user = User.objects.select_for_update().get(id=user.id)
+    player_creature = Creature.objects.select_for_update().get(id=player_creature.id)
+
     from game.energy import spend_energy
     from game.equipment import get_equipped_items
     from game.creature import creature_power
@@ -156,6 +162,8 @@ def fight_mugen_floor(user: User, player_creature: Creature) -> dict:
     rew = floor_rewards(floor)
     player_power = creature_power(player_creature, get_equipped_items(player_creature))
 
+    user_fields = ["energy", "energy_updated_at"]
+
     if won:
         user.mugen_tower_floor = floor + 1
         user.coins += rew["coins"]
@@ -164,7 +172,8 @@ def fight_mugen_floor(user: User, player_creature: Creature) -> dict:
             user.diamonds += rew["diamonds"]
         if rew["tickets"]:
             user.biocrate_tickets = (user.biocrate_tickets or 0) + rew["tickets"]
-        user.save(update_fields=["mugen_tower_floor", "coins", "dna_fragments", "diamonds", "biocrate_tickets"])
+        user_fields.extend(["mugen_tower_floor", "coins", "dna_fragments", "diamonds", "biocrate_tickets"])
+        user.save(update_fields=user_fields)
 
         record_gain(
             user, "mugen_tower",
@@ -177,6 +186,7 @@ def fight_mugen_floor(user: User, player_creature: Creature) -> dict:
         player_creature.save()
         lab.add_lab_xp(user, rew["lab_xp"])
     else:
+        user.save(update_fields=user_fields)
         # Small consolation XP on loss
         add_xp(player_creature, 10)
         player_creature.save()
