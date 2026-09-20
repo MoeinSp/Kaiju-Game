@@ -195,7 +195,8 @@ def _text_emoji_category_caption(category: str) -> str:
             continue
         rendered = get_emoji(k)  # <tg-emoji> HTML if premium set, else the unicode default
         is_premium = rendered.startswith("<tg-emoji")
-        lines.append(f"{rendered} {label} — {'✅ پرمیوم' if is_premium else '⬜️ پیش‌فرض'}")
+        tag = f"{get_emoji('status_premium')} پرمیوم" if is_premium else f"{get_emoji('status_default')} پیش‌فرض"
+        lines.append(f"{rendered} {label} — {tag}")
     lines.append("\nکدوم مورد رو می‌خوای عوض کنی؟")
     return "\n".join(lines)
 
@@ -3092,9 +3093,9 @@ def _btn_emoji_category_caption(category: str) -> str:
             continue
         icon = get_button_icon(k)
         if icon:
-            lines.append(f'<tg-emoji emoji-id="{icon}">{glyph}</tg-emoji> {label} — ✅ پرمیوم')
+            lines.append(f'<tg-emoji emoji-id="{icon}">{glyph}</tg-emoji> {label} — {get_emoji("status_premium")} پرمیوم')
         else:
-            lines.append(f"{glyph} {label} — ⬜️ پیش‌فرض")
+            lines.append(f"{glyph} {label} — {get_emoji('status_default')} پیش‌فرض")
     lines.append("\nکدوم دکمه رو می‌خوای عوض کنی؟ (ایموجی روی خودِ دکمه‌ها هم پیش‌نمایششه)")
     return "\n".join(lines)
 

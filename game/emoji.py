@@ -103,6 +103,8 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "key": ("کلید", "🗝", "ui"),
     "info": ("اطلاعات", "ℹ️", "ui"),
     # UI
+    "status_premium": ("نشان وضعیت پرمیوم", "✅", "ui"),
+    "status_default": ("نشان وضعیت پیش‌فرض", "⬜️", "ui"),
     "confirm": ("تأیید و تیک سبز", "✅", "ui"),
     "check": ("تیک ساده و بررسی", "✔️", "ui"),
     "cancel": ("لغو و ضربدر", "❌", "ui"),

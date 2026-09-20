@@ -274,6 +274,8 @@ class Command(BaseCommand):
         # owner's sets don't carry, try a few semantically-close alternatives so the
         # key still gets a fitting Premium icon instead of staying plain.
         TEXT_FALLBACKS = {
+            "status_premium": ["✅", "✔️", "☑️", "🟢", "⭐"],
+            "status_default": ["⬜️", "⚪️", "🔘", "▫️", "◻️", "◽️", "▪️"],
             "scroll": ["📜", "📃", "📄", "📑", "📝", "✉️", "📖", "📚"],
             "poison": ["🐍", "💀", "🧪", "☠"], "def": ["🔰", "⛨"], "spd": ["🌪", "👟", "🏃", "⚡"],
             "wings": ["🪽", "🕊", "🦅"], "element_earth": ["⛰", "🌍", "🟫", "🗿"],
