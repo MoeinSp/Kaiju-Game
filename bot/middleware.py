@@ -216,9 +216,20 @@ async def enforce_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if is_check_callback:
             await update.callback_query.answer("هنوز عضو همه‌ی کانال‌ها نشدی!", show_alert=True)
         elif update.effective_message is not None:
-            await update.effective_message.reply_text(
-                _join_gate_text(missing), parse_mode="HTML", reply_markup=_join_gate_keyboard(missing)
-            )
+            try:
+                await update.effective_message.reply_text(
+                    _join_gate_text(missing), parse_mode="HTML", reply_markup=_join_gate_keyboard(missing)
+                )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning("Failed to send force-join rich prompt: %s", e)
+                try:
+                    ch_names = ", ".join([f"@{c.username}" if c.username else (c.title or "کانال") for c in missing])
+                    await update.effective_message.reply_text(
+                        f"⚠️ برای ادامه ابتدا باید در کانال‌های زیر عضو شوید:\n{ch_names}"
+                    )
+                except Exception as inner_e:
+                    logging.getLogger(__name__).warning("Failed to send fallback force-join text: %s", inner_e)
         raise ApplicationHandlerStop
 
     just_passed = not (current_ids <= passed_ids)
