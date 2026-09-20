@@ -83,6 +83,7 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_locked": ("بخش قفل", "🔒", "nav"),
     # confirm / destructive
     "btn_confirm": ("تأیید", "✅", "confirm"),
+    "btn_check": ("تیک و بررسی", "✔️", "confirm"),
     "btn_cancel": ("لغو", "❌", "confirm"),
     "btn_delete": ("حذف", "🗑", "confirm"),
     "btn_join": ("عضویت در کانال", "📡", "confirm"),

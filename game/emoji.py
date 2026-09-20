@@ -103,8 +103,10 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "key": ("کلید", "🗝", "ui"),
     "info": ("اطلاعات", "ℹ️", "ui"),
     # UI
-    "confirm": ("تأیید", "✅", "ui"),
-    "cancel": ("لغو", "❌", "ui"),
+    "confirm": ("تأیید و تیک سبز", "✅", "ui"),
+    "check": ("تیک ساده و بررسی", "✔️", "ui"),
+    "cancel": ("لغو و ضربدر", "❌", "ui"),
+    "cross": ("رد و ضربدر قرمز", "✖️", "ui"),
     "warning": ("هشدار", "⚠️", "ui"),
     "banned": ("مسدود", "🚫", "ui"),
     "stats": ("آمار", "📊", "ui"),
@@ -310,6 +312,10 @@ CANONICAL_KEY_GLYPHS: dict[str, set[str]] = {
     "idea": {"💡"},
     "key": {"🗝", "🗝️"},
     "info": {"ℹ️", "ℹ"},
+    "confirm": {"✅", "☑️", "☑"},
+    "check": {"✔️", "✔", "✓"},
+    "cancel": {"❌", "❎"},
+    "cross": {"✖️", "✖"},
 }
 
 
