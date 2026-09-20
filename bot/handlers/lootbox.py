@@ -31,24 +31,25 @@ def _bulk_summary_text(header: str, summary: dict) -> str:
     drop, then creatures and equipment in separate numbered lists, then a rarity
     tally that notes whether each rarity was creatures or gear."""
     order = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
-    div = "──────────────"
+    div = "━━━━━━━━━━━━━━━━━━━━"
 
     best = summary["best"]
     if best["kind"] == "creature":
-        best_line = f"{_rarity_dot(best['rarity'])} <b>{best['creature'].name}</b> — {constants.RARITY_LABELS[best['rarity']]}"
+        best_line = f"{_rarity_dot(best['rarity'])} <b>{best['creature'].name}</b> ({constants.RARITY_LABELS[best['rarity']]})"
     else:
         it = best["item"]
         best_line = (f"{_rarity_dot(best['rarity'])} {constants.EQUIPMENT_SLOT_LABELS.get(it.slot, '🎒')} "
-                     f"<b>{it.name} +{it.level}</b> — {constants.RARITY_LABELS[best['rarity']]}")
+                     f"<b>{it.name}</b> (<code>+{it.level}</code>) — {constants.RARITY_LABELS[best['rarity']]}")
 
     _gift = summary["opened"] - summary["paid"]
+    gift_info = (f"<blockquote>پرداخت: <code>{summary['paid']}</code> باکس\nهدیه رایگان: <code>+{_gift}</code> باکس</blockquote>" if _gift > 0
+                 else f"<blockquote>تعداد: <code>{summary['opened']}</code> باکس</blockquote>")
     lines = [
-        f"🎁 <b>نتایج گشایش {summary['opened']} {header}</b>",
-        (f"<i>(پرداخت {summary['paid']} باکس + {_gift} باکس هدیه)</i>" if _gift > 0
-         else f"<i>({summary['opened']} باکس)</i>"),
+        f"🎁 <b>نتایج گشایش <code>{summary['opened']}</code> {header}</b>",
+        gift_info,
         "",
         "🏆 <b>ارزشمندترین دریافت:</b>",
-        f"• {best_line}",
+        f"<blockquote>{best_line}</blockquote>",
     ]
 
     creatures = sorted(summary["creatures"], key=lambda r: -order.get(r["rarity"], 0))
@@ -58,14 +59,14 @@ def _bulk_summary_text(header: str, summary: dict) -> str:
         lines += ["", div, "", "🐣 <b>هیولاهای دریافتی (اضافه شده به کلکسیون):</b>"]
         for i, r in enumerate(creatures, 1):
             c = r["creature"]
-            lines.append(f"{i}. {_rarity_dot(r['rarity'])} {c.name} — {constants.RARITY_LABELS[r['rarity']]}")
+            lines.append(f"{i}. {_rarity_dot(r['rarity'])} <b>{c.name}</b> ({constants.RARITY_LABELS[r['rarity']]})")
 
     if items:
         lines += ["", div, "", "⚔️ <b>تجهیزات دریافتی (اضافه شده به تجهیزات):</b>"]
         for i, r in enumerate(items, 1):
             it = r["item"]
             slot = constants.EQUIPMENT_SLOT_LABELS.get(it.slot, "🎒")
-            lines.append(f"{i}. {_rarity_dot(r['rarity'])} {slot} {it.name} +{it.level} — {constants.RARITY_LABELS[r['rarity']]}")
+            lines.append(f"{i}. {_rarity_dot(r['rarity'])} {slot} <b>{it.name}</b> (<code>+{it.level}</code>) — {constants.RARITY_LABELS[r['rarity']]}")
 
     # rarity tally, annotated with what kind each rarity's drops were
     lines += ["", div, "", "📊 <b>خلاصه به تفکیک نایابی:</b>"]
@@ -76,12 +77,12 @@ def _bulk_summary_text(header: str, summary: dict) -> str:
         n_c = sum(1 for r in summary["creatures"] if r["rarity"] == rarity)
         n_i = sum(1 for r in summary["items"] if r["rarity"] == rarity)
         if n_c and n_i:
-            kind = f"{n_i} تجهیزات · {n_c} هیولا"
+            kind = f"<code>{n_i}</code> تجهیزات · <code>{n_c}</code> هیولا"
         elif n_i:
             kind = "تجهیزات"
         else:
             kind = "هیولا"
-        lines.append(f"• {constants.RARITY_LABELS[rarity]}: {n} ({kind})")
+        lines.append(f"• {constants.RARITY_LABELS[rarity]}: <code>{n}</code> ({kind})")
     return "\n".join(lines)
 
 
@@ -105,7 +106,7 @@ def _biocrate_list_keyboard(tickets: int = 0) -> InlineKeyboardMarkup:
     for tier in constants.BIOCRATE_TIER_ORDER:
         cfg = constants.BIOCRATE_TIERS[tier]
         rows.append([btn(
-            f"{cfg['label']} — {cfg['gold']:,} طلا + {cfg['dna']} DNA",
+            cfg['label'],
             style=SHOP, callback_data=f"bc_pick:{tier}",
         )])
     rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
@@ -114,14 +115,19 @@ def _biocrate_list_keyboard(tickets: int = 0) -> InlineKeyboardMarkup:
 
 async def biocrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     coins, dna, tickets = await run_db(_user_coins_sync, update.effective_user)
-    ticket_line = f" · 🎟 {tickets} بلیط" if tickets else ""
-    text = (
-        f"{get_emoji('biocrate')} <b>باکس ژنتیکی</b>\n"
-        "<blockquote>یه باکس شانسی — بیشترش تجهیزاته و گاهی هیولای تازه ازش درمی‌آد. "
-        "هرچی گرون‌تر، شانس هیولا و نایابیش بیشتر.</blockquote>\n"
-        f"<i>موجودی: {coins:,} طلا · {dna} DNA{ticket_line}</i>\n\n"
-        "رو یکی بزن تا شانس‌ها و خریدش رو ببینی:"
-    )
+    ticket_line = f"\n🎟 موجودی بلیط: <code>{tickets:,}</code>" if tickets else ""
+    lines = [
+        f"{get_emoji('biocrate')} <b>باکس ژنتیکی</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "<blockquote>یه باکس شانسی حاوی تجهیزات و هیولاهای کمیاب.\n"
+        "هرچه سطح باکس بالاتر باشد، شانس دریافت هیولا و نایابی آن بیشتر خواهد بود.</blockquote>",
+        "",
+        f"💰 موجودی طلا: <code>{coins:,}</code>",
+        f"🧬 موجودی DNA: <code>{dna:,}</code>{ticket_line}",
+        "",
+        "<i>یکی از باکس‌های زیر را انتخاب کنید:</i>",
+    ]
+    text = "\n".join(lines)
     from game.media import get_feature_image_path
     photo = get_feature_image_path("biocrate")
     await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=_biocrate_list_keyboard(tickets))
@@ -146,41 +152,32 @@ def _biocrate_detail_text(tier: str) -> str:
     total = sum(weights.values())
     lines = [
         f"{cfg['label']}",
-        f"هزینه: <b>{cfg['gold']:,}</b> {get_emoji('coin')} + <b>{cfg['dna']}</b> {get_emoji('dna')}\n",
-        f"🎒 <b>تجهیزات</b> — روی‌هم <b>{(1 - cc) * 100:g}٪</b>:",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"<blockquote>💰 هزینه طلا: <code>{cfg['gold']:,}</code> {get_emoji('coin')}\n"
+        f"🧬 هزینه DNA: <code>{cfg['dna']:,}</code> {get_emoji('dna')}</blockquote>",
+        "",
+        f"🎒 <b>تجهیزات</b> (مجموعاً <code>{(1 - cc) * 100:g}٪</code>):",
     ]
     # equipment rarity breakdown (this tier's own gear table)
     ew = cfg.get("equip_weights", constants.LOOTBOX_RARITY_WEIGHTS)
     et = sum(ew.values())
     for rarity, weight in ew.items():
         pct = (1 - cc) * weight / et * 100
-        lines.append(f"　{constants.RARITY_LABELS[rarity]} — <b>{pct:.2g}٪</b>")
-    lines.append(f"\n🧬 <b>هیولا</b> — روی‌هم <b>{cc * 100:g}٪</b>:")
+        lines.append(f"  • {constants.RARITY_LABELS[rarity]}: <code>{pct:.2g}٪</code>")
+    lines.append("")
+    lines.append(f"🧬 <b>هیولا</b> (مجموعاً <code>{cc * 100:g}٪</code>):")
     for rarity, weight in weights.items():
         pct = cc * weight / total * 100
-        lines.append(f"　{constants.RARITY_LABELS[rarity]} — <b>{pct:.2g}٪</b>")
+        lines.append(f"  • {constants.RARITY_LABELS[rarity]}: <code>{pct:.2g}٪</code>")
     return "\n".join(lines)
-
-
-def _open_label(tier: str, tickets: int, count: int) -> str:
-    """Button text with the REAL cost: tickets first, then this tier's gold+DNA for the
-    boxes tickets don't cover (so a ×10 with only 3 tickets shows the money it needs)."""
-    cfg = constants.BIOCRATE_TIERS[tier]
-    ft = min(tickets, count)
-    paid = count - ft
-    parts = []
-    if ft:
-        parts.append(f"{ft}🎟")
-    if paid:
-        parts.append(f"{cfg['gold'] * paid:,}🪙 {cfg['dna'] * paid}🧬")
-    cost = " + ".join(parts) if parts else "رایگان"
-    return f"باز کردن ×{count} ({cost})"
 
 
 def _biocrate_detail_keyboard(tier: str, tickets: int = 0) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [btn(_open_label(tier, tickets, 1), emoji_key="btn_confirm", style=CONFIRM, callback_data=f"bc_open:{tier}:1")],
-        [btn(_open_label(tier, tickets, 10), style=SHOP, callback_data=f"bc_open:{tier}:10")],
+        [
+            btn("باز کردن (۱×)", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"bc_open:{tier}:1"),
+            btn("باز کردن (۱۰×)", emoji_key="btn_biocrate", style=SHOP, callback_data=f"bc_open:{tier}:10"),
+        ],
         [back_btn("menu:biocrate", "بازگشت به لیست")],
     ])
 
@@ -189,8 +186,8 @@ def _biocrate_ticket_note(tier: str, tickets: int) -> str:
     if tickets <= 0:
         return ""
     return (
-        f"\n🎟 بلیط: <b>{tickets}</b> — اول بلیط‌ها خرج می‌شن؛ برای باقیِ باکس‌ها "
-        "طلا/DNA کم می‌شه."
+        f"\n\n<blockquote>🎟 موجودی بلیط: <code>{tickets:,}</code>\n"
+        "در ابتدا بلیط‌ها مصرف می‌شوند و برای باقیمانده طلا و DNA کسر خواهد شد.</blockquote>"
     )
 
 
@@ -213,11 +210,14 @@ def _pay_line(summary: dict) -> str:
     """One line describing how a batch was paid: N via tickets, M via gold+DNA."""
     parts = []
     if summary.get("from_tickets"):
-        parts.append(f"🎟 {summary['from_tickets']} با بلیط")
+        parts.append(f"🎟 <code>{summary['from_tickets']}</code> با بلیط")
     if summary.get("paid_boxes"):
-        parts.append(f"{summary['paid_boxes']} با پول ({summary['gold_spent']:,} طلا + {summary['dna_spent']} DNA)")
-    line = " · ".join(parts) if parts else ""
-    return (f"\n<i>{line}</i>" if line else "") + f"\n<i>🎟 بلیط باقی‌مونده: {summary.get('tickets_left', 0)}</i>"
+        parts.append(f"<code>{summary['paid_boxes']}</code> با هزینه (<code>{summary['gold_spent']:,}</code> طلا + <code>{summary['dna_spent']:,}</code> DNA)")
+    lines = []
+    if parts:
+        lines.append(" • ".join(parts))
+    lines.append(f"🎟 بلیط باقیمانده: <code>{summary.get('tickets_left', 0)}</code>")
+    return "\n<blockquote>" + "\n".join(lines) + "</blockquote>"
 
 
 async def biocrate_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -242,17 +242,29 @@ async def biocrate_open_callback(update: Update, context: ContextTypes.DEFAULT_T
         rarity_label = constants.RARITY_LABELS[result["rarity"]]
         if result["kind"] == "creature":
             c = result["creature"]
-            reveal = f"{get_emoji('egg')} <b>{c.name}</b>\n{constants.element_label(c.element)} · {rarity_label}"
-            hint = "از «🗂 کلکسیون» توی منو می‌تونی فعالش کنی."
+            reveal = (
+                f"{get_emoji('egg')} <b>{c.name}</b>\n"
+                f"عنصر: {constants.element_label(c.element)}\n"
+                f"رده: {rarity_label}"
+            )
+            hint = "از «🗂 کلکسیون» می‌توانید آن را فعال کنید."
             photo = get_creature_image_path(c)
         else:
             it = result["item"]
-            reveal = f"{constants.EQUIPMENT_SLOT_LABELS[it.slot]} <b>{it.name}</b>\n{rarity_label}"
-            hint = "از «🎒 تجهیزات» توی منو می‌تونی تجهیزش کنی."
+            reveal = (
+                f"{constants.EQUIPMENT_SLOT_LABELS[it.slot]} <b>{it.name}</b>\n"
+                f"رده: {rarity_label}"
+            )
+            hint = "از «🎒 تجهیزات» می‌توانید آن را تجهیز کنید."
             photo = get_equipment_image_path(it)
         await query.answer("🎟 باز شد!" if summary.get("from_tickets") else "🟢 باز شد!")
-        text = (f"{label} <b>باز شد!</b>{_pay_line(summary)}\n\n"
-                f"<tg-spoiler>{reveal}</tg-spoiler>\n\n<blockquote>{hint}</blockquote>")
+        text = (
+            f"{label} <b>باز شد!</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"<tg-spoiler>{reveal}</tg-spoiler>\n\n"
+            f"<blockquote>{hint}</blockquote>"
+            f"{_pay_line(summary)}"
+        )
     else:
         await query.answer("🎉 باز شد!")
         text = _bulk_summary_text(label, summary) + _pay_line(summary)
@@ -275,7 +287,7 @@ async def biocrate_bulk_callback(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer("🎉 باز شد!")
     label = constants.BIOCRATE_TIERS[tier]["label"]
     keyboard = InlineKeyboardMarkup([
-        [btn(f"باز کردن ×{BULK_PAY} دیگه", style=SHOP, callback_data=f"bc_bulk:{tier}")],
+        [btn(f"باز کردن ×{BULK_PAY} دیگر", emoji_key="btn_biocrate", style=SHOP, callback_data=f"bc_bulk:{tier}")],
         [back_btn("menu:biocrate", "لیست باکس‌ها")],
     ])
     photo = composite_lootbox_batch_image(summary["rolls"], label)
@@ -308,9 +320,9 @@ def _diamond_box_list_keyboard(free_tiers: set[str] | None = None) -> InlineKeyb
     rows = []
     for tier, cfg in constants.DIAMOND_BOX_TIERS.items():
         if tier in free_tiers:
-            label = f"{cfg['label']} — رایگان امروز! 🎁"
+            label = f"{cfg['label']} (رایگان)"
         else:
-            label = f"{cfg['label']} — {cfg['cost_diamonds']} 💎"
+            label = f"{cfg['label']}"
         rows.append([btn(label, style=SHOP, callback_data=f"dbox_pick:{tier}")])
     rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
     return InlineKeyboardMarkup(rows)
@@ -330,12 +342,17 @@ async def diamond_box_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             names.append("نقره‌ای")
         free_banner = f"🎁 <b>باکس هیولا رایگان امروز ({' و '.join(names)}) آماده باز کردن!</b>\n\n"
 
+    lines = [
+        f"{get_emoji('diamond_box')} <b>باکس هیولا</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "<blockquote>این باکس‌ها همیشه یک موجود جدید به شما می‌دهند.\n"
+        "هرچه سطح باکس بالاتر باشد، شانس نایاب‌بودن آن بیشتر است.</blockquote>",
+        "",
+        f"{free_banner}<i>یکی از باکس‌های زیر را برای مشاهده جزئیات انتخاب کنید:</i>",
+    ]
     await send_screen(
         update,
-        f"{get_emoji('diamond_box')} <b>باکس هیولا</b>\n"
-        "این باکس‌ها همیشه یه موجود جدید می‌دن (نه تجهیزات) — هرچی سطح باکس بالاتر، شانس نایاب‌بودنش بیشتره.\n\n"
-        f"{free_banner}"
-        "رو یکی بزن تا احتمالات دقیقش رو ببینی:",
+        "\n".join(lines),
         photo=photo,
         parse_mode="HTML",
         reply_markup=_diamond_box_list_keyboard(free_tiers),
@@ -346,31 +363,35 @@ def _diamond_box_detail_text(tier: str, is_free: bool = False) -> str:
     cfg = constants.DIAMOND_BOX_TIERS[tier]
     if tier in ("bronze", "silver"):
         if is_free:
-            cost_line = f"{get_emoji('diamond')} هزینه: <b>رایگان! 🎁</b> (۱ بار در روز — آماده باز کردن)"
+            cost_line = f"<blockquote>{get_emoji('diamond')} هزینه: <b>رایگان! 🎁</b> (۱ بار در روز — آماده باز کردن)</blockquote>"
         else:
-            cost_line = f"{get_emoji('diamond')} هزینه: {cfg['cost_diamonds']} الماس <i>(باکس رایگان امروز مصرف شده)</i>"
+            cost_line = f"<blockquote>{get_emoji('diamond')} هزینه: <code>{cfg['cost_diamonds']:,}</code> الماس <i>(رایگان امروز مصرف شده)</i></blockquote>"
     else:
-        cost_line = f"{get_emoji('diamond')} هزینه: {cfg['cost_diamonds']} الماس"
+        cost_line = f"<blockquote>{get_emoji('diamond')} هزینه: <code>{cfg['cost_diamonds']:,}</code> الماس</blockquote>"
 
     lines = [
         f"{cfg['label']}",
-        cost_line + "\n",
+        "━━━━━━━━━━━━━━━━━━━━",
+        cost_line,
+        "",
         "📊 <b>احتمال هر رده:</b>",
     ]
     for rarity, weight in cfg["weights"].items():
-        lines.append(f"{constants.RARITY_LABELS[rarity]} — {weight:g}٪")
+        lines.append(f"  • {constants.RARITY_LABELS[rarity]}: <code>{weight:g}٪</code>")
     return "\n".join(lines)
 
 
 def _diamond_box_detail_keyboard(tier: str, is_free: bool = False) -> InlineKeyboardMarkup:
     if tier in ("bronze", "silver") and is_free:
-        open_label = "🎁 باز کردن رایگان امروز"
+        open_label = "باز کردن رایگان"
     else:
-        open_label = "خرید و باز کن"
+        open_label = "خرید و باز کردن"
     return InlineKeyboardMarkup(
         [
-            [btn(open_label, emoji_key="btn_confirm", style=CONFIRM, callback_data=f"dbox_buy:{tier}")],
-            [btn(f"باز کردن ×{BULK_PAY} (+۱ رایگان 🎁)", style=SHOP, callback_data=f"dbox_bulk:{tier}")],
+            [
+                btn(open_label, emoji_key="btn_confirm", style=CONFIRM, callback_data=f"dbox_buy:{tier}"),
+                btn("خرید بسته‌ای (۱۰+۱)", emoji_key="btn_diamond_box", style=SHOP, callback_data=f"dbox_bulk:{tier}"),
+            ],
             [back_btn("menu:diamond_box", "بازگشت به لیست")],
         ]
     )
@@ -424,12 +445,18 @@ async def _do_diamond_box_buy(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
     photo = get_creature_image_path(creature)
     free_tag = "\n<i>(🎁 هدیه رایگان امروز شما)</i>" if is_free else ""
+    lines = [
+        f"{constants.DIAMOND_BOX_TIERS[tier]['label']} <b>باز شد!</b>{free_tag}",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"<tg-spoiler>{get_emoji('egg')} <b>{creature.name}</b>\n"
+        f"عنصر: {constants.element_label(creature.element)}\n"
+        f"رده: {rarity_label}</tg-spoiler>",
+        "",
+        "<blockquote>از «🗂 کلکسیون» می‌توانید آن را فعال کنید.</blockquote>",
+    ]
     await send_screen(
         update,
-        f"{constants.DIAMOND_BOX_TIERS[tier]['label']} <b>باز شد!</b>{free_tag}\n\n"
-        f"<tg-spoiler>{get_emoji('egg')} <b>{creature.name}</b>\n"
-        f"{constants.element_label(creature.element)} · {rarity_label}</tg-spoiler>\n\n"
-        "<blockquote>از «🗂 کلکسیون» توی منو می‌تونی فعالش کنی.</blockquote>",
+        "\n".join(lines),
         photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,
@@ -452,14 +479,21 @@ async def diamond_box_buy_callback(update: Update, context: ContextTypes.DEFAULT
     cost = cfg["cost_diamonds"]
     await query.answer()
     keyboard = InlineKeyboardMarkup([
-        [btn(f"✅ تأیید و باز کردن ({cost} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"dbox_do_buy:{tier}")],
-        [back_btn(f"dbox_pick:{tier}", "❌ انصراف")],
+        [
+            btn("تأیید و باز کردن", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"dbox_do_buy:{tier}"),
+            back_btn(f"dbox_pick:{tier}", "انصراف"),
+        ],
     ])
+    lines = [
+        f"{get_emoji('diamond_box')} <b>خرید و باز کردن {cfg['label']}</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"<blockquote>💰 هزینه: <code>{cost:,}</code> الماس {get_emoji('diamond')}</blockquote>",
+        "",
+        "آیا از خرید و باز کردن این جعبه مطمئن هستید؟",
+    ]
     await safe_edit_message_text(
         query,
-        f"{get_emoji('diamond_box')} <b>خرید و باز کردن {cfg['label']}</b>\n\n"
-        f"{get_emoji('diamond')} هزینه: <b>{cost} الماس</b>\n\n"
-        "آیا از خرید و باز کردن این جعبه مطمئن هستید؟",
+        "\n".join(lines),
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -484,15 +518,22 @@ async def diamond_box_bulk_callback(update: Update, context: ContextTypes.DEFAUL
     cost = BULK_PAY * cfg["cost_diamonds"]
     await query.answer()
     keyboard = InlineKeyboardMarkup([
-        [btn(f"✅ تأیید و خرید ({cost} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"dbox_do_bulk:{tier}")],
-        [back_btn(f"dbox_pick:{tier}", "❌ انصراف")],
+        [
+            btn("تأیید و خرید", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"dbox_do_bulk:{tier}"),
+            back_btn(f"dbox_pick:{tier}", "انصراف"),
+        ],
     ])
+    lines = [
+        f"{get_emoji('diamond_box')} <b>خرید بسته‌ای {cfg['label']}</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"<blockquote>📦 تعداد: <code>{BULK_PAY} + ۱ رایگان 🎁</code> (۱۱ جعبه)\n"
+        f"💰 مجموع هزینه: <code>{cost:,}</code> الماس {get_emoji('diamond')}</blockquote>",
+        "",
+        "آیا از خرید بسته‌ای این جعبه مطمئن هستید؟",
+    ]
     await safe_edit_message_text(
         query,
-        f"{get_emoji('diamond_box')} <b>خرید بسته‌ای {cfg['label']}</b>\n\n"
-        f"📦 تعداد: <b>{BULK_PAY} + ۱ رایگان 🎁</b> (روی‌هم ۱۱ جعبه)\n"
-        f"{get_emoji('diamond')} مجموع هزینه: <b>{cost} الماس</b>\n\n"
-        "آیا از خرید بسته‌ای این جعبه مطمئن هستید؟",
+        "\n".join(lines),
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -509,7 +550,7 @@ async def diamond_box_do_bulk_callback(update: Update, context: ContextTypes.DEF
     await query.answer("🎉 باز شد!")
     label = constants.DIAMOND_BOX_TIERS[tier]["label"]
     keyboard = InlineKeyboardMarkup([
-        [btn(f"باز کردن ×{BULK_PAY} دیگه", style=SHOP, callback_data=f"dbox_bulk:{tier}")],
+        [btn("باز کردن دوباره", emoji_key="btn_diamond_box", style=SHOP, callback_data=f"dbox_bulk:{tier}")],
         [back_btn("menu:diamond_box", "لیست جعبه‌ها")],
     ])
     photo = composite_lootbox_batch_image(summary["rolls"], label)

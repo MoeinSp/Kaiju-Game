@@ -110,7 +110,8 @@ async def send_outbid_notification_now(context, outbid: dict) -> None:
     user_id = outbid["user_id"]
     curr_label = "طلا 🪙" if outbid["currency"] == "coins" else "الماس 💎"
     text = (
-        f"⚠️ <b>پیشنهاد بالاتر در بازار سیاه!</b>\n\n"
+        f"⚠️ <b>پیشنهاد بالاتر در بازار سیاه!</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
         f"🏷 مزایده: <b>{outbid['auction_title']}</b>\n"
         f"💵 پیشنهاد جدید: <b>{outbid['new_bid']:,}</b> {curr_label}\n"
         f"💰 مبلغ <b>{outbid['refunded_amount']:,} {curr_label}</b> به حساب شما بازگردانده شد.\n\n"

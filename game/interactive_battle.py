@@ -105,7 +105,7 @@ def is_finished(battle: InteractiveBattle) -> tuple[bool, str | None]:
 
 
 def render_hp_bar(current: int, total: int, width: int = 10) -> str:
-    return constants.render_bar(current, total, width) + f" {max(current, 0)}/{total}"
+    return constants.render_bar(current, total, width) + f" (<code>{max(current, 0):,}</code>/<code>{total:,}</code>)"
 
 
 def render_battle_card(battle: InteractiveBattle) -> str:
@@ -113,20 +113,21 @@ def render_battle_card(battle: InteractiveBattle) -> str:
     stats_b = effective_stats(battle.creature_b)
     lines = [
         f"{get_emoji('battle')} <b>نبرد زنده</b>",
-        f"{battle.creature_a.name}  {render_hp_bar(battle.hp_a, stats_a['hp'])}",
-        f"{battle.creature_b.name}  {render_hp_bar(battle.hp_b, stats_b['hp'])}",
-        "",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"🦁 <b>{battle.creature_a.name}</b>\n❤️ سلامت: {render_hp_bar(battle.hp_a, stats_a['hp'])}",
+        f"🐯 <b>{battle.creature_b.name}</b>\n❤️ سلامت: {render_hp_bar(battle.hp_b, stats_b['hp'])}",
+        "━━━━━━━━━━━━━━━━━━━━",
     ]
 
     if battle.log:
         tail = battle.log.strip().split("\n")[-6:]
-        lines.extend(tail)
-        lines.append("")
+        lines.append("<blockquote>" + "\n".join(tail) + "</blockquote>")
+        lines.append("━━━━━━━━━━━━━━━━━━━━")
 
     if battle.status == "active":
         actor = _creature(battle, battle.turn)
         skill_uses = battle.skill_uses_a if battle.turn == "a" else battle.skill_uses_b
-        lines.append(f"⏳ نوبت: <b>{actor.name}</b>  (اسکیل باقی‌مانده: {skill_uses})")
+        lines.append(f"⏳ نوبت: <b>{actor.name}</b> (اسکیل باقی‌مانده: <code>{skill_uses}</code>)")
     elif battle.status == "finished":
         winner_side = "a" if battle.hp_b <= 0 else "b"
         winner = _creature(battle, winner_side)

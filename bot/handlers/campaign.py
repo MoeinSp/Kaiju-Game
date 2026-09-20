@@ -14,17 +14,17 @@ from game.energy import sync_energy
 from game.teambattle import battle_summary, team_power
 
 
-def _reward_text(reward: dict) -> str:
-    parts = []
+def _reward_lines(reward: dict) -> list[str]:
+    lines = []
     if reward.get("coins"):
-        parts.append(f"{reward['coins']} طلا")
+        lines.append(f"🪙 سکه: <code>+{reward['coins']:,}</code> {get_emoji('coin')}")
     if reward.get("dna"):
-        parts.append(f"{reward['dna']} DNA")
+        lines.append(f"🧬 دی‌ان‌ای: <code>+{reward['dna']:,}</code> {get_emoji('dna')}")
     if reward.get("diamonds"):
-        parts.append(f"{reward['diamonds']} 💎")
+        lines.append(f"💎 الماس: <code>+{reward['diamonds']:,}</code> {get_emoji('diamond')}")
     if reward.get("speedup"):
-        parts.append(f"کارت سرعت {reward['speedup']} دقیقه‌ای")
-    return " + ".join(parts) or "—"
+        lines.append(f"⚡ کارت سرعت: <code>{reward['speedup']:,}</code> دقیقه‌ای")
+    return lines or ["▫️ بدون پاداش"]
 
 
 def _team_creatures(user):
@@ -47,25 +47,33 @@ def _panel_sync(tg_user):
 def _render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
     st = view["status"]
     if st["next_stage"] is None:
-        text = "🗺 <b>دانجن</b>\n\n🏆 <b>کل دانجن رو فتح کردی!</b> منتظر مراحل جدید باش."
+        text = "🗺 <b>دانجن</b>\n━━━━━━━━━━━━━━━━━━━━\n🏆 <b>کل دانجن رو فتح کردی!</b>\n<i>منتظر مراحل جدید باش.</i>"
         return text, InlineKeyboardMarkup([[back_btn("menu:me")]])
 
     boss = " 👹 <b>(باس!)</b>" if st["next_is_boss"] else ""
+    rew_lines = _reward_lines(st["next_reward"])
     lines = [
-        f"🗺 <b>دانجن</b> — مرحله‌ی <b>{st['next_stage']}</b>/{st['max_stage']}{boss}",
-        f"<blockquote>✅ فتح‌شده: {st['cleared']} مرحله\n"
-        f"👾 قدرت دشمن این مرحله: <b>{st['enemy_power']}</b>\n"
-        f"💪 قدرت تیم تو: <b>{view['team_power']}</b>\n"
-        f"🎁 جایزه‌ی فتح: {_reward_text(st['next_reward'])}</blockquote>",
-        f"{get_emoji('energy')} انرژی: {view['energy']}  ·  هزینه: {campaign.ENERGY_COST}",
+        f"🗺 <b>دانجن</b> — مرحله‌ی <code>{st['next_stage']}</code> از <code>{st['max_stage']}</code>{boss}",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "<blockquote>"
+        f"✅ مراحل فتح‌شده: <code>{st['cleared']}</code>\n"
+        f"👾 قدرت دشمن این مرحله: <code>{st['enemy_power']:,}</code>\n"
+        f"💪 قدرت تیم شما: <code>{view['team_power']:,}</code>\n\n"
+        "🎁 <b>پاداش فتح این مرحله:</b>\n"
+        + "\n".join(rew_lines)
+        + f"\n\n⚡ <b>هزینه ورود:</b> <code>{campaign.ENERGY_COST:,}</code> انرژی\n"
+        + f"{get_emoji('energy')} <b>انرژی فعلی:</b> <code>{view['energy']:,}</code>"
+        + "</blockquote>",
     ]
     rows = []
     if not view["has_team"]:
-        lines.append("\n⚠️ اول از «⚔️ تیم من» یه تیم بچین.")
-        rows.append([btn("⚔️ چیدن تیم", style=PRIMARY, callback_data="menu:team")])
+        lines.append("\n⚠️ <i>اول از «چیدن تیم» یک تیم ۳ نفره بچین.</i>")
+        rows.append([btn("چیدن تیم", emoji_key="btn_team", style=PRIMARY, callback_data="menu:team")])
     else:
-        rows.append([btn("⚔️ حمله به مرحله", emoji_key="btn_hunt", style=BATTLE, callback_data="camp_fight")])
-        rows.append([btn("⚔️ تیم من", style=PRIMARY, callback_data="menu:team")])
+        rows.append([
+            btn("شروع نبرد", emoji_key="btn_hunt", style=BATTLE, callback_data="camp_fight"),
+            btn("مدیریت تیم", emoji_key="btn_team", style=PRIMARY, callback_data="menu:team"),
+        ])
     rows.append([back_btn("menu:me")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -98,23 +106,31 @@ async def campaign_fight_callback(update: Update, context: ContextTypes.DEFAULT_
 
     if result["won"]:
         await query.answer("🎉 مرحله فتح شد!")
-        header = (
-            f"🎉 <b>مرحله‌ی {result['stage']} فتح شد!</b>"
-            + (" 👹" if result["is_boss"] else "")
-            + f"\n🎁 <b>{_reward_text(result['reward'])}</b>"
-            + (f"\n🛡 {result['survivors']} هیولا زنده موند." if result["survivors"] else "")
-        )
+        rew_lines = _reward_lines(result["reward"])
+        header_lines = [
+            f"🎉 <b>مرحله‌ی <code>{result['stage']}</code> فتح شد!</b>" + (" 👹" if result["is_boss"] else ""),
+            "━━━━━━━━━━━━━━━━━━━━",
+            "<blockquote>🎁 <b>پاداش دریافتی:</b>\n"
+            + "\n".join(rew_lines)
+            + (f"\n\n🛡 <b>بازماندگان:</b> <code>{result['survivors']}</code> هیولا زنده ماندند." if result["survivors"] else "")
+            + "</blockquote>"
+        ]
         if result["cleared_all"]:
-            header = "🏆 <b>آخرین مرحله‌ی دانجن رو هم فتح کردی!</b>\n" + header
+            header_lines.insert(0, "🏆 <b>تمام مراحل دانجن با موفقیت فتح شدند!</b>\n━━━━━━━━━━━━━━━━━━━━")
+        header = "\n".join(header_lines)
     else:
         await query.answer("💀 شکست خوردی")
-        header = f"💀 <b>تیمت توی مرحله‌ی {result['stage']} شکست خورد.</b>\nتیمت رو قوی‌تر کن و دوباره امتحان کن."
+        header = (
+            f"💀 <b>شکست در مرحله‌ی <code>{result['stage']}</code>!</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "<i>تیم خود را ارتقا داده و دوباره تلاش کنید.</i>"
+        )
 
     log = battle_summary(result["log"])
     text, keyboard = _render(view)
     await safe_edit_message_text(
         query,
-        f"{header}\n\n<blockquote>{log}</blockquote>\n━━━━━━━━━━\n" + text,
+        f"{header}\n\n<blockquote>{log}</blockquote>\n━━━━━━━━━━━━━━━━━━━━\n{text}",
         parse_mode="HTML",
         reply_markup=keyboard,
     )

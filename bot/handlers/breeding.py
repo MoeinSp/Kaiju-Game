@@ -127,11 +127,15 @@ def _nav_row(page: int, total_pages: int, cb) -> list:
 def _parent_a_render(candidates: list, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
     text = (
         "🕳 <b>غار هیولا — جفت بفرست</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
         "<blockquote>دو هیولای آزاد رو بفرست توی غار. اول جفت‌گیری می‌کنن، بعد یه <b>تخم</b> "
-        "می‌ذارن و آزاد می‌شن؛ تخم جدا رشد می‌کنه تا سر باز کنه.\n"
-        "هرچی والدین <b>نایاب‌تر</b>، <b>زمان جفت‌گیری</b> خیلی بیشتر (اساطیری+اساطیری تا 36 ساعت). "
-        "رده‌ی تخم فقط به رده‌ی والدین بستگی داره: هم‌رده ⇒ ۶۰٪ همان رده/۴۰٪ پایین‌تر، متفاوت‌رده ⇒ ۷۵٪ پایین‌تر/۲۵٪ بالاتر — و هیچ‌وقت از والدین بالاتر نمی‌ره.</blockquote>\n"
-        "\n<b>والد اول رو انتخاب کن:</b>  <i>(با تب نایابی جدا کن)</i>"
+        "می‌ذارن و آزاد می‌شن؛ تخم جدا رشد می‌کنه تا سر باز کنه.\n\n"
+        "قوانین رده‌ی تخم:\n"
+        "▫️ هم‌رده: <code>۶۰٪</code> همان رده / <code>۴۰٪</code> پایین‌تر\n"
+        "▫️ متفاوت‌رده: <code>۷۵٪</code> پایین‌تر / <code>۲۵٪</code> بالاتر\n"
+        "رده هرگز بالاتر از والدین نمی‌رود.</blockquote>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "<b>والد اول رو انتخاب کن:</b> <i>(با تب نایابی جدا کن)</i>"
     )
     rows = _tab_rows(candidates, filt, lambda f: f"brd_ap:{f}:0")
     shown, page, total_pages = _page_slice(_filter_sort(candidates, filt), page)
@@ -149,9 +153,11 @@ def _parent_a_render(candidates: list, filt: str = "all", page: int = 0) -> tupl
 
 def _parent_b_render(parent_a, candidates: list, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
     text = (
-        f"{get_emoji('lab')} والد اول: <b>{parent_a.name}</b> "
-        f"({constants.RARITY_LABELS[parent_a.rarity]})\n\n<b>حالا والد دوم رو انتخاب کن:</b>  "
-        "<i>(با تب نایابی جدا کن)</i>"
+        f"{get_emoji('lab')} والد اول: <b>{parent_a.name}</b>\n"
+        f"✨ نایابی: <b>{constants.RARITY_LABELS[parent_a.rarity]}</b>\n"
+        f"📦 سطح: <code>{parent_a.level}</code>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "<b>حالا والد دوم رو انتخاب کن:</b> <i>(با تب نایابی جدا کن)</i>"
     )
     rows = _tab_rows(candidates, filt, lambda f: f"brd_bp:{parent_a.id}:{f}:0")
     shown, page, total_pages = _page_slice(_filter_sort(candidates, filt), page)
@@ -172,8 +178,9 @@ def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
 
     if not view["built"]:
         text = (
-            f"🕳 <b>غار هیولا</b>\n\n"
-            f"🔒 اول باید {hall} رو از «🏗 ساختمون‌ها» بسازی تا غار باز شه."
+            f"🕳 <b>غار هیولا</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            f"🔒 اول باید <b>{hall}</b> رو از «🏗 ساختمون‌ها» بسازی تا غار باز شه."
         )
         rows = [
             [btn("رفتن به ساختمون‌ها", emoji_key="btn_buildings", style=PRIMARY, callback_data="menu:buildings")],
@@ -181,7 +188,7 @@ def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
         ]
         return text, InlineKeyboardMarkup(rows)
 
-    lines = ["🕳 <b>غار هیولا</b>", ""]
+    lines = ["🕳 <b>غار هیولا</b>", "━━━━━━━━━━━━━━━━━━━━", ""]
     rows: list = []
 
     # ── cave (phase 1: mating) ────────────────────────────────────────────────
@@ -190,15 +197,14 @@ def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
 
     if jobs:
         for idx, j in enumerate(jobs, 1):
-            parents = f"{j['parent_a_name']} + {j['parent_b_name']}"
-            job_num = f" (جفت #{idx})" if max_jobs > 1 or len(jobs) > 1 else ""
+            job_num = f" #{idx}" if max_jobs > 1 or len(jobs) > 1 else ""
+            lines.append(f"💞 <b>جفت‌گیری در غار{job_num}</b>")
+            lines.append(f"<blockquote>والد اول: <b>{j['parent_a_name']}</b>\nوالد دوم: <b>{j['parent_b_name']}</b></blockquote>")
             if j["ready"]:
-                lines.append(f"💞 <b>جفت‌گیری تموم شد!{job_num}</b>  <blockquote>{parents}</blockquote>")
-                lines.append("بزن تا تخم بذارن و از غار آزاد شن.")
+                lines.append("✅ <b>جفت‌گیری تموم شد!</b> بزن تا تخم بذارن و آزاد شن.\n")
                 rows.append([btn(f"🥚 تخم بذار{job_num}", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"brd_lay:{j['id']}")])
             else:
-                lines.append(f"💞 یه جفت توی غارن{job_num}:  <blockquote>{parents}</blockquote>")
-                lines.append(f"⏳ <b>{_format_remaining(j['seconds_left'])}</b> تا تخم‌گذاری")
+                lines.append(f"⏱ زمان باقیمانده: <code>{_format_remaining(j['seconds_left'])}</code>\n")
                 rows.append(
                     [
                         btn(f"💎 فوری‌کن{job_num} ({j['finish_price']})", style=PRIMARY, callback_data=f"brd_cave_finish_ask:{j['id']}"),
@@ -206,12 +212,11 @@ def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
                     ]
                 )
         if len(jobs) < max_jobs:
-            lines.append("")
+            lines.append(f"✨ ظرفیت غار: <code>{len(jobs)}</code> / <code>{max_jobs}</code>")
             if view["free_count"] >= 2:
-                lines.append(f"✨ ظرفیت غار: {len(jobs)}/{max_jobs} — می‌تونی یک جفت دیگر هم بفرستی!")
                 rows.append([btn(f"🐣 جفت بعدی رو بفرست غار ({len(jobs) + 1}/{max_jobs})", emoji_key="btn_confirm", style=CONFIRM, callback_data="brd_new")])
             else:
-                lines.append(f"✨ ظرفیت غار: {len(jobs)}/{max_jobs} (برای فرستادن جفت بعدی حداقل ۲ هیولای آزاد لازم داری).")
+                lines.append("<i>برای فرستادن جفت بعدی حداقل ۲ هیولای آزاد لازم داری.</i>")
     else:
         if view["free_count"] >= 2:
             lines.append("🕳 غار خالیه — یه جفت بفرست تا جفت‌گیری کنن و تخم بذارن.")
@@ -224,19 +229,19 @@ def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
     eggs = view["eggs"]
     if eggs:
         lines.append("")
-        lines.append(f"{get_emoji('egg')} <b>تخم‌های در حال رشد ({len(eggs)}):</b>")
+        lines.append(f"{get_emoji('egg')} <b>تخم‌های در حال رشد (<code>{len(eggs)}</code>):</b>")
         for i, e in enumerate(eggs, 1):
             if e["ready"]:
-                lines.append(f"  🐣 تخم #{i} — <b>آماده‌ی سر باز کردنه!</b>")
+                lines.append(f"🐣 تخم <code>#{i}</code> — <b>آماده‌ی سر باز کردنه!</b>")
                 rows.append([btn(f"🐣 سر باز کن تخم #{i}", style=CONFIRM, callback_data=f"brd_hatch:{e['id']}")])
             else:
-                lines.append(f"  🥚 تخم #{i} — ⏳ {_format_remaining(e['seconds_left'])}")
+                lines.append(f"🥚 تخم <code>#{i}</code> — ⏱ <code>{_format_remaining(e['seconds_left'])}</code>")
                 rows.append(
                     [btn(f"💎 فوری‌کن تخم #{i} ({e['finish_price']})", style=PRIMARY, callback_data=f"brd_egg_finish_ask:{e['id']}")]
                 )
         lines.append("\n<i>چی توی تخم‌هاست؟ تا سر باز نکنن هیچ‌کس نمی‌دونه.</i>")
 
-    lines.append(f"\n{get_emoji('diamond')} موجودی الماس: {view['user'].diamonds}")
+    lines.append(f"\n{get_emoji('diamond')} موجودی الماس: <code>{view['user'].diamonds:,}</code>")
     rows.append([btn("📖 راهنمای کامل غار", style=NAV, callback_data="brd_guide")])
     rows.append([back_btn("menu:me")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
@@ -249,44 +254,46 @@ def _cave_guide_text() -> str:
     lo = constants.CAVE_MATING_HOURS_BY_RARITY_SUM[0]
     hi = constants.CAVE_MATING_HOURS_BY_RARITY_SUM[8]
     gem_rate = constants.DIAMOND_FINISH_PER_HOUR * constants.CAVE_FINISH_MULTIPLIER
-    div = "──────────────"
+    div = "━━━━━━━━━━━━━━━━━━━━"
     dna_lines = "\n".join([
-        f"• اساطیری + اساطیری: <b>5,000</b> DNA",
-        f"• اساطیری + افسانه‌ای: <b>3,000</b> DNA",
-        f"• افسانه‌ای + افسانه‌ای: <b>2,000</b> DNA",
-        f"• افسانه‌ای + حماسی: <b>1,400</b> DNA",
-        f"• حماسی + حماسی: <b>800</b> DNA",
-        f"• حماسی + کمیاب: <b>500</b> DNA",
-        f"• کمیاب + کمیاب: <b>300</b> DNA",
-        f"• کمیاب + عادی: <b>200</b> DNA",
-        f"• عادی + عادی: <b>100</b> DNA",
+        f"▫️ اساطیری + اساطیری: <code>5,000</code> DNA",
+        f"▫️ اساطیری + افسانه‌ای: <code>3,000</code> DNA",
+        f"▫️ افسانه‌ای + افسانه‌ای: <code>2,000</code> DNA",
+        f"▫️ افسانه‌ای + حماسی: <code>1,400</code> DNA",
+        f"▫️ حماسی + حماسی: <code>800</code> DNA",
+        f"▫️ حماسی + کمیاب: <code>500</code> DNA",
+        f"▫️ کمیاب + کمیاب: <code>300</code> DNA",
+        f"▫️ کمیاب + عادی: <code>200</code> DNA",
+        f"▫️ عادی + عادی: <code>100</code> DNA",
     ])
     return "\n".join([
         "📖 <b>راهنمای غار هیولا</b>",
-        "",
+        div,
         "🥚 <b>فرایند جفت‌گیری</b>",
-        "• دو هیولای آزاد رو انتخاب می‌کنی؛ جفت‌گیری انجام می‌شه (والدین بعد از تخم‌گذاری آزاد می‌شن) و یک "
-        "تخم جدید به دست می‌آد که پس از رشد مشخص، باز خواهد شد.",
-        "", div, "",
+        "<blockquote>دو هیولای آزاد رو انتخاب می‌کنی؛ جفت‌گیری انجام می‌شه (والدین بعد از تخم‌گذاری آزاد می‌شن) و یک تخم جدید به دست می‌آد که پس از رشد مشخص، باز خواهد شد.</blockquote>",
+        "",
         "🎲 <b>فرمول رده‌ی تخم</b>",
-        "رده‌ی نوزاد هرگز بالاتر از والدین نخواهد رفت و بر اساس قوانین زیر محاسبه می‌شود:",
-        "• والدین هم‌رده: ۶۰٪ شانس دریافت همان رده | ۴۰٪ شانس یک رده پایین‌تر",
-        "• والدین متفاوت‌رده: ۷۵٪ شانس رده‌ی پایین‌تر | ۲۵٪ شانس رده‌ی بالاتر",
-        "• نژاد نوزاد: در صورت تفاوت نژاد، ۵۰/۵۰ به صورت تصادفی نژاد یکی از والدین منتقل می‌شود.",
-        "", div, "",
+        "<blockquote>رده‌ی نوزاد هرگز بالاتر از والدین نخواهد رفت:\n"
+        "▫️ والدین هم‌رده: <code>۶۰٪</code> همان رده / <code>۴۰٪</code> یک رده پایین‌تر\n"
+        "▫️ والدین متفاوت‌رده: <code>۷۵٪</code> رده‌ی پایین‌تر / <code>۲۵٪</code> رده‌ی بالاتر\n"
+        "▫️ نژاد نوزاد: ۵۰/۵۰ به صورت تصادفی نژاد یکی از والدین منتقل می‌شود.</blockquote>",
+        "",
         "⏱ <b>زمان‌بندی و محدودیت‌ها</b>",
-        f"• مدت جفت‌گیری: {lo} تا {hi} ساعت (بسته به نایابی والدین). ۱ جفت همزمان (با اشتراک طلایی ۲ جفت همزمان).",
-        "• مدت رشد تخم: ۱۰ دقیقه تا ۱ ساعت (امکان رشد همزمان چندین تخم وجود دارد).",
-        "", div, "",
+        f"<blockquote>▫️ مدت جفت‌گیری: <code>{lo}</code> تا <code>{hi}</code> ساعت (بسته به نایابی)\n"
+        "▫️ ظرفیت: ۱ جفت همزمان (با اشتراک طلایی ۲ جفت همزمان)\n"
+        "▫️ مدت رشد تخم: <code>۱۰ دقیقه</code> تا <code>۱ ساعت</code></blockquote>",
+        "",
         "🧬 <b>هزینه DNA</b> <i>(بر اساس ترکیب نایابی والدین)</i>",
-        dna_lines,
-        "", div, "",
+        f"<blockquote>{dna_lines}</blockquote>",
+        "",
         "💎 <b>تسریع زمان (فوری‌سازی)</b>",
-        f"• نرخ پایه: حدود {gem_rate} الماس به ازای هر ساعت. هرچه زمان باقی‌مانده کمتر باشد، هزینه‌ی الماس کاهش می‌یابد.",
-        "", div, "",
+        f"<blockquote>▫️ نرخ پایه: حدود <code>{gem_rate} الماس</code> به ازای هر ساعت.\n"
+        "هرچه زمان باقی‌مانده کمتر باشد، هزینه‌ی الماس کاهش می‌یابد.</blockquote>",
+        "",
         "🐣 <b>مشخصات نوزاد</b>",
-        "• نوزاد هیچ قابلیتی را به ارث نمی‌برد؛ همیشه در سطح ۱ و ۱ ستاره (1⭐) متولد می‌شود و رشد آن "
-        "از صفر خواهد بود (تنها گونه و رده بر اساس والدها تعیین می‌شود).",
+        "<blockquote>▫️ سطح اولیه: <code>سطح 1</code> و <code>1⭐</code>\n"
+        "▫️ نوزاد هیچ قابلیتی را به ارث نمی‌برد و رشد آن از صفر خواهد بود.</blockquote>",
+        div,
     ])
 
 
@@ -402,20 +409,27 @@ async def breeding_pick_b_callback(update: Update, context: ContextTypes.DEFAULT
     fb_label = constants.RARITY_LABELS[info["fallback_rarity"]]
     pct = round(info["top_chance"] * 100)
     if info["top_rarity"] == info["fallback_rarity"]:
-        odds_line = f"🎲 رده‌ی تخم: حتماً <b>{top_label}</b>"
+        odds_lines = f"🎲 رده‌ی تخم: حتماً <b>{top_label}</b> (<code>100٪</code>)"
     else:
-        odds_line = f"🎲 رده‌ی تخم: <b>{pct}٪ {top_label}</b> · <b>{100 - pct}٪ {fb_label}</b>"
+        odds_lines = (
+            f"🎲 شانس رده‌ی تخم:\n"
+            f"▫️ <b>{top_label}</b>: <code>{pct}٪</code>\n"
+            f"▫️ <b>{fb_label}</b>: <code>{100 - pct}٪</code>"
+        )
 
     text = (
-        f"🕳 <b>فرستادن به غار هیولا</b>\n\n"
-        f"<blockquote>{parent_a.name} ({constants.RARITY_LABELS[parent_a.rarity]}) "
-        f"+ {parent_b.name} ({constants.RARITY_LABELS[parent_b.rarity]})</blockquote>\n"
-        f"{odds_line}\n"
-        f"⏱ زمان کل: جفت‌گیری <b>{_format_remaining(info['mating_minutes'] * 60)}</b> + "
-        f"تخم <b>{_format_remaining(info['hatch_minutes'] * 60)}</b>\n"
-        f"{get_emoji('dna')} هزینه: <b>{info['dna']:,}</b> DNA (موجودی: {user.dna_fragments:,})\n\n"
-        f"{get_emoji('egg')} <b>چی از تخم درمیاد؟ تا سر باز نکنه هیچ‌کس نمی‌دونه.</b>\n"
-        "<i>رده‌ی تخم فقط به رده‌ی والدین بستگی داره و هیچ‌وقت ازشون بالاتر نمی‌ره.</i>"
+        f"🕳 <b>فرستادن به غار هیولا</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"<blockquote>🧬 والدین انتخابی:\n"
+        f"▫️ {parent_a.name} ({constants.RARITY_LABELS[parent_a.rarity]})\n"
+        f"▫️ {parent_b.name} ({constants.RARITY_LABELS[parent_b.rarity]})</blockquote>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"{odds_lines}\n\n"
+        f"⏱ زمان جفت‌گیری: <code>{_format_remaining(info['mating_minutes'] * 60)}</code>\n"
+        f"🥚 زمان رشد تخم: <code>{_format_remaining(info['hatch_minutes'] * 60)}</code>\n"
+        f"{get_emoji('dna')} هزینه: <code>{info['dna']:,} DNA</code>\n"
+        f"💼 موجودی شما: <code>{user.dna_fragments:,} DNA</code>\n\n"
+        f"<blockquote>{get_emoji('egg')} <i>رده‌ی تخم فقط به رده‌ی والدین بستگی داره و هیچ‌وقت ازشون بالاتر نمی‌ره.</i></blockquote>"
     )
     pair = f"{parent_a.id}:{parent_b.id}"
     rows = [
@@ -559,17 +573,20 @@ async def breeding_hatch_callback(update: Update, context: ContextTypes.DEFAULT_
     await query.answer("🐣 تخم سر باز کرد!")
     upgrade_note = (
         "\n✨ <b>به سقف رده رسید!</b>" if info["hit_top"]
-        else "\n<i>این‌بار یه رده پایین‌تر دراومد.</i>"
+        else "\n<i>این‌بار یک رده پایین‌تر دراومد.</i>"
     )
     text, keyboard = _panel_render(view)
     photo = get_creature_image_path(child)
     await safe_edit_message_text(
         query,
-        f"🐣 <b>تخم سر باز کرد!</b> ببین چی توش بود:\n\n"
-        f"🦖 <b>{child.name}</b> · <b>{constants.RARITY_LABELS[child.rarity]}</b> · سطح <b>{child.level}</b>"
+        f"🐣 <b>تخم سر باز کرد!</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"🦖 نام: <b>{child.name}</b>\n"
+        f"✨ نایابی: <b>{constants.RARITY_LABELS[child.rarity]}</b>\n"
+        f"📦 سطح: <code>{child.level}</code>"
         f"{upgrade_note}\n\n"
-        f"<i>از {info['parents'][0]} و {info['parents'][1]}</i>\n\n"
-        "━━━━━━━━━━\n" + text,
+        f"<i>والدین: {info['parents'][0]} و {info['parents'][1]}</i>\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n" + text,
         photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,
@@ -602,7 +619,10 @@ async def breeding_cave_finish_ask_callback(update: Update, context: ContextType
     cb_finish = f"brd_cave_finish:{job_id}" if job_id else "brd_cave_finish"
     await safe_edit_message_text(
         query,
-        f"💎 <b>فوری‌کردن جفت‌گیری</b>\n\nبا <b>{price}</b> الماس همین الان تخم گذاشته می‌شه. تأیید می‌کنی؟",
+        f"💎 <b>فوری‌کردن جفت‌گیری</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"<blockquote>با <code>{price} الماس</code> همین الان تخم گذاشته می‌شه.</blockquote>\n\n"
+        f"آیا تأیید می‌کنی؟",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
             btn(f"✅ بله ({price} 💎)", style=PRIMARY, callback_data=cb_finish),
@@ -631,7 +651,10 @@ async def breeding_egg_finish_ask_callback(update: Update, context: ContextTypes
     await query.answer()
     await safe_edit_message_text(
         query,
-        f"💎 <b>فوری‌کردن تخم</b>\n\nبا <b>{price}</b> الماس همین الان آماده‌ی سر باز کردن می‌شه. تأیید می‌کنی؟",
+        f"💎 <b>فوری‌کردن تخم</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"<blockquote>با <code>{price} الماس</code> همین الان آماده‌ی سر باز کردن می‌شه.</blockquote>\n\n"
+        f"آیا تأیید می‌کنی؟",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
             btn(f"✅ بله ({price} 💎)", style=PRIMARY, callback_data=f"brd_egg_finish:{egg_id}"),
@@ -698,8 +721,9 @@ async def breeding_cancel_callback(update: Update, context: ContextTypes.DEFAULT
     ]])
     await safe_edit_message_text(
         query,
-        "⚠️ <b>مطمئنی می‌خوای جفت‌گیری غار رو لغو کنی؟</b>\n"
-        "<blockquote>DNA‌ای که خرج کردی <b>برنمی‌گرده</b>.</blockquote>",
+        "⚠️ <b>لغو جفت‌گیری غار</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "<blockquote>DNAای که خرج کردی <b>برنمی‌گرده</b>. آیا مطمئنی؟</blockquote>",
         parse_mode="HTML", reply_markup=keyboard,
     )
 

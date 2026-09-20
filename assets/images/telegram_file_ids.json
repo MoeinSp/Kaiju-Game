@@ -2,7 +2,6 @@
   "kaijus/electric_tier3.jpg": "AgACAgQAAxkDAAIFkGqlDD8KTp6GVV_EgwhZmLiaAZUuAAKDEGsboo8oUaqhl6zaCTEoAQADAgADeQADPQQ",
   "buildings/bld_main_hall_lvl5.jpg": "AgACAgQAAxkDAAIFmmqlDE_0bMGlWc-A56HCEuFQbwUJAAKEEGsboo8oUZh8QsB3uE5KAQADAgADeQADPQQ",
   "8485889221": {
-    "cache/creature_shahbaz_s1_epic_star1.jpg": "AgACAgQAAxkDAAIFtWqlRrCwTKD1dhNpDbRFLHkB31AoAALBD2sboo8wUajP_mByJUVDAQADAgADeQADPQQ",
     "features/feat_campaign.jpg": "AgACAgQAAxkDAAIFy2qtXH5BT9Fw7ZxwoUC2GpOo1ySfAAJnEGsbdoJoUTjTcTFV6YoGAQADAgADeQADPQQ",
     "cache/creature_azhdahak_s1_common_star1.jpg": "AgACAgQAAxkDAAIF22qtcb_lCESMY_juvnvwkQJX2RSbAAK7DmsbvEFwUctk_m_4TGtvAQADAgADeQADPQQ",
     "features/feat_arena.jpg": "AgACAgQAAxkDAAIF4GqtcfvdZP7XshMUPGitcdi6Otr5AAJ5EGsbdoJoUckwxWbKzSKnAQADAgADeQADPQQ",
@@ -15,6 +14,17 @@
     "cache/bld_card_main_hall_lvl1.jpg": "AgACAgQAAxkDAAIF_mqtqdsQJhko1Y7sVMSWicqfX_g7AAJyD2sbvEFwUX1KBJ3z20egAQADAgADeQADPQQ",
     "cache/bld_card_fusion_lab_lvl1.jpg": "AgACAgQAAxkDAAIF_mqtqeC3ak_Bx_n0ATVzj6mIJZy7AAJzD2sbvEFwUWLpN9Eq9f0oAQADAgADeQADPQQ",
     "features/feat_cat_rewards.jpg": "AgACAgQAAxkDAAIF-WqtqfiJt1h2D_qUON7VK9QlhItFAAL4EGsbdoJoUSgpRRN2dA1LAQADAgADeQADPQQ",
-    "features/feat_mugen_tower.jpg": "AgACAgQAAxkDAAIF-Wqtph7anwABvKo6L5Z2vwttB8TALQAC7hBrG3aCaFEw_DLqP64FyQEAAwIAA3kAAz0E"
+    "features/feat_mugen_tower.jpg": "AgACAgQAAxkDAAIF-Wqtph7anwABvKo6L5Z2vwttB8TALQAC7hBrG3aCaFEw_DLqP64FyQEAAwIAA3kAAz0E",
+    "features/feat_upgrade.jpg": "AgACAgQAAxkDAAIGAmqvdnR0dXZ04xotek-e678RsoDkAAJhD2sbPrN4UdiiVB9ZroPZAQADAgADeQADPQQ",
+    "cache/creature_karkas_darya_s6_mythic_star5.jpg": "AgACAgQAAxkDAAIGAmqvdnjZ7NDtSwvcJ_Bt5kza4841AAJiD2sbPrN4UQ6KvRicTPQkAQADAgADeQADPQQ",
+    "features/feat_fusion.jpg": "AgACAgQAAxkDAAIGCGqvesTId4m6_s5jg9wBI_47WXNSAAJxD2sbPrN4UXBZOH7NaMiOAQADAgADeQADPQQ",
+    "features/feat_blacksmith.jpg": "AgACAgQAAxkDAAIGCGqvevMzmGIh1EszYZJ5uXFcgf0ZAAJyD2sbPrN4UTE2IB-r2rwtAQADAgADeQADPQQ",
+    "features/feat_biocrate.jpg": "AgACAgQAAxkDAAIGCGqvfRRjRr2oSkZZkRPagSVFC9wLAAJ0D2sbPrN4UQHJb9tH4cNTAQADAgADeQADPQQ",
+    "cache/loot_batch_9baaaec16dc22298.jpg": "AgACAgQAAxkDAAIGCGqvfRk6bDomDtNOC15KmV3v0EvrAAJ1D2sbPrN4UXyEbPxzIsm5AQADAgADeQADPQQ",
+    "features/feat_collection.jpg": "AgACAgQAAxkDAAIGCGqvfSEB91kUkVUQNZziGms4E1FgAAJ2D2sbPrN4UTvfcDZ8sUsjAQADAgADeQADPQQ",
+    "cache/creature_karkas_darya_s1_mythic_star1.jpg": "AgACAgQAAxkDAAIGC2qvfujahJS5iFqz19pYp6PvlHxTAAJ4D2sbPrN4UbkkI7Ie1w0hAQADAgADeQADPQQ",
+    "features/feat_banner.jpg": "AgACAgQAAxkDAAIGC2qvf4oXpQABZMhR7UHgAmsgkJco-wACeQ9rGz6zeFElUMpGOV_UEwEAAwIAA3kAAz0E",
+    "features/feat_guide.jpg": "AgACAgQAAxkDAAIGDWqvgHdGMlFIUgizchpx32R0I2BAAAJ7D2sbPrN4UUCQJozlGLzuAQADAgADeQADPQQ",
+    "cache/creature_shahbaz_s1_epic_star1.jpg": "AgACAgQAAxkDAAIFtWqlRrCwTKD1dhNpDbRFLHkB31AoAALBD2sboo8wUajP_mByJUVDAQADAgADeQADPQQ"
   }
 }

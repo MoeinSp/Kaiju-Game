@@ -22,8 +22,10 @@ def _bm_sync(tg_user):
 def _render_bm_text(user: User, auctions: list[BlackMarketAuction]) -> str:
     lines = [
         "⏳ <b>بازار سیاه و مزایده‌های شبانه</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
         "<i>هر شب اقلام نایاب و بسته‌های باارزش برای مزایده گذاشته می‌شوند.</i>\n",
-        f"💰 موجودی شما: <b>{user.coins:,}</b> طلا · <b>{user.diamonds:,}</b> الماس\n",
+        f"💰 موجودی طلا: <code>{user.coins:,} طلا</code>",
+        f"💎 موجودی الماس: <code>{user.diamonds:,} الماس</code>",
         "━━━━━━━━━━━━━━━━━━━━",
     ]
     if not auctions:
@@ -38,10 +40,10 @@ def _render_bm_text(user: User, auctions: list[BlackMarketAuction]) -> str:
             rem_str = blackmarket.format_time_remaining(rem_secs)
             lines.append(
                 f"🏷 <b>{a.title}</b>\n"
-                f"  💵 بالاترین پیشنهاد: <b>{a.current_bid:,}</b> {curr}\n"
-                f"  👤 برنده فعلی: <b>{top_bidder}</b>\n"
-                f"  ⏱ <b>مهلت:</b> {deadline_str}\n"
-                f"  ⏳ <b>مهلت تا پایان:</b> <b>{rem_str}</b>\n"
+                f"<blockquote>💵 بالاترین پیشنهاد: <code>{a.current_bid:,} {curr}</code>\n"
+                f"👤 پیشنهاد دهنده برتر: <b>{top_bidder}</b>\n"
+                f"⏱ مهلت: <code>{deadline_str}</code>\n"
+                f"⏳ زمان باقیمانده: <code>{rem_str}</code></blockquote>\n"
             )
     return "\n".join(lines)
 
@@ -49,23 +51,20 @@ def _render_bm_text(user: User, auctions: list[BlackMarketAuction]) -> str:
 def _render_bm_keyboard(auctions: list[BlackMarketAuction]) -> InlineKeyboardMarkup:
     rows = []
     for a in auctions:
-        curr = "طلا" if a.bid_currency == "coins" else "💎"
+        curr = "طلا" if a.bid_currency == "coins" else "الماس"
         step = blackmarket.get_min_bid_increment(a.current_bid, a.bid_currency)
         next_bid = (a.current_bid + step) if a.highest_bidder_id is not None else a.min_bid
-        short_title = a.title[:14]
         rows.append([
-            btn(f"➕ پیشنهاد {next_bid:,} {curr} ({short_title}...)",
+            btn(f"پیشنهاد {next_bid:,} {curr}",
                 emoji_key="btn_bm_bid",
                 style=SHOP,
-                callback_data=f"bm_bid:{a.id}:{next_bid}")
-        ])
-        rows.append([
-            btn(f"🔢 ثبت پیشنهاد دلخواه ({short_title}...)",
+                callback_data=f"bm_bid:{a.id}:{next_bid}"),
+            btn("پیشنهاد دلخواه",
                 emoji_key="btn_custom_amt",
                 style=CONFIRM,
                 callback_data=f"bm_custom:{a.id}")
         ])
-    rows.append([btn("🔄 بروزرسانی بازار", emoji_key="btn_bm_refresh", style=NAV, callback_data="bm:refresh")])
+    rows.append([btn("بروزرسانی بازار", emoji_key="btn_bm_refresh", style=NAV, callback_data="bm:refresh")])
     rows.append([back_btn("menu:me")])
     return InlineKeyboardMarkup(rows)
 
@@ -78,7 +77,7 @@ def _render_confirmation_text(preview: dict) -> str:
     prev_name = preview["prev_bidder_name"] or "هنوز پیشنهادی ثبت نشده"
     prev_amount = preview["prev_amount"]
     
-    cost_info = f"<b>{cost:,}</b> {curr}"
+    cost_info = f"<code>{cost:,} {curr}</code>"
     if preview.get("is_own_increase"):
         cost_info += f" <i>(افزایش روی پیشنهاد قبلی خودتان)</i>"
 
@@ -88,11 +87,13 @@ def _render_confirmation_text(preview: dict) -> str:
 
     lines = [
         "🏷 <b>تأیید نهایی ثبت پیشنهاد در مزایده</b>",
-        f"«<b>{auc.title}</b>»\n",
-        f"💵 پیشنهاد شما: <b>{bid_amount:,}</b> {curr}",
-        f"👤 بالاترین پیشنهاد قبلی: <b>{prev_name}</b> ({prev_amount:,} {curr})",
-        f"💰 مبلغ کسر از حساب: {cost_info}",
-        f"⏱ <b>مهلت:</b> {deadline_str} <i>(⏳ {rem_str} تا پایان)</i>\n",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"مزایده: <b>{auc.title}</b>\n",
+        f"<blockquote>💵 پیشنهاد شما: <code>{bid_amount:,} {curr}</code>\n"
+        f"👤 بالاترین پیشنهاد قبلی: <b>{prev_name}</b> (<code>{prev_amount:,} {curr}</code>)\n"
+        f"💰 مبلغ کسر از حساب: {cost_info}\n"
+        f"⏱ مهلت: <code>{deadline_str}</code>\n"
+        f"⏳ زمان باقیمانده: <code>{rem_str}</code></blockquote>",
         "━━━━━━━━━━━━━━━━━━━━",
         "⚠️ <i>آیا از ثبت این پیشنهاد با مبلغ فوق اطمینان دارید؟</i>",
     ]
@@ -102,18 +103,15 @@ def _render_confirmation_text(preview: dict) -> str:
 def _render_confirmation_keyboard(preview: dict) -> InlineKeyboardMarkup:
     auc = preview["auction"]
     bid_amount = preview["bid_amount"]
-    curr = "طلا" if preview["currency"] == "coins" else "الماس"
     return InlineKeyboardMarkup([
         [
             btn(
-                f"✅ بله، ثبت پیشنهاد ({bid_amount:,} {curr})",
+                "تأیید پیشنهاد",
                 emoji_key="btn_confirm",
                 style=CONFIRM,
                 callback_data=f"bm_bid_go:{auc.id}:{bid_amount}",
-            )
-        ],
-        [
-            back_btn("menu:blackmarket", "❌ انصراف و بازگشت")
+            ),
+            back_btn("menu:blackmarket", "انصراف"),
         ],
     ])
 
@@ -209,20 +207,23 @@ async def bm_custom_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     }
     await query.answer()
     text = (
-        f"🏷 <b>ثبت پیشنهاد دلخواه در مزایده:</b>\n"
-        f"«<b>{auc.title}</b>»\n\n"
-        f"💵 بالاترین پیشنهاد فعلی: <b>{auc.current_bid:,}</b> {curr}\n"
-        f"📈 حداقل افزایش مجاز: <b>+{step:,}</b> {curr}\n"
-        f"🎯 <b>حداقل مبلغ کل پیشنهادی:</b> <b>{min_required:,}</b> {curr}\n"
-        f"⏱ <b>مهلت:</b> {deadline_str} <i>(⏳ {rem_str} تا پایان)</i>\n\n"
-        f"لطفاً مبلغ مورد نظر خود را همینجا ارسال کنید:\n"
+        f"🏷 <b>ثبت پیشنهاد دلخواه در مزایده</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"مزایده: <b>{auc.title}</b>\n\n"
+        f"<blockquote>💵 بالاترین پیشنهاد فعلی: <code>{auc.current_bid:,} {curr}</code>\n"
+        f"📈 حداقل افزایش مجاز: <code>+{step:,} {curr}</code>\n"
+        f"🎯 حداقل پیشنهاد کل: <code>{min_required:,} {curr}</code>\n"
+        f"⏱ مهلت: <code>{deadline_str}</code>\n"
+        f"⏳ زمان باقیمانده: <code>{rem_str}</code></blockquote>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"لطفاً مبلغ مورد نظر خود را ارسال کنید:\n"
         f"<i>(مثال: <code>{min_required}</code>)</i>"
     )
     await safe_edit_message_text(
         query,
         text,
         parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([[back_btn("menu:blackmarket", "انصراف و بازگشت")]]),
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:blackmarket", "انصراف")]]),
     )
 
 

@@ -129,8 +129,9 @@ async def war_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.answer()
     lines = [
         "⚔️ <b>جنگ هفتگی اتحادها</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
         f"<blockquote>هر فعالیتِ اعضا امتیاز جنگ می‌ده. آخر هفته خزانه‌ی اتحاد اول "
-        f"<b>{view['bonus']} طلا</b> جایزه می‌گیره!</blockquote>",
+        f"<b>{view['bonus']:,} طلا</b> جایزه می‌گیره!</blockquote>",
         "",
     ]
     medals = ["🥇", "🥈", "🥉"]
@@ -138,7 +139,7 @@ async def war_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         for i, row in enumerate(view["board"]):
             tag = medals[i] if i < 3 else f"{i + 1}."
             mine = " ⬅️ <b>اتحاد تو</b>" if row["id"] == view["my_id"] else ""
-            lines.append(f"{tag} <b>{row['name']}</b> — {row['war_points']} امتیاز{mine}")
+            lines.append(f"{tag} <b>{row['name']}</b> — <b>{row['war_points']:,}</b> امتیاز{mine}")
         if view["my_id"] and not any(r["id"] == view["my_id"] for r in view["board"]):
             lines.append(f"\n<i>اتحاد تو ({view['my_name']}) هنوز توی جدول نیست — فعالیت کنید!</i>")
     else:

@@ -17,9 +17,9 @@ def _panel_sync(tg_user):
 
 def _render(equipped, avail, total) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
-        f"🏅 <b>لقب‌ها</b>  ({len(avail)}/{total} باز شده)",
+        f"🏅 <b>لقب‌ها</b> ({len(avail)}/{total} باز شده)",
         "<blockquote>لقب‌ها با پیشرفتت باز می‌شن و کنار اسم آزمایشگاهت نشون داده می‌شن. "
-        "یکی رو انتخاب کن تا پز بدی!</blockquote>",
+        "یکی رو انتخاب کن تا به بقیه نشان بدی!</blockquote>",
     ]
     rows = []
     for t in avail:

@@ -57,9 +57,9 @@ def _home_render(oid: int, coins: int, dna: int, in_group: bool) -> tuple[str, I
         "می‌خوای کدوم رو بخری؟"
     )
     rows = [
-        [btn("💰 خرید طلا (با DNA)", emoji_key="btn_gold_shop", style=BUILD, callback_data=f"exch:pick:buy_gold:{oid}")],
-        [btn("🧬 خرید DNA (با طلا)", emoji_key="btn_exchange", style=SHOP, callback_data=f"exch:pick:buy_dna:{oid}")],
-        [btn("🎟 مبادله تجهیزات با بلیط", emoji_key="btn_ticket_exchange", style=NAV,
+        [btn("خرید طلا", emoji_key="btn_gold_shop", style=BUILD, callback_data=f"exch:pick:buy_gold:{oid}")],
+        [btn("خرید DNA", emoji_key="btn_exchange", style=SHOP, callback_data=f"exch:pick:buy_dna:{oid}")],
+        [btn("مبادله تجهیزات با بلیط", emoji_key="btn_ticket_exchange", style=NAV,
              callback_data=f"exch:tickets:{oid}")],
         _leave_row(in_group),
     ]
@@ -96,15 +96,14 @@ def _amount_render(oid: int, direction: str, coins: int, dna: int, in_group: boo
         for gold in exchange.PRESET_GOLD:
             need_dna = exchange.dna_for_gold(gold)
             got_gold = exchange.sell_gold_gain(need_dna)
-            label = f"💰 دریافت {got_gold:,} طلا (با {need_dna} DNA)"
-            rows.append([btn(label, emoji_key="btn_exchange", style=BUILD, callback_data=f"exch:amt:{direction}:{need_dna}:{oid}")])
+            label = f"دریافت {got_gold:,} طلا"
+            rows.append([btn(label, emoji_key="btn_gold_shop", style=BUILD, callback_data=f"exch:amt:{direction}:{need_dna}:{oid}")])
     else:
         for amt in exchange.PRESET_DNA:
-            pack = exchange.describe(direction, amt)
-            label = f"🧬 دریافت {amt} DNA (با {pack['gold']:,} طلا)"
-            rows.append([btn(label, emoji_key="btn_exchange", style=BUILD, callback_data=f"exch:amt:{direction}:{amt}:{oid}")])
-    rows.append([btn("✏️ عدد دلخواه", emoji_key="btn_charge", style=NAV, callback_data=f"exch:custom:{direction}:{oid}")])
-    rows.append([btn("↩️ بازگشت", emoji_key="btn_back", style=NAV, callback_data=f"exch:home:{oid}")])
+            label = f"دریافت {amt:,} DNA"
+            rows.append([btn(label, emoji_key="btn_exchange", style=SHOP, callback_data=f"exch:amt:{direction}:{amt}:{oid}")])
+    rows.append([btn("عدد دلخواه", emoji_key="btn_custom_amt", style=NAV, callback_data=f"exch:custom:{direction}:{oid}")])
+    rows.append([back_btn(f"exch:home:{oid}")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -123,8 +122,8 @@ def build_confirm(oid: int, pack: dict, coins: int, dna: int) -> tuple[str, Inli
         f"موجودی فعلی: {coins:,} طلا · {dna:,} DNA</blockquote>"
     )
     rows = [[
-        btn("تأیید", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"exchgo:{d}:{pack['dna']}:{oid}"),
-        btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data=f"exch:pick:{d}:{oid}"),
+        btn("تأیید مبادله", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"exchgo:{d}:{pack['dna']}:{oid}"),
+        btn("انصراف", emoji_key="btn_cancel", style=DANGER, callback_data=f"exch:pick:{d}:{oid}"),
     ]]
     return text, InlineKeyboardMarkup(rows)
 

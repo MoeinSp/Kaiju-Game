@@ -34,7 +34,7 @@ def _render(idle_st: dict, dg_st: dict) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
         "💤 <b>پاداش آفلاین و دخمه‌ی روزانه</b>",
         f"<blockquote>🕰 <b>صندوق آفلاین</b> — {hrs:.1f} ساعت جمع شده{cap_note}\n"
-        f"{get_emoji('coin')} {idle_st['coins']} طلا  +  {get_emoji('dna')} {idle_st['dna']} DNA\n"
+        f"{get_emoji('coin')} <b>{idle_st['coins']:,}</b> طلا  +  {get_emoji('dna')} <b>{idle_st['dna']:,}</b> DNA\n"
         f"<i>تا سقف {idle_st['cap_hours']} ساعت جمع می‌شه؛ هرچی قوی‌تر باشی، بیشتر.</i></blockquote>",
         f"\n{dg['emoji']} <b>دخمه‌ی امروز: {dg['title']}</b>",
         f"<blockquote>{dg['boss_flavor']}\n"

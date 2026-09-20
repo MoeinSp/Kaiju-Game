@@ -67,8 +67,10 @@ def _buildings_sync(tg_user):
     alert_txt = ""
     if (user.plundered_alert_gold or 0) > 0 or (user.plundered_alert_dna or 0) > 0:
         alert_txt = (
-            f"⚠️ <b>هشدار غارت معدن:</b> در حمله اخیر آرنا به شما، بخشی از منابع ذخیره‌شده شامل "
-            f"<b>{user.plundered_alert_gold:,}</b> طلا و <b>{user.plundered_alert_dna:,}</b> DNA به غارت رفت!\n\n"
+            f"⚠️ <b>هشدار غارت معدن</b>\n"
+            f"در حمله اخیر آرنا به شما، بخشی از منابع ذخیره‌شده به غارت رفت:\n"
+            f"💰 طلا: <code>{user.plundered_alert_gold:,}</code>\n"
+            f"🧬 DNA: <code>{user.plundered_alert_dna:,}</code>\n\n"
         )
         user.plundered_alert_gold = 0
         user.plundered_alert_dna = 0
@@ -93,14 +95,15 @@ def _buildings_keyboard(building_rows, upgrading_ids, busy_count, slots, diamond
     for b, pending, unlocked in building_rows:
         label = constants.BUILDING_LABELS[b.building_type]
         if b.level == 0:
-            state = "🔒 ساخته‌نشده" if unlocked else f"🔒 از سطح {unlock_level_for(b.building_type)} تالار"
+            state = "ساخته‌نشده" if unlocked else f"سطح {unlock_level_for(b.building_type)} تالار"
         else:
-            state = f"Lv{b.level}" + (f" (+{pending})" if pending else "")
-        busy_tag = " ⏳" if b.id in upgrading_ids else ""
+            state = f"سطح {b.level}" + (f" (+{pending:,})" if pending else "")
+        busy_tag = " (ارتقا)" if b.id in upgrading_ids else ""
         rows.append([btn(f"{label} — {state}{busy_tag}", emoji_key=f"btn_bld_{b.building_type}", style=LIST, callback_data=f"bld_pick:{b.id}")])
     if slots < constants.MAX_BUILDER_SLOTS:
         rows.append([btn(
-            f"👷‍♂️ خرید کارگر دوم ({constants.SECOND_BUILDER_DIAMONDS} 💎)",
+            "خرید کارگر دوم",
+            emoji_key="btn_workers",
             style=SHOP, callback_data="bld_buy_builder",
         )])
     rows.append([back_btn("menu:me")])
@@ -111,9 +114,10 @@ def _buildings_text(busy_count, slots, hall_level: int) -> str:
     hall = constants.BUILDING_LABELS[constants.MAIN_BUILDING]
     lines = [
         f"{get_emoji('building')} <b>ساختمون‌های تو</b>",
-        f"{hall}: سطح <b>{hall_level}</b>/{constants.BUILDING_MAX_LEVEL}",
-        f"👷‍♂️ کارگرها: <b>{busy_count}/{slots}</b> مشغول",
-        "",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"🏛 {hall}: سطح <code>{hall_level}</code> / <code>{constants.BUILDING_MAX_LEVEL}</code>",
+        f"👷‍♂️ کارگران: <code>{busy_count}</code> / <code>{slots}</code> مشغول",
+        "━━━━━━━━━━━━━━━━━━━━",
     ]
     if slots < constants.MAX_BUILDER_SLOTS:
         lines.append(
@@ -121,7 +125,7 @@ def _buildings_text(busy_count, slots, hall_level: int) -> str:
         )
     lines.append("رو هرکدوم بزن تا جزئیاتش رو ببینی:")
     lines.append(
-        f"\n<blockquote>هیچ ساختمونی نمی‌تونه از سطح {hall_level} جلو بزنه — "
+        f"\n<blockquote>هیچ ساختمونی نمی‌تونه از سطح <code>{hall_level}</code> جلو بزنه — "
         "برای باز شدن بقیه، اول اون رو ارتقا بده.</blockquote>"
     )
     return "\n".join(lines)
@@ -185,7 +189,7 @@ def _pbar(current, total, width: int = 10) -> str:
     total = max(int(total), 1)
     pct = max(0, min(100, round(current / total * 100)))
     filled = min(width, max(0, round(width * max(current, 0) / total)))
-    return f"[{'■' * filled}{'□' * (width - filled)}] {pct}%"
+    return f"[{'■' * filled}{'□' * (width - filled)}] <code>{pct}٪</code>"
 
 
 def _building_detail_text(view: dict) -> str:
@@ -197,7 +201,7 @@ def _building_detail_text(view: dict) -> str:
     btype = building.building_type
     label = constants.BUILDING_LABELS[btype]
     unlocked = view["unlocked"]
-    div = "───"
+    div = "━━━━━━━━━━━━━━━━━━━━"
 
     # ── producing buildings get the rich "collector" dashboard ────────────────
     if produces(btype) and building.level > 0:
@@ -208,21 +212,25 @@ def _building_detail_text(view: dict) -> str:
         cap_store = view["store_cap"]
         en = _COLLECTOR_EN.get(btype, "")
         lines = [
-            f"🏭 <b>{label}</b>" + (f" | {en}" if en else ""),
-            f"🎖 سطح سازه: <b>{building.level}/{cap}</b>",
-            f"📦 مخزن: {_pbar(pending, cap_store)} ({pending:,}/{cap_store:,})",
-            f"{resource_emoji} آماده برداشت: <b>+{pending:,}</b>",
+            f"🏭 <b>{label}</b>" + (f"\n<i>{en}</i>" if en else ""),
             div,
-            f"📈 نرخ کل: <b>{rate:.1f}</b>/ساعت (پایه: {base_rate:g} ┃ بونوس: +{bonus * 100:.0f}٪)",
+            f"🎖 سطح سازه: <code>{building.level}</code> / <code>{cap}</code>",
+            f"📦 وضعیت مخزن: {_pbar(pending, cap_store)}",
+            f"📊 ظرفیت ذخیره: <code>{pending:,}</code> / <code>{cap_store:,}</code>",
+            f"{resource_emoji} آماده برداشت: <code>+{pending:,}</code>",
             div,
-            f"👷‍♂️ کارگران مستقر ({len(workers)}/{slots}):",
+            f"📈 نرخ کل تولید: <code>{rate:.1f}</code> در ساعت",
+            f"▫️ تولید پایه: <code>{base_rate:g}</code>",
+            f"▫️ بونوس کارگران: <code>+{bonus * 100:.0f}٪</code>",
+            div,
+            f"👷‍♂️ کارگران مستقر (<code>{len(workers)}</code> / <code>{slots}</code>):",
         ]
         if workers:
             influence = view.get("worker_influence", {})
             w_lines = []
             for c in workers:
                 gain = influence.get(c.id, 0.0) * 100
-                w_lines.append(f"▫️ {c.name} (+{gain:.0f}٪)")
+                w_lines.append(f"▫️ {c.name} (<code>+{gain:.0f}٪</code>)")
             lines.append("\n".join(w_lines))
         else:
             lines.append("<i>خالیه — کایجو بذار تا تولید بیشتر بشه.</i>")
@@ -230,10 +238,11 @@ def _building_detail_text(view: dict) -> str:
         # upgrade / status block for producers
         if upgrade is not None:
             remaining = (upgrade.finishes_at - timezone.now()).total_seconds()
-            lines.append(f"⏳ در حال ارتقا تا سطح {upgrade.target_level} — {_format_remaining(remaining)} مونده")
-            lines.append(f"<i>با کارت سرعت یا {diamond_finish_price(upgrade)} 💎 تمومش کن.</i>")
+            lines.append(f"⏳ در حال ارتقا تا سطح <code>{upgrade.target_level}</code>")
+            lines.append(f"⏱ زمان باقیمانده: <code>{_format_remaining(remaining)}</code>")
+            lines.append(f"<i>با کارت سرعت یا <code>{diamond_finish_price(upgrade)} 💎</code> تمومش کن.</i>")
         elif all_builders_busy:
-            lines.append(f"⏳ هر دو کارگرت مشغول ساختمون‌های دیگه‌ان ({busy_count}/{builder_slots_n}).")
+            lines.append(f"⏳ هر دو کارگرت مشغول ساختمون‌های دیگه‌ان (<code>{busy_count}</code> / <code>{builder_slots_n}</code>).")
         elif building.level >= constants.BUILDING_MAX_LEVEL:
             lines.append("🏆 این سازه به سقف سطح رسیده.")
         elif building.level >= cap:
@@ -241,58 +250,103 @@ def _building_detail_text(view: dict) -> str:
             lines.append(f"🔒 برای ادامه اول باید {hall} رو ارتقا بدی.")
         else:
             cost, _minutes = upgrade_cost_and_minutes(building)
-            lines.append(f"🔧 پیش‌نیاز سطح {building.level + 1}: {get_emoji('coin')} {cost:,} طلا ┃ ⏳ {_format_remaining(upgrade_seconds(building))}")
+            lines.append(f"🔧 ارتقا به سطح <code>{building.level + 1}</code>:")
+            lines.append(f"💰 هزینه: <code>{cost:,} طلا</code>")
+            lines.append(f"⏱ زمان ساخت: <code>{_format_remaining(upgrade_seconds(building))}</code>")
         return "\n".join(lines)
 
     # ── non-producing / not-yet-built buildings: a clean, consistent "info card" ─────
     hall = constants.BUILDING_LABELS[constants.MAIN_BUILDING]
     # header status tag
     if building.level == 0:
-        status_tag = "🔒 (قفل)" if not unlocked else "🔒 (ساخته‌نشده)"
+        status_tag = "🔒 <i>(قفل)</i>" if not unlocked else "🔒 <i>(ساخته‌نشده)</i>"
     else:
-        status_tag = f"— سطح {building.level}/{cap}"
+        status_tag = f"سطح <code>{building.level}</code> / <code>{cap}</code>"
         if btype != constants.MAIN_BUILDING and cap < constants.BUILDING_MAX_LEVEL:
-            status_tag += " (سقف با تالار مِهر)"
-    lines = [f"{label} {status_tag}", "", constants.BUILDING_DESCRIPTIONS[btype], ""]
+            status_tag += " <i>(سقف با تالار مِهر)</i>"
+    lines = [
+        f"🏛 <b>{label}</b>",
+        f"📌 وضعیت: {status_tag}",
+        div,
+        f"<i>{constants.BUILDING_DESCRIPTIONS[btype]}</i>",
+        div,
+    ]
 
-    # info bullets — each begins with its own icon so it reads as a bullet list
+    # info bullets
     if building.level == 0 and not unlocked:
-        lines.append(f"🔓 پیش‌نیاز باز شدن: {hall} (سطح {unlock_level_for(btype)})")
+        lines.append(f"🔓 پیش‌نیاز باز شدن: {hall} (سطح <code>{unlock_level_for(btype)}</code>)")
     benefit = constants.BUILDING_UPGRADE_BENEFIT.get(btype)
     if benefit:
         lines.append(f"📈 مزیت ارتقا: {benefit}")
     note = constants.BUILDING_RULE_NOTE.get(btype)
     if note:
-        lines.append(note)
+        lines.append(f"<blockquote>{note}</blockquote>")
     # live built-state extras
     if btype == "blacksmith" and building.level > 0:
-        lines.append(f"🔨 سقفِ فعلیِ سطحِ تجهیزات: <b>+{building.level * constants.EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL}</b>")
+        lines.append(f"🔨 سقفِ فعلیِ سطحِ تجهیزات: <code>+{building.level * constants.EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL}</code>")
     if btype == constants.MAIN_BUILDING and building.level > 0:
-        lines.append(f"⭐ سقفِ فعلیِ ستاره‌ی هیولاها: <b>{building.level}</b>")
+        lines.append(f"⭐ سقفِ فعلیِ ستاره‌ی هیولاها: <code>{building.level}</code>")
+        next_lvl = building.level + 1
+        if next_lvl <= constants.BUILDING_MAX_LEVEL:
+            _UNLOCKS_BY_HALL = {
+                2: [
+                    "🔮 تالار ادغام و غار هیولا",
+                    "🧬 ساخت آزمایشگاه DNA و تالار تجارت",
+                    "🎫 دسترسی به پاس ماهانه و صرافی طلا/DNA",
+                    "⭐ افزایش سقف ترکیب به ۲ ستاره",
+                ],
+                3: [
+                    "⚒ ساخت و بازگشایی آهنگری تجهیزات",
+                    "👥 چیدمان تیم ۳ نفره مبارزات",
+                    "💎 ساخت معدن جمع‌کننده الماس",
+                    "🏆 ورود به لیگ رتبه‌بندی و رویدادها",
+                    "🛡 فروشگاه سپر و مبادله تجهیزات",
+                    "⭐ افزایش سقف ترکیب به ۳ ستاره",
+                ],
+                4: [
+                    "🗺 نبردهای کمپین و دانجن داستانی",
+                    "🏛 دسترسی به حراجی بازار سیاه",
+                    "🎰 گردونه و بازی‌های کازینو",
+                    "🎖 کسب عناوین افتخاری و رتبه‌بندی خزانه",
+                    "⭐ افزایش سقف ترکیب به ۴ ستاره",
+                ],
+                5: [
+                    "🏰 صعود به ۱۰۰ طبقه برج موگن",
+                    "🔬 ساخت آزمایشگاه تحقیقات ژنتیک",
+                    "👑 شرکت در لیگ اتحادها و رتبه‌بندی رید",
+                    "🛍 گردونه بنر ویژه و شاپ آیتم‌های خاص",
+                    "⭐ افزایش سقف ترکیب به ۵ ستاره (نهایی)",
+                ],
+            }
+            unlock_items = _UNLOCKS_BY_HALL.get(next_lvl, [])
+            if unlock_items:
+                lines.append(f"\n✨ <b>امکانات بازشونده در سطح <code>{next_lvl}</code>:</b>")
+                quote_text = "\n".join(f"▫️ {item}" for item in unlock_items)
+                lines.append(f"<blockquote>{quote_text}</blockquote>")
 
-    lines += ["", div]
+    lines += [div]
     # footer: current build/upgrade state
     if upgrade is not None:
         remaining = (upgrade.finishes_at - timezone.now()).total_seconds()
         verb = "ساخت" if building.level == 0 else "ارتقا"
-        lines.append(f"⏳ در حال {verb} تا سطح {upgrade.target_level} — {_format_remaining(remaining)} مونده")
+        lines.append(f"⏳ در حال {verb} تا سطح <code>{upgrade.target_level}</code>")
+        lines.append(f"⏱ زمان باقیمانده: <code>{_format_remaining(remaining)}</code>")
         lines.append(
-            f"<i>می‌تونی با کارت سرعت یا {diamond_finish_price(upgrade)} 💎 همین الان تمومش کنی "
-            "(هرچی بیشتر صبر کنی، ارزون‌تر می‌شه).</i>"
+            f"<i>می‌تونی با کارت سرعت یا <code>{diamond_finish_price(upgrade)} 💎</code> همین الان تمومش کنی.</i>"
         )
     elif building.level == 0 and not unlocked:
-        lines.append(f"🔒 هنوز قفله — از سطح {unlock_level_for(btype)} {hall} باز می‌شه.")
+        lines.append(f"🔒 هنوز قفله — از سطح <code>{unlock_level_for(btype)}</code> {hall} باز می‌شه.")
     elif all_builders_busy:
-        lines.append(f"⏳ کارگرها: هر دو کارگرت مشغول ساختمون‌های دیگه‌ان ({busy_count}/{builder_slots_n}).")
+        lines.append(f"⏳ کارگرها: هر دو کارگرت مشغول ساختمون‌های دیگه‌ان (<code>{busy_count}</code> / <code>{builder_slots_n}</code>).")
     elif building.level >= constants.BUILDING_MAX_LEVEL:
         lines.append("🏆 این ساختمون به سقف سطح رسیده.")
     elif building.level >= cap:
         lines.append(f"🔒 برای ادامه اول باید {hall} رو ارتقا بدی.")
     else:
         cost, _minutes = upgrade_cost_and_minutes(building)
-        verb = "🏗 ساخت" if building.level == 0 else "🔧 ارتقا به سطح"
-        target = "" if building.level == 0 else f" {building.level + 1}"
-        lines.append(f"{verb}{target}: {cost:,} {get_emoji('coin')} · {_format_remaining(upgrade_seconds(building))}")
+        verb = "🏗 هزینه ساخت" if building.level == 0 else f"🔧 هزینه ارتقا به سطح <code>{building.level + 1}</code>"
+        lines.append(f"{verb}: <code>{cost:,} طلا</code>")
+        lines.append(f"⏱ مدت زمان: <code>{_format_remaining(upgrade_seconds(building))}</code>")
     return "\n".join(lines)
 
 
@@ -303,12 +357,11 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
     rows = []
     if produces(building.building_type) and building.level > 0:
         res_name = _RESOURCE_NAMES.get(constants.BUILDING_PRODUCTION[building.building_type]["resource"], "")
-        pend = view.get("pending", 0)
-        rows.append([btn(f"جمع‌آوری {res_name} (+{pend:,})", emoji_key="btn_collect", style=BUILD, callback_data=f"bld_collect:{building.id}")])
+        rows.append([btn(f"جمع‌آوری {res_name}", emoji_key="btn_collect", style=BUILD, callback_data=f"bld_collect:{building.id}")])
         rows.append(
             [
                 btn(
-                    f"👷‍♂️ مدیریت کارگران ({len(workers)}/{slots})",
+                    f"مدیریت کارگران ({len(workers)}/{slots})",
                     emoji_key="btn_workers",
                     style=PRIMARY,
                     callback_data=f"bld_workers:{building.id}",
@@ -316,20 +369,14 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
             ]
         )
     if upgrade is not None:
-        rows.append([btn("سریع‌ترش کن", emoji_key="btn_speedup", style=SHOP, callback_data=f"bld_speedup_list:{building.id}")])
+        rows.append([
+            btn("تسریع با کارت", emoji_key="btn_speedup", style=SHOP, callback_data=f"bld_speedup_list:{building.id}"),
+            btn("اتمام فوری", emoji_key="btn_bld_diamond_collector", style=SHOP, callback_data=f"bld_finish_ask:{building.id}"),
+        ])
         rows.append(
             [
                 btn(
-                    f"💎 تمومش کن ({diamond_finish_price(upgrade)} الماس)",
-                    style=SHOP,
-                    callback_data=f"bld_finish_ask:{building.id}",
-                )
-            ]
-        )
-        rows.append(
-            [
-                btn(
-                    f"❌ لغو ارتقا (نصف طلا برمی‌گرده: +{cancel_refund(upgrade):,})",
+                    "لغو ارتقا",
                     emoji_key="btn_cancel",
                     style=DANGER,
                     callback_data=f"bld_cancel_ask:{building.id}",
@@ -341,14 +388,14 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
     elif all_builders_busy:
         pass  # both builders are working other buildings — text explains it
     elif building.level < min(cap, constants.BUILDING_MAX_LEVEL):
-        label = "🏗 ساخت" if building.level == 0 else "🔧 شروع ارتقا"
+        label = "شروع ساخت" if building.level == 0 else "شروع ارتقا"
         rows.append([btn(label, emoji_key="btn_build", style=BUILD, callback_data=f"bld_upgrade:{building.id}")])
     if building.building_type == "research_lab" and building.level > 0:
-        rows.append([btn("🔬 پژوهش‌ها", style=PRIMARY, callback_data="menu:research")])
+        rows.append([btn("پژوهش‌ها", emoji_key="btn_research", style=PRIMARY, callback_data="menu:research")])
     if building.building_type == "blacksmith" and building.level > 0:
-        rows.append([btn("⚒ رفتن به آهنگری", emoji_key="btn_forge", style=PRIMARY, callback_data="menu:blacksmith")])
+        rows.append([btn("آهنگری", emoji_key="btn_forge", style=PRIMARY, callback_data="menu:blacksmith")])
     if building.building_type == "fusion_hall" and building.level > 0:
-        rows.append([btn("🧬 رفتن به تالار ادغام", emoji_key="btn_fusion", style=PRIMARY, callback_data="menu:fusion")])
+        rows.append([btn("تالار ادغام", emoji_key="btn_fusion", style=PRIMARY, callback_data="menu:fusion")])
     rows.append([back_btn("menu:buildings")])
     return InlineKeyboardMarkup(rows)
 
@@ -464,19 +511,24 @@ async def building_speedup_list_callback(update: Update, context: ContextTypes.D
     rows = []
     for c in cards:
         row = [btn(
-            f"{constants.speedup_label(c.minutes)} — یکی",
+            f"{constants.speedup_label(c.minutes)} (۱×)",
+            emoji_key="btn_speedup",
             style=BUILD, callback_data=f"bld_speedup_do:{building_id}:{c.minutes}",
         )]
         if c.count > 1:
             row.append(btn(
-                f"همه ({c.count})", style=SHOP,
+                f"همه ({c.count}×)",
+                emoji_key="btn_speedup",
+                style=SHOP,
                 callback_data=f"bld_speedup_all:{building_id}:{c.minutes}",
             ))
         rows.append(row)
     rows.append([back_btn(f"bld_pick:{building_id}")])
     await safe_edit_message_text(
         query,
-        f"{get_emoji('speedup')} کدوم کارت سرعت؟ «یکی» یه کارت مصرف می‌کنه، «همه» تا جایی که لازمه از اون کارت می‌ذاره.",
+        f"{get_emoji('speedup')} <b>انتخاب کارت سرعت</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "<blockquote>کارت مورد نظر را برای کاهش زمان ارتقا انتخاب کنید.</blockquote>",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(rows),
     )
@@ -514,11 +566,14 @@ async def building_finish_ask_callback(update: Update, context: ContextTypes.DEF
     await query.answer()
     await safe_edit_message_text(
         query,
-        f"💎 <b>تمام‌کردن فوری با الماس</b>\n\nاین ارتقا با <b>{cost}</b> الماس همین الان تموم می‌شه. تأیید می‌کنی؟",
+        f"💎 <b>تمام‌کردن فوری با الماس</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"<blockquote>هزینه اتمام فوری: <code>{cost:,} الماس</code></blockquote>\n\n"
+        f"آیا برای پایان ساختمون اطمینان داری؟",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
-            btn(f"✅ بله ({cost} 💎)", style=SHOP, callback_data=f"bld_finish:{building_id}"),
-            btn("❌ نه", style=DANGER, callback_data=f"bld_pick:{building_id}"),
+            btn("تأیید", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"bld_finish:{building_id}"),
+            btn("انصراف", emoji_key="btn_cancel", style=DANGER, callback_data=f"bld_pick:{building_id}"),
         ]]),
     )
 
@@ -536,7 +591,9 @@ async def building_finish_callback(update: Update, context: ContextTypes.DEFAULT
     photo_path = get_building_image_path(view["building"].building_type, view["building"].level)
     await safe_edit_message_text(
         query,
-        f"💎 <b>با {cost} الماس تموم شد!</b>\n\n" + _building_detail_text(view),
+        f"💎 <b>ارتقا با موفقیت انجام شد!</b>\n"
+        f"هزینه پرداختی: <code>{cost} الماس</code>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n" + _building_detail_text(view),
         photo=photo_path,
         parse_mode="HTML",
         reply_markup=_building_detail_keyboard(view),
@@ -564,13 +621,15 @@ async def building_cancel_ask_callback(update: Update, context: ContextTypes.DEF
     await query.answer()
     await safe_edit_message_text(
         query,
-        f"❌ <b>لغو ارتقا</b>\n\n"
-        f"اگه این ارتقا (تا سطح {target}) رو لغو کنی، پیشرفتش از بین می‌ره و "
-        f"فقط <b>نصف</b> طلای پرداختی ({get_emoji('coin')} <b>{refund:,}</b>) بهت برمی‌گرده. مطمئنی؟",
+        f"❌ <b>لغو ارتقا</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"<blockquote>در صورت لغو ارتقا (تا سطح <code>{target}</code>)، پیشرفت ساخت از بین رفته و "
+        f"تنها نصف طلای پرداختی (<code>+{refund:,} طلا</code>) برگشت داده می‌شود.</blockquote>\n\n"
+        f"آیا برای لغو ارتقا اطمینان داری؟",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
-            btn(f"✅ بله، لغو کن (+{refund:,} طلا)", style=DANGER, callback_data=f"bld_cancel:{building_id}"),
-            btn("↩️ نه، ادامه بده", style=CONFIRM, callback_data=f"bld_pick:{building_id}"),
+            btn("تأیید لغو", emoji_key="btn_confirm", style=DANGER, callback_data=f"bld_cancel:{building_id}"),
+            btn("انصراف", emoji_key="btn_cancel", style=CONFIRM, callback_data=f"bld_pick:{building_id}"),
         ]]),
     )
 
@@ -597,7 +656,9 @@ async def building_cancel_callback(update: Update, context: ContextTypes.DEFAULT
     await query.answer(f"❌ ارتقا لغو شد — {refund:,} طلا برگشت.")
     await safe_edit_message_text(
         query,
-        f"❌ <b>ارتقا لغو شد.</b> {get_emoji('coin')} <b>{refund:,}</b> طلا (نصف هزینه) برگشت داده شد.\n\n"
+        f"❌ <b>ارتقا لغو شد</b>\n"
+        f"مبلغ برگشتی: <code>{refund:,} طلا</code>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
         + _building_detail_text(view),
         parse_mode="HTML",
         reply_markup=_building_detail_keyboard(view),
@@ -654,20 +715,21 @@ def _workers_text(building: Building, workers, slots: int, free, influence: dict
     bonus = raw if cap is None else min(cap, raw)
     lines = [
         f"👷 <b>کارگرهای {label}</b>",
-        f"<blockquote>{len(workers)} از {slots} جایگاه پره — هر سطح ساختمون یه جایگاه می‌ده."
-        f"\nتولید فعلی: <b>+{bonus * 100:.0f}٪</b></blockquote>",
-        "",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"<blockquote>جایگاه‌های پر: <code>{len(workers)}</code> از <code>{slots}</code>\n"
+        f"تولید فعلی: <code>+{bonus * 100:.0f}٪</code></blockquote>",
+        "━━━━━━━━━━━━━━━━━━━━",
     ]
     if workers:
         lines.append("<b>سر کار:</b>")
         for creature in workers:
             gain = influence.get(creature.id, 0.0) * 100
-            lines.append(f"⛏ {creature.name} · سطح {creature.level} → +{gain:.0f}٪")
+            lines.append(f"⛏ <b>{creature.name}</b> (سطح <code>{creature.level}</code>): <code>+{gain:.0f}٪</code>")
         lines.append("")
     if len(workers) >= slots:
         lines.append("<i>جایگاه خالی نداری. برای جای بیشتر ساختمون رو ارتقا بده.</i>")
     elif free:
-        lines.append("<b>آماده‌ی کار:</b> یکی رو انتخاب کن")
+        lines.append("<b>آماده‌ی کار:</b> یکی رو انتخاب کن:")
     else:
         lines.append(
             "<i>هیچ هیولای آزادی نداری. موجود فعال و هیولاهایی که توی غار هیولا تخم گذاشتن نمی‌تونن کار کنن.</i>"
@@ -683,7 +745,7 @@ def _workers_keyboard(building: Building, workers, slots: int, free, influence: 
 
     # already-stationed workers (tap to remove) sit at the top
     rows = [
-        [btn(f"➖ {c.name} (سطح {c.level})", style=DANGER, callback_data=f"bld_unassign:{building.id}:{c.id}")]
+        [btn(f"ترک کار: {c.name} (سطح {c.level})", emoji_key="btn_delete", style=DANGER, callback_data=f"bld_unassign:{building.id}:{c.id}")]
         for c in workers
     ]
     if len(workers) < slots and free:
@@ -697,7 +759,8 @@ def _workers_keyboard(building: Building, workers, slots: int, free, influence: 
         for c in chunk:
             gain = influence.get(c.id, 0.0) * 100
             rows.append([btn(
-                f"➕ {c.name} {'⭐' * c.star_level} · Lv{c.level} · {constants.RARITY_LABELS[c.rarity]} → +{gain:.0f}٪",
+                f"{c.name} (سطح {c.level}) — +{gain:.0f}٪",
+                emoji_key="btn_workers",
                 style=BUILD, callback_data=f"bld_assign:{building.id}:{c.id}",
             )])
         rows += nav_rows
@@ -815,15 +878,16 @@ async def building_buy_builder_prompt(update: Update, context: ContextTypes.DEFA
     await query.answer()
     cost = constants.SECOND_BUILDER_DIAMONDS
     keyboard = InlineKeyboardMarkup([
-        [btn(f"✅ تأیید و خرید ({cost} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="bld_buy_builder_do"),
-         btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data="menu:buildings")],
+        [btn("تأیید و خرید", emoji_key="btn_confirm", style=CONFIRM, callback_data="bld_buy_builder_do"),
+         btn("انصراف", emoji_key="btn_cancel", style=DANGER, callback_data="menu:buildings")],
     ])
     await safe_edit_message_text(
         query,
-        f"👷‍♂️ <b>خرید کارگر دوم</b>\n\n"
-        f"با خرید کارگر دوم می‌تونی <b>هم‌زمان دو ساختمون</b> رو ارتقا بدی و سرعت ساخت‌وسازت دو برابر شه.\n\n"
-        f"{get_emoji('diamond')} هزینه: <b>{cost}</b> الماس (یک‌بار برای همیشه)\n\n"
-        f"تأیید می‌کنی؟",
+        f"👷‍♂️ <b>خرید کارگر دوم</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"<i>با خرید کارگر دوم می‌تونی هم‌زمان دو ساختمون رو ارتقا بدی و سرعت ساخت‌وسازت دو برابر شه.</i>\n\n"
+        f"<blockquote>💰 هزینه: <code>{cost:,} الماس</code> (دائمی)</blockquote>\n\n"
+        f"آیا برای خرید کارگر دوم اطمینان داری؟",
         parse_mode="HTML", reply_markup=keyboard,
     )
 

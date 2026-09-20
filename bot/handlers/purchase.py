@@ -67,21 +67,21 @@ def _amount_screen(context) -> tuple[str, InlineKeyboardMarkup]:
         lines.append("")
         rows.append([
             btn(f"➖ {step:,}", style=NAV, callback_data=f"buy_adj:{res}:-"),
-            btn(f"{_RES_TITLE[res]}", style=NAV, callback_data="buy_noop"),
+            btn(f"{purchase.RES_LABEL[res]}", style=NAV, callback_data="buy_noop"),
             btn(f"➕ {step:,}", style=CONFIRM, callback_data=f"buy_adj:{res}:+"),
         ])
-        rows.append([btn(f"🔢 عدد دلخواه ({purchase.RES_LABEL[res]})", style=NAV, callback_data=f"buy_custom:{res}")])
+        rows.append([btn(f"عدد دلخواه ({purchase.RES_LABEL[res]})", emoji_key="btn_custom_amt", style=NAV, callback_data=f"buy_custom:{res}")])
     total = purchase.price_for(amounts["coins"], amounts["dna"], amounts["diamonds"])
     minimum = botconfig.get_buy_min()
     lines += [_RULE, f"💳 <b>مبلغ قابل پرداخت: {total:,} تومان</b>"]
     if minimum > 0:
         lines.append(f"<i>حداقل خرید: {minimum:,} تومان</i>")
     if total > 0 and total >= minimum:
-        rows.append([btn("✅ ثبت و مشاهده‌ی کارت", emoji_key="btn_confirm", style=PRIMARY, callback_data="buy_submit")])
+        rows.append([btn("ثبت و مشاهده کارت", emoji_key="btn_confirm", style=PRIMARY, callback_data="buy_submit")])
     elif total > 0 and minimum > 0:
         lines.append(f"⚠️ <b>برای ثبت خرید حداقل {minimum:,} تومان لازمه</b> — کمی بیشتر انتخاب کن.")
     if total > 0:
-        rows.append([btn("♻️ صفر کردن", style=DANGER, callback_data="buy_reset")])
+        rows.append([btn("صفر کردن", emoji_key="btn_reset", style=DANGER, callback_data="buy_reset")])
     rows.append([back_btn("menu:me", "بازگشت به منو")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -103,12 +103,12 @@ def _store_screen(packs: list[dict], custom_ok: bool) -> tuple[str, InlineKeyboa
             else:
                 lines.append(f"┘ <b>{p['price']:,} تومان</b>")
             lines.append("")
-            label = f"{p['emoji']} {p['title']} — {p['price']:,}ت"
+            label = f"{p['emoji']} {p['title']}"
             rows.append([btn(label, style=SHOP, callback_data=f"buy_pack:{p['id']}")])
     else:
         lines.append("مقدار مورد نظرت رو بساز و پرداخت کن:")
     if custom_ok:
-        rows.append([btn("🔢 مقدار دلخواه (خودم انتخاب می‌کنم)", style=NAV, callback_data="buy_custom_home")])
+        rows.append([btn("مقدار دلخواه", emoji_key="btn_custom_amt", style=NAV, callback_data="buy_custom_home")])
     rows.append([back_btn("menu:me", "بازگشت به منو")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -119,8 +119,22 @@ def _store_state_sync() -> tuple[list[dict], bool]:
 
 async def buy_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    buy_link = botconfig.get_buy_link()
     if not botconfig.store_ready():
-        await query.answer("خرید درون‌بازی هنوز فعال نشده.", show_alert=True)
+        if buy_link is not None:
+            burl, btitle = buy_link
+            await query.answer()
+            await safe_edit_message_text(
+                query,
+                f"🛒 <b>خرید درون‌برنامه‌ای</b>\n\nجهت خرید بسته‌ها و الماس به درگاه رسمی زیر مراجعه کنید:\n\n{burl}",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([
+                    [btn(btitle or "ورود به درگاه خرید", style=PRIMARY, url=burl)],
+                    [back_btn("menu:me", "بازگشت")],
+                ]),
+            )
+            return
+        await query.answer("🛒 بخش خرید درون‌برنامه‌ای در حال راه‌اندازی است.", show_alert=True)
         return
     context.user_data[_AMOUNTS_KEY] = {"coins": 0, "dna": 0, "diamonds": 0}
     context.user_data.pop(_AWAIT_RECEIPT_KEY, None)
@@ -159,8 +173,10 @@ def _pack_detail_screen(p: dict) -> tuple[str, InlineKeyboardMarkup]:
         lines.append(f"💰 قیمت: <b>{p['price']:,} تومان</b>")
     lines += ["", "بعد از تأیید، کارت پرداخت رو می‌بینی و رسیدت رو می‌فرستی."]
     kb = InlineKeyboardMarkup([
-        [btn("✅ خرید این پک", emoji_key="btn_confirm", style=PRIMARY, callback_data=f"buy_pack_go:{p['id']}")],
-        [back_btn("buy_open", "بازگشت به فروشگاه")],
+        [
+            btn("خرید این پک", emoji_key="btn_confirm", style=PRIMARY, callback_data=f"buy_pack_go:{p['id']}"),
+            back_btn("buy_open", "انصراف"),
+        ],
     ])
     return "\n".join(lines), kb
 
@@ -332,11 +348,11 @@ async def receipt_photo_handler(update: Update, context: ContextTypes.DEFAULT_TY
         f"💰 مبلغ: <b>{req.price_toman:,} تومان</b>"
     )
     kb = InlineKeyboardMarkup([
-        [btn("✅ تأیید", style=CONFIRM, callback_data=f"buyok:{req.id}"),
-         btn("❌ رد", style=DANGER, callback_data=f"buyno:{req.id}")],
-        [btn("⛔ بلاک رسید", style=DANGER, callback_data=f"buyblk:{user.id}"),
-         btn("♻️ آنبلاک", style=NAV, callback_data=f"buyunblk:{user.id}")],
-        [btn("👤 مدیریت کاربر", style=ADMIN, callback_data=f"buymgr:{user.id}")],
+        [btn("تأیید", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"buyok:{req.id}"),
+         btn("رد", emoji_key="btn_cancel", style=DANGER, callback_data=f"buyno:{req.id}")],
+        [btn("بلاک رسید", emoji_key="btn_cancel", style=DANGER, callback_data=f"buyblk:{user.id}"),
+         btn("آنبلاک", emoji_key="btn_confirm", style=NAV, callback_data=f"buyunblk:{user.id}")],
+        [btn("مدیریت کاربر", emoji_key="btn_profile", style=ADMIN, callback_data=f"buymgr:{user.id}")],
     ])
     try:
         await context.bot.send_photo(chat_id=OWNER_TELEGRAM_ID, photo=file_id,

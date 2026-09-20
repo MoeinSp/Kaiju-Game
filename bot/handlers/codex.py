@@ -17,13 +17,13 @@ def _panel_sync(tg_user):
 
 def _render(st: dict) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
-        f"📖 <b>دانشنامه‌ی هیولاها</b>  ({st['discovered']}/{st['total']})",
+        f"📖 <b>دانشنامه‌ی هیولاها</b> ({st['discovered']}/{st['total']})",
         "<blockquote>هر گونه‌ای که یه‌بار داشته باشی برای همیشه اینجا ثبت می‌شه. "
         "با کامل‌کردن دسته‌ها و کل دانشنامه جایزه بگیر.</blockquote>",
     ]
     for grp in st["elements"]:
         tick = " ✅" if grp["complete"] else ""
-        names = "  ".join(f"✅ {s['name']}" if s["found"] else "❓ ؟؟؟" for s in grp["species"])
+        names = "  ".join(f"✅ <code>{s['name']}</code>" if s["found"] else "❓ ؟؟؟" for s in grp["species"])
         lines.append(f"\n{grp['label']}{tick}\n  {names}")
     milestones = "، ".join(
         f"{n} گونه" for n in st["count_milestones"]

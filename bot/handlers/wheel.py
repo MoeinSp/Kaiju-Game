@@ -41,7 +41,7 @@ async def wheel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "<blockquote>فردا دوباره سر بزن، یه چرخش دیگه منتظرته.</blockquote>",
         photo=photo,
         parse_mode="HTML",
-        reply_markup=back_only_keyboard("menu:cat_rewards", "بازگشت به جایزه‌ها"),
+        reply_markup=back_only_keyboard("menu:cat_rewards", "بازگشت"),
     )
 
 

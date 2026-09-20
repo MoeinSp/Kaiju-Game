@@ -86,15 +86,15 @@ async def battle_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     keyboard = InlineKeyboardMarkup(
         [
             [
-                btn("قبول می‌کنم", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"battle_accept:{battle.id}"),
-                btn("رد می‌کنم", emoji_key="btn_cancel", style=DANGER, callback_data=f"battle_decline:{battle.id}"),
+                btn("قبول نبرد", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"battle_accept:{battle.id}"),
+                btn("رد نبرد", emoji_key="btn_cancel", style=DANGER, callback_data=f"battle_decline:{battle.id}"),
             ]
         ]
     )
     await update.message.reply_text(
-        f"{get_emoji('battle')} <b>{display_name(challenger_user)}</b> با {challenger_creature.name} به "
+        f"{get_emoji('battle')} <b>{display_name(challenger_user)}</b> با <b>{challenger_creature.name}</b> به "
         f"<b>{display_name(opponent_user)}</b> پیشنهاد نبرد تعاملی زنده داد!\n"
-        f"قبول می‌کنی؟ 👇",
+        f"<i>آیا قبول می‌کنید؟</i> 👇",
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -194,15 +194,17 @@ def _battle_action_sync(battle_id, actor_tg_id, action):
         record_action(winner_user, "duel_win")
         completed_missions = check_missions(winner_user, "duel_win")
 
-        dna_bit = f" · +{reward['dna']} {get_emoji('dna')}" if reward["dna"] else ""
         reward_lines.append(
-            f"{get_emoji('coin')} {winner_creature.name} +{reward['coins']} طلا · "
-            f"+{reward['xp']} XP{dna_bit}"
-            + (f" {get_emoji('celebrate')} رسید به سطح {winner_creature.level}!" if winner_levels else "")
+            f"<blockquote>🏆 <b>پاداش پیروزی {winner_creature.name}:</b>\n"
+            f"🪙 سکه: <code>+{reward['coins']:,}</code> {get_emoji('coin')}\n"
+            f"⭐ تجربه: <code>+{reward['xp']:,}</code> XP"
+            + (f"\n🧬 دی‌ان‌ای: <code>+{reward['dna']:,}</code> {get_emoji('dna')}" if reward["dna"] else "")
+            + (f"\n{get_emoji('celebrate')} <b>رسید به سطح <code>{winner_creature.level}</code>!</b>" if winner_levels else "")
+            + "</blockquote>"
         )
         for m in completed_missions:
             reward_lines.append(
-                f"{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}"
+                f"<blockquote>{get_emoji('mission')} <b>ماموریت «{m['label']}» تکمیل شد!</b>\n{mission_reward_text(m)}</blockquote>"
             )
 
     battle.save()

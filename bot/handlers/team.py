@@ -63,13 +63,16 @@ def _panel_sync(tg_user):
 def _render(view: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
     from bot.handlers.private import creature_picker_frame
 
-    lines = [f"⚔️ <b>تیم من</b>  (برای دانجن و نبرد تیمی)"]
+    lines = [
+        "⚔️ <b>تیم من</b>  (برای دانجن و نبرد تیمی)",
+        "━━━━━━━━━━━━━━━━━━━━"
+    ]
     if view["members"]:
         for c in view["members"]:
             lines.append(f"  {constants.RARITY_LABELS[c.rarity]} <b>{c.name}</b> {'⭐' * c.star_level} · Lv{c.level}")
-        lines.append(f"\n💪 قدرت تیم: <b>{view['power']}</b>")
+        lines.append(f"\n💪 قدرت تیم: <b>{view['power']:,}</b>")
         if view["synergy"]:
-            lines.append("✨ <b>هم‌افزایی عنصری فعاله!</b> (+۱۰٪ حمله چون هر ۳ هم‌عنصرن)")
+            lines.append("✨ <b>هم‌افزایی عنصری فعاله!</b> (+۱۰٪ حمله چون هر ۳ هم‌عنصر هستن)")
     else:
         lines.append("<blockquote>هنوز کسی توی تیمت نیست. تا ۳ هیولا انتخاب کن.</blockquote>")
 
@@ -86,11 +89,11 @@ def _render(view: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKe
         in_team = c.id in view["member_ids"]
         mark = "✅ " if in_team else ""
         power = c.base_hp + c.base_atk + c.base_def + c.base_spd
-        rows.append([btn(
-            f"{mark}{c.name} {'⭐' * c.star_level} · سطح {c.level} · 💪{power:,}",
-            style=PRIMARY if in_team else LIST,
-            callback_data=f"team_tog:{c.id}",
-        )])
+        rarity_short = constants.RARITY_LABELS[c.rarity].split()[0]
+        rows.append([
+            btn(f"{mark}{c.name} ({rarity_short})", style=PRIMARY if in_team else LIST, callback_data=f"team_tog:{c.id}"),
+            btn(f"⭐ {c.star_level} | سطح {c.level} | 💪 {power:,}", style=PRIMARY if in_team else NAV, callback_data=f"team_tog:{c.id}"),
+        ])
     rows += nav_rows
     rows.append([back_btn("menu:me")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)

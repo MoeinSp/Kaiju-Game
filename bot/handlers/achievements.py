@@ -75,7 +75,7 @@ async def achievements_claim_callback(update: Update, context: ContextTypes.DEFA
     text, keyboard = _render(user, view)
     await safe_edit_message_text(
         query,
-        f"🎉 <b>دستاورد دریافت شد!</b>\n{names}\n🎁 <b>{got}</b>\n\n━━━━━━━━━━\n" + text,
+        f"🎉 <b>دستاورد دریافت شد!</b>\n{names}\n🎁 <b>{got}</b>\n\n━━━━━━━━━━━━━━━━━━━━\n" + text,
         parse_mode="HTML",
         reply_markup=keyboard,
     )

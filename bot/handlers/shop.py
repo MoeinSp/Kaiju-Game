@@ -20,11 +20,12 @@ def _panel_sync(tg_user):
 
 def _render(offers, coins, diamonds) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
-        "🛒 <b>فروشگاه روزانه</b> — هر روز آفرهای تازه و محدود",
-        "",
-        "💰 <b>موجودی شما:</b>",
-        f"{get_emoji('coin')} طلا: <b>{coins:,}</b>",
-        f"{get_emoji('diamond')} الماس: <b>{diamonds:,}</b>",
+        "🛒 <b>فروشگاه روزانه</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "<i>هر روز آفرهای تازه و با تخفیف محدود</i>\n",
+        f"💰 موجودی طلا: <code>{coins:,} طلا</code>",
+        f"💎 موجودی الماس: <code>{diamonds:,} الماس</code>",
+        "━━━━━━━━━━━━━━━━━━━━",
     ]
     rows: list = []
 
@@ -34,17 +35,19 @@ def _render(offers, coins, diamonds) -> tuple[str, InlineKeyboardMarkup]:
         lines.append("")
         lines.append(header)
         for o in group:
-            cur = "💎" if o["currency"] == "diamonds" else "طلا"
+            cur = "الماس" if o["currency"] == "diamonds" else "طلا"
+            cur_icon = "💎" if o["currency"] == "diamonds" else "🪙"
             star = "⭐ " if o["featured"] else ""
-            disc = " 🔻تخفیف امروز" if o["featured"] else ""
+            disc = "\n🔻 <i>تخفیف ویژه امروز</i>" if o["featured"] else ""
             rem = o.get("remaining")
-            lim_txt = f"  <i>({rem} عدد مانده امروز)</i>" if rem is not None else ""
-            lines.append(f"{star}{o['emoji']} <b>{o['title']}</b>{disc}")
-            # ┘ (up-and-LEFT corner) reads as a proper sub-branch in RTL, unlike └
-            lines.append(f"┘ قیمت: <b>{o['price']:,}</b> {cur}{lim_txt}")
+            lim_txt = f"\n📦 باقیمانده امروز: <code>{rem} عدد</code>" if rem is not None else ""
+            lines.append(
+                f"<blockquote>{star}{o['emoji']} <b>{o['title']}</b>{disc}\n"
+                f"💰 قیمت: <code>{o['price']:,} {cur}</code>{lim_txt}</blockquote>"
+            )
             sold_out = rem == 0
-            label = (f"⛔ سقف امروز پر شد — {o['title']}" if sold_out
-                     else f"{o['emoji']} خرید {o['title']} ({o['price']:,} {cur})")
+            label = (f"⛔ تکمیل سقف — {o['title']}" if sold_out
+                     else f"{o['emoji']} {o['title']}")
             rows.append([btn(
                 label, style=BUILD if o["featured"] else SHOP, callback_data=f"shop_buy:{o['key']}",
             )])
@@ -93,7 +96,7 @@ def _render_qty_picker(offer: dict, coins: int, diamonds: int) -> tuple[str, Inl
     key = offer["key"]
     title = offer["title"]
     emoji = offer["emoji"]
-    cur = "💎" if offer["currency"] == "diamonds" else "طلا"
+    cur = "الماس" if offer["currency"] == "diamonds" else "طلا"
     price = offer["price"]
     user_bal = diamonds if offer["currency"] == "diamonds" else coins
     max_afford = user_bal // max(1, price)
@@ -104,11 +107,12 @@ def _render_qty_picker(offer: dict, coins: int, diamonds: int) -> tuple[str, Inl
         max_qty = max_afford
 
     lines = [
-        f"{emoji} <b>خرید {title}</b>\n",
-        f"💰 قیمت هر عدد: <b>{price:,}</b> {cur}",
-        f"👛 موجودی شما: <b>{user_bal:,}</b> {cur}",
-        f"📊 حداکثر قابل خرید با موجودی فعلی: <b>{max_qty:,}</b> عدد" + (f" <i>(سقف امروز: {rem})</i>" if rem is not None else ""),
-        "",
+        f"{emoji} <b>خرید {title}</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"💰 قیمت هر عدد: <code>{price:,} {cur}</code>",
+        f"👛 موجودی شما: <code>{user_bal:,} {cur}</code>",
+        f"📊 حداکثر قابل خرید: <code>{max_qty:,} عدد</code>" + (f" <i>(سقف: <code>{rem}</code>)</i>" if rem is not None else ""),
+        "━━━━━━━━━━━━━━━━━━━━",
         "چند عدد می‌خوای بخری؟",
     ]
 
@@ -129,8 +133,8 @@ def _render_qty_picker(offer: dict, coins: int, diamonds: int) -> tuple[str, Inl
 
     action_row = []
     if max_qty > 1 and max_qty not in valid_presets:
-        action_row.append(btn(f"🛒 خرید حداکثر ({max_qty:,} عدد)", style=BUILD, callback_data=f"shop_do_buy:{key}:{max_qty}"))
-    action_row.append(btn("🔢 تعداد دلخواه", emoji_key="btn_custom_amt", style=NAV, callback_data=f"shop_custom_qty:{key}"))
+        action_row.append(btn(f"خرید حداکثر ({max_qty:,})", emoji_key="btn_buy", style=BUILD, callback_data=f"shop_do_buy:{key}:{max_qty}"))
+    action_row.append(btn("تعداد دلخواه", emoji_key="btn_custom_amt", style=NAV, callback_data=f"shop_custom_qty:{key}"))
     rows.append(action_row)
     rows.append([back_btn("menu:shop", "بازگشت به فروشگاه")])
 
@@ -138,21 +142,22 @@ def _render_qty_picker(offer: dict, coins: int, diamonds: int) -> tuple[str, Inl
 
 
 async def _render_shop_confirm(query, title: str, emoji: str, price: int, currency: str, count: int, key: str, diamonds: int) -> None:
-    cur_label = "💎 الماس" if currency == "diamonds" else "🪙 طلا"
-    cur_icon = "💎" if currency == "diamonds" else "طلا"
+    cur_label = "الماس" if currency == "diamonds" else "طلا"
     lines = [
-        f"💎 <b>تأیید خرید</b>",
-        "",
-        f"آیتم انتخابی: {emoji} <b>{title}</b>",
-        f"تعداد: <b>{count:,} عدد</b>",
-        f"مبلغ پرداختی: <b>{price:,} {cur_icon}</b>",
-        f"موجودی الماس شما: <b>{diamonds:,}</b> 💎",
-        "",
+        "💎 <b>تأیید خرید</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"<blockquote>آیتم: {emoji} <b>{title}</b>\n"
+        f"تعداد: <code>{count:,} عدد</code>\n"
+        f"مبلغ پرداختی: <code>{price:,} {cur_label}</code>\n"
+        f"موجودی الماس شما: <code>{diamonds:,} الماس</code></blockquote>",
+        "━━━━━━━━━━━━━━━━━━━━",
         "آیا برای انجام این خرید اطمینان داری؟",
     ]
     keyboard = InlineKeyboardMarkup([
-        [btn(f"✅ تأیید و خرید ({price:,} {cur_icon})", style=CONFIRM, callback_data=f"shop_confirm_buy:{key}:{count}")],
-        [back_btn("menu:shop", "❌ انصراف")],
+        [
+            btn("تأیید و خرید", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"shop_confirm_buy:{key}:{count}"),
+            back_btn("menu:shop", "انصراف"),
+        ],
     ])
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
@@ -195,7 +200,7 @@ async def shop_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     text, keyboard = _render(offers, coins, diamonds)
     await safe_edit_message_text(
         query,
-        f"✅ <b>خرید موفق:</b> {offer['emoji']} {offer['title']}\n\n━━━━━━━━━━\n" + text,
+        f"✅ <b>خرید موفق:</b> {offer['emoji']} {offer['title']}\n\n━━━━━━━━━━━━━━━━━━━━\n" + text,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -233,11 +238,11 @@ async def shop_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     _remember_offers(context, offers)
     await query.answer(f"✅ خریدی: {shop.offer_reward_text(offer)}")
     text, keyboard = _render(offers, coins, diamonds)
-    cur = "💎" if offer["currency"] == "diamonds" else "طلا"
+    cur = "الماس" if offer["currency"] == "diamonds" else "طلا"
     await safe_edit_message_text(
         query,
         f"✅ <b>خرید موفق ({count:,} عدد):</b> {offer['emoji']} {offer['title']}\n"
-        f"💳 کل مبلغ پرداختی: <b>{tot_price:,}</b> {cur}\n\n━━━━━━━━━━\n" + text,
+        f"💳 کل مبلغ پرداختی: <code>{tot_price:,} {cur}</code>\n\n━━━━━━━━━━━━━━━━━━━━\n" + text,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -260,11 +265,11 @@ async def shop_confirm_buy_callback(update: Update, context: ContextTypes.DEFAUL
     await query.answer(f"✅ خریدی: {shop.offer_reward_text(offer)}")
     text, keyboard = _render(offers, coins, diamonds)
     tot_price = offer.get("total_price", offer["price"] * count)
-    cur = "💎" if offer["currency"] == "diamonds" else "طلا"
+    cur = "الماس" if offer["currency"] == "diamonds" else "طلا"
     await safe_edit_message_text(
         query,
         f"✅ <b>خرید موفق ({count:,} عدد):</b> {offer['emoji']} {offer['title']}\n"
-        f"💳 کل مبلغ پرداختی: <b>{tot_price:,}</b> {cur}\n\n━━━━━━━━━━\n" + text,
+        f"💳 کل مبلغ پرداختی: <code>{tot_price:,} {cur}</code>\n\n━━━━━━━━━━━━━━━━━━━━\n" + text,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -287,12 +292,15 @@ async def shop_custom_qty_callback(update: Update, context: ContextTypes.DEFAULT
         "shown_currency": shown.get("currency"),
     }
     await query.answer()
-    cur = "💎" if target_offer["currency"] == "diamonds" else "طلا"
+    cur = "الماس" if target_offer["currency"] == "diamonds" else "طلا"
     await safe_edit_message_text(
         query,
-        f"🔢 <b>خرید تعداد دلخواه {target_offer['emoji']} {target_offer['title']}</b>\n\n"
-        f"💰 قیمت هر عدد: <b>{target_offer['price']:,}</b> {cur}\n"
-        f"لطفاً <b>تعداد</b> مورد نظرت رو به صورت عدد انگلیسی یا فارسی بفرست (مثلاً 20):",
+        f"🔢 <b>خرید تعداد دلخواه {target_offer['emoji']} {target_offer['title']}</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"💰 قیمت هر عدد: <code>{target_offer['price']:,} {cur}</code>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "لطفاً <b>تعداد</b> مورد نظر خود را ارسال کنید:\n"
+        "<i>(مثال: <code>20</code>)</i>",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[back_btn("menu:shop", "انصراف")]]),
     )
@@ -307,18 +315,20 @@ async def handle_custom_qty_buy(update: Update, context: ContextTypes.DEFAULT_TY
         emoji = target_offer["emoji"] if target_offer else "📦"
         tot_price = (shown_price or target_offer["price"]) * qty
         lines = [
-            f"💎 <b>تأیید خرید</b>",
-            "",
-            f"آیتم انتخابی: {emoji} <b>{title}</b>",
-            f"تعداد: <b>{qty:,} عدد</b>",
-            f"مبلغ پرداختی: <b>{tot_price:,} 💎</b>",
-            f"موجودی الماس شما: <b>{diamonds:,}</b> 💎",
-            "",
-            "آیا برای انجام این خرید اطمینان داری؟",
+            "💎 <b>تأیید خرید</b>",
+            "━━━━━━━━━━━━━━━━━━━━",
+            f"<blockquote>آیتم: {emoji} <b>{title}</b>\n"
+            f"تعداد: <code>{qty:,} عدد</code>\n"
+            f"مبلغ پرداختی: <code>{tot_price:,} الماس</code>\n"
+            f"موجودی شما: <code>{diamonds:,} الماس</code></blockquote>",
+            "━━━━━━━━━━━━━━━━━━━━",
+            "آیا از انجام این خرید اطمینان داری؟",
         ]
         keyboard = InlineKeyboardMarkup([
-            [btn(f"✅ تأیید و خرید ({tot_price:,} 💎)", style=CONFIRM, callback_data=f"shop_confirm_buy:{key}:{qty}")],
-            [back_btn("menu:shop", "❌ انصراف")],
+            [
+                btn("تأیید و خرید", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"shop_confirm_buy:{key}:{qty}"),
+                back_btn("menu:shop", "انصراف"),
+            ],
         ])
         await message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
         return
@@ -333,10 +343,10 @@ async def handle_custom_qty_buy(update: Update, context: ContextTypes.DEFAULT_TY
     _remember_offers(context, offers)
     text, keyboard = _render(offers, coins, diamonds)
     tot_price = offer.get("total_price", offer["price"] * qty)
-    cur = "💎" if offer["currency"] == "diamonds" else "طلا"
+    cur = "الماس" if offer["currency"] == "diamonds" else "طلا"
     await message.reply_text(
         f"✅ <b>خرید موفق ({qty:,} عدد):</b> {offer['emoji']} {offer['title']}\n"
-        f"💳 کل مبلغ پرداختی: <b>{tot_price:,}</b> {cur}\n\n━━━━━━━━━━\n" + text,
+        f"💳 کل مبلغ پرداختی: <code>{tot_price:,} {cur}</code>\n\n━━━━━━━━━━━━━━━━━━━━\n" + text,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -362,19 +372,22 @@ def _fmt_hours(seconds: int) -> str:
 
 def _shield_render(diamonds: int, shield_secs: int) -> tuple[str, InlineKeyboardMarkup]:
     sh = get_emoji("shield")
-    status = f"{sh} سپر فعلی: <b>{_fmt_hours(shield_secs)}</b>" if shield_secs > 0 else f"{sh} الان سپر نداری"
+    status = f"⏱ مدت باقیمانده: <code>{_fmt_hours(shield_secs)}</code>" if shield_secs > 0 else "⚪️ <i>در حال حاضر سپر فعال ندارید</i>"
     lines = [
-        f"{sh} <b>خرید سپر محافظ</b>",
-        f"<blockquote>{status}\n"
-        f"موجودی: {get_emoji('diamond')} <b>{diamonds}</b> الماس\n\n"
-        f"تا وقتی سپر داری کسی نمی‌تونه توی آرنا غارتت کنه. هر حمله‌ای که <b>خودت</b> بزنی "
-        f"{constants.SHIELD_ATTACK_COST_HOURS} ساعت از سپرت کم می‌کنه. خریدها روی هم جمع می‌شن.</blockquote>",
+        f"{sh} <b>خرید سپر محافظ آرنا</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"📌 وضعیت فعلی:\n{status}",
+        f"💎 موجودی الماس: <code>{diamonds:,} الماس</code>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"<blockquote>تا وقتی سپر داری کسی نمی‌تونه در آرنا بهت حمله کنه.\n"
+        f"هر حمله‌ای که <b>خودت</b> بزنی <code>{constants.SHIELD_ATTACK_COST_HOURS} ساعت</code> از سپرت کم می‌کنه.\n"
+        "خریدها روی هم جمع می‌شوند.</blockquote>",
     ]
     rows = []
     for tier, cfg in constants.SHIELD_SHOP_TIERS.items():
-        # button labels are plain text — never get_emoji() here (it returns <tg-emoji> HTML)
         rows.append([btn(
-            f"{cfg['label']} — {cfg['diamonds']} 💎",
+            f"سپر {cfg['hours']} ساعته",
+            emoji_key="btn_shield",
             style=SHOP, callback_data=f"shield_buy:{tier}",
         )])
     rows.append([back_btn("menu:shield_shop", "بازگشت")])
@@ -385,14 +398,18 @@ async def shield_shop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     """The «خرید سپر» entry — first choose which shield to buy (arena vs group)."""
     sh = get_emoji("shield")
     text = (
-        f"{sh} <b>خرید سپر</b>\n"
-        "<blockquote>🛡 <b>سپر آرنا</b>: جلوی غارت‌شدن توی آرنا رو می‌گیره.\n"
-        "🛡 <b>سپر گروه</b>: جلوی «اتک»‌خوردن توی گروه رو می‌گیره (ارزون‌تر).</blockquote>\n"
-        "کدوم رو می‌خوای؟"
+        f"{sh} <b>خرید سپر محافظ</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "<blockquote>🛡 <b>سپر آرنا:</b> جلوگیری از غارت منابع در آرنا\n"
+        "🛡 <b>سپر گروه:</b> جلوگیری از حمله در گروه‌ها</blockquote>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "کدام سپر را می‌خواهید؟"
     )
     rows = InlineKeyboardMarkup([
-        [btn("🛡 سپر آرنا", style=SHOP, callback_data="shield_arena")],
-        [btn("🛡 سپر گروه", style=SHOP, callback_data="gshield_shop")],
+        [
+            btn("سپر آرنا", emoji_key="btn_shield", style=SHOP, callback_data="shield_arena"),
+            btn("سپر گروه", emoji_key="btn_shield", style=SHOP, callback_data="gshield_shop"),
+        ],
         [back_btn("menu:cat_shop", "بازگشت به فروشگاه")],
     ])
     from game.media import get_feature_image_path
@@ -426,17 +443,19 @@ async def shield_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     lines = [
         "🛡 <b>تأیید خرید سپر آرنا</b>",
-        "",
-        f"نوع سپر: <b>{cfg['label']}</b>",
-        f"مدت زمان: <b>{cfg['hours']} ساعت</b>",
-        f"هزینه: <b>{cfg['diamonds']}</b> الماس {get_emoji('diamond')}",
-        f"موجودی الماس شما: <b>{diamonds}</b> 💎",
-        "",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"<blockquote>نوع سپر: <b>{cfg['label']}</b>\n"
+        f"مدت زمان: <code>{cfg['hours']} ساعت</code>\n"
+        f"هزینه: <code>{cfg['diamonds']} الماس</code>\n"
+        f"موجودی الماس شما: <code>{diamonds:,} الماس</code></blockquote>",
+        "━━━━━━━━━━━━━━━━━━━━",
         "آیا تأیید می‌کنی؟",
     ]
     keyboard = InlineKeyboardMarkup([
-        [btn(f"✅ تأیید و خرید ({cfg['diamonds']} 💎)", style=CONFIRM, callback_data=f"shield_do_buy:{tier}")],
-        [back_btn("shield_arena", "❌ انصراف")],
+        [
+            btn("تأیید و خرید", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"shield_do_buy:{tier}"),
+            back_btn("shield_arena", "انصراف"),
+        ],
     ])
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
@@ -453,7 +472,7 @@ async def shield_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_T
     text, keyboard = _shield_render(diamonds, shield_secs)
     await safe_edit_message_text(
         query,
-        f"✅ <b>سپر خریداری شد!</b> الان <b>{_fmt_hours(shield_secs)}</b> محافظت داری.\n\n━━━━━━━━━━\n" + text,
+        f"✅ <b>سپر خریداری شد!</b> الان <code>{_fmt_hours(shield_secs)}</code> محافظت داری.\n\n━━━━━━━━━━━━━━━━━━━━\n" + text,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -471,30 +490,39 @@ def _item_shop_render(items, coins, diamonds, gem=None) -> tuple[str, InlineKeyb
     from game import itemshop
 
     lines = [
-        f"{get_emoji('shop_item')} <b>آیتم‌های ویژه</b>",
-        f"<blockquote>{get_emoji('coin')} {coins:,} طلا · {get_emoji('diamond')} {diamonds} الماس</blockquote>",
+        f"{get_emoji('shop_item')} <b>آیتم‌ها و بسته‌های ویژه</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"💰 موجودی طلا: <code>{coins:,} طلا</code>",
+        f"💎 موجودی الماس: <code>{diamonds:,} الماس</code>",
+        "━━━━━━━━━━━━━━━━━━━━",
     ]
     rows = []
     # 💎 daily gem-kaiju — a same-species/same-rarity twin of one of the player's top kaiju
     if gem:
         label = constants.RARITY_LABELS[gem["rarity"]]
-        lines.append(f"\n💎 <b>{gem['name']}</b> {label}")
+        lines.append(f"💎 <b>کایجوی جمی: {gem['name']}</b> ({label})")
         if gem["claimed"]:
-            lines.append("✅ امروز خریدیش")
+            lines.append("<blockquote>✅ امروز خریداری شده است.</blockquote>")
         else:
-            lines.append(f"🏷 <b>{gem['price']}</b> {get_emoji('diamond')} · <i>روزی یک‌بار قابل خرید</i>")
-            rows.append([btn(f"💎 خرید {gem['name']} ({gem['price']} الماس)", style=SHOP, callback_data="gemk_buy")])
+            lines.append(
+                f"<blockquote>💰 قیمت: <code>{gem['price']} الماس</code>\n"
+                "<i>روزی یک‌بار قابل خرید</i></blockquote>"
+            )
+            rows.append([btn(f"خرید {gem['name']}", emoji_key="btn_creature", style=SHOP, callback_data="gemk_buy")])
+        lines.append("")
+
     if not items:
-        lines.append("\n<i>الان آیتم ویژه‌ی دیگه‌ای موجود نیست. بعداً سر بزن.</i>")
+        lines.append("<i>الان آیتم ویژه‌ی دیگری موجود نیست.</i>")
     for it in items:
         contents = json.loads(it.contents_json)
+        summary = itemshop.content_summary(contents)
+        desc = f"\n<i>{it.description}</i>" if it.description else ""
         lines.append(
-            f"\n{it.emoji} <b>{it.title}</b> — {itemshop.price_text(it)}\n"
-            f"   <i>{itemshop.content_summary(contents)}</i>"
-            + (f"\n   {it.description}" if it.description else "")
+            f"<blockquote>{it.emoji} <b>{it.title}</b>\n"
+            f"💰 قیمت: <code>{itemshop.price_text(it)}</code>\n"
+            f"🎁 محتویات: {summary}{desc}</blockquote>"
         )
-        rows.append([btn(f"{it.emoji} خرید {it.title} ({itemshop.price_text(it)})",
-                         style=SHOP, callback_data=f"sitem_buy:{it.id}")])
+        rows.append([btn(f"{it.emoji} {it.title}", style=SHOP, callback_data=f"sitem_buy:{it.id}")])
     rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -532,17 +560,19 @@ async def item_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         from game import itemshop
         lines = [
             f"🛍 <b>تأیید خرید آیتم ویژه</b>",
-            "",
-            f"آیتم: {item.emoji} <b>{item.title}</b>",
-            f"محتویات: <i>{itemshop.content_summary(contents)}</i>",
-            f"قیمت: <b>{item.price_diamonds}</b> الماس {get_emoji('diamond')}",
-            f"موجودی الماس شما: <b>{diamonds}</b> 💎",
-            "",
-            "آیا تأیید می‌کنی؟",
+            f"━━━━━━━━━━━━━━━━━━━━",
+            f"<blockquote>📦 آیتم: {item.emoji} <b>{item.title}</b>\n"
+            f"🎁 محتویات: <i>{itemshop.content_summary(contents)}</i>\n"
+            f"💰 قیمت: <code>{item.price_diamonds:,} الماس</code>\n"
+            f"💎 موجودی الماس: <code>{diamonds:,} الماس</code></blockquote>",
+            "━━━━━━━━━━━━━━━━━━━━",
+            "آیا از خرید این آیتم اطمینان داری؟",
         ]
         keyboard = InlineKeyboardMarkup([
-            [btn(f"✅ تأیید و خرید ({item.price_diamonds} 💎)", style=CONFIRM, callback_data=f"sitem_do_buy:{item.id}")],
-            [back_btn("menu:items", "❌ انصراف")],
+            [
+                btn("تأیید و خرید", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"sitem_do_buy:{item.id}"),
+                back_btn("menu:items", "انصراف"),
+            ],
         ])
         await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
         return
@@ -566,7 +596,9 @@ async def item_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     got = "، ".join(result["notes"])
     await safe_edit_message_text(
         query,
-        f"✅ <b>خرید موفق: {result['emoji']} {result['title']}</b>\n🎁 گرفتی: {got}\n\n━━━━━━━━━━\n" + text,
+        f"✅ <b>خرید موفق: {result['emoji']} {result['title']}</b>\n"
+        f"🎁 دریافتی: <i>{got}</i>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n" + text,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -590,16 +622,18 @@ async def gem_kaiju_buy_callback(update: Update, context: ContextTypes.DEFAULT_T
     label = constants.RARITY_LABELS[gem["rarity"]]
     lines = [
         "💎 <b>تأیید خرید کایجوی جمی</b>",
-        "",
-        f"هیولا: <b>{gem['name']}</b> ({label})",
-        f"قیمت: <b>{gem['price']}</b> الماس {get_emoji('diamond')}",
-        f"موجودی الماس شما: <b>{diamonds}</b> 💎",
-        "",
-        "آیا تأیید می‌کنی؟",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"<blockquote>🧬 هیولا: <b>{gem['name']}</b> ({label})\n"
+        f"💰 قیمت: <code>{gem['price']:,} الماس</code>\n"
+        f"💎 موجودی الماس: <code>{diamonds:,} الماس</code></blockquote>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "آیا از خرید این کایجو اطمینان داری؟",
     ]
     keyboard = InlineKeyboardMarkup([
-        [btn(f"✅ تأیید و خرید ({gem['price']} 💎)", style=CONFIRM, callback_data="gemk_do_buy")],
-        [back_btn("menu:items", "❌ انصراف")],
+        [
+            btn("تأیید و خرید", emoji_key="btn_confirm", style=CONFIRM, callback_data="gemk_do_buy"),
+            back_btn("menu:items", "انصراف"),
+        ],
     ])
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
@@ -619,9 +653,10 @@ async def gem_kaiju_do_buy_callback(update: Update, context: ContextTypes.DEFAUL
     await safe_edit_message_text(
         query,
         f"✅ <b>کایجوی جمی خریده شد!</b>\n"
-        f"🧬 <b>{c.name}</b> {constants.RARITY_LABELS[c.rarity]} به کلکسیونت اضافه شد "
-        f"(−{result['price']} {get_emoji('diamond')}).\n"
-        "<i>از «🗂 کلکسیون» می‌تونی فعالش کنی یا برای فیوژن استفاده کنی.</i>\n\n━━━━━━━━━━\n" + text,
+        f"🧬 <b>{c.name}</b> ({constants.RARITY_LABELS[c.rarity]}) به کلکسیونت اضافه شد.\n"
+        f"💎 هزینه: <code>{result['price']:,}</code> الماس\n\n"
+        f"<blockquote>از «🗂 کلکسیون» می‌تونی فعالش کنی یا برای فیوژن استفاده کنی.</blockquote>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n" + text,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -636,18 +671,20 @@ def _gshield_state_sync(tg_user):
 
 
 def _gshield_render(diamonds: int, shield_secs: int) -> tuple[str, InlineKeyboardMarkup]:
-    status = f"🛡 سپر گروه فعلی: <b>{_fmt_hours(shield_secs)}</b>" if shield_secs > 0 else "🛡 الان سپر گروه نداری"
+    status = f"⏱ زمان باقیمانده: <code>{_fmt_hours(shield_secs)}</code>" if shield_secs > 0 else "⚪️ <i>در حال حاضر سپر گروه فعال ندارید</i>"
     lines = [
         "🛡 <b>خرید سپر گروه</b>",
-        f"<blockquote>{status}\n"
-        f"موجودی: {get_emoji('diamond')} <b>{diamonds}</b> الماس\n\n"
-        "تا وقتی سپر گروه داری، کسی نمی‌تونه توی گروه با «اتک» بهت حمله کنه. "
-        "از سپر آرنا جداست و ارزون‌تره.</blockquote>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"{status}",
+        f"💎 موجودی الماس: <code>{diamonds:,} الماس</code>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "<blockquote>تا وقتی سپر گروه داری، کسی نمی‌تونه توی گروه با «اتک» بهت حمله کنه.\n"
+        "این سپر از سپر آرنا جداست و ارزون‌تره.</blockquote>",
     ]
     rows = []
     for tier, cfg in constants.GROUP_SHIELD_SHOP_TIERS.items():
-        rows.append([btn(f"{cfg['label']} — {cfg['diamonds']} 💎",
-                         style=SHOP, callback_data=f"gshield_buy:{tier}")])
+        rows.append([btn(f"سپر گروه {cfg['hours']} ساعته",
+                         emoji_key="btn_shield", style=SHOP, callback_data=f"gshield_buy:{tier}")])
     rows.append([back_btn("menu:shield_shop", "بازگشت")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -678,17 +715,19 @@ async def group_shield_buy_callback(update: Update, context: ContextTypes.DEFAUL
     await query.answer()
     lines = [
         "🛡 <b>تأیید خرید سپر گروه</b>",
-        "",
-        f"نوع سپر: <b>{cfg['label']}</b>",
-        f"مدت زمان: <b>{cfg['hours']} ساعت</b>",
-        f"هزینه: <b>{cfg['diamonds']}</b> الماس {get_emoji('diamond')}",
-        f"موجودی الماس شما: <b>{diamonds}</b> 💎",
-        "",
-        "آیا تأیید می‌کنی؟",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"<blockquote>نوع سپر: <b>{cfg['label']}</b>\n"
+        f"⏱ مدت زمان: <code>{cfg['hours']} ساعت</code>\n"
+        f"💰 هزینه: <code>{cfg['diamonds']:,} الماس</code>\n"
+        f"💎 موجودی الماس: <code>{diamonds:,} الماس</code></blockquote>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "آیا از خرید این سپر اطمینان داری؟",
     ]
     keyboard = InlineKeyboardMarkup([
-        [btn(f"✅ تأیید و خرید ({cfg['diamonds']} 💎)", style=CONFIRM, callback_data=f"gshield_do_buy:{tier}")],
-        [back_btn("gshield_shop", "❌ انصراف")],
+        [
+            btn("تأیید و خرید", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"gshield_do_buy:{tier}"),
+            back_btn("gshield_shop", "انصراف"),
+        ],
     ])
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
@@ -705,7 +744,9 @@ async def group_shield_do_buy_callback(update: Update, context: ContextTypes.DEF
     text, keyboard = _gshield_render(diamonds, shield_secs)
     await safe_edit_message_text(
         query,
-        f"✅ <b>سپر گروه خریداری شد!</b> الان <b>{_fmt_hours(shield_secs)}</b> محافظت داری.\n\n━━━━━━━━━━\n" + text,
+        f"✅ <b>سپر گروه خریداری شد!</b>\n"
+        f"⏱ زمان محافظت فعال: <code>{_fmt_hours(shield_secs)}</code>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n" + text,
         parse_mode="HTML", reply_markup=keyboard,
     )
 
@@ -736,14 +777,17 @@ async def show_gold_error(query, exc) -> bool:
 def _gold_shop_render(coins: int, diamonds: int) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
         f"{get_emoji('coin')} <b>خرید طلا با الماس</b>",
-        f"<blockquote>موجودی: {get_emoji('coin')} <b>{coins:,}</b> طلا · "
-        f"{get_emoji('diamond')} <b>{diamonds}</b> الماس\n"
-        "بسته‌های بزرگ‌تر کمی به‌صرفه‌ترن.</blockquote>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"💰 موجودی طلا: <code>{coins:,}</code>",
+        f"💎 موجودی الماس: <code>{diamonds:,}</code>",
+        "",
+        "<blockquote>بسته‌های بزرگ‌تر تخفیف بیشتری دارند و به‌صرفه‌تر هستند.</blockquote>",
     ]
     rows = []
     for i, pack in enumerate(shop.GOLD_PACKS):
         rows.append([btn(
-            f"💰 {pack['gold']:,} طلا — {pack['diamonds']} 💎",
+            f"بسته {pack['gold']:,} طلا",
+            emoji_key="btn_gold_shop",
             style=SHOP, callback_data=f"gold_buy:{i}",
         )])
     rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
@@ -780,16 +824,18 @@ async def gold_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await query.answer()
     lines = [
         "💰 <b>تأیید خرید طلا با الماس</b>",
-        "",
-        f"دریافتی: <b>+{pack['gold']:,}</b> طلا {get_emoji('coin')}",
-        f"پرداختی: <b>{pack['diamonds']}</b> الماس {get_emoji('diamond')}",
-        f"موجودی الماس شما: <b>{diamonds}</b> 💎",
-        "",
-        "آیا تأیید می‌کنی؟",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"<blockquote>🎁 دریافتی: <code>+{pack['gold']:,} طلا</code>\n"
+        f"💎 پرداختی: <code>{pack['diamonds']:,} الماس</code>\n"
+        f"💎 موجودی الماس: <code>{diamonds:,} الماس</code></blockquote>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "آیا از تبدیل الماس به طلا اطمینان داری؟",
     ]
     keyboard = InlineKeyboardMarkup([
-        [btn(f"✅ تأیید و خرید ({pack['diamonds']} 💎)", style=CONFIRM, callback_data=f"gold_do_buy:{idx}")],
-        [back_btn("gold_shop", "❌ انصراف")],
+        [
+            btn("تأیید و خرید", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"gold_do_buy:{idx}"),
+            back_btn("gold_shop", "انصراف"),
+        ],
     ])
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
@@ -806,8 +852,10 @@ async def gold_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     text, keyboard = _gold_shop_render(coins, diamonds)
     await safe_edit_message_text(
         query,
-        f"✅ <b>{pack['gold']:,} طلا</b> به موجودیت اضافه شد "
-        f"({pack['diamonds']} 💎 کم شد).\n\n━━━━━━━━━━\n" + text,
+        f"✅ <b>خرید طلا با موفقیت انجام شد!</b>\n"
+        f"💰 دریافتی: <code>+{pack['gold']:,} طلا</code>\n"
+        f"💎 پرداختی: <code>{pack['diamonds']:,} الماس</code>\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n" + text,
         parse_mode="HTML", reply_markup=keyboard,
     )
 

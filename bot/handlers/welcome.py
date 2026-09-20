@@ -17,8 +17,8 @@ def _build_welcome_text() -> str:
     from game import keywords
 
     return (
-        f"{get_emoji('creature')} <b>سلام! من Kaiju Legends‌ام</b> {get_emoji('raid_boss')}\n"
-        "بازیِ رشد و ترکیب ژنتیکی هیولا — همینجا توی گروه می‌شه به بقیه اتک زد، هیولای وحشی احضار کرد، "
+        f"{get_emoji('creature')} <b>سلام! من Kaiju Legends هستم</b> {get_emoji('raid_boss')}\n"
+        "بازیِ رشد و ترکیب ژنتیکی هیولا — همینجا توی گروه می‌شه به بقیه حمله کرد، هیولای وحشی احضار کرد، "
         "دسته‌جمعی شکارش کرد و محافظ گروه شد.\n\n"
         f"{get_emoji('book')} <b>بازی با کلمه‌ست، نه دستور.</b>\n"
         f"<blockquote>کافیه کلمه‌ی <b>«{keywords.word_for('help')}»</b> رو بفرستی تا همه‌چیز "

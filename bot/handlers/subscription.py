@@ -75,8 +75,8 @@ def _render_subscription_text(info: dict) -> str:
 
 def _render_subscription_keyboard(info: dict) -> InlineKeyboardMarkup:
     rows = [
-        [btn("🥈 خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)", emoji_key="btn_sub_silver", style=PRIMARY, callback_data="sub_pick:silver")],
-        [btn("👑 خرید اشتراک طلایی (۵۰۰ هزار تومان)", emoji_key="btn_sub_gold", style=CONFIRM, callback_data="sub_pick:gold")],
+        [btn("خرید اشتراک نقره‌ای", emoji_key="btn_sub_silver", style=PRIMARY, callback_data="sub_pick:silver")],
+        [btn("خرید اشتراک طلایی", emoji_key="btn_sub_gold", style=CONFIRM, callback_data="sub_pick:gold")],
         [back_btn("menu:cat_shop", "بازگشت به فروشگاه")],
     ]
     return InlineKeyboardMarkup(rows)
@@ -124,8 +124,8 @@ async def send_subscription_invoice(target, tg_user, tier: str, context: Context
     lines = [
         f"🧾 <b>پرداخت و فعال‌سازی {get_emoji('sub_vip')} اشتراک ویژه</b>",
         "",
-        f"⭐ سطح انتخابی: <b>{sub_cfg.get('name', tier)}</b> (۳۰ روزه)",
-        f"{get_emoji('coin')} مبلغ قابل پرداخت: <b>{req.price_toman:,} تومان</b>",
+        f"<blockquote>⭐ سطح انتخابی: <b>{sub_cfg.get('name', tier)}</b> (۳۰ روزه)\n"
+        f"{get_emoji('coin')} مبلغ قابل پرداخت: <b>{req.price_toman:,} تومان</b></blockquote>",
         "",
         "💳 <b>مبلغ رو به این کارت واریز کن:</b>",
         f"<code>{card_number}</code>",
@@ -151,7 +151,7 @@ async def send_subscription_invoice(target, tg_user, tier: str, context: Context
     elif origin and origin.startswith("menu:"):
         cancel_cb = origin
 
-    kb = InlineKeyboardMarkup([[btn("انصراف", emoji_key="btn_cancel", style=NAV, callback_data=cancel_cb)]])
+    kb = InlineKeyboardMarkup([[back_btn(cancel_cb, "انصراف")]])
     text = "\n".join(lines)
     if hasattr(target, "edit_message_text"):
         await safe_edit_message_text(target, text, parse_mode="HTML", reply_markup=kb)
@@ -186,19 +186,19 @@ async def sub_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         lines = [
             f"⚠️ <b>تأیید تمدید {get_emoji('sub_vip')} اشتراک ویژه</b>",
             "━━━━━━━━━━━━━━━━━━━━",
-            f"✨ اشتراک فعال شما: <b>{info['badge']} {info['tier_name']}</b>",
-            f"⏳ زمان باقی‌مانده فعلی: <b>{info['days_left']} روز و {info['hours_left']} ساعت</b>",
-            "",
-            f"📦 اشتراک انتخابی: <b>{sub_cfg.get('name', tier)}</b> (۳۰ روزه)",
-            f"{get_emoji('coin')} مبلغ: <b>{sub_cfg.get('price_toman', 0):,} تومان</b>",
-            "",
+            f"<blockquote>✨ اشتراک فعال شما: <b>{info['badge']} {info['tier_name']}</b>\n"
+            f"⏳ زمان باقی‌مانده فعلی: <b>{info['days_left']} روز و {info['hours_left']} ساعت</b>\n\n"
+            f"📦 اشتراک انتخابی: <b>{sub_cfg.get('name', tier)}</b> (۳۰ روزه)\n"
+            f"{get_emoji('coin')} مبلغ: <b>{sub_cfg.get('price_toman', 0):,} تومان</b></blockquote>\n\n"
             f"⚡️ <b>با خرید این اشتراک، ۳۰ روز افزوده شده و مدت اشتراک شما به {new_days} روز می‌رسد.</b>",
             "━━━━━━━━━━━━━━━━━━━━",
             "آیا مایل به دریافت اطلاعات کارت و واریز هستید؟",
         ]
         keyboard = InlineKeyboardMarkup([
-            [btn("✅ تأیید و رفتن به پرداخت", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"sub_conf:{tier}:{origin}")],
-            [btn("انصراف", emoji_key="btn_cancel", style=NAV, callback_data=cancel_cb)],
+            [
+                btn("تأیید و پرداخت", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"sub_conf:{tier}:{origin}"),
+                btn("انصراف", emoji_key="btn_cancel", style=NAV, callback_data=cancel_cb),
+            ],
         ])
         await query.answer()
         await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)

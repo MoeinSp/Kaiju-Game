@@ -31,6 +31,9 @@ from game.guardian import challenge_guardian, ensure_guardian, get_guardian
 from game.raid import (RAID_DAILY_ATTACKS, RaidError, attack_boss, distribute_rewards,
                        get_active_boss, spawn_boss)
 
+_RULE = "━━━━━━━━━━━━━━━━━━━━"
+
+
 
 def _speedup_note(minutes: int | None) -> str:
     if minutes is None:
@@ -68,17 +71,19 @@ async def _reply_error(message, exc, owner_id: int) -> None:
             )
             cost = botconfig.get_energy_refill_cost()
             from bot.buttons import PRIMARY, btn
-            row1 = [btn(f"شارژ کامل با {cost} الماس", emoji_key="btn_charge", style=PRIMARY, callback_data=f"enr:ask:{owner_id}:ghunt")]
+            row1 = [btn(f"شارژ کامل ({cost} الماس)", emoji_key="btn_charge", style=PRIMARY, callback_data=f"enr:ask:{owner_id}:ghunt")]
             markup = InlineKeyboardMarkup([row1])
         else:
             caption = (
                 f"{str(exc)}\n\n"
-                f"👑 <b>با تهیه اشتراک نقره‌ای:</b>\n"
-                f"  ⚡️ <b>سقف انرژیت ۲ برابر می‌شه (۱۰۰ به جای ۵۰)!</b>\n"
-                f"  📋 جعبه‌های آرنا خودکار و پشت‌سرهم باز می‌شن\n"
-                f"  🏹 درآمدت از شکار خودکار ۲۵٪ بیشتر می‌شه!\n"
-                f"  🥈 نشان پرمیوم نقره‌ای کنار اسمت قرار می‌گیره\n\n"
-                f"<i>💡 فقط با ۱۰۰ هزار تومان، محدودیت انرژی رو برای همیشه فراموش کن!</i>"
+                f"<blockquote>"
+                f"👑 <b>مزایای اشتراک نقره‌ای:</b>\n"
+                f"⚡️ سقف انرژی ۲ برابر (۱۰۰ به جای ۵۰)\n"
+                f"📋 باز شدن خودکار جعبه‌های آرنا\n"
+                f"🏹 +۲۵٪ غنیمت شکار خودکار\n"
+                f"🥈 نشان پرمیوم نقره‌ای\n"
+                f"💰 قیمت: ۱۰۰ هزار تومان"
+                f"</blockquote>"
             )
             markup = energy_refill_markup(owner_id, is_group=True, origin="ghunt")
         await message.reply_text(caption, parse_mode="HTML", reply_markup=markup)
@@ -217,7 +222,8 @@ async def admin_deduct_gold(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         await update.message.reply_text(str(exc))
         return
     await update.message.reply_text(
-        f"✅ <b>{amount:,}</b> {get_emoji('coin')} از <b>{name}</b> کم شد. موجودی جدید: <b>{new_coins:,}</b>",
+        f"✅ مقدار <code>{amount:,}</code> {get_emoji('coin')} از <b>{name}</b> کسر شد.\n"
+        f"موجودی جدید: <code>{new_coins:,}</code>",
         parse_mode="HTML",
     )
 
@@ -244,10 +250,12 @@ async def _dm_transfer_received(context, receiver, sender, what: str) -> None:
     if not getattr(receiver, "transfer_notify", True):
         return
     text = (
-        f"{get_emoji('gift')} <b>یه انتقال دریافت کردی!</b>\n\n"
-        f"• 👤 از طرفِ: <b>{display_name(sender)}</b>\n"
-        f"• 🎁 دریافتی: {what}\n\n"
-        "<i>در صورتی که نمی‌خوای این پیام‌ها بیاد، /off رو بزن.</i>"
+        f"{get_emoji('gift')} <b>انتقال جدید دریافت شد</b>\n"
+        f"{_RULE}\n"
+        f"👤 فرستنده: <b>{display_name(sender)}</b>\n"
+        f"🎁 دریافتی: {what}\n"
+        f"{_RULE}\n"
+        "<i>برای غیرفعال‌سازی این پیام‌ها، /off را ارسال کنید.</i>"
     )
     from game.media import get_notify_image_path
     from bot.utils import get_cached_file_id, store_cached_file_id, invalidate_cached_file_id
@@ -293,15 +301,17 @@ async def gold_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE, amou
         return
     coin = get_emoji("coin")
     await update.message.reply_text(
-        "✅ <b>انتقال موفق طلا</b>\n\n"
-        f"• 👤 فرستنده: {mention(sender)}\n"
-        f"• 🎯 گیرنده: {mention(receiver)}\n"
-        f"• {coin} مبلغ ارسالی: <b>{amount:,}</b> طلا\n"
-        f"• 📉 کارمزد (۱۰٪): <b>{fee:,}</b> طلا\n"
-        f"• 📥 دریافتی خالص: <b>{net:,}</b> طلا",
+        f"✅ <b>انتقال موفق طلا</b>\n"
+        f"{_RULE}\n"
+        f"👤 فرستنده: {mention(sender)}\n"
+        f"🎯 گیرنده: {mention(receiver)}\n"
+        f"{_RULE}\n"
+        f"{coin} مبلغ ارسالی: <code>{amount:,}</code> طلا\n"
+        f"📉 کارمزد (۱۰٪): <code>{fee:,}</code> طلا\n"
+        f"📥 دریافتی خالص: <code>{net:,}</code> طلا",
         parse_mode="HTML",
     )
-    await _dm_transfer_received(context, receiver, sender, f"{coin} <b>{net:,}</b> طلا")
+    await _dm_transfer_received(context, receiver, sender, f"{coin} <code>{net:,}</code> طلا")
 
 
 async def _reply_transfer_error(message, exc) -> None:
@@ -312,12 +322,13 @@ async def _reply_transfer_error(message, exc) -> None:
     if isinstance(exc, TransferFundsError):
         guide = "c" if exc.kind == "creature" else "e"
         keyboard = InlineKeyboardMarkup([[
-            btn("💎 راهنمای هزینه‌ها", emoji_key="btn_report", style=NAV, callback_data=f"xfo:prices:{guide}"),
+            btn("راهنمای هزینه‌ها", emoji_key="btn_report", style=NAV, callback_data=f"xfo:prices:{guide}"),
         ]])
         await message.reply_text(
-            f"{get_emoji('diamond')} <b>الماس گیرنده کافی نیست</b>\n\n"
-            f"این انتقال <b>{exc.cost}</b> {get_emoji('diamond')} لازم داره، "
-            f"ولی گیرنده الان فقط <b>{exc.have}</b> تا داره.\n"
+            f"{get_emoji('diamond')} <b>الماس گیرنده کافی نیست</b>\n"
+            f"{_RULE}\n"
+            f"این انتقال <code>{exc.cost}</code> {get_emoji('diamond')} لازم داره، "
+            f"ولی گیرنده الان فقط <code>{exc.have}</code> تا داره.\n"
             "<blockquote>گیرنده اول باید الماس تهیه کنه — از جعبه‌ی الماسی، معدن الماس یا گردونه‌ی شانس.</blockquote>",
             parse_mode="HTML", reply_markup=keyboard,
         )
@@ -402,9 +413,9 @@ def _item_active_offer(kind: str, item_id: int) -> dict | None:
 
 def _seller_step_keyboard(token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [btn("💰 تعیین قیمت", emoji_key="btn_charge", style=PRIMARY, callback_data=f"xfo:setp:{token}"),
-         btn("🎁 رایگان", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"xfo:free:{token}")],
-        [btn("❌ لغو", emoji_key="btn_cancel", style=DANGER, callback_data=f"xfo:cancel:{token}")],
+        [btn("تعیین قیمت", emoji_key="btn_charge", style=PRIMARY, callback_data=f"xfo:setp:{token}"),
+         btn("ارسال رایگان", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"xfo:free:{token}")],
+        [btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data=f"xfo:cancel:{token}")],
     ])
 
 
@@ -427,17 +438,23 @@ async def _begin_offer(message, kind: str, sender, receiver, item_id: int, desc:
     token = _new_offer(kind, sender.id, receiver.id, item_id=item_id, fee=fee, desc=desc,
                        sender_name=display_name(sender), receiver_name=display_name(receiver),
                        sender_cd=sender_cd, receiver_cd=receiver_cd)
-    reset_line = f"\n{_CREATURE_RESET_NOTE}\n" if kind == "c" else ""
-    cd_line = f"⏳ کول‌داون: فرستنده {sender_cd} ساعت | گیرنده {receiver_cd} ساعت\n" if kind == "c" else ""
+    reset_line = f"{_CREATURE_RESET_NOTE}\n" if kind == "c" else ""
+    cd_line = f"⏳ کول‌داون فرستنده: <code>{sender_cd}</code> ساعت\n⏳ کول‌داون گیرنده: <code>{receiver_cd}</code> ساعت\n" if kind == "c" else ""
     await message.reply_text(
-        f"🤝 <b>{display_name(sender)}</b> می‌خواد {desc} رو به <b>{display_name(receiver)}</b> بده.\n"
-        f"{get_emoji('diamond')} کارمزد انتقال: <b>{fee}</b> الماس (گیرنده می‌ده)\n"
+        f"🤝 <b>پیشنهاد انتقال</b>\n"
+        f"{_RULE}\n"
+        f"📦 {desc}\n"
+        f"👤 فرستنده: <b>{display_name(sender)}</b>\n"
+        f"🎯 گیرنده: <b>{display_name(receiver)}</b>\n"
+        f"{get_emoji('diamond')} کارمزد انتقال: <code>{fee}</code> الماس (گیرنده می‌دهد)\n"
         f"{cd_line}"
-        f"{reset_line}\n"
-        f"<b>{display_name(sender)}</b>، قیمت (به طلا) رو تعیین کن یا رایگان بفرست 👇\n"
-        "<i>5 دقیقه اعتبار داره.</i>",
+        f"{reset_line}"
+        f"{_RULE}\n"
+        f"<b>{display_name(sender)}</b>، قیمت (به طلا) را تعیین کن یا رایگان بفرست 👇\n"
+        "<i><code>5</code> دقیقه اعتبار دارد.</i>",
         parse_mode="HTML", reply_markup=_seller_step_keyboard(token),
     )
+
 
 
 async def transfer_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE, creature_id: int) -> None:
@@ -472,7 +489,7 @@ async def transfer_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TY
                 str(exc) + "\n\n<i>می‌تونی همین‌جا آزادش کنی و انتقال رو ادامه بدی 👇</i>",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([[btn(
-                    f"🔓 آزاد کردن «{exc.creature_name}» و ادامه", emoji_key="btn_confirm", style=BUILD,
+                    f"آزاد کردن {exc.creature_name}", emoji_key="btn_confirm", style=BUILD,
                     callback_data=f"frcfree:ask:{update.effective_user.id}:{exc.creature_id}:{recipient.id}",
                 )]]),
             )
@@ -525,11 +542,11 @@ async def transfer_free_ask_callback(update: Update, context: ContextTypes.DEFAU
     await safe_edit_message_text(
         query,
         "🔓 <b>آزاد کردن کایجو</b>\n"
-        "این کایجو از کارِ فعلیش (معدن) آزاد می‌شه و تولیدِ جمع‌شده‌ش توی معدن می‌مونه. "
-        "بعدش انتقال ادامه پیدا می‌کنه. تأیید می‌کنی؟",
+        "<blockquote>این کایجو از کارِ فعلیش (معدن) آزاد می‌شه و تولیدِ جمع‌شده‌ش توی معدن می‌مونه. "
+        "بعدش انتقال ادامه پیدا می‌کنه.</blockquote>\nتأیید می‌کنی؟",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
-            btn("✅ آزاد کن و ادامه", emoji_key="btn_confirm", style=CONFIRM,
+            btn("تأیید و ادامه", emoji_key="btn_confirm", style=CONFIRM,
                 callback_data=f"frcfree:go:{sender_id}:{cid}:{rid}"),
             btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data=f"frcfree:cancel:{sender_id}"),
         ]]),
@@ -633,9 +650,9 @@ def _transfer_do_sync(kind, sender_id, receiver_id, item_id, price):
 
 def _offer_receiver_keyboard(token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [btn("✅ قبول", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"xfo:acc:{token}"),
-         btn("❌ رد", emoji_key="btn_cancel", style=DANGER, callback_data=f"xfo:rej:{token}")],
-        [btn("💎 راهنمای هزینه‌ها", emoji_key="btn_report", style=NAV, callback_data="xfo:prices:c")],
+        [btn("قبول پیشنهاد", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"xfo:acc:{token}"),
+         btn("رد پیشنهاد", emoji_key="btn_cancel", style=DANGER, callback_data=f"xfo:rej:{token}")],
+        [btn("راهنمای هزینه‌ها", emoji_key="btn_report", style=NAV, callback_data="xfo:prices:c")],
     ])
 
 
@@ -648,26 +665,32 @@ _CREATURE_RESET_NOTE = (
 def _offer_receiver_text(offer: dict) -> str:
     price = offer["price"]
     price_line = (
-        f"{get_emoji('coin')} قیمت: <b>{price:,}</b> طلا (به فروشنده می‌رسه)"
+        f"{get_emoji('coin')} قیمت: <code>{price:,}</code> طلا (به فروشنده می‌رسد)"
         if price > 0 else f"{get_emoji('gift')} <b>رایگان</b> (بدون قیمت)"
     )
-    reset_line = f"\n\n{_CREATURE_RESET_NOTE}" if offer.get("kind") == "c" else ""
+    reset_line = f"\n{_CREATURE_RESET_NOTE}" if offer.get("kind") == "c" else ""
     if offer.get("kind") == "c":
         s_cd = offer.get("sender_cd", 24)
         r_cd = offer.get("receiver_cd", 24)
-        cd_info = f"⏳ کول‌داون پس از انتقال: فرستنده {s_cd} ساعت · گیرنده {r_cd} ساعت"
+        cd_info = f"⏳ کول‌داون فرستنده: <code>{s_cd}</code> ساعت\n⏳ کول‌داون گیرنده: <code>{r_cd}</code> ساعت"
     else:
-        cd_info = "⏳ ۱ روز کول‌داون برای هر دو طرف"
+        cd_info = "⏳ کول‌داون: <code>۱</code> روز برای هر دو طرف"
     return (
         f"🤝 <b>پیشنهاد انتقال</b>\n"
-        f"{offer['desc']}\n"
-        f"از <b>{offer['sender_name']}</b> به <b>{offer['receiver_name']}</b>\n\n"
+        f"{_RULE}\n"
+        f"📦 {offer['desc']}\n"
+        f"👤 فرستنده: <b>{offer['sender_name']}</b>\n"
+        f"🎯 گیرنده: <b>{offer['receiver_name']}</b>\n"
+        f"{_RULE}\n"
         f"{price_line}\n"
-        f"{get_emoji('diamond')} کارمزد: <b>{offer['fee']}</b> الماس"
-        f"{reset_line}\n\n"
-        f"<b>{offer['receiver_name']}</b>، قبول می‌کنی؟ 👇  <i>(5 دقیقه اعتبار)</i>\n"
-        f"<i>{cd_info}</i>"
+        f"{get_emoji('diamond')} کارمزد: <code>{offer['fee']}</code> الماس\n"
+        f"{cd_info}"
+        f"{reset_line}\n"
+        f"{_RULE}\n"
+        f"<b>{offer['receiver_name']}</b>، قبول می‌کنی؟ 👇\n"
+        f"<i><code>5</code> دقیقه اعتبار دارد.</i>"
     )
+
 
 
 async def _present_offer_to_receiver(update, token: str, via_query=None) -> None:
@@ -731,7 +754,7 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.answer()
         which = parts[2] if len(parts) > 2 else "c"
         text = transfer.creature_prices_text() if which == "c" else transfer.equip_prices_text()
-        other = ("🎒 هزینه‌ی تجهیزات", "xfo:prices:e") if which == "c" else ("🦖 هزینه‌ی هیولا", "xfo:prices:c")
+        other = ("هزینه تجهیزات", "xfo:prices:e") if which == "c" else ("هزینه هیولا", "xfo:prices:c")
         await safe_edit_message_text(
             query, text, parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[btn(other[0], emoji_key="btn_report", style=NAV, callback_data=other[1])]]),
@@ -794,9 +817,10 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
                 await query.answer()
                 await safe_edit_message_text(
                     query,
-                    f"{get_emoji('diamond')} <b>الماس گیرنده کافی نیست</b>\n\n"
-                    f"این انتقال <b>{exc.cost}</b> {get_emoji('diamond')} کارمزد لازم داره، "
-                    f"ولی گیرنده فقط <b>{exc.have}</b> تا داره.",
+                    f"{get_emoji('diamond')} <b>الماس گیرنده کافی نیست</b>\n"
+                    f"{_RULE}\n"
+                    f"این انتقال <code>{exc.cost}</code> {get_emoji('diamond')} کارمزد لازم دارد، "
+                    f"ولی گیرنده فقط <code>{exc.have}</code> تا دارد.",
                     parse_mode="HTML",
                     reply_markup=InlineKeyboardMarkup([[_offer_receiver_keyboard(token).inline_keyboard[0][0]]]),
                 )
@@ -808,24 +832,27 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
             c = result["creature"]
             s_cd = result.get("sender_cd", offer.get("sender_cd", 24))
             r_cd = result.get("receiver_cd", offer.get("receiver_cd", 24))
-            cd_text = f"⏳ کول‌داون انتقال فعال شد: فرستنده {s_cd} ساعت | گیرنده {r_cd} ساعت"
+            cd_text = f"⏳ کول‌داون فرستنده: <code>{s_cd}</code> ساعت\n⏳ کول‌داون گیرنده: <code>{r_cd}</code> ساعت"
             body = (f"🦖 هیولای <b>{creature_name(c)}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level} "
                     f"به <b>{display_name(receiver)}</b> منتقل شد! ✅\n"
-                    f"<i>♻️ لِوِل و ارتقاهای بدنی ریست شد؛ فقط ستاره‌ها موند.</i>")
+                    f"<i>♻️ لِوِل و ارتقاهای بدنی ریست شد؛ فقط ستاره‌ها باقی ماندند.</i>")
         else:
             it = result["item"]
-            cd_text = "⏳ ۱ روز کول‌داون برای هر دو طرف فعال شد."
+            cd_text = "⏳ کول‌داون: <code>۱</code> روز برای هر دو طرف فعال شد."
             body = (f"🎒 تجهیزاتِ <b>{it.name} +{it.level}</b> {constants.RARITY_LABELS[it.rarity]} "
                     f"به <b>{display_name(receiver)}</b> منتقل شد! ✅")
         price_line = (
-            f"\n{get_emoji('coin')} گیرنده <b>{result['price']:,}</b> طلا به فروشنده داد."
+            f"\n{get_emoji('coin')} پرداخت: <code>{result['price']:,}</code> طلا به فروشنده"
             if result.get("price") else ""
         )
         await query.answer("✅ انجام شد!")
         await safe_edit_message_text(
             query,
-            f"{body}{price_line}\n{get_emoji('diamond')} کارمزد <b>{result['cost']}</b> الماس پرداخت شد.\n"
-            f"<i>{cd_text}</i>",
+            f"{body}\n"
+            f"{_RULE}"
+            f"{price_line}\n"
+            f"{get_emoji('diamond')} کارمزد: <code>{result['cost']}</code> الماس پرداخت شد.\n"
+            f"{cd_text}",
             parse_mode="HTML",
         )
         if offer["kind"] == "c":
@@ -863,13 +890,16 @@ async def raid_spawn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text(str(exc), parse_mode="HTML")
         return
     await update.message.reply_text(
-        f"👻 <b>باس رید لِوِل {boss.level} برای اتحاد «{alliance_name}» ظاهر شد: {boss.name}!</b>\n"
-        f"{constants.render_bar(boss.current_hp, boss.max_hp, width=14)} {boss.current_hp:,}/{boss.max_hp:,} HP\n"
-        f"عنصر: {constants.element_label(boss.element)}\n\n"
-        f"• {get_emoji('energy')} هزینه هر حمله: ۱ انرژی (پاداش بیشتر با دمیج بالاتر)\n"
-        f"• ⏳ کول‌داون هر اتک: ۵ دقیقه · سقف روزانه: {RAID_DAILY_ATTACKS} اتک\n"
-        f"• ⚔️ فقط اعضای همین اتحاد می‌تونن با «اتک» بهش حمله کنن\n"
-        f"• 🎯 حمله به بازیکن: ریپلای روی پیامش و ارسال «اتک»",
+        f"👻 <b>باس رید لِوِل <code>{boss.level}</code> برای اتحاد «{alliance_name}» ظاهر شد: {boss.name}!</b>\n"
+        f"{_RULE}\n"
+        f"❤️ سلامت: {constants.render_bar(boss.current_hp, boss.max_hp, width=14)} (<code>{boss.current_hp:,}</code>/<code>{boss.max_hp:,}</code> HP)\n"
+        f"🔮 عنصر: <b>{constants.element_label(boss.element)}</b>\n"
+        f"{_RULE}\n"
+        f"⚡️ هزینه هر حمله: <code>1</code> انرژی\n"
+        f"⏳ کول‌داون اتک: <code>5</code> دقیقه\n"
+        f"🔁 سقف روزانه: <code>{RAID_DAILY_ATTACKS}</code> اتک\n"
+        f"⚔️ حمله به باس: ارسال «اتک» توسط اعضای اتحاد\n"
+        f"🎯 حمله به بازیکن: ریپلای روی پیامش و ارسال «اتک»",
         parse_mode="HTML",
     )
 
@@ -905,11 +935,11 @@ def _attack_sync(chat, tg_user):
             member = User.objects.filter(id=uid).first()
             name = display_name(member) if member else str(uid)
             pct = round(100 * r["damage"] / total_dmg)
-            # same board style as the live «جدول رید»: premium icons + RTL-safe branch
             reward_lines.append(
-                f"{_raid_rank_label(i)} {name}\n"
-                f"{_RAID_BRANCH} {get_emoji('crit')} {r['damage']:,} ({pct}٪) · "
-                f"{get_emoji('gift')} {get_emoji('coin')} {r['coins']:,} · {get_emoji('dna')} {r['dna']:,}"
+                f"{_raid_rank_label(i)} <b>{name}</b>\n"
+                f"💥 آسیب: <code>{r['damage']:,}</code> (<code>{pct}%</code>)\n"
+                f"{get_emoji('coin')} طلا: <code>+{r['coins']:,}</code>\n"
+                f"{get_emoji('dna')} پاداش DNA: <code>+{r['dna']:,}</code>"
             )
         speedup_won = maybe_award_speedup_card(user)  # bonus chance for whoever lands the killing blow
 
@@ -937,7 +967,6 @@ def _raid_attack_view(creature, boss, dmg, defeated, completed_missions, reward_
     from bot.handlers.private import pct_bar as _pct_bar
 
     hp = max(boss.current_hp, 0)
-    div = "──────────────"
     boss_e = get_emoji("raid_boss", "👻")
     hp_e = get_emoji("hp", "❤️")
     coin_e = get_emoji("coin", "💰")
@@ -945,30 +974,28 @@ def _raid_attack_view(creature, boss, dmg, defeated, completed_missions, reward_
     atk_e = get_emoji("raid_attacks_left", "🔁")
 
     lines = [
-        "🗡  <b>گزارش نبرد با باس | Raid Attack</b>",
-        "",
+        "🗡 <b>گزارش نبرد با باس</b>",
+        _RULE,
         f"🦅 مهاجم: <b>{creature_name(creature)}</b>",
-        f"💥  آسیب وارده: <b>{dmg:,} DMG</b>",
-        "",
-        div,
-        "",
-        f"{boss_e}  وضعیت باس: <b>{boss.name}</b> [سطح {boss.level}]",
-        f"{hp_e}  سلامت باس: {_pct_bar(hp, boss.max_hp)} ({hp:,}/{boss.max_hp:,} HP)",
-        "",
-        div,
-        "",
-        "پاداش 🎁",
-        f"+{coin_gain:,} {coin_e}",
-        f" +{dna_gain:,} {dna_e}",
-        f"{atk_e}  اتک رید باقیمانده‌ی امروز: {attacks_left}/{RAID_DAILY_ATTACKS}",
+        f"💥 آسیب وارده: <code>{dmg:,}</code> DMG",
+        _RULE,
+        "<blockquote>"
+        f"{boss_e} وضعیت باس: <b>{boss.name}</b> (سطح <code>{boss.level}</code>)\n"
+        f"{hp_e} سلامت باس: {_pct_bar(hp, boss.max_hp)} (<code>{hp:,}</code>/<code>{boss.max_hp:,}</code> HP)"
+        "</blockquote>",
+        _RULE,
+        "🎁 <b>پاداش و وضعیت:</b>",
+        f"{coin_e} طلا: <code>+{coin_gain:,}</code>",
+        f"{dna_e} پاداش DNA: <code>+{dna_gain:,}</code>",
+        f"{atk_e} اتک باقیمانده امروز: <code>{attacks_left}</code>/<code>{RAID_DAILY_ATTACKS}</code>",
     ]
     text = "\n".join(lines) + _mission_lines(completed_missions)
     if defeated:
         text += (
-            f"\n\n{get_emoji('celebrate')} <b>باس لِوِل {boss.level} شکست خورد!</b> "
-            f"لِوِل رید اتحاد رفت رو <b>{boss.level + 1}</b> — باس بعدی قوی‌تر و پرجایزه‌تره.\n\n"
+            f"\n\n{get_emoji('celebrate')} <b>باس لِوِل <code>{boss.level}</code> شکست خورد!</b>\n"
+            f"لِوِل رید اتحاد رسید به <code>{boss.level + 1}</code> — باس بعدی قوی‌تر و پرجایزه‌تره.\n\n"
             f"📊 <b>جدول نهایی رید — {boss.name}</b>\n"
-            "──────────────\n\n" + "\n\n".join(reward_lines)
+            f"{_RULE}\n" + "\n\n".join(reward_lines)
         )
         text += _speedup_note(speedup_won)
     return text
@@ -992,12 +1019,15 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     await update.message.reply_text(
         f"🐲 <b>اتک رید</b>\n"
+        f"{_RULE}\n"
+        f"<blockquote>"
         f"🤝 اتحاد: <b>{alliance_name}</b>\n"
-        f"{get_emoji('raid_boss')} باس: <b>{boss_name}</b> (لِوِل {boss_level})\n\n"
+        f"{get_emoji('raid_boss')} باس: <b>{boss_name}</b> (لِوِل <code>{boss_level}</code>)"
+        f"</blockquote>\n"
         f"می‌خوای به باس رید اتحادت حمله کنی؟",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
-            btn("✅ تأیید و اتک", emoji_key="btn_attack", style=BATTLE, callback_data=f"raidatk:{update.effective_user.id}")
+            btn("حمله به باس", emoji_key="btn_attack", style=BATTLE, callback_data=f"raidatk:{update.effective_user.id}")
         ]]),
     )
 
@@ -1054,26 +1084,24 @@ def _raid_rank_label(i: int) -> str:
 
 def _raid_leaderboard_text(lb: dict) -> str:
     """The «📊 جدول رید» board — boss HP + total damage, then each attacker with their
-    damage share and DNA reward. All icons go through get_emoji so the owner's Premium
-    set applies; the stats sub-line is RTL-forced so its marker never reverses."""
+    damage share and DNA reward."""
     pct = round(100 * max(lb["hp"], 0) / max(1, lb["max_hp"]))
     lines = [
-        f"📊 <b>جدول رید: {lb['boss_name']} (سطح {lb['boss_level']})</b>",
-        "",
-        f"{get_emoji('hp')} باس: {constants.render_bar(lb['hp'], lb['max_hp'], width=10)} {pct}٪",
-        f"{get_emoji('crit')} کل آسیب: <b>{lb['total_damage']:,}</b>",
-        "",
-        "──────────────",
+        f"📊 <b>جدول رید: {lb['boss_name']}</b> (سطح <code>{lb['boss_level']}</code>)",
+        _RULE,
+        f"{get_emoji('hp')} سلامت باس: {constants.render_bar(lb['hp'], lb['max_hp'], width=10)} (<code>{pct}%</code>)",
+        f"{get_emoji('crit')} کل آسیب: <code>{lb['total_damage']:,}</code>",
+        _RULE,
     ]
     if not lb["rows"]:
-        lines.append("\n<i>هنوز کسی به این باس ضربه نزده.</i>")
+        lines.append("<i>هنوز کسی به این باس ضربه نزده.</i>")
     else:
         for i, r in enumerate(lb["rows"][:15]):
-            lines.append("")
-            lines.append(f"{_raid_rank_label(i)} {r['name']}")
             lines.append(
-                f"{_RAID_BRANCH} {get_emoji('crit')} {r['damage']:,} ({r['share_pct']}٪) · "
-                f"{get_emoji('gift')} {r['coins']:,} {get_emoji('coin')} · {r['dna']:,} {get_emoji('dna')}"
+                f"{_raid_rank_label(i)} <b>{r['name']}</b>\n"
+                f"💥 آسیب: <code>{r['damage']:,}</code> (<code>{r['share_pct']}%</code>)\n"
+                f"{get_emoji('coin')} طلا: <code>+{r['coins']:,}</code>\n"
+                f"{get_emoji('dna')} پاداش DNA: <code>+{r['dna']:,}</code>"
             )
     return "\n".join(lines)
 
@@ -1092,29 +1120,26 @@ async def raid_overall_rank_callback(update: Update, context: ContextTypes.DEFAU
     medals = {1: "🥇", 2: "🥈", 3: "🥉"}
     lines = [
         "🐲 <b>رتبه‌بندی کلی رید اتحادها</b>",
-        "",
-        "بر اساس <b>لِوِل رید اتحاد</b>. آخر هفته جایزهٔ هر رتبه بین ۱۰ رِیدرِ برترِ اون اتحاد پخش می‌شه.",
-        "",
-        "──────────────",
-        "",
+        _RULE,
+        "<i>بر اساس لِوِل رید اتحاد. آخر هفته پاداش بین ۱۰ رِیدرِ برترِ هر اتحاد تقسیم می‌شود.</i>",
+        _RULE,
     ]
     if not rows:
         lines.append("<i>هنوز هیچ اتحادی رید نکرده.</i>")
     for r in rows:
         rank, name = r["rank"], r["alliance"].name
         reward = reward_by_rank.get(rank)
-        rw = f" │ 🎁 {reward['diamonds']}💎+{reward['coins']:,}🪙" if reward else ""
-        if rank <= 3:
-            lines.append(f"{medals[rank]} <b>{name}</b>")
-            lines.append(f"‏└ 🐉 لِوِل رید: <b>{r['raid_level']}</b> │ 👥 {r['member_count']} عضو{rw}")
-            lines.append("")
-        else:
-            if rank == 4:
-                lines.append("──────────────")
-            lines.append(f"{rank}. {name} │ 🐉 لِوِل {r['raid_level']} │ 👥 {r['member_count']}")
+        rw_lines = f"\n🎁 پاداش: <code>{reward['diamonds']}</code> 💎 + <code>{reward['coins']:,}</code> 🪙" if reward else ""
+        badge = medals.get(rank, f"{rank}.")
+        lines.append(
+            f"{badge} <b>{name}</b>\n"
+            f"🐉 لِوِل رید: <code>{r['raid_level']}</code>\n"
+            f"👥 اعضا: <code>{r['member_count']}</code> نفر"
+            f"{rw_lines}"
+        )
     kb = InlineKeyboardMarkup([[btn("بروزرسانی", emoji_key="btn_recheck", style=NAV, callback_data="raidrankall")]])
     await query.answer()
-    await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=kb)
+    await safe_edit_message_text(query, "\n\n".join(lines[:2]) + "\n" + "\n\n".join(lines[2:]), parse_mode="HTML", reply_markup=kb)
 
 
 def _raid_lb_for_user_sync(tg_user):
@@ -1190,26 +1215,23 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
     # target is group-shielded → say it LOUDLY at the very top so the attacker
     # doesn't waste a tap, and drop the attack button (the attack would be blocked).
     if t_shield_secs and t_shield_secs > 0:
-        div = "──────────────"
         text = "\n".join([
             "🛡 <b>حمله ناموفق | هدف تحت حفاظت است</b>",
-            "",
+            _RULE,
             f"👤 کاربر هدف: <b>{t_name}</b>",
-            f"⏳ مدت زمان سپر: <b>{_fmt_shield_hm(t_shield_secs)}</b> باقی‌مانده",
-            "",
-            div,
-            "",
-            "📊 مقایسه توان رزمی:",
-            f"▫️ قدرت شما: <b>{a_power:,}</b> 💪",
-            f"▫️ قدرت حریف: <b>{t_power:,}</b> 💪",
-            "",
-            div,
-            "",
-            "⚠️ تا زمان فروپاشی سپر محافظ گروه، امکان هجوم به این پایگاه وجود نداره.",
+            f"⏳ مدت زمان سپر: <code>{_fmt_shield_hm(t_shield_secs)}</code> باقی‌مانده",
+            _RULE,
+            "📊 <b>مقایسه توان رزمی:</b>",
+            "<blockquote>",
+            f"💪 قدرت شما: <code>{a_power:,}</code>\n"
+            f"💀 قدرت حریف: <code>{t_power:,}</code>",
+            "</blockquote>",
+            _RULE,
+            "<i>⚠️ تا زمان پایان سپر محافظ گروه، امکان هجوم به این پایگاه وجود ندارد.</i>",
         ])
         keyboard = InlineKeyboardMarkup([
-            [btn("🔍 جزییات حریف", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}"),
-             btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER, callback_data=f"gatk_cancel:{attacker_id}")],
+            [btn("جزئیات حریف", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}"),
+             btn("انصراف", emoji_key="btn_cancel", style=DANGER, callback_data=f"gatk_cancel:{attacker_id}")],
         ])
         return text, keyboard
 
@@ -1217,33 +1239,33 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
     adv = element_advantage_line(a_elem, t_elem)
     a_tag = f" [{constants.element_label(a_elem)}]" if a_elem else ""
     t_tag = f" [{constants.element_label(t_elem)}]" if t_elem else ""
-    div = "──────────────"
-    # trimmed prompt: opponent, your side, then the tactical read — no reward/cost/shield
-    # clutter (those are explained elsewhere; the shield warning moves to the confirm step)
-    lines = [
-        f"👤 حریف شما: <b>{t_name}</b>",
-        f"👹 موجود حریف: <b>{t_cname}</b>{t_tag}",
-        f"💀 قدرت حریف: <b>{t_power:,}</b>",
-        "",
-        div,
-        "",
-        f"🦅 موجود شما: <b>{a_cname}</b>{a_tag}",
-        f"💪 قدرت شما: <b>{a_power:,}</b>",
-        f"{get_emoji('energy')} انرژی فعلی: {pct_bar(a_energy, a_max_energy)} ({a_energy}/{a_max_energy})",
-        "",
-        div,
-        "",
-        "🎯 تحلیل تاکتیکی نبرد:",
-        f"شانس پیروزی: {pct_bar(pct, 100)} {win_label(pct)}",
+    tactical = [
+        f"📊 شانس پیروزی: {pct_bar(pct, 100)} {win_label(pct)}",
     ]
     if adv:
-        lines.append(f"🔮 مزیت عنصری: {adv}")
+        tactical.append(f"🔮 مزیت عنصری: {adv}")
+    tactical_block = "<blockquote>" + "\n".join(tactical) + "</blockquote>"
+
+    lines = [
+        "⚔️ <b>پیش‌نمایش نبرد تن‌به‌تن</b>",
+        _RULE,
+        f"👤 حریف: <b>{t_name}</b>",
+        f"👹 موجود حریف: <b>{t_cname}</b>{t_tag}",
+        f"💀 قدرت حریف: <code>{t_power:,}</code>",
+        _RULE,
+        f"🦅 موجود شما: <b>{a_cname}</b>{a_tag}",
+        f"💪 قدرت شما: <code>{a_power:,}</code>",
+        f"{get_emoji('energy')} انرژی فعلی: {pct_bar(a_energy, a_max_energy)} (<code>{a_energy}</code>/<code>{a_max_energy}</code>)",
+        _RULE,
+        "🎯 <b>تحلیل تاکتیکی:</b>",
+        tactical_block,
+    ]
     keyboard = InlineKeyboardMarkup([
-        [btn(f"⚔️ شروع حمله (-{constants.RAID_ATTACK_ENERGY_COST}⚡)", emoji_key="btn_attack", style=CONFIRM,
+        [btn(f"حمله (-{constants.RAID_ATTACK_ENERGY_COST}⚡)", emoji_key="btn_attack", style=CONFIRM,
              callback_data=f"gatk:{attacker_id}:{target_id}")],
-        [btn("🔄 انتخاب موجود دیگر از تیم", emoji_key="btn_recheck", style=NAV, callback_data=f"gatk_swap:{attacker_id}:{target_id}")],
-        [btn("🔍 جزییات حریف", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}"),
-         btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER,
+        [btn("تعویض موجود", emoji_key="btn_recheck", style=NAV, callback_data=f"gatk_swap:{attacker_id}:{target_id}")],
+        [btn("جزئیات حریف", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}"),
+         btn("انصراف", emoji_key="btn_cancel", style=DANGER,
              callback_data=f"gatk_cancel:{attacker_id}")],
     ])
     return "\n".join(lines), keyboard
@@ -1316,7 +1338,7 @@ async def gatk_opp_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     from bot.handlers.arena import opponent_details_text
 
     await query.answer()
-    keyboard = InlineKeyboardMarkup([[btn("↩️ بازگشت", emoji_key="btn_back", style=NAV, callback_data=f"gatk_back:{attacker_id}:{target_id}")]])
+    keyboard = InlineKeyboardMarkup([[btn("بازگشت", emoji_key="btn_back", style=NAV, callback_data=f"gatk_back:{attacker_id}:{target_id}")]])
     await safe_edit_message_text(query, opponent_details_text(d), parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -1368,9 +1390,10 @@ async def gatk_swap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     for cid, name, element, power, is_active, busy in choices:
         tag = "🟢 " if is_active else ("⛔ " if busy else "")
         note = " (مشغول)" if busy else ""
-        rows.append([btn(f"{tag}{name} [{constants.ELEMENT_LABELS[element]}] · 💪{power:,}{note}",
+        elem_lbl = constants.ELEMENT_LABELS.get(element, "")
+        rows.append([btn(f"{tag}{name} ({elem_lbl})",
                          style=CONFIRM, callback_data=f"gatk_swap_pick:{attacker_id}:{target_id}:{cid}")])
-    rows.append([btn("↩️ بازگشت به حریف", emoji_key="btn_back", style=NAV, callback_data=f"gatk_swap_pick:{attacker_id}:{target_id}:0")])
+    rows.append([btn("بازگشت", emoji_key="btn_back", style=NAV, callback_data=f"gatk_swap_pick:{attacker_id}:{target_id}:0")])
     await safe_edit_message_text(
         query,
         "🔄 <b>کدوم موجود با این حریف بجنگه؟</b>\n<blockquote>حریف عوض نمی‌شه؛ فقط موجودِ خودت. "
@@ -1576,14 +1599,20 @@ async def pvp_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.answer()
         await safe_edit_message_text(
             query,
-            f"🛡 <b>توجه:</b> تو الان سپر گروهی داری ({_fmt_shield_hm(shield_secs)}).\n"
-            f"با این حمله <b>{constants.SHIELD_ATTACK_COST_HOURS} ساعت</b> از سپرت کم می‌شه.\n\n"
-            "مطمئنی می‌خوای حمله کنی؟",
+            f"🛡 <b>توجه: سپر گروهی فعال است</b>\n"
+            f"{_RULE}\n"
+            f"<blockquote>"
+            f"مدت زمان باقیمانده سپر: <code>{_fmt_shield_hm(shield_secs)}</code>\n"
+            f"با این حمله <code>{constants.SHIELD_ATTACK_COST_HOURS}</code> ساعت از سپرتان کسر می‌شود."
+            f"</blockquote>\n\n"
+            "آیا مایل به ادامه حمله هستید؟",
             parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([[
-                btn("✅ تأیید و حمله", emoji_key="btn_attack", style=CONFIRM, callback_data=f"gatkc:{attacker_id}:{target_id}"),
-                btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data=f"gatk_cancel:{attacker_id}"),
-            ]]),
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    btn("تأیید و حمله", emoji_key="btn_attack", style=CONFIRM, callback_data=f"gatkc:{attacker_id}:{target_id}"),
+                    btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data=f"gatk_cancel:{attacker_id}"),
+                ]
+            ]),
         )
         return
     await _pvp_attack_execute(update, context, query, int(attacker_id), int(target_id))
@@ -1611,24 +1640,25 @@ async def _pvp_attack_execute(update, context, query, attacker_id: int, target_i
     await send_defense_report_now(context, result.get("defense"), group=True)
     await query.answer("🟢 بردی!" if result["attacker_won"] else "🔴 باختی.")
     if result["attacker_won"]:
-        new_coins_note = f" <i>(موجودی: {result['new_coins']:,})</i>" if result.get("new_coins") is not None else ""
+        new_coins_note = f" <i>(موجودی: <code>{result['new_coins']:,}</code>)</i>" if result.get("new_coins") is not None else ""
         reward_block = (
-            "💰 <b>پاداش دریافتی:</b>\n\n"
-            f"• {get_emoji('coin')} +{result['loot']:,}{new_coins_note}\n"
-            f"• {get_emoji('dna')} +{result.get('dna', 0)}\n"
-            f"• 📈 +{constants.DUEL_WIN_XP} XP"
+            "💰 <b>پاداش دریافتی:</b>\n"
+            f"{get_emoji('coin')} طلا: <code>+{result['loot']:,}</code>{new_coins_note}\n"
+            f"{get_emoji('dna')} پاداش DNA: <code>+{result.get('dna', 0):,}</code>\n"
+            f"📈 تجربه: <code>+{constants.DUEL_WIN_XP}</code> XP"
         )
     else:
-        reward_block = "😔 <b>باختی</b> — ولی هیچی ازت کم نشد (اتک گروهی کاپ نداره)."
+        reward_block = "😔 <b>شکست</b> — بدون کسر امتیاز یا کاپ."
     if result["winner_level_up"]:
-        reward_block += f"\n{get_emoji('celebrate')} {result['winner_creature']} رسید به سطح {result['winner_new_level']}!"
+        reward_block += f"\n{get_emoji('celebrate')} <b>{result['winner_creature']}</b> به سطح <code>{result['winner_new_level']}</code> ارتقا یافت!"
     reward_block += _mission_lines(result["missions"]) + _speedup_note(result["speedup"])
     _tally = result.get("target_alliance")
     _target = result.get("target_name", "")
-    header = ["⚔️ <b>خلاصه نبرد</b>"]
+    header = ["⚔️ <b>خلاصه نبرد</b>", _RULE]
     if _target:
-        header.append(f"🏭 حریف: <b>{_target}</b> 👥")
-        header.append(f"اتحاد: 🤝 {_tally}" if _tally else "🚫 بدون اتحاد")
+        header.append(f"👤 حریف: <b>{_target}</b>")
+        header.append(f"🤝 اتحاد: <b>{_tally}</b>" if _tally else "🚫 بدون اتحاد")
+        header.append(_RULE)
     text = battle_report(
         result["battle_a"], result["battle_b"], result["battle_winner_name"],
         result["battle_rounds"], result["battle_mult"],
@@ -1712,11 +1742,18 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         )
         return
     medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
-    lines = [f"{get_emoji('trophy')} <b>برترین بازیکن‌های این گروه</b>\n"]
+    lines = [
+        f"{get_emoji('trophy')} <b>برترین بازیکن‌های این گروه</b>",
+        _RULE,
+    ]
     for i, (c, power) in enumerate(creatures, start=1):
         rank = medals[i - 1] if i <= 3 else f"{i}."
-        lines.append(f"{rank} {mention(c.owner)} — 💪{power}  <i>(Lv{c.level})</i>")
-    await update.message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
+        lines.append(
+            f"{rank} {mention(c.owner)}\n"
+            f"💪 قدرت: <code>{power:,}</code>\n"
+            f"🎖 لِوِل: <code>{c.level}</code>"
+        )
+    await update.message.reply_text("\n\n".join(lines[:2]) + "\n" + "\n\n".join(lines[2:]), parse_mode="HTML", reply_markup=keyboard)
 
 
 def _guardian_sync(chat, tg_user):
@@ -1739,21 +1776,19 @@ async def guardian(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(str(exc))
         return
     stars = get_emoji("star") * top.star_level
-    div = "──────────────"
     await update.message.reply_text(
         "\n".join([
-            f"{get_emoji('guardian')} <b>جایگاه محافظ گروه | Group Guardian</b>",
-            "",
+            f"{get_emoji('guardian')} <b>جایگاه محافظ گروه</b>",
+            _RULE,
             f"👑 مالک عنوان: <b>{owner_name}</b>",
             f"🦅 موجود نگهبان: <b>{top.name}</b> [{constants.RARITY_LABELS[top.rarity]}] {stars}",
-            f"{constants.element_label(top.element)} ┃ 🎖 سطح {top.level} ┃ 💪 قدرت کل: <b>{top_power:,}</b>",
-            "",
-            div,
-            "",
-            f"{get_emoji('battle')} چالش جایگاه: برای تصاحب عنوان محافظ، کلمه «تسخیر» را بفرست.",
-            f"{get_emoji('gift')} حقوق روزانه: محافظ هر روز با «حقوق» طلا و DNA می‌گیره — "
-            f"مبلغش به قدرت هیولای محافظ بستگی داره (تا ۵۰٬۰۰۰ طلا و ۲٬۰۰۰ DNA).",
-            f"🚪 کناره‌گیری: با «استعفا» می‌تونی جایگاه رو به نفر بعدی واگذار کنی.",
+            f"🔮 عنصر: <b>{constants.element_label(top.element)}</b>",
+            f"🎖 سطح: <code>{top.level}</code>",
+            f"💪 قدرت کل: <code>{top_power:,}</code>",
+            _RULE,
+            f"{get_emoji('battle')} <b>چالش جایگاه:</b> برای تصاحب عنوان، کلمه «تسخیر» را بفرستید.",
+            f"{get_emoji('gift')} <b>حقوق روزانه:</b> دریافت روزانه با «حقوق» (تا <code>50,000</code> طلا و <code>2,000</code> DNA بر اساس قدرت).",
+            f"🚪 <b>کناره‌گیری:</b> با «استعفا» جایگاه را به نفر بعدی واگذار کنید.",
         ]),
         parse_mode="HTML",
     )
@@ -1798,31 +1833,28 @@ def _guardian_report_text(report: dict, won: bool) -> str:
 
     def hp_line(s: dict) -> str:
         icon = "💀" if s["hp"] <= 0 else "❤️"
-        crit = f"  💥 {s['crits']} ضربه" if s["crits"] else ""
-        return f"{icon} {s['name']}: {pct_bar(s['hp'], s['max_hp'])} ({s['hp']:,}/{s['max_hp']:,} HP){crit}"
+        crit = f" (<code>{s['crits']}</code> کریت)" if s["crits"] else ""
+        return f"{icon} <b>{s['name']}</b>: {pct_bar(s['hp'], s['max_hp'])} (<code>{s['hp']:,}</code>/<code>{s['max_hp']:,}</code> HP){crit}"
 
-    div = "──────────────"
-    result_line = ("✅ نتیجه نهایی: بردی و محافظ جدید گروه شدی!" if won
-                   else "❌ نتیجه نهایی: شکست خوردی! محافظ جایگاه تغییر نکرد.")
+    result_line = ("✅ <b>نتیجه:</b> پیروز شدی و عنوان محافظ گروه را تصاحب کردی!" if won
+                   else "❌ <b>نتیجه:</b> شکست خوردی! محافظ جایگاه تغییر نکرد.")
     return "\n".join([
+        "⚔️ <b>گزارش نبرد تسخیر جایگاه محافظ</b>",
+        _RULE,
         f"🗡 مهاجم: <b>{a['name']}</b> [{constants.element_label(a['element'])}]",
         f"🛡 مدافع: <b>{b['name']}</b> [{constants.element_label(b['element'])}]",
-        f"⚖️ وضعیت عنصرها: {elem_status}",
-        "",
-        div,
-        "",
-        "📊 وضعیت سلامت مبارزان:",
-        hp_line(a),
-        hp_line(b),
-        "",
-        div,
-        "",
-        f"{get_emoji('trophy')} پیروز میدان: <b>{report['winner'].name}</b> (در {report['rounds']} راند)",
+        f"⚖️ وضعیت عنصرها: <i>{elem_status}</i>",
+        _RULE,
+        "<blockquote>"
+        "📊 وضعیت سلامت مبارزان:\n"
+        f"{hp_line(a)}\n"
+        f"{hp_line(b)}"
+        "</blockquote>",
+        _RULE,
+        f"{get_emoji('trophy')} پیروز میدان: <b>{report['winner'].name}</b> (در <code>{report['rounds']}</code> راند)",
         result_line,
-        "",
-        div,
-        "",
-        f"🔁 چرخه برتری عناصر:\n{_element_cycle_line()}",
+        _RULE,
+        f"🔁 <b>چرخه برتری عناصر:</b>\n<i>{_element_cycle_line()}</i>",
     ])
 
 
@@ -1879,9 +1911,12 @@ async def guardian_claim(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
     await update.message.reply_text(
         f"{get_emoji('guardian')} <b>حقوق محافظ گروه پرداخت شد!</b>\n"
-        f"به پاس نگهبانی از قلمرو، امروز <b>{coins:,} {get_emoji('coin')}</b> و "
-        f"<b>{dna:,} {get_emoji('dna')}</b> دریافت کردی.\n"
-        f"<i>مبلغ حقوق بر اساس قدرت هیولای محافظ محاسبه می‌شود — هرچه قوی‌تر، حقوق بیشتر.</i>",
+        f"{_RULE}\n"
+        f"به پاس نگهبانی از قلمرو، پاداش امروز شما:\n"
+        f"{get_emoji('coin')} طلا: <code>+{coins:,}</code>\n"
+        f"{get_emoji('dna')} پاداش DNA: <code>+{dna:,}</code>\n"
+        f"{_RULE}\n"
+        f"<i>مبلغ حقوق بر اساس قدرت هیولای محافظ محاسبه می‌شود.</i>",
         parse_mode="HTML",
     )
 
@@ -1913,13 +1948,15 @@ async def guardian_resign(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if successor_name:
         text = (
             f"{get_emoji('guardian')} <b>از جایگاه محافظ کناره‌گیری کردی.</b>\n"
+            f"{_RULE}\n"
             f"👑 محافظ جدید گروه: <b>{successor_name}</b>\n"
-            f"هر وقت خواستی دوباره با «تسخیر» جایگاه رو پس بگیر."
+            f"<i>هر وقت خواستی دوباره با «تسخیر» جایگاه رو پس بگیر.</i>"
         )
     else:
         text = (
             f"{get_emoji('guardian')} <b>از جایگاه محافظ کناره‌گیری کردی.</b>\n"
-            f"جایگاه محافظ اکنون خالیه — اولین نفری که «تسخیر» بزنه بدون جنگ محافظ می‌شه."
+            f"{_RULE}\n"
+            f"<i>جایگاه محافظ اکنون خالیه — اولین نفری که «تسخیر» بزنه بدون جنگ محافظ می‌شه.</i>"
         )
     await update.message.reply_text(text, parse_mode="HTML")
 

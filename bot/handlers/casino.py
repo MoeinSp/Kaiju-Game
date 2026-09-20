@@ -31,18 +31,15 @@ def _panel_sync(tg_user):
 def _render(tiers, coins, diamonds, free_used) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
         f"{get_emoji('casino')} <b>کازینو</b>",
-        f"<blockquote>{get_emoji('coin')} {coins} طلا · {get_emoji('diamond')} {diamonds} الماس\n"
+        f"<blockquote>{get_emoji('coin')} {coins:,} طلا · {get_emoji('diamond')} {diamonds:,} الماس\n"
         "یه میز رو انتخاب کن. هر میز یه جدول جایزه‌ی خودش رو داره — شانسیه، ممکنه ببری یا ببازی.</blockquote>",
     ]
     rows = []
     for t in tiers:
         if t["daily"]:
-            cost_txt = " (امروز استفاده شده)" if free_used else " (رایگان امروز)"
+            cost_txt = " (استفاده شده)" if free_used else " (رایگان)"
         else:
-            # plain text in button labels — get_emoji() returns <tg-emoji> HTML that
-            # can't render on a button
-            cur = "💎" if t["currency"] == "diamonds" else "طلا"
-            cost_txt = f" — {t['cost']} {cur}"
+            cost_txt = ""
         rows.append([btn(f"{t['label']}{cost_txt}", style=SHOP, callback_data=f"casino_pick:{t['key']}")])
     rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
@@ -66,18 +63,19 @@ async def casino_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     tiers, coins, diamonds, free_used = await run_db(_panel_sync, update.effective_user)
     await query.answer()
     if cfg["daily"]:
-        cost_line = "رایگان (روزی یک‌بار)"
-        btn_label = "🎲 بچرخون! (رایگان)"
+        cost_line = "هزینه: <b>رایگان (روزی یک‌بار)</b>"
+        btn_label = "چرخش رایگان"
     else:
-        cur_icon = "💎" if cfg["currency"] == "diamonds" else "طلا"
         cur = get_emoji("diamond") if cfg["currency"] == "diamonds" else get_emoji("coin")
-        cost_line = f"شرط: <b>{cfg['cost']}</b> {cur}"
-        btn_label = f"✅ تأیید و شرط‌بندی ({cfg['cost']} {cur_icon})"
+        cost_line = f"شرط: <b>{cfg['cost']:,}</b> {cur}"
+        btn_label = "تأیید و شروع"
 
-    bal_line = f"\n💎 موجودی الماس شما: <b>{diamonds}</b> الماس" if cfg.get("currency") == "diamonds" else f"\n💰 موجودی طلا: <b>{coins:,}</b> طلا"
+    bal_line = f"\n💎 موجودی الماس شما: <b>{diamonds:,}</b> الماس" if cfg.get("currency") == "diamonds" else f"\n💰 موجودی طلا: <b>{coins:,}</b> طلا"
     keyboard = InlineKeyboardMarkup([
-        [btn(btn_label, style=CONFIRM, callback_data=f"casino_play:{tier}")],
-        [back_btn("menu:casino", "❌ انصراف")],
+        [
+            btn(btn_label, emoji_key="btn_confirm", style=CONFIRM, callback_data=f"casino_play:{tier}"),
+            back_btn("menu:casino", "انصراف"),
+        ],
     ])
     await safe_edit_message_text(
         query,
@@ -115,13 +113,15 @@ async def casino_play_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         reveal = f"🎉 <b>بردی!</b>\n<tg-spoiler>{emoji} {prize['label']}</tg-spoiler>"
 
     keyboard = InlineKeyboardMarkup([
-        [btn("🎲 دوباره", style=SHOP, callback_data=f"casino_pick:{tier}")],
-        [back_btn("menu:casino", "بازگشت به کازینو")],
+        [
+            btn("بازی دوباره", emoji_key="btn_casino", style=SHOP, callback_data=f"casino_pick:{tier}"),
+            back_btn("menu:casino", "بازگشت"),
+        ],
     ])
     await safe_edit_message_text(
         query,
         f"{constants.CASINO_TIERS[tier]['label']}\n\n{reveal}\n\n"
-        f"<i>موجودی: {coins} طلا · {diamonds} الماس</i>",
+        f"<i>موجودی: {coins:,} طلا · {diamonds:,} الماس</i>",
         parse_mode="HTML",
         reply_markup=keyboard,
     )

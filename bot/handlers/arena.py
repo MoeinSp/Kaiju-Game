@@ -96,22 +96,23 @@ def _arena_home_text(user, power, shield_secs, history, week, season_secs, reven
     lines = [
         f"{get_emoji('trophy')} <b>آرنا</b>",
         f"🗓 فصل <code>{week}</code> — <b>{_format_remaining(season_secs)}</b> تا پایان",
-        "",
-        f"🏆 کاپ تو: <b>{user.cup}</b>",
-        f"💪 قدرت: <b>{power}</b>",
+        _ARENA_DIV,
+        f"🏆 کاپ شما: <code>{user.cup:,}</code>",
+        f"💪 قدرت شما: <code>{power:,}</code>",
     ]
     _lg = constants.league_for_cup(user.cup)
     _nx = constants.next_league(user.cup)
-    lg_line = f"{_lg['emoji']} لیگ: <b>{_lg['name']}</b> — پاداش هر برد: {_lg['coins']} {get_emoji('coin')} + {_lg['dna']} {get_emoji('dna')}"
+    lines.append(f"{_lg['emoji']} لیگ: <b>{_lg['name']}</b>")
+    lines.append(f"🪙 پاداش سکه هر برد: <code>+{_lg['coins']:,}</code> {get_emoji('coin')}")
+    lines.append(f"🧬 پاداش دی‌ان‌ای هر برد: <code>+{_lg['dna']:,}</code> {get_emoji('dna')}")
     if _nx:
-        lg_line += f"\n<i>لیگ بعدی «{_nx['name']}» در کاپ {_nx['min_cup']}</i>"
-    lines.append(lg_line)
+        lines.append(f"<i>لیگ بعدی «{_nx['name']}» در کاپ <code>{_nx['min_cup']:,}</code></i>")
     ceiling = deserved_cup(power)
     if user.cup > ceiling:
-        lines.append("<i>⚠️ کاپت از قدرت موجودت جلو زده — بردها کاپ کمتری می‌دن تا هیولات قوی‌تر بشه.</i>")
+        lines.append("<i>⚠️ کاپت از قدرت موجودت جلو زده — بردها کاپ کمتری می‌دن تا هیولای شما قوی‌تر شود.</i>")
     if shield_secs > 0:
-        lines.append(f"🛡 سپر محافظ: <b>{_format_remaining(shield_secs)}</b> باقی‌مونده")
-        lines.append("<i>اگه خودت حمله کنی سپرت می‌پره.</i>")
+        lines.append(f"🛡 سپر محافظ: <b>{_format_remaining(shield_secs)}</b> باقی‌مانده")
+        lines.append("<i>اگر خودت حمله کنی سپرت از بین می‌رود.</i>")
     else:
         lines.append("🛡 سپر محافظ: نداری — ممکنه بهت حمله بشه")
 
@@ -125,54 +126,57 @@ def _arena_home_text(user, power, shield_secs, history, week, season_secs, reven
                 st = "🎁 آماده باز کردن"
             elif c.status == "unlocking":
                 rem = seconds_until_ready(c)
-                st = f"⏳ {_format_remaining(rem)}"
+                st = f"⏳ <code>{_format_remaining(rem)}</code>"
             elif c.status == "queued":
                 st = "📋 در صف"
             else:
                 st = "🔒 قفل"
-            chest_bits.append(f"{c_emoji} جایگاه {c.slot}: {st}")
-        lines.append(f"\n{get_emoji('chest_arena')} <b>جعبه‌های آرنا ({len(chests)}/4):</b>\n" + " ┃ ".join(chest_bits))
+            chest_bits.append(f"{c_emoji} جایگاه <code>{c.slot}</code>: {st}")
+        lines.append(f"\n{get_emoji('chest_arena')} <b>جعبه‌های آرنا ({len(chests)}/4):</b>\n" + "\n".join(chest_bits))
     else:
-        lines.append(f"\n{get_emoji('chest_arena')} <b>جعبه‌های آرنا (0/4):</b> جایگاه‌ها خالی است (با برد در آرنا به دست می‌آید)")
+        lines.append(f"\n{get_emoji('chest_arena')} <b>جعبه‌های آرنا (0/4):</b> <i>جایگاه‌ها خالی است (با برد در آرنا به دست می‌آید)</i>")
 
     if history:
-        lines.append("\n<b>آخرین حمله‌ها بهت:</b>")
+        lines.append("\n<b>آخرین حمله‌ها به شما:</b>")
         for log in history:
             mark = "🔴" if log.attacker_won else "🟢"
             attacker_name = log.attacker_label or lab_display(log.attacker)
-            pwr = f"  💪{log.attacker_power}" if log.attacker_power else ""
+            pwr = f"\n  💪 قدرت: <code>{log.attacker_power:,}</code>" if log.attacker_power else ""
             loot_bits = []
             if log.loot_gold:
-                loot_bits.append(f"−{log.loot_gold:,} {get_emoji('coin')}")
+                loot_bits.append(f"  🪙 غارت: <code>−{log.loot_gold:,}</code> {get_emoji('coin')}")
             if getattr(log, "loot_dna", 0):
-                loot_bits.append(f"−{log.loot_dna:,} {get_emoji('dna')}")
-            loot_str = f"  ({' '.join(loot_bits)})" if loot_bits else ""
+                loot_bits.append(f"  🧬 غارت: <code>−{log.loot_dna:,}</code> {get_emoji('dna')}")
+            loot_str = "\n" + "\n".join(loot_bits) if loot_bits else ""
             lines.append(f"{mark} <b>{attacker_name}</b>{pwr}{loot_str}")
 
     if revenges:
-        lines.append(f"\n⚔️ <b>{len(revenges)} انتقام</b> در انتظار — مهلت 3 روزه")
+        lines.append(f"\n⚔️ <b><code>{len(revenges)}</code> انتقام</b> در انتظار — مهلت ۳ روزه")
 
     lines.append(
-        f"\n<blockquote>هر حمله {constants.ARENA_ATTACK_ENERGY_COST} انرژی می‌بره. اگه ببری "
-        f"{int(constants.ARENA_LOOT_PERCENT * 100)}٪ طلا و ۱۰٪ DNA حریف رو غارت می‌کنی و کاپ می‌گیری؛ اگه ببازی فقط کاپ کم می‌شه.\n"
-        "آخر هر هفته کاپ‌ها ریست می‌شن — هرچی رتبه‌ت بالاتر باشه، از کاپ بالاتری شروع می‌کنی.</blockquote>"
+        f"\n<blockquote>⚡ هر حمله <code>{constants.ARENA_ATTACK_ENERGY_COST}</code> انرژی مصرف می‌کند.\n"
+        f"در صورت پیروزی <code>{int(constants.ARENA_LOOT_PERCENT * 100)}%</code> طلا و <code>10%</code> DNA حریف غارت می‌شود.\n"
+        "آخر هر هفته کاپ‌ها ریست می‌شوند.</blockquote>"
     )
     return "\n".join(lines)
 
 
 def _arena_home_keyboard(has_revenges: bool, chest_count: int = 0, ready_chests: int = 0) -> InlineKeyboardMarkup:
-    chest_btn_text = f"📦 جعبه‌های آرنا ({chest_count}/4)"
+    chest_btn_text = f"جعبه‌های آرنا ({chest_count}/4)"
     if ready_chests > 0:
-        chest_btn_text = f"🎁 {chest_btn_text} — آماده باز کردن!"
+        chest_btn_text = f"جعبه‌های آماده ({ready_chests})"
+    chest_emoji = "btn_chest_open" if ready_chests > 0 else "btn_chests"
     rows = [
-        [btn("پیدا کردن حریف", emoji_key="btn_attack", style=BATTLE, callback_data="arena_find")],
-        [btn(chest_btn_text, emoji_key="btn_chests", style=SHOP if ready_chests > 0 else NAV, callback_data="arena_chests")],
+        [btn("جستجوی حریف", emoji_key="btn_attack", style=BATTLE, callback_data="arena_find")],
+        [btn(chest_btn_text, emoji_key=chest_emoji, style=SHOP if ready_chests > 0 else NAV, callback_data="arena_chests")],
     ]
     if has_revenges:
         rows.append([btn("انتقام‌ها", emoji_key="btn_revenges", style=DANGER, callback_data="arena_revenges")])
     rows += [
-        [btn("جدول این هفته", emoji_key="btn_rank", style=NAV, callback_data="arena_top")],
-        [btn("نتایج هفته‌ی قبل", emoji_key="btn_last_season", style=NAV, callback_data="arena_last_season")],
+        [
+            btn("جدول این هفته", emoji_key="btn_rank", style=NAV, callback_data="arena_top"),
+            btn("فصل قبل", emoji_key="btn_last_season", style=NAV, callback_data="arena_last_season"),
+        ],
         [back_btn("menu:me")],
     ]
     return InlineKeyboardMarkup(rows)
@@ -299,11 +303,12 @@ async def arena_swap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     rows = []
     for cid, name, element, power, is_active, busy in choices:
-        tag = "🟢 " if is_active else ("⛔ " if busy else "")
+        tag = "🟢 " if is_active else ("⛔ " if busy else "🦖 ")
+        elem_lbl = constants.ELEMENT_LABELS.get(element, "")
         note = " (مشغول)" if busy else ""
-        rows.append([btn(f"{tag}{name} [{constants.ELEMENT_LABELS[element]}] · 💪{power:,}{note}",
+        rows.append([btn(f"{tag}{name} ({elem_lbl}) · {power:,}{note}",
                          style=BATTLE, callback_data=f"arena_swap_pick:{cid}")])
-    rows.append([btn("↩️ بازگشت به حریف", style=NAV, callback_data="arena_swap_back")])
+    rows.append([back_btn("arena_swap_back", "بازگشت به حریف")])
     await safe_edit_message_text(
         query,
         "🔄 <b>کدوم موجود با این حریف بجنگه؟</b>\n<blockquote>حریف عوض نمی‌شه؛ فقط موجودِ خودت. "
@@ -426,40 +431,39 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
     lines = [
         f"👤 حریف: <b>{opponent['label']}</b>{alliance_str}",
         f"👹 موجود حریف: <b>{opponent.get('creature_name', '؟')}</b>{opp_elem_tag}",
-        f"💀 قدرت حریف: <b>{opponent['power']:,}</b>",
-        f"{get_emoji('trophy')} کاپ: <b>{opponent['cup']:,}</b>",
+        f"💀 قدرت حریف: <code>{opponent['power']:,}</code>",
+        f"{get_emoji('trophy')} کاپ حریف: <code>{opponent['cup']:,}</code>",
         _ARENA_DIV,
         f"🦅 موجود شما: <b>{cname}</b>{my_elem_tag}",
-        f"💪 قدرت شما: <b>{my_power:,}</b> ┃ {get_emoji('trophy')} کاپ: <b>{user.cup:,}</b>",
-        f"{get_emoji('energy')} انرژی فعلی: {pct_bar(energy, max_en, 10)} ({energy}/{max_en})",
+        f"💪 قدرت شما: <code>{my_power:,}</code>",
+        f"{get_emoji('trophy')} کاپ شما: <code>{user.cup:,}</code>",
+        f"{get_emoji('energy')} انرژی فعلی: {pct_bar(energy, max_en, 10)} (<code>{energy}</code>/<code>{max_en}</code>)",
         _ARENA_DIV,
-        "🎯 تحلیل تاکتیکی نبرد:",
-        f"شانس پیروزی: {pct_bar(pct, 100, 10)} {win_label(pct)}",
-    ]
-    if adv:
-        lines.append(f"🔮 مزیت عنصری: {adv}")
-    lines += [
-        "",
-        f"{get_emoji('coin')} <b>+{loot:,}</b>",
-        f"{get_emoji('dna')} <b>+{dna_win:,}</b>",
-        f"{get_emoji('trophy')} تغییر رنک: برد <b>+{win_cup}</b> | باخت <b>{loss_cup}</b>",
+        "<blockquote>"
+        f"🎯 <b>شانس پیروزی:</b> {pct_bar(pct, 100, 10)} {win_label(pct)}\n"
+        + (f"🔮 <b>مزیت عنصری:</b> {adv}\n" if adv else "")
+        + f"⚡ <b>هزینه نبرد:</b> <code>{constants.ARENA_ATTACK_ENERGY_COST}</code> انرژی\n\n"
+        "🎁 <b>پاداش پیروزی:</b>\n"
+        f"🪙 سکه: <code>+{loot:,}</code> {get_emoji('coin')}\n"
+        f"🧬 دی‌ان‌ای: <code>+{dna_win:,}</code> {get_emoji('dna')}\n"
+        f"🏆 تغییر کاپ: برد <code>+{win_cup}</code> | باخت <code>{loss_cup}</code>"
+        "</blockquote>",
     ]
     keyboard = InlineKeyboardMarkup(
         [
-            # the opponent ref is embedded in the button so the attack still works if the
-            # in-memory pending is gone (bot restarted, or an old card) — see _opp_ref /
-            # _reconstruct_pending_sync in arena_attack_callback
-            [btn(f"⚔️ شروع حمله (-{constants.ARENA_ATTACK_ENERGY_COST}⚡)", emoji_key="btn_attack", style=BATTLE, callback_data=f"arena_attack:{_opp_ref(opponent)}")],
-            [btn("🔄 انتخاب موجود دیگر از تیم", style=NAV, callback_data="arena_swap")],
-            [btn("🔍 جزییات حریف", style=NAV, callback_data="arena_opp_details"),
-             btn("حریف بعدی", emoji_key="btn_recheck", style=NAV, callback_data="arena_find")],
-            [back_btn("menu:arena")],
+            [btn("شروع حمله", emoji_key="btn_attack", style=BATTLE, callback_data=f"arena_attack:{_opp_ref(opponent)}")],
+            [
+                btn("جزئیات حریف", emoji_key="btn_atk_details", style=NAV, callback_data="arena_opp_details"),
+                btn("حریف بعدی", emoji_key="btn_recheck", style=NAV, callback_data="arena_find"),
+            ],
+            [btn("تعویض موجود", emoji_key="btn_swap", style=NAV, callback_data="arena_swap")],
+            [back_btn("menu:arena", "بازگشت به آرنا")],
         ]
     )
     return "\n".join(lines), keyboard
 
 
-_ARENA_DIV = "──────────────"
+_ARENA_DIV = "━━━━━━━━━━━━━━━━━━━━"
 
 
 def _opponent_details_sync(pending: dict) -> dict:
@@ -536,7 +540,7 @@ async def arena_opp_details_callback(update: Update, context: ContextTypes.DEFAU
         return
     await query.answer()
     d = await run_db(_opponent_details_sync, pending)
-    keyboard = InlineKeyboardMarkup([[btn("↩️ بازگشت به حریف", style=NAV, callback_data="arena_opp_back")]])
+    keyboard = InlineKeyboardMarkup([[back_btn("arena_opp_back", "بازگشت به حریف")]])
     await safe_edit_message_text(query, opponent_details_text(d), parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -550,39 +554,51 @@ def opponent_details_text(d: dict, *, show_header: bool = True) -> str:
     )
     header = (f"🏭 <b>{d['label']}</b>\n{alliance_line}") if show_header else ""
     if d["is_fake"]:
-        tier = f"{d['rarity']} · {'⭐' * d['star_level']}\n" if d.get("rarity") else ""
+        tier = f"🏷 نایابی: <b>{d['rarity']}</b>\n⭐ ستاره: <b>{'⭐' * d['star_level']}</b>\n" if d.get("rarity") else ""
+        elem = f"🔮 عنصر: <b>{constants.element_label(d['element'])}</b>\n" if d.get("element") else ""
         return (
-            f"🔍 <b>جزییات حریف</b>\n\n{header}"
+            f"🔍 <b>جزئیات حریف</b>\n\n{header}"
             f"{tier}"
-            f"💪 قدرت کل: <b>{d['power']}</b>\n"
-            f"{constants.element_label(d['element']) if d.get('element') else ''}\n\n"
-            "<i>این یه آزمایشگاه بات هم‌ردهٔ کاپته — هرچی کاپت بالاتر، قوی‌تر و مجهزتره "
-            "(نزدیک کاپ 4000 کاملاً مکس و شکست‌ناپذیر می‌شه).</i>"
+            f"💪 قدرت کل: <code>{d['power']:,}</code>\n"
+            f"{elem}\n"
+            "<i>این یک آزمایشگاه هوش‌مصنوعی هم‌رده‌ی کاپ شماست — هرچه کاپ شما بالاتر باشد، قوی‌تر و مجهزتر است "
+            "(نزدیک کاپ ۴۰۰۰ به بالاترین سطح رسیده و شکست‌ناپذیر می‌شود).</i>"
         )
     s = d["stats"]
-    lines = ["🔍 <b>جزییات حریف</b>"]
+    lines = ["🔍 <b>جزئیات حریف</b>", _ARENA_DIV]
     if show_header:
         lines.append(f"🏭 <b>{d['label']}</b>")
         lines.append(f"{get_emoji('alliance')} اتحاد: <b>{d['alliance']}</b>" if d.get("alliance") else "🚫 بدون اتحاد")
-    lines.append("")
-    lines.append(f"{get_emoji('creature')} <b>{d['name']}</b> · {constants.element_label(d['element'])}")
+        lines.append("")
+    lines.append(f"{get_emoji('creature')} <b>{d['name']}</b> ({constants.element_label(d['element'])})")
     if d.get("breed") and d["breed"] != d["name"]:
         lines.append(f"🧬 نژاد: <b>{d['breed']}</b>")
     lines += [
-        f"{d['rarity']} · {'⭐' * d['star_level']} · سطح <b>{d['level']}</b>",
-        f"💪 قدرت کل: <b>{d['full_power']}</b>  <i>(از تجهیزات: +{d['gear_power']})</i>\n",
-        f"❤️ HP <b>{s['hp']}</b> · ⚔️ ATK <b>{s['atk']}</b> · 🛡 DEF <b>{s['def']}</b> · 💨 SPD <b>{s['spd']}</b>"
-        + (f" · ☠️ {round(s['poison'])}" if s.get('poison') else ""),
+        f"⭐ ستاره: <b>{'⭐' * d['star_level']}</b>",
+        f"🏷 نایابی: <b>{d['rarity']}</b>",
+        f"🎖 سطح: <code>{d['level']}</code>",
+        f"💪 قدرت کل: <code>{d['full_power']:,}</code>",
+        f"⚙️ قدرت تجهیزات: <code>+{d['gear_power']:,}</code>",
+        "",
+        "📊 <b>مشخصات پایه:</b>",
+        f"❤️ سلامت: <code>{s['hp']:,}</code>",
+        f"⚔️ قدرت حمله: <code>{s['atk']:,}</code>",
+        f"🛡 دفاع: <code>{s['def']:,}</code>",
+        f"💨 سرعت: <code>{s['spd']:,}</code>",
+    ]
+    if s.get("poison"):
+        lines.append(f"☠️ زهر: <code>{round(s['poison']):,}</code>")
+    lines += [
         "",
         "<b>🦴 ارتقای اعضا:</b>",
     ]
-    lines += [f"　{label} — <b>{lvl}</b>" for label, lvl in d["parts"]]
+    lines += [f"▫️ {label}: سطح <code>{lvl}</code>" for label, lvl in d["parts"]]
     lines.append("")
     if d["gear"]:
         lines.append("<b>🎒 تجهیزات:</b>")
-        lines += [f"　{g['slot']} — {g['name']} +{g['level']} ({g['rarity']})" for g in d["gear"]]
+        lines += [f"▫️ {g['slot']}: <b>{g['name']}</b> <code>+{g['level']}</code> (<i>{g['rarity']}</i>)" for g in d["gear"]]
     else:
-        lines.append("<i>🎒 هیچ تجهیزاتی نداره.</i>")
+        lines.append("<i>🎒 هیچ تجهیزاتی ندارد.</i>")
     return "\n".join(lines)
 
 
@@ -712,8 +728,10 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
             await query.answer()
             confirm_cb = f"arena_attack:{ref}:c" if ref else "arena_attack:c"
             keyboard = InlineKeyboardMarkup([
-                [btn("✅ بله، حمله کن", style=BATTLE, callback_data=confirm_cb)],
-                [btn("🛡 نه، سپرم بمونه", style=NAV, callback_data="arena_opp_back")],
+                [
+                    btn("تأیید حمله", emoji_key="btn_confirm", style=BATTLE, callback_data=confirm_cb),
+                    btn("حفظ سپر", emoji_key="btn_cancel", style=NAV, callback_data="arena_opp_back"),
+                ]
             ])
             await safe_edit_message_text(
                 query,
@@ -802,63 +820,64 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
             hp_line_a = f"💀  {atk_name} [□□□□□□□□□□] 0%"
             hp_line_b = f"❤️  {def_name} [■■■■■■■■■■] 100%"
 
-    div = "──────────────"
+    div = "━━━━━━━━━━━━━━━━━━━━"
     if result["won"]:
         cup_sign = f"+{result['cup_delta']}" if result['cup_delta'] > 0 else str(result['cup_delta'])
         reward_lines = [
-            f"{get_emoji('coin')}  <b>مجموع غارت :</b>\n +{loot_gold:,} {get_emoji('coin')}\n  : +{loot_dna:,}{get_emoji('dna')}"
+            "🎁 <b>غنائم غارت‌شده:</b>",
+            f"🪙 سکه: <code>+{loot_gold:,}</code> {get_emoji('coin')}",
+            f"🧬 دی‌ان‌ای: <code>+{loot_dna:,}</code> {get_emoji('dna')}",
         ]
         if league_gold or league_dna:
             lg_emoji = result.get("league_emoji", "🥉")
             lg_name = result.get("league_name", "")
-            reward_lines.append(
-                f"{lg_emoji}  <b>جایزه لیگ {lg_name} :</b>\n+{league_gold:,} {get_emoji('coin')}\n+{league_dna:,} {get_emoji('dna')}"
-            )
-        reward_lines.append(f"{get_emoji('trophy')}  : <b>{cup_sign}</b> (کاپ جدید: {result['new_cup']:,})")
+            reward_lines.append(f"\n{lg_emoji} <b>پاداش لیگ {lg_name}:</b>")
+            if league_gold:
+                reward_lines.append(f"🪙 سکه لیگ: <code>+{league_gold:,}</code> {get_emoji('coin')}")
+            if league_dna:
+                reward_lines.append(f"🧬 دی‌ان‌ای لیگ: <code>+{league_dna:,}</code> {get_emoji('dna')}")
+        reward_lines.append(f"\n🏆 تغییر کاپ: <code>{cup_sign}</code> (کاپ جدید: <code>{result['new_cup']:,}</code>)")
         if result.get("awarded_chest"):
             awarded = result["awarded_chest"]
             awarded_cfg = ARENA_CHEST_TIERS.get(awarded.chest_type, {})
             reward_lines.append(
-                f"{get_emoji(f'chest_{awarded.chest_type}', awarded_cfg.get('emoji', '📦'))}  <b>جعبه جدید دریافت شد:</b> {awarded_cfg.get('name', 'جعبه آرنا')} (جایگاه {awarded.slot})"
+                f"\n{get_emoji(f'chest_{awarded.chest_type}', awarded_cfg.get('emoji', '📦'))} <b>جعبه جدید:</b> {awarded_cfg.get('name', 'جعبه آرنا')} (جایگاه <code>{awarded.slot}</code>)"
             )
         elif result.get("slots_full"):
-            reward_lines.append("<i>⚠️ جایگاه‌های جعبه‌ات پر بود — جعبه جدیدی دریافت نشد.</i>")
+            reward_lines.append("\n<i>⚠️ جایگاه‌های جعبه‌ات پر بود — جعبه جدیدی دریافت نشد.</i>")
 
         body_lines = [
-            f"{get_emoji('celebrate')}  <b>پیروزی در نبرد آرنا!</b>",
+            f"{get_emoji('celebrate')} <b>پیروزی در نبرد آرنا!</b>",
             "",
-            f"👤  <b>آزمایشگاه حریف:</b> {result['opponent_label']} {opp_alliance}",
-            f"🛡  <b>هیولای حریف:</b> {def_name} [{elem_lbl}]",
+            f"👤 <b>آزمایشگاه حریف:</b> {result['opponent_label']} {opp_alliance}",
+            f"🛡 <b>هیولای حریف:</b> {def_name} [{elem_lbl}]",
             div,
-            hp_line_a,
-            hp_line_b,
+            f"<blockquote>{hp_line_a}\n{hp_line_b}</blockquote>",
             div,
         ] + reward_lines
         body = "\n".join(body_lines)
     else:
         cup_str = str(result['cup_delta'])
         body_lines = [
-            "😔  <b>شکست در نبرد آرنا!</b>",
+            "😔 <b>شکست در نبرد آرنا!</b>",
             "",
-            f"👤  <b>آزمایشگاه حریف:</b> {result['opponent_label']} {opp_alliance}",
-            f"🛡  <b>هیولای حریف:</b> {def_name} [{elem_lbl}]",
+            f"👤 <b>آزمایشگاه حریف:</b> {result['opponent_label']} {opp_alliance}",
+            f"🛡 <b>هیولای حریف:</b> {def_name} [{elem_lbl}]",
             div,
-            hp_line_a,
-            hp_line_b,
+            f"<blockquote>{hp_line_a}\n{hp_line_b}</blockquote>",
             div,
-            f"{get_emoji('trophy')}  : <b>{cup_str}</b> (کاپ جدید: {result['new_cup']:,})",
+            f"🏆 تغییر کاپ: <code>{cup_str}</code> (کاپ جدید: <code>{result['new_cup']:,}</code>)",
         ]
         body = "\n".join(body_lines)
 
-    buttons = [
-        [btn("🔍 جزییات حمله", style=NAV, callback_data="arena_detail")],
-    ]
+    buttons = []
     if result.get("awarded_chest"):
-        buttons.append([btn("📦 مشاهده جعبه‌های آرنا", style=SHOP, callback_data="arena_chests")])
-    buttons += [
-        [btn("حریف بعدی", emoji_key="btn_attack", style=NAV, callback_data="arena_find")],
-        [back_btn("menu:arena", "بازگشت به آرنا")],
-    ]
+        buttons.append([btn("مشاهده جعبه‌ها", emoji_key="btn_chests", style=SHOP, callback_data="arena_chests")])
+    buttons.append([
+        btn("جزئیات حمله", emoji_key="btn_atk_details", style=NAV, callback_data="arena_detail"),
+        btn("حریف بعدی", emoji_key="btn_attack", style=BATTLE, callback_data="arena_find"),
+    ])
+    buttons.append([back_btn("menu:arena", "بازگشت به آرنا")])
     keyboard = InlineKeyboardMarkup(buttons)
     await query.answer("🟢 بردی!" if result["won"] else "🔴 باختی.")
     await safe_edit_message_text(
@@ -949,22 +968,27 @@ async def arena_revenges_callback(update: Update, context: ContextTypes.DEFAULT_
 
     ready = [it for it in items if it["shield_secs"] <= 0]
     shielded = [it for it in items if it["shield_secs"] > 0]
-    lines = [f"⚔️ <b>انتقام‌ها</b> — {len(items)} مورد ({len(ready)} آماده)\n"]
+    lines = [f"⚔️ <b>انتقام‌ها</b> — <code>{len(items)}</code> مورد (<code>{len(ready)}</code> آماده)", _ARENA_DIV]
     rows = []
     for it in ready:
         res = "غارتت کرد" if it["won"] else "دفاع کردی"
-        loot = f" · −{it['loot']} {get_emoji('coin')}" if it["loot"] else ""
-        lines.append(f"🔴 <b>{it['name']}</b> · 💪{it['power']} · {res}{loot} · ⏳{it['hrs_left']}h")
-        row = [btn(f"⚔️ انتقام", style=DANGER, callback_data=f"arena_revenge:{it['log_id']}")]
+        loot = f"\n  🪙 غارت: <code>−{it['loot']:,}</code> {get_emoji('coin')}" if it["loot"] else ""
+        lines.append(
+            f"🔴 <b>{it['name']}</b>\n"
+            f"  💪 قدرت: <code>{it['power']:,}</code>\n"
+            f"  ⚔️ نتیجه: <b>{res}</b>{loot}\n"
+            f"  ⏳ مهلت: <code>{it['hrs_left']}</code> ساعت"
+        )
+        row = [btn("انتقام", emoji_key="btn_revenge", style=DANGER, callback_data=f"arena_revenge:{it['log_id']}")]
         if it["attacker_id"]:
-            row.append(btn("🔍 جزییات", style=NAV, callback_data=f"defrep_opp:{it['attacker_id']}"))
+            row.append(btn("جزئیات", emoji_key="btn_atk_details", style=NAV, callback_data=f"defrep_opp:{it['attacker_id']}"))
         rows.append(row)
     if shielded:
-        lines.append("\n🛡 <b>الان سپر دارن</b> <i>(تا سپرشون نپره نمی‌شه انتقام گرفت):</i>")
+        lines.append("\n🛡 <b>الان سپر دارند</b> <i>(تا سپرشان تمام نشود نمی‌شود انتقام گرفت):</i>")
         for it in shielded:
-            lines.append(f"　🛡 <b>{it['name']}</b> · 💪{it['power']} — {_fmt_hm(it['shield_secs'])} مونده")
+            lines.append(f"▫️ 🛡 <b>{it['name']}</b>\n  💪 قدرت: <code>{it['power']:,}</code>\n  ⏳ سپر: <code>{_fmt_hm(it['shield_secs'])}</code>")
 
-    rows.append([back_btn("menu:arena")])
+    rows.append([back_btn("menu:arena", "بازگشت به آرنا")])
     await safe_edit_message_text(
         query, "\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows),
     )
@@ -1002,21 +1026,22 @@ async def arena_revenge_callback(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     gap = opp_power - my_power
-    odds = "🟢 شانس بالا" if gap < -15 else ("🔴 خطرناک" if gap > 15 else "🟡 سرتاسری")
-    stolen_bits = []
-    if log.loot_gold:
-        stolen_bits.append(f"{log.loot_gold:,} طلا {get_emoji('coin')}")
-    if getattr(log, "loot_dna", 0):
-        stolen_bits.append(f"{log.loot_dna:,} DNA {get_emoji('dna')}")
-    stolen_str = " + ".join(stolen_bits) if stolen_bits else f"{log.loot_gold:,} طلا"
+    odds = "🟢 شانس بالا" if gap < -15 else ("🔴 خطرناک" if gap > 15 else "🟡 پایاپای")
     lines = [
-        f"⚔️ <b>انتقام از {attacker_name}</b>\n",
-        f"💪 قدرت حریف: <b>{opp_power}</b>  (تو: {my_power} — {odds})",
-        f"💸 اون از تو <b>{stolen_str}</b> دزدید!",
-        f"\n<i>حمله {constants.ARENA_ATTACK_ENERGY_COST} انرژی می‌بره.</i>",
+        f"⚔️ <b>انتقام از {attacker_name}</b>",
+        _ARENA_DIV,
+        "<blockquote>"
+        f"💪 قدرت حریف: <code>{opp_power:,}</code>\n"
+        f"🦅 قدرت شما: <code>{my_power:,}</code> ({odds})\n"
+        f"⚡ هزینه نبرد: <code>{constants.ARENA_ATTACK_ENERGY_COST}</code> انرژی",
     ]
+    if log.loot_gold:
+        lines.append(f"🪙 غنیمت قابل بازپس‌گیری: <code>{log.loot_gold:,}</code> {get_emoji('coin')}")
+    if getattr(log, "loot_dna", 0):
+        lines.append(f"🧬 دی‌ان‌ای: <code>{log.loot_dna:,}</code> {get_emoji('dna')}")
+    lines.append("</blockquote>")
     keyboard = InlineKeyboardMarkup([
-        [btn("⚔️ حمله کن!", style=BATTLE, callback_data=f"arena_revenge_atk:{log_id}")],
+        [btn("شروع انتقام", emoji_key="btn_revenge", style=DANGER, callback_data=f"arena_revenge_atk:{log_id}")],
         [back_btn("arena_revenges", "بازگشت به انتقام‌ها")],
     ])
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
@@ -1077,24 +1102,28 @@ async def arena_revenge_attack_callback(update: Update, context: ContextTypes.DE
 
     loot_gold = result.get("loot", 0)
     loot_dna = result.get("dna", 0)
-    div = "──────────────"
+    div = _ARENA_DIV
 
     if result["won"]:
         cup_sign = f"+{result['cup_delta']}" if result['cup_delta'] > 0 else str(result['cup_delta'])
         body = (
-            f"{get_emoji('celebrate')} <b>انتقام گرفتی! پیروزی در نبرد!</b>\n\n"
-            f"💰 <b>غنیمت دریافتی:</b> +{loot_gold:,} {get_emoji('coin')} ┃ +{loot_dna:,} {get_emoji('dna')}\n"
-            f"🏆 <b>تغییر کاپ:</b> <b>{cup_sign}</b> <i>(کاپ جدید: {result['new_cup']:,})</i>\n\n"
+            f"{get_emoji('celebrate')} <b>انتقام گرفتی! پیروزی در نبرد!</b>\n"
             f"{div}\n"
-            + result["log_text"]
+            f"🎁 <b>غنیمت دریافتی:</b>\n"
+            f"🪙 سکه: <code>+{loot_gold:,}</code> {get_emoji('coin')}\n"
+            f"🧬 دی‌ان‌ای: <code>+{loot_dna:,}</code> {get_emoji('dna')}\n"
+            f"🏆 تغییر کاپ: <code>{cup_sign}</code> <i>(کاپ جدید: <code>{result['new_cup']:,}</code>)</i>\n"
+            f"{div}\n"
+            f"<blockquote>{result['log_text']}</blockquote>"
         )
     else:
         cup_str = str(result['cup_delta'])
         body = (
             f"😔 <b>شکست — انتقام گرفته نشد</b>\n"
-            f"🏆 <b>تغییر کاپ:</b> <b>{cup_str}</b> <i>(کاپ جدید: {result['new_cup']:,})</i>\n\n"
             f"{div}\n"
-            + result["log_text"]
+            f"🏆 تغییر کاپ: <code>{cup_str}</code> <i>(کاپ جدید: <code>{result['new_cup']:,}</code>)</i>\n"
+            f"{div}\n"
+            f"<blockquote>{result['log_text']}</blockquote>"
         )
 
     keyboard = InlineKeyboardMarkup([
@@ -1125,14 +1154,15 @@ async def arena_top_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.answer()
     medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
     lines = [
-        f"{get_emoji('trophy')} <b>جدول فصل {week}</b>",
-        f"⏳ <b>{_format_remaining(season_secs)}</b> تا ریست\n",
+        f"{get_emoji('trophy')} <b>جدول فصل <code>{week}</code></b>",
+        f"⏳ <b>{_format_remaining(season_secs)}</b> تا ریست",
+        _ARENA_DIV,
     ]
     if not ranked:
         lines.append("<i>هنوز کسی کاپ نگرفته — اولین نفر باش!</i>")
     for row in ranked:
         rank = medals[row["rank"] - 1] if row["rank"] <= 3 else f"{row['rank']}."
-        lines.append(f"{rank} {mention(row['user'])} — 🏆 <b>{row['cup']}</b>  <i>(ریست به {row['reset_to']})</i>")
+        lines.append(f"{rank} {mention(row['user'])}\n  🏆 کاپ: <code>{row['cup']:,}</code> <i>(ریست به <code>{row['reset_to']:,}</code>)</i>")
     keyboard = InlineKeyboardMarkup([[back_btn("menu:arena")]])
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
@@ -1155,10 +1185,10 @@ async def arena_last_season_callback(update: Update, context: ContextTypes.DEFAU
         )
         return
     medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
-    lines = [f"🗓 <b>نتایج فصل {week}</b>\n"]
+    lines = [f"🗓 <b>نتایج فصل <code>{week}</code></b>", _ARENA_DIV]
     for r in results:
         rank = medals[r.rank - 1] if r.rank <= 3 else f"{r.rank}."
-        lines.append(f"{rank} {mention(r.user)} — 🏆 {r.cup_before} → {r.cup_after}")
+        lines.append(f"{rank} {mention(r.user)}\n  🏆 کاپ: <code>{r.cup_before:,}</code> ➔ <code>{r.cup_after:,}</code>")
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -1174,11 +1204,13 @@ def _chests_panel_sync(tg_user):
 def _render_chests_text(user, chests: list, has_sub: bool) -> str:
     lines = [
         f"{get_emoji('chest_arena')} <b>جعبه‌های نبرد آرنا</b>",
-        "━━━━━━━━━━━━━━━━━━━━",
+        _ARENA_DIV,
         "با هر پیروزی در آرنا، شانس دریافت یکی از ۴ نوع جعبه را دارید:",
-        f"{get_emoji('chest_silver')} <b>جعبه نقره‌ای</b> (۳ ساعت) ┃ {get_emoji('chest_golden')} <b>جعبه طلایی</b> (۸ ساعت)",
-        f"{get_emoji('chest_magical')} <b>جعبه جادویی</b> (۱۲ ساعت) ┃ {get_emoji('chest_mega')} <b>جعبه مگا / امگا</b> (۲۴ ساعت)",
-        "━━━━━━━━━━━━━━━━━━━━",
+        f"{get_emoji('chest_silver')} <b>جعبه نقره‌ای</b> (<code>۳</code> ساعت)",
+        f"{get_emoji('chest_golden')} <b>جعبه طلایی</b> (<code>۸</code> ساعت)",
+        f"{get_emoji('chest_magical')} <b>جعبه جادویی</b> (<code>۱۲</code> ساعت)",
+        f"{get_emoji('chest_mega')} <b>جعبه مگا / امگا</b> (<code>۲۴</code> ساعت)",
+        _ARENA_DIV,
         "<b>وضعیت جایگاه‌های شما (حداکثر ۴ جعبه):</b>\n",
     ]
 
@@ -1202,17 +1234,17 @@ def _render_chests_text(user, chests: list, has_sub: bool) -> str:
                 st_text = f"{get_emoji('gift')} <b>آماده باز کردن!</b>"
             elif c.status == "unlocking":
                 rem = seconds_until_ready(c)
-                st_text = f"⏳ در حال باز شدن (<b>{_format_remaining(rem)}</b> باقی‌مانده)"
+                st_text = f"⏳ در حال باز شدن (<code>{_format_remaining(rem)}</code> باقی‌مانده)"
             elif c.status == "queued":
                 st_text = "📋 <b>در صف</b> (بعد از جعبه فعلی خودکار باز می‌شود)"
             else:
-                st_text = f"{get_emoji('lock')} <b>قفل</b> (زمان بازگشایی: {cfg.get('unlock_hours', 3)} ساعت)"
-            lines.append(f"{num_e}  <b>جایگاه {slot}: {c_emoji} {name}</b>\n   ┘ وضعیت: {st_text}")
+                st_text = f"{get_emoji('lock')} <b>قفل</b> (زمان بازگشایی: <code>{cfg.get('unlock_hours', 3)}</code> ساعت)"
+            lines.append(f"{num_e} <b>جایگاه {slot}: {c_emoji} {name}</b>\n   ┘ وضعیت: {st_text}")
         else:
-            lines.append(f"{num_e}  <b>جایگاه {slot}: 🔘 خالی</b> <i>(با پیروزی در آرنا به دست می‌آید)</i>")
+            lines.append(f"{num_e} <b>جایگاه {slot}: 🔘 خالی</b> <i>(با پیروزی در آرنا به دست می‌آید)</i>")
 
     lines.append("")
-    lines.append("━━━━━━━━━━━━━━━━━━━━")
+    lines.append(_ARENA_DIV)
     if has_sub:
         lines.append(f"{get_emoji('sub_vip')} <i>اشتراک ویژه فعال است — امکان در صف گذاشتن ۱ جعبه برای بازگشایی خودکار وجود دارد.</i>")
     else:
@@ -1228,11 +1260,10 @@ def _render_chests_keyboard(chests: list) -> InlineKeyboardMarkup:
         c = slots_map.get(slot)
         if c:
             cfg = ARENA_CHEST_TIERS.get(c.chest_type, {})
-            emoji = cfg.get("emoji", "📦")
             name = cfg.get("name", c.chest_type)
             emoji_key = f"btn_chest_{c.chest_type}"
             if c.status == "ready":
-                label = f"🎁 باز کردن {name} (جایگاه {slot})!"
+                label = f"باز کردن {name} (اسلات {slot})"
                 rows.append([btn(label, emoji_key="btn_chest_open", style=SHOP, callback_data=f"arena_chest_open:{c.id}")])
             else:
                 if c.status == "unlocking":
@@ -1242,10 +1273,10 @@ def _render_chests_keyboard(chests: list) -> InlineKeyboardMarkup:
                     st = "📋 در صف"
                 else:
                     st = "🔒 قفل"
-                label = f"{emoji} جایگاه {slot}: {name} ({st})"
+                label = f"جایگاه {slot}: {name} ({st})"
                 rows.append([btn(label, emoji_key=emoji_key, style=NAV, callback_data=f"arena_chest_detail:{c.id}")])
 
-    rows.append([btn("📊 راهنمای جوایز لیگ‌ها", emoji_key="btn_chest_rewards", style=NAV, callback_data="arena_chest_rewards:silver")])
+    rows.append([btn("راهنمای جوایز لیگ‌ها", emoji_key="btn_chest_rewards", style=NAV, callback_data="arena_chest_rewards:silver")])
     rows.append([back_btn("menu:arena", "بازگشت به آرنا")])
     return InlineKeyboardMarkup(rows)
 
@@ -1293,49 +1324,52 @@ async def arena_chest_detail_callback(update: Update, context: ContextTypes.DEFA
     rarity_label = constants.RARITY_LABELS.get(guaranteed, guaranteed)
 
     lines = [
-        f"{get_emoji(f'chest_{chest.chest_type}', cfg['emoji'])} <b>{cfg['name']} (جایگاه {chest.slot})</b>",
-        "━━━━━━━━━━━━━━━━━━━━",
-        f"🏆 لیگ در زمان دریافت: <b>{lg['name']}</b> (کاپ {chest.cup_at_drop})",
-        f"⏱ زمان بازگشایی پایه: <b>{cfg['unlock_hours']} ساعت</b>",
+        f"{get_emoji(f'chest_{chest.chest_type}', cfg['emoji'])} <b>{cfg['name']} (جایگاه <code>{chest.slot}</code>)</b>",
+        _ARENA_DIV,
+        f"🏆 لیگ در زمان دریافت: <b>{lg['name']}</b> (کاپ <code>{chest.cup_at_drop:,}</code>)",
+        f"⏱ زمان بازگشایی پایه: <code>{cfg['unlock_hours']}</code> ساعت",
         "",
         "<b>جوایز تخمینی این جعبه:</b>",
-        f"🪙 طلا: <b>~{gold_val:,}</b> {get_emoji('coin')} (بر اساس لیگ)",
-        f"🧬 دی‌ان‌ای: <b>~{dna_val:,}</b> {get_emoji('dna')}",
+        f"🪙 طلا: <code>~{gold_val:,}</code> {get_emoji('coin')} (بر اساس لیگ)",
+        f"🧬 دی‌ان‌ای: <code>~{dna_val:,}</code> {get_emoji('dna')}",
     ]
     if cfg["key"] in ("magical", "mega"):
         lines.append(f"💎 الماس: <b>دارد (بونس ویژه)</b> {get_emoji('diamond')}")
     if chest.chest_type == "mega" and chest.cup_at_drop >= 3500:
         c_line = f"👹 هیولا: <b>تضمینی قطعی ۱۰۰٪ {rarity_label}</b>"
     else:
-        c_line = f"👹 شانس هیولا: <b>{int(cfg['creature_chance'] * 100)}٪</b> (حداقل تضمینی: <b>{rarity_label}</b>)"
+        c_line = f"👹 شانس هیولا: <code>{int(cfg['creature_chance'] * 100)}%</code> (حداقل تضمینی: <b>{rarity_label}</b>)"
     lines += [
         c_line,
-        "━━━━━━━━━━━━━━━━━━━━",
+        _ARENA_DIV,
     ]
 
     rows = []
     if chest.status == "ready":
         lines.append(f"وضعیت: {get_emoji('gift')} <b>آماده باز کردن است!</b>")
-        rows.append([btn("🎁 باز کردن جعبه", emoji_key="btn_chest_open", style=SHOP, callback_data=f"arena_chest_open:{chest.id}")])
+        rows.append([btn("باز کردن جعبه", emoji_key="btn_chest_open", style=SHOP, callback_data=f"arena_chest_open:{chest.id}")])
     elif chest.status == "unlocking":
         rem = seconds_until_ready(chest)
-        lines.append(f"وضعیت: ⏳ در حال باز شدن (<b>{_format_remaining(rem)}</b> باقی‌مانده)")
-        rows.append([btn(f"⚡ پایان فوری با {cost} الماس 💎", emoji_key="btn_chest_speedup", style=SHOP, callback_data=f"arena_chest_speedup:{chest.id}")])
+        lines.append(f"وضعیت: ⏳ در حال باز شدن (<code>{_format_remaining(rem)}</code> باقی‌مانده)")
+        lines.append(f"<blockquote>⚡ <b>هزینه بازگشایی فوری:</b> <code>{cost}</code> الماس {get_emoji('diamond')}</blockquote>")
+        rows.append([btn("بازگشایی فوری با الماس", emoji_key="btn_chest_speedup", style=SHOP, callback_data=f"arena_chest_speedup:{chest.id}")])
     elif chest.status == "queued":
         lines.append("وضعیت: 📋 <b>در صف بازگشایی</b> (بعد از اتمام جعبه فعلی خودکار باز می‌شود)")
-        rows.append([btn(f"⚡ پایان فوری با {cost} الماس 💎", emoji_key="btn_chest_speedup", style=SHOP, callback_data=f"arena_chest_speedup:{chest.id}")])
+        lines.append(f"<blockquote>⚡ <b>هزینه بازگشایی فوری:</b> <code>{cost}</code> الماس {get_emoji('diamond')}</blockquote>")
+        rows.append([btn("بازگشایی فوری با الماس", emoji_key="btn_chest_speedup", style=SHOP, callback_data=f"arena_chest_speedup:{chest.id}")])
     else:  # locked
-        lines.append(f"وضعیت: {get_emoji('lock')} <b>قفل</b> (نیازمند {cfg['unlock_hours']} ساعت زمان)")
+        lines.append(f"وضعیت: {get_emoji('lock')} <b>قفل</b> (نیازمند <code>{cfg['unlock_hours']}</code> ساعت زمان)")
+        lines.append(f"<blockquote>⚡ <b>هزینه بازگشایی فوری:</b> <code>{cost}</code> الماس {get_emoji('diamond')}</blockquote>")
         if not active_unlocking:
-            rows.append([btn("🔓 شروع باز کردن", emoji_key="btn_chest_start", style=BATTLE, callback_data=f"arena_chest_start:{chest.id}")])
+            rows.append([btn("شروع بازگشایی", emoji_key="btn_chest_start", style=BATTLE, callback_data=f"arena_chest_start:{chest.id}")])
         else:
             if has_sub:
-                rows.append([btn("📋 قرار دادن در صف (ویژه)", emoji_key="btn_chest_queue", style=PRIMARY, callback_data=f"arena_chest_queue:{chest.id}")])
+                rows.append([btn("در صف گذاشتن", emoji_key="btn_chest_queue", style=PRIMARY, callback_data=f"arena_chest_queue:{chest.id}")])
             else:
                 lines.append("<i>⚠️ جعبه دیگری در حال باز شدن است.</i>")
-        rows.append([btn(f"⚡ باز کردن فوری با {cost} الماس 💎", emoji_key="btn_chest_speedup", style=SHOP, callback_data=f"arena_chest_speedup:{chest.id}")])
+        rows.append([btn("بازگشایی فوری با الماس", emoji_key="btn_chest_speedup", style=SHOP, callback_data=f"arena_chest_speedup:{chest.id}")])
 
-    rows.append([btn("🔙 بازگشت به جعبه‌ها", emoji_key="btn_chests", style=NAV, callback_data="arena_chests")])
+    rows.append([back_btn("arena_chests", "بازگشت به جعبه‌ها")])
 
     photo = get_arena_chest_image_path(chest.chest_type, chest.status)
     await send_screen(update, "\n".join(lines), photo=photo, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
@@ -1403,16 +1437,20 @@ async def arena_chest_speedup_callback(update: Update, context: ContextTypes.DEF
         return
     await query.answer()
     keyboard = InlineKeyboardMarkup([
-        [btn(f"✅ تأیید و باز کردن فوری ({cost} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"arena_chest_speedup_do:{chest_id}")],
-        [btn("❌ انصراف", emoji_key="btn_cancel", style=DANGER, callback_data=f"arena_chest_detail:{chest_id}")],
+        [
+            btn("تأیید بازگشایی", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"arena_chest_speedup_do:{chest_id}"),
+            btn("انصراف", emoji_key="btn_cancel", style=DANGER, callback_data=f"arena_chest_detail:{chest_id}"),
+        ]
     ])
     from game.emoji import get_emoji
     await safe_edit_message_text(
         query,
-        f"⚡ <b>باز کردن فوری {cfg['name']} (جایگاه {chest.slot})</b>\n\n"
-        f"{get_emoji('diamond')} هزینه: <b>{cost} الماس</b>\n"
-        f"💎 موجودی شما: <b>{user.diamonds} الماس</b>\n\n"
-        "آیا از باز کردن فوری این جعبه با الماس مطمئن هستید؟",
+        f"⚡ <b>باز کردن فوری {cfg['name']} (جایگاه <code>{chest.slot}</code>)</b>\n\n"
+        "<blockquote>"
+        f"{get_emoji('diamond')} <b>هزینه:</b> <code>{cost}</code> الماس\n"
+        f"💎 <b>موجودی شما:</b> <code>{user.diamonds}</code> الماس"
+        "</blockquote>\n\n"
+        "<i>آیا از باز کردن فوری این جعبه با الماس مطمئن هستید؟</i>",
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -1448,14 +1486,14 @@ async def arena_chest_open_callback(update: Update, context: ContextTypes.DEFAUL
     tier = res["tier"]
 
     lines = [
-        f"{get_emoji('celebrate', '💝')}  <b>جعبه باز شد!</b>",
-        f"{get_emoji(f'chest_{tier}', res['emoji'])}  <b>{res['name']} (جایگاه {res['slot']})</b>",
-        "━━━━━━━━━━━━━━━━━━━━",
-        f"🪙  طلا: <b>+{res['coins']:,}</b> {get_emoji('coin', '💰')}",
-        f"🧬  دی‌ان‌ای: <b>+{res['dna']:,}</b> {get_emoji('dna', '🧬')}",
+        f"{get_emoji('celebrate', '💝')} <b>جعبه باز شد!</b>",
+        f"{get_emoji(f'chest_{tier}', res['emoji'])} <b>{res['name']} (جایگاه <code>{res['slot']}</code>)</b>",
+        _ARENA_DIV,
+        f"🪙 طلا: <code>+{res['coins']:,}</code> {get_emoji('coin', '💰')}",
+        f"🧬 دی‌ان‌ای: <code>+{res['dna']:,}</code> {get_emoji('dna', '🧬')}",
     ]
     if res.get("diamonds"):
-        lines.append(f"💎  الماس: <b>+{res['diamonds']:,}</b> {get_emoji('diamond', '💎')}")
+        lines.append(f"💎 الماس: <code>+{res['diamonds']:,}</code> {get_emoji('diamond', '💎')}")
 
     creature = res.get("creature")
     item = res.get("item")
@@ -1464,14 +1502,14 @@ async def arena_chest_open_callback(update: Update, context: ContextTypes.DEFAUL
     if creature:
         lines += [
             "",
-            f"{get_emoji('creature', '🦖')}  <b>موجود جدید از جعبه آزاد شد:</b>",
-            f"✨  <b>{creature.name}</b> [{rarity_label}]",
+            f"{get_emoji('creature', '🦖')} <b>موجود جدید از جعبه آزاد شد:</b>",
+            f"✨ <b>{creature.name}</b> [<b>{rarity_label}</b>]",
         ]
     elif item:
         lines += [
             "",
-            "🎒  <b>تجهیزات دریافت شده:</b>",
-            f"⚔️  <b>{item.name}</b> [{rarity_label}]",
+            "🎒 <b>تجهیزات دریافت شده:</b>",
+            f"⚔️ <b>{item.name}</b> [<b>{rarity_label}</b>]",
         ]
 
     if res.get("next_started"):
@@ -1479,15 +1517,17 @@ async def arena_chest_open_callback(update: Update, context: ContextTypes.DEFAUL
         next_cfg = ARENA_CHEST_TIERS.get(next_c.chest_type, {})
         lines += [
             "",
-            f"📋 جعبه در صف «{next_cfg.get('name', '')}» (جایگاه {next_c.slot}) خودکار شروع به باز شدن کرد!",
+            f"📋 <i>جعبه در صف «{next_cfg.get('name', '')}» (جایگاه <code>{next_c.slot}</code>) خودکار شروع به باز شدن کرد!</i>",
         ]
 
-    lines.append("━━━━━━━━━━━━━━━━━━━━")
+    lines.append(_ARENA_DIV)
 
     photo = get_arena_chest_image_path(tier, "open")
     kb = InlineKeyboardMarkup([
-        [btn("📦 مشاهده جعبه‌های آرنا", emoji_key="btn_chests", style=SHOP, callback_data="arena_chests")],
-        [btn("منوی اصلی", style=NAV, callback_data="menu:me")],
+        [
+            btn("جعبه‌های آرنا", emoji_key="btn_chests", style=SHOP, callback_data="arena_chests"),
+            back_btn("menu:me", "منوی اصلی"),
+        ],
     ])
     await send_screen(update, "\n".join(lines), photo=photo, parse_mode="HTML", reply_markup=kb)
 
@@ -1519,22 +1559,22 @@ async def arena_chest_rewards_callback(update: Update, context: ContextTypes.DEF
         tier_tabs.append(btn(label, emoji_key=f"btn_chest_{t_key}", style=PRIMARY if is_sel else NAV, callback_data=f"arena_chest_rewards:{t_key}:{page}"))
 
     if tier == "mega":
-        min_info = "کاپ ۰+: حداقل حماسی ┃ کاپ ۱۵۰۰+: حداقل افسانه‌ای ┃ کاپ ۳۵۰۰+: تضمینی ۱۰۰٪ اساطیری"
+        min_info = "▫️ کاپ <code>0</code>+: حداقل حماسی\n▫️ کاپ <code>1,500</code>+: حداقل افسانه‌ای\n▫️ کاپ <code>3,500</code>+: تضمینی ۱۰۰٪ اساطیری"
     elif tier == "magical":
-        min_info = "کاپ ۰+: حداقل کمیاب ┃ کاپ ۱۵۰۰+: حداقل حماسی ┃ کاپ ۳۵۰۰+: حداقل افسانه‌ای"
+        min_info = "▫️ کاپ <code>0</code>+: حداقل کمیاب\n▫️ کاپ <code>1,500</code>+: حداقل حماسی\n▫️ کاپ <code>3,500</code>+: حداقل افسانه‌ای"
     elif tier == "golden":
-        min_info = "کاپ ۰+: حداقل معمولی ┃ کاپ ۱۵۰۰+: حداقل کمیاب ┃ کاپ ۳۵۰۰+: حداقل حماسی"
+        min_info = "▫️ کاپ <code>0</code>+: حداقل معمولی\n▫️ کاپ <code>1,500</code>+: حداقل کمیاب\n▫️ کاپ <code>3,500</code>+: حداقل حماسی"
     else:  # silver
-        min_info = "کاپ ۰+: حداقل معمولی ┃ کاپ ۳۵۰۰+: حداقل کمیاب"
+        min_info = "▫️ کاپ <code>0</code>+: حداقل معمولی\n▫️ کاپ <code>3,500</code>+: حداقل کمیاب"
 
     page_label = "لیگ‌های ۱ تا ۸" if page == 1 else "لیگ‌های ۹ تا ۱۶"
     lines = [
         f"{tier_emoji} <b>راهنمای جوایز {tier_name}</b> ({page_label})",
-        "───────────────────",
-        f"⏱ زمان بازگشایی پایه: <b>{cfg['unlock_hours']} ساعت</b>",
-        f"{get_emoji('creature')} شانس دریافت هیولا: <b>{int(cfg['creature_chance'] * 100)}٪</b>",
-        f"🎯 نایابی تضمینی هیولا/تجهیزات:\n   ▫️ <i>{min_info}</i>",
-        f"🎒 تجهیزات: <b>۱ عدد تصادفی</b>",
+        _ARENA_DIV,
+        f"⏱ زمان بازگشایی پایه: <code>{cfg['unlock_hours']}</code> ساعت",
+        f"{get_emoji('creature')} شانس دریافت هیولا: <code>{int(cfg['creature_chance'] * 100)}%</code>",
+        f"🎯 <b>نایابی تضمینی هیولا/تجهیزات:</b>\n{min_info}",
+        "🎒 تجهیزات: <b>۱ عدد تصادفی</b>",
     ]
     if cfg["key"] in ("magical", "mega"):
         lines.append(f"{get_emoji('diamond')} الماس: <b>دارد (بونس ویژه)</b>")
@@ -1542,7 +1582,7 @@ async def arena_chest_rewards_callback(update: Update, context: ContextTypes.DEF
     lines += [
         "",
         "🏆 <b>میزان جوایز بر اساس لیگ و کاپ:</b>",
-        "───────────────────",
+        _ARENA_DIV,
     ]
 
     from game.arena_chests import league_multiplier
@@ -1554,25 +1594,26 @@ async def arena_chest_rewards_callback(update: Update, context: ContextTypes.DEF
         dna_val = round(cfg["base_dna"] * mult)
         lg_emoji = lg.get("emoji", "🎖")
         lines.append(
-            f"{lg_emoji} <b>{lg['name']}</b> ({min_cup:,}+ کاپ):\n"
-            f"▫️ <b>{gold_val:,}</b> {get_emoji('coin')} طلا ┃ <b>{dna_val:,}</b> {get_emoji('dna')} دی‌ان‌ای"
+            f"{lg_emoji} <b>{lg['name']}</b> (کاپ <code>{min_cup:,}</code>+):\n"
+            f"  🪙 سکه: <code>+{gold_val:,}</code> {get_emoji('coin')}\n"
+            f"  🧬 دی‌ان‌ای: <code>+{dna_val:,}</code> {get_emoji('dna')}"
         )
 
     lines += [
-        "───────────────────",
+        _ARENA_DIV,
         "💡 <i>جوایز بر اساس لیگ شما در لحظه پیروزی محاسبه می‌شوند.</i>",
     ]
 
     # Pagination navigation row
     if page == 1:
-        nav_row = [btn("صفحه بعدی (لیگ‌های برتر) ◀️", emoji_key="btn_next", style=PRIMARY, callback_data=f"arena_chest_rewards:{tier}:2")]
+        nav_row = [btn("لیگ‌های برتر", emoji_key="btn_next", style=PRIMARY, callback_data=f"arena_chest_rewards:{tier}:2")]
     else:
-        nav_row = [btn("▶️ صفحه قبلی (لیگ‌های پایه)", emoji_key="btn_back", style=PRIMARY, callback_data=f"arena_chest_rewards:{tier}:1")]
+        nav_row = [btn("لیگ‌های پایه", emoji_key="btn_prev", style=PRIMARY, callback_data=f"arena_chest_rewards:{tier}:1")]
 
     kb = InlineKeyboardMarkup([
         tier_tabs,
         nav_row,
-        [btn("🔙 بازگشت به جعبه‌ها", emoji_key="btn_chests", style=NAV, callback_data="arena_chests")],
+        [back_btn("arena_chests", "بازگشت به جعبه‌ها")],
     ])
 
     from game.media import get_arena_chest_image_path

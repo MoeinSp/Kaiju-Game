@@ -67,7 +67,7 @@ async def event_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     text, keyboard = _render(st)
     await safe_edit_message_text(
         query,
-        f"🎉 <b>جایزه‌ی رویداد دریافت شد!</b>\n🎁 <b>{events.reward_text(reward)}</b>\n\n━━━━━━━━━━\n" + text,
+        f"🎉 <b>جایزه‌ی رویداد دریافت شد!</b>\n🎁 <b>{events.reward_text(reward)}</b>\n\n━━━━━━━━━━━━━━━━━━━━\n" + text,
         parse_mode="HTML",
         reply_markup=keyboard,
     )

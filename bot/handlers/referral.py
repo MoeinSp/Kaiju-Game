@@ -41,10 +41,10 @@ def _render(st: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyb
         "🎁 <b>دعوت دوستان</b>",
         "<blockquote>لینکت رو برای دوستات بفرست. وقتی یکی با لینک تو بیاد و به "
         f"<b>سطح آزمایشگاه {st['milestone_level']}</b> برسه، <b>هردوتون</b> جایزه می‌گیرین:\n"
-        f"• تو: <b>{st['referrer_reward']}</b> 💎   • دوستت: <b>{st['friend_reward']}</b> 💎</blockquote>",
+        f"• تو: <b>{st['referrer_reward']:,}</b> 💎   • دوستت: <b>{st['friend_reward']:,}</b> 💎</blockquote>",
         "",
-        f"👥 کل: <b>{st['total']}</b>   ✅ موفق: <b>{len(successful)}</b>   "
-        f"🎉 آماده: <b>{len(ready)}</b>   ⛔ شرایط ناقص: <b>{len(incomplete)}</b>",
+        f"👥 کل: <b>{st['total']:,}</b>   ✅ موفق: <b>{len(successful):,}</b>   "
+        f"🎉 آماده: <b>{len(ready):,}</b>   ⛔ شرایط ناقص: <b>{len(incomplete):,}</b>",
     ]
 
     if not friends:

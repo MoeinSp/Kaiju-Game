@@ -772,13 +772,13 @@ BUILDING_LEVEL_LAB_REQ = {1: 0, 2: 3, 3: 7, 4: 12, 5: 18}
 # creature-combination building that grants prestige stars — as the reward for
 # fully maxing the main hall.
 BUILDING_UNLOCK_HALL_LEVEL = {
-    "gold_collector": 1,      # the first thing you build — income has to come first
-    "fusion_lab": 1,          # stars open from day one; its LEVEL is the star cap now
-    "dna_lab": 2,             # DNA feeds breeding and fusion costs
-    "blacksmith": 3,          # gear upgrades open once there's gold to spend on them
-    "diamond_collector": 4,   # the premium mine — a real mid/late-game payoff
-    "trade_hall": 2,          # trading opens once a player has a small foothold
-    "research_lab": 5,        # the endgame prize — opens only at a maxed main hall
+    "gold_collector": 1,      # درآمد پایه از ابتدا
+    "dna_lab": 2,             # آزمایشگاه DNA
+    "fusion_lab": 2,          # تالار ادغام و افزایش ستاره
+    "trade_hall": 2,          # تالار تجارت
+    "blacksmith": 3,          # آهنگری و ارتقای تجهیزات
+    "diamond_collector": 3,   # معدن جمع‌کننده الماس
+    "research_lab": 5,        # آزمایشگاه تحقیقات ژنتیک
 }
 
 # ── Upgrade pacing ────────────────────────────────────────────────────────────

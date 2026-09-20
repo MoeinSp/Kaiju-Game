@@ -214,12 +214,18 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
     if parse_mode == "HTML" and isinstance(text, str):
         text = premiumize_html(text)
 
+    def _strip_tg_emoji(s: str) -> str:
+        return re.sub(r"</?tg-emoji[^>]*>", "", s) if s else ""
+
+    def _strip_html(s: str) -> str:
+        return re.sub(r"<[^>]+>", "", s) if s else ""
+
     if valid_photo:
         if parse_mode == "HTML":
             caption = safe_truncate_html(text, 1000)
         else:
             caption = text[:1000] if text else ""
-        plain_caption = re.sub(r"<[^>]+>", "", caption) if caption else ""
+        plain_caption = _strip_html(caption)
         cached_fid = get_cached_file_id(valid_photo)
         try:
             if query is not None and getattr(query, "message", None):
@@ -236,16 +242,24 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                         except BadRequest as ex:
                             if "Message is not modified" in str(ex):
                                 return getattr(query, "message", None)
-                            if any(k in str(ex).lower() for k in ("parse", "entity", "tag", "start tag")):
+                            if any(k in str(ex).lower() for k in ("document_invalid", "parse", "entity", "tag", "start tag")):
                                 try:
                                     res = await query.edit_message_media(
-                                        media=InputMediaPhoto(media=cached_fid, caption=plain_caption, parse_mode=None),
+                                        media=InputMediaPhoto(media=cached_fid, caption=_strip_tg_emoji(caption), parse_mode=parse_mode),
                                         reply_markup=reply_markup,
                                     )
                                     return res
                                 except BadRequest as inner_ex:
                                     if "Message is not modified" in str(inner_ex):
                                         return getattr(query, "message", None)
+                                    try:
+                                        res = await query.edit_message_media(
+                                            media=InputMediaPhoto(media=cached_fid, caption=plain_caption, parse_mode=None),
+                                            reply_markup=reply_markup,
+                                        )
+                                        return res
+                                    except Exception:
+                                        pass
                                 except Exception:
                                     pass
                             logger.debug("edit_message_media with file_id failed, falling back: %s", ex)
@@ -268,21 +282,28 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                     except BadRequest as ex:
                         if "Message is not modified" in str(ex):
                             return getattr(query, "message", None)
-                        if any(k in str(ex).lower() for k in ("parse", "entity", "tag", "start tag")):
+                        if any(k in str(ex).lower() for k in ("document_invalid", "parse", "entity", "tag", "start tag")):
                             try:
                                 with open(valid_photo, "rb") as f:
                                     res = await query.edit_message_media(
-                                        media=InputMediaPhoto(media=f, caption=plain_caption, parse_mode=None),
+                                        media=InputMediaPhoto(media=f, caption=_strip_tg_emoji(caption), parse_mode=parse_mode),
                                         reply_markup=reply_markup,
                                     )
                                 if res and hasattr(res, "photo") and res.photo:
                                     store_cached_file_id(valid_photo, res.photo[-1].file_id)
                                 return res
-                            except BadRequest as inner_ex:
-                                if "Message is not modified" in str(inner_ex):
-                                    return getattr(query, "message", None)
                             except Exception:
-                                pass
+                                try:
+                                    with open(valid_photo, "rb") as f:
+                                        res = await query.edit_message_media(
+                                            media=InputMediaPhoto(media=f, caption=plain_caption, parse_mode=None),
+                                            reply_markup=reply_markup,
+                                        )
+                                    if res and hasattr(res, "photo") and res.photo:
+                                        store_cached_file_id(valid_photo, res.photo[-1].file_id)
+                                    return res
+                                except Exception:
+                                    pass
                     except Exception:
                         pass
 
@@ -299,14 +320,20 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                         )
                         return res
                     except BadRequest as ex:
-                        if any(k in str(ex).lower() for k in ("parse", "entity", "tag", "start tag")):
+                        if any(k in str(ex).lower() for k in ("document_invalid", "parse", "entity", "tag", "start tag")):
                             try:
                                 res = await query.message.chat.send_photo(
-                                    photo=cached_fid, caption=plain_caption, reply_markup=reply_markup, parse_mode=None, **kwargs
+                                    photo=cached_fid, caption=_strip_tg_emoji(caption), reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
                                 )
                                 return res
                             except Exception:
-                                pass
+                                try:
+                                    res = await query.message.chat.send_photo(
+                                        photo=cached_fid, caption=plain_caption, reply_markup=reply_markup, parse_mode=None, **kwargs
+                                    )
+                                    return res
+                                except Exception:
+                                    pass
                         logger.debug("send_photo with file_id failed, falling back: %s", ex)
                         invalidate_cached_file_id(valid_photo)
                         cached_fid = None
@@ -324,17 +351,26 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                         store_cached_file_id(valid_photo, res.photo[-1].file_id)
                     return res
                 except BadRequest as ex:
-                    if any(k in str(ex).lower() for k in ("parse", "entity", "tag", "start tag")):
+                    if any(k in str(ex).lower() for k in ("document_invalid", "parse", "entity", "tag", "start tag")):
                         try:
                             with open(valid_photo, "rb") as f:
                                 res = await query.message.chat.send_photo(
-                                    photo=f, caption=plain_caption, reply_markup=reply_markup, parse_mode=None, **kwargs
+                                    photo=f, caption=_strip_tg_emoji(caption), reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
                                 )
                             if res and hasattr(res, "photo") and res.photo:
                                 store_cached_file_id(valid_photo, res.photo[-1].file_id)
                             return res
                         except Exception:
-                            pass
+                            try:
+                                with open(valid_photo, "rb") as f:
+                                    res = await query.message.chat.send_photo(
+                                        photo=f, caption=plain_caption, reply_markup=reply_markup, parse_mode=None, **kwargs
+                                    )
+                                if res and hasattr(res, "photo") and res.photo:
+                                    store_cached_file_id(valid_photo, res.photo[-1].file_id)
+                                return res
+                            except Exception:
+                                pass
                 except Exception:
                     pass
 
@@ -347,14 +383,20 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                         )
                         return res
                     except BadRequest as ex:
-                        if any(k in str(ex).lower() for k in ("parse", "entity", "tag", "start tag")):
+                        if any(k in str(ex).lower() for k in ("document_invalid", "parse", "entity", "tag", "start tag")):
                             try:
                                 res = await message.reply_photo(
-                                    photo=cached_fid, caption=plain_caption, reply_markup=reply_markup, parse_mode=None, **kwargs
+                                    photo=cached_fid, caption=_strip_tg_emoji(caption), reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
                                 )
                                 return res
                             except Exception:
-                                pass
+                                try:
+                                    res = await message.reply_photo(
+                                        photo=cached_fid, caption=plain_caption, reply_markup=reply_markup, parse_mode=None, **kwargs
+                                    )
+                                    return res
+                                except Exception:
+                                    pass
                         logger.debug("reply_photo with file_id failed, falling back: %s", ex)
                         invalidate_cached_file_id(valid_photo)
                         cached_fid = None
@@ -372,17 +414,26 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                         store_cached_file_id(valid_photo, res.photo[-1].file_id)
                     return res
                 except BadRequest as ex:
-                    if any(k in str(ex).lower() for k in ("parse", "entity", "tag", "start tag")):
+                    if any(k in str(ex).lower() for k in ("document_invalid", "parse", "entity", "tag", "start tag")):
                         try:
                             with open(valid_photo, "rb") as f:
                                 res = await message.reply_photo(
-                                    photo=f, caption=plain_caption, reply_markup=reply_markup, parse_mode=None, **kwargs
+                                    photo=f, caption=_strip_tg_emoji(caption), reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
                                 )
                             if res and hasattr(res, "photo") and res.photo:
                                 store_cached_file_id(valid_photo, res.photo[-1].file_id)
                             return res
                         except Exception:
-                            pass
+                            try:
+                                with open(valid_photo, "rb") as f:
+                                    res = await message.reply_photo(
+                                        photo=f, caption=plain_caption, reply_markup=reply_markup, parse_mode=None, **kwargs
+                                    )
+                                if res and hasattr(res, "photo") and res.photo:
+                                    store_cached_file_id(valid_photo, res.photo[-1].file_id)
+                                return res
+                            except Exception:
+                                pass
                 except Exception:
                     pass
         except Exception as e:
@@ -393,7 +444,7 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
         has_photo = bool(getattr(query.message, "photo", None))
         if has_photo:
             caption = safe_truncate_html(text, 1024) if parse_mode == "HTML" else (text[:1024] if text else "")
-            plain_caption = re.sub(r"<[^>]+>", "", caption) if caption else ""
+            plain_caption = _strip_html(caption)
             try:
                 return await query.edit_message_caption(
                     caption=caption, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
@@ -401,44 +452,98 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
             except BadRequest as exc:
                 if "Message is not modified" in str(exc):
                     return getattr(query, "message", None)
-                if any(k in str(exc).lower() for k in ("parse", "entity", "tag", "start tag")):
+                if any(k in str(exc).lower() for k in ("document_invalid", "parse", "entity", "tag", "start tag")):
                     try:
                         return await query.edit_message_caption(
-                            caption=plain_caption, reply_markup=reply_markup, parse_mode=None, **kwargs
+                            caption=_strip_tg_emoji(caption), reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
                         )
-                    except BadRequest as inner_ex:
-                        if "Message is not modified" in str(inner_ex):
-                            return getattr(query, "message", None)
                     except Exception:
-                        pass
+                        try:
+                            return await query.edit_message_caption(
+                                caption=plain_caption, reply_markup=reply_markup, parse_mode=None, **kwargs
+                            )
+                        except BadRequest as inner_ex:
+                            if "Message is not modified" in str(inner_ex):
+                                return getattr(query, "message", None)
+                        except Exception:
+                            pass
                 try:
                     await query.message.delete()
                 except Exception:
                     pass
-                return await query.message.chat.send_message(
-                    text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
-                )
+                try:
+                    return await query.message.chat.send_message(
+                        text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
+                    )
+                except Exception:
+                    return await query.message.chat.send_message(
+                        plain_caption, reply_markup=reply_markup, parse_mode=None, **kwargs
+                    )
             except Exception:
                 try:
                     await query.message.delete()
                 except Exception:
                     pass
-                return await query.message.chat.send_message(
-                    text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
-                )
+                try:
+                    return await query.message.chat.send_message(
+                        text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
+                    )
+                except Exception:
+                    return await query.message.chat.send_message(
+                        plain_caption, reply_markup=reply_markup, parse_mode=None, **kwargs
+                    )
         try:
             return await query.edit_message_text(
                 text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
             )
         except BadRequest as exc:
-            if "Message is not modified" not in str(exc):
-                raise
+            if "Message is not modified" in str(exc):
+                return getattr(query, "message", None)
+            if any(k in str(exc).lower() for k in ("document_invalid", "parse", "entity", "tag", "start tag")):
+                try:
+                    return await query.edit_message_text(
+                        _strip_tg_emoji(text), reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
+                    )
+                except BadRequest as exc2:
+                    if "Message is not modified" in str(exc2):
+                        return getattr(query, "message", None)
+                    try:
+                        return await query.edit_message_text(
+                            _strip_html(text), reply_markup=reply_markup, parse_mode=None, **kwargs
+                        )
+                    except BadRequest as exc3:
+                        if "Message is not modified" in str(exc3):
+                            return getattr(query, "message", None)
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+            # If edit failed (e.g. message too old or cannot be edited), fallback to sending new message
+            try:
+                return await query.message.chat.send_message(
+                    text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
+                )
+            except Exception:
+                pass
+            raise
         return getattr(query, "message", None)
 
     if message is not None:
-        return await message.reply_text(
-            text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
-        )
+        try:
+            return await message.reply_text(
+                text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
+            )
+        except BadRequest as exc:
+            if any(k in str(exc).lower() for k in ("document_invalid", "parse", "entity", "tag", "start tag")):
+                try:
+                    return await message.reply_text(
+                        _strip_tg_emoji(text), reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
+                    )
+                except Exception:
+                    return await message.reply_text(
+                        _strip_html(text), reply_markup=reply_markup, parse_mode=None, **kwargs
+                    )
+            raise
     return None
 
 
@@ -452,24 +557,34 @@ async def safe_edit_message_text(query, text, **kwargs):
     if photo:
         return await send_screen(query, text, photo=photo, **kwargs)
 
+    def _strip_tg_emoji(s: str) -> str:
+        return re.sub(r"</?tg-emoji[^>]*>", "", s) if s else ""
+
+    def _strip_html(s: str) -> str:
+        return re.sub(r"<[^>]+>", "", s) if s else ""
+
     if getattr(query, "message", None) and getattr(query.message, "photo", None):
         caption = safe_truncate_html(text, 1024) if parse_mode == "HTML" else (text[:1024] if text else "")
-        plain_caption = re.sub(r"<[^>]+>", "", caption) if caption else ""
+        plain_caption = _strip_html(caption)
         try:
             return await query.edit_message_caption(caption=caption, **kwargs)
         except BadRequest as exc:
             if "Message is not modified" in str(exc):
                 return getattr(query, "message", None)
-            if any(k in str(exc).lower() for k in ("parse", "entity", "tag", "start tag")):
+            if any(k in str(exc).lower() for k in ("document_invalid", "parse", "entity", "tag", "start tag")):
                 try:
                     clean_kwargs = dict(kwargs)
-                    clean_kwargs["parse_mode"] = None
-                    return await query.edit_message_caption(caption=plain_caption, **clean_kwargs)
-                except BadRequest as inner_ex:
-                    if "Message is not modified" in str(inner_ex):
-                        return getattr(query, "message", None)
+                    return await query.edit_message_caption(caption=_strip_tg_emoji(caption), **clean_kwargs)
                 except Exception:
-                    pass
+                    try:
+                        clean_kwargs = dict(kwargs)
+                        clean_kwargs["parse_mode"] = None
+                        return await query.edit_message_caption(caption=plain_caption, **clean_kwargs)
+                    except BadRequest as inner_ex:
+                        if "Message is not modified" in str(inner_ex):
+                            return getattr(query, "message", None)
+                    except Exception:
+                        pass
             try:
                 await query.message.delete()
             except Exception:
@@ -487,16 +602,20 @@ async def safe_edit_message_text(query, text, **kwargs):
     except BadRequest as exc:
         if "Message is not modified" in str(exc):
             return getattr(query, "message", None)
-        if any(k in str(exc).lower() for k in ("parse", "entity", "tag", "start tag")):
+        if any(k in str(exc).lower() for k in ("document_invalid", "parse", "entity", "tag", "start tag")):
             try:
                 clean_kwargs = dict(kwargs)
-                clean_kwargs["parse_mode"] = None
-                plain_text = re.sub(r"<[^>]+>", "", text) if text else ""
-                return await query.edit_message_text(plain_text, **clean_kwargs)
-            except BadRequest as inner_ex:
-                if "Message is not modified" in str(inner_ex):
-                    return getattr(query, "message", None)
+                return await query.edit_message_text(_strip_tg_emoji(text), **clean_kwargs)
             except Exception:
-                pass
+                try:
+                    clean_kwargs = dict(kwargs)
+                    clean_kwargs["parse_mode"] = None
+                    plain_text = _strip_html(text)
+                    return await query.edit_message_text(plain_text, **clean_kwargs)
+                except BadRequest as inner_ex:
+                    if "Message is not modified" in str(inner_ex):
+                        return getattr(query, "message", None)
+                except Exception:
+                    pass
         raise
     return getattr(query, "message", None)

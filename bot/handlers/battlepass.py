@@ -54,7 +54,7 @@ def _render(user, st: dict) -> tuple[str, InlineKeyboardMarkup]:
     pct = round(100 * st["into"] / max(1, st["span"]))
     track = "✦ ویژه (Premium)" if st["premium"] else "رایگان (Free)"
     left = _fmt_left(battlepass.seconds_until_period_end())
-    div = "──────────────"
+    div = "━━━━━━━━━━━━━━━━━━━━"
 
     now_date = timezone.localtime(timezone.now()).date()
     jy, jm, jd = battlepass.gregorian_to_jalali(now_date.year, now_date.month, now_date.day)
@@ -125,7 +125,7 @@ async def pass_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     text, keyboard = _render(user, st)
     await safe_edit_message_text(
         query,
-        f"🎉 <b>جوایز پاس دریافت شد!</b>\n🎁 <b>{got}</b>\n\n━━━━━━━━━━\n" + text,
+        f"🎉 <b>جوایز پاس دریافت شد!</b>\n🎁 <b>{got}</b>\n\n━━━━━━━━━━━━━━━━━━━━\n" + text,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -175,7 +175,7 @@ async def pass_buy_do_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await safe_edit_message_text(
         query,
         "✦ <b>پاس ویژه فعال شد!</b> حالا جوایز ویژه‌ی همه‌ی مرحله‌هایی که رسیدی رو می‌تونی بگیری.\n\n"
-        "━━━━━━━━━━\n" + text,
+        "━━━━━━━━━━━━━━━━━━━━\n" + text,
         parse_mode="HTML",
         reply_markup=keyboard,
     )

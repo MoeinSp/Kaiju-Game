@@ -21,25 +21,29 @@ from game.equipment import (
 def _item_line(item: Equipment) -> str:
     from game.equipment import equipment_power
 
-    status = " · <i>(تجهیز شده)</i>" if item.equipped_on_id else ""
+    status = " <i>(تجهیز شده)</i>" if item.equipped_on_id else ""
     return (
-        f"{constants.EQUIPMENT_SLOT_LABELS[item.slot]} — {item.name} <code>#{item.id}</code> "
-        f"{constants.RARITY_LABELS[item.rarity]} +{item.level} · 💪{equipment_power(item)}{status}"
+        f"{constants.EQUIPMENT_SLOT_LABELS[item.slot]} <b>{item.name}</b> <code>#{item.id}</code>{status}\n"
+        f"✨ نایابی: {constants.RARITY_LABELS[item.rarity]}\n"
+        f"🎖 سطح: <code>+{item.level}</code>\n"
+        f"💪 توان: <code>+{equipment_power(item):,}</code>"
     )
 
 
 def _item_detail_text(item: Equipment) -> str:
     from game.equipment import equipment_power
 
-    status = "🟢 <b>تجهیز شده روی موجود فعال</b>" if item.equipped_on_id else "⚪️ <b>در کوله‌پشتی</b>"
+    status = "🟢 <i>تجهیز شده روی موجود فعال</i>" if item.equipped_on_id else "⚪️ <i>در کوله‌پشتی</i>"
     lines = [
-        "🎒 <b>مشخصات تجهیزات</b>\n",
+        "🎒 <b>مشخصات تجهیزات</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
         f"🏷 <b>نام:</b> {item.name}",
-        f"🆔 <b>کد تجهیز:</b> <code>#{item.id}</code>  <i>(لمس برای کپی)</i>",
+        f"🆔 <b>کد تجهیز:</b> <code>#{item.id}</code>",
         f"📦 <b>جایگاه:</b> {constants.EQUIPMENT_SLOT_LABELS[item.slot]}",
         f"✨ <b>نایابی:</b> {constants.RARITY_LABELS[item.rarity]}",
-        f"🎖 <b>سطح ارتقا:</b> +{item.level}/{constants.EQUIPMENT_MAX_LEVEL}",
-        f"💪 <b>قدرت افزوده:</b> +{equipment_power(item):,} توان",
+        f"🎖 <b>سطح ارتقا:</b> <code>+{item.level}</code> / <code>{constants.EQUIPMENT_MAX_LEVEL}</code>",
+        f"💪 <b>قدرت افزوده:</b> <code>+{equipment_power(item):,}</code> توان",
+        "━━━━━━━━━━━━━━━━━━━━",
         f"📌 <b>وضعیت:</b> {status}",
     ]
     return "\n".join(lines)
@@ -62,7 +66,8 @@ def _inv_home_sync(tg_user):
 def _inv_home_render(counts: dict) -> tuple[str, InlineKeyboardMarkup]:
     text = (
         f"{get_emoji('collection')} <b>کوله‌پشتی تجهیزات</b>\n"
-        "بر اساس نوع دسته‌بندی شده — یه دسته انتخاب کن (رنگ کنار هر آیتم = نایابی):"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "<blockquote>بر اساس نوع دسته‌بندی شده — یک دسته را انتخاب کنید:</blockquote>"
     )
     slots = constants.EQUIPMENT_SLOTS
     rows = []
@@ -72,7 +77,7 @@ def _inv_home_render(counts: dict) -> tuple[str, InlineKeyboardMarkup]:
             for s in slots[i : i + 2]
         ]
         rows.append(row)
-    rows.append([btn("⚒ رفتن به آهنگری (ارتقای با طلا)", emoji_key="btn_forge", style=SHOP, callback_data="menu:blacksmith")])
+    rows.append([btn("آهنگری", emoji_key="btn_forge", style=SHOP, callback_data="menu:blacksmith")])
     rows.append([back_btn("menu:me")])
     return text, InlineKeyboardMarkup(rows)
 
@@ -115,7 +120,7 @@ def _inv_cat_render(slot, items: list[Equipment], filt: str, page: int) -> tuple
     chunk = shown[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
     rows = list(tab_rows)
     for i in chunk:
-        tag = "⚔️ " if i.equipped_on_id else ""
+        tag = "⚔️ " if i.equipped_on_id else "📦 "
         rows.append([btn(
             f"{tag}{constants.RARITY_LABELS[i.rarity]} {i.name} +{i.level}",
             style=LIST, callback_data=f"inv_pick:{i.id}",
@@ -181,11 +186,11 @@ def _item_detail_sync(tg_user, item_id):
 def _item_detail_keyboard(item: Equipment, dupe_count: int) -> InlineKeyboardMarkup:
     rows = []
     if item.equipped_on_id:
-        rows.append([btn("خارج کردن از موجود", emoji_key="btn_inventory", style=DANGER, callback_data=f"inv_unequip:{item.id}")])
+        rows.append([btn("خروج از تجهیز", emoji_key="btn_cancel", style=DANGER, callback_data=f"inv_unequip:{item.id}")])
     else:
-        rows.append([btn("تجهیز روی موجود فعال", emoji_key="btn_attack", style=BUILD, callback_data=f"inv_equip:{item.id}")])
+        rows.append([btn("تجهیز روی موجود", emoji_key="btn_attack", style=BUILD, callback_data=f"inv_equip:{item.id}")])
     if item.level < constants.EQUIPMENT_MAX_LEVEL and dupe_count > 0:
-        rows.append([btn("✨ ارتقا با یه نمونه‌ی مشابه", style=BUILD, callback_data=f"inv_upgrade:{item.id}")])
+        rows.append([btn("ارتقا با نمونه مشابه", emoji_key="btn_upgrade", style=BUILD, callback_data=f"inv_upgrade:{item.id}")])
     rows.append([back_btn("menu:inventory", "بازگشت به کوله‌پشتی")])
     return InlineKeyboardMarkup(rows)
 
@@ -280,7 +285,7 @@ async def inventory_upgrade_list_callback(update: Update, context: ContextTypes.
     ]
     rows.append([back_btn(f"inv_pick:{item.id}")])
     await safe_edit_message_text(query,
-        f"✨ کدوم نمونه رو مصرف کنم تا <b>{item.name}</b> +{item.level} ارتقا پیدا کنه؟",
+        f"✨ کدام نمونه را مصرف کنم تا <b>{item.name}</b> (سطح <code>+{item.level}</code>) ارتقا پیدا کند؟",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(rows),
     )
@@ -304,7 +309,9 @@ async def inventory_upgrade_do_callback(update: Update, context: ContextTypes.DE
     from game.media import get_equipment_image_path
     photo_path = get_equipment_image_path(item)
     await safe_edit_message_text(query,
-        f"✨ {item.name} به <b>+{item.level}</b> ارتقا یافت!\n\n" + _item_line(item),
+        f"✨ <b>{item.name}</b> به سطح <code>+{item.level}</code> ارتقا یافت!\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        + _item_line(item),
         photo=photo_path,
         parse_mode="HTML",
         reply_markup=_item_detail_keyboard(item, len(dupes)),
@@ -322,7 +329,10 @@ async def equip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(str(exc))
         return
     await update.message.reply_text(
-        f"⚔️ {constants.EQUIPMENT_SLOT_LABELS[item.slot]} <b>{item.name}</b> +{item.level} روی موجود فعالت تجهیز شد!",
+        f"⚔️ <b>تجهیزات روی موجود فعال قرار گرفت:</b>\n"
+        f"📦 جایگاه: {constants.EQUIPMENT_SLOT_LABELS[item.slot]}\n"
+        f"🏷 نام: <b>{item.name}</b>\n"
+        f"🎖 سطح: <code>+{item.level}</code>",
         parse_mode="HTML",
     )
 
@@ -337,7 +347,7 @@ async def unequip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
-    await update.message.reply_text(f"🎒 {item.name} به کوله‌پشتی برگشت.", parse_mode="HTML")
+    await update.message.reply_text(f"🎒 <b>{item.name}</b> به کوله‌پشتی برگشت.", parse_mode="HTML")
 
 
 async def upgrade_item_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -352,7 +362,7 @@ async def upgrade_item_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
-    await update.message.reply_text(f"✨ {item.name} به <b>+{item.level}</b> ارتقا یافت!", parse_mode="HTML")
+    await update.message.reply_text(f"✨ <b>{item.name}</b> به سطح <code>+{item.level}</code> ارتقا یافت!", parse_mode="HTML")
 
 
 def _forge_home_sync(tg_user):
@@ -367,10 +377,12 @@ def _forge_home_sync(tg_user):
 def _forge_home_render(user, counts: dict) -> tuple[str, InlineKeyboardMarkup]:
     text = (
         "⚒ <b>آهنگری</b>\n"
-        f"با <b>طلا</b> سطح تجهیزات رو بالا ببر، یا با «🔗 ترکیب هم‌نوع» یه تجهیزات رو "
-        "قربانیِ یکی دیگه کن (ریسک شکست داره).\n\n"
-        f"{get_emoji('coin')} طلای تو: <b>{user.coins}</b>\n\n"
-        "یه دسته انتخاب کن:"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "<blockquote>با <b>طلا</b> سطح تجهیزات را ارتقا دهید، یا با «🔗 ترکیب هم‌نوع» یک تجهیزات را "
+        "قربانی دیگری کنید (ریسک شکست دارد).</blockquote>\n\n"
+        f"💰 طلای شما: <code>{user.coins:,} طلا</code>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "یک دسته را انتخاب کنید:"
     )
     # a 2×2 grid of the four equipment types, each showing how many are upgradeable
     slots = constants.EQUIPMENT_SLOTS
@@ -468,23 +480,26 @@ def _forge_detail_sync(tg_user, item_id):
 
 def _forge_detail_text(user, item, preview) -> str:
     fail_pct = round(preview["fail_chance"] * 100)
-    risk = "بدون ریسک ✅" if fail_pct == 0 else f"شانس شکست: <b>{fail_pct}٪</b> ⚠️"
+    risk = "بدون ریسک ✅" if fail_pct == 0 else f"شانس شکست: <code>{fail_pct}٪</code> ⚠️"
     return (
-        f"⚒ <b>آهنگری</b>\n\n"
-        f"{_item_line(item)}\n\n"
-        f"🎯 ارتقا به <b>+{preview['target_level']}</b>\n"
-        f"{get_emoji('coin')} هزینه: <b>{preview['cost']}</b> (موجودی تو: {user.coins})\n"
-        f"{risk}\n\n"
-        "<blockquote>در صورت شکست، طلا خرج می‌شه ولی سطح بالا نمی‌ره. "
-        "راه بی‌ریسک، ارتقا با نمونه‌ی تکراری از «🎒 تجهیزات» ـه.</blockquote>"
+        f"⚒ <b>آهنگری</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"{_item_line(item)}\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"🎯 ارتقا به سطح: <code>+{preview['target_level']}</code>\n"
+        f"💰 هزینه ارتقا: <code>{preview['cost']:,} طلا</code>\n"
+        f"💼 موجودی شما: <code>{user.coins:,} طلا</code>\n"
+        f"🎲 وضعیت ریسک: {risk}\n\n"
+        "<blockquote>در صورت شکست، طلا خرج می‌شه ولی سطح بالا نمی‌ره.\n"
+        "راه بی‌ریسک، ارتقا با نمونه‌ی تکراری از «🎒 تجهیزات» است.</blockquote>"
     )
 
 
 def _forge_detail_keyboard(item_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [btn("🔨 ارتقا با طلا", emoji_key="btn_forge", style=BUILD, callback_data=f"forge_do:{item_id}")],
-            [btn("🔗 ترکیب هم‌نوع (قربانی تجهیزات)", style=NAV, callback_data=f"efuse_start:{item_id}")],
+            [btn("ارتقا با طلا", emoji_key="btn_forge", style=BUILD, callback_data=f"forge_do:{item_id}")],
+            [btn("ترکیب هم‌نوع", emoji_key="btn_fusion", style=NAV, callback_data=f"efuse_start:{item_id}")],
             [back_btn("menu:blacksmith", "بازگشت به آهنگری")],
         ]
     )
@@ -515,8 +530,11 @@ def _efuse_scored_sync(tg_user, target_id):
 def _efuse_pick_render(target, scored, selected: set[int]) -> tuple[str, InlineKeyboardMarkup]:
     if not scored:
         return (
-            f"🔗 <b>ترکیب هم‌نوع</b>\n\n{_item_line(target)}\n\n"
-            "هیچ تجهیزات هم‌نوع دیگه‌ای برای قربانی کردن نداری.",
+            f"🔗 <b>ترکیب هم‌نوع</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            f"{_item_line(target)}\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "<i>هیچ تجهیزات هم‌نوع دیگری برای قربانی کردن نداری.</i>",
             InlineKeyboardMarkup([[back_btn(f"forge_pick:{target.id}", "بازگشت")]]),
         )
     shown = scored[:PAGE_SIZE]
@@ -525,26 +543,29 @@ def _efuse_pick_render(target, scored, selected: set[int]) -> tuple[str, InlineK
     rows = []
     for c, fail in shown:
         mark = "✅" if c.id in selected else "⬜️"
-        used = " · درحال‌استفاده" if c.equipped_on_id else ""
+        used = " (در حال استفاده)" if c.equipped_on_id else ""
         rows.append([btn(
-            f"{mark} {constants.RARITY_LABELS[c.rarity]} {c.name} +{c.level}  (شکست {round(fail * 100)}٪){used}",
+            f"{mark} {c.name} +{c.level} ({round(fail * 100)}٪ خطا){used}",
             style=LIST, callback_data=f"efuse_tog:{target.id}:{c.id}",
         )])
     if len(selected) == len(shown):
-        rows.append([btn("◻️ برداشتن همه", style=NAV, callback_data=f"efuse_none:{target.id}")])
+        rows.append([btn("لغو همه", emoji_key="btn_cancel", style=NAV, callback_data=f"efuse_none:{target.id}")])
     else:
-        rows.append([btn("✅ انتخاب همه", style=NAV, callback_data=f"efuse_all:{target.id}")])
+        rows.append([btn("انتخاب همه", emoji_key="btn_confirm", style=NAV, callback_data=f"efuse_all:{target.id}")])
     if selected:
         rows.append([btn(
-            f"🔗 ترکیب ({len(selected)} تا)",
+            f"ترکیب منتخب ({len(selected)})",
+            emoji_key="btn_fusion",
             style=CONFIRM, callback_data=f"efuse_multi:{target.id}",
         )])
     rows.append([back_btn(f"forge_pick:{target.id}", "بازگشت")])
     text = (
-        f"🔗 <b>ترکیب هم‌نوع</b>\n\n"
-        f"هدف: {_item_line(target)}\n\n"
-        "هرچند تا قربانی که می‌خوای رو <b>تیک بزن</b> — هر کدوم یه شانس جدا برای <b>+۱</b> سطحه. "
-        "<i>قربانی هرچی نایاب‌تر و بالاتر، شانس موفقیت بیشتر. قربانی در هر صورت مصرف می‌شه.</i>"
+        f"🔗 <b>ترکیب هم‌نوع</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"🎯 <b>تجهیز هدف:</b>\n{_item_line(target)}\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "<blockquote>تجهیزات قربانی را <b>تیک بزن</b> — هر کدام یک شانس جدا برای <code>+۱</code> سطح است.\n"
+        "<i>قربانی هرچه نایاب‌تر باشد، شانس موفقیت بیشتر است. در هر صورت قربانی مصرف می‌شود.</i></blockquote>"
     )
     return text, InlineKeyboardMarkup(rows)
 
@@ -619,18 +640,21 @@ async def efuse_multi_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer(f"🎉 {result['successes']} موفق / 💥 {result['fails']} شکست")
     head = (
         f"🔗 <b>ترکیب چندتایی انجام شد</b>\n"
-        f"🎉 موفق: <b>{result['successes']}</b>  ·  💥 شکست: <b>{result['fails']}</b>  "
-        f"(از {result['consumed']} قربانی)\n"
-        f"سطح فعلی: <b>+{result['new_level']}</b>"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"🎉 موفقیت: <code>{result['successes']}</code>\n"
+        f"💥 شکست: <code>{result['fails']}</code>\n"
+        f"📦 قربانی مصرف‌شده: <code>{result['consumed']}</code>\n"
+        f"🎖 سطح نهایی: <code>+{result['new_level']}</code>\n"
+        "━━━━━━━━━━━━━━━━━━━━"
     )
     if result["capped"]:
-        head += "\n<i>به سقف فعلی آهنگری رسید — برای بالاتر، ⚒ آهنگری رو ارتقا بده.</i>"
+        head += "\n<i>به سقف فعلی آهنگری رسید — برای بالاتر، ⚒ آهنگری را ارتقا دهید.</i>"
     await safe_edit_message_text(
         query,
         f"{head}\n\n{_item_line(target)}",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
-            [btn("🔗 ترکیب دوباره", style=NAV, callback_data=f"efuse_start:{target.id}")],
+            [btn("ترکیب دوباره", emoji_key="btn_fusion", style=NAV, callback_data=f"efuse_start:{target.id}")],
             [back_btn("menu:blacksmith", "بازگشت به آهنگری")],
         ]),
     )
@@ -675,10 +699,10 @@ async def forge_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     item = result["item"]
     if result["success"]:
-        header = f"✨ <b>موفق!</b> {item.name} رسید به <b>+{item.level}</b>"
+        header = f"✨ <b>ارتقای موفق!</b>\nسطح جدید: <code>+{item.level}</code>"
         await query.answer("✨ موفق!")
     else:
-        header = f"💥 <b>شکست خورد!</b> {result['cost']} طلا سوخت و سطح تغییر نکرد."
+        header = f"💥 <b>ارتقا شکست خورد!</b>\nهزینه سوخته: <code>{result['cost']:,} طلا</code>"
         await query.answer("💥 شکست خورد.")
 
     await safe_edit_message_text(

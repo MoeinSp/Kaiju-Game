@@ -29,7 +29,7 @@ from game.energy import sync_energy
 from game.equipment import bonus_text, get_equipped_items, slot_loadout
 from game.lab import lab_bar, lab_progress
 
-def _pm_button(label: str = "برو به پیوی ربات", emoji_key: str = "btn_creature", start_param: str = "group"):
+def _pm_button(label: str = "ورود به بازی (پیوی)", emoji_key: str = "btn_creature", start_param: str = "group"):
     return btn(label, emoji_key=emoji_key, style=PRIMARY, url=f"https://t.me/{BOT_USERNAME}?start={start_param}")
 
 
@@ -93,22 +93,24 @@ def _creature_card(user, creature, equipped, slots) -> tuple[str, InlineKeyboard
     stars = get_emoji("star") * creature.star_level
     filled = sum(1 for row in slots if not row["is_empty"])
     nick = (getattr(creature, "custom_name", "") or "").strip()
-    div = "──────────────"
+    div = "━━━━━━━━━━━━━━━━━━━━"
     lines = [
         # نام (chosen) and نژاد (species) on their OWN lines
         f"{get_emoji('creature')} نام: <b>{nick or 'بدون نام'}</b> {stars}",
         f"{get_emoji('dna')} نژاد: <b>{creature.name}</b>",
-        f"{constants.RARITY_LABELS[creature.rarity]} · {constants.element_label(creature.element)} · "
-        f"سطح {creature.level} · آزمایشگاه {lab_display(user)}",
+        f"🏷 رده: <b>{constants.RARITY_LABELS[creature.rarity]}</b>",
+        f"🔮 عنصر: <b>{constants.element_label(creature.element)}</b>",
+        f"🎖 سطح: <code>{creature.level}</code>",
+        f"🔬 آزمایشگاه: <b>{lab_display(user)}</b>",
         div,
         # stats — each on its own line, aligned and labelled
-        f"{get_emoji('hp')} جان: <b>{stats['hp']}</b>",
-        f"{get_emoji('atk')} حمله: <b>{stats['atk']}</b>",
-        f"{get_emoji('def')} دفاع: <b>{stats['def']}</b>",
-        f"{get_emoji('spd')} سرعت: <b>{stats['spd']}</b>",
+        f"{get_emoji('hp')} جان: <code>{stats['hp']}</code>",
+        f"{get_emoji('atk')} حمله: <code>{stats['atk']}</code>",
+        f"{get_emoji('def')} دفاع: <code>{stats['def']}</code>",
+        f"{get_emoji('spd')} سرعت: <code>{stats['spd']}</code>",
         div,
-        f"{get_emoji('atk')} قدرت کل: <b>{combat_rating(stats):,}</b>",
-        f"{get_emoji('diamond_box')} تجهیزات: <b>{filled}/{len(slots)}</b> جایگاه پر",
+        f"{get_emoji('atk')} قدرت کل: <code>{combat_rating(stats):,}</code>",
+        f"{get_emoji('diamond_box')} تجهیزات: <code>{filled}</code>/<code>{len(slots)}</code> جایگاه پر",
     ]
     rows = [
         [
@@ -127,7 +129,8 @@ def _creature_card(user, creature, equipped, slots) -> tuple[str, InlineKeyboard
 
 
 def _equipment_card(user, creature, slots) -> tuple[str, InlineKeyboardMarkup]:
-    lines = [f"{get_emoji('diamond_box')} <b>تجهیزات {creature.name}</b>", ""]
+    div = "━━━━━━━━━━━━━━━━━━━━"
+    lines = [f"{get_emoji('diamond_box')} <b>تجهیزات {creature.name}</b>", div]
     for row in slots:
         if row["is_empty"]:
             lines.append(f"{row['label']}: <i>خالی</i>")
@@ -137,15 +140,16 @@ def _equipment_card(user, creature, slots) -> tuple[str, InlineKeyboardMarkup]:
             from game.equipment import equipment_power
 
             lines.append(
-                f"{row['label']}: <b>{item.name} +{item.level}</b> · {get_emoji('atk')}{equipment_power(item):,}"
-                + (f" — <i>{bonus}</i>" if bonus else "")
+                f"▫️ {row['label']}: <b>{item.name}</b> +<code>{item.level}</code>\n"
+                f"  └ {get_emoji('atk')} قدرت: <code>{equipment_power(item):,}</code>"
+                + (f"\n  └ <i>{bonus}</i>" if bonus else "")
             )
     rows = [
         [
             btn("هیولا", emoji_key="btn_creature", style=NAV, callback_data=_scoped("creature", user.id)),
             btn("کلکسیون", emoji_key="btn_collection", style=NAV, callback_data=_scoped("collection", user.id)),
         ],
-        [_pm_button("مدیریت تجهیزات در پیوی", emoji_key="btn_inventory", start_param="inventory")],
+        [_pm_button("مدیریت در پیوی", emoji_key="btn_inventory", start_param="inventory")],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -158,16 +162,18 @@ def _collection_card(user, creatures, page: int = 0) -> tuple[str, InlineKeyboar
     total_pages = max(1, (len(creatures) + _COLLECTION_PAGE - 1) // _COLLECTION_PAGE)
     page = max(0, min(page, total_pages - 1))
     chunk = creatures[page * _COLLECTION_PAGE:(page + 1) * _COLLECTION_PAGE]
+    div = "━━━━━━━━━━━━━━━━━━━━"
     lines = [
-        f"{get_emoji('collection')} <b>کلکسیون {lab_display(user)}</b> — {len(creatures)} هیولا"
-        + (f"  (صفحه {page + 1}/{total_pages})" if total_pages > 1 else ""),
-        "",
+        f"{get_emoji('collection')} <b>کلکسیون {lab_display(user)}</b> (<code>{len(creatures)}</code> هیولا)"
+        + (f"\n📄 صفحه <code>{page + 1}</code> از <code>{total_pages}</code>" if total_pages > 1 else ""),
+        div,
     ]
     for creature in chunk:
         tag = "🟢 " if creature.is_active else ""
         lines.append(
-            f"{tag}{creature.name} {'⭐' * creature.star_level} · "
-            f"{constants.RARITY_LABELS[creature.rarity]} · Lv{creature.level}"
+            f"{tag}<b>{creature.name}</b> {'⭐' * creature.star_level}\n"
+            f"  ▫️ رده: <b>{constants.RARITY_LABELS[creature.rarity]}</b>\n"
+            f"  ▫️ سطح: <code>{creature.level}</code>"
         )
     rows = [
         # row 1: prev / next
@@ -176,7 +182,7 @@ def _collection_card(user, creatures, page: int = 0) -> tuple[str, InlineKeyboar
             btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=_scoped_pg("collection", user.id, page + 1)),
         ],
         # row 2: activate a creature (premium icon)
-        [btn("انتخاب کایجو فعال", emoji_key="btn_creature", style=NAV, callback_data=_scoped("select", user.id))],
+        [btn("انتخاب هیولای فعال", emoji_key="btn_creature", style=NAV, callback_data=_scoped("select", user.id))],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -189,22 +195,28 @@ def _select_card(user, creatures, powers) -> tuple[str, InlineKeyboardMarkup]:
             "هنوز هیولایی نداری. توی پیوی بات /start بزن تا اولین هیولات رو بگیری.",
             group_footer_keyboard(user.id),
         )
-    lines = [f"{get_emoji('creature')} <b>انتخاب هیولای فعال</b> — قوی‌ترین‌ها اول:", ""]
+    div = "━━━━━━━━━━━━━━━━━━━━"
+    lines = [
+        f"{get_emoji('creature')} <b>انتخاب هیولای فعال</b> (قوی‌ترین‌ها اول):",
+        div,
+    ]
     rows = []
     for c in creatures[:8]:
         active = c.is_active
         lines.append(
-            f"{'🟢 ' if active else ''}{c.name} {'⭐' * c.star_level} · "
-            f"{constants.RARITY_LABELS[c.rarity]} · Lv{c.level} · 💪{powers.get(c.id, 0)}"
+            f"{'🟢 ' if active else ''}<b>{c.name}</b> {'⭐' * c.star_level}\n"
+            f"  ▫️ رده: <b>{constants.RARITY_LABELS[c.rarity]}</b>\n"
+            f"  ▫️ سطح: <code>{c.level}</code>\n"
+            f"  ▫️ قدرت: <code>{powers.get(c.id, 0):,}</code>"
         )
         if not active:
             rows.append([btn(
-                f"فعال کن: {c.name} (💪{powers.get(c.id, 0)})",
+                f"فعال‌سازی {c.name}",
                 emoji_key="btn_confirm", style=CONFIRM,
                 callback_data=_act("setactive", user.id, str(c.id)),
             )])
-    lines.append("\n<i>هیولای فعال توی همه‌ی نبردها (اتک، شکار، نبرد) می‌جنگه.</i>")
-    rows.append([_pm_button("مدیریت کامل در پیوی")])
+    lines.append(f"\n{div}\n<i>هیولای فعال توی همه‌ی نبردها (اتک، شکار، نبرد) می‌جنگه.</i>")
+    rows.append([_pm_button("مدیریت در پیوی")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -213,22 +225,25 @@ def _profile_card(user, creature_count, energy) -> tuple[str, InlineKeyboardMark
 
     max_energy = get_max_energy(user)
     progress = lab_progress(user)
+    div = "━━━━━━━━━━━━━━━━━━━━"
     lines = [
         f"{get_emoji('profile')} <b>آزمایشگاه {lab_display(user)}</b>",
-        f"🔬 سطح <b>{progress['level']}</b> {lab_bar(user)}",
-        "",
-        f"{get_emoji('trophy')} کاپ: <b>{user.cup}</b>",
-        f"{get_emoji('creature')} هیولاها: <b>{creature_count}</b>",
-        f"🔥 روزهای پشت‌سرهم: <b>{user.login_streak}</b>",
-        "",
-        f"{get_emoji('coin')} {user.coins:,}   {get_emoji('dna')} {user.dna_fragments:,}   "
-        f"{get_emoji('diamond')} {user.diamonds:,}   {get_emoji('energy')} {energy}/{max_energy}",
+        f"🔬 سطح: <code>{progress['level']}</code> {lab_bar(user)}",
+        div,
+        f"{get_emoji('trophy')} کاپ: <code>{user.cup:,}</code>",
+        f"{get_emoji('creature')} هیولاها: <code>{creature_count}</code>",
+        f"🔥 روزهای پشت‌سرهم: <code>{user.login_streak}</code>",
+        div,
+        f"{get_emoji('coin')} طلا: <code>{user.coins:,}</code>",
+        f"{get_emoji('dna')} دی‌ان‌ای: <code>{user.dna_fragments:,}</code>",
+        f"{get_emoji('diamond')} الماس: <code>{user.diamonds:,}</code>",
+        f"{get_emoji('energy')} انرژی: <code>{energy}</code>/<code>{max_energy}</code>",
     ]
     from game.arena import shield_status_lines
 
     shield_lines = shield_status_lines(user)
     if shield_lines:
-        lines.append("")
+        lines.append(div)
         lines.extend(shield_lines)
     rows = [
         [
@@ -240,7 +255,7 @@ def _profile_card(user, creature_count, energy) -> tuple[str, InlineKeyboardMark
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
-_RULE = "━━━━━━━━━━━━━━"
+_RULE = "━━━━━━━━━━━━━━━━━━━━"
 
 
 def _help_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
@@ -266,7 +281,7 @@ def _help_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
         "<b>💡 آموزش‌ها</b> — توضیحِ مفهوم‌های بازی.",
     ]
     # short-labelled buttons only (never overflow): one commands hub + concept chips
-    keyboard = [[btn("📋 دستورات گروه", emoji_key="btn_report", style=PRIMARY,
+    keyboard = [[btn("دستورات گروه", emoji_key="btn_report", style=PRIMARY,
                      callback_data=f"grph:cmds:{user_id}")]]
     topic_buttons = [
         btn(_TOPIC_SHORT.get(key, title[:16]), emoji_key=_TOPIC_BTN.get(key, "btn_report"),
@@ -382,7 +397,7 @@ def _cmds_cat_card(cat_key: str, user_id: int) -> tuple[str, InlineKeyboardMarku
         for word, desc in cat["items"]:
             lines.append(f"• <code>{word}</code> — {desc}")
     rows = [
-        [btn("↩️ دسته‌ها", emoji_key="btn_back", style=BACK, callback_data=f"grph:cmds:{user_id}")],
+        [btn("دسته‌ها", emoji_key="btn_back", style=BACK, callback_data=f"grph:cmds:{user_id}")],
         [_pm_button()],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
@@ -471,23 +486,29 @@ def _upgrade_card(user, creature, energy, step: int = 1) -> tuple[str, InlineKey
     sfx = f" ×{step}" if step > 1 else ""
     cap = constants.part_upgrade_cap(creature.rarity, creature.star_level)
     max_level = constants.creature_max_level(creature.rarity, creature.star_level)
+    div = "━━━━━━━━━━━━━━━━━━━━"
     lines = [
         f"{get_emoji('settings')} <b>ارتقای {creature_name(creature)}</b>",
-        f"🎖 سطح {creature.level}/{max_level} · XP {creature.xp}/{constants.xp_for_creature_level(creature.level)}",
-        "",
-        f"🧩 <b>اعضای بدن</b> (هر دکمه = +{step} سطح):",
+        f"🎖 سطح: <code>{creature.level}</code>/<code>{max_level}</code>",
+        f"✨ تجربه: <code>{creature.xp:,}</code>/<code>{constants.xp_for_creature_level(creature.level):,}</code> XP",
+        div,
+        f"🧩 <b>اعضای بدن</b> (هر دکمه = +<code>{step}</code> سطح):",
     ]
     for part, cfg in constants.BODY_PARTS.items():
         lvl = getattr(creature, f"{part}_lvl")
         if lvl >= cap:
-            lines.append(f"{cfg['label']}: <b>{lvl}/{cap}</b> 🔒")
+            lines.append(f"▫️ {cfg['label']}: <code>{lvl}</code>/<code>{cap}</code> 🔒")
         else:
             n = min(step, cap - lvl)  # can't buy past the cap
-            lines.append(f"{cfg['label']}: <b>{lvl}/{cap}</b> — +{n}: {part_bulk_cost(lvl, n, creature.rarity):,} {get_emoji('coin')}")
+            lines.append(
+                f"▫️ {cfg['label']}: <code>{lvl}</code>/<code>{cap}</code>\n"
+                f"  └ هزینه +<code>{n}</code>: <code>{part_bulk_cost(lvl, n, creature.rarity):,}</code> {get_emoji('coin')}"
+            )
     lines += [
-        "",
-        f"🍽 غذای هیولا برای تغذیه (داری: {total_capsules(user)}) — از «فروشگاه روزانه» بخر",
-        f"{get_emoji('coin')} {user.coins:,}   {get_emoji('energy')} {energy}/{max_energy}",
+        div,
+        f"🍽 غذای هیولا برای تغذیه: <code>{total_capsules(user)}</code>",
+        f"{get_emoji('coin')} موجودی طلا: <code>{user.coins:,}</code>",
+        f"{get_emoji('energy')} انرژی: <code>{energy}</code>/<code>{max_energy}</code>",
     ]
     # ×1/×5/×10 selector — the active step gets a ✅
     step_row = [
@@ -496,7 +517,7 @@ def _upgrade_card(user, creature, energy, step: int = 1) -> tuple[str, InlineKey
         for s in _GRP_UPG_STEPS
     ]
     rows = [
-        [btn("🍽 تغذیه", emoji_key="btn_feed", style=BUILD, callback_data=_act("feedcap", user.id))],
+        [btn("تغذیه", emoji_key="btn_feed", style=BUILD, callback_data=_act("feedcap", user.id))],
         step_row,
         [
             btn(f"بال{sfx}", emoji_key="btn_wings", style=BUILD, callback_data=_act("up_wings", user.id)),
@@ -507,7 +528,7 @@ def _upgrade_card(user, creature, energy, step: int = 1) -> tuple[str, InlineKey
             btn(f"زهر{sfx}", emoji_key="btn_poison", style=BUILD, callback_data=_act("up_poison", user.id)),
         ],
         [btn("هیولا", emoji_key="btn_creature", style=NAV, callback_data=_scoped("creature", user.id))],
-        [_pm_button("تجهیزات و فیوژن در پیوی")],
+        [_pm_button("ترکیب و ارتقا (پیوی)")],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -515,20 +536,21 @@ def _upgrade_card(user, creature, energy, step: int = 1) -> tuple[str, InlineKey
 def _feedcap_group_card(user, creature, caps: dict, maxed: bool) -> tuple[str, InlineKeyboardMarkup]:
     """Group capsule-feeding panel — scoped to the summoner. Mirrors the DM one."""
     max_level = constants.creature_max_level(creature.rarity, creature.star_level)
+    div = "━━━━━━━━━━━━━━━━━━━━"
     lines = [
         f"🧪 <b>تغذیهٔ {creature_name(creature)}</b>",
-        f"🎖 سطح {creature.level}/{max_level}",
-        "",
+        f"🎖 سطح: <code>{creature.level}</code>/<code>{max_level}</code>",
+        div,
         "چه موجودی بدم هیولات بخوره؟",
     ]
     for tier in constants.XP_CAPSULE_ORDER:
         cfg = constants.XP_CAPSULES[tier]
-        lines.append(f"{cfg['emoji']} {cfg['label']}: <b>{caps.get(tier, 0)}</b>  <i>(+{cfg['xp']:,} XP)</i>")
+        lines.append(f"{cfg['emoji']} {cfg['label']}: <code>{caps.get(tier, 0)}</code>\n  └ <i>(+<code>{cfg['xp']:,}</code> امتیاز تجربه)</i>")
     rows = []
     if maxed:
-        lines.append("\n🔒 <i>به سقف سطح رسیده — تغذیه بی‌فایده‌ست.</i>")
+        lines.append(f"\n{div}\n🔒 <i>به سقف سطح رسیده — تغذیه بی‌فایده‌ست.</i>")
     elif sum(caps.values()) == 0:
-        lines.append("\n<i>حیوونی برای تغذیه نداری. از «فروشگاه روزانه» (پیوی) بخر یا از جایزه‌ها بگیر.</i>")
+        lines.append(f"\n{div}\n<i>حیوونی برای تغذیه نداری. از «فروشگاه روزانه» (پیوی) بخر یا از جایزه‌ها بگیر.</i>")
     else:
         for tier in constants.XP_CAPSULE_ORDER:
             cfg = constants.XP_CAPSULES[tier]
@@ -537,11 +559,11 @@ def _feedcap_group_card(user, creature, caps: dict, maxed: bool) -> tuple[str, I
                 continue
             rows.append([
                 btn(f"{cfg['emoji']} +۱", style=BUILD, callback_data=_act("fcfeed", user.id, f"one:{tier}")),
-                btn(f"همهٔ {cfg['label']} ({n})", style=BUILD, callback_data=_act("fcfeed", user.id, f"allt:{tier}")),
+                btn(f"همه ({n})", style=BUILD, callback_data=_act("fcfeed", user.id, f"allt:{tier}")),
             ])
-        rows.append([btn("🍽 مصرف همه", emoji_key="btn_confirm", style=CONFIRM,
+        rows.append([btn("مصرف همه", emoji_key="btn_confirm", style=CONFIRM,
                          callback_data=_act("fcfeed", user.id, "all:x"))])
-    rows.append([btn("↩️ ارتقا", emoji_key="btn_back", style=BACK, callback_data=_scoped("upgrade", user.id))])
+    rows.append([btn("بازگشت", emoji_key="btn_back", style=BACK, callback_data=_scoped("upgrade", user.id))])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -554,6 +576,7 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
 
     max_energy = get_max_energy(user)
     cost = botconfig.get_energy_refill_cost()
+    div = "━━━━━━━━━━━━━━━━━━━━"
 
     if energy <= 0:
         sub_info = get_subscription_info(user)
@@ -564,13 +587,13 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
             days_left = sub_info.get("days_left", 0)
             hours_left = sub_info.get("hours_left", 0)
             status_text = (
-                f"{badge} <b>{sub_name}</b> برای شما فعال است "
-                f"({days_left} روز و {hours_left} ساعت باقی‌مانده).\n\n"
-                f"<i>💡 سقف انرژی شما ۱۰۰ است. می‌توانید با الماس آن را فوراً شارژ کامل کنید:</i>"
+                f"{badge} <b>{sub_name}</b> برای شما فعال است\n"
+                f"⏳ زمان باقی‌مانده: <code>{days_left}</code> روز و <code>{hours_left}</code> ساعت\n\n"
+                f"<blockquote>💡 سقف انرژی شما ۱۰۰ است. شارژ کامل با الماس:</blockquote>"
             )
             rows.append([
                 btn(
-                    f"شارژ با {cost} الماس",
+                    f"شارژ کامل ({cost} الماس)",
                     emoji_key="btn_charge",
                     style=PRIMARY,
                     callback_data=f"enr:ask:{user.id}:ghunt",
@@ -578,16 +601,18 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
             ])
         else:
             status_text = (
-                f"👑 <b>با تهیه اشتراک نقره‌ای:</b>\n"
-                f"  ⚡️ <b>سقف انرژیت ۲ برابر می‌شه (۱۰۰ به جای ۵۰)!</b>\n"
-                f"  📋 جعبه‌های آرنا خودکار و پشت‌سرهم باز می‌شن\n"
-                f"  🏹 درآمدت از شکار خودکار ۲۵٪ بیشتر می‌شه!\n"
-                f"  🥈 نشان پرمیوم نقره‌ای کنار اسمت قرار می‌گیره\n\n"
-                f"<i>💡 فقط با ۱۰۰ هزار تومان، محدودیت انرژی رو برای همیشه فراموش کن!</i>"
+                f"<blockquote>"
+                f"👑 <b>مزایای اشتراک نقره‌ای:</b>\n"
+                f"⚡️ سقف انرژی ۲ برابر (۱۰۰ به جای ۵۰)\n"
+                f"📋 باز شدن خودکار جعبه‌های آرنا\n"
+                f"🏹 +۲۵٪ غنیمت شکار خودکار\n"
+                f"🥈 نشان پرمیوم نقره‌ای\n"
+                f"💰 قیمت: ۱۰۰ هزار تومان"
+                f"</blockquote>"
             )
             rows.append([
                 btn(
-                    f"شارژ با {cost} الماس",
+                    f"شارژ کامل ({cost} الماس)",
                     emoji_key="btn_charge",
                     style=PRIMARY,
                     callback_data=f"enr:ask:{user.id}:ghunt",
@@ -595,7 +620,7 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
             ])
             rows.append([
                 btn(
-                    "خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)",
+                    "خرید اشتراک نقره‌ای",
                     emoji_key="btn_sub_silver",
                     style=SHOP,
                     url=f"https://t.me/{BOT_USERNAME}?start=sub_silver",
@@ -603,7 +628,7 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
             ])
 
         full_text = (
-            f"{get_emoji('energy')} <b>انرژی شما تمام شده است!</b> ({energy}/{max_energy})\n\n"
+            f"{get_emoji('energy')} <b>انرژی شما تمام شده است!</b> (<code>{energy}</code>/<code>{max_energy}</code>)\n\n"
             f"{status_text}"
         )
         return full_text, InlineKeyboardMarkup(rows)
@@ -623,25 +648,32 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
     text = "\n".join([
         f"{get_emoji('hunt')} <b>حریف آماده نبرد است!</b>",
         "",
-        f"🏰 حریف وحشی: <b>{target['name']}</b>  <i>({target['tier_label']})</i>",
-        f"🎯 عنصر حریف: {constants.element_label(target['element'])}",
+        "<blockquote>",
+        f"🏰 حریف وحشی: <b>{target['name']}</b>",
+        f"🏷 رده حریف: <i>{target['tier_label']}</i>",
+        f"🎯 عنصر حریف: <b>{constants.element_label(target['element'])}</b>",
+        f"💀 قدرت حریف: <code>{target['power']:,}</code>",
         "",
-        "📊 مقایسه وضعیت نبرد:",
-        f"💪 قدرت: شما <b>{my_power:,}</b> 🆚 حریف <b>{target['power']:,}</b>",
+        f"🦅 قدرت شما: <code>{my_power:,}</code>",
         f"🎯 شانس پیروزی: {pct_bar(pct, 100)} {win_label(pct)}",
-        (f"🔮 {adv}" if adv else ""),
+        (f"🔮 مزیت عنصری: {adv}" if adv else ""),
+        "</blockquote>",
         "",
-        f"🎁 جوایز برد: {get_emoji('coin')} <b>+{coin_reward:,}</b> طلا · {get_emoji('dna')} <b>+{dna_reward:,}</b>",
-        f"{get_emoji('energy')} هزینه: 1 انرژی (داری: {energy}/{max_energy})",
-        f"🔍 بعدی: <b>{target.get('scout_cost', 0)}</b> طلا",
+        div,
+        "🎁 <b>جوایز برد:</b>",
+        f"{get_emoji('coin')} طلا: <code>+{coin_reward:,}</code>",
+        f"{get_emoji('dna')} دی‌ان‌ای: <code>+{dna_reward:,}</code>",
+        div,
+        f"{get_emoji('energy')} هزینه نبرد: <code>1</code> انرژی (موجودی: <code>{energy}</code>/<code>{max_energy}</code>)",
+        f"🔍 هزینه حریف بعدی: <code>{target.get('scout_cost', 0):,}</code> طلا",
     ])
     rows = [
         [
-            btn("حمله!", emoji_key="btn_attack", style=BATTLE,
+            btn("حمله", emoji_key="btn_attack", style=BATTLE,
                 callback_data=_act("hunt_go", user.id, f"{target['tier']}:{target['seed']}")),
-            btn("بعدی", emoji_key="btn_scout_next", style=NAV, callback_data=_act("hunt_next", user.id)),
+            btn("حریف بعدی", emoji_key="btn_scout_next", style=NAV, callback_data=_act("hunt_next", user.id)),
         ],
-        [btn(f"شکار خودکار (همه انرژی: {energy})", emoji_key="btn_autohunt", style=BATTLE,
+        [btn(f"شکار خودکار ({energy}⚡)", emoji_key="btn_autohunt", style=BATTLE,
              callback_data=_act("autohunt", user.id))],
     ]
     return text, InlineKeyboardMarkup(rows)
@@ -651,7 +683,7 @@ def _arena_card(user, opponent, loot, shielded_for, data=None) -> tuple[str, Inl
     data = data or {}
     if opponent is None:
         return (
-            f"{get_emoji('trophy')} <b>آرنا</b> — کاپ تو: <b>{user.cup:,}</b>\n\nحریفی پیدا نشد، بعداً دوباره امتحان کن.",
+            f"{get_emoji('trophy')} <b>آرنا</b> — کاپ تو: <code>{user.cup:,}</code>\n\nحریفی پیدا نشد، بعداً دوباره امتحان کن.",
             group_footer_keyboard(user.id),
         )
     from bot.handlers.private import (element_advantage_line, pct_bar, win_chance_pct, win_label)
@@ -670,19 +702,22 @@ def _arena_card(user, opponent, loot, shielded_for, data=None) -> tuple[str, Inl
     loss_cup = _arena.cup_delta(user, opponent["cup"], False, my_power)
     my_tag = f" [{constants.element_label(my_element)}]" if my_element else ""
     opp_tag = f" [{constants.element_label(opp_element)}]" if opp_element else ""
-    div = "──────────────"
+    div = "━━━━━━━━━━━━━━━━━━━━"
     lines = [
         f"{get_emoji('battle')} <b>حریف پیدا شد!</b>",
         "",
+        "<blockquote>",
         f"🦅 موجود شما: <b>{data.get('my_name', '—')}</b>{my_tag}",
-        f"💪 قدرت شما: <b>{my_power:,}</b> · 🏆 کاپ: <b>{user.cup:,}</b>",
-        f"{get_emoji('energy')} انرژی: {pct_bar(energy, max_energy)} ({energy}/{max_energy})",
+        f"💪 قدرت شما: <code>{my_power:,}</code>",
+        f"🏆 کاپ شما: <code>{user.cup:,}</code>",
+        f"{get_emoji('energy')} انرژی: {pct_bar(energy, max_energy)} (<code>{energy}</code>/<code>{max_energy}</code>)",
         "",
         div,
         "",
         f"👤 حریف: <b>{opponent['label']}</b>",
         f"👹 موجود حریف: <b>{opponent.get('creature_name', '؟')}</b>{opp_tag}",
-        f"💀 قدرت حریف: <b>{opponent['power']:,}</b> · 🏆 کاپ: <b>{opponent['cup']:,}</b>",
+        f"💀 قدرت حریف: <code>{opponent['power']:,}</code>",
+        f"🏆 کاپ حریف: <code>{opponent['cup']:,}</code>",
         "",
         div,
         "",
@@ -690,15 +725,22 @@ def _arena_card(user, opponent, loot, shielded_for, data=None) -> tuple[str, Inl
     ]
     if adv:
         lines.append(f"🔮 مزیت عنصری: {adv}")
+    lines.append("</blockquote>")
     lines += [
-        f"🎁 جوایز برد: {get_emoji('coin')} <b>~+{loot:,}</b> · {get_emoji('dna')} <b>+{dna_win:,}</b>",
-        f"{get_emoji('trophy')} تغییر کاپ: برد <b>+{win_cup}</b> | باخت <b>{loss_cup}</b>",
+        "",
+        div,
+        "🎁 <b>جوایز تخمینی برد:</b>",
+        f"{get_emoji('coin')} طلا: <code>~+{loot:,}</code>",
+        f"{get_emoji('dna')} دی‌ان‌ای: <code>+{dna_win:,}</code>",
+        div,
+        f"{get_emoji('trophy')} تغییر کاپ برد: <code>+{win_cup}</code>",
+        f"💔 تغییر کاپ باخت: <code>{loss_cup}</code>",
     ]
     if shielded_for:
-        lines.append(f"🛡 <i>سپر آرنا داری ({shielded_for // 3600}س) — با حمله می‌پره.</i>")
+        lines.append(f"🛡 <i>سپر آرنا داری (<code>{shielded_for // 3600}</code> ساعت) — با حمله می‌پره.</i>")
     rows = [
         [
-            btn(f"⚔️ حمله (-{constants.ARENA_ATTACK_ENERGY_COST}⚡)", emoji_key="btn_attack", style=BATTLE, callback_data=_act("arena_go", user.id)),
+            btn(f"حمله (-{constants.ARENA_ATTACK_ENERGY_COST}⚡)", emoji_key="btn_attack", style=BATTLE, callback_data=_act("arena_go", user.id)),
             btn("حریف بعدی", emoji_key="btn_recheck", style=NAV, callback_data=_act("arena_find", user.id)),
         ],
         [_pm_button()],
@@ -712,15 +754,15 @@ def _mine_card(user, mine: dict) -> tuple[str, InlineKeyboardMarkup]:
     n = mine.get("dna_lab", {})
 
     def _lvl(x):
-        return f"سطح {x.get('level', 0)}" if x.get("level", 0) > 0 else "🔒 ساخته‌نشده"
+        return f"سطح <code>{x.get('level', 0)}</code>" if x.get("level", 0) > 0 else "🔒 ساخته‌نشده"
 
-    div = "──────────────"
+    div = "━━━━━━━━━━━━━━━━━━━━"
     alert_txt = ""
     if (user.plundered_alert_gold or 0) > 0 or (user.plundered_alert_dna or 0) > 0:
         alert_txt = (
             f"⚠️ <b>هشدار غارت معدن:</b>\n"
             f"در حمله اخیر در آرنا، بخشی از طلا و DNA ذخیره‌شده شما شامل "
-            f"<b>{user.plundered_alert_gold:,}</b> طلا و <b>{user.plundered_alert_dna:,}</b> DNA به غارت رفت!\n{div}\n"
+            f"<b><code>{user.plundered_alert_gold:,}</code></b> طلا و <b><code>{user.plundered_alert_dna:,}</code></b> DNA به غارت رفت!\n{div}\n"
         )
         user.plundered_alert_gold = 0
         user.plundered_alert_dna = 0
@@ -728,7 +770,10 @@ def _mine_card(user, mine: dict) -> tuple[str, InlineKeyboardMarkup]:
 
     lines = [
         f"{alert_txt}⛏ <b>بخش معدن و استخراج</b>",
-        f"💎 جمع‌کننده الماس — {_lvl(d)}  🏭 جمع‌کننده طلا — {_lvl(g)}  🧬 آزمایشگاه DNA — {_lvl(n)}",
+        div,
+        f"💎 جمع‌کننده الماس: {_lvl(d)}",
+        f"🏭 جمع‌کننده طلا: {_lvl(g)}",
+        f"🧬 آزمایشگاه DNA: {_lvl(n)}",
         div,
         "📦 <b>آماده‌ی جمع‌آوری:</b>",
         "",
@@ -754,8 +799,10 @@ def _box_card(user) -> tuple[str, InlineKeyboardMarkup]:
         "کدوم رو می‌خوای؟"
     )
     rows = [
-        [btn("🧬 باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data=_act("box_genetic", user.id))],
-        [btn("👹 باکس هیولا", emoji_key="btn_diamond_box", style=SHOP, callback_data=_act("mbox", user.id))],
+        [
+            btn("باکس ژنتیکی", emoji_key="btn_biocrate", style=SHOP, callback_data=_act("box_genetic", user.id)),
+            btn("باکس هیولا", emoji_key="btn_diamond_box", style=SHOP, callback_data=_act("mbox", user.id)),
+        ],
     ]
     return text, InlineKeyboardMarkup(rows)
 
@@ -769,11 +816,13 @@ def _mbox_list_card(user) -> tuple[str, InlineKeyboardMarkup]:
     if free_tiers:
         names = ["برنزی" if t == "bronze" else "نقره‌ای" for t in free_tiers]
         free_line = f"\n🎁 <b>باکس رایگان امروز: {' و '.join(names)} آماده دریافت!</b>"
+    div = "━━━━━━━━━━━━━━━━━━━━"
     lines = [
         f"{get_emoji('diamond_box')} <b>باکس هیولا</b>",
-        f"<blockquote>{get_emoji('diamond')} الماس تو: <b>{user.diamonds:,}</b>\n"
+        f"<blockquote>{get_emoji('diamond')} الماس تو: <code>{user.diamonds:,}</code>\n"
         "هر باکس همیشه یه هیولای جدید می‌ده؛ هرچی باکس بالاتر، شانس نایاب‌بودن بیشتر.</blockquote>"
         + free_line,
+        div,
         "یه باکس انتخاب کن:",
     ]
     # NOTE: no trailing 💎 in the label — the Premium btn_diamond_box icon already shows a
@@ -781,12 +830,12 @@ def _mbox_list_card(user) -> tuple[str, InlineKeyboardMarkup]:
     rows = []
     for tier, cfg in constants.DIAMOND_BOX_TIERS.items():
         if tier in free_tiers:
-            cost_str = "رایگان امروز! 🎁"
+            cost_str = "رایگان"
         else:
-            cost_str = str(cfg["cost_diamonds"])
-        rows.append([btn(f"{cfg['label']} — {cost_str}", emoji_key="btn_diamond_box", style=SHOP,
+            cost_str = f"{cfg['cost_diamonds']} 💎"
+        rows.append([btn(f"{cfg['label']} ({cost_str})", emoji_key="btn_diamond_box", style=SHOP,
                          callback_data=_act("mbox_pick", user.id, tier))])
-    rows.append([btn("↩️ باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_scoped("box", user.id))])
+    rows.append([btn("بازگشت", emoji_key="btn_back", style=BACK, callback_data=_scoped("box", user.id))])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -816,7 +865,7 @@ def _mbox_result_card(user, tier: str, kind: str, result: dict) -> tuple[str, In
         )
     rows = [
         [btn("یکی دیگه", emoji_key="btn_diamond_box", style=SHOP, callback_data=_act("mbox_pick", user.id, tier))],
-        [btn("↩️ لیست باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_act("mbox", user.id))],
+        [btn("بازگشت", emoji_key="btn_back", style=BACK, callback_data=_act("mbox", user.id))],
     ]
     return text, InlineKeyboardMarkup(rows)
 
@@ -826,29 +875,34 @@ def _mbox_detail_card(user, tier: str) -> tuple[str, InlineKeyboardMarkup]:
 
     cfg = constants.DIAMOND_BOX_TIERS[tier]
     is_free = (tier in ("bronze", "silver") and can_claim_free_diamond_box(user, tier))
+    div = "━━━━━━━━━━━━━━━━━━━━"
     if tier in ("bronze", "silver"):
         if is_free:
-            cost_line = f"{get_emoji('diamond')} هزینه: <b>رایگان! 🎁</b> (۱ بار در روز) · موجودی تو: <b>{user.diamonds:,}</b>"
+            cost_line = f"{get_emoji('diamond')} هزینه: <b>رایگان! 🎁</b> (<code>1</code> بار در روز)\n💎 موجودی: <code>{user.diamonds:,}</code>"
         else:
-            cost_line = f"{get_emoji('diamond')} هزینه: <b>{cfg['cost_diamonds']}</b> الماس <i>(رایگان امروز مصرف شده)</i> · موجودی تو: <b>{user.diamonds:,}</b>"
+            cost_line = f"{get_emoji('diamond')} هزینه: <code>{cfg['cost_diamonds']}</code> الماس <i>(رایگان امروز مصرف شده)</i>\n💎 موجودی: <code>{user.diamonds:,}</code>"
     else:
-        cost_line = f"{get_emoji('diamond')} هزینه: <b>{cfg['cost_diamonds']}</b> الماس · موجودی تو: <b>{user.diamonds:,}</b>"
+        cost_line = f"{get_emoji('diamond')} هزینه: <code>{cfg['cost_diamonds']}</code> الماس\n💎 موجودی: <code>{user.diamonds:,}</code>"
 
     lines = [
-        f"{cfg['label']}",
-        cost_line,
-        "",
+        f"<b>باکس {cfg['label']}</b>",
+        f"<blockquote>{cost_line}</blockquote>",
+        div,
         "📊 <b>احتمال هر رده:</b>",
+        "<blockquote>",
     ]
     for rarity, weight in cfg["weights"].items():
-        lines.append(f"{constants.RARITY_LABELS[rarity]} — {weight:g}٪")
+        lines.append(f"▫️ {constants.RARITY_LABELS[rarity]}: <code>{weight:g}٪</code>")
+    lines.append("</blockquote>")
 
-    buy_label = "🎁 باز کردن رایگان امروز" if is_free else "خرید و باز کن"
+    buy_label = "دریافت رایگان" if is_free else "خرید تکی"
     rows = [
-        [btn(buy_label, emoji_key="btn_confirm", style=CONFIRM, callback_data=_act("mbox_open", user.id, f"{tier}:1"))],
-        [btn(f"باز کردن ×{BULK_PAY} (+۱ رایگان 🎁)", emoji_key="btn_diamond_box", style=SHOP,
-             callback_data=_act("mbox_open", user.id, f"{tier}:bulk"))],
-        [btn("↩️ لیست باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_act("mbox", user.id))],
+        [
+            btn(buy_label, emoji_key="btn_confirm", style=CONFIRM, callback_data=_act("mbox_open", user.id, f"{tier}:1")),
+            btn(f"خرید بسته ×{BULK_PAY}", emoji_key="btn_diamond_box", style=SHOP,
+                 callback_data=_act("mbox_open", user.id, f"{tier}:bulk")),
+        ],
+        [btn("بازگشت", emoji_key="btn_back", style=BACK, callback_data=_act("mbox", user.id))],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -856,21 +910,27 @@ def _mbox_detail_card(user, tier: str) -> tuple[str, InlineKeyboardMarkup]:
 def _box_genetic_card(user) -> tuple[str, InlineKeyboardMarkup]:
     """Genetic-box TIER list — same tiers/prices as the DM (basic/rare/epic)."""
     tickets = getattr(user, "biocrate_tickets", 0)
-    ticket_line = f" · 🎟 بلیط: <b>{tickets}</b>" if tickets else ""
+    ticket_line = f"\n🎟 بلیط باکس: <code>{tickets}</code>" if tickets else ""
+    div = "━━━━━━━━━━━━━━━━━━━━"
     lines = [
         f"{get_emoji('biocrate')} <b>باکس ژنتیکی</b>",
         "<blockquote>بیشترش تجهیزاته و گاهی هیولای تازه می‌ده. هرچی گرون‌تر، شانس هیولا و "
         "نایابی بیشتر.</blockquote>",
-        f"موجودی: {user.coins:,} {get_emoji('coin')} · {user.dna_fragments} {get_emoji('dna')}{ticket_line}",
+        div,
+        "💰 <b>موجودی:</b>",
+        f"{get_emoji('coin')} طلا: <code>{user.coins:,}</code>",
+        f"{get_emoji('dna')} دی‌ان‌ای: <code>{user.dna_fragments:,}</code>" + ticket_line,
+        div,
         "یه باکس انتخاب کن:",
     ]
-    rows = [
-        [btn(f"{constants.BIOCRATE_TIERS[t]['label']} — {constants.BIOCRATE_TIERS[t]['gold']:,} طلا + "
-             f"{constants.BIOCRATE_TIERS[t]['dna']} DNA",
-             emoji_key="btn_biocrate", style=SHOP, callback_data=_act("bgx_pick", user.id, t))]
-        for t in constants.BIOCRATE_TIER_ORDER
-    ]
-    rows.append([btn("↩️ باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_scoped("box", user.id))])
+    rows = []
+    for t in constants.BIOCRATE_TIER_ORDER:
+        cfg = constants.BIOCRATE_TIERS[t]
+        rows.append([btn(
+            f"{cfg['label']} ({cfg['gold']:,} طلا)",
+            emoji_key="btn_biocrate", style=SHOP, callback_data=_act("bgx_pick", user.id, t)
+        )])
+    rows.append([btn("بازگشت", emoji_key="btn_back", style=BACK, callback_data=_scoped("box", user.id))])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -881,11 +941,13 @@ def _bgx_detail_card(user, tier: str) -> tuple[str, InlineKeyboardMarkup]:
     tickets = getattr(user, "biocrate_tickets", 0)
     text = _biocrate_detail_text(tier) + _biocrate_ticket_note(tier, tickets)
     rows = [
-        [btn(_open_label(tier, tickets, 1), emoji_key="btn_confirm", style=CONFIRM,
-             callback_data=_act("bgx_open", user.id, f"{tier}:1"))],
-        [btn(_open_label(tier, tickets, 10), emoji_key="btn_biocrate", style=SHOP,
-             callback_data=_act("bgx_open", user.id, f"{tier}:10"))],
-        [btn("↩️ لیست باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_act("box_genetic", user.id))],
+        [
+            btn("باز کردن ×۱", emoji_key="btn_confirm", style=CONFIRM,
+                 callback_data=_act("bgx_open", user.id, f"{tier}:1")),
+            btn("باز کردن ×۱۰", emoji_key="btn_biocrate", style=SHOP,
+                 callback_data=_act("bgx_open", user.id, f"{tier}:10")),
+        ],
+        [btn("بازگشت", emoji_key="btn_back", style=BACK, callback_data=_act("box_genetic", user.id))],
     ]
     return text, InlineKeyboardMarkup(rows)
 
@@ -917,7 +979,7 @@ def _bgx_result_card(user, tier: str, count: int, summary: dict) -> tuple[str, I
         text = _bulk_summary_text(label, summary) + _pay_line(summary)
     rows = [
         [btn("یکی دیگه", emoji_key="btn_biocrate", style=SHOP, callback_data=_act("bgx_pick", user.id, tier))],
-        [btn("↩️ لیست باکس‌ها", emoji_key="btn_back", style=BACK, callback_data=_act("box_genetic", user.id))],
+        [btn("بازگشت", emoji_key="btn_back", style=BACK, callback_data=_act("box_genetic", user.id))],
     ]
     return text, InlineKeyboardMarkup(rows)
 
@@ -934,7 +996,7 @@ def _wheel_card(user, spun_today) -> tuple[str, InlineKeyboardMarkup]:
         "<blockquote>🎁 روزی یک‌بار رایگان با جوایز ارزشمند متناسب با سطح قدرت:\n"
         "💰 طلا، 🧬 DNA، 💎 الماس، 🧪 غذای هیولا، ⏱ کارت سرعت یا 🐾 هیولای جدید!</blockquote>"
     )
-    rows = [[btn("بچرخون!", emoji_key="btn_wheel", style=SHOP, callback_data=_act("wheel_spin", user.id))]]
+    rows = [[btn("گردونه شانس", emoji_key="btn_wheel", style=SHOP, callback_data=_act("wheel_spin", user.id))]]
     rows.append([_pm_button()])
     return text, InlineKeyboardMarkup(rows)
 
@@ -944,19 +1006,22 @@ def _casino_card(user) -> tuple[str, InlineKeyboardMarkup]:
     table (scoped to the summoner), tapping opens a confirm step."""
     from game import casino
 
+    div = "━━━━━━━━━━━━━━━━━━━━"
     lines = [
         f"{get_emoji('casino')} <b>کازینو</b>",
-        f"<blockquote>{get_emoji('coin')} {user.coins:,} طلا · {get_emoji('diamond')} {user.diamonds} الماس\n"
-        "یه میز رو انتخاب کن. قماره — ممکنه ببری یا ببازی.</blockquote>",
+        "<blockquote>یه میز رو انتخاب کن. قماره — ممکنه ببری یا ببازی.</blockquote>",
+        div,
+        f"{get_emoji('coin')} موجودی طلا: <code>{user.coins:,}</code>",
+        f"{get_emoji('diamond')} موجودی الماس: <code>{user.diamonds:,}</code>",
     ]
     rows = []
     for t in casino.tier_list():
         if t["daily"]:
-            cost = "رایگان روزانه"
+            cost = "رایگان"
         else:
-            cost = f"{t['cost']} " + ("💎" if t["currency"] == "diamonds" else "طلا")
-        rows.append([btn(f"{t['label']} — {cost}", style=SHOP, callback_data=_act("casino_pick", user.id, t["key"]))])
-    rows.append([_pm_button("🎰 در پیوی")])
+            cost = f"{t['cost']} " + ("الماس" if t["currency"] == "diamonds" else "طلا")
+        rows.append([btn(f"{t['label']} ({cost})", emoji_key="btn_casino", style=SHOP, callback_data=_act("casino_pick", user.id, t["key"]))])
+    rows.append([_pm_button("کازینو در پیوی", emoji_key="btn_casino")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -976,57 +1041,67 @@ def _casino_play_sync(tg_user, tier):
 
 def _casino_confirm(owner_id: int, tier: str) -> tuple[str, InlineKeyboardMarkup]:
     cfg = constants.CASINO_TIERS[tier]
+    div = "━━━━━━━━━━━━━━━━━━━━"
     if cfg["daily"]:
         cost_line = "رایگان (روزی یک‌بار — همون قرعه‌کشی)"
     else:
         cur = "💎 الماس" if cfg["currency"] == "diamonds" else "طلا"
-        cost_line = f"شرط: <b>{cfg['cost']}</b> {cur}"
+        cost_line = f"شرط: <code>{cfg['cost']}</code> {cur}"
     text = (
-        f"{cfg['label']}\n<blockquote>{cfg['desc']}\n{cost_line}\n\n"
+        f"<b>{cfg['label']}</b>\n"
+        f"{div}\n"
+        f"<blockquote>{cfg['desc']}\n{cost_line}\n\n"
         "ممکنه جایزه‌ی بزرگ ببری یا هیچی گیرت نیاد. مطمئنی؟</blockquote>"
     )
     rows = [
-        [btn("🎲 بچرخون!", emoji_key="btn_casino", style=CONFIRM, callback_data=_act("casino_play", owner_id, tier))],
-        [btn("↩️ میزهای دیگه", emoji_key="btn_back", style=NAV, callback_data=_act("casino_home", owner_id))],
+        [btn("چرخاندن تاس", emoji_key="btn_casino", style=CONFIRM, callback_data=_act("casino_play", owner_id, tier))],
+        [btn("بازگشت", emoji_key="btn_back", style=NAV, callback_data=_act("casino_home", owner_id))],
     ]
     return text, InlineKeyboardMarkup(rows)
 
 
 def _casino_result(owner_id: int, tier: str, prize: dict, coins: int, diamonds: int) -> tuple[str, InlineKeyboardMarkup]:
+    div = "━━━━━━━━━━━━━━━━━━━━"
     if prize["kind"] == "nothing":
         reveal = "😔 <b>باختی!</b> این دور چیزی نصیبت نشد."
     else:
         reveal = f"🎉 <b>بردی!</b>\n<tg-spoiler>{prize['label']}</tg-spoiler>"
     text = (
-        f"{constants.CASINO_TIERS[tier]['label']}\n\n{reveal}\n\n"
-        f"<i>موجودی: {coins:,} طلا · {diamonds} الماس</i>"
+        f"<b>{constants.CASINO_TIERS[tier]['label']}</b>\n\n"
+        f"{reveal}\n\n"
+        f"{div}\n"
+        f"💰 طلا: <code>{coins:,}</code>\n"
+        f"💎 الماس: <code>{diamonds:,}</code>"
     )
     rows = [
-        [btn("🎲 دوباره همین میز", emoji_key="btn_casino", style=SHOP, callback_data=_act("casino_pick", owner_id, tier))],
-        [btn("↩️ میزهای دیگه", emoji_key="btn_back", style=NAV, callback_data=_act("casino_home", owner_id))],
+        [btn("بازی مجدد", emoji_key="btn_casino", style=SHOP, callback_data=_act("casino_pick", owner_id, tier))],
+        [btn("سایر میزها", emoji_key="btn_back", style=NAV, callback_data=_act("casino_home", owner_id))],
     ]
     return text, InlineKeyboardMarkup(rows)
 
 
 def _fusion_card(user, pairs, built, cap) -> tuple[str, InlineKeyboardMarkup]:
+    div = "━━━━━━━━━━━━━━━━━━━━"
     lines = [f"{get_emoji('lab')} <b>ترکیب هیولا</b>"]
     if not built:
         lines.append("\n🔒 اول باید 🔮 تالار ادغام رو توی پیوی بسازی.")
     elif pairs:
-        lines.append(f"⭐ سقف ستاره‌ی تو: <b>{cap}</b>\n")
-        lines.append("این جفت‌ها آماده‌ان — <b>هر کدوم 100٪ موفقه</b>:")
+        lines.append(f"⭐ سقف ستاره‌ی تو: <code>{cap}</code>\n")
+        lines.append(div)
+        lines.append("این جفت‌ها آماده‌ان (<b>هر کدوم <code>100٪</code> موفقه</b>):")
         for pair in pairs[:6]:
             rarity = constants.RARITY_LABELS[pair["rarity"]].split()[0]
-            lines.append(f"• {rarity} {pair['name']} {'⭐' * pair['star']} ×{pair['count']} → {'⭐' * (pair['star'] + 1)}")
+            lines.append(f"▫️ {rarity} <b>{pair['name']}</b> {'⭐' * pair['star']} (تعداد: <code>{pair['count']}</code>) → {'⭐' * (pair['star'] + 1)}")
     else:
         lines.append(
             "\n<blockquote>الان جفت آماده‌ای نداری. برای ترکیب به <b>دو هیولای هم‌نام، "
             "هم‌نایابی و هم‌ستاره</b> نیاز داری.</blockquote>"
         )
-    return "\n".join(lines), InlineKeyboardMarkup([[_pm_button("انجام ترکیب در پیوی")]])
+    return "\n".join(lines), InlineKeyboardMarkup([[_pm_button("انجام ترکیب (پیوی)")]])
 
 
 def _breeding_card(user, job, seconds_left, built, egg_count=0) -> tuple[str, InlineKeyboardMarkup]:
+    div = "━━━━━━━━━━━━━━━━━━━━"
     lines = [f"🕳 <b>غار هیولا</b>"]
     if not built:
         lines.append("\n🔒 اول باید 🔮 تالار ادغام رو توی پیوی بسازی تا غار باز شه.")
@@ -1037,15 +1112,15 @@ def _breeding_card(user, job, seconds_left, built, egg_count=0) -> tuple[str, In
                 "والدین بعد از تخم‌گذاری آزاد می‌شن. چی توی تخمه؟ تا سر باز نکنه معلوم نیست.</blockquote>"
             )
         elif seconds_left <= 0:
-            lines.append(f"\n💞 <b>جفت‌گیری تموم شد!</b> {job.parent_a.name} + {job.parent_b.name}")
+            lines.append(f"\n💞 <b>جفت‌گیری تموم شد!</b>\n▫️ <b>{job.parent_a.name}</b> + <b>{job.parent_b.name}</b>")
             lines.append("توی پیوی تخم رو بردار و والدها رو آزاد کن.")
         else:
             hours, rem = divmod(seconds_left, 3600)
-            lines.append(f"\n💞 یه جفت توی غارن: {job.parent_a.name} + {job.parent_b.name}")
-            lines.append(f"<b>{hours} ساعت و {rem // 60} دقیقه</b> مونده تا تخم‌گذاری")
+            lines.append(f"\n💞 یه جفت توی غارن:\n▫️ <b>{job.parent_a.name}</b> + <b>{job.parent_b.name}</b>")
+            lines.append(f"⏳ زمان باقی‌مانده: <code>{hours}</code> ساعت و <code>{rem // 60}</code> دقیقه")
         if egg_count:
-            lines.append(f"\n{get_emoji('egg')} <b>{egg_count}</b> تخم در حال رشد داری.")
-    return "\n".join(lines), InlineKeyboardMarkup([[_pm_button("مدیریت غار هیولا در پیوی")]])
+            lines.append(f"\n{get_emoji('egg')} <code>{egg_count}</code> تخم در حال رشد داری.")
+    return "\n".join(lines), InlineKeyboardMarkup([[_pm_button("مدیریت غار (پیوی)")]])
 
 
 def _start_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
@@ -1056,7 +1131,7 @@ def _start_card(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
     lines.append(f"<i>برای دیدن همه‌ی کارها «{keywords.word_for('help')}» رو بفرست.</i>")
     rows = [
         [btn("راهنمای کامل", emoji_key="btn_report", style=NAV, callback_data=_scoped("help", user_id))],
-        [_pm_button("شروع در پیوی ربات")],
+        [_pm_button("شروع در پیوی")],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -1295,10 +1370,18 @@ def _leaderboard_card(user, ranked, powers) -> tuple[str, InlineKeyboardMarkup]:
     if not ranked:
         return "هنوز هیچ موجودی توی این گروه ثبت نشده.", group_footer_keyboard(user.id, skip="leaderboard")
     medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
-    lines = [f"{get_emoji('trophy')} <b>برترین بازیکن‌های این گروه</b>", ""]
+    div = "━━━━━━━━━━━━━━━━━━━━"
+    lines = [
+        f"{get_emoji('trophy')} <b>برترین بازیکن‌های این گروه</b>",
+        div,
+    ]
     for i, c in enumerate(ranked, start=1):
         rank = medals[i - 1] if i <= 3 else f"<b>{i}.</b>"
-        lines.append(f"{rank} {mention(c.owner)} — 💪{powers.get(c.id, 0)}  <i>(Lv{c.level})</i>")
+        lines.append(
+            f"{rank} {mention(c.owner)}\n"
+            f"  ▫️ قدرت: <code>{powers.get(c.id, 0):,}</code>\n"
+            f"  ▫️ سطح: <code>{c.level}</code>"
+        )
     return "\n".join(lines), group_footer_keyboard(user.id, skip="leaderboard")
 
 
@@ -1336,42 +1419,43 @@ def _format_mmss(seconds: int) -> str:
 
 
 def _reward_text(user, result: dict) -> str:
+    div = "━━━━━━━━━━━━━━━━━━━━"
     if not result["ok"]:
         return (
             f"⏳ <b>{display_name(user)}</b> هنوز زوده!\n"
-            f"تا جایزه‌ی بعدی <b>{_format_mmss(result['seconds_left'])}</b> مونده."
+            f"تا جایزه‌ی بعدی <code>{_format_mmss(result['seconds_left'])}</code> مونده."
         )
 
     # off cooldown but a chance-based miss — still starts the fresh random cooldown
     if not result.get("won"):
         return (
             f"🎲 <b>{display_name(user)}</b>، این‌بار چیزی نبود!\n"
-            f"<b>{_format_mmss(result['next_wait'])}</b> دیگه دوباره «جایزه» یا «کایجو» بفرست."
+            f"<code>{_format_mmss(result['next_wait'])}</code> دیگه دوباره «جایزه» یا «کایجو» بفرست."
         )
 
     kind = result["kind"]
     if kind == "speedup":
-        prize = f"⏱ <b>کارت سرعت:</b> +{constants.speedup_plain_label(result['minutes'])}"
+        prize = f"⏱ <b>کارت سرعت:</b> +<code>{constants.speedup_plain_label(result['minutes'])}</code>"
     elif kind == "jackpot":
-        prize = f"{get_emoji('coin')} <b>جک‌پات بزرگ:</b> <b>+{result['amount']:,}</b> طلا"
+        prize = f"{get_emoji('coin')} <b>جک‌پات بزرگ:</b> <code>+{result['amount']:,}</code> طلا"
     elif kind == "coins":
-        prize = f"{get_emoji('coin')} <b>طلا:</b> <b>+{result['amount']:,}</b>"
+        prize = f"{get_emoji('coin')} <b>طلا:</b> <code>+{result['amount']:,}</code>"
     elif kind == "dna":
-        prize = f"{get_emoji('dna')} <b>دی‌ان‌ای:</b> <b>+{result['amount']:,}</b>"
+        prize = f"{get_emoji('dna')} <b>دی‌ان‌ای:</b> <code>+{result['amount']:,}</code>"
     elif kind == "food":
         cfg = constants.XP_CAPSULES.get(result.get("food_tier") or "small", {})
-        prize = (f"{cfg.get('emoji', '🍖')} <b>غذای هیولا:</b> یه <b>{cfg.get('label', 'حیوون')}</b> (+{cfg.get('xp', 0):,} XP)")
+        prize = (f"{cfg.get('emoji', '🍖')} <b>غذای هیولا:</b> <b>{cfg.get('label', 'حیوون')}</b> (+<code>{cfg.get('xp', 0):,}</code> XP)")
     else:
-        prize = f"{get_emoji('diamond')} <b>الماس:</b> <b>+{result['amount']:,}</b>"
+        prize = f"{get_emoji('diamond')} <b>الماس:</b> <code>+{result['amount']:,}</code>"
 
     lines = [
         f"{get_emoji('gift')} <b>صندوق پاداش باز شد!</b>",
         f"👤 بازیکن: <b>{display_name(user)}</b>",
-        "",
+        div,
         "📦 <b>غنیمت دریافتی:</b>",
-        f"  ↲ {prize}",
-        "",
-        f"⏳ شارژ مجدد: <b>{_format_mmss(result['next_wait'])}</b> دیگر",
+        f"  └ {prize}",
+        div,
+        f"⏳ شارژ مجدد: <code>{_format_mmss(result['next_wait'])}</code> دیگر",
     ]
     return "\n".join(lines)
 
@@ -1697,7 +1781,7 @@ async def group_setup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             "برای دیدن همه‌ی کلمه‌ها «راهنما» رو بفرست.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
-                [[btn("همه‌ی کلمه‌ها", emoji_key="btn_report", style=PRIMARY, callback_data=_scoped("help", update.effective_user.id))],
+                [[btn("دستورات گروه", emoji_key="btn_report", style=PRIMARY, callback_data=_scoped("help", update.effective_user.id))],
                  [_pm_button()]]
             ),
         )
@@ -1889,6 +1973,7 @@ def _do_sync(tg_user, chat, action, arg):
 
 def _action_note(payload: dict) -> str:
     """The one-line "what just happened" banner above the refreshed card."""
+    div = "━━━━━━━━━━━━━━━━━━━━"
     kind = payload["kind"]
     if kind == "setactive":
         note = f"🟢 <b>{payload['creature'].name}</b> شد هیولای فعالت!"
@@ -1896,12 +1981,13 @@ def _action_note(payload: dict) -> str:
         r = payload["result"]
         note_lines = [
             "⚡️ <b>شکار خودکار با موفقیت انجام شد!</b>",
-            f"📊 خلاصه عملکرد: <code>{r['wins']}/{r['hunts']}</code> برد 📈",
-            "──────────────",
+            div,
+            f"📊 خلاصه عملکرد: <code>{r['wins']}</code>/<code>{r['hunts']}</code> برد 📈",
+            div,
             "💰 <b>مجموع غارت دریافتی (لوت):</b>",
-            f"{get_emoji('coin')} طلا: <b>+{r['coins']:,}</b>",
-            f"{get_emoji('dna')} دی‌ان‌ای: <b>+{r['dna']:,}</b>",
-            f"📈 تجربه: <b>+{r['xp']:,} XP</b>",
+            f"{get_emoji('coin')} طلا: <code>+{r['coins']:,}</code>",
+            f"{get_emoji('dna')} دی‌ان‌ای: <code>+{r['dna']:,}</code>",
+            f"📈 تجربه: <code>+{r['xp']:,}</code> XP",
         ]
         if r.get("sub_bonus_pct"):
             sub_title = f"اشتراک {r.get('sub_name') or 'ویژه'}"
@@ -1911,10 +1997,12 @@ def _action_note(payload: dict) -> str:
             base_c = r.get('base_coins', r['coins'])
             base_d = r.get('base_dna', r['dna'])
             note_lines.extend([
-                "──────────────",
-                f"👑 <b>با احتساب {pct}٪ سود {sub_title}:</b>",
-                f"🔹 لوت پایه: {base_c:,} طلا · {base_d:,} DNA",
-                f"🎁 <b>سود اشتراک شما:</b> +{bonus_c:,} طلا · +{bonus_d:,} DNA",
+                div,
+                f"👑 <b>با احتساب <code>{pct}٪</code> سود {sub_title}:</b>",
+                f"🔹 لوت پایه طلا: <code>{base_c:,}</code>",
+                f"🔹 لوت پایه DNA: <code>{base_d:,}</code>",
+                f"🎁 سود اشتراک طلا: <code>+{bonus_c:,}</code>",
+                f"🎁 سود اشتراک DNA: <code>+{bonus_d:,}</code>",
             ])
         else:
             note_lines.extend([
@@ -1924,28 +2012,32 @@ def _action_note(payload: dict) -> str:
         note = "\n".join(note_lines)
     elif kind == "part":
         label = constants.BODY_PARTS.get(payload["part"], {}).get("label", payload["part"])
-        note = f"🧩 <b>{label} → سطح {payload['new_level']}</b> (−{payload['cost']:,} {get_emoji('coin')})"
+        note = f"🧩 <b>{label} → سطح <code>{payload['new_level']}</code></b> (−<code>{payload['cost']:,}</code> {get_emoji('coin')})"
     elif kind == "hunt":
         r = payload["result"]
         if r["won"]:
-            note = (f"{get_emoji('celebrate')} <b>بردی!</b> +{r['coins']} {get_emoji('coin')} "
-                    f"+{r['dna']} {get_emoji('dna')}")
+            note = (f"{get_emoji('celebrate')} <b>بردی!</b>\n"
+                    f"{get_emoji('coin')} طلا: <code>+{r['coins']:,}</code>\n"
+                    f"{get_emoji('dna')} دی‌ان‌ای: <code>+{r['dna']:,}</code>")
         else:
             note = "💀 <b>باختی!</b> دفعه‌ی بعد قوی‌تر برگرد."
     elif kind == "arena":
         r = payload["result"]
         arrow = "▲" if r["cup_delta"] >= 0 else "▼"
         if r["won"]:
-            note = (f"{get_emoji('celebrate')} <b>غارت موفق!</b> +{r['loot']:,} {get_emoji('coin')} "
-                    f"+{r.get('dna', 0)} {get_emoji('dna')}")
+            note = (f"{get_emoji('celebrate')} <b>غارت موفق!</b>\n"
+                    f"{get_emoji('coin')} طلا: <code>+{r['loot']:,}</code>\n"
+                    f"{get_emoji('dna')} دی‌ان‌ای: <code>+{r.get('dna', 0):,}</code>")
             if r.get("league_coins"):
-                note += f" · {r.get('league_emoji', '🏅')} پاداش لیگ: +{r['league_coins']} {get_emoji('coin')} +{r['league_dna']} {get_emoji('dna')}"
+                note += (f"\n{r.get('league_emoji', '🏅')} پاداش لیگ:\n"
+                         f"  ▫️ طلا: <code>+{r['league_coins']:,}</code>\n"
+                         f"  ▫️ دی‌ان‌ای: <code>+{r['league_dna']:,}</code>")
         else:
             note = "🛡 <b>حمله دفع شد!</b>"
-        note += f"  {arrow} {abs(r['cup_delta'])} 🏆 (کاپ: {r['new_cup']})"
+        note += f"\n{arrow} تغییر کاپ: <code>{abs(r['cup_delta'])}</code> 🏆 (کاپ فعلی: <code>{r['new_cup']:,}</code>)"
     elif kind == "collect":
-        parts = [f"+{amount:,} {get_emoji(_RESOURCE_EMOJI[res])}" for res, amount in payload["collected"].items()]
-        note = f"{get_emoji('coin')} <b>جمع‌آوری شد!</b> " + "  ".join(parts)
+        parts = [f"▫️ {get_emoji(_RESOURCE_EMOJI[res])}: <code>+{amount:,}</code>" for res, amount in payload["collected"].items()]
+        note = f"{get_emoji('coin')} <b>جمع‌آوری شد!</b>\n" + "\n".join(parts)
     elif kind == "box":
         r = payload["result"]
         note = f"{get_emoji('celebrate')} <b>باکس باز شد!</b> <tg-spoiler>{r.get('label', '')}</tg-spoiler>"
@@ -1955,7 +2047,7 @@ def _action_note(payload: dict) -> str:
     else:
         return ""
     if payload.get("levels"):
-        note += f" {get_emoji('celebrate')} سطح {payload['creature'].level}!"
+        note += f"\n{get_emoji('celebrate')} ارتقا به سطح <code>{payload['creature'].level}</code>!"
     return note + "\n\n"
 
 
@@ -2001,10 +2093,10 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
             await query.answer(str(exc), show_alert=True)
             return
         eaten = sum(result["consumed"].values())
-        await query.answer(f"🍽 {eaten} تا غذا · +{result['xp']:,} XP")
+        await query.answer(f"🍽 {eaten} تا غذا · +{result['xp']:,} امتیاز تجربه")
         text, keyboard = _feedcap_group_card(user, creature, caps, maxed)
         lvl = f" {get_emoji('celebrate')} سطح {result['new_level']}!" if result["levels"] else ""
-        note = f"🍽 <b>{eaten} تا غذا به هیولات دادی</b> · +{result['xp']:,} XP{lvl}\n\n"
+        note = f"🍽 <b>{eaten} تا غذا به هیولات دادی</b> · +{result['xp']:,} امتیاز تجربه{lvl}\n\n"
         from game.media import get_creature_image_path
 
         photo_path = get_creature_image_path(creature)
@@ -2110,7 +2202,7 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
             return
         await query.answer()
         label = constants.BODY_PARTS.get(part, {}).get("label", part)
-        note = f"🧩 <b>{label} → سطح {new_level}</b> (−{cost:,} {get_emoji('coin')})\n\n"
+        note = f"🧩 <b>{label} → سطح <code>{new_level}</code></b> (−<code>{cost:,}</code> {get_emoji('coin')})\n\n"
         text, keyboard = _upgrade_card(user, creature, energy, step)
         from game.media import get_creature_image_path
 
@@ -2173,11 +2265,11 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         cost = botconfig.get_energy_refill_cost()
         kb_rows = []
         kb_rows.append([
-            btn(f"شارژ با {cost} الماس", emoji_key="btn_charge", style=PRIMARY, callback_data=f"enr:ask:{owner_id}:ghunt")
+            btn(f"شارژ کامل ({cost} الماس)", emoji_key="btn_charge", style=PRIMARY, callback_data=f"enr:ask:{owner_id}:ghunt")
         ])
         if not sub_info["is_active"]:
             kb_rows.append([
-                btn("خرید اشتراک (۱۰۰ تومان)", emoji_key="btn_sub_silver", style=SHOP, url=f"https://t.me/{BOT_USERNAME}?start=sub_silver"),
+                btn("خرید اشتراک نقره‌ای", emoji_key="btn_sub_silver", style=SHOP, url=f"https://t.me/{BOT_USERNAME}?start=sub_silver"),
             ])
         await safe_edit_message_text(
             query,
@@ -2198,20 +2290,23 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
 def _render_expedition_card(exp_id: int, creator_name: str, target_name: str, member_names: list[str]) -> tuple[str, InlineKeyboardMarkup]:
     m_list_str = "\n".join([f"  ▫️ <b>{name}</b>" for name in member_names])
+    div = "━━━━━━━━━━━━━━━━━━━━"
 
     text = (
         f"⛵ <b>کاروان مأموریت تیمی: {target_name}</b>\n"
         f"<i>اعزام به مناطق دوردست برای غارت گنجینه‌ها و منابع باارزش</i>\n\n"
-        f"👑 <b>سرپرست کاروان:</b> {creator_name}\n"
-        f"👥 <b>اعضای حاضر ({len(member_names)}/4):</b>\n{m_list_str}\n\n"
-        f"⏳ وضعیت: <b>در حال عضوگیری...</b> (حداقل ۲ نفر)\n"
+        "<blockquote>"
+        f"👑 <b>سرپرست کاروان:</b> <b>{creator_name}</b>\n"
+        f"👥 <b>اعضای حاضر (<code>{len(member_names)}</code>/<code>4</code>):</b>\n{m_list_str}\n\n"
+        f"⏳ وضعیت: <b>در حال عضوگیری...</b> (حداقل <code>2</code> نفر)\n"
         f"⚠️ <i>سهمیه: ۱ بار در روز (ریست هر شب ساعت ۲۴:۰۰ بامداد).</i>\n"
         f"📊 <i>جایزه بر اساس قدرت کل تیم محاسبه می‌شود.</i>"
+        "</blockquote>"
     )
     kb = InlineKeyboardMarkup([
         [
-            btn("➕ پیوستن به کاروان", emoji_key="btn_exp_join", style=PRIMARY, callback_data=f"exp_join:{exp_id}"),
-            btn("🚀 حرکت کاروان", emoji_key="btn_exp_launch", style=BATTLE, callback_data=f"exp_launch:{exp_id}"),
+            btn("پیوستن به کاروان", emoji_key="btn_exp_join", style=PRIMARY, callback_data=f"exp_join:{exp_id}"),
+            btn("حرکت کاروان", emoji_key="btn_exp_launch", style=BATTLE, callback_data=f"exp_launch:{exp_id}"),
         ]
     ])
     return text, kb
@@ -2303,14 +2398,17 @@ async def expedition_launch_callback(update: Update, context: ContextTypes.DEFAU
         await query.answer(str(exc), show_alert=True)
         return
 
+    div = "━━━━━━━━━━━━━━━━━━━━"
     text = (
         f"🏆 <b>کاروان مأموریت تیمی با موفقیت بازگشت!</b>\n\n"
         f"📍 مقصد: <b>{res['destination']}</b>\n"
-        f"👥 دلاوران کاروان: <b>{res['members_str']}</b>\n\n"
+        f"👥 دلاوران کاروان:\n<b>{res['members_str']}</b>\n\n"
+        f"{div}\n"
         f"🎁 <b>سهم غنیمت هر عضو:</b>\n"
-        f"  💰 <b>+{res['per_gold']:,}</b> طلا\n"
-        f"  🧬 <b>+{res['per_dna']}</b> DNA\n"
-        f"  💎 <b>+{res['per_diamond']}</b> الماس\n\n"
+        f"  {get_emoji('coin')} طلا: <code>+{res['per_gold']:,}</code>\n"
+        f"  {get_emoji('dna')} دی‌ان‌ای: <code>+{res['per_dna']:,}</code>\n"
+        f"  {get_emoji('diamond')} الماس: <code>+{res['per_diamond']:,}</code>\n\n"
+        f"{div}\n"
         f"✨ غنائم به حساب تمامی اعضای کاروان واریز شد!"
     )
     await safe_edit_message_text(query, text, parse_mode="HTML")

@@ -29,35 +29,42 @@ def _render_mugen_text(view: dict) -> str:
     c = view["creature"]
     rew = st["rewards"]
 
-    rew_parts = [f"{rew['coins']:,} طلا", f"{rew['dna']} DNA"]
-    if rew.get("diamonds"):
-        rew_parts.append(f"{rew['diamonds']} 💎")
-    if rew.get("tickets"):
-        rew_parts.append(f"{rew['tickets']} 🎫")
-
     c_name = c.name if c else "بدون موجود فعال"
     elem_label = constants.element_label(st["guardian_element"])
 
     lines = [
-        f"🏰 <b>برج موگن (無限の塔) — طبقه {st['floor']}</b>",
-        f"<i>سیاه‌چال بی‌پایان و نبردهای مرگبار با نگهبانان باستانی</i>\n",
+        f"🏰 <b>برج موگن (無限の塔) — طبقه <code>{st['floor']}</code></b>",
+        "<i>سیاه‌چال بی‌پایان و نبردهای مرگبار با نگهبانان باستانی</i>\n",
+        "━━━━━━━━━━━━━━━━━━━━",
         f"👹 <b>نگهبان این طبقه:</b> {st['guardian_name']}",
         f"🏷 نایابی: <b>{constants.RARITY_LABELS.get(st['guardian_rarity'], st['guardian_rarity'])}</b>",
-        f"🎯 عنصر: <b>{elem_label}</b>",
-        f"💪 قدرت نگهبان: <b>{st['guardian_power']:,}</b>",
-        "",
+        f"🔮 عنصر: <b>{elem_label}</b>",
+        f"💪 قدرت نگهبان: <code>{st['guardian_power']:,}</code>",
+        "━━━━━━━━━━━━━━━━━━━━",
         f"🦖 موجود فعال شما: <b>{c_name}</b>",
-        f"🎁 پاداش فتح این طبقه: <b>{' + '.join(rew_parts)}</b>",
         "",
-        f"{get_emoji('energy')} انرژی فعلی: <b>{view['energy']}</b> · هزینه ورود: <b>{mugen_tower.MUGEN_ENERGY_COST}</b>",
+        "<blockquote>"
+        "🎁 <b>پاداش فتح این طبقه:</b>\n"
+        f"🪙 سکه: <code>+{rew['coins']:,}</code> {get_emoji('coin')}\n"
+        f"🧬 دی‌ان‌ای: <code>+{rew['dna']:,}</code> {get_emoji('dna')}",
+    ]
+    if rew.get("diamonds"):
+        lines.append(f"💎 الماس: <code>+{rew['diamonds']:,}</code> {get_emoji('diamond')}")
+    if rew.get("tickets"):
+        lines.append(f"🎫 بلیط: <code>+{rew['tickets']:,}</code>")
+
+    lines += [
+        f"\n\n⚡ <b>هزینه ورود:</b> <code>{mugen_tower.MUGEN_ENERGY_COST:,}</code> انرژی\n"
+        f"{get_emoji('energy')} <b>انرژی فعلی:</b> <code>{view['energy']:,}</code>"
+        "</blockquote>",
     ]
     return "\n".join(lines)
 
 
 def _render_mugen_keyboard(view: dict) -> InlineKeyboardMarkup:
     rows = [
-        [btn("⚔️ نبرد با نگهبان طبقه", emoji_key="btn_attack", style=BATTLE, callback_data="mugen:fight")],
-        [btn("🏆 لیدربورد فاتحان برج", emoji_key="btn_rank", style=NAV, callback_data="mugen:lb")],
+        [btn("نبرد با نگهبان", emoji_key="btn_attack", style=BATTLE, callback_data="mugen:fight")],
+        [btn("برترین فاتحان", emoji_key="btn_rank", style=NAV, callback_data="mugen:lb")],
         [back_btn("menu:me")],
     ]
     return InlineKeyboardMarkup(rows)
@@ -100,26 +107,33 @@ async def mugen_fight_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
     if res["won"]:
         rew = res["rewards"]
-        rew_str = f"+{rew['coins']:,} طلا · +{rew['dna']} DNA"
+        rew_lines = [
+            f"🪙 سکه: <code>+{rew['coins']:,}</code> {get_emoji('coin')}",
+            f"🧬 دی‌ان‌ای: <code>+{rew['dna']:,}</code> {get_emoji('dna')}",
+        ]
         if rew["diamonds"]:
-            rew_str += f" · +{rew['diamonds']} 💎"
+            rew_lines.append(f"💎 الماس: <code>+{rew['diamonds']:,}</code> {get_emoji('diamond')}")
         if rew["tickets"]:
-            rew_str += f" · +{rew['tickets']} 🎫"
+            rew_lines.append(f"🎫 بلیط: <code>+{rew['tickets']:,}</code>")
 
         text = (
-            f"🎉 <b>پیروزی در طبقه {res['floor']} برج موگن!</b>\n\n"
+            f"🎉 <b>پیروزی در طبقه <code>{res['floor']}</code> برج موگن!</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
             f"⚔️ <b>{res['guardian_name']}</b> با قدرت شکست خورد!\n\n"
-            f"🎁 <b>غنائم دریافتی:</b>\n{rew_str}\n\n"
-            f"🔓 <b>طبقه {res['next_floor']} باز شد!</b>"
+            "<blockquote>🎁 <b>غنائم دریافتی:</b>\n"
+            + "\n".join(rew_lines)
+            + "</blockquote>\n\n"
+            f"🔓 <b>طبقه <code>{res['next_floor']}</code> باز شد!</b>"
         )
     else:
         text = (
-            f"💀 <b>شکست در طبقه {res['floor']}!</b>\n\n"
-            f"نگهبان برج بسیار قدرتمند بود. کایجوت رو ارتقا بده و دوباره تلاش کن!"
+            f"💀 <b>شکست در طبقه <code>{res['floor']}</code>!</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "<blockquote><i>نگهبان برج بسیار قدرتمند بود. هیولای خود را ارتقا داده و دوباره تلاش کنید!</i></blockquote>"
         )
 
     kb = InlineKeyboardMarkup([
-        [btn("🏰 ادامه در برج موگن", emoji_key="btn_mugen", style=BATTLE, callback_data="mugen:panel")],
+        [btn("ادامه صعود", emoji_key="btn_mugen", style=BATTLE, callback_data="mugen:panel")],
         [back_btn("menu:me")],
     ])
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
@@ -137,17 +151,17 @@ async def mugen_lb_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
 
     lb = await run_db(_get_lb)
-    lines = ["🏆 <b>برترین فاتحان برج موگن (無限の塔)</b>\n"]
+    lines = ["🏆 <b>برترین فاتحان برج موگن (無限の塔)</b>", "━━━━━━━━━━━━━━━━━━━━"]
     if not lb:
         lines.append("<i>هنوز کسی طبقات اول رو فتح نکرده است!</i>")
     else:
         for idx, u in enumerate(lb, start=1):
             name = u["lab_name"] or u["first_name"] or u["username"] or f"Player {u['id']}"
             badge = "🥇" if idx == 1 else ("🥈" if idx == 2 else ("🥉" if idx == 3 else f"{idx}."))
-            lines.append(f"{badge} <b>{name}</b> — طبقه <b>{u['mugen_tower_floor']}</b>")
+            lines.append(f"{badge} <b>{name}</b>\n  🏰 طبقه: <code>{u['mugen_tower_floor']}</code>")
 
     kb = InlineKeyboardMarkup([
-        [btn("↩️ بازگشت به برج", emoji_key="btn_back", style=NAV, callback_data="mugen:panel")],
+        [back_btn("mugen:panel", "بازگشت به برج")],
     ])
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=kb)
 
