@@ -540,9 +540,28 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
                         _strip_tg_emoji(text), reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
                     )
                 except Exception:
-                    return await message.reply_text(
-                        _strip_html(text), reply_markup=reply_markup, parse_mode=None, **kwargs
+                    try:
+                        return await message.reply_text(
+                            _strip_html(text), reply_markup=reply_markup, parse_mode=None, **kwargs
+                        )
+                    except Exception:
+                        pass
+            # If reply fails (e.g. reply message not found), fallback to sending directly in the chat
+            try:
+                chat = getattr(message, "chat", None)
+                if chat:
+                    return await chat.send_message(
+                        text, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
                     )
+            except Exception:
+                try:
+                    chat = getattr(message, "chat", None)
+                    if chat:
+                        return await chat.send_message(
+                            _strip_html(text), reply_markup=reply_markup, parse_mode=None, **kwargs
+                        )
+                except Exception:
+                    pass
             raise
     return None
 

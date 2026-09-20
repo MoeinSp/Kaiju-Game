@@ -1706,19 +1706,29 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if action in _CARD_ACTIONS or action == "help":
         try:
             data = await run_db(_card_sync, update.effective_user, message.chat, action)
-        except GameError as exc:
-            sent = await message.reply_text(str(exc))
-            _schedule_cleanup(context, message.chat_id, [message.message_id, sent.message_id], action)
-            return
-        text, keyboard = _render(action, data)
-        photo_path = None
-        if action in ("creature", "upgrade") and data.get("creature"):
-            from game.media import get_creature_image_path
+            text, keyboard = _render(action, data)
+            photo_path = None
+            if action in ("creature", "upgrade") and data.get("creature"):
+                from game.media import get_creature_image_path
 
-            photo_path = get_creature_image_path(data["creature"])
-        sent = await send_screen(update, text, photo=photo_path, parse_mode="HTML", reply_markup=keyboard)
-        sent_id = getattr(sent, "message_id", None)
-        _schedule_cleanup(context, message.chat_id, [message.message_id, sent_id], action)
+                photo_path = get_creature_image_path(data["creature"])
+            sent = await send_screen(update, text, photo=photo_path, parse_mode="HTML", reply_markup=keyboard)
+            sent_id = getattr(sent, "message_id", None)
+            _schedule_cleanup(context, message.chat_id, [message.message_id, sent_id], action)
+        except GameError as exc:
+            try:
+                sent = await message.reply_text(str(exc))
+                _schedule_cleanup(context, message.chat_id, [message.message_id, sent.message_id], action)
+            except Exception:
+                pass
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).exception("Error handling group card action %s: %s", action, exc)
+            try:
+                sent = await message.reply_text("خطایی در نمایش این بخش رخ داد. لطفاً مجدداً امتحان کنید.")
+                _schedule_cleanup(context, message.chat_id, [message.message_id, sent.message_id], action)
+            except Exception:
+                pass
 
 
 async def group_card_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

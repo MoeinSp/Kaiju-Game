@@ -60,13 +60,16 @@ def normalize(text: str) -> str:
     if not text:
         return ""
     text = text.strip().lower()
+    # Strip @botusername mentions (e.g. @HeroGameZbot or /mine@HeroGameZbot)
+    text = re.sub(r"@\w+", "", text).strip()
     for src, dst in _CHAR_MAP.items():
         text = text.replace(src, dst)
     text = _STRIP.sub("", text)
     text = text.translate(_DIGITS)
-    # collapse runs of whitespace, and drop trailing punctuation people add
+    # collapse runs of whitespace
     text = re.sub(r"\s+", " ", text).strip()
-    return text.strip("!?.،؟؛:")
+    # strip leading and trailing command symbols & punctuation (/mine, !معدن, .معدن, #معدن, etc.)
+    return text.strip("!?.،؟؛:/\\#-_~ ")
 
 
 # action key -> (the ONE word, emoji registry key for the help card, one-line
