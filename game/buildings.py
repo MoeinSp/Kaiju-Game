@@ -71,7 +71,8 @@ def building_level(user: User, building_type: str) -> int:
 
 
 def main_hall_level(user: User) -> int:
-    return building_level(user, constants.MAIN_BUILDING)
+    lvl = building_level(user, constants.MAIN_BUILDING)
+    return max(1, lvl)
 
 
 def max_level_for(user: User, building_type: str) -> int:
@@ -153,7 +154,8 @@ def _accrued_since_collect(building: Building) -> float:
     """Raw (uncapped) production earned since last_collected_at at the CURRENT rate."""
     if production_rate(building) <= 0:
         return 0.0
-    elapsed_hours = (timezone.now() - building.last_collected_at).total_seconds() / 3600
+    last_col = building.last_collected_at or timezone.now()
+    elapsed_hours = (timezone.now() - last_col).total_seconds() / 3600
     return production_rate(building) * max(elapsed_hours, 0)
 
 

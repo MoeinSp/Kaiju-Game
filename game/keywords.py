@@ -535,6 +535,18 @@ ALIASES: dict[str, str] = {
     "کایجو من": "select",
     "کاروان": "expedition",
     "اعزام کاروان": "expedition",
+    # Mine
+    "معادن": "mine",
+    "ماین": "mine",
+    "استخراج": "mine",
+    "ساختمون": "mine",
+    "ساختمون ها": "mine",
+    "ساختمون‌ها": "mine",
+    "ساختمان": "mine",
+    "ساختمان ها": "mine",
+    "ساختمان‌ها": "mine",
+    "mine": "mine",
+    "معدن من": "mine",
     # Mugen
     "برج موگن": "mugen",
     "برج بی پایان": "mugen",
