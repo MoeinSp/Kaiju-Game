@@ -49,10 +49,17 @@ _CHAR_MAP = {
     "‏": "",        # RTL mark
     "‎": "",        # LTR mark
     "﻿": "",        # BOM
+    "\u200d": "",   # ZWJ -> strip
+    "\u200b": "",   # ZWSP -> strip
+    "\u2060": "",   # Word Joiner -> strip
+    "\ufeff": "",   # BOM -> strip
+    "\u061c": "",   # ALM -> strip
 }
-# harakat / tatweel — decorative, never meaningful for a keyword
-_STRIP = re.compile(r"[ً-ْـ]")
+# harakat / tatweel / variation selectors — decorative, never meaningful for a keyword
+_STRIP = re.compile(r"[ً-ْـ\ufe0f\ufe0e]")
 _DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+
+_EDGE_CHARS = "!?.،؟؛:/\\#-_~()[]{}<>«»\"\'*•⛏💎⚔️🛡️🔥💧⚡🪨🎁👑🐉🦖🏰 "
 
 
 def normalize(text: str) -> str:
@@ -66,10 +73,13 @@ def normalize(text: str) -> str:
         text = text.replace(src, dst)
     text = _STRIP.sub("", text)
     text = text.translate(_DIGITS)
+    # Strip emojis, symbols, and punctuation from outer edges
+    text = text.strip(_EDGE_CHARS)
+    text = re.sub(r"^[\W\d_]+", "", text) if not any(c.isalnum() for c in text[:1]) else text
+    text = re.sub(r"[\W\d_]+$", "", text) if not any(c.isalnum() for c in text[-1:]) else text
     # collapse runs of whitespace
     text = re.sub(r"\s+", " ", text).strip()
-    # strip leading and trailing command symbols & punctuation (/mine, !معدن, .معدن, #معدن, etc.)
-    return text.strip("!?.،؟؛:/\\#-_~ ")
+    return text.strip(_EDGE_CHARS)
 
 
 # action key -> (the ONE word, emoji registry key for the help card, one-line
@@ -542,6 +552,17 @@ ALIASES: dict[str, str] = {
     "معادن": "mine",
     "ماین": "mine",
     "استخراج": "mine",
+    "معدن ها": "mine",
+    "معدنها": "mine",
+    "معدن‌ها": "mine",
+    "معدنم": "mine",
+    "معادنم": "mine",
+    "ماینم": "mine",
+    "بخش معدن": "mine",
+    "معدن طلا": "mine",
+    "معدن الماس": "mine",
+    "معدن dna": "mine",
+    "معدن دی ان ای": "mine",
     "ساختمون": "mine",
     "ساختمون ها": "mine",
     "ساختمون‌ها": "mine",
@@ -549,6 +570,8 @@ ALIASES: dict[str, str] = {
     "ساختمان ها": "mine",
     "ساختمان‌ها": "mine",
     "mine": "mine",
+    "buildings": "mine",
+    "building": "mine",
     "معدن من": "mine",
     # Mugen
     "برج موگن": "mugen",

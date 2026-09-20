@@ -2445,7 +2445,7 @@ def register(application) -> None:
     application.add_handler(
         CommandHandler("setup", group_setup, filters.ChatType.GROUPS)
     )
-    # THE group text handler — see the module docstring before adding another
+    # THE group text handler — handles plain words and slash commands (/mine, /معدن, etc.)
     application.add_handler(
-        MessageHandler(filters.ChatType.GROUPS & filters.TEXT & ~filters.COMMAND, handle_group_text)
+        MessageHandler(filters.ChatType.GROUPS & filters.TEXT, handle_group_text)
     )
