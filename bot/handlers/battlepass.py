@@ -49,7 +49,7 @@ def _panel_reward(reward: dict) -> str:
     return " ┃ ".join(parts) or "—"
 
 
-def _render(user, st: dict) -> tuple[str, InlineKeyboardMarkup]:
+def _render(user, st: dict, is_group: bool = False) -> tuple[str, InlineKeyboardMarkup]:
     bar = constants.render_bar(st["into"], st["span"], width=10)
     pct = round(100 * st["into"] / max(1, st["span"]))
     track = "✦ ویژه (Premium)" if st["premium"] else "رایگان (Free)"
@@ -118,13 +118,14 @@ def _claim_sync(tg_user):
 
 async def pass_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     user, result, st = await run_db(_claim_sync, update.effective_user)
     if not result["tiers"]:
         await query.answer("چیزی برای دریافت نیست.", show_alert=True)
         return
     await query.answer(f"🎉 جوایز {result['tiers']} مرحله گرفته شد!")
     got = battlepass.reward_text(result["reward"])
-    text, keyboard = _render(user, st)
+    text, keyboard = _render(user, st, is_group=is_group)
     await safe_edit_message_text(
         query,
         f"🎉 <b>جوایز پاس دریافت شد!</b>\n🎁 <b>{got}</b>\n\n━━━━━━━━━━━━━━━━━━━━\n" + text,
@@ -141,6 +142,7 @@ def _buy_sync(tg_user):
 
 async def pass_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     user, st = await run_db(_panel_sync, update.effective_user)
     if st["premium"]:
         await query.answer("پاس ویژه قبلاً برای شما فعال شده است.", show_alert=True)
@@ -150,9 +152,10 @@ async def pass_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await query.answer(f"الماس کافی نداری! خرید پاس ویژه {cost} الماس می‌خواد.", show_alert=True)
         return
     await query.answer()
+    back_target = "menu:battlepass" if not is_group else "close"
     keyboard = InlineKeyboardMarkup([
         [btn(f"✅ تأیید و خرید پاس ویژه ({cost} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="pass_buy_do")],
-        [back_btn("menu:battlepass", "❌ انصراف")],
+        [back_btn(back_target, "❌ انصراف")],
     ])
     await safe_edit_message_text(
         query,
@@ -167,13 +170,14 @@ async def pass_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 async def pass_buy_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     try:
         user, st = await run_db(_buy_sync, update.effective_user)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("✦ پاس ویژه فعال شد!")
-    text, keyboard = _render(user, st)
+    text, keyboard = _render(user, st, is_group=is_group)
     await safe_edit_message_text(
         query,
         "✦ <b>پاس ویژه فعال شد!</b> حالا جوایز ویژه‌ی همه‌ی مرحله‌هایی که رسیدی رو می‌تونی بگیری.\n\n"
