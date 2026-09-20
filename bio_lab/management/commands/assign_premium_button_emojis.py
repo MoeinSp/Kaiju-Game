@@ -73,27 +73,33 @@ class Command(BaseCommand):
         # 1) which Premium sets does the owner draw from? (both button + text overrides)
         ids = list({r.custom_emoji_id for r in existing.values() if r.custom_emoji_id} | {o.custom_emoji_id for o in text_existing.values() if o.custom_emoji_id})
         set_names = set()
-        for cid in ids:
+        for i in range(0, len(ids), 100):
+            batch = ids[i:i+100]
             try:
-                res = self._api("getCustomEmojiStickers", {"custom_emoji_ids": [cid]})
+                res = self._api("getCustomEmojiStickers", {"custom_emoji_ids": batch})
                 for s in res.get("result", []):
                     if s.get("set_name"):
                         set_names.add(s["set_name"])
-            except Exception:
+            except Exception as ex:
+                self.stderr.write(f"Warning: batch {i} failed: {ex}")
                 continue
         set_names = sorted(set_names)
 
         # 2) every emoji available across those sets → base emoji : custom_emoji_id
         emap = {}
         for sn in set_names:
-            r = self._api("getStickerSet", {"name": sn})
-            if not r.get("ok"):
+            try:
+                r = self._api("getStickerSet", {"name": sn})
+                if not r.get("ok"):
+                    continue
+                for s in r["result"]["stickers"]:
+                    e, cid = s.get("emoji"), s.get("custom_emoji_id")
+                    if e and cid:
+                        emap.setdefault(e, cid)
+                        emap.setdefault(e.replace(_VS16, ""), cid)
+            except Exception as ex:
+                self.stderr.write(f"Warning: failed to load set {sn}: {ex}")
                 continue
-            for s in r["result"]["stickers"]:
-                e, cid = s.get("emoji"), s.get("custom_emoji_id")
-                if e and cid:
-                    emap.setdefault(e, cid)
-                    emap.setdefault(e.replace(_VS16, ""), cid)
         self.stdout.write(f"discovered {len(set_names)} Premium set(s), {len(emap)} emojis available")
 
         # 3) fill in every button that lacks an override (or all, with --force)
@@ -222,12 +228,12 @@ class Command(BaseCommand):
             "btn_filter": ["🔍", "🔎", "🔽", "🗂"],
             "btn_settings": ["⚙️", "🔧", "🛠", "🎛"],
             "btn_diamond": ["💎", "💠", "🔹", "🔷"],
-            "btn_kick": ["🥾", "❌", "🚫", "🚪"],
+            "btn_kick": ["❌", "✖️", "🚫", "⛔", "🚪", "👟", "👞", "👢", "🏃", "👋", "🥾"],
             "btn_members": ["👥", "🧑‍🤝‍🧑", "👤", "📋"],
             "btn_deputy": ["🎖", "🏅", "⭐", "👑"],
             "btn_edit": ["✏️", "📝", "✍️", "🛠"],
             "btn_search": ["🔎", "🔍", "👁", "📋"],
-            "btn_list": ["📋", "📜", "📑", "📁"],
+            "btn_list": ["📜", "📃", "📄", "📑", "📝", "📊", "🗂", "📁", "📂", "📖", "📚", "📋"],
             "btn_energy": ["⚡", "🔋", "⚡️", "💥"],
             "btn_requests": ["📨", "✉️", "📬", "📩"],
             "btn_vault": ["🏦", "🏛", "💰", "🪙"],
@@ -260,6 +266,7 @@ class Command(BaseCommand):
         # owner's sets don't carry, try a few semantically-close alternatives so the
         # key still gets a fitting Premium icon instead of staying plain.
         TEXT_FALLBACKS = {
+            "scroll": ["📜", "📃", "📄", "📑", "📝", "✉️", "📖", "📚"],
             "poison": ["🐍", "💀", "🧪", "☠"], "def": ["🔰", "⛨"], "spd": ["🌪", "👟", "🏃", "⚡"],
             "wings": ["🪽", "🕊", "🦅"], "element_earth": ["⛰", "🌍", "🟫", "🗿"],
             "forfeit_action": ["🚩", "🏳"], "speedup": ["⏰", "⌛", "🕐", "⚡"],
