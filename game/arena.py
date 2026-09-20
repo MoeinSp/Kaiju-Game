@@ -258,8 +258,16 @@ def _fake_opponent(attacker: User) -> dict:
         power = max(1, expected + random.randint(-200, 200))
     rarity, star = _bot_display_tier(bot_cup)
 
-    # Bot element selection: purely random across all elements
-    _bot_element = constants.random_element()
+    # Bot element selection:
+    # In high cups (>= 3700), bots counter the player's element to protect the top ladder.
+    # Otherwise (< 3700), elements are completely random (fire, water, earth, electric).
+    creature = Creature.objects.filter(owner=attacker, is_active=True).first()
+    attacker_element = creature.element if creature else None
+    if attacker_element and (attacker.cup >= 3700 or bot_cup >= 3700):
+        counters = [e for e in constants.ELEMENTS if constants.ELEMENT_STRONG_AGAINST.get(e) == attacker_element]
+        _bot_element = counters[0] if counters else constants.random_element()
+    else:
+        _bot_element = constants.random_element()
 
     return {
         "is_fake": True,
