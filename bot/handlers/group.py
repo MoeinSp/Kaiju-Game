@@ -739,13 +739,24 @@ async def maybe_capture_transfer_price(update: Update, context: ContextTypes.DEF
         await message.reply_text("فقط یه عدد بفرست (مثلا 5000) — یا «لغو».")
         return True
     offer = _get_offer(token)
-    context.user_data.pop("xfer_price_token", None)
     if offer is None:
+        context.user_data.pop("xfer_price_token", None)
         await message.reply_text("⌛ این پیشنهاد منقضی شد. دوباره از «انتقال …» شروع کن.")
         return True
     if update.effective_user.id != offer["sender_id"]:
         return True  # not the seller — ignore
-    offer["price"] = int(raw)
+
+    price = int(raw)
+    if offer.get("kind") == "e" and price > constants.EQUIP_TRANSFER_MAX_GOLD_PRICE:
+        await message.reply_text(
+            f"❌ سقف قیمت طلا برای انتقال تجهیزات حداکثر <code>{constants.EQUIP_TRANSFER_MAX_GOLD_PRICE:,}</code> طلاست.\n"
+            f"لطفاً عددی تا سقف <code>{constants.EQUIP_TRANSFER_MAX_GOLD_PRICE:,}</code> بفرست — یا «لغو».",
+            parse_mode="HTML",
+        )
+        return True
+
+    context.user_data.pop("xfer_price_token", None)
+    offer["price"] = price
     await _present_offer_to_receiver(update, token)
     return True
 
@@ -796,10 +807,11 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
         # setp → ask the seller to type a number; captured in maybe_capture_transfer_price
         context.user_data["xfer_price_token"] = token
         await query.answer()
+        limit_hint = f" (حداکثر <code>{constants.EQUIP_TRANSFER_MAX_GOLD_PRICE:,}</code>)" if offer.get("kind") == "e" else ""
         await safe_edit_message_text(
             query,
             f"{offer['desc']}\n\n💰 <b>{offer['sender_name']}</b>، قیمت رو به طلا بفرست "
-            "(فقط یه عدد، مثلا <code>5000</code>) — یا «لغو».\n<i>5 دقیقه اعتبار.</i>",
+            f"(فقط یه عدد{limit_hint}، مثلا <code>5000</code>) — یا «لغو».\n<i>5 دقیقه اعتبار.</i>",
             parse_mode="HTML",
         )
         return

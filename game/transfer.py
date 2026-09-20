@@ -365,7 +365,8 @@ def transfer_equipment(sender: User, receiver: User, equip_id: int, price: int =
         )
     _check_equip_blacksmith(receiver, item)
 
-    cost = constants.equip_transfer_cost(item.rarity, item.level)
+    if price > constants.EQUIP_TRANSFER_MAX_GOLD_PRICE:
+        raise GameError(f"حداکثر قیمت طلا برای انتقال تجهیزات {constants.EQUIP_TRANSFER_MAX_GOLD_PRICE:,} طلاست.")
     if receiver.diamonds < cost:
         raise TransferFundsError(cost, receiver.diamonds, "equip")
     if price > 0 and receiver.coins < price:

@@ -632,6 +632,8 @@ CREATURE_TRANSFER_RARITY_MULT = {
 EQUIP_TRANSFER_COST = {
     "common": 5, "rare": 12, "epic": 23, "legendary": 43, "mythic": 83,
 }
+# Maximum gold price the seller can ask for when transferring an equipment piece
+EQUIP_TRANSFER_MAX_GOLD_PRICE = 100_000
 # receiver prerequisites by the creature's star: (main_hall level, fusion_lab level).
 # main_hall is the whole game's bottleneck (weeks to max), so this is the real
 # anti-fake-account gate — you can't receive a 5★ without a mature base.
