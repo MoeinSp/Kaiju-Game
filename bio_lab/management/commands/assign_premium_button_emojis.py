@@ -95,12 +95,20 @@ class Command(BaseCommand):
                 for s in r["result"]["stickers"]:
                     e, cid = s.get("emoji"), s.get("custom_emoji_id")
                     if e and cid:
-                        emap.setdefault(e, cid)
-                        emap.setdefault(e.replace(_VS16, ""), cid)
+                        emap[e] = cid
+                        e_clean = e.replace(_VS16, "").strip()
+                        emap[e_clean] = cid
+                        emap[e_clean + _VS16] = cid
             except Exception as ex:
                 self.stderr.write(f"Warning: failed to load set {sn}: {ex}")
                 continue
         self.stdout.write(f"discovered {len(set_names)} Premium set(s), {len(emap)} emojis available")
+
+        def _get_cid(glyph: str) -> str | None:
+            if not glyph:
+                return None
+            g_clean = glyph.replace(_VS16, "").strip()
+            return emap.get(glyph) or emap.get(g_clean) or emap.get(g_clean + _VS16)
 
         # 3) fill in every button that lacks an override (or all, with --force)
         BUTTON_FALLBACKS = {
@@ -250,7 +258,7 @@ class Command(BaseCommand):
             placeholder = PREFERRED.get(key, fallback)
             candidates = [placeholder] + BUTTON_FALLBACKS.get(key, [])
             for cand in candidates:
-                cid = emap.get(cand) or emap.get(cand.replace(_VS16, ""))
+                cid = _get_cid(cand)
                 if cid:
                     placeholder = cand
                     break
@@ -288,7 +296,7 @@ class Command(BaseCommand):
             cid = None
             placeholder = default
             for cand in [default] + TEXT_FALLBACKS.get(key, []):
-                cid = emap.get(cand) or emap.get(cand.replace(_VS16, ""))
+                cid = _get_cid(cand)
                 if cid:
                     placeholder = cand
                     break
