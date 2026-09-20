@@ -156,6 +156,23 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_exp_launch": ("حرکت کاروان", "🚀", "action"),
     "btn_bm_bid": ("ثبت پیشنهاد مزایده", "🏷", "action"),
     "btn_bm_refresh": ("بروزرسانی مزایده", "🔄", "action"),
+    # additional system & alliance button keys
+    "btn_war": ("جنگ اتحاد", "⚔️", "features"),
+    "btn_filter": ("فیلتر", "🔍", "nav"),
+    "btn_settings": ("تنظیمات", "⚙️", "admin"),
+    "btn_diamond": ("الماس", "💎", "economy"),
+    "btn_kick": ("اخراج عضو", "🥾", "admin"),
+    "btn_members": ("لیست اعضا", "👥", "nav"),
+    "btn_deputy": ("تعیین معاون", "🎖", "admin"),
+    "btn_edit": ("ویرایش", "✏️", "admin"),
+    "btn_search": ("جستجو", "🔎", "nav"),
+    "btn_list": ("لیست", "📋", "nav"),
+    "btn_energy": ("انرژی", "⚡", "economy"),
+    "btn_requests": ("درخواست‌های عضویت", "📨", "admin"),
+    "btn_vault": ("درآمد خزانه", "🏦", "economy"),
+    "btn_hatch": ("شکستن تخم", "🐣", "action"),
+    "btn_instant": ("تکمیل فوری", "⚡", "action"),
+    "btn_help": ("راهنما", "📖", "nav"),
 }
 
 BUTTON_CATEGORY_LABELS: dict[str, str] = {

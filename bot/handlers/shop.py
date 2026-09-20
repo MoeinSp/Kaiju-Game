@@ -18,7 +18,7 @@ def _panel_sync(tg_user):
     return shop.offers_with_remaining(user), user.coins, user.diamonds
 
 
-def _render(offers, coins, diamonds) -> tuple[str, InlineKeyboardMarkup]:
+def _render(offers, coins, diamonds, is_group: bool = False) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
         "🛒 <b>فروشگاه روزانه</b>",
         "━━━━━━━━━━━━━━━━━━━━",
@@ -56,7 +56,8 @@ def _render(offers, coins, diamonds) -> tuple[str, InlineKeyboardMarkup]:
     _section("🪙 <b>خرید با طلا:</b>", [o for o in offers if o["currency"] != "diamonds"])
     if not offers:
         lines.append("\n<i>الان آفری موجود نیست. بعداً سر بزن.</i>")
-    rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
+    if not is_group:
+        rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -72,9 +73,10 @@ def _remember_offers(context, offers) -> None:
 
 
 async def shop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     offers, coins, diamonds = await run_db(_panel_sync, update.effective_user)
     _remember_offers(context, offers)
-    text, keyboard = _render(offers, coins, diamonds)
+    text, keyboard = _render(offers, coins, diamonds, is_group=is_group)
     from game.media import get_feature_image_path
     photo = get_feature_image_path("shop")
     await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)

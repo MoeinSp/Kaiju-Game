@@ -15,7 +15,7 @@ def _panel_sync(tg_user):
     return user.title, titles.available(user), len(titles.TITLES)
 
 
-def _render(equipped, avail, total) -> tuple[str, InlineKeyboardMarkup]:
+def _render(equipped, avail, total, is_group: bool = False) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
         f"🏅 <b>لقب‌ها</b> ({len(avail)}/{total} باز شده)",
         "<blockquote>لقب‌ها با پیشرفتت باز می‌شن و کنار اسم آزمایشگاهت نشون داده می‌شن. "
@@ -27,13 +27,15 @@ def _render(equipped, avail, total) -> tuple[str, InlineKeyboardMarkup]:
         rows.append([btn(f"{mark}{t['emoji']} {t['title']}", style=PRIMARY if t["equipped"] else LIST, callback_data=f"title_set:{t['key']}")])
     if equipped:
         rows.append([btn("❌ برداشتن لقب", style=LIST, callback_data="title_set:none")])
-    rows.append([back_btn("menu:profile")])
+    if not is_group:
+        rows.append([back_btn("menu:profile")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 async def titles_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     equipped, avail, total = await run_db(_panel_sync, update.effective_user)
-    text, keyboard = _render(equipped, avail, total)
+    text, keyboard = _render(equipped, avail, total, is_group=is_group)
     from game.media import get_feature_image_path
     photo = get_feature_image_path("titles")
     await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)

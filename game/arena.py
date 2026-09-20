@@ -258,21 +258,8 @@ def _fake_opponent(attacker: User) -> dict:
         power = max(1, expected + random.randint(-200, 200))
     rarity, star = _bot_display_tier(bot_cup)
 
-    # Bot element selection: MUST NOT have elemental weakness against player!
-    creature = Creature.objects.filter(owner=attacker, is_active=True).first()
-    attacker_element = creature.element if creature else None
-    if attacker_element:
-        # The element that attacker beats
-        weak_to_attacker = constants.ELEMENT_STRONG_AGAINST.get(attacker_element)
-        safe_elements = [e for e in constants.ELEMENTS if e != weak_to_attacker]
-        if attacker.cup >= 3700:
-            # At high cups, the bot specifically chooses the counter element that beats the player
-            counters = [e for e in constants.ELEMENTS if constants.ELEMENT_STRONG_AGAINST.get(e) == attacker_element]
-            _bot_element = counters[0] if counters else random.choice(safe_elements)
-        else:
-            _bot_element = random.choice(safe_elements)
-    else:
-        _bot_element = constants.random_element()
+    # Bot element selection: purely random across all elements
+    _bot_element = constants.random_element()
 
     return {
         "is_fake": True,

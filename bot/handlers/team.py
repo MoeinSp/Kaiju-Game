@@ -95,7 +95,8 @@ def _render(view: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKe
             btn(f"⭐ {c.star_level} | سطح {c.level} | 💪 {power:,}", style=PRIMARY if in_team else NAV, callback_data=f"team_tog:{c.id}"),
         ])
     rows += nav_rows
-    rows.append([back_btn("menu:me")])
+    if not is_group:
+        rows.append([back_btn("menu:me")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -104,9 +105,10 @@ def _team_view(context):
 
 
 async def team_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     view = await run_db(_panel_sync, update.effective_user)
     filt, page = _team_view(context)
-    text, keyboard = _render(view, filt, page)
+    text, keyboard = _render(view, filt, page, is_group=is_group)
     from game.media import get_feature_image_path
     photo = get_feature_image_path("team")
     await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)

@@ -48,7 +48,7 @@ def _render_bm_text(user: User, auctions: list[BlackMarketAuction]) -> str:
     return "\n".join(lines)
 
 
-def _render_bm_keyboard(auctions: list[BlackMarketAuction]) -> InlineKeyboardMarkup:
+def _render_bm_keyboard(auctions: list[BlackMarketAuction], is_group: bool = False) -> InlineKeyboardMarkup:
     rows = []
     for a in auctions:
         curr = "طلا" if a.bid_currency == "coins" else "الماس"
@@ -65,7 +65,8 @@ def _render_bm_keyboard(auctions: list[BlackMarketAuction]) -> InlineKeyboardMar
                 callback_data=f"bm_custom:{a.id}")
         ])
     rows.append([btn("بروزرسانی بازار", emoji_key="btn_bm_refresh", style=NAV, callback_data="bm:refresh")])
-    rows.append([back_btn("menu:me")])
+    if not is_group:
+        rows.append([back_btn("menu:me")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -117,10 +118,11 @@ def _render_confirmation_keyboard(preview: dict) -> InlineKeyboardMarkup:
 
 
 async def blackmarket_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     try:
         user, auctions = await run_db(_bm_sync, update.effective_user)
     except GameError as exc:
-        await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard())
+        await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard() if not is_group else None)
         return
 
     from game.media import get_feature_image_path
@@ -130,12 +132,13 @@ async def blackmarket_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         _render_bm_text(user, auctions),
         photo=photo,
         parse_mode="HTML",
-        reply_markup=_render_bm_keyboard(auctions),
+        reply_markup=_render_bm_keyboard(auctions, is_group=is_group),
     )
 
 
 async def bm_refresh_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     await query.answer()
     try:
         user, auctions = await run_db(_bm_sync, update.effective_user)
@@ -149,7 +152,7 @@ async def bm_refresh_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         _render_bm_text(user, auctions),
         photo=photo,
         parse_mode="HTML",
-        reply_markup=_render_bm_keyboard(auctions),
+        reply_markup=_render_bm_keyboard(auctions, is_group=is_group),
     )
 
 

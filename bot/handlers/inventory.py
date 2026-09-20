@@ -63,7 +63,7 @@ def _inv_home_sync(tg_user):
     return counts
 
 
-def _inv_home_render(counts: dict) -> tuple[str, InlineKeyboardMarkup]:
+def _inv_home_render(counts: dict, is_group: bool = False) -> tuple[str, InlineKeyboardMarkup]:
     text = (
         f"{get_emoji('collection')} <b>کوله‌پشتی تجهیزات</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
@@ -78,7 +78,8 @@ def _inv_home_render(counts: dict) -> tuple[str, InlineKeyboardMarkup]:
         ]
         rows.append(row)
     rows.append([btn("آهنگری", emoji_key="btn_forge", style=SHOP, callback_data="menu:blacksmith")])
-    rows.append([back_btn("menu:me")])
+    if not is_group:
+        rows.append([back_btn("menu:me")])
     return text, InlineKeyboardMarkup(rows)
 
 
@@ -108,48 +109,56 @@ def _rarity_tab_rows(slot, items, filt):
 
 def _inv_cat_render(slot, items: list[Equipment], filt: str, page: int) -> tuple[str, InlineKeyboardMarkup]:
     label = constants.EQUIPMENT_SLOT_LABELS[slot]
+    lines = [f"{get_emoji('diamond_box')} <b>{label}</b>\n━━━━━━━━━━━━━━━━━━━━"]
     if not items:
-        return (
-            f"{get_emoji('collection')} <b>کوله‌پشتی — {label}</b>\n\nتوی این دسته چیزی نداری.",
-            InlineKeyboardMarkup([[back_btn("menu:inventory", "بازگشت به دسته‌ها")]]),
+        lines.append("<i>هیچ تجهیزاتی در این جایگاه نداری.</i>")
+        return "\n".join(lines), InlineKeyboardMarkup(
+            [[back_btn("menu:inventory", "بازگشت به دسته‌ها")]]
         )
-    tab_rows = _rarity_tab_rows(slot, items, filt)
-    shown = items if filt == "all" else [i for i in items if i.rarity == filt]
-    total_pages = max(1, (len(shown) + PAGE_SIZE - 1) // PAGE_SIZE)
+
+    # filter by rarity if requested
+    visible = [i for i in items if filt == "all" or i.rarity == filt]
+
+    # paginate the visible subset
+    total_pages = max(1, (len(visible) + PAGE_SIZE - 1) // PAGE_SIZE)
     page = max(0, min(page, total_pages - 1))
-    chunk = shown[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
-    rows = list(tab_rows)
-    for i in chunk:
-        tag = "⚔️ " if i.equipped_on_id else "📦 "
-        rows.append([btn(
-            f"{tag}{constants.RARITY_LABELS[i.rarity]} {i.name} +{i.level}",
-            style=LIST, callback_data=f"inv_pick:{i.id}",
-        )])
-    nav = []
+    chunk = visible[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
+
+    for item in chunk:
+        lines.append(_item_line(item))
+        lines.append("")
+
+    tab_rows = _rarity_tab_rows(slot, items, filt)
+    pick_rows = [
+        [btn(f"{item.name} +{item.level}", style=NAV, callback_data=f"inv_pick:{item.id}")]
+        for item in chunk
+    ]
+    nav_row = []
     if page > 0:
-        nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"inv_cat:{slot}:{filt}:{page - 1}"))
-    if page < total_pages - 1:
-        nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"inv_cat:{slot}:{filt}:{page + 1}"))
-    if nav:
-        rows.append(nav)
+        nav_row.append(btn("◀️ قبلی", style=NAV, callback_data=f"inv_cat:{slot}:{filt}:{page - 1}"))
+    if total_pages > 1:
+        nav_row.append(btn(f"{page + 1}/{total_pages}", style=NAV, callback_data="noop"))
+    if page + 1 < total_pages:
+        nav_row.append(btn("بعدی ▶️", style=NAV, callback_data=f"inv_cat:{slot}:{filt}:{page + 1}"))
+
+    rows = list(tab_rows) + pick_rows
+    if nav_row:
+        rows.append(nav_row)
     rows.append([back_btn("menu:inventory", "بازگشت به دسته‌ها")])
-    page_note = f"  (صفحه {page + 1}/{total_pages})" if total_pages > 1 else ""
-    rarity_note = "" if filt == "all" else f" · {constants.RARITY_LABELS[filt]}"
-    text = (f"{get_emoji('collection')} <b>کوله‌پشتی — {label}</b>{rarity_note}{page_note}\n"
-            "نایابی رو انتخاب کن، بعد رو آیتم بزن:")
-    return text, InlineKeyboardMarkup(rows)
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 async def inventory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     counts = await run_db(_inv_home_sync, update.effective_user)
     if sum(counts.values()) == 0:
         await send_screen(update,
             f"{get_emoji('lab')} کوله‌پشتی‌ات خالیه! از باکس‌های ژنتیکی (📦 باکس ژنتیکی) تجهیزات به‌دست بیار.",
             parse_mode="HTML",
-            reply_markup=back_only_keyboard(),
+            reply_markup=back_only_keyboard() if not is_group else None,
         )
         return
-    text, keyboard = _inv_home_render(counts)
+    text, keyboard = _inv_home_render(counts, is_group=is_group)
     from game.media import get_feature_image_path
     photo = get_feature_image_path("inventory")
     await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)

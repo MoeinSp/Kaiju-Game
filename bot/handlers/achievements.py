@@ -20,7 +20,7 @@ def _panel_sync(tg_user):
     return user, achievements.evaluate(user)
 
 
-def _render(user, view: dict) -> tuple[str, InlineKeyboardMarkup]:
+def _render(user, view: dict, is_group: bool = False) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
         f"🏅 <b>دستاوردها</b> ({view['done']}/{view['total']})",
         "هدف‌های بلندمدت؛ با تکمیل هر مرحله، پاداشش رو دریافت کن.",
@@ -45,13 +45,15 @@ def _render(user, view: dict) -> tuple[str, InlineKeyboardMarkup]:
         rows.append(
             [btn(f"🎁 دریافت همه ({view['claimable']})", emoji_key="btn_confirm", style=CONFIRM, callback_data="ach_claim")]
         )
-    rows.append([back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")])
+    if not is_group:
+        rows.append([back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 async def achievements_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     user, view = await run_db(_panel_sync, update.effective_user)
-    text, keyboard = _render(user, view)
+    text, keyboard = _render(user, view, is_group=is_group)
     from game.media import get_feature_image_path
     photo = get_feature_image_path("achievements")
     await send_screen(update, text, photo=photo, reply_markup=keyboard)

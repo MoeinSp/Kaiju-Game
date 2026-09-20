@@ -73,19 +73,21 @@ def _render_subscription_text(info: dict) -> str:
     return "\n".join(lines)
 
 
-def _render_subscription_keyboard(info: dict) -> InlineKeyboardMarkup:
+def _render_subscription_keyboard(info: dict, is_group: bool = False) -> InlineKeyboardMarkup:
     rows = [
         [btn("خرید اشتراک نقره‌ای", emoji_key="btn_sub_silver", style=PRIMARY, callback_data="sub_pick:silver")],
         [btn("خرید اشتراک طلایی", emoji_key="btn_sub_gold", style=CONFIRM, callback_data="sub_pick:gold")],
-        [back_btn("menu:cat_shop", "بازگشت به فروشگاه")],
     ]
+    if not is_group:
+        rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
     return InlineKeyboardMarkup(rows)
 
 
 async def subscription_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     user, info = await run_db(_sub_panel_sync, update.effective_user)
     text = _render_subscription_text(info)
-    keyboard = _render_subscription_keyboard(info)
+    keyboard = _render_subscription_keyboard(info, is_group=is_group)
 
     from game.media import get_feature_image_path
     photo = get_feature_image_path("subscription")

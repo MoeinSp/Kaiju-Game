@@ -61,20 +61,22 @@ def _render_mugen_text(view: dict) -> str:
     return "\n".join(lines)
 
 
-def _render_mugen_keyboard(view: dict) -> InlineKeyboardMarkup:
+def _render_mugen_keyboard(view: dict, is_group: bool = False) -> InlineKeyboardMarkup:
     rows = [
         [btn("نبرد با نگهبان", emoji_key="btn_attack", style=BATTLE, callback_data="mugen:fight")],
         [btn("برترین فاتحان", emoji_key="btn_rank", style=NAV, callback_data="mugen:lb")],
-        [back_btn("menu:me")],
     ]
+    if not is_group:
+        rows.append([back_btn("menu:me")])
     return InlineKeyboardMarkup(rows)
 
 
 async def mugen_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     try:
         view = await run_db(_mugen_panel_sync, update.effective_user)
     except GameError as exc:
-        await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard())
+        await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard() if not is_group else None)
         return
 
     from game.media import get_feature_image_path
@@ -84,12 +86,13 @@ async def mugen_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         _render_mugen_text(view),
         photo=photo,
         parse_mode="HTML",
-        reply_markup=_render_mugen_keyboard(view),
+        reply_markup=_render_mugen_keyboard(view, is_group=is_group),
     )
 
 
 async def mugen_fight_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
 
     def _do_fight(tg_user):
         user, _ = get_or_create_user(tg_user)
@@ -132,10 +135,10 @@ async def mugen_fight_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             "<blockquote><i>نگهبان برج بسیار قدرتمند بود. هیولای خود را ارتقا داده و دوباره تلاش کنید!</i></blockquote>"
         )
 
-    kb = InlineKeyboardMarkup([
-        [btn("ادامه صعود", emoji_key="btn_mugen", style=BATTLE, callback_data="mugen:panel")],
-        [back_btn("menu:me")],
-    ])
+    rows = [[btn("ادامه صعود", emoji_key="btn_mugen", style=BATTLE, callback_data="mugen:panel")]]
+    if not is_group:
+        rows.append([back_btn("menu:me")])
+    kb = InlineKeyboardMarkup(rows)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
 
 
@@ -168,6 +171,7 @@ async def mugen_lb_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 async def mugen_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     await query.answer()
     try:
         view = await run_db(_mugen_panel_sync, update.effective_user)
@@ -181,7 +185,7 @@ async def mugen_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         _render_mugen_text(view),
         photo=photo,
         parse_mode="HTML",
-        reply_markup=_render_mugen_keyboard(view),
+        reply_markup=_render_mugen_keyboard(view, is_group=is_group),
     )
 
 

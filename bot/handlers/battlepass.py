@@ -94,15 +94,17 @@ def _render(user, st: dict) -> tuple[str, InlineKeyboardMarkup]:
         rows.append([btn("🎁 دریافت جوایز", emoji_key="btn_confirm", style=CONFIRM, callback_data="pass_claim")])
     if not st["premium"]:
         rows.append(
-            [btn(f"✦ خرید پاس ویژه ({st['premium_cost']} 💎)", style=SHOP, callback_data="pass_buy")]
+            [btn(f"خرید پاس ویژه ({st['premium_cost']} 💎)", emoji_key="btn_battlepass", style=SHOP, callback_data="pass_buy")]
         )
-    rows.append([back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")])
+    if not is_group:
+        rows.append([back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 async def battlepass_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     user, st = await run_db(_panel_sync, update.effective_user)
-    text, keyboard = _render(user, st)
+    text, keyboard = _render(user, st, is_group=is_group)
     from game.media import get_feature_image_path
     photo = get_feature_image_path("battlepass")
     await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)

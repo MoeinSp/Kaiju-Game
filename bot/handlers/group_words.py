@@ -758,15 +758,14 @@ def _mine_card(user, mine: dict) -> tuple[str, InlineKeyboardMarkup]:
 
     div = "━━━━━━━━━━━━━━━━━━━━"
     alert_txt = ""
-    if (user.plundered_alert_gold or 0) > 0 or (user.plundered_alert_dna or 0) > 0:
+    alert_gold = mine.get("alert_gold", 0)
+    alert_dna = mine.get("alert_dna", 0)
+    if alert_gold > 0 or alert_dna > 0:
         alert_txt = (
             f"⚠️ <b>هشدار غارت معدن:</b>\n"
             f"در حمله اخیر در آرنا، بخشی از طلا و DNA ذخیره‌شده شما شامل "
-            f"<b><code>{user.plundered_alert_gold:,}</code></b> طلا و <b><code>{user.plundered_alert_dna:,}</code></b> DNA به غارت رفت!\n{div}\n"
+            f"<b><code>{alert_gold:,}</code></b> طلا و <b><code>{alert_dna:,}</code></b> DNA به غارت رفت!\n{div}\n"
         )
-        user.plundered_alert_gold = 0
-        user.plundered_alert_dna = 0
-        user.save(update_fields=["plundered_alert_gold", "plundered_alert_dna"])
 
     lines = [
         f"{alert_txt}⛏ <b>بخش معدن و استخراج</b>",
@@ -781,12 +780,15 @@ def _mine_card(user, mine: dict) -> tuple[str, InlineKeyboardMarkup]:
         f"🧬 دی‌ان‌ای: <code>{n.get('pending', 0):,}</code>",
         f"💎 الماس: <code>{d.get('pending', 0):,}</code>",
     ]
-    # one row, three separate per-resource collect buttons (premium-themed)
-    rows = [[
-        btn("طلا", emoji_key="btn_bld_gold_collector", style=BUILD, callback_data=_act("collect_gold", user.id)),
-        btn("دی‌ان‌ای", emoji_key="btn_bld_dna_lab", style=BUILD, callback_data=_act("collect_dna", user.id)),
-        btn("الماس", emoji_key="btn_bld_diamond_collector", style=BUILD, callback_data=_act("collect_diamond", user.id)),
-    ]]
+    rows = [
+        [btn("جمع‌آوری همه", emoji_key="btn_vault", style=CONFIRM, callback_data=_act("collect_all", user.id))],
+        [
+            btn("طلا", emoji_key="btn_bld_gold_collector", style=BUILD, callback_data=_act("collect_gold", user.id)),
+            btn("دی‌ان‌ای", emoji_key="btn_bld_dna_lab", style=BUILD, callback_data=_act("collect_dna", user.id)),
+            btn("الماس", emoji_key="btn_bld_diamond_collector", style=BUILD, callback_data=_act("collect_diamond", user.id)),
+        ],
+        [_pm_button()],
+    ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -1280,10 +1282,20 @@ def _card_sync(tg_user, chat, action):
     elif action == "mine":
         from game.buildings import get_or_create_buildings, pending_amount
 
+        alert_gold = user.plundered_alert_gold or 0
+        alert_dna = user.plundered_alert_dna or 0
+        if alert_gold > 0 or alert_dna > 0:
+            user.plundered_alert_gold = 0
+            user.plundered_alert_dna = 0
+            user.save(update_fields=["plundered_alert_gold", "plundered_alert_dna"])
+
         buildings = get_or_create_buildings(user)
         by_type = {b.building_type: b for b in buildings}
         # the three producing collectors, in display order (diamond, gold, dna)
-        mine = {}
+        mine = {
+            "alert_gold": alert_gold,
+            "alert_dna": alert_dna,
+        }
         for t in ("diamond_collector", "gold_collector", "dna_lab"):
             b = by_type.get(t)
             mine[t] = {"level": b.level if b else 0, "pending": pending_amount(b) if b else 0}

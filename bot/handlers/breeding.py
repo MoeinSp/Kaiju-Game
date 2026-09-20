@@ -202,25 +202,25 @@ def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
             lines.append(f"<blockquote>والد اول: <b>{j['parent_a_name']}</b>\nوالد دوم: <b>{j['parent_b_name']}</b></blockquote>")
             if j["ready"]:
                 lines.append("✅ <b>جفت‌گیری تموم شد!</b> بزن تا تخم بذارن و آزاد شن.\n")
-                rows.append([btn(f"🥚 تخم بذار{job_num}", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"brd_lay:{j['id']}")])
+                rows.append([btn(f"تخم بذار{job_num}", emoji_key="btn_hatch", style=CONFIRM, callback_data=f"brd_lay:{j['id']}")])
             else:
                 lines.append(f"⏱ زمان باقیمانده: <code>{_format_remaining(j['seconds_left'])}</code>\n")
                 rows.append(
                     [
-                        btn(f"💎 فوری‌کن{job_num} ({j['finish_price']})", style=PRIMARY, callback_data=f"brd_cave_finish_ask:{j['id']}"),
+                        btn(f"فوری‌کن{job_num} ({j['finish_price']} الماس)", emoji_key="btn_instant", style=PRIMARY, callback_data=f"brd_cave_finish_ask:{j['id']}"),
                         btn(f"لغو{job_num}", emoji_key="btn_cancel", style=DANGER, callback_data=f"brd_cancel:{j['id']}"),
                     ]
                 )
         if len(jobs) < max_jobs:
             lines.append(f"✨ ظرفیت غار: <code>{len(jobs)}</code> / <code>{max_jobs}</code>")
             if view["free_count"] >= 2:
-                rows.append([btn(f"🐣 جفت بعدی رو بفرست غار ({len(jobs) + 1}/{max_jobs})", emoji_key="btn_confirm", style=CONFIRM, callback_data="brd_new")])
+                rows.append([btn(f"جفت بعدی رو بفرست غار ({len(jobs) + 1}/{max_jobs})", emoji_key="btn_breeding", style=CONFIRM, callback_data="brd_new")])
             else:
                 lines.append("<i>برای فرستادن جفت بعدی حداقل ۲ هیولای آزاد لازم داری.</i>")
     else:
         if view["free_count"] >= 2:
             lines.append("🕳 غار خالیه — یه جفت بفرست تا جفت‌گیری کنن و تخم بذارن.")
-            rows.append([btn("🐣 جفت بفرست غار", emoji_key="btn_confirm", style=CONFIRM, callback_data="brd_new")])
+            rows.append([btn("جفت بفرست غار", emoji_key="btn_breeding", style=CONFIRM, callback_data="brd_new")])
         else:
             lines.append("🕳 غار خالیه. برای جفت‌گیری حداقل <b>دو</b> هیولای آزاد لازم داری.")
             lines.append("<i>موجود فعال و هیولاهایی که سر کارن حساب نمی‌شن.</i>")
@@ -233,16 +233,16 @@ def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
         for i, e in enumerate(eggs, 1):
             if e["ready"]:
                 lines.append(f"🐣 تخم <code>#{i}</code> — <b>آماده‌ی سر باز کردنه!</b>")
-                rows.append([btn(f"🐣 سر باز کن تخم #{i}", style=CONFIRM, callback_data=f"brd_hatch:{e['id']}")])
+                rows.append([btn(f"سر باز کن تخم #{i}", emoji_key="btn_hatch", style=CONFIRM, callback_data=f"brd_hatch:{e['id']}")])
             else:
                 lines.append(f"🥚 تخم <code>#{i}</code> — ⏱ <code>{_format_remaining(e['seconds_left'])}</code>")
                 rows.append(
-                    [btn(f"💎 فوری‌کن تخم #{i} ({e['finish_price']})", style=PRIMARY, callback_data=f"brd_egg_finish_ask:{e['id']}")]
+                    [btn(f"فوری‌کن تخم #{i} ({e['finish_price']} الماس)", emoji_key="btn_instant", style=PRIMARY, callback_data=f"brd_egg_finish_ask:{e['id']}")]
                 )
         lines.append("\n<i>چی توی تخم‌هاست؟ تا سر باز نکنن هیچ‌کس نمی‌دونه.</i>")
 
     lines.append(f"\n{get_emoji('diamond')} موجودی الماس: <code>{view['user'].diamonds:,}</code>")
-    rows.append([btn("📖 راهنمای کامل غار", style=NAV, callback_data="brd_guide")])
+    rows.append([btn("راهنمای کامل غار", emoji_key="btn_help", style=NAV, callback_data="brd_guide")])
     rows.append([back_btn("menu:me")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
