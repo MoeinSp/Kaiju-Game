@@ -823,11 +823,18 @@ BUILDING_CONSTRUCT_SECONDS = 5
 # the SMALLER of the two sides' caps, so both parties benefit from levelling it. It
 # also gates creature transfers by star: moving an N★ creature needs BOTH sides at
 # trade-hall level ≥ N. Like every building it can't exceed the main hall's level.
-TRADE_HALL_GOLD_CAP = {0: 0, 1: 100_000, 2: 300_000, 3: 500_000, 4: 1_000_000, 5: 2_000_000}
+TRADE_HALL_GOLD_CAP = {
+    0: 50_000,
+    1: 150_000,
+    2: 300_000,
+    3: 500_000,
+    4: 1_000_000,
+    5: 1_500_000,
+}
 
 
 def trade_hall_gold_cap(level: int) -> int:
-    return TRADE_HALL_GOLD_CAP.get(max(0, min(int(level or 0), BUILDING_MAX_LEVEL)), 0)
+    return TRADE_HALL_GOLD_CAP.get(max(0, min(int(level or 0), BUILDING_MAX_LEVEL)), TRADE_HALL_GOLD_CAP[0])
 
 
 # ── 🔬 آزمایشگاه (research lab) tracks ───────────────────────────────────────────

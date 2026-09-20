@@ -118,27 +118,35 @@ def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
         from game.transfer import _check_account_maturity_gate
 
         _check_account_maturity_gate(sender)
-        # «تالار تجارت» gate: both sides must have it built, and the transfer is bounded
-        # by the SMALLER of their two per-level gold caps — so both benefit from
-        # levelling it up (see constants.trade_hall_gold_cap).
+        # «تالار تجارت» gate: transfer is bounded by the SMALLER of their two per-level gold caps,
+        # and the receiver cannot receive more than their Trade Hall gold cap per day in total.
         s_cap = constants.trade_hall_gold_cap(building_level(sender, "trade_hall"))
         r_cap = constants.trade_hall_gold_cap(building_level(receiver, "trade_hall"))
-        if s_cap <= 0:
-            raise GameError(
-                "برای انتقال طلا باید اول «🤝 تالار تجارت» رو بسازی (از بخش «ساختمون‌ها» توی پیوی ربات)."
-            )
-        if r_cap <= 0:
-            raise GameError("گیرنده هنوز «🤝 تالار تجارت» نساخته و نمی‌تونه طلا بگیره.")
         cap = min(s_cap, r_cap)
         if amount > cap:
             raise GameError(
-                f"سقف انتقال طلا الان {cap:,} طلاست (به سطح «تالار تجارت» هر دو طرف بستگی داره). "
-                "برای انتقال بیشتر، تالار تجارت رو ارتقا بدین."
+                f"سقف انتقال طلا در هر تراکنش {cap:,} طلاست (بر اساس سطح تالار تجارت دو طرف). "
+                "برای انتقال بیشتر، تالار تجارت را ارتقا دهید."
             )
+
+        from game.daily import get_daily_count, record_action_bulk
+
+        received_today = get_daily_count(receiver, "gold_transfer_received")
+        remaining_daily = max(0, r_cap - received_today)
+        if remaining_daily <= 0:
+            raise GameError(
+                f"گیرنده امروز به سقف مجاز دریافت روزانه طلا ({r_cap:,} طلا) رسیده است و نمی‌تواند طلای بیشتری دریافت کند."
+            )
+        if amount > remaining_daily:
+            raise GameError(
+                f"گیرنده امروز {received_today:,} طلا دریافت کرده و حداکثر می‌تواند {remaining_daily:,} طلای دیگر دریافت کند "
+                f"(سقف روزانه تالار تجارت او {r_cap:,} طلاست)."
+            )
+
         if not getattr(receiver, "transfers_enabled", True):
             raise GameError("🔒 این کاربر دریافت انتقال رو خاموش کرده — نمی‌تونی بهش طلا بدی.")
         if sender.coins < amount:
-            raise GameError(f"طلا کافی نداری! فقط {sender.coins} طلا داری.")
+            raise GameError(f"طلا کافی نداری! فقط {sender.coins:,} طلا داری.")
         # 10% transfer fee, floored (rounded in the user's favour → smaller fee, more
         # reaches the receiver). The sender pays `amount`; the receiver gets `amount-fee`.
         fee = amount // 10
@@ -147,6 +155,7 @@ def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
         receiver.coins += net
         sender.save(update_fields=["coins"])
         receiver.save(update_fields=["coins"])
+        record_action_bulk(receiver, "gold_transfer_received", amount)
         from game.ledger import record_gain
         record_gain(receiver, "transfer", coins=net)
     return sender, receiver, amount, fee, net
