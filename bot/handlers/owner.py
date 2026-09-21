@@ -362,6 +362,8 @@ async def list_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_admin(update):
+        if update.callback_query:
+            await update.callback_query.answer("فقط ادمین‌ها به این بخش دسترسی دارند.", show_alert=True)
         return
     stats = await run_db(dashboard_stats)
     txt_set, txt_tot = text_category_stats()
@@ -420,7 +422,11 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             btn("💾 بکاپ خودکار", style=ADMIN, callback_data="admin_menu:autobackup"),
         ])
         keyboard = InlineKeyboardMarkup(rows)
-    await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+    if update.callback_query:
+        await update.callback_query.answer()
+        await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=keyboard)
+    else:
+        await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 # ── admin management (owner-only) ─────────────────────────────────────────────

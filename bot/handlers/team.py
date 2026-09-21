@@ -13,6 +13,7 @@ from bot.buttons import LIST, NAV, PRIMARY, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants
 from game.creature import GameError
+from game.emoji import get_emoji
 from game.teambattle import team_power
 
 MAX_SLOTS = 3
@@ -69,7 +70,8 @@ def _render(view: dict, filt: str = "all", page: int = 0, is_group: bool = False
     ]
     if view["members"]:
         for c in view["members"]:
-            lines.append(f"  {constants.RARITY_LABELS[c.rarity]} <b>{c.name}</b> {f'{get_emoji('star')}' * c.star_level} · Lv{c.level}")
+            stars = get_emoji("star") * c.star_level
+            lines.append(f"  {constants.RARITY_LABELS[c.rarity]} <b>{c.name}</b> {stars} · Lv{c.level}")
         lines.append(f"\n💪 قدرت تیم: <b>{view['power']:,}</b>")
         if view["synergy"]:
             lines.append("✨ <b>هم‌افزایی عنصری فعاله!</b> (+۱۰٪ حمله چون هر ۳ هم‌عنصر هستن)")

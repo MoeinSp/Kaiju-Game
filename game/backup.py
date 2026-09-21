@@ -50,7 +50,19 @@ BACKUP_FORMAT_VERSION = 1
 # Everything the game owns, plus panel logins. Order matters for restore only in
 # that Django resolves forward references itself, so this is just "what to dump".
 BACKUP_APPS = ["bio_lab", "auth"]
-BACKUP_EXCLUDE = ["contenttypes", "auth.permission", "sessions", "admin.logentry"]
+BACKUP_EXCLUDE = [
+    "contenttypes",
+    "auth.permission",
+    "sessions",
+    "admin.logentry",
+    "bio_lab.attacklog",
+    "bio_lab.duellog",
+    "bio_lab.groupeventlog",
+    "bio_lab.interactivebattle",
+    "bio_lab.dailyactionlog",
+    "bio_lab.dailyresourcegain",
+    "bio_lab.raiddamagelog",
+]
 
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9_.-]+")
 
@@ -95,7 +107,10 @@ def create_backup(label: str = "") -> dict[str, Any]:
         "--natural-primary",
         stdout=buffer,
     )
-    objects = json.loads(buffer.getvalue() or "[]")
+    raw = buffer.getvalue() or "[]"
+    buffer.close()
+    objects = json.loads(raw)
+    del raw
 
     label = _safe_label(label)
     stamp = timezone.now().strftime("%Y%m%d-%H%M%S")
@@ -103,6 +118,8 @@ def create_backup(label: str = "") -> dict[str, Any]:
     payload = {"manifest": _manifest(len(objects), label), "objects": objects}
     with gzip.open(path, "wt", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False)
+    del payload
+    del objects
     return describe_backup(path)
 
 

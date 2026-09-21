@@ -462,28 +462,27 @@ async def breeding_info_callback(update: Update, context: ContextTypes.DEFAULT_T
         top, fb = lbl[info["top_rarity"]], lbl[info["fallback_rarity"]]
         pct = round(info["top_chance"] * 100)
         if info["top_rarity"] == info["fallback_rarity"]:
-            msg = f"🎲 این تخم حتماً {top} می‌شه.\nرده هیچ‌وقت از والدین بالاتر نمی‌ره."
+            msg = f"🎲 این تخم حتماً {top} می‌شه.\nرده از والدین بالاتر نمی‌ره."
         elif parent_a.rarity == parent_b.rarity:
             msg = (
-                f"🎲 شانس رده (والدین هم‌رده)\n\n"
-                f"{top} : {pct}٪\n{fb} : {100 - pct}٪\n\n"
-                f"دو والدِ هم‌رده ⇒ {pct}٪ همون رده، {100 - pct}٪ یک رده پایین‌تر."
+                f"🎲 شانس رده (والدین هم‌رده):\n"
+                f"• {top}: {pct}٪\n• {fb}: {100 - pct}٪\n"
+                f"رده از والدین بالاتر نمی‌ره."
             )
         else:
             msg = (
-                f"🎲 شانس رده (والدین متفاوت‌رده)\n\n"
-                f"{fb} : {100 - pct}٪\n{top} : {pct}٪\n\n"
-                f"والدین با رده‌ی متفاوت ⇒ {100 - pct}٪ رده‌ی پایین‌تر، {pct}٪ رده‌ی بالاتر.\n"
-                f"رده هیچ‌وقت از والدین بالاتر نمی‌ره (مثلاً {top} + {fb}، شانس {top} {pct}٪ است)."
+                f"🎲 شانس رده (والدین متفاوت):\n"
+                f"• {top}: {pct}٪\n• {fb}: {100 - pct}٪\n"
+                f"رده از والدین بالاتر نمی‌ره."
             )
     else:  # time
         msg = (
-            f"⏱ زمان‌ها\n\n"
-            f"جفت‌گیری (والدها قفل): {_format_remaining(info['mating_minutes'] * 60)}\n"
-            f"رشد تخم (سریع): {_format_remaining(info['hatch_minutes'] * 60)}\n\n"
-            "زمان جفت‌گیری گلوگاه اصلیه — اساطیری+اساطیری 36 ساعت، اساطیری+افسانه‌ای 28 ساعت.\n"
-            "می‌تونی بعد از فرستادن، از داخل غار با الماس فوری‌ش کنی (بر اساس زمان مونده)."
+            f"⏱ زمان جفت‌گیری: {_format_remaining(info['mating_minutes'] * 60)}\n"
+            f"🐣 زمان تخم: {_format_remaining(info['hatch_minutes'] * 60)}\n\n"
+            "می‌تونی از داخل غار با الماس فوری‌ش کنی."
         )
+    if len(msg) > 200:
+        msg = msg[:197] + "..."
     await query.answer(msg, show_alert=True)
 
 
