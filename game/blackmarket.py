@@ -380,30 +380,35 @@ def settle_and_collect_winner_notifications() -> list[tuple[int, str]]:
 
 def _deliver_auction_item(user: User, auction: BlackMarketAuction) -> None:
     """Deliver the won auction reward to the user."""
+    from game import constants
     p = auction.item_payload or {}
     itype = auction.item_type
+
     if itype == "diamonds":
         user.diamonds += p.get("amount", 0)
         user.save(update_fields=["diamonds"])
-    elif itype == "tickets":
+    elif itype in ("tickets", "biocrate_tickets"):
         user.biocrate_tickets = (user.biocrate_tickets or 0) + p.get("amount", 0)
         user.save(update_fields=["biocrate_tickets"])
-    elif itype == "coins":
+    elif itype in ("coins", "gold"):
         user.coins += p.get("amount", 0)
         user.save(update_fields=["coins"])
-    elif itype in ("dna", "material"):
+    elif itype in ("dna", "material", "dna_fragments"):
         user.dna_fragments += p.get("amount", 0)
         user.save(update_fields=["dna_fragments"])
-    elif itype == "speedup":
+    elif itype in ("speedup", "speedup_card"):
         from bio_lab.models import SpeedupCard
         mins = p.get("minutes", 60)
         cnt = p.get("count", 1)
         card, _ = SpeedupCard.objects.get_or_create(owner=user, minutes=mins)
         card.count += cnt
         card.save(update_fields=["count"])
+    elif itype == "energy":
+        from game import energy
+        amt = p.get("amount", 50)
+        energy.add_energy(user, amt)
     elif itype == "equipment":
         from bio_lab.models import Equipment
-        from game import constants
         slot = p.get("slot", "weapon")
         rarity = p.get("rarity", "rare")
         level = p.get("level", 1)
@@ -417,29 +422,81 @@ def _deliver_auction_item(user: User, auction: BlackMarketAuction) -> None:
             rarity=rarity,
             level=level,
         )
+    elif itype == "egg":
+        from bio_lab.models import Egg
+        rarity = p.get("rarity", "legendary")
+        elem = p.get("element") or constants.random_element()
+        name = p.get("name") or constants.random_species_name(elem)
+        mins = max(0, p.get("minutes", 0))
+        Egg.objects.create(
+            owner=user,
+            base_rarity=rarity,
+            upgrade_chance=1.0,
+            fallback_rarity=rarity,
+            parent_a_name=name,
+            parent_a_element=elem,
+            parent_b_name=name,
+            parent_b_element=elem,
+            inherit_level=p.get("level", 1),
+            finishes_at=timezone.now() + datetime.timedelta(minutes=mins),
+        )
     elif itype == "creature":
         from bio_lab.models import Creature
-        from game.creature import base_share_for_rating
-        rarity = p.get("rarity", "rare")
-        star = p.get("star", 1)
-        lvl = p.get("level", 1)
-        elem = p.get("element", "fire")
-        custom_name = p.get("name") or f"کایجوی بازار سیاه {star}⭐"
-        share = max(10, 30 * star)
+        rarity = p.get("rarity", "legendary")
+        star = max(1, min(5, p.get("star", 1)))
+        lvl = max(1, p.get("level", 1))
+        elem = p.get("element") or constants.random_element()
+        species_name = p.get("name") or constants.random_species_name(elem)
+        mult = constants.RARITY_STAT_MULTIPLIER.get(rarity, 1.0)
+        
+        base_hp = round(constants.STARTER_BASE_HP * mult) + (lvl - 1) * constants.LEVEL_UP_HP
+        base_atk = round(constants.STARTER_BASE_ATK * mult) + (lvl - 1) * constants.LEVEL_UP_ATK
+        base_def = round(constants.STARTER_BASE_DEF * mult) + (lvl - 1) * constants.LEVEL_UP_DEF
+        base_spd = round(constants.STARTER_BASE_SPD * mult) + (lvl - 1) * constants.LEVEL_UP_SPD
+        
         Creature.objects.create(
             owner=user,
-            name=custom_name,
+            name=species_name,
             rarity=rarity,
             star_level=star,
             level=lvl,
             element=elem,
-            base_hp=share, base_atk=share, base_def=share, base_spd=share,
+            base_hp=base_hp,
+            base_atk=base_atk,
+            base_def=base_def,
+            base_spd=base_spd,
+            is_active=False,
         )
+    elif itype in ("subscription", "vip"):
+        from game.subscription import activate_subscription
+        tier = p.get("tier", "silver")
+        days = p.get("days", 30)
+        activate_subscription(user, tier=tier, days=days)
+    elif itype == "builder":
+        user.builder_slots = max(2, user.builder_slots)
+        user.save(update_fields=["builder_slots"])
 
 
-def admin_list_auctions() -> list[BlackMarketAuction]:
-    """List auctions for admin panel."""
-    return list(BlackMarketAuction.objects.all().select_related("highest_bidder").order_by("-id")[:30])
+def admin_list_auctions(only_active: bool = True) -> list[BlackMarketAuction]:
+    """List auctions for admin panel. By default returns only active and future auctions."""
+    _settle_expired_auctions()
+    now = timezone.now()
+    if only_active:
+        return list(
+            BlackMarketAuction.objects.filter(is_settled=False, ends_at__gt=now)
+            .select_related("highest_bidder")
+            .order_by("ends_at")
+        )
+    return list(
+        BlackMarketAuction.objects.all()
+        .select_related("highest_bidder")
+        .order_by("-id")[:50]
+    )
+
+
+def admin_get_auction(auction_id: int) -> BlackMarketAuction | None:
+    """Fetch single auction with bidder for admin panel views."""
+    return BlackMarketAuction.objects.filter(id=auction_id).select_related("highest_bidder").first()
 
 
 def admin_create_auction(
@@ -493,4 +550,5 @@ def admin_extend_auction(auction_id: int, hours: int) -> tuple[bool, str]:
         auction.is_settled = False
         auction.save(update_fields=["ends_at", "is_settled"])
         return True, f"زمان پایان مزایده تا {format_persian_deadline(auction.ends_at)} تمدید شد."
+
 

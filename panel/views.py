@@ -623,7 +623,7 @@ def channels(request):
 def auctions(request):
     import datetime
     from bio_lab.models import BlackMarketAuction
-    from game.blackmarket import settle_expired_auctions
+    from game.blackmarket import settle_expired_auctions, admin_delete_auction
 
     if request.method == "POST":
         action = _post_action(request)
@@ -654,20 +654,32 @@ def auctions(request):
                 payload = {}
                 if item_type == "diamonds":
                     payload["amount"] = _int(request, "diamonds_amount", 100)
-                elif item_type == "tickets":
+                elif item_type in ("tickets", "biocrate_tickets"):
                     payload["amount"] = _int(request, "tickets_amount", 5)
-                elif item_type == "coins":
+                elif item_type in ("coins", "gold"):
                     payload["amount"] = _int(request, "coins_amount", 50000)
                 elif item_type in ("dna", "material"):
                     payload["amount"] = _int(request, "dna_amount", 500)
                 elif item_type == "speedup":
                     payload["minutes"] = _int(request, "speedup_minutes", 60)
                     payload["count"] = _int(request, "speedup_count", 1)
+                elif item_type == "energy":
+                    payload["amount"] = _int(request, "energy_amount", 50)
+                elif item_type == "subscription":
+                    payload["tier"] = (request.POST.get("vip_tier") or "silver").strip()
+                    payload["days"] = max(1, _int(request, "vip_days", 30))
+                elif item_type == "builder":
+                    payload = {}
                 elif item_type == "equipment":
                     payload["slot"] = (request.POST.get("equip_slot") or "weapon").strip()
                     payload["rarity"] = (request.POST.get("equip_rarity") or "epic").strip()
                     payload["level"] = _int(request, "equip_level", 1)
                     payload["name"] = (request.POST.get("equip_name") or "").strip()
+                elif item_type == "egg":
+                    payload["rarity"] = (request.POST.get("egg_rarity") or "legendary").strip()
+                    payload["element"] = (request.POST.get("egg_element") or "fire").strip()
+                    payload["level"] = max(1, _int(request, "egg_level", 1))
+                    payload["minutes"] = max(0, _int(request, "egg_minutes", 0))
                 elif item_type == "creature":
                     payload["rarity"] = (request.POST.get("creature_rarity") or "legendary").strip()
                     payload["star"] = max(1, min(5, _int(request, "creature_star", 3)))
@@ -692,8 +704,11 @@ def auctions(request):
 
             elif action == "delete":
                 auc_id = _int(request, "auction_id")
-                BlackMarketAuction.objects.filter(id=auc_id).delete()
-                messages.success(request, "مزایده با موفقیت حذف شد.")
+                ok, msg = admin_delete_auction(auc_id)
+                if ok:
+                    messages.success(request, msg)
+                else:
+                    messages.error(request, msg)
 
             elif action == "settle_now":
                 auc_id = _int(request, "auction_id")
@@ -718,8 +733,8 @@ def auctions(request):
     settle_expired_auctions()
 
     active_auctions = BlackMarketAuction.objects.filter(is_settled=False, ends_at__gt=now).order_by("ends_at")
-    settled_auctions = BlackMarketAuction.objects.filter(is_settled=True).order_by("-ends_at")[:20]
-    tomorrow_midnight = (now + timedelta(days=1)).strftime("%Y-%m-%dT23:59")
+    settled_auctions = BlackMarketAuction.objects.filter(is_settled=True).order_by("-ends_at")[:30]
+    tomorrow_midnight = (now + datetime.timedelta(days=1)).strftime("%Y-%m-%dT22:30")
 
     return render(
         request,

@@ -5292,46 +5292,61 @@ async def capture_owner_text_reply(update: Update, context: ContextTypes.DEFAULT
 
 # ── Black Market Management (Admin) ──────────────────────────────────────────
 
-async def blackmarket_manage_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def blackmarket_manage_panel(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, view_mode: str = "active"
+) -> None:
     if not _is_admin(update):
         return
     from game import blackmarket
-    auctions = await run_db(blackmarket.admin_list_auctions)
     
+    only_active = (view_mode != "history")
+    auctions = await run_db(blackmarket.admin_list_auctions, only_active)
+    
+    header_title = "🏛 <b>مزایده‌های فعال و جاری بازار سیاه</b>" if only_active else "📜 <b>تاریخچه مزایده‌های گذشته بازار سیاه</b>"
     lines = [
-        "🏛 <b>مدیریت بازار سیاه و مزایده‌ها</b>",
+        header_title,
         "━━━━━━━━━━━━━━━━━━━━",
-        "<i>در این بخش می‌توانید مزایده‌های فعال را مشاهده، زمان آن‌ها را تمدید یا حذف کرده و مزایده‌های جدید ایجاد کنید.</i>\n",
+        "<i>در این بخش می‌توانید مزایده‌های فعال را مدیریت کنید، زمان آن‌ها را تمدید نمایید یا مزایده‌های جدید بسازید.</i>\n",
     ]
     rows = []
     
     if not auctions:
-        lines.append("<i>در حال حاضر هیچ مزایده‌ای ثبت نشده است.</i>")
+        if only_active:
+            lines.append("<i>در حال حاضر هیچ مزایده فعالی ثبت نشده است. با دکمه زیر یک مزایده جدید اضافه کنید.</i>")
+        else:
+            lines.append("<i>تاریخچه‌ای از مزایده‌های قبلی یافت نشد.</i>")
     else:
         now = timezone.now()
         for a in auctions:
             is_active = (not a.is_settled) and a.ends_at > now
-            status_tag = "🟢 در حال برگزاری" if is_active else ("🏁 پایان یافته" if a.is_settled else "⌛ منقضی شده")
+            status_tag = "🟢 در حال برگزاری" if is_active else ("🏁 تسویه شده" if a.is_settled else "⌛ پایان یافته")
             cur_label = "طلا" if a.bid_currency == "coins" else "الماس"
             cur_emoji = get_emoji("coin") if a.bid_currency == "coins" else get_emoji("diamond")
             bidder = a.highest_bidder_name or (display_name(a.highest_bidder) if a.highest_bidder else "بدون پیشنهاد")
             deadline_str = blackmarket.format_persian_deadline(a.ends_at)
+            rem_secs = max(0, (a.ends_at - now).total_seconds())
+            rem_str = blackmarket.format_time_remaining(rem_secs) if is_active else "به پایان رسیده"
             
             lines.append(
-                f"🏷 <b>{a.title}</b> (شناسه: <code>{a.id}</code>)\n"
+                f"🏷 <b>{a.title}</b> (شناسه: <code>#{a.id}</code>)\n"
                 f"  📊 وضعیت: {status_tag}\n"
                 f"  {cur_emoji} بالاترین پیشنهاد: <code>{a.current_bid:,}</code> {cur_label} ({bidder})\n"
-                f"  ⏳ مهلت: <code>{deadline_str}</code>\n"
+                f"  ⏳ مهلت: <code>{deadline_str}</code> (باقیمانده: {rem_str})\n"
             )
             
             row = []
             if is_active:
                 row.append(btn("➕ ۱۲ ساعت", style=PRIMARY, callback_data=f"bm_adm_ext:{a.id}:12"))
                 row.append(btn("➕ ۲۴ ساعت", style=PRIMARY, callback_data=f"bm_adm_ext:{a.id}:24"))
-            row.append(btn("🗑 حذف", style=DANGER, callback_data=f"bm_adm_del:{a.id}"))
+            row.append(btn(f"🗑 حذف #{a.id}", style=DANGER, callback_data=f"bm_adm_del_conf:{a.id}"))
             rows.append(row)
             
-    rows.append([btn("➕ ایجاد مزایده از قالب‌های آماده", style=CONFIRM, callback_data="admin_menu:bm_presets")])
+    rows.append([btn("➕ ایجاد مزایده از قالب‌های آماده و متنوع", style=CONFIRM, callback_data="admin_menu:bm_presets")])
+    if only_active:
+        rows.append([btn("📜 مشاهده تاریخچه مزایده‌های قبلی", style=NAV, callback_data="bm_adm_view:history")])
+    else:
+        rows.append([btn("🟢 بازگشت به مزایده‌های فعال", style=NAV, callback_data="bm_adm_view:active")])
+    rows.append([btn("⚡ تسویه فوری سررسیدها", style=PRIMARY, callback_data="bm_adm_settle")])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
     
     text = "\n".join(lines)
@@ -5341,23 +5356,106 @@ async def blackmarket_manage_panel(update: Update, context: ContextTypes.DEFAULT
         await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
 
-async def blackmarket_presets_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def blackmarket_presets_panel(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, cat: str | None = None
+) -> None:
     if not _is_admin(update):
         return
-    lines = [
-        "➕ <b>ایجاد مزایده جدید بازار سیاه</b>",
-        "━━━━━━━━━━━━━━━━━━━━",
-        "یکی از قالب‌های آماده زیر را انتخاب کنید تا فوراً به عنوان مزایده ۲۴ ساعته فعال شود:\n",
-    ]
-    rows = [
-        [btn("💎 محموله ۱,۰۰۰ الماس (شروع ۵۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dia1000")],
-        [btn("🎫 بسته ۲۵ عددی بلیط باکس (شروع ۵۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:tic25")],
-        [btn("👑 🐉 کایجوی اساطیری ۵ ستاره VIP (شروع ۵۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:cre_mythic")],
-        [btn("👑 🦖 تخم کایجوی افسانه‌ای ۴ ستاره VIP (شروع ۳۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:cre_leg")],
-        [btn("⚡ بسته ۱۰۰ تایی کارت سرعت (شروع ۵۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:spd100")],
-        [btn("🪙 محموله ۱,۰۰۰,۰۰۰ طلا (شروع ۱۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:gold1m")],
-        [back_btn("admin_menu:blackmarket", "بازگشت به مدیریت بازار سیاه")],
-    ]
+
+    if cat is None:
+        lines = [
+            "➕ <b>ایجاد مزایده جدید بازار سیاه</b>",
+            "━━━━━━━━━━━━━━━━━━━━",
+            "دسته‌بندی مورد نظر را برای انتخاب یا شخصی‌سازی آیتم انتخاب کنید:\n",
+        ]
+        rows = [
+            [btn("💎 محموله‌های الماس", style=PRIMARY, callback_data="bm_adm_cat:dia"),
+             btn("🪙 بسته‌های طلا", style=PRIMARY, callback_data="bm_adm_cat:gold")],
+            [btn("🦖 کایجوی اختصاصی (۱ تا ۵⭐)", style=PRIMARY, callback_data="bm_adm_cat:creature"),
+             btn("🥚 تخم کایجو", style=PRIMARY, callback_data="bm_adm_cat:egg")],
+            [btn("🎫 بلیط باکس ژنتیکی", style=PRIMARY, callback_data="bm_adm_cat:tickets"),
+             btn("🧬 قطعات DNA", style=PRIMARY, callback_data="bm_adm_cat:dna")],
+            [btn("🎒 تجهیزات و سلاح‌ها", style=PRIMARY, callback_data="bm_adm_cat:equip"),
+             btn("⚡ کارت‌های افزایش سرعت", style=PRIMARY, callback_data="bm_adm_cat:speedup")],
+            [btn("👑 اشتراک‌های VIP ۳۰ روزه", style=PRIMARY, callback_data="bm_adm_cat:vip"),
+             btn("🏗 کارگر دوم (Builder)", style=PRIMARY, callback_data="bm_adm_cat:builder")],
+            [back_btn("admin_menu:blackmarket", "بازگشت به مدیریت بازار سیاه")],
+        ]
+    else:
+        lines = [
+            "➕ <b>انتخاب آیتم مزایده (۲۴ ساعته)</b>",
+            "━━━━━━━━━━━━━━━━━━━━",
+            "روی هر گزینه بزنید تا با قیمت پایه تعیین‌شده در بازار سیاه فعال گردد:\n",
+        ]
+        rows = []
+        if cat == "dia":
+            rows = [
+                [btn("💎 ۵۰۰ الماس (شروع ۲۵ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dia_500")],
+                [btn("💎 ۱,۰۰۰ الماس (شروع ۵۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dia_1000")],
+                [btn("💎 ۲,۵۰۰ الماس (شروع ۱۰۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dia_2500")],
+                [btn("💎 ۵,۰۰۰ الماس (شروع ۲۰۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dia_5000")],
+                [btn("💎 ۱۰,۰۰۰ الماس (شروع ۴۰۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dia_10000")],
+            ]
+        elif cat == "gold":
+            rows = [
+                [btn("🪙 ۲۵۰,۰۰۰ طلا (شروع ۲۵ الماس)", style=PRIMARY, callback_data="bm_adm_add:gold_250k")],
+                [btn("🪙 ۵۰۰,۰۰۰ طلا (شروع ۵۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:gold_500k")],
+                [btn("🪙 ۱,۰۰۰,۰۰۰ طلا (شروع ۱۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:gold_1m")],
+                [btn("🪙 ۵,۰۰۰,۰۰۰ طلا (شروع ۴۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:gold_5m")],
+                [btn("🪙 ۱۰,۰۰۰,۰۰۰ طلا (شروع ۷۵۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:gold_10m")],
+            ]
+        elif cat == "creature":
+            rows = [
+                [btn("⭐ کایجوی نایاب ۱ ستاره (شروع ۵۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:cre_1s")],
+                [btn("⭐⭐ کایجوی حماسی ۲ ستاره (شروع ۱۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:cre_2s")],
+                [btn("⭐⭐⭐ کایجوی افسانه‌ای ۳ ستاره (شروع ۲۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:cre_3s")],
+                [btn("👑 ⭐⭐⭐⭐ کایجوی افسانه‌ای ۴ ستاره VIP (شروع ۳۵۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:cre_4s")],
+                [btn("👑 ⭐⭐⭐⭐⭐ کایجوی اساطیری ۵ ستاره VIP (شروع ۶۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:cre_5s")],
+            ]
+        elif cat == "egg":
+            rows = [
+                [btn("🥚 تخم کایجوی نایاب (شروع ۳۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:egg_rare")],
+                [btn("🥚 تخم کایجوی حماسی (شروع ۷۵ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:egg_epic")],
+                [btn("🥚 تخم کایجوی افسانه‌ای (شروع ۱۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:egg_leg")],
+                [btn("👑 🥚 تخم کایجوی اساطیری VIP (شروع ۳۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:egg_mythic")],
+            ]
+        elif cat == "tickets":
+            rows = [
+                [btn("🎫 ۱۰ عدد بلیط باکس (شروع ۲۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:tic_10")],
+                [btn("🎫 ۲۵ عدد بلیط باکس (شروع ۵۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:tic_25")],
+                [btn("🎫 ۵۰ عدد بلیط باکس (شروع ۹۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:tic_50")],
+                [btn("🎫 ۱۰۰ عدد بلیط باکس (شروع ۱۶۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:tic_100")],
+            ]
+        elif cat == "dna":
+            rows = [
+                [btn("🧬 ۱,۰۰۰ قطعه DNA (شروع ۲۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dna_1k")],
+                [btn("🧬 ۵,۰۰۰ قطعه DNA (شروع ۸۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dna_5k")],
+                [btn("🧬 ۱۰,۰۰۰ قطعه DNA (شروع ۱۵۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dna_10k")],
+                [btn("🧬 ۲۵,۰۰۰ قطعه DNA (شروع ۳۰۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dna_25k")],
+            ]
+        elif cat == "equip":
+            rows = [
+                [btn("⚔️ سلاح حماسی Lv5 (شروع ۵۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:eq_epic_weap")],
+                [btn("🛡 زره افسانه‌ای Lv5 (شروع ۱۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:eq_leg_armor")],
+                [btn("💍 زیورآلات اساطیری Lv10 (شروع ۲۵۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:eq_myth_acc")],
+            ]
+        elif cat == "speedup":
+            rows = [
+                [btn("⚡ ۵۰ عدد کارت سرعت ۶۰ دقیقه (شروع ۳۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:spd_50")],
+                [btn("⚡ ۱۰۰ عدد کارت سرعت ۶۰ دقیقه (شروع ۶۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:spd_100")],
+                [btn("⚡ ۵۰ عدد کارت سرعت ۱۸۰ دقیقه (شروع ۱۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:spd_180m")],
+            ]
+        elif cat == "vip":
+            rows = [
+                [btn("🥈 اشتراک ویژه نقره‌ای ۳۰ روزه (شروع ۲۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:vip_silver")],
+                [btn("👑 اشتراک ویژه طلایی ۳۰ روزه (شروع ۵۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:vip_gold")],
+            ]
+        elif cat == "builder":
+            rows = [
+                [btn("🏗 استخدام کارگر دوم دائمی (شروع ۱۵۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:builder_slot")],
+            ]
+        rows.append([back_btn("admin_menu:bm_presets", "↩️ بازگشت به دسته‌ها")])
+
     if update.callback_query:
         await safe_edit_message_text(update.callback_query, "\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
@@ -5367,46 +5465,139 @@ async def blackmarket_admin_action_callback(update: Update, context: ContextType
     if not _is_admin(update):
         await query.answer()
         return
-    parts = query.data.split(":")
-    action = parts[0]
-    
+    data = query.data
     from game import blackmarket
-    
-    if action == "bm_adm_ext":
+
+    if data.startswith("bm_adm_ext:"):
+        parts = data.split(":")
         auction_id = int(parts[1])
         hours = int(parts[2])
         ok, msg = await run_db(blackmarket.admin_extend_auction, auction_id, hours)
         await query.answer(msg, show_alert=True)
         await blackmarket_manage_panel(update, context)
         return
-        
-    if action == "bm_adm_del":
-        auction_id = int(parts[1])
+
+    if data.startswith("bm_adm_del_conf:"):
+        auction_id = int(data.split(":")[1])
+        auc = await run_db(blackmarket.admin_get_auction, auction_id)
+        if not auc:
+            await query.answer("مزایده یافت نشد.", show_alert=True)
+            await blackmarket_manage_panel(update, context)
+            return
+
+        cur_label = "طلا" if auc.bid_currency == "coins" else "الماس"
+        cur_emoji = get_emoji("coin") if auc.bid_currency == "coins" else get_emoji("diamond")
+        bidder = auc.highest_bidder_name or (display_name(auc.highest_bidder) if auc.highest_bidder else "بدون پیشنهاد")
+        deadline_str = blackmarket.format_persian_deadline(auc.ends_at)
+
+        confirm_text = (
+            "⚠️ <b>تأیید حذف مزایده</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            f"🏷 <b>عنوان مزایده:</b> {auc.title}\n"
+            f"🆔 <b>شناسه:</b> <code>#{auc.id}</code>\n"
+            f"💵 <b>نوع آیتم:</b> <code>{auc.item_type}</code>\n"
+            f"💰 <b>بالاترین پیشنهاد:</b> {cur_emoji} <code>{auc.current_bid:,}</code> {cur_label}\n"
+            f"👤 <b>پیشنهاد‌دهنده برتر:</b> <b>{bidder}</b>\n"
+            f"⏳ <b>مهلت پایان:</b> <code>{deadline_str}</code>\n\n"
+            "<blockquote>⚠️ <b>هشدار:</b> در صورت حذف، این مزایده بلافاصله متوقف شده و مبلغ ثبت‌شده فوراً به حساب بازیکن پیشنهاددهنده بازگردانده می‌شود.</blockquote>\n"
+            "آیا از حذف این مزایده اطمینان کامل دارید؟"
+        )
+        c_rows = [
+            [btn("✅ بله، حذف مزایده و عودت وجه", style=DANGER, callback_data=f"bm_adm_del_do:{auc.id}")],
+            [back_btn("admin_menu:blackmarket", "❌ انصراف و بازگشت")],
+        ]
+        await query.answer()
+        await safe_edit_message_text(query, confirm_text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(c_rows))
+        return
+
+    if data.startswith("bm_adm_del_do:"):
+        auction_id = int(data.split(":")[1])
         ok, msg = await run_db(blackmarket.admin_delete_auction, auction_id)
         await query.answer(msg, show_alert=True)
         await blackmarket_manage_panel(update, context)
         return
-        
-    if action == "bm_adm_add":
-        preset = parts[1]
+
+    if data.startswith("bm_adm_view:"):
+        mode = data.split(":")[1]
+        await query.answer()
+        await blackmarket_manage_panel(update, context, view_mode=mode)
+        return
+
+    if data == "bm_adm_settle":
+        c = await run_db(blackmarket.settle_expired_auctions)
+        await query.answer(f"تسویه انجام شد ({c} مزایده منقضی شده تسویه شدند).", show_alert=True)
+        await blackmarket_manage_panel(update, context)
+        return
+
+    if data.startswith("bm_adm_cat:"):
+        cat = data.split(":")[1]
+        await query.answer()
+        await blackmarket_presets_panel(update, context, cat=cat)
+        return
+
+    if data.startswith("bm_adm_add:"):
+        preset = data.split(":")[1]
         ends_at = timezone.now() + datetime.timedelta(hours=24)
-        
+
         def _do_add():
-            if preset == "dia1000":
-                return blackmarket.admin_create_auction("💎 محموله ۱,۰۰۰ تایی الماس خالص", "diamonds", {"amount": 1000}, "coins", 50000, ends_at)
-            elif preset == "tic25":
-                return blackmarket.admin_create_auction("🎫 بسته ۲۵ عددی بلیط باکس ژنتیکی", "tickets", {"amount": 25}, "coins", 50000, ends_at)
-            elif preset == "cre_mythic":
-                return blackmarket.admin_create_auction("👑 🐉 کایجوی اساطیری ۵ ستاره (VIP)", "creature", {"rarity": "mythic", "star": 5, "level": 1}, "diamonds", 500, ends_at)
-            elif preset == "cre_leg":
-                return blackmarket.admin_create_auction("👑 🦖 تخم کایجوی افسانه‌ای ۴ ستاره (VIP)", "creature", {"rarity": "legendary", "star": 4, "level": 1}, "diamonds", 300, ends_at)
-            elif preset == "spd100":
-                return blackmarket.admin_create_auction("⚡ بسته ۱۰۰ تایی کارت سرعت ۶۰ دقیقه‌ای", "speedup", {"minutes": 60, "count": 100}, "coins", 50000, ends_at)
-            elif preset == "gold1m":
-                return blackmarket.admin_create_auction("🪙 محموله ۱,۰۰۰,۰۰۰ طلا", "coins", {"amount": 1000000}, "diamonds", 100, ends_at)
-        
-        await run_db(_do_add)
-        await query.answer("مزایده با موفقیت ثبت و فعال شد!", show_alert=True)
+            p_map = {
+                # Diamonds
+                "dia_500": ("💎 محموله ۵۰۰ تایی الماس خالص", "diamonds", {"amount": 500}, "coins", 25000),
+                "dia_1000": ("💎 محموله ۱,۰۰۰ تایی الماس خالص", "diamonds", {"amount": 1000}, "coins", 50000),
+                "dia_2500": ("💎 محموله ۲,۵۰۰ تایی الماس خالص", "diamonds", {"amount": 2500}, "coins", 100000),
+                "dia_5000": ("💎 محموله ۵,۰۰۰ تایی الماس خالص", "diamonds", {"amount": 5000}, "coins", 200000),
+                "dia_10000": ("💎 محموله ۱۰,۰۰۰ تایی الماس خالص", "diamonds", {"amount": 10000}, "coins", 400000),
+                # Gold
+                "gold_250k": ("🪙 محموله ۲۵۰,۰۰۰ طلا", "coins", {"amount": 250000}, "diamonds", 25),
+                "gold_500k": ("🪙 محموله ۵۰۰,۰۰۰ طلا", "coins", {"amount": 500000}, "diamonds", 50),
+                "gold_1m": ("🪙 محموله ۱,۰۰۰,۰۰۰ طلا", "coins", {"amount": 1000000}, "diamonds", 100),
+                "gold_5m": ("🪙 محموله ۵,۰۰۰,۰۰۰ طلا", "coins", {"amount": 5000000}, "diamonds", 400),
+                "gold_10m": ("🪙 محموله ۱۰,۰۰۰,۰۰۰ طلا", "coins", {"amount": 10000000}, "diamonds", 750),
+                # Creatures
+                "cre_1s": ("🦖 کایجوی نایاب ۱ ستاره", "creature", {"rarity": "rare", "star": 1, "level": 1}, "diamonds", 50),
+                "cre_2s": ("🦖 کایجوی حماسی ۲ ستاره", "creature", {"rarity": "epic", "star": 2, "level": 1}, "diamonds", 100),
+                "cre_3s": ("🦖 کایجوی افسانه‌ای ۳ ستاره", "creature", {"rarity": "legendary", "star": 3, "level": 1}, "diamonds", 200),
+                "cre_4s": ("👑 🦖 کایجوی افسانه‌ای ۴ ستاره (VIP)", "creature", {"rarity": "legendary", "star": 4, "level": 1}, "diamonds", 350),
+                "cre_5s": ("👑 🐉 کایجوی اساطیری ۵ ستاره (VIP)", "creature", {"rarity": "mythic", "star": 5, "level": 1}, "diamonds", 600),
+                # Eggs
+                "egg_rare": ("🥚 تخم کایجوی نایاب", "egg", {"rarity": "rare", "level": 1, "minutes": 0}, "coins", 30000),
+                "egg_epic": ("🥚 تخم کایجوی حماسی", "egg", {"rarity": "epic", "level": 1, "minutes": 0}, "coins", 75000),
+                "egg_leg": ("🥚 تخم کایجوی افسانه‌ای", "egg", {"rarity": "legendary", "level": 1, "minutes": 0}, "diamonds", 100),
+                "egg_mythic": ("👑 🥚 تخم کایجوی اساطیری (VIP)", "egg", {"rarity": "mythic", "level": 1, "minutes": 0}, "diamonds", 300),
+                # Tickets
+                "tic_10": ("🎫 بسته ۱۰ عددی بلیط باکس ژنتیکی", "tickets", {"amount": 10}, "coins", 20000),
+                "tic_25": ("🎫 بسته ۲۵ عددی بلیط باکس ژنتیکی", "tickets", {"amount": 25}, "coins", 50000),
+                "tic_50": ("🎫 بسته ۵۰ عددی بلیط باکس ژنتیکی", "tickets", {"amount": 50}, "coins", 90000),
+                "tic_100": ("🎫 بسته ۱۰۰ عددی بلیط باکس ژنتیکی", "tickets", {"amount": 100}, "coins", 160000),
+                # DNA
+                "dna_1k": ("🧬 محموله ۱,۰۰۰ قطعه DNA", "dna", {"amount": 1000}, "coins", 20000),
+                "dna_5k": ("🧬 محموله ۵,۰۰۰ قطعه DNA", "dna", {"amount": 5000}, "coins", 80000),
+                "dna_10k": ("🧬 محموله ۱۰,۰۰۰ قطعه DNA", "dna", {"amount": 10000}, "coins", 150000),
+                "dna_25k": ("🧬 محموله ۲۵,۰۰۰ قطعه DNA", "dna", {"amount": 25000}, "coins", 300000),
+                # Equip
+                "eq_epic_weap": ("⚔️ شمشیر حماسی باستانی +5", "equipment", {"slot": "weapon", "rarity": "epic", "level": 5, "name": "شمشیر حماسی باستانی"}, "coins", 50000),
+                "eq_leg_armor": ("🛡 زره سنگین افسانه‌ای +5", "equipment", {"slot": "armor", "rarity": "legendary", "level": 5, "name": "زره سنگین افسانه‌ای"}, "diamonds", 100),
+                "eq_myth_acc": ("💍 حلقه اسطوره‌ای اژدها +10", "equipment", {"slot": "accessory", "rarity": "mythic", "level": 10, "name": "حلقه اسطوره‌ای اژدها"}, "diamonds", 250),
+                # Speedup
+                "spd_50": ("⚡ بسته ۵۰ تایی کارت سرعت ۶۰ دقیقه‌ای", "speedup", {"minutes": 60, "count": 50}, "coins", 30000),
+                "spd_100": ("⚡ بسته ۱۰۰ تایی کارت سرعت ۶۰ دقیقه‌ای", "speedup", {"minutes": 60, "count": 100}, "coins", 60000),
+                "spd_180m": ("⚡ بسته ۵۰ تایی کارت سرعت ۱۸۰ دقیقه‌ای", "speedup", {"minutes": 180, "count": 50}, "diamonds", 100),
+                # VIP
+                "vip_silver": ("🥈 اشتراک ویژه نقره‌ای ۳۰ روزه", "subscription", {"tier": "silver", "days": 30}, "diamonds", 200),
+                "vip_gold": ("👑 اشتراک ویژه طلایی ۳۰ روزه (VIP)", "subscription", {"tier": "gold", "days": 30}, "diamonds", 500),
+                # Builder
+                "builder_slot": ("🏗 استخدام کارگر دوم آزمایشگاه (دائمی)", "builder", {}, "diamonds", 150),
+            }
+            if preset in p_map:
+                title, itype, pld, cur, mb = p_map[preset]
+                return blackmarket.admin_create_auction(title, itype, pld, cur, mb, ends_at)
+            return None
+
+        created = await run_db(_do_add)
+        if created:
+            await query.answer(f"مزایده «{created.title}» با موفقیت ثبت شد!", show_alert=True)
+        else:
+            await query.answer("قالب مورد نظر یافت نشد.", show_alert=True)
         await blackmarket_manage_panel(update, context)
         return
 
@@ -5489,7 +5680,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(admin_maxbld_do_callback, pattern=r"^admin_maxbld_do:\d+$"))
     application.add_handler(CallbackQueryHandler(admin_op_callback, pattern=r"^opc:(confirm|edit|cancel)$"))
     application.add_handler(CallbackQueryHandler(admin_remove_callback, pattern=r"^admin_rm:\d+$"))
-    application.add_handler(CallbackQueryHandler(blackmarket_admin_action_callback, pattern=r"^bm_adm_(ext|del|add):"))
+    application.add_handler(CallbackQueryHandler(blackmarket_admin_action_callback, pattern=r"^bm_adm_"))
     application.add_handler(CallbackQueryHandler(dailyshop_builder_callback, pattern=r"^dshop:"))
     application.add_handler(CallbackQueryHandler(itemshop_add_start, pattern=r"^sitem_add$"))
     application.add_handler(CallbackQueryHandler(itemshop_builder_callback, pattern=r"^ish:"))
