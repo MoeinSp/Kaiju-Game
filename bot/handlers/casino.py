@@ -1,4 +1,4 @@
-f"""«{get_emoji('casino')} کازینو» — a paid gamble with three tables plus one free daily spin."""
+"""«کازینو» — a paid gamble with three tables plus one free daily spin."""
 
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters

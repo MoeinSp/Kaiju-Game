@@ -1,4 +1,4 @@
-f"""{get_emoji('ticket')} مبادله تجهیزات با بلیط — trade spare legendary/mythic gear for genetic-box tickets.
+"""مبادله تجهیزات با بلیط — trade spare legendary/mythic gear for genetic-box tickets.
 
 Rarity-tabbed, paginated multi-select panel: filter by rarity (اساطیری/افسانه‌ای), page
 through the list, toggle items (or «انتخاب همه»), then «تبدیل». Equipped gear is never

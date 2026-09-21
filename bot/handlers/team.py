@@ -1,4 +1,4 @@
-f"""«{get_emoji('atk')} تیم من» — pick up to three creatures for 3v3 team battles (the campaign).
+"""«تیم من» — pick up to three creatures for 3v3 team battles (the campaign).
 
 A toggle picker: tap a creature to add it to the team, tap again to remove. The
 panel shows the current squad, its team power, and any same-element synergy.

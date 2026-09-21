@@ -1,4 +1,4 @@
-f"""«{get_emoji('ticket')} پاس فصلی» — the Battle Pass screen.
+"""«پاس فصلی» — the Battle Pass screen.
 
 One panel: current tier + a progress bar to the next, a peek at the next few
 tiers' rewards on both tracks, a «دریافت جوایز» button when anything is claimable,
@@ -36,7 +36,7 @@ def _fmt_left(seconds: int) -> str:
 
 
 def _panel_reward(reward: dict) -> str:
-    f"""A tier's reward in the panel style: «1,195 طلا {get_emoji('coin')} ┃ 6 الماس {get_emoji('diamond')}»."""
+    """A tier's reward in the panel style."""
     parts = []
     if reward.get("coins"):
         parts.append(f"{reward['coins']:,} طلا {get_emoji('coin')}")

@@ -1,5 +1,6 @@
-f"""«{get_emoji('book')} دانشنامه» — the Codex screen: which of the 20 species you've discovered,
-grouped by element, with milestone rewards to claim."""
+"""«دانشنامه» — the Codex screen: which of the 20 species you've discovered,
+how many of each you hold, and milestone rewards for cataloguing more.
+"""
 
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters

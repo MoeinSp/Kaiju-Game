@@ -1,4 +1,4 @@
-f"""«{get_emoji('gift')} دعوت دوستان» — the referral screen: your invite link, how it's doing, and
+"""«دعوت دوستان» — the referral screen: your invite link, how it's doing, and
 a button to collect any rewards that are ready.
 
 Rewards also pay out automatically via the notification job once an invited friend

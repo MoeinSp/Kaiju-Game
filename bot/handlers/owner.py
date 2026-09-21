@@ -1110,7 +1110,7 @@ def _itemshop_load_draft_sync(item_id: int) -> dict:
 
 
 async def itemshop_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    f"""«{get_emoji('edit')} ویرایش» — load an existing item into the button builder for editing, then save."""
+    """«ویرایش» — load an existing item into the button builder for editing, then save."""
     query = update.callback_query
     if not _is_admin(update):
         await query.answer()
@@ -1532,7 +1532,7 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
 
 
 async def user_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    f"""Power-user shortcut — the advertised path is the admin panel's «{get_emoji('status_default')} مدیریت
+    """Power-user shortcut — the advertised path is the admin panel's «مدیریت
     کاربر» button, which also attaches quick grant/deduct/ban action buttons."""
     if not _is_admin(update):
         return
@@ -1553,8 +1553,8 @@ async def user_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def charge_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    f"""One-shot multi-resource top-up: /charge <user> <gold> <dna> <diamonds>.
-    The advertised path is the admin panel's «{get_emoji('energy')} شارژ کامل» button."""
+    """One-shot multi-resource top-up: /charge <user> <gold> <dna> <diamonds>.
+    The advertised path is the admin panel's «شارژ کامل» button."""
     if not _is_admin(update):
         return
     if len(context.args) != 4 or not all(_is_signed_int(a) for a in context.args[1:]):
@@ -1703,7 +1703,7 @@ def _delete_creature_confirm_keyboard(creature_id: int) -> InlineKeyboardMarkup:
 
 
 async def delete_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    f"""Power-user shortcut — the advertised path is the admin panel's «{get_emoji('delete')} حذف موجود» button."""
+    """Power-user shortcut — the advertised path is the admin panel's «حذف موجود» button."""
     if not _is_admin(update):
         return
     if not context.args or not context.args[0].isdigit():
@@ -1910,7 +1910,7 @@ def _player_log_text(d: dict) -> str:
 
 
 async def player_log_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    f"""Power-user shortcut for «{get_emoji('stats')} لاگ پیشرفت». Accepts a numeric id, @username, or
+    """Power-user shortcut for «لاگ پیشرفت». Accepts a numeric id, @username, or
     lab name."""
     if not _is_admin(update):
         return
