@@ -12,7 +12,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 from bio_lab.models import User
 from bio_lab.repository import display_name
 from bot.buttons import ADMIN, CONFIRM, DANGER, LIST, NAV, PRIMARY, SHOP, back_btn, btn
-from bot.utils import run_db, safe_edit_message_text
+from bot.utils import run_db, safe_edit_message_text, send_screen
 from game.button_emoji import (
     BUTTON_CATEGORY_LABELS,
     BUTTON_CATEGORY_OF,
@@ -423,11 +423,9 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             btn("💾 بکاپ خودکار", style=ADMIN, callback_data="admin_menu:autobackup"),
         ])
         keyboard = InlineKeyboardMarkup(rows)
-    if update.callback_query:
-        await update.callback_query.answer()
-        await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=keyboard)
-    else:
-        await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("admin") or get_feature_image_path("settings")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 # ── admin management (owner-only) ─────────────────────────────────────────────

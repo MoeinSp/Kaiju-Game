@@ -3,7 +3,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.models import Equipment
 from bio_lab.repository import get_active_creature, get_or_create_user
-from bot.buttons import BUILD, CONFIRM, DANGER, LIST, NAV, back_btn, back_only_keyboard, btn
+from bot.buttons import BUILD, CONFIRM, DANGER, LIST, NAV, SHOP, back_btn, back_only_keyboard, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants
 from game.blacksmith import forge, forge_preview, forgeable_items
