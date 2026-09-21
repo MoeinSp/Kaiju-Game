@@ -36,7 +36,7 @@ def _render(st: dict) -> tuple[str, InlineKeyboardMarkup]:
     ]
     rows = []
     if st["can_claim"]:
-        rows.append([btn(f"{get_emoji('gift')} دریافت جایزه‌ی امروز", emoji_key="btn_confirm", style=CONFIRM, callback_data="event_claim")])
+        rows.append([btn("دریافت جایزه‌ی امروز", emoji_key="btn_confirm", style=CONFIRM, callback_data="event_claim")])
     else:
         lines.append(f"\n{get_emoji('confirm')} جایزه‌ی امروزو گرفتی. فردا دوباره بیا.")
     rows.append([back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")])

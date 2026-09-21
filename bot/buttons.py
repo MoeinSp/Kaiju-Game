@@ -59,6 +59,10 @@ ADMIN = "admin"  # owner-only panel buttons
 SUCCESS = CONFIRM
 
 
+_TG_EMOJI_HTML = re.compile(r"<tg-emoji\b[^>]*>(.*?)</tg-emoji>", re.DOTALL)
+_ANY_HTML = re.compile(r"<[^>]+>")
+
+
 def btn(
     label: str,
     *,
@@ -74,6 +78,10 @@ def btn(
     from the constants above, not a Telegram colour. Pass the rest
     (``callback_data``, ``url``, …) through as usual.
     """
+    if "<" in label and ">" in label:
+        label = _TG_EMOJI_HTML.sub(r"\1", label)
+        label = _ANY_HTML.sub("", label)
+
     if emoji_key is not None:
         icon = get_button_icon(emoji_key)
         has_leading = bool(_LEADING_EMOJI.match(label))

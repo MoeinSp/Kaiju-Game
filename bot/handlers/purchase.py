@@ -426,7 +426,7 @@ async def buy_approve_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer(f"{get_emoji('confirm')} تأیید شد و اعمال شد.")
+    await query.answer("✅ تأیید شد و اعمال شد.")
     bits = []
     if res.get("subscription_tier"):
         from game.subscription import SUBSCRIPTION_TIERS
@@ -463,7 +463,7 @@ async def buy_reject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer(f"{get_emoji('cancel')} رد شد.")
+    await query.answer("❌ رد شد.")
     await _notify_user(
         context, res["user_id"],
         f"{get_emoji('cancel')} <b>رسید خریدت تأیید نشد.</b> اگه فکر می‌کنی اشتباهی رخ داده، با پشتیبانی در تماس باش.",
@@ -488,7 +488,7 @@ async def buy_block_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer(f"{get_emoji('banned')} بلاک شد." if block else "♻️ آنبلاک شد.")
+    await query.answer("🚫 بلاک شد." if block else "♻️ آنبلاک شد.")
     if query.message is not None:
         tag = f"{get_emoji('banned')} <b>ثبت رسید این کاربر بلاک شد.</b>" if block else "♻️ <b>بلاک رسید برداشته شد.</b>"
         await query.edit_message_caption(

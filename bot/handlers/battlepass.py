@@ -91,7 +91,7 @@ def _render(user, st: dict, is_group: bool = False) -> tuple[str, InlineKeyboard
 
     rows = []
     if st["has_claimable"]:
-        rows.append([btn(f"{get_emoji('gift')} دریافت جوایز", emoji_key="btn_confirm", style=CONFIRM, callback_data="pass_claim")])
+        rows.append([btn("دریافت جوایز", emoji_key="btn_confirm", style=CONFIRM, callback_data="pass_claim")])
     if not st["premium"]:
         rows.append(
             [btn(f"خرید پاس ویژه ({st['premium_cost']} 💎)", emoji_key="btn_battlepass", style=SHOP, callback_data="pass_buy")]
@@ -155,7 +155,7 @@ async def pass_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     back_target = "menu:battlepass" if not is_group else "close"
     keyboard = InlineKeyboardMarkup([
         [btn(f"✅ تأیید و خرید پاس ویژه ({cost} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="pass_buy_do")],
-        [back_btn(back_target, f"{get_emoji('cancel')} انصراف")],
+        [back_btn(back_target, "انصراف")],
     ])
     await safe_edit_message_text(
         query,

@@ -257,7 +257,7 @@ async def biocrate_open_callback(update: Update, context: ContextTypes.DEFAULT_T
             )
             hint = "از «🎒 تجهیزات» می‌توانید آن را تجهیز کنید."
             photo = get_equipment_image_path(it)
-        await query.answer(f"{get_emoji('ticket')} باز شد!" if summary.get("from_tickets") else f"{get_emoji('poison')} باز شد!")
+        await query.answer("🎟 باز شد!" if summary.get("from_tickets") else "📦 باز شد!")
         text = (
             f"{label} <b>باز شد!</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -434,9 +434,9 @@ async def _do_diamond_box_buy(update: Update, context: ContextTypes.DEFAULT_TYPE
     rarity_label = constants.RARITY_LABELS[result["rarity"]]
     is_free = result.get("is_free", is_free)
     if is_free:
-        await query.answer(f"{get_emoji('gift')} باکس رایگان امروز باز شد!")
+        await query.answer("🎁 باکس رایگان امروز باز شد!")
     else:
-        await query.answer(f"{get_emoji('poison')} باز شد!")
+        await query.answer("📦 باز شد!")
     keyboard = InlineKeyboardMarkup(
         [
             [btn("یکی دیگه باز کن", emoji_key="btn_diamond_box", style=SHOP, callback_data=f"dbox_pick:{tier}")],

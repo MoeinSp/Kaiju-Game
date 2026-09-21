@@ -71,8 +71,8 @@ def _render(st: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyb
         # filter "menu" — tap to switch which list you're looking at
         rows.append([
             btn(("• " if filt == "all" else "") + "همه", style=NAV, callback_data="ref_view:all:0"),
-            btn(("• " if filt == "success" else "") + f"{get_emoji('confirm')} موفق", style=NAV, callback_data="ref_view:success:0"),
-            btn(("• " if filt == "incomplete" else "") + f"{get_emoji('banned')} ناقص", style=NAV, callback_data="ref_view:incomplete:0"),
+            btn(("• " if filt == "success" else "") + "✅ موفق", style=NAV, callback_data="ref_view:success:0"),
+            btn(("• " if filt == "incomplete" else "") + "⏳ ناقص", style=NAV, callback_data="ref_view:incomplete:0"),
         ])
         total_pages = max(1, (len(shown) + _REF_PAGE - 1) // _REF_PAGE)
         nav = []

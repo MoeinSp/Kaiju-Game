@@ -482,7 +482,7 @@ async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAUL
             return
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer(f"{get_emoji('building')} ساخت شروع شد!" if view["building"].level == 0 else "🔧 ارتقا شروع شد!")
+    await query.answer("🏗 ساخت شروع شد!" if view["building"].level == 0 else "🔧 ارتقا شروع شد!")
     from game.media import get_building_image_path
     photo_path = get_building_image_path(view["building"].building_type, view["building"].level)
     await safe_edit_message_text(
@@ -849,9 +849,9 @@ async def building_speedup_do_callback(update: Update, context: ContextTypes.DEF
         await query.answer(str(exc), show_alert=True)
         return
     if completed:
-        await query.answer(f"{get_emoji('trophy')} ارتقا تموم شد!")
+        await query.answer("🏆 ارتقا تموم شد!")
     else:
-        await query.answer(f"⚡ {used} کارت استفاده شد!" if used > 1 else f"{get_emoji('energy')} سرعت گرفت!")
+        await query.answer(f"⚡ {used} کارت استفاده شد!" if used > 1 else "⚡ سرعت گرفت!")
     await safe_edit_message_text(
         query,
         _building_detail_text(view),

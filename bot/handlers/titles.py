@@ -23,12 +23,12 @@ def _render(equipped, avail, total, is_group: bool = False) -> tuple[str, Inline
     ]
     rows = []
     for t in avail:
-        mark = f"{get_emoji('confirm')} " if t["equipped"] else ""
+        mark = "✅ " if t["equipped"] else ""
         rows.append([btn(f"{mark}{t['emoji']} {t['title']}", style=PRIMARY if t["equipped"] else LIST, callback_data=f"title_set:{t['key']}")])
     if equipped:
-        rows.append([btn(f"{get_emoji('cancel')} برداشتن لقب", style=LIST, callback_data="title_set:none")])
+        rows.append([btn("❌ برداشتن لقب", style=LIST, callback_data="title_set:none")])
     if not is_group:
-        rows.append([back_btn("menu:profile")])
+        rows.append([back_btn("menu:profile", "بازگشت به پروفایل")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -41,7 +41,7 @@ async def titles_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
-def _set_sync(tg_user, key):
+def _set_sync(tg_user, key: str):
     user, _ = get_or_create_user(tg_user)
     titles.equip(user, key)
     return user.title, titles.available(user), len(titles.TITLES)
@@ -55,7 +55,7 @@ async def title_set_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer(f"{get_emoji('confirm')} لقب تنظیم شد" if key != "none" else "لقب برداشته شد")
+    await query.answer("✅ لقب تنظیم شد" if key != "none" else "لقب برداشته شد")
     text, keyboard = _render(equipped, avail, total)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 

@@ -193,7 +193,7 @@ async def energy_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer(f"{get_emoji('energy')} پر شد!")
+    await query.answer("⚡ پر شد!")
     max_en = await run_db(_user_max_energy_sync, update.effective_user)
 
     is_group = query.message.chat.type in ("group", "supergroup") if query.message and query.message.chat else False

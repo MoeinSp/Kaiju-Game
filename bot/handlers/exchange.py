@@ -245,7 +245,7 @@ async def exchange_do_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         done = f"✅ <b>{result['dna']:,} DNA گرفتی</b> ({result['gold']:,} طلا دادی)."
     else:
         done = f"✅ <b>{result['gold']:,} طلا گرفتی</b> ({result['dna']:,} DNA دادی)."
-    await query.answer(f"{get_emoji('confirm')} انجام شد!")
+    await query.answer("✅ انجام شد!")
     text, kb = _home_render(int(oid), result["new_coins"], result["new_dna"], _is_group(update))
     await safe_edit_message_text(query, f"{done}\n━━━━━━━━━━\n{text}", parse_mode="HTML", reply_markup=kb)
 

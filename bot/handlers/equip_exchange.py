@@ -183,7 +183,7 @@ async def etx_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
                 btn(f"✅ بله، تبدیل کن ({gain}🎟)", emoji_key="btn_confirm", style=CONFIRM, callback_data="etx:confirm"),
-                btn(f"{get_emoji('cancel')} نه", emoji_key="btn_cancel", style=DANGER, callback_data="etx:back"),
+                btn("نه", emoji_key="btn_cancel", style=DANGER, callback_data="etx:back"),
             ]]),
         )
         return

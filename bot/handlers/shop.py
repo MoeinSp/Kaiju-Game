@@ -470,7 +470,7 @@ async def shield_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_T
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer(f"{get_emoji('def')} سپر فعال شد!")
+    await query.answer("🛡 سپر فعال شد!")
     text, keyboard = _shield_render(diamonds, shield_secs)
     await safe_edit_message_text(
         query,
@@ -593,7 +593,7 @@ async def item_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             return
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer(f"{get_emoji('confirm')} خریداری شد!")
+    await query.answer("✅ خریداری شد!")
     text, keyboard = _item_shop_render(items, result["coins"], result["diamonds"], gem)
     got = "، ".join(result["notes"])
     await safe_edit_message_text(
@@ -649,7 +649,7 @@ async def gem_kaiju_do_buy_callback(update: Update, context: ContextTypes.DEFAUL
             return
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer(f"{get_emoji('confirm')} کایجوی جمی خریداری شد!")
+    await query.answer("✅ کایجوی جمی خریداری شد!")
     c = result["creature"]
     text, keyboard = _item_shop_render(items, result["coins"], result["diamonds"], gem)
     await safe_edit_message_text(
@@ -742,7 +742,7 @@ async def group_shield_do_buy_callback(update: Update, context: ContextTypes.DEF
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer(f"{get_emoji('def')} سپر گروه فعال شد!")
+    await query.answer("🛡 سپر گروه فعال شد!")
     text, keyboard = _gshield_render(diamonds, shield_secs)
     await safe_edit_message_text(
         query,

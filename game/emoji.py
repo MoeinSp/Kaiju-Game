@@ -156,9 +156,14 @@ def _load_cache() -> dict[str, EmojiOverride]:
     return _cache
 
 
+def list_overrides() -> dict[str, EmojiOverride]:
+    """Returns the text emoji overrides dictionary (key -> EmojiOverride)."""
+    return _cache if _cache is not None else _load_cache()
+
+
 def text_category_stats(category: str | None = None) -> tuple[int, int]:
     """Returns (set_count, total) for text emojis. Pure in-memory cache lookup."""
-    cache = _cache if _cache is not None else {}
+    cache = list_overrides()
     if category:
         keys = [k for k, c in CATEGORY_OF.items() if c == category]
     else:
@@ -366,6 +371,18 @@ def get_emoji(key: str, fallback: str | None = None) -> str:
             ph = DEFAULT_EMOJI.get(resolved_key, "💰")
         return f'<tg-emoji emoji-id="{override.custom_emoji_id}">{ph}</tg-emoji>'
     return fallback if fallback is not None else DEFAULT_EMOJI.get(resolved_key, "❓")
+
+
+def get_plain_emoji(key: str, fallback: str | None = None) -> str:
+    """Returns plain unicode glyph for `key` (never wraps in <tg-emoji> tags).
+    Use this for Telegram button text, query.answer toasts, or anywhere raw HTML tags are forbidden."""
+    resolved_key = KEY_ALIASES.get(key, key)
+    cache = _cache if _cache is not None else _load_cache()
+    override = cache.get(resolved_key)
+    if override is not None and override.placeholder:
+        return override.placeholder
+    return fallback if fallback is not None else DEFAULT_EMOJI.get(resolved_key, "")
+
 
 
 def _key_glyphs(key: str, placeholder: str) -> set[str]:

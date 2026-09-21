@@ -107,10 +107,18 @@ def _category_keyboard() -> InlineKeyboardMarkup:
 
 def _key_keyboard(category: str) -> InlineKeyboardMarkup:
     keys_in_cat = [k for k, c in CATEGORY_OF.items() if c == category]
-    buttons = [
-        btn(EMOJI_KEYS[k], style=LIST, callback_data=f"{EMOJI_KEY_CALLBACK_PREFIX}{k}")
-        for k in keys_in_cat
-    ]
+    overrides = list_overrides()
+    buttons = []
+    for k in keys_in_cat:
+        label = EMOJI_DEFS[k][0]
+        if k in overrides:
+            ph = overrides[k].placeholder or EMOJI_DEFS[k][1]
+            btn_text = f"{ph} {label}"
+        else:
+            btn_text = f"▫️ {label}"
+        buttons.append(
+            btn(btn_text, style=LIST, callback_data=f"{EMOJI_KEY_CALLBACK_PREFIX}{k}")
+        )
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
     rows.append([back_btn(EMOJI_BACK_CALLBACK, "بازگشت به دسته‌ها")])
     return InlineKeyboardMarkup(rows)
@@ -1048,7 +1056,7 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
             # nice DM to the recipient
             bal_lines = _balance_lines_for(user, ["coins", "dna", "diamonds"])
             dmed = await _notify_recipient(context, user, notes, bal_lines)
-            await query.answer(f"{get_emoji('gift')} داده شد!")
+            await query.answer("🎁 داده شد!")
             confirm = _admin_op_confirm(
                 user, f"آیتم داده شد ({' + '.join(notes)})",
                 _balance_lines_for(user, ["coins", "dna", "diamonds"]),
@@ -1074,7 +1082,7 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
             item = await run_db(shop.add_catalog_item, draft["title"], draft.get("emoji", f"{get_emoji('gift')}"),
                                 draft["contents"], cost, currency)
             context.user_data.pop(_ISH_DRAFT, None)
-            await query.answer(f"{get_emoji('confirm')} به شاپ روزانه اضافه شد!")
+            await query.answer("✅ به شاپ روزانه اضافه شد!")
             await safe_edit_message_text(
                 query,
                 f"✅ <b>آیتم به کاتالوگ شاپ روزانه اضافه شد:</b> {item.emoji} {item.title}\n"
@@ -1091,7 +1099,7 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
             item = await run_db(itemshop.create_item_from_draft, draft)
             verb_txt = "ساخته شد"
         context.user_data.pop(_ISH_DRAFT, None)
-        await query.answer(f"{get_emoji('confirm')} ثبت شد!")
+        await query.answer("✅ ثبت شد!")
         await safe_edit_message_text(
             query,
             f"✅ <b>آیتم {verb_txt}:</b> {item.emoji} {item.title}\n"
@@ -1125,7 +1133,7 @@ async def itemshop_edit_callback(update: Update, context: ContextTypes.DEFAULT_T
         await query.answer(str(exc), show_alert=True)
         return
     context.user_data[_ISH_DRAFT] = draft
-    await query.answer(f"{get_emoji('edit')} حالت ویرایش")
+    await query.answer("✏️ حالت ویرایش")
     await _ish_show_home(update, context)
 
 
@@ -2235,7 +2243,7 @@ async def admin_cweaken_do_callback(update: Update, context: ContextTypes.DEFAUL
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer(f"{get_emoji('confirm')} کایجو با موفقیت ضعیف شد.", show_alert=True)
+    await query.answer("✅ کایجو با موفقیت ضعیف شد.", show_alert=True)
     try:
         data = await run_db(admin_creature_view_data, int(cid))
     except GameError as exc:
@@ -2374,8 +2382,8 @@ def _render_sub_mgr_text(user: User, info: dict) -> str:
 def _render_sub_mgr_keyboard(target_id: int, info: dict) -> InlineKeyboardMarkup:
     rows = [
         [
-            btn(f"{get_emoji('chest_silver')} فعال‌سازی نقره‌ای (۳۰ روز)", emoji_key="btn_sub_silver", style=PRIMARY, callback_data=f"adm_sub_set:{target_id}:silver:30"),
-            btn(f"{get_emoji('sub_vip')} فعال‌سازی طلایی (۳۰ روز)", emoji_key="btn_sub_gold", style=CONFIRM, callback_data=f"adm_sub_set:{target_id}:gold:30"),
+            btn("فعال‌سازی نقره‌ای (۳۰ روز)", emoji_key="btn_sub_silver", style=PRIMARY, callback_data=f"adm_sub_set:{target_id}:silver:30"),
+            btn("فعال‌سازی طلایی (۳۰ روز)", emoji_key="btn_sub_gold", style=CONFIRM, callback_data=f"adm_sub_set:{target_id}:gold:30"),
         ],
         [
             btn("➕ تمدید ۳۰ روز", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"adm_sub_ext:{target_id}:30"),
@@ -2384,7 +2392,7 @@ def _render_sub_mgr_keyboard(target_id: int, info: dict) -> InlineKeyboardMarkup
     ]
     if info["is_active"]:
         rows.append([
-            btn(f"{get_emoji('cancel')} لغو اشتراک کاربر", emoji_key="btn_cancel", style=DANGER, callback_data=f"adm_sub_cancel:{target_id}"),
+            btn("لغو اشتراک کاربر", emoji_key="btn_cancel", style=DANGER, callback_data=f"adm_sub_cancel:{target_id}"),
         ])
     rows.append([back_btn(f"admin_userback:{target_id}", "بازگشت به اطلاعات کاربر")])
     return InlineKeyboardMarkup(rows)
@@ -2484,7 +2492,7 @@ async def adm_sub_cancel_callback(update: Update, context: ContextTypes.DEFAULT_
     except Exception as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer(f"{get_emoji('cancel')} اشتراک کاربر لغو شد.", show_alert=True)
+    await query.answer("❌ اشتراک کاربر لغو شد.", show_alert=True)
     text = _render_sub_mgr_text(user, info)
     kb = _render_sub_mgr_keyboard(target_id, info)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
@@ -3680,7 +3688,7 @@ async def pack_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer(f"{get_emoji('poison')} فعال شد." if p["active"] else "🔴 غیرفعال شد.")
+    await query.answer("🟢 فعال شد." if p["active"] else "🔴 غیرفعال شد.")
     await packs_panel(update, context)
 
 
@@ -3696,7 +3704,7 @@ async def pack_delete_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         f"{get_emoji('delete')} <b>حذف پک</b>\nمطمئنی؟ این کار برگشت‌ناپذیره.",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
-            [btn(f"{get_emoji('delete')} بله، حذف کن", style=DANGER, callback_data=f"pack_delok:{pack_id}")],
+            [btn("🗑 بله، حذف کن", style=DANGER, callback_data=f"pack_delok:{pack_id}")],
             [back_btn("admin_menu:packs", "انصراف")],
         ]),
     )
@@ -3709,7 +3717,7 @@ async def pack_delete_confirm_callback(update: Update, context: ContextTypes.DEF
         return
     pack_id = int(query.data.split(":")[1])
     await run_db(purchase.delete_pack, pack_id)
-    await query.answer(f"{get_emoji('delete')} حذف شد.")
+    await query.answer("🗑 حذف شد.")
     await packs_panel(update, context)
 
 
@@ -4048,7 +4056,7 @@ async def admin_maxbld_do_callback(update: Update, context: ContextTypes.DEFAULT
         await query.answer(str(exc), show_alert=True)
         return
     u = res["user"]
-    await query.answer(f"{get_emoji('building')} ساختمان‌ها مکس شدند!")
+    await query.answer("🏗 ساختمان‌ها مکس شدند!")
     await safe_edit_message_text(
         query,
         f"{get_emoji('confirm')} همه‌ی <b>{res['count']}</b> ساختمانِ <b>{display_name(u)}</b> "
@@ -4158,7 +4166,7 @@ async def admin_unban_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer(f"{get_emoji('confirm')} رفع شد.")
+    await query.answer("✅ رفع شد.")
     await safe_edit_message_text(query,
         _user_info_text(data), parse_mode="HTML", reply_markup=_user_manage_keyboard(user.id, False)
     )
@@ -4376,7 +4384,7 @@ async def dailyshop_builder_callback(update: Update, context: ContextTypes.DEFAU
 
     if verb == "delc":  # do the permanent delete
         await run_db(shop.delete_catalog_item, parts[2])
-        await query.answer(f"{get_emoji('delete')} حذف شد.", show_alert=True)
+        await query.answer("🗑 حذف شد.", show_alert=True)
         await dailyshop_panel_from_query(query, context)
         return
 
@@ -4477,7 +4485,7 @@ async def dailyshop_builder_callback(update: Update, context: ContextTypes.DEFAU
     if verb == "save":
         await run_db(shop.save_day, draft["slot"], draft["states"])
         context.user_data.pop(_DSHOP_DRAFT, None)
-        await query.answer(f"{get_emoji('confirm')} ذخیره شد!", show_alert=True)
+        await query.answer("✅ ذخیره شد!", show_alert=True)
         await dailyshop_panel_from_query(query, context)
         return
 
