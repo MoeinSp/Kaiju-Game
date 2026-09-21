@@ -111,13 +111,19 @@ def _key_keyboard(category: str) -> InlineKeyboardMarkup:
     buttons = []
     for k in keys_in_cat:
         label = EMOJI_DEFS[k][0]
+        btn_kwargs = {}
         if k in overrides:
-            ph = overrides[k].placeholder or EMOJI_DEFS[k][1]
-            btn_text = f"{ph} {label}"
+            override = overrides[k]
+            if override.custom_emoji_id:
+                btn_kwargs["icon_custom_emoji_id"] = override.custom_emoji_id
+                btn_text = label
+            else:
+                ph = override.placeholder or EMOJI_DEFS[k][1]
+                btn_text = f"{ph} {label}"
         else:
             btn_text = f"▫️ {label}"
         buttons.append(
-            btn(btn_text, style=LIST, callback_data=f"{EMOJI_KEY_CALLBACK_PREFIX}{k}")
+            btn(btn_text, style=LIST, callback_data=f"{EMOJI_KEY_CALLBACK_PREFIX}{k}", **btn_kwargs)
         )
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
     rows.append([back_btn(EMOJI_BACK_CALLBACK, "بازگشت به دسته‌ها")])
