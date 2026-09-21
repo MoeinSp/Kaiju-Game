@@ -1,4 +1,4 @@
-"""«📖 دانشنامه» — the Codex screen: which of the 20 species you've discovered,
+f"""«{get_emoji('book')} دانشنامه» — the Codex screen: which of the 20 species you've discovered,
 grouped by element, with milestone rewards to claim."""
 
 from telegram import InlineKeyboardMarkup, Update
@@ -22,7 +22,7 @@ def _render(st: dict) -> tuple[str, InlineKeyboardMarkup]:
         "با کامل‌کردن دسته‌ها و کل دانشنامه جایزه بگیر.</blockquote>",
     ]
     for grp in st["elements"]:
-        tick = " ✅" if grp["complete"] else ""
+        tick = f" {get_emoji('confirm')}" if grp["complete"] else ""
         names = "  ".join(f"✅ <code>{s['name']}</code>" if s["found"] else "❓ ؟؟؟" for s in grp["species"])
         lines.append(f"\n{grp['label']}{tick}\n  {names}")
     milestones = "، ".join(

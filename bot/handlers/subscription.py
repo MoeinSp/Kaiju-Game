@@ -1,4 +1,4 @@
-"""«⭐ اشتراک‌های ویژه» — VIP Subscriptions management and purchase.
+f"""«{get_emoji('star')} اشتراک‌های ویژه» — VIP Subscriptions management and purchase.
 
 Two tiers:
 - Silver (۲۵۰,۰۰۰ تومان - ۳۰ روزه)

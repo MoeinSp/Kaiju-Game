@@ -116,6 +116,14 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "collection": ("کلکسیون", "🗂", "ui"),
     "settings": ("تنظیمات", "🎨", "ui"),
     "book": ("راهنما", "📖", "ui"),
+    "search": ("جستجو و ذره‌بین", "🔍", "ui"),
+    "edit": ("ویرایش و قلم", "✏️", "ui"),
+    "delete": ("حذف و سطل زباله", "🗑", "ui"),
+    "refresh": ("بروزرسانی و تازه‌سازی", "🔄", "ui"),
+    "sparkles": ("درخشش و مهارت", "✨", "ui"),
+    "war": ("جنگ اتحاد", "⚔️", "battle"),
+    "members": ("اعضای اتحاد", "👥", "social"),
+    "deputy": ("معاون و ارشد", "🎖", "social"),
 }
 
 CATEGORY_LABELS: dict[str, str] = {
@@ -321,6 +329,21 @@ CANONICAL_KEY_GLYPHS: dict[str, set[str]] = {
 }
 
 
+KEY_ALIASES: dict[str, str] = {
+    "gold": "coin",
+    "coins": "coin",
+    "diamonds": "diamond",
+    "dia": "diamond",
+    "rank": "trophy",
+    "vip": "sub_vip",
+    "speed_card": "speedup",
+    "fire": "element_fire",
+    "water": "element_water",
+    "earth": "element_earth",
+    "electric": "element_electric",
+}
+
+
 def get_emoji(key: str, fallback: str | None = None) -> str:
     """Returns HTML for `key`: a <tg-emoji> wrapper if the owner set a Premium custom
     emoji for it, otherwise the plain unicode default (from EMOJI_DEFS, or `fallback`
@@ -328,20 +351,21 @@ def get_emoji(key: str, fallback: str | None = None) -> str:
     database, after the first (eager-warmed) load. Only usable in message BODY text
     sent with parse_mode="HTML" — Telegram button labels are plain text and can
     never render <tg-emoji>, so never call this for InlineKeyboardButton text."""
+    resolved_key = KEY_ALIASES.get(key, key)
     cache = _cache if _cache is not None else _load_cache()
-    override = cache.get(key)
+    override = cache.get(resolved_key)
     if override is not None:
         ph = override.placeholder
         # If the stored placeholder conflicts with another key (e.g. coin had 🧬),
         # fall back to the canonical emoji for the tag placeholder
-        if key in CANONICAL_KEY_GLYPHS and any(
+        if resolved_key in CANONICAL_KEY_GLYPHS and any(
             _norm_glyph(ph) in {_norm_glyph(g) for g in glyphs}
             for other_k, glyphs in CANONICAL_KEY_GLYPHS.items()
-            if other_k != key
+            if other_k != resolved_key
         ):
-            ph = DEFAULT_EMOJI.get(key, "💰")
+            ph = DEFAULT_EMOJI.get(resolved_key, "💰")
         return f'<tg-emoji emoji-id="{override.custom_emoji_id}">{ph}</tg-emoji>'
-    return fallback if fallback is not None else DEFAULT_EMOJI.get(key, "❓")
+    return fallback if fallback is not None else DEFAULT_EMOJI.get(resolved_key, "❓")
 
 
 def _key_glyphs(key: str, placeholder: str) -> set[str]:

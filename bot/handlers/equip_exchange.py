@@ -1,4 +1,4 @@
-"""🎟 مبادله تجهیزات با بلیط — trade spare legendary/mythic gear for genetic-box tickets.
+f"""{get_emoji('ticket')} مبادله تجهیزات با بلیط — trade spare legendary/mythic gear for genetic-box tickets.
 
 Rarity-tabbed, paginated multi-select panel: filter by rarity (اساطیری/افسانه‌ای), page
 through the list, toggle items (or «انتخاب همه»), then «تبدیل». Equipped gear is never
@@ -64,7 +64,7 @@ def _render(tickets, items, selected: set, filt: str, page: int, back=None):
     chunk = shown[page * _PAGE_SIZE:(page + 1) * _PAGE_SIZE]
 
     lines = [
-        "🎟 <b>مبادله تجهیزات با بلیط</b>",
+        f"{get_emoji('ticket')} <b>مبادله تجهیزات با بلیط</b>",
         f"بلیط‌های تو: <b>{tickets}</b> 🎟",
         "",
         "هر تجهیزِ اساطیری = <b>۲</b> بلیط · هر افسانه‌ای = <b>۱</b> بلیط",
@@ -84,7 +84,7 @@ def _render(tickets, items, selected: set, filt: str, page: int, back=None):
     rows.append(tab_row)
     # item toggles for this page
     for it in chunk:
-        mark = "✅" if it.id in selected else "⬜️"
+        mark = f"{get_emoji('confirm')}" if it.id in selected else "⬜️"
         lvl = f" +{it.level}" if it.level > 1 else ""
         rows.append([btn(
             f"{mark} {constants.RARITY_LABELS[it.rarity]} {it.name}{lvl} → {ticket_value(it)}🎟",
@@ -183,7 +183,7 @@ async def etx_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
                 btn(f"✅ بله، تبدیل کن ({gain}🎟)", emoji_key="btn_confirm", style=CONFIRM, callback_data="etx:confirm"),
-                btn("❌ نه", emoji_key="btn_cancel", style=DANGER, callback_data="etx:back"),
+                btn(f"{get_emoji('cancel')} نه", emoji_key="btn_cancel", style=DANGER, callback_data="etx:back"),
             ]]),
         )
         return

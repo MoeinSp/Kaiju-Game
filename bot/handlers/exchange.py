@@ -1,6 +1,6 @@
 """«مبادله» — the gold ↔ DNA exchange screens.
 
-Flow: the opener first picks WHICH currency to buy (طلا / دی‌ان‌ای), then an amount —
+Flow: the opener first picks WHICH currency to buy (طلا / دیانای), then an amount —
 a quick-pick preset or a free-form custom number — then a final confirm. Works in
 the DM and (scoped) in a group: every button carries the opener's id, so a keyboard
 visible to a whole group can only be driven by the person who opened it. The swap
@@ -8,7 +8,7 @@ itself is a single atomic, balance-checked, row-locked update in game/exchange.p
 re-checked at the moment of confirmation (a stale/spammed tap can't over-convert).
 
 Directions (as the user experiences them):
-* «دی‌ان‌ای»  → buy_dna  (pay gold, get DNA)
+* «دیانای»  → buy_dna  (pay gold, get DNA)
 * «طلا»       → buy_gold (pay DNA, get gold)
 """
 
@@ -23,7 +23,7 @@ from game import exchange
 from game.creature import GameError
 from game.emoji import get_emoji
 
-_DISABLED_MSG = "🔄 مبادله فعلاً غیرفعاله."
+_DISABLED_MSG = f"{get_emoji('refresh')} مبادله فعلاً غیرفعاله."
 
 
 def _bal_sync(tg_user):
@@ -117,7 +117,7 @@ def build_confirm(oid: int, pack: dict, coins: int, dna: int) -> tuple[str, Inli
         deal = (f"<b>{pack['gold']:,}</b> {get_emoji('coin')} طلا می‌گیری و "
                 f"<b>{pack['dna']:,}</b> {get_emoji('dna')} DNA می‌دی.")
     text = (
-        "🔄 <b>تأیید مبادله</b>\n"
+        f"{get_emoji('refresh')} <b>تأیید مبادله</b>\n"
         f"<blockquote>{deal}\n\n"
         f"موجودی فعلی: {coins:,} طلا · {dna:,} DNA</blockquote>"
     )
@@ -245,7 +245,7 @@ async def exchange_do_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         done = f"✅ <b>{result['dna']:,} DNA گرفتی</b> ({result['gold']:,} طلا دادی)."
     else:
         done = f"✅ <b>{result['gold']:,} طلا گرفتی</b> ({result['dna']:,} DNA دادی)."
-    await query.answer("✅ انجام شد!")
+    await query.answer(f"{get_emoji('confirm')} انجام شد!")
     text, kb = _home_render(int(oid), result["new_coins"], result["new_dna"], _is_group(update))
     await safe_edit_message_text(query, f"{done}\n━━━━━━━━━━\n{text}", parse_mode="HTML", reply_markup=kb)
 
@@ -265,7 +265,7 @@ async def handle_custom_amount(update: Update, context: ContextTypes.DEFAULT_TYP
     norm = raw.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789"))
     if not norm.isdigit() or int(norm) <= 0:
         context.user_data[AWAITING_PLAYER_KEY] = awaiting  # keep waiting
-        await message.reply_text("⚠️ یه عدد درست بفرست (مثلاً 120).")
+        await message.reply_text(f"{get_emoji('warning')} یه عدد درست بفرست (مثلاً 120).")
         return
     # for buy_gold the number is GOLD to receive → convert to the whole DNA to sell
     amount_dna = exchange.dna_for_gold(int(norm)) if unit == "gold" else int(norm)

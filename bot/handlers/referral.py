@@ -1,4 +1,4 @@
-"""«🎁 دعوت دوستان» — the referral screen: your invite link, how it's doing, and
+f"""«{get_emoji('gift')} دعوت دوستان» — the referral screen: your invite link, how it's doing, and
 a button to collect any rewards that are ready.
 
 Rewards also pay out automatically via the notification job once an invited friend
@@ -24,7 +24,7 @@ def _panel_sync(tg_user):
 
 def _friend_status(f: dict, milestone: int) -> str:
     if f["paid"]:
-        return "✅ جایزه گرفته شد"
+        return f"{get_emoji('confirm')} جایزه گرفته شد"
     if f["reached"]:
         return "🎉 آماده‌ی دریافت جایزه!"
     return f"⛔ شرایط ناقص — سطح {f['level']}/{milestone}"
@@ -38,7 +38,7 @@ def _render(st: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyb
     shown = {"all": friends, "success": successful, "incomplete": incomplete, "ready": ready}.get(filt, friends)
 
     lines = [
-        "🎁 <b>دعوت دوستان</b>",
+        f"{get_emoji('gift')} <b>دعوت دوستان</b>",
         "<blockquote>لینکت رو برای دوستات بفرست. وقتی یکی با لینک تو بیاد و به "
         f"<b>سطح آزمایشگاه {st['milestone_level']}</b> برسه، <b>هردوتون</b> جایزه می‌گیرین:\n"
         f"• تو: <b>{st['referrer_reward']:,}</b> 💎   • دوستت: <b>{st['friend_reward']:,}</b> 💎</blockquote>",
@@ -71,8 +71,8 @@ def _render(st: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyb
         # filter "menu" — tap to switch which list you're looking at
         rows.append([
             btn(("• " if filt == "all" else "") + "همه", style=NAV, callback_data="ref_view:all:0"),
-            btn(("• " if filt == "success" else "") + "✅ موفق", style=NAV, callback_data="ref_view:success:0"),
-            btn(("• " if filt == "incomplete" else "") + "⛔ ناقص", style=NAV, callback_data="ref_view:incomplete:0"),
+            btn(("• " if filt == "success" else "") + f"{get_emoji('confirm')} موفق", style=NAV, callback_data="ref_view:success:0"),
+            btn(("• " if filt == "incomplete" else "") + f"{get_emoji('banned')} ناقص", style=NAV, callback_data="ref_view:incomplete:0"),
         ])
         total_pages = max(1, (len(shown) + _REF_PAGE - 1) // _REF_PAGE)
         nav = []

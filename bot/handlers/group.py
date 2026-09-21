@@ -1150,7 +1150,7 @@ async def raid_overall_rank_callback(update: Update, context: ContextTypes.DEFAU
     for r in rows:
         rank, name = r["rank"], r["alliance"].name
         reward = reward_by_rank.get(rank)
-        rw_lines = f"\n🎁 پاداش: <code>{reward['diamonds']}</code> 💎 + <code>{reward['coins']:,}</code> 🪙" if reward else ""
+        rw_lines = f"\n{get_emoji('gift')} پاداش: <code>{reward['diamonds']}</code> {get_emoji('diamond')} + <code>{reward['coins']:,}</code> {get_emoji('coin')}" if reward else ""
         badge = medals.get(rank, f"{rank}.")
         lines.append(
             f"{badge} <b>{name}</b>\n"

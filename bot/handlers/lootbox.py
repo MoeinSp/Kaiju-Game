@@ -48,7 +48,7 @@ def _bulk_summary_text(header: str, summary: dict) -> str:
         f"🎁 <b>نتایج گشایش <code>{summary['opened']}</code> {header}</b>",
         gift_info,
         "",
-        "🏆 <b>ارزشمندترین دریافت:</b>",
+        f"{get_emoji('trophy')} <b>ارزشمندترین دریافت:</b>",
         f"<blockquote>{best_line}</blockquote>",
     ]
 
@@ -56,20 +56,20 @@ def _bulk_summary_text(header: str, summary: dict) -> str:
     items = sorted(summary["items"], key=lambda r: -order.get(r["rarity"], 0))
 
     if creatures:
-        lines += ["", div, "", "🐣 <b>هیولاهای دریافتی (اضافه شده به کلکسیون):</b>"]
+        lines += ["", div, "", f"{get_emoji('hatch')} <b>هیولاهای دریافتی (اضافه شده به کلکسیون):</b>"]
         for i, r in enumerate(creatures, 1):
             c = r["creature"]
             lines.append(f"{i}. {_rarity_dot(r['rarity'])} <b>{c.name}</b> ({constants.RARITY_LABELS[r['rarity']]})")
 
     if items:
-        lines += ["", div, "", "⚔️ <b>تجهیزات دریافتی (اضافه شده به تجهیزات):</b>"]
+        lines += ["", div, "", f"{get_emoji('atk')} <b>تجهیزات دریافتی (اضافه شده به تجهیزات):</b>"]
         for i, r in enumerate(items, 1):
             it = r["item"]
             slot = constants.EQUIPMENT_SLOT_LABELS.get(it.slot, "🎒")
             lines.append(f"{i}. {_rarity_dot(r['rarity'])} {slot} <b>{it.name}</b> (<code>+{it.level}</code>) — {constants.RARITY_LABELS[r['rarity']]}")
 
     # rarity tally, annotated with what kind each rarity's drops were
-    lines += ["", div, "", "📊 <b>خلاصه به تفکیک نایابی:</b>"]
+    lines += ["", div, "", f"{get_emoji('stats')} <b>خلاصه به تفکیک نایابی:</b>"]
     for rarity in reversed(constants.RARITY_ORDER):
         n = summary["by_rarity"].get(rarity, 0)
         if not n:
@@ -247,7 +247,7 @@ async def biocrate_open_callback(update: Update, context: ContextTypes.DEFAULT_T
                 f"عنصر: {constants.element_label(c.element)}\n"
                 f"رده: {rarity_label}"
             )
-            hint = "از «🗂 کلکسیون» می‌توانید آن را فعال کنید."
+            hint = f"از «{get_emoji('collection')} کلکسیون» می‌توانید آن را فعال کنید."
             photo = get_creature_image_path(c)
         else:
             it = result["item"]
@@ -257,7 +257,7 @@ async def biocrate_open_callback(update: Update, context: ContextTypes.DEFAULT_T
             )
             hint = "از «🎒 تجهیزات» می‌توانید آن را تجهیز کنید."
             photo = get_equipment_image_path(it)
-        await query.answer("🎟 باز شد!" if summary.get("from_tickets") else "🟢 باز شد!")
+        await query.answer(f"{get_emoji('ticket')} باز شد!" if summary.get("from_tickets") else f"{get_emoji('poison')} باز شد!")
         text = (
             f"{label} <b>باز شد!</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -374,7 +374,7 @@ def _diamond_box_detail_text(tier: str, is_free: bool = False) -> str:
         "━━━━━━━━━━━━━━━━━━━━",
         cost_line,
         "",
-        "📊 <b>احتمال هر رده:</b>",
+        f"{get_emoji('stats')} <b>احتمال هر رده:</b>",
     ]
     for rarity, weight in cfg["weights"].items():
         lines.append(f"  • {constants.RARITY_LABELS[rarity]}: <code>{weight:g}٪</code>")
@@ -434,9 +434,9 @@ async def _do_diamond_box_buy(update: Update, context: ContextTypes.DEFAULT_TYPE
     rarity_label = constants.RARITY_LABELS[result["rarity"]]
     is_free = result.get("is_free", is_free)
     if is_free:
-        await query.answer("🎁 باکس رایگان امروز باز شد!")
+        await query.answer(f"{get_emoji('gift')} باکس رایگان امروز باز شد!")
     else:
-        await query.answer("🟢 باز شد!")
+        await query.answer(f"{get_emoji('poison')} باز شد!")
     keyboard = InlineKeyboardMarkup(
         [
             [btn("یکی دیگه باز کن", emoji_key="btn_diamond_box", style=SHOP, callback_data=f"dbox_pick:{tier}")],
@@ -444,7 +444,7 @@ async def _do_diamond_box_buy(update: Update, context: ContextTypes.DEFAULT_TYPE
         ]
     )
     photo = get_creature_image_path(creature)
-    free_tag = "\n<i>(🎁 هدیه رایگان امروز شما)</i>" if is_free else ""
+    free_tag = f"\n<i>({get_emoji('gift')} هدیه رایگان امروز شما)</i>" if is_free else ""
     lines = [
         f"{constants.DIAMOND_BOX_TIERS[tier]['label']} <b>باز شد!</b>{free_tag}",
         "━━━━━━━━━━━━━━━━━━━━",
@@ -452,7 +452,7 @@ async def _do_diamond_box_buy(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"عنصر: {constants.element_label(creature.element)}\n"
         f"رده: {rarity_label}</tg-spoiler>",
         "",
-        "<blockquote>از «🗂 کلکسیون» می‌توانید آن را فعال کنید.</blockquote>",
+        f"<blockquote>از «{get_emoji('collection')} کلکسیون» می‌توانید آن را فعال کنید.</blockquote>",
     ]
     await send_screen(
         update,

@@ -17,13 +17,13 @@ from game.teambattle import battle_summary, team_power
 def _reward_lines(reward: dict) -> list[str]:
     lines = []
     if reward.get("coins"):
-        lines.append(f"🪙 سکه: <code>+{reward['coins']:,}</code> {get_emoji('coin')}")
+        lines.append(f"{get_emoji('coin')} طلا: <code>+{reward['coins']:,}</code>")
     if reward.get("dna"):
-        lines.append(f"🧬 دی‌ان‌ای: <code>+{reward['dna']:,}</code> {get_emoji('dna')}")
+        lines.append(f"{get_emoji('dna')} DNA: <code>+{reward['dna']:,}</code>")
     if reward.get("diamonds"):
-        lines.append(f"💎 الماس: <code>+{reward['diamonds']:,}</code> {get_emoji('diamond')}")
+        lines.append(f"{get_emoji('diamond')} الماس: <code>+{reward['diamonds']:,}</code>")
     if reward.get("speedup"):
-        lines.append(f"⚡ کارت سرعت: <code>{reward['speedup']:,}</code> دقیقه‌ای")
+        lines.append(f"{get_emoji('speedup')} کارت سرعت: <code>{reward['speedup']:,}</code> دقیقه‌ای")
     return lines or ["▫️ بدون پاداش"]
 
 
@@ -47,27 +47,27 @@ def _panel_sync(tg_user):
 def _render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
     st = view["status"]
     if st["next_stage"] is None:
-        text = "🗺 <b>دانجن</b>\n━━━━━━━━━━━━━━━━━━━━\n🏆 <b>کل دانجن رو فتح کردی!</b>\n<i>منتظر مراحل جدید باش.</i>"
+        text = f"{get_emoji('dungeon')} <b>دانجن</b>\n━━━━━━━━━━━━━━━━━━━━\n{get_emoji('trophy')} <b>کل دانجن رو فتح کردی!</b>\n<i>منتظر مراحل جدید باش.</i>"
         return text, InlineKeyboardMarkup([[back_btn("menu:me")]])
 
-    boss = " 👹 <b>(باس!)</b>" if st["next_is_boss"] else ""
+    boss = f" {get_emoji('hunt')} <b>(باس!)</b>" if st["next_is_boss"] else ""
     rew_lines = _reward_lines(st["next_reward"])
     lines = [
-        f"🗺 <b>دانجن</b> — مرحله‌ی <code>{st['next_stage']}</code> از <code>{st['max_stage']}</code>{boss}",
+        f"{get_emoji('dungeon')} <b>دانجن</b> — مرحله‌ی <code>{st['next_stage']}</code> از <code>{st['max_stage']}</code>{boss}",
         "━━━━━━━━━━━━━━━━━━━━",
         "<blockquote>"
-        f"✅ مراحل فتح‌شده: <code>{st['cleared']}</code>\n"
-        f"👾 قدرت دشمن این مرحله: <code>{st['enemy_power']:,}</code>\n"
-        f"💪 قدرت تیم شما: <code>{view['team_power']:,}</code>\n\n"
-        "🎁 <b>پاداش فتح این مرحله:</b>\n"
+        f"{get_emoji('confirm')} مراحل فتح‌شده: <code>{st['cleared']}</code>\n"
+        f"{get_emoji('atk')} قدرت دشمن این مرحله: <code>{st['enemy_power']:,}</code>\n"
+        f"{get_emoji('power')} قدرت تیم شما: <code>{view['team_power']:,}</code>\n\n"
+        f"{get_emoji('gift')} <b>پاداش فتح این مرحله:</b>\n"
         + "\n".join(rew_lines)
-        + f"\n\n⚡ <b>هزینه ورود:</b> <code>{campaign.ENERGY_COST:,}</code> انرژی\n"
+        + f"\n\n{get_emoji('energy')} <b>هزینه ورود:</b> <code>{campaign.ENERGY_COST:,}</code> انرژی\n"
         + f"{get_emoji('energy')} <b>انرژی فعلی:</b> <code>{view['energy']:,}</code>"
         + "</blockquote>",
     ]
     rows = []
     if not view["has_team"]:
-        lines.append("\n⚠️ <i>اول از «چیدن تیم» یک تیم ۳ نفره بچین.</i>")
+        lines.append(f"\n⚠️ <i>اول از «چیدن تیم» یک تیم ۳ نفره بچین.</i>")
         rows.append([btn("چیدن تیم", emoji_key="btn_team", style=PRIMARY, callback_data="menu:team")])
     else:
         rows.append([
@@ -108,15 +108,15 @@ async def campaign_fight_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.answer("🎉 مرحله فتح شد!")
         rew_lines = _reward_lines(result["reward"])
         header_lines = [
-            f"🎉 <b>مرحله‌ی <code>{result['stage']}</code> فتح شد!</b>" + (" 👹" if result["is_boss"] else ""),
+            f"{get_emoji('celebrate')} <b>مرحله‌ی <code>{result['stage']}</code> فتح شد!</b>" + (f" {get_emoji('hunt')}" if result["is_boss"] else ""),
             "━━━━━━━━━━━━━━━━━━━━",
-            "<blockquote>🎁 <b>پاداش دریافتی:</b>\n"
+            f"<blockquote>{get_emoji('gift')} <b>پاداش دریافتی:</b>\n"
             + "\n".join(rew_lines)
-            + (f"\n\n🛡 <b>بازماندگان:</b> <code>{result['survivors']}</code> هیولا زنده ماندند." if result["survivors"] else "")
+            + (f"\n\n{get_emoji('def')} <b>بازماندگان:</b> <code>{result['survivors']}</code> هیولا زنده ماندند." if result["survivors"] else "")
             + "</blockquote>"
         ]
         if result["cleared_all"]:
-            header_lines.insert(0, "🏆 <b>تمام مراحل دانجن با موفقیت فتح شدند!</b>\n━━━━━━━━━━━━━━━━━━━━")
+            header_lines.insert(0, f"{get_emoji('trophy')} <b>تمام مراحل دانجن با موفقیت فتح شدند!</b>\n━━━━━━━━━━━━━━━━━━━━")
         header = "\n".join(header_lines)
     else:
         await query.answer("💀 شکست خوردی")

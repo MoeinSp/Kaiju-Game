@@ -33,29 +33,29 @@ def _render_mugen_text(view: dict) -> str:
     elem_label = constants.element_label(st["guardian_element"])
 
     lines = [
-        f"🏰 <b>برج موگن (無限の塔) — طبقه <code>{st['floor']}</code></b>",
+        f"{get_emoji('mugen')} <b>برج موگن (無限の塔) — طبقه <code>{st['floor']}</code></b>",
         "<i>سیاه‌چال بی‌پایان و نبردهای مرگبار با نگهبانان باستانی</i>\n",
         "━━━━━━━━━━━━━━━━━━━━",
-        f"👹 <b>نگهبان این طبقه:</b> {st['guardian_name']}",
+        f"{get_emoji('hunt')} <b>نگهبان این طبقه:</b> {st['guardian_name']}",
         f"🏷 نایابی: <b>{constants.RARITY_LABELS.get(st['guardian_rarity'], st['guardian_rarity'])}</b>",
         f"🔮 عنصر: <b>{elem_label}</b>",
-        f"💪 قدرت نگهبان: <code>{st['guardian_power']:,}</code>",
+        f"{get_emoji('power')} قدرت نگهبان: <code>{st['guardian_power']:,}</code>",
         "━━━━━━━━━━━━━━━━━━━━",
         f"🦖 موجود فعال شما: <b>{c_name}</b>",
         "",
-        "<blockquote>"
-        "🎁 <b>پاداش فتح این طبقه:</b>\n"
-        f"🪙 سکه: <code>+{rew['coins']:,}</code> {get_emoji('coin')}\n"
-        f"🧬 دی‌ان‌ای: <code>+{rew['dna']:,}</code> {get_emoji('dna')}",
+        "<blockquote>",
+        f"{get_emoji('gift')} <b>پاداش فتح این طبقه:</b>\n",
+        f"{get_emoji('coin')} طلا: <code>+{rew['coins']:,}</code>\n",
+        f"{get_emoji('dna')} DNA: <code>+{rew['dna']:,}</code>",
     ]
     if rew.get("diamonds"):
-        lines.append(f"💎 الماس: <code>+{rew['diamonds']:,}</code> {get_emoji('diamond')}")
+        lines.append(f"{get_emoji('diamond')} الماس: <code>+{rew['diamonds']:,}</code>")
     if rew.get("tickets"):
         lines.append(f"🎫 بلیط: <code>+{rew['tickets']:,}</code>")
 
     lines += [
-        f"\n\n⚡ <b>هزینه ورود:</b> <code>{mugen_tower.MUGEN_ENERGY_COST:,}</code> انرژی\n"
-        f"{get_emoji('energy')} <b>انرژی فعلی:</b> <code>{view['energy']:,}</code>"
+        f"\n\n{get_emoji('energy')} <b>هزینه ورود:</b> <code>{mugen_tower.MUGEN_ENERGY_COST:,}</code> انرژی\n",
+        f"{get_emoji('energy')} <b>انرژی فعلی:</b> <code>{view['energy']:,}</code>",
         "</blockquote>",
     ]
     return "\n".join(lines)
@@ -111,19 +111,19 @@ async def mugen_fight_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     if res["won"]:
         rew = res["rewards"]
         rew_lines = [
-            f"🪙 سکه: <code>+{rew['coins']:,}</code> {get_emoji('coin')}",
-            f"🧬 دی‌ان‌ای: <code>+{rew['dna']:,}</code> {get_emoji('dna')}",
+            f"{get_emoji('coin')} طلا: <code>+{rew['coins']:,}</code>",
+            f"{get_emoji('dna')} DNA: <code>+{rew['dna']:,}</code>",
         ]
         if rew["diamonds"]:
-            rew_lines.append(f"💎 الماس: <code>+{rew['diamonds']:,}</code> {get_emoji('diamond')}")
+            rew_lines.append(f"{get_emoji('diamond')} الماس: <code>+{rew['diamonds']:,}</code>")
         if rew["tickets"]:
             rew_lines.append(f"🎫 بلیط: <code>+{rew['tickets']:,}</code>")
 
         text = (
-            f"🎉 <b>پیروزی در طبقه <code>{res['floor']}</code> برج موگن!</b>\n"
+            f"{get_emoji('celebrate')} <b>پیروزی در طبقه <code>{res['floor']}</code> برج موگن!</b>\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
-            f"⚔️ <b>{res['guardian_name']}</b> با قدرت شکست خورد!\n\n"
-            "<blockquote>🎁 <b>غنائم دریافتی:</b>\n"
+            f"{get_emoji('battle')} <b>{res['guardian_name']}</b> با قدرت شکست خورد!\n\n"
+            f"<blockquote>{get_emoji('gift')} <b>غنائم دریافتی:</b>\n"
             + "\n".join(rew_lines)
             + "</blockquote>\n\n"
             f"🔓 <b>طبقه <code>{res['next_floor']}</code> باز شد!</b>"
@@ -154,14 +154,15 @@ async def mugen_lb_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
 
     lb = await run_db(_get_lb)
-    lines = ["🏆 <b>برترین فاتحان برج موگن (無限の塔)</b>", "━━━━━━━━━━━━━━━━━━━━"]
+    lines = [f"{get_emoji('trophy')} <b>برترین فاتحان برج موگن (無限の塔)</b>", "━━━━━━━━━━━━━━━━━━━━"]
     if not lb:
         lines.append("<i>هنوز کسی طبقات اول رو فتح نکرده است!</i>")
     else:
+        medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
         for idx, u in enumerate(lb, start=1):
             name = u["lab_name"] or u["first_name"] or u["username"] or f"Player {u['id']}"
-            badge = "🥇" if idx == 1 else ("🥈" if idx == 2 else ("🥉" if idx == 3 else f"{idx}."))
-            lines.append(f"{badge} <b>{name}</b>\n  🏰 طبقه: <code>{u['mugen_tower_floor']}</code>")
+            badge = medals[idx - 1] if idx <= 3 else f"{idx}."
+            lines.append(f"{badge} <b>{name}</b>\n  {get_emoji('mugen')} طبقه: <code>{u['mugen_tower_floor']}</code>")
 
     kb = InlineKeyboardMarkup([
         [back_btn("mugen:panel", "بازگشت به برج")],

@@ -42,7 +42,7 @@ def _sellable(prices: dict) -> list[str]:
 
 
 _RULE = "━━━━━━━━━━━━━━━━━━━━"
-_RES_TITLE = {"coins": "🪙 طلا", "dna": "🧬 دی‌ان‌ای (DNA)", "diamonds": "💎 الماس"}
+_RES_TITLE = {"coins": f"{get_emoji('coin')} طلا", "dna": f"{get_emoji('dna')} دیانای (DNA)", "diamonds": f"{get_emoji('diamond')} الماس"}
 _RES_UNIT_WORD = {"coins": "طلا", "dna": "عدد", "diamonds": "عدد"}
 
 
@@ -338,7 +338,7 @@ async def receipt_photo_handler(update: Update, context: ContextTypes.DEFAULT_TY
         await message.reply_text("این درخواست دیگه معتبر نیست. از منو دوباره «خرید» رو بزن.")
         return
     await message.reply_text(
-        "✅ رسیدت دریافت شد و برای تأیید ارسال شد. به‌محض تأیید، موجودی اضافه می‌شه. 🙏"
+        f"{get_emoji('confirm')} رسیدت دریافت شد و برای تأیید ارسال شد. به‌محض تأیید، موجودی اضافه می‌شه. 🙏"
     )
     # forward the receipt to the owner with review actions
     base_caption = (
@@ -394,7 +394,7 @@ async def _update_channel_status(context, res: dict, status_html: str) -> None:
         from game.subscription import SUBSCRIPTION_TIERS
         sub = SUBSCRIPTION_TIERS.get(res["subscription_tier"])
         name = sub["name"] if sub else res["subscription_tier"]
-        badge = sub["badge"] if sub else "⭐"
+        badge = sub["badge"] if sub else f"{get_emoji('star')}"
         bits.append(f"{badge} {name} (۳۰ روزه)")
     if res.get("coins"):
         bits.append(f"{res['coins']:,} 🪙")
@@ -426,13 +426,13 @@ async def buy_approve_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer("✅ تأیید شد و اعمال شد.")
+    await query.answer(f"{get_emoji('confirm')} تأیید شد و اعمال شد.")
     bits = []
     if res.get("subscription_tier"):
         from game.subscription import SUBSCRIPTION_TIERS
         sub = SUBSCRIPTION_TIERS.get(res["subscription_tier"])
         name = sub["name"] if sub else res["subscription_tier"]
-        badge = sub["badge"] if sub else "⭐"
+        badge = sub["badge"] if sub else f"{get_emoji('star')}"
         bits.append(f"{badge} <b>{name} (۳۰ روزه)</b> فعال شد! 🎉")
     if res["coins"]:
         bits.append(f"{res['coins']:,} {get_emoji('coin')}")
@@ -440,16 +440,16 @@ async def buy_approve_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         bits.append(f"{res['dna']:,} {get_emoji('dna')}")
     if res["diamonds"]:
         bits.append(f"{res['diamonds']:,} {get_emoji('diamond')}")
-    notify_text = "✅ <b>خریدت تأیید شد!</b>\n🎁 " + ("\n".join(bits) if res.get("subscription_tier") else ("به حسابت اضافه شد: " + " · ".join(bits)))
+    notify_text = f"{get_emoji('confirm')} <b>خریدت تأیید شد!</b>\n{get_emoji('gift')} " + ("\n".join(bits) if res.get("subscription_tier") else ("به حسابت اضافه شد: " + " · ".join(bits)))
     await _notify_user(
         context, res["user_id"],
         notify_text,
     )
     if query.message is not None and query.message.caption is not None:
         await query.edit_message_caption(
-            caption=(query.message.caption or "") + "\n\n✅ <b>تأیید شد.</b>", parse_mode="HTML"
+            caption=(query.message.caption or "") + f"\n\n{get_emoji('confirm')} <b>تأیید شد.</b>", parse_mode="HTML"
         )
-    await _update_channel_status(context, res, "✅ <b>وضعیت: تأیید شد</b>")
+    await _update_channel_status(context, res, f"{get_emoji('confirm')} <b>وضعیت: تأیید شد</b>")
 
 
 async def buy_reject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -463,16 +463,16 @@ async def buy_reject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer("❌ رد شد.")
+    await query.answer(f"{get_emoji('cancel')} رد شد.")
     await _notify_user(
         context, res["user_id"],
-        "❌ <b>رسید خریدت تأیید نشد.</b> اگه فکر می‌کنی اشتباهی رخ داده، با پشتیبانی در تماس باش.",
+        f"{get_emoji('cancel')} <b>رسید خریدت تأیید نشد.</b> اگه فکر می‌کنی اشتباهی رخ داده، با پشتیبانی در تماس باش.",
     )
     if query.message is not None and query.message.caption is not None:
         await query.edit_message_caption(
-            caption=(query.message.caption or "") + "\n\n❌ <b>رد شد.</b>", parse_mode="HTML"
+            caption=(query.message.caption or "") + f"\n\n{get_emoji('cancel')} <b>رد شد.</b>", parse_mode="HTML"
         )
-    await _update_channel_status(context, res, "❌ <b>وضعیت: رد شد</b>")
+    await _update_channel_status(context, res, f"{get_emoji('cancel')} <b>وضعیت: رد شد</b>")
 
 
 async def buy_block_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -488,9 +488,9 @@ async def buy_block_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer("⛔ بلاک شد." if block else "♻️ آنبلاک شد.")
+    await query.answer(f"{get_emoji('banned')} بلاک شد." if block else "♻️ آنبلاک شد.")
     if query.message is not None:
-        tag = "⛔ <b>ثبت رسید این کاربر بلاک شد.</b>" if block else "♻️ <b>بلاک رسید برداشته شد.</b>"
+        tag = f"{get_emoji('banned')} <b>ثبت رسید این کاربر بلاک شد.</b>" if block else "♻️ <b>بلاک رسید برداشته شد.</b>"
         await query.edit_message_caption(
             caption=(query.message.caption or "") + f"\n\n{tag}", parse_mode="HTML"
         )

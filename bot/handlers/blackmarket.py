@@ -96,7 +96,7 @@ def _render_confirmation_text(preview: dict) -> str:
         f"⏱ مهلت: <code>{deadline_str}</code>\n"
         f"⏳ زمان باقیمانده: <code>{rem_str}</code></blockquote>",
         "━━━━━━━━━━━━━━━━━━━━",
-        "⚠️ <i>آیا از ثبت این پیشنهاد با مبلغ فوق اطمینان دارید؟</i>",
+        f"{get_emoji('warning')} <i>آیا از ثبت این پیشنهاد با مبلغ فوق اطمینان دارید؟</i>",
     ]
     return "\n".join(lines)
 
@@ -240,7 +240,7 @@ async def handle_custom_bid_input(update: Update, context: ContextTypes.DEFAULT_
     auc_id = awaiting.get("auction_id")
     if not norm.isdigit() or int(norm) <= 0:
         context.user_data[AWAITING_PLAYER_KEY] = awaiting
-        await message.reply_text("⚠️ لطفاً فقط یک عدد معتبر ارسال کنید (مثلاً <code>100000</code>).", parse_mode="HTML")
+        await message.reply_text(f"{get_emoji('warning')} لطفاً فقط یک عدد معتبر ارسال کنید (مثلاً <code>100000</code>).", parse_mode="HTML")
         return
 
     bid_amount = int(norm)

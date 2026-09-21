@@ -134,7 +134,7 @@ async def set_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             f"{get_emoji('settings')} <b>تنظیم ایموجی پرمیوم</b>\n"
             "اول یه دسته انتخاب کن، بعد کلید موردنظر رو، بعدش فقط همون <b>ایموجی پرمیوم</b> رو تک و تنها بفرست "
             "(از کیبورد ایموجی «پرمیوم» تلگرام، نه یونیکد معمولی).\n\n"
-            "میان‌بر برای حرفه‌ای‌ها: <code>/set_emoji coin</code> 🪙 (کلید + ایموجی تو یه پیام)\n"
+            f"میان‌بر برای حرفه‌ای‌ها: <code>/set_emoji coin</code> {get_emoji('coin')} (کلید + ایموجی تو یه پیام)\n"
             "برای دیدن نتیجه‌ی فعلی همه‌چیز: /preview_emoji"
         )
         if update.callback_query:
@@ -157,7 +157,7 @@ async def set_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     extracted = _extract_custom_emoji(update.message)
     if extracted is None:
         await update.effective_message.reply_text(
-            "⚠️ هیچ ایموجی پرمیومی توی پیامت پیدا نشد. باید خودِ ایموجی پرمیوم (نه یونیکد معمولی) رو بفرستی — "
+            f"{get_emoji('warning')} هیچ ایموجی پرمیومی توی پیامت پیدا نشد. باید خودِ ایموجی پرمیوم (نه یونیکد معمولی) رو بفرستی — "
             "مطمئن شو اشتراک پرمیومت فعاله و از کیبورد ایموجی «پرمیوم» تلگرام انتخابش کردی، نه ایموجی معمولی."
         )
         return
@@ -244,7 +244,7 @@ async def set_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_T
     ]
     if cat is not None:
         rows.append([back_btn(f"{EMOJI_CAT_PREFIX}{cat}", "↩️ بازگشت به این دسته")])
-    rows.append([back_btn(EMOJI_BACK_CALLBACK, "❌ لغو و بازگشت به دسته‌ها")])
+    rows.append([back_btn(EMOJI_BACK_CALLBACK, f"{get_emoji('cancel')} لغو و بازگشت به دسته‌ها")])
     keyboard = InlineKeyboardMarkup(rows)
 
     await safe_edit_message_text(query,
@@ -293,9 +293,9 @@ async def capture_emoji_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         rows = []
         if cat is not None:
             rows.append([back_btn(f"{EMOJI_CAT_PREFIX}{cat}", "↩️ بازگشت به این دسته")])
-        rows.append([back_btn(EMOJI_BACK_CALLBACK, "❌ لغو و بازگشت به دسته‌ها")])
+        rows.append([back_btn(EMOJI_BACK_CALLBACK, f"{get_emoji('cancel')} لغو و بازگشت به دسته‌ها")])
         await message.reply_text(
-            "⚠️ توی این پیام ایموجی پرمیومی پیدا نکردم. یه ایموجی پرمیوم تک و تنها بفرست.",
+            f"{get_emoji('warning')} توی این پیام ایموجی پرمیومی پیدا نکردم. یه ایموجی پرمیوم تک و تنها بفرست.",
             reply_markup=InlineKeyboardMarkup(rows),
         )
         return
@@ -367,19 +367,19 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = InlineKeyboardMarkup(
         [
             [
-                btn("📊 آمار کلی", style=ADMIN, callback_data="admin_menu:global_stats"),
+                btn(f"{get_emoji('stats')} آمار کلی", style=ADMIN, callback_data="admin_menu:global_stats"),
                 btn("گزارش پیشرفت", emoji_key="btn_report", style=ADMIN, callback_data="admin_menu:report"),
             ],
             [btn("🧾 گزارش خرید (روزانه)", style=ADMIN, callback_data="admin_menu:buy_report")],
             [
                 btn("👥 لیست کاربران", style=ADMIN, callback_data="admin_menu:users"),
-                btn("🔍 جستجوی کاربر", emoji_key="btn_profile", style=ADMIN, callback_data="admin_menu:user_manage"),
+                btn(f"{get_emoji('search')} جستجوی کاربر", emoji_key="btn_profile", style=ADMIN, callback_data="admin_menu:user_manage"),
             ],
             [btn("🕵 چیت‌یاب (جایزه‌گیرهای مشکوک)", style=DANGER, callback_data="admin_menu:cheat")],
-            [btn("🛍 مدیریت فروشگاه (آیتم/پک)", style=ADMIN, callback_data="admin_menu:itemshop")],
+            [btn(f"{get_emoji('shop_item')} مدیریت فروشگاه (آیتم/پک)", style=ADMIN, callback_data="admin_menu:itemshop")],
             [btn("🛒 مدیریت شاپ روزانه (قیمت‌ها)", style=ADMIN, callback_data="admin_menu:dailyshop")],
             [
-                btn("🎁 هدیه به همه", style=ADMIN, callback_data="admin_menu:gift_all"),
+                btn(f"{get_emoji('gift')} هدیه به همه", style=ADMIN, callback_data="admin_menu:gift_all"),
                 btn("ارسال همگانی", emoji_key="btn_broadcast", style=ADMIN, callback_data="admin_menu:broadcast_start"),
             ],
             [btn("حذف موجود", emoji_key="btn_delete", style=DANGER, callback_data="admin_menu:del_creature_start")],
@@ -387,7 +387,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 btn(f"🎨 ایموجی متن‌ها ({txt_set}/{txt_tot})", style=ADMIN, callback_data="admin_menu:set_emoji_start"),
                 btn(f"🎛 ایموجی دکمه‌ها ({btn_set}/{btn_tot})", style=ADMIN, callback_data="admin_menu:button_emoji"),
             ],
-            [btn("🔍 پیش‌نمایش ایموجی‌ها", style=ADMIN, callback_data="admin_menu:preview_emoji")],
+            [btn(f"{get_emoji('search')} پیش‌نمایش ایموجی‌ها", style=ADMIN, callback_data="admin_menu:preview_emoji")],
             [
                 btn("🖼 همه در یک پیام", style=ADMIN, callback_data="admin_menu:all_emojis"),
                 btn("🖼 در چند پیام", style=ADMIN, callback_data="admin_menu:all_emojis_multi"),
@@ -472,7 +472,7 @@ def _autobackup_panel_markup(hours: int, dest_id) -> tuple[str, InlineKeyboardMa
         "یا از یه فایل بکاپ بازیابی کنی.</blockquote>"
     )
     labels = {0: "🚫 خاموش", 6: "6 ساعت", 12: "12 ساعت", 24: "24 ساعت", 48: "48 ساعت"}
-    rows = [[btn(("✅ " if h == hours else "") + labels[h], style=(CONFIRM if h == hours else ADMIN),
+    rows = [[btn((f"{get_emoji('confirm')} " if h == hours else "") + labels[h], style=(CONFIRM if h == hours else ADMIN),
                  callback_data=f"autobk_set:{h}")] for h in _BACKUP_INTERVAL_CHOICES]
     rows.append([btn("⏱ بازه‌ی دلخواه (ساعت)", style=ADMIN, callback_data="autobk_custom")])
     rows.append([
@@ -575,19 +575,19 @@ async def cheat_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 # ── owner-authored item shop management ───────────────────────────────────────
 _ITEMSHOP_HELP = (
-    "🛍 <b>افزودن آیتم به فروشگاه</b>\n\n"
+    f"{get_emoji('shop_item')} <b>افزودن آیتم به فروشگاه</b>\n\n"
     "آیتم رو توی این قالب بفرست (هر خط یه چیز):\n"
     "<blockquote>خط 1: عنوان (می‌تونه با ایموجی شروع شه)\n"
-    "خط 2: قیمت — مثل «قیمت: 19000 جم» یا «قیمت: 5000 سکه 50 جم»\n"
+    "خط 2: قیمت — مثل «قیمت: 19000 جم» یا «قیمت: 5000 طلا 50 جم»\n"
     "خط‌های بعد: محتوا، هرکدوم یکی:\n"
-    "• <code>سکه 10000</code>\n"
+    "• <code>طلا 10000</code>\n"
     "• <code>جم 25</code>\n"
     "• <code>dna 200</code>\n"
     "• <code>کارت 60 3</code>  (کارت سرعت 60دقیقه ×3)\n"
     "• <code>هیولا mythic fire</code>  (عنصر اختیاریه)\n"
     "• <code>تجهیزات weapon legendary</code></blockquote>\n"
     "<b>نمونه پک:</b>\n"
-    "<code>🐉 پک اساطیری\nقیمت: 19000 جم\nسکه 10000\ndna 200\nهیولا mythic fire\nتجهیزات weapon legendary</code>"
+    "<code>🐉 پک اساطیری\nقیمت: 19000 جم\nطلا 10000\ndna 200\nهیولا mythic fire\nتجهیزات weapon legendary</code>"
 )
 
 
@@ -608,7 +608,7 @@ async def itemshop_manage_panel(update: Update, context: ContextTypes.DEFAULT_TY
             await update.callback_query.answer()
         return
     items = await run_db(_itemshop_list_sync)
-    lines = ["🛍 <b>مدیریت فروشگاه آیتم‌ها</b>"]
+    lines = [f"{get_emoji('shop_item')} <b>مدیریت فروشگاه آیتم‌ها</b>"]
     rows = [
         [btn("➕ ساخت آیتم/پک (با دکمه)", style=CONFIRM, callback_data="ish:new")],
         [btn("✍️ افزودن با متن", style=NAV, callback_data="sitem_add")],
@@ -616,13 +616,13 @@ async def itemshop_manage_panel(update: Update, context: ContextTypes.DEFAULT_TY
     if not items:
         lines.append("<i>هنوز آیتمی نساختی.</i>")
     for it in items:
-        state = "🟢" if it["active"] else "🔴"
+        state = f"{get_emoji('poison')}" if it["active"] else "🔴"
         lines.append(f"\n{state} {it['emoji']} <b>{it['title']}</b> — {it['price']}\n   <i>{it['contents']}</i>")
         rows.append([
-            btn("✏️ ویرایش", style=CONFIRM, callback_data=f"sitem_edit:{it['id']}"),
-            btn(("🔴 غیرفعال" if it["active"] else "🟢 فعال"),
+            btn(f"{get_emoji('edit')} ویرایش", style=CONFIRM, callback_data=f"sitem_edit:{it['id']}"),
+            btn(("🔴 غیرفعال" if it["active"] else f"{get_emoji('poison')} فعال"),
                 style=ADMIN, callback_data=f"sitem_toggle:{it['id']}"),
-            btn("🗑 حذف", style=DANGER, callback_data=f"sitem_del:{it['id']}"),
+            btn(f"{get_emoji('delete')} حذف", style=DANGER, callback_data=f"sitem_del:{it['id']}"),
         ])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
     target = update.callback_query.message if update.callback_query else update.effective_message
@@ -650,14 +650,14 @@ _ISH_PRESETS = {
 _ISH_PRICE_DIAMONDS = [10, 50, 100, 200, 300, 500, 800, 1000, 2000]
 _ISH_PRICE_COINS = [1000, 5000, 10000, 50000, 100000, 500000, 1000000]
 _ISH_CTYPE_LABELS = {
-    "coins": "🪙 سکه", "diamonds": "💎 جم", "dna": "🧬 DNA",
-    "speedup": "⏱ کارت سرعت", "creature": "🐉 هیولا", "equipment": "⚔️ تجهیزات",
+    "coins": f"{get_emoji('coin')} طلا", "diamonds": f"{get_emoji('diamond')} جم", "dna": f"{get_emoji('dna')} DNA",
+    "speedup": "⏱ کارت سرعت", "creature": "🐉 هیولا", "equipment": f"{get_emoji('atk')} تجهیزات",
 }
 
 
 def _ish_draft(context) -> dict:
     return context.user_data.setdefault(
-        _ISH_DRAFT, {"title": None, "emoji": "🎁", "price_coins": 0, "price_diamonds": 0, "contents": [], "max_per_user": 0}
+        _ISH_DRAFT, {"title": None, "emoji": f"{get_emoji('gift')}", "price_coins": 0, "price_diamonds": 0, "contents": [], "max_per_user": 0}
     )
 
 
@@ -675,9 +675,9 @@ def _ish_home_markup(draft: dict):
     target = draft.get("target")
     is_daily = target == "daily"
     is_user = target == "user"
-    header = ("🎁 <b>دادن آیتم به کاربر</b>" if is_user
+    header = (f"{get_emoji('gift')} <b>دادن آیتم به کاربر</b>" if is_user
               else "🛒 <b>افزودن آیتم به شاپ روزانه</b>" if is_daily
-              else "✏️ <b>ویرایش آیتم (با دکمه)</b>" if draft.get("edit_id")
+              else f"{get_emoji('edit')} <b>ویرایش آیتم (با دکمه)</b>" if draft.get("edit_id")
               else "🛠 <b>ساخت آیتم/پک (با دکمه)</b>")
     lines = [header, "", f"{draft['emoji']} عنوان: <b>{title}</b>"]
     if not is_user:  # a direct gift to a user has no price
@@ -691,9 +691,9 @@ def _ish_home_markup(draft: dict):
     if is_user:
         lines.append("\n<i>عنوان فقط برای پیامیه که به کاربر می‌ره. محتوا رو انتخاب کن و «بده» رو بزن.</i>")
     text = "\n".join(lines)
-    rows = [[btn("✏️ عنوان", style=ADMIN, callback_data="ish:title")]]
+    rows = [[btn(f"{get_emoji('edit')} عنوان", style=ADMIN, callback_data="ish:title")]]
     if not is_user:
-        rows[0].append(btn("💰 قیمت", style=ADMIN, callback_data="ish:price"))
+        rows[0].append(btn(f"{get_emoji('coin')} قیمت", style=ADMIN, callback_data="ish:price"))
     if not is_daily and not is_user:
         rows.append([btn("🔢 محدودیت خرید", style=ADMIN, callback_data="ish:limit")])
     rows.append([btn("➕ افزودن محتوا", style=CONFIRM, callback_data="ish:addc")])
@@ -704,10 +704,10 @@ def _ish_home_markup(draft: dict):
     else:
         ready = bool(draft["title"]) and (draft["price_coins"] or draft["price_diamonds"]) and draft["contents"]
     if ready:
-        save_label = ("🎁 بده به کاربر" if is_user
-                      else "✅ افزودن به شاپ روزانه" if is_daily
+        save_label = (f"{get_emoji('gift')} بده به کاربر" if is_user
+                      else f"{get_emoji('confirm')} افزودن به شاپ روزانه" if is_daily
                       else "💾 ذخیره‌ی تغییرات" if draft.get("edit_id")
-                      else "✅ ثبت و انتشار آیتم")
+                      else f"{get_emoji('confirm')} ثبت و انتشار آیتم")
         rows.append([btn(save_label, style=CONFIRM, callback_data="ish:save")])
     if is_user:
         back_target = f"admin_uinfo:{draft.get('target_user_id')}"
@@ -715,7 +715,7 @@ def _ish_home_markup(draft: dict):
         back_target = "admin_menu:dailyshop"
     else:
         back_target = "admin_menu:itemshop"
-    rows.append([btn("🗑 پاک‌کردن پیش‌نویس", style=DANGER, callback_data="ish:discard"),
+    rows.append([btn(f"{get_emoji('delete')} پاک‌کردن پیش‌نویس", style=DANGER, callback_data="ish:discard"),
                  back_btn(back_target, "بازگشت")])
     return text, InlineKeyboardMarkup(rows)
 
@@ -753,7 +753,7 @@ async def _ish_ask_name(query, context, pending: dict) -> None:
     # (names are Persian and can't be safely packed into callback_data directly)
     context.user_data["ish_name_options"] = options
     rows = [[btn(f"🏷 {nm}", style=ADMIN, callback_data=f"ish:pname:{i}")] for i, nm in enumerate(options)]
-    rows.append([btn("✏️ اسم کاملاً دلخواه بده", style=NAV, callback_data="ish:name")])
+    rows.append([btn(f"{get_emoji('edit')} اسم کاملاً دلخواه بده", style=NAV, callback_data="ish:name")])
     rows.append([btn("🎲 بدون اسم (تصادفی)", style=CONFIRM, callback_data="ish:noname")])
     await safe_edit_message_text(
         query,
@@ -776,7 +776,7 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
 
     if verb in ("new", "home"):
         if verb == "new":
-            context.user_data[_ISH_DRAFT] = {"title": None, "emoji": "🎁",
+            context.user_data[_ISH_DRAFT] = {"title": None, "emoji": f"{get_emoji('gift')}",
                                              "price_coins": 0, "price_diamonds": 0, "contents": [], "max_per_user": 0}
         await query.answer()
         await _ish_show_home(update, context)
@@ -809,7 +809,7 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
     if verb == "title":
         context.user_data[AWAITING_ADMIN_KEY] = {"action": "ish_title"}
         await query.answer()
-        await query.message.reply_text("✏️ عنوان آیتم رو بفرست (می‌تونه با ایموجی شروع شه):")
+        await query.message.reply_text(f"{get_emoji('edit')} عنوان آیتم رو بفرست (می‌تونه با ایموجی شروع شه):")
         return
     if verb == "price":
         cur = []
@@ -819,8 +819,8 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
             cur.append(f"{draft['price_diamonds']} 💎")
         cur_txt = " + ".join(cur) or "— (تنظیم نشده)"
         rows = [
-            [btn("💎 قیمت جم", style=ADMIN, callback_data="ish:pd"),
-             btn("🪙 قیمت طلا", style=ADMIN, callback_data="ish:pc")],
+            [btn(f"{get_emoji('diamond')} قیمت جم", style=ADMIN, callback_data="ish:pd"),
+             btn(f"{get_emoji('coin')} قیمت طلا", style=ADMIN, callback_data="ish:pc")],
         ]
         if draft["price_coins"] or draft["price_diamonds"]:
             rows.append([btn("🧹 پاک‌کردن قیمت", style=DANGER, callback_data="ish:pclr")])
@@ -834,7 +834,7 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
     if verb in ("pd", "pc"):
         is_dia = verb == "pd"
         presets = _ISH_PRICE_DIAMONDS if is_dia else _ISH_PRICE_COINS
-        label = "💎 جم" if is_dia else "🪙 طلا"
+        label = f"{get_emoji('diamond')} جم" if is_dia else f"{get_emoji('coin')} طلا"
         rows = [[btn(f"{v:,}", style=ADMIN, callback_data=f"ish:{'pdv' if is_dia else 'pcv'}:{v}")]
                 for v in presets]
         rows.append([btn("🔢 مقدار دلخواه", style=NAV, callback_data=f"ish:{'pdx' if is_dia else 'pcx'}")])
@@ -906,7 +906,7 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
             rows.append([btn("🎲 اسلات تصادفی", style=CONFIRM, callback_data="ish:eq:rand")])
             rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:addc")])
             await query.answer()
-            await safe_edit_message_text(query, "⚔️ اسلات تجهیزات رو انتخاب کن (یا تصادفی):", parse_mode="HTML",
+            await safe_edit_message_text(query, f"{get_emoji('atk')} اسلات تجهیزات رو انتخاب کن (یا تصادفی):", parse_mode="HTML",
                                          reply_markup=InlineKeyboardMarkup(rows))
             return
     if verb == "amt":
@@ -1005,7 +1005,7 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
         if context.user_data.get("ish_pending"):
             context.user_data[AWAITING_ADMIN_KEY] = {"action": "ish_cname"}
             await query.answer()
-            await query.message.reply_text("✏️ اسم دلخواه برای این هیولا/تجهیزات رو بفرست:")
+            await query.message.reply_text(f"{get_emoji('edit')} اسم دلخواه برای این هیولا/تجهیزات رو بفرست:")
         else:
             await query.answer()
         return
@@ -1044,13 +1044,13 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
             # nice DM to the recipient
             bal_lines = _balance_lines_for(user, ["coins", "dna", "diamonds"])
             dmed = await _notify_recipient(context, user, notes, bal_lines)
-            await query.answer("🎁 داده شد!")
+            await query.answer(f"{get_emoji('gift')} داده شد!")
             confirm = _admin_op_confirm(
                 user, f"آیتم داده شد ({' + '.join(notes)})",
                 _balance_lines_for(user, ["coins", "dna", "diamonds"]),
             )
             if not dmed:
-                confirm += "\n\n<i>⚠️ پیام به کاربر نرسید (بات رو استارت نزده یا بلاک کرده).</i>"
+                confirm += f"\n\n<i>{get_emoji('warning')} پیام به کاربر نرسید (بات رو استارت نزده یا بلاک کرده).</i>"
             await safe_edit_message_text(
                 query, confirm, parse_mode="HTML",
                 reply_markup=_user_manage_keyboard(user.id, user.is_banned),
@@ -1067,10 +1067,10 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
 
             cost, currency = ((draft["price_diamonds"], "diamonds") if draft["price_diamonds"]
                               else (draft["price_coins"], "coins"))
-            item = await run_db(shop.add_catalog_item, draft["title"], draft.get("emoji", "🎁"),
+            item = await run_db(shop.add_catalog_item, draft["title"], draft.get("emoji", f"{get_emoji('gift')}"),
                                 draft["contents"], cost, currency)
             context.user_data.pop(_ISH_DRAFT, None)
-            await query.answer("✅ به شاپ روزانه اضافه شد!")
+            await query.answer(f"{get_emoji('confirm')} به شاپ روزانه اضافه شد!")
             await safe_edit_message_text(
                 query,
                 f"✅ <b>آیتم به کاتالوگ شاپ روزانه اضافه شد:</b> {item.emoji} {item.title}\n"
@@ -1087,11 +1087,11 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
             item = await run_db(itemshop.create_item_from_draft, draft)
             verb_txt = "ساخته شد"
         context.user_data.pop(_ISH_DRAFT, None)
-        await query.answer("✅ ثبت شد!")
+        await query.answer(f"{get_emoji('confirm')} ثبت شد!")
         await safe_edit_message_text(
             query,
             f"✅ <b>آیتم {verb_txt}:</b> {item.emoji} {item.title}\n"
-            "حالا توی «🛍 آیتم‌های ویژه»ی فروشگاه دیده می‌شه.",
+            f"حالا توی «{get_emoji('shop_item')} آیتم‌های ویژه»ی فروشگاه دیده می‌شه.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[back_btn("admin_menu:itemshop", "بازگشت به مدیریت فروشگاه")]]),
         )
@@ -1110,7 +1110,7 @@ def _itemshop_load_draft_sync(item_id: int) -> dict:
 
 
 async def itemshop_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """«✏️ ویرایش» — load an existing item into the button builder for editing, then save."""
+    f"""«{get_emoji('edit')} ویرایش» — load an existing item into the button builder for editing, then save."""
     query = update.callback_query
     if not _is_admin(update):
         await query.answer()
@@ -1121,7 +1121,7 @@ async def itemshop_edit_callback(update: Update, context: ContextTypes.DEFAULT_T
         await query.answer(str(exc), show_alert=True)
         return
     context.user_data[_ISH_DRAFT] = draft
-    await query.answer("✏️ حالت ویرایش")
+    await query.answer(f"{get_emoji('edit')} حالت ویرایش")
     await _ish_show_home(update, context)
 
 
@@ -1207,7 +1207,7 @@ async def autobackup_now_callback(update: Update, context: ContextTypes.DEFAULT_
             await context.bot.send_document(
                 chat_id=dest, document=fh, filename=meta["name"], caption="💾 بکاپ دستی دیتابیس",
             )
-        await query.message.reply_text("✅ بکاپ ساخته و به مقصد فرستاده شد.")
+        await query.message.reply_text(f"{get_emoji('confirm')} بکاپ ساخته و به مقصد فرستاده شد.")
     except (TelegramError, OSError) as exc:
         await query.message.reply_text(f"⚠️ نشد بکاپ رو بفرستم: {exc}")
 
@@ -1222,7 +1222,7 @@ async def autobackup_restore_start(update: Update, context: ContextTypes.DEFAULT
     await query.message.reply_text(
         "♻️ <b>بازیابی دیتابیس از فایل</b>\n\n"
         "فایل بکاپ (<code>.json.gz</code>) رو همینجا بفرست.\n"
-        "<b>⚠️ هشدار:</b> بازیابی کل دیتای فعلی بازی رو با محتوای فایل <b>جایگزین</b> می‌کنه "
+        f"<b>{get_emoji('warning')} هشدار:</b> بازیابی کل دیتای فعلی بازی رو با محتوای فایل <b>جایگزین</b> می‌کنه "
         "و برگشت‌پذیر نیست. قبلش یه «📤 بکاپ همین حالا» بگیر.\n\n"
         "<i>برای انصراف، هر پیام دیگه‌ای بفرست.</i>",
         parse_mode="HTML",
@@ -1351,7 +1351,7 @@ def _buy_report_text_kb(offset: int):
         sub_parts = []
         for tier, cnt in rep["sub_counts"].items():
             cfg = SUBSCRIPTION_TIERS.get(tier)
-            badge = cfg["badge"] if cfg else "⭐"
+            badge = cfg["badge"] if cfg else f"{get_emoji('star')}"
             name = cfg["name"] if cfg else tier
             sub_parts.append(f"{badge} {name} ×{cnt}")
         if sub_parts:
@@ -1445,7 +1445,7 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 def _user_info_text(data: dict) -> str:
     user = data["user"]
     alliance_name = html.escape(data["alliance_name"]) if data.get("alliance_name") else "ندارد"
-    banned_txt = "🔴 مسدود" if user.is_banned else "🟢 فعال"
+    banned_txt = "🔴 مسدود" if user.is_banned else f"{get_emoji('poison')} فعال"
     joined_txt = timezone.localtime(user.created_at).strftime("%Y-%m-%d")
     creatures = data.get("creatures", [])
     active_c = next((c for c in creatures if c.is_active), None)
@@ -1491,37 +1491,37 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
     return InlineKeyboardMarkup(
         [
             [
-                btn("📊 گزارش طلا", emoji_key="btn_report", style=NAV, callback_data=f"admin_reslog:{target_id}:coins"),
-                btn("🧬 گزارش DNA", emoji_key="btn_report", style=NAV, callback_data=f"admin_reslog:{target_id}:dna"),
-                btn("💎 گزارش الماس", emoji_key="btn_report", style=NAV, callback_data=f"admin_reslog:{target_id}:diamonds"),
+                btn(f"{get_emoji('stats')} گزارش طلا", emoji_key="btn_report", style=NAV, callback_data=f"admin_reslog:{target_id}:coins"),
+                btn(f"{get_emoji('dna')} گزارش DNA", emoji_key="btn_report", style=NAV, callback_data=f"admin_reslog:{target_id}:dna"),
+                btn(f"{get_emoji('diamond')} گزارش الماس", emoji_key="btn_report", style=NAV, callback_data=f"admin_reslog:{target_id}:diamonds"),
             ],
             [btn("🦖 مدیریت موجودات (کلکسیون)", emoji_key="btn_creature", style=PRIMARY, callback_data=f"admin_clist:{target_id}:all:0")],
             [
-                btn("💰 اعطای طلا", style=CONFIRM, callback_data=f"admin_grant:{target_id}:coins"),
-                btn("🧬 اعطای DNA", style=CONFIRM, callback_data=f"admin_grant:{target_id}:dna"),
-                btn("💎 اعطای الماس", style=CONFIRM, callback_data=f"admin_grant:{target_id}:diamonds"),
+                btn(f"{get_emoji('coin')} اعطای طلا", style=CONFIRM, callback_data=f"admin_grant:{target_id}:coins"),
+                btn(f"{get_emoji('dna')} اعطای DNA", style=CONFIRM, callback_data=f"admin_grant:{target_id}:dna"),
+                btn(f"{get_emoji('diamond')} اعطای الماس", style=CONFIRM, callback_data=f"admin_grant:{target_id}:diamonds"),
             ],
             [
-                btn("💰 کسر طلا", style=DANGER, callback_data=f"admin_deduct:{target_id}:coins"),
-                btn("🧬 کسر DNA", style=DANGER, callback_data=f"admin_deduct:{target_id}:dna"),
-                btn("💎 کسر الماس", style=DANGER, callback_data=f"admin_deduct:{target_id}:diamonds"),
+                btn(f"{get_emoji('coin')} کسر طلا", style=DANGER, callback_data=f"admin_deduct:{target_id}:coins"),
+                btn(f"{get_emoji('dna')} کسر DNA", style=DANGER, callback_data=f"admin_deduct:{target_id}:dna"),
+                btn(f"{get_emoji('diamond')} کسر الماس", style=DANGER, callback_data=f"admin_deduct:{target_id}:diamonds"),
             ],
-            [btn("⚡ شارژ کامل (طلا+DNA+الماس)", emoji_key="btn_charge", style=CONFIRM, callback_data=f"admin_charge:{target_id}")],
+            [btn(f"{get_emoji('energy')} شارژ کامل (طلا+DNA+الماس)", emoji_key="btn_charge", style=CONFIRM, callback_data=f"admin_charge:{target_id}")],
             [
-                btn("⭐ مدیریت اشتراک", emoji_key="btn_sub_mgr", style=PRIMARY, callback_data=f"adm_sub_mgr:{target_id}"),
-                btn("📦 اهدای جعبه آرنا", emoji_key="btn_chest_grant", style=PRIMARY, callback_data=f"adm_chest_grant:{target_id}"),
+                btn(f"{get_emoji('star')} مدیریت اشتراک", emoji_key="btn_sub_mgr", style=PRIMARY, callback_data=f"adm_sub_mgr:{target_id}"),
+                btn(f"{get_emoji('gift')} اهدای جعبه آرنا", emoji_key="btn_chest_grant", style=PRIMARY, callback_data=f"adm_chest_grant:{target_id}"),
             ],
-            [btn("🎁 دادن آیتم/کایجو/تجهیز به این کاربر", style=CONFIRM, callback_data=f"admin_give_item:{target_id}")],
+            [btn(f"{get_emoji('gift')} دادن آیتم/کایجو/تجهیز به این کاربر", style=CONFIRM, callback_data=f"admin_give_item:{target_id}")],
             [btn("🦖 اعطای کایجوی دلخواه (سطح/ستاره/تعداد)", style=CONFIRM, callback_data=f"admin_givek:{target_id}")],
-            [btn("🌟 اعطای کایجوی مکس (همه‌چی بیشینه)", style=CONFIRM, callback_data=f"admin_givekmax:{target_id}")],
-            [btn("⚔️ اعطای تجهیزات دلخواه (سطح دلخواه)", style=CONFIRM, callback_data=f"admin_givee:{target_id}")],
+            [btn(f"{get_emoji('status_premium')} اعطای کایجوی مکس (همه‌چی بیشینه)", style=CONFIRM, callback_data=f"admin_givekmax:{target_id}")],
+            [btn(f"{get_emoji('atk')} اعطای تجهیزات دلخواه (سطح دلخواه)", style=CONFIRM, callback_data=f"admin_givee:{target_id}")],
             [
                 btn("🔬 تنظیم سطح آزمایشگاه", emoji_key="btn_lab", style=CONFIRM, callback_data=f"admin_lablevel:{target_id}"),
-                btn("🏆 تنظیم کاپ", style=CONFIRM, callback_data=f"admin_setcup:{target_id}"),
+                btn(f"{get_emoji('trophy')} تنظیم کاپ", style=CONFIRM, callback_data=f"admin_setcup:{target_id}"),
             ],
-            [btn("🏗 مکس‌کردن ساختمان‌ها", style=CONFIRM, callback_data=f"admin_maxbld:{target_id}")],
+            [btn(f"{get_emoji('building')} مکس‌کردن ساختمان‌ها", style=CONFIRM, callback_data=f"admin_maxbld:{target_id}")],
             [
-                btn("📊 لاگ پیشرفت", emoji_key="btn_report", style=ADMIN, callback_data=f"admin_plog:{target_id}"),
+                btn(f"{get_emoji('stats')} لاگ پیشرفت", emoji_key="btn_report", style=ADMIN, callback_data=f"admin_plog:{target_id}"),
                 btn("✉️ پیام", style=ADMIN, callback_data=f"admin_dm:{target_id}"),
             ],
             [ban_button],
@@ -1532,7 +1532,7 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
 
 
 async def user_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Power-user shortcut — the advertised path is the admin panel's «👤 مدیریت
+    f"""Power-user shortcut — the advertised path is the admin panel's «{get_emoji('status_default')} مدیریت
     کاربر» button, which also attaches quick grant/deduct/ban action buttons."""
     if not _is_admin(update):
         return
@@ -1553,8 +1553,8 @@ async def user_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def charge_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """One-shot multi-resource top-up: /charge <user> <gold> <dna> <diamonds>.
-    The advertised path is the admin panel's «⚡ شارژ کامل» button."""
+    f"""One-shot multi-resource top-up: /charge <user> <gold> <dna> <diamonds>.
+    The advertised path is the admin panel's «{get_emoji('energy')} شارژ کامل» button."""
     if not _is_admin(update):
         return
     if len(context.args) != 4 or not all(_is_signed_int(a) for a in context.args[1:]):
@@ -1703,7 +1703,7 @@ def _delete_creature_confirm_keyboard(creature_id: int) -> InlineKeyboardMarkup:
 
 
 async def delete_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Power-user shortcut — the advertised path is the admin panel's «🗑 حذف موجود» button."""
+    f"""Power-user shortcut — the advertised path is the admin panel's «{get_emoji('delete')} حذف موجود» button."""
     if not _is_admin(update):
         return
     if not context.args or not context.args[0].isdigit():
@@ -1910,7 +1910,7 @@ def _player_log_text(d: dict) -> str:
 
 
 async def player_log_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Power-user shortcut for «📊 لاگ پیشرفت». Accepts a numeric id, @username, or
+    f"""Power-user shortcut for «{get_emoji('stats')} لاگ پیشرفت». Accepts a numeric id, @username, or
     lab name."""
     if not _is_admin(update):
         return
@@ -1956,9 +1956,9 @@ def _resource_log_data(target_id, field):
 
 
 _RESLOG_META = {
-    "diamonds": ("💎", "الماس", "الماس دریافتی"),
-    "coins": ("🪙", "طلا", "طلای دریافتی"),
-    "dna": ("🧬", "دی‌ان‌ای", "DNA دریافتی"),
+    "diamonds": (f"{get_emoji('diamond')}", "الماس", "الماس دریافتی"),
+    "coins": (f"{get_emoji('coin')}", "طلا", "طلای دریافتی"),
+    "dna": (f"{get_emoji('dna')}", "دیانای", "DNA دریافتی"),
 }
 
 
@@ -2017,9 +2017,9 @@ async def resource_log_callback(update: Update, context: ContextTypes.DEFAULT_TY
     lines.append("")
     lines.append(f"📊 <b>مجموع ۷ روز اخیر:</b> <code>+{log['total']:,}</code> {icon}")
 
-    c_btn = "• 🪙 طلا •" if field == "coins" else "🪙 طلا"
-    dna_btn = "• 🧬 DNA •" if field == "dna" else "🧬 DNA"
-    dia_btn = "• 💎 الماس •" if field == "diamonds" else "💎 الماس"
+    c_btn = f"• {get_emoji('coin')} طلا •" if field == "coins" else f"{get_emoji('coin')} طلا"
+    dna_btn = f"• {get_emoji('dna')} DNA •" if field == "dna" else f"{get_emoji('dna')} DNA"
+    dia_btn = f"• {get_emoji('diamond')} الماس •" if field == "diamonds" else f"{get_emoji('diamond')} الماس"
 
     keyboard = InlineKeyboardMarkup(
         [
@@ -2053,8 +2053,8 @@ def _render_creatures_page(data: dict) -> tuple[str, InlineKeyboardMarkup]:
         lines.append("<i>موجودی با این مشخصات یافت نشد.</i>")
     else:
         for idx, c in enumerate(creatures, start=page * 6 + 1):
-            active_mark = " ✅ <b>(فعال)</b>" if c["is_active"] else ""
-            stars = "⭐" * c["star_level"]
+            active_mark = f" {get_emoji('confirm')} <b>(فعال)</b>" if c["is_active"] else ""
+            stars = f"{get_emoji('star')}" * c["star_level"]
             lines.append(
                 f"<b>{idx}. #{c['id']} {html.escape(c['name'])}</b> ({c['rarity_label']} {stars}){active_mark}\n"
                 f"   🎖 سطح: <b>{c['level']}</b> · 💪 قدرت: <b>{c['power']:,}</b> · ⚡ عنصر: <b>{c['element']}</b>"
@@ -2083,7 +2083,7 @@ def _render_creatures_page(data: dict) -> tuple[str, InlineKeyboardMarkup]:
     for i in range(0, len(creatures), 2):
         pair = []
         for c in creatures[i : i + 2]:
-            act = " ✅" if c["is_active"] else ""
+            act = f" {get_emoji('confirm')}" if c["is_active"] else ""
             pair.append(btn(f"#{c['id']} {c['name']} Lv{c['level']}{act}", callback_data=f"admin_cview:{user.id}:{c['id']}:{rarity}:{page}"))
         c_rows.append(pair)
 
@@ -2110,8 +2110,8 @@ def _render_creature_view(data: dict, target_id: str | int, rarity: str, page: i
     equip = data["equipment"]
 
     rarity_lbl = constants.RARITY_LABELS.get(c.rarity, c.rarity)
-    stars = "⭐" * (c.star_level or 1)
-    act_badge = "🟢 <b>کایجوی فعال کاربر</b>" if c.is_active else "⚪ <b>غیرفعال در کلکسیون</b>"
+    stars = f"{get_emoji('star')}" * (c.star_level or 1)
+    act_badge = f"{get_emoji('poison')} <b>کایجوی فعال کاربر</b>" if c.is_active else f"{get_emoji('sub_silver')} <b>غیرفعال در کلکسیون</b>"
 
     lines = [
         f"🦖 <b>مدیریت موجود #{c.id} — {html.escape(c.name)}</b>",
@@ -2120,11 +2120,11 @@ def _render_creature_view(data: dict, target_id: str | int, rarity: str, page: i
         f"🎖 سطح: <b>{c.level}</b> · 🧪 تجربه (XP): <b>{c.xp:,}</b>",
         f"💪 قدرت کل: <b>{power:,}</b> · {act_badge}",
         "",
-        "📊 <b>مشخصات رزمی:</b>",
+        f"{get_emoji('stats')} <b>مشخصات رزمی:</b>",
         f"  ❤️ سلامت: <b>{stats['hp']:,}</b> · ⚔️ حمله: <b>{stats['atk']:,}</b>",
         f"  🛡 دفاع: <b>{stats['def']:,}</b> · ⚡ سرعت: <b>{stats['spd']:,}</b>",
         "",
-        "🧬 <b>سطح اندام‌ها و ارتقاها:</b>",
+        f"{get_emoji('dna')} <b>سطح اندام‌ها و ارتقاها:</b>",
         f"  🦋 بال‌ها: <b>{c.wings_lvl}</b> · 🛡 زره: <b>{c.armor_lvl}</b>",
         f"  🦷 نیش: <b>{c.fangs_lvl}</b> · ☠️ غدد سمی: <b>{c.poison_lvl}</b>",
     ]
@@ -2142,10 +2142,10 @@ def _render_creature_view(data: dict, target_id: str | int, rarity: str, page: i
         [
             [
                 btn("📉 ضعیف کردن (سطح ۱)", style=DANGER, callback_data=f"admin_cweaken:{target_id}:{c.id}:{rarity}:{page}"),
-                btn("🗑 حذف موجود", style=DANGER, callback_data=f"admin_cdel:{target_id}:{c.id}:{rarity}:{page}"),
+                btn(f"{get_emoji('delete')} حذف موجود", style=DANGER, callback_data=f"admin_cdel:{target_id}:{c.id}:{rarity}:{page}"),
             ],
             [
-                btn("🔄 انتقال به کاربر دیگر", style=CONFIRM, callback_data=f"admin_cxfer:{target_id}:{c.id}:{rarity}:{page}"),
+                btn(f"{get_emoji('refresh')} انتقال به کاربر دیگر", style=CONFIRM, callback_data=f"admin_cxfer:{target_id}:{c.id}:{rarity}:{page}"),
             ],
             [
                 back_btn(f"admin_clist:{target_id}:{rarity}:{page}", "بازگشت به لیست موجودات"),
@@ -2231,7 +2231,7 @@ async def admin_cweaken_do_callback(update: Update, context: ContextTypes.DEFAUL
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer("✅ کایجو با موفقیت ضعیف شد.", show_alert=True)
+    await query.answer(f"{get_emoji('confirm')} کایجو با موفقیت ضعیف شد.", show_alert=True)
     try:
         data = await run_db(admin_creature_view_data, int(cid))
     except GameError as exc:
@@ -2250,7 +2250,7 @@ async def admin_cdel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     text = (
         f"🛑 <b>آیا از حذف دائمی کایجوی #{cid} مطمئن هستید؟</b>\n\n"
-        "⚠️ این عملیات <b>غیرقابل بازگشت</b> است و کایجو برای همیشه حذف خواهد شد!\n"
+        f"{get_emoji('warning')} این عملیات <b>غیرقابل بازگشت</b> است و کایجو برای همیشه حذف خواهد شد!\n"
         "(در صورت وجود تجهیزات، آنها به انبار کاربر بازمی‌گردند)"
     )
     keyboard = InlineKeyboardMarkup(
@@ -2360,7 +2360,7 @@ def _render_sub_mgr_text(user: User, info: dict) -> str:
         ]
     else:
         lines += [
-            "وضعیت: <b>غیرفعال ❌</b> (فاقد اشتراک فعال)",
+            f"وضعیت: <b>غیرفعال {get_emoji('cancel')}</b> (فاقد اشتراک فعال)",
             "<i>می‌توانید با دکمه‌های زیر اشتراک دلخواه را برای این کاربر فعال یا تمدید کنید.</i>",
         ]
     lines.append("━━━━━━━━━━━━━━━━━━━━")
@@ -2370,8 +2370,8 @@ def _render_sub_mgr_text(user: User, info: dict) -> str:
 def _render_sub_mgr_keyboard(target_id: int, info: dict) -> InlineKeyboardMarkup:
     rows = [
         [
-            btn("🥈 فعال‌سازی نقره‌ای (۳۰ روز)", emoji_key="btn_sub_silver", style=PRIMARY, callback_data=f"adm_sub_set:{target_id}:silver:30"),
-            btn("👑 فعال‌سازی طلایی (۳۰ روز)", emoji_key="btn_sub_gold", style=CONFIRM, callback_data=f"adm_sub_set:{target_id}:gold:30"),
+            btn(f"{get_emoji('chest_silver')} فعال‌سازی نقره‌ای (۳۰ روز)", emoji_key="btn_sub_silver", style=PRIMARY, callback_data=f"adm_sub_set:{target_id}:silver:30"),
+            btn(f"{get_emoji('sub_vip')} فعال‌سازی طلایی (۳۰ روز)", emoji_key="btn_sub_gold", style=CONFIRM, callback_data=f"adm_sub_set:{target_id}:gold:30"),
         ],
         [
             btn("➕ تمدید ۳۰ روز", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"adm_sub_ext:{target_id}:30"),
@@ -2380,7 +2380,7 @@ def _render_sub_mgr_keyboard(target_id: int, info: dict) -> InlineKeyboardMarkup
     ]
     if info["is_active"]:
         rows.append([
-            btn("❌ لغو اشتراک کاربر", emoji_key="btn_cancel", style=DANGER, callback_data=f"adm_sub_cancel:{target_id}"),
+            btn(f"{get_emoji('cancel')} لغو اشتراک کاربر", emoji_key="btn_cancel", style=DANGER, callback_data=f"adm_sub_cancel:{target_id}"),
         ])
     rows.append([back_btn(f"admin_userback:{target_id}", "بازگشت به اطلاعات کاربر")])
     return InlineKeyboardMarkup(rows)
@@ -2480,7 +2480,7 @@ async def adm_sub_cancel_callback(update: Update, context: ContextTypes.DEFAULT_
     except Exception as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer("❌ اشتراک کاربر لغو شد.", show_alert=True)
+    await query.answer(f"{get_emoji('cancel')} اشتراک کاربر لغو شد.", show_alert=True)
     text = _render_sub_mgr_text(user, info)
     kb = _render_sub_mgr_keyboard(target_id, info)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
@@ -2509,7 +2509,7 @@ def _render_chest_grant_text(user: User, chests: list) -> str:
         c = slots_map.get(slot)
         if c:
             cfg = ARENA_CHEST_TIERS.get(c.chest_type, {})
-            c_emoji = get_emoji(f"chest_{c.chest_type}", cfg.get("emoji", "📦"))
+            c_emoji = get_emoji(f"chest_{c.chest_type}", cfg.get("emoji", f"{get_emoji('gift')}"))
             name = cfg.get("name", c.chest_type)
             if c.status == "ready":
                 st = f"{get_emoji('gift')} آماده باز کردن"
@@ -2534,12 +2534,12 @@ def _render_chest_grant_text(user: User, chests: list) -> str:
 def _render_chest_grant_keyboard(target_id: int) -> InlineKeyboardMarkup:
     rows = [
         [
-            btn("🥈 اهدای نقره‌ای", emoji_key="btn_chest_silver", style=PRIMARY, callback_data=f"adm_chest_give:{target_id}:silver"),
-            btn("🥇 اهدای طلایی", emoji_key="btn_chest_golden", style=CONFIRM, callback_data=f"adm_chest_give:{target_id}:golden"),
+            btn(f"{get_emoji('chest_silver')} اهدای نقره‌ای", emoji_key="btn_chest_silver", style=PRIMARY, callback_data=f"adm_chest_give:{target_id}:silver"),
+            btn(f"{get_emoji('chest_golden')} اهدای طلایی", emoji_key="btn_chest_golden", style=CONFIRM, callback_data=f"adm_chest_give:{target_id}:golden"),
         ],
         [
-            btn("🔮 اهدای جادویی", emoji_key="btn_chest_magical", style=PRIMARY, callback_data=f"adm_chest_give:{target_id}:magical"),
-            btn("👑 اهدای مگا", emoji_key="btn_chest_mega", style=CONFIRM, callback_data=f"adm_chest_give:{target_id}:mega"),
+            btn(f"{get_emoji('chest_magical')} اهدای جادویی", emoji_key="btn_chest_magical", style=PRIMARY, callback_data=f"adm_chest_give:{target_id}:magical"),
+            btn(f"{get_emoji('sub_vip')} اهدای مگا", emoji_key="btn_chest_mega", style=CONFIRM, callback_data=f"adm_chest_give:{target_id}:mega"),
         ],
         [back_btn(f"admin_userback:{target_id}", "بازگشت به اطلاعات کاربر")],
     ]
@@ -2601,7 +2601,7 @@ async def preview_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     lines = [
-        "🔍 <b>پیش‌نمایش نمونه</b> (شبیه کارت موجود واقعی):\n",
+        f"{get_emoji('search')} <b>پیش‌نمایش نمونه</b> (شبیه کارت موجود واقعی):\n",
         f"{get_emoji('creature')} <b>Pyrofang</b>  <code>#1</code>",
         f"{constants.element_label('fire')} · سطح 5",
         "",
@@ -2740,7 +2740,7 @@ def _channel_card(channel) -> str:
         reward_parts.append(f"{channel.reward_dna} {get_emoji('dna')}")
     if channel.reward_diamonds:
         reward_parts.append(f"{channel.reward_diamonds} {get_emoji('diamond')}")
-    reward = f"🎁 {' + '.join(reward_parts)}" if reward_parts else "🎁 بدون جایزه"
+    reward = f"🎁 {' + '.join(reward_parts)}" if reward_parts else f"{get_emoji('gift')} بدون جایزه"
     handle = f"@{channel.username}" if channel.username else str(channel.chat_id)
     link_line = f"🔗 لینک: {channel.invite_link}" if channel.invite_link else "🔗 لینک: <i>تنظیم نشده</i>"
     return (
@@ -2766,7 +2766,7 @@ def _channel_manage_keyboard(channel_id: int) -> InlineKeyboardMarkup:
                 btn("⏳ دلخواه", style=ADMIN, callback_data=f"fj_dur:{channel_id}"),
             ],
             [
-                btn("🎁 تنظیم جایزه", style=CONFIRM, callback_data=f"fj_reward:{channel_id}"),
+                btn(f"{get_emoji('gift')} تنظیم جایزه", style=CONFIRM, callback_data=f"fj_reward:{channel_id}"),
                 btn("🔗 لینک عضویت", style=ADMIN, callback_data=f"fj_link:{channel_id}"),
             ],
             [btn("حذف", emoji_key="btn_delete", style=DANGER, callback_data=f"fj_rm:{channel_id}")],
@@ -2801,7 +2801,7 @@ async def force_join_add_callback(update: Update, context: ContextTypes.DEFAULT_
     context.user_data[AWAITING_FORCE_JOIN_KEY] = {"action": "add_channel"}
     await query.answer()
     await safe_edit_message_text(query,
-        "🟢 <b>افزودن جوین اجباری</b>\n\n"
+        f"{get_emoji('poison')} <b>افزودن جوین اجباری</b>\n\n"
         "یکی از این‌ها رو بفرست:\n"
         "• برای <b>کانال</b>: یه پیام رو مستقیم از خودِ کانال <b>فوروارد</b> کن.\n"
         "• برای <b>گروه</b> یا کانالِ عمومی: آی‌دی عددی (مثل <code>-1001234567890</code>) یا "
@@ -2959,7 +2959,7 @@ async def capture_force_join_reply(update: Update, context: ContextTypes.DEFAULT
             if ident is None:
                 context.user_data[AWAITING_FORCE_JOIN_KEY] = awaiting  # keep waiting
                 await message.reply_text(
-                    "⚠️ یا یه پیام رو از خودِ کانال فوروارد کن، یا آی‌دی عددی (مثل "
+                    f"{get_emoji('warning')} یا یه پیام رو از خودِ کانال فوروارد کن، یا آی‌دی عددی (مثل "
                     "<code>-1001234567890</code>) / <code>@username</code> / لینک عمومیِ t.me رو بفرست. "
                     "برای گروهِ خصوصی، آی‌دی عددیش رو بده.",
                     parse_mode="HTML",
@@ -2993,7 +2993,7 @@ async def capture_force_join_reply(update: Update, context: ContextTypes.DEFAULT
             link = "https://t.me/" + link[1:]
         if not (link.startswith("http") or link.startswith("t.me/")):
             context.user_data[AWAITING_FORCE_JOIN_KEY] = awaiting
-            await message.reply_text("⚠️ یه لینک معتبر بفرست، مثل <code>https://t.me/+AbCdEf</code>.", parse_mode="HTML")
+            await message.reply_text(f"{get_emoji('warning')} یه لینک معتبر بفرست، مثل <code>https://t.me/+AbCdEf</code>.", parse_mode="HTML")
             return
         try:
             channel = await run_db(set_invite_link, channel_id, link)
@@ -3014,7 +3014,7 @@ async def capture_force_join_reply(update: Update, context: ContextTypes.DEFAULT
             hours = int(text)
         else:
             context.user_data[AWAITING_FORCE_JOIN_KEY] = awaiting
-            await message.reply_text("⚠️ یه عدد مثبت بفرست (ساعت)، یا بنویس «نامحدود».")
+            await message.reply_text(f"{get_emoji('warning')} یه عدد مثبت بفرست (ساعت)، یا بنویس «نامحدود».")
             return
         try:
             channel = await run_db(set_duration, channel_id, hours)
@@ -3033,7 +3033,7 @@ async def capture_force_join_reply(update: Update, context: ContextTypes.DEFAULT
         if len(parts) not in (2, 3) or not all(p.isdigit() for p in parts):
             context.user_data[AWAITING_FORCE_JOIN_KEY] = awaiting
             await message.reply_text(
-                "⚠️ سه عدد با فاصله بفرست، مثلاً: <code>50 5 2</code>", parse_mode="HTML"
+                f"{get_emoji('warning')} سه عدد با فاصله بفرست، مثلاً: <code>50 5 2</code>", parse_mode="HTML"
             )
             return
         coins, dna = int(parts[0]), int(parts[1])
@@ -3188,7 +3188,7 @@ async def btn_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_T
     ]
     if cat is not None:
         rows.append([back_btn(f"{BTN_EMOJI_CAT_PREFIX}{cat}", "↩️ بازگشت به این دسته")])
-    rows.append([back_btn(BTN_EMOJI_BACK, "❌ لغو و بازگشت به دسته‌ها")])
+    rows.append([back_btn(BTN_EMOJI_BACK, f"{get_emoji('cancel')} لغو و بازگشت به دسته‌ها")])
     keyboard = InlineKeyboardMarkup(rows)
 
     await safe_edit_message_text(
@@ -3237,9 +3237,9 @@ async def capture_button_emoji_reply(update: Update, context: ContextTypes.DEFAU
         rows = []
         if cat is not None:
             rows.append([back_btn(f"{BTN_EMOJI_CAT_PREFIX}{cat}", "↩️ بازگشت به این دسته")])
-        rows.append([back_btn(BTN_EMOJI_BACK, "❌ لغو و بازگشت به دسته‌ها")])
+        rows.append([back_btn(BTN_EMOJI_BACK, f"{get_emoji('cancel')} لغو و بازگشت به دسته‌ها")])
         await message.reply_text(
-            "⚠️ توی این پیام ایموجی پرمیومی پیدا نکردم. یه ایموجی پرمیوم تک و تنها بفرست.",
+            f"{get_emoji('warning')} توی این پیام ایموجی پرمیومی پیدا نکردم. یه ایموجی پرمیوم تک و تنها بفرست.",
             reply_markup=InlineKeyboardMarkup(rows),
         )
         return
@@ -3349,7 +3349,7 @@ async def user_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def gift_all_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data[AWAITING_ADMIN_KEY] = {"action": "gift_all"}
     await update.effective_message.reply_text(
-        "🎁 <b>هدیه به همه‌ی کاربران</b>\n"
+        f"{get_emoji('gift')} <b>هدیه به همه‌ی کاربران</b>\n"
         "سه عدد با فاصله بفرست: <code>طلا DNA الماس</code>\n"
         "مثلاً <code>1000 50 10</code> (هرکدوم رو نخواستی، صفر بذار).",
         parse_mode="HTML",
@@ -3414,9 +3414,9 @@ def _group_link_sync() -> tuple[str, str]:
 
 
 def _group_link_panel_keyboard(has_link: bool) -> InlineKeyboardMarkup:
-    rows = [[btn("✏️ تنظیم/تغییر لینک گروه", style=PRIMARY, callback_data="admin_menu:group_link_set")]]
+    rows = [[btn(f"{get_emoji('edit')} تنظیم/تغییر لینک گروه", style=PRIMARY, callback_data="admin_menu:group_link_set")]]
     if has_link:
-        rows.append([btn("🗑 حذف دکمه‌ی گروه", style=DANGER, callback_data="admin_menu:group_link_clear")])
+        rows.append([btn(f"{get_emoji('delete')} حذف دکمه‌ی گروه", style=DANGER, callback_data="admin_menu:group_link_clear")])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
     return InlineKeyboardMarkup(rows)
 
@@ -3454,7 +3454,7 @@ async def group_link_set_start(update: Update, context: ContextTypes.DEFAULT_TYP
 async def group_link_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await run_db(botconfig.set_group_link, "", "")
     await update.effective_message.reply_text(
-        "✅ دکمه‌ی گروه حذف شد.", reply_markup=_group_link_panel_keyboard(False)
+        f"{get_emoji('confirm')} دکمه‌ی گروه حذف شد.", reply_markup=_group_link_panel_keyboard(False)
     )
 
 
@@ -3479,15 +3479,15 @@ def _buy_cfg_sync() -> dict:
 
 def _buy_link_panel_keyboard(has_link: bool) -> InlineKeyboardMarkup:
     rows = [
-        [btn("🎁 مدیریت پک‌ها (تخفیف/قیمت)", style=CONFIRM, callback_data="admin_menu:packs")],
+        [btn(f"{get_emoji('gift')} مدیریت پک‌ها (تخفیف/قیمت)", style=CONFIRM, callback_data="admin_menu:packs")],
         [btn("💵 تنظیم قیمت‌ها (خرید درون‌ربات)", style=PRIMARY, callback_data="admin_menu:buy_prices_set")],
         [btn("💳 تنظیم کارت پرداخت", style=PRIMARY, callback_data="admin_menu:buy_card_set")],
         [btn("🎚 تنظیم حداقل خرید", style=PRIMARY, callback_data="admin_menu:buy_min_set")],
-        [btn("📢 کانال گزارش خرید", style=ADMIN, callback_data="admin_menu:buy_channel_set")],
+        [btn(f"{get_emoji('broadcast')} کانال گزارش خرید", style=ADMIN, callback_data="admin_menu:buy_channel_set")],
         [btn("🔗 تنظیم/تغییر لینک خرید بیرونی", style=NAV, callback_data="admin_menu:buy_link_set")],
     ]
     if has_link:
-        rows.append([btn("🗑 حذف لینک خرید بیرونی", style=DANGER, callback_data="admin_menu:buy_link_clear")])
+        rows.append([btn(f"{get_emoji('delete')} حذف لینک خرید بیرونی", style=DANGER, callback_data="admin_menu:buy_link_clear")])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
     return InlineKeyboardMarkup(rows)
 
@@ -3495,7 +3495,7 @@ def _buy_link_panel_keyboard(has_link: bool) -> InlineKeyboardMarkup:
 def _buy_panel_text(cfg: dict) -> str:
     p = cfg["prices"]
     card_num, card_holder = cfg["card"]
-    status = "✅ فعال (درون‌ربات)" if cfg["inbot_ready"] else "⛔ غیرفعال (کارت یا قیمت ثبت نشده)"
+    status = f"{get_emoji('confirm')} فعال (درون‌ربات)" if cfg["inbot_ready"] else f"{get_emoji('banned')} غیرفعال (کارت یا قیمت ثبت نشده)"
     body_lines = [
         "🛒 <b>خرید درون‌بازی</b>",
         f"وضعیت خرید درون‌ربات: <b>{status}</b>",
@@ -3554,7 +3554,7 @@ async def buy_channel_set_start(update: Update, context: ContextTypes.DEFAULT_TY
     cur_line = f"کانال فعلی: <code>{cur}</code>\n\n" if cur else "الان کانالی تنظیم نشده (فقط به پیوی مالک می‌ره).\n\n"
     context.user_data[AWAITING_ADMIN_KEY] = {"action": "set_buy_channel"}
     await update.effective_message.reply_text(
-        "📢 <b>کانال گزارش خرید</b>\n"
+        f"{get_emoji('broadcast')} <b>کانال گزارش خرید</b>\n"
         f"{cur_line}"
         "یه پیام از اون کانال رو همین‌جا <b>فوروارد</b> کن، یا آیدی عددی کانال رو بفرست "
         "(مثل <code>-1001234567890</code>).\n"
@@ -3577,7 +3577,7 @@ async def buy_link_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.effective_message.reply_text(
         "🛒 لینک خرید رو بفرست (هر لینکی — پست کانال، بات پرداخت، سایت...).\n\n"
         "اگه می‌خوای متن دکمه هم عوض شه، بعد از لینک یه <code>|</code> بذار و متن دلخواه رو بنویس:\n"
-        "<code>https://t.me/mychannel/12 | 💎 خرید الماس</code>",
+        f"<code>https://t.me/mychannel/12 | {get_emoji('diamond')} خرید الماس</code>",
         parse_mode="HTML",
     )
 
@@ -3585,19 +3585,19 @@ async def buy_link_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def buy_link_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await run_db(botconfig.set_buy_link, "", "")
     await update.effective_message.reply_text(
-        "✅ دکمه‌ی خرید حذف شد.", reply_markup=_buy_link_panel_keyboard(False)
+        f"{get_emoji('confirm')} دکمه‌ی خرید حذف شد.", reply_markup=_buy_link_panel_keyboard(False)
     )
 
 
 # ── purchase pack manager ─────────────────────────────────────────────────────
 
 _PACK_HELP = (
-    "🎁 <b>ساخت پک خرید</b>\n\n"
+    f"{get_emoji('gift')} <b>ساخت پک خرید</b>\n\n"
     "پک رو در <b>یک خط</b> بفرست، فیلدها با <code>|</code> جدا:\n"
     "<code>عنوان | طلا | DNA | الماس | قیمت(تومان) | تخفیف٪</code>\n\n"
     "نمونه‌ها:\n"
     "<code>پک برنزی | 100000 | 0 | 50 | 90000 | 10</code>\n"
-    "<code>💎 پک الماس | 0 | 0 | 500 | 250000 | 20</code>\n\n"
+    f"<code>{get_emoji('diamond')} پک الماس | 0 | 0 | 500 | 250000 | 20</code>\n\n"
     "<i>• تخفیف اختیاریه (پیش‌فرض ۰). فقط برای نمایش «٪ تخفیف» و قیمتِ خط‌خورده‌ست؛ "
     "مبلغی که کاربر می‌پردازه همون «قیمت»ه.\n"
     "• می‌تونی عنوان رو با ایموجی شروع کنی.</i>"
@@ -3605,7 +3605,7 @@ _PACK_HELP = (
 
 
 def _pack_line(p: dict) -> str:
-    state = "🟢" if p["active"] else "🔴"
+    state = f"{get_emoji('poison')}" if p["active"] else "🔴"
     disc = f" · 🔥{p['discount']}٪" if p["discount"] > 0 else ""
     return (f"{state} {p['emoji']} <b>{p['title']}</b> — {p['price']:,} ت{disc}\n"
             f"   <i>{p['contents']}</i>")
@@ -3617,7 +3617,7 @@ async def packs_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await update.callback_query.answer()
         return
     packs = await run_db(purchase.list_all_packs)
-    lines = ["🎁 <b>مدیریت پک‌های خرید</b>",
+    lines = [f"{get_emoji('gift')} <b>مدیریت پک‌های خرید</b>",
              "<i>پک‌ها با قیمت ثابت و یک‌ضربه خریده می‌شن. برای فعال‌شدن، «کارت پرداخت» هم باید ثبت باشه.</i>", ""]
     rows = [[btn("➕ ساخت پک جدید", style=CONFIRM, callback_data="pack_new")]]
     if not packs:
@@ -3625,9 +3625,9 @@ async def packs_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     for p in packs:
         lines.append(_pack_line(p))
         rows.append([
-            btn("✏️ ویرایش", style=ADMIN, callback_data=f"pack_edit:{p['id']}"),
-            btn(("🔴 غیرفعال" if p["active"] else "🟢 فعال"), style=NAV, callback_data=f"pack_toggle:{p['id']}"),
-            btn("🗑 حذف", style=DANGER, callback_data=f"pack_del:{p['id']}"),
+            btn(f"{get_emoji('edit')} ویرایش", style=ADMIN, callback_data=f"pack_edit:{p['id']}"),
+            btn(("🔴 غیرفعال" if p["active"] else f"{get_emoji('poison')} فعال"), style=NAV, callback_data=f"pack_toggle:{p['id']}"),
+            btn(f"{get_emoji('delete')} حذف", style=DANGER, callback_data=f"pack_del:{p['id']}"),
         ])
     rows.append([back_btn("admin_menu:buy_link", "بازگشت به تنظیمات خرید")])
     target = update.callback_query.message if update.callback_query else update.effective_message
@@ -3658,7 +3658,7 @@ async def pack_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.answer()
     template = f"{p['title']} | {p['coins']} | {p['dna']} | {p['diamonds']} | {p['price']} | {p['discount']}"
     await query.message.reply_text(
-        "✏️ <b>ویرایش پک</b>\n\nخط زیر رو کپی کن، مقدارها رو عوض کن و بفرست:\n"
+        f"{get_emoji('edit')} <b>ویرایش پک</b>\n\nخط زیر رو کپی کن، مقدارها رو عوض کن و بفرست:\n"
         f"<code>{html.escape(template)}</code>\n\n"
         "<i>قالب: عنوان | طلا | DNA | الماس | قیمت | تخفیف٪</i>",
         parse_mode="HTML",
@@ -3676,7 +3676,7 @@ async def pack_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer("🟢 فعال شد." if p["active"] else "🔴 غیرفعال شد.")
+    await query.answer(f"{get_emoji('poison')} فعال شد." if p["active"] else "🔴 غیرفعال شد.")
     await packs_panel(update, context)
 
 
@@ -3689,10 +3689,10 @@ async def pack_delete_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
     await safe_edit_message_text(
         query,
-        "🗑 <b>حذف پک</b>\nمطمئنی؟ این کار برگشت‌ناپذیره.",
+        f"{get_emoji('delete')} <b>حذف پک</b>\nمطمئنی؟ این کار برگشت‌ناپذیره.",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
-            [btn("🗑 بله، حذف کن", style=DANGER, callback_data=f"pack_delok:{pack_id}")],
+            [btn(f"{get_emoji('delete')} بله، حذف کن", style=DANGER, callback_data=f"pack_delok:{pack_id}")],
             [back_btn("admin_menu:packs", "انصراف")],
         ]),
     )
@@ -3705,7 +3705,7 @@ async def pack_delete_confirm_callback(update: Update, context: ContextTypes.DEF
         return
     pack_id = int(query.data.split(":")[1])
     await run_db(purchase.delete_pack, pack_id)
-    await query.answer("🗑 حذف شد.")
+    await query.answer(f"{get_emoji('delete')} حذف شد.")
     await packs_panel(update, context)
 
 
@@ -3748,7 +3748,7 @@ def _charge_summary(new_values: dict) -> str:
 def _admin_op_confirm(user, change_desc: str, balance_lines: list[str]) -> str:
     """The admin-facing 'operation done' receipt (matches the requested format)."""
     lines = [
-        "✅ <b>عملیات با موفقیت انجام شد</b>",
+        f"{get_emoji('confirm')} <b>عملیات با موفقیت انجام شد</b>",
         "",
         f"👤 کاربر هدف: <b>{display_name(user)}</b>",
         f"🎁 تغییرات: {change_desc}",
@@ -3761,7 +3761,7 @@ def _recipient_reward_dm(user, reward_bits: list[str], balance_lines: list[str])
     """The gamey DM the RECIPIENT gets, so they know a reward landed."""
     rewards = " + ".join(reward_bits) if reward_bits else "پاداش ویژه"
     lines = [
-        "💎 <b>واریز پاداش اختصاصی!</b>",
+        f"{get_emoji('diamond')} <b>واریز پاداش اختصاصی!</b>",
         "",
         f"👤 سلام {display_name(user)} عزیز،",
         f"🎁 خزانه‌ی شما شارژ شد و {rewards} به حسابت نشست!",
@@ -3832,9 +3832,9 @@ def _pending_op_screen(op: dict) -> tuple[str, InlineKeyboardMarkup]:
             "\nتأیید می‌کنی؟",
         ]
     kb = InlineKeyboardMarkup([
-        [btn("✅ تأیید و اعمال", style=CONFIRM, callback_data="opc:confirm")],
-        [btn("✏️ تغییر مقدار", style=NAV, callback_data="opc:edit"),
-         btn("❌ لغو", style=DANGER, callback_data="opc:cancel")],
+        [btn(f"{get_emoji('confirm')} تأیید و اعمال", style=CONFIRM, callback_data="opc:confirm")],
+        [btn(f"{get_emoji('edit')} تغییر مقدار", style=NAV, callback_data="opc:edit"),
+         btn(f"{get_emoji('cancel')} لغو", style=DANGER, callback_data="opc:cancel")],
     ])
     return "\n".join(lines), kb
 
@@ -3874,7 +3874,7 @@ async def admin_op_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             context.user_data[AWAITING_ADMIN_KEY] = {"action": "charge", "target_id": op["target_id"]}
             await query.answer()
             await query.message.reply_text(
-                "✏️ سه عدد جدید با فاصله بفرست: طلا DNA الماس (مثلاً <code>1000 50 20</code>).",
+                f"{get_emoji('edit')} سه عدد جدید با فاصله بفرست: طلا DNA الماس (مثلاً <code>1000 50 20</code>).",
                 parse_mode="HTML",
             )
         else:
@@ -3902,7 +3902,7 @@ async def admin_op_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 dmed = await _notify_recipient(context, user, [reward], bal_lines)
                 confirm = _admin_op_confirm(user, f"اعطا شد ({reward})", bal_lines)
                 if not dmed:
-                    confirm += "\n\n<i>⚠️ پیام به کاربر نرسید (بات رو استارت نزده یا بلاک کرده).</i>"
+                    confirm += f"\n\n<i>{get_emoji('warning')} پیام به کاربر نرسید (بات رو استارت نزده یا بلاک کرده).</i>"
             else:
                 confirm = _admin_op_confirm(user, f"کسر شد ({op['amount']:,} {label})", bal_lines)
             await safe_edit_message_text(
@@ -3923,9 +3923,9 @@ async def admin_op_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 dmed = await _notify_recipient(context, user, reward_bits, _balance_lines_for(user, positive))
             confirm = f"{get_emoji('confirm')} <b>{display_name(user)}</b> شارژ شد!\n\n" + _charge_summary(new_values)
             if dmed is False:
-                confirm += "\n\n<i>⚠️ پیام به کاربر نرسید (بات رو استارت نزده یا بلاک کرده).</i>"
+                confirm += f"\n\n<i>{get_emoji('warning')} پیام به کاربر نرسید (بات رو استارت نزده یا بلاک کرده).</i>"
             elif dmed:
-                confirm += "\n\n<i>✅ پیام اطلاع‌رسانی برای کاربر هم فرستاده شد.</i>"
+                confirm += f"\n\n<i>{get_emoji('confirm')} پیام اطلاع‌رسانی برای کاربر هم فرستاده شد.</i>"
             await safe_edit_message_text(
                 query, confirm, parse_mode="HTML",
                 reply_markup=_user_manage_keyboard(user.id, user.is_banned),
@@ -3941,7 +3941,7 @@ async def admin_give_item_start(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer()
         return
     target_id = query.data.split(":")[1]
-    context.user_data[_ISH_DRAFT] = {"title": None, "emoji": "🎁", "price_coins": 0,
+    context.user_data[_ISH_DRAFT] = {"title": None, "emoji": f"{get_emoji('gift')}", "price_coins": 0,
                                      "price_diamonds": 0, "contents": [], "max_per_user": 0,
                                      "target": "user", "target_user_id": target_id}
     await query.answer()
@@ -3980,7 +3980,7 @@ async def admin_givekmax_callback(update: Update, context: ContextTypes.DEFAULT_
     await query.answer()
     await safe_edit_message_text(
         query,
-        "🌟 <b>اعطای کایجوی مکس</b>\n"
+        f"{get_emoji('status_premium')} <b>اعطای کایجوی مکس</b>\n"
         "یه خط بفرست به این شکل:\n"
         "<code>&lt;نایابی&gt; &lt;تعداد&gt; &lt;نام گونه&gt;</code>\n\n"
         "مثال: <code>mythic 3 کرکس دریا</code>\n"
@@ -4000,7 +4000,7 @@ async def admin_givee_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
     await safe_edit_message_text(
         query,
-        "⚔️ <b>اعطای تجهیزات دلخواه</b>\n"
+        f"{get_emoji('atk')} <b>اعطای تجهیزات دلخواه</b>\n"
         "یه خط بفرست به این شکل:\n"
         "<code>&lt;جایگاه&gt; &lt;نایابی&gt; &lt;سطح&gt; &lt;تعداد&gt;</code>\n\n"
         "مثال: <code>weapon mythic 25 2</code>\n"
@@ -4019,11 +4019,11 @@ async def admin_maxbld_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
     await safe_edit_message_text(
         query,
-        "🏗 <b>مکس‌کردن ساختمان‌ها</b>\n"
+        f"{get_emoji('building')} <b>مکس‌کردن ساختمان‌ها</b>\n"
         f"مطمئنی؟ همه‌ی ساختمان‌های این کاربر به سطح بیشینه می‌رسن.",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
-            [btn("✅ آره، مکس کن", style=CONFIRM, callback_data=f"admin_maxbld_do:{target_id}")],
+            [btn(f"{get_emoji('confirm')} آره، مکس کن", style=CONFIRM, callback_data=f"admin_maxbld_do:{target_id}")],
             [btn("انصراف", style=DANGER, callback_data=f"admin_userback:{target_id}")],
         ]),
     )
@@ -4044,7 +4044,7 @@ async def admin_maxbld_do_callback(update: Update, context: ContextTypes.DEFAULT
         await query.answer(str(exc), show_alert=True)
         return
     u = res["user"]
-    await query.answer("🏗 ساختمان‌ها مکس شدند!")
+    await query.answer(f"{get_emoji('building')} ساختمان‌ها مکس شدند!")
     await safe_edit_message_text(
         query,
         f"{get_emoji('confirm')} همه‌ی <b>{res['count']}</b> ساختمانِ <b>{display_name(u)}</b> "
@@ -4120,7 +4120,7 @@ async def admin_setcup_callback(update: Update, context: ContextTypes.DEFAULT_TY
     context.user_data[AWAITING_ADMIN_KEY] = {"action": "set_cup", "target_id": target_id}
     await query.answer()
     await safe_edit_message_text(
-        query, "🏆 مقدار کاپ جدید رو بفرست (یه عدد ۰ یا بیشتر):", parse_mode="HTML"
+        query, f"{get_emoji('trophy')} مقدار کاپ جدید رو بفرست (یه عدد ۰ یا بیشتر):", parse_mode="HTML"
     )
 
 
@@ -4154,7 +4154,7 @@ async def admin_unban_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer("✅ رفع شد.")
+    await query.answer(f"{get_emoji('confirm')} رفع شد.")
     await safe_edit_message_text(query,
         _user_info_text(data), parse_mode="HTML", reply_markup=_user_manage_keyboard(user.id, False)
     )
@@ -4185,10 +4185,10 @@ def _dshop_home_render(days, energy_cost) -> tuple[str, InlineKeyboardMarkup]:
     ]
     rows = [[btn(f"⚡ تغییر هزینه شارژ انرژی ({energy_cost} 💎)", style=PRIMARY, callback_data="dshop:energy")]]
     for d in days:
-        tag = "✅ تنظیم‌شده" if d["configured"] else "⚪️ پیش‌فرض (چرخشی)"
+        tag = f"{get_emoji('confirm')} تنظیم‌شده" if d["configured"] else f"{get_emoji('sub_silver')}️ پیش‌فرض (چرخشی)"
         rows.append([btn(f"🗓 {d['label']} — {tag}", style=ADMIN, callback_data=f"dshop:day:{d['offset']}")])
     rows.append([btn("➕ افزودن آیتم جدید (کایجو/تجهیز/…)", style=CONFIRM, callback_data="dshop:additem")])
-    rows.append([btn("🗑 حذف دائمی آیتم از کاتالوگ", style=DANGER, callback_data="dshop:dellist")])
+    rows.append([btn(f"{get_emoji('delete')} حذف دائمی آیتم از کاتالوگ", style=DANGER, callback_data="dshop:dellist")])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -4206,7 +4206,7 @@ async def dailyshop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 def _cur_glyph(currency: str) -> str:
-    return "💎" if currency == "diamonds" else "🪙"
+    return f"{get_emoji('diamond')}" if currency == "diamonds" else f"{get_emoji('coin')}"
 
 
 def _limit_label(n: int) -> str:
@@ -4240,13 +4240,13 @@ def _dshop_day_render(draft: dict) -> tuple[str, InlineKeyboardMarkup]:
         rows.append([
             btn(f"{s['emoji']} {s['title']}: {s['cost']:,} {cur} · {lim}", style=(ADMIN if s["active"] else NAV),
                 callback_data=f"dshop:pp:{s['key']}"),
-            btn("🟢" if s["active"] else "🔴", style=(CONFIRM if s["active"] else DANGER),
+            btn(f"{get_emoji('poison')}" if s["active"] else "🔴", style=(CONFIRM if s["active"] else DANGER),
                 callback_data=f"dshop:tog:{s['key']}"),
         ])
     rows.append([btn("📋 کپی این روز به روز دیگر", style=SHOP, callback_data="dshop:copymenu")])
     rows.append([
-        btn("✅ تأیید و ذخیره", style=CONFIRM, callback_data="dshop:save"),
-        btn("❌ لغو", style=DANGER, callback_data="dshop:cancel"),
+        btn(f"{get_emoji('confirm')} تأیید و ذخیره", style=CONFIRM, callback_data="dshop:save"),
+        btn(f"{get_emoji('cancel')} لغو", style=DANGER, callback_data="dshop:cancel"),
     ])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -4282,7 +4282,7 @@ def _dshop_price_render(draft: dict, key: str) -> tuple[str, InlineKeyboardMarku
     rows.append([btn("🔢 قیمت دلخواه", style=NAV, callback_data=f"dshop:cx:{key}")])
     # per-day purchase limit: 1 / 2 / unlimited (the active one is marked)
     def _lim_btn(n, label):
-        mark = "✅ " if cur_limit == n else ""
+        mark = f"{get_emoji('confirm')} " if cur_limit == n else ""
         return btn(f"{mark}{label}", style=(CONFIRM if cur_limit == n else NAV),
                    callback_data=f"dshop:lim:{key}:{n}")
     lines.append("\n🛒 <b>تعداد قابل خرید (در روز):</b>")
@@ -4322,13 +4322,13 @@ async def dailyshop_builder_callback(update: Update, context: ContextTypes.DEFAU
         context.user_data[AWAITING_ADMIN_KEY] = {"action": "energy_cost"}
         await query.answer()
         await query.message.reply_text(
-            "⚡ هزینه‌ی جدید شارژ کامل انرژی رو به <b>الماس</b> بفرست (فقط عدد، مثلاً <code>25</code>):",
+            f"{get_emoji('energy')} هزینه‌ی جدید شارژ کامل انرژی رو به <b>الماس</b> بفرست (فقط عدد، مثلاً <code>25</code>):",
             parse_mode="HTML",
         )
         return
 
     if verb == "additem":  # start the item builder, targeting the daily-shop catalog
-        context.user_data[_ISH_DRAFT] = {"title": None, "emoji": "🎁", "price_coins": 0,
+        context.user_data[_ISH_DRAFT] = {"title": None, "emoji": f"{get_emoji('gift')}", "price_coins": 0,
                                          "price_diamonds": 0, "contents": [], "max_per_user": 0,
                                          "target": "daily"}
         await query.answer()
@@ -4343,7 +4343,7 @@ async def dailyshop_builder_callback(update: Update, context: ContextTypes.DEFAU
         await query.answer()
         await safe_edit_message_text(
             query,
-            "🗑 <b>حذف دائمی آیتم از کاتالوگ شاپ روزانه</b>\n\n"
+            f"{get_emoji('delete')} <b>حذف دائمی آیتم از کاتالوگ شاپ روزانه</b>\n\n"
             "<blockquote>کدوم آیتم برای همیشه حذف بشه؟ از همه‌ی روزها هم پاک می‌شه و "
             "دیگه برنمی‌گرده.</blockquote>",
             parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows),
@@ -4364,15 +4364,15 @@ async def dailyshop_builder_callback(update: Update, context: ContextTypes.DEFAU
             f"⚠️ آیتم «{it['emoji']} {it['title']}» برای همیشه حذف بشه؟",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([
-                [btn("✅ بله، حذف کن", style=DANGER, callback_data=f"dshop:delc:{key}")],
-                [btn("❌ نه", style=NAV, callback_data="dshop:dellist")],
+                [btn(f"{get_emoji('confirm')} بله، حذف کن", style=DANGER, callback_data=f"dshop:delc:{key}")],
+                [btn(f"{get_emoji('cancel')} نه", style=NAV, callback_data="dshop:dellist")],
             ]),
         )
         return
 
     if verb == "delc":  # do the permanent delete
         await run_db(shop.delete_catalog_item, parts[2])
-        await query.answer("🗑 حذف شد.", show_alert=True)
+        await query.answer(f"{get_emoji('delete')} حذف شد.", show_alert=True)
         await dailyshop_panel_from_query(query, context)
         return
 
@@ -4465,7 +4465,7 @@ async def dailyshop_builder_callback(update: Update, context: ContextTypes.DEFAU
         context.user_data[AWAITING_ADMIN_KEY] = {"action": "dshop_custom", "key": parts[2]}
         await query.answer()
         await query.message.reply_text(
-            "🔢 قیمت دلخواه رو بفرست، مثل <code>30 جم</code> یا <code>1000 سکه</code>:",
+            "🔢 قیمت دلخواه رو بفرست، مثل <code>30 جم</code> یا <code>1000 طلا</code>:",
             parse_mode="HTML",
         )
         return
@@ -4473,7 +4473,7 @@ async def dailyshop_builder_callback(update: Update, context: ContextTypes.DEFAU
     if verb == "save":
         await run_db(shop.save_day, draft["slot"], draft["states"])
         context.user_data.pop(_DSHOP_DRAFT, None)
-        await query.answer("✅ ذخیره شد!", show_alert=True)
+        await query.answer(f"{get_emoji('confirm')} ذخیره شد!", show_alert=True)
         await dailyshop_panel_from_query(query, context)
         return
 
@@ -4585,7 +4585,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         u = res["user"]
         await message.reply_text(
             f"{get_emoji('confirm')} <b>{res['count']}× {res['species']}</b> "
-            f"[{constants.RARITY_LABELS[res['rarity']]}] {'⭐' * res['star']} سطح {res['level']} "
+            f"[{constants.RARITY_LABELS[res['rarity']]}] {f'{get_emoji('star')}' * res['star']} سطح {res['level']} "
             f"به <b>{display_name(u)}</b> داده شد.",
             parse_mode="HTML",
             reply_markup=_user_manage_keyboard(u.id, u.is_banned),
@@ -4604,7 +4604,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         u = res["user"]
         await message.reply_text(
             f"{get_emoji('confirm')} <b>{res['count']}× {res['species']}</b> "
-            f"[{constants.RARITY_LABELS[res['rarity']]}] {'⭐' * res['star']} سطح {res['level']} "
+            f"[{constants.RARITY_LABELS[res['rarity']]}] {f'{get_emoji('star')}' * res['star']} سطح {res['level']} "
             f"🌟 <b>مکس کامل</b> (اعضا هم بیشینه) به <b>{display_name(u)}</b> داده شد.",
             parse_mode="HTML",
             reply_markup=_user_manage_keyboard(u.id, u.is_banned),
@@ -4634,7 +4634,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         parts = text.split()
         if len(parts) != 3 or not all(p.lstrip("-").isdigit() for p in parts):
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text("⚠️ سه عدد با فاصله بفرست، مثلاً: <code>1000 50 10</code>", parse_mode="HTML")
+            await message.reply_text(f"{get_emoji('warning')} سه عدد با فاصله بفرست، مثلاً: <code>1000 50 10</code>", parse_mode="HTML")
             return
         coins, dna, diamonds = (int(p) for p in parts)
         try:
@@ -4670,7 +4670,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         try:
             await context.bot.send_message(chat_id=target_id, text=f"✉️ <b>پیام از مدیریت:</b>\n\n{text}", parse_mode="HTML")
         except TelegramError:
-            await message.reply_text("⚠️ نشد بفرستم — احتمالاً کاربر بات رو بلاک کرده یا استارت نزده.")
+            await message.reply_text(f"{get_emoji('warning')} نشد بفرستم — احتمالاً کاربر بات رو بلاک کرده یا استارت نزده.")
             return
         await message.reply_text(f"✅ پیام به کاربر <code>{target_id}</code> فرستاده شد.", parse_mode="HTML")
         return
@@ -4698,7 +4698,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
     if action == "set_cup":
         if not text.isdigit():
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text("⚠️ یه عدد ۰ یا بیشتر بفرست.")
+            await message.reply_text(f"{get_emoji('warning')} یه عدد ۰ یا بیشتر بفرست.")
             return
         try:
             user, new_cup = await run_db(set_cup, awaiting["target_id"], int(text))
@@ -4715,7 +4715,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
     if action in ("grant", "deduct"):
         if not text.isdigit() or int(text) <= 0:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text("⚠️ یه عدد مثبت بفرست.")
+            await message.reply_text(f"{get_emoji('warning')} یه عدد مثبت بفرست.")
             return
         try:
             name = await run_db(_display_name_sync, awaiting["target_id"])
@@ -4733,12 +4733,12 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         parts = text.split()
         if len(parts) != 3 or not all(_is_signed_int(p) for p in parts):
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text("⚠️ سه عدد با فاصله بفرست، مثلاً: <code>1000 50 20</code>", parse_mode="HTML")
+            await message.reply_text(f"{get_emoji('warning')} سه عدد با فاصله بفرست، مثلاً: <code>1000 50 20</code>", parse_mode="HTML")
             return
         coins, dna, diamonds = (int(p) for p in parts)
         if coins == 0 and dna == 0 and diamonds == 0:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text("⚠️ حداقل یکی از مقدارها باید غیرصفر باشه.")
+            await message.reply_text(f"{get_emoji('warning')} حداقل یکی از مقدارها باید غیرصفر باشه.")
             return
         try:
             name = await run_db(_display_name_sync, awaiting["target_id"])
@@ -4755,7 +4755,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
     if action == "delete_creature":
         if not text.isdigit():
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text("⚠️ یه شماره‌ی معتبر بفرست.")
+            await message.reply_text(f"{get_emoji('warning')} یه شماره‌ی معتبر بفرست.")
             return
         creature_id = int(text)
         try:
@@ -4784,7 +4784,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         if not (url.startswith("http://") or url.startswith("https://")):
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
             await message.reply_text(
-                "⚠️ لینک معتبر نیست. باید با <code>https://</code> شروع شه یا مثل "
+                f"{get_emoji('warning')} لینک معتبر نیست. باید با <code>https://</code> شروع شه یا مثل "
                 "<code>https://t.me/mygroup</code> باشه. دوباره بفرست:",
                 parse_mode="HTML",
             )
@@ -4810,12 +4810,12 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
                 p = await run_db(purchase.update_pack, awaiting["pack_id"],
                                  fields["title"], fields["coins"], fields["dna"], fields["diamonds"],
                                  fields["price_toman"], fields["discount_percent"])
-                note = "✅ پک ویرایش شد."
+                note = f"{get_emoji('confirm')} پک ویرایش شد."
             else:
                 p = await run_db(purchase.create_pack,
                                  fields["title"], fields["coins"], fields["dna"], fields["diamonds"],
                                  fields["price_toman"], fields["discount_percent"])
-                note = "✅ پک ساخته شد."
+                note = f"{get_emoji('confirm')} پک ساخته شد."
         except GameError as exc:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
             await message.reply_text(f"⚠️ {exc}", parse_mode="HTML")
@@ -4830,17 +4830,17 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             coins, dna, diamonds = (float(parts[0]), float(parts[1]), float(parts[2]))
         except (ValueError, IndexError):
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text("⚠️ سه عدد با فاصله بفرست: طلا DNA الماس (مثلاً <code>0.2 5 50</code>).", parse_mode="HTML")
+            await message.reply_text(f"{get_emoji('warning')} سه عدد با فاصله بفرست: طلا DNA الماس (مثلاً <code>0.2 5 50</code>).", parse_mode="HTML")
             return
         await run_db(botconfig.set_buy_prices, coins, dna, diamonds)
-        await _show_buy_panel(update, "✅ قیمت‌ها ثبت شد.")
+        await _show_buy_panel(update, f"{get_emoji('confirm')} قیمت‌ها ثبت شد.")
         return
 
     if action == "set_buy_min":
         raw = text.replace(",", "").replace("،", "").replace("٬", "").strip()
         if not raw.isdigit():
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text("⚠️ فقط یه عدد بفرست (تومان)، مثلاً <code>50000</code>.", parse_mode="HTML")
+            await message.reply_text(f"{get_emoji('warning')} فقط یه عدد بفرست (تومان)، مثلاً <code>50000</code>.", parse_mode="HTML")
             return
         await run_db(botconfig.set_buy_min, int(raw))
         note = f"حداقل خرید روی {int(raw):,} تومان تنظیم شد." if int(raw) > 0 else "حداقل خرید برداشته شد."
@@ -4863,7 +4863,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             if not (raw.lstrip("-").isdigit()):
                 context.user_data[AWAITING_ADMIN_KEY] = awaiting
                 await message.reply_text(
-                    "⚠️ یا یه پیام از کانال رو فوروارد کن، یا آیدی عددی کانال رو بفرست "
+                    f"{get_emoji('warning')} یا یه پیام از کانال رو فوروارد کن، یا آیدی عددی کانال رو بفرست "
                     "(مثل <code>-1001234567890</code>)، یا <code>0</code> برای حذف.",
                     parse_mode="HTML",
                 )
@@ -4873,7 +4873,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         if channel_id:
             # verify the bot can post there
             try:
-                probe = await context.bot.send_message(chat_id=channel_id, text="✅ کانال گزارش خرید تنظیم شد.")
+                probe = await context.bot.send_message(chat_id=channel_id, text=f"{get_emoji('confirm')} کانال گزارش خرید تنظیم شد.")
                 try:
                     await context.bot.delete_message(chat_id=channel_id, message_id=probe.message_id)
                 except Exception:  # noqa: BLE001
@@ -4892,10 +4892,10 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         number = "".join(ch for ch in num_part if ch.isdigit())
         if len(number) < 12:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text("⚠️ شماره کارت معتبر نیست (حداقل ۱۲ رقم). دوباره بفرست.")
+            await message.reply_text(f"{get_emoji('warning')} شماره کارت معتبر نیست (حداقل ۱۲ رقم). دوباره بفرست.")
             return
         await run_db(botconfig.set_buy_card, number, holder_part.strip())
-        await _show_buy_panel(update, "✅ کارت ثبت شد.")
+        await _show_buy_panel(update, f"{get_emoji('confirm')} کارت ثبت شد.")
         return
 
     if action == "set_buy_link":
@@ -4908,7 +4908,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         if not (url.startswith("http://") or url.startswith("https://")):
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
             await message.reply_text(
-                "⚠️ لینک معتبر نیست. باید با <code>https://</code> شروع شه. دوباره بفرست:",
+                f"{get_emoji('warning')} لینک معتبر نیست. باید با <code>https://</code> شروع شه. دوباره بفرست:",
                 parse_mode="HTML",
             )
             return
@@ -4925,7 +4925,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         digits = text.strip()
         if not digits.isdigit() or int(digits) > 720:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text("⚠️ یه عدد ساعت بین 0 تا 720 بفرست (0 = خاموش).")
+            await message.reply_text(f"{get_emoji('warning')} یه عدد ساعت بین 0 تا 720 بفرست (0 = خاموش).")
             return
         hours = int(digits)
         await run_db(botconfig.set_backup_interval, hours)
@@ -4940,14 +4940,14 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         if not _is_signed_int(raw):
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
             await message.reply_text(
-                "⚠️ یه chat id معتبر بفرست (مثلاً <code>-1001234567890</code>) یا <code>0</code> برای پیوی مالک.",
+                f"{get_emoji('warning')} یه chat id معتبر بفرست (مثلاً <code>-1001234567890</code>) یا <code>0</code> برای پیوی مالک.",
                 parse_mode="HTML",
             )
             return
         chat_id = int(raw)
         await run_db(botconfig.set_backup_chat_id, None if chat_id == 0 else chat_id)
         if chat_id == 0:
-            await message.reply_text("✅ مقصد بکاپ شد پیوی مالک.")
+            await message.reply_text(f"{get_emoji('confirm')} مقصد بکاپ شد پیوی مالک.")
         else:
             await message.reply_text(
                 f"✅ مقصد بکاپ شد <code>{chat_id}</code>. مطمئن شو بات اونجا می‌تونه فایل بفرسته.",
@@ -4957,7 +4957,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if action == "ish_title":
         draft = _ish_draft(context)
-        emoji = "🎁"
+        emoji = f"{get_emoji('gift')}"
         t = text.strip()
         first = t.split()[0] if t.split() else ""
         if first and any(ord(ch) > 0x2600 for ch in first) and len(first) <= 4:
@@ -4979,7 +4979,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         digits = text.strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
         if not digits.isdigit():
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text("⚠️ یه عدد بفرست (0 = نامحدود).")
+            await message.reply_text(f"{get_emoji('warning')} یه عدد بفرست (0 = نامحدود).")
             return
         _ish_draft(context)["max_per_user"] = int(digits)
         await _ish_show_home(update, context, edit=False)
@@ -5028,7 +5028,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
                 s["cost"], s["currency"], s["active"] = max(0, cost), currency, True
                 break
         text_out, keyboard = _dshop_day_render(draft)
-        await message.reply_text("✅ قیمت ثبت شد.\n\n" + text_out, parse_mode="HTML", reply_markup=keyboard)
+        await message.reply_text(f"{get_emoji('confirm')} قیمت ثبت شد.\n\n" + text_out, parse_mode="HTML", reply_markup=keyboard)
         return
 
     if action == "dshop_limit":
@@ -5039,21 +5039,21 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         digits = text.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
         if not digits.isdigit():
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text("⚠️ یه عدد صحیح بفرست (0 = نامحدود).")
+            await message.reply_text(f"{get_emoji('warning')} یه عدد صحیح بفرست (0 = نامحدود).")
             return
         for s in draft["states"]:
             if s["key"] == awaiting["key"]:
                 s["limit"], s["active"] = max(0, int(digits)), True
                 break
         text_out, keyboard = _dshop_day_render(draft)
-        await message.reply_text("✅ سقف خرید ثبت شد.\n\n" + text_out, parse_mode="HTML", reply_markup=keyboard)
+        await message.reply_text(f"{get_emoji('confirm')} سقف خرید ثبت شد.\n\n" + text_out, parse_mode="HTML", reply_markup=keyboard)
         return
 
     if action == "energy_cost":
         digits = text.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
         if not digits.isdigit() or int(digits) <= 0:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text("⚠️ یه عدد مثبت (الماس) بفرست، مثلاً <code>25</code>.", parse_mode="HTML")
+            await message.reply_text(f"{get_emoji('warning')} یه عدد مثبت (الماس) بفرست، مثلاً <code>25</code>.", parse_mode="HTML")
             return
         await run_db(botconfig.set_energy_refill_cost, int(digits))
         days, energy_cost = await run_db(_dshop_home_sync)
@@ -5068,7 +5068,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         digits = text.strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
         if not digits.isdigit() or int(digits) <= 0:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text("⚠️ یه عدد مثبت بفرست.")
+            await message.reply_text(f"{get_emoji('warning')} یه عدد مثبت بفرست.")
             return
         _ish_draft(context)["contents"].append({"type": awaiting["kind"], "amount": int(digits)})
         await _ish_show_home(update, context, edit=False)
@@ -5091,7 +5091,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"✅ <b>آیتم ساخته شد:</b> {item.emoji} {item.title}\n"
             f"قیمت: {itemshop.price_text(item)}\n"
             f"محتوا: {itemshop.content_summary(spec['contents'])}\n\n"
-            "حالا توی «🛍 آیتم‌های ویژه»ی فروشگاه برای بازیکن‌ها دیده می‌شه.",
+            f"حالا توی «{get_emoji('shop_item')} آیتم‌های ویژه»ی فروشگاه برای بازیکن‌ها دیده می‌شه.",
             parse_mode="HTML",
         )
         return
@@ -5129,11 +5129,11 @@ async def capture_restore_upload(update: Update, context: ContextTypes.DEFAULT_T
     document = message.document
     if document is None:
         context.user_data.pop(AWAITING_RESTORE_KEY, None)
-        await message.reply_text("❌ بازیابی لغو شد (فایلی نفرستادی).")
+        await message.reply_text(f"{get_emoji('cancel')} بازیابی لغو شد (فایلی نفرستادی).")
         return
     if document.file_size and document.file_size > 60 * 1024 * 1024:
         context.user_data.pop(AWAITING_RESTORE_KEY, None)
-        await message.reply_text("⚠️ فایل خیلی بزرگه (بیشتر از 60 مگابایت).")
+        await message.reply_text(f"{get_emoji('warning')} فایل خیلی بزرگه (بیشتر از 60 مگابایت).")
         return
 
     context.user_data.pop(AWAITING_RESTORE_KEY, None)
@@ -5141,7 +5141,7 @@ async def capture_restore_upload(update: Update, context: ContextTypes.DEFAULT_T
         tg_file = await context.bot.get_file(document.file_id)
         raw = await tg_file.download_as_bytearray()
     except TelegramError:
-        await message.reply_text("⚠️ نشد فایل رو دانلود کنم. دوباره امتحان کن.")
+        await message.reply_text(f"{get_emoji('warning')} نشد فایل رو دانلود کنم. دوباره امتحان کن.")
         return
 
     def _validate_and_store():
@@ -5162,7 +5162,7 @@ async def capture_restore_upload(update: Update, context: ContextTypes.DEFAULT_T
         f"فایل: <code>{meta['name']}</code>\n"
         f"ساخته‌شده: <code>{created}</code>\n"
         f"تعداد رکورد: <b>{count}</b>\n\n"
-        "<b>⚠️ این کل دیتای فعلی بازی رو جایگزین می‌کنه و برگشت‌پذیر نیست.</b>",
+        f"<b>{get_emoji('warning')} این کل دیتای فعلی بازی رو جایگزین می‌کنه و برگشت‌پذیر نیست.</b>",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
             [btn("♻️ بله، بازیابی کن", style=DANGER, callback_data=f"autobk_restore_do:{meta['name']}")],

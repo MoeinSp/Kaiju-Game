@@ -1,4 +1,4 @@
-"""«⚔️ تیم من» — pick up to three creatures for 3v3 team battles (the campaign).
+f"""«{get_emoji('atk')} تیم من» — pick up to three creatures for 3v3 team battles (the campaign).
 
 A toggle picker: tap a creature to add it to the team, tap again to remove. The
 panel shows the current squad, its team power, and any same-element synergy.
@@ -64,12 +64,12 @@ def _render(view: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKe
     from bot.handlers.private import creature_picker_frame
 
     lines = [
-        "⚔️ <b>تیم من</b>  (برای دانجن و نبرد تیمی)",
+        f"{get_emoji('atk')} <b>تیم من</b>  (برای دانجن و نبرد تیمی)",
         "━━━━━━━━━━━━━━━━━━━━"
     ]
     if view["members"]:
         for c in view["members"]:
-            lines.append(f"  {constants.RARITY_LABELS[c.rarity]} <b>{c.name}</b> {'⭐' * c.star_level} · Lv{c.level}")
+            lines.append(f"  {constants.RARITY_LABELS[c.rarity]} <b>{c.name}</b> {f'{get_emoji('star')}' * c.star_level} · Lv{c.level}")
         lines.append(f"\n💪 قدرت تیم: <b>{view['power']:,}</b>")
         if view["synergy"]:
             lines.append("✨ <b>هم‌افزایی عنصری فعاله!</b> (+۱۰٪ حمله چون هر ۳ هم‌عنصر هستن)")
@@ -87,7 +87,7 @@ def _render(view: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKe
     rows = list(tab_rows)
     for c in chunk:
         in_team = c.id in view["member_ids"]
-        mark = "✅ " if in_team else ""
+        mark = f"{get_emoji('confirm')} " if in_team else ""
         power = c.base_hp + c.base_atk + c.base_def + c.base_spd
         rarity_short = constants.RARITY_LABELS[c.rarity].split()[0]
         rows.append([

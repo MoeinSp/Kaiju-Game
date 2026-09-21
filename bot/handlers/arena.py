@@ -97,33 +97,33 @@ def _arena_home_text(user, power, shield_secs, history, week, season_secs, reven
         f"{get_emoji('trophy')} <b>آرنا</b>",
         f"🗓 فصل <code>{week}</code> — <b>{_format_remaining(season_secs)}</b> تا پایان",
         _ARENA_DIV,
-        f"🏆 کاپ شما: <code>{user.cup:,}</code>",
-        f"💪 قدرت شما: <code>{power:,}</code>",
+        f"{get_emoji('trophy')} کاپ شما: <code>{user.cup:,}</code>",
+        f"{get_emoji('power')} قدرت شما: <code>{power:,}</code>",
     ]
     _lg = constants.league_for_cup(user.cup)
     _nx = constants.next_league(user.cup)
     lines.append(f"{_lg['emoji']} لیگ: <b>{_lg['name']}</b>")
-    lines.append(f"🪙 پاداش سکه هر برد: <code>+{_lg['coins']:,}</code> {get_emoji('coin')}")
-    lines.append(f"🧬 پاداش دی‌ان‌ای هر برد: <code>+{_lg['dna']:,}</code> {get_emoji('dna')}")
+    lines.append(f"{get_emoji('coin')} پاداش طلا هر برد: <code>+{_lg['coins']:,}</code>")
+    lines.append(f"{get_emoji('dna')} پاداش DNA هر برد: <code>+{_lg['dna']:,}</code>")
     if _nx:
         lines.append(f"<i>لیگ بعدی «{_nx['name']}» در کاپ <code>{_nx['min_cup']:,}</code></i>")
     ceiling = deserved_cup(power)
     if user.cup > ceiling:
         lines.append("<i>⚠️ کاپت از قدرت موجودت جلو زده — بردها کاپ کمتری می‌دن تا هیولای شما قوی‌تر شود.</i>")
     if shield_secs > 0:
-        lines.append(f"🛡 سپر محافظ: <b>{_format_remaining(shield_secs)}</b> باقی‌مانده")
+        lines.append(f"{get_emoji('def')} سپر محافظ: <b>{_format_remaining(shield_secs)}</b> باقی‌مانده")
         lines.append("<i>اگر خودت حمله کنی سپرت از بین می‌رود.</i>")
     else:
-        lines.append("🛡 سپر محافظ: نداری — ممکنه بهت حمله بشه")
+        lines.append(f"{get_emoji('def')} سپر محافظ: نداری — ممکنه بهت حمله بشه")
 
     chests = chests or []
     if chests:
         chest_bits = []
         for c in chests:
             cfg = ARENA_CHEST_TIERS.get(c.chest_type, {})
-            c_emoji = cfg.get("emoji", "📦")
+            c_emoji = get_emoji(f"chest_{c.chest_type}", cfg.get("emoji", "📦"))
             if c.status == "ready":
-                st = "🎁 آماده باز کردن"
+                st = f"{get_emoji('gift')} آماده باز کردن"
             elif c.status == "unlocking":
                 rem = seconds_until_ready(c)
                 st = f"⏳ <code>{_format_remaining(rem)}</code>"
@@ -141,17 +141,17 @@ def _arena_home_text(user, power, shield_secs, history, week, season_secs, reven
         for log in history:
             mark = "🔴" if log.attacker_won else "🟢"
             attacker_name = log.attacker_label or lab_display(log.attacker)
-            pwr = f"\n  💪 قدرت: <code>{log.attacker_power:,}</code>" if log.attacker_power else ""
+            pwr = f"\n  {get_emoji('power')} قدرت: <code>{log.attacker_power:,}</code>" if log.attacker_power else ""
             loot_bits = []
             if log.loot_gold:
-                loot_bits.append(f"  🪙 غارت: <code>−{log.loot_gold:,}</code> {get_emoji('coin')}")
+                loot_bits.append(f"  {get_emoji('coin')} غارت: <code>−{log.loot_gold:,}</code>")
             if getattr(log, "loot_dna", 0):
-                loot_bits.append(f"  🧬 غارت: <code>−{log.loot_dna:,}</code> {get_emoji('dna')}")
+                loot_bits.append(f"  {get_emoji('dna')} غارت: <code>−{log.loot_dna:,}</code>")
             loot_str = "\n" + "\n".join(loot_bits) if loot_bits else ""
             lines.append(f"{mark} <b>{attacker_name}</b>{pwr}{loot_str}")
 
     if revenges:
-        lines.append(f"\n⚔️ <b><code>{len(revenges)}</code> انتقام</b> در انتظار — مهلت ۳ روزه")
+        lines.append(f"\n{get_emoji('battle')} <b><code>{len(revenges)}</code> انتقام</b> در انتظار — مهلت ۳ روزه")
 
     lines.append(
         f"\n<blockquote>⚡ هر حمله <code>{constants.ARENA_ATTACK_ENERGY_COST}</code> انرژی مصرف می‌کند.\n"
@@ -437,11 +437,11 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
         "<blockquote>"
         f"🎯 <b>شانس پیروزی:</b> {pct_bar(pct, 100, 10)} {win_label(pct)}\n"
         + (f"🔮 <b>مزیت عنصری:</b> {adv}\n" if adv else "")
-        + f"⚡ <b>هزینه نبرد:</b> <code>{constants.ARENA_ATTACK_ENERGY_COST}</code> انرژی\n\n"
-        "🎁 <b>پاداش پیروزی:</b>\n"
-        f"🪙 سکه: <code>+{loot:,}</code> {get_emoji('coin')}\n"
-        f"🧬 دی‌ان‌ای: <code>+{dna_win:,}</code> {get_emoji('dna')}\n"
-        f"🏆 تغییر کاپ: برد <code>+{win_cup}</code> | باخت <code>{loss_cup}</code>"
+        + f"{get_emoji('energy')} <b>هزینه نبرد:</b> <code>{constants.ARENA_ATTACK_ENERGY_COST}</code> انرژی\n\n"
+        f"{get_emoji('gift')} <b>پاداش پیروزی:</b>\n"
+        f"{get_emoji('coin')} طلا: <code>+{loot:,}</code>\n"
+        f"{get_emoji('dna')} DNA: <code>+{dna_win:,}</code>\n"
+        f"{get_emoji('trophy')} تغییر کاپ: برد <code>+{win_cup}</code> | باخت <code>{loss_cup}</code>"
         "</blockquote>",
     ]
     keyboard = InlineKeyboardMarkup(
@@ -819,19 +819,19 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     if result["won"]:
         cup_sign = f"+{result['cup_delta']}" if result['cup_delta'] > 0 else str(result['cup_delta'])
         reward_lines = [
-            "🎁 <b>غنائم غارت‌شده:</b>",
-            f"🪙 سکه: <code>+{loot_gold:,}</code> {get_emoji('coin')}",
-            f"🧬 دی‌ان‌ای: <code>+{loot_dna:,}</code> {get_emoji('dna')}",
+            f"{get_emoji('gift')} <b>غنائم غارت‌شده:</b>",
+            f"{get_emoji('coin')} طلا: <code>+{loot_gold:,}</code>",
+            f"{get_emoji('dna')} DNA: <code>+{loot_dna:,}</code>",
         ]
         if league_gold or league_dna:
             lg_emoji = result.get("league_emoji", "🥉")
             lg_name = result.get("league_name", "")
             reward_lines.append(f"\n{lg_emoji} <b>پاداش لیگ {lg_name}:</b>")
             if league_gold:
-                reward_lines.append(f"🪙 سکه لیگ: <code>+{league_gold:,}</code> {get_emoji('coin')}")
+                reward_lines.append(f"{get_emoji('coin')} طلا لیگ: <code>+{league_gold:,}</code>")
             if league_dna:
-                reward_lines.append(f"🧬 دی‌ان‌ای لیگ: <code>+{league_dna:,}</code> {get_emoji('dna')}")
-        reward_lines.append(f"\n🏆 تغییر کاپ: <code>{cup_sign}</code> (کاپ جدید: <code>{result['new_cup']:,}</code>)")
+                reward_lines.append(f"{get_emoji('dna')} DNA لیگ: <code>+{league_dna:,}</code>")
+        reward_lines.append(f"\n{get_emoji('trophy')} تغییر کاپ: <code>{cup_sign}</code> (کاپ جدید: <code>{result['new_cup']:,}</code>)")
         if result.get("awarded_chest"):
             awarded = result["awarded_chest"]
             awarded_cfg = ARENA_CHEST_TIERS.get(awarded.chest_type, {})
@@ -967,11 +967,11 @@ async def arena_revenges_callback(update: Update, context: ContextTypes.DEFAULT_
     rows = []
     for it in ready:
         res = "غارتت کرد" if it["won"] else "دفاع کردی"
-        loot = f"\n  🪙 غارت: <code>−{it['loot']:,}</code> {get_emoji('coin')}" if it["loot"] else ""
+        loot = f"\n  {get_emoji('coin')} غارت: <code>−{it['loot']:,}</code>" if it["loot"] else ""
         lines.append(
             f"🔴 <b>{it['name']}</b>\n"
-            f"  💪 قدرت: <code>{it['power']:,}</code>\n"
-            f"  ⚔️ نتیجه: <b>{res}</b>{loot}\n"
+            f"  {get_emoji('power')} قدرت: <code>{it['power']:,}</code>\n"
+            f"  {get_emoji('battle')} نتیجه: <b>{res}</b>{loot}\n"
             f"  ⏳ مهلت: <code>{it['hrs_left']}</code> ساعت"
         )
         row = [btn("انتقام", emoji_key="btn_revenge", style=DANGER, callback_data=f"arena_revenge:{it['log_id']}")]
@@ -1023,17 +1023,17 @@ async def arena_revenge_callback(update: Update, context: ContextTypes.DEFAULT_T
     gap = opp_power - my_power
     odds = "🟢 شانس بالا" if gap < -15 else ("🔴 خطرناک" if gap > 15 else "🟡 پایاپای")
     lines = [
-        f"⚔️ <b>انتقام از {attacker_name}</b>",
+        f"{get_emoji('battle')} <b>انتقام از {attacker_name}</b>",
         _ARENA_DIV,
         "<blockquote>"
-        f"💪 قدرت حریف: <code>{opp_power:,}</code>\n"
-        f"🦅 قدرت شما: <code>{my_power:,}</code> ({odds})\n"
-        f"⚡ هزینه نبرد: <code>{constants.ARENA_ATTACK_ENERGY_COST}</code> انرژی",
+        f"{get_emoji('power')} قدرت حریف: <code>{opp_power:,}</code>\n"
+        f"{get_emoji('power')} قدرت شما: <code>{my_power:,}</code> ({odds})\n"
+        f"{get_emoji('energy')} هزینه نبرد: <code>{constants.ARENA_ATTACK_ENERGY_COST}</code> انرژی",
     ]
     if log.loot_gold:
-        lines.append(f"🪙 غنیمت قابل بازپس‌گیری: <code>{log.loot_gold:,}</code> {get_emoji('coin')}")
+        lines.append(f"{get_emoji('coin')} غنیمت قابل بازپس‌گیری: <code>{log.loot_gold:,}</code>")
     if getattr(log, "loot_dna", 0):
-        lines.append(f"🧬 دی‌ان‌ای: <code>{log.loot_dna:,}</code> {get_emoji('dna')}")
+        lines.append(f"{get_emoji('dna')} DNA: <code>{log.loot_dna:,}</code>")
     lines.append("</blockquote>")
     keyboard = InlineKeyboardMarkup([
         [btn("شروع انتقام", emoji_key="btn_revenge", style=DANGER, callback_data=f"arena_revenge_atk:{log_id}")],
@@ -1104,10 +1104,10 @@ async def arena_revenge_attack_callback(update: Update, context: ContextTypes.DE
         body = (
             f"{get_emoji('celebrate')} <b>انتقام گرفتی! پیروزی در نبرد!</b>\n"
             f"{div}\n"
-            f"🎁 <b>غنیمت دریافتی:</b>\n"
-            f"🪙 سکه: <code>+{loot_gold:,}</code> {get_emoji('coin')}\n"
-            f"🧬 دی‌ان‌ای: <code>+{loot_dna:,}</code> {get_emoji('dna')}\n"
-            f"🏆 تغییر کاپ: <code>{cup_sign}</code> <i>(کاپ جدید: <code>{result['new_cup']:,}</code>)</i>\n"
+            f"{get_emoji('gift')} <b>غنیمت دریافتی:</b>\n"
+            f"{get_emoji('coin')} طلا: <code>+{loot_gold:,}</code>\n"
+            f"{get_emoji('dna')} DNA: <code>+{loot_dna:,}</code>\n"
+            f"{get_emoji('trophy')} تغییر کاپ: <code>{cup_sign}</code> <i>(کاپ جدید: <code>{result['new_cup']:,}</code>)</i>\n"
             f"{div}\n"
             f"<blockquote>{result['log_text']}</blockquote>"
         )
@@ -1321,19 +1321,19 @@ async def arena_chest_detail_callback(update: Update, context: ContextTypes.DEFA
     lines = [
         f"{get_emoji(f'chest_{chest.chest_type}', cfg['emoji'])} <b>{cfg['name']} (جایگاه <code>{chest.slot}</code>)</b>",
         _ARENA_DIV,
-        f"🏆 لیگ در زمان دریافت: <b>{lg['name']}</b> (کاپ <code>{chest.cup_at_drop:,}</code>)",
+        f"{get_emoji('trophy')} لیگ در زمان دریافت: <b>{lg['name']}</b> (کاپ <code>{chest.cup_at_drop:,}</code>)",
         f"⏱ زمان بازگشایی پایه: <code>{cfg['unlock_hours']}</code> ساعت",
         "",
         "<b>جوایز تخمینی این جعبه:</b>",
-        f"🪙 طلا: <code>~{gold_val:,}</code> {get_emoji('coin')} (بر اساس لیگ)",
-        f"🧬 دی‌ان‌ای: <code>~{dna_val:,}</code> {get_emoji('dna')}",
+        f"{get_emoji('coin')} طلا: <code>~{gold_val:,}</code> (بر اساس لیگ)",
+        f"{get_emoji('dna')} DNA: <code>~{dna_val:,}</code>",
     ]
     if cfg["key"] in ("magical", "mega"):
-        lines.append(f"💎 الماس: <b>دارد (بونس ویژه)</b> {get_emoji('diamond')}")
+        lines.append(f"{get_emoji('diamond')} الماس: <b>دارد (بونس ویژه)</b>")
     if chest.chest_type == "mega" and chest.cup_at_drop >= 3500:
-        c_line = f"👹 هیولا: <b>تضمینی قطعی ۱۰۰٪ {rarity_label}</b>"
+        c_line = f"{get_emoji('hunt')} هیولا: <b>تضمینی قطعی ۱۰۰٪ {rarity_label}</b>"
     else:
-        c_line = f"👹 شانس هیولا: <code>{int(cfg['creature_chance'] * 100)}%</code> (حداقل تضمینی: <b>{rarity_label}</b>)"
+        c_line = f"{get_emoji('hunt')} شانس هیولا: <code>{int(cfg['creature_chance'] * 100)}%</code> (حداقل تضمینی: <b>{rarity_label}</b>)"
     lines += [
         c_line,
         _ARENA_DIV,
@@ -1484,11 +1484,11 @@ async def arena_chest_open_callback(update: Update, context: ContextTypes.DEFAUL
         f"{get_emoji('celebrate', '💝')} <b>جعبه باز شد!</b>",
         f"{get_emoji(f'chest_{tier}', res['emoji'])} <b>{res['name']} (جایگاه <code>{res['slot']}</code>)</b>",
         _ARENA_DIV,
-        f"🪙 طلا: <code>+{res['coins']:,}</code> {get_emoji('coin', '💰')}",
-        f"🧬 دی‌ان‌ای: <code>+{res['dna']:,}</code> {get_emoji('dna', '🧬')}",
+        f"{get_emoji('coin')} طلا: <code>+{res['coins']:,}</code>",
+        f"{get_emoji('dna')} DNA: <code>+{res['dna']:,}</code>",
     ]
     if res.get("diamonds"):
-        lines.append(f"💎 الماس: <code>+{res['diamonds']:,}</code> {get_emoji('diamond', '💎')}")
+        lines.append(f"{get_emoji('diamond')} الماس: <code>+{res['diamonds']:,}</code>")
 
     creature = res.get("creature")
     item = res.get("item")
@@ -1503,8 +1503,8 @@ async def arena_chest_open_callback(update: Update, context: ContextTypes.DEFAUL
     elif item:
         lines += [
             "",
-            "🎒 <b>تجهیزات دریافت شده:</b>",
-            f"⚔️ <b>{item.name}</b> [<b>{rarity_label}</b>]",
+            f"{get_emoji('gear')} <b>تجهیزات جدید دریافت شد:</b>",
+            f"📦 <b>{item.name}</b> [<b>{rarity_label}</b>]",
         ]
 
     if res.get("next_started"):
@@ -1590,8 +1590,8 @@ async def arena_chest_rewards_callback(update: Update, context: ContextTypes.DEF
         lg_emoji = lg.get("emoji", "🎖")
         lines.append(
             f"{lg_emoji} <b>{lg['name']}</b> (کاپ <code>{min_cup:,}</code>+):\n"
-            f"  🪙 سکه: <code>+{gold_val:,}</code> {get_emoji('coin')}\n"
-            f"  🧬 دی‌ان‌ای: <code>+{dna_val:,}</code> {get_emoji('dna')}"
+            f"  {get_emoji('coin')} طلا: <code>+{gold_val:,}</code>\n"
+            f"  {get_emoji('dna')} DNA: <code>+{dna_val:,}</code>"
         )
 
     lines += [

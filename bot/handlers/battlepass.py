@@ -1,4 +1,4 @@
-"""«🎟 پاس فصلی» — the Battle Pass screen.
+f"""«{get_emoji('ticket')} پاس فصلی» — the Battle Pass screen.
 
 One panel: current tier + a progress bar to the next, a peek at the next few
 tiers' rewards on both tracks, a «دریافت جوایز» button when anything is claimable,
@@ -36,7 +36,7 @@ def _fmt_left(seconds: int) -> str:
 
 
 def _panel_reward(reward: dict) -> str:
-    """A tier's reward in the panel style: «1,195 طلا 🪙 ┃ 6 الماس 💎»."""
+    f"""A tier's reward in the panel style: «1,195 طلا {get_emoji('coin')} ┃ 6 الماس {get_emoji('diamond')}»."""
     parts = []
     if reward.get("coins"):
         parts.append(f"{reward['coins']:,} طلا {get_emoji('coin')}")
@@ -73,7 +73,7 @@ def _render(user, st: dict, is_group: bool = False) -> tuple[str, InlineKeyboard
     # preview the next few tiers
     upcoming = [t for t in range(st["tier"] + 1, min(st["max_tier"], st["tier"] + _PREVIEW_TIERS) + 1)]
     if upcoming:
-        lines.append("🎁 <b>جوایز مراحل پیش‌رو:</b>")
+        lines.append(f"{get_emoji('gift')} <b>جوایز مراحل پیش‌رو:</b>")
         lines.append("")
         for t in upcoming:
             final = " (جایزه نهایی)" if t == st["max_tier"] else ""
@@ -83,7 +83,7 @@ def _render(user, st: dict, is_group: bool = False) -> tuple[str, InlineKeyboard
             lines.append(f"🔸 ویژه: {_panel_reward(battlepass.premium_reward(t))}{flourish}")
             lines.append("")
     else:
-        lines.append("🏆 <b>به آخرین مرحله‌ی پاس رسیدی!</b>")
+        lines.append(f"{get_emoji('trophy')} <b>به آخرین مرحله‌ی پاس رسیدی!</b>")
         lines.append("")
     lines.append(div)
     lines.append("")
@@ -91,7 +91,7 @@ def _render(user, st: dict, is_group: bool = False) -> tuple[str, InlineKeyboard
 
     rows = []
     if st["has_claimable"]:
-        rows.append([btn("🎁 دریافت جوایز", emoji_key="btn_confirm", style=CONFIRM, callback_data="pass_claim")])
+        rows.append([btn(f"{get_emoji('gift')} دریافت جوایز", emoji_key="btn_confirm", style=CONFIRM, callback_data="pass_claim")])
     if not st["premium"]:
         rows.append(
             [btn(f"خرید پاس ویژه ({st['premium_cost']} 💎)", emoji_key="btn_battlepass", style=SHOP, callback_data="pass_buy")]
@@ -155,7 +155,7 @@ async def pass_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     back_target = "menu:battlepass" if not is_group else "close"
     keyboard = InlineKeyboardMarkup([
         [btn(f"✅ تأیید و خرید پاس ویژه ({cost} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="pass_buy_do")],
-        [back_btn(back_target, "❌ انصراف")],
+        [back_btn(back_target, f"{get_emoji('cancel')} انصراف")],
     ])
     await safe_edit_message_text(
         query,

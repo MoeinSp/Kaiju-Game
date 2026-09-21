@@ -30,9 +30,9 @@ def _render(user, view: dict, is_group: bool = False) -> tuple[str, InlineKeyboa
         ach = item["ach"]
         reward = achievements._reward_text(ach.reward)
         if item["claimed"]:
-            status = "✔️ دریافت‌شده"
+            status = f"{get_emoji('check')}️ دریافت‌شده"
         elif item["earned"]:
-            status = "✅ <b>آماده‌ی دریافت!</b>"
+            status = f"{get_emoji('confirm')} <b>آماده‌ی دریافت!</b>"
         else:
             bar = constants.render_bar(item["current"], item["target"], width=8)
             status = f"{bar} {item['current']}/{item['target']}"

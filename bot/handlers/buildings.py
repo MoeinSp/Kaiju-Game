@@ -244,7 +244,7 @@ def _building_detail_text(view: dict) -> str:
         elif all_builders_busy:
             lines.append(f"⏳ هر دو کارگرت مشغول ساختمون‌های دیگه‌ان (<code>{busy_count}</code> / <code>{builder_slots_n}</code>).")
         elif building.level >= constants.BUILDING_MAX_LEVEL:
-            lines.append("🏆 این سازه به سقف سطح رسیده.")
+            lines.append(f"{get_emoji('trophy')} این سازه به سقف سطح رسیده.")
         elif building.level >= cap:
             hall = constants.BUILDING_LABELS[constants.MAIN_BUILDING]
             lines.append(f"🔒 برای ادامه اول باید {hall} رو ارتقا بدی.")
@@ -290,32 +290,32 @@ def _building_detail_text(view: dict) -> str:
         if next_lvl <= constants.BUILDING_MAX_LEVEL:
             _UNLOCKS_BY_HALL = {
                 2: [
-                    "🔮 تالار ادغام و غار هیولا",
-                    "🧬 ساخت آزمایشگاه DNA و تالار تجارت",
-                    "🎫 دسترسی به پاس ماهانه و صرافی طلا/DNA",
-                    "⭐ افزایش سقف ترکیب به ۲ ستاره",
+                    f"{get_emoji('chest_magical')} تالار ادغام و غار هیولا",
+                    f"{get_emoji('dna')} ساخت آزمایشگاه DNA و تالار تجارت",
+                    f"{get_emoji('ticket')} دسترسی به پاس ماهانه و صرافی طلا/DNA",
+                    f"{get_emoji('star')} افزایش سقف ترکیب به ۲ ستاره",
                 ],
                 3: [
                     "⚒ ساخت و بازگشایی آهنگری تجهیزات",
                     "👥 چیدمان تیم ۳ نفره مبارزات",
-                    "💎 ساخت معدن جمع‌کننده الماس",
-                    "🏆 ورود به لیگ رتبه‌بندی و رویدادها",
-                    "🛡 فروشگاه سپر و مبادله تجهیزات",
-                    "⭐ افزایش سقف ترکیب به ۳ ستاره",
+                    f"{get_emoji('diamond')} ساخت معدن جمع‌کننده الماس",
+                    f"{get_emoji('trophy')} ورود به لیگ رتبه‌بندی و رویدادها",
+                    f"{get_emoji('def')} فروشگاه سپر و مبادله تجهیزات",
+                    f"{get_emoji('star')} افزایش سقف ترکیب به ۳ ستاره",
                 ],
                 4: [
                     "🗺 نبردهای کمپین و دانجن داستانی",
                     "🏛 دسترسی به حراجی بازار سیاه",
-                    "🎰 گردونه و بازی‌های کازینو",
+                    f"{get_emoji('casino')} گردونه و بازی‌های کازینو",
                     "🎖 کسب عناوین افتخاری و رتبه‌بندی خزانه",
-                    "⭐ افزایش سقف ترکیب به ۴ ستاره",
+                    f"{get_emoji('star')} افزایش سقف ترکیب به ۴ ستاره",
                 ],
                 5: [
-                    "🏰 صعود به ۱۰۰ طبقه برج موگن",
+                    f"{get_emoji('dungeon')} صعود به ۱۰۰ طبقه برج موگن",
                     "🔬 ساخت آزمایشگاه تحقیقات ژنتیک",
-                    "👑 شرکت در لیگ اتحادها و رتبه‌بندی رید",
-                    "🛍 گردونه بنر ویژه و شاپ آیتم‌های خاص",
-                    "⭐ افزایش سقف ترکیب به ۵ ستاره (نهایی)",
+                    f"{get_emoji('sub_vip')} شرکت در لیگ اتحادها و رتبه‌بندی رید",
+                    f"{get_emoji('shop_item')} گردونه بنر ویژه و شاپ آیتم‌های خاص",
+                    f"{get_emoji('star')} افزایش سقف ترکیب به ۵ ستاره (نهایی)",
                 ],
             }
             unlock_items = _UNLOCKS_BY_HALL.get(next_lvl, [])
@@ -339,12 +339,12 @@ def _building_detail_text(view: dict) -> str:
     elif all_builders_busy:
         lines.append(f"⏳ کارگرها: هر دو کارگرت مشغول ساختمون‌های دیگه‌ان (<code>{busy_count}</code> / <code>{builder_slots_n}</code>).")
     elif building.level >= constants.BUILDING_MAX_LEVEL:
-        lines.append("🏆 این ساختمون به سقف سطح رسیده.")
+        lines.append(f"{get_emoji('trophy')} این ساختمون به سقف سطح رسیده.")
     elif building.level >= cap:
         lines.append(f"🔒 برای ادامه اول باید {hall} رو ارتقا بدی.")
     else:
         cost, _minutes = upgrade_cost_and_minutes(building)
-        verb = "🏗 هزینه ساخت" if building.level == 0 else f"🔧 هزینه ارتقا به سطح <code>{building.level + 1}</code>"
+        verb = f"{get_emoji('building')} هزینه ساخت" if building.level == 0 else f"🔧 هزینه ارتقا به سطح <code>{building.level + 1}</code>"
         lines.append(f"{verb}: <code>{cost:,} طلا</code>")
         lines.append(f"⏱ مدت زمان: <code>{_format_remaining(upgrade_seconds(building))}</code>")
     return "\n".join(lines)
@@ -482,7 +482,7 @@ async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAUL
             return
         await query.answer(str(exc), show_alert=True)
         return
-    await query.answer("🏗 ساخت شروع شد!" if view["building"].level == 0 else "🔧 ارتقا شروع شد!")
+    await query.answer(f"{get_emoji('building')} ساخت شروع شد!" if view["building"].level == 0 else "🔧 ارتقا شروع شد!")
     from game.media import get_building_image_path
     photo_path = get_building_image_path(view["building"].building_type, view["building"].level)
     await safe_edit_message_text(
@@ -849,9 +849,9 @@ async def building_speedup_do_callback(update: Update, context: ContextTypes.DEF
         await query.answer(str(exc), show_alert=True)
         return
     if completed:
-        await query.answer("🏆 ارتقا تموم شد!")
+        await query.answer(f"{get_emoji('trophy')} ارتقا تموم شد!")
     else:
-        await query.answer(f"⚡ {used} کارت استفاده شد!" if used > 1 else "⚡ سرعت گرفت!")
+        await query.answer(f"⚡ {used} کارت استفاده شد!" if used > 1 else f"{get_emoji('energy')} سرعت گرفت!")
     await safe_edit_message_text(
         query,
         _building_detail_text(view),
