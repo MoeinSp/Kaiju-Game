@@ -412,12 +412,13 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 btn("🛒 لینک خرید درون‌بازی", style=ADMIN, callback_data="admin_menu:buy_link"),
             ],
             [btn("🌐 پنل تحت وب (رنگ دکمه‌ها، لودآوت، پشتیبان‌گیری)", style=PRIMARY, url=ADMIN_PANEL_URL)],
+            [back_btn("menu:me", "بازگشت به منوی اصلی")],
         ]
     )
     if _is_owner(update):
         # admin management + auto-backup are the owner's alone
         rows = list(keyboard.inline_keyboard)
-        rows.insert(-1, [
+        rows.insert(-2, [
             btn("👮 مدیریت ادمین‌ها", style=ADMIN, callback_data="admin_menu:admin_manage"),
             btn("💾 بکاپ خودکار", style=ADMIN, callback_data="admin_menu:autobackup"),
         ])
@@ -449,8 +450,11 @@ async def admin_manage_panel(update: Update, context: ContextTypes.DEFAULT_TYPE)
         lines.append("هنوز ادمینی اضافه نشده.")
     rows.append([btn("➕ افزودن ادمین", style=CONFIRM, callback_data="admin_menu:admin_add")])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
-    target = update.callback_query.message if update.callback_query else update.effective_message
-    await target.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+    kb = InlineKeyboardMarkup(rows)
+    if update.callback_query:
+        await safe_edit_message_text(update.callback_query, "\n".join(lines), parse_mode="HTML", reply_markup=kb)
+    else:
+        await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=kb)
 
 
 async def admin_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -514,8 +518,10 @@ async def autobackup_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
     hours, dest_id = await run_db(_autobackup_state_sync)
     text, keyboard = _autobackup_panel_markup(hours, dest_id)
-    target = update.callback_query.message if update.callback_query else update.effective_message
-    await target.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+    if update.callback_query:
+        await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=keyboard)
+    else:
+        await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def autobackup_set_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -533,30 +539,35 @@ async def autobackup_set_callback(update: Update, context: ContextTypes.DEFAULT_
 def _cheat_report_sync(limit: int = 15):
     """Today's biggest «جایزه» claimers, most-claimed first — the main signal for a
     reward-farming account. With the global cooldown a normal player tops out well
-    under the theoretical cap, so an outlier near it stands out."""
-    from django.utils import timezone
+    under the day's hours (24 / 4 = 6 claims at most). Anyone higher is exploiting
+    a loophole or bug."""
+    from django.db.models import Count
 
-    from bio_lab.models import DailyActionLog, User
-    from bio_lab.repository import display_name
-    from game.daily import today_str
+    from bio_lab.models import DailyActionLog
 
-    rows = (
-        DailyActionLog.objects.filter(action="word_reward", day=today_str())
-        .select_related("user")
-        .order_by("-count")[:limit]
+    today = timezone.localdate()
+    qs = (
+        DailyActionLog.objects.filter(action="daily_reward", date=today)
+        .values("user_id")
+        .annotate(c=Count("id"))
+        .order_by("-c")[:limit]
     )
-    now = timezone.now()
+    user_ids = [r["user_id"] for r in qs]
+    users_by_id = {u.id: u for u in User.objects.filter(id__in=user_ids)}
     out = []
-    for r in rows:
-        u = r.user
-        age_days = (now - u.created_at).days if u.created_at else 0
+    for r in qs:
+        u = users_by_id.get(r["user_id"])
+        if not u:
+            continue
+        lifetime = DailyActionLog.objects.filter(user=u, action="daily_reward").count()
+        age_days = (today - u.created_at.date()).days if u.created_at else 0
         out.append({
             "id": u.id,
             "name": display_name(u),
-            "count": r.count,
-            "banned": u.is_banned,
+            "count": r["c"],
+            "lifetime": lifetime,
             "age_days": age_days,
-            "lifetime": u.reward_total_claims,
+            "banned": u.is_banned,
         })
     return out, User.objects.count()
 
@@ -587,8 +598,11 @@ async def cheat_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             style=ADMIN, callback_data=f"admin_uinfo:{r['id']}",
         )])
     keyboard_rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
-    target = update.callback_query.message if update.callback_query else update.effective_message
-    await target.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard_rows))
+    kb = InlineKeyboardMarkup(keyboard_rows)
+    if update.callback_query:
+        await safe_edit_message_text(update.callback_query, "\n".join(lines), parse_mode="HTML", reply_markup=kb)
+    else:
+        await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=kb)
 
 
 # ── owner-authored item shop management ───────────────────────────────────────
@@ -598,25 +612,27 @@ _ITEMSHOP_HELP = (
     "<blockquote>خط 1: عنوان (می‌تونه با ایموجی شروع شه)\n"
     "خط 2: قیمت — مثل «قیمت: 19000 جم» یا «قیمت: 5000 طلا 50 جم»\n"
     "خط‌های بعد: محتوا، هرکدوم یکی:\n"
-    "• <code>طلا 10000</code>\n"
-    "• <code>جم 25</code>\n"
-    "• <code>dna 200</code>\n"
-    "• <code>کارت 60 3</code>  (کارت سرعت 60دقیقه ×3)\n"
-    "• <code>هیولا mythic fire</code>  (عنصر اختیاریه)\n"
-    "• <code>تجهیزات weapon legendary</code></blockquote>\n"
-    "<b>نمونه پک:</b>\n"
-    "<code>🐉 پک اساطیری\nقیمت: 19000 جم\nطلا 10000\ndna 200\nهیولا mythic fire\nتجهیزات weapon legendary</code>"
+    "  • الماس 100\n"
+    "  • طلا 5000\n"
+    "  • DNA 200\n"
+    "  • کارت سرعت 10\n"
+    "  • کپسول زیستی 5\n"
+    "  • جعبه الماس 2\n"
+    "  • اشتراک طلایی 30 روز\n"
+    "  • اشتراک نقره‌ای 7 روز\n"
+    "  • بال (یا زره/شاخ/دم/چشم/نیش/پنجه) [اختیاری: افسانه‌ای 5 ستاره]\n"
+    "  • موجود [اختیاری: افسانه‌ای 5 ستاره عنصر آتش]</blockquote>\n\n"
+    "<i>هر خط رو که نخواستی ننویس. دکمه‌ی «➕ ساخت آیتم/پک» همین کار رو بدون متن هم انجام می‌ده.</i>"
 )
 
 
 def _itemshop_list_sync():
-    from game import itemshop
+    from bio_lab.models import ShopItem
 
-    items = itemshop.list_items(active_only=False)
+    items = list(ShopItem.objects.order_by("-is_active", "-created_at"))
     return [{
-        "id": it.id, "emoji": it.emoji, "title": it.title, "active": it.is_active,
-        "price": itemshop.price_text(it),
-        "contents": itemshop.content_summary(json.loads(it.contents_json)),
+        "id": it.id, "title": it.title, "emoji": it.emoji or f"{get_emoji('shop_item')}",
+        "price": it.price_display(), "contents": it.contents_summary(), "active": it.is_active,
     } for it in items]
 
 
@@ -643,8 +659,11 @@ async def itemshop_manage_panel(update: Update, context: ContextTypes.DEFAULT_TY
             btn(f"{get_emoji('delete')} حذف", style=DANGER, callback_data=f"sitem_del:{it['id']}"),
         ])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
-    target = update.callback_query.message if update.callback_query else update.effective_message
-    await target.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+    kb = InlineKeyboardMarkup(rows)
+    if update.callback_query:
+        await safe_edit_message_text(update.callback_query, "\n".join(lines), parse_mode="HTML", reply_markup=kb)
+    else:
+        await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=kb)
 
 
 async def itemshop_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1291,7 +1310,11 @@ async def report_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     else:
         lines.append(f"{get_emoji('confirm')} هیچ فعالیت مشکوکی امروز پیدا نشد.")
 
-    await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
+    kb = InlineKeyboardMarkup([[back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")]])
+    if update.callback_query:
+        await safe_edit_message_text(update.callback_query, "\n".join(lines), parse_mode="HTML", reply_markup=kb)
+    else:
+        await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=kb)
 
 
 # ── purchase (sales) report ───────────────────────────────────────────────────
@@ -1410,7 +1433,10 @@ async def buy_report_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not _is_admin(update):
         return
     text, keyboard = await run_db(_buy_report_text_kb, 0)
-    await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+    if update.callback_query:
+        await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=keyboard)
+    else:
+        await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def buy_report_nav_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2640,7 +2666,11 @@ async def preview_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 continue
             lines.append(f"{get_emoji(key)} {label} (<code>{key}</code>)")
 
-    await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
+    kb = InlineKeyboardMarkup([[back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")]])
+    if update.callback_query:
+        await safe_edit_message_text(update.callback_query, "\n".join(lines), parse_mode="HTML", reply_markup=kb)
+    else:
+        await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=kb)
 
 
 def _all_premium_emoji_entries_sync():
@@ -2808,7 +2838,11 @@ async def force_join_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             )
     rows.append([btn("افزودن گروه/کانال جدید", emoji_key="btn_confirm", style=CONFIRM, callback_data="fj_add")])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
-    await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+    kb = InlineKeyboardMarkup(rows)
+    if update.callback_query:
+        await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=kb)
+    else:
+        await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=kb)
 
 
 async def force_join_add_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -3454,9 +3488,11 @@ async def group_link_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             "هنوز گروهی تنظیم نشده. با تنظیم لینک، یه دکمه ته منوی اصلیِ همه‌ی بازیکن‌ها اضافه می‌شه "
             "که مستقیم می‌برتشون به گروه بازی."
         )
-    await update.effective_message.reply_text(
-        body, parse_mode="HTML", reply_markup=_group_link_panel_keyboard(bool(url))
-    )
+    kb = _group_link_panel_keyboard(bool(url))
+    if update.callback_query:
+        await safe_edit_message_text(update.callback_query, body, parse_mode="HTML", reply_markup=kb)
+    else:
+        await update.effective_message.reply_text(body, parse_mode="HTML", reply_markup=kb)
 
 
 async def group_link_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -3536,9 +3572,13 @@ async def _show_buy_panel(update, prefix: str = "") -> None:
     so the owner always sees the complete config and never thinks a field was wiped."""
     cfg = await run_db(_buy_cfg_sync)
     text = (prefix + "\n\n" if prefix else "") + _buy_panel_text(cfg)
-    await update.effective_message.reply_text(
-        text, parse_mode="HTML", reply_markup=_buy_link_panel_keyboard(bool(cfg["url"]))
-    )
+    kb = _buy_link_panel_keyboard(bool(cfg["url"]))
+    if getattr(update, "callback_query", None):
+        await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=kb)
+    else:
+        await update.effective_message.reply_text(
+            text, parse_mode="HTML", reply_markup=kb
+        )
 
 
 async def buy_link_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -3648,8 +3688,11 @@ async def packs_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             btn(f"{get_emoji('delete')} حذف", style=DANGER, callback_data=f"pack_del:{p['id']}"),
         ])
     rows.append([back_btn("admin_menu:buy_link", "بازگشت به تنظیمات خرید")])
-    target = update.callback_query.message if update.callback_query else update.effective_message
-    await target.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+    kb = InlineKeyboardMarkup(rows)
+    if update.callback_query:
+        await safe_edit_message_text(update.callback_query, "\n".join(lines), parse_mode="HTML", reply_markup=kb)
+    else:
+        await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=kb)
 
 
 async def pack_new_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

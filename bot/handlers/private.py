@@ -45,6 +45,16 @@ from bot.buttons import (ADMIN, BACK, BATTLE, BUILD, CONFIRM, DANGER, LIST, NAV,
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text, send_screen
 from config import OWNER_TELEGRAM_ID
 from game import botconfig, constants, keywords
+
+
+def _is_admin_user(user_id: int | None) -> bool:
+    if user_id is None:
+        return False
+    if user_id == OWNER_TELEGRAM_ID:
+        return True
+    from game import admins
+    return admins.is_admin(user_id)
+
 from game.alliance import (
     alliance_info,
     approve_request,
@@ -1337,7 +1347,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     creature_photo = get_creature_image_path(creature)
     lines.append(creature_card_text(user, creature, equipped_items, compact=bool(creature_photo)))
-    is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
+    is_owner = _is_admin_user(update.effective_user.id if update.effective_user else None)
     await send_screen(
         update,
         "\n".join(lines),
@@ -1368,7 +1378,7 @@ async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "😅 هنوز موجودی نداری! دستور /start رو بزن تا از آزمایشگاه شروع کنی."
         )
         return
-    is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
+    is_owner = _is_admin_user(update.effective_user.id if update.effective_user else None)
     from game.media import get_creature_image_path
     photo_path = get_creature_image_path(creature)
     card_txt = creature_card_text(user, creature, equipped_items, compact=bool(photo_path))
@@ -1927,7 +1937,7 @@ async def collection_select_callback(update: Update, context: ContextTypes.DEFAU
     except GameError as exc:
         await query.answer(str(exc), show_alert=True)
         return
-    is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
+    is_owner = _is_admin_user(update.effective_user.id if update.effective_user else None)
     await query.answer("🟢 انتخاب شد!")
     from game.media import get_creature_image_path
     photo_path = get_creature_image_path(creature)
@@ -2181,7 +2191,7 @@ async def select(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
-    is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
+    is_owner = _is_admin_user(update.effective_user.id if update.effective_user else None)
     await update.message.reply_text(
         f"🟢 <b>{creature_name(creature)}</b> حالا موجود فعالته!\n\n" + creature_card_text(user, creature, equipped_items),
         parse_mode="HTML",
@@ -2216,7 +2226,7 @@ async def fusion_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
-    is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
+    is_owner = _is_admin_user(update.effective_user.id if update.effective_user else None)
     inherit_note = "\n🧬 یه تجهیزات از والدین به ارث رسید!" if inherited else ""
     await update.message.reply_text(
         f"{get_emoji('lab')} <b>فیوژن موفق بود!</b> والدین سوزانده شدن و یه موجود جدید متولد شد:{inherit_note}\n\n"
@@ -2549,7 +2559,7 @@ async def fusion_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
             return
         await query.answer(str(exc), show_alert=True)
         return
-    is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
+    is_owner = _is_admin_user(update.effective_user.id if update.effective_user else None)
     inherit_note = "\n🧬 یه تجهیزات از والدین به ارث رسید!" if inherited else ""
     await query.answer("🟢 فیوژن موفق بود!")
     await safe_edit_message_text(query,
@@ -4058,7 +4068,7 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
             context.user_data[AWAITING_PLAYER_KEY] = awaiting
             await message.reply_text(f"⚠️ {exc} — یه اسم دیگه بفرست:")
             return
-        is_owner = update.effective_user.id == OWNER_TELEGRAM_ID
+        is_owner = _is_admin_user(update.effective_user.id if update.effective_user else None)
         await message.reply_text(
             f"{get_emoji('egg')} <b>آزمایشگاه «{lab_display(user)}» فعال شد!</b>\n"
             "یه موجود تازه از کپسول زیستی بیرون اومد — بهش خوش‌آمد بگو 👇\n\n"
@@ -4681,9 +4691,10 @@ def _menu_lab_line_sync(tg_user):
 async def _show_main_menu(update) -> None:
     """Main menu with the lab level + 'how far to the next level' line at the top."""
     lab_line, hall_level, research_built = await run_db(_menu_lab_line_sync, update.effective_user)
+    is_admin = _is_admin_user(update.effective_user.id if update.effective_user else None)
     await send_screen(
         update, f"📋 <b>منوی اصلی</b>\n\n{lab_line}\n\n<i>یکی از بخش‌های زیر را انتخاب کنید:</i>",
-        parse_mode="HTML", reply_markup=main_menu_keyboard(hall_level=hall_level, research_built=research_built),
+        parse_mode="HTML", reply_markup=main_menu_keyboard(is_owner=is_admin, hall_level=hall_level, research_built=research_built),
     )
 
 
