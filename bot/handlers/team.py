@@ -60,7 +60,7 @@ def _panel_sync(tg_user):
     }
 
 
-def _render(view: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+def _render(view: dict, filt: str = "all", page: int = 0, is_group: bool = False) -> tuple[str, InlineKeyboardMarkup]:
     from bot.handlers.private import creature_picker_frame
 
     lines = [
@@ -106,6 +106,8 @@ def _team_view(context):
 
 async def team_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
+    if update.callback_query:
+        await update.callback_query.answer()
     view = await run_db(_panel_sync, update.effective_user)
     filt, page = _team_view(context)
     text, keyboard = _render(view, filt, page, is_group=is_group)
@@ -116,11 +118,12 @@ async def team_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 async def team_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     _, filt, page = query.data.split(":")
     context.user_data["team_view"] = (filt, int(page))
     view = await run_db(_panel_sync, update.effective_user)
     await query.answer()
-    text, keyboard = _render(view, filt, int(page))
+    text, keyboard = _render(view, filt, int(page), is_group=is_group)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -147,6 +150,7 @@ def _toggle_sync(tg_user, creature_id):
 
 async def team_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     creature_id = int(query.data.split(":")[1])
     try:
         view = await run_db(_toggle_sync, update.effective_user, creature_id)
@@ -155,11 +159,12 @@ async def team_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     await query.answer()
     filt, page = _team_view(context)
-    text, keyboard = _render(view, filt, page)
+    text, keyboard = _render(view, filt, page, is_group=is_group)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def register(application) -> None:
     application.add_handler(CommandHandler("team", team_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CallbackQueryHandler(team_panel, pattern=r"^menu:team$"))
     application.add_handler(CallbackQueryHandler(team_toggle_callback, pattern=r"^team_tog:"))
     application.add_handler(CallbackQueryHandler(team_page_callback, pattern=r"^team_page:"))

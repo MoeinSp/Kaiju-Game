@@ -435,3 +435,62 @@ def _deliver_auction_item(user: User, auction: BlackMarketAuction) -> None:
             element=elem,
             base_hp=share, base_atk=share, base_def=share, base_spd=share,
         )
+
+
+def admin_list_auctions() -> list[BlackMarketAuction]:
+    """List auctions for admin panel."""
+    return list(BlackMarketAuction.objects.all().select_related("highest_bidder").order_by("-id")[:30])
+
+
+def admin_create_auction(
+    title: str,
+    item_type: str,
+    item_payload: dict,
+    bid_currency: str,
+    min_bid: int,
+    ends_at: datetime.datetime,
+) -> BlackMarketAuction:
+    """Create a new auction from admin panel."""
+    return BlackMarketAuction.objects.create(
+        title=title,
+        item_type=item_type,
+        item_payload=item_payload,
+        bid_currency=bid_currency,
+        min_bid=min_bid,
+        current_bid=min_bid,
+        ends_at=ends_at,
+    )
+
+
+def admin_delete_auction(auction_id: int) -> tuple[bool, str]:
+    """Delete / cancel auction, refunding the bidder if any."""
+    with transaction.atomic():
+        auction = BlackMarketAuction.objects.select_for_update().filter(id=auction_id).first()
+        if not auction:
+            return False, "مزایده پیدا نشد."
+        if auction.highest_bidder and not auction.is_settled:
+            bidder = User.objects.select_for_update().get(id=auction.highest_bidder.id)
+            if auction.bid_currency == "coins":
+                bidder.coins += auction.current_bid
+                bidder.save(update_fields=["coins"])
+            else:
+                bidder.diamonds += auction.current_bid
+                bidder.save(update_fields=["diamonds"])
+        title = auction.title
+        auction.delete()
+        return True, f"مزایده «{title}» با موفقیت حذف شد و مبالغ واریزی بازگردانده شد."
+
+
+def admin_extend_auction(auction_id: int, hours: int) -> tuple[bool, str]:
+    """Extend or set deadline for an auction."""
+    with transaction.atomic():
+        auction = BlackMarketAuction.objects.select_for_update().filter(id=auction_id).first()
+        if not auction:
+            return False, "مزایده پیدا نشد."
+        now = timezone.now()
+        base_time = max(auction.ends_at, now)
+        auction.ends_at = base_time + datetime.timedelta(hours=hours)
+        auction.is_settled = False
+        auction.save(update_fields=["ends_at", "is_settled"])
+        return True, f"زمان پایان مزایده تا {format_persian_deadline(auction.ends_at)} تمدید شد."
+

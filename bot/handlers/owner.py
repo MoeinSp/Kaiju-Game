@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import html
 import json
 import logging
@@ -377,7 +378,10 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             ],
             [btn("🕵 چیت‌یاب (جایزه‌گیرهای مشکوک)", style=DANGER, callback_data="admin_menu:cheat")],
             [btn(f"{get_emoji('shop_item')} مدیریت فروشگاه (آیتم/پک)", style=ADMIN, callback_data="admin_menu:itemshop")],
-            [btn("🛒 مدیریت شاپ روزانه (قیمت‌ها)", style=ADMIN, callback_data="admin_menu:dailyshop")],
+            [
+                btn("🛒 شاپ روزانه", style=ADMIN, callback_data="admin_menu:dailyshop"),
+                btn("🏛 بازار سیاه و مزایده‌ها", style=ADMIN, callback_data="admin_menu:blackmarket"),
+            ],
             [
                 btn(f"{get_emoji('gift')} هدیه به همه", style=ADMIN, callback_data="admin_menu:gift_all"),
                 btn("ارسال همگانی", emoji_key="btn_broadcast", style=ADMIN, callback_data="admin_menu:broadcast_start"),
@@ -5225,6 +5229,127 @@ async def capture_owner_text_reply(update: Update, context: ContextTypes.DEFAULT
         return
 
 
+# ── Black Market Management (Admin) ──────────────────────────────────────────
+
+async def blackmarket_manage_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update):
+        return
+    from game import blackmarket
+    auctions = await run_db(blackmarket.admin_list_auctions)
+    
+    lines = [
+        "🏛 <b>مدیریت بازار سیاه و مزایده‌ها</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "<i>در این بخش می‌توانید مزایده‌های فعال را مشاهده، زمان آن‌ها را تمدید یا حذف کرده و مزایده‌های جدید ایجاد کنید.</i>\n",
+    ]
+    rows = []
+    
+    if not auctions:
+        lines.append("<i>در حال حاضر هیچ مزایده‌ای ثبت نشده است.</i>")
+    else:
+        now = timezone.now()
+        for a in auctions:
+            is_active = (not a.is_settled) and a.ends_at > now
+            status_tag = "🟢 در حال برگزاری" if is_active else ("🏁 پایان یافته" if a.is_settled else "⌛ منقضی شده")
+            cur_label = "طلا" if a.bid_currency == "coins" else "الماس"
+            cur_emoji = get_emoji("coin") if a.bid_currency == "coins" else get_emoji("diamond")
+            bidder = a.highest_bidder_name or (display_name(a.highest_bidder) if a.highest_bidder else "بدون پیشنهاد")
+            deadline_str = blackmarket.format_persian_deadline(a.ends_at)
+            
+            lines.append(
+                f"🏷 <b>{a.title}</b> (شناسه: <code>{a.id}</code>)\n"
+                f"  📊 وضعیت: {status_tag}\n"
+                f"  {cur_emoji} بالاترین پیشنهاد: <code>{a.current_bid:,}</code> {cur_label} ({bidder})\n"
+                f"  ⏳ مهلت: <code>{deadline_str}</code>\n"
+            )
+            
+            row = []
+            if is_active:
+                row.append(btn("➕ ۱۲ ساعت", style=PRIMARY, callback_data=f"bm_adm_ext:{a.id}:12"))
+                row.append(btn("➕ ۲۴ ساعت", style=PRIMARY, callback_data=f"bm_adm_ext:{a.id}:24"))
+            row.append(btn("🗑 حذف", style=DANGER, callback_data=f"bm_adm_del:{a.id}"))
+            rows.append(row)
+            
+    rows.append([btn("➕ ایجاد مزایده از قالب‌های آماده", style=CONFIRM, callback_data="admin_menu:bm_presets")])
+    rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
+    
+    text = "\n".join(lines)
+    if update.callback_query:
+        await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+    else:
+        await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+
+
+async def blackmarket_presets_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update):
+        return
+    lines = [
+        "➕ <b>ایجاد مزایده جدید بازار سیاه</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "یکی از قالب‌های آماده زیر را انتخاب کنید تا فوراً به عنوان مزایده ۲۴ ساعته فعال شود:\n",
+    ]
+    rows = [
+        [btn("💎 محموله ۱,۰۰۰ الماس (شروع ۵۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dia1000")],
+        [btn("🎫 بسته ۲۵ عددی بلیط باکس (شروع ۵۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:tic25")],
+        [btn("👑 🐉 کایجوی اساطیری ۵ ستاره VIP (شروع ۵۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:cre_mythic")],
+        [btn("👑 🦖 تخم کایجوی افسانه‌ای ۴ ستاره VIP (شروع ۳۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:cre_leg")],
+        [btn("⚡ بسته ۱۰۰ تایی کارت سرعت (شروع ۵۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:spd100")],
+        [btn("🪙 محموله ۱,۰۰۰,۰۰۰ طلا (شروع ۱۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:gold1m")],
+        [back_btn("admin_menu:blackmarket", "بازگشت به مدیریت بازار سیاه")],
+    ]
+    if update.callback_query:
+        await safe_edit_message_text(update.callback_query, "\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+
+
+async def blackmarket_admin_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    parts = query.data.split(":")
+    action = parts[0]
+    
+    from game import blackmarket
+    
+    if action == "bm_adm_ext":
+        auction_id = int(parts[1])
+        hours = int(parts[2])
+        ok, msg = await run_db(blackmarket.admin_extend_auction, auction_id, hours)
+        await query.answer(msg, show_alert=True)
+        await blackmarket_manage_panel(update, context)
+        return
+        
+    if action == "bm_adm_del":
+        auction_id = int(parts[1])
+        ok, msg = await run_db(blackmarket.admin_delete_auction, auction_id)
+        await query.answer(msg, show_alert=True)
+        await blackmarket_manage_panel(update, context)
+        return
+        
+    if action == "bm_adm_add":
+        preset = parts[1]
+        ends_at = timezone.now() + datetime.timedelta(hours=24)
+        
+        def _do_add():
+            if preset == "dia1000":
+                return blackmarket.admin_create_auction("💎 محموله ۱,۰۰۰ تایی الماس خالص", "diamonds", {"amount": 1000}, "coins", 50000, ends_at)
+            elif preset == "tic25":
+                return blackmarket.admin_create_auction("🎫 بسته ۲۵ عددی بلیط باکس ژنتیکی", "tickets", {"amount": 25}, "coins", 50000, ends_at)
+            elif preset == "cre_mythic":
+                return blackmarket.admin_create_auction("👑 🐉 کایجوی اساطیری ۵ ستاره (VIP)", "creature", {"rarity": "mythic", "star": 5, "level": 1}, "diamonds", 500, ends_at)
+            elif preset == "cre_leg":
+                return blackmarket.admin_create_auction("👑 🦖 تخم کایجوی افسانه‌ای ۴ ستاره (VIP)", "creature", {"rarity": "legendary", "star": 4, "level": 1}, "diamonds", 300, ends_at)
+            elif preset == "spd100":
+                return blackmarket.admin_create_auction("⚡ بسته ۱۰۰ تایی کارت سرعت ۶۰ دقیقه‌ای", "speedup", {"minutes": 60, "count": 100}, "coins", 50000, ends_at)
+            elif preset == "gold1m":
+                return blackmarket.admin_create_auction("🪙 محموله ۱,۰۰۰,۰۰۰ طلا", "coins", {"amount": 1000000}, "diamonds", 100, ends_at)
+        
+        await run_db(_do_add)
+        await query.answer("مزایده با موفقیت ثبت و فعال شد!", show_alert=True)
+        await blackmarket_manage_panel(update, context)
+        return
+
+
 _ADMIN_MENU_ACTIONS.update(
     {
         "report": report_cmd,
@@ -5260,6 +5385,8 @@ _ADMIN_MENU_ACTIONS.update(
         "cheat": cheat_panel,
         "itemshop": itemshop_manage_panel,
         "dailyshop": dailyshop_panel,
+        "blackmarket": blackmarket_manage_panel,
+        "bm_presets": blackmarket_presets_panel,
     }
 )
 
@@ -5301,6 +5428,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(admin_maxbld_do_callback, pattern=r"^admin_maxbld_do:\d+$"))
     application.add_handler(CallbackQueryHandler(admin_op_callback, pattern=r"^opc:(confirm|edit|cancel)$"))
     application.add_handler(CallbackQueryHandler(admin_remove_callback, pattern=r"^admin_rm:\d+$"))
+    application.add_handler(CallbackQueryHandler(blackmarket_admin_action_callback, pattern=r"^bm_adm_(ext|del|add):"))
     application.add_handler(CallbackQueryHandler(dailyshop_builder_callback, pattern=r"^dshop:"))
     application.add_handler(CallbackQueryHandler(itemshop_add_start, pattern=r"^sitem_add$"))
     application.add_handler(CallbackQueryHandler(itemshop_builder_callback, pattern=r"^ish:"))

@@ -64,11 +64,74 @@ def _render_mugen_text(view: dict) -> str:
 def _render_mugen_keyboard(view: dict, is_group: bool = False) -> InlineKeyboardMarkup:
     rows = [
         [btn("نبرد با نگهبان", emoji_key="btn_attack", style=BATTLE, callback_data="mugen:fight")],
-        [btn("برترین فاتحان", emoji_key="btn_rank", style=NAV, callback_data="mugen:lb")],
+        [
+            btn("انتخاب کایجو", emoji_key="btn_swap", style=NAV, callback_data="mugen:swap"),
+            btn("برترین فاتحان", emoji_key="btn_rank", style=NAV, callback_data="mugen:lb"),
+        ],
     ]
     if not is_group:
         rows.append([back_btn("menu:me")])
     return InlineKeyboardMarkup(rows)
+
+
+def _team_choices_sync(tg_user):
+    from bio_lab.repository import team_choices
+    from game.workers import creature_status
+    from game.creature import creature_power
+    from game.equipment import get_equipped_items
+
+    user, _ = get_or_create_user(tg_user)
+    out = []
+    for c in team_choices(user):
+        busy = (not c.is_active) and creature_status(user, c) is not None
+        pwr = creature_power(c, get_equipped_items(c))
+        out.append((c.id, c.name, c.element, pwr, c.is_active, busy))
+    return out
+
+
+async def mugen_swap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    choices = await run_db(_team_choices_sync, update.effective_user)
+    rows = []
+    for cid, name, element, power, is_active, busy in choices:
+        tag = "🟢 " if is_active else ("⛔ " if busy else "🦖 ")
+        elem_lbl = constants.ELEMENT_LABELS.get(element, "")
+        note = " (مشغول)" if busy else ""
+        rows.append([btn(f"{tag}{name} ({elem_lbl}) · {power:,}{note}",
+                         style=BATTLE, callback_data=f"mugen:swap_pick:{cid}")])
+    rows.append([back_btn("mugen:panel", "بازگشت به برج")])
+    await safe_edit_message_text(
+        query,
+        f"{get_emoji('mugen')} <b>انتخاب هیولا برای صعود در برج موگن:</b>\n"
+        "<blockquote>یکی از کایجوهای خود را انتخاب کنید تا موجود فعال شما در نبردهای برج شود.</blockquote>",
+        parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+def _swap_pick_sync(tg_user, creature_id: int):
+    from game.creature import set_active_creature
+    user, _ = get_or_create_user(tg_user)
+    set_active_creature(user, creature_id)
+    return _mugen_panel_sync(tg_user)
+
+
+async def mugen_swap_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    creature_id = int(query.data.split(":")[2])
+    try:
+        view = await run_db(_swap_pick_sync, update.effective_user, creature_id)
+    except GameError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+    await query.answer("هیولای فعال تنظیم شد.")
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
+    await safe_edit_message_text(
+        query,
+        _render_mugen_text(view),
+        parse_mode="HTML",
+        reply_markup=_render_mugen_keyboard(view, is_group=is_group),
+    )
 
 
 async def mugen_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -195,3 +258,5 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(mugen_panel_callback, pattern=r"^mugen:panel$"))
     application.add_handler(CallbackQueryHandler(mugen_fight_callback, pattern=r"^mugen:fight$"))
     application.add_handler(CallbackQueryHandler(mugen_lb_callback, pattern=r"^mugen:lb$"))
+    application.add_handler(CallbackQueryHandler(mugen_swap_callback, pattern=r"^mugen:swap$"))
+    application.add_handler(CallbackQueryHandler(mugen_swap_pick_callback, pattern=r"^mugen:swap_pick:\d+$"))
