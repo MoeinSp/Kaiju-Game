@@ -348,7 +348,7 @@ async def list_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not overrides:
         lines.append("<i>هنوز چیزی تنظیم نشده.</i>\n")
     else:
-        for o in overrides:
+        for o in (overrides.values() if isinstance(overrides, dict) else overrides):
             label = EMOJI_KEYS.get(o.key, o.key)
             lines.append(
                 f'<tg-emoji emoji-id="{o.custom_emoji_id}">{o.placeholder}</tg-emoji> — {label} (<code>{o.key}</code>)'

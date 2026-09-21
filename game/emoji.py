@@ -142,7 +142,7 @@ EMOJI_KEYS: dict[str, str] = {key: f"{emoji} {label}" for key, (label, emoji, _c
 DEFAULT_EMOJI: dict[str, str] = {key: emoji for key, (_label, emoji, _cat) in EMOJI_DEFS.items()}
 CATEGORY_OF: dict[str, str] = {key: cat for key, (_label, _emoji, cat) in EMOJI_DEFS.items()}
 
-_cache: dict[str, EmojiOverride] | None = None
+_cache: dict[str, EmojiOverride] = {}
 
 
 def _load_cache() -> dict[str, EmojiOverride]:
@@ -150,20 +150,18 @@ def _load_cache() -> dict[str, EmojiOverride]:
     try:
         _cache = {o.key: o for o in EmojiOverride.objects.all()}
     except Exception:
-        if _cache is not None:
-            return _cache
-        return {}
+        pass
     return _cache
 
 
 def list_overrides() -> dict[str, EmojiOverride]:
     """Returns the text emoji overrides dictionary (key -> EmojiOverride)."""
-    return _cache if _cache is not None else _load_cache()
+    return _cache
 
 
 def text_category_stats(category: str | None = None) -> tuple[int, int]:
     """Returns (set_count, total) for text emojis. Pure in-memory cache lookup."""
-    cache = list_overrides()
+    cache = _cache
     if category:
         keys = [k for k, c in CATEGORY_OF.items() if c == category]
     else:
@@ -477,7 +475,3 @@ def couple_all_key_glyphs() -> int:
     if n:
         refresh_cache()
     return n
-
-
-def list_overrides() -> list[EmojiOverride]:
-    return list(EmojiOverride.objects.order_by("key"))
