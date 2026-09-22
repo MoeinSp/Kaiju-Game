@@ -8,6 +8,7 @@ from bio_lab.repository import get_or_create_user
 from bot.buttons import CONFIRM, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import events
+from game.emoji import get_emoji
 
 
 def _fmt_left(seconds: int) -> str:
