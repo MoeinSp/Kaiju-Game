@@ -236,6 +236,9 @@ class AllianceWar(models.Model):
     ends_at = models.DateTimeField()
     status = models.CharField(max_length=12, default=ACTIVE)  # active | settled
     winner = models.ForeignKey(Alliance, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    notified_start = models.BooleanField(default=False)
+    notified_6h = models.BooleanField(default=False)
+    notified_30m = models.BooleanField(default=False)
 
     def __str__(self) -> str:
         return f"{self.alliance_a_id} vs {self.alliance_b_id} ({self.status})"

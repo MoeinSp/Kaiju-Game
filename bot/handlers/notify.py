@@ -130,6 +130,57 @@ async def send_outbid_notification_now(context, outbid: dict) -> None:
         pass
 
 
+async def send_war_notifications_now(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send active 1-day alliance war notifications (start, 6h reminder, 30m reminder)."""
+    try:
+        from game.alliance import collect_war_notifications
+        from bot.buttons import BATTLE, CONFIRM, btn
+        from game.media import get_feature_image_path
+
+        war_notifs = await run_db(collect_war_notifications)
+        if not war_notifs:
+            return
+
+        war_kb = InlineKeyboardMarkup([
+            [btn("⚔️ شرکت در جنگ", emoji_key="btn_war", style=BATTLE, callback_data="ally_war1d")],
+            [btn("منوی اصلی", emoji_key="btn_lab", style=CONFIRM, callback_data="menu:me")],
+        ])
+        war_photo = get_feature_image_path("alliance")
+
+        for notif in war_notifs:
+            uid = notif["user_id"]
+            txt = notif["text"]
+            try:
+                if war_photo and os.path.exists(war_photo):
+                    cached_fid = get_cached_file_id(war_photo)
+                    if cached_fid:
+                        try:
+                            await context.bot.send_photo(
+                                chat_id=uid, photo=cached_fid, caption=txt, parse_mode="HTML", reply_markup=war_kb
+                            )
+                            await asyncio.sleep(SEND_DELAY_SECONDS)
+                            continue
+                        except Exception:
+                            invalidate_cached_file_id(war_photo)
+                    with open(war_photo, "rb") as f:
+                        resp = await context.bot.send_photo(
+                            chat_id=uid, photo=f, caption=txt, parse_mode="HTML", reply_markup=war_kb
+                        )
+                    if resp and resp.photo:
+                        store_cached_file_id(war_photo, resp.photo[-1].file_id)
+                else:
+                    await context.bot.send_message(
+                        chat_id=uid, text=txt, parse_mode="HTML", reply_markup=war_kb
+                    )
+            except Forbidden:
+                await run_db(_opt_out, uid)
+            except TelegramError:
+                pass
+            await asyncio.sleep(SEND_DELAY_SECONDS)
+    except Exception:
+        pass
+
+
 def _opt_out(user_id: int) -> None:
     """A player who blocked the bot shouldn't be retried — turn their master
     switch off so the collector stops queueing DMs for them."""
@@ -177,6 +228,12 @@ async def notify_job(context: ContextTypes.DEFAULT_TYPE) -> None:
             except TelegramError:
                 pass
             await asyncio.sleep(SEND_DELAY_SECONDS)
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Alliance 1-Day War Notifications (Start, 6h reminder, 30m reminder)
+    try:
+        await send_war_notifications_now(context)
     except Exception:  # noqa: BLE001
         pass
 

@@ -2321,7 +2321,7 @@ def _render_expedition_card(exp_id: int, creator_name: str, target_name: str, me
         f"👑 <b>سرپرست کاروان:</b> <b>{creator_name}</b>\n"
         f"👥 <b>اعضای حاضر (<code>{len(member_names)}</code>/<code>4</code>):</b>\n{m_list_str}\n\n"
         f"⏳ وضعیت: <b>در حال عضوگیری...</b> (حداقل <code>2</code> نفر)\n"
-        f"⚠️ <i>سهمیه: ۱ بار در روز (ریست هر شب ساعت ۲۴:۰۰ بامداد).</i>\n"
+        f"⚠️ <i>سهمیه: روزی یک‌بار برای هر کاربر.</i>\n"
         f"📊 <i>جایزه بر اساس قدرت کل تیم محاسبه می‌شود.</i>"
         "</blockquote>"
     )
@@ -2407,6 +2407,8 @@ async def expedition_launch_callback(update: Update, context: ContextTypes.DEFAU
         members_str = "، ".join([display_name(m) for m in res["members"]])
         return {
             "destination": res["destination"],
+            "group_title": res["expedition"].group_title,
+            "member_ids": [m.id for m in res["members"]],
             "members_str": members_str,
             "per_gold": res["per_gold"],
             "per_dna": res["per_dna"],
@@ -2434,6 +2436,52 @@ async def expedition_launch_callback(update: Update, context: ContextTypes.DEFAU
         f"✨ غنائم به حساب تمامی اعضای کاروان واریز شد!"
     )
     await safe_edit_message_text(query, text, parse_mode="HTML")
+
+    # Send DM notification to all expedition members
+    import os
+    from bot.buttons import CONFIRM
+    from bot.utils import get_cached_file_id, invalidate_cached_file_id, store_cached_file_id
+    from game.media import get_feature_image_path
+
+    dm_text = (
+        f"⛵ <b>پاداش مأموریت کاروان تیمی</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"📍 مقصد: <b>{res['destination']}</b>\n"
+        f"👥 گروه: <b>{res.get('group_title', 'گروه')}</b>\n\n"
+        f"🎁 <b>غنائم دریافتی شما:</b>\n"
+        f"  {get_emoji('coin')} طلا: <b>+{res['per_gold']:,}</b>\n"
+        f"  {get_emoji('dna')} دی‌ان‌ای: <b>+{res['per_dna']:,}</b>\n"
+        f"  {get_emoji('diamond')} الماس: <b>+{res['per_diamond']:,}</b>\n\n"
+        f"✨ <i>غنائم مستقیماً به موجودی شما اضافه شد!</i>"
+    )
+    dm_kb = InlineKeyboardMarkup([
+        [btn("منوی اصلی", emoji_key="btn_lab", style=CONFIRM, callback_data="menu:me")]
+    ])
+    photo_path = get_feature_image_path("expedition")
+    for mid in res.get("member_ids", []):
+        try:
+            if photo_path and os.path.exists(photo_path):
+                cached_fid = get_cached_file_id(photo_path)
+                if cached_fid:
+                    try:
+                        await context.bot.send_photo(
+                            chat_id=mid, photo=cached_fid, caption=dm_text, parse_mode="HTML", reply_markup=dm_kb
+                        )
+                        continue
+                    except Exception:
+                        invalidate_cached_file_id(photo_path)
+                with open(photo_path, "rb") as f:
+                    resp = await context.bot.send_photo(
+                        chat_id=mid, photo=f, caption=dm_text, parse_mode="HTML", reply_markup=dm_kb
+                    )
+                if resp and resp.photo:
+                    store_cached_file_id(photo_path, resp.photo[-1].file_id)
+            else:
+                await context.bot.send_message(
+                    chat_id=mid, text=dm_text, parse_mode="HTML", reply_markup=dm_kb
+                )
+        except Exception:
+            pass
 
 
 def register(application) -> None:

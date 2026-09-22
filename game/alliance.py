@@ -1245,3 +1245,121 @@ def _bump_war_points(alliance_id: int, points: int) -> None:
         alliance.war_week = week
     alliance.war_points += int(points)
     alliance.save(update_fields=["war_points", "war_week"])
+
+
+def collect_war_notifications() -> list[dict]:
+    """Scan active 1-day AllianceWars and collect due DM notifications:
+    1. War Start: when war begins (notified_start=False) -> notify all members of both alliances.
+    2. 6 Hours before end: (rem <= 6h and not notified_6h) -> notify unhit members of both alliances.
+    3. 30 Minutes before end: (rem <= 30m and not notified_30m) -> notify unhit members of both alliances.
+    """
+    from bio_lab.models import AllianceWar, AllianceWarHit, User
+
+    now = timezone.now()
+    active_wars = AllianceWar.objects.filter(
+        status=AllianceWar.ACTIVE, ends_at__gt=now
+    ).select_related("alliance_a", "alliance_b")
+
+    notifications: list[dict] = []
+
+    for war in active_wars:
+        rem_sec = (war.ends_at - now).total_seconds()
+
+        # 1. War Start Notification
+        if not war.notified_start:
+            members_a = User.objects.filter(
+                alliance_id=war.alliance_a_id, notifications_on=True, is_banned=False
+            ).values_list("id", flat=True)
+            members_b = User.objects.filter(
+                alliance_id=war.alliance_b_id, notifications_on=True, is_banned=False
+            ).values_list("id", flat=True)
+
+            txt_a = (
+                f"🔥 <b>جنگ یک‌روزه‌ی اتحاد آغاز شد!</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"⚔️ اتحاد شما <b>{war.alliance_a.name}</b> در برابر <b>{war.alliance_b.name}</b> وارد جنگ شد!\n\n"
+                f"⏱ شما ۲۴ ساعت فرصت دارید تا با ثبت قدرت کایجوی خود، امتیاز اتحاد را بالا ببرید و پاداش‌های ارزشمند جنگ را دریافت کنید.\n\n"
+                f"<i>همین الان با دکمه زیر قدرت خود را به جنگ اضافه کنید!</i>"
+            )
+            for uid in members_a:
+                notifications.append({"user_id": uid, "text": txt_a, "kind": "war_start", "war_id": war.id})
+
+            txt_b = (
+                f"🔥 <b>جنگ یک‌روزه‌ی اتحاد آغاز شد!</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"⚔️ اتحاد شما <b>{war.alliance_b.name}</b> در برابر <b>{war.alliance_a.name}</b> وارد جنگ شد!\n\n"
+                f"⏱ شما ۲۴ ساعت فرصت دارید تا با ثبت قدرت کایجوی خود، امتیاز اتحاد را بالا ببرید و پاداش‌های ارزشمند جنگ را دریافت کنید.\n\n"
+                f"<i>همین الان با دکمه زیر قدرت خود را به جنگ اضافه کنید!</i>"
+            )
+            for uid in members_b:
+                notifications.append({"user_id": uid, "text": txt_b, "kind": "war_start", "war_id": war.id})
+
+            war.notified_start = True
+            war.save(update_fields=["notified_start"])
+
+        # 2. 6 Hours Remaining Notification (only for those who haven't rallied)
+        if rem_sec <= 6 * 3600 and rem_sec > 30 * 60 and not war.notified_6h:
+            hit_uids = set(AllianceWarHit.objects.filter(war=war).values_list("user_id", flat=True))
+            members_a = User.objects.filter(
+                alliance_id=war.alliance_a_id, notifications_on=True, is_banned=False
+            ).exclude(id__in=hit_uids).values_list("id", flat=True)
+            members_b = User.objects.filter(
+                alliance_id=war.alliance_b_id, notifications_on=True, is_banned=False
+            ).exclude(id__in=hit_uids).values_list("id", flat=True)
+
+            txt_a = (
+                f"⏳ <b>فقط ۶ ساعت تا پایان جنگ یک‌روزه باقی مانده!</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"⚔️ نبرد حساس <b>{war.alliance_a.name}</b> در برابر <b>{war.alliance_b.name}</b>!\n\n"
+                f"⚠️ شما هنوز در این جنگ شرکت نکرده‌اید و قدرت کایجوی شما ثبت نشده است!\n\n"
+                f"<i>همین حالا با یک کلیک قدرت خود را ثبت کنید تا امتیاز اتحاد افزایش یابد.</i>"
+            )
+            for uid in members_a:
+                notifications.append({"user_id": uid, "text": txt_a, "kind": "war_6h", "war_id": war.id})
+
+            txt_b = (
+                f"⏳ <b>فقط ۶ ساعت تا پایان جنگ یک‌روزه باقی مانده!</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"⚔️ نبرد حساس <b>{war.alliance_b.name}</b> در برابر <b>{war.alliance_a.name}</b>!\n\n"
+                f"⚠️ شما هنوز در این جنگ شرکت نکرده‌اید و قدرت کایجوی شما ثبت نشده است!\n\n"
+                f"<i>همین حالا با یک کلیک قدرت خود را ثبت کنید تا امتیاز اتحاد افزایش یابد.</i>"
+            )
+            for uid in members_b:
+                notifications.append({"user_id": uid, "text": txt_b, "kind": "war_6h", "war_id": war.id})
+
+            war.notified_6h = True
+            war.save(update_fields=["notified_6h"])
+
+        # 3. 30 Minutes Remaining Notification (only for those who haven't rallied)
+        if rem_sec <= 30 * 60 and rem_sec > 0 and not war.notified_30m:
+            hit_uids = set(AllianceWarHit.objects.filter(war=war).values_list("user_id", flat=True))
+            members_a = User.objects.filter(
+                alliance_id=war.alliance_a_id, notifications_on=True, is_banned=False
+            ).exclude(id__in=hit_uids).values_list("id", flat=True)
+            members_b = User.objects.filter(
+                alliance_id=war.alliance_b_id, notifications_on=True, is_banned=False
+            ).exclude(id__in=hit_uids).values_list("id", flat=True)
+
+            txt_a = (
+                f"🚨 <b>فقط ۳۰ دقیقه تا پایان جنگ یک‌روزه!</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"⚔️ آخرین دقایق نبرد <b>{war.alliance_a.name}</b> در برابر <b>{war.alliance_b.name}</b>!\n\n"
+                f"⚠️ هنوز قدرت کایجوی خود را ثبت نکرده‌اید! همین حالا شرکت کنید تا سهم پاداش و شانس برد اتحاد از دست نرود."
+            )
+            for uid in members_a:
+                notifications.append({"user_id": uid, "text": txt_a, "kind": "war_30m", "war_id": war.id})
+
+            txt_b = (
+                f"🚨 <b>فقط ۳۰ دقیقه تا پایان جنگ یک‌روزه!</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"⚔️ آخرین دقایق نبرد <b>{war.alliance_b.name}</b> در برابر <b>{war.alliance_a.name}</b>!\n\n"
+                f"⚠️ هنوز قدرت کایجوی خود را ثبت نکرده‌اید! همین حالا شرکت کنید تا سهم پاداش و شانس برد اتحاد از دست نرود."
+            )
+            for uid in members_b:
+                notifications.append({"user_id": uid, "text": txt_b, "kind": "war_30m", "war_id": war.id})
+
+            war.notified_30m = True
+            war.save(update_fields=["notified_30m"])
+
+    return notifications
+

@@ -244,6 +244,9 @@ async def war_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.answer("🔥 جنگ شروع شد!")
     text, keyboard = _war1d_render(data)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+    from bot.handlers.notify import send_war_notifications_now
+    import asyncio
+    asyncio.create_task(send_war_notifications_now(context))
 
 
 def _war_rally_preview_sync(tg_user):

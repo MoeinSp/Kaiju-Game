@@ -24,27 +24,12 @@ EXPEDITION_DESTINATIONS = [
 
 
 def can_join_expedition(user: User) -> tuple[bool, str]:
-    """Check if user has used their daily expedition quota (resets at Tehran midnight 00:00)."""
+    """Check if user has used their daily expedition quota (1 per day)."""
     if user.last_expedition_at is not None:
         user_local_date = timezone.localdate(user.last_expedition_at)
         today_local_date = timezone.localdate()
         if user_local_date == today_local_date:
-            now_local = timezone.localtime()
-            tomorrow_midnight = timezone.make_aware(
-                datetime.datetime.combine(
-                    today_local_date + datetime.timedelta(days=1),
-                    datetime.time.min,
-                ),
-                timezone.get_current_timezone(),
-            )
-            rem = int((tomorrow_midnight - now_local).total_seconds())
-            rem_h = max(0, rem // 3600)
-            rem_m = max(0, (rem % 3600) // 60)
-            if rem_h > 0:
-                time_str = f"{rem_h} ساعت و {rem_m} دقیقه"
-            else:
-                time_str = f"{rem_m} دقیقه"
-            return False, f"⏳ شما امروز در یک اعزام شرکت کرده‌اید!\n(سهمیه شما ساعت ۲۴:۰۰ بامداد — یعنی {time_str} دیگر ریست می‌شود)"
+            return False, "⏳ هر کاربر روزی یک‌بار می‌تواند در اعزام کاروان شرکت کند.\n(سهمیه امروز شما تمام شده است؛ فردا دوباره امتحان کنید.)"
     return True, ""
 
 
