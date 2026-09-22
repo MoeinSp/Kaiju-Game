@@ -40,7 +40,7 @@ def _render(tiers, coins, diamonds, free_used) -> tuple[str, InlineKeyboardMarku
             cost_txt = " (استفاده شده)" if free_used else " (رایگان)"
         else:
             cost_txt = ""
-        rows.append([btn(f"{t['label']}{cost_txt}", style=SHOP, callback_data=f"casino_pick:{t['key']}")])
+        rows.append([btn(f"{t['label']}{cost_txt}", emoji_key="btn_casino", style=SHOP, callback_data=f"casino_pick:{t['key']}")])
     rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 

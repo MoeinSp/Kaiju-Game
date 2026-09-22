@@ -371,7 +371,7 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
     if upgrade is not None:
         rows.append([
             btn("تسریع با کارت", emoji_key="btn_speedup", style=SHOP, callback_data=f"bld_speedup_list:{building.id}"),
-            btn("اتمام فوری", emoji_key="btn_bld_diamond_collector", style=SHOP, callback_data=f"bld_finish_ask:{building.id}"),
+            btn("اتمام فوری", emoji_key="btn_instant", style=SHOP, callback_data=f"bld_finish_ask:{building.id}"),
         ])
         rows.append(
             [

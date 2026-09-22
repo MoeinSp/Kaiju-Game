@@ -285,8 +285,8 @@ def _war_rally_confirm(p: dict) -> tuple[str, InlineKeyboardMarkup]:
         )
     lines += ["", "تأیید می‌کنی؟"]
     rows = InlineKeyboardMarkup([
-        [btn("✅ تأیید و شرکت", emoji_key="btn_confirm", style=CONFIRM, callback_data="ally_war_rally_go")],
-        [btn("↩️ بازگشت", emoji_key="btn_back", style=DANGER, callback_data="ally_war1d")],
+        [btn("تأیید و شرکت", emoji_key="btn_confirm", style=CONFIRM, callback_data="ally_war_rally_go")],
+        [btn("بازگشت", emoji_key="btn_back", style=DANGER, callback_data="ally_war1d")],
     ])
     return "\n".join(lines), rows
 

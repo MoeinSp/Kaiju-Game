@@ -26,7 +26,7 @@ def _render(equipped, avail, total, is_group: bool = False) -> tuple[str, Inline
         mark = "✅ " if t["equipped"] else ""
         rows.append([btn(f"{mark}{t['emoji']} {t['title']}", style=PRIMARY if t["equipped"] else LIST, callback_data=f"title_set:{t['key']}")])
     if equipped:
-        rows.append([btn("❌ برداشتن لقب", style=LIST, callback_data="title_set:none")])
+        rows.append([btn("برداشتن لقب", emoji_key="btn_cancel", style=LIST, callback_data="title_set:none")])
     if not is_group:
         rows.append([back_btn("menu:profile", "بازگشت به پروفایل")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)

@@ -77,9 +77,9 @@ def _render(st: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyb
         total_pages = max(1, (len(shown) + _REF_PAGE - 1) // _REF_PAGE)
         nav = []
         if page > 0:
-            nav.append(btn("◀️ قبلی", style=NAV, callback_data=f"ref_view:{filt}:{page - 1}"))
+            nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"ref_view:{filt}:{page - 1}"))
         if page < total_pages - 1:
-            nav.append(btn("بعدی ▶️", style=NAV, callback_data=f"ref_view:{filt}:{page + 1}"))
+            nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"ref_view:{filt}:{page + 1}"))
         if nav:
             rows.append(nav)
     if st["claimable"] > 0:

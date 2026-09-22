@@ -28,7 +28,7 @@ def _render(st: dict) -> tuple[str, InlineKeyboardMarkup]:
         f"\n{get_emoji('diamond')} هزینه‌ی هر کشش: <b>{st['cost']}</b>  (موجودی: {st['diamonds']})",
     ]
     rows = [
-        [btn(f"🎰 کشیدن بنر ({st['cost']} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="banner_pull")],
+        [btn(f"کشیدن بنر ({st['cost']} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="banner_pull")],
         [back_btn("menu:cat_shop", "بازگشت به فروشگاه")],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
@@ -56,7 +56,7 @@ async def banner_pull_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     await query.answer()
     keyboard = InlineKeyboardMarkup([
-        [btn(f"✅ تأیید و کشیدن بنر ({st['cost']} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="banner_pull_do")],
+        [btn(f"تأیید و کشیدن بنر ({st['cost']} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="banner_pull_do")],
         [back_btn("menu:banner", "❌ انصراف")],
     ])
     await safe_edit_message_text(

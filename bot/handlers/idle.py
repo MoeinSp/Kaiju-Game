@@ -42,9 +42,9 @@ def _render(idle_st: dict, dg_st: dict) -> tuple[str, InlineKeyboardMarkup]:
     ]
     rows = []
     if idle_st["coins"] or idle_st["dna"]:
-        rows.append([btn("🕰 برداشت صندوق آفلاین", emoji_key="btn_confirm", style=CONFIRM, callback_data="idle_collect")])
+        rows.append([btn("برداشت صندوق آفلاین", emoji_key="btn_collect", style=CONFIRM, callback_data="idle_collect")])
     if dg_st["can_run"]:
-        rows.append([btn(f"{dg['emoji']} ورود به نبرد دخمه", style=BATTLE, callback_data="idle_dungeon")])
+        rows.append([btn("ورود به نبرد دخمه", emoji_key="btn_campaign", style=BATTLE, callback_data="idle_dungeon")])
     else:
         lines.append(f"\n{get_emoji('confirm')} دخمه‌ی امروزو رفتی. فردا دوباره بیا.")
     rows.append([back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")])

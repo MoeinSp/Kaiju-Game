@@ -384,40 +384,40 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = InlineKeyboardMarkup(
         [
             [
-                btn(f"{get_emoji('stats')} آمار کلی", style=ADMIN, callback_data="admin_menu:global_stats"),
+                btn("آمار کلی", emoji_key="btn_stats", style=ADMIN, callback_data="admin_menu:global_stats"),
                 btn("گزارش پیشرفت", emoji_key="btn_report", style=ADMIN, callback_data="admin_menu:report"),
             ],
-            [btn("🧾 گزارش خرید (روزانه)", style=ADMIN, callback_data="admin_menu:buy_report")],
+            [btn("گزارش خرید (روزانه)", emoji_key="btn_report", style=ADMIN, callback_data="admin_menu:buy_report")],
             [
-                btn("👥 لیست کاربران", style=ADMIN, callback_data="admin_menu:users"),
-                btn(f"{get_emoji('search')} جستجوی کاربر", emoji_key="btn_profile", style=ADMIN, callback_data="admin_menu:user_manage"),
+                btn("لیست کاربران", emoji_key="btn_members", style=ADMIN, callback_data="admin_menu:users"),
+                btn("جستجوی کاربر", emoji_key="btn_profile", style=ADMIN, callback_data="admin_menu:user_manage"),
             ],
-            [btn("🕵 چیت‌یاب (جایزه‌گیرهای مشکوک)", style=DANGER, callback_data="admin_menu:cheat")],
-            [btn(f"{get_emoji('shop_item')} مدیریت فروشگاه (آیتم/پک)", style=ADMIN, callback_data="admin_menu:itemshop")],
+            [btn("چیت‌یاب (جایزه‌گیرهای مشکوک)", emoji_key="btn_cancel", style=DANGER, callback_data="admin_menu:cheat")],
+            [btn("مدیریت فروشگاه (آیتم/پک)", emoji_key="btn_shop", style=ADMIN, callback_data="admin_menu:itemshop")],
             [
-                btn("🛒 شاپ روزانه", style=ADMIN, callback_data="admin_menu:dailyshop"),
-                btn("🏛 بازار سیاه و مزایده‌ها", style=ADMIN, callback_data="admin_menu:blackmarket"),
+                btn("شاپ روزانه", emoji_key="btn_shop", style=ADMIN, callback_data="admin_menu:dailyshop"),
+                btn("بازار سیاه و مزایده‌ها", emoji_key="btn_blackmarket", style=ADMIN, callback_data="admin_menu:blackmarket"),
             ],
             [
-                btn(f"{get_emoji('gift')} هدیه به همه", style=ADMIN, callback_data="admin_menu:gift_all"),
+                btn("هدیه به همه", emoji_key="btn_gift", style=ADMIN, callback_data="admin_menu:gift_all"),
                 btn("ارسال همگانی", emoji_key="btn_broadcast", style=ADMIN, callback_data="admin_menu:broadcast_start"),
             ],
             [btn("حذف موجود", emoji_key="btn_delete", style=DANGER, callback_data="admin_menu:del_creature_start")],
             [
-                btn(f"🎨 ایموجی متن‌ها ({txt_set}/{txt_tot})", style=ADMIN, callback_data="admin_menu:set_emoji_start"),
-                btn(f"🎛 ایموجی دکمه‌ها ({btn_set}/{btn_tot})", style=ADMIN, callback_data="admin_menu:button_emoji"),
+                btn(f"ایموجی متن‌ها ({txt_set}/{txt_tot})", emoji_key="btn_settings", style=ADMIN, callback_data="admin_menu:set_emoji_start"),
+                btn(f"ایموجی دکمه‌ها ({btn_set}/{btn_tot})", emoji_key="btn_settings", style=ADMIN, callback_data="admin_menu:button_emoji"),
             ],
-            [btn(f"{get_emoji('search')} پیش‌نمایش ایموجی‌ها", style=ADMIN, callback_data="admin_menu:preview_emoji")],
+            [btn("پیش‌نمایش ایموجی‌ها", emoji_key="btn_profile", style=ADMIN, callback_data="admin_menu:preview_emoji")],
             [
-                btn("🖼 همه در یک پیام", style=ADMIN, callback_data="admin_menu:all_emojis"),
-                btn("🖼 در چند پیام", style=ADMIN, callback_data="admin_menu:all_emojis_multi"),
+                btn("همه در یک پیام", emoji_key="btn_broadcast", style=ADMIN, callback_data="admin_menu:all_emojis"),
+                btn("در چند پیام", emoji_key="btn_broadcast", style=ADMIN, callback_data="admin_menu:all_emojis_multi"),
             ],
             [
-                btn("📡 جوین اجباری", style=ADMIN, callback_data="admin_menu:force_join"),
-                btn("🎮 گروه بازی", style=ADMIN, callback_data="admin_menu:group_link"),
-                btn("🛒 لینک خرید درون‌بازی", style=ADMIN, callback_data="admin_menu:buy_link"),
+                btn("جوین اجباری", emoji_key="btn_alliance", style=ADMIN, callback_data="admin_menu:force_join"),
+                btn("گروه بازی", emoji_key="btn_chat", style=ADMIN, callback_data="admin_menu:group_link"),
+                btn("لینک خرید درون‌بازی", emoji_key="btn_shop", style=ADMIN, callback_data="admin_menu:buy_link"),
             ],
-            [btn("🌐 پنل تحت وب (رنگ دکمه‌ها، لودآوت، پشتیبان‌گیری)", style=PRIMARY, url=ADMIN_PANEL_URL)],
+            [btn("پنل تحت وب (رنگ دکمه‌ها، لودآوت، پشتیبان‌گیری)", emoji_key="btn_settings", style=PRIMARY, url=ADMIN_PANEL_URL)],
             [back_btn("menu:me", "بازگشت به منوی اصلی")],
         ]
     )
@@ -425,8 +425,8 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # admin management + auto-backup are the owner's alone
         rows = list(keyboard.inline_keyboard)
         rows.insert(-2, [
-            btn("👮 مدیریت ادمین‌ها", style=ADMIN, callback_data="admin_menu:admin_manage"),
-            btn("💾 بکاپ خودکار", style=ADMIN, callback_data="admin_menu:autobackup"),
+            btn("مدیریت ادمین‌ها", emoji_key="btn_admin", style=ADMIN, callback_data="admin_menu:admin_manage"),
+            btn("بکاپ خودکار", emoji_key="btn_confirm", style=ADMIN, callback_data="admin_menu:autobackup"),
         ])
         keyboard = InlineKeyboardMarkup(rows)
     from game.media import get_feature_image_path
