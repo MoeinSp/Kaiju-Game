@@ -5,21 +5,30 @@ from bio_lab.models import EmojiOverride
 # Rarity circles stay fixed colour codes — NEVER premiumise them (rarity must read
 # instantly regardless of theme). Same for the plain check/cross used as bullet marks
 # where a themed icon would look odd mid-sentence.
-GLYPH_SKIP = {"⚪", "🔵", "🟣", "🟡", "🔴", "▓", "░", "•", "·", "━"}
+GLYPH_SKIP = {"▓", "░", "•", "·", "━", "─", "│", "┃", "—"}
 _GLYPH_PREFIX = "g:"  # EmojiOverride.key prefix for a per-GLYPH (not per-semantic-key) theme
 
 # key -> (label, default unicode emoji, category). This is the single registry for
 # every icon that's worth letting the owner re-skin with a Telegram Premium custom
-# emoji. Deliberately excludes: rarity circles (⚪🔵🟣🟡🔴 — kept as a fixed color
-# code so rarity stays instantly recognizable regardless of skin), and anything that
-# only ever appears as text on an InlineKeyboardButton — Telegram buttons are plain
-# text with no HTML support, so <tg-emoji> can never render there no matter what.
+# emoji.
 EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     # resources
     "coin": ("طلا", "💰", "resources"),
     "dna": ("DNA", "🧬", "resources"),
     "diamond": ("الماس", "💎", "resources"),
     "energy": ("انرژی", "⚡", "resources"),
+    "bank": ("خزانه و بانک", "🏦", "resources"),
+    "battery": ("شارژ و باتری", "🔋", "resources"),
+    "meat": ("غذا و گوشت", "🍖", "resources"),
+    "potion": ("کپسول تجربه/معجون", "🧪", "resources"),
+    "wallet": ("کیف پول و موجودی", "💼", "resources"),
+    "purse": ("کیف سکه", "👛", "resources"),
+    "card_payment": ("کارت بانکی و پرداخت", "💳", "resources"),
+    "cash_bill": ("اسکناس و پیشنهاد", "💵", "resources"),
+    "invoice_receipt": ("فاکتور و صورتحساب", "🧾", "resources"),
+    "collector": ("کارخانه و جمع‌کننده منابع", "🏭", "resources"),
+    "mining": ("معدن‌کاری و استخراج", "⛏", "resources"),
+    "clock_offline": ("صندوق آفلاین و ساعت", "🕰", "resources"),
     # stats
     "hp": ("HP", "❤️", "stats"),
     "atk": ("ATK", "⚔️", "stats"),
@@ -28,11 +37,26 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "poison": ("زهر", "☠️", "stats"),
     "crit": ("کریتیکال", "💥", "stats"),
     "lifesteal": ("جون‌خواری", "🧛", "stats"),
+    "power": ("قدرت و توان", "💪", "stats"),
+    "level": ("سطح و لِوِل", "🎖", "stats"),
+    "max_level": ("سطح بیشینه و ماکس", "👑", "stats"),
+    "gear_power": ("قدرت تجهیزات", "⚙️", "stats"),
+    "body_parts": ("ارتقای اعضای بدن", "🦴", "stats"),
+    "trend_up": ("نرخ رشد و افزایش", "📈", "stats"),
     # elements
     "element_fire": ("عنصر آتش", "🔥", "elements"),
     "element_water": ("عنصر آب", "💧", "elements"),
     "element_earth": ("عنصر خاک", "🪨", "elements"),
     "element_electric": ("عنصر الکتریسیته", "⚡", "elements"),
+    "element_advantage": ("مزیت عنصری", "🔮", "elements"),
+    "no_advantage": ("بدون مزیت عنصری", "➖", "elements"),
+    # rarity
+    "rarity_common": ("نایابی معمولی", "⚪", "rarity"),
+    "rarity_uncommon": ("نایابی غیرمعمول", "🟢", "rarity"),
+    "rarity_rare": ("نایابی کمیاب", "🔵", "rarity"),
+    "rarity_epic": ("نایابی حماسی", "🟣", "rarity"),
+    "rarity_legendary": ("نایابی افسانه‌ای", "🟡", "rarity"),
+    "rarity_mythic": ("نایابی اساطیری", "🔴", "rarity"),
     # body parts
     "wings": ("بال", "🦋", "body"),
     "fangs": ("نیش", "🦷", "body"),
@@ -44,15 +68,38 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "raid_boss": ("هیولای وحشی", "🐲", "battle"),
     "hunt": ("شکار", "🏹", "battle"),
     "raid_attacks_left": ("اتک رید باقی‌مانده", "🔁", "battle"),
+    "mugen": ("برج موگن", "🏰", "battle"),
+    "expedition": ("اعزام کاروان", "⛵", "battle"),
+    "war": ("جنگ اتحاد", "⚔️", "battle"),
+    "opponent_creature": ("موجود و کایجوی حریف", "👾", "battle"),
+    "opponent_lab": ("آزمایشگاه و پایگاه حریف", "🏭", "battle"),
+    "creature_active": ("هیولای مبارز شما", "🦅", "battle"),
+    "log_win": ("پیروزی در حمله/دفاع", "🟢", "battle"),
+    "log_loss": ("شکست در حمله/دفاع", "🔴", "battle"),
+    "defense_log": ("گزارش دفاع و حمله", "🛡", "battle"),
+    "skull_ko": ("ناک‌اوت و جمجمه", "💀", "battle"),
+    "defeat": ("پیام شکست نبرد", "😔", "battle"),
+    "arena_status": ("میدان و سپر آرنا", "🏟", "battle"),
+    "war_fire": ("شعله و استارت جنگ", "🔥", "battle"),
+    "heist": ("شبیخون و غارت اتحاد", "🏴‍☠️", "battle"),
+    "raid_boss_spawn": ("ظهور باس رید", "👻", "battle"),
+    "dragon": ("اژدها و سطح رید", "🐉", "battle"),
     # social
     "alliance": ("اتحاد", "🤝", "social"),
     "gift": ("هدیه", "🎁", "social"),
     "profile": ("پروفایل", "👤", "social"),
     "users": ("کاربران", "👥", "social"),
     "crown": ("رهبر/محافظ", "👑", "social"),
+    "members": ("اعضای اتحاد", "👥", "social"),
+    "deputy": ("معاون و ارشد", "🎖", "social"),
+    "team": ("تیم کایجوها", "🛡", "social"),
+    "ally_academy": ("آکادمی اتحاد", "🎓", "social"),
+    "ally_shrine": ("معبد اتحاد", "⛩", "social"),
+    "ally_fortress": ("دژ اتحاد", "🏯", "social"),
+    "ally_barracks": ("پادگان اتحاد", "🪖", "social"),
+    "door_resign": ("استعفا و کناره‌گیری", "🚪", "social"),
+    "kick_boot": ("اخراج عضو", "🥾", "social"),
     # progress / identity
-    # deliberately NOT 🧬 — that's the DNA resource, and using the same glyph for
-    # both made "🧬 وایو … 🧬 113" unreadable on the creature card
     "creature": ("نماد موجود", "🦖", "progress"),
     "trophy": ("رتبه‌بندی", "🏆", "progress"),
     "celebrate": ("تبریک/لول‌آپ", "🎉", "progress"),
@@ -83,26 +130,30 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "sub_silver": ("اشتراک نقره‌ای VIP", "🥈", "progress"),
     "sub_gold": ("اشتراک طلایی VIP", "👑", "progress"),
     "sub_vip": ("اشتراک ویژه VIP", "⭐", "progress"),
-    "mugen": ("برج موگن", "🏰", "battle"),
     "blackmarket": ("بازار سیاه", "🏛", "progress"),
-    "expedition": ("اعزام کاروان", "⛵", "battle"),
-    "lock": ("قفل", "🔒", "ui"),
-    "power": ("قدرت و توان", "💪", "stats"),
     "dice": ("تاس و شانس", "🎲", "progress"),
-    "timer": ("زمان‌سنج", "⏱", "ui"),
     "hatch": ("جوجه‌کشی و تخم", "🐣", "progress"),
-    "bank": ("خزانه و بانک", "🏦", "resources"),
     "scroll": ("طومار و دستاورد", "📜", "progress"),
-    "battery": ("شارژ و باتری", "🔋", "resources"),
+    "fitness": ("تمرین بدنی", "🏋️", "progress"),
+    "gear": ("تجهیزات و ابزار", "⚙️", "progress"),
+    "forge": ("آهنگری و چکش", "⚒", "progress"),
+    "worker": ("کارگر ساخت‌وساز", "👷‍♂️", "progress"),
+    "cave": ("غار هیولا و پرورش", "🕳", "progress"),
+    "mating": ("جفت‌گیری در غار", "💞", "progress"),
+    "fuse_chain": ("ترکیب و ادغام", "🔗", "progress"),
+    "recycle": ("بازیافت و تبدیل", "♻️", "progress"),
+    "rocket": ("اعزام و پرتاب کاروان", "🚀", "progress"),
+    "lab_level": ("سطح آزمایشگاه", "🔬", "progress"),
+    # UI
+    "lock": ("قفل", "🔒", "ui"),
+    "unlock": ("بازگشایی قفل", "🔓", "ui"),
+    "timer": ("زمان‌سنج", "⏱", "ui"),
     "bell": ("اعلان فعال", "🔔", "ui"),
     "bell_off": ("بی‌صدا", "🔕", "ui"),
-    "meat": ("غذا و گوشت", "🍖", "resources"),
-    "fitness": ("تمرین بدنی", "🏋️", "progress"),
     "pin": ("سنجاق و نکته", "📌", "ui"),
     "idea": ("ایده و راهنمایی", "💡", "ui"),
     "key": ("کلید", "🗝", "ui"),
     "info": ("اطلاعات", "ℹ️", "ui"),
-    # UI
     "status_premium": ("نشان وضعیت پرمیوم", "✅", "ui"),
     "status_default": ("نشان وضعیت پیش‌فرض", "⬜️", "ui"),
     "confirm": ("تأیید و تیک سبز", "✅", "ui"),
@@ -121,17 +172,66 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "delete": ("حذف و سطل زباله", "🗑", "ui"),
     "refresh": ("بروزرسانی و تازه‌سازی", "🔄", "ui"),
     "sparkles": ("درخشش و مهارت", "✨", "ui"),
-    "war": ("جنگ اتحاد", "⚔️", "battle"),
-    "members": ("اعضای اتحاد", "👥", "social"),
-    "deputy": ("معاون و ارشد", "🎖", "social"),
-    "potion": ("کپسول تجربه/معجون", "🧪", "resources"),
-    "team": ("تیم کایجوها", "🛡", "social"),
+    "cart": ("فروشگاه و سبد خرید", "🛒", "ui"),
+    "discount": ("تخفیف ویژه روز", "🔻", "ui"),
+    "sold_out": ("اتمام موجودی و سقف", "⛔", "ui"),
+    "numeric": ("تعداد دلخواه", "🔢", "ui"),
+    "photo_receipt": ("عکس رسید", "📸", "ui"),
+    "siren": ("آژیر خطر و هشدار جنگ", "🚨", "ui"),
+    "requests_inbox": ("درخواست‌های عضویت", "📨", "ui"),
+    "admin_badge": ("مدیریت ادمین‌ها", "👮", "ui"),
+    "backup_box": ("بکاپ و ذخیره‌سازی", "💾", "ui"),
+    "search_inspect": ("چیت‌یاب و بازرسی", "🕵", "ui"),
+    "writing_note": ("افزودن متن", "✍️", "ui"),
+    "queue": ("صف جعبه‌ها", "📋", "ui"),
+    "tag_name": ("برچسب و نام", "🏷", "ui"),
+    "badge_id": ("شناسه و کد", "🆔", "ui"),
+    "empty_inbox": ("صندوق خالی", "📭", "ui"),
+    "greeting": ("خوش‌آمدگویی", "👋", "ui"),
+    "feed": ("تغذیه هیولا", "🍽", "resources"),
+    "idle_sleep": ("پاداش خواب و آفلاین", "💤", "resources"),
+    "ring": ("زیورآلات و حلقه", "💍", "progress"),
+    "paw": ("رد پای موجود", "🐾", "progress"),
+    "archive": ("آرشیو و کلکسیون", "🗃", "progress"),
+    "wood_league": ("لیگ چوب", "🪵", "progress"),
+    "rookie_badge": ("نشان تازه‌کار", "🔰", "progress"),
+    "play_card": ("کارت بازی", "🃏", "progress"),
+    "element_balance": ("توازن و چرخه عناصر", "⚖️", "elements"),
+    "volcano": ("دشت آتشفشانی", "🌋", "elements"),
+    "body_part": ("قطعات بدن", "🧩", "body"),
+    "no_duel": ("خطای نبرد", "🙅", "battle"),
+    "flee": ("فرار و دویدن", "🏃", "battle"),
+    "rest": ("استراحت هیولا", "😴", "battle"),
+    "lion": ("شیر مبارز", "🦁", "battle"),
+    "tiger": ("ببر مبارز", "🐯", "battle"),
+    "shadow_thief": ("دزد سایه‌ها", "🦹", "battle"),
+    "tower_ladder": ("نردبان برج", "🪜", "battle"),
+    "admin_tools": ("ابزار و پنل مدیریت", "🛠", "ui"),
+    "admin_dm": ("پیام ادمین", "✉️", "ui"),
+    "btn_settings_icon": ("تنظیمات دکمه", "🎛", "ui"),
+    "slider": ("اسلایدر و تنظیم مقدار", "🎚", "ui"),
+    "help_mark": ("راهنما و علامت سوال", "❓", "ui"),
+    "stop_warning": ("توقف و اخطار", "🛑", "ui"),
+    "gallery": ("گالری و تصاویر", "🖼", "ui"),
+    "channel_broadcast": ("کانال و ماهواره", "📡", "ui"),
+    "game_group": ("گروه بازی", "🎮", "ui"),
+    "calendar": ("تقویم و فصل", "🗓", "ui"),
+    "trend_down": ("نرخ کاهش و کارمزد", "📉", "stats"),
+    "upgrade_arrow": ("فلش ارتقا", "🔼", "stats"),
+    "document": ("برگه و سند", "📄", "ui"),
+    "broom_clear": ("پاکسازی و جارو", "🧹", "ui"),
+    "inbox_receive": ("دریافت و صندوق ورودی", "📥", "ui"),
+    "badge_warn": ("نشان ممنوع و اخطار", "📛", "ui"),
+    "flag_finish": ("پایان و خط پایان", "🏁", "battle"),
+    "rosette": ("مدال افسانه‌ای", "🏵", "progress"),
+    "page_counter": ("نشانگر صفحه", "📑", "ui"),
 }
 
 CATEGORY_LABELS: dict[str, str] = {
     "resources": "💰 منابع",
     "stats": "📈 استت‌ها",
     "elements": "🌍 عناصر",
+    "rarity": "💎 نایابی هیولاها",
     "body": "🦴 اعضای بدن",
     "battle": "⚔️ نبرد",
     "social": "🤝 اجتماعی",
@@ -158,7 +258,7 @@ def _load_cache() -> dict[str, EmojiOverride]:
 
 def list_overrides() -> dict[str, EmojiOverride]:
     """Returns the text emoji overrides dictionary (key -> EmojiOverride)."""
-    return _cache
+    return dict(_load_cache())
 
 
 def text_category_stats(category: str | None = None) -> tuple[int, int]:
@@ -179,25 +279,32 @@ _TAG = re.compile(r"<[^>]+>")  # any HTML tag — never premiumise a glyph insid
 
 
 def _norm_glyph(g: str) -> str:
-    """Drop the emoji variation selector (U+FE0F) so `⚡️` and `⚡`, `🛡️` and `🛡`
-    are treated as the same glyph. Without this a message that hard-codes the
-    VS-16 form of an emoji would never match a themed glyph stored in the bare form
-    (or vice-versa), so those emojis silently stayed un-skinnable — the exact
-    'some emojis in the attack/hunt message aren't configurable' bug."""
-    return g.replace("️", "")
+    """Strip variation selectors (U+FE0F, U+FE0E) so '⚔️' and '⚔' match the same key."""
+    return g.replace("\ufe0f", "").replace("\ufe0e", "").strip()
 
 
 def _load_glyph_map() -> dict[str, str]:
-    """Build {normalized glyph: custom_emoji_id} from the g:-prefixed overrides, plus a
-    regex that matches any themed glyph — variation-selector-insensitive, and longest
-    first so multi-codepoint emoji win over their parts."""
+    """Build a mapping of normalised Unicode glyph -> custom_emoji_id.
+    Reads from:
+      1) Per-glyph overrides (keys like 'g:⚔')
+      2) Semantic-key overrides (e.g. key 'atk' mapped to custom_emoji_id -> sets '⚔')
+    """
     global _glyph_map, _glyph_re
     try:
-        gm = {
-            _norm_glyph(o.key[len(_GLYPH_PREFIX):]): o.custom_emoji_id
-            for o in EmojiOverride.objects.filter(key__startswith=_GLYPH_PREFIX)
-            if o.key[len(_GLYPH_PREFIX):] not in GLYPH_SKIP
-        }
+        cache = _load_cache()
+        gm: dict[str, str] = {}
+        for key, glyphs in CANONICAL_KEY_GLYPHS.items():
+            override = cache.get(key)
+            if override is not None:
+                for g in glyphs:
+                    gm[_norm_glyph(g)] = override.custom_emoji_id
+        for k, o in cache.items():
+            if k.startswith(_GLYPH_PREFIX):
+                raw_glyph = k[len(_GLYPH_PREFIX):]
+                if raw_glyph:
+                    gm[_norm_glyph(raw_glyph)] = o.custom_emoji_id
+        for skip in GLYPH_SKIP:
+            gm.pop(_norm_glyph(skip), None)
         _glyph_map = gm
         # each glyph may appear with an optional trailing VS-16 in the text; match either
         _glyph_re = (
@@ -226,7 +333,7 @@ def set_glyph(glyph: str, custom_emoji_id: str) -> None:
 
 def set_glyphs_bulk(pairs: dict[str, str]) -> int:
     """Theme many glyphs at once (glyph -> custom_emoji_id), refreshing the cache just
-    once. Skips the fixed rarity/bullet glyphs. Returns how many were set."""
+    once. Returns how many were set."""
     n = 0
     for glyph, cid in pairs.items():
         if not glyph or glyph in GLYPH_SKIP:
@@ -249,7 +356,7 @@ def premiumize_html(text: str) -> str:
     """Wrap every themed literal emoji in `text` with its Premium <tg-emoji>. Applied
     to ALL outgoing HTML messages, so plain emojis hardcoded in message strings render
     as the owner's Premium set without touching each f-string. Skips glyphs already
-    inside a <tg-emoji> block or any HTML tag, and the fixed rarity/bullet glyphs."""
+    inside a <tg-emoji> block or any HTML tag, and the fixed bullet glyphs."""
     if not text:
         return text
     gm = _glyph_map if _glyph_map is not None else _load_glyph_map()
@@ -284,7 +391,7 @@ def premiumize_html(text: str) -> str:
     # and reads cramped — put a clear gap between it and what follows. Regular spaces
     # collapse to one in Telegram's renderer, so use NON-BREAKING spaces (U+00A0),
     # which it keeps.
-    return _LEAD_EMOJI.sub(lambda m: m.group("pre") + m.group("emoji") + "  ", result)
+    return _LEAD_EMOJI.sub(lambda m: m.group("pre") + m.group("emoji") + "  ", result)
 
 
 # <blockquote> + optional whitespace + a leading <tg-emoji> block, then any trailing
@@ -305,20 +412,42 @@ CANONICAL_KEY_GLYPHS: dict[str, set[str]] = {
     "battery": {"🔋"},
     "bank": {"🏦"},
     "meat": {"🍖", "🥩"},
+    "wallet": {"💼"},
+    "purse": {"👛"},
+    "card_payment": {"💳"},
+    "cash_bill": {"💵"},
+    "invoice_receipt": {"🧾"},
+    "collector": {"🏭"},
+    "mining": {"⛏", "⛏️"},
+    "clock_offline": {"🕰"},
     # Stats
     "hp": {"❤️", "♥️"},
     "atk": {"⚔️", "⚔"},
     "def": {"🛡️", "🛡"},
     "spd": {"💨"},
-    "poison": {"☠️", "☠", "💀"},
+    "poison": {"☠️", "☠"},
     "crit": {"💥"},
     "lifesteal": {"🧛", "🩸"},
     "power": {"💪"},
+    "level": {"🎖️", "🎖"},
+    "max_level": {"👑", "⭐"},
+    "gear_power": {"⚙️", "⚙"},
+    "body_parts": {"🦴"},
+    "trend_up": {"📈", "💹"},
     # Elements
     "element_fire": {"🔥"},
     "element_water": {"💧", "🌊"},
     "element_earth": {"🪨", "🗿", "⛰️", "⛰"},
     "element_electric": {"⚡", "⚡️"},
+    "element_advantage": {"🔮"},
+    "no_advantage": {"➖"},
+    # Rarity
+    "rarity_common": {"⚪", "🔘"},
+    "rarity_uncommon": {"🟢"},
+    "rarity_rare": {"🔵", "🔷"},
+    "rarity_epic": {"🟣", "🟪"},
+    "rarity_legendary": {"🟡", "🟨"},
+    "rarity_mythic": {"🔴", "🟥"},
     # Body parts
     "wings": {"🦋"},
     "fangs": {"🦷"},
@@ -327,12 +456,25 @@ CANONICAL_KEY_GLYPHS: dict[str, set[str]] = {
     "attack_action": {"🗡️", "🗡"},
     "skill_action": {"✨"},
     "forfeit_action": {"🏳️", "🏳"},
-    "raid_boss": {"🐲", "🐉", "👹"},
+    "raid_boss": {"🐲", "👹"},
     "hunt": {"🏹"},
     "raid_attacks_left": {"🔁"},
     "mugen": {"🏰", "🏯"},
     "expedition": {"⛵", "🚢"},
     "war": {"⚔️", "⚔"},
+    "opponent_creature": {"👾", "👹", "👿"},
+    "opponent_lab": {"🏭", "🏰"},
+    "creature_active": {"🦅"},
+    "log_win": {"🟢"},
+    "log_loss": {"🔴"},
+    "defense_log": {"🛡️", "🛡"},
+    "skull_ko": {"💀"},
+    "defeat": {"😔", "💔"},
+    "arena_status": {"🏟️", "🏟"},
+    "war_fire": {"🔥"},
+    "heist": {"🏴‍☠️", "🏴"},
+    "raid_boss_spawn": {"👻"},
+    "dragon": {"🐉"},
     # Social
     "alliance": {"🤝"},
     "gift": {"🎁"},
@@ -342,6 +484,12 @@ CANONICAL_KEY_GLYPHS: dict[str, set[str]] = {
     "members": {"👥"},
     "deputy": {"🎖️", "🎖"},
     "team": {"🛡️", "🛡"},
+    "ally_academy": {"🎓"},
+    "ally_shrine": {"⛩️", "⛩"},
+    "ally_fortress": {"🏯"},
+    "ally_barracks": {"🪖"},
+    "door_resign": {"🚪"},
+    "kick_boot": {"🥾"},
     # Progress & Identity
     "creature": {"🦖", "🦕"},
     "trophy": {"🏆"},
@@ -378,12 +526,22 @@ CANONICAL_KEY_GLYPHS: dict[str, set[str]] = {
     "dice": {"🎲"},
     "scroll": {"📜"},
     "fitness": {"🏋️", "🏋"},
+    "gear": {"⚙️", "⚙"},
+    "forge": {"⚒️", "⚒", "🔨"},
+    "worker": {"👷‍♂️", "👷"},
+    "cave": {"🕳️", "🕳"},
+    "mating": {"💞"},
+    "fuse_chain": {"🔗"},
+    "recycle": {"♻️", "♻"},
+    "rocket": {"🚀"},
+    "lab_level": {"🔬"},
     # UI & Moderation
-    "lock": {"🔒", "🔓"},
-    "timer": {"⏱️", "⏱"},
+    "lock": {"🔒"},
+    "unlock": {"🔓"},
+    "timer": {"⏱️", "⏱", "⏳", "⌛"},
     "bell": {"🔔"},
     "bell_off": {"🔕"},
-    "pin": {"📌"},
+    "pin": {"📌", "📍"},
     "idea": {"💡"},
     "key": {"🗝️", "🗝"},
     "info": {"ℹ️", "ℹ"},
@@ -395,7 +553,7 @@ CANONICAL_KEY_GLYPHS: dict[str, set[str]] = {
     "cross": {"✖️", "✖"},
     "warning": {"⚠️", "⚠", "❗"},
     "banned": {"🚫", "⛔"},
-    "stats": {"📊", "📈", "📉"},
+    "stats": {"📊"},
     "broadcast": {"📢", "📣"},
     "collection": {"🗂️", "🗂", "🎒"},
     "settings": {"🎨", "⚙️", "⚙"},
@@ -405,6 +563,59 @@ CANONICAL_KEY_GLYPHS: dict[str, set[str]] = {
     "delete": {"🗑️", "🗑"},
     "refresh": {"🔄", "🔃", "🔁"},
     "sparkles": {"✨"},
+    "cart": {"🛒"},
+    "discount": {"🔻"},
+    "sold_out": {"⛔"},
+    "numeric": {"🔢"},
+    "photo_receipt": {"📸"},
+    "siren": {"🚨"},
+    "requests_inbox": {"📨"},
+    "admin_badge": {"👮", "👮‍♂️"},
+    "backup_box": {"💾", "📤"},
+    "search_inspect": {"🕵️", "🕵"},
+    "writing_note": {"✍️", "✍"},
+    "queue": {"📋"},
+    "tag_name": {"🏷️", "🏷"},
+    "badge_id": {"🆔"},
+    "empty_inbox": {"📭"},
+    "greeting": {"👋"},
+    "feed": {"🍽️", "🍽"},
+    "idle_sleep": {"💤"},
+    "ring": {"💍"},
+    "paw": {"🐾"},
+    "archive": {"🗃️", "🗃"},
+    "wood_league": {"🪵"},
+    "rookie_badge": {"🔰"},
+    "play_card": {"🃏"},
+    "element_balance": {"⚖️", "⚖"},
+    "volcano": {"🌋"},
+    "body_part": {"🧩"},
+    "no_duel": {"🙅‍♂️", "🙅‍♀️", "🙅"},
+    "flee": {"🏃‍♂️", "🏃‍♀️", "🏃"},
+    "rest": {"😴"},
+    "lion": {"🦁"},
+    "tiger": {"🐯"},
+    "shadow_thief": {"🦹‍♂️", "🦹‍♀️", "🦹"},
+    "tower_ladder": {"🪜"},
+    "admin_tools": {"🛠️", "🛠", "🔧"},
+    "admin_dm": {"✉️", "✉"},
+    "btn_settings_icon": {"🎛️", "🎛"},
+    "slider": {"🎚️", "🎚"},
+    "help_mark": {"❓"},
+    "stop_warning": {"🛑"},
+    "gallery": {"🖼️", "🖼"},
+    "channel_broadcast": {"📡"},
+    "game_group": {"🎮"},
+    "calendar": {"🗓️", "🗓", "📅", "📆"},
+    "trend_down": {"📉"},
+    "upgrade_arrow": {"🔼"},
+    "document": {"📄", "🗒️", "🗒"},
+    "broom_clear": {"🧹"},
+    "inbox_receive": {"📥"},
+    "badge_warn": {"📛"},
+    "flag_finish": {"🏁"},
+    "rosette": {"🏵️", "🏵"},
+    "page_counter": {"📑"},
 }
 
 
@@ -427,6 +638,13 @@ KEY_ALIASES: dict[str, str] = {
     "market": "blackmarket",
     "chest": "chest_arena",
     "crates": "biocrate",
+    "common": "rarity_common",
+    "uncommon": "rarity_uncommon",
+    "rare": "rarity_rare",
+    "epic": "rarity_epic",
+    "legendary": "rarity_legendary",
+    "mythic": "rarity_mythic",
+    "advantage": "element_advantage",
 }
 
 
