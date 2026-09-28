@@ -2357,6 +2357,8 @@ async def handle_expedition_word(update: Update, context: ContextTypes.DEFAULT_T
         creator_name = display_name(exp.creator)
         return exp.id, creator_name, exp.target_name, member_names
 
+    try:
+        exp_id, creator_name, target_name, member_names = await run_db(_sync, update.effective_user, message.chat)
     except GameError as exc:
         from config import BOT_USERNAME
         add_group_kb = InlineKeyboardMarkup([
