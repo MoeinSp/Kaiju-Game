@@ -1,5 +1,7 @@
 import random
 
+MIN_GROUP_MEMBERS = 10
+
 ELEMENTS = ["fire", "water", "earth", "electric"]
 
 # each element deals bonus damage to the one it points to, and takes bonus damage from the one before it

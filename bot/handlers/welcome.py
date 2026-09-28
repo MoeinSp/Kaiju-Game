@@ -1,6 +1,7 @@
 from telegram import ChatMemberUpdated, Update
 from telegram.ext import ChatMemberHandler, ContextTypes
 
+from game.constants import MIN_GROUP_MEMBERS
 from game.emoji import get_emoji
 
 IN_CHAT_STATUSES = ("member", "administrator", "creator")
@@ -45,13 +46,40 @@ async def on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if not _bot_just_added(result):
         return
 
-    await context.bot.send_message(chat_id=result.chat.id, text=_build_welcome_text(), parse_mode="HTML")
+    chat_id = result.chat.id
+
+    # Check group member count on activation
+    try:
+        member_count = await context.bot.get_chat_member_count(chat_id=chat_id)
+    except Exception:
+        member_count = None
+
+    if member_count is not None and member_count < MIN_GROUP_MEMBERS:
+        try:
+            warning_text = (
+                f"{get_emoji('warning')} <b>عدم امکان فعالیت در گروه</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"⚠️ این ربات فقط در گروه‌های دارای <b>حداقل {MIN_GROUP_MEMBERS} عضو</b> فعال می‌شود.\n\n"
+                f"👥 تعداد اعضای فعلی این گروه: <code>{member_count}</code> نفر\n\n"
+                f"💡 <i>برای استفاده از ربات، ابتدا تعداد اعضای گروه را به حداقل {MIN_GROUP_MEMBERS} نفر برسانید و سپس مجدداً ربات را اضافه کنید.</i>"
+            )
+            await context.bot.send_message(chat_id=chat_id, text=warning_text, parse_mode="HTML")
+        except Exception:
+            pass
+
+        try:
+            await context.bot.leave_chat(chat_id=chat_id)
+        except Exception:
+            pass
+        return
+
+    await context.bot.send_message(chat_id=chat_id, text=_build_welcome_text(), parse_mode="HTML")
     # The welcome text tells the group to type words at the bot. If privacy mode
     # is on those words never reach it, so say so immediately instead of letting
     # them find out by being ignored.
     from bot.handlers.group_words import announce_setup
 
-    await announce_setup(context.bot, result.chat.id)
+    await announce_setup(context.bot, chat_id)
 
 
 def register(application) -> None:
