@@ -2006,7 +2006,7 @@ def _resource_log_data(target_id, field):
 _RESLOG_META = {
     "diamonds": (f"{get_emoji('diamond')}", "الماس", "الماس دریافتی"),
     "coins": (f"{get_emoji('coin')}", "طلا", "طلای دریافتی"),
-    "dna": (f"{get_emoji('dna')}", "دیانای", "DNA دریافتی"),
+    "dna": (f"{get_emoji('dna')}", "دی‌ان‌ای", "DNA دریافتی"),
 }
 
 

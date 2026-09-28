@@ -42,7 +42,7 @@ def _sellable(prices: dict) -> list[str]:
 
 
 _RULE = "━━━━━━━━━━━━━━━━━━━━"
-_RES_TITLE = {"coins": f"{get_emoji('coin')} طلا", "dna": f"{get_emoji('dna')} دیانای (DNA)", "diamonds": f"{get_emoji('diamond')} الماس"}
+_RES_TITLE = {"coins": f"{get_emoji('coin')} طلا", "dna": f"{get_emoji('dna')} دی‌ان‌ای (DNA)", "diamonds": f"{get_emoji('diamond')} الماس"}
 _RES_UNIT_WORD = {"coins": "طلا", "dna": "عدد", "diamonds": "عدد"}
 
 

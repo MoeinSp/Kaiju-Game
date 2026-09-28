@@ -1078,7 +1078,7 @@ def _locked_actions_for(hall_level) -> frozenset:
 _HUBS = {
     "hub_battle": ("⚔️ <b>نبرد و ماجراجویی</b>", [
         [("شکار هیولا", "hunt", "b", "btn_hunt"), ("میدان آرنا", "arena", "b", "btn_arena")],
-        [("جعبههای آرنا", "arena_chests", "s", "btn_chests"), ("برج موگن", "mugen_tower", "b", "btn_mugen")],
+        [("جعبه‌های آرنا", "arena_chests", "s", "btn_chests"), ("برج موگن", "mugen_tower", "b", "btn_mugen")],
         [("ماجراجویی دانجن", "campaign", "b", "btn_campaign"), ("اعزام کاروان", "expedition", "b", "btn_expedition")],
         [("جنگ اتحاد", "alliance_war", "b", "btn_war")],
     ]),
@@ -1089,20 +1089,20 @@ _HUBS = {
         [("تیم نبرد", "team", "n", "btn_team")],
     ]),
     "hub_base": ("🏰 <b>پایگاه و منابع</b>", [
-        [("ساختمانها", "buildings", "bu", "btn_buildings"), ("مدیریت کارگران", "workers", "bu", "btn_workers")],
+        [("ساختمان‌ها", "buildings", "bu", "btn_buildings"), ("مدیریت کارگران", "workers", "bu", "btn_workers")],
         [("آزمایشگاه پژوهش", "research", "bu", "btn_research"), ("خزانه و انبار", "vault", "bu", "btn_vault")],
         [("پاداش آفلاین", "idle", "s", "btn_idle"), ("صرافی طلا و DNA", "exchange", "s", "btn_exchange")],
         [("بازیافت تجهیزات", "equip_exchange", "s", "btn_ticket_exchange")],
     ]),
     "hub_shop": ("🛒 <b>فروشگاه و بازار</b>", [
         [("فروشگاه روزانه", "shop", "s", "btn_shop"), ("بازار سیاه", "blackmarket", "s", "btn_blackmarket")],
-        [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("جعبههای الماسی", "diamond_box", "s", "btn_diamond_box")],
+        [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("جعبه‌های الماسی", "diamond_box", "s", "btn_diamond_box")],
         [("خرید الماس و طلا", "buy_open", "s", "btn_buy"), ("خرید سپر محافظ", "shield_shop", "s", "btn_shield")],
         [("اشتراک ویژه VIP", "subscription", "s", "btn_vip")],
     ]),
     "hub_city": ("🌐 <b>شهر، جوایز و کلوپ</b>", [
-        [("پاس فصلی (بتلپاس)", "battlepass", "s", "btn_battlepass"), ("دستاوردها", "achievements", "s", "btn_achievements")],
-        [("رویدادهای ویژه", "events", "s", "btn_events"), ("لیگ و رتبهبندی", "league", "n", "btn_league")],
+        [("پاس فصلی (بتل‌پاس)", "battlepass", "s", "btn_battlepass"), ("دستاوردها", "achievements", "s", "btn_achievements")],
+        [("رویدادهای ویژه", "events", "s", "btn_events"), ("لیگ و رتبه‌بندی", "league", "n", "btn_league")],
         [("اتحاد و کلن", "alliance_info", "n", "btn_alliance"), ("گردونه شانس", "wheel", "s", "btn_wheel")],
         [("کازینو و تاس", "casino", "s", "btn_casino"), ("بنر ویژه کایجو", "banner", "s", "btn_banner")],
         [("دعوت دوستان", "referral", "s", "btn_referral"), ("دانشنامه و القاب", "codex", "n", "btn_codex")],
