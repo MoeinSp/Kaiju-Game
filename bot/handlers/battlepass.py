@@ -97,7 +97,7 @@ def _render(user, st: dict, is_group: bool = False) -> tuple[str, InlineKeyboard
             [btn(f"خرید پاس ویژه ({st['premium_cost']} 💎)", emoji_key="btn_battlepass", style=SHOP, callback_data="pass_buy")]
         )
     if not is_group:
-        rows.append([back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")])
+        rows.append([back_btn("menu:hub_city", "بازگشت به شهر و خدمات")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -126,9 +126,12 @@ async def pass_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer(f"🎉 جوایز {result['tiers']} مرحله گرفته شد!")
     got = battlepass.reward_text(result["reward"])
     text, keyboard = _render(user, st, is_group=is_group)
-    await safe_edit_message_text(
-        query,
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("battlepass")
+    await send_screen(
+        update,
         f"🎉 <b>جوایز پاس دریافت شد!</b>\n🎁 <b>{got}</b>\n\n━━━━━━━━━━━━━━━━━━━━\n" + text,
+        photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -157,12 +160,15 @@ async def pass_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         [btn(f"✅ تأیید و خرید پاس ویژه ({cost} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="pass_buy_do")],
         [back_btn(back_target, "انصراف")],
     ])
-    await safe_edit_message_text(
-        query,
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("battlepass")
+    await send_screen(
+        update,
         f"🎟 <b>خرید پاس ماهانه ویژه (Premium)</b>\n\n"
         f"{get_emoji('diamond')} هزینه: <b>{cost} الماس</b>\n"
         f"💎 موجودی شما: <b>{user.diamonds} الماس</b>\n\n"
         "آیا از خرید پاس ماهانه ویژه مطمئن هستید؟",
+        photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -178,10 +184,13 @@ async def pass_buy_do_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     await query.answer("✦ پاس ویژه فعال شد!")
     text, keyboard = _render(user, st, is_group=is_group)
-    await safe_edit_message_text(
-        query,
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("battlepass")
+    await send_screen(
+        update,
         "✦ <b>پاس ویژه فعال شد!</b> حالا جوایز ویژه‌ی همه‌ی مرحله‌هایی که رسیدی رو می‌تونی بگیری.\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n" + text,
+        photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,
     )

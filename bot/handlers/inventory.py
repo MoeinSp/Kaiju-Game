@@ -135,11 +135,11 @@ def _inv_cat_render(slot, items: list[Equipment], filt: str, page: int) -> tuple
     ]
     nav_row = []
     if page > 0:
-        nav_row.append(btn("◀️ قبلی", style=NAV, callback_data=f"inv_cat:{slot}:{filt}:{page - 1}"))
+        nav_row.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"inv_cat:{slot}:{filt}:{page - 1}"))
     if total_pages > 1:
         nav_row.append(btn(f"{page + 1}/{total_pages}", style=NAV, callback_data="noop"))
     if page + 1 < total_pages:
-        nav_row.append(btn("بعدی ▶️", style=NAV, callback_data=f"inv_cat:{slot}:{filt}:{page + 1}"))
+        nav_row.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"inv_cat:{slot}:{filt}:{page + 1}"))
 
     rows = list(tab_rows) + pick_rows
     if nav_row:

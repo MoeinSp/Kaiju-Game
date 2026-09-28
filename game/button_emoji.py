@@ -18,8 +18,13 @@ never hit the DB from async handler code.
 
 from bio_lab.models import ButtonEmojiOverride
 
-# key -> (label shown in the admin picker, fallback unicode emoji, category)
 BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
+    # 5 Main Hubs (داشبورد اصلی)
+    "btn_hub_battle": ("هاب نبرد و ماجراجویی", "⚔️", "nav"),
+    "btn_hub_creature": ("هاب هیولا و تجهیزات", "🦖", "nav"),
+    "btn_hub_base": ("هاب پایگاه و منابع", "🏰", "nav"),
+    "btn_hub_shop": ("هاب فروشگاه و بازار", "🛒", "nav"),
+    "btn_hub_city": ("هاب شهر و جوایز", "🌐", "nav"),
     # main navigation
     "btn_creature": ("موجود فعال", "🧬", "nav"),
     "btn_upgrade": ("ارتقا و پرورش", "🔧", "nav"),
@@ -237,19 +242,19 @@ def get_button_icon(key: str) -> str | None:
     when the owner hasn't set one (the button then just shows its unicode fallback).
     Pure in-memory read — safe to call from async handler code."""
     override = _cache.get(key)
-    if override is not None:
+    if override is not None and override.custom_emoji_id:
         return override.custom_emoji_id
     if key == "btn_vip":
         fb = _cache.get("btn_subscription")
-        if fb is not None:
+        if fb is not None and fb.custom_emoji_id:
             return fb.custom_emoji_id
     elif key == "btn_subscription":
         fb = _cache.get("btn_vip")
-        if fb is not None:
+        if fb is not None and fb.custom_emoji_id:
             return fb.custom_emoji_id
     if key == "btn_scout_next":
         fb = _cache.get("btn_recheck")
-        if fb is not None:
+        if fb is not None and fb.custom_emoji_id:
             return fb.custom_emoji_id
     return None
 
@@ -257,6 +262,9 @@ def get_button_icon(key: str) -> str | None:
 def get_button_label_emoji(key: str) -> str:
     """Unicode fallback for the button label. Kept even when a custom icon is set:
     clients too old for `icon_custom_emoji_id` still show a sensible label."""
+    override = _cache.get(key)
+    if override is not None and override.placeholder:
+        return override.placeholder
     return BUTTON_DEFAULT_EMOJI.get(key, "")
 
 

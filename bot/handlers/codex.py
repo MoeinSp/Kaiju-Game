@@ -35,7 +35,7 @@ def _render(st: dict) -> tuple[str, InlineKeyboardMarkup]:
     rows = []
     if st["claimable"]:
         rows.append([btn(f"🎁 دریافت جوایز ({st['claimable']})", emoji_key="btn_confirm", style=CONFIRM, callback_data="codex_claim")])
-    rows.append([back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")])
+    rows.append([back_btn("menu:hub_city", "بازگشت به شهر و خدمات")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -62,9 +62,12 @@ async def codex_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer(f"🎉 {result['claimed']} جایزه‌ی دانشنامه گرفتی!")
     got = codex._reward_text(result["reward"])
     text, keyboard = _render(st)
-    await safe_edit_message_text(
-        query,
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("codex")
+    await send_screen(
+        update,
         f"🎉 <b>جایزه‌ی دانشنامه دریافت شد!</b>\n🎁 <b>{got}</b>\n\n━━━━━━━━━━\n" + text,
+        photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,
     )

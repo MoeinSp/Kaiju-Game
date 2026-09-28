@@ -88,7 +88,7 @@ def _render(st: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyb
             f"🎉 دریافت جایزه ({st['claimable']} دعوت آماده)",
             emoji_key="btn_confirm", style=CONFIRM, callback_data="ref_claim",
         )])
-    rows.append([back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")])
+    rows.append([back_btn("menu:hub_city", "بازگشت به شهر و خدمات")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -106,7 +106,9 @@ async def referral_view_callback(update: Update, context: ContextTypes.DEFAULT_T
     st = await run_db(_panel_sync, update.effective_user)
     await query.answer()
     text, keyboard = _render(st, filt, int(page))
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("referral")
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _claim_sync(tg_user):
@@ -123,9 +125,12 @@ async def referral_claim_callback(update: Update, context: ContextTypes.DEFAULT_
         return
     await query.answer(f"🎉 {result['diamonds']} 💎 گرفتی!")
     text, keyboard = _render(st)
-    await safe_edit_message_text(
-        query,
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("referral")
+    await send_screen(
+        update,
         f"🎉 <b>{result['diamonds']} 💎 از {result['claimed']} دعوت موفق گرفتی!</b>\n━━━━━━━━━━\n" + text,
+        photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,
     )

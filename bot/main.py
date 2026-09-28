@@ -126,6 +126,18 @@ async def _warn_if_group_privacy_on(application: Application) -> None:
     )
 
 
+async def _global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from telegram.error import BadRequest, Forbidden
+    if isinstance(context.error, Forbidden):
+        logging.info("Telegram Forbidden (blocked/left): %s", context.error)
+        return
+    if isinstance(context.error, BadRequest):
+        err_msg = str(context.error)
+        if "Query is too old" in err_msg or "message is not modified" in err_msg:
+            return
+    logging.warning("Update %s caused error %s", update, context.error)
+
+
 async def _post_init(application: Application) -> None:
     await _configure_commands(application)
     await _warn_if_group_privacy_on(application)
@@ -219,6 +231,7 @@ def main() -> None:
     # everyone else's taps. Paired with the thread-pool run_db (bot/utils), this is
     # what keeps the bot responsive under load — NOT any outgoing rate limit.
     builder = Application.builder().token(BOT_TOKEN).concurrent_updates(True)
+    builder = builder.connect_timeout(30.0).read_timeout(30.0).write_timeout(30.0).get_updates_read_timeout(30.0)
     if PROXY_URL:
         builder = builder.proxy(PROXY_URL).get_updates_proxy(PROXY_URL)
     application = builder.build()
@@ -268,6 +281,15 @@ def main() -> None:
         MessageHandler(filters.ChatType.PRIVATE & ~filters.COMMAND, _capture_private_text_reply)
     )
 
+    async def theme_cache_sync_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+        from game.theme import refresh_theme_caches
+        from bot.utils import run_db
+        await run_db(refresh_theme_caches)
+
+    if application.job_queue:
+        application.job_queue.run_repeating(theme_cache_sync_job, interval=5, first=2)
+
+    application.add_error_handler(_global_error_handler)
     application.post_init = _post_init
 
     # my_chat_member (bot added/removed from a group) isn't in the default update
@@ -296,7 +318,7 @@ def main() -> None:
         return
 
     logging.info("starting in POLLING mode (set WEBHOOK_URL to switch)")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    application.run_polling(allowed_updates=Update.ALL_TYPES, bootstrap_retries=-1)
 
 
 if __name__ == "__main__":

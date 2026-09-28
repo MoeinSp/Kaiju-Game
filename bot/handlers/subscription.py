@@ -79,7 +79,7 @@ def _render_subscription_keyboard(info: dict, is_group: bool = False) -> InlineK
         [btn("خرید اشتراک طلایی", emoji_key="btn_sub_gold", style=CONFIRM, callback_data="sub_pick:gold")],
     ]
     if not is_group:
-        rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
+        rows.append([back_btn("menu:hub_city", "بازگشت به شهر و خدمات")])
     return InlineKeyboardMarkup(rows)
 
 

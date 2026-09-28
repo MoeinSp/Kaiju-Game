@@ -915,6 +915,14 @@ def get_feature_image_path(feature_name: str) -> str | None:
         p = FEATURES_DIR / "cave.jpg"
         if p.exists():
             return str(p)
+    if feature_name in ("hub_shop", "cat_shop"):
+        p = FEATURES_DIR / "feat_cat_shop.jpg"
+        if p.exists():
+            return str(p)
+    if feature_name in ("hub_city", "cat_social", "cat_rewards"):
+        p = FEATURES_DIR / "feat_cat_social.jpg"
+        if p.exists():
+            return str(p)
     filename = f"feat_{feature_name}.jpg"
     path = FEATURES_DIR / filename
     if path.exists():

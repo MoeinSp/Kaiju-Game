@@ -1947,7 +1947,7 @@ def _player_log_text(d: dict) -> str:
                     bits.append(f"{dn:,}🧬")
                 if di:
                     bits.append(f"{di:,}💎")
-                lines.append(f"     └ {SOURCE_LABELS.get(src, src)}: {' · '.join(bits)}")
+                lines.append(f"   ▫️ {SOURCE_LABELS.get(src, src)}: {' · '.join(bits)}")
     if d["recent_activity"]:
         lines.append("\n🗒 <b>فعالیت اخیر:</b>")
         for day, action, count in d["recent_activity"]:

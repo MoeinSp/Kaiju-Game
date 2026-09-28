@@ -41,7 +41,7 @@ def _render(tiers, coins, diamonds, free_used) -> tuple[str, InlineKeyboardMarku
         else:
             cost_txt = ""
         rows.append([btn(f"{t['label']}{cost_txt}", emoji_key="btn_casino", style=SHOP, callback_data=f"casino_pick:{t['key']}")])
-    rows.append([back_btn("menu:cat_shop", "بازگشت به فروشگاه")])
+    rows.append([back_btn("menu:hub_city", "بازگشت به شهر و خدمات")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -77,10 +77,13 @@ async def casino_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             back_btn("menu:casino", "انصراف"),
         ],
     ])
-    await safe_edit_message_text(
-        query,
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("casino")
+    await send_screen(
+        update,
         f"{cfg['label']}\n<blockquote>{cfg['desc']}\n{cost_line}{bal_line}\n\n"
         "شانسیه — ممکنه جایزه‌ی بزرگ ببری یا هیچی گیرت نیاد. آیا مطمئن هستید؟</blockquote>",
+        photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -118,10 +121,13 @@ async def casino_play_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             back_btn("menu:casino", "بازگشت"),
         ],
     ])
-    await safe_edit_message_text(
-        query,
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("casino")
+    await send_screen(
+        update,
         f"{constants.CASINO_TIERS[tier]['label']}\n\n{reveal}\n\n"
         f"<i>موجودی: {coins:,} طلا · {diamonds:,} الماس</i>",
+        photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,
     )

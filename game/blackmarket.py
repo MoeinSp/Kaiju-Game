@@ -288,16 +288,19 @@ def place_bid(user: User, auction_id: int, bid_amount: int) -> dict:
             user.diamonds -= bid_amount
             user.save(update_fields=["diamonds"])
 
-        # Refund previous highest bidder if different user
+    # Refund previous highest bidder if different user
         if prev_bidder is not None:
             prev_user = User.objects.select_for_update().filter(id=prev_bidder.id).first()
             if prev_user:
+                from game.ledger import record_gain
                 if auction.bid_currency == "coins":
                     prev_user.coins += prev_amount
                     prev_user.save(update_fields=["coins"])
+                    record_gain(prev_user, "blackmarket", coins=prev_amount)
                 else:
                     prev_user.diamonds += prev_amount
                     prev_user.save(update_fields=["diamonds"])
+                    record_gain(prev_user, "blackmarket", diamonds=prev_amount)
 
                 outbid_info = {
                     "user_id": prev_user.id,
@@ -308,10 +311,15 @@ def place_bid(user: User, auction_id: int, bid_amount: int) -> dict:
                     "new_bid": bid_amount,
                 }
 
+    # Anti-snipe: if bid is placed in the last 120 seconds, extend auction deadline
+    time_left = (auction.ends_at - now).total_seconds()
+    if time_left < 120:
+        auction.ends_at = now + datetime.timedelta(seconds=120)
+
     auction.highest_bidder = user
     auction.highest_bidder_name = lab_display(user)
     auction.current_bid = bid_amount
-    auction.save(update_fields=["highest_bidder", "highest_bidder_name", "current_bid"])
+    auction.save(update_fields=["highest_bidder", "highest_bidder_name", "current_bid", "ends_at"])
 
     return {
         "auction": auction,
@@ -323,6 +331,9 @@ def place_bid(user: User, auction_id: int, bid_amount: int) -> dict:
 
 def settle_expired_auctions() -> int:
     """Settle finished auctions and grant items to highest bidders."""
+    import logging
+    from game.ledger import record_gain
+
     now = timezone.now()
     expired = BlackMarketAuction.objects.filter(is_settled=False, ends_at__lte=now)
     count = 0
@@ -333,7 +344,25 @@ def settle_expired_auctions() -> int:
                 continue
             if auc.highest_bidder is not None:
                 winner = User.objects.select_for_update().get(id=auc.highest_bidder.id)
-                _deliver_auction_item(winner, auc)
+                try:
+                    _deliver_auction_item(winner, auc)
+                except Exception as err:
+                    logging.exception(
+                        "Black market delivery failed for auction %s (winner %s): %s. Refunding bid.",
+                        auc.id,
+                        winner.id,
+                        err,
+                    )
+                    # Safe fallback refund
+                    if auc.bid_currency == "coins":
+                        winner.coins += auc.current_bid
+                        winner.save(update_fields=["coins"])
+                        record_gain(winner, "blackmarket", coins=auc.current_bid)
+                    else:
+                        winner.diamonds += auc.current_bid
+                        winner.save(update_fields=["diamonds"])
+                        record_gain(winner, "blackmarket", diamonds=auc.current_bid)
+
             auc.is_settled = True
             auc.save(update_fields=["is_settled"])
             count += 1
@@ -364,7 +393,7 @@ def settle_and_collect_winner_notifications() -> list[tuple[int, str]]:
             text = (
                 "🎉 <b>تبریک! شما برنده مزایده بازار سیاه شدید!</b>\n\n"
                 f"🏷 <b>نام آیتم:</b> «<b>{auc.title}</b>»\n"
-                f"💵 <b>مبلغ نهایی ثبت شده:</b> <b>{auc.current_bid:,}</b> {curr}\n\n"
+                f"💵 <b>مبلغ نهایی ثبت شده:</b> <code>{auc.current_bid:,}</code> {curr}\n\n"
                 "🎁 <i>جایزه این مزایده به طور خودکار به حساب / انبار شما واریز گردید.</i>\n"
                 "✨ جهت شرکت در مزایده‌های جدید، به منوی «⏳ بازار سیاه» سر بزنید."
             )
@@ -381,21 +410,29 @@ def settle_and_collect_winner_notifications() -> list[tuple[int, str]]:
 def _deliver_auction_item(user: User, auction: BlackMarketAuction) -> None:
     """Deliver the won auction reward to the user."""
     from game import constants
+    from game.ledger import record_gain
+
     p = auction.item_payload or {}
     itype = auction.item_type
 
     if itype == "diamonds":
-        user.diamonds += p.get("amount", 0)
+        amt = p.get("amount", 0)
+        user.diamonds += amt
         user.save(update_fields=["diamonds"])
+        record_gain(user, "blackmarket", diamonds=amt)
     elif itype in ("tickets", "biocrate_tickets"):
         user.biocrate_tickets = (user.biocrate_tickets or 0) + p.get("amount", 0)
         user.save(update_fields=["biocrate_tickets"])
     elif itype in ("coins", "gold"):
-        user.coins += p.get("amount", 0)
+        amt = p.get("amount", 0)
+        user.coins += amt
         user.save(update_fields=["coins"])
+        record_gain(user, "blackmarket", coins=amt)
     elif itype in ("dna", "material", "dna_fragments"):
-        user.dna_fragments += p.get("amount", 0)
+        amt = p.get("amount", 0)
+        user.dna_fragments += amt
         user.save(update_fields=["dna_fragments"])
+        record_gain(user, "blackmarket", dna=amt)
     elif itype in ("speedup", "speedup_card"):
         from bio_lab.models import SpeedupCard
         mins = p.get("minutes", 60)
@@ -407,6 +444,11 @@ def _deliver_auction_item(user: User, auction: BlackMarketAuction) -> None:
         from game import energy
         amt = p.get("amount", 50)
         energy.add_energy(user, amt)
+    elif itype in ("lootbox", "chest", "diamond_box"):
+        tier = p.get("tier", "magical")
+        cnt = p.get("count", 1)
+        user.biocrate_tickets = (user.biocrate_tickets or 0) + (cnt * 5)
+        user.save(update_fields=["biocrate_tickets"])
     elif itype == "equipment":
         from bio_lab.models import Equipment
         slot = p.get("slot", "weapon")
@@ -475,6 +517,16 @@ def _deliver_auction_item(user: User, auction: BlackMarketAuction) -> None:
     elif itype == "builder":
         user.builder_slots = max(2, user.builder_slots)
         user.save(update_fields=["builder_slots"])
+    else:
+        # Unknown lot fallback: convert to diamonds or coins
+        if auction.bid_currency == "coins":
+            user.coins += auction.current_bid
+            user.save(update_fields=["coins"])
+            record_gain(user, "blackmarket", coins=auction.current_bid)
+        else:
+            user.diamonds += auction.current_bid
+            user.save(update_fields=["diamonds"])
+            record_gain(user, "blackmarket", diamonds=auction.current_bid)
 
 
 def admin_list_auctions(only_active: bool = True) -> list[BlackMarketAuction]:
@@ -521,6 +573,7 @@ def admin_create_auction(
 
 def admin_delete_auction(auction_id: int) -> tuple[bool, str]:
     """Delete / cancel auction, refunding the bidder if any."""
+    from game.ledger import record_gain
     with transaction.atomic():
         auction = BlackMarketAuction.objects.select_for_update().filter(id=auction_id).first()
         if not auction:
@@ -530,9 +583,11 @@ def admin_delete_auction(auction_id: int) -> tuple[bool, str]:
             if auction.bid_currency == "coins":
                 bidder.coins += auction.current_bid
                 bidder.save(update_fields=["coins"])
+                record_gain(bidder, "blackmarket", coins=auction.current_bid)
             else:
                 bidder.diamonds += auction.current_bid
                 bidder.save(update_fields=["diamonds"])
+                record_gain(bidder, "blackmarket", diamonds=auction.current_bid)
         title = auction.title
         auction.delete()
         return True, f"مزایده «{title}» با موفقیت حذف شد و مبالغ واریزی بازگردانده شد."

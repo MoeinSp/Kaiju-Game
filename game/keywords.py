@@ -59,7 +59,7 @@ _CHAR_MAP = {
 _STRIP = re.compile(r"[ً-ْـ\ufe0f\ufe0e]")
 _DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
 
-_EDGE_CHARS = "!?.،؟؛:/\\#-_~()[]{}<>«»\"\'*•⛏💎⚔️🛡️🔥💧⚡🪨🎁👑🐉🦖🏰 "
+_EDGE_CHARS = "!?.،؟؛:/\\#-_~()[]{}<>«»\"\'*•⛏💎⚔️🛡️🔥💧⚡🪨🎁👑🐉🦖🏰🛒🌐 "
 
 
 def normalize(text: str) -> str:
@@ -592,6 +592,11 @@ ALIASES: dict[str, str] = {
     "شاپ": "shop",
     "خرید": "shop",
     "shop": "shop",
+    "فروشگاه و بازار": "shop",
+    # City & Rewards
+    "شهر و جوایز": "reward",
+    "جوایز": "reward",
+    "شهر": "help",
     # Inventory
     "کوله": "inventory",
     "آیتم": "inventory",
@@ -630,6 +635,10 @@ ALIASES: dict[str, str] = {
     "تیم کایجو": "team",
     "تیم من": "team",
     "team": "team",
+    # Guide & Lab
+    "راهنمای بازی": "help",
+    "آزمایشگاه من": "lab",
+    "پروفایل": "lab",
 }
 
 

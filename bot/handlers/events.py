@@ -40,7 +40,7 @@ def _render(st: dict) -> tuple[str, InlineKeyboardMarkup]:
         rows.append([btn("دریافت جایزه‌ی امروز", emoji_key="btn_confirm", style=CONFIRM, callback_data="event_claim")])
     else:
         lines.append(f"\n{get_emoji('confirm')} جایزه‌ی امروزو گرفتی. فردا دوباره بیا.")
-    rows.append([back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")])
+    rows.append([back_btn("menu:hub_city", "بازگشت به شهر و خدمات")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -66,9 +66,12 @@ async def event_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     await query.answer("🎉 گرفتی!")
     text, keyboard = _render(st)
-    await safe_edit_message_text(
-        query,
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("events")
+    await send_screen(
+        update,
         f"🎉 <b>جایزه‌ی رویداد دریافت شد!</b>\n🎁 <b>{events.reward_text(reward)}</b>\n\n━━━━━━━━━━━━━━━━━━━━\n" + text,
+        photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,
     )

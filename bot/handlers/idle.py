@@ -47,7 +47,7 @@ def _render(idle_st: dict, dg_st: dict) -> tuple[str, InlineKeyboardMarkup]:
         rows.append([btn("ورود به نبرد دخمه", emoji_key="btn_campaign", style=BATTLE, callback_data="idle_dungeon")])
     else:
         lines.append(f"\n{get_emoji('confirm')} دخمه‌ی امروزو رفتی. فردا دوباره بیا.")
-    rows.append([back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")])
+    rows.append([back_btn("menu:hub_base", "بازگشت به پایگاه و منابع")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -73,9 +73,12 @@ async def idle_collect_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer("چیزی برای برداشت نیست.", show_alert=True)
         return
     text, keyboard = _render(idle_st, dg_st)
-    await safe_edit_message_text(
-        query,
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("idle")
+    await send_screen(
+        update,
         f"🕰 <b>صندوق آفلاین برداشته شد!</b>\n🎁 <b>{_reward_text(got)}</b>\n\n━━━━━━━━━━\n" + text,
+        photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -116,9 +119,12 @@ async def idle_dungeon_callback(update: Update, context: ContextTypes.DEFAULT_TY
         )
 
     text, keyboard = _render(idle_st, dg_st)
-    await safe_edit_message_text(
-        query,
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("idle")
+    await send_screen(
+        update,
         f"{header}\n\n<blockquote>{result['log_text']}</blockquote>\n━━━━━━━━━━\n" + text,
+        photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,
     )

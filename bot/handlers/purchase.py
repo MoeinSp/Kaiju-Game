@@ -104,7 +104,7 @@ def _store_screen(packs: list[dict], custom_ok: bool) -> tuple[str, InlineKeyboa
                 lines.append(f"┘ <b>{p['price']:,} تومان</b>")
             lines.append("")
             label = f"{p['emoji']} {p['title']}"
-            rows.append([btn(label, style=SHOP, callback_data=f"buy_pack:{p['id']}")])
+            rows.append([btn(label, emoji_key="btn_shop", style=SHOP, callback_data=f"buy_pack:{p['id']}")])
     else:
         lines.append("مقدار مورد نظرت رو بساز و پرداخت کن:")
     if custom_ok:
@@ -129,7 +129,7 @@ async def buy_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 f"🛒 <b>خرید درون‌برنامه‌ای</b>\n\nجهت خرید بسته‌ها و الماس به درگاه رسمی زیر مراجعه کنید:\n\n{burl}",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([
-                    [btn(btitle or "ورود به درگاه خرید", style=PRIMARY, url=burl)],
+                    [btn(btitle or "ورود به درگاه خرید", emoji_key="btn_buy", style=PRIMARY, url=burl)],
                     [back_btn("menu:me", "بازگشت")],
                 ]),
             )
@@ -296,7 +296,7 @@ def _receipt_screen(req) -> tuple[str, InlineKeyboardMarkup]:
         "📸 بعد از واریز، <b>عکس رسید</b> رو همین‌جا بفرست تا برای تأیید ارسال بشه.",
         "<i>پس از تأیید توسط پشتیبانی، موجودی بلافاصله به حسابت اضافه می‌شه.</i>",
     ]
-    kb = InlineKeyboardMarkup([[btn("انصراف", style=BACK, callback_data="buy_open")]])
+    kb = InlineKeyboardMarkup([[btn("انصراف", emoji_key="btn_cancel", style=BACK, callback_data="buy_open")]])
     return "\n".join(lines), kb
 
 

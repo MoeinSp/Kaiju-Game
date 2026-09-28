@@ -43,7 +43,7 @@ def _guard_owner(update: Update, oid) -> bool:
 def _leave_row(in_group: bool):
     if in_group:
         return [btn("برو به پیوی ربات", emoji_key="btn_lab", style=PRIMARY, url=f"https://t.me/{BOT_USERNAME}?start=group")]
-    return [back_btn("menu:cat_shop", "بازگشت به فروشگاه")]
+    return [back_btn("menu:hub_base", "بازگشت به پایگاه و منابع")]
 
 
 # ── screen 1: which currency to buy? ─────────────────────────────────────────

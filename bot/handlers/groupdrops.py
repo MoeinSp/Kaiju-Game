@@ -66,7 +66,7 @@ def _win_text(kind: str, who: str, reward: dict) -> str:
     if energy == "full":
         reward_items.append(f"{get_emoji('energy')} انرژی: <b>فول شارژ (۱۰۰٪)</b>")
 
-    rewards_block = "\n".join(f"  ↲ {item}" for item in reward_items) if reward_items else "  ↲ بدون جایزه"
+    rewards_block = "\n".join(f"▫️ {item}" for item in reward_items) if reward_items else "▫️ بدون جایزه"
 
     lines = [
         f"{emoji} <b>{title}</b>",

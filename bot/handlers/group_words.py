@@ -141,8 +141,8 @@ def _equipment_card(user, creature, slots) -> tuple[str, InlineKeyboardMarkup]:
 
             lines.append(
                 f"▫️ {row['label']}: <b>{item.name}</b> +<code>{item.level}</code>\n"
-                f"  └ {get_emoji('atk')} قدرت: <code>{equipment_power(item):,}</code>"
-                + (f"\n  └ <i>{bonus}</i>" if bonus else "")
+                f"   {get_emoji('atk')} قدرت: <code>{equipment_power(item):,}</code>"
+                + (f"\n   <i>{bonus}</i>" if bonus else "")
             )
     rows = [
         [
@@ -502,7 +502,7 @@ def _upgrade_card(user, creature, energy, step: int = 1) -> tuple[str, InlineKey
             n = min(step, cap - lvl)  # can't buy past the cap
             lines.append(
                 f"▫️ {cfg['label']}: <code>{lvl}</code>/<code>{cap}</code>\n"
-                f"  └ هزینه +<code>{n}</code>: <code>{part_bulk_cost(lvl, n, creature.rarity):,}</code> {get_emoji('coin')}"
+                f"   هزینه +<code>{n}</code>: <code>{part_bulk_cost(lvl, n, creature.rarity):,}</code> {get_emoji('coin')}"
             )
     lines += [
         div,
@@ -512,7 +512,7 @@ def _upgrade_card(user, creature, energy, step: int = 1) -> tuple[str, InlineKey
     ]
     # ×1/×5/×10 selector — the active step gets a ✅
     step_row = [
-        btn(("✅ " if s == step else "") + f"×{s}", style=(CONFIRM if s == step else NAV),
+        btn(("• " if s == step else "") + f"×{s}", style=(CONFIRM if s == step else NAV),
             callback_data=_act("upgstep", user.id, str(s)))
         for s in _GRP_UPG_STEPS
     ]
@@ -545,7 +545,7 @@ def _feedcap_group_card(user, creature, caps: dict, maxed: bool) -> tuple[str, I
     ]
     for tier in constants.XP_CAPSULE_ORDER:
         cfg = constants.XP_CAPSULES[tier]
-        lines.append(f"{cfg['emoji']} {cfg['label']}: <code>{caps.get(tier, 0)}</code>\n  └ <i>(+<code>{cfg['xp']:,}</code> امتیاز تجربه)</i>")
+        lines.append(f"{cfg['emoji']} {cfg['label']}: <code>{caps.get(tier, 0)}</code>\n   <i>(+<code>{cfg['xp']:,}</code> امتیاز تجربه)</i>")
     rows = []
     if maxed:
         lines.append(f"\n{div}\n🔒 <i>به سقف سطح رسیده — تغذیه بی‌فایده‌ست.</i>")
@@ -1465,7 +1465,7 @@ def _reward_text(user, result: dict) -> str:
         f"👤 بازیکن: <b>{display_name(user)}</b>",
         div,
         "📦 <b>غنیمت دریافتی:</b>",
-        f"  └ {prize}",
+        f"▫️ {prize}",
         div,
         f"⏳ شارژ مجدد: <code>{_format_mmss(result['next_wait'])}</code> دیگر",
     ]

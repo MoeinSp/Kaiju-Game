@@ -144,6 +144,12 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "recycle": ("بازیافت و تبدیل", "♻️", "progress"),
     "rocket": ("اعزام و پرتاب کاروان", "🚀", "progress"),
     "lab_level": ("سطح آزمایشگاه", "🔬", "progress"),
+    "hub_battle": ("هاب نبرد و ماجراجویی", "⚔️", "progress"),
+    "hub_creature": ("هاب هیولا و تجهیزات", "🦖", "progress"),
+    "hub_base": ("هاب پایگاه و منابع", "🏰", "progress"),
+    "hub_city": ("هاب شهر و خدمات", "🌐", "progress"),
+    "vault": ("خزانه و گاوصندوق", "🏦", "resources"),
+    "city": ("شهر و خدمات", "🌐", "progress"),
     # UI
     "lock": ("قفل", "🔒", "ui"),
     "unlock": ("بازگشایی قفل", "🔓", "ui"),
@@ -225,6 +231,29 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "flag_finish": ("پایان و خط پایان", "🏁", "battle"),
     "rosette": ("مدال افسانه‌ای", "🏵", "progress"),
     "page_counter": ("نشانگر صفحه", "📑", "ui"),
+    # Additional semantic keys
+    "achievements": ("دستاوردها", "🏅", "progress"),
+    "battlepass": ("پاس فصلی / بتلپاس", "🎟", "progress"),
+    "events": ("رویدادها", "⏳", "progress"),
+    "league": ("لیگ و رتبهبندی", "🎖", "progress"),
+    "referral": ("دعوت از دوستان", "🎁", "social"),
+    "codex": ("دانشنامه کایجوها", "📖", "progress"),
+    "titles": ("القاب و عناوین", "👑", "progress"),
+    "banner": ("بنر ویژه کایجو", "🎰", "progress"),
+    "arena": ("میدان آرنا", "🏟", "battle"),
+    "campaign": ("دانجن و ماجراجویی", "🗺", "battle"),
+    "upgrade": ("ارتقای هیولا", "🔧", "progress"),
+    "inventory": ("کوله تجهیزات", "🎒", "progress"),
+    "breeding": ("غار پرورش", "🕳", "progress"),
+    "fusion": ("تالار ترکیب", "🧪", "progress"),
+    "buildings": ("ساختمانهای پایگاه", "🏗", "progress"),
+    "workers": ("کارگران پایگاه", "👷", "progress"),
+    "research": ("آزمایشگاه پژوهش", "🔬", "progress"),
+    "idle": ("پاداش آفلاین", "💤", "resources"),
+    "exchange": ("صرافی طلا و دیانای", "🔄", "resources"),
+    "shop": ("فروشگاه روزانه", "🛒", "resources"),
+    "vip": ("اشتراک ویژه VIP", "⭐", "progress"),
+    "hub_shop": ("هاب فروشگاه و بازار", "🛒", "ui"),
 }
 
 CATEGORY_LABELS: dict[str, str] = {
@@ -318,8 +347,13 @@ def _load_glyph_map() -> dict[str, str]:
         return {}
 
 
-def refresh_cache() -> None:
+def refresh_cache(couple_glyphs: bool = True) -> None:
     """Call after any EmojiOverride write so lookups reflect it without a bot restart."""
+    if couple_glyphs:
+        try:
+            couple_all_key_glyphs(refresh=False)
+        except Exception:
+            pass
     _load_cache()
     _load_glyph_map()
 
@@ -535,6 +569,12 @@ CANONICAL_KEY_GLYPHS: dict[str, set[str]] = {
     "recycle": {"♻️", "♻"},
     "rocket": {"🚀"},
     "lab_level": {"🔬"},
+    "hub_battle": {"⚔️", "⚔"},
+    "hub_creature": {"🦖", "🦕"},
+    "hub_base": {"🏰", "🏯"},
+    "hub_city": {"🌐"},
+    "city": {"🌐"},
+    "vault": {"🏦"},
     # UI & Moderation
     "lock": {"🔒"},
     "unlock": {"🔓"},
@@ -616,6 +656,29 @@ CANONICAL_KEY_GLYPHS: dict[str, set[str]] = {
     "flag_finish": {"🏁"},
     "rosette": {"🏵️", "🏵"},
     "page_counter": {"📑"},
+    # Additional canonical glyphs
+    "achievements": {"🏅"},
+    "battlepass": {"🎟", "🎟️"},
+    "events": {"⏳"},
+    "league": {"🎖", "🎖️"},
+    "referral": {"🎁"},
+    "codex": {"📖"},
+    "titles": {"👑"},
+    "banner": {"🎰"},
+    "arena": {"🏟", "🏟️"},
+    "campaign": {"🗺", "🗺️"},
+    "upgrade": {"🔧"},
+    "inventory": {"🎒"},
+    "breeding": {"🕳", "🕳️"},
+    "fusion": {"🧪"},
+    "buildings": {"🏗", "🏗️"},
+    "workers": {"👷", "👷‍♂️", "👷♂️"},
+    "research": {"🔬"},
+    "idle": {"💤"},
+    "exchange": {"🔄"},
+    "shop": {"🛒", "🛍", "🛍️"},
+    "vip": {"⭐", "🌟"},
+    "hub_shop": {"🛒"},
 }
 
 
@@ -625,16 +688,12 @@ KEY_ALIASES: dict[str, str] = {
     "diamonds": "diamond",
     "dia": "diamond",
     "rank": "trophy",
-    "vip": "sub_vip",
     "speed_card": "speedup",
     "fire": "element_fire",
     "water": "element_water",
     "earth": "element_earth",
     "electric": "element_electric",
-    "shop": "shop_item",
-    "inventory": "collection",
     "team": "team",
-    "campaign": "dungeon",
     "market": "blackmarket",
     "chest": "chest_arena",
     "crates": "biocrate",
@@ -645,6 +704,22 @@ KEY_ALIASES: dict[str, str] = {
     "legendary": "rarity_legendary",
     "mythic": "rarity_mythic",
     "advantage": "element_advantage",
+    # Mapped variations
+    "pass": "battlepass",
+    "battle_pass": "battlepass",
+    "dungeon": "campaign",
+    "collection": "inventory",
+    "bag": "inventory",
+    "shop_item": "shop",
+    "cart": "shop",
+    "sub_vip": "vip",
+    "vip_sub": "vip",
+    "cave": "breeding",
+    "building": "buildings",
+    "worker": "workers",
+    "lab_level": "research",
+    "idle_sleep": "idle",
+    "fuse_chain": "fusion",
 }
 
 
@@ -751,7 +826,7 @@ def clear_emoji(key: str) -> bool:
     return deleted > 0
 
 
-def couple_all_key_glyphs() -> int:
+def couple_all_key_glyphs(refresh: bool = False) -> int:
     """One-shot backfill: for every semantic emoji the owner has already set, make sure
     the matching literal glyph is themed too (so pre-existing settings for 💎/💥/… also
     apply to hard-coded emojis in messages). Idempotent; safe to run at every startup."""
@@ -773,6 +848,6 @@ def couple_all_key_glyphs() -> int:
                 key=f"{_GLYPH_PREFIX}{g}", defaults={"custom_emoji_id": o.custom_emoji_id, "placeholder": g}
             )
             n += 1
-    if n:
-        refresh_cache()
+    if refresh and n:
+        refresh_cache(couple_glyphs=False)
     return n

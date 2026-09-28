@@ -29,7 +29,7 @@ def _render(st: dict) -> tuple[str, InlineKeyboardMarkup]:
     ]
     rows = [
         [btn(f"کشیدن بنر ({st['cost']} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="banner_pull")],
-        [back_btn("menu:cat_shop", "بازگشت به فروشگاه")],
+        [back_btn("menu:hub_city", "بازگشت به شهر و خدمات")],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -59,12 +59,15 @@ async def banner_pull_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         [btn(f"تأیید و کشیدن بنر ({st['cost']} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="banner_pull_do")],
         [back_btn("menu:banner", "❌ انصراف")],
     ])
-    await safe_edit_message_text(
-        query,
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("banner")
+    await send_screen(
+        update,
         f"🎰 <b>کشیدن بنر ویژه ({st['featured_label']})</b>\n\n"
         f"{get_emoji('diamond')} هزینه: <b>{st['cost']} الماس</b>\n"
         f"💎 موجودی شما: <b>{st['diamonds']} الماس</b>\n\n"
         "آیا از کشیدن بنر ویژه با الماس مطمئن هستید؟",
+        photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -86,12 +89,15 @@ async def banner_pull_do_callback(update: Update, context: ContextTypes.DEFAULT_
         tags.append("🎯 <b>تضمین افسانه‌ای!</b>")
     tag_line = ("\n" + " · ".join(tags)) if tags else ""
     text, keyboard = _render(st)
-    await safe_edit_message_text(
-        query,
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("banner")
+    await send_screen(
+        update,
         f"🎰 <b>نتیجه‌ی بنر:</b>\n\n"
         f"<tg-spoiler>{get_emoji('egg')} <b>{cr.name}</b>\n"
         f"{constants.element_label(cr.element)} · {constants.RARITY_LABELS[cr.rarity]}</tg-spoiler>"
         f"{tag_line}\n\n<i>از «🗂 کلکسیون» می‌تونی فعالش کنی.</i>\n\n━━━━━━━━━━\n" + text,
+        photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,
     )

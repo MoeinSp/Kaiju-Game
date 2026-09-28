@@ -24,7 +24,7 @@ colour scheme — from the web panel or a loadout — never touches a handler.
 import re
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from game.button_emoji import get_button_icon, get_button_label_emoji
+from game.button_emoji import BUTTON_EMOJI_DEFS, get_button_icon, get_button_label_emoji
 from game.button_style import resolve_style
 
 # A leading/trailing emoji cluster (broad unicode emoji ranges + geometric shapes like ◀ ▶
@@ -38,6 +38,173 @@ _TRAILING_EMOJI = re.compile(
     r"\s*[\U0001F000-\U0001FAFF\u25A0-\u25FF☀-➿←-⇿⬀-⯿⌀-⏿]"
     r"[️‍\U0001F000-\U0001FAFF\u25A0-\u25FF☀-➿⬀-⯿]*\s*$"
 )
+
+_INFER_KEYWORDS: list[tuple[tuple[str, ...], str]] = [
+    (("لغو", "انصراف"), "btn_cancel"),
+    (("تأیید", "تایید"), "btn_confirm"),
+    (("قبلی",), "btn_prev"),
+    (("بعدی",), "btn_next"),
+    (("بازگشت",), "btn_back"),
+    (("حذف",), "btn_delete"),
+    (("تغذیه", "غذا"), "btn_feed"),
+    (("تمرین",), "btn_train"),
+    (("تسریع", "سریع"), "btn_speedup"),
+    (("جستجو",), "btn_search"),
+    (("تنظیمات",), "btn_settings"),
+    (("بررسی مجدد", "تازه‌سازی", "بروزرسانی"), "btn_recheck"),
+    (("آهنگری",), "btn_forge"),
+    (("صرافی", "مبادله"), "btn_exchange"),
+    (("دانجن",), "btn_campaign"),
+    (("ماموریت", "مأموریت"), "btn_missions"),
+    (("پروفایل",), "btn_profile"),
+    (("رتبه‌بندی", "رتبه بندی"), "btn_rank"),
+    (("آرنا",), "btn_arena"),
+    (("کوله", "تجهیزات"), "btn_inventory"),
+    (("کلکسیون",), "btn_collection"),
+    (("پرورش", "غار"), "btn_breeding"),
+    (("ترکیب", "فیوژن"), "btn_fusion"),
+    (("پژوهش", "آزمایشگاه"), "btn_research"),
+    (("کارگران", "کارگر"), "btn_workers"),
+    (("ساختمان", "ساختمون"), "btn_buildings"),
+    (("فروشگاه", "شاپ"), "btn_shop"),
+    (("دستاورد",), "btn_achievements"),
+    (("بتلپاس", "پاس فصلی", "پاس ماهانه"), "btn_battlepass"),
+    (("رویداد",), "btn_events"),
+    (("لیگ",), "btn_league"),
+    (("دعوت", "زیرمجموعه"), "btn_referral"),
+    (("دانشنامه",), "btn_codex"),
+    (("القاب", "عناوین", "لقب"), "btn_titles"),
+    (("گردونه",), "btn_wheel"),
+    (("کازینو",), "btn_casino"),
+    (("اتحاد",), "btn_alliance"),
+]
+
+_INFER_LEADING_GLYPHS: dict[str, str] = {
+    "❌": "btn_cancel",
+    "❎": "btn_cancel",
+    "✅": "btn_confirm",
+    "✔️": "btn_confirm",
+    "✔": "btn_confirm",
+    "☑️": "btn_confirm",
+    "☑": "btn_confirm",
+    "◀️": "btn_prev",
+    "◀": "btn_prev",
+    "▶️": "btn_next",
+    "▶": "btn_next",
+    "🔙": "btn_back",
+    "⬅️": "btn_back",
+    "⬅": "btn_back",
+    "🗑️": "btn_delete",
+    "🗑": "btn_delete",
+    "🍖": "btn_feed",
+    "🥩": "btn_feed",
+    "🏋️": "btn_train",
+    "🏋": "btn_train",
+    "⚡️": "btn_speedup",
+    "⚡": "btn_speedup",
+    "🔍": "btn_search",
+    "🔎": "btn_search",
+    "⚙️": "btn_settings",
+    "⚙": "btn_settings",
+    "🍽️": "btn_feed",
+    "🍽": "btn_feed",
+    "🎒": "btn_inventory",
+    "🗂️": "btn_collection",
+    "🗂": "btn_collection",
+    "🧬": "btn_creature",
+    "🔧": "btn_upgrade",
+    "🎯": "btn_missions",
+    "👤": "btn_profile",
+    "🏆": "btn_rank",
+    "🏹": "btn_hunt",
+    "⚔️": "btn_attack",
+    "⚔": "btn_attack",
+    "🐲": "btn_raid_rank",
+    "📊": "btn_report",
+    "🦋": "btn_wings",
+    "🛡️": "btn_armor",
+    "🛡": "btn_armor",
+    "🦷": "btn_fangs",
+    "☠️": "btn_poison",
+    "🧪": "btn_fusion",
+    "🔬": "btn_research",
+    "🕳️": "btn_breeding",
+    "🕳": "btn_breeding",
+    "⚒️": "btn_forge",
+    "⚒": "btn_forge",
+    "💰": "btn_collect",
+    "🏗️": "btn_buildings",
+    "🏗": "btn_buildings",
+    "📦": "btn_biocrate",
+    "💠": "btn_diamond_box",
+    "🎡": "btn_wheel",
+    "🤝": "btn_alliance",
+    "🔒": "btn_locked",
+    "📡": "btn_join",
+    "🔄": "btn_recheck",
+    "🛠️": "btn_admin",
+    "🛠": "btn_admin",
+    "📢": "btn_broadcast",
+    "🗺️": "btn_campaign",
+    "🗺": "btn_campaign",
+    "🎖️": "btn_league",
+    "🎖": "btn_league",
+    "📖": "btn_codex",
+    "🎁": "btn_referral",
+    "🎟️": "btn_battlepass",
+    "🎟": "btn_battlepass",
+    "⏳": "btn_events",
+    "🎰": "btn_banner",
+    "🛒": "btn_shop",
+    "👷": "btn_workers",
+    "👷‍♂️": "btn_workers",
+    "💤": "btn_idle",
+    "🏅": "btn_achievements",
+    "👑": "btn_titles",
+    "⭐": "btn_vip",
+    "🌟": "btn_vip",
+    "🛍️": "btn_items",
+    "🛍": "btn_items",
+    "✨": "btn_skill",
+    "🏳️": "btn_forfeit",
+    "🏳": "btn_forfeit",
+    "🐣": "btn_hatch",
+    "♻️": "btn_reset",
+    "♻": "btn_reset",
+    "🚀": "btn_exp_launch",
+    "🏷": "btn_bm_bid",
+    "💎": "btn_diamond",
+    "🥾": "btn_kick",
+    "👥": "btn_members",
+    "✏️": "btn_edit",
+    "✏": "btn_edit",
+    "📋": "btn_list",
+    "📨": "btn_requests",
+    "🏦": "btn_vault",
+    "💳": "btn_confirm_pay",
+    "🦖": "btn_hub_creature",
+    "🏰": "btn_hub_base",
+    "🌐": "btn_hub_city",
+}
+
+
+def infer_emoji_key(label: str) -> str | None:
+    """Infer a BUTTON_EMOJI_DEFS key from the label text or its leading emoji."""
+    if not label:
+        return None
+    for keywords, key in _INFER_KEYWORDS:
+        if any(kw in label for kw in keywords):
+            return key
+    m = _LEADING_EMOJI.match(label)
+    if m:
+        glyph = m.group().strip()
+        if glyph in _INFER_LEADING_GLYPHS:
+            return _INFER_LEADING_GLYPHS[glyph]
+        norm = glyph.replace("\ufe0f", "").replace("\ufe0e", "").strip()
+        for k, v in _INFER_LEADING_GLYPHS.items():
+            if k.replace("\ufe0f", "").replace("\ufe0e", "").strip() == norm:
+                return v
+    return None
 
 # Semantic roles. Call sites say what a button *means*; game.button_style decides
 # what colour that currently is. Kept as module constants (rather than bare
@@ -82,36 +249,44 @@ def btn(
         label = _TG_EMOJI_HTML.sub(r"\1", label)
         label = _ANY_HTML.sub("", label)
 
+    if emoji_key is None:
+        emoji_key = infer_emoji_key(label)
+    elif emoji_key not in BUTTON_EMOJI_DEFS and f"btn_{emoji_key}" in BUTTON_EMOJI_DEFS:
+        emoji_key = f"btn_{emoji_key}"
+
     if emoji_key is not None:
         icon = get_button_icon(emoji_key)
         has_leading = bool(_LEADING_EMOJI.match(label))
         has_trailing = bool(_TRAILING_EMOJI.search(label))
-        if icon is not None:
+
+        stripped = label
+        if has_leading:
+            stripped = _LEADING_EMOJI.sub("", stripped, count=1)
+        if has_trailing:
+            stripped = _TRAILING_EMOJI.sub("", stripped, count=1)
+
+        if icon:
             # Telegram draws the icon *before* the label, so any emoji baked into the
             # label would render a SECOND time next to the Premium icon. Strip it.
-            stripped = label
-            if has_leading:
-                stripped = _LEADING_EMOJI.sub("", stripped, count=1)
-            if has_trailing:
-                stripped = _TRAILING_EMOJI.sub("", stripped, count=1)
+            kwargs["icon_custom_emoji_id"] = icon
             if stripped.strip():
-                # there's real text left → show the Premium icon + that text
-                kwargs["icon_custom_emoji_id"] = icon
                 label = stripped.strip()
             elif emoji_key in ("btn_prev", "btn_back"):
                 label = "قبلی"
-                kwargs["icon_custom_emoji_id"] = icon
             elif emoji_key == "btn_next":
                 label = "بعدی"
-                kwargs["icon_custom_emoji_id"] = icon
-            # else: the label was ONLY an emoji without known text fallback:
-            # keep plain emoji and skip icon
-        elif not has_leading and not has_trailing:
-            # no Premium icon and the label has no emoji of its own → prefix the
-            # key's unicode fallback so the button still has an identifying glyph
+            else:
+                label = get_button_label_emoji(emoji_key) or label
+        else:
+            # icon is None: render text fallback. Strip hardcoded leading/trailing
+            # emoji from label and prefix configured fallback.
             fallback = get_button_label_emoji(emoji_key)
-            if fallback:
-                label = f"{fallback} {label}"
+            base_text = stripped.strip()
+            if base_text:
+                label = f"{fallback} {base_text}" if fallback else base_text
+            else:
+                label = fallback if fallback else label
+
     # emoji_key doubles as the per-button colour key, so a button that already
     # has its own identity in the registry can also have its own colour
     resolved = resolve_style(style, emoji_key)
@@ -189,4 +364,27 @@ def enforce_keyboard_symmetry(rows: list[list[InlineKeyboardButton]]) -> list[li
 def symmetric_markup(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
     """Builds an InlineKeyboardMarkup after strictly enforcing color symmetry across all rows."""
     return InlineKeyboardMarkup(enforce_keyboard_symmetry(rows))
+
+
+def get_main_reply_keyboard():
+    """Reply keyboard for fast one-tap navigation in private chat.
+    one_time_keyboard=True auto-hides the keyboard after a button is pressed,
+    and is_persistent=False allows the user to collapse/toggle it anytime."""
+    from telegram import KeyboardButton, ReplyKeyboardMarkup
+    from game.button_emoji import get_button_label_emoji
+
+    b_battle = f"{get_button_label_emoji('btn_hub_battle') or '⚔️'} نبرد و ماجراجویی"
+    b_creature = f"{get_button_label_emoji('btn_hub_creature') or '🦖'} هیولا و تجهیزات"
+    b_base = f"{get_button_label_emoji('btn_hub_base') or '🏰'} پایگاه و منابع"
+    b_shop = f"{get_button_label_emoji('btn_hub_shop') or '🛒'} فروشگاه و بازار"
+    b_city = f"{get_button_label_emoji('btn_hub_city') or '🌐'} شهر و جوایز"
+    b_me = f"{get_button_label_emoji('btn_profile') or '👤'} آزمایشگاه من"
+
+    keyboard = [
+        [KeyboardButton(b_battle), KeyboardButton(b_creature)],
+        [KeyboardButton(b_base), KeyboardButton(b_shop)],
+        [KeyboardButton(b_city), KeyboardButton(b_me)],
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True, is_persistent=False)
+
 

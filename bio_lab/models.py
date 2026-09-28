@@ -135,6 +135,10 @@ class User(models.Model):
     plundered_alert_gold = models.IntegerField(default=0)
     plundered_alert_dna = models.IntegerField(default=0)
 
+    # ── Story Quests & Onboarding (خط داستانی فصلی و آموزش اولیه) ──
+    story_step = models.IntegerField(default=0)
+    onboarding_completed = models.BooleanField(default=False)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:

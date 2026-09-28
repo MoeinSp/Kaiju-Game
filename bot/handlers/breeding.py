@@ -116,11 +116,11 @@ def _nav_row(page: int, total_pages: int, cb) -> list:
     """Prev/next page buttons; `cb(page_index)` builds each callback_data."""
     row = []
     if page > 0:
-        row.append(btn("« قبلی", style=NAV, callback_data=cb(page - 1)))
+        row.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=cb(page - 1)))
     if total_pages > 1:
         row.append(btn(f"صفحه {page + 1}/{total_pages}", style=NAV, callback_data="brd_noop"))
     if page < total_pages - 1:
-        row.append(btn("بعدی »", style=NAV, callback_data=cb(page + 1)))
+        row.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=cb(page + 1)))
     return [row] if row else []
 
 
@@ -433,8 +433,8 @@ async def breeding_pick_b_callback(update: Update, context: ContextTypes.DEFAULT
     )
     pair = f"{parent_a.id}:{parent_b.id}"
     rows = [
-        [btn(f"🎲 شانس رده ({pct}٪)", style=NAV, callback_data=f"brd_info:chance:{pair}"),
-         btn("⏱ زمان‌ها", style=NAV, callback_data=f"brd_info:time:{pair}")],
+        [btn(f"شانس رده ({pct}٪)", emoji_key="btn_cave_info", style=NAV, callback_data=f"brd_info:chance:{pair}"),
+         btn("زمان‌ها", emoji_key="btn_time_info", style=NAV, callback_data=f"brd_info:time:{pair}")],
         [
             btn("بذارش توی غار", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"brd_go:{parent_a.id}:{parent_b.id}"),
             btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER, callback_data="menu:breeding"),
@@ -624,8 +624,8 @@ async def breeding_cave_finish_ask_callback(update: Update, context: ContextType
         f"آیا تأیید می‌کنی؟",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
-            btn(f"✅ بله ({price} 💎)", style=PRIMARY, callback_data=cb_finish),
-            btn("❌ نه", style=NAV, callback_data="menu:breeding"),
+            btn(f"بله ({price} 💎)", emoji_key="btn_confirm", style=PRIMARY, callback_data=cb_finish),
+            btn("نه", emoji_key="btn_cancel", style=NAV, callback_data="menu:breeding"),
         ]]),
     )
 
@@ -656,8 +656,8 @@ async def breeding_egg_finish_ask_callback(update: Update, context: ContextTypes
         f"آیا تأیید می‌کنی؟",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
-            btn(f"✅ بله ({price} 💎)", style=PRIMARY, callback_data=f"brd_egg_finish:{egg_id}"),
-            btn("❌ نه", style=NAV, callback_data="menu:breeding"),
+            btn(f"بله ({price} 💎)", emoji_key="btn_confirm", style=PRIMARY, callback_data=f"brd_egg_finish:{egg_id}"),
+            btn("نه", emoji_key="btn_cancel", style=NAV, callback_data="menu:breeding"),
         ]]),
     )
 
@@ -715,7 +715,7 @@ async def breeding_cancel_callback(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
     cb_yes = f"brd_cancel_yes:{job_id}" if job_id else "brd_cancel_yes"
     keyboard = InlineKeyboardMarkup([[
-        btn("✅ بله، لغو کن", style=DANGER, callback_data=cb_yes),
+        btn("بله، لغو کن", emoji_key="btn_confirm", style=DANGER, callback_data=cb_yes),
         btn("انصراف", emoji_key="btn_cancel", style=NAV, callback_data="menu:breeding"),
     ]])
     await safe_edit_message_text(

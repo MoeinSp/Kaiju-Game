@@ -264,7 +264,19 @@ async def enforce_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE)
         raise ApplicationHandlerStop
 
 
+async def react_to_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Adds a heart (❤) reaction to incoming user messages."""
+    msg = update.message or update.edited_message
+    if msg is not None and msg.from_user and not msg.from_user.is_bot:
+        try:
+            from telegram import ReactionTypeEmoji
+            await msg.set_reaction([ReactionTypeEmoji("❤")])
+        except Exception:
+            pass
+
+
 def register(application) -> None:
+    application.add_handler(TypeHandler(Update, react_to_user_message), group=-4)
     application.add_handler(TypeHandler(Update, capture_referral), group=-3)
     application.add_handler(TypeHandler(Update, enforce_ban), group=-2)
     application.add_handler(TypeHandler(Update, enforce_force_join), group=-1)

@@ -46,7 +46,7 @@ def _render(user, view: dict, is_group: bool = False) -> tuple[str, InlineKeyboa
             [btn(f"🎁 دریافت همه ({view['claimable']})", emoji_key="btn_confirm", style=CONFIRM, callback_data="ach_claim")]
         )
     if not is_group:
-        rows.append([back_btn("menu:cat_rewards", "بازگشت به جایزه‌ها")])
+        rows.append([back_btn("menu:hub_city", "بازگشت به شهر و خدمات")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -67,6 +67,7 @@ def _claim_sync(tg_user):
 
 async def achievements_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     user, result, view = await run_db(_claim_sync, update.effective_user)
     if not result["claimed"]:
         await query.answer("چیزی برای دریافت نیست.", show_alert=True)
@@ -74,10 +75,13 @@ async def achievements_claim_callback(update: Update, context: ContextTypes.DEFA
     await query.answer(f"🎉 {len(result['claimed'])} دستاورد دریافت شد!")
     got = achievements._reward_text(result["reward"]) or "—"
     names = "، ".join(a.title for a in result["claimed"])
-    text, keyboard = _render(user, view)
-    await safe_edit_message_text(
-        query,
+    text, keyboard = _render(user, view, is_group=is_group)
+    from game.media import get_feature_image_path
+    photo = get_feature_image_path("achievements")
+    await send_screen(
+        update,
         f"🎉 <b>دستاورد دریافت شد!</b>\n{names}\n🎁 <b>{got}</b>\n\n━━━━━━━━━━━━━━━━━━━━\n" + text,
+        photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
