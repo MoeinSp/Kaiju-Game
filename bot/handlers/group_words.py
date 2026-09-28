@@ -1390,7 +1390,7 @@ def _leaderboard_card(user, ranked, powers) -> tuple[str, InlineKeyboardMarkup]:
     for i, c in enumerate(ranked, start=1):
         rank = medals[i - 1] if i <= 3 else f"<b>{i}.</b>"
         lines.append(
-            f"{rank} {mention(c.owner)}\n"
+            f"{rank}  <b>{lab_display(c.owner)}</b>\n"
             f"  ▫️ قدرت: <code>{powers.get(c.id, 0):,}</code>\n"
             f"  ▫️ سطح: <code>{c.level}</code>"
         )

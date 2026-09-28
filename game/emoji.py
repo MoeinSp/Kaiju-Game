@@ -733,6 +733,11 @@ def get_emoji(key: str, fallback: str | None = None) -> str:
     resolved_key = KEY_ALIASES.get(key, key)
     cache = _cache if _cache is not None else _load_cache()
     override = cache.get(resolved_key)
+    if override is None:
+        def_glyph = DEFAULT_EMOJI.get(resolved_key, "")
+        if def_glyph:
+            norm_g = _norm_glyph(def_glyph)
+            override = cache.get(f"{_GLYPH_PREFIX}{norm_g}")
     if override is not None:
         ph = override.placeholder
         # If the stored placeholder conflicts with another key (e.g. coin had 🧬),
@@ -753,6 +758,11 @@ def get_plain_emoji(key: str, fallback: str | None = None) -> str:
     resolved_key = KEY_ALIASES.get(key, key)
     cache = _cache if _cache is not None else _load_cache()
     override = cache.get(resolved_key)
+    if override is None:
+        def_glyph = DEFAULT_EMOJI.get(resolved_key, "")
+        if def_glyph:
+            norm_g = _norm_glyph(def_glyph)
+            override = cache.get(f"{_GLYPH_PREFIX}{norm_g}")
     if override is not None and override.placeholder:
         return override.placeholder
     return fallback if fallback is not None else DEFAULT_EMOJI.get(resolved_key, "")

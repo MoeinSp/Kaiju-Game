@@ -33,8 +33,16 @@ def mention(user: User) -> str:
     """A clickable Telegram mention of the account (tg://user link), for leaderboards
     where the person — not the lab or creature — is the identity. The visible label
     is the escaped account name; tapping it opens the user's profile."""
-    label = display_name(user)
-    return f'<a href="tg://user?id={user.id}">{label}</a>'
+    from game.subscription import subscription_badge
+
+    badge = subscription_badge(user)
+    if user.username:
+        base = f"@{html.escape(user.username)}"
+    elif user.first_name:
+        base = html.escape(user.first_name)
+    else:
+        base = f"بازیکن {user.id}"
+    return f'<a href="tg://user?id={user.id}">{base}</a>{badge}'
 
 
 def lab_display(user: User) -> str:

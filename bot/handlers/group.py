@@ -16,6 +16,7 @@ from bio_lab.repository import (
     get_or_create_group,
     get_or_create_user,
     group_member_creatures,
+    lab_display,
     mention,
     touch_membership,
 )
@@ -1770,13 +1771,13 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         _RULE,
     ]
     for i, (c, power) in enumerate(creatures, start=1):
-        rank = medals[i - 1] if i <= 3 else f"{i}."
+        rank = medals[i - 1] if i <= 3 else f"<b>{i}.</b>"
         lines.append(
-            f"{rank} {mention(c.owner)}\n"
-            f"💪 قدرت: <code>{power:,}</code>\n"
-            f"🎖 لِوِل: <code>{c.level}</code>"
+            f"{rank}  <b>{lab_display(c.owner)}</b>\n"
+            f"  ▫️ قدرت: <code>{power:,}</code>\n"
+            f"  ▫️ سطح: <code>{c.level}</code>"
         )
-    await update.message.reply_text("\n\n".join(lines[:2]) + "\n" + "\n\n".join(lines[2:]), parse_mode="HTML", reply_markup=keyboard)
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
 
 def _guardian_sync(chat, tg_user):
