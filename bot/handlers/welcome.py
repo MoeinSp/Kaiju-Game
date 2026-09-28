@@ -60,8 +60,7 @@ async def on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 f"{get_emoji('warning')} <b>عدم امکان فعالیت در گروه</b>\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
                 f"⚠️ این ربات فقط در گروه‌های دارای <b>حداقل {MIN_GROUP_MEMBERS} عضو</b> فعال می‌شود.\n\n"
-                f"👥 تعداد اعضای فعلی این گروه: <code>{member_count}</code> نفر\n\n"
-                f"💡 <i>برای استفاده از ربات، ابتدا تعداد اعضای گروه را به حداقل {MIN_GROUP_MEMBERS} نفر برسانید و سپس مجدداً ربات را اضافه کنید.</i>"
+                f"👥 تعداد اعضای فعلی این گروه: <code>{member_count}</code> نفر"
             )
             await context.bot.send_message(chat_id=chat_id, text=warning_text, parse_mode="HTML")
         except Exception:
