@@ -79,7 +79,7 @@ def _inv_home_render(counts: dict, is_group: bool = False) -> tuple[str, InlineK
         rows.append(row)
     rows.append([btn("آهنگری", emoji_key="btn_forge", style=SHOP, callback_data="menu:blacksmith")])
     if not is_group:
-        rows.append([back_btn("menu:me")])
+        rows.append([back_btn("menu:hub_creature", "بازگشت به هیولا")])
     return text, InlineKeyboardMarkup(rows)
 
 
@@ -155,7 +155,7 @@ async def inventory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await send_screen(update,
             f"{get_emoji('lab')} کوله‌پشتی‌ات خالیه! از باکس‌های ژنتیکی (📦 باکس ژنتیکی) تجهیزات به‌دست بیار.",
             parse_mode="HTML",
-            reply_markup=back_only_keyboard() if not is_group else None,
+            reply_markup=back_only_keyboard("menu:hub_creature", "بازگشت به هیولا") if not is_group else None,
         )
         return
     text, keyboard = _inv_home_render(counts, is_group=is_group)

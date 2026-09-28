@@ -70,7 +70,7 @@ def _render_mugen_keyboard(view: dict, is_group: bool = False) -> InlineKeyboard
         ],
     ]
     if not is_group:
-        rows.append([back_btn("menu:me")])
+        rows.append([back_btn("menu:hub_battle", "بازگشت به نبرد")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -139,7 +139,7 @@ async def mugen_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     try:
         view = await run_db(_mugen_panel_sync, update.effective_user)
     except GameError as exc:
-        await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard() if not is_group else None)
+        await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard("menu:hub_battle", "بازگشت به نبرد") if not is_group else None)
         return
 
     from game.media import get_feature_image_path
@@ -200,7 +200,7 @@ async def mugen_fight_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     rows = [[btn("ادامه صعود", emoji_key="btn_mugen", style=BATTLE, callback_data="mugen:panel")]]
     if not is_group:
-        rows.append([back_btn("menu:me")])
+        rows.append([back_btn("menu:hub_battle", "بازگشت به نبرد")])
     kb = InlineKeyboardMarkup(rows)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
 

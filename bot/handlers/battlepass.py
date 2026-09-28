@@ -97,7 +97,7 @@ def _render(user, st: dict, is_group: bool = False) -> tuple[str, InlineKeyboard
             [btn(f"خرید پاس ویژه ({st['premium_cost']} 💎)", emoji_key="btn_battlepass", style=SHOP, callback_data="pass_buy")]
         )
     if not is_group:
-        rows.append([back_btn("menu:hub_city", "بازگشت به شهر و خدمات")])
+        rows.append([back_btn("menu:hub_city", "بازگشت به شهر")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 

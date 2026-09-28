@@ -40,7 +40,7 @@ def _render(st: dict) -> tuple[str, InlineKeyboardMarkup]:
         rows.append([btn("دریافت جایزه‌ی امروز", emoji_key="btn_confirm", style=CONFIRM, callback_data="event_claim")])
     else:
         lines.append(f"\n{get_emoji('confirm')} جایزه‌ی امروزو گرفتی. فردا دوباره بیا.")
-    rows.append([back_btn("menu:hub_city", "بازگشت به شهر و خدمات")])
+    rows.append([back_btn("menu:hub_city", "بازگشت به شهر")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 

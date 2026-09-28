@@ -76,7 +76,7 @@ def _panel_keyboard(lab_level: int, rows) -> InlineKeyboardMarkup:
             else:
                 tag = f"سطح {r['level']}/{lab_level}"
             kb.append([btn(f"{r['label']} — {tag}", emoji_key=r["btn_key"], style=LIST, callback_data=f"rsch:pick:{r['key']}")])
-    kb.append([back_btn("menu:buildings", "بازگشت به ساختمون‌ها")])
+    kb.append([back_btn("menu:hub_base", "بازگشت به پایگاه")])
     return InlineKeyboardMarkup(kb)
 
 

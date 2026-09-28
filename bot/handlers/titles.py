@@ -28,7 +28,7 @@ def _render(equipped, avail, total, is_group: bool = False) -> tuple[str, Inline
     if equipped:
         rows.append([btn("برداشتن لقب", emoji_key="btn_cancel", style=LIST, callback_data="title_set:none")])
     if not is_group:
-        rows.append([back_btn("menu:profile", "بازگشت به پروفایل")])
+        rows.append([back_btn("menu:hub_city", "بازگشت به شهر")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 

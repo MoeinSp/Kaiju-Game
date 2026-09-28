@@ -98,7 +98,7 @@ def _render(view: dict, filt: str = "all", page: int = 0, is_group: bool = False
         ])
     rows += nav_rows
     if not is_group:
-        rows.append([back_btn("menu:me")])
+        rows.append([back_btn("menu:hub_creature", "بازگشت به هیولا")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 

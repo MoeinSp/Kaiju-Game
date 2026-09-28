@@ -659,7 +659,7 @@ def _upgrade_render(user, ranked, filt: str, page: int) -> tuple[str, InlineKeyb
         nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"upg_page:{filt}:{page + 1}"))
     if nav:
         rows.append(nav)
-    rows.append([back_btn("menu:me")])
+    rows.append([back_btn("menu:hub_creature", "بازگشت به هیولا")])
 
     page_note = f" <i>(صفحه <code>{page + 1}/{total_pages}</code>)</i>" if total_pages > 1 else ""
     rarity_note = "" if filt == "all" else f" — <b>{constants.RARITY_LABELS[filt]}</b>"
@@ -1719,7 +1719,7 @@ def _collection_render(ranked, filt: str = "all", page: int = 0) -> tuple[str, I
     if nav:
         rows.append(nav)
     rows.append([btn("ترکیب هیولا", emoji_key="btn_fusion", style=NAV, callback_data="menu:fusion")])
-    rows.append([back_btn("menu:me")])
+    rows.append([back_btn("menu:hub_creature", "بازگشت به هیولا")])
 
     page_note = f" <i>(صفحه <code>{page + 1}/{total_pages}</code>)</i>" if total_pages > 1 else ""
     text = (
@@ -2476,7 +2476,7 @@ async def fusion_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         lines.append("\n🔒 اول باید 🔮 <b>تالار ادغام</b> رو از «🏗 ساختمون‌ها» بسازی.")
         rows = [
             [btn("رفتن به ساختمون‌ها", emoji_key="btn_buildings", style=PRIMARY, callback_data="menu:buildings")],
-            [back_btn("menu:me")],
+            [back_btn("menu:hub_creature", "بازگشت به هیولا")],
         ]
         await send_screen(update, 
             "\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows)
@@ -2531,7 +2531,7 @@ def _fusion_body(user, pairs, cap, filt: str) -> tuple[str, InlineKeyboardMarkup
                 f"{rarity_dot} {p['name']} ({p['star']}★ ➔ {p['star'] + 1}★){extra}",
                 style=PRIMARY, callback_data=f"fus_a:{p['parent_a'].id}",
             )])
-    rows.append([back_btn("menu:me")])
+    rows.append([back_btn("menu:hub_creature", "بازگشت به هیولا")])
     lines.append(f"\n{wallet_line(user)}")
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -3379,7 +3379,7 @@ def _alliance_action_keyboard(in_alliance: bool) -> InlineKeyboardMarkup:
             [btn("پیوستن به اتحاد", emoji_key="btn_alliance", style=PRIMARY, callback_data="ally_join")],
             [btn("برترین اتحادها", emoji_key="btn_rank", style=NAV, callback_data="ally_top")],
         ]
-    rows.append([back_btn("menu:hub_battle", "بازگشت به نبرد و ماجراجویی")])
+    rows.append([back_btn("menu:hub_city", "بازگشت به شهر")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -3581,7 +3581,7 @@ def _requests_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
             btn(f"قبول {name[:10]}", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"ally_approve:{r['id']}"),
             btn("رد", emoji_key="btn_cancel", style=DANGER, callback_data=f"ally_reject:{r['id']}"),
         ])
-    rows.append([back_btn("ally_members", "بازگشت به اعضا")])
+    rows.append([back_btn("menu:alliance_info", "بازگشت به اتحاد")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -3721,6 +3721,7 @@ async def alliance_set_minpow_start(update: Update, context: ContextTypes.DEFAUL
     await safe_edit_message_text(
         query, "🎯 حداقل قدرت لازم برای عضویت رو به عدد بفرست (مثلاً <code>500</code>؛ برای برداشتن محدودیت 0):",
         parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "انصراف")]]),
     )
 
 
@@ -3728,16 +3729,22 @@ async def alliance_kick_start(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     context.user_data[AWAITING_PLAYER_KEY] = {"action": "ally_kick"}
     await query.answer()
-    await safe_edit_message_text(query, f"🥾 آیدیِ عضوی که می‌خوای کیک بشه رو بفرست:{_reply_hint(update)}",
-                                 parse_mode="HTML")
+    await safe_edit_message_text(
+        query, f"🥾 آیدیِ عضوی که می‌خوای کیک بشه رو بفرست:{_reply_hint(update)}",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "انصراف")]]),
+    )
 
 
 async def alliance_deputy_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     context.user_data[AWAITING_PLAYER_KEY] = {"action": "ally_deputy"}
     await query.answer()
-    await safe_edit_message_text(query, f"🎖 آیدیِ عضوی که قائم‌مقام بشه رو بفرست:{_reply_hint(update)}",
-                                 parse_mode="HTML")
+    await safe_edit_message_text(
+        query, f"🎖 آیدیِ عضوی که قائم‌مقام بشه رو بفرست:{_reply_hint(update)}",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "انصراف")]]),
+    )
 
 
 def _deputy_off_sync(tg_user):
@@ -3809,6 +3816,7 @@ async def alliance_create_callback(update: Update, context: ContextTypes.DEFAULT
         f"🟢 {get_emoji('alliance')} اسم اتحاد جدیدت رو بفرست:\n\n"
         f"<i>ساختش <code>{ALLIANCE_CREATE_COST:,}</code> طلا هزینه داره — آخرش تأیید می‌گیریم.</i>{_reply_hint(update)}",
         parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "انصراف")]]),
     )
 
 
@@ -3932,6 +3940,7 @@ async def alliance_search_callback(update: Update, context: ContextTypes.DEFAULT
         query,
         f"🔍 {get_emoji('alliance')} اسم (یا بخشی از اسم) اتحاد رو بفرست:{_reply_hint(update)}",
         parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "انصراف")]]),
     )
 
 
@@ -3939,9 +3948,11 @@ async def alliance_deposit_callback(update: Update, context: ContextTypes.DEFAUL
     query = update.callback_query
     context.user_data[AWAITING_PLAYER_KEY] = {"action": "alliance_deposit"}
     await query.answer()
-    await safe_edit_message_text(query,
+    await safe_edit_message_text(
+        query,
         f"💰 چند {get_emoji('coin')} طلا می‌خوای به خزانه واریز کنی؟ یه عدد بفرست:{_reply_hint(update)}",
         parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "انصراف")]]),
     )
 
 

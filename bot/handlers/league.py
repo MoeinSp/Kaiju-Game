@@ -84,7 +84,7 @@ async def league_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     photo = get_feature_image_path("league")
     await send_screen(
         update, "\n".join(lines), photo=photo, parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([[back_btn("menu:hub_city", "بازگشت به شهر و خدمات")]]),
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:hub_city", "بازگشت به شهر")]]),
     )
 
 

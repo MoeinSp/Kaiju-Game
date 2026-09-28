@@ -88,7 +88,7 @@ def _render(st: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyb
             f"🎉 دریافت جایزه ({st['claimable']} دعوت آماده)",
             emoji_key="btn_confirm", style=CONFIRM, callback_data="ref_claim",
         )])
-    rows.append([back_btn("menu:hub_city", "بازگشت به شهر و خدمات")])
+    rows.append([back_btn("menu:hub_city", "بازگشت به شهر")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 

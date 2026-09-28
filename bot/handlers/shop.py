@@ -57,7 +57,7 @@ def _render(offers, coins, diamonds, is_group: bool = False) -> tuple[str, Inlin
     if not offers:
         lines.append("\n<i>الان آفری موجود نیست. بعداً سر بزن.</i>")
     if not is_group:
-        rows.append([back_btn("menu:hub_city", "بازگشت به شهر و خدمات")])
+        rows.append([back_btn("menu:hub_shop", "بازگشت به فروشگاه")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 

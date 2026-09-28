@@ -177,7 +177,7 @@ def _arena_home_keyboard(has_revenges: bool, chest_count: int = 0, ready_chests:
             btn("جدول این هفته", emoji_key="btn_rank", style=NAV, callback_data="arena_top"),
             btn("فصل قبل", emoji_key="btn_last_season", style=NAV, callback_data="arena_last_season"),
         ],
-        [back_btn("menu:me")],
+        [back_btn("menu:hub_battle", "بازگشت به نبرد")],
     ]
     return InlineKeyboardMarkup(rows)
 
@@ -1521,7 +1521,7 @@ async def arena_chest_open_callback(update: Update, context: ContextTypes.DEFAUL
     kb = InlineKeyboardMarkup([
         [
             btn("جعبه‌های آرنا", emoji_key="btn_chests", style=SHOP, callback_data="arena_chests"),
-            back_btn("menu:me", "منوی اصلی"),
+            back_btn("menu:arena", "بازگشت به آرنا"),
         ],
     ])
     await send_screen(update, "\n".join(lines), photo=photo, parse_mode="HTML", reply_markup=kb)

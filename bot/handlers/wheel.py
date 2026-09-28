@@ -28,7 +28,7 @@ async def wheel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         prize = await run_db(_wheel_sync, update.effective_user)
     except GameError as exc:
-        await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard())
+        await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard("menu:hub_city", "بازگشت به شهر"))
         return
 
     emoji_key = _KIND_EMOJI_KEY.get(prize.get("kind"), "wheel")
@@ -41,7 +41,7 @@ async def wheel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "<blockquote>فردا دوباره سر بزن، یه چرخش دیگه منتظرته.</blockquote>",
         photo=photo,
         parse_mode="HTML",
-        reply_markup=back_only_keyboard("menu:hub_city", "بازگشت به شهر و خدمات"),
+        reply_markup=back_only_keyboard("menu:hub_city", "بازگشت به شهر"),
     )
 
 

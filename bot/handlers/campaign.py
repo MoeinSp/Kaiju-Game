@@ -48,7 +48,7 @@ def _render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
     st = view["status"]
     if st["next_stage"] is None:
         text = f"{get_emoji('dungeon')} <b>دانجن</b>\n━━━━━━━━━━━━━━━━━━━━\n{get_emoji('trophy')} <b>کل دانجن رو فتح کردی!</b>\n<i>منتظر مراحل جدید باش.</i>"
-        return text, InlineKeyboardMarkup([[back_btn("menu:me")]])
+        return text, InlineKeyboardMarkup([[back_btn("menu:hub_battle", "بازگشت به نبرد")]])
 
     boss = f" {get_emoji('hunt')} <b>(باس!)</b>" if st["next_is_boss"] else ""
     rew_lines = _reward_lines(st["next_reward"])
@@ -74,7 +74,7 @@ def _render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
             btn("شروع نبرد", emoji_key="btn_hunt", style=BATTLE, callback_data="camp_fight"),
             btn("مدیریت تیم", emoji_key="btn_team", style=PRIMARY, callback_data="menu:team"),
         ])
-    rows.append([back_btn("menu:me")])
+    rows.append([back_btn("menu:hub_battle", "بازگشت به نبرد")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 

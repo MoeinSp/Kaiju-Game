@@ -106,7 +106,7 @@ def _buildings_keyboard(building_rows, upgrading_ids, busy_count, slots, diamond
             emoji_key="btn_workers",
             style=SHOP, callback_data="bld_buy_builder",
         )])
-    rows.append([back_btn("menu:me")])
+    rows.append([back_btn("menu:hub_base", "بازگشت به پایگاه")])
     return InlineKeyboardMarkup(rows)
 
 

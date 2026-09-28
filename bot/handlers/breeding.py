@@ -184,7 +184,7 @@ def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
         )
         rows = [
             [btn("رفتن به ساختمون‌ها", emoji_key="btn_buildings", style=PRIMARY, callback_data="menu:buildings")],
-            [back_btn("menu:me")],
+            [back_btn("menu:hub_creature", "بازگشت به هیولا")],
         ]
         return text, InlineKeyboardMarkup(rows)
 
@@ -243,7 +243,7 @@ def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
 
     lines.append(f"\n{get_emoji('diamond')} موجودی الماس: <code>{view['user'].diamonds:,}</code>")
     rows.append([btn("راهنمای کامل غار", emoji_key="btn_help", style=NAV, callback_data="brd_guide")])
-    rows.append([back_btn("menu:me")])
+    rows.append([back_btn("menu:hub_creature", "بازگشت به هیولا")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 

@@ -109,7 +109,7 @@ def _biocrate_list_keyboard(tickets: int = 0) -> InlineKeyboardMarkup:
             cfg['label'],
             style=SHOP, callback_data=f"bc_pick:{tier}",
         )])
-    rows.append([back_btn("menu:hub_city", "بازگشت به شهر و خدمات")])
+    rows.append([back_btn("menu:hub_shop", "بازگشت به فروشگاه")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -324,7 +324,7 @@ def _diamond_box_list_keyboard(free_tiers: set[str] | None = None) -> InlineKeyb
         else:
             label = f"{cfg['label']}"
         rows.append([btn(label, style=SHOP, callback_data=f"dbox_pick:{tier}")])
-    rows.append([back_btn("menu:hub_city", "بازگشت به شهر و خدمات")])
+    rows.append([back_btn("menu:hub_shop", "بازگشت به فروشگاه")])
     return InlineKeyboardMarkup(rows)
 
 

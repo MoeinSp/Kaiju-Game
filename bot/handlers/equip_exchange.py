@@ -41,17 +41,17 @@ def _selection(context) -> set:
 def _back_button(update: Update):
     """The «بازگشت» button target: in a group the panel was opened from «مبادله», so it
     returns to that exchange home (an exch: callback that works in groups); in the DM it
-    goes back to the creature hub. Fixes the dead back button reported in groups."""
+    goes back to the base hub. Fixes the dead back button reported in groups."""
     chat = update.effective_chat
     if chat is not None and chat.type in ("group", "supergroup"):
         return btn("↩️ بازگشت به مبادله", emoji_key="btn_back", style=NAV,
                    callback_data=f"exch:home:{update.effective_user.id}")
-    return back_btn("menu:hub_creature", "بازگشت به هیولا و تجهیزات")
+    return back_btn("menu:hub_base", "بازگشت به پایگاه")
 
 
 def _render(tickets, items, selected: set, filt: str, page: int, back=None):
     if back is None:
-        back = back_btn("menu:hub_creature", "بازگشت به هیولا و تجهیزات")
+        back = back_btn("menu:hub_base", "بازگشت به پایگاه")
     selected &= {it.id for it in items}  # drop ids that are gone (converted/equipped)
     picked = [it for it in items if it.id in selected]
     gain = sum(ticket_value(it) for it in picked)

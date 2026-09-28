@@ -66,7 +66,7 @@ def _render_bm_keyboard(auctions: list[BlackMarketAuction], is_group: bool = Fal
         ])
     rows.append([btn("بروزرسانی بازار", emoji_key="btn_bm_refresh", style=NAV, callback_data="bm:refresh")])
     if not is_group:
-        rows.append([back_btn("menu:me")])
+        rows.append([back_btn("menu:hub_shop", "بازگشت به فروشگاه")])
     return InlineKeyboardMarkup(rows)
 
 

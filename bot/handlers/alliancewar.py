@@ -61,7 +61,7 @@ async def perks_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     info = await run_db(_perks_sync, update.effective_user)
     await query.answer()
     if info is None:
-        await safe_edit_message_text(query, "توی هیچ اتحادی نیستی.", reply_markup=InlineKeyboardMarkup([[back_btn("menu:me")]]))
+        await safe_edit_message_text(query, "توی هیچ اتحادی نیستی.", reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "بازگشت به اتحاد")]]))
         return
     text, keyboard = _perks_render(info)
     from game.media import get_alliance_building_image_path
@@ -146,7 +146,7 @@ async def war_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         lines.append("<i>این هفته هنوز هیچ اتحادی امتیاز نگرفته. اولین باشید!</i>")
     await safe_edit_message_text(
         query, "\n".join(lines), parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info")]]),
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_war", "بازگشت به جنگ اتحاد")]]),
     )
 
 
@@ -187,7 +187,7 @@ def _war1d_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
             rows.append([btn("پیدا کردن حریف و شروع جنگ", emoji_key="btn_search", style=BATTLE, callback_data="ally_war_start")])
         else:
             lines.append("\n<i>فقط رهبر یا قائم‌مقام اتحاد می‌تونه جنگ رو شروع کنه.</i>")
-        rows.append([back_btn("menu:alliance_info")])
+        rows.append([back_btn("menu:alliance_war", "بازگشت به جنگ اتحاد")])
         return "\n".join(lines), InlineKeyboardMarkup(rows)
 
     lead = "🟢 جلویی" if view["my_score"] > view["foe_score"] else ("🔴 عقبی" if view["my_score"] < view["foe_score"] else "🟡 مساوی")
@@ -213,7 +213,7 @@ def _war1d_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
     else:
         lines.append("\n<i>هنوز شرکت نکردی — قدرتتو اضافه کن و پاداش بگیر!</i>")
         rows.append([btn("شرکت در جنگ (قدرتمو اضافه کن)", emoji_key="btn_war", style=BATTLE, callback_data="ally_war_rally")])
-    rows.append([back_btn("menu:alliance_info")])
+    rows.append([back_btn("menu:alliance_war", "بازگشت به جنگ اتحاد")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -222,7 +222,7 @@ async def war1d_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     data = await run_db(_war1d_sync, update.effective_user)
     await query.answer()
     if not data["in_alliance"]:
-        await safe_edit_message_text(query, "توی هیچ اتحادی نیستی.", reply_markup=InlineKeyboardMarkup([[back_btn("menu:me")]]))
+        await safe_edit_message_text(query, "توی هیچ اتحادی نیستی.", reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_war", "بازگشت به جنگ اتحاد")]]))
         return
     text, keyboard = _war1d_render(data)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)

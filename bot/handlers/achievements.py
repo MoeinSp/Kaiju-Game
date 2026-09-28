@@ -46,7 +46,7 @@ def _render(user, view: dict, is_group: bool = False) -> tuple[str, InlineKeyboa
             [btn(f"🎁 دریافت همه ({view['claimable']})", emoji_key="btn_confirm", style=CONFIRM, callback_data="ach_claim")]
         )
     if not is_group:
-        rows.append([back_btn("menu:hub_city", "بازگشت به شهر و خدمات")])
+        rows.append([back_btn("menu:hub_city", "بازگشت به شهر")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 

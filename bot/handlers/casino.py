@@ -41,7 +41,7 @@ def _render(tiers, coins, diamonds, free_used) -> tuple[str, InlineKeyboardMarku
         else:
             cost_txt = ""
         rows.append([btn(f"{t['label']}{cost_txt}", emoji_key="btn_casino", style=SHOP, callback_data=f"casino_pick:{t['key']}")])
-    rows.append([back_btn("menu:hub_city", "بازگشت به شهر و خدمات")])
+    rows.append([back_btn("menu:hub_city", "بازگشت به شهر")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 

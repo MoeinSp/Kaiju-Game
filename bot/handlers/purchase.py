@@ -46,14 +46,14 @@ _RES_TITLE = {"coins": f"{get_emoji('coin')} طلا", "dna": f"{get_emoji('dna')
 _RES_UNIT_WORD = {"coins": "طلا", "dna": "عدد", "diamonds": "عدد"}
 
 
-def _amount_screen(context) -> tuple[str, InlineKeyboardMarkup]:
+def _amount_screen(context, is_sub: bool = True) -> tuple[str, InlineKeyboardMarkup]:
     prices = botconfig.get_buy_prices()
     amounts = _amounts(context)
     sellable = _sellable(prices)
     lines = [
         "🛒 <b>خرید درون‌بازی</b>",
         _RULE,
-        "مقدار مورد نظرت رو با دکمه‌های ➖ و ➕ تنظیم کن:",
+        "مقدار مورد نظرت رو با دکمه‌های ➖ و➕ تنظیم کن:",
         "",
     ]
     rows = []
@@ -82,7 +82,10 @@ def _amount_screen(context) -> tuple[str, InlineKeyboardMarkup]:
         lines.append(f"⚠️ <b>برای ثبت خرید حداقل {minimum:,} تومان لازمه</b> — کمی بیشتر انتخاب کن.")
     if total > 0:
         rows.append([btn("صفر کردن", emoji_key="btn_reset", style=DANGER, callback_data="buy_reset")])
-    rows.append([back_btn("menu:me", "بازگشت به منو")])
+    if is_sub:
+        rows.append([back_btn("menu:buy_open", "بازگشت")])
+    else:
+        rows.append([back_btn("menu:hub_shop", "بازگشت به فروشگاه")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -109,7 +112,7 @@ def _store_screen(packs: list[dict], custom_ok: bool) -> tuple[str, InlineKeyboa
         lines.append("مقدار مورد نظرت رو بساز و پرداخت کن:")
     if custom_ok:
         rows.append([btn("مقدار دلخواه", emoji_key="btn_custom_amt", style=NAV, callback_data="buy_custom_home")])
-    rows.append([back_btn("menu:me", "بازگشت به منو")])
+    rows.append([back_btn("menu:hub_shop", "بازگشت به فروشگاه")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -130,7 +133,7 @@ async def buy_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([
                     [btn(btitle or "ورود به درگاه خرید", emoji_key="btn_buy", style=PRIMARY, url=burl)],
-                    [back_btn("menu:me", "بازگشت")],
+                    [back_btn("menu:hub_shop", "بازگشت به فروشگاه")],
                 ]),
             )
             return
@@ -144,7 +147,7 @@ async def buy_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         text, kb = _store_screen(packs, custom_ok)
     else:
         # no packs → go straight to the classic stepper screen (preserves old behaviour)
-        text, kb = _amount_screen(context)
+        text, kb = _amount_screen(context, is_sub=False)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
 
 
@@ -156,7 +159,8 @@ async def buy_custom_home_callback(update: Update, context: ContextTypes.DEFAULT
         return
     context.user_data[_AMOUNTS_KEY] = {"coins": 0, "dna": 0, "diamonds": 0}
     await query.answer()
-    text, kb = _amount_screen(context)
+    packs, _ = await run_db(_store_state_sync)
+    text, kb = _amount_screen(context, is_sub=bool(packs))
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
 
 
@@ -175,7 +179,7 @@ def _pack_detail_screen(p: dict) -> tuple[str, InlineKeyboardMarkup]:
     kb = InlineKeyboardMarkup([
         [
             btn("خرید این پک", emoji_key="btn_confirm", style=PRIMARY, callback_data=f"buy_pack_go:{p['id']}"),
-            back_btn("buy_open", "انصراف"),
+            back_btn("menu:buy_open", "انصراف"),
         ],
     ])
     return "\n".join(lines), kb
@@ -224,14 +228,16 @@ async def buy_adjust_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     delta = step if sign == "+" else -step
     amounts[res] = max(0, min(purchase.MAX_UNITS.get(res, 0), amounts.get(res, 0) + delta))
     await query.answer()
-    text, kb = _amount_screen(context)
+    packs, _ = await run_db(_store_state_sync)
+    text, kb = _amount_screen(context, is_sub=bool(packs))
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
 
 
 async def buy_reset_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data[_AMOUNTS_KEY] = {"coins": 0, "dna": 0, "diamonds": 0}
     await update.callback_query.answer("صفر شد.")
-    text, kb = _amount_screen(context)
+    packs, _ = await run_db(_store_state_sync)
+    text, kb = _amount_screen(context, is_sub=bool(packs))
     await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=kb)
 
 
@@ -249,6 +255,7 @@ async def buy_custom_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"🔢 چه مقدار <b>{purchase.RES_LABEL[res]}</b> می‌خوای؟ عدد رو همین‌جا بفرست.\n"
         f"<i>مثلاً <code>{purchase.STEP[res] * 3:,}</code></i>",
         parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:buy_open", "انصراف")]]),
     )
 
 
@@ -267,7 +274,8 @@ async def handle_custom_amount(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     if res in purchase.STEP:
         _amounts(context)[res] = max(0, min(purchase.MAX_UNITS.get(res, 0), int(raw)))
-    text, kb = _amount_screen(context)
+    packs, _ = await run_db(_store_state_sync)
+    text, kb = _amount_screen(context, is_sub=bool(packs))
     await message.reply_text(text, parse_mode="HTML", reply_markup=kb)
 
 
@@ -296,7 +304,7 @@ def _receipt_screen(req) -> tuple[str, InlineKeyboardMarkup]:
         "📸 بعد از واریز، <b>عکس رسید</b> رو همین‌جا بفرست تا برای تأیید ارسال بشه.",
         "<i>پس از تأیید توسط پشتیبانی، موجودی بلافاصله به حسابت اضافه می‌شه.</i>",
     ]
-    kb = InlineKeyboardMarkup([[btn("انصراف", emoji_key="btn_cancel", style=BACK, callback_data="buy_open")]])
+    kb = InlineKeyboardMarkup([[back_btn("menu:buy_open", "انصراف")]])
     return "\n".join(lines), kb
 
 
