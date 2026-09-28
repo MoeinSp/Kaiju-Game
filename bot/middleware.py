@@ -265,7 +265,10 @@ async def enforce_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def react_to_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Adds a heart (❤) reaction to incoming user messages."""
+    """Adds a heart (❤) reaction to incoming user messages in private chat only."""
+    chat = update.effective_chat
+    if chat is None or chat.type != "private":
+        return
     msg = update.message or update.edited_message
     if msg is not None and msg.from_user and not msg.from_user.is_bot:
         try:
