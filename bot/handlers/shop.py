@@ -30,73 +30,72 @@ def _render(offers, coins, diamonds, special_items=None, gem=None, is_group: boo
     lines = [
         "🛒 <b>فروشگاه روزانه</b>",
         "━━━━━━━━━━━━━━━━━━━━",
-        "<i>هر روز آفرهای تازه، تخفیف‌های محدود و بسته‌های ویژه</i>\n",
-        f"💰 موجودی طلا: <code>{coins:,} طلا</code>",
-        f"💎 موجودی الماس: <code>{diamonds:,} الماس</code>",
+        f"💰 موجودی طلا: <code>{coins:,}</code>",
+        f"💎 موجودی الماس: <code>{diamonds:,}</code>",
         "━━━━━━━━━━━━━━━━━━━━",
     ]
     rows: list = []
 
-    # 1. 💎 Daily Gem Kaiju (if any)
+    # 1. 💎 Daily Gem Kaiju (if active)
     if gem:
         label = constants.RARITY_LABELS[gem["rarity"]]
-        lines.append(f"💎 <b>کایجوی جمی: {gem['name']}</b> ({label})")
         if gem.get("claimed"):
-            lines.append(f"<blockquote>{get_emoji('confirm')} امروز خریداری شده است.</blockquote>\n")
+            lines.append(f"💎 <b>کایجوی جمی امروز:</b> {gem['name']} <i>(خریداری شد ✅)</i>")
         else:
-            lines.append(
-                f"<blockquote>💰 قیمت: <code>{gem['price']} الماس</code>\n"
-                "<i>روزی یک‌بار قابل خرید</i></blockquote>\n"
-            )
-            rows.append([btn(f"خرید {gem['name']}", emoji_key="btn_creature", style=SHOP, callback_data="gemk_buy")])
+            lines.append(f"💎 <b>کایجوی جمی:</b> {gem['name']} ({label}) — <code>{gem['price']:,}</code> 💎")
+            rows.append([btn(f"💎 خرید {gem['name']}", emoji_key="btn_creature", style=SHOP, callback_data="gemk_buy")])
 
-    # 2. 🛍 Special Items / Packs (if any)
+    # 2. 🛍 Special Items / Packs (if active)
     if special_items:
-        lines.append(f"{get_emoji('shop_item')} <b>آیتم‌ها و بسته‌های ویژه:</b>")
+        lines.append(f"\n🛍 <b>بسته‌های ویژه:</b>")
+        sitem_btns = []
         for it in special_items:
-            try:
-                contents = json.loads(it.contents_json)
-                summary = itemshop.content_summary(contents)
-            except Exception:
-                summary = "بسته ویژه"
-            desc = f"\n<i>{it.description}</i>" if it.description else ""
-            lines.append(
-                f"<blockquote>{it.emoji} <b>{it.title}</b>\n"
-                f"💰 قیمت: <code>{itemshop.price_text(it)}</code>\n"
-                f"🎁 محتویات: {summary}{desc}</blockquote>"
-            )
-            rows.append([btn(f"{it.emoji} {it.title}", style=SHOP, callback_data=f"sitem_buy:{it.id}")])
-        lines.append("")
+            lines.append(f"• {it.emoji} <b>{it.title}</b> — <code>{itemshop.price_text(it)}</code>")
+            sitem_btns.append(btn(f"{it.emoji} {it.title}", style=SHOP, callback_data=f"sitem_buy:{it.id}"))
+        for i in range(0, len(sitem_btns), 2):
+            rows.append(sitem_btns[i:i+2])
 
-    def _section(header: str, group: list) -> None:
-        if not group:
-            return
-        lines.append(header)
-        for o in group:
+    # Categorize daily offers:
+    food_offers = [o for o in offers if o["key"].startswith("cap_")]
+    speedup_offers = [o for o in offers if o["key"].startswith("speedup")]
+    other_offers = [o for o in offers if not o["key"].startswith("cap_") and not o["key"].startswith("speedup")]
+
+    # 3. 🍗 Food / XP Capsules
+    if food_offers:
+        lines.append(f"\n🍗 <b>غذای هیولا (XP):</b>")
+        food_row = []
+        for o in food_offers:
             cur = "الماس" if o["currency"] == "diamonds" else "طلا"
-            star = f"{get_emoji('star')} " if o["featured"] else ""
-            disc = "\n🔻 <i>تخفیف ویژه امروز</i>" if o["featured"] else ""
-            rem = o.get("remaining")
-            lim_txt = f"\n📦 باقیمانده امروز: <code>{rem} عدد</code>" if rem is not None else ""
-            lines.append(
-                f"<blockquote>{star}{o['emoji']} <b>{o['title']}</b>{disc}\n"
-                f"💰 قیمت: <code>{o['price']:,} {cur}</code>{lim_txt}</blockquote>"
-            )
-            sold_out = rem == 0
-            label = (f"⛔ تکمیل سقف — {o['title']}" if sold_out
-                     else f"{o['emoji']} {o['title']}")
-            rows.append([btn(
-                label, style=BUILD if o["featured"] else SHOP, callback_data=f"shop_buy:{o['key']}",
-            )])
-        lines.append("")
+            lines.append(f"• {o['emoji']} {o['title']}: <code>{o['price']:,}</code> {cur}")
+            short_name = o['title'].split("(")[0].strip()
+            food_row.append(btn(f"{o['emoji']} {short_name}", style=SHOP, callback_data=f"shop_buy:{o['key']}"))
+        rows.append(food_row)
 
-    _section(f"{get_emoji('diamond')} <b>خرید با الماس:</b>", [o for o in offers if o["currency"] == "diamonds"])
-    _section(f"{get_emoji('coin')} <b>خرید با طلا:</b>", [o for o in offers if o["currency"] != "diamonds"])
+    # 4. ⏱ Speedup Cards
+    if speedup_offers:
+        lines.append(f"\n⏱ <b>کارت‌های سرعت:</b>")
+        speedup_row = []
+        for o in speedup_offers:
+            cur = "الماس" if o["currency"] == "diamonds" else "طلا"
+            lines.append(f"• {o['title']}: <code>{o['price']:,}</code> {cur}")
+            short_name = o['title'].replace("کارت سرعت", "").strip()
+            speedup_row.append(btn(f"⏱ {short_name}", style=SHOP, callback_data=f"shop_buy:{o['key']}"))
+        rows.append(speedup_row)
+
+    # 5. ⚡ Other offers (e.g. energy)
+    if other_offers:
+        other_row = []
+        for o in other_offers:
+            cur = "الماس" if o["currency"] == "diamonds" else "طلا"
+            lines.append(f"• {o['emoji']} {o['title']}: <code>{o['price']:,}</code> {cur}")
+            other_row.append(btn(f"{o['emoji']} {o['title']}", style=SHOP, callback_data=f"shop_buy:{o['key']}"))
+        rows.append(other_row)
+
     if not offers and not special_items and not gem:
         lines.append("\n<i>الان آفری موجود نیست. بعداً سر بزن.</i>")
     if not is_group:
         rows.append([back_btn("menu:hub_shop")])
-    return "\n".join(lines).rstrip(), InlineKeyboardMarkup(rows)
+    return "\n".join(lines).strip(), InlineKeyboardMarkup(rows)
 
 
 _SHOWN_OFFERS_KEY = "shop_shown_offers"
@@ -213,7 +212,7 @@ async def _render_shop_confirm(query, title: str, emoji: str, price: int, curren
 async def shop_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     key = query.data.split(":")[1]
-    offers, coins, diamonds = await run_db(_panel_sync, update.effective_user)
+    offers, coins, diamonds, special_items, gem = await run_db(_panel_sync, update.effective_user)
     _remember_offers(context, offers)
     target_offer = next((o for o in offers if o["key"] == key), None)
     if target_offer is None:
@@ -326,7 +325,7 @@ async def shop_confirm_buy_callback(update: Update, context: ContextTypes.DEFAUL
 async def shop_custom_qty_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     key = query.data.split(":")[1]
-    offers, coins, diamonds = await run_db(_panel_sync, update.effective_user)
+    offers, coins, diamonds, special_items, gem = await run_db(_panel_sync, update.effective_user)
     _remember_offers(context, offers)
     target_offer = next((o for o in offers if o["key"] == key), None)
     if target_offer is None:
@@ -357,7 +356,7 @@ async def shop_custom_qty_callback(update: Update, context: ContextTypes.DEFAULT
 async def handle_custom_qty_buy(update: Update, context: ContextTypes.DEFAULT_TYPE, key: str, qty: int, shown_price, shown_currency) -> None:
     message = update.effective_message
     if shown_currency == "diamonds":
-        offers, coins, diamonds = await run_db(_panel_sync, update.effective_user)
+        offers, coins, diamonds, special_items, gem = await run_db(_panel_sync, update.effective_user)
         target_offer = next((o for o in offers if o["key"] == key), None)
         title = target_offer["title"] if target_offer else key
         emoji = target_offer["emoji"] if target_offer else f"{get_emoji('gift')}"
@@ -382,14 +381,14 @@ async def handle_custom_qty_buy(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     try:
-        offer, offers, coins, diamonds = await run_db(
+        offer, offers, coins, diamonds, special_items, gem = await run_db(
             _buy_sync, update.effective_user, key, shown_price, shown_currency, count=qty
         )
     except GameError as exc:
         await message.reply_text(f"⚠️ {exc}")
         return
     _remember_offers(context, offers)
-    text, keyboard = _render(offers, coins, diamonds)
+    text, keyboard = _render(offers, coins, diamonds, special_items, gem)
     tot_price = offer.get("total_price", offer["price"] * qty)
     cur = "الماس" if offer["currency"] == "diamonds" else "طلا"
     await message.reply_text(
