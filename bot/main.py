@@ -287,7 +287,7 @@ def main() -> None:
         await run_db(refresh_theme_caches)
 
     if application.job_queue:
-        application.job_queue.run_repeating(theme_cache_sync_job, interval=5, first=2)
+        application.job_queue.run_repeating(theme_cache_sync_job, interval=120, first=10)
 
     application.add_error_handler(_global_error_handler)
     application.post_init = _post_init

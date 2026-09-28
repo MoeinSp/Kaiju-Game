@@ -38,7 +38,7 @@ from game import button_emoji, button_style, emoji
 SNAPSHOT_VERSION = 1
 
 
-def refresh_theme_caches() -> None:
+def refresh_theme_caches(couple_glyphs: bool = False) -> None:
     """Reload all three in-memory caches from the DB.
 
     Must run from sync context. Every write path that touches a theme table has
@@ -46,7 +46,7 @@ def refresh_theme_caches() -> None:
     lazily populated because they're read from async handler code, where a
     Django query raises SynchronousOnlyOperation.
     """
-    emoji.refresh_cache()
+    emoji.refresh_cache(couple_glyphs=couple_glyphs)
     button_emoji.refresh_cache()
     button_style.refresh_cache()
 

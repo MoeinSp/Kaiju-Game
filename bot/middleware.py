@@ -90,9 +90,22 @@ def _create_user_and_bind_referral(tg_user, referrer_id):
     return user
 
 
+import asyncio
 import time
 
 _BAN_CACHE: dict[int, tuple[bool, float]] = {}
+_ACTIVE_CHANNELS_CACHE: tuple[list, float] = ([], 0.0)
+
+
+def _cached_active_channels(force_refresh: bool = False) -> list:
+    global _ACTIVE_CHANNELS_CACHE
+    now = time.monotonic()
+    channels, expiry = _ACTIVE_CHANNELS_CACHE
+    if not force_refresh and now < expiry:
+        return channels
+    channels = list(active_channels())
+    _ACTIVE_CHANNELS_CACHE = (channels, now + 60.0)
+    return channels
 
 
 def _is_banned_sync(user_id: int) -> bool:
@@ -178,15 +191,16 @@ async def enforce_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not _gate_applies(update):
         return  # ordinary group chatter — never gate it
 
-    channels = await run_db(active_channels)
+    is_check_callback = (
+        update.callback_query is not None and update.callback_query.data == FORCE_JOIN_CHECK_CALLBACK
+    )
+
+    channels = await run_db(_cached_active_channels, is_check_callback)
     if not channels:
         return
 
     current_ids = frozenset(ch.id for ch in channels)
     passed_ids = context.user_data.get("force_join_passed_ids", frozenset())
-    is_check_callback = (
-        update.callback_query is not None and update.callback_query.data == FORCE_JOIN_CHECK_CALLBACK
-    )
 
     if current_ids <= passed_ids and not is_check_callback:
         return  # already verified for every channel that's currently required
@@ -264,18 +278,22 @@ async def enforce_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE)
         raise ApplicationHandlerStop
 
 
+async def _safe_set_reaction(msg) -> None:
+    try:
+        from telegram import ReactionTypeEmoji
+        await msg.set_reaction([ReactionTypeEmoji("❤")])
+    except Exception:
+        pass
+
+
 async def react_to_user_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Adds a heart (❤) reaction to incoming user messages in private chat only."""
+    """Adds a heart (❤) reaction to incoming user messages in private chat only (non-blocking)."""
     chat = update.effective_chat
     if chat is None or chat.type != "private":
         return
     msg = update.message or update.edited_message
     if msg is not None and msg.from_user and not msg.from_user.is_bot:
-        try:
-            from telegram import ReactionTypeEmoji
-            await msg.set_reaction([ReactionTypeEmoji("❤")])
-        except Exception:
-            pass
+        asyncio.create_task(_safe_set_reaction(msg))
 
 
 def register(application) -> None:
