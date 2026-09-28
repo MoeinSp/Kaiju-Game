@@ -412,7 +412,7 @@ async def shield_shop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             btn("سپر آرنا", emoji_key="btn_shield", style=SHOP, callback_data="shield_arena"),
             btn("سپر گروه", emoji_key="btn_shield", style=SHOP, callback_data="gshield_shop"),
         ],
-        [back_btn("menu:hub_city", "بازگشت به شهر و خدمات")],
+        [back_btn("menu:hub_shop", "بازگشت به فروشگاه")],
     ])
     from game.media import get_feature_image_path
     photo = get_feature_image_path("shield_shop")
@@ -525,7 +525,7 @@ def _item_shop_render(items, coins, diamonds, gem=None) -> tuple[str, InlineKeyb
             f"🎁 محتویات: {summary}{desc}</blockquote>"
         )
         rows.append([btn(f"{it.emoji} {it.title}", style=SHOP, callback_data=f"sitem_buy:{it.id}")])
-    rows.append([back_btn("menu:hub_city", "بازگشت به شهر و خدمات")])
+    rows.append([back_btn("menu:hub_shop", "بازگشت به فروشگاه")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -792,7 +792,7 @@ def _gold_shop_render(coins: int, diamonds: int) -> tuple[str, InlineKeyboardMar
             emoji_key="btn_gold_shop",
             style=SHOP, callback_data=f"gold_buy:{i}",
         )])
-    rows.append([back_btn("menu:hub_city", "بازگشت به شهر و خدمات")])
+    rows.append([back_btn("menu:hub_shop", "بازگشت به فروشگاه")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 

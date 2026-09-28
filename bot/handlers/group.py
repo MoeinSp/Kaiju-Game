@@ -1,3 +1,5 @@
+import asyncio
+import datetime
 import os
 import secrets
 import time
@@ -1808,7 +1810,7 @@ async def guardian(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"💪 قدرت کل: <code>{top_power:,}</code>",
             _RULE,
             f"{get_emoji('battle')} <b>چالش جایگاه:</b> برای تصاحب عنوان، کلمه «تسخیر» را بفرستید.",
-            f"{get_emoji('gift')} <b>حقوق روزانه:</b> دریافت روزانه با «حقوق» (تا <code>50,000</code> طلا و <code>2,000</code> DNA بر اساس قدرت).",
+            f"{get_emoji('gift')} <b>حقوق روزانه:</b> واریز خودکار روزانه در ساعت ۱۸:۰۰ (تا <code>100,000</code> طلا و <code>4,000</code> DNA بر اساس قدرت).",
             f"🚪 <b>کناره‌گیری:</b> با «استعفا» جایگاه را به نفر بعدی واگذار کنید.",
         ]),
         parse_mode="HTML",
@@ -1897,49 +1899,121 @@ def _guardian_claim_sync(chat, tg_user):
     user, _ = get_or_create_user(tg_user)
     touch_membership(group, user)
 
-    top = get_guardian(group)
-    if top is None or top.owner_id != user.id:
-        raise GameError("😅 تو محافظ فعلی این گروه نیستی. با «محافظ» ببین کیه.")
+    top = ensure_guardian(group, group_member_creatures(group))
+    if top is None:
+        return {"has_guardian": False}
 
     from game.guardian import salary_for
 
     coins, dna = salary_for(top)
-    # atomic daily consume BEFORE paying, so a rapid double-tap can't collect the
-    # salary twice in one day (was check-then-record — spammable). The daily log is
-    # keyed on the USER, so this is one salary per day across EVERY group they're in.
-    with transaction.atomic():
-        try:
-            consume_daily(user, "guardian_stipend")
-        except GameError:
-            raise GameError(
-                "📛 شما امروز حقوق محافظ خود را قبلاً (در همین گروه یا گروهی دیگر) دریافت کرده‌اید.\n"
-                "حقوق محافظ فقط روزی یک‌بار پرداخت می‌شود؛ فردا دوباره سر بزن."
-            )
-        user.coins += coins
-        user.dna_fragments += dna
-        user.save(update_fields=["coins", "dna_fragments"])
-        from game.ledger import record_gain
+    owner = User.objects.filter(id=top.owner_id).first()
+    owner_name = display_name(owner) if owner else f"User {top.owner_id}"
+    is_current_user = (top.owner_id == user.id)
 
-        record_gain(user, "salary", coins=coins, dna=dna)
-    return coins, dna
+    return {
+        "has_guardian": True,
+        "guardian_name": top.name,
+        "guardian_level": top.level,
+        "owner_name": owner_name,
+        "coins": coins,
+        "dna": dna,
+        "is_current_user": is_current_user,
+    }
 
 
 async def guardian_claim(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        coins, dna = await run_db(_guardian_claim_sync, update.effective_chat, update.effective_user)
+        data = await run_db(_guardian_claim_sync, update.effective_chat, update.effective_user)
     except GameError as exc:
         await update.message.reply_text(str(exc))
         return
-    await update.message.reply_text(
-        f"{get_emoji('guardian')} <b>حقوق محافظ گروه پرداخت شد!</b>\n"
+
+    if not data.get("has_guardian"):
+        await update.message.reply_text(
+            f"{get_emoji('guardian')} <b>سیستم حقوق محافظ گروه</b>\n"
+            f"{_RULE}\n"
+            f"این گروه در حال حاضر محافظی ندارد!\n"
+            f"⏰ حقوق محافظ هر روز ساعت <b>۱۸:۰۰ (۶ عصر)</b> به صورت خودکار واریز می‌شود.\n"
+            f"برای تصاحب جایگاه و دریافت پاداش روزانه، کلمه «تسخیر» را بفرستید.",
+            parse_mode="HTML",
+        )
+        return
+
+    owner_name = data["owner_name"]
+    guardian_name = data["guardian_name"]
+    level = data["guardian_level"]
+    coins = data["coins"]
+    dna = data["dna"]
+    is_me = data["is_current_user"]
+
+    if is_me:
+        role_note = "👑 شما در حال حاضر <b>محافظ این گروه</b> هستید."
+    else:
+        role_note = f"👑 محافظ فعلی گروه: <b>{owner_name}</b>"
+
+    text = (
+        f"{get_emoji('guardian')} <b>سیستم خودکار حقوق محافظ</b>\n"
         f"{_RULE}\n"
-        f"به پاس نگهبانی از قلمرو، پاداش امروز شما:\n"
-        f"{get_emoji('coin')} طلا: <code>+{coins:,}</code>\n"
-        f"{get_emoji('dna')} پاداش DNA: <code>+{dna:,}</code>\n"
+        f"⏰ <b>زمان واریز:</b> حقوق محافظان هر روز رأس ساعت <b>۱۸:۰۰ (۶ عصر)</b> به صورت خودکار واریز می‌شود.\n\n"
+        f"{role_note}\n"
+        f"🦅 موجود نگهبان: <b>{guardian_name}</b> (سطح <code>{level}</code>)\n"
+        f"{get_emoji('coin')} حقوق تخمینی امروز: <code>{coins:,}</code> طلا\n"
+        f"{get_emoji('dna')} پاداش تخمینی DNA: <code>+{dna:,}</code>\n"
         f"{_RULE}\n"
-        f"<i>مبلغ حقوق بر اساس قدرت هیولای محافظ محاسبه می‌شود.</i>",
-        parse_mode="HTML",
+        f"⚔️ <i>اگر می‌خواهید پاداش ساعت ۱۸ به شما برسد، با ارسال کلمه «تسخیر» محافظ فعلی را شکست دهید!</i>"
     )
+    await update.message.reply_text(text, parse_mode="HTML")
+
+
+async def guardian_daily_payout_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Daily 18:00 JobQueue task to payout guardian salaries and announce in groups."""
+    from game.guardian import process_daily_guardian_payouts
+
+    payouts = await run_db(process_daily_guardian_payouts)
+    if not payouts:
+        return
+
+    for p in payouts:
+        group_id = p["group_id"]
+        user = p["user"]
+        creature = p["creature"]
+        user_name = display_name(user)
+        c_name = creature.name if creature else "نامشخص"
+        coins = p.get("coins", 0)
+        dna = p.get("dna", 0)
+        paid = p.get("paid", False)
+
+        if paid:
+            text = (
+                f"{get_emoji('guardian')} <b>واریز خودکار حقوق محافظ گروه</b>\n"
+                f"{_RULE}\n"
+                f"⏰ ساعت ۱۸:۰۰ و زمان واریز حقوق محافظان فرا رسید!\n\n"
+                f"👑 محافظ شایسته: <b>{user_name}</b>\n"
+                f"🦅 هیولای نگهبان: <b>{c_name}</b>\n"
+                f"{get_emoji('coin')} حقوق واریز شده: <code>+{coins:,}</code> طلا\n"
+                f"{get_emoji('dna')} پاداش DNA: <code>+{dna:,}</code>\n"
+                f"{_RULE}\n"
+                f"<i>پاداش نگهبانی هر روز ساعت ۱۸:۰۰ به صورت خودکار واریز می‌شود. با ارسال «تسخیر» برای فردا آماده شوید!</i>"
+            )
+        else:
+            text = (
+                f"{get_emoji('guardian')} <b>حقوق محافظ گروه</b>\n"
+                f"{_RULE}\n"
+                f"👑 محافظ فعلی: <b>{user_name}</b>\n"
+                f"⚠️ این کاربر سهمیه حقوق روزانه خود را امروز قبلاً از گروه دیگری دریافت کرده است.\n"
+                f"{_RULE}\n"
+                f"<i>حقوق محافظ هر روز ساعت ۱۸:۰۰ به صورت خودکار محاسبه و واریز می‌شود.</i>"
+            )
+
+        try:
+            await context.bot.send_message(
+                chat_id=group_id,
+                text=text,
+                parse_mode="HTML",
+            )
+        except Exception:
+            pass
+        await asyncio.sleep(0.05)
 
 
 def _guardian_resign_sync(chat, tg_user):
@@ -2006,3 +2080,11 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(gatk_back_callback, pattern=r"^gatk_back:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(gatk_swap_callback, pattern=r"^gatk_swap:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(gatk_swap_pick_callback, pattern=r"^gatk_swap_pick:\d+:\d+:\d+$"))
+
+    job_queue = application.job_queue
+    if job_queue is not None:
+        job_queue.run_daily(
+            guardian_daily_payout_job,
+            time=datetime.time(14, 30, tzinfo=datetime.timezone.utc),
+            name="guardian_daily_payout",
+        )

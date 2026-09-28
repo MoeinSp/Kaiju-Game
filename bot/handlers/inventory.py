@@ -404,7 +404,7 @@ def _forge_home_render(user, counts: dict) -> tuple[str, InlineKeyboardMarkup]:
                 style=NAV, callback_data=f"forge_cat:{slot}:all:0",
             ))
         rows.append(row)
-    rows.append([back_btn("menu:me")])
+    rows.append([back_btn("menu:hub_creature", "بازگشت به هیولا")])
     return text, InlineKeyboardMarkup(rows)
 
 

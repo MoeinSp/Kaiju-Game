@@ -41,6 +41,15 @@ def start_expedition_recruitment(creator: User, group_id: int, group_title: str)
     if not ok:
         raise GameError(msg)
 
+    today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    group_done_today = GroupExpedition.objects.filter(
+        group_id=group_id,
+        status="completed",
+        created_at__gte=today_start,
+    ).exists()
+    if group_done_today:
+        raise GameError("⏳ سهمیه اعزام کاروان این گروه برای امروز تمام شده است!\n(هر گروه روزانه فقط یکبار میتواند اعزام داشته باشد. برای اعزامهای بیشتر، ربات را به گروههای دیگر اضافه کنید!)")
+
     # Check if user already is in an active pending expedition anywhere
     pending = GroupExpedition.objects.filter(
         members=creator,
@@ -113,9 +122,23 @@ def launch_expedition(user: User, expedition_id: int) -> dict:
     if exp.creator_id != user.id:
         raise GameError("فقط سرپرست کاروان (سازنده) می‌تواند دستور حرکت را صادر کند.")
 
+    today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    group_done_today = GroupExpedition.objects.filter(
+        group_id=exp.group_id,
+        status="completed",
+        created_at__gte=today_start,
+    ).exists()
+    if group_done_today:
+        raise GameError("⏳ سهمیه اعزام کاروان این گروه برای امروز تمام شده است!\n(هر گروه روزانه فقط یکبار میتواند اعزام داشته باشد. برای اعزامهای بیشتر، ربات را به گروههای دیگر اضافه کنید!)")
+
     members = list(exp.members.select_for_update().all())
     if len(members) < 2:
         raise GameError("برای حرکت کاروان حداقل ۲ نفر باید در تیم حضور داشته باشند.")
+
+    for m in members:
+        ok, msg = can_join_expedition(m)
+        if not ok:
+            raise GameError(f"⚠️ کاربر {display_name(m)} سهمیه امروز اعزام خود را استفاده کرده است.")
 
     dest = next((d for d in EXPEDITION_DESTINATIONS if d["name"] == exp.target_name), EXPEDITION_DESTINATIONS[0])
 

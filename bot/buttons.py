@@ -265,13 +265,19 @@ def btn(
         if has_trailing:
             stripped = _TRAILING_EMOJI.sub("", stripped, count=1)
 
-        if icon:
+        if emoji_key == "btn_back" or stripped.strip() in ("بازگشت", "🔙", "") or label in ("بازگشت", "🔙", ""):
+            if icon:
+                kwargs["icon_custom_emoji_id"] = icon
+                label = "\u200c"
+            else:
+                label = get_button_label_emoji("btn_back") or "🔙"
+        elif icon:
             # Telegram draws the icon *before* the label, so any emoji baked into the
             # label would render a SECOND time next to the Premium icon. Strip it.
             kwargs["icon_custom_emoji_id"] = icon
             if stripped.strip():
                 label = stripped.strip()
-            elif emoji_key in ("btn_prev", "btn_back"):
+            elif emoji_key == "btn_prev":
                 label = "قبلی"
             elif emoji_key == "btn_next":
                 label = "بعدی"
@@ -295,13 +301,13 @@ def btn(
     return InlineKeyboardButton(label, **kwargs)
 
 
-def back_btn(callback_data: str, label: str = "بازگشت") -> InlineKeyboardButton:
+def back_btn(callback_data: str, label: str = "🔙") -> InlineKeyboardButton:
     """The ubiquitous back button — always the same look and always the same role,
     so recolouring "back" anywhere recolours it everywhere."""
     return btn(label, emoji_key="btn_back", style=BACK, callback_data=callback_data)
 
 
-def back_only_keyboard(callback_data: str = "menu:me", label: str = "بازگشت"):
+def back_only_keyboard(callback_data: str = "menu:me", label: str = "🔙"):
     """A screen whose only control is "go back".
 
     Several screens (rank, missions, profile, …) used to end with no keyboard at

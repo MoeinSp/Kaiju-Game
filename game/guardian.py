@@ -1,4 +1,6 @@
-from bio_lab.models import Creature, Group, User
+from django.db import transaction
+
+from bio_lab.models import Creature, Group, GroupEventLog, User
 from game import constants
 from game.combat import resolve_duel_report
 from game.creature import GameError
@@ -15,7 +17,7 @@ def salary_for(creature: Creature) -> tuple[int, int]:
 
     Scales linearly with the creature's combat power against the game's ceiling
     (ARENA_BOT_MAX_POWER, a maxed mythic 5★): a maxed guardian earns the full
-    50,000🪙 / 2,000🧬, a weaker one earns proportionally less down to a floor so
+    100,000🪙 / 4,000🧬, a weaker one earns proportionally less down to a floor so
     the claim is always worth making."""
     power = _power(creature)
     frac = min(1.0, max(0.0, power / constants.ARENA_BOT_MAX_POWER))
@@ -70,3 +72,73 @@ def challenge_guardian(group: Group, challenger_user: User, challenger_creature:
         group.guardian_creature = challenger_creature
         group.save(update_fields=["guardian_creature"])
     return won, report
+
+
+@transaction.atomic
+def _payout_single_group(group_id: int, today: str) -> dict | None:
+    group = Group.objects.select_for_update().filter(id=group_id).first()
+    if group is None:
+        return None
+
+    # Check if this group already got guardian_payout today
+    if GroupEventLog.objects.filter(group=group, event_key="guardian_payout", day=today).exists():
+        return None
+
+    guardian = group.guardian_creature
+    if guardian is None:
+        GroupEventLog.objects.create(group=group, event_key="guardian_payout", day=today)
+        return None
+
+    owner = User.objects.select_for_update().filter(id=guardian.owner_id).first()
+    if owner is None:
+        GroupEventLog.objects.create(group=group, event_key="guardian_payout", day=today)
+        return None
+
+    from game.daily import consume_daily
+    coins, dna = salary_for(guardian)
+    paid = False
+    try:
+        consume_daily(owner, "guardian_stipend")
+        owner.coins += coins
+        owner.dna_fragments += dna
+        owner.save(update_fields=["coins", "dna_fragments"])
+        from game.ledger import record_gain
+        record_gain(owner, "salary", coins=coins, dna=dna)
+        paid = True
+    except GameError:
+        paid = False
+        coins, dna = 0, 0
+
+    GroupEventLog.objects.create(group=group, event_key="guardian_payout", day=today)
+    return {
+        "group_id": group.id,
+        "group_title": group.title,
+        "user": owner,
+        "creature": guardian,
+        "coins": coins,
+        "dna": dna,
+        "paid": paid,
+    }
+
+
+def process_daily_guardian_payouts() -> list[dict]:
+    """Process daily 18:00 payouts for all active groups' guardians.
+
+    Each group pays out once per day (tracked via GroupEventLog).
+    Each user can only receive guardian salary once per day globally across all groups (tracked via DailyActionLog / guardian_stipend).
+    """
+    from game.daily import today_str
+
+    today = today_str()
+    group_ids = list(
+        Group.objects.filter(guardian_creature__isnull=False).values_list("id", flat=True)
+    )
+    results = []
+    for gid in group_ids:
+        try:
+            res = _payout_single_group(gid, today)
+            if res:
+                results.append(res)
+        except Exception:
+            continue
+    return results

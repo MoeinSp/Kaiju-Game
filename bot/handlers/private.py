@@ -44,7 +44,7 @@ from bot.buttons import (ADMIN, BACK, BATTLE, BUILD, CONFIRM, DANGER, LIST, NAV,
                          SHOP, back_btn, back_only_keyboard, btn, enforce_keyboard_symmetry,
                          get_main_reply_keyboard, symmetric_markup)
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text, send_screen
-from config import OWNER_TELEGRAM_ID
+from config import BOT_USERNAME, OWNER_TELEGRAM_ID
 from game import botconfig, constants, keywords
 
 
@@ -1089,9 +1089,8 @@ _HUBS = {
         [("تیم نبرد", "team", "n", "btn_team")],
     ]),
     "hub_base": ("🏰 <b>پایگاه و منابع</b>", [
-        [("ساختمان‌ها", "buildings", "bu", "btn_buildings"), ("مدیریت کارگران", "workers", "bu", "btn_workers")],
-        [("آزمایشگاه پژوهش", "research", "bu", "btn_research"), ("خزانه و انبار", "vault", "bu", "btn_vault")],
-        [("پاداش آفلاین", "idle", "s", "btn_idle"), ("صرافی طلا و DNA", "exchange", "s", "btn_exchange")],
+        [("ساختمان‌ها", "buildings", "bu", "btn_buildings"), ("آزمایشگاه پژوهش", "research", "bu", "btn_research")],
+        [("خزانه و انبار", "vault", "bu", "btn_vault"), ("صرافی طلا و DNA", "exchange", "s", "btn_exchange")],
         [("بازیافت تجهیزات", "equip_exchange", "s", "btn_ticket_exchange")],
     ]),
     "hub_shop": ("🛒 <b>فروشگاه و بازار</b>", [
@@ -1119,7 +1118,7 @@ _CATEGORIES = {
 
 def story_quest_card_text(quest: dict | None) -> str:
     if not quest:
-        return "🌟 <b>تمام مأموریت‌های داستانی با موفقیت تکمیل شدند!</b>\n"
+        return ""
     status_icon = "✅ آماده دریافت پاداش!" if quest["is_done"] else "⏳ در حال انجام"
     return (
         f"🎯 <b>{quest['chapter_name']}</b> (مأموریت {quest['step_num']}/{quest['total_steps']})\n"
@@ -1178,6 +1177,10 @@ def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=
     if group_link is not None:
         url, title = group_link
         rows.append([btn(title, emoji_key="btn_join_group", style=PRIMARY, url=url)])
+    add_group_url = f"https://t.me/{BOT_USERNAME}?startgroup=true"
+    rows.append([
+        btn("➕ افزودن به گروه", emoji_key="btn_add_group", style=CONFIRM, url=add_group_url)
+    ])
     if is_owner:
         rows.append([btn("پنل ادمین", emoji_key="btn_admin", style=ADMIN, callback_data="menu:admin")])
     return symmetric_markup(rows)
@@ -1419,7 +1422,8 @@ async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     photo_path = get_creature_image_path(creature)
     card_txt = creature_card_text(user, creature, equipped_items, compact=bool(photo_path))
     quest_txt = story_quest_card_text(quest)
-    text = f"👋 <b>آزمایشگاه «{lab_display(user)}»</b>\n\n<blockquote>{quest_txt.strip()}</blockquote>\n\n" + card_txt
+    quest_block = f"<blockquote>{quest_txt.strip()}</blockquote>\n\n" if quest_txt.strip() else ""
+    text = f"👋 <b>آزمایشگاه «{lab_display(user)}»</b>\n\n{quest_block}" + card_txt
     await send_screen(update,
         text,
         photo=photo_path,
@@ -2777,7 +2781,7 @@ def _hunt_scout_keyboard(target, scout_price=0) -> InlineKeyboardMarkup:
             rows.append([btn("عبور از چشمه", emoji_key="btn_cancel", style=NAV, callback_data="henc:spring:leave")])
 
         rows.append([btn("حریف بعدی", emoji_key="btn_scout_next", style=NAV, callback_data="hunt_next")])
-        rows.append([back_btn("menu:me")])
+        rows.append([back_btn("menu:hub_battle", "بازگشت به نبرد")])
         return InlineKeyboardMarkup(rows)
 
     return InlineKeyboardMarkup(
@@ -2786,7 +2790,7 @@ def _hunt_scout_keyboard(target, scout_price=0) -> InlineKeyboardMarkup:
             [btn("تغییر موجود مبارز", emoji_key="btn_swap", style=NAV, callback_data=f"hunt_swap:{target['tier']}:{target['seed']}")],
             [btn("حریف بعدی", emoji_key="btn_scout_next", style=NAV, callback_data="hunt_next")],
             [btn("شکار خودکار", emoji_key="btn_autohunt", style=BATTLE, callback_data="autohunt_start")],
-            [back_btn("menu:me")],
+            [back_btn("menu:hub_battle", "بازگشت به نبرد")],
         ]
     )
 
@@ -2806,7 +2810,7 @@ async def hunt_encounter_callback(update: Update, context: ContextTypes.DEFAULT_
     text = res["msg"]
     keyboard = InlineKeyboardMarkup([
         [btn("شکار دوباره", emoji_key="btn_hunt", style=BATTLE, callback_data="hunt_next")],
-        [back_btn("menu:me")],
+        [back_btn("menu:hub_battle", "بازگشت به نبرد")],
     ])
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
@@ -2969,7 +2973,7 @@ async def hunt_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     keyboard = InlineKeyboardMarkup(
         [
             [btn("شکار دوباره", emoji_key="btn_hunt", style=BATTLE, callback_data="hunt_next")],
-            [back_btn("menu:me")],
+            [back_btn("menu:hub_battle", "بازگشت به نبرد")],
         ]
     )
     div = "━━━━━━━━━━━━━━━━━━━━"
@@ -3036,7 +3040,7 @@ def _autohunt_confirm_kb(amount: int):
     )
     kb = InlineKeyboardMarkup([
         [btn("تأیید و شروع", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"autohunt_do:{amount}")],
-        [back_btn("menu:me", "انصراف")],
+        [back_btn("hunt_next", "انصراف")],
     ])
     return text, kb
 
@@ -3109,7 +3113,7 @@ async def autohunt_start_callback(update: Update, context: ContextTypes.DEFAULT_
             [btn(f"همه ({energy})", emoji_key="btn_autohunt", style=BATTLE, callback_data="autohunt_amt:all"),
              btn(f"نصف ({half})", emoji_key="btn_autohunt", style=NAV, callback_data="autohunt_amt:half")],
             [btn("انرژی دلخواه", emoji_key="btn_custom_amt", style=NAV, callback_data="autohunt_amt:custom")],
-            [back_btn("menu:me", "انصراف")],
+            [back_btn("hunt_next", "انصراف")],
         ]),
     )
 
@@ -3135,7 +3139,7 @@ async def autohunt_amt_callback(update: Update, context: ContextTypes.DEFAULT_TY
             f"یه عدد بفرست (بین <code>1</code> تا <code>{energy}</code>).\n\n"
             f"<i>شکار خودکار نصف لوت شکار دستیه.</i>",
             parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([[back_btn("menu:me", "انصراف")]]),
+            reply_markup=InlineKeyboardMarkup([[back_btn("autohunt_start", "انصراف")]]),
         )
         return
     amount = energy if which == "all" else max(constants.HUNT_ENERGY_COST, energy // 2)
@@ -3200,7 +3204,7 @@ async def autohunt_do_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         reply_markup=InlineKeyboardMarkup([
             [btn("شکار خودکار مجدد", emoji_key="btn_autohunt", style=BATTLE, callback_data="autohunt_start")],
             [btn("شکار دستی", emoji_key="btn_hunt", style=NAV, callback_data="hunt_next")],
-            [back_btn("menu:me")],
+            [back_btn("menu:hub_battle", "بازگشت به نبرد")],
         ]),
     )
 
@@ -4131,9 +4135,10 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
 
         is_owner = _is_admin_user(update.effective_user.id if update.effective_user else None)
         quest_txt = story_quest_card_text(quest)
+        quest_block = f"<blockquote>{quest_txt.strip()}</blockquote>\n\n" if quest_txt.strip() else ""
         await message.reply_text(
             f"👋 <b>آزمایشگاه «{lab_display(user)}» فعال شد!</b>\n\n"
-            f"<blockquote>{quest_txt.strip()}</blockquote>\n\n"
+            f"{quest_block}"
             + creature_card_text(user, creature, equipped_items),
             parse_mode="HTML",
             reply_markup=creature_keyboard(quest, is_owner, _locked_actions_for(hall_lvl), rsch_ok),
@@ -4748,9 +4753,10 @@ async def _show_main_menu(update) -> None:
     user, lab_line, hall_level, research_built, quest = await run_db(_menu_lab_line_sync, update.effective_user)
     is_admin = _is_admin_user(update.effective_user.id if update.effective_user else None)
     quest_txt = story_quest_card_text(quest)
+    quest_block = f"<blockquote>{quest_txt.strip()}</blockquote>\n\n" if quest_txt.strip() else ""
     text = (
         f"📋 <b>منوی اصلی</b>\n\n"
-        f"<blockquote>{quest_txt.strip()}</blockquote>\n\n"
+        f"{quest_block}"
         f"{lab_line}\n\n"
         f"<i>یکی از بخش‌های زیر را انتخاب کنید:</i>"
     )
@@ -5011,7 +5017,7 @@ _KEYWORD_TO_MENU = {
     "creature": "me", "equipment": "inventory", "collection": "collection",
     "upgrade": "upgrade", "lab": "profile", "hunt": "hunt", "arena": "arena",
     "mission": "missions", "fusion": "fusion", "breeding": "breeding",
-    "reward": "idle", "alliance": "alliance_info", "leaderboard": "rank",
+    "reward": "hub_city", "alliance": "alliance_info", "leaderboard": "rank",
     "box": "biocrate", "mine": "buildings", "wheel": "wheel",
     "select": "collection", "help": "guide", "start": "guide",
     "casino": "casino", "exchange": "exchange", "balance": "balance",
@@ -5283,10 +5289,11 @@ async def onboarding_upgrade_callback(update: Update, context: ContextTypes.DEFA
     
     card_txt = creature_card_text(user, creature, equipped_items, compact=bool(photo_path))
     quest_txt = story_quest_card_text(quest)
+    quest_block = f"<blockquote>{quest_txt.strip()}</blockquote>\n\n" if quest_txt.strip() else ""
     text = (
         f"🎉 <b>تبریک! کایجوی شما به سطح ۲ رسید!</b>\n\n"
         f"<blockquote>آموزش اولیه با موفقیت تکمیل شد. اکنون کنترل کامل پایگاه و تمامی بخش‌های بازی در دستان شماست!</blockquote>\n\n"
-        f"<blockquote>{quest_txt.strip()}</blockquote>\n\n"
+        f"{quest_block}"
         f"{card_txt}"
     )
     await send_screen(

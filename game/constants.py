@@ -234,10 +234,10 @@ ENERGY_CAPS = {
 # guardians earn proportionally less down to a small floor (so even a fresh
 # guardian gets something worth claiming). Paid once per day PER PLAYER — the
 # daily-action log is keyed on the user, so it's shared across every group.
-GUARDIAN_SALARY_MAX_COINS = 50_000
-GUARDIAN_SALARY_MAX_DNA = 2_000
-GUARDIAN_SALARY_MIN_COINS = 500
-GUARDIAN_SALARY_MIN_DNA = 20
+GUARDIAN_SALARY_MAX_COINS = 100_000
+GUARDIAN_SALARY_MAX_DNA = 4_000
+GUARDIAN_SALARY_MIN_COINS = 1_000
+GUARDIAN_SALARY_MIN_DNA = 40
 
 # regenerating stamina pool spent on feed/raid_attack — refills over real time instead
 # of resetting once a day, so there's a reason to come back every couple hours
