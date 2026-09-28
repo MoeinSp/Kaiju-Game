@@ -29,7 +29,12 @@ def can_join_expedition(user: User) -> tuple[bool, str]:
         user_local_date = timezone.localdate(user.last_expedition_at)
         today_local_date = timezone.localdate()
         if user_local_date == today_local_date:
-            return False, "⏳ هر کاربر روزی یک‌بار می‌تواند در اعزام کاروان شرکت کند.\n(سهمیه امروز شما تمام شده است؛ فردا دوباره امتحان کنید.)"
+            return False, (
+                f"{get_emoji('timer')} <b>سهمیه فردی شما برای امروز تمام شده است!</b>\n\n"
+                f"<blockquote>👤 هر کاربر روزانه فقط <code>1</code> بار می‌تواند در کاروان شرکت کند.\n"
+                f"سهمیه شما فردا مجدداً فعال می‌شود.</blockquote>\n\n"
+                f"💡 <i>برای بازی در گروه‌های دیگر، ربات را به گروه‌های دوستانتان اضافه کنید!</i>"
+            )
     return True, ""
 
 
@@ -48,7 +53,12 @@ def start_expedition_recruitment(creator: User, group_id: int, group_title: str)
         created_at__gte=today_start,
     ).exists()
     if group_done_today:
-        raise GameError("⏳ سهمیه اعزام کاروان این گروه برای امروز تمام شده است!\n(هر گروه روزانه فقط یکبار میتواند اعزام داشته باشد. برای اعزامهای بیشتر، ربات را به گروههای دیگر اضافه کنید!)")
+        raise GameError(
+            f"{get_emoji('timer')} <b>سهمیه اعزام کاروان این گروه تمام شده است!</b>\n\n"
+            f"<blockquote>👥 هر گروه روزانه فقط <code>1</code> بار می‌تواند اعزام کاروان داشته باشد.\n"
+            f"سهمیه این گروه فردا مجدداً فعال می‌شود.</blockquote>\n\n"
+            f"💡 <i>برای اعزام‌های بیشتر و کسب غنائم، ربات را به گروه‌های دیگر خود اضافه کنید!</i>"
+        )
 
     # Check if user already is in an active pending expedition anywhere
     pending = GroupExpedition.objects.filter(

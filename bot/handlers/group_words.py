@@ -2357,10 +2357,25 @@ async def handle_expedition_word(update: Update, context: ContextTypes.DEFAULT_T
         creator_name = display_name(exp.creator)
         return exp.id, creator_name, exp.target_name, member_names
 
-    try:
-        exp_id, creator_name, target_name, member_names = await run_db(_sync, update.effective_user, message.chat)
     except GameError as exc:
-        sent = await message.reply_text(str(exc))
+        from config import BOT_USERNAME
+        add_group_kb = InlineKeyboardMarkup([
+            [btn("➕ افزودن به گروه", emoji_key="btn_add_group", style=CONFIRM, url=f"https://t.me/{BOT_USERNAME}?startgroup=true")]
+        ])
+        err_msg = str(exc)
+        if "<b>" not in err_msg:
+            err_text = (
+                f"{get_emoji('rocket')} <b>اعزام کاروان تیمی</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"{err_msg}"
+            )
+        else:
+            err_text = (
+                f"{get_emoji('rocket')} <b>اعزام کاروان تیمی</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"{err_msg}"
+            )
+        sent = await message.reply_text(err_text, parse_mode="HTML", reply_markup=add_group_kb)
         _schedule_cleanup(context, message.chat_id, [message.message_id, sent.message_id], "expedition")
         return
 

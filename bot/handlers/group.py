@@ -1923,20 +1923,25 @@ def _guardian_claim_sync(chat, tg_user):
 
 
 async def guardian_claim(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from config import BOT_USERNAME
+    add_group_kb = InlineKeyboardMarkup([
+        [btn("➕ افزودن به گروه", emoji_key="btn_add_group", style=CONFIRM, url=f"https://t.me/{BOT_USERNAME}?startgroup=true")]
+    ])
     try:
         data = await run_db(_guardian_claim_sync, update.effective_chat, update.effective_user)
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(str(exc), reply_markup=add_group_kb)
         return
 
     if not data.get("has_guardian"):
         await update.message.reply_text(
-            f"{get_emoji('guardian')} <b>سیستم حقوق محافظ گروه</b>\n"
+            f"{get_emoji('guardian')} <b>سیستم حقوق و پاداش محافظ گروه</b>\n"
             f"{_RULE}\n"
-            f"این گروه در حال حاضر محافظی ندارد!\n"
-            f"⏰ حقوق محافظ هر روز ساعت <b>۱۸:۰۰ (۶ عصر)</b> به صورت خودکار واریز می‌شود.\n"
-            f"برای تصاحب جایگاه و دریافت پاداش روزانه، کلمه «تسخیر» را بفرستید.",
+            f"این گروه در حال حاضر <b>محافظی ندارد</b>!\n\n"
+            f"<blockquote>⏰ <b>زمان واریز:</b> حقوق محافظ هر روز ساعت <code>18:00</code> (۶ عصر) به صورت خودکار واریز می‌شود.\n"
+            f"⚔️ <i>برای تصاحب جایگاه محافظ و دریافت پاداش روزانه، کلمه «<b>تسخیر</b>» را ارسال کنید.</i></blockquote>",
             parse_mode="HTML",
+            reply_markup=add_group_kb,
         )
         return
 
@@ -1953,22 +1958,26 @@ async def guardian_claim(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         role_note = f"👑 محافظ فعلی گروه: <b>{owner_name}</b>"
 
     text = (
-        f"{get_emoji('guardian')} <b>سیستم خودکار حقوق محافظ</b>\n"
+        f"{get_emoji('guardian')} <b>سیستم خودکار حقوق محافظ گروه</b>\n"
         f"{_RULE}\n"
-        f"⏰ <b>زمان واریز:</b> حقوق محافظان هر روز رأس ساعت <b>۱۸:۰۰ (۶ عصر)</b> به صورت خودکار واریز می‌شود.\n\n"
-        f"{role_note}\n"
-        f"🦅 موجود نگهبان: <b>{guardian_name}</b> (سطح <code>{level}</code>)\n"
+        f"⏰ <b>زمان واریز:</b> هر روز رأس ساعت <code>18:00</code> (۶ عصر)\n\n"
+        f"<blockquote>{role_note}\n"
+        f"🦅 <b>هیولای نگهبان:</b> <b>{guardian_name}</b> (سطح <code>{level}</code>)\n"
         f"{get_emoji('coin')} حقوق تخمینی امروز: <code>{coins:,}</code> طلا\n"
-        f"{get_emoji('dna')} پاداش تخمینی DNA: <code>+{dna:,}</code>\n"
-        f"{_RULE}\n"
-        f"⚔️ <i>اگر می‌خواهید پاداش ساعت ۱۸ به شما برسد، با ارسال کلمه «تسخیر» محافظ فعلی را شکست دهید!</i>"
+        f"{get_emoji('dna')} پاداش تخمینی DNA: <code>+{dna:,}</code>\n\n"
+        f"⚔️ <i>اگر می‌خواهید حقوق ساعت ۱۸ به شما برسد، با ارسال کلمه «<b>تسخیر</b>» محافظ فعلی را شکست دهید!</i></blockquote>"
     )
-    await update.message.reply_text(text, parse_mode="HTML")
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=add_group_kb)
 
 
 async def guardian_daily_payout_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Daily 18:00 JobQueue task to payout guardian salaries and announce in groups."""
+    from config import BOT_USERNAME
     from game.guardian import process_daily_guardian_payouts
+
+    add_group_kb = InlineKeyboardMarkup([
+        [btn("➕ افزودن به گروه", emoji_key="btn_add_group", style=CONFIRM, url=f"https://t.me/{BOT_USERNAME}?startgroup=true")]
+    ])
 
     payouts = await run_db(process_daily_guardian_payouts)
     if not payouts:
@@ -1989,20 +1998,19 @@ async def guardian_daily_payout_job(context: ContextTypes.DEFAULT_TYPE) -> None:
                 f"{get_emoji('guardian')} <b>واریز خودکار حقوق محافظ گروه</b>\n"
                 f"{_RULE}\n"
                 f"⏰ ساعت ۱۸:۰۰ و زمان واریز حقوق محافظان فرا رسید!\n\n"
-                f"👑 محافظ شایسته: <b>{user_name}</b>\n"
-                f"🦅 هیولای نگهبان: <b>{c_name}</b>\n"
+                f"<blockquote>👑 <b>محافظ شایسته:</b> <b>{user_name}</b>\n"
+                f"🦅 <b>هیولای نگهبان:</b> <b>{c_name}</b>\n"
                 f"{get_emoji('coin')} حقوق واریز شده: <code>+{coins:,}</code> طلا\n"
-                f"{get_emoji('dna')} پاداش DNA: <code>+{dna:,}</code>\n"
-                f"{_RULE}\n"
-                f"<i>پاداش نگهبانی هر روز ساعت ۱۸:۰۰ به صورت خودکار واریز می‌شود. با ارسال «تسخیر» برای فردا آماده شوید!</i>"
+                f"{get_emoji('dna')} پاداش DNA: <code>+{dna:,}</code>\n\n"
+                f"✨ <i>پاداش نگهبانی هر روز ساعت ۱۸:۰۰ به صورت خودکار واریز می‌شود. با ارسال «تسخیر» برای فردا آماده شوید!</i></blockquote>"
             )
         else:
             text = (
                 f"{get_emoji('guardian')} <b>حقوق محافظ گروه</b>\n"
                 f"{_RULE}\n"
-                f"👑 محافظ فعلی: <b>{user_name}</b>\n"
-                f"⚠️ این کاربر سهمیه حقوق روزانه خود را امروز قبلاً از گروه دیگری دریافت کرده است.\n"
-                f"{_RULE}\n"
+                f"👑 <b>محافظ فعلی:</b> <b>{user_name}</b>\n\n"
+                f"<blockquote>⚠️ این کاربر سهمیه حقوق روزانه خود را امروز قبلاً از گروه دیگری دریافت کرده است.\n"
+                f"(هر کاربر روزانه فقط از ۱ گروه می‌تواند حقوق دریافت کند)</blockquote>\n\n"
                 f"<i>حقوق محافظ هر روز ساعت ۱۸:۰۰ به صورت خودکار محاسبه و واریز می‌شود.</i>"
             )
 
@@ -2011,7 +2019,10 @@ async def guardian_daily_payout_job(context: ContextTypes.DEFAULT_TYPE) -> None:
                 chat_id=group_id,
                 text=text,
                 parse_mode="HTML",
+                reply_markup=add_group_kb,
             )
+        except Exception:
+            pass
         except Exception:
             pass
         await asyncio.sleep(0.05)
