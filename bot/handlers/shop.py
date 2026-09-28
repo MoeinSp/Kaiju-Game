@@ -14,29 +14,66 @@ from game.emoji import get_emoji
 
 
 def _panel_sync(tg_user):
+    from game import gemkaiju, itemshop
     user, _ = get_or_create_user(tg_user)
-    return shop.offers_with_remaining(user), user.coins, user.diamonds
+    return (
+        shop.offers_with_remaining(user),
+        user.coins,
+        user.diamonds,
+        itemshop.list_items(active_only=True),
+        gemkaiju.gem_offer(user),
+    )
 
 
-def _render(offers, coins, diamonds, is_group: bool = False) -> tuple[str, InlineKeyboardMarkup]:
+def _render(offers, coins, diamonds, special_items=None, gem=None, is_group: bool = False) -> tuple[str, InlineKeyboardMarkup]:
+    from game import itemshop
     lines = [
         "🛒 <b>فروشگاه روزانه</b>",
         "━━━━━━━━━━━━━━━━━━━━",
-        "<i>هر روز آفرهای تازه و با تخفیف محدود</i>\n",
+        "<i>هر روز آفرهای تازه، تخفیف‌های محدود و بسته‌های ویژه</i>\n",
         f"💰 موجودی طلا: <code>{coins:,} طلا</code>",
         f"💎 موجودی الماس: <code>{diamonds:,} الماس</code>",
         "━━━━━━━━━━━━━━━━━━━━",
     ]
     rows: list = []
 
+    # 1. 💎 Daily Gem Kaiju (if any)
+    if gem:
+        label = constants.RARITY_LABELS[gem["rarity"]]
+        lines.append(f"💎 <b>کایجوی جمی: {gem['name']}</b> ({label})")
+        if gem.get("claimed"):
+            lines.append(f"<blockquote>{get_emoji('confirm')} امروز خریداری شده است.</blockquote>\n")
+        else:
+            lines.append(
+                f"<blockquote>💰 قیمت: <code>{gem['price']} الماس</code>\n"
+                "<i>روزی یک‌بار قابل خرید</i></blockquote>\n"
+            )
+            rows.append([btn(f"خرید {gem['name']}", emoji_key="btn_creature", style=SHOP, callback_data="gemk_buy")])
+
+    # 2. 🛍 Special Items / Packs (if any)
+    if special_items:
+        lines.append(f"{get_emoji('shop_item')} <b>آیتم‌ها و بسته‌های ویژه:</b>")
+        for it in special_items:
+            try:
+                contents = json.loads(it.contents_json)
+                summary = itemshop.content_summary(contents)
+            except Exception:
+                summary = "بسته ویژه"
+            desc = f"\n<i>{it.description}</i>" if it.description else ""
+            lines.append(
+                f"<blockquote>{it.emoji} <b>{it.title}</b>\n"
+                f"💰 قیمت: <code>{itemshop.price_text(it)}</code>\n"
+                f"🎁 محتویات: {summary}{desc}</blockquote>"
+            )
+            rows.append([btn(f"{it.emoji} {it.title}", style=SHOP, callback_data=f"sitem_buy:{it.id}")])
+        lines.append("")
+
     def _section(header: str, group: list) -> None:
         if not group:
             return
-        lines.append("")
         lines.append(header)
         for o in group:
             cur = "الماس" if o["currency"] == "diamonds" else "طلا"
-            cur_icon = f"{get_emoji('diamond')}" if o["currency"] == "diamonds" else f"{get_emoji('coin')}"
             star = f"{get_emoji('star')} " if o["featured"] else ""
             disc = "\n🔻 <i>تخفیف ویژه امروز</i>" if o["featured"] else ""
             rem = o.get("remaining")
@@ -51,14 +88,15 @@ def _render(offers, coins, diamonds, is_group: bool = False) -> tuple[str, Inlin
             rows.append([btn(
                 label, style=BUILD if o["featured"] else SHOP, callback_data=f"shop_buy:{o['key']}",
             )])
+        lines.append("")
 
     _section(f"{get_emoji('diamond')} <b>خرید با الماس:</b>", [o for o in offers if o["currency"] == "diamonds"])
     _section(f"{get_emoji('coin')} <b>خرید با طلا:</b>", [o for o in offers if o["currency"] != "diamonds"])
-    if not offers:
+    if not offers and not special_items and not gem:
         lines.append("\n<i>الان آفری موجود نیست. بعداً سر بزن.</i>")
     if not is_group:
-        rows.append([back_btn("menu:hub_shop", "بازگشت به فروشگاه")])
-    return "\n".join(lines), InlineKeyboardMarkup(rows)
+        rows.append([back_btn("menu:hub_shop")])
+    return "\n".join(lines).rstrip(), InlineKeyboardMarkup(rows)
 
 
 _SHOWN_OFFERS_KEY = "shop_shown_offers"
@@ -74,19 +112,27 @@ def _remember_offers(context, offers) -> None:
 
 async def shop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
-    offers, coins, diamonds = await run_db(_panel_sync, update.effective_user)
+    offers, coins, diamonds, special_items, gem = await run_db(_panel_sync, update.effective_user)
     _remember_offers(context, offers)
-    text, keyboard = _render(offers, coins, diamonds, is_group=is_group)
+    text, keyboard = _render(offers, coins, diamonds, special_items, gem, is_group=is_group)
     from game.media import get_feature_image_path
     photo = get_feature_image_path("shop")
     await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _buy_sync(tg_user, key, shown_price, shown_currency, count=1):
+    from game import gemkaiju, itemshop
     user, _ = get_or_create_user(tg_user)
     offer = shop.buy(user, key, count=count, shown_price=shown_price, shown_currency=shown_currency)
     user.refresh_from_db()  # buy() charges via a locked re-fetch; outer instance is stale
-    return offer, shop.offers_with_remaining(user), user.coins, user.diamonds
+    return (
+        offer,
+        shop.offers_with_remaining(user),
+        user.coins,
+        user.diamonds,
+        itemshop.list_items(active_only=True),
+        gemkaiju.gem_offer(user),
+    )
 
 
 def is_quantity_offer(offer_or_key) -> bool:
@@ -191,7 +237,7 @@ async def shop_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     try:
-        offer, offers, coins, diamonds = await run_db(
+        offer, offers, coins, diamonds, special_items, gem = await run_db(
             _buy_sync, update.effective_user, key, price, currency, count=1
         )
     except GameError as exc:
@@ -199,7 +245,7 @@ async def shop_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
     _remember_offers(context, offers)
     await query.answer(f"✅ خریدی: {shop.offer_reward_text(offer)}")
-    text, keyboard = _render(offers, coins, diamonds)
+    text, keyboard = _render(offers, coins, diamonds, special_items, gem)
     await safe_edit_message_text(
         query,
         f"✅ <b>خرید موفق:</b> {offer['emoji']} {offer['title']}\n\n━━━━━━━━━━━━━━━━━━━━\n" + text,
@@ -212,7 +258,7 @@ async def shop_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     _, key, raw_count = query.data.split(":")
     count = int(raw_count)
-    offers, coins, diamonds = await run_db(_panel_sync, update.effective_user)
+    offers, coins, diamonds, special_items, gem = await run_db(_panel_sync, update.effective_user)
     _remember_offers(context, offers)
     target_offer = next((o for o in offers if o["key"] == key), None)
     if target_offer is None:
@@ -231,7 +277,7 @@ async def shop_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     try:
-        offer, offers, coins, diamonds = await run_db(
+        offer, offers, coins, diamonds, special_items, gem = await run_db(
             _buy_sync, update.effective_user, key, unit_price, currency, count=count
         )
     except GameError as exc:
@@ -239,7 +285,7 @@ async def shop_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     _remember_offers(context, offers)
     await query.answer(f"✅ خریدی: {shop.offer_reward_text(offer)}")
-    text, keyboard = _render(offers, coins, diamonds)
+    text, keyboard = _render(offers, coins, diamonds, special_items, gem)
     cur = "الماس" if offer["currency"] == "diamonds" else "طلا"
     await safe_edit_message_text(
         query,
@@ -257,7 +303,7 @@ async def shop_confirm_buy_callback(update: Update, context: ContextTypes.DEFAUL
     count = int(raw_count)
     shown = context.user_data.get(_SHOWN_OFFERS_KEY, {}).get(key, {})
     try:
-        offer, offers, coins, diamonds = await run_db(
+        offer, offers, coins, diamonds, special_items, gem = await run_db(
             _buy_sync, update.effective_user, key, shown.get("price"), shown.get("currency"), count=count
         )
     except GameError as exc:
@@ -265,7 +311,7 @@ async def shop_confirm_buy_callback(update: Update, context: ContextTypes.DEFAUL
         return
     _remember_offers(context, offers)
     await query.answer(f"✅ خریدی: {shop.offer_reward_text(offer)}")
-    text, keyboard = _render(offers, coins, diamonds)
+    text, keyboard = _render(offers, coins, diamonds, special_items, gem)
     tot_price = offer.get("total_price", offer["price"] * count)
     cur = "الماس" if offer["currency"] == "diamonds" else "طلا"
     await safe_edit_message_text(
@@ -482,67 +528,37 @@ async def shield_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_T
 
 # ── 🛍 owner-authored item shop / packs ───────────────────────────────────────
 def _item_shop_sync(tg_user):
-    from game import itemshop, gemkaiju
-
+    from game import gemkaiju, itemshop
     user, _ = get_or_create_user(tg_user)
-    return itemshop.list_items(active_only=True), user.coins, user.diamonds, gemkaiju.gem_offer(user)
+    return (
+        shop.offers_with_remaining(user),
+        user.coins,
+        user.diamonds,
+        itemshop.list_items(active_only=True),
+        gemkaiju.gem_offer(user),
+    )
 
 
 def _item_shop_render(items, coins, diamonds, gem=None) -> tuple[str, InlineKeyboardMarkup]:
-    from game import itemshop
-
-    lines = [
-        f"{get_emoji('shop_item')} <b>آیتم‌ها و بسته‌های ویژه</b>",
-        "━━━━━━━━━━━━━━━━━━━━",
-        f"💰 موجودی طلا: <code>{coins:,} طلا</code>",
-        f"💎 موجودی الماس: <code>{diamonds:,} الماس</code>",
-        "━━━━━━━━━━━━━━━━━━━━",
-    ]
-    rows = []
-    # 💎 daily gem-kaiju — a same-species/same-rarity twin of one of the player's top kaiju
-    if gem:
-        label = constants.RARITY_LABELS[gem["rarity"]]
-        lines.append(f"💎 <b>کایجوی جمی: {gem['name']}</b> ({label})")
-        if gem["claimed"]:
-            lines.append(f"<blockquote>{get_emoji('confirm')} امروز خریداری شده است.</blockquote>")
-        else:
-            lines.append(
-                f"<blockquote>💰 قیمت: <code>{gem['price']} الماس</code>\n"
-                "<i>روزی یک‌بار قابل خرید</i></blockquote>"
-            )
-            rows.append([btn(f"خرید {gem['name']}", emoji_key="btn_creature", style=SHOP, callback_data="gemk_buy")])
-        lines.append("")
-
-    if not items:
-        lines.append("<i>الان آیتم ویژه‌ی دیگری موجود نیست.</i>")
-    for it in items:
-        contents = json.loads(it.contents_json)
-        summary = itemshop.content_summary(contents)
-        desc = f"\n<i>{it.description}</i>" if it.description else ""
-        lines.append(
-            f"<blockquote>{it.emoji} <b>{it.title}</b>\n"
-            f"💰 قیمت: <code>{itemshop.price_text(it)}</code>\n"
-            f"🎁 محتویات: {summary}{desc}</blockquote>"
-        )
-        rows.append([btn(f"{it.emoji} {it.title}", style=SHOP, callback_data=f"sitem_buy:{it.id}")])
-    rows.append([back_btn("menu:hub_shop", "بازگشت به فروشگاه")])
-    return "\n".join(lines), InlineKeyboardMarkup(rows)
+    return _render([], coins, diamonds, items, gem)
 
 
 async def item_shop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    items, coins, diamonds, gem = await run_db(_item_shop_sync, update.effective_user)
-    text, keyboard = _item_shop_render(items, coins, diamonds, gem)
-    from game.media import get_feature_image_path
-    photo = get_feature_image_path("item_shop")
-    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
+    await shop_panel(update, context)
 
 
 def _item_buy_sync(tg_user, item_id):
-    from game import itemshop, gemkaiju
-
+    from game import gemkaiju, itemshop
     user, _ = get_or_create_user(tg_user)
     result = itemshop.buy(user, item_id)
-    return result, itemshop.list_items(active_only=True), gemkaiju.gem_offer(user)
+    return (
+        result,
+        shop.offers_with_remaining(user),
+        user.coins,
+        user.diamonds,
+        itemshop.list_items(active_only=True),
+        gemkaiju.gem_offer(user),
+    )
 
 
 async def item_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -556,7 +572,7 @@ async def item_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     # If it costs diamonds, ask for confirmation
     if item.price_diamonds > 0:
-        _, _, diamonds, _ = await run_db(_item_shop_sync, update.effective_user)
+        _, _, diamonds, _, _ = await run_db(_panel_sync, update.effective_user)
         await query.answer()
         contents = json.loads(item.contents_json)
         from game import itemshop
@@ -573,7 +589,7 @@ async def item_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         keyboard = InlineKeyboardMarkup([
             [
                 btn("تأیید و خرید", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"sitem_do_buy:{item.id}"),
-                back_btn("menu:items", "انصراف"),
+                back_btn("menu:shop", "انصراف"),
             ],
         ])
         await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
@@ -587,14 +603,14 @@ async def item_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     item_id = int(query.data.split(":")[1])
     try:
-        result, items, gem = await run_db(_item_buy_sync, update.effective_user, item_id)
+        result, offers, coins, diamonds, items, gem = await run_db(_item_buy_sync, update.effective_user, item_id)
     except GameError as exc:
         if await show_gold_error(query, exc):
             return
         await query.answer(str(exc), show_alert=True)
         return
     await query.answer("✅ خریداری شد!")
-    text, keyboard = _item_shop_render(items, result["coins"], result["diamonds"], gem)
+    text, keyboard = _render(offers, coins, diamonds, items, gem)
     got = "، ".join(result["notes"])
     await safe_edit_message_text(
         query,
@@ -608,15 +624,21 @@ async def item_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 def _gem_buy_sync(tg_user):
     from game import gemkaiju, itemshop
-
     user, _ = get_or_create_user(tg_user)
     result = gemkaiju.buy_gem_kaiju(user)
-    return result, itemshop.list_items(active_only=True), gemkaiju.gem_offer(user)
+    return (
+        result,
+        shop.offers_with_remaining(user),
+        user.coins,
+        user.diamonds,
+        itemshop.list_items(active_only=True),
+        gemkaiju.gem_offer(user),
+    )
 
 
 async def gem_kaiju_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    items, coins, diamonds, gem = await run_db(_item_shop_sync, update.effective_user)
+    offers, coins, diamonds, items, gem = await run_db(_panel_sync, update.effective_user)
     if not gem or gem.get("claimed"):
         await query.answer("آفر کایجوی جمی امروز فعال نیست یا دریافت شده.", show_alert=True)
         return
@@ -634,7 +656,7 @@ async def gem_kaiju_buy_callback(update: Update, context: ContextTypes.DEFAULT_T
     keyboard = InlineKeyboardMarkup([
         [
             btn("تأیید و خرید", emoji_key="btn_confirm", style=CONFIRM, callback_data="gemk_do_buy"),
-            back_btn("menu:items", "انصراف"),
+            back_btn("menu:shop", "انصراف"),
         ],
     ])
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
@@ -643,7 +665,7 @@ async def gem_kaiju_buy_callback(update: Update, context: ContextTypes.DEFAULT_T
 async def gem_kaiju_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     try:
-        result, items, gem = await run_db(_gem_buy_sync, update.effective_user)
+        result, offers, coins, diamonds, items, gem = await run_db(_gem_buy_sync, update.effective_user)
     except GameError as exc:
         if await show_gold_error(query, exc):
             return
@@ -651,7 +673,7 @@ async def gem_kaiju_do_buy_callback(update: Update, context: ContextTypes.DEFAUL
         return
     await query.answer("✅ کایجوی جمی خریداری شد!")
     c = result["creature"]
-    text, keyboard = _item_shop_render(items, result["coins"], result["diamonds"], gem)
+    text, keyboard = _render(offers, coins, diamonds, items, gem)
     await safe_edit_message_text(
         query,
         f"✅ <b>کایجوی جمی خریده شد!</b>\n"
