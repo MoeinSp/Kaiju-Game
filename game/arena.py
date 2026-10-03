@@ -286,8 +286,8 @@ def _fake_opponent(attacker: User) -> dict:
 def find_opponent(attacker: User, exclude_ids=None) -> dict:
     """Picks a raid target: strongly prefers real, unshielded players with high variety.
     Only falls back to a bot if literally no real unshielded player exists.
-    Optimized for sub-5ms execution via single-pass index scan and in-memory distance ranking."""
-    from django.db.models import Q
+    The pool is built by one filtered query walking outward from the attacker's cup."""
+    from django.db.models import Exists, OuterRef, Q
 
     if active_power(attacker) <= 0:
         raise GameError("اول یه موجود فعال انتخاب کن.")
@@ -296,61 +296,43 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
     band = constants.ARENA_MATCH_CUP_BAND
     exclude_set = set(exclude_ids or [])
     reserved = _reserved_by_others(attacker.id)
-    base_exclude = {attacker.id} | reserved
+    # never the attacker, anyone another searcher is currently looking at, or anyone this
+    # player was just shown ("حریف بعدی" must bring a fresh face)
+    skip_ids = {attacker.id} | reserved | exclude_set
 
-    # If attacker belongs to an alliance, exclude all alliance members from matchmaking
-    if attacker.alliance_id:
-        alliance_member_ids = set(
-            User.objects.filter(alliance_id=attacker.alliance_id).values_list("id", flat=True)
-        )
-        base_exclude |= alliance_member_ids
-
-    # Fast indexed lookup of active creature owners excluding attacker, reserved & alliance members
-    active_owner_ids = set(
-        Creature.objects.filter(is_active=True).values_list("owner_id", flat=True)
-    ) - base_exclude
-
-    if not active_owner_ids:
-        return _fake_opponent(attacker)
-
-    # Fetch all eligible unshielded players in ONE single query (no joins, no heavy distinct)
-    eligible = list(
-        User.objects.filter(id__in=active_owner_ids, is_banned=False)
+    # The eligible pool, expressed as ONE filtered query instead of the old three-step
+    # version (pull every active owner id in the game into Python → send them all back as
+    # an 11k-element IN list → filter the band in Python), which cost ~300ms per search.
+    # Every rule is unchanged: a real, un-banned, un-shielded player who has an active
+    # creature, isn't an alliance-mate, sits inside the hard cup band, and respects rookie
+    # protection (>=2000 never meets <1000 and vice versa).
+    pool_qs = (
+        User.objects.filter(is_banned=False)
         .filter(Q(shield_until__isnull=True) | Q(shield_until__lte=now))
+        .filter(cup__gte=attacker.cup - band, cup__lte=attacker.cup + band)
+        .filter(Exists(Creature.objects.filter(owner_id=OuterRef("pk"), is_active=True)))
+        .exclude(id__in=skip_ids)
         .select_related("alliance")
-        .only("id", "cup", "coins", "username", "first_name", "alliance__name", "alliance_id")
     )
-
     if attacker.alliance_id:
-        eligible = [u for u in eligible if u.alliance_id != attacker.alliance_id]
+        pool_qs = pool_qs.exclude(alliance_id=attacker.alliance_id)
+    if attacker.cup >= 2000:
+        pool_qs = pool_qs.filter(cup__gte=1000)
+    if attacker.cup < 1000:
+        pool_qs = pool_qs.filter(cup__lt=2000)
 
-    if not eligible:
-        return _fake_opponent(attacker)
-
-    # Hard Cup Band (+- 1000) & Rookie Protection:
-    # High-cup players (>=2000) must NEVER match with beginners (<1000)
-    band_eligible = [
-        u for u in eligible
-        if abs(u.cup - attacker.cup) <= band
-        and not (attacker.cup >= 2000 and u.cup < 1000)
-        and not (attacker.cup < 1000 and u.cup >= 2000)
-    ]
-
-    # If no real players sit in the hard band (e.g. 5300 cup or empty bracket),
-    # strictly return a system bot. NEVER fall back to 0-cup beginners!
-    if not band_eligible:
-        return _fake_opponent(attacker)
-
-    # Pass 1: candidates in band not recently seen
-    candidates = [u for u in band_eligible if u.id not in exclude_set]
-
-    # If all real players in this band have been seen in recent searches (e.g. only 2 players exist),
-    # return a system bot to break the 2-player ping-pong loop!
+    # We only ever pick among the 8 closest cups, so walk outward from the attacker's cup
+    # in both directions (each an index range scan on (cup, id)) and keep the nearest 8.
+    # No real player in the band → a system bot, exactly as before. NEVER fall back to
+    # players outside the band.
+    above = list(pool_qs.filter(cup__gte=attacker.cup).order_by("cup", "id")[:8])
+    below = list(pool_qs.filter(cup__lt=attacker.cup).order_by("-cup", "id")[:8])
+    candidates = above + below
     if not candidates:
         return _fake_opponent(attacker)
 
-    # Sort candidates by cup proximity in Python (instant < 0.05ms)
-    candidates.sort(key=lambda u: abs(u.cup - attacker.cup))
+    # nearest cups first (ties broken by id so the order is stable)
+    candidates.sort(key=lambda u: (abs(u.cup - attacker.cup), u.id))
 
     # Pick from top 8 closest candidates with weighted random to maximize player variety
     pool = candidates[: min(8, len(candidates))]

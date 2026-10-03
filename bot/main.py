@@ -138,7 +138,24 @@ async def _global_error_handler(update: object, context: ContextTypes.DEFAULT_TY
     logging.warning("Update %s caused error %s", update, context.error)
 
 
+def _widen_db_thread_pool() -> None:
+    """run_db() runs on the event loop's DEFAULT executor, whose size Python picks as
+    min(32, cpu+4) — only 6 threads on this 2-vCPU box. Each button press makes a few
+    run_db hops, so a handful of concurrent players (or one slow screen) filled the pool
+    and everyone else's taps queued behind them. The work is I/O-bound (waiting on
+    Postgres), so more threads than cores is exactly right; each holds one DB connection,
+    well under Postgres' limit of 100."""
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    workers = int(os.environ.get("BOT_DB_THREADS", "16"))
+    asyncio.get_running_loop().set_default_executor(
+        ThreadPoolExecutor(max_workers=workers, thread_name_prefix="run_db")
+    )
+
+
 async def _post_init(application: Application) -> None:
+    _widen_db_thread_pool()
     await _configure_commands(application)
     await _warn_if_group_privacy_on(application)
 

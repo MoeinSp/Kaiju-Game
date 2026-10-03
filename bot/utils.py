@@ -121,9 +121,83 @@ def _to_rel_asset_key(path: str) -> str:
         return str(path).replace("\\", "/")
 
 
+# ── persistent runtime layer ─────────────────────────────────────────────────
+# The JSON above ships INSIDE the image, so every file_id the bot learned at runtime was
+# thrown away on each deploy and every picture had to be re-uploaded (300–450KB each)
+# the first time anyone opened that screen again — the "bot is slow after an update"
+# effect. This second layer lives on the mounted backups volume, so it survives deploys.
+# Each entry also remembers the file's size: if the artwork at that path is regenerated,
+# the size no longer matches and the stale file_id is ignored instead of showing old art.
+_RUNTIME_IDS: dict[str, list] = {}
+_RUNTIME_LOADED = False
+
+
+def _runtime_cache_file() -> Path | None:
+    base = os.environ.get("BACKUP_DIR")
+    if not base:
+        return None
+    d = Path(base)
+    return d / "telegram_file_ids_runtime.json" if d.is_dir() else None
+
+
+def _load_runtime_ids() -> None:
+    global _RUNTIME_IDS, _RUNTIME_LOADED
+    if _RUNTIME_LOADED:
+        return
+    _RUNTIME_LOADED = True
+    f = _runtime_cache_file()
+    if f is None or not f.exists():
+        return
+    try:
+        with open(f, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        mine = data.get(_get_cache_token_prefix()) if isinstance(data, dict) else None
+        if isinstance(mine, dict):
+            _RUNTIME_IDS = {k: v for k, v in mine.items() if isinstance(v, list) and len(v) == 2}
+    except Exception as e:  # noqa: BLE001 — a corrupt cache must never break sending
+        logger.warning("Failed to load runtime file_id cache: %s", e)
+        _RUNTIME_IDS = {}
+
+
+def _save_runtime_ids() -> None:
+    f = _runtime_cache_file()
+    if f is None:
+        return
+    try:
+        data = {}
+        if f.exists():
+            try:
+                with open(f, "r", encoding="utf-8") as fh:
+                    raw = json.load(fh)
+                if isinstance(raw, dict):
+                    data = raw
+            except Exception:  # noqa: BLE001
+                data = {}
+        data[_get_cache_token_prefix()] = _RUNTIME_IDS
+        tmp = f.with_suffix(".tmp")
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False)
+        os.replace(tmp, f)  # atomic: a crash mid-write can't leave a half file
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Failed to save runtime file_id cache: %s", e)
+
+
+def _file_sig(path: str) -> int:
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return 0
+
+
 def get_cached_file_id(path: str) -> str | None:
     _load_file_id_cache()
+    _load_runtime_ids()
     key = _to_rel_asset_key(path)
+    entry = _RUNTIME_IDS.get(key)
+    if entry is not None:
+        # a size mismatch means the picture at this path was replaced — re-upload it
+        # (and don't fall back to the bundled id either, which would be just as stale)
+        return entry[0] if entry[1] == _file_sig(path) else None
     return _FILE_ID_CACHE.get(key)
 
 
@@ -131,7 +205,15 @@ def store_cached_file_id(path: str, file_id: str) -> None:
     if not path or not file_id:
         return
     _load_file_id_cache()
+    _load_runtime_ids()
     key = _to_rel_asset_key(path)
+    if _runtime_cache_file() is not None:
+        entry = [file_id, _file_sig(path)]
+        if _RUNTIME_IDS.get(key) != entry:
+            _RUNTIME_IDS[key] = entry
+            _save_runtime_ids()
+        return
+    # no persistent volume (local dev) → the original in-image cache
     if _FILE_ID_CACHE.get(key) != file_id:
         _FILE_ID_CACHE[key] = file_id
         _save_file_id_cache()
@@ -139,7 +221,11 @@ def store_cached_file_id(path: str, file_id: str) -> None:
 
 def invalidate_cached_file_id(path: str) -> None:
     _load_file_id_cache()
+    _load_runtime_ids()
     key = _to_rel_asset_key(path)
+    if key in _RUNTIME_IDS:
+        del _RUNTIME_IDS[key]
+        _save_runtime_ids()
     if key in _FILE_ID_CACHE:
         del _FILE_ID_CACHE[key]
         _save_file_id_cache()

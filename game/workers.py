@@ -40,14 +40,18 @@ def assigned_creatures(building: Building) -> list[Creature]:
     ]
 
 
-def creature_mine_influence(creature: Creature, building: Building | None = None) -> float:
+def creature_mine_influence(creature: Creature, building: Building | None = None, items=None) -> float:
     """One stationed kaiju's production bonus (a multiplier addend). Scales with the
     kaiju's power (gear and research lab included) from its per-rarity floor up to the per-rarity
     ceiling. For diamond collector, uses diamond-specific scaling so diamond output remains balanced."""
     from game.creature import creature_power
     from game.equipment import get_equipped_items
 
-    power = creature_power(creature, get_equipped_items(creature))
+    # `items` lets a caller that already batch-loaded the gear (worker_bonus) skip the
+    # per-creature query; omitted → fetched here exactly as before
+    if items is None:
+        items = get_equipped_items(creature)
+    power = creature_power(creature, items)
     if building is not None and building.building_type == "diamond_collector":
         return constants.diamond_mine_influence(creature.rarity, power)
     return constants.mine_influence(creature.rarity, power)
@@ -62,8 +66,12 @@ def worker_bonus(building: Building) -> float:
     stationed kaiju, so stronger AND more kaiju both raise output. A mine with an
     explicit `worker_bonus_cap` (the diamond collector) is clamped to that ceiling —
     gold/DNA stay uncapped."""
+    from game.equipment import equipped_items_map
+
     cfg = constants.BUILDING_PRODUCTION.get(building.building_type, {})
-    total = sum(creature_mine_influence(c, building) for c in assigned_creatures(building))
+    workers = assigned_creatures(building)
+    gear = equipped_items_map(workers)  # one query for every stationed kaiju's gear
+    total = sum(creature_mine_influence(c, building, gear[c.pk]) for c in workers)
     cap = cfg.get("worker_bonus_cap")  # None for gold/DNA → no ceiling
     return total if cap is None else min(cap, total)
 

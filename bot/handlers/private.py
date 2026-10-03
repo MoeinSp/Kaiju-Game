@@ -613,8 +613,11 @@ def _upgrade_list_sync(tg_user):
     from game import research
 
     research.attach_research(user, creatures)  # buttons always show WITH-lab power
+    from game.equipment import equipped_items_map
+
+    gear = equipped_items_map(creatures)  # ONE query, not one per kaiju
     ranked = sorted(
-        ((c, _creature_power(c, get_equipped_items(c))) for c in creatures),
+        ((c, _creature_power(c, gear[c.pk])) for c in creatures),
         key=lambda pair: pair[1],
         reverse=True,
     )
@@ -1661,7 +1664,10 @@ def _collection_sync(tg_user):
 
     research.attach_research(user, creatures)  # buttons always show WITH-lab power
     # pair each creature with its effective (with-lab) power for the button labels
-    return [(c, _creature_power(c, get_equipped_items(c))) for c in creatures]
+    from game.equipment import equipped_items_map
+
+    gear = equipped_items_map(creatures)  # ONE query, not one per kaiju
+    return [(c, _creature_power(c, gear[c.pk])) for c in creatures]
 
 
 COLLECTION_PAGE_SIZE = 8

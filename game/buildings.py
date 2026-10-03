@@ -32,6 +32,21 @@ def get_or_create_buildings(user: User) -> list[Building]:
     """Seeds one row per building type. Everything starts at level 0 ("not built")
     except the main hall, which a player always owns — otherwise there'd be nothing
     to gate the very first construction against."""
+    # Fast path (the overwhelmingly common case): every row already exists and none is
+    # above the main-hall cap → ONE query. The seeding loop below costs ~19 queries
+    # (a get_or_create inside its own transaction per type, then the cap pass, then a
+    # re-read) and ran on every buildings/mine/menu screen. Anything unusual — a missing
+    # row, or a level over the cap — falls through to that original, self-healing path.
+    existing = {
+        b.building_type: b
+        for b in Building.objects.filter(owner=user, building_type__in=constants.BUILDING_TYPES)
+    }
+    if len(existing) == len(constants.BUILDING_TYPES):
+        main = existing.get(constants.MAIN_BUILDING)
+        cap = min(constants.BUILDING_MAX_LEVEL, max(1, main.level if main is not None else 0))
+        if all(b.level <= cap for t, b in existing.items() if t != constants.MAIN_BUILDING):
+            return [existing[t] for t in constants.BUILDING_TYPES]
+
     buildings = []
     for building_type in constants.BUILDING_TYPES:
         default_level = 1 if building_type == constants.MAIN_BUILDING else 0
@@ -131,32 +146,43 @@ def produces(building_type: str) -> bool:
     return building_type in constants.BUILDING_PRODUCTION
 
 
-def production_rate(building: Building) -> float:
-    """Current output per hour (base × level × worker bonus), 0 for non-producers."""
+def _worker_bonus(building: Building) -> float:
+    from game.workers import worker_bonus
+
+    return worker_bonus(building)
+
+
+def production_rate(building: Building, bonus: float | None = None) -> float:
+    """Current output per hour (base × level × worker bonus), 0 for non-producers.
+
+    `bonus` is the building's worker bonus when the caller already has it — computing it
+    costs queries (stationed kaiju + their gear), and pending_amount() used to pay that
+    three times over for one number. Omitted → looked up here, as before."""
     cfg = constants.BUILDING_PRODUCTION.get(building.building_type)
     if cfg is None or building.level <= 0:
         return 0.0
-    from game.workers import worker_bonus
+    if bonus is None:
+        bonus = _worker_bonus(building)
+    return cfg["rate_per_hour"] * building.level * (1 + bonus)
 
-    return cfg["rate_per_hour"] * building.level * (1 + worker_bonus(building))
 
-
-def storage_cap(building: Building) -> int:
+def storage_cap(building: Building, bonus: float | None = None) -> int:
     cfg = constants.BUILDING_PRODUCTION.get(building.building_type)
     if cfg is None or building.level <= 0:
         return 0
-    from game.workers import worker_bonus
+    if bonus is None:
+        bonus = _worker_bonus(building)
+    return int(cfg["cap_base"] * building.level * (1 + bonus))
 
-    return int(cfg["cap_base"] * building.level * (1 + worker_bonus(building)))
 
-
-def _accrued_since_collect(building: Building) -> float:
+def _accrued_since_collect(building: Building, bonus: float | None = None) -> float:
     """Raw (uncapped) production earned since last_collected_at at the CURRENT rate."""
-    if production_rate(building) <= 0:
+    rate = production_rate(building, bonus)
+    if rate <= 0:
         return 0.0
     last_col = building.last_collected_at or timezone.now()
     elapsed_hours = (timezone.now() - last_col).total_seconds() / 3600
-    return production_rate(building) * max(elapsed_hours, 0)
+    return rate * max(elapsed_hours, 0)
 
 
 def pending_amount(building: Building) -> int:
@@ -166,8 +192,9 @@ def pending_amount(building: Building) -> int:
     cfg = constants.BUILDING_PRODUCTION.get(building.building_type)
     if cfg is None or building.level <= 0:
         return 0
-    total = (building.banked_pending or 0.0) + _accrued_since_collect(building)
-    return int(min(storage_cap(building), math.floor(total)))
+    bonus = _worker_bonus(building)  # resolved ONCE and shared by rate + cap
+    total = (building.banked_pending or 0.0) + _accrued_since_collect(building, bonus)
+    return int(min(storage_cap(building, bonus), math.floor(total)))
 
 
 def lock_pending(building: Building) -> None:
@@ -177,7 +204,8 @@ def lock_pending(building: Building) -> None:
     still can't retro-multiply hours already earned (the 'الماس زیاد' abuse)."""
     if not produces(building.building_type) or building.level <= 0:
         return
-    locked = min(float(storage_cap(building)), (building.banked_pending or 0.0) + _accrued_since_collect(building))
+    bonus = _worker_bonus(building)
+    locked = min(float(storage_cap(building, bonus)), (building.banked_pending or 0.0) + _accrued_since_collect(building, bonus))
     building.banked_pending = locked
     building.last_collected_at = timezone.now()
     building.save(update_fields=["banked_pending", "last_collected_at"])

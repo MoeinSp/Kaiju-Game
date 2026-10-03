@@ -141,6 +141,15 @@ class User(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        indexes = [
+            # arena matchmaking walks outward from the attacker's cup in both directions
+            # (game.arena.find_opponent) and the season/leaderboard screens sort by cup
+            models.Index(fields=["cup", "id"], name="user_cup_id_idx"),
+            # Mugen Tower climbing leaderboard
+            models.Index(fields=["mugen_tower_floor"], name="user_mugen_floor_idx"),
+        ]
+
     def __str__(self) -> str:
         return self.username or self.first_name or f"Player {self.id}"
 
@@ -288,6 +297,16 @@ class Creature(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     last_trained_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            # "the player's active creature" is the single hottest query in the game
+            # (several times per button). Without this, `WHERE is_active AND owner_id=X
+            # ORDER BY id LIMIT 1` made Postgres walk the PRIMARY KEY index and filter —
+            # thousands of buffers per call. This partial index answers it in one probe.
+            models.Index(fields=["owner", "id"], condition=models.Q(is_active=True),
+                         name="creature_active_owner_idx"),
+        ]
 
     def __str__(self) -> str:
         return f"{self.name} (#{self.id})"
@@ -749,6 +768,14 @@ class AttackLog(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     defender_notified = models.BooleanField(default=False)  # "you were raided" DM sent to the defender
     revenge_taken = models.BooleanField(default=False)      # defender has revenged this attack
+
+    class Meta:
+        indexes = [
+            # "recent raids on me" (arena home, revenge list) and "my arena wins"
+            # (transfer gate, story quests) — both were sorting/counting hundreds of rows
+            models.Index(fields=["defender", "-created_at"], name="attacklog_def_recent_idx"),
+            models.Index(fields=["attacker", "attacker_won"], name="attacklog_atk_won_idx"),
+        ]
 
     def __str__(self) -> str:
         return f"{self.attacker_id} -> {self.defender_label} ({'W' if self.attacker_won else 'L'})"

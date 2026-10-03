@@ -15,6 +15,22 @@ def get_equipped_items(creature: Creature) -> list[Equipment]:
     return list(Equipment.objects.filter(equipped_on=creature))
 
 
+def equipped_items_map(creatures) -> dict[int, list[Equipment]]:
+    """get_equipped_items() for MANY creatures in ONE query → {creature_id: [items]}.
+
+    Every creature passed in gets a key (an empty list when it wears nothing), so
+    callers can index it directly. Use this anywhere a loop would otherwise call
+    get_equipped_items() per creature — the collection and upgrade pickers used to
+    fire one query per kaiju (800+ queries for a big roster)."""
+    ids = [c.pk for c in creatures if c is not None and c.pk is not None]
+    out: dict[int, list[Equipment]] = {i: [] for i in ids}
+    if not ids:
+        return out
+    for item in Equipment.objects.filter(equipped_on_id__in=ids):
+        out[item.equipped_on_id].append(item)
+    return out
+
+
 def list_inventory(user: User) -> list[Equipment]:
     return list(Equipment.objects.filter(owner=user).order_by("slot", "-rarity", "-level"))
 

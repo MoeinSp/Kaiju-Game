@@ -127,7 +127,15 @@ async def enforce_ban(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
     if not _gate_applies(update):
         return  # ordinary group chatter — never gate it
-    if await run_db(_is_banned_sync, user.id):
+    # Answer from the in-memory cache right here on the event loop when it's warm —
+    # this gate runs on EVERY update, and a thread-pool hop just to read a dict made
+    # each button wait in the same queue as real database work.
+    cached = _BAN_CACHE.get(user.id)
+    if cached is not None and time.monotonic() < cached[1]:
+        banned = cached[0]
+    else:
+        banned = await run_db(_is_banned_sync, user.id)
+    if banned:
         if update.effective_message is not None:
             await update.effective_message.reply_text("🚫 دسترسیت به این بات مسدود شده.")
         raise ApplicationHandlerStop
@@ -195,7 +203,11 @@ async def enforce_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE)
         update.callback_query is not None and update.callback_query.data == FORCE_JOIN_CHECK_CALLBACK
     )
 
-    channels = await run_db(_cached_active_channels, is_check_callback)
+    # same idea as the ban gate: only go to the thread pool when the 60s cache has
+    # expired (or the player pressed «بررسی مجدد», which must see fresh data)
+    channels, _expiry = _ACTIVE_CHANNELS_CACHE
+    if is_check_callback or time.monotonic() >= _expiry:
+        channels = await run_db(_cached_active_channels, is_check_callback)
     if not channels:
         return
 
