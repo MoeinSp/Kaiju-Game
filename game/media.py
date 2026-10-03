@@ -300,7 +300,9 @@ def get_creature_image_path(creature) -> str | None:
         if cache_file.exists() and cache_file.stat().st_size > 5000:
             return str(cache_file)
 
-        stage_file = KAIJU_DIR / f"{slug}_stage{stage}.jpg"
+        stage_file = KAIJU_DIR / f"{slug}_star{star_level}.jpg"
+        if not stage_file.exists():
+            stage_file = KAIJU_DIR / f"{slug}_stage{stage}.jpg"
         if not stage_file.exists():
             stage_file = KAIJU_DIR / f"{slug}_base.jpg"
 
