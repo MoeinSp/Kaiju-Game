@@ -10,6 +10,54 @@
   {% if player.username %}(@{{ player.username }}){% endif %}
 </p>
 
+<div class="card" style="margin-bottom: 20px;">
+  <h3 style="margin-top:0;">➕ اعطای کایجو به بازیکن</h3>
+  <form method="post" class="row" style="gap:12px; align-items:flex-end; flex-wrap:wrap;">
+    {% csrf_token %}
+    <div>
+      <label style="font-size:13px; color:var(--muted); display:block; margin-bottom:4px;">گونه و عنصر:</label>
+      <select name="species" style="min-width:200px;" required>
+        {% for sp in species_list %}
+          <option value="{{ sp.name }}">{{ sp.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label style="font-size:13px; color:var(--muted); display:block; margin-bottom:4px;">نایابی:</label>
+      <select name="rarity" style="width:130px;">
+        {% for rk, rl in rarities %}
+          <option value="{{ rk }}" {% if rk == "mythic" %}selected{% endif %}>{{ rl }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label style="font-size:13px; color:var(--muted); display:block; margin-bottom:4px;">ستاره:</label>
+      <select name="star" style="width:80px;">
+        <option value="1">۱⭐</option>
+        <option value="2">۲⭐</option>
+        <option value="3">۳⭐</option>
+        <option value="4">۴⭐</option>
+        <option value="5" selected>۵⭐</option>
+      </select>
+    </div>
+    <div>
+      <label style="font-size:13px; color:var(--muted); display:block; margin-bottom:4px;">سطح:</label>
+      <input type="number" name="level" value="100" min="1" max="120" style="width:75px;">
+    </div>
+    <div>
+      <label style="font-size:13px; color:var(--muted); display:block; margin-bottom:4px;">تعداد:</label>
+      <input type="number" name="count" value="1" min="1" max="50" style="width:65px;">
+    </div>
+    <div style="display:flex; align-items:center; gap:6px; padding-bottom:6px;">
+      <input type="checkbox" name="maxed" id="f_maxed" value="1" checked>
+      <label for="f_maxed" style="font-size:13px; cursor:pointer;">مکس تمام اعضا</label>
+    </div>
+    <div>
+      <button type="submit" name="action" value="grant_creature" class="green">اعطا به بازیکن</button>
+    </div>
+  </form>
+</div>
+
 <div class="card">
   <p class="hint">
     «کاهش ستاره» ستاره رو پایین می‌آره و به‌همراهش <b>سطح</b> و <b>ارتقای اعضا</b> (نیش/زره/بال/سم) رو هم

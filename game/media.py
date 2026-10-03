@@ -63,6 +63,18 @@ SPECIES_TO_SLUG = {
     "هما": "homa",
     "رخش": "rakhsh",
     "شهباز": "shahbaz",
+    # crystal
+    "زبرجد": "zebarjad",
+    "یشم‌تن": "yashmtan",
+    "بلورزاد": "boloorzad",
+    "درخشنده": "derakhshandeh",
+    "الماس‌گون": "almasgoon",
+    # plasma
+    "اخگرزاد": "akhgarzad",
+    "شهاب‌شکن": "shahabshekan",
+    "تندرمهر": "tondarmehr",
+    "آذرخش‌تن": "azarakhshtan",
+    "شعله‌سای": "sholehsay",
 }
 
 RARITY_STYLES = {
@@ -186,6 +198,18 @@ SPECIES_TITLES = {
     "homa": ("HOMA", "CELESTIAL THUNDERBIRD"),
     "rakhsh": ("RAKHSH", "SAFFRON LIGHTNING STEED"),
     "shahbaz": ("SHAHBAZ", "IMPERIAL THUNDER FALCON"),
+    # crystal
+    "zebarjad": ("ZEBARJAD", "PRISMATIC SERPENT TITAN"),
+    "yashmtan": ("YASHMTAN", "ANCIENT JADE GOLEM"),
+    "boloorzad": ("BOLOORZAD", "ASTRAL CRYSTAL DRAKE"),
+    "derakhshandeh": ("DERAKHSHANDEH", "LUMINOUS PRISM BEAST"),
+    "almasgoon": ("ALMASGOON", "APEX DIAMOND COLOSSUS"),
+    # plasma
+    "akhgarzad": ("AKHGARZAD", "SUPERHEATED PLASMA DRAKE"),
+    "shahabshekan": ("SHAHABSHEKAN", "COSMIC METEOR BREAKER"),
+    "tondarmehr": ("TONDARMEHR", "SOLAR CORONA TITAN"),
+    "azarakhshtan": ("AZARAKHSHTAN", "IONIZED PARTICLE BEAST"),
+    "sholehsay": ("SHOLEHSAY", "SUPERNOVA FLARE LORD"),
 }
 
 
@@ -823,6 +847,8 @@ def get_lab_overview_image_path(user, creature, buildings: list | None = None) -
                 "water": (0, 200, 255),
                 "earth": (160, 220, 40),
                 "electric": (255, 215, 0),
+                "crystal": (210, 80, 255),
+                "plasma": (0, 240, 255),
             }
             border_col = elem_colors.get(elem, (255, 140, 0))
 

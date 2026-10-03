@@ -31,6 +31,8 @@ _ELEMENT_ALIASES = {
     "water": "water", "آب": "water",
     "earth": "earth", "خاک": "earth",
     "electric": "electric", "الکتریسیته": "electric", "برق": "electric",
+    "crystal": "crystal", "کریستال": "crystal", "بلور": "crystal",
+    "plasma": "plasma", "پلاسما": "plasma",
 }
 _SLOT_ALIASES = {
     "weapon": "weapon", "سلاح": "weapon",

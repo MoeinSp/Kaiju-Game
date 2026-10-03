@@ -547,6 +547,20 @@ def player_creatures(request, user_id: int):
             elif action == "delete":
                 name = moderation.delete_creature(creature_id)
                 messages.success(request, f"«{name}» حذف شد.")
+            elif action == "grant_creature":
+                species_input = (request.POST.get("species") or "").strip()
+                rarity = (request.POST.get("rarity") or "mythic").strip()
+                star = _int(request, "star", 5)
+                level = _int(request, "level", 100)
+                count = _int(request, "count", 1)
+                maxed = bool(request.POST.get("maxed"))
+                sp_name, elem = moderation._resolve_species(species_input)
+                star = max(1, min(constants.STAR_MAX, star))
+                max_lvl = constants.creature_max_level(rarity, star)
+                lvl = max(1, min(max_lvl, level if not maxed else max_lvl))
+                cnt = max(1, min(50, count))
+                moderation._grant_creatures(user, sp_name, elem, rarity, lvl, star, cnt, maxed_parts=maxed)
+                messages.success(request, f"کایجوی «{sp_name}» ({constants.element_label(elem)}) با نایابی {constants.RARITY_LABELS.get(rarity, rarity)} به بازیکن اعطا شد.")
         except GameError as exc:
             messages.error(request, str(exc))
         return redirect("panel:player_creatures", user_id=user_id)
@@ -560,10 +574,22 @@ def player_creatures(request, user_id: int):
             "rarity_label": constants.RARITY_LABELS.get(c.rarity, c.rarity),
             "star_options": range(1, 6),
         })
+
+    species_list = []
+    for e in constants.ELEMENTS:
+        for s in constants.SPECIES_NAMES.get(e, []):
+            species_list.append({"name": s, "element": e, "label": f"{constants.element_label(e)} — {s}"})
+
     return render(
         request,
         "panel/player_creatures.html",
-        {"page": "players", "player": user, "creatures": creatures},
+        {
+            "page": "players",
+            "player": user,
+            "creatures": creatures,
+            "species_list": species_list,
+            "rarities": [(k, constants.RARITY_LABELS[k]) for k in constants.RARITY_ORDER],
+        },
     )
 
 

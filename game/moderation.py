@@ -78,14 +78,66 @@ def _grant_creatures(user, species, element, rarity_key, level, star, count, *, 
             )
 
 
-def _resolve_species(species: str):
-    from game import constants
+def _resolve_species(species_input: str) -> tuple[str, str]:
+    """Resolves raw species/element input into a canonical (species_name, element) tuple.
 
-    element = constants.species_element(species)
-    if element is None:
-        names = "، ".join(sorted(constants.SPECIES.keys()))
-        raise GameError(f"گونه‌ی «{species}» ناشناخته‌ست.\nگونه‌های مجاز:\n{names}")
-    return element
+    Tolerates:
+    - Normal spaces vs half-spaces (e.g. «الماس گون» or «الماس‌گون»)
+    - English species slugs (e.g. 'almasgoon', 'zebarjad', 'akhgarzad', 'simurgh')
+    - Element names in English or Persian (e.g. 'crystal', 'plasma', 'کریستال', 'پلاسما')
+      which will pick a species of that element!
+    """
+    from game import constants
+    from game.media import SPECIES_TO_SLUG
+
+    raw = (species_input or "").strip()
+    if not raw:
+        raise GameError("نام گونه یا عنصر مشخص نشده است.")
+
+    # 1. Exact match in constants.SPECIES
+    if raw in constants.SPECIES:
+        return raw, constants.SPECIES[raw]
+
+    # 2. Match with space / half-space normalization
+    norm_input = raw.replace("\u200c", " ").replace("  ", " ").strip().lower()
+    for s_name, elem in constants.SPECIES.items():
+        s_norm = s_name.replace("\u200c", " ").replace("  ", " ").strip().lower()
+        if norm_input == s_norm:
+            return s_name, elem
+
+    # 3. Match without spaces at all
+    no_space_input = norm_input.replace(" ", "")
+    for s_name, elem in constants.SPECIES.items():
+        s_no_space = s_name.replace("\u200c", "").replace(" ", "").lower()
+        if no_space_input == s_no_space:
+            return s_name, elem
+
+    # 4. English slug match (from SPECIES_TO_SLUG)
+    slug_to_persian = {slug.lower(): s_name for s_name, slug in SPECIES_TO_SLUG.items()}
+    if norm_input in slug_to_persian:
+        canonical_name = slug_to_persian[norm_input]
+        return canonical_name, constants.SPECIES[canonical_name]
+
+    # 5. Direct element specification
+    elem_aliases = {
+        "fire": "fire", "آتش": "fire",
+        "water": "water", "آب": "water",
+        "earth": "earth", "خاک": "earth",
+        "electric": "electric", "الکتریسیته": "electric", "برق": "electric",
+        "crystal": "crystal", "کریستال": "crystal", "بلور": "crystal",
+        "plasma": "plasma", "پلاسما": "plasma",
+    }
+    target_elem = elem_aliases.get(norm_input) or elem_aliases.get(no_space_input)
+    if target_elem and target_elem in constants.SPECIES_NAMES:
+        chosen_species = constants.random_species_name(target_elem)
+        return chosen_species, target_elem
+
+    names_by_elem = []
+    for e in constants.ELEMENTS:
+        sp_list = "، ".join(constants.SPECIES_NAMES.get(e, []))
+        names_by_elem.append(f"{constants.element_label(e)}: {sp_list}")
+    full_guide = "\n".join(names_by_elem)
+    raise GameError(f"گونه یا عنصر «{raw}» ناشناخته است.\n\nلیست گونه‌های مجاز به تفکیک عنصر:\n{full_guide}")
 
 
 def _resolve_rarity(token: str) -> str:
@@ -107,7 +159,7 @@ def admin_give_kaiju(identifier: str, raw: str) -> dict:
     if len(parts) < 5:
         raise GameError(
             "فرمت درست: <code>&lt;نایابی&gt; &lt;سطح&gt; &lt;ستاره&gt; &lt;تعداد&gt; &lt;نام&gt;</code>\n"
-            "مثال: <code>mythic 100 5 3 کرکس دریا</code>\n"
+            "مثال: <code>mythic 100 5 3 کرکس دریا</code> یا <code>mythic 100 5 1 کریستال</code>\n"
             "نایابی: common / rare / epic / legendary / mythic (یا معادل فارسی)."
         )
     rarity_key = _resolve_rarity(parts[0])
@@ -115,8 +167,8 @@ def admin_give_kaiju(identifier: str, raw: str) -> dict:
         level, star, count = int(parts[1]), int(parts[2]), int(parts[3])
     except ValueError:
         raise GameError("سطح، ستاره و تعداد باید عدد باشن.")
-    species = " ".join(parts[4:]).strip()
-    element = _resolve_species(species)
+    raw_species = " ".join(parts[4:]).strip()
+    species, element = _resolve_species(raw_species)
 
     star = max(1, min(constants.STAR_MAX, star))
     max_level = constants.creature_max_level(rarity_key, star)
@@ -141,7 +193,7 @@ def admin_give_maxed_kaiju(identifier: str, raw: str) -> dict:
     if len(parts) < 3:
         raise GameError(
             "فرمت درست: <code>&lt;نایابی&gt; &lt;تعداد&gt; &lt;نام‌گونه&gt;</code>\n"
-            "مثال: <code>mythic 3 کرکس دریا</code>\n"
+            "مثال: <code>mythic 1 الماس‌گون</code> یا <code>mythic 1 پلاسما</code>\n"
             "<i>سطح/ستاره/ارتقای اعضا همه خودکار مکس می‌شن.</i>"
         )
     rarity_key = _resolve_rarity(parts[0])
@@ -149,8 +201,8 @@ def admin_give_maxed_kaiju(identifier: str, raw: str) -> dict:
         count = int(parts[1])
     except ValueError:
         raise GameError("تعداد باید عدد باشه.")
-    species = " ".join(parts[2:]).strip()
-    element = _resolve_species(species)
+    raw_species = " ".join(parts[2:]).strip()
+    species, element = _resolve_species(raw_species)
 
     star = constants.STAR_MAX
     level = constants.creature_max_level(rarity_key, star)

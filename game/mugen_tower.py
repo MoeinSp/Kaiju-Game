@@ -57,8 +57,8 @@ def get_floor_guardian_info(floor: int) -> tuple[str, str, str]:
     if floor == 9:
         return "اختاپوس اساطیری اعماق", "water", "mythic"
 
-    # Deterministic elements cycle
-    elems = ["earth", "fire", "water", "electric"]
+    # Deterministic elements cycle across all 6 elements
+    elems = constants.ELEMENTS
     elem = elems[(floor * 7 + 3) % len(elems)]
 
     # Deterministic rarity progression
