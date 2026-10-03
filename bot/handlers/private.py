@@ -4581,6 +4581,8 @@ async def raid_rank_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             lines.append(f"   🐉 سطح رید: <code>{r['raid_level']}</code>")
             lines.append(f"   👥 اعضا: <code>{r['member_count']}</code>")
             lines.append("")
+    from game.media import get_feature_image_path
+
     raid_photo = get_feature_image_path("raid_rank")
     await send_screen(update, "\n".join(lines), photo=raid_photo, parse_mode="HTML",
                       reply_markup=back_only_keyboard("menu:hub_battle", "بازگشت به نبرد و ماجراجویی"))
@@ -5219,10 +5221,10 @@ async def onboarding_hatch_callback(update: Update, context: ContextTypes.DEFAUL
     user, creature, equipped_items = await run_db(_onboarding_hatch_sync, update.effective_user)
     from game.media import get_creature_image_path
     photo_path = get_creature_image_path(creature)
-    stats = creature_stats(creature)
+    stats = effective_stats(creature, equipped_items)
     text = (
         f"🎉 <b>کایجوی شما با موفقیت متولد شد!</b>\n\n"
-        f"<blockquote>نام: <b>{creature.name}</b> | عنصر: {creature.element}\n"
+        f"<blockquote>نام: <b>{creature.name}</b> | عنصر: {constants.element_label(creature.element)}\n"
         f"❤️ سلامت: <code>{stats['hp']:,}</code> | ⚔️ قدرت: <code>{stats['atk']:,}</code>\n"
         f"🛡 دفاع: <code>{stats['def']:,}</code> | ⚡ سرعت: <code>{stats['spd']:,}</code></blockquote>\n\n"
         f"<blockquote>این موجود برای رشد به تغذیه و تجربه نبرد نیاز دارد.\n"

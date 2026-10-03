@@ -228,14 +228,14 @@ SQLite (`game.db`, در `.gitignore`، همون فایلی که همیشه بو�
 - `bot/main.py` یه **error handler سراسری** داره (`Forbidden`، «Query is too old» و «message is not modified» رو بی‌صدا رد می‌کنه)، `concurrent_updates(True)`، تایم‌اوت ۳۰ ثانیه، و هر ۲ دقیقه کش‌های تم رو دوباره از دیتابیس می‌خونه (تا تغییرِ پنل وب بدون ری‌استارت به بات برسه).
 - **`context.user_data` پایدار نیست.** هر state که باید از ری‌استارت جون سالم به در ببره یا باید توی `callback_data` باشه یا توی دیتابیس.
 - **رندر async هیچ‌وقت نباید کوئری بزنه** (`SynchronousOnlyOperation`). هر چیزی که متن می‌سازه و به ORM دست می‌زنه (`titles.label`، `wallet_line`، `lab_display` با badge، …) باید توی تابع `_xxx_sync` ساخته بشه یا کل رندر با `run_db` اجرا بشه.
-- **هر فیلد `CharField` که `lab_display()` توش ذخیره می‌شه باید جادار باشه.** خروجی‌ش اسم escape‌شده + تگ کامل `<tg-emoji>` نشانِ اشتراکه و راحت از ۶۴ رد می‌شه؛ `AttackLog.*_label` به همین دلیل ۲۵۵ شد (قبلش حمله به هر اشتراک‌دارِ اسم‌بلند بی‌صدا کرش می‌کرد). `BlackMarketAuction.highest_bidder_name` هنوز ۱۲۸ه.
+- **هر فیلد `CharField` که `lab_display()` توش ذخیره می‌شه باید جادار باشه.** خروجی‌ش اسم escape‌شده + تگ کامل `<tg-emoji>` نشانِ اشتراکه و راحت از ۶۴ رد می‌شه؛ `AttackLog.*_label` به همین دلیل ۲۵۵ شد (قبلش حمله به هر اشتراک‌دارِ اسم‌بلند بی‌صدا کرش می‌کرد). `BlackMarketAuction.highest_bidder_name` هم به همین دلیل ۲۵۵ه.
 - `/api/started/` (توی `telgame_site/api.py`) فقط `User.started_gate` رو برمی‌گردونه.
 
 ### استقرار
 سرور Hetzner مشترک، مسیر `/opt/kaiju-bio-lab`، سه کانتینر (`web`/`bot`/`db`). استقرار: push به `origin/master` و بعد روی سرور `./update.sh` (pull + rebuild + migrate؛ entrypoint وب مایگریشن رو قبل از مرحله‌ی migrateِ اسکریپت اعمال می‌کنه، پس «No migrations to apply» طبیعیه). تست زنده با `docker compose exec -T web python manage.py shell`؛ توی اون شل کش‌های ایموجی/دکمه/botconfig **سردن** و اگه رندر تست می‌کنی باید دستی گرمشون کنی.
 
-### باگ‌های بازِ شناخته‌شده (۳ اکتبر ۲۰۲۶ — بعد از رفع، این بند رو پاک کن)
-چهار `undefined name` که `pyflakes game bot` نشون می‌ده و هر کدوم موقع اجرا کرش می‌کنن: `cost` توی `transfer.transfer_equipment` (انتقال تجهیزات کلاً از کار افتاده)، `random` توی `bot/handlers/arena.py::_swap_rerender_sync`، `get_feature_image_path` توی صفحه‌ی رتبه‌بندی رید (`private.py`)، و `creature_stats` توی `onboarding_hatch_callback`. **قبل از هر دیپلوی `python -m pyflakes game bot | grep "undefined name"` بزن** — `py_compile` و `manage.py check` این کلاس باگ رو نمی‌گیرن.
+### قبل از هر دیپلوی
+`python -m pyflakes game bot bio_lab panel | grep "undefined name"` بزن. `py_compile` و `manage.py check` اسمِ تعریف‌نشده رو نمی‌گیرن چون فقط موقع اجرای همون خط کرش می‌کنه — یه‌بار چهار تا از این‌ها هم‌زمان روی بات زنده بودن (انتقال تجهیزات، تعویض هیولا جلوی بات کاپ‌بالا، صفحه‌ی رتبه‌بندی رید، باز شدن تخم آنبوردینگ) و هیچ‌کدوم توی لاگ دیده نمی‌شدن تا کسی اون دکمه رو بزنه.
 
 **تعادل اقتصادی (مهم برای تغییرات بعدی):** سه محور درآمد عمداً به یه محور پیشرفت مشترک گره خوردن — **سطح هیولا**:
 - **منحنی سطح آزمایشگاه فوق‌درجه‌دومه** (`25*(L-1)²` → `18*(L-1)^2.6`): با مربع ساده، فاصله‌ی سطح ۴۰ به ۴۱ فقط ۱٫۷ برابر فاصله‌ی ۱۰ به ۱۱ بود، یعنی کسی که با همون ریتم بازی می‌کرد تقریباً با سرعت ثابت بالا می‌رفت و عدد بالا معنی‌ش رو از دست می‌داد. با توان ۲٫۶ این نسبت ~۱۰ برابر می‌شه. `level_for_xp` بعد از ریشه‌گیری با `xp_for_level` تصحیح می‌شه، چون ریشه‌ی اعشاری روی اعداد بزرگ ممکنه یه مو این‌ور یا اون‌ورِ مرز بیفته و نوار پیشرفت به عقب بپره.

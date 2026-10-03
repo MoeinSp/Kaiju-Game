@@ -377,6 +377,9 @@ def transfer_equipment(sender: User, receiver: User, equip_id: int, price: int =
 
     if price > constants.EQUIP_TRANSFER_MAX_GOLD_PRICE:
         raise GameError(f"حداکثر قیمت طلا برای انتقال تجهیزات {constants.EQUIP_TRANSFER_MAX_GOLD_PRICE:,} طلاست.")
+    # the receiver's diamond fee (a sink) — this line was dropped when the gold-price cap
+    # was added, which left `cost` undefined and broke every equipment transfer
+    cost = constants.equip_transfer_cost(item.rarity, item.level)
     if receiver.diamonds < cost:
         raise TransferFundsError(cost, receiver.diamonds, "equip")
     if price > 0 and receiver.coins < price:

@@ -1179,7 +1179,9 @@ class BlackMarketAuction(models.Model):
     min_bid = models.IntegerField(default=1000)
     current_bid = models.IntegerField(default=0)
     highest_bidder = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="won_auctions")
-    highest_bidder_name = models.CharField(max_length=128, blank=True, default="")
+    # 255: stores lab_display(), i.e. the escaped lab name PLUS the subscription badge's
+    # full <tg-emoji> tag — the same overflow that silently broke AttackLog at 64
+    highest_bidder_name = models.CharField(max_length=255, blank=True, default="")
     ends_at = models.DateTimeField()
     is_settled = models.BooleanField(default=False)
     winner_notified = models.BooleanField(default=False)

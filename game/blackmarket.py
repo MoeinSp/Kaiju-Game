@@ -317,7 +317,7 @@ def place_bid(user: User, auction_id: int, bid_amount: int) -> dict:
         auction.ends_at = now + datetime.timedelta(seconds=120)
 
     auction.highest_bidder = user
-    auction.highest_bidder_name = lab_display(user)
+    auction.highest_bidder_name = lab_display(user)[:255]
     auction.current_bid = bid_amount
     auction.save(update_fields=["highest_bidder", "highest_bidder_name", "current_bid", "ends_at"])
 
