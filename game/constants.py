@@ -2,14 +2,16 @@ import random
 
 MIN_GROUP_MEMBERS = 10
 
-ELEMENTS = ["fire", "water", "earth", "electric"]
+ELEMENTS = ["fire", "water", "earth", "electric", "crystal", "plasma"]
 
-# each element deals bonus damage to the one it points to, and takes bonus damage from the one before it
+# each element deals bonus damage to the elements in its strong list
 ELEMENT_STRONG_AGAINST = {
-    "fire": "earth",
-    "earth": "electric",
-    "electric": "water",
-    "water": "fire",
+    "fire": ["earth"],
+    "earth": ["electric"],
+    "electric": ["water"],
+    "water": ["fire"],
+    "crystal": ["water", "electric"],
+    "plasma": ["fire", "earth"],
 }
 
 ELEMENT_WORDS = {
@@ -17,6 +19,8 @@ ELEMENT_WORDS = {
     "water": "آب",
     "earth": "خاک",
     "electric": "الکتریسیته",
+    "crystal": "کریستال",
+    "plasma": "پلاسما",
 }
 
 ELEMENT_EMOJI_KEYS = {
@@ -24,6 +28,8 @@ ELEMENT_EMOJI_KEYS = {
     "water": "element_water",
     "earth": "element_earth",
     "electric": "element_electric",
+    "crystal": "element_crystal",
+    "plasma": "element_plasma",
 }
 
 # plain-unicode labels — kept for contexts that can't render <tg-emoji> (button text,
@@ -33,6 +39,8 @@ ELEMENT_LABELS = {
     "water": "💧 آب",
     "earth": "🪨 خاک",
     "electric": "⚡ الکتریسیته",
+    "crystal": "🔮 کریستال",
+    "plasma": "⚛️ پلاسما",
 }
 
 
@@ -41,6 +49,14 @@ def element_label(element: str) -> str:
     from game.emoji import get_emoji
 
     return f"{get_emoji(ELEMENT_EMOJI_KEYS[element])} {ELEMENT_WORDS[element]}"
+
+
+def is_strong_against(attacker_element: str, defender_element: str) -> bool:
+    """True if attacker_element has an elemental advantage against defender_element."""
+    targets = ELEMENT_STRONG_AGAINST.get(attacker_element, [])
+    if isinstance(targets, (list, set, tuple)):
+        return defender_element in targets
+    return defender_element == targets
 
 # Names drawn from Persian myth (Shahnameh / Avestan lore) rather than invented
 # words. **SPECIES is the single source of truth and the mapping is strictly
@@ -73,6 +89,18 @@ SPECIES = {
     "هما": "electric",
     "رخش": "electric",
     "شهباز": "electric",
+    # crystal — کانی‌ها و بلورهای منشوری باستانی
+    "زبرجد": "crystal",
+    "یشم‌تن": "crystal",
+    "بلورزاد": "crystal",
+    "درخشنده": "crystal",
+    "الماس‌گون": "crystal",
+    # plasma — انرژی و ذرات باردار کیهانی
+    "اخگرزاد": "plasma",
+    "شهاب‌شکن": "plasma",
+    "تندرمهر": "plasma",
+    "آذرخش‌تن": "plasma",
+    "شعله‌سای": "plasma",
 }
 
 # derived view: element -> [names]. Built from SPECIES so the two can never drift.
@@ -219,6 +247,8 @@ ELEMENT_SKILLS = {
     "water": {"name": "💧 موج شفا", "desc": "۲۵٪ HP ماکسیمم رو ترمیم می‌کنه", "heal_pct": 0.25},
     "earth": {"name": "🪨 دیوار سنگی", "desc": "نیمی از ضربه‌ی بعدی حریف رو خنثی می‌کنه", "shield_pct": 0.5},
     "electric": {"name": "⚡ شوک برق", "desc": "حریف یک نوبت برق می‌گیره و از دست می‌ده", "stun": True},
+    "crystal": {"name": "🔮 منشور بازتابنده", "desc": "دمیج کریستالی و سپر محافظتی", "power_mult": 1.7, "shield_pct": 0.4},
+    "plasma": {"name": "⚛️ انفجار پلاسما", "desc": "شلیک پرتو فوق‌حرارتی و دمیج سنگین", "power_mult": 2.2},
 }
 
 # daily caps for actions with no natural cooldown of their own (guardian stipend is a
@@ -1586,9 +1616,9 @@ def random_species_name(element: str) -> str:
 
 
 def element_multiplier(attacker_element: str, defender_element: str) -> float:
-    if ELEMENT_STRONG_AGAINST[attacker_element] == defender_element:
+    if is_strong_against(attacker_element, defender_element):
         return STRONG_MULTIPLIER
-    if ELEMENT_STRONG_AGAINST[defender_element] == attacker_element:
+    if is_strong_against(defender_element, attacker_element):
         return WEAK_MULTIPLIER
     return 1.0
 
@@ -1598,36 +1628,47 @@ def element_advantage_chain() -> str:
     from game.emoji import get_emoji
 
     seq = ["fire", "earth", "electric", "water", "fire"]
-    return "🔁 ترتیب برتری عنصری: " + " › ".join(get_emoji(ELEMENT_EMOJI_KEYS[e]) for e in seq)
+    return "🔁 ترتیب برتری عناصر پایه: " + " › ".join(get_emoji(ELEMENT_EMOJI_KEYS[e]) for e in seq)
 
 
 def element_advantage_lines() -> str:
     """Who-beats-whom, one pairing per line — easier to read than the cramped cycle.
     Each element on its own row pointing at the element it's strong against."""
-    lines = ["🔁 <b>برتری عنصری:</b>"]
+    lines = ["🔁 <b>برتری عناصر پایه:</b>"]
     for e in ("fire", "earth", "electric", "water"):  # follow the beat cycle
-        lines.append(f"{element_label(e)} ⟶ {element_label(ELEMENT_STRONG_AGAINST[e])}")
+        targets = ELEMENT_STRONG_AGAINST.get(e, [])
+        t_str = "، ".join(element_label(t) for t in targets)
+        lines.append(f"{element_label(e)} ⟶ {t_str}")
+    lines.append("━━━━━━━━━━━━━━━━━━━━")
+    lines.append("✨ <b>عناصر برتر و باستانی:</b>")
+    lines.append(f"{element_label('crystal')} ⟶ {element_label('water')}، {element_label('electric')}")
+    lines.append(f"{element_label('plasma')} ⟶ {element_label('fire')}، {element_label('earth')}")
     return "\n".join(lines)
 
 
 def element_cycle_block() -> str:
     """The full superiority cycle on its own clear line, under a header — the footer
     shown at the end of every battle report so players can read who beats whom at a
-    glance: 🔁 چرخه برتری عناصر: / 🔥 آتش › 🪨 خاک › ⚡ الکتریسیته › 💧 آب › 🔥 آتش."""
+    glance."""
     seq = ["fire", "earth", "electric", "water", "fire"]
     chain = " › ".join(element_label(e) for e in seq)
-    return f"🔁 <b>چرخه برتری عناصر:</b>\n{chain}"
+    return (
+        f"🔁 <b>چرخه برتری عناصر پایه:</b>\n{chain}\n\n"
+        f"✨ <b>عناصر برتر:</b>\n"
+        f"• {element_label('crystal')} ⟶ {element_label('water')} و {element_label('electric')}\n"
+        f"• {element_label('plasma')} ⟶ {element_label('fire')} و {element_label('earth')}"
+    )
 
 
 def element_matchup_note(my_element: str, opp_element: str) -> str:
     """A one-line elemental heads-up for a fight preview: warns when the opponent's
     element beats yours, cheers when yours beats theirs, empty when neutral."""
-    if ELEMENT_STRONG_AGAINST.get(opp_element) == my_element:
+    if is_strong_against(opp_element, my_element):
         return (
             f"⚠️ <b>احتمال باخت بیشتره:</b> {element_label(opp_element)} به "
             f"{element_label(my_element)} برتری داره."
         )
-    if ELEMENT_STRONG_AGAINST.get(my_element) == opp_element:
+    if is_strong_against(my_element, opp_element):
         return (
             f"✅ <b>برتری عنصری با توئه:</b> {element_label(my_element)} به "
             f"{element_label(opp_element)} برتری داره."

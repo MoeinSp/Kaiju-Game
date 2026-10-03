@@ -35,6 +35,8 @@ ELEMENT_TRAIT = {
     "water": {"hp_mult": 1.25},        # bulwark
     "earth": {"dmg_taken_mult": 0.82}, # tank
     "electric": {"crit_bonus": 0.15},  # striker
+    "crystal": {"dmg_taken_mult": 0.88, "atk_mult": 1.15}, # reflective prism
+    "plasma": {"atk_mult": 1.22, "crit_bonus": 0.10},     # cosmic burst
 }
 SYNERGY_ATK_BONUS = 0.10  # all three share an element → +10% atk team-wide
 

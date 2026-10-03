@@ -43,11 +43,12 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "gear_power": ("قدرت تجهیزات", "⚙️", "stats"),
     "body_parts": ("ارتقای اعضای بدن", "🦴", "stats"),
     "trend_up": ("نرخ رشد و افزایش", "📈", "stats"),
-    # elements
     "element_fire": ("عنصر آتش", "🔥", "elements"),
     "element_water": ("عنصر آب", "💧", "elements"),
     "element_earth": ("عنصر خاک", "🪨", "elements"),
     "element_electric": ("عنصر الکتریسیته", "⚡", "elements"),
+    "element_crystal": ("عنصر کریستال", "🔮", "elements"),
+    "element_plasma": ("عنصر پلاسما", "⚛️", "elements"),
     "element_advantage": ("مزیت عنصری", "🔮", "elements"),
     "no_advantage": ("بدون مزیت عنصری", "➖", "elements"),
     # rarity
@@ -473,6 +474,8 @@ CANONICAL_KEY_GLYPHS: dict[str, set[str]] = {
     "element_water": {"💧", "🌊"},
     "element_earth": {"🪨", "🗿", "⛰️", "⛰"},
     "element_electric": {"⚡", "⚡️"},
+    "element_crystal": {"🔮", "💎"},
+    "element_plasma": {"⚛️", "⚛", "🪐", "🌀"},
     "element_advantage": {"🔮"},
     "no_advantage": {"➖"},
     # Rarity
@@ -693,6 +696,8 @@ KEY_ALIASES: dict[str, str] = {
     "water": "element_water",
     "earth": "element_earth",
     "electric": "element_electric",
+    "crystal": "element_crystal",
+    "plasma": "element_plasma",
     "team": "team",
     "market": "blackmarket",
     "chest": "chest_arena",

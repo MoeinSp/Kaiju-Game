@@ -200,6 +200,10 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_rarity_epic": ("فیلتر حماسی", "🟣", "nav"),
     "btn_rarity_legendary": ("فیلتر افسانه‌ای", "🟡", "nav"),
     "btn_rarity_mythic": ("فیلتر اساطیری", "🔴", "nav"),
+    "btn_elem_crystal": ("فیلتر کریستال", "🔮", "nav"),
+    "btn_elem_plasma": ("فیلتر پلاسما", "⚛️", "nav"),
+    "btn_rsch_crystal": ("پژوهش کریستال", "🔮", "features"),
+    "btn_rsch_plasma": ("پژوهش پلاسما", "⚛️", "features"),
 }
 
 BUTTON_CATEGORY_LABELS: dict[str, str] = {

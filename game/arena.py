@@ -264,8 +264,8 @@ def _fake_opponent(attacker: User) -> dict:
     creature = Creature.objects.filter(owner=attacker, is_active=True).first()
     attacker_element = creature.element if creature else None
     if attacker_element and (attacker.cup >= 3700 or bot_cup >= 3700):
-        counters = [e for e in constants.ELEMENTS if constants.ELEMENT_STRONG_AGAINST.get(e) == attacker_element]
-        _bot_element = counters[0] if counters else constants.random_element()
+        counters = [e for e in constants.ELEMENTS if constants.is_strong_against(e, attacker_element)]
+        _bot_element = random.choice(counters) if counters else constants.random_element()
     else:
         _bot_element = constants.random_element()
 

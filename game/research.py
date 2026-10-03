@@ -32,6 +32,8 @@ RESEARCH_DEFS: dict[str, dict] = {
     "elem_water":    {"label": "قدرت آب", "emoji": "💧", "btn_key": "btn_rsch_water", "kind": "element", "element": "water", "per_level": 0.02},
     "elem_earth":    {"label": "قدرت خاک", "emoji": "🪨", "btn_key": "btn_rsch_earth", "kind": "element", "element": "earth", "per_level": 0.02},
     "elem_electric": {"label": "قدرت برق", "emoji": "⚡", "btn_key": "btn_rsch_electric", "kind": "element", "element": "electric", "per_level": 0.02},
+    "elem_crystal":  {"label": "قدرت کریستال", "emoji": "🔮", "btn_key": "btn_rsch_crystal", "kind": "element", "element": "crystal", "per_level": 0.02},
+    "elem_plasma":   {"label": "قدرت پلاسما", "emoji": "⚛️", "btn_key": "btn_rsch_plasma", "kind": "element", "element": "plasma", "per_level": 0.02},
     "might":      {"label": "خشمِ باستانی", "emoji": "⚔️", "btn_key": "btn_rsch_might", "kind": "atk", "per_level": 0.03},
     "vigor":      {"label": "سرزندگی", "emoji": "❤️", "btn_key": "btn_rsch_vigor", "kind": "hp", "per_level": 0.04},
 }
@@ -42,6 +44,8 @@ RESEARCH_DESC: dict[str, str] = {
     "elem_water": "قدرتِ همه‌ی هیولاهای عنصرِ آب رو هر لِوِل ۲٪ بیشتر می‌کنه.",
     "elem_earth": "قدرتِ همه‌ی هیولاهای عنصرِ خاک رو هر لِوِل ۲٪ بیشتر می‌کنه.",
     "elem_electric": "قدرتِ همه‌ی هیولاهای عنصرِ برق رو هر لِوِل ۲٪ بیشتر می‌کنه.",
+    "elem_crystal": "قدرتِ همه‌ی هیولاهای عنصرِ کریستال رو هر لِوِل ۲٪ بیشتر می‌کنه.",
+    "elem_plasma": "قدرتِ همه‌ی هیولاهای عنصرِ پلاسما رو هر لِوِل ۲٪ بیشتر می‌کنه.",
     "might": "حمله‌ی همه‌ی هیولاهات رو هر لِوِل ۳٪ بیشتر می‌کنه.",
     "vigor": "جانِ (HP) همه‌ی هیولاهات رو هر لِوِل ۴٪ بیشتر می‌کنه.",
 }

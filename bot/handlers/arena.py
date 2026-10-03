@@ -339,9 +339,9 @@ def _swap_rerender_sync(tg_user, creature_id, pending):
     opp_elem = pending.get("element")
     opp_cname = pending.get("creature_name", "؟")
     if pending.get("is_fake") and (user.cup >= 3700 or int(pending.get("cup", 0)) >= 3700) and creature.element:
-        counters = [e for e in constants.ELEMENTS if constants.ELEMENT_STRONG_AGAINST.get(e) == creature.element]
+        counters = [e for e in constants.ELEMENTS if constants.is_strong_against(e, creature.element)]
         if counters:
-            opp_elem = counters[0]
+            opp_elem = random.choice(counters) if len(counters) > 1 else counters[0]
             opp_cname = constants.random_species_name(opp_elem)
             pending["element"] = opp_elem
             pending["creature_name"] = opp_cname

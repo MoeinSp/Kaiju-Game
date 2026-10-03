@@ -187,6 +187,11 @@ def preview_creature_transfer(sender: User, receiver: User, creature_id: int) ->
     creature = Creature.objects.filter(id=creature_id, owner=sender).first()
     if creature is None:
         raise GameError("همچین هیولایی با این کد توی کلکسیونت نیست.")
+    if creature.element in ("crystal", "plasma"):
+        raise GameError(
+            f"🚫 هیولاهای باستانی و برتر با عنصر {constants.element_label(creature.element)} "
+            "دارای پیوند بیولوژیک بوده و غیرقابل انتقال هستند!"
+        )
     if creature.is_active:
         raise GameError("هیولای فعال رو نمی‌شه منتقل کرد — اول یکی دیگه رو فعال کن.")
     from game.workers import creature_status, is_mining
@@ -273,6 +278,11 @@ def transfer_creature(sender: User, receiver: User, creature_id: int, price: int
     creature = Creature.objects.select_for_update().filter(id=creature_id, owner=sender).first()
     if creature is None:
         raise GameError("همچین هیولایی با این کد توی کلکسیونت نیست.")
+    if creature.element in ("crystal", "plasma"):
+        raise GameError(
+            f"🚫 هیولاهای باستانی و برتر با عنصر {constants.element_label(creature.element)} "
+            "دارای پیوند بیولوژیک بوده و غیرقابل انتقال هستند!"
+        )
     if creature.is_active:
         raise GameError("هیولای فعال رو نمی‌شه منتقل کرد — اول یکی دیگه رو فعال کن.")
     from game.workers import creature_status

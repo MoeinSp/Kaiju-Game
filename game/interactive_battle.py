@@ -77,6 +77,19 @@ def perform_action(battle: InteractiveBattle, actor_side: str, action: str) -> l
             setattr(battle, f"stunned_{defender_side}", True)
             return [f"{skill['name']}! {defender.name} برق‌گرفته شد و نوبت بعدیش رو از دست می‌ده!"]
 
+        if actor.element == "crystal":
+            mult = constants.element_multiplier(actor.element, defender.element) * skill["power_mult"]
+            base = max(1.0, actor_stats["atk"] - defender_stats["def"] * 0.4)
+            dealt = _apply_damage(battle, defender_side, round(base * mult))
+            setattr(battle, f"shield_active_{actor_side}", True)
+            return [f"{skill['name']}! {actor.name} با درخشش منشور بلورین {dealt} دمیج وارد کرد و سپر کریستالی گرفت!"]
+
+        if actor.element == "plasma":
+            mult = constants.element_multiplier(actor.element, defender.element) * skill["power_mult"]
+            base = max(1.0, actor_stats["atk"] - defender_stats["def"] * 0.2)
+            dealt = _apply_damage(battle, defender_side, round(base * mult))
+            return [f"{skill['name']}! {actor.name} پرتو پلاسمای فوق‌حرارتی شلیک کرد و {dealt} دمیج سنگین زد!"]
+
     if action == "forfeit":
         setattr(battle, f"hp_{actor_side}", 0)
         return [f"{get_emoji('forfeit_action')} {actor.name} تسلیم شد."]
