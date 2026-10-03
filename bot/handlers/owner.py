@@ -1465,29 +1465,66 @@ def _all_user_ids_sync() -> list[int]:
 async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_admin(update):
         return
+    message = update.effective_message
+    if not message:
+        return
+
+    user_ids = await run_db(_all_user_ids_sync)
+
+    if message.reply_to_message:
+        target_msg = message.reply_to_message
+        status_msg = await message.reply_text(f"⏳ در حال ارسال همگانی پیام به <code>{len(user_ids)}</code> کاربر...", parse_mode="HTML")
+        sent = 0
+        failed = 0
+        for user_id in user_ids:
+            try:
+                await context.bot.copy_message(
+                    chat_id=user_id,
+                    from_chat_id=target_msg.chat_id,
+                    message_id=target_msg.message_id,
+                )
+                sent += 1
+            except TelegramError:
+                failed += 1
+            await asyncio.sleep(BROADCAST_DELAY_SECONDS)
+
+        summary = f"✅ پیام همگانی به <b>{sent:,}</b> کاربر ارسال شد."
+        if failed:
+            summary += f"\n❌ <b>{failed:,}</b> کاربر ناموفق (ربات را بلاک کرده‌اند)."
+        await status_msg.edit_text(summary, parse_mode="HTML")
+        return
+
     if not context.args:
-        await update.effective_message.reply_text(
-            "استفاده: <code>/broadcast متن پیام</code> — برای همه‌ی بازیکن‌های ثبت‌شده فرستاده می‌شه.",
+        await message.reply_text(
+            "📢 <b>راهنمای ارسال همگانی:</b>\n\n"
+            "۱. می‌توانید به هر پیامی (شامل عکس، متن، ویدیو یا ایموجی‌های پرمیوم) ریپلای بزنید و دستور <code>/broadcast</code> را ارسال کنید.\n"
+            "۲. یا متن پیام را مستقیماً جلوی دستور بنویسید:\n"
+            "<code>/broadcast متن پیام</code>",
             parse_mode="HTML",
         )
         return
 
-    text = " ".join(context.args)
-    user_ids = await run_db(_all_user_ids_sync)
+    from game.emoji import premiumize_html
+    text_html = message.text_html or message.text or ""
+    parts = text_html.split(maxsplit=1)
+    broadcast_text = parts[1] if len(parts) > 1 else " ".join(context.args)
+    broadcast_text = premiumize_html(broadcast_text)
+
+    status_msg = await message.reply_text(f"⏳ در حال ارسال همگانی به <code>{len(user_ids)}</code> کاربر...", parse_mode="HTML")
     sent = 0
     failed = 0
     for user_id in user_ids:
         try:
-            await context.bot.send_message(chat_id=user_id, text=f"📢 {text}")
+            await context.bot.send_message(chat_id=user_id, text=broadcast_text, parse_mode="HTML")
             sent += 1
         except TelegramError:
             failed += 1
         await asyncio.sleep(BROADCAST_DELAY_SECONDS)
 
-    summary = f"✅ به {sent} نفر ارسال شد."
+    summary = f"✅ پیام همگانی به <b>{sent:,}</b> کاربر ارسال شد."
     if failed:
-        summary += f" ({failed} نفر ناموفق — احتمالاً بات رو بلاک کردن)"
-    await update.effective_message.reply_text(summary)
+        summary += f"\n❌ <b>{failed:,}</b> کاربر ناموفق (ربات را بلاک کرده‌اند)."
+    await status_msg.edit_text(summary, parse_mode="HTML")
 
 
 def _user_info_text(data: dict) -> str:
@@ -5163,19 +5200,24 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if action == "broadcast":
         user_ids = await run_db(_all_user_ids_sync)
+        status_msg = await message.reply_text(f"⏳ در حال ارسال همگانی به <code>{len(user_ids)}</code> کاربر...", parse_mode="HTML")
         sent = 0
         failed = 0
         for user_id in user_ids:
             try:
-                await context.bot.send_message(chat_id=user_id, text=f"📢 {text}")
+                await context.bot.copy_message(
+                    chat_id=user_id,
+                    from_chat_id=message.chat_id,
+                    message_id=message.message_id,
+                )
                 sent += 1
             except TelegramError:
                 failed += 1
             await asyncio.sleep(BROADCAST_DELAY_SECONDS)
-        summary = f"✅ به {sent} نفر ارسال شد."
+        summary = f"✅ پیام همگانی به <b>{sent:,}</b> کاربر ارسال شد."
         if failed:
-            summary += f" ({failed} نفر ناموفق — احتمالاً بات رو بلاک کردن)"
-        await message.reply_text(summary)
+            summary += f"\n❌ <b>{failed:,}</b> کاربر ناموفق (ربات را بلاک کرده‌اند)."
+        await status_msg.edit_text(summary, parse_mode="HTML")
         return
 
 
