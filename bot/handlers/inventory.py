@@ -337,7 +337,7 @@ async def equip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         item = await run_db(_equip_sync, update.effective_user, int(context.args[0]))
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(alert_text(exc, 3500))
         return
     await update.message.reply_text(
         f"⚔️ <b>تجهیزات روی موجود فعال قرار گرفت:</b>\n"
@@ -356,7 +356,7 @@ async def unequip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     try:
         item = await run_db(_unequip_sync, update.effective_user, int(context.args[0]))
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(alert_text(exc, 3500))
         return
     await update.message.reply_text(f"🎒 <b>{item.name}</b> به کوله‌پشتی برگشت.", parse_mode="HTML")
 
@@ -371,7 +371,7 @@ async def upgrade_item_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             _upgrade_item_sync, update.effective_user, int(context.args[0]), int(context.args[1])
         )
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(alert_text(exc, 3500))
         return
     await update.message.reply_text(f"✨ <b>{item.name}</b> به سطح <code>+{item.level}</code> ارتقا یافت!", parse_mode="HTML")
 

@@ -845,6 +845,14 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
             f"{get_emoji('coin')} طلا: <code>+{loot_gold:,}</code>",
             f"{get_emoji('dna')} DNA: <code>+{loot_dna:,}</code>",
         ]
+        coll_gold = result.get("plundered_collector_gold", 0)
+        coll_dna = result.get("plundered_collector_dna", 0)
+        if coll_gold or coll_dna:
+            reward_lines.append("\n🏭 <b>غارت از معدن‌های حریف:</b>")
+            if coll_gold:
+                reward_lines.append(f"{get_emoji('coin')} طلا: <code>+{coll_gold:,}</code>")
+            if coll_dna:
+                reward_lines.append(f"{get_emoji('dna')} DNA: <code>+{coll_dna:,}</code>")
         if league_gold or league_dna:
             lg_emoji = result.get("league_emoji", "🥉")
             lg_name = result.get("league_name", "")
@@ -1589,9 +1597,9 @@ async def arena_chest_rewards_callback(update: Update, context: ContextTypes.DEF
         f"{tier_emoji} <b>راهنمای جوایز {tier_name}</b> ({page_label})",
         _ARENA_DIV,
         f"⏱ زمان بازگشایی پایه: <code>{cfg['unlock_hours']}</code> ساعت",
-        f"{get_emoji('creature')} شانس دریافت هیولا: <code>{int(cfg['creature_chance'] * 100)}%</code>",
+        f"🎁 محتوا: <code>{int(cfg['creature_chance'] * 100)}%</code> یک هیولا، "
+        + ("همیشه هیولا" if cfg['creature_chance'] >= 1 else "در غیر این صورت ۱ تجهیزات"),
         f"🎯 <b>نایابی تضمینی هیولا/تجهیزات:</b>\n{min_info}",
-        "🎒 تجهیزات: <b>۱ عدد تصادفی</b>",
     ]
     if cfg["key"] in ("magical", "mega"):
         lines.append(f"{get_emoji('diamond')} الماس: <b>دارد (بونس ویژه)</b>")

@@ -1709,7 +1709,7 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         try:
             await run_db(_charge_hunt_scout_sync, update.effective_user)
         except GameError as exc:
-            sent = await message.reply_text(str(exc))
+            sent = await message.reply_text(alert_text(exc, 3500))
             _schedule_cleanup(context, message.chat_id, [message.message_id, sent.message_id], action)
             return
 
@@ -1727,7 +1727,7 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             _schedule_cleanup(context, message.chat_id, [message.message_id, sent_id], action)
         except GameError as exc:
             try:
-                sent = await message.reply_text(str(exc))
+                sent = await message.reply_text(alert_text(exc, 3500))
                 _schedule_cleanup(context, message.chat_id, [message.message_id, sent.message_id], action)
             except Exception:
                 pass

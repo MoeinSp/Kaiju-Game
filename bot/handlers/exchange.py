@@ -275,7 +275,7 @@ async def handle_custom_amount(update: Update, context: ContextTypes.DEFAULT_TYP
         pack = exchange.describe(direction, amount_dna)
     except GameError as exc:
         context.user_data[AWAITING_PLAYER_KEY] = awaiting
-        await message.reply_text(str(exc))
+        await message.reply_text(alert_text(exc, 3500))
         return
     coins, dbal = await run_db(_bal_sync, update.effective_user)
     text, kb = build_confirm(int(oid), pack, coins, dbal)

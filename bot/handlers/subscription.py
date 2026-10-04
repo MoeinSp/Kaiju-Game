@@ -8,6 +8,7 @@ Two tiers:
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.repository import get_or_create_user
 from bot.buttons import CONFIRM, NAV, PRIMARY, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
@@ -100,7 +101,17 @@ def _create_sub_req_sync(tg_user, tier: str):
 
 
 async def send_subscription_invoice(target, tg_user, tier: str, context: ContextTypes.DEFAULT_TYPE, origin: str = "sub") -> None:
-    if not botconfig.inbot_purchase_ready():
+    chat = getattr(getattr(target, "message", target), "chat", None)
+    if chat is not None and chat.type in ("group", "supergroup"):
+        # the receipt photo is only accepted in the private chat, and the card number
+        # must not be posted in a public group
+        msg = "خرید اشتراک فقط توی پیوی ربات انجام می‌شه. اونجا /start بزن و «اشتراک ویژه» رو باز کن."
+        if hasattr(target, "answer"):
+            await target.answer(msg, show_alert=True)
+        else:
+            await target.reply_text(msg)
+        return
+    if not botconfig.get_buy_card()[0]:
         msg = "سیستم پرداخت موقتاً در دسترس نیست."
         if hasattr(target, "answer"):
             await target.answer(msg, show_alert=True)
@@ -112,9 +123,9 @@ async def send_subscription_invoice(target, tg_user, tier: str, context: Context
         req = await run_db(_create_sub_req_sync, tg_user, tier)
     except GameError as exc:
         if hasattr(target, "answer"):
-            await target.answer(str(exc), show_alert=True)
+            await target.answer(alert_text(exc), show_alert=True)
         else:
-            await target.reply_text(str(exc))
+            await target.reply_text(alert_text(exc, 3500))
         return
 
     context.user_data["buy_awaiting_receipt_req"] = req.id
@@ -171,6 +182,18 @@ async def sub_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if info["is_active"]:
         sub_cfg = SUBSCRIPTION_TIERS.get(tier, {})
         new_days = info["days_left"] + 30
+        result_tier = sub_cfg.get("name", tier)
+        cur_cfg = SUBSCRIPTION_TIERS.get(info["tier"] or "", {})
+        if cur_cfg and info["tier"] != tier and sub_cfg:
+            # mirrors game.subscription.activate_subscription: a different tier is
+            # converted by money value
+            old_p, new_p = cur_cfg["price_toman"], sub_cfg["price_toman"]
+            left = info["days_left"] + info["hours_left"] / 24
+            if new_p < old_p:  # cheaper tier bought → the running one is extended by its worth
+                new_days = int(left + 30 * new_p / old_p)
+                result_tier = cur_cfg["name"]
+            else:              # upgrade → remaining days carried over at their value
+                new_days = int(left * old_p / new_p + 30)
         cancel_cb = "menu:subscription"
         if origin == "hunt":
             cancel_cb = "hunt_next"
@@ -192,7 +215,9 @@ async def sub_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             f"⏳ زمان باقی‌مانده فعلی: <b>{info['days_left']} روز و {info['hours_left']} ساعت</b>\n\n"
             f"📦 اشتراک انتخابی: <b>{sub_cfg.get('name', tier)}</b> (۳۰ روزه)\n"
             f"{get_emoji('coin')} مبلغ: <b>{sub_cfg.get('price_toman', 0):,} تومان</b></blockquote>\n\n"
-            f"⚡️ <b>با خرید این اشتراک، ۳۰ روز افزوده شده و مدت اشتراک شما به {new_days} روز می‌رسد.</b>",
+            f"⚡️ <b>بعد از تأیید پرداخت: {result_tier}، حدود {new_days} روز.</b>"
+            + ("\n<i>چون رده‌ی انتخابی با اشتراک فعلیت فرق داره، مدت بر اساس ارزش پولی تبدیل می‌شه.</i>"
+               if cur_cfg and info["tier"] != tier else ""),
             "━━━━━━━━━━━━━━━━━━━━",
             "آیا مایل به دریافت اطلاعات کارت و واریز هستید؟",
         ]

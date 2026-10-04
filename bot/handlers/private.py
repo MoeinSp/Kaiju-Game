@@ -1,3 +1,4 @@
+import re
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
@@ -1124,6 +1125,20 @@ _CATEGORIES = {
 }
 
 
+_INVISIBLE_CHARS = dict.fromkeys(
+    [0x200B, 0x200D, 0x200E, 0x200F, 0x2060, 0x2061, 0x2062, 0x2063, 0x2064, 0xFEFF, 0x00AD, 0x061C,
+     0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069, 0x3164, 0x115F, 0x1160]
+)
+
+
+def _clean_lab_name(name) -> str:
+    """Whitespace collapsed, invisible/direction-control characters dropped, a ZWNJ kept
+    only between letters (Persian half-space), then trimmed to the length limit."""
+    text = " ".join(str(name).translate(_INVISIBLE_CHARS).split())
+    text = re.sub(r"(?<![^\W\d_])\u200c|\u200c(?![^\W\d_])", "", text).strip()
+    return text[:LAB_NAME_MAX_LEN]
+
+
 def story_quest_card_text(quest: dict | None) -> str:
     if not quest:
         return ""
@@ -1236,7 +1251,9 @@ def _set_lab_name_sync(tg_user, name):
     # Collapse whitespace and strip control characters. The name is shown on every
     # leaderboard, so a name padded with newlines could push other rows off the
     # screen; lab_display() handles the HTML escaping separately.
-    cleaned = " ".join(str(name).split())[:LAB_NAME_MAX_LEN]
+    cleaned = _clean_lab_name(name)
+    if not cleaned:
+        raise GameError("اسم نمی‌تونه خالی باشه")
     # Lab names must be unique — they're shown on every leaderboard AND used as a
     # moderation identifier (resolve_user), so a duplicate would be ambiguous.
     if lab_name_taken(cleaned, exclude_user_id=user.id):
@@ -1251,7 +1268,7 @@ def _set_lab_name_sync(tg_user, name):
 
 def _rename_lab_check_sync(tg_user, name):
     user, _ = get_or_create_user(tg_user)
-    cleaned = " ".join(str(name).split())[:LAB_NAME_MAX_LEN]
+    cleaned = _clean_lab_name(name)
     if not cleaned:
         raise GameError("اسم نمی‌تونه خالی باشه")
     if user.lab_name is None:
@@ -1270,7 +1287,7 @@ def _rename_lab_sync(tg_user, name):
     """Paid lab rename: charges diamonds (escalating each time) and enforces the
     same uniqueness as the free first-time name."""
     user, _ = get_or_create_user(tg_user)
-    cleaned = " ".join(str(name).split())[:LAB_NAME_MAX_LEN]
+    cleaned = _clean_lab_name(name)
     if not cleaned:
         raise GameError("اسم نمی‌تونه خالی باشه")
     if user.lab_name is None:
@@ -2282,7 +2299,7 @@ async def select(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         user, creature, equipped_items = await run_db(_select_sync, update.effective_user, int(context.args[0]))
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(alert_text(exc, 3500))
         return
     is_owner = _is_admin_user(update.effective_user.id if update.effective_user else None)
     await update.message.reply_text(
@@ -2317,7 +2334,7 @@ async def fusion_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             _fusion_sync, update.effective_user, int(context.args[0]), int(context.args[1])
         )
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(alert_text(exc, 3500))
         return
     is_owner = _is_admin_user(update.effective_user.id if update.effective_user else None)
     inherit_note = "\n🧬 یه تجهیزات از والدین به ارث رسید!" if inherited else ""
@@ -3005,8 +3022,12 @@ def _hunt_go_sync(tg_user, tier, seed):
 
 async def hunt_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    parts = query.data.split(":")
+    if len(parts) != 3 or parts[1] not in HUNT_TIERS or not parts[2].isdigit():
+        await query.answer("این کارت شکار دیگه معتبر نیست؛ دوباره «شکار» رو بزن.", show_alert=True)
+        return
     await query.answer()
-    _, tier, seed = query.data.split(":")
+    _, tier, seed = parts
     try:
         creature, result, completed_missions = await run_db(
             _hunt_go_sync, update.effective_user, tier, int(seed)
@@ -3360,11 +3381,29 @@ def _alliance_leave_sync(tg_user):
     leave_alliance(user)
 
 
+def _leave_preview_sync(tg_user) -> str:
+    """What leaving will do, for the confirm screen (mirrors game.alliance.leave_alliance)."""
+    user, _ = get_or_create_user(tg_user)
+    alliance = Alliance.objects.filter(id=user.alliance_id).first() if user.alliance_id else None
+    if alliance is None:
+        return "توی هیچ اتحادی نیستی."
+    others = User.objects.filter(alliance_id=alliance.id).exclude(id=user.id).count()
+    if others == 0:
+        return (
+            "تو آخرین عضوی: با خروجت <b>اتحاد و خزانه‌ش "
+            f"(<code>{alliance.treasury_gold:,}</code> طلا) برای همیشه حذف می‌شه</b>."
+        )
+    if alliance.leader_id == user.id:
+        heir = "قائم‌مقام" if alliance.deputy_id and alliance.deputy_id != user.id else "یکی از اعضا"
+        return f"تو رهبری: با خروجت <b>رهبری به {heir} می‌رسه</b> و طلایی که به خزانه دادی برنمی‌گرده."
+    return "طلایی که به خزانه واریز کردی برنمی‌گرده."
+
+
 async def alliance_leave(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         await run_db(_alliance_leave_sync, update.effective_user)
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(alert_text(exc, 3500))
         return
     await update.message.reply_text("👋 از اتحاد خارج شدی.")
 
@@ -4047,8 +4086,12 @@ async def alliance_leave_callback(update: Update, context: ContextTypes.DEFAULT_
             ]
         ]
     )
+    note = await run_db(_leave_preview_sync, update.effective_user)
     await query.answer()
-    await safe_edit_message_text(query, "مطمئنی می‌خوای از اتحادت خارج بشی؟", reply_markup=keyboard)
+    await safe_edit_message_text(
+        query, f"⚠️ <b>خروج از اتحاد</b>\n\n{note}\n\nمطمئنی می‌خوای خارج بشی؟",
+        parse_mode="HTML", reply_markup=keyboard,
+    )
 
 
 async def alliance_leave_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -4059,7 +4102,10 @@ async def alliance_leave_confirm_callback(update: Update, context: ContextTypes.
         await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("👋 خارج شدی.")
-    await safe_edit_message_text(query, "👋 از اتحاد خارج شدی.")
+    await safe_edit_message_text(
+        query, "👋 از اتحاد خارج شدی.",
+        reply_markup=back_only_keyboard("menu:hub_city", "بازگشت به شهر"),
+    )
 
 
 def _heist_targets_sync(tg_user):
@@ -4255,7 +4301,7 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         try:
             energy, max_en = await run_db(_autohunt_info_sync, update.effective_user)
         except GameError as exc:
-            await message.reply_text(str(exc))
+            await message.reply_text(alert_text(exc, 3500))
             return
         amount = min(int(raw), energy)
         if amount < constants.HUNT_ENERGY_COST:
@@ -4357,7 +4403,7 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
             al = await run_db(lambda tg: set_join_settings(get_or_create_user(tg)[0], min_power=int(raw)),
                               update.effective_user)
         except GameError as exc:
-            await message.reply_text(str(exc))
+            await message.reply_text(alert_text(exc, 3500))
             return
         await message.reply_text(f"✅ حداقل قدرت عضویت روی <code>{al.min_join_power:,}</code> تنظیم شد.", parse_mode="HTML")
         return
@@ -4380,7 +4426,7 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         try:
             result = await run_db(_do, update.effective_user, int(digits), action)
         except GameError as exc:
-            await message.reply_text(str(exc))
+            await message.reply_text(alert_text(exc, 3500))
             return
         if action == "ally_kick":
             await message.reply_text(f"🥾 <b>{result['name']}</b> از اتحاد حذف شد.", parse_mode="HTML")
@@ -4406,7 +4452,7 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         try:
             alliance = await run_db(_alliance_deposit_sync, update.effective_user, int(text))
         except GameError as exc:
-            await message.reply_text(str(exc))
+            await message.reply_text(alert_text(exc, 3500))
             return
         await message.reply_text(
             f"{get_emoji('coin')} به خزانه‌ی <b>{alliance.name}</b> واریز شد!\n"
@@ -4494,7 +4540,7 @@ async def alliance_deposit(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     try:
         alliance = await run_db(_alliance_deposit_sync, update.effective_user, int(context.args[0]))
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(alert_text(exc, 3500))
         return
     await update.message.reply_text(
         f"{get_emoji('coin')} به خزانه‌ی <b>{alliance.name}</b> واریز شد!\n"
@@ -4529,7 +4575,7 @@ async def heist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         result, target = await run_db(_heist_sync, update.effective_user, " ".join(context.args))
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(alert_text(exc, 3500))
         return
 
     if result["defender_creature"] is not None:

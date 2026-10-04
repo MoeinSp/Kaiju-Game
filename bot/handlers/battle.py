@@ -97,7 +97,7 @@ async def battle_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             _battle_cmd_sync, update.effective_chat, challenger_tg, opponent_tg
         )
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(alert_text(exc, 3500))
         return
 
     keyboard = InlineKeyboardMarkup(

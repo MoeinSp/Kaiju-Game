@@ -1647,7 +1647,7 @@ async def user_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     try:
         data = await run_db(user_info, context.args[0])
     except GameError as exc:
-        await update.effective_message.reply_text(str(exc))
+        await update.effective_message.reply_text(alert_text(exc, 3500))
         return
     user = data["user"]
     await update.effective_message.reply_text(
@@ -1671,7 +1671,7 @@ async def charge_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     try:
         user, new_values = await run_db(charge_user, identifier, int(coins), int(dna), int(diamonds))
     except GameError as exc:
-        await update.effective_message.reply_text(str(exc))
+        await update.effective_message.reply_text(alert_text(exc, 3500))
         return
     await update.effective_message.reply_text(
         f"{get_emoji('confirm')} <b>{display_name(user)}</b> شارژ شد!\n\n" + _charge_summary(new_values),
@@ -1692,7 +1692,7 @@ async def grant_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         user, new_value = await run_db(grant_resource, identifier, resource, int(amount_str))
     except GameError as exc:
-        await update.effective_message.reply_text(str(exc))
+        await update.effective_message.reply_text(alert_text(exc, 3500))
         return
     await update.effective_message.reply_text(
         f"{get_emoji('confirm')} به {display_name(user)} داده شد. مقدار جدید {resource}: {new_value}",
@@ -1712,7 +1712,7 @@ async def deduct_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     try:
         user, new_value = await run_db(deduct_resource, identifier, resource, int(amount_str))
     except GameError as exc:
-        await update.effective_message.reply_text(str(exc))
+        await update.effective_message.reply_text(alert_text(exc, 3500))
         return
     await update.effective_message.reply_text(
         f"{get_emoji('confirm')} از {display_name(user)} کم شد. مقدار جدید {resource}: {new_value}",
@@ -1731,7 +1731,7 @@ async def ban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         user = await run_db(set_banned, context.args[0], True)
     except GameError as exc:
-        await update.effective_message.reply_text(str(exc))
+        await update.effective_message.reply_text(alert_text(exc, 3500))
         return
     await update.effective_message.reply_text(
         f"{get_emoji('banned')} {display_name(user)} مسدود شد.", parse_mode="HTML"
@@ -1749,7 +1749,7 @@ async def unban_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         user = await run_db(set_banned, context.args[0], False)
     except GameError as exc:
-        await update.effective_message.reply_text(str(exc))
+        await update.effective_message.reply_text(alert_text(exc, 3500))
         return
     await update.effective_message.reply_text(
         f"{get_emoji('confirm')} {display_name(user)} دیگه مسدود نیست.", parse_mode="HTML"
@@ -1818,7 +1818,7 @@ async def delete_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         creature, owner_name = await run_db(_delete_creature_preview_sync, creature_id)
     except GameError as exc:
-        await update.effective_message.reply_text(str(exc))
+        await update.effective_message.reply_text(alert_text(exc, 3500))
         return
 
     await update.effective_message.reply_text(
@@ -1891,7 +1891,7 @@ async def reset_user_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     try:
         user, creature_count = await run_db(_reset_preview_sync, context.args[0])
     except GameError as exc:
-        await update.effective_message.reply_text(str(exc))
+        await update.effective_message.reply_text(alert_text(exc, 3500))
         return
     await update.effective_message.reply_text(
         _reset_confirm_text(user, creature_count),
@@ -2025,7 +2025,7 @@ async def player_log_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     try:
         data = await run_db(player_progress, " ".join(context.args))
     except GameError as exc:
-        await update.effective_message.reply_text(str(exc))
+        await update.effective_message.reply_text(alert_text(exc, 3500))
         return
     await update.effective_message.reply_text(_player_log_text(data), parse_mode="HTML")
 
@@ -3109,7 +3109,7 @@ async def capture_force_join_reply(update: Update, context: ContextTypes.DEFAULT
         try:
             channel = await run_db(set_invite_link, channel_id, link)
         except GameError as exc:
-            await message.reply_text(str(exc))
+            await message.reply_text(alert_text(exc, 3500))
             return
         await message.reply_text(
             _channel_card(channel), parse_mode="HTML", reply_markup=_channel_manage_keyboard(channel_id)
@@ -3130,7 +3130,7 @@ async def capture_force_join_reply(update: Update, context: ContextTypes.DEFAULT
         try:
             channel = await run_db(set_duration, channel_id, hours)
         except GameError as exc:
-            await message.reply_text(str(exc))
+            await message.reply_text(alert_text(exc, 3500))
             return
         await message.reply_text(
             _channel_card(channel), parse_mode="HTML", reply_markup=_channel_manage_keyboard(channel_id)
@@ -3152,7 +3152,7 @@ async def capture_force_join_reply(update: Update, context: ContextTypes.DEFAULT
         try:
             channel = await run_db(set_reward, channel_id, coins, dna, diamonds)
         except GameError as exc:
-            await message.reply_text(str(exc))
+            await message.reply_text(alert_text(exc, 3500))
             return
         await message.reply_text(
             _channel_card(channel), parse_mode="HTML", reply_markup=_channel_manage_keyboard(channel_id)
@@ -4777,7 +4777,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             affected = await run_db(gift_all, coins, dna, diamonds)
         except GameError as exc:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text(str(exc))
+            await message.reply_text(alert_text(exc, 3500))
             return
         await message.reply_text(
             f"🎁 به <b>{affected}</b> کاربر هدیه داده شد: "
@@ -4793,7 +4793,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             user = await run_db(admins.add_admin, text)
         except GameError as exc:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text(str(exc))
+            await message.reply_text(alert_text(exc, 3500))
             return
         await message.reply_text(
             f"✅ <b>{display_name(user)}</b> حالا ادمینه (همه‌کاره جز مدیریت ادمین‌ها).",
@@ -4822,7 +4822,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             user, new_level = await run_db(set_lab_level, awaiting["target_id"], int(text))
             data = await run_db(user_info, str(user.id))
         except GameError as exc:
-            await message.reply_text(str(exc))
+            await message.reply_text(alert_text(exc, 3500))
             return
         await message.reply_text(
             f"{get_emoji('confirm')} سطح آزمایشگاه <b>{display_name(user)}</b> روی <b>{new_level}</b> تنظیم شد.",
@@ -4839,7 +4839,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         try:
             user, new_cup = await run_db(set_cup, awaiting["target_id"], int(text))
         except GameError as exc:
-            await message.reply_text(str(exc))
+            await message.reply_text(alert_text(exc, 3500))
             return
         await message.reply_text(
             f"{get_emoji('confirm')} کاپِ <b>{display_name(user)}</b> روی <b>{new_cup:,}</b> تنظیم شد.",
@@ -4856,7 +4856,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         try:
             name = await run_db(_display_name_sync, awaiting["target_id"])
         except GameError as exc:
-            await message.reply_text(str(exc))
+            await message.reply_text(alert_text(exc, 3500))
             return
         op = {"kind": action, "target_id": awaiting["target_id"], "resource": awaiting["resource"],
               "amount": int(text), "name": name}
@@ -4879,7 +4879,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         try:
             name = await run_db(_display_name_sync, awaiting["target_id"])
         except GameError as exc:
-            await message.reply_text(str(exc))
+            await message.reply_text(alert_text(exc, 3500))
             return
         op = {"kind": "charge", "target_id": awaiting["target_id"], "coins": coins, "dna": dna,
               "diamonds": diamonds, "name": name}
@@ -4897,7 +4897,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         try:
             creature, owner_name = await run_db(_delete_creature_preview_sync, creature_id)
         except GameError as exc:
-            await message.reply_text(str(exc))
+            await message.reply_text(alert_text(exc, 3500))
             return
         await message.reply_text(
             _delete_creature_confirm_text(creature, owner_name),

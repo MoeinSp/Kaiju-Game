@@ -233,7 +233,7 @@ async def admin_deduct_gold(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     try:
         new_coins, name = await run_db(_admin_deduct_gold_sync, reply.from_user.id, amount)
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(alert_text(exc, 3500))
         return
     await update.message.reply_text(
         f"✅ مقدار <code>{amount:,}</code> {get_emoji('coin')} از <b>{name}</b> کسر شد.\n"
@@ -253,7 +253,7 @@ async def admin_remove_shield(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         name = await run_db(_admin_remove_shield_sync, reply.from_user.id)
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(alert_text(exc, 3500))
         return
     await update.message.reply_text(f"🛡❌ سپرِ <b>{name}</b> (آرنا و گروه) حذف شد.", parse_mode="HTML")
 
@@ -311,7 +311,7 @@ async def gold_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE, amou
             _gold_transfer_sync, update.effective_chat, update.effective_user, recipient.id, amount
         )
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(alert_text(exc, 3500))
         return
     coin = get_emoji("coin")
     await update.message.reply_text(
@@ -347,7 +347,7 @@ async def _reply_transfer_error(message, exc) -> None:
             parse_mode="HTML", reply_markup=keyboard,
         )
     else:
-        await message.reply_text(str(exc))
+        await message.reply_text(alert_text(exc, 3500))
 
 
 def _preview_creature_sync(chat, sender_tg, receiver_id, creature_id):
@@ -1318,7 +1318,7 @@ async def _pvp_attack_prompt(update, context, target_tg) -> None:
     try:
         data = await run_db(_pvp_preview_sync, update.effective_user, target_tg)
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(alert_text(exc, 3500))
         return
     text, keyboard = _pvp_prompt_render(update.effective_user.id, target_tg.id, *data)
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
@@ -1819,7 +1819,7 @@ async def guardian(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         top, owner_name, top_power = await run_db(_guardian_sync, update.effective_chat, update.effective_user)
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(alert_text(exc, 3500))
         return
     stars = get_emoji("star") * top.star_level
     await update.message.reply_text(
@@ -1849,9 +1849,13 @@ def _guardian_challenge_sync(chat, tg_user):
     if creature is None:
         raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
 
+    # resolve the seat first: energy used to be spent and then the challenge refused
+    # («تو خودت همین الان محافظ گروهی!»)
+    guardian = ensure_guardian(group, group_member_creatures(group))
+    if guardian is not None and guardian.owner_id == user.id:
+        raise GameError("تو خودت همین الان محافظ گروهی!")
     spend_energy(user, constants.GUARDIAN_CHALLENGE_ENERGY_COST, "چالش نگهبان")
     user.save(update_fields=["energy", "energy_updated_at"])
-    ensure_guardian(group, group_member_creatures(group))
     won, report = challenge_guardian(group, user, creature)
 
     record_action(user, "guardian_challenge")
@@ -1910,7 +1914,7 @@ async def guardian_challenge(update: Update, context: ContextTypes.DEFAULT_TYPE)
             _guardian_challenge_sync, update.effective_chat, update.effective_user
         )
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(alert_text(exc, 3500))
         return
     text = _guardian_report_text(report, won)
     text += _mission_lines(completed_missions) + _speedup_note(speedup_won)
@@ -2072,7 +2076,7 @@ async def guardian_resign(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     try:
         successor_name = await run_db(_guardian_resign_sync, update.effective_chat, update.effective_user)
     except GameError as exc:
-        await update.message.reply_text(str(exc))
+        await update.message.reply_text(alert_text(exc, 3500))
         return
     if successor_name:
         text = (

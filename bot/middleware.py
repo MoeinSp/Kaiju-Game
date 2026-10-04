@@ -209,6 +209,9 @@ async def enforce_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if is_check_callback or time.monotonic() >= _expiry:
         channels = await run_db(_cached_active_channels, is_check_callback)
     if not channels:
+        if is_check_callback:  # nobody else handles this button
+            await update.callback_query.answer("الان عضویت اجباری فعالی نیست؛ /start رو بزن.")
+            raise ApplicationHandlerStop
         return
 
     current_ids = frozenset(ch.id for ch in channels)

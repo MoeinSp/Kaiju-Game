@@ -410,10 +410,16 @@ def open_chest(user: User, chest_id: int) -> dict:
     slot_num = chest.slot
     chest.delete()
 
+    already_unlocking = set(
+        ArenaChest.objects.filter(user=user, status="unlocking").values_list("id", flat=True)
+    )
     advance_user_chests(user)
 
-    # If there is a chest currently unlocking (or recently auto-started from queue), pass it
-    next_started = ArenaChest.objects.filter(user=user, status="unlocking").first()
+    # only a chest that went from the queue to «unlocking» RIGHT NOW counts — one the
+    # player started by hand earlier used to be announced as «auto-started» too
+    next_started = (
+        ArenaChest.objects.filter(user=user, status="unlocking").exclude(id__in=already_unlocking).first()
+    )
 
     return {
         "tier": chest_type_key,
