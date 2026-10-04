@@ -33,7 +33,6 @@ def can_join_expedition(user: User) -> tuple[bool, str]:
     return True, ""
 
 
-@transaction.atomic
 def _today_start():
     """Midnight of the game day (Asia/Tehran) — the same boundary can_join_expedition
     uses, so the group cap and the user cap reset together (it used to be UTC midnight,
@@ -41,6 +40,7 @@ def _today_start():
     return timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
 
 
+@transaction.atomic
 def start_expedition_recruitment(creator: User, group_id: int, group_title: str) -> GroupExpedition:
     """Start a new expedition team recruitment in group."""
     creator = User.objects.select_for_update().get(id=creator.id)
