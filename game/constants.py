@@ -1033,9 +1033,22 @@ def egg_hatch_minutes(rarity_a: str, rarity_b: str) -> int:
 # The egg's rarity is decided ENTIRELY by the two parents' rarities and can NEVER
 # exceed the higher of the two:
 #   • both parents SAME rarity R  → 60% R, 40% one tier below R.
-#   • parents of DIFFERENT rarity → 75% the LOWER rarity, 25% the HIGHER rarity.
+#   • parents of DIFFERENT rarity → mostly the LOWER rarity; the chance of the HIGHER
+#     one shrinks with the GAP between them (1 tier apart 25% … 4 tiers apart 6%).
+# The gap scaling is the balance: mating time and DNA cost fall fast when one parent is
+# junk, so with a flat 25% a mythic + a COMMON was the best mythic factory in the game
+# (≈40h / 4,800 DNA per mythic vs ≈60h / 8,300 DNA for mythic + mythic, and it needed
+# only ONE mythic). Expected cost per top-rarity egg now always favours a matching pair.
 CAVE_SAME_RARITY_TOP_CHANCE = 0.60   # P(keep the shared rarity) when both parents match (60% same, 40% one tier below)
-CAVE_MIXED_RARITY_TOP_CHANCE = 0.25  # P(reach the higher rarity) when they differ (25% higher, 75% lower)
+CAVE_MIXED_RARITY_TOP_CHANCE = 0.25  # (legacy name) the 1-tier-gap chance
+CAVE_MIXED_TOP_CHANCE_BY_GAP = {1: 0.25, 2: 0.15, 3: 0.10, 4: 0.06}
+# these elements are shop-only: they never come out of the cave, so they can't go in
+CAVE_BLOCKED_ELEMENTS = ("crystal", "plasma")
+
+
+def cave_mixed_top_chance(rarity_a: str, rarity_b: str) -> float:
+    gap = abs(RARITY_ORDER.index(rarity_a) - RARITY_ORDER.index(rarity_b))
+    return CAVE_MIXED_TOP_CHANCE_BY_GAP.get(gap, CAVE_MIXED_RARITY_TOP_CHANCE)
 
 
 def cave_offspring_rarities(rarity_a: str, rarity_b: str) -> dict:
@@ -1045,7 +1058,7 @@ def cave_offspring_rarities(rarity_a: str, rarity_b: str) -> dict:
     hi = higher_rarity(rarity_a, rarity_b)
     if lo == hi:
         return {"top": hi, "fallback": prev_rarity(hi), "p_top": CAVE_SAME_RARITY_TOP_CHANCE}
-    return {"top": hi, "fallback": lo, "p_top": CAVE_MIXED_RARITY_TOP_CHANCE}
+    return {"top": hi, "fallback": lo, "p_top": cave_mixed_top_chance(lo, hi)}
 
 
 # (legacy — kept for any old caller; the roll now uses cave_offspring_rarities)

@@ -99,6 +99,35 @@ def _buy_sync(tg_user, perk_key):
 
 
 async def perk_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Tapping an upgrade shows a confirmation first — it spends the shared treasury
+    (up to millions of gold) and used to fire on a single tap."""
+    query = update.callback_query
+    perk_key = query.data.split(":")[1]
+    info = await run_db(_perks_sync, update.effective_user)
+    b = next((x for x in (info or {}).get("buildings", []) if x["key"] == perk_key), None)
+    if info is None or b is None or b["maxed"]:
+        await query.answer("این ارتقا الان در دسترس نیست.", show_alert=True)
+        return
+    if not info["is_manager"]:
+        await query.answer("فقط رهبر یا قائم‌مقام اتحاد می‌تونه ساختمون ارتقا بده.", show_alert=True)
+        return
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        f"{b['emoji']} <b>ارتقای {b['title']}</b> به سطح <b>{b['level'] + 1}</b>\n\n"
+        f"<blockquote>نتیجه: {b['next_effect']}\n"
+        f"💰 هزینه از خزانه: <code>{b['cost']:,}</code> طلا\n"
+        f"🏦 خزانه‌ی فعلی: <code>{info['treasury']:,}</code> طلا</blockquote>\n\n"
+        "تأیید می‌کنی؟",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[
+            btn("بله، ارتقا بده", emoji_key="btn_confirm", style=BUILD, callback_data=f"ally_perk_ok:{perk_key}"),
+            back_btn("ally_perks", "نه"),
+        ]]),
+    )
+
+
+async def perk_buy_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     perk_key = query.data.split(":")[1]
     try:
@@ -235,6 +264,23 @@ def _war_start_sync(tg_user):
 
 
 async def war_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Starting a war asks first — it commits the whole alliance to a 24-hour war."""
+    query = update.callback_query
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        "⚔️ <b>شروع جنگ اتحاد؟</b>\n\n"
+        "<blockquote>یه اتحاد هم‌قدرت پیدا می‌شه و <b>۲۴ ساعت</b> باهاش می‌جنگید. "
+        "بعد از شروع، جنگ قابل لغو نیست و به همه‌ی اعضا خبر داده می‌شه.</blockquote>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[
+            btn("بله، شروع کن", emoji_key="btn_confirm", style=BATTLE, callback_data="ally_war_go"),
+            back_btn("ally_war1d", "نه"),
+        ]]),
+    )
+
+
+async def war_start_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     try:
         data = await run_db(_war_start_sync, update.effective_user)
@@ -328,11 +374,16 @@ async def war_rally_go_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 def register(application) -> None:
-    application.add_handler(CallbackQueryHandler(perks_panel_callback, pattern=r"^ally_perks$"))
-    application.add_handler(CallbackQueryHandler(perk_buy_callback, pattern=r"^ally_perk_buy:"))
-    application.add_handler(CallbackQueryHandler(vault_collect_callback, pattern=r"^ally_vault_collect$"))
-    application.add_handler(CallbackQueryHandler(war_panel_callback, pattern=r"^ally_war$"))
-    application.add_handler(CallbackQueryHandler(war1d_panel_callback, pattern=r"^ally_war1d$"))
-    application.add_handler(CallbackQueryHandler(war_start_callback, pattern=r"^ally_war_start$"))
-    application.add_handler(CallbackQueryHandler(war_rally_callback, pattern=r"^ally_war_rally$"))
-    application.add_handler(CallbackQueryHandler(war_rally_go_callback, pattern=r"^ally_war_rally_go$"))
+    # in a group these panels are one shared message → only its owner may drive it
+    from bot.gates import card_owner_only as own
+
+    application.add_handler(CallbackQueryHandler(own(perks_panel_callback), pattern=r"^ally_perks$"))
+    application.add_handler(CallbackQueryHandler(own(perk_buy_callback), pattern=r"^ally_perk_buy:"))
+    application.add_handler(CallbackQueryHandler(own(perk_buy_confirm_callback), pattern=r"^ally_perk_ok:"))
+    application.add_handler(CallbackQueryHandler(own(vault_collect_callback), pattern=r"^ally_vault_collect$"))
+    application.add_handler(CallbackQueryHandler(own(war_panel_callback), pattern=r"^ally_war$"))
+    application.add_handler(CallbackQueryHandler(own(war1d_panel_callback), pattern=r"^ally_war1d$"))
+    application.add_handler(CallbackQueryHandler(own(war_start_callback), pattern=r"^ally_war_start$"))
+    application.add_handler(CallbackQueryHandler(own(war_start_confirm_callback), pattern=r"^ally_war_go$"))
+    application.add_handler(CallbackQueryHandler(own(war_rally_callback), pattern=r"^ally_war_rally$"))
+    application.add_handler(CallbackQueryHandler(own(war_rally_go_callback), pattern=r"^ally_war_rally_go$"))

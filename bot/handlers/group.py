@@ -1997,6 +1997,14 @@ async def guardian_claim(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=add_group_kb)
 
 
+async def _guardian_payout_catchup_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    from django.utils import timezone as _tz
+
+    now = _tz.localtime()
+    if (now.hour, now.minute) >= (18, 0):  # never pay BEFORE today's 18:00
+        await guardian_daily_payout_job(context)
+
+
 async def guardian_daily_payout_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Daily 18:00 JobQueue task to payout guardian salaries and announce in groups."""
     from config import BOT_USERNAME
@@ -2127,3 +2135,6 @@ def register(application) -> None:
             time=datetime.time(14, 30, tzinfo=datetime.timezone.utc),
             name="guardian_daily_payout",
         )
+        # catch-up: the payout is idempotent per group/user per day, so running it once
+        # shortly after every start only pays what the 18:00 run missed (bot was down)
+        job_queue.run_once(_guardian_payout_catchup_job, when=90, name="guardian_payout_catchup")

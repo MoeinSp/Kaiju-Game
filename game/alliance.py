@@ -884,13 +884,19 @@ def settle_war_if_needed() -> list[tuple[int, str]]:
         return []
 
     out: list[tuple[int, str]] = []
-    # the winner is the top alliance whose points belong to a *past* week
+    # the winner is the top alliance of the week that JUST ended — it used to be the top
+    # of ANY past week, so a runner-up's points from weeks ago could win a later week
+    closing = timezone.localtime(timezone.now() - datetime.timedelta(days=7)).strftime("%G-W%V")
     winner = (
-        Alliance.objects.exclude(war_week=current)
-        .filter(war_points__gt=0)
-        .order_by("-war_points")
+        Alliance.objects.filter(war_week=closing, war_points__gt=0)
+        .order_by("-war_points", "id")
         .first()
     )
+    # every other alliance's leftover points from past weeks are dropped
+    stale = Alliance.objects.exclude(war_week=current).filter(war_points__gt=0)
+    if winner is not None:
+        stale = stale.exclude(id=winner.id)
+    stale.update(war_points=0)
     if winner is not None:
         winner.treasury_gold += WAR_WINNER_TREASURY_BONUS
         winner.war_points = 0

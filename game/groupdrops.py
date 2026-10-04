@@ -149,8 +149,10 @@ def due_spawns() -> list[dict]:
         ).exists()
 
         # ── scheduled special drops (vein once/~24h, capsule once/~12h) ──────────
-        scheduled = _due_scheduled_kind(group, now)
-        if scheduled is not None and not open_now:
+        # only consult (and advance) the schedule when a drop can actually spawn — it
+        # used to be advanced even while another drop was open, losing that vein/capsule
+        scheduled = None if open_now else _due_scheduled_kind(group, now)
+        if scheduled is not None:
             out.append(_spawn(group, scheduled, now))
             continue  # at most one drop per group per tick
 

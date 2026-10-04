@@ -1,3 +1,4 @@
+import html
 import re
 from django.db import transaction
 from django.db.models import F
@@ -541,7 +542,7 @@ def upgrade_panel_keyboard(creature_id: int, is_active: bool = True, step: int =
         rows.append(
             [btn("انتخاب به عنوان فعال", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"upg_default:{creature_id}")]
         )
-    rows.append([back_btn("menu:upgrade", "لیست هیولاها")])
+    rows.append([back_btn("upg_back", "لیست هیولاها")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -695,10 +696,13 @@ async def upgrade_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def upgrade_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     parts = query.data.split(":")
-    if len(parts) == 3:  # upg_page:<filter>:<page>
+    if parts[0] == "upg_back":  # back from a creature → the page/filter it was opened from
+        filt, page = context.user_data.get("upg_loc", ("all", 0))
+    elif len(parts) == 3:  # upg_page:<filter>:<page>
         filt, page = parts[1], int(parts[2])
     else:  # old form from a stale keyboard: upg_page:<page>
         filt, page = "all", int(parts[1])
+    context.user_data["upg_loc"] = (filt, page)
     try:
         user, ranked = await run_db(_upgrade_list_sync, update.effective_user)
     except GameError as exc:
@@ -721,9 +725,19 @@ def _upgrade_pick_sync(tg_user, creature_id):
     return user, creature, get_equipped_items(creature), slot_loadout(user, creature)
 
 
+async def creature_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«بازگشت» from devour / fusion screens → the creature screen they were opened
+    from (the upgrade panel or the collection detail), not always the collection."""
+    if context.user_data.get("cr_origin") == "u":
+        await upgrade_pick_callback(update, context)
+    else:
+        await collection_pick_callback(update, context)
+
+
 async def upgrade_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     creature_id = int(query.data.split(":")[1])
+    context.user_data["cr_origin"] = "u"
     try:
         user, creature, equipped_items, slots = await run_db(
             _upgrade_pick_sync, update.effective_user, creature_id
@@ -1113,7 +1127,8 @@ _HUBS = {
         [("اتحاد و کلن", "alliance_info", "n", "btn_alliance"), ("گردونه شانس", "wheel", "s", "btn_wheel")],
         [("کازینو و تاس", "casino", "s", "btn_casino"), ("بنر ویژه کایجو", "banner", "s", "btn_banner")],
         [("دعوت دوستان", "referral", "s", "btn_referral"), ("دانشنامه و القاب", "codex", "n", "btn_codex")],
-        [("مأموریت‌های روزانه", "missions", "s", "btn_missions")],
+        [("مأموریت‌های روزانه", "missions", "s", "btn_missions"), ("رتبه‌بندی اتحادها", "rank", "n", "btn_league")],
+        [("لیگ اتحادها", "alliance_league", "n", "btn_league"), ("رتبه‌بندی رید", "raid_rank", "n", "btn_raid_rank")],
     ]),
 }
 
@@ -1777,10 +1792,13 @@ async def collection_page_callback(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     parts = query.data.split(":")
     # new form is coll_page:<filt>:<page>; tolerate the old coll_page:<page> too
-    if len(parts) == 3:
+    if parts[0] == "coll_back":  # back from a creature → the page/filter it was opened from
+        filt, page = context.user_data.get("coll_loc", ("all", 0))
+    elif len(parts) == 3:
         filt, page = parts[1], int(parts[2])
     else:
         filt, page = "all", int(parts[1])
+    context.user_data["coll_loc"] = (filt, page)
     creatures = await run_db(_collection_sync, update.effective_user)
     await query.answer()
     text, keyboard = _collection_render(creatures, filt, page)
@@ -1871,13 +1889,15 @@ def _creature_detail_keyboard(creature_id: int, is_active: bool) -> InlineKeyboa
     rows.append([btn("ورود به فیوژن", emoji_key="btn_fusion", style=PRIMARY, callback_data=f"fus_a:{creature_id}")])
     rows.append([btn("بلعیدن هیولا", emoji_key="btn_devour", style=BUILD, callback_data=f"devour_start:{creature_id}")])
     rows.append([btn("تغییر نام", emoji_key="btn_edit", style=NAV, callback_data=f"kaiju_rename:{creature_id}:c")])
-    rows.append([back_btn("menu:collection")])
+    rows.append([back_btn("coll_back")])
     return InlineKeyboardMarkup(rows)
 
 
 async def collection_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     creature_id = int(query.data.split(":")[1])
+    if not query.data.startswith("cr_back:"):
+        context.user_data["cr_origin"] = "c"
     try:
         user, creature, equipped_items = await run_db(_creature_detail_sync, update.effective_user, creature_id)
     except GameError as exc:
@@ -2109,7 +2129,7 @@ def _devour_list_render(target, scored, selected: set[int], page: int = 0, xp_to
             f"بلعیدن ({len(selected)} موجود)", emoji_key="btn_devour",
             style=CONFIRM, callback_data=f"devour_multi:{target.id}",
         )])
-    rows.append([back_btn(f"coll_pick:{target.id}", "بازگشت")])
+    rows.append([back_btn(f"cr_back:{target.id}", "بازگشت")])
     page_note = f" <i>(صفحه <code>{page + 1}/{total_pages}</code>)</i>" if total_pages > 1 else ""
     enough = total_xp >= xp_to_max
     lines = [
@@ -2285,7 +2305,7 @@ async def devour_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
             [btn("تقویت بیشتر", emoji_key="btn_feed", style=BUILD, callback_data=f"devour_start:{target.id}")],
-            [back_btn("menu:collection", "بازگشت به کلکسیون")],
+            [back_btn(f"cr_back:{target.id}", "بازگشت")],
         ]),
     )
 
@@ -2401,7 +2421,7 @@ async def fusion_pick_a_callback(update: Update, context: ContextTypes.DEFAULT_T
                 f"🧬 {creature_name(c)} ({c.star_level}★ - Lv.{c.level})",
                 style=PRIMARY, callback_data=f"fus_b:{parent_a_id}:{c.id}",
             )])
-    rows.append([back_btn(f"coll_pick:{parent_a_id}")])
+    rows.append([back_btn(f"cr_back:{parent_a_id}")])
     from game.media import get_creature_image_path
     photo = get_creature_image_path(creature)
     await safe_edit_message_text(query,
@@ -2627,14 +2647,14 @@ def _fusion_cost_sync(tg_user, a_id, b_id):
     if a is None or b is None:
         raise GameError("این جفت دیگه پیدا نشد.")
     base_rarity = constants.higher_rarity(a.rarity, b.rarity)
-    return constants.fusion_cost(a.star_level, base_rarity)
+    return constants.fusion_cost(a.star_level, base_rarity), a, b
 
 
 async def fusion_pick_b_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     _, a_id, b_id = query.data.split(":")
     try:
-        cost = await run_db(_fusion_cost_sync, update.effective_user, int(a_id), int(b_id))
+        cost, par_a, par_b = await run_db(_fusion_cost_sync, update.effective_user, int(a_id), int(b_id))
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
         return
@@ -2643,13 +2663,18 @@ async def fusion_pick_b_callback(update: Update, context: ContextTypes.DEFAULT_T
         [
             [
                 btn("تأیید فیوژن", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"fus_confirm:{a_id}:{b_id}"),
-                btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data=f"coll_pick:{a_id}"),
+                btn("لغو", emoji_key="btn_cancel", style=NAV, callback_data=f"cr_back:{a_id}"),
             ]
         ]
     )
     await safe_edit_message_text(query,
-        f"{get_emoji('warning')} <b>ترکیب؟</b>\n\n"
-        f"هر دو سوزانده می‌شن و یکی با یک ستاره بالاتر می‌سازی.\n"
+        f"{get_emoji('warning')} <b>تأیید ادغام</b>\n\n"
+        "<blockquote>"
+        f"• {creature_name(par_a)} — {constants.RARITY_LABELS[par_a.rarity]} · {par_a.star_level}⭐ · سطح {par_a.level}\n"
+        f"• {creature_name(par_b)} — {constants.RARITY_LABELS[par_b.rarity]} · {par_b.star_level}⭐ · سطح {par_b.level}"
+        "</blockquote>\n"
+        f"این دو هیولا <b>برای همیشه حذف می‌شن</b> و یک «{par_a.name}» <b>{par_a.star_level + 1}⭐</b> ساخته می‌شه "
+        "که هیولای فعالت می‌شه. تجهیزاتشون به کوله برمی‌گرده.\n"
         f"{get_emoji('coin')} هزینه: <code>{cost:,}</code> طلا",
         parse_mode="HTML",
         reply_markup=keyboard,
@@ -3550,7 +3575,11 @@ async def _show_group_alliance(update: Update, *, edit: bool) -> None:
     if edit and update.callback_query is not None:
         await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=kb)
     else:
-        await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=kb)
+        sent = await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=kb)
+        if update.effective_chat is not None and update.effective_user is not None:
+            from bot.gates import remember_card_owner
+
+            remember_card_owner(update.effective_chat.id, sent.message_id, update.effective_user.id)
 
 
 async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -4158,7 +4187,93 @@ def _heist_by_id_sync(tg_user, target_alliance_id):
     return result, target
 
 
+def _kick_preview_sync(tg_user, target_id) -> str:
+    user, _ = get_or_create_user(tg_user)
+    if user.alliance_id is None:
+        raise GameError("عضو هیچ اتحادی نیستی.")
+    target = User.objects.filter(id=target_id, alliance_id=user.alliance_id).first()
+    if target is None:
+        raise GameError("همچین عضوی توی اتحادت نیست. آیدی عددی رو از لیست اعضا بردار.")
+    return display_name(target)
+
+
+async def alliance_kick_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    target_id = int(query.data.split(":")[1])
+
+    def _do(tg_user):
+        from game import alliance as alliance_mod
+
+        user, _ = get_or_create_user(tg_user)
+        return alliance_mod.kick_member(user, target_id)
+
+    try:
+        result = await run_db(_do, update.effective_user)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    await query.answer()
+    await safe_edit_message_text(
+        query, f"🥾 <b>{result['name']}</b> از اتحاد حذف شد.", parse_mode="HTML",
+        reply_markup=back_only_keyboard("menu:alliance_info", "بازگشت به اتحاد"),
+    )
+
+
+async def alliance_deposit_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    amount = int(query.data.split(":")[1])
+    try:
+        alliance = await run_db(_alliance_deposit_sync, update.effective_user, amount)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        f"{get_emoji('coin')} <code>{amount:,}</code> طلا به خزانه‌ی <b>{alliance.name}</b> واریز شد!\n"
+        f"خزانه فعلی: <code>{alliance.treasury_gold:,}</code> طلا",
+        parse_mode="HTML",
+        reply_markup=back_only_keyboard("menu:alliance_info", "بازگشت به اتحاد"),
+    )
+
+
+def _heist_preview_sync(tg_user, target_alliance_id):
+    from game.daily import get_daily_count
+
+    user, _ = get_or_create_user(tg_user)
+    target = Alliance.objects.filter(id=target_alliance_id).first()
+    if target is None:
+        raise GameError("این اتحاد دیگه پیدا نشد.")
+    return target, get_daily_count(user, "heist"), constants.ENERGY_CAPS.get("heist")
+
+
 async def heist_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Picking a target shows a confirmation first — the attempt is limited per day and
+    used to fire on the very first tap."""
+    query = update.callback_query
+    target_id = int(query.data.split(":")[1])
+    try:
+        target, used, cap = await run_db(_heist_preview_sync, update.effective_user, target_id)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    await query.answer()
+    attempts = f"\n🔁 شبیخون‌های امروز: <code>{used}/{cap}</code>" if cap else ""
+    await safe_edit_message_text(
+        query,
+        f"🏴‍☠️ <b>شبیخون به «{target.name}»؟</b>\n\n"
+        f"{get_emoji('coin')} خزانه‌ی هدف: <code>{target.treasury_gold:,}</code> طلا\n"
+        f"در صورت برد، <b>{int(constants.HEIST_STEAL_PERCENT * 100)}٪</b> خزانه به خزانه‌ی اتحادت می‌رسه."
+        f"{attempts}\n<i>چه ببری چه ببازی، یکی از شبیخون‌های امروزت مصرف می‌شه.</i>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[
+            btn("حمله کن", emoji_key="btn_heist", style=BATTLE, callback_data=f"heist_ok:{target_id}"),
+            btn("نه", emoji_key="btn_cancel", style=NAV, callback_data="ally_heist_list"),
+        ]]),
+    )
+
+
+async def heist_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     target_id = int(query.data.split(":")[1])
     try:
@@ -4182,7 +4297,34 @@ async def heist_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await safe_edit_message_text(query, "\n\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
 
-async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+def _lab_name_check_sync(tg_user, name) -> str:
+    user, _ = get_or_create_user(tg_user)
+    cleaned = _clean_lab_name(name)
+    if not cleaned:
+        raise GameError("اسم نمی‌تونه خالی باشه")
+    if lab_name_taken(cleaned, exclude_user_id=user.id):
+        raise GameError("این اسم آزمایشگاه قبلاً گرفته شده")
+    return cleaned
+
+
+def _needs_lab_name_sync(tg_user) -> bool:
+    user, _ = get_or_create_user(tg_user)
+    return user.lab_name is None
+
+
+async def lab_name_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    name = context.user_data.pop("pending_lab_name", None)
+    await query.answer()
+    if query.data == "labname_no" or not name:
+        context.user_data[AWAITING_PLAYER_KEY] = {"action": "set_lab_name"}
+        await safe_edit_message_text(query, "باشه — اسم آزمایشگاهت رو بفرست:")
+        return
+    context.user_data[AWAITING_PLAYER_KEY] = {"action": "set_lab_name", "confirmed": True}
+    await capture_player_text_reply(update, context, override_text=name)
+
+
+async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, override_text: str | None = None) -> None:
     """Single dispatcher for every 'awaiting a plain-text reply' player flow (alliance
     name, deposit amount) — PTB only runs the first handler that matches an update
     within a group, so this and owner.capture_owner_text_reply are combined into one
@@ -4192,7 +4334,7 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         return
     message = update.effective_message
     action = awaiting["action"]
-    text = (message.text or "").strip()
+    text = (override_text if override_text is not None else (message.text or "")).strip()
 
     if action == "exchange_custom":
         from bot.handlers.exchange import handle_custom_amount
@@ -4230,10 +4372,29 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
             context.user_data[AWAITING_PLAYER_KEY] = awaiting
             await message.reply_text(f"⚠️ اسم باید بین 1 تا {LAB_NAME_MAX_LEN} کاراکتر باشه. دوباره بفرست:")
             return
+        if not awaiting.get("confirmed"):
+            # the first text a newcomer sends used to become their permanent name («سلام»)
+            try:
+                cleaned = await run_db(_lab_name_check_sync, update.effective_user, text)
+            except GameError as exc:
+                context.user_data[AWAITING_PLAYER_KEY] = awaiting
+                await message.reply_text(f"⚠️ {exc} — یه اسم دیگه بفرست:")
+                return
+            context.user_data["pending_lab_name"] = cleaned
+            await message.reply_text(
+                f"🧪 اسم آزمایشگاهت «<b>{html.escape(cleaned)}</b>» باشه؟\n"
+                "<i>این اسم توی همه‌ی جدول‌ها دیده می‌شه.</i>",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([[
+                    btn("آره، همین", emoji_key="btn_confirm", style=CONFIRM, callback_data="labname_ok"),
+                    btn("یه اسم دیگه", emoji_key="btn_cancel", style=NAV, callback_data="labname_no"),
+                ]]),
+            )
+            return
         try:
             user, creature, equipped_items, hall_lvl, rsch_ok, quest = await run_db(_set_lab_name_sync, update.effective_user, text)
         except GameError as exc:
-            context.user_data[AWAITING_PLAYER_KEY] = awaiting
+            context.user_data[AWAITING_PLAYER_KEY] = {"action": "set_lab_name"}
             await message.reply_text(f"⚠️ {exc} — یه اسم دیگه بفرست:")
             return
 
@@ -4408,7 +4569,10 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         except GameError as exc:
             await message.reply_text(alert_text(exc, 3500))
             return
-        await message.reply_text(f"✅ حداقل قدرت عضویت روی <code>{al.min_join_power:,}</code> تنظیم شد.", parse_mode="HTML")
+        await message.reply_text(
+            f"✅ حداقل قدرت عضویت روی <code>{al.min_join_power:,}</code> تنظیم شد.", parse_mode="HTML",
+            reply_markup=back_only_keyboard("menu:alliance_info", "بازگشت به اتحاد"),
+        )
         return
 
     if action in ("ally_kick", "ally_deputy"):
@@ -4416,6 +4580,24 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         if not digits.isdigit():
             context.user_data[AWAITING_PLAYER_KEY] = awaiting
             await message.reply_text("⚠️ آیدیِ عددی عضو رو بفرست (کد جلوی اسمش توی لیست اعضا).")
+            return
+
+        if action == "ally_kick":
+            try:
+                name = await run_db(_kick_preview_sync, update.effective_user, int(digits))
+            except GameError as exc:
+                await message.reply_text(
+                    alert_text(exc, 3500), reply_markup=back_only_keyboard("menu:alliance_info", "بازگشت به اتحاد")
+                )
+                return
+            await message.reply_text(
+                f"🥾 <b>{name}</b> (<code>{digits}</code>) از اتحاد اخراج بشه؟",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([[
+                    btn("بله، اخراج کن", emoji_key="btn_confirm", style=DANGER, callback_data=f"ally_kick_ok:{digits}"),
+                    btn("نه", emoji_key="btn_cancel", style=NAV, callback_data="menu:alliance_info"),
+                ]]),
+            )
             return
 
         def _do(tg_user, target_id, act):
@@ -4434,7 +4616,10 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         if action == "ally_kick":
             await message.reply_text(f"🥾 <b>{result['name']}</b> از اتحاد حذف شد.", parse_mode="HTML")
         else:
-            await message.reply_text(f"🎖 <b>{result['name']}</b> حالا قائم‌مقام اتحاده.", parse_mode="HTML")
+            await message.reply_text(
+                f"🎖 <b>{result['name']}</b> حالا قائم‌مقام اتحاده.", parse_mode="HTML",
+                reply_markup=back_only_keyboard("menu:alliance_info", "بازگشت به اتحاد"),
+            )
         return
 
     if action == "alliance_search":
@@ -4452,15 +4637,14 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
             context.user_data[AWAITING_PLAYER_KEY] = awaiting
             await message.reply_text("⚠️ یه عدد مثبت بفرست.")
             return
-        try:
-            alliance = await run_db(_alliance_deposit_sync, update.effective_user, int(text))
-        except GameError as exc:
-            await message.reply_text(alert_text(exc, 3500))
-            return
         await message.reply_text(
-            f"{get_emoji('coin')} به خزانه‌ی <b>{alliance.name}</b> واریز شد!\n"
-            f"خزانه فعلی: <code>{alliance.treasury_gold:,}</code> طلا",
+            f"💰 <code>{int(text):,}</code> {get_emoji('coin')} طلا به خزانه‌ی اتحاد واریز بشه؟\n"
+            "<i>طلای واریزشده به خزانه دیگه قابل برداشت نیست.</i>",
             parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                btn("بله، واریز کن", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"ally_dep_ok:{int(text)}"),
+                btn("نه", emoji_key="btn_cancel", style=NAV, callback_data="menu:alliance_info"),
+            ]]),
         )
         return
 
@@ -4525,7 +4709,7 @@ async def alliance_league_panel(update: Update, context: ContextTypes.DEFAULT_TY
     photo = get_feature_image_path("alliance_league")
     await send_screen(
         update, "\n".join(lines), photo=photo, parse_mode="HTML",
-        reply_markup=back_only_keyboard("menu:hub_battle", "بازگشت به نبرد و ماجراجویی"),
+        reply_markup=back_only_keyboard("menu:hub_city", "بازگشت به شهر"),
     )
 
 
@@ -4657,7 +4841,7 @@ async def rank(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     from game.media import get_feature_image_path
     photo = get_feature_image_path("rank")
     await send_screen(update, "\n".join(lines), photo=photo, parse_mode="HTML",
-                      reply_markup=back_only_keyboard("menu:hub_battle", "بازگشت به نبرد و ماجراجویی"))
+                      reply_markup=back_only_keyboard("menu:hub_city", "بازگشت به شهر"))
 
 
 def _raid_rank_sync():
@@ -4704,7 +4888,7 @@ async def raid_rank_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     raid_photo = get_feature_image_path("raid_rank")
     await send_screen(update, "\n".join(lines), photo=raid_photo, parse_mode="HTML",
-                      reply_markup=back_only_keyboard("menu:hub_battle", "بازگشت به نبرد و ماجراجویی"))
+                      reply_markup=back_only_keyboard("menu:hub_city", "بازگشت به شهر"))
 
 
 def _profile_sync(tg_user):
@@ -5235,6 +5419,13 @@ async def route_private_keyword(update: Update, context: ContextTypes.DEFAULT_TY
     if not menu_action:
         action = keywords.match(message.text)
         if action is None:
+            # a newcomer whose «send your lab name» prompt was lost (bot restart): their
+            # text used to be ignored with no hint — treat it as the name
+            if update.effective_chat is not None and update.effective_chat.type == "private" \
+                    and await run_db(_needs_lab_name_sync, update.effective_user):
+                context.user_data[AWAITING_PLAYER_KEY] = {"action": "set_lab_name"}
+                await capture_player_text_reply(update, context)
+                return True
             return False
         menu_action = _KEYWORD_TO_MENU.get(action, "")
 
@@ -5291,6 +5482,8 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # text prompt — otherwise the NEXT plain message was still consumed by it (a later
     # number got deposited into the treasury, or kicked a member by id).
     context.user_data.pop(AWAITING_PLAYER_KEY, None)
+    if action in ("upgrade", "collection"):  # entering a list from the menu starts at page 1
+        context.user_data.pop("upg_loc" if action == "upgrade" else "coll_loc", None)
     # The full DM menu must never open inside a group — walking up categories/root there
     # would expose the whole private menu. But group-reachable panels (alliance sub-panels,
     # the ticket exchange) legitimately have «بازگشت» buttons. So in a group we resolve
@@ -5298,6 +5491,11 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     chat = update.effective_chat
     if chat is not None and chat.type in ("group", "supergroup"):
         if action in ("alliance_info", "cat_social", "hub_battle"):
+            from bot.gates import is_card_owner
+
+            if not is_card_owner(update):
+                await query.answer("این کارت مال یه بازیکن دیگه‌ست — خودت «اتحاد» رو بفرست.", show_alert=True)
+                return
             await query.answer()
             await _show_group_alliance(update, edit=True)
             return
@@ -5473,6 +5671,20 @@ def _onboarding_upgrade_sync(tg_user):
         creature.save()
     user.onboarding_completed = True
     if user.story_step < 2:
+        # the tutorial IS quests 0 and 1 (hatch + first hunt) — pay their rewards while
+        # skipping them, so finishing the tutorial isn't worth less than abandoning it
+        skipped = {"coins": 0, "dna": 0, "diamonds": 0}
+        for q in story.STORY_QUESTS[user.story_step:2]:
+            for k in skipped:
+                skipped[k] += q["reward"].get(k, 0)
+        type(user).objects.filter(pk=user.pk).update(
+            coins=F("coins") + skipped["coins"],
+            dna_fragments=F("dna_fragments") + skipped["dna"],
+            diamonds=F("diamonds") + skipped["diamonds"],
+        )
+        user.coins += skipped["coins"]
+        user.dna_fragments += skipped["dna"]
+        user.diamonds += skipped["diamonds"]
         user.story_step = 2
     user.save(update_fields=["onboarding_completed", "story_step"])
     equipped_items = get_equipped_items(creature) if creature else []
@@ -5521,7 +5733,12 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(guide_page_callback, pattern=r"^guide:"))
     application.add_handler(CallbackQueryHandler(upgrade_pick_callback, pattern=r"^upg_pick:"))
     application.add_handler(CallbackQueryHandler(upgrade_fusion_gate_callback, pattern=r"^upg_fusion:"))
-    application.add_handler(CallbackQueryHandler(upgrade_page_callback, pattern=r"^upg_page:"))
+    application.add_handler(CallbackQueryHandler(upgrade_page_callback, pattern=r"^(upg_page:|upg_back$)"))
+    application.add_handler(CallbackQueryHandler(creature_back_callback, pattern=r"^cr_back:\d+$"))
+    application.add_handler(CallbackQueryHandler(lab_name_confirm_callback, pattern=r"^labname_(ok|no)$"))
+    application.add_handler(CallbackQueryHandler(alliance_kick_confirm_callback, pattern=r"^ally_kick_ok:\d+$"))
+    application.add_handler(CallbackQueryHandler(alliance_deposit_confirm_callback, pattern=r"^ally_dep_ok:\d+$"))
+    application.add_handler(CallbackQueryHandler(heist_confirm_callback, pattern=r"^heist_ok:\d+$"))
     application.add_handler(CallbackQueryHandler(missions_page_callback, pattern=r"^mission_page:"))
     application.add_handler(CallbackQueryHandler(lab_rename_start_callback, pattern=r"^lab_rename$"))
     application.add_handler(CallbackQueryHandler(lab_rename_ok_callback, pattern=r"^lab_rename_ok$"))
@@ -5542,7 +5759,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(hunt_swap_callback, pattern=r"^hunt_swap:"))
     application.add_handler(CallbackQueryHandler(hunt_swap_pick_callback, pattern=r"^hunt_swap_pick:"))
     application.add_handler(CallbackQueryHandler(collection_pick_callback, pattern=r"^coll_pick:"))
-    application.add_handler(CallbackQueryHandler(collection_page_callback, pattern=r"^coll_page:"))
+    application.add_handler(CallbackQueryHandler(collection_page_callback, pattern=r"^(coll_page:|coll_back$)"))
     application.add_handler(CallbackQueryHandler(collection_select_callback, pattern=r"^coll_select:"))
     application.add_handler(CallbackQueryHandler(kaiju_rename_callback, pattern=r"^kaiju_rename:\d+(:[cu])?$"))
     application.add_handler(CallbackQueryHandler(kaiju_rename_ok_callback, pattern=r"^kaiju_rename_ok:\d+$"))

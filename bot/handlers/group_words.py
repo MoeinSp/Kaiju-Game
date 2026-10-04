@@ -312,6 +312,9 @@ _CMD_CATS: dict[str, dict] = {
         ("شکار", "شکار وحشی (+ شکار خودکار)"),
         ("احضار", "احضار باسِ رید اتحاد"),
         ("اتک", "زدنِ باس؛ یا ریپلای روی بازیکن = حمله بهش"),
+        ("کاروان", "اعزام ۲ تا ۴ نفره — روزی یک‌بار"),
+        ("برج", "برج موگن"),
+        ("تیم", "تیم نبرد"),
     ]},
     "grow": {"btn": "هیولا", "emoji": "creature", "title": "قوی‌تر کردن هیولا", "items": [
         ("ارتقا", "تغذیه (موش/مرغ/گربه) و ارتقای اعضا"),
@@ -329,6 +332,14 @@ _CMD_CATS: dict[str, dict] = {
         ("ماموریت", "ماموریت‌های روزانه"),
         ("مبادله", "طلا↔DNA و تجهیزات↔بلیط"),
         ("موجودی", "دارایی‌هات"),
+        ("فروشگاه", "فروشگاه روزانه"),
+        ("بازار", "بازار سیاه و مزایده"),
+        ("انبار", "کوله و آیتم‌هات"),
+        ("کازینو", "بازی‌های شانسی"),
+        ("پاس", "پاس ماهانه"),
+        ("دستاورد", "دستاوردها و جایزه‌هاشون"),
+        ("لقب", "لقب‌هات"),
+        ("اشتراک", "اشتراک ویژه"),
     ]},
     "rank": {"btn": "گروه", "emoji": "trophy", "title": "جایگاه در گروه", "items": [
         ("جدول", "برترین‌های گروه"),
@@ -1535,6 +1546,10 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     message = update.effective_message
     if message is None or not message.text or update.edited_message is not None:
         return
+    first = message.text.split()[0] if message.text.split() else ""
+    if first.startswith("/") and "@" in first:
+        if first.split("@", 1)[1].lower() != (context.bot.username or "").lower():
+            return
     # a reply to the bot's prompt feeds a pending text flow (alliance name, search…)
     if await _maybe_capture_group_reply(update, context):
         return

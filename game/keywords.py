@@ -534,7 +534,6 @@ KEYWORD_SECTIONS: tuple[tuple[str, str, str, str, tuple[str, ...]], ...] = (
 ALIASES: dict[str, str] = {
     "کایجو": "reward",
     "kaiju": "reward",
-    "ربات": "help",
     "help": "help",
     "کایجو لجند": "help",
     "کایجولجند": "help",
@@ -543,7 +542,6 @@ ALIASES: dict[str, str] = {
     # easy synonyms so players reach features by the word that comes to mind
     "قرعه کشی": "wheel",     # normalize() already folds the ZWNJ in «قرعه‌کشی» to a space
     "کازینو": "casino",      # the paid gamble (PV) — distinct from the free daily wheel
-    "شانس": "wheel",
     "انتخاب کایجو": "select",
     "انتخاب هیولا": "select",
     "کایجو من": "select",
@@ -571,8 +569,6 @@ ALIASES: dict[str, str] = {
     "ساختمان ها": "mine",
     "ساختمان‌ها": "mine",
     "mine": "mine",
-    "buildings": "mine",
-    "building": "mine",
     "معدن من": "mine",
     # Mugen
     "برج موگن": "mugen",
@@ -580,7 +576,6 @@ ALIASES: dict[str, str] = {
     "برج بی‌پایان": "mugen",
     "موگن": "mugen",
     "mugen": "mugen",
-    "tower": "mugen",
     # Black Market
     "بازار سیاه": "blackmarket",
     "بازارسیاه": "blackmarket",
@@ -588,16 +583,12 @@ ALIASES: dict[str, str] = {
     "حراج": "blackmarket",
     "مارکت": "blackmarket",
     "blackmarket": "blackmarket",
-    "market": "blackmarket",
     # Shop
     "شاپ": "shop",
-    "خرید": "shop",
-    "shop": "shop",
     "فروشگاه و بازار": "shop",
     # City & Rewards
     "شهر و جوایز": "reward",
     "جوایز": "reward",
-    "شهر": "help",
     # Inventory
     "کوله": "inventory",
     "آیتم": "inventory",
@@ -618,24 +609,18 @@ ALIASES: dict[str, str] = {
     # Achievements
     "دستاوردها": "achievements",
     "افتخارات": "achievements",
-    "چالش": "achievements",
     "achievements": "achievements",
     # Battle Pass
     "بتل پس": "battlepass",
     "بتل‌پس": "battlepass",
-    "فصل": "battlepass",
     "battlepass": "battlepass",
-    "pass": "battlepass",
     # Titles
     "القاب": "titles",
     "عناوین": "titles",
-    "عنوان": "titles",
     "titles": "titles",
-    "title": "titles",
     # Team
     "تیم کایجو": "team",
     "تیم من": "team",
-    "team": "team",
     # Guide & Lab
     "راهنمای بازی": "help",
     "آزمایشگاه من": "lab",
