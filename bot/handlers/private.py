@@ -2173,11 +2173,12 @@ async def devour_select_all_callback(update: Update, context: ContextTypes.DEFAU
         except GameError as exc:
             await query.answer(alert_text(exc), show_alert=True)
             return
-        # «انتخاب همه» caps at the XP needed to max — pick strongest-first until the
-        # target would fill up (the one that crosses the line is included), so it never
-        # over-selects and wastes creatures.
+        # «انتخاب همه» caps at the XP needed to max, and feeds the LEAST valuable first
+        # (lowest rarity, then star, then XP) — it used to take the highest-XP ones, i.e.
+        # the rarest/most-starred creatures, so two taps could burn the best of a roster.
         picked, running = set(), 0
-        for c, xp in sorted(scored, key=lambda t: -t[1]):
+        _rk = constants.RARITY_ORDER.index
+        for c, xp in sorted(scored, key=lambda t: (_rk(t[0].rarity), t[0].star_level, t[1])):
             if running >= xp_to_max:
                 break
             picked.add(c.id)
@@ -2201,11 +2202,51 @@ def _devour_multi_sync(tg_user, target_id, sac_ids):
 
 
 async def devour_multi_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«بلعیدن» → a confirmation screen first: devouring deletes creatures for good, so
+    the player sees exactly who is about to be eaten before it happens."""
+    query = update.callback_query
+    target_id = int(query.data.split(":")[1])
+    selection = _devour_selection(context, target_id)
+    if not selection:
+        await query.answer("اول حداقل یه موجود رو تیک بزن.", show_alert=True)
+        return
+    try:
+        target, scored, _xp_to_max = await run_db(_devour_list_sync, update.effective_user, target_id)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    chosen = [(c, xp) for c, xp in scored if c.id in selection]
+    if not chosen:
+        await query.answer("انتخاب‌هات دیگه معتبر نیستن؛ دوباره تیک بزن.", show_alert=True)
+        return
+    await query.answer()
+    chosen.sort(key=lambda t: (-constants.RARITY_ORDER.index(t[0].rarity), -t[0].star_level, -t[1]))
+    lines = [
+        f"⚠️ <b>بلعیدن {len(chosen)} هیولا — مطمئنی؟</b>",
+        "",
+        f"این هیولاها <b>برای همیشه حذف می‌شن</b> و تجربه‌شون به <b>{creature_name(target)}</b> می‌رسه:",
+        "<blockquote>" + "\n".join(
+            f"• {creature_name(c)} — {constants.RARITY_LABELS[c.rarity]} · {c.star_level}⭐ · سطح {c.level}"
+            for c, _ in chosen[:15]
+        ) + (f"\n… و {len(chosen) - 15} هیولای دیگه" if len(chosen) > 15 else "") + "</blockquote>",
+        f"مجموع تجربه: <code>+{sum(xp for _, xp in chosen):,}</code>",
+    ]
+    await safe_edit_message_text(
+        query, "\n".join(lines), parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [btn(f"بله، {len(chosen)} هیولا بلعیده بشه", emoji_key="btn_devour", style=DANGER,
+                 callback_data=f"devour_ok:{target_id}")],
+            [btn("نه، برگرد", emoji_key="btn_cancel", style=NAV, callback_data=f"devour_page:{target_id}:0")],
+        ]),
+    )
+
+
+async def devour_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     target_id = int(query.data.split(":")[1])
     selection = list(_devour_selection(context, target_id))
     if not selection:
-        await query.answer("اول حداقل یه موجود رو تیک بزن.", show_alert=True)
+        await query.answer("انتخابی ثبت نشده؛ دوباره از «تقویت» شروع کن.", show_alert=True)
         return
     try:
         result = await run_db(_devour_multi_sync, update.effective_user, target_id, selection)
@@ -3093,7 +3134,7 @@ async def _autohunt_no_energy(query, energy: int, max_energy: int = 50) -> None:
             f"  📋 جعبه‌های آرنا خودکار و پشت‌سرهم باز می‌شن\n"
             f"  🏹 درآمدت از شکار خودکار ۲۵٪ بیشتر می‌شه!\n"
             f"  🥈 نشان پرمیوم نقره‌ای کنار اسمت قرار می‌گیره\n\n"
-            f"<i>💡 فقط با ۱۰۰ هزار تومان، محدودیت انرژی رو برای همیشه فراموش کن!</i>"
+            f"<i>💡 با اشتراک نقره‌ای ۳۰ روزه، سقف انرژیت دو برابر می‌شه و سریع‌تر شارژ می‌شی!</i>"
         )
         row1 = [btn("شارژ فوری انرژی", emoji_key="btn_charge", style=SHOP, callback_data=f"enr:ask:{query.from_user.id}")]
         row2 = [btn("خرید اشتراک نقره‌ای", emoji_key="btn_vip", style=SHOP, callback_data="sub_pick:silver:hunt")]
@@ -4077,7 +4118,7 @@ async def heist_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     if result["success"]:
         reveal = (
             f"{get_emoji('celebrate')} <b>شبیخون موفق بود!</b>\n"
-            f"{get_emoji('coin')} غارت: <code>+{result['stolen']:,}</code> طلا از خزانه‌ی <b>{target.name}</b> به <b>خزانه‌ی اتحاد شما</b> واریز شد (همچنین پاداش شخصی دریافت شد)!"
+            f"{get_emoji('coin')} غارت: <code>+{result['stolen']:,}</code> طلا از خزانه‌ی <b>{target.name}</b> غارت شد — نصفش به کیف خودت و نصفش به خزانه‌ی اتحادت رفت!"
         )
     else:
         reveal = f"😔 نگهبان‌های <b>{target.name}</b> دفاع کردن و شبیخونت شکست خورد."
@@ -4491,7 +4532,7 @@ async def heist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if result["success"]:
         await update.message.reply_text(
             f"{get_emoji('celebrate')} <b>شبیخون موفق بود!</b>\n"
-            f"{get_emoji('coin')} غارت: <code>+{result['stolen']:,}</code> طلا از خزانه‌ی <b>{target.name}</b> به <b>خزانه‌ی اتحاد شما</b> واریز گردید (همچنین پاداش شخصی دریافت شد)!",
+            f"{get_emoji('coin')} غارت: <code>+{result['stolen']:,}</code> طلا از خزانه‌ی <b>{target.name}</b> غارت شد — نصفش به کیف خودت و نصفش به خزانه‌ی اتحادت رفت!",
             parse_mode="HTML",
         )
     else:
@@ -5443,6 +5484,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(devour_select_all_callback, pattern=r"^devour_(all|none):\d+$"))
     application.add_handler(CallbackQueryHandler(devour_page_callback, pattern=r"^devour_page:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(devour_multi_callback, pattern=r"^devour_multi:\d+$"))
+    application.add_handler(CallbackQueryHandler(devour_confirm_callback, pattern=r"^devour_ok:\d+$"))
     application.add_handler(CallbackQueryHandler(fusion_pick_a_callback, pattern=r"^fus_a:"))
     application.add_handler(CallbackQueryHandler(fusion_busy_callback, pattern=r"^fus_busy:\d+$"))
     application.add_handler(CallbackQueryHandler(fusion_rarity_callback, pattern=r"^fus_rarity:"))

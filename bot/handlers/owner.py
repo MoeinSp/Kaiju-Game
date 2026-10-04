@@ -2841,7 +2841,7 @@ def _channel_card(channel) -> str:
     return (
         f"{_fj_icon(channel)} <b>{channel.title or handle}</b> ({_fj_kind_label(channel)} · {handle})\n"
         f"{limit}\n{reward}\n{link_line}\n\n"
-        f"<i>یادت نباشه بات رو ادمینِ همین {_fj_kind_label(channel)} کنی، وگرنه نمی‌تونه عضویت رو چک کنه. "
+        f"<i>یادت باشه بات رو ادمینِ همین {_fj_kind_label(channel)} کنی، وگرنه نمی‌تونه عضویت رو چک کنه. "
         "برای گروه/کانالِ خصوصی حتماً «🔗 لینک عضویت» رو ست کن تا دکمه‌ی عضویت کار کنه.</i>"
     )
 

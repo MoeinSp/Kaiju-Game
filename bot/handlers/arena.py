@@ -114,7 +114,7 @@ def _arena_home_text(user, power, shield_secs, history, week, season_secs, reven
         lines.append("<i>⚠️ کاپت از قدرت موجودت جلو زده — بردها کاپ کمتری می‌دن تا هیولای شما قوی‌تر شود.</i>")
     if shield_secs > 0:
         lines.append(f"{get_emoji('def')} سپر محافظ: <b>{_format_remaining(shield_secs)}</b> باقی‌مانده")
-        lines.append("<i>اگر خودت حمله کنی سپرت از بین می‌رود.</i>")
+        lines.append(f"<i>هر حمله‌ای که بزنی {constants.SHIELD_ATTACK_COST_HOURS} ساعت از سپرت کم می‌کند.</i>")
     else:
         lines.append(f"{get_emoji('def')} سپر محافظ: نداری — ممکنه بهت حمله بشه")
 

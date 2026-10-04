@@ -159,7 +159,15 @@ def _check_account_maturity_gate(sender: User) -> None:
                 f"اکانت فرستنده باید حداقل {min_age_days} روز قدمت داشته باشه "
                 f"(قدمت فعلی شما: {int(age_days)} روز)."
             )
-    wins = AttackLog.objects.filter(attacker=sender, attacker_won=True).count()
+    from django.db.models import Count
+
+    won = AttackLog.objects.filter(attacker=sender, attacker_won=True)
+    # bots count in full; wins over the same real player are capped (anti alt-farming)
+    wins = won.filter(defender__isnull=True).count() + sum(
+        min(n, constants.TRANSFER_GATE_MAX_WINS_PER_OPPONENT)
+        for n in won.filter(defender__isnull=False).values("defender_id")
+        .annotate(n=Count("id")).values_list("n", flat=True)
+    )
     if wins < min_arena_wins:
         raise GameError(
             f"🔒 محدودیت تجربه انتقال:\n\n"
@@ -290,6 +298,13 @@ def transfer_creature(sender: User, receiver: User, creature_id: int, price: int
     status = creature_status(sender, creature)
     if status is not None:
         raise GameError(f"«{creature.name}» الان مشغوله ({status}) — اول آزادش کن.")
+    max_price = constants.creature_transfer_max_price(creature.rarity, creature.star_level)
+    if price > max_price:
+        raise GameError(
+            f"سقف قیمت این هیولا {max_price:,} طلاست "
+            f"({constants.RARITY_LABELS.get(creature.rarity, creature.rarity)}، {creature.star_level}⭐). "
+            "قیمت کمتری تعیین کن."
+        )
 
     _check_creature_trade_gate(sender, receiver, creature.star_level)
 

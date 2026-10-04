@@ -286,7 +286,7 @@ def _building_detail_text(view: dict) -> str:
     if btype == "blacksmith" and building.level > 0:
         lines.append(f"🔨 سقفِ فعلیِ سطحِ تجهیزات: <code>+{building.level * constants.EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL}</code>")
     if btype == constants.MAIN_BUILDING and building.level > 0:
-        lines.append(f"⭐ سقفِ فعلیِ ستاره‌ی هیولاها: <code>{building.level}</code>")
+        lines.append("⭐ سقفِ ستاره‌ی هیولاها = سطحِ «تالار ادغام» (که خودش از سطحِ این تالار بالاتر نمی‌ره).")
         next_lvl = building.level + 1
         if next_lvl <= constants.BUILDING_MAX_LEVEL:
             _UNLOCKS_BY_HALL = {

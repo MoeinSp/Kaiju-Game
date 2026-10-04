@@ -343,7 +343,7 @@ async def _reply_transfer_error(message, exc) -> None:
             f"{_RULE}\n"
             f"این انتقال <code>{exc.cost}</code> {get_emoji('diamond')} لازم داره، "
             f"ولی گیرنده الان فقط <code>{exc.have}</code> تا داره.\n"
-            "<blockquote>گیرنده اول باید الماس تهیه کنه — از جعبه‌ی الماسی، معدن الماس یا گردونه‌ی شانس.</blockquote>",
+            "<blockquote>گیرنده اول باید الماس تهیه کنه — از معدن الماس، گردونه‌ی شانس یا خرید درون‌بازی.</blockquote>",
             parse_mode="HTML", reply_markup=keyboard,
         )
     else:
@@ -725,6 +725,11 @@ async def _present_offer_to_receiver(update, token: str, via_query=None) -> None
         await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
+def _creature_price_cap_sync(creature_id):
+    c = Creature.objects.filter(id=creature_id).only("rarity", "star_level").first()
+    return constants.creature_transfer_max_price(c.rarity, c.star_level) if c else None
+
+
 async def maybe_capture_transfer_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     """If the sender is mid-«تعیین قیمت», treat their next numeric message as the
     price and move the offer to the receiver. Returns True if it consumed the
@@ -761,6 +766,15 @@ async def maybe_capture_transfer_price(update: Update, context: ContextTypes.DEF
             parse_mode="HTML",
         )
         return True
+    if offer.get("kind") == "c" and price > 0:
+        cap = await run_db(_creature_price_cap_sync, offer["item_id"])
+        if cap is not None and price > cap:
+            await message.reply_text(
+                f"❌ سقف قیمت این هیولا <code>{cap:,}</code> طلاست.\n"
+                f"لطفاً عددی تا سقف <code>{cap:,}</code> بفرست — یا «لغو».",
+                parse_mode="HTML",
+            )
+            return True
 
     context.user_data.pop("xfer_price_token", None)
     offer["price"] = price
