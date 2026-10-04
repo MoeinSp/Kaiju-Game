@@ -68,7 +68,7 @@ def _rarity_at_least(tier: str):
 
 # Rewards are modest but meaningful — a nudge, never a shortcut past the economy.
 ACHIEVEMENTS: list[Achievement] = [
-    Achievement("first_raid", "🩸 اولین شکار موفق", "🩸",
+    Achievement("first_raid", "🩸 اولین پیروزی آرنا", "🩸",
                 "اولین برد آرنا را ثبت کن", {"coins": 100},
                 lambda s: (min(s.arena_wins, 1), 1)),
     Achievement("collector_5", "🗃 کلکسیونر", "🗃",
@@ -99,7 +99,7 @@ ACHIEVEMENTS: list[Achievement] = [
                 "تالار مِهر را به آخرین سطح برسان", {"diamonds": 30},
                 lambda s: (min(s.hall_level, constants.BUILDING_MAX_LEVEL), constants.BUILDING_MAX_LEVEL)),
     Achievement("all_buildings_max", "🏗 شهرساز", "🏗",
-                "تمام ۶ ساختمان بازی را Max کن", {"diamonds": 80, "speedup": 720},
+                "همه‌ی ساختمان‌های بازی را به سطح آخر برسان", {"diamonds": 80, "speedup": 720},
                 lambda s: (min(s.maxed_buildings, len(constants.BUILDING_TYPES)), len(constants.BUILDING_TYPES))),
     Achievement("arena_wins_10", "⚔️ جنگجو", "⚔️",
                 "۱۰ پیروزی در آرنا کسب کن", {"coins": 400},

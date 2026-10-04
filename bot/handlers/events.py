@@ -34,7 +34,7 @@ def _render(st: dict) -> tuple[str, InlineKeyboardMarkup]:
         f"{ev['emoji']} <b>رویداد این هفته: {ev['title']}</b>",
         f"<blockquote>{ev['desc']}\n⏳ تا پایان رویداد: <b>{_fmt_left(st['seconds_left'])}</b></blockquote>",
         f"\n🎁 <b>جایزه‌ی امروزِ رویداد</b> (روز {st['day']}/۷): {events.reward_text(st['today_reward'])}",
-        "<i>هر روزِ رویداد یه جایزه‌ی بزرگ‌تر — روز آخر جک‌پات الماس!</i>",
+        "<i>جایزه در روز ۴ و روز ۷ بزرگ‌تر می‌شه — روز آخر جک‌پات الماس!</i>",
     ]
     rows = []
     if st["can_claim"]:

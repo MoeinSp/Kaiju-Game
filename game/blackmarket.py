@@ -32,7 +32,7 @@ def format_persian_deadline(dt: datetime.datetime) -> str:
     local_dt = timezone.localtime(dt)
     day_name = PERSIAN_WEEKDAYS.get(local_dt.weekday(), "")
     time_str = local_dt.strftime("%H:%M")
-    return f"{day_name} ساعت {time_str} شب"
+    return f"{day_name} ساعت {time_str}"
 
 
 def format_time_remaining(seconds: float | int) -> str:

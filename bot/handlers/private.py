@@ -846,7 +846,7 @@ async def equip_slot_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if row["item"] is not None:
         rows.append(
-            [btn("حذف تجهیزات", emoji_key="btn_cancel", style=DANGER,
+            [btn("درآوردن از هیولا", emoji_key="btn_cancel", style=DANGER,
                  callback_data=f"upg_unequip:{creature_id}:{row['item'].id}")]
         )
     rows.append([back_btn(f"upg_eq:{creature_id}", "بازگشت به تجهیزات")])
@@ -1420,7 +1420,7 @@ async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user, creature, equipped_items, hall_level, research_built, quest = await run_db(_me_sync, update.effective_user)
     if creature is None:
         await send_screen(update,
-            "😅 هنوز موجودی نداری! دستور /start رو بزن تا از آزمایشگاه شروع کنی."
+            "😅 هنوز هیولایی نداری! /start رو بزن تا اولین هیولات رو بگیری."
         )
         return
     is_owner = _is_admin_user(update.effective_user.id if update.effective_user else None)
@@ -1716,7 +1716,7 @@ def _collection_render(ranked, filt: str = "all", page: int = 0) -> tuple[str, I
     chunk = filtered[page * COLLECTION_PAGE_SIZE : (page + 1) * COLLECTION_PAGE_SIZE]
 
     for c in chunk:
-        rarity_short = constants.RARITY_LABELS[c.rarity].split()[0]
+        rarity_short = constants.RARITY_LABELS[c.rarity].split()[-1]
         circle = _RARITY_CIRCLES.get(c.rarity, "⚪️")
         rows.append([btn(f"{circle} {creature_name(c)} ({rarity_short})", style=LIST, callback_data=f"coll_pick:{c.id}")])
         if c.is_active:

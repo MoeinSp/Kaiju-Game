@@ -574,7 +574,7 @@ async def breeding_hatch_callback(update: Update, context: ContextTypes.DEFAULT_
     await query.answer("🐣 تخم سر باز کرد!")
     upgrade_note = (
         "\n✨ <b>به سقف رده رسید!</b>" if info["hit_top"]
-        else "\n<i>این‌بار یک رده پایین‌تر دراومد.</i>"
+        else "\n<i>این‌بار نایابیِ پایین‌تری دراومد.</i>"
     )
     text, keyboard = _panel_render(view)
     photo = get_creature_image_path(child)

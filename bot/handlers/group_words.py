@@ -522,12 +522,12 @@ def _upgrade_card(user, creature, energy, step: int = 1) -> tuple[str, InlineKey
         [btn("تغذیه", emoji_key="btn_feed", style=BUILD, callback_data=_act("feedcap", user.id))],
         step_row,
         [
-            btn(f"بال{sfx}", emoji_key="btn_wings", style=BUILD, callback_data=_act("up_wings", user.id)),
-            btn(f"زره{sfx}", emoji_key="btn_armor", style=BUILD, callback_data=_act("up_armor", user.id)),
+            btn(f"بال{sfx}", emoji_key="btn_wings", style=BUILD, callback_data=_act("up_wings", user.id, str(step))),
+            btn(f"زره{sfx}", emoji_key="btn_armor", style=BUILD, callback_data=_act("up_armor", user.id, str(step))),
         ],
         [
-            btn(f"نیش{sfx}", emoji_key="btn_fangs", style=BUILD, callback_data=_act("up_fangs", user.id)),
-            btn(f"زهر{sfx}", emoji_key="btn_poison", style=BUILD, callback_data=_act("up_poison", user.id)),
+            btn(f"نیش{sfx}", emoji_key="btn_fangs", style=BUILD, callback_data=_act("up_fangs", user.id, str(step))),
+            btn(f"زهر{sfx}", emoji_key="btn_poison", style=BUILD, callback_data=_act("up_poison", user.id, str(step))),
         ],
         [btn("هیولا", emoji_key="btn_creature", style=NAV, callback_data=_scoped("creature", user.id))],
         [_pm_button("ترکیب و ارتقا (پیوی)")],
@@ -2221,7 +2221,10 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await safe_edit_message_text(query, text, photo=photo_path, parse_mode="HTML", reply_markup=keyboard)
         return
     if action in ("up_wings", "up_armor", "up_fangs", "up_poison"):
-        step = context.user_data.get("grp_upg_step", 1)
+        if arg and arg.isdigit() and int(arg) in _GRP_UPG_STEPS:
+            step = int(arg)
+        else:  # a card rendered before this change
+            step = context.user_data.get("grp_upg_step", 1)
         part = action[3:]
         try:
             user, creature, new_level, cost, energy = await run_db(

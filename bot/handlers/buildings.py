@@ -116,7 +116,7 @@ def _buildings_text(busy_count, slots, hall_level: int) -> str:
     lines = [
         f"{get_emoji('building')} <b>ساختمون‌های تو</b>",
         "━━━━━━━━━━━━━━━━━━━━",
-        f"🏛 {hall}: سطح <code>{hall_level}</code> / <code>{constants.BUILDING_MAX_LEVEL}</code>",
+        f"{hall}: سطح <code>{hall_level}</code> / <code>{constants.BUILDING_MAX_LEVEL}</code>",
         f"👷‍♂️ کارگران: <code>{busy_count}</code> / <code>{slots}</code> مشغول",
         "━━━━━━━━━━━━━━━━━━━━",
     ]
@@ -213,7 +213,7 @@ def _building_detail_text(view: dict) -> str:
         cap_store = view["store_cap"]
         en = _COLLECTOR_EN.get(btype, "")
         lines = [
-            f"🏭 <b>{label}</b>" + (f"\n<i>{en}</i>" if en else ""),
+            f"<b>{label}</b>" + (f"\n<i>{en}</i>" if en else ""),
             div,
             f"🎖 سطح سازه: <code>{building.level}</code> / <code>{cap}</code>",
             f"📦 وضعیت مخزن: {_pbar(pending, cap_store)}",
@@ -266,7 +266,7 @@ def _building_detail_text(view: dict) -> str:
         if btype != constants.MAIN_BUILDING and cap < constants.BUILDING_MAX_LEVEL:
             status_tag += " <i>(سقف با تالار مِهر)</i>"
     lines = [
-        f"🏛 <b>{label}</b>",
+        f"<b>{label}</b>",
         f"📌 وضعیت: {status_tag}",
         div,
         f"<i>{constants.BUILDING_DESCRIPTIONS[btype]}</i>",
