@@ -8,6 +8,7 @@ before any diamonds are spent.
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, ContextTypes
 
+from bot.utils import alert_text
 from bio_lab.repository import get_or_create_user
 from bot.utils import run_db, safe_edit_message_text
 from game import constants
@@ -191,7 +192,7 @@ async def energy_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         result = await run_db(_refill_sync, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("⚡ پر شد!")
     max_en = await run_db(_user_max_energy_sync, update.effective_user)

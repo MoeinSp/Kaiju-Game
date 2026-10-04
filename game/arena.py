@@ -553,6 +553,7 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         "new_coins": attacker.coins,
         "new_dna": attacker.dna_fragments,
         "awarded_chest": awarded_chest,
+        "slots_full": bool(won and award_cup and awarded_chest is None),
         # payload for the INSTANT defense DM (None defender_id = bot, no DM)
         "defense": None if defender_user is None else {
             "defender_id": defender_user.id,

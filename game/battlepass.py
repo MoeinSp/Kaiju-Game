@@ -20,6 +20,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from bio_lab.models import PassProgress, User
+from bio_lab.repository import lock_row
 
 # ── Shamsi / Jalali Calendar Conversion Helpers ───────────────────────────────
 
@@ -246,7 +247,6 @@ def reward_text(reward: dict) -> str:
 
 
 @transaction.atomic
-@transaction.atomic
 def claim(user: User) -> dict:
     """Claim every reached-but-unclaimed tier on both tracks the player owns.
     Returns {'tiers': int, 'reward': {...totals...}}.
@@ -255,6 +255,7 @@ def claim(user: User) -> dict:
     rapid double-tap can't claim the same tiers — and their rewards — twice."""
     _get_progress(user)  # ensure the row exists before locking it
     progress = PassProgress.objects.select_for_update().get(user=user, season_key=season_key())
+    lock_row(user)
     tier = tier_for_points(progress.points)
     totals: dict[str, int] = {}
     claimed_tiers = 0
@@ -286,9 +287,11 @@ def buy_premium(user: User) -> None:
     claim premium rewards for every tier you've already reached."""
     from game.creature import GameError
 
-    progress = _get_progress(user)
+    _get_progress(user)  # ensure the row exists before locking it
+    progress = PassProgress.objects.select_for_update().get(user=user, season_key=season_key())
+    lock_row(user)
     if progress.premium:
-        raise GameError("پاس ویژه‌ی این فصل رو قبلاً گرفتی.")
+        raise GameError("پاس ویژه‌ی این ماه رو قبلاً گرفتی.")
     if user.diamonds < PREMIUM_COST_DIAMONDS:
         raise GameError(f"الماس کافی نداری! پاس ویژه {PREMIUM_COST_DIAMONDS} الماس می‌خواد.")
     user.diamonds -= PREMIUM_COST_DIAMONDS

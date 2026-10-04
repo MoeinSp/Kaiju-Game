@@ -62,8 +62,12 @@ def standings(limit: int = 10) -> list[dict]:
 def close_due_season() -> str | None:
     """Settles the previous week if it hasn't been settled yet. Returns the week
     key that was closed, or None when there was nothing to do."""
-    state = _state()
     now_week = current_week()
+    if _state().last_closed_week == now_week:
+        return None  # the common case: no lock needed
+    # lock the state row: only ONE request may settle the week (two at once used to
+    # reset cups and pay the division rewards twice)
+    state = SeasonState.objects.select_for_update().get(id=1)
     if state.last_closed_week == now_week:
         return None
     if state.last_closed_week is None:
@@ -94,7 +98,8 @@ def close_due_season() -> str | None:
     try:
         from game import alliance as alliance_mod
 
-        alliance_mod.award_alliance_league()
+        with transaction.atomic():  # savepoint: a DB error here must not poison the close
+            alliance_mod.award_alliance_league()
     except Exception:  # noqa: BLE001 — a league-reward hiccup must not block the cup reset
         pass
 
@@ -102,7 +107,8 @@ def close_due_season() -> str | None:
     try:
         from game.raid import settle_weekly_raid
 
-        settle_weekly_raid()
+        with transaction.atomic():
+            settle_weekly_raid()
     except Exception:  # noqa: BLE001 — a raid-settle hiccup must not block the cup reset
         pass
 

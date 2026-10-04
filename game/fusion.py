@@ -3,6 +3,7 @@ import random
 from django.db import transaction
 
 from bio_lab.models import Creature, User
+from bio_lab.repository import lock_row
 from game import constants, lab
 from game.buildings import is_built, star_cap
 from game.creature import GameError, InsufficientGoldError
@@ -103,6 +104,16 @@ def fuse(user: User, parent_a: Creature, parent_b: Creature) -> tuple[Creature, 
     Returns (child, inherited_item) — inherited_item is the Equipment moved onto the
     child if the FUSION_INHERIT_CHANCE roll hit and either parent had gear equipped,
     else None."""
+    # lock the player and BOTH parents: two confirms at once used to forge two children
+    # from one pair (and pay once). The loser of the race now finds the parents gone.
+    lock_row(user)
+    locked = {
+        c.id: c
+        for c in Creature.objects.select_for_update().filter(id__in=[parent_a.id, parent_b.id])
+    }
+    if parent_a.id != parent_b.id and len(locked) != 2:
+        raise GameError("این دو هیولا دیگه در دسترس نیستن (شاید همین الان ترکیب شدن).")
+    parent_a, parent_b = locked.get(parent_a.id, parent_a), locked.get(parent_b.id, parent_b)
     assert_fusion_available(user)
     if parent_a.owner_id != user.id or parent_b.owner_id != user.id:
         raise GameError("هر دو موجود باید مال خودت باشن.")

@@ -1,3 +1,4 @@
+import html
 from asgiref.sync import sync_to_async
 from telegram.error import BadRequest
 
@@ -229,6 +230,51 @@ def invalidate_cached_file_id(path: str) -> None:
     if key in _FILE_ID_CACHE:
         del _FILE_ID_CACHE[key]
         _save_file_id_cache()
+
+
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def alert_text(exc_or_text, limit: int = 200) -> str:
+    """Text safe for `query.answer(..., show_alert=True)`: a callback alert is plain
+    text capped at 200 chars. GameError messages are written for HTML screens, so they
+    may carry <b>/<tg-emoji> tags or run long — Telegram then REJECTS the answer and the
+    button looks dead. Strip the tags, unescape entities, and trim."""
+    text = html.unescape(_TAG_RE.sub("", str(exc_or_text))).strip()
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+_ANSWERED_QUERIES: dict[str, None] = {}  # insertion-ordered, trimmed below
+
+
+def install_answer_guard() -> None:
+    """Telegram shows only the FIRST answer to a callback query. Many handlers answer
+    early (to stop the spinner) and then, on a GameError, answer AGAIN with an alert —
+    which the client silently drops, so the button just looked dead (no «طلا کافی نداری»,
+    no «این انتقام دیگه در دسترس نیست», …). With this guard a second answer that carries
+    an alert is delivered as a normal message in the chat instead; a second plain toast
+    is skipped. Patched on the class: PTB objects are frozen per instance."""
+    from telegram import CallbackQuery
+
+    if getattr(CallbackQuery.answer, "_guarded", False):
+        return
+    original = CallbackQuery.answer
+
+    async def answer(self, text=None, show_alert=None, *args, **kwargs):
+        if self.id in _ANSWERED_QUERIES:
+            if text and show_alert and self.message is not None:
+                try:
+                    await self.get_bot().send_message(self.message.chat.id, alert_text(text, 600))
+                except Exception:  # noqa: BLE001 — best effort, never break the handler
+                    pass
+            return True
+        _ANSWERED_QUERIES[self.id] = None
+        while len(_ANSWERED_QUERIES) > 2000:
+            _ANSWERED_QUERIES.pop(next(iter(_ANSWERED_QUERIES)))
+        return await original(self, text, show_alert, *args, **kwargs)
+
+    answer._guarded = True
+    CallbackQuery.answer = answer
 
 
 def safe_truncate_html(text: str, max_chars: int = 1000) -> str:

@@ -5,6 +5,7 @@ import json
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.repository import get_or_create_user
 from bot.buttons import BUILD, CONFIRM, DANGER, NAV, PRIMARY, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
@@ -240,7 +241,7 @@ async def shop_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             _buy_sync, update.effective_user, key, price, currency, count=1
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     _remember_offers(context, offers)
     await query.answer(f"✅ خریدی: {shop.offer_reward_text(offer)}")
@@ -280,7 +281,7 @@ async def shop_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             _buy_sync, update.effective_user, key, unit_price, currency, count=count
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     _remember_offers(context, offers)
     await query.answer(f"✅ خریدی: {shop.offer_reward_text(offer)}")
@@ -306,7 +307,7 @@ async def shop_confirm_buy_callback(update: Update, context: ContextTypes.DEFAUL
             _buy_sync, update.effective_user, key, shown.get("price"), shown.get("currency"), count=count
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     _remember_offers(context, offers)
     await query.answer(f"✅ خریدی: {shop.offer_reward_text(offer)}")
@@ -513,7 +514,7 @@ async def shield_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_T
     try:
         result, diamonds, shield_secs = await run_db(_shield_buy_sync, update.effective_user, tier)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🛡 سپر فعال شد!")
     text, keyboard = _shield_render(diamonds, shield_secs)
@@ -606,7 +607,7 @@ async def item_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     except GameError as exc:
         if await show_gold_error(query, exc):
             return
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("✅ خریداری شد!")
     text, keyboard = _render(offers, coins, diamonds, items, gem)
@@ -668,7 +669,7 @@ async def gem_kaiju_do_buy_callback(update: Update, context: ContextTypes.DEFAUL
     except GameError as exc:
         if await show_gold_error(query, exc):
             return
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("✅ کایجوی جمی خریداری شد!")
     c = result["creature"]
@@ -761,7 +762,7 @@ async def group_shield_do_buy_callback(update: Update, context: ContextTypes.DEF
     try:
         result, diamonds, shield_secs = await run_db(_gshield_buy_sync, update.effective_user, tier)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🛡 سپر گروه فعال شد!")
     text, keyboard = _gshield_render(diamonds, shield_secs)
@@ -869,7 +870,7 @@ async def gold_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         pack, coins, diamonds = await run_db(_gold_buy_sync, update.effective_user, idx)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer(f"✅ {pack['gold']:,} طلا گرفتی!")
     text, keyboard = _gold_shop_render(coins, diamonds)

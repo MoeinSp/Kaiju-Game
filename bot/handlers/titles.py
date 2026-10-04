@@ -3,6 +3,7 @@
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.repository import get_or_create_user
 from bot.buttons import LIST, PRIMARY, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
@@ -53,7 +54,7 @@ async def title_set_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         equipped, avail, total = await run_db(_set_sync, update.effective_user, key)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("✅ لقب تنظیم شد" if key != "none" else "لقب برداشته شد")
     text, keyboard = _render(equipped, avail, total)

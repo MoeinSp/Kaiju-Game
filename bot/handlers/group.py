@@ -8,6 +8,7 @@ from django.db import transaction
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.models import Alliance, Creature, DuelLog, User
 from bio_lab.repository import (
     creature_name,
@@ -17,6 +18,7 @@ from bio_lab.repository import (
     get_or_create_user,
     group_member_creatures,
     lab_display,
+    lock_row,
     mention,
     touch_membership,
 )
@@ -577,10 +579,10 @@ async def transfer_free_go_callback(update: Update, context: ContextTypes.DEFAUL
             _free_and_preview_creature_sync, query.message.chat, update.effective_user, int(rid), int(cid)
         )
     except CreatureBusyError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🔓 آزاد شد — انتقال ادامه پیدا کرد.")
     c = preview["creature"]
@@ -738,14 +740,16 @@ async def maybe_capture_transfer_price(update: Update, context: ContextTypes.DEF
         context.user_data.pop("xfer_price_token", None)
         await message.reply_text("باشه، قیمت‌گذاری لغو شد.")
         return True
-    if not raw.isdigit():
-        await message.reply_text("فقط یه عدد بفرست (مثلا 5000) — یا «لغو».")
-        return True
     offer = _get_offer(token)
     if offer is None:
+        # expired: drop the prompt silently for ordinary chat, explain only for a number
         context.user_data.pop("xfer_price_token", None)
-        await message.reply_text("⌛ این پیشنهاد منقضی شد. دوباره از «انتقال …» شروع کن.")
-        return True
+        if raw.isdigit():
+            await message.reply_text("⌛ این پیشنهاد منقضی شد. دوباره از «انتقال …» شروع کن.")
+            return True
+        return False
+    if not raw.isdigit():
+        return False  # ordinary chat / keywords keep working while the price is pending
     if update.effective_user.id != offer["sender_id"]:
         return True  # not the seller — ignore
 
@@ -849,7 +853,7 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
                     reply_markup=InlineKeyboardMarkup([[_offer_receiver_keyboard(token).inline_keyboard[0][0]]]),
                 )
                 return
-            await query.answer(str(exc), show_alert=True)
+            await query.answer(alert_text(exc), show_alert=True)
             return
         _PENDING_OFFERS.pop(token, None)
         if offer["kind"] == "c":
@@ -942,9 +946,13 @@ def _attack_sync(chat, tg_user):
     if creature is None:
         raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
 
-    spend_energy(user, constants.RAID_ATTACK_ENERGY_COST, "حمله")
-    dmg, defeated, dna_gain, coin_gain, attacks_left = attack_boss(user, creature, boss)
-    user.save(update_fields=["energy", "energy_updated_at"])
+    # energy is saved BEFORE the hit (attack_boss re-reads the locked row); the atomic
+    # block rolls it back if the hit is refused (cooldown / daily cap / boss already dead)
+    with transaction.atomic():
+        lock_row(user)
+        spend_energy(user, constants.RAID_ATTACK_ENERGY_COST, "حمله")
+        user.save(update_fields=["energy", "energy_updated_at"])
+        dmg, defeated, dna_gain, coin_gain, attacks_left = attack_boss(user, creature, boss)
 
     record_action(user, "raid_attack")
     completed_missions = check_missions(user, "raid_attack")
@@ -1357,7 +1365,7 @@ async def gatk_opp_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     try:
         d = await run_db(_gatk_opp_details_sync, int(target_id))
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     from bot.handlers.arena import opponent_details_text
 
@@ -1376,7 +1384,7 @@ async def gatk_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         data = await run_db(_pvp_preview_by_ids_sync, int(attacker_id), int(target_id))
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     text, keyboard = _pvp_prompt_render(int(attacker_id), int(target_id), *data)
@@ -1407,7 +1415,7 @@ async def gatk_swap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         choices = await run_db(_gatk_team_choices_sync, int(attacker_id))
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     rows = []
@@ -1446,7 +1454,7 @@ async def gatk_swap_pick_callback(update: Update, context: ContextTypes.DEFAULT_
     try:
         data = await run_db(_gatk_swap_pick_sync, int(attacker_id), int(target_id), int(cid))
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("موجودت عوض شد." if int(cid) else "")
     text, keyboard = _pvp_prompt_render(int(attacker_id), int(target_id), *data)
@@ -1656,7 +1664,7 @@ async def _pvp_attack_execute(update, context, query, attacker_id: int, target_i
     try:
         result = await run_db(_pvp_attack_sync, update.effective_chat, update.effective_user, int(target_id))
     except (RaidError, GameError) as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     # INSTANT defense report DM to the attacked player (no 5-minute delay)
     from bot.handlers.notify import send_defense_report_now

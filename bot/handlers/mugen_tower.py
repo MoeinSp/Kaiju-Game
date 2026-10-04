@@ -3,6 +3,7 @@
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.models import Creature, User
 from bio_lab.repository import get_active_creature, get_or_create_user
 from bot.buttons import BATTLE, CONFIRM, LIST, NAV, back_btn, back_only_keyboard, btn
@@ -122,7 +123,7 @@ async def mugen_swap_pick_callback(update: Update, context: ContextTypes.DEFAULT
     try:
         view = await run_db(_swap_pick_sync, update.effective_user, creature_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("هیولای فعال تنظیم شد.")
     is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
@@ -167,7 +168,7 @@ async def mugen_fight_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         res = await run_db(_do_fight, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
 
     await query.answer()
@@ -240,7 +241,7 @@ async def mugen_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         view = await run_db(_mugen_panel_sync, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     from game.media import get_feature_image_path
     photo = get_feature_image_path("mugen_tower")

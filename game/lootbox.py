@@ -3,6 +3,7 @@ import random
 from django.db import transaction
 
 from bio_lab.models import Creature, User
+from bio_lab.repository import lock_row
 from game import constants
 from game.creature import GameError, InsufficientGoldError
 from game.equipment import roll_equipment
@@ -81,6 +82,7 @@ def _charge_biocrate(user: User, cfg: dict, times: int) -> None:
 @transaction.atomic
 def open_biocrate(user: User, tier: str = "basic") -> dict:
     cfg = _biocrate_cfg(tier)
+    lock_row(user)
     _charge_biocrate(user, cfg, 1)
     return _biocrate_roll_once(user, cfg, tier)
 
@@ -208,7 +210,7 @@ def can_claim_free_silver_box(user: User) -> bool:
 
 
 @transaction.atomic
-def open_diamond_box(user: User, tier: str) -> dict:
+def open_diamond_box(user: User, tier: str, require_free: bool = False) -> dict:
     """Diamond boxes always yield a creature (never equipment) — this is the "open
     a new monster with diamonds" path the gold Bio-Crate doesn't guarantee.
 
@@ -232,6 +234,10 @@ def open_diamond_box(user: User, tier: str) -> dict:
             is_free = True
 
     if not is_free:
+        if require_free:
+            # the player tapped «باز کردن رایگان» (no price confirm was shown) but the
+            # free one is already used — a double-tap used to charge diamonds here
+            raise GameError("باکس رایگان امروزت رو قبلاً گرفتی.")
         _charge_diamond_box(user, cfg, 1)
 
     result = _diamond_box_roll_once(user, cfg, tier)
@@ -243,6 +249,7 @@ def open_diamond_box(user: User, tier: str) -> dict:
 def open_diamond_box_bulk(user: User, tier: str) -> dict:
     """Pay for BULK_PAY diamond boxes, open BULK_OPEN (one free)."""
     cfg = _diamond_box_cfg(tier)
+    lock_row(user)  # a double-tap used to open 22 boxes for the price of 10
     _charge_diamond_box(user, cfg, BULK_PAY)
     rolls = [_diamond_box_roll_once(user, cfg, tier) for _ in range(BULK_OPEN)]
     return _summarise_rolls(rolls, tier, paid=BULK_PAY, opened=BULK_OPEN)

@@ -9,9 +9,12 @@ between the gacha. The daily rotation is the recurring reason to look.
 
 from __future__ import annotations
 
+from django.db import transaction
+
 from django.utils import timezone
 
 from bio_lab.models import User
+from bio_lab.repository import lock_row
 from game import constants
 from game.creature import GameError
 
@@ -453,11 +456,13 @@ GOLD_PACKS = [
 ]
 
 
+@transaction.atomic
 def buy_gold_pack(user: User, idx: int) -> dict:
     """Spend diamonds for a fixed gold pack. Always available (not day-gated)."""
     if idx < 0 or idx >= len(GOLD_PACKS):
         raise GameError("این بسته‌ی طلا وجود نداره.")
     pack = GOLD_PACKS[idx]
+    lock_row(user)
     if user.diamonds < pack["diamonds"]:
         raise GameError(
             f"الماس کافی نداری! این بسته {pack['diamonds']} الماس می‌خواد "

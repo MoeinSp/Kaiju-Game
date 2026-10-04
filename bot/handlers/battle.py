@@ -1,7 +1,12 @@
-from django.db.models import Q
+import datetime
+
+from django.db import transaction
+from django.db.models import F, Q
+from django.utils import timezone
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.models import InteractiveBattle, User
 from bio_lab.repository import display_name, get_active_creature, get_or_create_group, get_or_create_user, touch_membership
 from bot.buttons import BATTLE, CONFIRM, DANGER, PRIMARY, back_btn, btn
@@ -11,6 +16,14 @@ from game.creature import GameError, add_xp, effective_stats
 from game.daily import check_missions, record_action
 from game.emoji import get_emoji
 from game.interactive_battle import advance_turn, is_finished, perform_action, pick_first_turn, render_battle_card
+
+
+# A live battle nobody is playing must not block that pair forever: an unanswered offer
+# or an abandoned fight stops counting after this long.
+BATTLE_STALE_MINUTES = 15
+# Live battles cost no energy, so the WIN REWARD is capped per day — otherwise two
+# accounts could loop «/battle → قبول → تسلیم» for unlimited gold/XP/mission progress.
+LIVE_BATTLE_REWARDED_WINS_PER_DAY = 3
 
 
 def _battle_keyboard(battle: InteractiveBattle) -> InlineKeyboardMarkup:
@@ -36,6 +49,10 @@ def _battle_cmd_sync(chat, challenger_tg, opponent_tg):
     if opponent_creature is None:
         raise GameError(f"{opponent_tg.first_name} هنوز موجودی نداره (باید /start بزنه).")
 
+    stale_before = timezone.now() - datetime.timedelta(minutes=BATTLE_STALE_MINUTES)
+    InteractiveBattle.objects.filter(
+        group_id=group.id, status__in=["pending", "active"], created_at__lt=stale_before
+    ).update(status="expired")
     existing = (
         InteractiveBattle.objects.filter(group_id=group.id, status__in=["pending", "active"])
         .filter(
@@ -122,7 +139,7 @@ async def battle_accept_callback(update: Update, context: ContextTypes.DEFAULT_T
     try:
         battle = await run_db(_battle_accept_sync, battle_id, update.effective_user.id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     await safe_edit_message_text(query,
@@ -149,15 +166,17 @@ async def battle_decline_callback(update: Update, context: ContextTypes.DEFAULT_
     try:
         await run_db(_battle_decline_sync, battle_id, update.effective_user.id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     await safe_edit_message_text(query, f"{get_emoji('cancel')} پیشنهاد نبرد زنده رد شد.", parse_mode="HTML")
 
 
+@transaction.atomic
 def _battle_action_sync(battle_id, actor_tg_id, action):
     try:
-        battle = InteractiveBattle.objects.get(id=battle_id)
+        # row lock: two taps on the same turn used to both apply (and pay the win twice)
+        battle = InteractiveBattle.objects.select_for_update().get(id=battle_id)
     except InteractiveBattle.DoesNotExist:
         raise GameError("این نبرد دیگه فعال نیست.")
     if battle.status != "active":
@@ -180,14 +199,24 @@ def _battle_action_sync(battle_id, actor_tg_id, action):
         winner_user_id = battle.player_a_id if winner_side == "a" else battle.player_b_id
         winner_creature = battle.creature_a if winner_side == "a" else battle.creature_b
         loser_creature = battle.creature_b if winner_side == "a" else battle.creature_a
-        winner_user = User.objects.get(id=winner_user_id)
+        winner_user = User.objects.select_for_update().get(id=winner_user_id)
+
+        rewarded_today = record_action(winner_user, "live_battle_win")
+        if rewarded_today > LIVE_BATTLE_REWARDED_WINS_PER_DAY:
+            battle.save()
+            reward_lines.append(
+                f"<blockquote>{get_emoji('trophy')} <b>{winner_creature.name} برنده شد!</b>\n"
+                f"پاداش نبرد زنده روزی {LIVE_BATTLE_REWARDED_WINS_PER_DAY} بار داده می‌شه؛ "
+                f"سهم امروزت رو گرفتی.</blockquote>"
+            )
+            return battle, finished, reward_lines
 
         reward = constants.duel_win_reward(loser_creature.level)
-        winner_user.coins += reward["coins"]
-        winner_user.dna_fragments += reward["dna"]
+        User.objects.filter(id=winner_user.id).update(
+            coins=F("coins") + reward["coins"], dna_fragments=F("dna_fragments") + reward["dna"]
+        )
         winner_levels = add_xp(winner_creature, reward["xp"])
         add_xp(loser_creature, constants.DUEL_LOSE_XP)
-        winner_user.save(update_fields=["coins", "dna_fragments"])
         winner_creature.save()
         loser_creature.save()
 
@@ -221,7 +250,7 @@ async def battle_action_callback(update: Update, context: ContextTypes.DEFAULT_T
             _battle_action_sync, battle_id, update.effective_user.id, action
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
 
     await query.answer()

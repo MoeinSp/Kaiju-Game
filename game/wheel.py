@@ -3,6 +3,7 @@ import random
 from django.db import transaction
 
 from bio_lab.models import Creature, User
+from bio_lab.repository import lock_row
 from bio_lab.repository import get_active_creature
 from game import constants
 from game.buildings import grant_speedup_card
@@ -135,6 +136,7 @@ def spin(user: User) -> dict:
     # consume the daily spin ATOMICALLY before granting, so a rapid double-tap can't
     # spin twice off one day's allowance.
     consume_daily(user, "wheel_spin")
+    lock_row(user)  # the prize is added to a fresh balance, not a stale one
     
     scale, power, cup = _compute_user_scale(user)
     prizes = _build_prize_pool(user, scale, power, cup)

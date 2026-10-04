@@ -16,6 +16,7 @@ from __future__ import annotations
 from django.db import transaction
 
 from bio_lab.models import User
+from bio_lab.repository import lock_row
 from game import lab
 
 MILESTONE_LEVEL = 3  # the friend must reach this lab level for the reward to unlock
@@ -78,7 +79,8 @@ def _settle_one(friend: User) -> User | None:
     )
     if not claimed:
         return None
-    referrer = User.objects.filter(id=friend.referred_by).first()
+    referrer = User.objects.select_for_update().filter(id=friend.referred_by).first()
+    lock_row(friend)
     _grant(friend, FRIEND_REWARD)
     if referrer is not None:
         _grant(referrer, REFERRER_REWARD)

@@ -1,8 +1,10 @@
 from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.models import Alliance, Creature, User
 from bio_lab.repository import (
     creature_has_nickname,
@@ -11,6 +13,7 @@ from bio_lab.repository import (
     get_active_creature,
     get_or_create_user,
     lab_display,
+    lock_row,
     lab_name_taken,
 )
 from bot.handlers.achievements import achievements_panel
@@ -697,7 +700,7 @@ async def upgrade_page_callback(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         user, ranked = await run_db(_upgrade_list_sync, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     text, keyboard = _upgrade_render(user, ranked, filt, page)
@@ -724,7 +727,7 @@ async def upgrade_pick_callback(update: Update, context: ContextTypes.DEFAULT_TY
             _upgrade_pick_sync, update.effective_user, creature_id
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     step = context.user_data.get("upg_step", 1)
@@ -755,7 +758,7 @@ async def equip_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         user, creature, slots = await run_db(_equip_panel_sync, update.effective_user, creature_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     await safe_edit_message_text(
@@ -782,7 +785,7 @@ async def equip_slot_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         user, creature, slots = await run_db(_equip_panel_sync, update.effective_user, creature_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     row = next((r for r in slots if r["slot"] == slot), None)
     if row is None:
@@ -880,7 +883,7 @@ async def equip_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             handler, update.effective_user, int(creature_id_raw), int(item_id_raw)
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     verb = "تجهیز شد" if action == "upg_equip" else "خارج شد"
     await query.answer(f"{item.name} {verb}")
@@ -902,7 +905,7 @@ async def upgrade_set_default_callback(update: Update, context: ContextTypes.DEF
             _upgrade_pick_sync, update.effective_user, creature_id
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🟢 پیش‌فرض شد!")
     step = context.user_data.get("upg_step", 1)
@@ -1444,9 +1447,11 @@ def _lab_action_sync(tg_user, action, creature_id, count=1):
 
     completed_missions: list[dict] = []
     if action == "feed":
-        spend_energy(user, constants.FEED_ENERGY_COST, "تغذیه")
-        levels = feed(user, creature)
-        user.save(update_fields=["energy", "energy_updated_at"])
+        with transaction.atomic():  # feed() re-reads the locked row → save energy first
+            lock_row(user)
+            spend_energy(user, constants.FEED_ENERGY_COST, "تغذیه")
+            user.save(update_fields=["energy", "energy_updated_at"])
+            levels = feed(user, creature)
         record_action(user, "feed")
         completed_missions = check_missions(user, "feed")
         note = "🍖 <b>تغذیه شد!</b>" + (
@@ -1491,7 +1496,7 @@ async def upgrade_step_callback(update: Update, context: ContextTypes.DEFAULT_TY
             _upgrade_view_sync, update.effective_user, int(creature_id)
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer(f"هر ارتقا حالا ×{context.user_data['upg_step']}")
     await safe_edit_message_text(query,
@@ -1532,7 +1537,7 @@ async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             return
         # Telegram caps callback-alert text at 200 chars — a longer message throws
         # BadRequest("Message_too_long"), which used to crash this handler
-        await query.answer(str(exc)[:200], show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     if result is None:
         await query.answer()
@@ -1635,7 +1640,7 @@ async def feedcap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         try:
             user, creature, caps, maxed = await run_db(_feedcap_view_sync, update.effective_user, creature_id)
         except GameError as exc:
-            await query.answer(str(exc), show_alert=True)
+            await query.answer(alert_text(exc), show_alert=True)
             return
         await query.answer()
         await safe_edit_message_text(query, feedcap_text(user, creature, caps, maxed),
@@ -1647,7 +1652,7 @@ async def feedcap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             _feedcap_do_sync, update.effective_user, creature_id, sub, tier
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     eaten = sum(result["consumed"].values())
     lvl = f"\n{get_emoji('celebrate')} <b>رسید به سطح <code>{result['new_level']}</code>!</b>" if result["levels"] else ""
@@ -1806,14 +1811,14 @@ def collection_creature_detail_text(creature, equipped_items: list | None = None
         lines.append(f"📈 پیشرفت لول: {pct_bar(creature.xp, xp_needed)} (<code>{creature.xp:,}/{xp_needed:,}</code> تجربه)")
 
     parts_info = []
-    if getattr(creature, "wings_level", 0) > 0:
-        parts_info.append(f"🦋 بال‌ها: لول <code>{creature.wings_level}</code>")
-    if getattr(creature, "fangs_level", 0) > 0:
-        parts_info.append(f"🦷 نیش: لول <code>{creature.fangs_level}</code>")
-    if getattr(creature, "armor_level", 0) > 0:
-        parts_info.append(f"🛡 زره: لول <code>{creature.armor_level}</code>")
-    if getattr(creature, "poison_level", 0) > 0:
-        parts_info.append(f"☠️ غده سمی: لول <code>{creature.poison_level}</code>")
+    if getattr(creature, "wings_lvl", 0) > 0:
+        parts_info.append(f"🦋 بال‌ها: لول <code>{creature.wings_lvl}</code>")
+    if getattr(creature, "fangs_lvl", 0) > 0:
+        parts_info.append(f"🦷 نیش: لول <code>{creature.fangs_lvl}</code>")
+    if getattr(creature, "armor_lvl", 0) > 0:
+        parts_info.append(f"🛡 زره: لول <code>{creature.armor_lvl}</code>")
+    if getattr(creature, "poison_lvl", 0) > 0:
+        parts_info.append(f"☠️ غده سمی: لول <code>{creature.poison_lvl}</code>")
     if parts_info:
         lines += ["", _CARD_DIV, "🧬 <b>اعضای تقویت‌شده:</b>"] + parts_info
 
@@ -1859,7 +1864,7 @@ async def collection_pick_callback(update: Update, context: ContextTypes.DEFAULT
     try:
         user, creature, equipped_items = await run_db(_creature_detail_sync, update.effective_user, creature_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     from game.media import get_creature_image_path
@@ -1899,7 +1904,7 @@ async def kaiju_rename_callback(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         creature, cost = await run_db(_rename_prompt_sync, update.effective_user, creature_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     context.user_data.pop("pending_kaiju_rename", None)
     context.user_data[AWAITING_PLAYER_KEY] = {
@@ -1936,7 +1941,7 @@ async def kaiju_rename_ok_callback(update: Update, context: ContextTypes.DEFAULT
     try:
         res = await run_db(_rename_kaiju_sync, update.effective_user, creature_id, pending["name"])
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     context.user_data.pop("pending_kaiju_rename", None)
     back_cb = f"upg_pick:{creature_id}" if origin == "u" else f"coll_pick:{creature_id}"
@@ -1982,7 +1987,7 @@ async def collection_select_callback(update: Update, context: ContextTypes.DEFAU
     try:
         user, creature, equipped_items = await run_db(_select_sync, update.effective_user, creature_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     is_owner = _is_admin_user(update.effective_user.id if update.effective_user else None)
     await query.answer("🟢 انتخاب شد!")
@@ -1992,7 +1997,7 @@ async def collection_select_callback(update: Update, context: ContextTypes.DEFAU
         f"🟢 <b>{creature_name(creature)}</b> حالا موجود فعالته!\n\n" + creature_card_text(user, creature, equipped_items, compact=bool(photo_path)),
         photo=photo_path,
         parse_mode="HTML",
-        reply_markup=creature_keyboard(is_owner),
+        reply_markup=creature_keyboard(None, is_owner),
     )
 
 
@@ -2114,7 +2119,7 @@ async def _devour_rerender(update, context, target_id: int) -> None:
     try:
         target, scored, xp_to_max = await run_db(_devour_list_sync, update.effective_user, target_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     selected = _devour_selection(context, target_id)
     text, keyboard = _devour_list_render(target, scored, selected, _devour_page(context, target_id), xp_to_max)
@@ -2166,7 +2171,7 @@ async def devour_select_all_callback(update: Update, context: ContextTypes.DEFAU
         try:
             _target, scored, xp_to_max = await run_db(_devour_list_sync, update.effective_user, target_id)
         except GameError as exc:
-            await query.answer(str(exc), show_alert=True)
+            await query.answer(alert_text(exc), show_alert=True)
             return
         # «انتخاب همه» caps at the XP needed to max — pick strongest-first until the
         # target would fill up (the one that crosses the line is included), so it never
@@ -2205,7 +2210,7 @@ async def devour_multi_callback(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         result = await run_db(_devour_multi_sync, update.effective_user, target_id, selection)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     context.user_data.get(_DEVOUR_SEL, {}).pop(target_id, None)  # consumed
     target = result["target"]
@@ -2242,7 +2247,7 @@ async def select(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         f"🟢 <b>{creature_name(creature)}</b> حالا موجود فعالته!\n\n" + creature_card_text(user, creature, equipped_items),
         parse_mode="HTML",
-        reply_markup=creature_keyboard(is_owner),
+        reply_markup=creature_keyboard(None, is_owner),
     )
 
 
@@ -2280,7 +2285,7 @@ async def fusion_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         + creature_card_text(user, child, equipped_items)
         + _mission_lines(completed_missions),
         parse_mode="HTML",
-        reply_markup=creature_keyboard(is_owner),
+        reply_markup=creature_keyboard(None, is_owner),
     )
 
 
@@ -2306,7 +2311,7 @@ async def fusion_pick_a_callback(update: Update, context: ContextTypes.DEFAULT_T
             _fusion_candidates_sync, update.effective_user, parent_a_id
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
 
     if not candidates:
@@ -2401,7 +2406,7 @@ async def upgrade_fusion_gate_callback(update: Update, context: ContextTypes.DEF
     try:
         g = await run_db(_fusion_gate_sync, update.effective_user, cid)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
 
@@ -2552,6 +2557,7 @@ async def fusion_rarity_callback(update: Update, context: ContextTypes.DEFAULT_T
     if not lab_built:
         await update.callback_query.answer()
         return
+    await update.callback_query.answer()
     text, keyboard = _fusion_body(user, pairs, cap, filt)
     await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
 
@@ -2572,7 +2578,7 @@ async def fusion_pick_b_callback(update: Update, context: ContextTypes.DEFAULT_T
     try:
         cost = await run_db(_fusion_cost_sync, update.effective_user, int(a_id), int(b_id))
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     keyboard = InlineKeyboardMarkup(
@@ -2604,7 +2610,7 @@ async def fusion_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
 
         if await show_gold_error(query, exc):
             return
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     is_owner = _is_admin_user(update.effective_user.id if update.effective_user else None)
     inherit_note = "\n🧬 یه تجهیزات از والدین به ارث رسید!" if inherited else ""
@@ -2615,7 +2621,7 @@ async def fusion_confirm_callback(update: Update, context: ContextTypes.DEFAULT_
         + creature_card_text(user, child, equipped_items)
         + _mission_lines(completed_missions),
         parse_mode="HTML",
-        reply_markup=creature_keyboard(is_owner),
+        reply_markup=creature_keyboard(None, is_owner),
     )
 
 
@@ -2712,11 +2718,11 @@ def _hunt_scout_sync(tg_user, charge=False):
     my_power = _creature_power(creature, equipped)
     cost = scout_cost(creature, power=my_power)
     if charge:  # «بعدی» costs a little gold, scaled by power
-        if user.coins < cost:
-            raise GameError(f"برای جستجوی دوباره {cost} طلا لازمه (الان {user.coins} داری).")
+        paid = type(user).objects.filter(id=user.id, coins__gte=cost).update(coins=F("coins") - cost)
+        if not paid:
+            raise GameError(f"برای جستجوی دوباره {cost:,} طلا لازمه (الان {user.coins:,} داری).")
         user.coins -= cost
-        user.save(update_fields=["coins"])
-    return creature, my_power, user.cup, scout_one(user, creature, benchmark_power=my_power), sync_energy(user), cost
+    return creature, my_power, user.cup, scout_one(user, creature), sync_energy(user), cost
 
 
 def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> str:
@@ -2803,7 +2809,11 @@ def _hunt_scout_keyboard(target, scout_price=0) -> InlineKeyboardMarkup:
 
 async def hunt_encounter_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    _, enc_type, action = query.data.split(":")
+    parts = query.data.split(":")
+    if len(parts) != 3:
+        await query.answer()
+        return
+    _, enc_type, action = parts
 
     def _do_enc(tg_user):
         user, _ = get_or_create_user(tg_user)
@@ -2811,7 +2821,11 @@ async def hunt_encounter_callback(update: Update, context: ContextTypes.DEFAULT_
         from game.hunt import resolve_encounter_action
         return resolve_encounter_action(user, creature, enc_type, action)
 
-    res = await run_db(_do_enc, update.effective_user)
+    try:
+        res = await run_db(_do_enc, update.effective_user)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
     await query.answer()
     text = res["msg"]
     keyboard = InlineKeyboardMarkup([
@@ -2850,7 +2864,7 @@ async def hunt_next_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         creature, my_power, cup, target, energy, cost = await run_db(_hunt_scout_sync, update.effective_user, True)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await safe_edit_message_text(
         query,
@@ -2917,7 +2931,7 @@ async def hunt_swap_pick_callback(update: Update, context: ContextTypes.DEFAULT_
             _hunt_swap_pick_sync, update.effective_user, tier, seed, int(cid)
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("موجودت عوض شد." if int(cid) else "")
     await safe_edit_message_text(
@@ -2960,7 +2974,7 @@ async def hunt_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         from bot.handlers.energy import show_energy_error
 
         if not await show_energy_error(query, exc):
-            await query.answer(str(exc), show_alert=True)
+            await query.answer(alert_text(exc), show_alert=True)
         return
 
     if result["won"]:
@@ -3100,7 +3114,7 @@ async def autohunt_start_callback(update: Update, context: ContextTypes.DEFAULT_
     try:
         energy, max_en = await run_db(_autohunt_info_sync, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     if energy < constants.HUNT_ENERGY_COST:
         await _autohunt_no_energy(query, energy, max_en)
@@ -3131,7 +3145,7 @@ async def autohunt_amt_callback(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         energy, max_en = await run_db(_autohunt_info_sync, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     if energy < constants.HUNT_ENERGY_COST:
         await _autohunt_no_energy(query, energy, max_en)
@@ -3165,7 +3179,7 @@ async def autohunt_do_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         from bot.handlers.energy import show_energy_error
 
         if not await show_energy_error(query, exc):
-            await query.answer(str(exc), show_alert=True)
+            await query.answer(alert_text(exc), show_alert=True)
         return
     lines = [
         f"⚡️ <b>نتیجه شکار خودکار</b>",
@@ -3618,7 +3632,7 @@ async def alliance_approve_callback(update: Update, context: ContextTypes.DEFAUL
     try:
         result, data = await run_db(_approve_sync, update.effective_user, req_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         # refresh the list (the request may have vanished)
         data = await run_db(_requests_sync, update.effective_user)
         if data is not None:
@@ -3653,7 +3667,7 @@ async def alliance_reject_callback(update: Update, context: ContextTypes.DEFAULT
     try:
         result, data = await run_db(_reject_sync, update.effective_user, req_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("❌ رد شد.")
     await _pv_notify(
@@ -3717,7 +3731,7 @@ async def alliance_toggle_auto_callback(update: Update, context: ContextTypes.DE
     try:
         data = await run_db(_toggle_auto_sync, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("✅ ذخیره شد.")
     text, keyboard = _settings_render(data)
@@ -3770,7 +3784,7 @@ async def alliance_deputy_off_callback(update: Update, context: ContextTypes.DEF
     try:
         data = await run_db(_deputy_off_sync, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("قائم‌مقام برداشته شد.")
     text, keyboard = _members_render(data)
@@ -3937,7 +3951,7 @@ async def alliance_browse_join_callback(update: Update, context: ContextTypes.DE
     try:
         result = await run_db(_join_by_id_sync, update.effective_user, alliance_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await _handle_join_result(update, context, result, via_query=query)
 
@@ -4001,7 +4015,7 @@ async def alliance_leave_confirm_callback(update: Update, context: ContextTypes.
     try:
         await run_db(_alliance_leave_sync, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("👋 خارج شدی.")
     await safe_edit_message_text(query, "👋 از اتحاد خارج شدی.")
@@ -4019,7 +4033,7 @@ async def alliance_heist_list_callback(update: Update, context: ContextTypes.DEF
     try:
         targets = await run_db(_heist_targets_sync, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     if not targets:
         await query.answer("هیچ اتحاد دیگه‌ای برای شبیخون نیست.", show_alert=True)
@@ -4054,7 +4068,7 @@ async def heist_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         result, target = await run_db(_heist_by_id_sync, update.effective_user, target_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🟢 انجام شد!" if result["success"] else "🔴 شکست خوردی.")
     lines = []
@@ -4716,7 +4730,7 @@ async def lab_rename_ok_callback(update: Update, context: ContextTypes.DEFAULT_T
     try:
         user, cost, _newname = await run_db(_rename_lab_sync, update.effective_user, pending["name"])
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     context.user_data.pop("pending_lab_rename", None)
     await query.answer("✅ نام آزمایشگاه تغییر کرد!")
@@ -5165,6 +5179,10 @@ def _hall_level_sync(tg_user) -> int:
 async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     action = query.data.split(":", 1)[1]
+    # Navigating away (incl. every «انصراف» that routes to a menu) cancels a pending
+    # text prompt — otherwise the NEXT plain message was still consumed by it (a later
+    # number got deposited into the treasury, or kicked a member by id).
+    context.user_data.pop(AWAITING_PLAYER_KEY, None)
     # The full DM menu must never open inside a group — walking up categories/root there
     # would expose the whole private menu. But group-reachable panels (alliance sub-panels,
     # the ticket exchange) legitimately have «بازگشت» buttons. So in a group we resolve
@@ -5242,8 +5260,11 @@ async def onboarding_hatch_callback(update: Update, context: ContextTypes.DEFAUL
     await send_screen(update, text, photo=photo_path, parse_mode="HTML", reply_markup=keyboard)
 
 
+@transaction.atomic
 def _onboarding_hatch_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
+    # lock the row: a double-tap used to hatch two starters (both active)
+    user = type(user).objects.select_for_update().get(id=user.id)
     creature = get_active_creature(user)
     if creature is None:
         creature = create_starter_creature(user)
@@ -5258,6 +5279,9 @@ async def onboarding_hunt_callback(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     await query.answer("⚔️ در حال نبرد در جنگل...")
     user, creature, loot = await run_db(_onboarding_hunt_sync, update.effective_user)
+    if loot is None:  # already claimed (replayed button) → just go to the menu
+        await me(update, context)
+        return
     from game.media import get_feature_image_path
     photo_path = get_feature_image_path("hunt")
     text = (
@@ -5274,16 +5298,26 @@ async def onboarding_hunt_callback(update: Update, context: ContextTypes.DEFAULT
     await send_screen(update, text, photo=photo_path, parse_mode="HTML", reply_markup=keyboard)
 
 
+@transaction.atomic
 def _onboarding_hunt_sync(tg_user):
+    from bio_lab.models import DailyActionLog
+
     user, _ = get_or_create_user(tg_user)
+    user = type(user).objects.select_for_update().get(id=user.id)
     creature = get_active_creature(user)
     loot = {"coins": 1000, "dna": 200, "diamonds": 20}
+    # the tutorial loot is paid ONCE: only while onboarding is still open, and the
+    # marker row (unique per user) stops replays of a kept/duplicated button
+    _, first_time = DailyActionLog.objects.get_or_create(
+        user=user, action="onboarding_loot", day="once", defaults={"count": 1}
+    )
+    if user.onboarding_completed or creature is None or not first_time:
+        return user, creature, None
     user.coins += loot["coins"]
     user.dna_fragments += loot["dna"]
     user.diamonds += loot["diamonds"]
     user.save(update_fields=["coins", "dna_fragments", "diamonds"])
-    from bio_lab.models import DailyActionLog
-    DailyActionLog.objects.create(user=user, action="hunt", count=1)
+    DailyActionLog.objects.get_or_create(user=user, action="hunt", day="", defaults={"count": 1})
     return user, creature, loot
 
 
@@ -5320,11 +5354,13 @@ def _onboarding_upgrade_sync(tg_user):
 
     user, _ = get_or_create_user(tg_user)
     creature = get_active_creature(user)
-    if creature and creature.level < 2:
+    # only during the tutorial (a kept button must not hand out free levels later), and
+    # with the canonical level-2 stats instead of an ad-hoc ×1.2
+    if creature and creature.level < 2 and not user.onboarding_completed:
+        canon = constants.canonical_base_stats(creature.rarity, 2)
         creature.level = 2
-        creature.base_hp = int(creature.base_hp * 1.2)
-        creature.base_atk = int(creature.base_atk * 1.2)
-        creature.base_def = int(creature.base_def * 1.2)
+        creature.base_hp, creature.base_atk = canon["base_hp"], canon["base_atk"]
+        creature.base_def, creature.base_spd = canon["base_def"], canon["base_spd"]
         creature.save()
     user.onboarding_completed = True
     if user.story_step < 2:
@@ -5335,7 +5371,13 @@ def _onboarding_upgrade_sync(tg_user):
     return user, creature, equipped_items, main_hall_level(user), research.is_unlocked(user), quest
 
 
+async def _noop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Label-only buttons (page indicators) — just stop the loading spinner."""
+    await update.callback_query.answer()
+
+
 def register(application) -> None:
+    application.add_handler(CallbackQueryHandler(_noop_callback, pattern=r"^noop$"))
     application.add_handler(CommandHandler("start", start, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("off", transfer_notify_off_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("on", transfer_notify_on_cmd, filters.ChatType.PRIVATE))

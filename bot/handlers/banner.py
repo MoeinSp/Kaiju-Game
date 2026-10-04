@@ -3,6 +3,7 @@
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.repository import get_or_create_user
 from bot.buttons import CONFIRM, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
@@ -78,7 +79,7 @@ async def banner_pull_do_callback(update: Update, context: ContextTypes.DEFAULT_
     try:
         result, st = await run_db(_pull_sync, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🎰 کشیده شد!")
     cr = result["creature"]

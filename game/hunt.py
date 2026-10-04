@@ -1,10 +1,12 @@
 import random
 
+from django.db import transaction
+
 from bio_lab.models import Creature, User
 from game import constants
 from game.combat import resolve_duel
 from game import lab
-from game.creature import add_xp, effective_stats
+from game.creature import GameError, add_xp, effective_stats
 
 WILD_NAMES = ["Ferabeast", "Grimhide", "Rustclaw", "Mossfang", "Duskrunner"]
 
@@ -172,6 +174,16 @@ def spawn_wild_creature(benchmark_power: int, tier: str = "normal", seed: int | 
 
 ENCOUNTER_CHANCE = 0.02  # 2% chance for a special random encounter instead of standard wild
 
+# The encounter a player was actually SHOWN and hasn't resolved yet: {user_id: enc_type}.
+# resolve_encounter_action() pops it, so a card pays exactly once — without this, every
+# repeated/forged «henc:» tap paid the reward again (no energy, no limit). In-memory on
+# purpose (single bot process): a restart just expires the open card.
+_PENDING_ENCOUNTERS: dict[int, str] = {}
+_ENCOUNTER_ACTIONS = {
+    "chest": ("open", "leave"), "thief": ("fight", "leave"),
+    "fork": ("crystal", "volcano"), "spring": ("drink", "leave"),
+}
+
 ENCOUNTERS = {
     "chest": {
         "title": "🎁 صندوقچه طلسم‌شده باستانی",
@@ -202,6 +214,7 @@ def scout_one(user: User, player_creature: Creature, benchmark_power: int | None
     # 2% chance for special random encounter
     if random.random() < ENCOUNTER_CHANCE:
         enc_type = random.choice(list(ENCOUNTERS.keys()))
+        _PENDING_ENCOUNTERS[user.id] = enc_type
         return {
             "is_encounter": True,
             "enc_type": enc_type,
@@ -215,6 +228,7 @@ def scout_one(user: User, player_creature: Creature, benchmark_power: int | None
             "reward_mult": 1.0,
         }
 
+    _PENDING_ENCOUNTERS.pop(user.id, None)  # a fresh scout replaces any open encounter
     tier = random.choice(list(HUNT_TIERS))
     seed = random.randrange(1_000_000)
     bench = benchmark_power if benchmark_power is not None else hunt_benchmark_power(user)
@@ -415,10 +429,18 @@ def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal",
     }
 
 
+@transaction.atomic
 def resolve_encounter_action(user: User, player_creature: Creature, enc_type: str, action: str) -> dict:
-    """Resolve an action on a special random hunt encounter."""
+    """Resolve an action on a special random hunt encounter. Pays only for the encounter
+    the player was actually shown, and only once (see _PENDING_ENCOUNTERS)."""
     from game.ledger import record_gain
     from game.creature import creature_power
+
+    if action not in _ENCOUNTER_ACTIONS.get(enc_type, ()):
+        raise GameError("این رویداد دیگه معتبر نیست. دوباره شکار رو بزن.")
+    if _PENDING_ENCOUNTERS.pop(user.id, None) != enc_type:  # pop = atomic, one payout
+        raise GameError("این رویداد قبلاً استفاده شده یا منقضی شده. دوباره شکار رو بزن.")
+    user = User.objects.select_for_update().get(id=user.id)
 
     if player_creature:
         power = max(50, creature_power(player_creature))
@@ -480,7 +502,7 @@ def resolve_encounter_action(user: User, player_creature: Creature, enc_type: st
             from game.energy import get_max_energy, sync_energy
             sync_energy(user)
             user.energy = min(get_max_energy(user), user.energy + energy_gain)
-            user.save(update_fields=["energy"])
+            user.save(update_fields=["energy", "energy_updated_at"])
             msg = f"✨ <b>نوشیدن از چشمه حیات:</b> جان و روان کایجوت تازه شد! <b>+{energy_gain} انرژی فوری</b> و <b>+{xp_gain} XP</b> دریافت کردی!"
         else:
             msg = "🏃 از کنار چشمه آرام گذشتی."

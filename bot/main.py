@@ -59,6 +59,10 @@ from game import admins, botconfig  # noqa: E402
 from game.theme import refresh_theme_caches  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+# httpx logs «HTTP Request: POST https://api.telegram.org/bot<TOKEN>/…» at INFO for every
+# API call — that put the bot token into `docker logs`. Keep these at WARNING.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 # every "awaiting a plain-text reply" key across the bot — if any is pending, the
@@ -156,6 +160,9 @@ def _widen_db_thread_pool() -> None:
 
 async def _post_init(application: Application) -> None:
     _widen_db_thread_pool()
+    from bot.utils import install_answer_guard
+
+    install_answer_guard()
     await _configure_commands(application)
     await _warn_if_group_privacy_on(application)
 

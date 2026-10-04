@@ -138,6 +138,8 @@ def start(user: User, parent_a: Creature, parent_b: Creature) -> BreedingJob:
     # twice: the second call blocks here, then sees the job the first created and bounces
     user = User.objects.select_for_update().get(id=user.id)
     assert_available(user)
+    if parent_a.id == parent_b.id:
+        raise GameError("دو هیولای متفاوت انتخاب کن — یه هیولا نمی‌تونه با خودش جفت بشه.")
     from game.subscription import get_subscription_tier
 
     max_jobs = 2 if get_subscription_tier(user) == "gold" else 1

@@ -10,6 +10,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from django.utils import timezone
 
+from bot.utils import alert_text
 from bio_lab.repository import get_or_create_user
 from bot.buttons import CONFIRM, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
@@ -180,7 +181,7 @@ async def pass_buy_do_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         user, st = await run_db(_buy_sync, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("✦ پاس ویژه فعال شد!")
     text, keyboard = _render(user, st, is_group=is_group)

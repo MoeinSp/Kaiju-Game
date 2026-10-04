@@ -1,3 +1,4 @@
+from django.db import transaction
 """Plain-word gameplay in group chats.
 
 **This module owns the one and only text MessageHandler for groups.** Same rule
@@ -18,6 +19,7 @@ from telegram.error import TelegramError
 from telegram.ext import (CallbackQueryHandler, CommandHandler, ContextTypes,
                           MessageHandler, filters)
 
+from bot.utils import alert_text
 from bio_lab.repository import creature_name, display_name, get_active_creature, get_or_create_group, get_or_create_user, lab_display, mention
 from bot.buttons import BACK, BATTLE, BUILD, CONFIRM, NAV, PRIMARY, SHOP, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
@@ -1574,8 +1576,16 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         m = re.search(r"\d+", ascii_txt)
         code = int(m.group()) if m else 0
 
-        if norm.startswith("انتقال طلا") and code:
-            await group_handlers.gold_transfer(update, context, code)
+        gold_m = re.fullmatch(r"انتقال طلا\s*([\d,٬،]+)", ascii_txt.strip())
+        if gold_m:
+            amount = int(re.sub(r"\D", "", gold_m.group(1)) or 0)
+            if amount:
+                await group_handlers.gold_transfer(update, context, amount)
+                return
+        if norm.startswith("انتقال طلا"):
+            await update.effective_message.reply_text(
+                "برای انتقال طلا روی پیام طرف ریپلای کن و فقط همین رو بفرست: انتقال طلا 1000"
+            )
             return
         if (norm.startswith("انتقال کایجو") or norm.startswith("انتقال هیولا")) and code:
             await group_handlers.transfer_creature_cmd(update, context, code)
@@ -1757,7 +1767,7 @@ async def group_card_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         data = await run_db(_card_sync, update.effective_user, query.message.chat, action)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     text, keyboard = _render(action, data, page)
@@ -2096,7 +2106,7 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         try:
             user, creature, caps, maxed = await run_db(_grp_feedcap_view_sync, update.effective_user)
         except GameError as exc:
-            await query.answer(str(exc), show_alert=True)
+            await query.answer(alert_text(exc), show_alert=True)
             return
         await query.answer()
         text, keyboard = _feedcap_group_card(user, creature, caps, maxed)
@@ -2112,7 +2122,7 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
                 _grp_feedcap_do_sync, update.effective_user, kind, tier
             )
         except GameError as exc:
-            await query.answer(str(exc), show_alert=True)
+            await query.answer(alert_text(exc), show_alert=True)
             return
         eaten = sum(result["consumed"].values())
         await query.answer(f"🍽 {eaten} تا غذا · +{result['xp']:,} امتیاز تجربه")
@@ -2150,7 +2160,7 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         try:
             summary, user = await run_db(_bgx_open_sync, update.effective_user, tier, count)
         except GameError as exc:
-            await query.answer(str(exc), show_alert=True)
+            await query.answer(alert_text(exc), show_alert=True)
             return
         await query.answer("🎉 باز شد!" if count > 1 else "🟢 باز شد!")
         text, keyboard = _bgx_result_card(user, tier, count, summary)
@@ -2159,18 +2169,16 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     # ── 👹 monster box (diamond box), fully in-group ───────────────────────────
     if action == "mbox":
-        user = await run_db(_casino_home_sync, update.effective_user)
+        text, keyboard = await run_db(lambda tg: _mbox_list_card(_casino_home_sync(tg)), update.effective_user)
         await query.answer()
-        text, keyboard = _mbox_list_card(user)
         await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
         return
     if action == "mbox_pick":
         if arg not in constants.DIAMOND_BOX_TIERS:
             await query.answer("این باکس پیدا نشد.", show_alert=True)
             return
-        user = await run_db(_casino_home_sync, update.effective_user)
+        text, keyboard = await run_db(lambda tg: _mbox_detail_card(_casino_home_sync(tg), arg), update.effective_user)
         await query.answer()
-        text, keyboard = _mbox_detail_card(user, arg)
         await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
         return
     if action == "mbox_open":
@@ -2181,7 +2189,7 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         try:
             kind, result, user = await run_db(_mbox_open_sync, update.effective_user, tier, mode)
         except GameError as exc:
-            await query.answer(str(exc), show_alert=True)
+            await query.answer(alert_text(exc), show_alert=True)
             return
         if kind != "bulk" and result.get("is_free"):
             await query.answer("🎁 باکس رایگان امروز باز شد!")
@@ -2203,7 +2211,7 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         try:
             user, creature, energy = await run_db(_grp_upgrade_view_sync, update.effective_user)
         except GameError as exc:
-            await query.answer(str(exc), show_alert=True)
+            await query.answer(alert_text(exc), show_alert=True)
             return
         await query.answer(f"هر ارتقا حالا ×{step}")
         text, keyboard = _upgrade_card(user, creature, energy, step)
@@ -2220,7 +2228,7 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
                 _grp_upgrade_part_sync, update.effective_user, part, step
             )
         except GameError as exc:
-            await query.answer(str(exc), show_alert=True)
+            await query.answer(alert_text(exc), show_alert=True)
             return
         await query.answer()
         label = constants.BODY_PARTS.get(part, {}).get("label", part)
@@ -2252,7 +2260,7 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         try:
             prize, coins, diamonds = await run_db(_casino_play_sync, update.effective_user, arg)
         except GameError as exc:
-            await query.answer(str(exc), show_alert=True)
+            await query.answer(alert_text(exc), show_alert=True)
             return
         await query.answer("🎉 بردی!" if prize["kind"] != "nothing" else "😔 نبردی.")
         text, keyboard = _casino_result(int(owner_id), arg, prize, coins, diamonds)
@@ -2270,7 +2278,7 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
             origin = "ghunt" if "hunt" in action else None
             if await show_energy_error(query, exc, int(owner_id), origin=origin):
                 return
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     if action == "autohunt":
         # a whole-energy batch — the player spent all energy; attach quick refill / subscription options
@@ -2406,7 +2414,7 @@ async def expedition_join_callback(update: Update, context: ContextTypes.DEFAULT
         exp_id, creator_name, target_name, member_names = await run_db(_do_join, update.effective_user)
         await query.answer("✅ شما به کاروان پیوستید!")
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
 
     text, kb = _render_expedition_card(exp_id, creator_name, target_name, member_names)
@@ -2436,7 +2444,7 @@ async def expedition_launch_callback(update: Update, context: ContextTypes.DEFAU
         res = await run_db(_do_launch, update.effective_user)
         await query.answer("🚀 کاروان با موفقیت اعزام شد!")
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
 
     div = "━━━━━━━━━━━━━━━━━━━━"

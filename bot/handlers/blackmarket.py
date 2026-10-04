@@ -4,6 +4,7 @@ from django.utils import timezone
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.models import BlackMarketAuction, User
 from bio_lab.repository import get_or_create_user
 from bot.buttons import CONFIRM, NAV, SHOP, back_btn, back_only_keyboard, btn
@@ -143,7 +144,7 @@ async def bm_refresh_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         user, auctions = await run_db(_bm_sync, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     from game.media import get_feature_image_path
     photo = get_feature_image_path("blackmarket")
@@ -169,7 +170,7 @@ async def bm_bid_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     try:
         preview = await run_db(_validate, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
 
     await query.answer()
@@ -276,7 +277,7 @@ async def bm_bid_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         res = await run_db(_do_bid, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
 
     curr = "طلا" if res["bid_currency"] == "coins" else "الماس"

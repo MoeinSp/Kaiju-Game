@@ -9,6 +9,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity, 
 from telegram.error import TelegramError
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.models import User
 from bio_lab.repository import display_name
 from bot.buttons import ADMIN, CONFIRM, DANGER, LIST, NAV, PRIMARY, SHOP, back_btn, btn
@@ -549,11 +550,14 @@ def _cheat_report_sync(limit: int = 15):
 
     from bio_lab.models import DailyActionLog
 
+    from django.db.models import Sum
+
     today = timezone.localdate()
+    # «جایزه» claims are logged as action="word_reward", one row per user per day
     qs = (
-        DailyActionLog.objects.filter(action="daily_reward", date=today)
+        DailyActionLog.objects.filter(action="word_reward", day=today.isoformat())
         .values("user_id")
-        .annotate(c=Count("id"))
+        .annotate(c=Sum("count"))
         .order_by("-c")[:limit]
     )
     user_ids = [r["user_id"] for r in qs]
@@ -563,7 +567,9 @@ def _cheat_report_sync(limit: int = 15):
         u = users_by_id.get(r["user_id"])
         if not u:
             continue
-        lifetime = DailyActionLog.objects.filter(user=u, action="daily_reward").count()
+        lifetime = (
+            DailyActionLog.objects.filter(user=u, action="word_reward").aggregate(s=Sum("count"))["s"] or 0
+        )
         age_days = (today - u.created_at.date()).days if u.created_at else 0
         out.append({
             "id": u.id,
@@ -1079,7 +1085,7 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
             try:
                 user, notes = await run_db(_give)
             except GameError as exc:
-                await query.answer(str(exc), show_alert=True)
+                await query.answer(alert_text(exc), show_alert=True)
                 return
             context.user_data.pop(_ISH_DRAFT, None)
             # nice DM to the recipient
@@ -1159,7 +1165,7 @@ async def itemshop_edit_callback(update: Update, context: ContextTypes.DEFAULT_T
     try:
         draft = await run_db(_itemshop_load_draft_sync, int(query.data.split(":")[1]))
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     context.user_data[_ISH_DRAFT] = draft
     await query.answer("✏️ حالت ویرایش")
@@ -1176,7 +1182,7 @@ async def itemshop_toggle_callback(update: Update, context: ContextTypes.DEFAULT
     try:
         await run_db(itemshop.toggle_item, int(query.data.split(":")[1]))
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("انجام شد.")
     await itemshop_manage_panel(update, context)
@@ -1750,8 +1756,8 @@ async def reset_xfer_cd_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
     identifier = context.args[0] if context.args else str(update.effective_user.id)
     try:
-        from game.moderation import find_user
-        user = await run_db(find_user, identifier)
+        from game.moderation import find_user_or_raise
+        user = await run_db(find_user_or_raise, identifier)
     except Exception as exc:
         await update.effective_message.reply_text(f"❌ کاربر یافت نشد: {exc}")
         return
@@ -1825,7 +1831,7 @@ async def delete_creature_confirm_callback(update: Update, context: ContextTypes
     try:
         name = await run_db(delete_creature, creature_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     await safe_edit_message_text(query, f"🗑 موجود «{name}» برای همیشه حذف شد.", parse_mode="HTML")
@@ -1892,7 +1898,7 @@ async def reset_user_start_callback(update: Update, context: ContextTypes.DEFAUL
     try:
         user, creature_count = await run_db(_reset_preview_sync, str(target_id))
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     await safe_edit_message_text(
@@ -1918,7 +1924,7 @@ async def reset_user_confirm_callback(update: Update, context: ContextTypes.DEFA
     try:
         user = await run_db(reset_user, target_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("ریست شد", show_alert=False)
     await safe_edit_message_text(
@@ -2021,7 +2027,7 @@ async def player_log_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         data = await run_db(player_progress, target_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     await safe_edit_message_text(
@@ -2057,7 +2063,7 @@ async def resource_log_callback(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         user, log = await run_db(_resource_log_data, target_id, field)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     from game.ledger import SOURCE_LABELS
@@ -2252,7 +2258,7 @@ async def admin_clist_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         data = await run_db(admin_creatures_page_data, target_id, rarity, page)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     text, kb = _render_creatures_page(data)
@@ -2272,7 +2278,7 @@ async def admin_cview_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         data = await run_db(admin_creature_view_data, cid)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     text, kb = _render_creature_view(data, target_id, rarity, page)
@@ -2314,13 +2320,13 @@ async def admin_cweaken_do_callback(update: Update, context: ContextTypes.DEFAUL
     try:
         await run_db(weaken_creature, int(cid))
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("✅ کایجو با موفقیت ضعیف شد.", show_alert=True)
     try:
         data = await run_db(admin_creature_view_data, int(cid))
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     text, kb = _render_creature_view(data, target_id, rarity, int(page))
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
@@ -2358,7 +2364,7 @@ async def admin_cdel_do_callback(update: Update, context: ContextTypes.DEFAULT_T
     try:
         name, owner = await run_db(admin_delete_creature, int(cid))
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer(f"🗑 کایجوی #{cid} ({name}) حذف شد.", show_alert=True)
     data = await run_db(admin_creatures_page_data, target_id, rarity, int(page))
@@ -2409,7 +2415,7 @@ async def admin_userback_callback(update: Update, context: ContextTypes.DEFAULT_
     try:
         data = await run_db(user_info, target_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     user = data["user"]
@@ -2480,7 +2486,7 @@ async def adm_sub_mgr_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         user, info = await run_db(_sub_mgr_data_sync, target_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     text = _render_sub_mgr_text(user, info)
@@ -2509,7 +2515,7 @@ async def adm_sub_set_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         user, info = await run_db(_sub_set_sync, target_id, tier, days)
     except Exception as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer(f"✅ اشتراک {info['tier_name']} به مدت {days} روز برای کاربر فعال شد!", show_alert=True)
     text = _render_sub_mgr_text(user, info)
@@ -2537,7 +2543,7 @@ async def adm_sub_ext_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         user, info = await run_db(_sub_ext_sync, target_id, days)
     except Exception as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer(f"✅ اشتراک کاربر به مدت {days} روز تمدید شد!", show_alert=True)
     text = _render_sub_mgr_text(user, info)
@@ -2563,7 +2569,7 @@ async def adm_sub_cancel_callback(update: Update, context: ContextTypes.DEFAULT_
     try:
         user, info = await run_db(_sub_cancel_sync, target_id)
     except Exception as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("❌ اشتراک کاربر لغو شد.", show_alert=True)
     text = _render_sub_mgr_text(user, info)
@@ -2640,7 +2646,7 @@ async def adm_chest_grant_callback(update: Update, context: ContextTypes.DEFAULT
     try:
         user, chests = await run_db(_chest_grant_data_sync, target_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     text = _render_chest_grant_text(user, chests)
@@ -2668,7 +2674,7 @@ async def adm_chest_give_callback(update: Update, context: ContextTypes.DEFAULT_
     try:
         user, chest, chests = await run_db(_chest_give_sync, target_id, chest_type)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     from game.arena_chests import ARENA_CHEST_TIERS
     cfg = ARENA_CHEST_TIERS.get(chest_type, {})
@@ -2946,7 +2952,7 @@ async def force_join_duration_quick_callback(update: Update, context: ContextTyp
     try:
         channel = await run_db(set_duration, channel_id, hours if hours > 0 else None)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("⏳ مدت تنظیم شد.")
     await safe_edit_message_text(query,
@@ -2979,7 +2985,7 @@ async def force_join_unlimited_callback(update: Update, context: ContextTypes.DE
     try:
         channel = await run_db(set_duration, channel_id, None)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("♾ نامحدود شد.")
     await safe_edit_message_text(query,
@@ -3419,7 +3425,7 @@ async def user_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         data = await run_db(_user_open_sync, target_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     user = data["user"]
@@ -3776,7 +3782,7 @@ async def pack_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         p = await run_db(purchase.toggle_pack, pack_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🟢 فعال شد." if p["active"] else "🔴 غیرفعال شد.")
     await packs_panel(update, context)
@@ -4159,7 +4165,7 @@ async def admin_maxbld_do_callback(update: Update, context: ContextTypes.DEFAULT
     try:
         res = await run_db(admin_max_buildings, target_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     u = res["user"]
     await query.answer("🏗 ساختمان‌ها مکس شدند!")
@@ -4252,7 +4258,7 @@ async def admin_ban_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         user = await run_db(set_banned, target_id, True)
         data = await run_db(user_info, str(user.id))
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🔴 مسدود شد.")
     await safe_edit_message_text(query,
@@ -4270,7 +4276,7 @@ async def admin_unban_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         user = await run_db(set_banned, target_id, False)
         data = await run_db(user_info, str(user.id))
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("✅ رفع شد.")
     await safe_edit_message_text(query,
@@ -5635,7 +5641,7 @@ async def blackmarket_admin_action_callback(update: Update, context: ContextType
                 # Equip
                 "eq_epic_weap": ("⚔️ شمشیر حماسی باستانی +5", "equipment", {"slot": "weapon", "rarity": "epic", "level": 5, "name": "شمشیر حماسی باستانی"}, "coins", 50000),
                 "eq_leg_armor": ("🛡 زره سنگین افسانه‌ای +5", "equipment", {"slot": "armor", "rarity": "legendary", "level": 5, "name": "زره سنگین افسانه‌ای"}, "diamonds", 100),
-                "eq_myth_acc": ("💍 حلقه اسطوره‌ای اژدها +10", "equipment", {"slot": "accessory", "rarity": "mythic", "level": 10, "name": "حلقه اسطوره‌ای اژدها"}, "diamonds", 250),
+                "eq_myth_acc": ("💍 حلقه اسطوره‌ای اژدها +10", "equipment", {"slot": "rune", "rarity": "mythic", "level": 10, "name": "حلقه اسطوره‌ای اژدها"}, "diamonds", 250),
                 # Speedup
                 "spd_50": ("⚡ بسته ۵۰ تایی کارت سرعت ۶۰ دقیقه‌ای", "speedup", {"minutes": 60, "count": 50}, "coins", 30000),
                 "spd_100": ("⚡ بسته ۱۰۰ تایی کارت سرعت ۶۰ دقیقه‌ای", "speedup", {"minutes": 60, "count": 100}, "coins", 60000),

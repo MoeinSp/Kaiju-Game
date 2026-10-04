@@ -3,6 +3,7 @@ import random
 from django.db import transaction
 
 from bio_lab.models import Equipment, User
+from bio_lab.repository import lock_row
 from game import constants
 from game.buildings import building_level, is_built
 from game.creature import GameError, InsufficientGoldError
@@ -46,9 +47,10 @@ def forge(user: User, item_id: int) -> dict:
     FORGE_SAFE_LEVEL an attempt can fail and burn the gold without a level, so
     feeding duplicates stays the safe-but-slow path and forging is the fast-but-
     risky one."""
+    lock_row(user)  # a double-tap used to forge twice for one payment
     assert_forge_available(user)
     try:
-        item = Equipment.objects.get(id=item_id)
+        item = Equipment.objects.select_for_update().get(id=item_id)
     except Equipment.DoesNotExist:
         raise GameError("این تجهیزات پیدا نشد.")
     if item.owner_id != user.id:

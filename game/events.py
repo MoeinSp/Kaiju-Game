@@ -16,11 +16,14 @@ the reward is deduped by comparing the last-claim day (game timezone).
 
 from __future__ import annotations
 
+from django.db import transaction
+
 import datetime
 
 from django.utils import timezone
 
 from bio_lab.models import User
+from bio_lab.repository import lock_row
 from game.daily import today_str
 
 # rotation — one is active per ISO week, chosen by week-number % len(EVENTS)
@@ -108,9 +111,11 @@ def status(user: User) -> dict:
     }
 
 
+@transaction.atomic
 def claim_daily(user: User) -> dict | None:
     """Claim today's event reward once. Returns the reward, or None if already
     claimed today."""
+    lock_row(user)  # two taps used to both pass the «already claimed» check
     today = today_str()
     if user.last_event_claim_day == today:
         return None

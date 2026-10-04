@@ -24,6 +24,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from bio_lab.models import Creature, User
+from bio_lab.repository import lock_row
 from game import constants
 from game.creature import GameError
 
@@ -83,6 +84,7 @@ def status(user: User) -> dict:
 @transaction.atomic
 def pull(user: User) -> dict:
     """One banner pull. Deducts diamonds, applies pity + rate-up, yields a creature."""
+    lock_row(user)  # two taps used to pull twice for one charge
     if user.diamonds < PULL_COST_DIAMONDS:
         raise GameError(f"الماس کافی نداری! هر کشش بنر {PULL_COST_DIAMONDS} الماس می‌خواد.")
     user.diamonds -= PULL_COST_DIAMONDS

@@ -1,9 +1,11 @@
+from django.db import transaction
 import random
 
 from django.db.models import F
 from django.utils import timezone
 
 from bio_lab.models import Creature, Group, RaidBoss, RaidDamageLog, User
+from bio_lab.repository import lock_row
 from game import constants
 from game.creature import effective_stats
 from game.equipment import get_equipped_items
@@ -91,11 +93,19 @@ def _joined_alliance_today(user: User) -> bool:
     return timezone.localtime(user.alliance_joined_at).date().isoformat() == today_str()
 
 
+@transaction.atomic
 def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bool, int, int]:
     """Land one hit on the raid boss. Flat 5-minute cooldown between hits and a daily
     cap of RAID_DAILY_ATTACKS. Reward (DNA + gold) is paid PER HIT, scaled by the landed
     damage. Returns (dmg, defeated, dna_gain, coin_gain, attacks_left_today)."""
     from game.daily import get_daily_count
+
+    # serialise hits: on the player (cooldown/daily cap can't be double-tapped past) and
+    # on the boss (simultaneous hits used to lose HP and could level the raid up twice)
+    lock_row(user)
+    lock_row(boss)
+    if not boss.is_active or boss.current_hp <= 0:
+        raise RaidError("این باس همین الان شکست خورد! دوباره «رید» رو بزن.")
 
     # a brand-new alliance member can't raid until the next midnight. The message
     # explains the surface reason (recently joined) + when it unlocks — not the

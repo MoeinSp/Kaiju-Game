@@ -1,6 +1,7 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.repository import get_or_create_user
 from bot.buttons import CONFIRM, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
@@ -231,7 +232,7 @@ async def biocrate_open_callback(update: Update, context: ContextTypes.DEFAULT_T
 
         if await show_gold_error(query, exc):
             return
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
 
     label = constants.BIOCRATE_TIERS[tier]["label"]
@@ -282,7 +283,7 @@ async def biocrate_bulk_callback(update: Update, context: ContextTypes.DEFAULT_T
 
         if await show_gold_error(query, exc):
             return
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🎉 باز شد!")
     label = constants.BIOCRATE_TIERS[tier]["label"]
@@ -412,9 +413,9 @@ async def diamond_box_pick_callback(update: Update, context: ContextTypes.DEFAUL
     )
 
 
-def _diamond_box_buy_sync(tg_user, tier):
+def _diamond_box_buy_sync(tg_user, tier, require_free=False):
     user, _ = get_or_create_user(tg_user)
-    return open_diamond_box(user, tier)
+    return open_diamond_box(user, tier, require_free=require_free)
 
 
 def _diamond_box_bulk_sync(tg_user, tier):
@@ -425,9 +426,9 @@ def _diamond_box_bulk_sync(tg_user, tier):
 async def _do_diamond_box_buy(update: Update, context: ContextTypes.DEFAULT_TYPE, tier: str, is_free: bool = False) -> None:
     query = update.callback_query
     try:
-        result = await run_db(_diamond_box_buy_sync, update.effective_user, tier)
+        result = await run_db(_diamond_box_buy_sync, update.effective_user, tier, is_free)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
 
     creature = result["creature"]
@@ -545,7 +546,7 @@ async def diamond_box_do_bulk_callback(update: Update, context: ContextTypes.DEF
     try:
         summary = await run_db(_diamond_box_bulk_sync, update.effective_user, tier)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🎉 باز شد!")
     label = constants.DIAMOND_BOX_TIERS[tier]["label"]

@@ -7,6 +7,7 @@ panel shows the current squad, its team power, and any same-element synergy.
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.models import Creature, Team
 from bio_lab.repository import get_or_create_user
 from bot.buttons import LIST, NAV, PRIMARY, back_btn, btn
@@ -157,7 +158,7 @@ async def team_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         view = await run_db(_toggle_sync, update.effective_user, creature_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     filt, page = _team_view(context)

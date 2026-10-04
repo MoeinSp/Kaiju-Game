@@ -15,6 +15,7 @@ without the bot needing to remember where they were.
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.models import Creature
 from bio_lab.repository import get_or_create_user
 from bot.buttons import BUILD, CONFIRM, DANGER, LIST, NAV, PRIMARY, back_btn, back_only_keyboard, btn
@@ -325,7 +326,7 @@ async def breeding_pick_a_callback(update: Update, context: ContextTypes.DEFAULT
     try:
         parent_a, candidates = await run_db(_pick_b_sync, update.effective_user, parent_a_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     if not candidates:
@@ -365,7 +366,7 @@ async def breeding_b_page_callback(update: Update, context: ContextTypes.DEFAULT
     try:
         parent_a, candidates = await run_db(_pick_b_sync, update.effective_user, int(parent_a_id))
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     if not candidates:
@@ -401,7 +402,7 @@ async def breeding_pick_b_callback(update: Update, context: ContextTypes.DEFAULT
             _preview_sync, update.effective_user, int(id_a), int(id_b)
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
 
@@ -454,7 +455,7 @@ async def breeding_info_callback(update: Update, context: ContextTypes.DEFAULT_T
             _preview_sync, update.effective_user, int(id_a), int(id_b)
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
 
     lbl = constants.RARITY_LABELS
@@ -503,7 +504,7 @@ async def breeding_start_callback(update: Update, context: ContextTypes.DEFAULT_
     try:
         view = await run_db(_start_sync, update.effective_user, int(id_a), int(id_b))
     except Exception as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("💞 رفتن توی غار!")
     text, keyboard = _panel_render(view)
@@ -547,7 +548,7 @@ async def breeding_lay_callback(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         view = await run_db(_lay_sync, update.effective_user, job_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🥚 تخم گذاشته شد! والدها آزاد شدن.")
     text, keyboard = _panel_render(view)
@@ -567,7 +568,7 @@ async def breeding_hatch_callback(update: Update, context: ContextTypes.DEFAULT_
     try:
         child, info, view = await run_db(_hatch_sync, update.effective_user, egg_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🐣 تخم سر باز کرد!")
     upgrade_note = (
@@ -645,7 +646,7 @@ async def breeding_egg_finish_ask_callback(update: Update, context: ContextTypes
     try:
         price = await run_db(_price, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     await safe_edit_message_text(
@@ -675,7 +676,7 @@ async def breeding_cave_finish_callback(update: Update, context: ContextTypes.DE
     try:
         view = await run_db(_cave_finish_sync, update.effective_user, job_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("💎 فوری شد — تخم گذاشته شد!")
     text, keyboard = _panel_render(view)
@@ -694,7 +695,7 @@ async def breeding_egg_finish_callback(update: Update, context: ContextTypes.DEF
     try:
         view = await run_db(_egg_finish_sync, update.effective_user, egg_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("💎 فوری شد — آماده‌ی سر باز کردنه!")
     text, keyboard = _panel_render(view)
@@ -734,7 +735,7 @@ async def breeding_cancel_confirm_callback(update: Update, context: ContextTypes
     try:
         view = await run_db(_cancel_sync, update.effective_user, job_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("لغو شد — DNA برنمی‌گرده.")
     text, keyboard = _panel_render(view)

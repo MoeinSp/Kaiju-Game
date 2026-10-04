@@ -3,6 +3,7 @@ import random
 from django.db import transaction
 
 from bio_lab.models import Creature, Equipment, User
+from bio_lab.repository import lock_row
 from game import constants
 from game.creature import GameError, InsufficientGoldError
 
@@ -157,10 +158,12 @@ def unequip_item(user: User, item_id: int) -> Equipment:
     return item
 
 
+@transaction.atomic
 def upgrade_item(user: User, item_id: int, dupe_item_id: int) -> Equipment:
+    lock_row(user)
     try:
-        item = Equipment.objects.get(id=item_id)
-        dupe = Equipment.objects.get(id=dupe_item_id)
+        item = Equipment.objects.select_for_update().get(id=item_id)
+        dupe = Equipment.objects.select_for_update().get(id=dupe_item_id)
     except Equipment.DoesNotExist:
         raise GameError("این تجهیزات پیدا نشد.")
     if item.owner_id != user.id or dupe.owner_id != user.id:
@@ -204,13 +207,14 @@ def _fuse_fail_chance(target: Equipment, sacrifice: Equipment) -> float:
     return max(0.03, min(0.6, chance))
 
 
+@transaction.atomic
 def fuse_equipment(user: User, target_id: int, sacrifice_id: int) -> dict:
     """Sacrifice a SAME-SLOT item (sword into sword) to try to raise another by one
     level. Flexible (no exact-duplicate needed) but risky: on failure the sacrifice
     is still consumed and the level doesn't go up. Returns the outcome."""
     try:
-        target = Equipment.objects.get(id=target_id)
-        sacrifice = Equipment.objects.get(id=sacrifice_id)
+        target = Equipment.objects.select_for_update().get(id=target_id)
+        sacrifice = Equipment.objects.select_for_update().get(id=sacrifice_id)
     except Equipment.DoesNotExist:
         raise GameError("این تجهیزات پیدا نشد.")
     if target.owner_id != user.id or sacrifice.owner_id != user.id:

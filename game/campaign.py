@@ -14,9 +14,12 @@ as everything else.
 
 from __future__ import annotations
 
+from django.db import transaction
+
 import random
 
 from bio_lab.models import Creature, User
+from bio_lab.repository import lock_row
 from game import constants, lab
 from game.creature import GameError
 from game.energy import spend_energy
@@ -93,6 +96,7 @@ def status(user: User) -> dict:
     }
 
 
+@transaction.atomic
 def attempt(user: User, team_creatures: list[Creature]) -> dict:
     """Fight the next uncleared stage with the player's team. Spends energy. On a
     win, advances the campaign and pays the first-clear reward.
@@ -100,6 +104,7 @@ def attempt(user: User, team_creatures: list[Creature]) -> dict:
     The dungeon outcome is decided PURELY by team power — if your team's power is at
     least the enemy stage's power, you win. No RNG / per-hit simulation, so a stronger
     team never loses to a weaker stage (the reported 9000-vs-6000 bug)."""
+    lock_row(user)
     stage = user.campaign_stage + 1
     if stage > MAX_STAGE:
         raise GameError("کل دانجن رو تموم کردی! 🏆 منتظر مراحل جدید باش.")

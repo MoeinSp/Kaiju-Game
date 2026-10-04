@@ -2,6 +2,7 @@ from django.utils import timezone
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.models import Building, Creature
 from bio_lab.repository import get_or_create_user
 from bot.buttons import BUILD, CONFIRM, DANGER, LIST, NAV, PRIMARY, SHOP, back_btn, back_only_keyboard, btn
@@ -394,7 +395,7 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
         rows.append([btn("پژوهش‌ها", emoji_key="btn_research", style=PRIMARY, callback_data="menu:research")])
     if building.building_type == "blacksmith" and building.level > 0:
         rows.append([btn("آهنگری", emoji_key="btn_forge", style=PRIMARY, callback_data="menu:blacksmith")])
-    if building.building_type == "fusion_hall" and building.level > 0:
+    if building.building_type == "fusion_lab" and building.level > 0:
         rows.append([btn("تالار ادغام", emoji_key="btn_fusion", style=PRIMARY, callback_data="menu:fusion")])
     rows.append([back_btn("menu:buildings")])
     return InlineKeyboardMarkup(rows)
@@ -406,7 +407,7 @@ async def building_pick_callback(update: Update, context: ContextTypes.DEFAULT_T
     try:
         view = await run_db(_building_detail_sync, update.effective_user, building_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     from game.media import get_building_image_path
@@ -440,7 +441,7 @@ async def building_collect_callback(update: Update, context: ContextTypes.DEFAUL
             _collect_sync, update.effective_user, building_id
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer(f"+{amount} {_RESOURCE_NAMES[resource]}!")
     text = _building_detail_text(view)
@@ -480,7 +481,7 @@ async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAUL
 
         if await show_gold_error(query, exc):
             return
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🏗 ساخت شروع شد!" if view["building"].level == 0 else "🔧 ارتقا شروع شد!")
     from game.media import get_building_image_path
@@ -584,7 +585,7 @@ async def building_finish_callback(update: Update, context: ContextTypes.DEFAULT
     try:
         view, cost = await run_db(_finish_with_diamonds_sync, update.effective_user, building_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer(f"💎 −{cost} — تموم شد!")
     from game.media import get_building_image_path
@@ -651,7 +652,7 @@ async def building_cancel_callback(update: Update, context: ContextTypes.DEFAULT
     try:
         view, refund = await run_db(_cancel_do_sync, update.effective_user, building_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer(f"❌ ارتقا لغو شد — {refund:,} طلا برگشت.")
     await safe_edit_message_text(
@@ -780,7 +781,7 @@ async def building_workers_callback(update: Update, context: ContextTypes.DEFAUL
             _workers_sync, update.effective_user, building_id
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     await safe_edit_message_text(
@@ -827,7 +828,7 @@ async def building_assign_callback(update: Update, context: ContextTypes.DEFAULT
             _assign_sync, update.effective_user, int(building_id), int(creature_id), attach
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     verb = "سر کار رفت" if attach else "برگشت"
     await query.answer(f"{creature.name} {verb} · تولیدِ جمع‌شده سر جاشه ✅")
@@ -846,7 +847,7 @@ async def building_speedup_do_callback(update: Update, context: ContextTypes.DEF
     try:
         view, completed, used = await run_db(sync, update.effective_user, int(building_id), int(minutes))
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     if completed:
         await query.answer("🏆 ارتقا تموم شد!")
@@ -899,7 +900,7 @@ async def building_buy_builder_callback(update: Update, context: ContextTypes.DE
             _buy_builder_sync, update.effective_user
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("👷‍♂️ کارگر دوم فعال شد! حالا می‌تونی هم‌زمان دو ساختمون رو ارتقا بدی.", show_alert=True)
     await safe_edit_message_text(

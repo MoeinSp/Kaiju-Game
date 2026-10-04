@@ -8,6 +8,7 @@ game/research.py; this module is only the Telegram UI.
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, ContextTypes
 
+from bot.utils import alert_text
 from bio_lab.repository import get_or_create_user
 from bot.buttons import BUILD, CONFIRM, DANGER, LIST, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
@@ -149,7 +150,7 @@ async def research_pick_callback(update: Update, context: ContextTypes.DEFAULT_T
     try:
         lab_level, level, remaining, target, fin_price, _d = await run_db(_detail_sync, update.effective_user, key)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     await safe_edit_message_text(
@@ -174,7 +175,7 @@ async def research_start_callback(update: Update, context: ContextTypes.DEFAULT_
 
         if await show_gold_error(query, exc):
             return
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🔬 پژوهش شروع شد!")
     await safe_edit_message_text(
@@ -189,7 +190,7 @@ async def research_finish_ask_callback(update: Update, context: ContextTypes.DEF
     try:
         _lab, _lvl, remaining, target, fin_price, _d = await run_db(_detail_sync, update.effective_user, key)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     if remaining is None:
         await query.answer("این پژوهش در حال انجام نیست.", show_alert=True)
@@ -221,7 +222,7 @@ async def research_finish_callback(update: Update, context: ContextTypes.DEFAULT
     try:
         cost, lab_level, level, remaining, target, fin_price = await run_db(_finish_sync, update.effective_user, key)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer(f"💎 −{cost} — تموم شد!")
     await safe_edit_message_text(

@@ -6,6 +6,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from bio_lab.models import Building, BuildingUpgrade, SpeedupCard, User
+from bio_lab.repository import lock_row
 from game import constants, lab
 from game.creature import GameError, InsufficientGoldError
 
@@ -193,8 +194,11 @@ def pending_amount(building: Building) -> int:
     if cfg is None or building.level <= 0:
         return 0
     bonus = _worker_bonus(building)  # resolved ONCE and shared by rate + cap
-    total = (building.banked_pending or 0.0) + _accrued_since_collect(building, bonus)
-    return int(min(storage_cap(building, bonus), math.floor(total)))
+    banked = building.banked_pending or 0.0
+    total = banked + _accrued_since_collect(building, bonus)
+    # the cap limits NEW accrual; output already banked (e.g. before a worker left and
+    # the cap dropped) is never truncated — removing workers used to destroy it
+    return int(math.floor(min(max(storage_cap(building, bonus), banked), total)))
 
 
 def lock_pending(building: Building) -> None:
@@ -205,7 +209,8 @@ def lock_pending(building: Building) -> None:
     if not produces(building.building_type) or building.level <= 0:
         return
     bonus = _worker_bonus(building)
-    locked = min(float(storage_cap(building, bonus)), (building.banked_pending or 0.0) + _accrued_since_collect(building, bonus))
+    banked = building.banked_pending or 0.0
+    locked = min(max(float(storage_cap(building, bonus)), banked), banked + _accrued_since_collect(building, bonus))
     building.banked_pending = locked
     building.last_collected_at = timezone.now()
     building.save(update_fields=["banked_pending", "last_collected_at"])
@@ -240,6 +245,7 @@ def collect(user: User, building: Building) -> tuple[int, str]:
     locked = Building.objects.select_for_update().get(id=building.id)
     if locked.owner_id != user.id:
         raise GameError("این ساختمون مال تو نیست.")
+    lock_row(user)  # otherwise a collect racing a spend wrote the pre-spend balance back
     if not produces(locked.building_type):
         raise GameError("این ساختمون چیزی تولید نمی‌کنه.")
     amount = pending_amount(locked)
@@ -268,12 +274,15 @@ def _finish_upgrade_row(user: User, upgrade: BuildingUpgrade) -> Building | None
     """Apply one due upgrade: bump the building's level (clamped to its current cap),
     award lab XP, and delete the job. Returns the building, or None if the cap moved
     below the target in the meantime (then the job is just cancelled)."""
+    # claim the job first: whoever deletes the row applies it, so two screens that
+    # render at once can't both level the building / award the lab XP
+    if not BuildingUpgrade.objects.filter(pk=upgrade.pk).delete()[0]:
+        return None
     building = upgrade.building
     cap = max_level_for(user, building.building_type)
     target = min(upgrade.target_level, cap)
     if target < upgrade.target_level:
         # تالار عقب‌تر از هدف ارتقا — ارتقا را بدون اعمال لول غیرمجاز لغو کن
-        upgrade.delete()
         return None
     building.level = target
     building.save(update_fields=["level"])
@@ -281,7 +290,6 @@ def _finish_upgrade_row(user: User, upgrade: BuildingUpgrade) -> Building | None
     # time, not one tap — awarded here, at the single point where an upgrade can
     # complete, so it can't be double-credited by the callers that poll this
     lab.award_building_level(user, target)
-    upgrade.delete()
     return building
 
 
@@ -377,10 +385,15 @@ def full_buildout_estimate() -> tuple[int, int]:
     return gold, minutes
 
 
+@transaction.atomic
 def start_upgrade(user: User, building: Building) -> BuildingUpgrade:
     if building.owner_id != user.id:
         raise GameError("این ساختمون مال تو نیست.")
+    # the user row is the mutex for the builder slots + the gold: two parallel taps
+    # used to start two upgrades with one builder and pay for only one
+    lock_row(user)
     check_and_apply_upgrade(user)
+    building.refresh_from_db(fields=["level"])
     if BuildingUpgrade.objects.filter(owner=user, building=building).exists():
         raise GameError("این ساختمون همین الان در حال ارتقاست.")
     slots = builder_slots(user)
@@ -534,37 +547,42 @@ def diamond_finish_price(upgrade: BuildingUpgrade) -> int:
     return constants.diamond_finish_cost(remaining)
 
 
+@transaction.atomic
 def finish_with_diamonds(user: User, building_id: int | None = None) -> tuple[Building, int]:
     """Instantly completes an active upgrade for diamonds. Returns (building, cost).
     Priced from the *remaining* time, so paying after waiting a while is cheaper —
     otherwise the sensible play would always be to pay immediately. `building_id`
     targets a specific upgrade when the player runs more than one at once."""
+    lock_row(user)
     upgrade = _pick_upgrade(user, building_id)
     if upgrade is None:
         raise GameError("هیچ ارتقایی در حال انجام نیست.")
+    if upgrade.finishes_at <= timezone.now():
+        # the timer ran out while the confirm screen was open — finish it for free
+        done = _finish_upgrade_row(user, upgrade)
+        return (done or upgrade.building), 0
 
     cost = diamond_finish_price(upgrade)
     if user.diamonds < cost:
         raise GameError(f"الماس کافی نداری! تموم کردن این ارتقا {cost} الماس می‌خواد.")
 
-    user.diamonds -= cost
-    user.save(update_fields=["diamonds"])
-
     building = upgrade.building
     cap = max_level_for(user, building.building_type)
     target = min(upgrade.target_level, cap)
+    if not BuildingUpgrade.objects.filter(pk=upgrade.pk).delete()[0]:
+        raise GameError("این ارتقا همین الان تموم شد.")
     if target < upgrade.target_level:
-        upgrade.delete()
         raise GameError(
             f"سقف این ساختمون الان سطح {cap} است — اول تالار مِهر رو ارتقا بده."
         )
+    user.diamonds -= cost
+    user.save(update_fields=["diamonds"])
     building.level = target
     building.save(update_fields=["level"])
     # a finished upgrade is worth real lab XP because it represents hours of real
     # time, not one tap — awarded here, at the single point where an upgrade can
     # complete, so it can't be double-credited by the callers that poll this
     lab.award_building_level(user, target)
-    upgrade.delete()
     return building, cost
 
 

@@ -141,3 +141,21 @@ def lab_name_taken(name: str, exclude_user_id: int | None = None) -> bool:
     if exclude_user_id is not None:
         qs = qs.exclude(id=exclude_user_id)
     return qs.exists()
+
+
+def lock_row(obj):
+    """Lock `obj`'s DB row (SELECT … FOR UPDATE) and refresh its plain columns IN PLACE.
+
+    The bot handles updates concurrently, so two taps from one player run in parallel
+    threads. Any `x.coins -= cost; x.save()` on an instance loaded before the other tap
+    committed writes a STALE balance — a double grant for one charge, or a refunded
+    spend. Call this at the top of a `transaction.atomic` block, before reading the
+    balance: the second tap then waits for the first and sees its result.
+
+    Only non-relational columns are refreshed, so cached relations (e.g. a
+    select_related `user.alliance` an async renderer reads later) stay loaded."""
+    model = type(obj)
+    model.objects.select_for_update().filter(pk=obj.pk).values_list("pk", flat=True).first()
+    fields = [f.name for f in model._meta.concrete_fields if not f.is_relation and not f.primary_key]
+    obj.refresh_from_db(fields=fields)
+    return obj

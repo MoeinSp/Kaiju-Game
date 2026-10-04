@@ -55,15 +55,16 @@ def grant_season_reward(user: User, cup: int) -> dict:
     """Grant the division reward for finishing a season at `cup`. Called from the
     season close for each ranked player."""
     reward = season_reward(cup)
-    fields = []
-    if reward.get("coins"):
-        user.coins += reward["coins"]; fields.append("coins")
-    if reward.get("diamonds"):
-        user.diamonds += reward["diamonds"]; fields.append("diamonds")
-    if reward.get("dna"):
-        user.dna_fragments += reward["dna"]; fields.append("dna_fragments")
-    if fields:
-        user.save(update_fields=fields)
+    # F() updates: the season close walks every ranked player in one long transaction,
+    # so saving a balance read before the loop would undo whatever they spent meanwhile
+    from django.db.models import F
+
+    updates = {}
+    for key, field in (("coins", "coins"), ("diamonds", "diamonds"), ("dna", "dna_fragments")):
+        if reward.get(key):
+            updates[field] = F(field) + reward[key]
+    if updates:
+        User.objects.filter(pk=user.pk).update(**updates)
     return reward
 
 

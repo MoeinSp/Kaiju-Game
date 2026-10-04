@@ -9,6 +9,7 @@ first, so an upgraded piece isn't scrapped by accident.
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, ContextTypes
 
+from bot.utils import alert_text
 from bio_lab.repository import get_or_create_user
 from bot.buttons import BUILD, CONFIRM, DANGER, LIST, NAV, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
@@ -204,7 +205,7 @@ async def _do_exchange(update, context):
     try:
         result = await run_db(exchange_for_tickets, update.effective_user, list(_selection(context)))
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         await _rerender(update, context)
         return
     context.user_data[_SEL_KEY] = set()

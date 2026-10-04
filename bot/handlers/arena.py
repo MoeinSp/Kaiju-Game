@@ -4,8 +4,9 @@ import random
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.models import AttackLog
-from bio_lab.repository import creature_name, get_or_create_user, lab_display, mention
+from bio_lab.repository import creature_name, get_or_create_user, lab_display, lock_row, mention
 from bot.buttons import BATTLE, CONFIRM, DANGER, NAV, PRIMARY, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants
@@ -234,7 +235,7 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             _find_sync, update.effective_user, recent
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     except Exception:  # noqa: BLE001 — never let a raid-matchmaking bug silently kill the button
         logger.exception("arena_find failed for user %s", update.effective_user.id)
@@ -369,7 +370,7 @@ async def arena_swap_pick_callback(update: Update, context: ContextTypes.DEFAULT
     try:
         args = await run_db(_swap_rerender_sync, update.effective_user, creature_id, pending)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("موجودت عوض شد.")
     text, keyboard = _render_opponent(*args)
@@ -386,7 +387,7 @@ async def arena_swap_back_callback(update: Update, context: ContextTypes.DEFAULT
     try:
         args = await run_db(_swap_rerender_sync, update.effective_user, None, pending)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     text, keyboard = _render_opponent(*args)
@@ -631,6 +632,7 @@ def _attack_sync(tg_user, pending):
     # atomic so a refused attack (e.g. the opponent got shielded in the meantime, or a
     # rapid double-tap) rolls the energy spend back instead of burning it for nothing
     user, _ = get_or_create_user(tg_user)
+    lock_row(user)  # two taps at once used to fight twice for one energy
     spend_energy(user, constants.ARENA_ATTACK_ENERGY_COST, "حمله")
     user.save(update_fields=["energy", "energy_updated_at"])
 
@@ -673,6 +675,15 @@ def _reconstruct_pending_sync(tg_user, ref):
             raise OpponentUnavailableError("این حریف دیگه در دسترس نیست، یکی دیگه پیدا کن.")
         if user.alliance_id and target.alliance_id and user.alliance_id == target.alliance_id:
             raise OpponentUnavailableError("🤝 این بازیکن هم‌اتحادی شماست و امکان حمله به او وجود ندارد.")
+        # an old card must obey the same matchmaking rules as a fresh search — otherwise a
+        # saved card of a rich/weak player is a permanent attack bookmark (out of the cup
+        # band, past rookie protection, or onto a banned account)
+        rookie_gap = (user.cup >= 2000 and target.cup < 1000) or (user.cup < 1000 and target.cup >= 2000)
+        if (
+            target.id == user.id or target.is_banned or rookie_gap
+            or abs(target.cup - user.cup) > constants.ARENA_MATCH_CUP_BAND
+        ):
+            raise OpponentUnavailableError("این حریف دیگه در محدوده‌ی کاپ تو نیست، یکی دیگه پیدا کن.")
         tc = Creature.objects.filter(owner=target, is_active=True).first()
         if tc is None:
             raise OpponentUnavailableError("این حریف دیگه موجود فعالی نداره، یکی دیگه پیدا کن.")
@@ -743,6 +754,16 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     # back so the player can retry. If the in-memory pending is gone, rebuild it from the
     # button's ref (survives bot restarts / stale cards — the reported bug).
     pending = context.user_data.pop(PENDING_OPPONENT_KEY, None)
+    if pending is not None and ref and ref != _opp_ref(pending):
+        # the tapped card belongs to an OLDER opponent than the one currently pending:
+        # attack the one on the card (rebuilt below), not whoever is pending now
+        context.user_data[PENDING_OPPONENT_KEY] = pending
+        pending = None
+    if pending is None and (not ref or ref == "f"):
+        # a bot card with nothing pending = a second tap (the first already attacked) or
+        # a restart. Don't silently fight a brand-new opponent — show a fresh card.
+        await arena_find_callback(update, context, note="این کارت قدیمی بود؛ حریف تازه برات پیدا کردم.")
+        return
     if pending is None:
         try:
             pending = await run_db(_reconstruct_pending_sync, update.effective_user, ref)
@@ -752,7 +773,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
             await _rematch_after_unavailable(update, context)
             return
         except GameError as exc:
-            await query.answer(str(exc), show_alert=True)
+            await query.answer(alert_text(exc), show_alert=True)
             return
         if pending is None:
             await query.answer("حریفی پیدا نشد، «حریف بعدی» رو بزن.", show_alert=True)
@@ -771,7 +792,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
         context.user_data[PENDING_OPPONENT_KEY] = pending  # restore for a retry
         if not await show_energy_error(query, exc):
-            await query.answer(str(exc), show_alert=True)
+            await query.answer(alert_text(exc), show_alert=True)
         return
 
     context.user_data[ARENA_DETAIL_KEY] = result.get("detail_log", "")
@@ -1018,7 +1039,7 @@ async def arena_revenge_callback(update: Update, context: ContextTypes.DEFAULT_T
             _revenge_find_sync, update.effective_user, log_id
         )
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
 
     gap = opp_power - my_power
@@ -1089,7 +1110,7 @@ async def arena_revenge_attack_callback(update: Update, context: ContextTypes.DE
         from bot.handlers.energy import show_energy_error
 
         if not await show_energy_error(query, exc):
-            await query.answer(str(exc), show_alert=True)
+            await query.answer(alert_text(exc), show_alert=True)
         return
 
     from bot.handlers.notify import send_defense_report_now
@@ -1383,7 +1404,7 @@ async def arena_chest_start_callback(update: Update, context: ContextTypes.DEFAU
         await run_db(_chest_start_sync, update.effective_user, chest_id)
         await query.answer("🔓 باز کردن جعبه شروع شد!")
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await arena_chest_detail_callback(update, context)
 
@@ -1400,7 +1421,7 @@ async def arena_chest_queue_callback(update: Update, context: ContextTypes.DEFAU
         await run_db(_chest_queue_sync, update.effective_user, chest_id)
         await query.answer("📋 جعبه در صف بازگشایی قرار گرفت!")
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await arena_chest_detail_callback(update, context)
 
@@ -1429,7 +1450,7 @@ async def arena_chest_speedup_callback(update: Update, context: ContextTypes.DEF
     try:
         user, chest, cfg, cost = await run_db(_chest_speedup_info_sync, update.effective_user, chest_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     keyboard = InlineKeyboardMarkup([
@@ -1459,7 +1480,7 @@ async def arena_chest_speedup_do_callback(update: Update, context: ContextTypes.
         await run_db(_chest_speedup_sync, update.effective_user, chest_id)
         await query.answer("⚡ جعبه آماده باز کردن شد!")
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await arena_chest_detail_callback(update, context)
 
@@ -1475,7 +1496,7 @@ async def arena_chest_open_callback(update: Update, context: ContextTypes.DEFAUL
     try:
         res = await run_db(_chest_open_sync, update.effective_user, chest_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
 
     await query.answer("🎉 جعبه باز شد!")

@@ -29,16 +29,18 @@ def can_join_expedition(user: User) -> tuple[bool, str]:
         user_local_date = timezone.localdate(user.last_expedition_at)
         today_local_date = timezone.localdate()
         if user_local_date == today_local_date:
-            return False, (
-                f"{get_emoji('timer')} <b>سهمیه فردی شما برای امروز تمام شده است!</b>\n\n"
-                f"<blockquote>👤 هر کاربر روزانه فقط <code>1</code> بار می‌تواند در کاروان شرکت کند.\n"
-                f"سهمیه شما فردا مجدداً فعال می‌شود.</blockquote>\n\n"
-                f"💡 <i>برای بازی در گروه‌های دیگر، ربات را به گروه‌های دوستانتان اضافه کنید!</i>"
-            )
+            return False, "⏳ امروز یک‌بار توی کاروان بودی. سهمیه‌ات فردا دوباره باز می‌شه."
     return True, ""
 
 
 @transaction.atomic
+def _today_start():
+    """Midnight of the game day (Asia/Tehran) — the same boundary can_join_expedition
+    uses, so the group cap and the user cap reset together (it used to be UTC midnight,
+    i.e. 03:30 Tehran)."""
+    return timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 def start_expedition_recruitment(creator: User, group_id: int, group_title: str) -> GroupExpedition:
     """Start a new expedition team recruitment in group."""
     creator = User.objects.select_for_update().get(id=creator.id)
@@ -46,7 +48,7 @@ def start_expedition_recruitment(creator: User, group_id: int, group_title: str)
     if not ok:
         raise GameError(msg)
 
-    today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = _today_start()
     group_done_today = GroupExpedition.objects.filter(
         group_id=group_id,
         status="completed",
@@ -132,7 +134,7 @@ def launch_expedition(user: User, expedition_id: int) -> dict:
     if exp.creator_id != user.id:
         raise GameError("فقط سرپرست کاروان (سازنده) می‌تواند دستور حرکت را صادر کند.")
 
-    today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = _today_start()
     group_done_today = GroupExpedition.objects.filter(
         group_id=exp.group_id,
         status="completed",

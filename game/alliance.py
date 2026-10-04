@@ -1,9 +1,11 @@
 import datetime
 
 from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 
 from bio_lab.models import Alliance, Creature, User
+from bio_lab.repository import lock_row
 from game import constants
 from game.combat import resolve_duel
 from game.creature import GameError
@@ -28,8 +30,17 @@ def validate_new_alliance(user: User, name: str | None = None) -> None:
         name = name.strip()
         if not name or len(name) > ALLIANCE_NAME_MAX_LEN:
             raise GameError(f"اسم اتحاد باید بین ۱ تا {ALLIANCE_NAME_MAX_LEN} کاراکتر باشه.")
+        _assert_name_safe(name)
         if Alliance.objects.filter(name__iexact=name).exists():
             raise GameError("این اسم قبلاً گرفته شده، یه اسم دیگه امتحان کن.")
+
+
+def _assert_name_safe(name: str) -> None:
+    """Alliance names are printed raw inside HTML messages all over the bot (cards,
+    leaderboards, war DMs), so the HTML control characters are simply not allowed —
+    one name like «<b>» used to break the formatting of every public board."""
+    if any(ch in name for ch in "<>&"):
+        raise GameError("اسم اتحاد نمی‌تونه شامل < یا > یا & باشه. یه اسم دیگه بفرست.")
 
 
 @transaction.atomic
@@ -37,6 +48,7 @@ def create_alliance(user: User, name: str) -> Alliance:
     name = name.strip()
     if not name or len(name) > ALLIANCE_NAME_MAX_LEN:
         raise GameError(f"اسم اتحاد باید بین ۱ تا {ALLIANCE_NAME_MAX_LEN} کاراکتر باشه.")
+    _assert_name_safe(name)
     if user.alliance_id is not None:
         raise GameError("اول باید از اتحاد فعلیت با /alliance_leave خارج بشی.")
     if Alliance.objects.filter(name__iexact=name).exists():
@@ -540,15 +552,18 @@ def award_daily_treasury_top3() -> list[tuple[int, str]]:
     return out
 
 
+@transaction.atomic
 def deposit_treasury(user: User, amount: int) -> Alliance:
-    if user.alliance_id is None:
-        raise GameError("اول باید عضو یه اتحاد باشی.")
     if amount <= 0:
         raise GameError("مقدار باید بیشتر از صفر باشه.")
+    lock_row(user)
+    if user.alliance_id is None:
+        raise GameError("اول باید عضو یه اتحاد باشی.")
     if user.coins < amount:
         raise GameError("طلا کافی نداری.")
 
-    alliance = user.alliance
+    # locked: a deposit racing a heist / perk purchase used to overwrite the treasury
+    alliance = Alliance.objects.select_for_update().get(id=user.alliance_id)
     user.coins -= amount
     alliance.treasury_gold += amount
     user.save(update_fields=["coins"])
@@ -1063,12 +1078,12 @@ def rally_war(user: User) -> dict:
 
     AllianceWarHit.objects.create(war=war, user=user, power=contribution)
     if war.alliance_a_id == user.alliance_id:
-        war.score_a += contribution
-        war.save(update_fields=["score_a"])
+        type(war).objects.filter(pk=war.pk).update(score_a=F("score_a") + contribution)
+        war.refresh_from_db(fields=["score_a", "score_b"])
         my_score, foe_score = war.score_a, war.score_b
     else:
-        war.score_b += contribution
-        war.save(update_fields=["score_b"])
+        type(war).objects.filter(pk=war.pk).update(score_b=F("score_b") + contribution)
+        war.refresh_from_db(fields=["score_a", "score_b"])
         my_score, foe_score = war.score_b, war.score_a
     return {"contribution": contribution, "my_score": my_score, "foe_score": foe_score,
             "creature_name": pick["chosen"].name, "creature_power": base}

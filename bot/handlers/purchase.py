@@ -8,6 +8,7 @@ upload a receipt photo. Owner side: gets the receipt with تایید / رد / ب
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
+from bot.utils import alert_text
 from bio_lab.repository import display_name, get_or_create_user
 from bot.buttons import ADMIN, BACK, CONFIRM, DANGER, NAV, PRIMARY, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text
@@ -208,7 +209,7 @@ async def buy_pack_go_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         req = await run_db(_create_pack_pending_sync, update.effective_user, pack_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     context.user_data[_AWAIT_RECEIPT_KEY] = req.id
     await query.answer()
@@ -315,7 +316,7 @@ async def buy_submit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         req = await run_db(_create_pending_sync, update.effective_user,
                            amounts["coins"], amounts["dna"], amounts["diamonds"])
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     context.user_data[_AWAIT_RECEIPT_KEY] = req.id
     await query.answer()
@@ -330,14 +331,33 @@ def _attach_sync(tg_user, req_id, file_id):
     return user, req
 
 
+def _recent_awaiting_req_id_sync(tg_id):
+    """The player's open «awaiting receipt» request from the last 2 hours — the durable
+    fallback for when the bot restarted between the invoice and the receipt photo (the
+    in-memory pointer is gone, but the paid player must not be ignored)."""
+    import datetime
+
+    from django.utils import timezone
+
+    from bio_lab.models import PurchaseRequest
+
+    since = timezone.now() - datetime.timedelta(hours=2)
+    return (
+        PurchaseRequest.objects.filter(user_id=tg_id, status="awaiting_receipt", created_at__gte=since)
+        .order_by("-id").values_list("id", flat=True).first()
+    )
+
+
 async def receipt_photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """A photo sent in private WHILE a purchase is awaiting its receipt is treated as
     that receipt. Otherwise ignored (so ordinary photos aren't captured)."""
+    message = update.effective_message
+    if message is None or not message.photo or update.effective_user is None:
+        return
     req_id = context.user_data.get(_AWAIT_RECEIPT_KEY)
     if req_id is None:
-        return
-    message = update.effective_message
-    if message is None or not message.photo:
+        req_id = await run_db(_recent_awaiting_req_id_sync, update.effective_user.id)
+    if req_id is None:
         return
     file_id = message.photo[-1].file_id  # largest size
     user, req = await run_db(_attach_sync, update.effective_user, req_id, file_id)
@@ -432,7 +452,7 @@ async def buy_approve_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         res = await run_db(purchase.approve, req_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("✅ تأیید شد و اعمال شد.")
     bits = []
@@ -469,7 +489,7 @@ async def buy_reject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         res = await run_db(purchase.reject, req_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("❌ رد شد.")
     await _notify_user(
@@ -494,7 +514,7 @@ async def buy_block_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         await run_db(purchase.set_receipt_block, user_id, block)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🚫 بلاک شد." if block else "♻️ آنبلاک شد.")
     if query.message is not None:
@@ -517,7 +537,7 @@ async def buy_manage_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         data = await run_db(user_info, user_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     u = data["user"]

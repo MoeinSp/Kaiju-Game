@@ -15,6 +15,7 @@ Directions (as the user experiences them):
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.repository import get_or_create_user
 from bot.buttons import BUILD, CONFIRM, DANGER, NAV, PRIMARY, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
@@ -184,7 +185,7 @@ async def exchange_nav_callback(update: Update, context: ContextTypes.DEFAULT_TY
         try:
             pack = exchange.describe(direction, amt)
         except GameError as exc:
-            await query.answer(str(exc), show_alert=True)
+            await query.answer(alert_text(exc), show_alert=True)
             return
         await query.answer()
         text, kb = build_confirm(int(oid), pack, coins, dna)
@@ -236,7 +237,7 @@ async def exchange_do_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     except GameError as exc:
         # balance changed since the button was drawn → back to the home screen with
         # the error, so a stale/spammed tap fails cleanly instead of over-converting
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         coins, dbal = await run_db(_bal_sync, update.effective_user)
         text, kb = _home_render(int(oid), coins, dbal, _is_group(update))
         await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)

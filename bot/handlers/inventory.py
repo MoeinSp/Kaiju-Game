@@ -1,6 +1,7 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.models import Equipment
 from bio_lab.repository import get_active_creature, get_or_create_user
 from bot.buttons import BUILD, CONFIRM, DANGER, LIST, NAV, SHOP, back_btn, back_only_keyboard, btn
@@ -210,7 +211,7 @@ async def inventory_pick_callback(update: Update, context: ContextTypes.DEFAULT_
     try:
         item, dupes = await run_db(_item_detail_sync, update.effective_user, item_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     from game.media import get_equipment_image_path
@@ -237,7 +238,7 @@ async def inventory_equip_callback(update: Update, context: ContextTypes.DEFAULT
     try:
         item = await run_db(_equip_sync, update.effective_user, item_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("⚔️ تجهیز شد!")
     from game.media import get_equipment_image_path
@@ -262,7 +263,7 @@ async def inventory_unequip_callback(update: Update, context: ContextTypes.DEFAU
     try:
         item = await run_db(_unequip_sync, update.effective_user, item_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     _, dupes = await run_db(_item_detail_sync, update.effective_user, item_id)
     await query.answer("🎒 خارج شد.")
@@ -282,7 +283,7 @@ async def inventory_upgrade_list_callback(update: Update, context: ContextTypes.
     try:
         item, dupes = await run_db(_item_detail_sync, update.effective_user, item_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     if not dupes:
         await query.answer("هیچ نمونه‌ی مشابهی نداری.", show_alert=True)
@@ -311,7 +312,7 @@ async def inventory_upgrade_do_callback(update: Update, context: ContextTypes.DE
     try:
         item = await run_db(_upgrade_item_sync, update.effective_user, int(item_id), int(dupe_id))
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     _, dupes = await run_db(_item_detail_sync, update.effective_user, int(item_id))
     await query.answer("✨ ارتقا یافت!")
@@ -484,7 +485,7 @@ def _forge_detail_sync(tg_user, item_id):
         item = Equipment.objects.get(id=item_id, owner=user)
     except Equipment.DoesNotExist:
         raise GameError("این تجهیزات پیدا نشد.")
-    return user, item, forge_preview(item)
+    return user, item, forge_preview(item, user)
 
 
 def _forge_detail_text(user, item, preview) -> str:
@@ -584,7 +585,7 @@ async def _efuse_rerender(update, context, target_id: int) -> None:
     try:
         target, scored = await run_db(_efuse_scored_sync, update.effective_user, target_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     selected = _efuse_selection(context, target_id)
     text, keyboard = _efuse_pick_render(target, scored, selected)
@@ -618,7 +619,7 @@ async def efuse_select_all_callback(update: Update, context: ContextTypes.DEFAUL
         try:
             _target, scored = await run_db(_efuse_scored_sync, update.effective_user, target_id)
         except GameError as exc:
-            await query.answer(str(exc), show_alert=True)
+            await query.answer(alert_text(exc), show_alert=True)
             return
         context.user_data.setdefault(_EFUSE_SEL, {})[target_id] = {c.id for c, _ in scored[:PAGE_SIZE]}
     await query.answer()
@@ -642,7 +643,7 @@ async def efuse_multi_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         result = await run_db(_efuse_multi_sync, update.effective_user, target_id, selection)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     context.user_data.get(_EFUSE_SEL, {}).pop(target_id, None)
     target = result["target"]
@@ -675,7 +676,7 @@ async def forge_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         user, item, preview = await run_db(_forge_detail_sync, update.effective_user, item_id)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     await safe_edit_message_text(
@@ -690,7 +691,7 @@ def _forge_do_sync(tg_user, item_id):
     user, _ = get_or_create_user(tg_user)
     result = forge(user, item_id)
     user.refresh_from_db()
-    return user, result, forge_preview(result["item"])
+    return user, result, forge_preview(result["item"], user)
 
 
 async def forge_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -703,7 +704,7 @@ async def forge_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
         if await show_gold_error(query, exc):
             return
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
 
     item = result["item"]

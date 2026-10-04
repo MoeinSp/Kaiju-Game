@@ -3,6 +3,7 @@
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.models import Team
 from bio_lab.repository import get_or_create_user
 from bot.buttons import BATTLE, PRIMARY, back_btn, back_only_keyboard, btn
@@ -101,7 +102,7 @@ async def campaign_fight_callback(update: Update, context: ContextTypes.DEFAULT_
         from bot.handlers.energy import show_energy_error
 
         if not await show_energy_error(query, exc):
-            await query.answer(str(exc), show_alert=True)
+            await query.answer(alert_text(exc), show_alert=True)
         return
 
     if result["won"]:

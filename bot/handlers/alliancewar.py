@@ -9,6 +9,7 @@ week's end (settled by the notification job).
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, ContextTypes
 
+from bot.utils import alert_text
 from bio_lab.models import Alliance
 from bio_lab.repository import creature_name, get_or_create_user
 from bot.buttons import BATTLE, BUILD, CONFIRM, DANGER, back_btn, btn
@@ -82,7 +83,7 @@ async def vault_collect_callback(update: Update, context: ContextTypes.DEFAULT_T
     try:
         result, info = await run_db(_vault_collect_sync, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer(f"🏦 {result['income']} طلا به خزانه اضافه شد!")
     text, keyboard = _perks_render(info)
@@ -103,7 +104,7 @@ async def perk_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     try:
         info = await run_db(_buy_sync, update.effective_user, perk_key)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("✅ پرک ارتقا یافت!")
     text, keyboard = _perks_render(info)
@@ -239,7 +240,7 @@ async def war_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         data = await run_db(_war_start_sync, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🔥 جنگ شروع شد!")
     text, keyboard = _war1d_render(data)
@@ -300,7 +301,7 @@ async def war_rally_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         p = await run_db(_war_rally_preview_sync, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
     text, keyboard = _war_rally_confirm(p)
@@ -318,7 +319,7 @@ async def war_rally_go_callback(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         result, data = await run_db(_war_rally_sync, update.effective_user)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer(f"💪 +{result['contribution']} امتیاز (با {result['creature_name']})")
     text, keyboard = _war1d_render(data)

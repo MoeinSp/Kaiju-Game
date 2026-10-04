@@ -121,12 +121,26 @@ def activate_subscription(user: User, tier: str, days: int = 30) -> User:
     now = timezone.now()
     active = is_subscription_active(user)
 
-    if active and user.subscription_until:
-        # If already active, extend from current expiration
-        user.subscription_until += datetime.timedelta(days=days)
-        # If upgrading to gold, update tier
-        if tier == "gold" or user.subscription_tier != "gold":
+    current = user.subscription_tier if active else None
+    if active and user.subscription_until and current in SUBSCRIPTION_TIERS and current != tier:
+        # Different tier than the running one: convert by MONEY VALUE, both ways —
+        #  • gold running, silver bought → stays gold, extended by what the silver
+        #    payment is worth in gold days (it used to add a full 30 gold days at the
+        #    silver price);
+        #  • silver running, gold bought → becomes gold; the remaining silver days are
+        #    carried over at their gold value (they used to turn into gold 1:1).
+        old_price = SUBSCRIPTION_TIERS[current]["price_toman"]
+        new_price = SUBSCRIPTION_TIERS[tier]["price_toman"]
+        if new_price < old_price:
+            user.subscription_until += datetime.timedelta(days=days * new_price / old_price)
+        else:
+            remaining = max(datetime.timedelta(0), user.subscription_until - now)
             user.subscription_tier = tier
+            user.subscription_until = now + remaining * (old_price / new_price) + datetime.timedelta(days=days)
+    elif active and user.subscription_until:
+        # same tier (or an unknown legacy one): plain extension
+        user.subscription_until += datetime.timedelta(days=days)
+        user.subscription_tier = tier
     else:
         user.subscription_tier = tier
         user.subscription_until = now + datetime.timedelta(days=days)

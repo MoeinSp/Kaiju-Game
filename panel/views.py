@@ -570,7 +570,7 @@ def player_creatures(request, user_id: int):
         creatures.append({
             "obj": c,
             "power": creature_power(c, get_equipped_items(c)),
-            "cap": constants.part_upgrade_cap(c.star_level),
+            "cap": constants.part_upgrade_cap(c.rarity, c.star_level),
             "rarity_label": constants.RARITY_LABELS.get(c.rarity, c.rarity),
             "star_options": range(1, 6),
         })

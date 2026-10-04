@@ -5,6 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from bio_lab.models import Creature, User
+from bio_lab.repository import lock_row
 from game import constants
 
 
@@ -300,7 +301,10 @@ def devour_creatures(user: User, target_id: int, sacrifice_ids: list[int]) -> di
     }
 
 
+@transaction.atomic
 def feed(user: User, creature: Creature) -> int:
+    lock_row(user)
+    lock_row(creature)
     if user.coins < constants.FEED_COST_COINS:
         raise InsufficientGoldError(
             f"طلا کافی نداری! هزینه تغذیه <b>{constants.FEED_COST_COINS:,}</b> طلاست "
@@ -428,7 +432,9 @@ def list_creatures(user: User) -> list[Creature]:
     return list(Creature.objects.filter(owner=user).order_by("id"))
 
 
+@transaction.atomic
 def set_active_creature(user: User, creature_id: int) -> Creature:
+    lock_row(user)  # serialises two parallel selects — otherwise both end up active
     try:
         target = Creature.objects.get(id=creature_id)
     except Creature.DoesNotExist:
@@ -484,12 +490,15 @@ def reset_progression_for_transfer(creature: Creature) -> None:
     creature.name_changes = 0
 
 
+@transaction.atomic
 def upgrade_part(user: User, creature: Creature, part: str, count: int = 1) -> tuple[int, int]:
     """Raise a body part by `count` levels in one paid step. Returns (new_level,
     total_cost). Charges the full escalating sum up front; all-or-nothing (if the
     player can't afford the whole batch, nothing is upgraded)."""
     if part not in constants.BODY_PARTS:
         raise GameError("این عضو وجود نداره.")
+    lock_row(user)
+    lock_row(creature)
     count = max(1, count)
     current_level = getattr(creature, f"{part}_lvl")
     cap = constants.part_upgrade_cap(creature.rarity, creature.star_level)
@@ -517,5 +526,5 @@ def upgrade_part(user: User, creature: Creature, part: str, count: int = 1) -> t
     user.coins -= total
     setattr(creature, f"{part}_lvl", current_level + count)
     user.save(update_fields=["coins"])
-    creature.save()
+    creature.save(update_fields=[f"{part}_lvl"])
     return current_level + count, total

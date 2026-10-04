@@ -3,6 +3,7 @@
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.utils import alert_text
 from bio_lab.repository import get_or_create_user
 from bot.buttons import CONFIRM, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
@@ -103,7 +104,7 @@ async def casino_play_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         prize, coins, diamonds, free_used = await run_db(_play_sync, update.effective_user, tier)
     except GameError as exc:
-        await query.answer(str(exc), show_alert=True)
+        await query.answer(alert_text(exc), show_alert=True)
         return
 
     if prize["kind"] == "nothing":
