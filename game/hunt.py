@@ -21,9 +21,15 @@ WILD_NAMES = ["Ferabeast", "Grimhide", "Rustclaw", "Mossfang", "Duskrunner"]
 # the right element clears it, which is why its loot is much bigger.
 HUNT_TIERS = {
     "weak": {"label": "🟢 ضعیف", "stat_mult": 0.80, "reward_mult": 0.6},
-    "normal": {"label": "🟡 هم‌سطح", "stat_mult": 0.95, "reward_mult": 1.0},
-    "strong": {"label": "🔴 قوی", "stat_mult": 1.05, "reward_mult": 2.8},
+    "normal": {"label": "🟡 هم‌سطح", "stat_mult": 0.95, "reward_mult": 0.8},
+    "strong": {"label": "🔴 قوی", "stat_mult": 1.05, "reward_mult": 1.2},
 }
+# reward_mult was 0.6 / 1.0 / 2.8 while a fight was a dice roll (≈96% / 67% / 34% to win).
+# Duels are deterministic now: the card says «می‌بری» or «می‌بازی», so nobody spends
+# energy on a loss — every hunt taken is a win. To keep gold/DNA/XP PER ENERGY where it
+# was, the per-win reward is re-based to roughly (old reward × old win chance):
+# 0.6×0.96≈0.6, 1.0×0.67→0.8, 2.8×0.34→1.2 (kept above the plain expectation so the
+# harder targets are still worth looking for). The HUNT_MAX_COIN cap is unchanged.
 
 # Hunt loot scales PURELY with the player creature's power — the stronger your kaiju,
 # the more it earns, independent of cup or anything else. Tier only sizes the target
@@ -263,7 +269,9 @@ def estimated_reward(tier: str, power: int = 0) -> tuple[int, int]:
     return hunt_coin_range(power, tier)
 
 
-AUTO_HUNT_LOOT_MULT = 0.5  # auto-hunt pays HALF the gold/DNA of a manual hunt
+# 0.625 × the (re-based) normal reward 0.8 = the same 0.5 of the OLD normal hunt, so
+# auto-hunt income is unchanged by the tier re-base above
+AUTO_HUNT_LOOT_MULT = 0.625
 WIN_CHANCE_EXP = 14  # mirrors bot.handlers.private._WIN_CHANCE_EXP for the fast auto-hunt
 # Auto-hunt is a hands-off convenience, not a real duel — the player can't pick the
 # right element per target like they do in a manual hunt, so raw power-ratio odds felt

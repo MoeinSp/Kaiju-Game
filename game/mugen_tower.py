@@ -191,6 +191,7 @@ def fight_mugen_floor(user: User, player_creature: Creature) -> dict:
         guardian,
         seed=floor * 10007 + player_creature.id,
         deterministic=True,
+        power_b=floor_guardian_power(floor),
     )
     won = winner is player_creature
     rew = floor_rewards(floor)

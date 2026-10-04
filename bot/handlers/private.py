@@ -197,6 +197,12 @@ ELEMENT_POWER_FACTOR = 1.15
 
 
 def win_chance_pct(my_power: int, opp_power: int, my_elem=None, opp_elem=None) -> int:
+    """The duel is deterministic now (constants.duel_attacker_wins — the very function
+    combat uses), so this is an honest 100 (you win) or 0 (you lose), never a guess."""
+    return 100 if constants.duel_attacker_wins(my_power, my_elem, opp_power, opp_elem) else 0
+
+
+def _legacy_win_chance_pct(my_power: int, opp_power: int, my_elem=None, opp_elem=None) -> int:
     my = max(1, int(my_power))
     opp = max(1, int(opp_power))
     # Same-element fights are decided purely by power (see combat._simulate): the
@@ -222,6 +228,10 @@ def win_chance_pct(my_power: int, opp_power: int, my_elem=None, opp_elem=None) -
 
 
 def win_label(pct: int) -> str:
+    if pct >= 100:
+        return "🟢 <b>می‌بری</b> (قطعی)"
+    if pct <= 0:
+        return "🔴 <b>می‌بازی</b> (قطعی)"
     if pct >= 80:
         return "🟢 (بسیار بالا)"
     if pct >= 60:
@@ -239,9 +249,11 @@ def element_advantage_line(my_elem, opp_elem) -> str:
         return ""
     mult = constants.element_multiplier(my_elem, opp_elem)
     if mult > 1:
-        return f"✅ برتری عنصری: {constants.element_label(my_elem)} بر {constants.element_label(opp_elem)} غلبه دارد!"
+        return (f"✅ برتری عنصری: {constants.element_label(my_elem)} بر {constants.element_label(opp_elem)} "
+                "غلبه دارد — قدرت تو ×۱٫۲ حساب می‌شه.")
     if mult < 1:
-        return f"⚠️ ضعف عنصری: {constants.element_label(opp_elem)} بر {constants.element_label(my_elem)} برتری دارد!"
+        return (f"⚠️ ضعف عنصری: {constants.element_label(opp_elem)} بر {constants.element_label(my_elem)} "
+                "برتری دارد — قدرت حریف ×۱٫۲ حساب می‌شه.")
     return "➖ بدون مزیت عنصری"
 
 
@@ -2840,7 +2852,7 @@ def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> st
         "📊 <b>مقایسه وضعیت نبرد:</b>",
         f"💪 قدرت شما: <code>{my_power:,}</code>",
         f"⚔️ قدرت حریف: <code>{target['power']:,}</code>",
-        f"🎯 شانس پیروزی: {pct_bar(pct, 100)} {win_label(pct)}",
+        f"🎯 نتیجه‌ی نبرد: {win_label(pct)}",
         "",
         _CARD_DIV,
         "",
@@ -3214,7 +3226,7 @@ async def autohunt_start_callback(update: Update, context: ContextTypes.DEFAULT_
         f"⚡️ <b>شکار خودکار</b>\n\n"
         f"چقدر انرژی می‌خوای صرف کنی؟ (الان <code>{energy}/{max_en}</code> داری — "
         f"هر شکار <code>{constants.HUNT_ENERGY_COST}</code> انرژی).\n\n"
-        f"<i>توجه: شکار خودکار نصف لوت شکار دستیه و طلا و دی‌ان‌ای کمتری می‌ده.</i>",
+        f"<i>توجه: شکار خودکار حدود ۶۰٪ لوت شکار دستیه و طلا و دی‌ان‌ای کمتری می‌ده.</i>",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
             [btn(f"همه ({energy})", emoji_key="btn_autohunt", style=BATTLE, callback_data="autohunt_amt:all"),
@@ -3244,7 +3256,7 @@ async def autohunt_amt_callback(update: Update, context: ContextTypes.DEFAULT_TY
             query,
             f"⌨️ <b>انرژی دلخواه</b>\n\n"
             f"یه عدد بفرست (بین <code>1</code> تا <code>{energy}</code>).\n\n"
-            f"<i>شکار خودکار نصف لوت شکار دستیه.</i>",
+            f"<i>شکار خودکار حدود ۶۰٪ لوت شکار دستیه.</i>",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[back_btn("autohunt_start", "انصراف")]]),
         )

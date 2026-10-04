@@ -1650,6 +1650,31 @@ def random_species_name(element: str) -> str:
     return random.choice(SPECIES_NAMES[element])
 
 
+# ── 1v1 duel outcome: DETERMINISTIC ───────────────────────────────────────────
+# A duel (hunt, arena, group attack, guardian challenge, heist, Mugen Tower) is decided
+# by ONE comparison the player can do in their head:
+#     effective power = power × 1.20 for the side that has the element advantage
+#     higher effective power wins — always. A tie goes to the attacker.
+# No dice: 12,001 beats a 10,000 that has the advantage (12,000 effective); 11,999 loses.
+ELEMENT_ADVANTAGE_POWER_FACTOR = 1.20
+
+
+def effective_duel_powers(power_a: int, elem_a, power_b: int, elem_b) -> tuple[int, int]:
+    """(effective_a, effective_b): each side's power, ×1.20 for the element-advantaged one."""
+    ea, eb = max(0, int(power_a)), max(0, int(power_b))
+    if elem_a and elem_b:
+        if is_strong_against(elem_a, elem_b):
+            ea = round(ea * ELEMENT_ADVANTAGE_POWER_FACTOR)
+        elif is_strong_against(elem_b, elem_a):
+            eb = round(eb * ELEMENT_ADVANTAGE_POWER_FACTOR)
+    return ea, eb
+
+
+def duel_attacker_wins(power_a: int, elem_a, power_b: int, elem_b) -> bool:
+    ea, eb = effective_duel_powers(power_a, elem_a, power_b, elem_b)
+    return ea >= eb
+
+
 def element_multiplier(attacker_element: str, defender_element: str) -> float:
     if is_strong_against(attacker_element, defender_element):
         return STRONG_MULTIPLIER

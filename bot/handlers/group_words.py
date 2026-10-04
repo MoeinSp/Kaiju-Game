@@ -668,7 +668,7 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
         f"💀 قدرت حریف: <code>{target['power']:,}</code>",
         "",
         f"🦅 قدرت شما: <code>{my_power:,}</code>",
-        f"🎯 شانس پیروزی: {pct_bar(pct, 100)} {win_label(pct)}",
+        f"🎯 نتیجه‌ی نبرد: {win_label(pct)}",
         (f"🔮 مزیت عنصری: {adv}" if adv else ""),
         "</blockquote>",
         "",
@@ -734,7 +734,7 @@ def _arena_card(user, opponent, loot, shielded_for, data=None) -> tuple[str, Inl
         "",
         div,
         "",
-        f"🎯 شانس پیروزی: {pct_bar(pct, 100)} {win_label(pct)}",
+        f"🎯 نتیجه‌ی نبرد: {win_label(pct)}",
     ]
     if adv:
         lines.append(f"🔮 مزیت عنصری: {adv}")

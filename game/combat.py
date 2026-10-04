@@ -38,7 +38,8 @@ class Fighter:
     form: float = 1.0
 
 
-def _simulate(creature_a: Creature, creature_b: Creature, *, seed: int | None = None, deterministic: bool = False) -> tuple[Fighter, Fighter, Fighter, int, list[str]]:
+def _simulate(creature_a: Creature, creature_b: Creature, *, seed: int | None = None, deterministic: bool = False,
+              power_a: int | None = None, power_b: int | None = None) -> tuple[Fighter, Fighter, Fighter, int, list[str]]:
     """Play out one duel. Returns (fa, fb, winner, rounds, blow_by_blow).
     Single source of truth so every result view (compact, detailed, structured) is the
     same fight rather than three copies of the loop that could drift apart."""
@@ -47,12 +48,10 @@ def _simulate(creature_a: Creature, creature_b: Creature, *, seed: int | None = 
     fa.hp = fa.stats["hp"]
     fb = Fighter(creature_b, effective_stats(creature_b, get_equipped_items(creature_b)), 0)
     fb.hp = fb.stats["hp"]
-    if deterministic:
-        fa.form = 1.0
-        fb.form = 1.0
-    else:
-        fa.form = rng.uniform(1 - FORM_SWING, 1 + FORM_SWING)
-        fb.form = rng.uniform(1 - FORM_SWING, 1 + FORM_SWING)
+    # no per-fight «form» any more: the result is fixed by the power rule below, the
+    # blow-by-blow is only its illustration
+    fa.form = 1.0
+    fb.form = 1.0
 
     blow_by_blow: list[str] = []
     round_num = 0
@@ -67,22 +66,24 @@ def _simulate(creature_a: Creature, creature_b: Creature, *, seed: int | None = 
             _attack(attacker, defender, blow_by_blow, rng)
 
     winner = _decide_winner(fa, fb)
-    # Same-element rule: NO upsets. When both fighters share an element there's no
-    # elemental factor to muddy things, so the higher-power creature must win every
-    # time (the shown win-chance is 100/0 to match — see win_chance_pct). We force the
-    # intended winner AND make the HP report agree, so a "100% but lost" bug is
-    # impossible. Different elements stay probabilistic — advantage can beat power there.
-    if creature_a.element == creature_b.element:
-        pa, pb = combat_rating(fa.stats), combat_rating(fb.stats)
-        if pa != pb:
-            intended = fa if pa > pb else fb
-            loser = fb if intended is fa else fa
-            if winner is not intended:
-                winner = intended
-                if loser.hp > 0:
-                    loser.hp = 0
-                if intended.hp <= 0:
-                    intended.hp = max(1, round(intended.stats["hp"] * 0.15))
+    # THE RULE (constants.duel_attacker_wins): the outcome is DETERMINISTIC — the side
+    # with the higher effective power wins, where the element-advantaged side counts
+    # ×1.20; a tie goes to the attacker (creature_a). Powers are the same numbers the
+    # cards show (creature_power: clamped at MAX_KAIJU_POWER), or the explicit
+    # power_a/power_b a caller displayed (bots, tower guardians). The simulated exchange
+    # above is cosmetic; we make its HP report agree with the decided winner, so a
+    # «می‌بری» card can never be followed by a loss.
+    cap = constants.MAX_KAIJU_POWER
+    pa = power_a if power_a is not None else min(cap, combat_rating(fa.stats))
+    pb = power_b if power_b is not None else min(cap, combat_rating(fb.stats))
+    intended = fa if constants.duel_attacker_wins(pa, creature_a.element, pb, creature_b.element) else fb
+    loser = fb if intended is fa else fa
+    if winner is not intended:
+        winner = intended
+    if loser.hp > 0:
+        loser.hp = 0
+    if intended.hp <= 0:
+        intended.hp = max(1, round(intended.stats["hp"] * 0.15))
     return fa, fb, winner, round_num, blow_by_blow
 
 
@@ -112,11 +113,11 @@ def battle_report(sa: dict, sb: dict, winner_name: str, rounds: int, mult: float
     a_lbl = constants.element_label(sa["element"])
     b_lbl = constants.element_label(sb["element"])
     if mult > 1:
-        match = f"⚖️ تطابق عناصر: برتری با <code>{sa['name']}</code> (ضریب آسیب فعال)"
+        match = f"⚖️ تطابق عناصر: برتری با <code>{sa['name']}</code> (+۲۰٪ قدرت)"
     elif mult < 1:
-        match = f"⚖️ تطابق عناصر: برتری با <code>{sb['name']}</code> (ضریب آسیب فعال)"
+        match = f"⚖️ تطابق عناصر: برتری با <code>{sb['name']}</code> (+۲۰٪ قدرت)"
     else:
-        match = "⚖️ تطابق عناصر: خنثی (بدون ضریب آسیب)"
+        match = "⚖️ تطابق عناصر: خنثی (بدون برتری)"
     lines = [
         f"🗡 مهاجم: <code>{sa['name']}</code> [{a_lbl}]",
         f"🛡 مدافع: <code>{sb['name']}</code> [{b_lbl}]",
@@ -150,11 +151,13 @@ def _detail_text(fa: Fighter, fb: Fighter, winner: Fighter, rounds: int, blow_by
     ])
 
 
-def resolve_battle(creature_a: Creature, creature_b: Creature, *, seed: int | None = None, deterministic: bool = False) -> dict:
+def resolve_battle(creature_a: Creature, creature_b: Creature, *, seed: int | None = None, deterministic: bool = False,
+                   power_a: int | None = None, power_b: int | None = None) -> dict:
     """Rich core result for callers that want to slot rewards into the shared report
     themselves: structured sides, winner, round count, element multiplier, and the
     ready-made compact / detail strings. Attacker is `creature_a`."""
-    fa, fb, winner, rounds, blow = _simulate(creature_a, creature_b, seed=seed, deterministic=deterministic)
+    fa, fb, winner, rounds, blow = _simulate(creature_a, creature_b, seed=seed, deterministic=deterministic,
+                                             power_a=power_a, power_b=power_b)
     sa, sb = _side(fa), _side(fb)
     mult = constants.element_multiplier(fa.creature.element, fb.creature.element)
     return {
@@ -165,10 +168,11 @@ def resolve_battle(creature_a: Creature, creature_b: Creature, *, seed: int | No
     }
 
 
-def resolve_duel(creature_a: Creature, creature_b: Creature, *, seed: int | None = None, deterministic: bool = False) -> tuple[Creature, str]:
+def resolve_duel(creature_a: Creature, creature_b: Creature, *, seed: int | None = None, deterministic: bool = False,
+                 power_a: int | None = None, power_b: int | None = None) -> tuple[Creature, str]:
     """Simulates a duel, returning (winner, compact_log). For the full blow-by-blow
     too, call resolve_duel_detailed()."""
-    r = resolve_battle(creature_a, creature_b, seed=seed, deterministic=deterministic)
+    r = resolve_battle(creature_a, creature_b, seed=seed, deterministic=deterministic, power_a=power_a, power_b=power_b)
     return r["winner"], r["compact"]
 
 

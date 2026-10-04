@@ -437,7 +437,7 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
         f"{get_emoji('energy')} انرژی فعلی: {pct_bar(energy, max_en, 10)} (<code>{energy}</code>/<code>{max_en}</code>)",
         _ARENA_DIV,
         "<blockquote>"
-        f"🎯 <b>شانس پیروزی:</b> {pct_bar(pct, 100, 10)} {win_label(pct)}\n"
+        f"🎯 <b>نتیجه‌ی نبرد:</b> {win_label(pct)}\n"
         + (f"🔮 <b>مزیت عنصری:</b> {adv}\n" if adv else "")
         + f"{get_emoji('energy')} <b>هزینه نبرد:</b> <code>{constants.ARENA_ATTACK_ENERGY_COST}</code> انرژی\n\n"
         f"{get_emoji('gift')} <b>پاداش پیروزی:</b>\n"

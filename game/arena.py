@@ -266,6 +266,12 @@ def _fake_opponent(attacker: User) -> dict:
     if attacker_element and (attacker.cup >= 3700 or bot_cup >= 3700):
         counters = [e for e in constants.ELEMENTS if constants.is_strong_against(e, attacker_element)]
         _bot_element = random.choice(counters) if counters else constants.random_element()
+    elif attacker_element:
+        # a bot is never element-WEAK to the attacker: with the deterministic rule that
+        # would be a guaranteed win over a bot 20% stronger than you, and free re-rolls
+        # would let everyone climb a fifth above the cup their power deserves
+        safe = [e for e in constants.ELEMENTS if not constants.is_strong_against(attacker_element, e)]
+        _bot_element = random.choice(safe or constants.ELEMENTS)
     else:
         _bot_element = constants.random_element()
 
@@ -397,7 +403,12 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         if is_shielded(defender_user):
             raise OpponentUnavailableError("این حریف الان سپر محافظ داره، یکی دیگه رو امتحان کن.")
 
-    battle_res = resolve_battle(attacker_creature, defender_creature)
+    # a bot fights with exactly the power its card showed (the stand-in creature built
+    # from that number can be off by a few points of rounding)
+    battle_res = resolve_battle(
+        attacker_creature, defender_creature,
+        power_b=opponent["power"] if opponent["is_fake"] else None,
+    )
     winner = battle_res["winner"]
     log_text = battle_res["compact"]
     detail_log = battle_res["detail"]

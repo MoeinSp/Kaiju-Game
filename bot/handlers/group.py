@@ -1284,7 +1284,7 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
     a_tag = f" [{constants.element_label(a_elem)}]" if a_elem else ""
     t_tag = f" [{constants.element_label(t_elem)}]" if t_elem else ""
     tactical = [
-        f"📊 شانس پیروزی: {pct_bar(pct, 100)} {win_label(pct)}",
+        f"📊 نتیجه‌ی نبرد: {win_label(pct)}",
     ]
     if adv:
         tactical.append(f"🔮 مزیت عنصری: {adv}")
