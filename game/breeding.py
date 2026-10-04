@@ -140,12 +140,6 @@ def start(user: User, parent_a: Creature, parent_b: Creature) -> BreedingJob:
     assert_available(user)
     if parent_a.id == parent_b.id:
         raise GameError("دو هیولای متفاوت انتخاب کن — یه هیولا نمی‌تونه با خودش جفت بشه.")
-    for p in (parent_a, parent_b):
-        if p.element in constants.CAVE_BLOCKED_ELEMENTS:
-            raise GameError(
-                f"هیولاهای {constants.element_label(p.element)} رو نمی‌شه توی غار جفت کرد — "
-                "این عنصر فقط از فروشگاه به دست می‌آد."
-            )
     from game.subscription import get_subscription_tier
 
     max_jobs = 2 if get_subscription_tier(user) == "gold" else 1
@@ -368,10 +362,7 @@ def parent_candidates(user: User, exclude_id: int | None = None) -> list[Creatur
     caller often wants power, so sort by level like every other picker."""
     from game.workers import free_creatures
 
-    return [
-        c for c in free_creatures(user)
-        if c.id != exclude_id and c.element not in constants.CAVE_BLOCKED_ELEMENTS
-    ]
+    return [c for c in free_creatures(user) if c.id != exclude_id]
 
 
 def creature_power(creature: Creature) -> int:
