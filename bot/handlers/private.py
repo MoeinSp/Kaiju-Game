@@ -4066,7 +4066,10 @@ def _heist_targets_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
     if user.alliance_id is None:
         raise GameError("اول باید عضو یه اتحاد باشی.")
-    return list(Alliance.objects.exclude(id=user.alliance_id).order_by("name"))
+    return list(
+        Alliance.objects.exclude(id=user.alliance_id).filter(treasury_gold__gt=0)
+        .order_by("-treasury_gold", "id")[:40]
+    )
 
 
 async def alliance_heist_list_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -4080,7 +4083,10 @@ async def alliance_heist_list_callback(update: Update, context: ContextTypes.DEF
         await query.answer("هیچ اتحاد دیگه‌ای برای شبیخون نیست.", show_alert=True)
         return
     await query.answer()
-    rows = [[btn(a.name, emoji_key="btn_heist", style=BATTLE, callback_data=f"heist_pick:{a.id}")] for a in targets]
+    rows = [
+        [btn(f"{a.name} — {a.treasury_gold:,} طلا", emoji_key="btn_heist", style=BATTLE, callback_data=f"heist_pick:{a.id}")]
+        for a in targets
+    ]
     rows.append([back_btn("menu:alliance_info")])
     await safe_edit_message_text(query,
         f"🏴‍☠️ کدوم اتحاد رو غارت کنم؟ ({int(constants.HEIST_STEAL_PERCENT * 100)}٪ خزانه در صورت برد)",
@@ -4161,9 +4167,9 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         from bot.handlers.shop import handle_custom_qty_buy
 
         raw = (text or "").strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
-        if not raw.isdigit() or int(raw) <= 0:
+        if not raw.isdigit() or not (0 < int(raw) <= 9999):
             context.user_data[AWAITING_PLAYER_KEY] = awaiting
-            await message.reply_text("⚠️ لطفاً فقط یه عدد مثبت بفرست (مثلاً 10) — یا دستور دیگری بزن:")
+            await message.reply_text("⚠️ لطفاً فقط یه عدد بین ۱ تا ۹۹۹۹ بفرست (مثلاً 10) — یا دستور دیگری بزن:")
             return
         await handle_custom_qty_buy(
             update, context, awaiting["key"], int(raw), awaiting.get("shown_price"), awaiting.get("shown_currency")
@@ -4553,7 +4559,10 @@ def _rank_sync(tg_user):
     if user.alliance_id:
         all_ids = list(Alliance.objects.order_by("-treasury_gold", "id").values_list("id", flat=True))
         my_rank = next((i for i, aid in enumerate(all_ids, start=1) if aid == user.alliance_id), None)
-    return ranked, my_rank, len(ranked), user
+        total = len(all_ids)
+    else:
+        total = Alliance.objects.count()
+    return ranked, my_rank, total, user
 
 
 async def rank(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

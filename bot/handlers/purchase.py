@@ -475,7 +475,7 @@ async def buy_approve_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     )
     if query.message is not None and query.message.caption is not None:
         await query.edit_message_caption(
-            caption=(query.message.caption or "") + f"\n\n{get_emoji('confirm')} <b>تأیید شد.</b>", parse_mode="HTML"
+            caption=(query.message.caption_html or "") + f"\n\n{get_emoji('confirm')} <b>تأیید شد.</b>", parse_mode="HTML"
         )
     await _update_channel_status(context, res, f"{get_emoji('confirm')} <b>وضعیت: تأیید شد</b>")
 
@@ -498,7 +498,7 @@ async def buy_reject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
     if query.message is not None and query.message.caption is not None:
         await query.edit_message_caption(
-            caption=(query.message.caption or "") + f"\n\n{get_emoji('cancel')} <b>رد شد.</b>", parse_mode="HTML"
+            caption=(query.message.caption_html or "") + f"\n\n{get_emoji('cancel')} <b>رد شد.</b>", parse_mode="HTML"
         )
     await _update_channel_status(context, res, f"{get_emoji('cancel')} <b>وضعیت: رد شد</b>")
 
@@ -520,7 +520,7 @@ async def buy_block_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if query.message is not None:
         tag = f"{get_emoji('banned')} <b>ثبت رسید این کاربر بلاک شد.</b>" if block else "♻️ <b>بلاک رسید برداشته شد.</b>"
         await query.edit_message_caption(
-            caption=(query.message.caption or "") + f"\n\n{tag}", parse_mode="HTML"
+            caption=(query.message.caption_html or "") + f"\n\n{tag}", parse_mode="HTML"
         )
 
 

@@ -106,9 +106,21 @@ def get_active_auctions() -> list[BlackMarketAuction]:
 def _ensure_daily_auctions() -> None:
     """Create default daily auctions if none are active."""
     now = timezone.now()
-    active_count = BlackMarketAuction.objects.filter(is_settled=False, ends_at__gt=now).count()
-    if active_count > 0:
+    if BlackMarketAuction.objects.filter(is_settled=False, ends_at__gt=now).exists():
         return
+    with transaction.atomic():
+        _create_daily_auctions_locked(now)
+
+
+def _create_daily_auctions_locked(now) -> None:
+    from django.db import connection
+
+    if connection.vendor == "postgresql":
+        # transaction-scoped advisory lock = a mutex for «create today's lots»
+        with connection.cursor() as cur:
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", [72600117])
+    if BlackMarketAuction.objects.filter(is_settled=False, ends_at__gt=now).exists():
+        return  # another request created them while we waited for the lock
 
     # 22:30 Tehran time deadline
     ends_at = get_next_blackmarket_deadline()

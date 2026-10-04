@@ -535,6 +535,7 @@ ALIASES: dict[str, str] = {
     "کایجو": "reward",
     "kaiju": "reward",
     "ربات": "help",
+    "help": "help",
     "کایجو لجند": "help",
     "کایجولجند": "help",
     "kaiju legend": "help",

@@ -33,7 +33,7 @@ from game.daily import check_missions, consume_daily, record_action
 from game.emoji import get_emoji
 from game.energy import spend_energy
 from game.guardian import challenge_guardian, ensure_guardian, get_guardian
-from game.raid import (RAID_DAILY_ATTACKS, RaidError, attack_boss, distribute_rewards,
+from game.raid import (RAID_DAILY_ATTACKS, RAID_WEEKLY_TOP_ALLIANCES, RaidError, attack_boss, distribute_rewards,
                        get_active_boss, spawn_boss)
 
 _RULE = "━━━━━━━━━━━━━━━━━━━━"
@@ -1171,7 +1171,7 @@ async def raid_overall_rank_callback(update: Update, context: ContextTypes.DEFAU
         lines.append("<i>هنوز هیچ اتحادی رید نکرده.</i>")
     for r in rows:
         rank, name = r["rank"], r["alliance"].name
-        reward = reward_by_rank.get(rank)
+        reward = reward_by_rank.get(rank) if rank <= RAID_WEEKLY_TOP_ALLIANCES else None
         rw_lines = f"\n{get_emoji('gift')} پاداش: <code>{reward['diamonds']}</code> {get_emoji('diamond')} + <code>{reward['coins']:,}</code> {get_emoji('coin')}" if reward else ""
         badge = medals.get(rank, f"{rank}.")
         lines.append(
@@ -1477,6 +1477,9 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     group = get_or_create_group(chat)
     attacker, _ = get_or_create_user(attacker_tg)
     touch_membership(group, attacker)
+    # both rows are locked in a stable id order — A attacking B while B attacks A used
+    # to take them in opposite orders and deadlock (Postgres then aborts one handler)
+    list(User.objects.select_for_update().filter(id__in=[attacker.id, target_id]).order_by("id"))
     attacker = User.objects.select_for_update().get(id=attacker.id)
     # LOCK the target's row and re-check the group shield UNDER the lock, so two
     # attackers hitting the same person at once serialise — the first applies the 4h

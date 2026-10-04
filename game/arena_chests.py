@@ -21,6 +21,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from bio_lab.models import ArenaChest, Creature, User
+from bio_lab.repository import lock_row
 from game import constants
 from game.creature import GameError
 from game.equipment import roll_equipment
@@ -247,12 +248,13 @@ def advance_user_chests(user: User) -> None:
 
 @transaction.atomic
 def start_unlock(user: User, chest_id: int) -> ArenaChest:
+    lock_row(user)  # the player row is the mutex for «one chest unlocking at a time»
     advance_user_chests(user)
     chest = ArenaChest.objects.select_for_update().filter(id=chest_id, user=user).first()
     if not chest:
         raise GameError("این جعبه پیدا نشد.")
     if chest.status != "locked":
-        raise GameError(f"این جعبه در وضعیت {chest.status} قرار دارد.")
+        raise GameError("این جعبه قفل نیست؛ یا در حال باز شدنه یا آماده‌ست.")
 
     # Check if another chest is actively unlocking
     active = ArenaChest.objects.filter(user=user, status="unlocking").exists()

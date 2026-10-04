@@ -1,3 +1,4 @@
+import html
 """Mugen Tower (برج موگن - 無限の塔) UI & Bot Handlers."""
 
 from telegram import InlineKeyboardMarkup, Update
@@ -225,7 +226,7 @@ async def mugen_lb_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     else:
         medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
         for idx, u in enumerate(lb, start=1):
-            name = u["lab_name"] or u["first_name"] or u["username"] or f"Player {u['id']}"
+            name = html.escape(u["lab_name"] or u["first_name"] or u["username"] or f"Player {u['id']}")
             badge = medals[idx - 1] if idx <= 3 else f"{idx}."
             lines.append(f"{badge} <b>{name}</b>\n  {get_emoji('mugen')} طبقه: <code>{u['mugen_tower_floor']}</code>")
 

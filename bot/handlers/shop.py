@@ -552,6 +552,7 @@ def _item_buy_sync(tg_user, item_id):
     from game import gemkaiju, itemshop
     user, _ = get_or_create_user(tg_user)
     result = itemshop.buy(user, item_id)
+    user.refresh_from_db(fields=["coins", "diamonds"])  # buy() charged a re-fetched row
     return (
         result,
         shop.offers_with_remaining(user),
@@ -582,7 +583,7 @@ async def item_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             f"━━━━━━━━━━━━━━━━━━━━",
             f"<blockquote>📦 آیتم: {item.emoji} <b>{item.title}</b>\n"
             f"🎁 محتویات: <i>{itemshop.content_summary(contents)}</i>\n"
-            f"💰 قیمت: <code>{item.price_diamonds:,} الماس</code>\n"
+            f"💰 قیمت: <b>{itemshop.price_text(item)}</b>\n"
             f"💎 موجودی الماس: <code>{diamonds:,} الماس</code></blockquote>",
             "━━━━━━━━━━━━━━━━━━━━",
             "آیا از خرید این آیتم اطمینان داری؟",
@@ -627,6 +628,7 @@ def _gem_buy_sync(tg_user):
     from game import gemkaiju, itemshop
     user, _ = get_or_create_user(tg_user)
     result = gemkaiju.buy_gem_kaiju(user)
+    user.refresh_from_db(fields=["coins", "diamonds"])
     return (
         result,
         shop.offers_with_remaining(user),
