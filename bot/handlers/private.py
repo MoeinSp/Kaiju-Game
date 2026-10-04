@@ -249,11 +249,9 @@ def element_advantage_line(my_elem, opp_elem) -> str:
         return ""
     mult = constants.element_multiplier(my_elem, opp_elem)
     if mult > 1:
-        return (f"✅ برتری عنصری: {constants.element_label(my_elem)} بر {constants.element_label(opp_elem)} "
-                "غلبه دارد — قدرت تو ×۱٫۲ حساب می‌شه.")
+        return "✅ برتری با تو: +۲۰٪ قدرت"
     if mult < 1:
-        return (f"⚠️ ضعف عنصری: {constants.element_label(opp_elem)} بر {constants.element_label(my_elem)} "
-                "برتری دارد — قدرت حریف ×۱٫۲ حساب می‌شه.")
+        return "⚠️ برتری با حریف: +۲۰٪ قدرت"
     return "➖ بدون مزیت عنصری"
 
 
@@ -2852,7 +2850,6 @@ def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> st
         "📊 <b>مقایسه وضعیت نبرد:</b>",
         f"💪 قدرت شما: <code>{my_power:,}</code>",
         f"⚔️ قدرت حریف: <code>{target['power']:,}</code>",
-        f"🎯 نتیجه‌ی نبرد: {win_label(pct)}",
         "",
         _CARD_DIV,
         "",
