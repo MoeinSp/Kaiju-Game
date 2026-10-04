@@ -141,7 +141,7 @@ def launch_expedition(user: User, expedition_id: int) -> dict:
         created_at__gte=today_start,
     ).exists()
     if group_done_today:
-        raise GameError("⏳ سهمیه اعزام کاروان این گروه برای امروز تمام شده است!\n(هر گروه روزانه فقط یکبار میتواند اعزام داشته باشد. برای اعزامهای بیشتر، ربات را به گروههای دیگر اضافه کنید!)")
+        raise GameError("⏳ سهمیه اعزام کاروان این گروه برای امروز تمام شده است!\n(هر گروه روزی فقط یک‌بار می‌تونه کاروان بفرسته. برای اعزام‌های بیشتر، ربات رو به گروه‌های دیگه اضافه کن.)")
 
     members = list(exp.members.select_for_update().all())
     if len(members) < 2:

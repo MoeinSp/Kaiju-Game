@@ -15,7 +15,7 @@ from game import constants
 from game.creature import GameError, add_xp, effective_stats
 from game.daily import check_missions, record_action
 from game.emoji import get_emoji
-from game.interactive_battle import advance_turn, is_finished, perform_action, pick_first_turn, render_battle_card
+from game.interactive_battle import attach_player_names, advance_turn, is_finished, perform_action, pick_first_turn, render_battle_card
 
 
 # A live battle nobody is playing must not block that pair forever: an unanswered offer
@@ -130,7 +130,7 @@ def _battle_accept_sync(battle_id, acceptor_id):
     battle.turn = pick_first_turn(battle.creature_a, battle.creature_b)
     battle.status = "active"
     battle.save(update_fields=["turn", "status"])
-    return battle
+    return attach_player_names(battle)
 
 
 async def battle_accept_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -209,7 +209,7 @@ def _battle_action_sync(battle_id, actor_tg_id, action):
                 f"پاداش نبرد زنده روزی {LIVE_BATTLE_REWARDED_WINS_PER_DAY} بار داده می‌شه؛ "
                 f"سهم امروزت رو گرفتی.</blockquote>"
             )
-            return battle, finished, reward_lines
+            return attach_player_names(battle), finished, reward_lines
 
         reward = constants.duel_win_reward(loser_creature.level)
         User.objects.filter(id=winner_user.id).update(
@@ -237,7 +237,7 @@ def _battle_action_sync(battle_id, actor_tg_id, action):
             )
 
     battle.save()
-    return battle, finished, reward_lines
+    return attach_player_names(battle), finished, reward_lines
 
 
 async def battle_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

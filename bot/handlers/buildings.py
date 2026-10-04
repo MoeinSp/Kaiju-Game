@@ -243,7 +243,7 @@ def _building_detail_text(view: dict) -> str:
             lines.append(f"⏱ زمان باقیمانده: <code>{_format_remaining(remaining)}</code>")
             lines.append(f"<i>با کارت سرعت یا <code>{diamond_finish_price(upgrade)} 💎</code> تمومش کن.</i>")
         elif all_builders_busy:
-            lines.append(f"⏳ هر دو کارگرت مشغول ساختمون‌های دیگه‌ان (<code>{busy_count}</code> / <code>{builder_slots_n}</code>).")
+            lines.append(f"⏳ بنّاهات مشغول ساختمون‌های دیگه‌ان (<code>{busy_count}</code> / <code>{builder_slots_n}</code>).")
         elif building.level >= constants.BUILDING_MAX_LEVEL:
             lines.append(f"{get_emoji('trophy')} این سازه به سقف سطح رسیده.")
         elif building.level >= cap:

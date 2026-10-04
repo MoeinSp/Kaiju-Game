@@ -121,14 +121,29 @@ def render_hp_bar(current: int, total: int, width: int = 10) -> str:
     return constants.render_bar(current, total, width) + f" (<code>{max(current, 0):,}</code>/<code>{total:,}</code>)"
 
 
+def attach_player_names(battle: InteractiveBattle) -> InteractiveBattle:
+    """Resolve both players' display names (ORM) — call in the sync layer, before the
+    card is rendered from async code."""
+    from bio_lab.repository import display_name
+
+    battle._player_names = {"a": display_name(battle.player_a), "b": display_name(battle.player_b)}
+    return battle
+
+
 def render_battle_card(battle: InteractiveBattle) -> str:
     stats_a = effective_stats(battle.creature_a)
     stats_b = effective_stats(battle.creature_b)
+    names = getattr(battle, "_player_names", None) or {}
+
+    def who(side: str) -> str:
+        creature = battle.creature_a if side == "a" else battle.creature_b
+        return f"{creature.name} ({names[side]})" if names.get(side) else creature.name
+
     lines = [
         f"{get_emoji('battle')} <b>نبرد زنده</b>",
         "━━━━━━━━━━━━━━━━━━━━",
-        f"🦁 <b>{battle.creature_a.name}</b>\n❤️ سلامت: {render_hp_bar(battle.hp_a, stats_a['hp'])}",
-        f"🐯 <b>{battle.creature_b.name}</b>\n❤️ سلامت: {render_hp_bar(battle.hp_b, stats_b['hp'])}",
+        f"🦁 <b>{who('a')}</b>\n❤️ سلامت: {render_hp_bar(battle.hp_a, stats_a['hp'])}",
+        f"🐯 <b>{who('b')}</b>\n❤️ سلامت: {render_hp_bar(battle.hp_b, stats_b['hp'])}",
         "━━━━━━━━━━━━━━━━━━━━",
     ]
 
@@ -140,10 +155,10 @@ def render_battle_card(battle: InteractiveBattle) -> str:
     if battle.status == "active":
         actor = _creature(battle, battle.turn)
         skill_uses = battle.skill_uses_a if battle.turn == "a" else battle.skill_uses_b
-        lines.append(f"⏳ نوبت: <b>{actor.name}</b> (اسکیل باقی‌مانده: <code>{skill_uses}</code>)")
+        lines.append(f"⏳ نوبت: <b>{who(battle.turn)}</b> (مهارت باقی‌مانده: <code>{skill_uses}</code>)")
     elif battle.status == "finished":
         winner_side = "a" if battle.hp_b <= 0 else "b"
         winner = _creature(battle, winner_side)
-        lines.append(f"{get_emoji('trophy')} <b>برنده: {winner.name}!</b>")
+        lines.append(f"{get_emoji('trophy')} <b>برنده: {who(winner_side)}!</b>")
 
     return "\n".join(lines)

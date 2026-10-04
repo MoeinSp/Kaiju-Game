@@ -304,15 +304,12 @@ def place_bid(user: User, auction_id: int, bid_amount: int) -> dict:
         if prev_bidder is not None:
             prev_user = User.objects.select_for_update().filter(id=prev_bidder.id).first()
             if prev_user:
-                from game.ledger import record_gain
                 if auction.bid_currency == "coins":
                     prev_user.coins += prev_amount
                     prev_user.save(update_fields=["coins"])
-                    record_gain(prev_user, "blackmarket", coins=prev_amount)
                 else:
                     prev_user.diamonds += prev_amount
                     prev_user.save(update_fields=["diamonds"])
-                    record_gain(prev_user, "blackmarket", diamonds=prev_amount)
 
                 outbid_info = {
                     "user_id": prev_user.id,

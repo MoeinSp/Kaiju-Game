@@ -1,3 +1,4 @@
+import hmac
 """Small public API for advertisers.
 
 One endpoint: "has this Telegram user started the bot?" — an advertiser buying a
@@ -23,7 +24,7 @@ from config import AD_API_KEY
 @require_GET
 def user_started(request):
     key = request.GET.get("key") or request.headers.get("X-API-Key", "")
-    if not AD_API_KEY or key != AD_API_KEY:
+    if not AD_API_KEY or not hmac.compare_digest(str(key), str(AD_API_KEY)):
         return JsonResponse({"error": "unauthorized"}, status=403)
 
     ident = (request.GET.get("user") or "").strip().lstrip("@")

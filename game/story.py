@@ -168,7 +168,7 @@ STORY_QUESTS: list[dict[str, Any]] = [
         "id": 8,
         "chapter": 3,
         "chapter_name": "فصل ۳: امپراتوری پایگاه",
-        "title": "۵ شکار پیروزمندانه",
+        "title": "۵ بار شکار",
         "desc": "در جنگل به ۵ شکار برو تا منابع لازم برای رشد پایگاه رو کسب کنی.",
         "checker": lambda u: _check_hunts(u, 5),
         "reward": {"coins": 6000, "dna": 1200, "diamonds": 60},

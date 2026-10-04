@@ -386,7 +386,9 @@ async def receipt_photo_handler(update: Update, context: ContextTypes.DEFAULT_TY
         await context.bot.send_photo(chat_id=OWNER_TELEGRAM_ID, photo=file_id,
                                      caption=base_caption, parse_mode="HTML", reply_markup=kb)
     except Exception:  # noqa: BLE001 — never fail the user's flow over a delivery hiccup
-        pass
+        import logging
+
+        logging.exception("purchase receipt could not be delivered to the owner (request %s)", req.id)
 
     # also post a report to the configured purchase-report channel (no buttons — review
     # happens in the owner's DM; the channel message is edited on approve/reject)
@@ -494,7 +496,7 @@ async def buy_reject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer("❌ رد شد.")
     await _notify_user(
         context, res["user_id"],
-        f"{get_emoji('cancel')} <b>رسید خریدت تأیید نشد.</b> اگه فکر می‌کنی اشتباهی رخ داده، با پشتیبانی در تماس باش.",
+        f"{get_emoji('cancel')} <b>رسید خریدت تأیید نشد.</b> اگه واریز کردی، عکس واضح‌ترِ رسید رو برای پشتیبانی بفرست تا دوباره بررسی بشه.",
     )
     if query.message is not None and query.message.caption is not None:
         await query.edit_message_caption(

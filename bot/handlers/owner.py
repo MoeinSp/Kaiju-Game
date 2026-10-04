@@ -5339,6 +5339,12 @@ async def capture_owner_text_reply(update: Update, context: ContextTypes.DEFAULT
     """Single dispatcher for every 'awaiting a plain-text/forwarded reply' flow in
     the owner panel — PTB only ever runs the first handler that matches an update
     within a group, so every such flow has to live behind one registration."""
+    if not _is_admin(update):
+        # revoked while a prompt was pending (or never an admin): drop the prompts
+        for key in (AWAITING_RESTORE_KEY, "awaiting_emoji_key", AWAITING_FORCE_JOIN_KEY,
+                    AWAITING_ADMIN_KEY, AWAITING_BUTTON_EMOJI_KEY):
+            context.user_data.pop(key, None)
+        return
     if context.user_data.get(AWAITING_RESTORE_KEY):
         await capture_restore_upload(update, context)
         return

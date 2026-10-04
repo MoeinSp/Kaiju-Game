@@ -102,8 +102,8 @@ def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
     group = get_or_create_group(chat)
     sender, _ = get_or_create_user(sender_tg)
     touch_membership(group, sender)
-    if amount <= 0:
-        raise GameError("مقدار باید بیشتر از صفر باشه.")
+    if amount < 10:
+        raise GameError("حداقل مقدار انتقال ۱۰ طلاست.")
     if sender.id == receiver_id:
         raise GameError("به خودت نمی‌تونی انتقال بدی.")
 
@@ -666,7 +666,8 @@ def _offer_receiver_keyboard(token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [btn("قبول پیشنهاد", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"xfo:acc:{token}"),
          btn("رد پیشنهاد", emoji_key="btn_cancel", style=DANGER, callback_data=f"xfo:rej:{token}")],
-        [btn("راهنمای هزینه‌ها", emoji_key="btn_report", style=NAV, callback_data="xfo:prices:c")],
+        [btn("راهنمای هزینه‌ها", emoji_key="btn_report", style=NAV,
+             callback_data=f"xfo:prices:{'e' if (_get_offer(token) or {}).get('kind') == 'e' else 'c'}")],
     ])
 
 
@@ -904,7 +905,7 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
 
 
 _NO_ALLIANCE_MSG = (
-    "🚫 <b>ارور: عدم عضویت در اتحاد</b>\n\n"
+    "🚫 <b>هنوز عضو هیچ اتحادی نیستی</b>\n\n"
     "برای شرکت در رید اتحاد، ابتدا باید در یک اتحاد عضو شوید یا اتحاد جدیدی بسازید.\n\n"
     "📌 <b>راهنما:</b>\n"
     "جهت ساخت یا عضویت در اتحاد، به پیوی ربات مراجعه کرده و وارد بخش «اتحاد من» شوید."

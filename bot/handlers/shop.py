@@ -360,6 +360,9 @@ async def handle_custom_qty_buy(update: Update, context: ContextTypes.DEFAULT_TY
     if shown_currency == "diamonds":
         offers, coins, diamonds, special_items, gem = await run_db(_panel_sync, update.effective_user)
         target_offer = next((o for o in offers if o["key"] == key), None)
+        if target_offer is None and not shown_price:
+            await message.reply_text("این آیتم دیگه توی فروشگاه امروز نیست. دوباره فروشگاه رو باز کن.")
+            return
         title = target_offer["title"] if target_offer else key
         emoji = target_offer["emoji"] if target_offer else f"{get_emoji('gift')}"
         tot_price = (shown_price or target_offer["price"]) * qty

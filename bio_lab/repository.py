@@ -1,3 +1,4 @@
+from django.db import transaction
 import html
 
 from bio_lab.models import Creature, Group, GroupMembership, User
@@ -128,9 +129,11 @@ def resolve_user(identifier: str) -> User | None:
     identifier = identifier.strip().lstrip("@")
     if identifier.isdigit():
         return User.objects.filter(id=int(identifier)).first()
+    # usernames aren't unique and can be stale → the most recently active match wins,
+    # in a stable order (an unordered .first() could pick a different row each time)
     return (
-        User.objects.filter(username__iexact=identifier).first()
-        or User.objects.filter(lab_name__iexact=identifier).first()
+        User.objects.filter(username__iexact=identifier).order_by("-energy_updated_at", "id").first()
+        or User.objects.filter(lab_name__iexact=identifier).order_by("id").first()
     )
 
 

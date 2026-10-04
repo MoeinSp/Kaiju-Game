@@ -106,7 +106,7 @@ async def perk_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
         return
-    await query.answer("✅ پرک ارتقا یافت!")
+    await query.answer("✅ ساختمون ارتقا پیدا کرد!")
     text, keyboard = _perks_render(info)
     from game.media import get_alliance_building_image_path
     b_lvl = next((b["level"] for b in info["buildings"] if b["key"] == perk_key), 1)

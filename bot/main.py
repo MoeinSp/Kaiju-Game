@@ -137,9 +137,10 @@ async def _global_error_handler(update: object, context: ContextTypes.DEFAULT_TY
         return
     if isinstance(context.error, BadRequest):
         err_msg = str(context.error)
-        if "Query is too old" in err_msg or "message is not modified" in err_msg:
+        low = err_msg.lower()
+        if "query is too old" in low or "message is not modified" in low:
             return
-    logging.warning("Update %s caused error %s", update, context.error)
+    logging.error("Update %s caused error %s", update, context.error, exc_info=context.error)
 
 
 def _widen_db_thread_pool() -> None:

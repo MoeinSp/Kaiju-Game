@@ -1603,7 +1603,7 @@ def feedcap_text(user, creature, caps: dict, maxed: bool) -> str:
     elif total == 0:
         lines.append("<blockquote>هیچ حیوونی برای تغذیه نداری. از «🛒 فروشگاه روزانه» بخر یا از جایزه‌ها بگیر.</blockquote>")
     else:
-        lines.append("<i>یکی رو بزن؛ «همه با هم» بزرگ‌ها رو اول می‌ده و به سقف سطح که رسید متوقف می‌شه.</i>")
+        lines.append("<i>یکی رو بزن؛ «تغذیه با همه» بزرگ‌ها رو اول می‌ده و به سقف سطح که رسید متوقف می‌شه.</i>")
     return "\n".join(lines)
 
 
@@ -1952,7 +1952,7 @@ async def kaiju_rename_ok_callback(update: Update, context: ContextTypes.DEFAULT
     creature_id = int(query.data.split(":")[1])
     pending = context.user_data.get("pending_kaiju_rename")
     if not pending or pending.get("creature_id") != creature_id:
-        await query.answer("⌛ منقضی شد — دوباره از «نام‌گذاری» شروع کن.", show_alert=True)
+        await query.answer("⌛ منقضی شد — دوباره از «تغییر نام» شروع کن.", show_alert=True)
         return
     origin = pending.get("origin", "c")
     try:
@@ -2519,7 +2519,7 @@ async def upgrade_fusion_gate_callback(update: Update, context: ContextTypes.DEF
         f"{check(gold_ok)} {get_emoji('coin')} طلای کافی: <code>{g['cost']:,}</code> (داری: <code>{g['coins']:,}</code>)",
         "", div, "",
         "<blockquote>فیوژن = دو هیولای <b>هم‌نام + هم‌نایابی + هم‌ستاره</b> ➔ یکی یک ستاره بالاتر.\n"
-        "استت‌ها و بهترین اعضای هر دو والد به فرزند می‌رسه و XP‌شون جمع می‌شه.\n"
+        "فرزند سطحِ والدِ قوی‌تر و بهترین اعضای هر دو رو می‌گیره و XP‌شون جمع می‌شه.\n"
         "سطح تالار ادغام سقف ستاره‌ست: سطح ۲ برای ۲⭐، سطح ۳ برای ۳⭐ …</blockquote>",
     ]
 
@@ -2745,7 +2745,7 @@ def _missions_render(status: list[dict], page: int) -> tuple[str, InlineKeyboard
         nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"mission_page:{page + 1}"))
     if nav:
         rows.append(nav)
-    rows.append([back_btn("menu:hub_city", "بازگشت به شهر و خدمات")])
+    rows.append([back_btn("menu:hub_city", "بازگشت به شهر")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -3400,12 +3400,15 @@ def _leave_preview_sync(tg_user) -> str:
 
 
 async def alliance_leave(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    try:
-        await run_db(_alliance_leave_sync, update.effective_user)
-    except GameError as exc:
-        await update.message.reply_text(alert_text(exc, 3500))
-        return
-    await update.message.reply_text("👋 از اتحاد خارج شدی.")
+    note = await run_db(_leave_preview_sync, update.effective_user)
+    keyboard = InlineKeyboardMarkup([[
+        btn("بله، خارج شو", emoji_key="btn_confirm", style=DANGER, callback_data="ally_leave_confirm"),
+        btn("بی‌خیال", emoji_key="btn_cancel", style=NAV, callback_data="menu:alliance_info"),
+    ]])
+    await update.effective_message.reply_text(
+        f"⚠️ <b>خروج از اتحاد</b>\n\n{note}\n\nمطمئنی می‌خوای خارج بشی؟",
+        parse_mode="HTML", reply_markup=keyboard,
+    )
 
 
 def _alliance_info_sync(tg_user):
@@ -3834,7 +3837,7 @@ async def alliance_kick_start(update: Update, context: ContextTypes.DEFAULT_TYPE
     context.user_data[AWAITING_PLAYER_KEY] = {"action": "ally_kick"}
     await query.answer()
     await safe_edit_message_text(
-        query, f"🥾 آیدیِ عضوی که می‌خوای کیک بشه رو بفرست:{_reply_hint(update)}",
+        query, f"🥾 آیدی عددیِ عضوی که می‌خوای اخراج بشه رو بفرست (همون عددِ کنار اسمش توی لیست اعضا):{_reply_hint(update)}",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "انصراف")]]),
     )

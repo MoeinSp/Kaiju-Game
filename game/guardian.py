@@ -62,7 +62,7 @@ def ensure_guardian(group: Group, members: list[Creature]) -> Creature | None:
 def challenge_guardian(group: Group, challenger_user: User, challenger_creature: Creature) -> tuple[bool, str]:
     guardian = get_guardian(group)
     if guardian is None:
-        raise GameError("این گروه هنوز محافظی نداره. اول /guardian رو بزن.")
+        raise GameError("این گروه هنوز محافظی نداره. اول «محافظ» رو بفرست.")
     if guardian.owner_id == challenger_user.id:
         raise GameError("تو خودت همین الان محافظ گروهی!")
 

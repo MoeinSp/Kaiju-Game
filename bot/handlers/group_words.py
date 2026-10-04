@@ -1533,7 +1533,7 @@ def _schedule_cleanup(context, chat_id: int, message_ids, action: str) -> None:
 
 async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
-    if message is None or not message.text:
+    if message is None or not message.text or update.edited_message is not None:
         return
     # a reply to the bot's prompt feeds a pending text flow (alliance name, search…)
     if await _maybe_capture_group_reply(update, context):

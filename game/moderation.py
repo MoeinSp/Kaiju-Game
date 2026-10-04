@@ -1,6 +1,7 @@
 from django.db import transaction
 
 from bio_lab.models import Creature, User
+from bio_lab.repository import lock_row
 from bio_lab.repository import resolve_user
 from game.creature import GameError
 
@@ -14,6 +15,9 @@ def find_user_or_raise(identifier: str) -> User:
     return user
 
 
+_MAX_BALANCE = 2_000_000_000  # stays inside a 32-bit IntegerField
+
+
 def _adjust_resource(identifier: str, resource: str, amount: int, sign: int) -> tuple[User, int]:
     if resource not in GRANT_RESOURCE_FIELDS:
         raise GameError("نوع منبع نامعتبره. باید coins، dna یا diamonds باشه.")
@@ -21,9 +25,11 @@ def _adjust_resource(identifier: str, resource: str, amount: int, sign: int) -> 
         raise GameError("مقدار باید یه عدد صحیح مثبت باشه.")
     user = find_user_or_raise(identifier)
     field = GRANT_RESOURCE_FIELDS[resource]
-    new_value = max(0, getattr(user, field) + sign * amount)
-    setattr(user, field, new_value)
-    user.save(update_fields=[field])
+    with transaction.atomic():
+        lock_row(user)  # the player may be spending right now — don't write a stale balance
+        new_value = min(_MAX_BALANCE, max(0, getattr(user, field) + sign * amount))
+        setattr(user, field, new_value)
+        user.save(update_fields=[field])
     if sign > 0:
         from game.ledger import record_gain
 
@@ -639,6 +645,14 @@ def admin_transfer_creature(creature_id: int, to_identifier: str) -> tuple[Creat
     new_owner = find_user_or_raise(str(to_identifier))
     if old_owner.id == new_owner.id:
         raise GameError("نمی‌توان موجود را به همان مالک فعلی منتقل کرد!")
+    from game.workers import busy_creature_ids, creature_status
+
+    busy = busy_creature_ids(old_owner)
+    if creature.id in busy:
+        raise GameError(
+            f"این موجود الان مشغوله ({creature_status(old_owner, creature) or 'مشغول'}) — "
+            "اول باید از معدن/غار آزاد بشه."
+        )
 
     Equipment.objects.filter(equipped_on=creature).update(equipped_on=None)
     Team.objects.filter(slot1=creature).update(slot1=None)
@@ -646,10 +660,11 @@ def admin_transfer_creature(creature_id: int, to_identifier: str) -> tuple[Creat
     Team.objects.filter(slot3=creature).update(slot3=None)
 
     if creature.is_active:
-        other = Creature.objects.filter(owner=old_owner).exclude(id=creature.id).first()
+        others = Creature.objects.filter(owner=old_owner).exclude(id=creature.id)
+        other = others.exclude(id__in=busy).order_by("-star_level", "-level").first() or others.first()
         if other:
             other.is_active = True
-            other.save()
+            other.save(update_fields=["is_active"])
 
     creature.owner = new_owner
     has_active = Creature.objects.filter(owner=new_owner, is_active=True).exists()
