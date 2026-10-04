@@ -274,6 +274,19 @@ def format_reward_text(reward: dict[str, Any]) -> str:
     return " | ".join(parts)
 
 
+def active_cta_action(user: User) -> str | None:
+    """The menu action the player's CURRENT story quest points at («mugen_tower» for
+    «فتح طبقه ۱ برج موگن»), or None. The main-hall unlock gate lets this one section
+    through — otherwise the story asked for something the menu refused to open (the
+    Mugen quests come long before the hall level that unlocks the tower), and every
+    later quest was stuck behind it. No query: reads only user.story_step."""
+    step = getattr(user, "story_step", 0)
+    if step >= len(STORY_QUESTS):
+        return None
+    cb = STORY_QUESTS[step]["cta_callback"]
+    return cb[5:] if cb.startswith("menu:") else None
+
+
 def get_active_quest(user: User) -> dict[str, Any] | None:
     """Returns the current active story quest dictionary with live progress and claim state,
     or None if all story quests are completed."""

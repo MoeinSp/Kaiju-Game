@@ -1468,6 +1468,36 @@ def _all_user_ids_sync() -> list[int]:
     return list(User.objects.values_list("id", flat=True))
 
 
+async def _broadcast_one(send) -> str:
+    """Deliver one broadcast copy. `send` is a zero-arg coroutine factory. Returns
+    'sent' | 'blocked' | 'failed'. A flood-wait (429) is waited out and retried — it
+    used to be counted as «ربات را بلاک کرده‌اند» and the user silently skipped."""
+    from telegram.error import Forbidden, RetryAfter
+
+    for _attempt in range(3):
+        try:
+            await send()
+            return "sent"
+        except RetryAfter as exc:
+            wait = exc.retry_after
+            wait = wait.total_seconds() if hasattr(wait, "total_seconds") else float(wait)
+            await asyncio.sleep(min(60.0, wait) + 1)
+        except Forbidden:
+            return "blocked"
+        except TelegramError:
+            return "failed"
+    return "failed"
+
+
+def _broadcast_summary(counts: dict) -> str:
+    summary = f"✅ پیام همگانی به <b>{counts['sent']:,}</b> کاربر ارسال شد."
+    if counts["blocked"]:
+        summary += f"\n🚫 <b>{counts['blocked']:,}</b> کاربر ربات را بلاک کرده‌اند."
+    if counts["failed"]:
+        summary += f"\n❌ به <b>{counts['failed']:,}</b> کاربر نرسید (حساب حذف‌شده یا خطای ارسال)."
+    return summary
+
+
 async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_admin(update):
         return
@@ -1480,24 +1510,13 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if message.reply_to_message:
         target_msg = message.reply_to_message
         status_msg = await message.reply_text(f"⏳ در حال ارسال همگانی پیام به <code>{len(user_ids)}</code> کاربر...", parse_mode="HTML")
-        sent = 0
-        failed = 0
+        counts = {"sent": 0, "blocked": 0, "failed": 0}
         for user_id in user_ids:
-            try:
-                await context.bot.copy_message(
-                    chat_id=user_id,
-                    from_chat_id=target_msg.chat_id,
-                    message_id=target_msg.message_id,
-                )
-                sent += 1
-            except TelegramError:
-                failed += 1
+            counts[await _broadcast_one(lambda uid=user_id: context.bot.copy_message(
+                chat_id=uid, from_chat_id=target_msg.chat_id, message_id=target_msg.message_id,
+            ))] += 1
             await asyncio.sleep(BROADCAST_DELAY_SECONDS)
-
-        summary = f"✅ پیام همگانی به <b>{sent:,}</b> کاربر ارسال شد."
-        if failed:
-            summary += f"\n❌ <b>{failed:,}</b> کاربر ناموفق (ربات را بلاک کرده‌اند)."
-        await status_msg.edit_text(summary, parse_mode="HTML")
+        await status_msg.edit_text(_broadcast_summary(counts), parse_mode="HTML")
         return
 
     if not context.args:
@@ -1517,20 +1536,13 @@ async def broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     broadcast_text = premiumize_html(broadcast_text)
 
     status_msg = await message.reply_text(f"⏳ در حال ارسال همگانی به <code>{len(user_ids)}</code> کاربر...", parse_mode="HTML")
-    sent = 0
-    failed = 0
+    counts = {"sent": 0, "blocked": 0, "failed": 0}
     for user_id in user_ids:
-        try:
-            await context.bot.send_message(chat_id=user_id, text=broadcast_text, parse_mode="HTML")
-            sent += 1
-        except TelegramError:
-            failed += 1
+        counts[await _broadcast_one(lambda uid=user_id: context.bot.send_message(
+            chat_id=uid, text=broadcast_text, parse_mode="HTML",
+        ))] += 1
         await asyncio.sleep(BROADCAST_DELAY_SECONDS)
-
-    summary = f"✅ پیام همگانی به <b>{sent:,}</b> کاربر ارسال شد."
-    if failed:
-        summary += f"\n❌ <b>{failed:,}</b> کاربر ناموفق (ربات را بلاک کرده‌اند)."
-    await status_msg.edit_text(summary, parse_mode="HTML")
+    await status_msg.edit_text(_broadcast_summary(counts), parse_mode="HTML")
 
 
 def _user_info_text(data: dict) -> str:
@@ -5223,23 +5235,13 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
     if action == "broadcast":
         user_ids = await run_db(_all_user_ids_sync)
         status_msg = await message.reply_text(f"⏳ در حال ارسال همگانی به <code>{len(user_ids)}</code> کاربر...", parse_mode="HTML")
-        sent = 0
-        failed = 0
+        counts = {"sent": 0, "blocked": 0, "failed": 0}
         for user_id in user_ids:
-            try:
-                await context.bot.copy_message(
-                    chat_id=user_id,
-                    from_chat_id=message.chat_id,
-                    message_id=message.message_id,
-                )
-                sent += 1
-            except TelegramError:
-                failed += 1
+            counts[await _broadcast_one(lambda uid=user_id: context.bot.copy_message(
+                chat_id=uid, from_chat_id=message.chat_id, message_id=message.message_id,
+            ))] += 1
             await asyncio.sleep(BROADCAST_DELAY_SECONDS)
-        summary = f"✅ پیام همگانی به <b>{sent:,}</b> کاربر ارسال شد."
-        if failed:
-            summary += f"\n❌ <b>{failed:,}</b> کاربر ناموفق (ربات را بلاک کرده‌اند)."
-        await status_msg.edit_text(summary, parse_mode="HTML")
+        await status_msg.edit_text(_broadcast_summary(counts), parse_mode="HTML")
         return
 
 

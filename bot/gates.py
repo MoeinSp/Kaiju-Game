@@ -13,8 +13,8 @@ def hall_gated(action: str, handler):
 
         req = private.SECTION_HALL_REQ.get(action)
         if req is not None and update.effective_user is not None:
-            level = await run_db(private._hall_level_sync, update.effective_user)
-            if level < req:
+            level, story_action = await run_db(private._hall_gate_sync, update.effective_user)
+            if level < req and action != story_action:
                 text = (
                     f"🔒 این بخش از سطح {req} «تالار مِهر» باز می‌شه (الان سطح {level}). "
                     "اول تالار مِهرت رو ارتقا بده."

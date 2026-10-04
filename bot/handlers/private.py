@@ -1159,11 +1159,9 @@ def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=
         if quest["is_done"]:
             rows.append([btn(f"دریافت پاداش ({quest['title']})", emoji_key="btn_confirm", style=CONFIRM, callback_data="story_claim")])
         else:
+            # the active quest's own section is exempt from the hall lock (menu_callback
+            # lets it through), so the button always goes where the quest says
             cb = quest["cta_callback"]
-            if cb.startswith("menu:"):
-                action = cb[5:]
-                if action in locked:
-                    cb = "menu:me"
             rows.append([btn(f"{quest['cta_label']} (مأموریت)", emoji_key="btn_skill", style=PRIMARY, callback_data=cb)])
 
     # Row 1: Battle & Creature
@@ -5219,6 +5217,15 @@ def _hall_level_sync(tg_user) -> int:
     return main_hall_level(user)
 
 
+def _hall_gate_sync(tg_user) -> tuple[int, str | None]:
+    """(main-hall level, the action the active story quest unlocks regardless of it)."""
+    from game import story
+    from game.buildings import main_hall_level
+
+    user, _ = get_or_create_user(tg_user)
+    return main_hall_level(user), story.active_cta_action(user)
+
+
 async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     action = query.data.split(":", 1)[1]
@@ -5239,11 +5246,12 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await query.answer("منوی کامل ربات فقط توی پیوی ربات بازه — همون‌جا /start بزن.", show_alert=True)
         return
     # one cheap read drives BOTH the lock gate and the lock icons in submenus
-    hall_level = await run_db(_hall_level_sync, update.effective_user)
+    hall_level, story_action = await run_db(_hall_gate_sync, update.effective_user)
     # the authoritative gate: a section that hasn't unlocked yet never opens, even if
     # a stale keyboard still shows it — the player is told which hall level it needs.
+    # (Exception: the section the active story quest sends the player to.)
     req = SECTION_HALL_REQ.get(action)
-    if req is not None and hall_level < req:
+    if req is not None and hall_level < req and action != story_action:
         await query.answer(
             f"🔒 این بخش از سطح {req} «تالار مِهر» باز می‌شه (الان سطح {hall_level}). "
             "اول تالار مِهرت رو ارتقا بده.",

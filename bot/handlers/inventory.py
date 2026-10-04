@@ -622,7 +622,12 @@ async def efuse_select_all_callback(update: Update, context: ContextTypes.DEFAUL
         except GameError as exc:
             await query.answer(alert_text(exc), show_alert=True)
             return
-        context.user_data.setdefault(_EFUSE_SEL, {})[target_id] = {c.id for c, _ in scored[:PAGE_SIZE]}
+        # only spare items: gear worn by a creature must be ticked by hand (the bulk
+        # select used to burn equipped — and rarer — items in two taps)
+        spare = [c for c, _ in scored if c.equipped_on_id is None]
+        context.user_data.setdefault(_EFUSE_SEL, {})[target_id] = {c.id for c in spare[:PAGE_SIZE]}
+        if len(spare) < len(scored[:PAGE_SIZE]):
+            await query.answer("تجهیزاتِ روی هیولاها انتخاب نشد؛ اگه می‌خوای، دستی تیک بزن.", show_alert=True)
     await query.answer()
     await _efuse_rerender(update, context, target_id)
 
