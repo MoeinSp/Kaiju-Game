@@ -243,16 +243,16 @@ def hatch(user: User, egg_id: int) -> tuple[Creature, dict]:
     # egg.base_rarity is the TOP (max parent) rarity; hit it with prob upgrade_chance,
     # otherwise fall back to fallback_rarity (the lower parent, or — for legacy eggs
     # laid before that column existed — one tier below the top). Never exceeds the top.
-    hit_top = random.random() < egg.upgrade_chance
-    fallback = egg.fallback_rarity or constants.prev_rarity(egg.base_rarity)
-    rarity = egg.base_rarity if hit_top else fallback
-
     # the child is one of the two parent species, never a blend — `name` is the
-    # fusion identity key, so a hybrid name would create an unfuseable species
+    # fusion identity key, so a hybrid name would create an unfuseable species.
+    # Picked BEFORE the rarity roll: a crystal/plasma newborn rolls at half the chance.
     if random.random() < 0.5:
         name, element = egg.parent_a_name, egg.parent_a_element
     else:
         name, element = egg.parent_b_name, egg.parent_b_element
+    hit_top = random.random() < constants.cave_top_chance_for_element(egg.upgrade_chance, element)
+    fallback = egg.fallback_rarity or constants.prev_rarity(egg.base_rarity)
+    rarity = egg.base_rarity if hit_top else fallback
     level = egg.inherit_level
     # canonical base stats keyed on rarity+level, so a hatchling matches every other
     # creature of the same rarity and level (no lineage-based divergence)

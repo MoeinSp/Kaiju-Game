@@ -1042,6 +1042,16 @@ def egg_hatch_minutes(rarity_a: str, rarity_b: str) -> int:
 CAVE_SAME_RARITY_TOP_CHANCE = 0.60   # P(keep the shared rarity) when both parents match (60% same, 40% one tier below)
 CAVE_MIXED_RARITY_TOP_CHANCE = 0.25  # (legacy name) the 1-tier-gap chance
 CAVE_MIXED_TOP_CHANCE_BY_GAP = {1: 0.25, 2: 0.15, 3: 0.10, 4: 0.06}
+# Crystal / plasma hatchlings reach the TOP rarity half as often as the other elements, in
+# every pairing (60% -> 30%, 25% -> 12.5%, ...), so a maxed mythic crystal/plasma is twice
+# as hard to breed. Applied at hatch time to the newborn's OWN element, so a fire/water/...
+# newborn from the same egg keeps the normal odds.
+CAVE_HALF_CHANCE_ELEMENTS = ("crystal", "plasma")
+CAVE_HALF_CHANCE_FACTOR = 0.5
+
+
+def cave_top_chance_for_element(p_top: float, element: str) -> float:
+    return p_top * CAVE_HALF_CHANCE_FACTOR if element in CAVE_HALF_CHANCE_ELEMENTS else p_top
 
 
 def cave_mixed_top_chance(rarity_a: str, rarity_b: str) -> float:
