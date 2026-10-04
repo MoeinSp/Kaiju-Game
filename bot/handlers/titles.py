@@ -3,6 +3,7 @@
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.gates import hall_gated
 from bot.utils import alert_text
 from bio_lab.repository import get_or_create_user
 from bot.buttons import LIST, PRIMARY, back_btn, btn
@@ -62,5 +63,5 @@ async def title_set_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 def register(application) -> None:
-    application.add_handler(CommandHandler("titles", titles_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("titles", hall_gated("titles", titles_panel), filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(title_set_callback, pattern=r"^title_set:"))

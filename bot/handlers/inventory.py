@@ -1,6 +1,7 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.gates import hall_gated
 from bot.utils import alert_text
 from bio_lab.models import Equipment
 from bio_lab.repository import get_active_creature, get_or_create_user
@@ -725,7 +726,7 @@ async def forge_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 def register(application) -> None:
     application.add_handler(CommandHandler("inventory", inventory_cmd, filters.ChatType.PRIVATE))
-    application.add_handler(CommandHandler("blacksmith", blacksmith_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("blacksmith", hall_gated("blacksmith", blacksmith_panel), filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(forge_pick_callback, pattern=r"^forge_pick:"))
     application.add_handler(CallbackQueryHandler(forge_cat_callback, pattern=r"^forge_cat:"))
     application.add_handler(CallbackQueryHandler(forge_do_callback, pattern=r"^forge_do:"))

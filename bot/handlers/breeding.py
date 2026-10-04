@@ -15,6 +15,7 @@ without the bot needing to remember where they were.
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.gates import hall_gated
 from bot.utils import alert_text
 from bio_lab.models import Creature
 from bio_lab.repository import get_or_create_user
@@ -744,7 +745,7 @@ async def breeding_cancel_confirm_callback(update: Update, context: ContextTypes
 
 
 def register(application) -> None:
-    application.add_handler(CommandHandler("breeding", breeding_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("breeding", hall_gated("breeding", breeding_panel), filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(breeding_new_callback, pattern=r"^brd_new$"))
     application.add_handler(CallbackQueryHandler(breeding_pick_a_callback, pattern=r"^brd_a:"))
     application.add_handler(CallbackQueryHandler(breeding_pick_b_callback, pattern=r"^brd_b:"))

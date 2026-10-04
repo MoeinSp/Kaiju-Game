@@ -7,6 +7,7 @@ panel shows the current squad, its team power, and any same-element synergy.
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.gates import hall_gated
 from bot.utils import alert_text
 from bio_lab.models import Creature, Team
 from bio_lab.repository import get_or_create_user
@@ -167,7 +168,7 @@ async def team_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 def register(application) -> None:
-    application.add_handler(CommandHandler("team", team_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("team", hall_gated("team", team_panel), filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(team_panel, pattern=r"^menu:team$"))
     application.add_handler(CallbackQueryHandler(team_toggle_callback, pattern=r"^team_tog:"))
     application.add_handler(CallbackQueryHandler(team_page_callback, pattern=r"^team_page:"))

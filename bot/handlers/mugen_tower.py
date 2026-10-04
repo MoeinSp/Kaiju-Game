@@ -3,6 +3,7 @@
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.gates import hall_gated
 from bot.utils import alert_text
 from bio_lab.models import Creature, User
 from bio_lab.repository import get_active_creature, get_or_create_user
@@ -255,9 +256,9 @@ async def mugen_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 def register(application) -> None:
-    application.add_handler(CommandHandler(["mugen", "tower"], mugen_panel))
-    application.add_handler(CallbackQueryHandler(mugen_panel_callback, pattern=r"^mugen:panel$"))
-    application.add_handler(CallbackQueryHandler(mugen_fight_callback, pattern=r"^mugen:fight$"))
+    application.add_handler(CommandHandler(["mugen", "tower"], hall_gated("mugen_tower", mugen_panel)))
+    application.add_handler(CallbackQueryHandler(hall_gated("mugen_tower", mugen_panel_callback), pattern=r"^mugen:panel$"))
+    application.add_handler(CallbackQueryHandler(hall_gated("mugen_tower", mugen_fight_callback), pattern=r"^mugen:fight$"))
     application.add_handler(CallbackQueryHandler(mugen_lb_callback, pattern=r"^mugen:lb$"))
     application.add_handler(CallbackQueryHandler(mugen_swap_callback, pattern=r"^mugen:swap$"))
     application.add_handler(CallbackQueryHandler(mugen_swap_pick_callback, pattern=r"^mugen:swap_pick:\d+$"))

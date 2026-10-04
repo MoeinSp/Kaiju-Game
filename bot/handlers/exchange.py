@@ -15,6 +15,7 @@ Directions (as the user experiences them):
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.gates import hall_gated
 from bot.utils import alert_text
 from bio_lab.repository import get_or_create_user
 from bot.buttons import BUILD, CONFIRM, DANGER, NAV, PRIMARY, SHOP, back_btn, btn
@@ -282,6 +283,6 @@ async def handle_custom_amount(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 def register(application) -> None:
-    application.add_handler(CommandHandler("exchange", exchange_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("exchange", hall_gated("exchange", exchange_panel), filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(exchange_nav_callback, pattern=r"^exch:"))
     application.add_handler(CallbackQueryHandler(exchange_do_callback, pattern=r"^exchgo:"))

@@ -3,6 +3,7 @@
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.gates import hall_gated
 from bot.utils import alert_text
 from bio_lab.repository import get_or_create_user
 from bot.buttons import CONFIRM, SHOP, back_btn, btn
@@ -105,6 +106,6 @@ async def banner_pull_do_callback(update: Update, context: ContextTypes.DEFAULT_
 
 
 def register(application) -> None:
-    application.add_handler(CommandHandler("banner", banner_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("banner", hall_gated("banner", banner_panel), filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(banner_pull_callback, pattern=r"^banner_pull$"))
     application.add_handler(CallbackQueryHandler(banner_pull_do_callback, pattern=r"^banner_pull_do$"))

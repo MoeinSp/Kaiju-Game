@@ -670,7 +670,7 @@ EQUIP_TRANSFER_MAX_GOLD_PRICE = 100_000
 # without a cap, «selling» a worthless 1★ common for millions bypassed every limit of
 # the gold transfer (per-transfer cap, daily cap, fee). Cap = rarity base × star.
 CREATURE_TRANSFER_MAX_GOLD_PRICE_BY_RARITY = {
-    "common": 50_000, "rare": 100_000, "epic": 250_000, "legendary": 500_000, "mythic": 1_000_000,
+    "common": 100_000, "rare": 200_000, "epic": 500_000, "legendary": 1_000_000, "mythic": 2_000_000,
 }
 # toward the sender's «100 arena wins» gate, at most this many wins against the SAME
 # real player count — repeatedly beating one cooperating alt no longer unlocks transfers
@@ -678,7 +678,7 @@ TRANSFER_GATE_MAX_WINS_PER_OPPONENT = 3
 
 
 def creature_transfer_max_price(rarity: str, star_level: int) -> int:
-    base = CREATURE_TRANSFER_MAX_GOLD_PRICE_BY_RARITY.get(rarity, 50_000)
+    base = CREATURE_TRANSFER_MAX_GOLD_PRICE_BY_RARITY.get(rarity, 100_000)
     return base * max(1, int(star_level or 1))
 # receiver prerequisites by the creature's star: (main_hall level, fusion_lab level).
 # main_hall is the whole game's bottleneck (weeks to max), so this is the real

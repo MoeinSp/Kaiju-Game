@@ -4,6 +4,7 @@ and today's claimable event reward."""
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.gates import hall_gated
 from bio_lab.repository import get_or_create_user
 from bot.buttons import CONFIRM, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
@@ -78,5 +79,5 @@ async def event_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 def register(application) -> None:
-    application.add_handler(CommandHandler("event", events_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("event", hall_gated("events", events_panel), filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(event_claim_callback, pattern=r"^event_claim$"))

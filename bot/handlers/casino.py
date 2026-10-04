@@ -3,6 +3,7 @@
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.gates import hall_gated
 from bot.utils import alert_text
 from bio_lab.repository import get_or_create_user
 from bot.buttons import CONFIRM, SHOP, back_btn, btn
@@ -135,6 +136,6 @@ async def casino_play_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 def register(application) -> None:
-    application.add_handler(CommandHandler("casino", casino_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("casino", hall_gated("casino", casino_panel), filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(casino_pick_callback, pattern=r"^casino_pick:"))
     application.add_handler(CallbackQueryHandler(casino_play_callback, pattern=r"^casino_play:"))

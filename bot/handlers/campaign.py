@@ -3,6 +3,7 @@
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.gates import hall_gated
 from bot.utils import alert_text
 from bio_lab.models import Team
 from bio_lab.repository import get_or_create_user
@@ -138,5 +139,5 @@ async def campaign_fight_callback(update: Update, context: ContextTypes.DEFAULT_
 
 
 def register(application) -> None:
-    application.add_handler(CommandHandler("campaign", campaign_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("campaign", hall_gated("campaign", campaign_panel), filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(campaign_fight_callback, pattern=r"^camp_fight$"))

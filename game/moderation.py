@@ -441,9 +441,10 @@ def get_creature_or_raise(creature_id: int) -> Creature:
 
 
 def delete_creature(creature_id: int) -> str:
-    creature = get_creature_or_raise(creature_id)
-    name = creature.name
-    creature.delete()
+    """Same guards as admin_delete_creature (never the owner's only creature; another
+    one becomes active; gear and team slots are released) — the bare delete used to
+    leave a player with no active creature."""
+    name, _owner = admin_delete_creature(creature_id)
     return name
 
 
@@ -614,10 +615,14 @@ def admin_delete_creature(creature_id: int) -> tuple[str, User]:
     Team.objects.filter(slot3=creature).update(slot3=None)
 
     if creature.is_active:
-        other = Creature.objects.filter(owner=owner).exclude(id=creature.id).first()
+        from game.workers import busy_creature_ids
+
+        busy = busy_creature_ids(owner)  # a mining / breeding creature can't also be active
+        others = Creature.objects.filter(owner=owner).exclude(id=creature.id)
+        other = others.exclude(id__in=busy).order_by("-star_level", "-level").first() or others.first()
         if other:
             other.is_active = True
-            other.save()
+            other.save(update_fields=["is_active"])
 
     name = creature.name
     creature.delete()

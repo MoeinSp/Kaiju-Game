@@ -5,6 +5,7 @@ import json
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.gates import hall_gated
 from bot.utils import alert_text
 from bio_lab.repository import get_or_create_user
 from bot.buttons import BUILD, CONFIRM, DANGER, NAV, PRIMARY, SHOP, back_btn, btn
@@ -900,7 +901,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(group_shield_shop_panel, pattern=r"^gshield_shop$"))
     application.add_handler(CallbackQueryHandler(group_shield_buy_callback, pattern=r"^gshield_buy:"))
     application.add_handler(CallbackQueryHandler(group_shield_do_buy_callback, pattern=r"^gshield_do_buy:"))
-    application.add_handler(CommandHandler("items", item_shop_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("items", hall_gated("item_shop", item_shop_panel), filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(item_buy_callback, pattern=r"^sitem_buy:\d+$"))
     application.add_handler(CallbackQueryHandler(item_do_buy_callback, pattern=r"^sitem_do_buy:\d+$"))
     application.add_handler(CallbackQueryHandler(gem_kaiju_buy_callback, pattern=r"^gemk_buy$"))

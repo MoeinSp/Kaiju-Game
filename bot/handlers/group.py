@@ -795,11 +795,8 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.answer()
         which = parts[2] if len(parts) > 2 else "c"
         text = transfer.creature_prices_text() if which == "c" else transfer.equip_prices_text()
-        other = ("هزینه تجهیزات", "xfo:prices:e") if which == "c" else ("هزینه هیولا", "xfo:prices:c")
-        await safe_edit_message_text(
-            query, text, parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([[btn(other[0], emoji_key="btn_report", style=NAV, callback_data=other[1])]]),
-        )
+        if query.message is not None:
+            await query.message.reply_text(text, parse_mode="HTML")
         return
 
     token = parts[2]

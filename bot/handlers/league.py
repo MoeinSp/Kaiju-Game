@@ -3,6 +3,7 @@
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CommandHandler, ContextTypes, filters
 
+from bot.gates import hall_gated
 from bio_lab.repository import display_name, get_or_create_user, lab_display
 from bot.buttons import back_btn
 from bot.utils import run_db, send_screen
@@ -89,4 +90,4 @@ async def league_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 def register(application) -> None:
-    application.add_handler(CommandHandler("league", league_panel, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("league", hall_gated("league", league_panel), filters.ChatType.PRIVATE))

@@ -609,23 +609,13 @@ def heist(attacker: User, attacker_creature: Creature, defender_alliance: Allian
         defender_alliance.treasury_gold -= amt
         defender_alliance.save(update_fields=["treasury_gold", "last_heisted_at"])
 
-        # The loot is SPLIT: half to the raider, the rest to their alliance treasury. It
-        # used to be credited in full to BOTH, so every heist minted gold out of nothing
-        # (two friendly alliances could farm each other every cooldown).
-        personal = amt // 2
-        to_treasury = amt - personal
+        # The WHOLE loot goes to the raider's alliance treasury — treasury to treasury.
+        # It used to be credited in full to the treasury AND to the raider's own coins,
+        # so every heist minted gold out of nothing.
         if attacker.alliance_id:
             attacker_alliance = Alliance.objects.select_for_update().get(id=attacker.alliance_id)
-            attacker_alliance.treasury_gold += to_treasury
+            attacker_alliance.treasury_gold += amt
             attacker_alliance.save(update_fields=["treasury_gold"])
-        else:
-            personal = amt
-
-        if personal:
-            User.objects.filter(pk=attacker.pk).update(coins=F("coins") + personal)
-            attacker.coins += personal
-            from game.ledger import record_gain
-            record_gain(attacker, "heist", coins=personal)
         return amt
 
     if not defender_creatures:

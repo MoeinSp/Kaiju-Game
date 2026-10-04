@@ -4,6 +4,7 @@ from django.utils import timezone
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
+from bot.gates import hall_gated
 from bot.utils import alert_text
 from bio_lab.models import Alliance, Creature, User
 from bio_lab.repository import (
@@ -1111,6 +1112,7 @@ _HUBS = {
         [("اتحاد و کلن", "alliance_info", "n", "btn_alliance"), ("گردونه شانس", "wheel", "s", "btn_wheel")],
         [("کازینو و تاس", "casino", "s", "btn_casino"), ("بنر ویژه کایجو", "banner", "s", "btn_banner")],
         [("دعوت دوستان", "referral", "s", "btn_referral"), ("دانشنامه و القاب", "codex", "n", "btn_codex")],
+        [("مأموریت‌های روزانه", "missions", "s", "btn_missions")],
     ]),
 }
 
@@ -3101,7 +3103,7 @@ def _autohunt_confirm_kb(amount: int):
     )
     kb = InlineKeyboardMarkup([
         [btn("تأیید و شروع", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"autohunt_do:{amount}")],
-        [back_btn("hunt_next", "انصراف")],
+        [back_btn("menu:hunt", "انصراف")],
     ])
     return text, kb
 
@@ -3124,7 +3126,7 @@ async def _autohunt_no_energy(query, energy: int, max_energy: int = 50) -> None:
             f"<i>💡 سقف انرژی شما ۱۰۰ است. می‌توانید با الماس آن را فوراً شارژ کامل کنید:</i>"
         )
         row1 = [btn("شارژ فوری انرژی", emoji_key="btn_charge", style=SHOP, callback_data=f"enr:ask:{query.from_user.id}")]
-        row2 = [btn("بازگشت به شکار", emoji_key="btn_hunt", style=NAV, callback_data="hunt_next")]
+        row2 = [btn("بازگشت به شکار", emoji_key="btn_hunt", style=NAV, callback_data="menu:hunt")]
         markup = InlineKeyboardMarkup([row1, row2])
     else:
         caption = (
@@ -3138,7 +3140,7 @@ async def _autohunt_no_energy(query, energy: int, max_energy: int = 50) -> None:
         )
         row1 = [btn("شارژ فوری انرژی", emoji_key="btn_charge", style=SHOP, callback_data=f"enr:ask:{query.from_user.id}")]
         row2 = [btn("خرید اشتراک نقره‌ای", emoji_key="btn_vip", style=SHOP, callback_data="sub_pick:silver:hunt")]
-        row3 = [btn("بازگشت به شکار", emoji_key="btn_hunt", style=NAV, callback_data="hunt_next")]
+        row3 = [btn("بازگشت به شکار", emoji_key="btn_hunt", style=NAV, callback_data="menu:hunt")]
         markup = InlineKeyboardMarkup([row1, row2, row3])
 
     await safe_edit_message_text(
@@ -3174,7 +3176,7 @@ async def autohunt_start_callback(update: Update, context: ContextTypes.DEFAULT_
             [btn(f"همه ({energy})", emoji_key="btn_autohunt", style=BATTLE, callback_data="autohunt_amt:all"),
              btn(f"نصف ({half})", emoji_key="btn_autohunt", style=NAV, callback_data="autohunt_amt:half")],
             [btn("انرژی دلخواه", emoji_key="btn_custom_amt", style=NAV, callback_data="autohunt_amt:custom")],
-            [back_btn("hunt_next", "انصراف")],
+            [back_btn("menu:hunt", "انصراف")],
         ]),
     )
 
@@ -3264,7 +3266,7 @@ async def autohunt_do_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         query, text, parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
             [btn("شکار خودکار مجدد", emoji_key="btn_autohunt", style=BATTLE, callback_data="autohunt_start")],
-            [btn("شکار دستی", emoji_key="btn_hunt", style=NAV, callback_data="hunt_next")],
+            [btn("شکار دستی", emoji_key="btn_hunt", style=NAV, callback_data="menu:hunt")],
             [back_btn("menu:hub_battle", "بازگشت به نبرد")],
         ]),
     )
@@ -4118,7 +4120,7 @@ async def heist_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     if result["success"]:
         reveal = (
             f"{get_emoji('celebrate')} <b>شبیخون موفق بود!</b>\n"
-            f"{get_emoji('coin')} غارت: <code>+{result['stolen']:,}</code> طلا از خزانه‌ی <b>{target.name}</b> غارت شد — نصفش به کیف خودت و نصفش به خزانه‌ی اتحادت رفت!"
+            f"{get_emoji('coin')} غارت: <code>+{result['stolen']:,}</code> طلا از خزانه‌ی <b>{target.name}</b> غارت شد و کامل به <b>خزانه‌ی اتحادت</b> واریز شد!"
         )
     else:
         reveal = f"😔 نگهبان‌های <b>{target.name}</b> دفاع کردن و شبیخونت شکست خورد."
@@ -4532,7 +4534,7 @@ async def heist_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if result["success"]:
         await update.message.reply_text(
             f"{get_emoji('celebrate')} <b>شبیخون موفق بود!</b>\n"
-            f"{get_emoji('coin')} غارت: <code>+{result['stolen']:,}</code> طلا از خزانه‌ی <b>{target.name}</b> غارت شد — نصفش به کیف خودت و نصفش به خزانه‌ی اتحادت رفت!",
+            f"{get_emoji('coin')} غارت: <code>+{result['stolen']:,}</code> طلا از خزانه‌ی <b>{target.name}</b> غارت شد و کامل به <b>خزانه‌ی اتحادت</b> واریز شد!",
             parse_mode="HTML",
         )
     else:
@@ -5440,7 +5442,7 @@ def register(application) -> None:
     application.add_handler(CommandHandler("alliance_top", alliance_top, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("alliance_deposit", alliance_deposit, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("heist", heist_cmd, filters.ChatType.PRIVATE))
-    application.add_handler(CommandHandler("rank", rank, filters.ChatType.PRIVATE))
+    application.add_handler(CommandHandler("rank", hall_gated("rank", rank), filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("profile", profile, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("balance", balance, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("menu", menu, filters.ChatType.PRIVATE))
