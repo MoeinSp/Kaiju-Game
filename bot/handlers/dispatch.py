@@ -119,7 +119,7 @@ async def _show_panel(update: Update, note: str = "") -> None:
     text, keyboard = _panel_render(data, note)
     from game.media import get_feature_image_path
 
-    await send_screen(update, text, photo=get_feature_image_path("idle"), parse_mode="HTML", reply_markup=keyboard)
+    await send_screen(update, text, photo=get_feature_image_path("dispatch"), parse_mode="HTML", reply_markup=keyboard)
 
 
 async def dispatch_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

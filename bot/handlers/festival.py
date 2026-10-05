@@ -63,7 +63,9 @@ def _home_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
 async def festival_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     st = await run_db(_home_sync, update.effective_user)
     text, keyboard = _home_render(st)
-    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+    from game.media import get_feature_image_path
+
+    await send_screen(update, text, photo=get_feature_image_path("festival"), parse_mode="HTML", reply_markup=keyboard)
 
 
 async def festival_home_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
