@@ -36,7 +36,27 @@ EVENTS = [
      "desc": "جایزه‌های روزانه‌ی رویداد این هفته دو برابرن!", "xp_mult": 1, "pass_mult": 1, "reward_mult": 2},
     {"key": "golden", "emoji": "🌟", "title": "هفته‌ی طلایی",
      "desc": "هم XP و هم امتیاز پاس ۲ برابر!", "xp_mult": 2, "pass_mult": 2, "reward_mult": 1},
+    # ── «قانون هفته»: weeks that change how a part of the GAME plays (read through the
+    # accessors below — hunt_loot_mult, dispatch_time_mult, cave_top_bonus, …) ──
+    {"key": "element_week", "emoji": "🔮", "title": "هفته‌ی عنصر",
+     "desc": "هیولاهای عنصرِ این هفته توی شکار ۳۰٪ طلا و DNA بیشتر می‌آرن!",
+     "xp_mult": 1, "pass_mult": 1, "reward_mult": 1, "rule": "hunt_element"},
+    {"key": "fast_dispatch", "emoji": "🧭", "title": "هفته‌ی اعزام سریع",
+     "desc": "مأموریت‌های اعزامی این هفته نصفِ زمان طول می‌کشن!",
+     "xp_mult": 1, "pass_mult": 1, "reward_mult": 1, "rule": "dispatch_fast"},
+    {"key": "cave_luck", "emoji": "🥚", "title": "هفته‌ی غار خوش‌شانس",
+     "desc": "تخم‌هایی که این هفته باز می‌شن ۱۰٪ شانسِ بیشتر برای رده‌ی بالا دارن!",
+     "xp_mult": 1, "pass_mult": 1, "reward_mult": 1, "rule": "cave_luck"},
+    {"key": "surprise_week", "emoji": "🍀", "title": "هفته‌ی شگفتی",
+     "desc": "شانس جایزه‌ی شگفتیِ مأموریت‌های اعزامی این هفته دو برابره!",
+     "xp_mult": 1, "pass_mult": 1, "reward_mult": 1, "rule": "dispatch_surprise"},
 ]
+
+# rule strengths
+HUNT_ELEMENT_LOOT_BONUS = 0.30
+DISPATCH_FAST_TIME_MULT = 0.5
+CAVE_LUCK_TOP_BONUS = 0.10
+DISPATCH_SURPRISE_MULT = 2.0
 
 
 def _now_local() -> datetime.datetime:
@@ -46,6 +66,50 @@ def _now_local() -> datetime.datetime:
 def current_event() -> dict:
     week = _now_local().isocalendar().week
     return EVENTS[week % len(EVENTS)]
+
+
+def current_rule() -> str | None:
+    return current_event().get("rule")
+
+
+def week_element() -> str:
+    """The element «هفته‌ی عنصر» favours — rotates through all six, week by week."""
+    from game import constants
+
+    week = _now_local().isocalendar().week
+    return constants.ELEMENTS[(week // len(EVENTS)) % len(constants.ELEMENTS)]
+
+
+def hunt_loot_mult(element: str | None) -> float:
+    """Gold/DNA multiplier for a hunt fought by a creature of `element` this week."""
+    if current_rule() == "hunt_element" and element == week_element():
+        return 1 + HUNT_ELEMENT_LOOT_BONUS
+    return 1.0
+
+
+def dispatch_time_mult() -> float:
+    return DISPATCH_FAST_TIME_MULT if current_rule() == "dispatch_fast" else 1.0
+
+
+def dispatch_surprise_mult() -> float:
+    return DISPATCH_SURPRISE_MULT if current_rule() == "dispatch_surprise" else 1.0
+
+
+def cave_top_bonus() -> float:
+    return CAVE_LUCK_TOP_BONUS if current_rule() == "cave_luck" else 0.0
+
+
+def rule_line() -> str:
+    """One line describing this week's rule for other screens (empty on bonus-only weeks)."""
+    ev = current_event()
+    if not ev.get("rule"):
+        return ""
+    extra = ""
+    if ev["rule"] == "hunt_element":
+        from game import constants
+
+        extra = f" — عنصر این هفته: {constants.element_label(week_element())}"
+    return f"{ev['emoji']} <b>{ev['title']}</b>{extra}"
 
 
 def ends_at() -> datetime.datetime:

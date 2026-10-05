@@ -483,6 +483,82 @@ class DispatchMission(models.Model):
         return f"dispatch {self.template_key} c{self.creature_id} ({self.owner_id}, {self.status})"
 
 
+class WorldBoss(models.Model):
+    """One «👹 غول سرگردان» (game/worldboss.py): a server-wide boss that appears twice a
+    day for a short window. HP is shared by everyone; rewards are settled once by the
+    notification job after it dies or escapes."""
+
+    ACTIVE = "active"
+    DEAD = "dead"
+    ESCAPED = "escaped"
+
+    name = models.CharField(max_length=64)
+    element = models.CharField(max_length=16)
+    max_hp = models.BigIntegerField()
+    current_hp = models.BigIntegerField()
+    spawned_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    status = models.CharField(max_length=12, default=ACTIVE)
+    settled = models.BooleanField(default=False)  # end-of-fight rewards + DMs done
+    killer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+
+    class Meta:
+        indexes = [models.Index(fields=["status", "settled"], name="worldboss_state_idx")]
+
+
+class WorldBossHit(models.Model):
+    """One player's total against one world boss (hits used + damage dealt)."""
+
+    boss = models.ForeignKey(WorldBoss, on_delete=models.CASCADE, related_name="hits")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
+    hits = models.PositiveSmallIntegerField(default=0)
+    damage = models.BigIntegerField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["boss", "user"], name="uq_worldboss_hit")]
+        indexes = [models.Index(fields=["boss", "-damage"], name="worldboss_hit_rank_idx")]
+
+
+class WorldBossState(models.Model):
+    """Singleton (id=1): when the next world boss is due."""
+
+    next_spawn_at = models.DateTimeField(null=True, blank=True)
+
+
+class FestivalProgress(models.Model):
+    """A player's «🎪 جشنواره» wallet for one festival (game/festival.py): coins they can
+    still spend, and everything they earned (the leaderboard number)."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
+    festival_key = models.CharField(max_length=16)  # Jalali «year-month», e.g. 1405-07
+    coins = models.IntegerField(default=0)
+    earned = models.IntegerField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "festival_key"], name="uq_festival_progress")]
+        indexes = [models.Index(fields=["festival_key", "-earned"], name="festival_rank_idx")]
+
+
+class FestivalPurchase(models.Model):
+    """How many of one festival-shop item a player has bought in one festival (limits)."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
+    festival_key = models.CharField(max_length=16)
+    item_key = models.CharField(max_length=32)
+    count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "festival_key", "item_key"], name="uq_festival_purchase")
+        ]
+
+
+class FestivalState(models.Model):
+    """Singleton (id=1): the last festival whose leaderboard prizes were paid."""
+
+    last_settled_key = models.CharField(max_length=16, default="", blank=True)
+
+
 class Team(models.Model):
     """A player's chosen squad of up to three creatures for 3v3 team battles
     (game/teambattle.py, used by the campaign). Slots are nullable and SET_NULL so

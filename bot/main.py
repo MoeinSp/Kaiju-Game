@@ -26,6 +26,8 @@ from bot.handlers import (
     codex,
     dispatch,
     energy,
+    festival,
+    worldboss,
     events,
     exchange,
     groupdrops,
@@ -290,6 +292,8 @@ def main() -> None:
     titles.register(application)
     mugen_tower.register(application)
     dispatch.register(application)
+    worldboss.register(application)
+    festival.register(application)
     blackmarket.register(application)
     groupdrops.register(application)  # flash reward drops in groups (JobQueue)
     notify.register(application)  # periodic re-engagement DMs (JobQueue)

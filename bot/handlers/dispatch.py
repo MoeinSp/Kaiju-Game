@@ -74,6 +74,10 @@ def _panel_render(data: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup
     ]
     if data["hq"] < len(dispatch.HQ_SLOTS) - 1:
         lines.append("<i>با ساخت و ارتقای «پایگاه اعزام» (بخش ساختمان‌ها) جایگاه، تعداد مأموریت و جایزه بیشتر می‌شه.</i>")
+    from game import events
+
+    if events.current_rule() in ("dispatch_fast", "dispatch_surprise"):
+        lines.append(f"{events.rule_line()} — <i>{events.current_event()['desc']}</i>")
     if note:
         lines = [note, ""] + lines
     rows = []
@@ -243,7 +247,7 @@ def _go_sync(tg_user, idx, creature_id):
     mission = dispatch.start(user, idx, creature_id)
     record_action(user, "dispatch")
     done = check_missions(user, "dispatch")
-    return creature_name(mission.creature), mission.hours, done
+    return creature_name(mission.creature), _fmt_left(dispatch.real_seconds(mission.hours)), done
 
 
 async def dispatch_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -257,7 +261,7 @@ async def dispatch_go_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer("🧭 راهی شد!")
     from bot.utils import mission_reward_text
 
-    note = f"🧭 <b>{name}</b> راهی مأموریت شد و <b>{hours} ساعت</b> دیگه برمی‌گرده."
+    note = f"🧭 <b>{name}</b> راهی مأموریت شد و <b>{hours}</b> دیگه برمی‌گرده."
     for m in done:
         note += f"\n{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}"
     await _show_panel(update, note=note)

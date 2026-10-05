@@ -123,7 +123,16 @@ def slots(user: User, level: int | None = None) -> int:
 
 
 def bonus_chance(hours: int, level: int) -> float:
-    return min(0.95, BONUS_CHANCE[hours] + HQ_BONUS_CHANCE_ADD[level])
+    from game import events
+
+    return min(0.95, (BONUS_CHANCE[hours] + HQ_BONUS_CHANCE_ADD[level]) * events.dispatch_surprise_mult())
+
+
+def real_seconds(hours: int) -> int:
+    """How long an `hours`-hour mission really takes right now («هفته‌ی اعزام سریع» halves it)."""
+    from game import events
+
+    return int(hours * 3600 * events.dispatch_time_mult())
 
 
 def hq_perks_text(level: int) -> str:
@@ -298,7 +307,7 @@ def start(user: User, offer_idx: int, creature_id: int) -> DispatchMission:
                 template_key=offer["key"],
                 hours=offer["hours"],
                 reward=reward,
-                finishes_at=timezone.now() + datetime.timedelta(hours=offer["hours"]),
+                finishes_at=timezone.now() + datetime.timedelta(seconds=real_seconds(offer["hours"])),
             )
     except IntegrityError:
         raise GameError("این مأموریت رو امروز قبلاً فرستادی.")

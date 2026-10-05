@@ -230,6 +230,8 @@ class Command(BaseCommand):
             "btn_blackmarket": ["🏛", "🏬", "💎", "💰"],
             "btn_expedition": ["⛵", "🚢", "🏹", "🧭"],
             "btn_dispatch": ["🧭", "🗺", "⛵", "🏹"],
+            "btn_worldboss": ["👹", "🐲", "💀", "⚔️"],
+            "btn_festival": ["🎪", "🎉", "🎁", "🎟"],
             "btn_exp_join": ["➕", "⛵", "🤝", "✅"],
             "btn_exp_launch": ["🚀", "⛵", "⚔️", "▶️"],
             "btn_bm_bid": ["🏷", "💰", "💎", "✍️"],

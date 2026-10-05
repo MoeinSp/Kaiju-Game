@@ -250,7 +250,10 @@ def hatch(user: User, egg_id: int) -> tuple[Creature, dict]:
         name, element = egg.parent_a_name, egg.parent_a_element
     else:
         name, element = egg.parent_b_name, egg.parent_b_element
-    hit_top = random.random() < constants.cave_top_chance_for_element(egg.upgrade_chance, element)
+    from game import events
+
+    top_chance = constants.cave_top_chance_for_element(egg.upgrade_chance, element)
+    hit_top = random.random() < min(0.95, top_chance + events.cave_top_bonus())  # «هفته‌ی غار خوش‌شانس»
     fallback = egg.fallback_rarity or constants.prev_rarity(egg.base_rarity)
     rarity = egg.base_rarity if hit_top else fallback
     level = egg.inherit_level

@@ -248,6 +248,16 @@ async def notify_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         photo_path = None
         if marker == "arena":
             reply_markup = _arena_button()
+        elif marker == "worldboss":
+            from bot.buttons import BATTLE
+
+            reply_markup = InlineKeyboardMarkup(
+                [[btn("غول سرگردان", emoji_key="btn_worldboss", style=BATTLE, callback_data="menu:worldboss")]]
+            )
+        elif marker == "festival":
+            reply_markup = InlineKeyboardMarkup(
+                [[btn("جشنواره", emoji_key="btn_festival", style=NAV, callback_data="menu:festival")]]
+            )
             photo_path = get_notify_image_path("energy")
         elif marker == "arena_chest_ready":
             chest_id, tier = payload if isinstance(payload, (tuple, list)) else (payload, "silver")

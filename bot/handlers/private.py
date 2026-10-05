@@ -25,6 +25,8 @@ from bot.handlers.banner import banner_panel
 from bot.handlers.battlepass import battlepass_panel
 from bot.handlers.campaign import campaign_panel
 from bot.handlers.dispatch import dispatch_panel
+from bot.handlers.festival import festival_panel
+from bot.handlers.worldboss import worldboss_panel
 from bot.handlers.codex import codex_panel
 from bot.handlers.events import events_panel
 from bot.handlers.idle import idle_panel
@@ -1115,6 +1117,7 @@ _HUBS = {
         [("جعبه‌های آرنا", "arena_chests", "s", "btn_chests"), ("برج موگن", "mugen_tower", "b", "btn_mugen")],
         [("ماجراجویی دانجن", "campaign", "b", "btn_campaign"), ("اعزام کاروان", "expedition", "b", "btn_expedition")],
         [("جنگ اتحاد", "alliance_war", "b", "btn_war"), ("مأموریت اعزامی", "dispatch", "b", "btn_dispatch")],
+        [("غول سرگردان", "worldboss", "b", "btn_worldboss")],
     ]),
     "hub_creature": ("🦖 <b>هیولا و تجهیزات</b>", [
         [("ارتقای هیولا", "upgrade", "p", "btn_upgrade"), ("کوله تجهیزات", "inventory", "n", "btn_inventory")],
@@ -1136,6 +1139,7 @@ _HUBS = {
     "hub_city": ("🌐 <b>شهر، جوایز و کلوپ</b>", [
         [("پاس فصلی (بتل‌پاس)", "battlepass", "s", "btn_battlepass"), ("دستاوردها", "achievements", "s", "btn_achievements")],
         [("رویدادهای ویژه", "events", "s", "btn_events"), ("لیگ و رتبه‌بندی", "league", "n", "btn_league")],
+        [("جشنواره‌ی ماهانه", "festival", "s", "btn_festival")],
         [("اتحاد و کلن", "alliance_info", "n", "btn_alliance"), ("گردونه شانس", "wheel", "s", "btn_wheel")],
         [("کازینو و تاس", "casino", "s", "btn_casino"), ("بنر ویژه کایجو", "banner", "s", "btn_banner")],
         [("دعوت دوستان", "referral", "s", "btn_referral"), ("دانشنامه و القاب", "codex", "n", "btn_codex")],
@@ -2910,7 +2914,11 @@ def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> st
 
     tier_label = HUNT_TIERS[target["tier"]]["label"]
     # a single random (seed-based) prize instead of a range — matches the actual payout
-    coin_reward, dna_reward = hunt_reward_roll(my_power, target["tier"], target.get("seed"))
+    from game import events as _events
+
+    coin_reward, dna_reward = hunt_reward_roll(
+        my_power, target["tier"], target.get("seed"), _events.hunt_loot_mult(creature.element)
+    )
     pct = win_chance_pct(my_power, target["power"], creature.element, target["element"])
     adv = element_advantage_line(creature.element, target["element"])
     lines = [
@@ -5390,6 +5398,8 @@ _MENU_ACTIONS = {
     "guide": guide_panel,
     "mugen_tower": mugen_panel,
     "dispatch": dispatch_panel,
+    "worldboss": worldboss_panel,
+    "festival": festival_panel,
     "blackmarket": blackmarket_panel,
     "buy_open": buy_open_callback,
     "expedition": expedition_panel,

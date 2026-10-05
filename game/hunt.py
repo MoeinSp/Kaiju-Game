@@ -397,6 +397,9 @@ def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal",
     # apply the owner's 🔬 research combat buffs to the player's kaiju for this fight
     from game import research
 
+    from game import events
+
+    loot_mult = loot_mult * events.hunt_loot_mult(player_creature.element)  # «هفته‌ی عنصر»
     research.attach_research(user, player_creature)
     wild = spawn_wild_creature(hunt_benchmark_power(user), tier, seed)
     winner, log_text = resolve_duel(player_creature, wild)

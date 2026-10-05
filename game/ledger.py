@@ -33,6 +33,8 @@ SOURCE_LABELS = {
     "hunt": "شکار",
     "dispatch": "مأموریت اعزامی",
     "league": "جایزه‌ی لیگ هفتگی",
+    "worldboss": "غول سرگردان",
+    "festival": "جشنواره",
     "arena": "آرنا",
     "raid": "باس رید",
     "duel": "اتک گروهی",

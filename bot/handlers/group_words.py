@@ -1263,7 +1263,11 @@ def _card_sync(tg_user, chat, action):
             # scout_one returns the raw roll; the card needs it labelled and priced.
             # a single seed-based prize (not a range) — matches the actual payout
             target["tier_label"] = HUNT_TIERS[target["tier"]]["label"]
-            coin_reward, dna_reward = hunt_reward_roll(my_power, target["tier"], target.get("seed"))
+            from game import events as _events
+
+            coin_reward, dna_reward = hunt_reward_roll(
+                my_power, target["tier"], target.get("seed"), _events.hunt_loot_mult(creature.element)
+            )
             target["reward"] = coin_reward
             target["dna_reward"] = dna_reward
             target["scout_cost"] = scout_cost(creature)

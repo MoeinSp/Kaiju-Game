@@ -29,7 +29,19 @@ def record_action(user: User, action: str) -> int:
     log = _get_or_create_log(user, action)
     log.count += 1
     log.save(update_fields=["count"])
+    _festival_hook(user, action, log.count, 1)
     return log.count
+
+
+def _festival_hook(user: User, action: str, new_count: int, n: int) -> None:
+    """Every counted action also feeds the monthly festival (a no-op between festivals).
+    Guarded: a festival hiccup must never break the action being recorded."""
+    try:
+        from game import festival
+
+        festival.on_action(user, action, new_count, n)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def record_action_bulk(user: User, action: str, n: int) -> int:
@@ -40,6 +52,7 @@ def record_action_bulk(user: User, action: str, n: int) -> int:
     if n > 0:
         log.count += n
         log.save(update_fields=["count"])
+        _festival_hook(user, action, log.count, n)
     return log.count
 
 
@@ -73,6 +86,7 @@ def consume_daily(user: User, action: str) -> int:
             )
         log.count += 1
         log.save(update_fields=["count"])
+        _festival_hook(user, action, log.count, 1)
         return log.count
 
 
@@ -222,6 +236,12 @@ def check_missions(user: User, action: str) -> list[dict]:
 
         for _ in completed:
             lab.award(user, "mission")
+        try:
+            from game import festival
+
+            festival.on_missions(user, completed)
+        except Exception:  # noqa: BLE001
+            pass
     return completed
 
 

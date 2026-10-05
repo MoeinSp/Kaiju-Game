@@ -176,6 +176,24 @@ def collect_due() -> list[tuple[int, str]]:
             job.notified = True
             job.save(update_fields=["notified"])
 
+        # ── world boss (spawn / settle) and festival leaderboard payout ────────
+        # Each in its own savepoint: a failure in one must not roll back the rest.
+        for _tick in ("worldboss", "festival"):
+            try:
+                with transaction.atomic():
+                    if _tick == "worldboss":
+                        from game import worldboss
+
+                        out.extend(worldboss.tick())
+                    else:
+                        from game import festival
+
+                        out.extend(festival.tick())
+            except Exception:  # noqa: BLE001
+                import logging
+
+                logging.exception("%s tick failed", _tick)
+
         # ── dispatch mission finished ─────────────────────────────────────────
         from game import dispatch
 
