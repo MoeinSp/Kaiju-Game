@@ -1,12 +1,12 @@
 """«🏆 لیگ» — the ranked division ladder built on the weekly cup season."""
 
 from telegram import InlineKeyboardMarkup, Update
-from telegram.ext import CommandHandler, ContextTypes, filters
+from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bot.gates import hall_gated
 from bio_lab.repository import display_name, get_or_create_user, lab_display
-from bot.buttons import back_btn
-from bot.utils import run_db, send_screen
+from bot.buttons import NAV, back_btn, btn
+from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import league, season
 
 
@@ -20,6 +20,9 @@ def _panel_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
     season.close_due_season()  # lazy settle, like the arena screens
     user.refresh_from_db()
+    from bio_lab.models import User
+
+    rank = User.objects.filter(is_banned=False, cup__gt=user.cup).count() + 1
     return {
         "cup": user.cup,
         "division": league.division_for(user.cup),
@@ -28,7 +31,30 @@ def _panel_sync(tg_user):
         "standings": season.standings(limit=10),
         "reward": league.season_reward(user.cup),
         "user_id": user.id,
+        "rank": rank,
+        "rank_reward": league.rank_reward(rank) if user.cup > 0 else None,
     }
+
+
+def _league_table_text(my_key: str | None) -> str:
+    """All 16 leagues with their end-of-week reward (kept short: this is shown as a
+    photo caption, which Telegram caps at ~1,000 characters)."""
+    lines = ["🏅 <b>پاداش آخر هفته‌ی هر لیگ</b>", _DIV]
+    for div in league.DIVISIONS:
+        here = " 📍" if div["key"] == my_key else ""
+        lines.append(f"{div['emoji']} {div['title']} ({div['min_cup']:,}+): {_reward_fmt(league.DIVISION_REWARD[div['key']])}{here}")
+    return "\n".join(lines)
+
+
+def _rank_table_text() -> str:
+    lines = ["🎖 <b>جایزه‌ی رتبه‌ی آخر هفته</b>", _DIV,
+             "<i>علاوه بر پاداش لیگ، به ۵۰ نفر اول جدول کاپ داده می‌شه:</i>", ""]
+    prev = 0
+    for max_rank, reward in league.RANK_REWARDS:
+        label = f"رتبه‌ی {max_rank}" if max_rank == prev + 1 else f"رتبه‌ی {prev + 1} تا {max_rank}"
+        lines.append(f"• {label}: {_reward_fmt(reward)}")
+        prev = max_rank
+    return "\n".join(lines)
 
 
 _DIV = "━━━━━━━━━━━━━━━━━━━━"
@@ -67,13 +93,13 @@ async def league_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     else:
         lines.append("👑 <b>توی بالاترین سطح لیگی!</b>")
 
-    lines.append("\n🏅 <b>سطوح لیگ و پاداش‌ها:</b>")
-    for div in league.DIVISIONS:
-        cup_label = "0 کاپ" if div["min_cup"] == 0 else f"+{div['min_cup']} کاپ"
-        here = " 📍 (جایگاه فعلی تو)" if div["key"] == d["key"] else ""
+    if view["cup"] > 0:
+        bonus = view["rank_reward"]
         lines.append(
-            f"• {div['emoji']} {div['title']}: {cup_label} ⟵ {_reward_fmt(league.DIVISION_REWARD[div['key']])}{here}"
+            f"📍 رتبه‌ی فعلی تو: <b>{view['rank']:,}</b>"
+            + (f" │ 🎖 جایزه‌ی رتبه: {_reward_fmt(bonus)}" if bonus else " │ 🎖 جایزه‌ی رتبه از ۵۰ نفر اول شروع می‌شه")
         )
+    lines.append("<i>آخر هفته هم پاداش لیگت رو می‌گیری، هم (اگه بین ۵۰ نفر اول باشی) جایزه‌ی رتبه.</i>")
 
     lines.append(f"\n{_DIV}")
     lines.append("📊 <b>صدرنشین‌های فصل:</b>")
@@ -85,9 +111,33 @@ async def league_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     photo = get_feature_image_path("league")
     await send_screen(
         update, "\n".join(lines), photo=photo, parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([[back_btn("menu:hub_city", "بازگشت به شهر")]]),
+        reply_markup=InlineKeyboardMarkup([
+            [btn("جوایز لیگ‌ها", emoji_key="btn_league", style=NAV, callback_data="league_tbl:l"),
+             btn("جوایز رتبه", emoji_key="btn_rank", style=NAV, callback_data="league_tbl:r")],
+            [back_btn("menu:hub_city", "بازگشت به شهر")],
+        ]),
+    )
+
+
+def _my_league_key_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    return league.division_for(user.cup)["key"]
+
+
+async def league_table_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    which = query.data.split(":")[1]
+    if which == "r":
+        text = _rank_table_text()
+    else:
+        text = _league_table_text(await run_db(_my_league_key_sync, update.effective_user))
+    await query.answer()
+    await safe_edit_message_text(
+        query, text, parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:league", "بازگشت به لیگ")]]),
     )
 
 
 def register(application) -> None:
     application.add_handler(CommandHandler("league", hall_gated("league", league_panel), filters.ChatType.PRIVATE))
+    application.add_handler(CallbackQueryHandler(league_table_callback, pattern=r"^league_tbl:[lr]$"))

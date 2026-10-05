@@ -32,6 +32,7 @@ def record_gain(user: User, source: str, *, coins: int = 0, dna: int = 0, diamon
 SOURCE_LABELS = {
     "hunt": "شکار",
     "dispatch": "مأموریت اعزامی",
+    "league": "جایزه‌ی لیگ هفتگی",
     "arena": "آرنا",
     "raid": "باس رید",
     "duel": "اتک گروهی",

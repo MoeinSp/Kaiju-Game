@@ -91,8 +91,8 @@ def get_guaranteed_rarity(chest_type: str, cup: int) -> str:
 
     Mega (امگا / مگا):
       - 0-1499: epic (حداقل حماسی)
-      - 1500-3499: legendary (حداقل افسانه‌ای)
-      - 3500+: mythic (تضمینی قطعی اساطیری)
+      - 1500+: legendary (حداقل افسانه‌ای)
+      (the mythic share is NOT a floor — see mega_mythic_chance: 30% → 70% by league)
     Magical (جادویی):
       - 0-1499: rare (حداقل کمیاب)
       - 1500-3499: epic (حداقل حماسی)
@@ -107,9 +107,7 @@ def get_guaranteed_rarity(chest_type: str, cup: int) -> str:
     """
     cup = max(0, int(cup))
     if chest_type == "mega":
-        if cup >= 3500:
-            return "mythic"
-        elif cup >= 1500:
+        if cup >= 1500:
             return "legendary"
         return "epic"
     elif chest_type == "magical":
@@ -130,8 +128,24 @@ def get_guaranteed_rarity(chest_type: str, cup: int) -> str:
         return "common"
 
 
+MEGA_MYTHIC_CHANCE_MIN = 0.30  # lowest league (برنز I)
+MEGA_MYTHIC_CHANCE_MAX = 0.70  # highest league (قهرمان)
+
+
+def mega_mythic_chance(cup: int) -> float:
+    """Chance an Omega chest holds a MYTHIC: a straight line over the 16 leagues, from 30%
+    in the lowest to 70% in the highest. (It used to be 8% below 1,500 cups, 13% up to
+    3,500 and a guaranteed 100% above — a cliff, and a free mythic for every top player.)"""
+    leagues = constants.LEAGUES
+    idx = leagues.index(constants.league_for_cup(cup))
+    step = idx / max(1, len(leagues) - 1)
+    return MEGA_MYTHIC_CHANCE_MIN + (MEGA_MYTHIC_CHANCE_MAX - MEGA_MYTHIC_CHANCE_MIN) * step
+
+
 def get_chest_effective_weights(chest_type: str, cup: int, base_weights: dict[str, float]) -> dict[str, float]:
-    """Filter base weights so that any rarity below get_guaranteed_rarity is strictly excluded."""
+    """Filter base weights so that any rarity below get_guaranteed_rarity is strictly excluded.
+    For the Omega chest the mythic share is then pinned to mega_mythic_chance(cup) and the
+    rest keeps its own proportions (epic : legendary below 1,500 cups, legendary above)."""
     guaranteed = get_guaranteed_rarity(chest_type, cup)
     min_idx = constants.RARITY_ORDER.index(guaranteed)
     filtered = {
@@ -140,6 +154,15 @@ def get_chest_effective_weights(chest_type: str, cup: int, base_weights: dict[st
     }
     if not filtered:
         return {guaranteed: 100.0}
+    if chest_type == "mega":
+        p = mega_mythic_chance(cup)
+        rest = {r: w for r, w in filtered.items() if r != "mythic"}
+        rest_total = sum(rest.values())
+        if rest_total <= 0:
+            return {"mythic": 100.0}
+        out = {r: (1 - p) * 100.0 * w / rest_total for r, w in rest.items()}
+        out["mythic"] = p * 100.0
+        return out
     return filtered
 
 

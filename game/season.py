@@ -84,6 +84,7 @@ def close_due_season() -> str | None:
         # league division reward for how they FINISHED (their end-of-season cup),
         # granted before the cup is reset to next week's floor
         league.grant_season_reward(user, user.cup)
+        league.grant_rank_reward(user, rank)  # top-of-the-table bonus
         new_cup = reset_floor(rank, user.cup)
         SeasonResult.objects.update_or_create(
             week_key=closing,

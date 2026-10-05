@@ -1583,7 +1583,8 @@ async def arena_chest_rewards_callback(update: Update, context: ContextTypes.DEF
         tier_tabs.append(btn(label, emoji_key=f"btn_chest_{t_key}", style=PRIMARY if is_sel else NAV, callback_data=f"arena_chest_rewards:{t_key}:{page}"))
 
     if tier == "mega":
-        min_info = "▫️ کاپ <code>0</code>+: حداقل حماسی\n▫️ کاپ <code>1,500</code>+: حداقل افسانه‌ای\n▫️ کاپ <code>3,500</code>+: تضمینی ۱۰۰٪ اساطیری"
+        min_info = ("▫️ کاپ <code>0</code>+: حداقل حماسی\n▫️ کاپ <code>1,500</code>+: حداقل افسانه‌ای\n"
+                    "▫️ شانس اساطیری: از <code>۳۰٪</code> در پایین‌ترین لیگ تا <code>۷۰٪</code> در بالاترین لیگ")
     elif tier == "magical":
         min_info = "▫️ کاپ <code>0</code>+: حداقل کمیاب\n▫️ کاپ <code>1,500</code>+: حداقل حماسی\n▫️ کاپ <code>3,500</code>+: حداقل افسانه‌ای"
     elif tier == "golden":
