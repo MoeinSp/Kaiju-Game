@@ -40,11 +40,19 @@ def _pm_button(label: str = "ورود به بازی (پیوی)", emoji_key: str 
 _TOPIC_BTN = {
     "beginner": "btn_report", "trading": "btn_alliance", "creatures": "btn_creature",
     "energy": "btn_recheck", "cup": "btn_rank", "economy": "btn_biocrate", "elements": "btn_attack",
+    "missions": "btn_missions", "dispatch": "btn_dispatch", "worldboss": "btn_worldboss",
+    "tournament": "btn_tournament", "festival": "btn_festival", "league": "btn_league",
+    "events": "btn_events", "mugen": "btn_mugen", "blackmarket": "btn_blackmarket",
+    "blacksmith": "btn_forge", "expeditions": "btn_expedition", "alliance": "btn_alliance", "vip": "btn_vip",
 }
 # SHORT button labels for the concept chips (their full titles are too long for a button).
 _TOPIC_SHORT = {
     "beginner": "شروع سریع", "trading": "معامله", "creatures": "هیولاها",
     "energy": "انرژی", "cup": "کاپ", "economy": "اقتصاد", "elements": "عناصر",
+    "missions": "مأموریت‌ها", "dispatch": "مأموریت اعزامی", "worldboss": "غول سرگردان",
+    "tournament": "جام آخر هفته", "festival": "جشنواره", "league": "کاپ و لیگ",
+    "events": "قانون هفته", "mugen": "برج موگن", "blackmarket": "بازار سیاه",
+    "blacksmith": "آهنگری", "expeditions": "کاروان", "alliance": "اتحاد", "vip": "اشتراک VIP",
 }
 _SECTION_BTN = {
     "start": "btn_report", "fight": "btn_attack", "grow": "btn_upgrade",
