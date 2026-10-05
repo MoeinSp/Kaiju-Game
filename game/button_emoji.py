@@ -74,6 +74,7 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_bld_blacksmith": ("ساختمون: آهنگری", "⚒", "buildings"),
     "btn_bld_fusion_lab": ("ساختمون: تالار ادغام", "🔮", "buildings"),
     "btn_bld_trade_hall": ("ساختمون: تالار تجارت", "🤝", "buildings"),
+    "btn_bld_dispatch_hq": ("ساختمون: پایگاه اعزام", "🧭", "buildings"),
     "btn_bld_research_lab": ("ساختمون: آزمایشگاه", "🔬", "buildings"),
     # economy
     "btn_biocrate": ("باکس ژنتیکی", "📦", "economy"),

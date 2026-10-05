@@ -47,13 +47,16 @@ def _panel_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
     dispatch.prune_old(user)
     missions = [_mission_view(m) for m in dispatch.active_missions(user)]
-    return {"missions": missions, "offers": dispatch.offers_for(user), "slots": dispatch.slots(user)}
+    level = dispatch.hq_level(user)
+    return {"missions": missions, "offers": dispatch.offers_for(user, level=level),
+            "slots": dispatch.slots(user, level), "hq": level}
 
 
 def _offer_line(o: dict) -> str:
     need = "" if o["min_rarity"] == "common" else f" · حداقل {constants.RARITY_LABELS[o['min_rarity']]}"
+    special = " ✨ <b>ویژه — جایزه ×۲</b>" if o.get("special") else ""
     return (
-        f"{o['emoji']} <b>{o['title']}</b>\n"
+        f"{o['emoji']} <b>{o['title']}</b>{special}\n"
         f"   ⏱ {o['hours']} ساعت · جایزه: {_FOCUS_LABEL[o['focus']]}{need}\n"
         f"   🔮 عنصر پیشنهادی: {constants.element_label(o['element'])} (+۲۵٪ جایزه)"
     )
@@ -66,8 +69,11 @@ def _panel_render(data: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup
         _DIV,
         "<blockquote>هیولاهای بیکارت رو بفرست مأموریت؛ چند ساعت بعد برگرد و جایزه رو بگیر. "
         "هیولای فعال و هیولاهای مشغول در معدن یا غار نمی‌تونن برن.</blockquote>",
-        f"📦 جایگاه اعزام: <code>{len(missions)}/{slots}</code>",
+        f"📦 جایگاه اعزام: <code>{len(missions)}/{slots}</code> · 🏗 پایگاه اعزام: "
+        + (f"سطح <code>{data['hq']}</code>" if data["hq"] else "<i>ساخته نشده</i>"),
     ]
+    if data["hq"] < len(dispatch.HQ_SLOTS) - 1:
+        lines.append("<i>با ساخت و ارتقای «پایگاه اعزام» (بخش ساختمان‌ها) جایگاه، تعداد مأموریت و جایزه بیشتر می‌شه.</i>")
     if note:
         lines = [note, ""] + lines
     rows = []
@@ -152,7 +158,11 @@ async def dispatch_offer_callback(update: Update, context: ContextTypes.DEFAULT_
     ]
     if offer["min_rarity"] != "common":
         lines.append(f"📌 حداقل نایابی: {constants.RARITY_LABELS[offer['min_rarity']]}")
-    lines.append(f"🍀 شانس جایزه‌ی شگفتی: <code>{int(dispatch.BONUS_CHANCE[offer['hours']] * 100)}٪</code>")
+    lines.append(f"🍀 شانس جایزه‌ی شگفتی: <code>{int(dispatch.bonus_chance(offer['hours'], offer['hq_level']) * 100)}٪</code>")
+    if offer.get("special"):
+        lines.append("✨ <b>مأموریت ویژه‌ی امروز: طلا و DNA دو برابر.</b>")
+    if dispatch.HQ_REWARD_BONUS[offer["hq_level"]]:
+        lines.append(f"🏗 پایگاه اعزام سطح {offer['hq_level']}: +{int(dispatch.HQ_REWARD_BONUS[offer['hq_level']] * 100)}٪ جایزه (حساب شده)")
     rows = []
     if not creatures:
         lines += ["", "😕 <b>هیولای بیکارِ مناسبی نداری.</b>",
@@ -214,7 +224,8 @@ async def dispatch_pick_callback(update: Update, context: ContextTypes.DEFAULT_T
         f"⏱ مدت: <b>{offer['hours']} ساعت</b>",
         "",
         f"🎁 <b>جایزه‌ی قطعی:</b> {dispatch.reward_text(reward, with_bonus=False)}",
-        f"🍀 شانس جایزه‌ی شگفتی: <code>{int(dispatch.BONUS_CHANCE[offer['hours']] * 100)}٪</code>",
+        f"🍀 شانس جایزه‌ی شگفتی: <code>{int(dispatch.bonus_chance(offer['hours'], offer['hq_level']) * 100)}٪</code>"
+        + (" · ✨ مأموریت ویژه (×۲ حساب شده)" if offer.get("special") else ""),
         "",
         "<i>تا وقتی برنگشته، این هیولا رو نمی‌تونی فعال، ترکیب، منتقل یا راهی معدن و غار کنی.</i>",
     ])

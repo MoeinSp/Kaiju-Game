@@ -789,6 +789,7 @@ BUILDING_TYPES = [
     "fusion_lab",
     "trade_hall",
     "research_lab",
+    "dispatch_hq",
 ]
 BUILDING_LABELS = {
     "main_hall": "🏛 تالار مِهر",  # the main hall; everything else is capped by its level
@@ -799,6 +800,7 @@ BUILDING_LABELS = {
     "fusion_lab": "🔮 تالار ادغام",
     "trade_hall": "🤝 تالار تجارت",
     "research_lab": "🔬 آزمایشگاه",
+    "dispatch_hq": "🧭 پایگاه اعزام",
 }
 BUILDING_DESCRIPTIONS = {
     "main_hall": "قلبِ آزمایشگاته و سقفِ سطحِ بقیه‌ی ساختمون‌ها رو تعیین می‌کنه.",
@@ -809,6 +811,7 @@ BUILDING_DESCRIPTIONS = {
     "fusion_lab": "اینجا هیولاهای تکراری رو یکی می‌کنی تا ستاره‌شون بره بالا.",
     "trade_hall": "برای انتقال طلا، هیولا و تجهیزات به این ساختمون نیاز داری.",
     "research_lab": "قلبِ پژوهش‌های پیشرفته. اینجا روی عناصر و توانایی‌ها تحقیق می‌کنی و به همه‌ی هیولاهات بونوس دائمی می‌دی.",
+    "dispatch_hq": "مرکز فرماندهی مأموریت‌های اعزامی. بدونِ این هم می‌تونی هیولا بفرستی، ولی با یه جایگاه و فهرستِ کوتاه.",
 }
 # One-line "why upgrade this" — shown as the «📈 مزیت ارتقا» bullet on each building card.
 BUILDING_UPGRADE_BENEFIT = {
@@ -820,6 +823,7 @@ BUILDING_UPGRADE_BENEFIT = {
     "fusion_lab": "سقفِ ستاره‌ی هیولاهات بالاتر می‌ره.",
     "trade_hall": "افزایش سقف انتقال و دریافت طلا.",
     "research_lab": "سقفِ سطحِ پژوهش‌ها بالاتر می‌ره (لِوِلِ ساختمون = بیشترین لِوِلی که هر پژوهش می‌تونه بره).",
+    "dispatch_hq": "جایگاهِ اعزام و تعدادِ مأموریتِ روزانه بیشتر می‌شه و جایزه‌ی مأموریت‌ها بالا می‌ره.",
 }
 # Optional extra rule bullet (already carries its own leading icon), shown after the benefit.
 BUILDING_RULE_NOTE = {
@@ -855,6 +859,7 @@ BUILDING_UNLOCK_HALL_LEVEL = {
     "blacksmith": 3,          # آهنگری و ارتقای تجهیزات
     "diamond_collector": 3,   # معدن جمع‌کننده الماس
     "research_lab": 5,        # آزمایشگاه تحقیقات ژنتیک
+    "dispatch_hq": 2,         # پایگاه اعزام (هم‌زمان با خودِ مأموریت اعزامی)
 }
 
 # ── Upgrade pacing ────────────────────────────────────────────────────────────

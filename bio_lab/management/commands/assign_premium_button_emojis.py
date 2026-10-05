@@ -154,6 +154,7 @@ class Command(BaseCommand):
             "btn_bld_blacksmith": ["⚒", "🔨", "⚔️", "🛡"],
             "btn_bld_fusion_lab": ["🔮", "🧪", "⚗️", "✨"],
             "btn_bld_trade_hall": ["🤝", "🏛", "⚖️", "🏪"],
+            "btn_bld_dispatch_hq": ["🧭", "🗺", "⛺", "🏕"],
             "btn_bld_research_lab": ["🔬", "⚗️", "🧪", "📚"],
             "btn_biocrate": ["📦", "🎁", "🧰", "🧬"],
             "btn_diamond_box": ["💠", "💎", "🎁", "🔷"],

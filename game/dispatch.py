@@ -40,20 +40,32 @@ from game.creature import GameError, add_capsules, add_xp, creature_power
 from game.daily import today_str
 from game.emoji import get_emoji
 
-OFFERS_PER_DAY = 5
-SLOTS_BASE = 2
-SLOTS_SUBSCRIBER = 3  # any active subscription adds one slot
+# ── «🧭 پایگاه اعزام» (building `dispatch_hq`) ─────────────────────────────────
+# Dispatch works WITHOUT the building (level 0: one slot, a short board) — the building
+# is how a player grows it. Index = building level 0..5.
+HQ_BUILDING = "dispatch_hq"
+HQ_SLOTS = (1, 2, 2, 3, 3, 4)                 # missions running at once
+HQ_OFFERS = (3, 4, 5, 6, 6, 7)                # offers on the daily board
+HQ_REWARD_BONUS = (0.0, 0.0, 0.10, 0.20, 0.30, 0.40)  # extra gold/DNA on every mission
+HQ_BONUS_CHANCE_ADD = (0.0, 0.0, 0.0, 0.0, 0.10, 0.10)  # extra chance of the surprise item
+HQ_LONG_MISSION_LEVEL = 3                     # the 24-hour mission appears from here
+HQ_SPECIAL_LEVEL = 5                          # one «ویژه» mission a day pays double
+SPECIAL_REWARD_MULT = 2.0
+SLOTS_SUBSCRIBER_EXTRA = 1  # any active subscription adds one slot
 
-DURATIONS = (2, 6, 12)
-# the day's five offers always come as this mix (shuffled), so every day has short
-# check-in missions AND one long overnight one
-_DAILY_DURATION_MIX = (2, 2, 6, 6, 12)
+OFFERS_PER_DAY = HQ_OFFERS[-1]  # size of the MASTER board (what a level-5 HQ shows)
+DURATIONS = (2, 6, 12, 24)
+# The master board, by index. A player sees its first HQ_OFFERS[level] entries, so the
+# board only ever GROWS when the building is upgraded mid-day and an offer keeps its
+# index (the index is what «already taken today» is recorded against). The 24-hour one
+# sits at index 5 = the first offer the level-3 HQ adds.
+_MASTER_DURATIONS = (2, 6, 12, 2, 6, 24, 12)
 
 # Gold for a gold-focused mission = creature power × this. For scale: one won «هم‌سطح»
 # hunt pays ≈ 0.39 × power, so 2h ≈ 1 hunt, 6h ≈ 3 hunts, 12h ≈ 4.5 hunts (longer is less
 # gold per hour — it's the low-attention option, not the efficient one). With 2 slots and
 # 5 offers a day the whole board is worth roughly 10–13 hunts: a side income.
-GOLD_FACTOR = {2: 0.45, 6: 1.10, 12: 1.80}
+GOLD_FACTOR = {2: 0.45, 6: 1.10, 12: 1.80, 24: 2.80}
 DNA_PER_GOLD = 0.03  # same gold:DNA ratio hunts use
 MIN_COINS = 50
 
@@ -68,10 +80,10 @@ ELEMENT_MATCH_BONUS = 0.25
 XP_PER_HOUR = 12
 
 # chance of a hidden bonus item, by duration
-BONUS_CHANCE = {2: 0.10, 6: 0.25, 12: 0.45}
-_BONUS_DIAMONDS = {2: (1, 3), 6: (2, 6), 12: (4, 10)}
-_BONUS_CAPSULE = {2: ("small", 2), 6: ("medium", 1), 12: ("medium", 2)}
-_BONUS_SPEEDUP = {2: 5, 6: 15, 12: 30}
+BONUS_CHANCE = {2: 0.10, 6: 0.25, 12: 0.45, 24: 0.60}
+_BONUS_DIAMONDS = {2: (1, 3), 6: (2, 6), 12: (4, 10), 24: (6, 14)}
+_BONUS_CAPSULE = {2: ("small", 2), 6: ("medium", 1), 12: ("medium", 2), 24: ("large", 1)}
+_BONUS_SPEEDUP = {2: 5, 6: 15, 12: 30, 24: 60}
 
 # (key, emoji, title, flavor, focus)
 TEMPLATES = (
@@ -93,13 +105,46 @@ _MIN_RARITY_OPTIONS = {
     2: ("common",),
     6: ("common", "rare"),
     12: ("rare", "epic"),
+    24: ("rare", "epic"),
 }
 
 
-def slots(user: User) -> int:
+def hq_level(user: User) -> int:
+    from game.buildings import building_level
+
+    return max(0, min(len(HQ_SLOTS) - 1, building_level(user, HQ_BUILDING)))
+
+
+def slots(user: User, level: int | None = None) -> int:
     from game.subscription import is_subscription_active
 
-    return SLOTS_SUBSCRIBER if is_subscription_active(user) else SLOTS_BASE
+    level = hq_level(user) if level is None else level
+    return HQ_SLOTS[level] + (SLOTS_SUBSCRIBER_EXTRA if is_subscription_active(user) else 0)
+
+
+def bonus_chance(hours: int, level: int) -> float:
+    return min(0.95, BONUS_CHANCE[hours] + HQ_BONUS_CHANCE_ADD[level])
+
+
+def hq_perks_text(level: int) -> str:
+    """What the HQ gives at `level`, and what the next level adds — for the building card."""
+    def line(lv: int) -> str:
+        parts = [f"{HQ_SLOTS[lv]} جایگاه", f"{HQ_OFFERS[lv]} مأموریت در روز"]
+        if HQ_REWARD_BONUS[lv]:
+            parts.append(f"+{int(HQ_REWARD_BONUS[lv] * 100)}٪ جایزه")
+        if lv >= HQ_LONG_MISSION_LEVEL:
+            parts.append("مأموریت ۲۴ ساعته")
+        if HQ_BONUS_CHANCE_ADD[lv]:
+            parts.append(f"+{int(HQ_BONUS_CHANCE_ADD[lv] * 100)}٪ شانس جایزه‌ی شگفتی")
+        if lv >= HQ_SPECIAL_LEVEL:
+            parts.append("روزی یک مأموریتِ ویژه (جایزه ×۲)")
+        return " · ".join(parts)
+
+    level = max(0, min(len(HQ_SLOTS) - 1, level))
+    out = [f"🧭 الان: {line(level)}"]
+    if level < len(HQ_SLOTS) - 1:
+        out.append(f"🔼 سطح بعد: {line(level + 1)}")
+    return "\n".join(out)
 
 
 def _taken_idxs(user: User, day: str) -> set[int]:
@@ -108,18 +153,22 @@ def _taken_idxs(user: User, day: str) -> set[int]:
     )
 
 
-def offers_for(user: User, day: str | None = None) -> list[dict]:
+def offers_for(user: User, day: str | None = None, level: int | None = None) -> list[dict]:
     """Today's board for this player. Pure function of (user id, day) plus which offers
     were already taken — the same list every time it's opened that day."""
     day = day or today_str()
+    level = hq_level(user) if level is None else level
     rng = random.Random(f"dispatch:{user.id}:{day}")
-    durations = list(_DAILY_DURATION_MIX)
-    rng.shuffle(durations)
     templates = rng.sample(TEMPLATES, k=OFFERS_PER_DAY)
+    special_idx = rng.randrange(OFFERS_PER_DAY)  # today's «ویژه» mission (level-5 HQ only)
     taken = _taken_idxs(user, day)
     out = []
-    for idx, (hours, tpl) in enumerate(zip(durations, templates)):
+    for idx, (hours, tpl) in enumerate(zip(_MASTER_DURATIONS, templates)):
         key, emoji, title, flavor, focus = tpl
+        offer_element = rng.choice(constants.ELEMENTS)
+        offer_rarity = rng.choice(_MIN_RARITY_OPTIONS[hours])
+        if idx >= HQ_OFFERS[level]:
+            continue  # the RNG above is still consumed, so every offer is the same at any level
         out.append({
             "idx": idx,
             "day": day,
@@ -129,18 +178,20 @@ def offers_for(user: User, day: str | None = None) -> list[dict]:
             "flavor": flavor,
             "focus": focus,
             "hours": hours,
-            "element": rng.choice(constants.ELEMENTS),
-            "min_rarity": rng.choice(_MIN_RARITY_OPTIONS[hours]),
+            "element": offer_element,
+            "min_rarity": offer_rarity,
             "taken": idx in taken,
+            "special": level >= HQ_SPECIAL_LEVEL and idx == special_idx,
+            "hq_level": level,
         })
     return out
 
 
 def get_offer(user: User, idx: int, day: str | None = None) -> dict:
-    offers = offers_for(user, day)
-    if not 0 <= idx < len(offers):
-        raise GameError("این مأموریت دیگه توی فهرست امروز نیست.")
-    return offers[idx]
+    for offer in offers_for(user, day):
+        if offer["idx"] == idx:
+            return offer
+    raise GameError("این مأموریت دیگه توی فهرست امروز نیست.")
 
 
 def active_missions(user: User) -> list[DispatchMission]:
@@ -187,7 +238,10 @@ def preview_reward(user: User, offer: dict, creature: Creature) -> dict:
     hours = offer["hours"]
     gold_share, dna_share = _FOCUS[offer["focus"]]
     match = creature.element == offer["element"]
-    mult = 1 + (ELEMENT_MATCH_BONUS if match else 0)
+    level = offer.get("hq_level", 0)
+    mult = (1 + (ELEMENT_MATCH_BONUS if match else 0)) * (1 + HQ_REWARD_BONUS[level])
+    if offer.get("special"):
+        mult *= SPECIAL_REWARD_MULT
     base = power * GOLD_FACTOR[hours] * mult
     return {
         "coins": max(MIN_COINS, round(base * gold_share)),
@@ -198,8 +252,8 @@ def preview_reward(user: User, offer: dict, creature: Creature) -> dict:
     }
 
 
-def _roll_bonus(hours: int) -> dict:
-    if random.random() >= BONUS_CHANCE[hours]:
+def _roll_bonus(hours: int, level: int = 0) -> dict:
+    if random.random() >= bonus_chance(hours, level):
         return {}
     kind = random.choices(("diamonds", "capsule", "speedup"), weights=(40, 35, 25), k=1)[0]
     if kind == "diamonds":
@@ -233,7 +287,7 @@ def start(user: User, offer_idx: int, creature_id: int) -> DispatchMission:
         raise GameError(f"این مأموریت حداقل یه هیولای {need} می‌خواد.")
 
     reward = preview_reward(user, offer, creature)
-    reward.update(_roll_bonus(offer["hours"]))
+    reward.update(_roll_bonus(offer["hours"], offer["hq_level"]))
     try:
         with transaction.atomic():
             return DispatchMission.objects.create(

@@ -283,6 +283,10 @@ def _building_detail_text(view: dict) -> str:
     if note:
         lines.append(f"<blockquote>{note}</blockquote>")
     # live built-state extras
+    if btype == "dispatch_hq":
+        from game import dispatch
+
+        lines.append("<blockquote>" + dispatch.hq_perks_text(building.level) + "</blockquote>")
     if btype == "blacksmith" and building.level > 0:
         lines.append(f"🔨 سقفِ فعلیِ سطحِ تجهیزات: <code>+{building.level * constants.EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL}</code>")
     if btype == constants.MAIN_BUILDING and building.level > 0:
@@ -391,6 +395,8 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
     elif building.level < min(cap, constants.BUILDING_MAX_LEVEL):
         label = "شروع ساخت" if building.level == 0 else "شروع ارتقا"
         rows.append([btn(label, emoji_key="btn_build", style=BUILD, callback_data=f"bld_upgrade:{building.id}")])
+    if building.building_type == "dispatch_hq":
+        rows.append([btn("مأموریت‌های اعزامی", emoji_key="btn_dispatch", style=PRIMARY, callback_data="menu:dispatch")])
     if building.building_type == "research_lab" and building.level > 0:
         rows.append([btn("پژوهش‌ها", emoji_key="btn_research", style=PRIMARY, callback_data="menu:research")])
     if building.building_type == "blacksmith" and building.level > 0:
