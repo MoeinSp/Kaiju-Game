@@ -178,7 +178,7 @@ def collect_due() -> list[tuple[int, str]]:
 
         # ── world boss (spawn / settle), weekend tournament, festival payout ───
         # Each in its own savepoint: a failure in one must not roll back the rest.
-        for _tick in ("worldboss", "tournament", "festival"):
+        for _tick in ("worldboss", "tournament", "festival", "announce"):
             try:
                 with transaction.atomic():
                     if _tick == "worldboss":
@@ -189,6 +189,10 @@ def collect_due() -> list[tuple[int, str]]:
                         from game import tournament
 
                         out.extend(tournament.tick())
+                    elif _tick == "announce":
+                        from game import announce
+
+                        out.extend(announce.tick())
                     else:
                         from game import festival
 

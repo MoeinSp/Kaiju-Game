@@ -132,14 +132,18 @@ async def dispatch_home_callback(update: Update, context: ContextTypes.DEFAULT_T
 
 
 # ── offer → creature picker ───────────────────────────────────────────────────
-def _offer_sync(tg_user, idx):
+def _offer_sync(tg_user, idx, page=0):
+    """→ (offer, the creatures of `page`, their reward previews, page, pages, total).
+    Only the page being shown is priced — pricing the whole roster was the slow part."""
     user, _ = get_or_create_user(tg_user)
     offer = dispatch.get_offer(user, idx)
     if offer["taken"]:
         raise GameError("این مأموریت رو امروز قبلاً فرستادی.")
     creatures = dispatch.eligible_creatures(user, offer)
-    previews = {c.id: dispatch.preview_reward(user, offer, c) for c in creatures}
-    return offer, creatures, previews
+    pages = max(1, (len(creatures) + PICK_PAGE_SIZE - 1) // PICK_PAGE_SIZE)
+    page = max(0, min(page, pages - 1))
+    chunk = creatures[page * PICK_PAGE_SIZE:(page + 1) * PICK_PAGE_SIZE]
+    return offer, chunk, dispatch.preview_rewards(user, offer, chunk), page, pages, len(creatures)
 
 
 async def dispatch_offer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -147,7 +151,7 @@ async def dispatch_offer_callback(update: Update, context: ContextTypes.DEFAULT_
     _, _, idx, page = query.data.split(":")
     idx, page = int(idx), int(page)
     try:
-        offer, creatures, previews = await run_db(_offer_sync, update.effective_user, idx)
+        offer, chunk, previews, page, pages, total = await run_db(_offer_sync, update.effective_user, idx, page)
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
         return
@@ -168,13 +172,10 @@ async def dispatch_offer_callback(update: Update, context: ContextTypes.DEFAULT_
     if dispatch.HQ_REWARD_BONUS[offer["hq_level"]]:
         lines.append(f"🏗 پایگاه اعزام سطح {offer['hq_level']}: +{int(dispatch.HQ_REWARD_BONUS[offer['hq_level']] * 100)}٪ جایزه (حساب شده)")
     rows = []
-    if not creatures:
+    if not total:
         lines += ["", "😕 <b>هیولای بیکارِ مناسبی نداری.</b>",
                   "<i>هیولای فعال و هیولاهای مشغول نمی‌تونن برن؛ یه هیولای دیگه آزاد کن یا از باکس و غار بگیر.</i>"]
     else:
-        pages = max(1, (len(creatures) + PICK_PAGE_SIZE - 1) // PICK_PAGE_SIZE)
-        page = max(0, min(page, pages - 1))
-        chunk = creatures[page * PICK_PAGE_SIZE:(page + 1) * PICK_PAGE_SIZE]
         lines += ["", "<b>کدوم هیولا بره؟</b>" + (f" <i>(صفحه {page + 1}/{pages})</i>" if pages > 1 else "")]
         for c in chunk:
             p = previews[c.id]

@@ -240,10 +240,22 @@ def _power_of(user: User, creature: Creature) -> int:
     return creature_power(creature, get_equipped_items(creature))
 
 
-def preview_reward(user: User, offer: dict, creature: Creature) -> dict:
+def preview_rewards(user: User, offer: dict, creatures: list[Creature]) -> dict[int, dict]:
+    """preview_reward() for a whole picker page in TWO queries (research + all the gear)
+    instead of two per creature — the picker used to fire 1,600 queries for a big roster."""
+    from game import research
+    from game.equipment import equipped_items_map
+
+    research.attach_research(user, creatures)
+    gear = equipped_items_map(creatures)
+    return {c.id: preview_reward(user, offer, c, power=creature_power(c, gear[c.id])) for c in creatures}
+
+
+def preview_reward(user: User, offer: dict, creature: Creature, power: int | None = None) -> dict:
     """The guaranteed part of the reward if `creature` takes `offer` right now (the
     hidden bonus item is rolled at dispatch and only revealed on collect)."""
-    power = _power_of(user, creature)
+    if power is None:
+        power = _power_of(user, creature)
     hours = offer["hours"]
     gold_share, dna_share = _FOCUS[offer["focus"]]
     match = creature.element == offer["element"]

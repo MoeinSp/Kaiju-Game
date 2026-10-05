@@ -559,6 +559,14 @@ class FestivalState(models.Model):
     last_settled_key = models.CharField(max_length=16, default="", blank=True)
 
 
+class AnnouncementMark(models.Model):
+    """«This broadcast DM was already sent» (game/announce.py) — one row per announcement
+    key, e.g. `fest_start:1405-07`, so each goes out exactly once."""
+
+    key = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class Tournament(models.Model):
     """One «🏟 جام آخر هفته» (game/tournament.py), keyed by ISO week: registration → draw
     into groups of up to 8 → three hourly knockout rounds on Friday night."""

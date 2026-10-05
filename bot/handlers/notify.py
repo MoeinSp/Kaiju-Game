@@ -264,7 +264,12 @@ async def notify_job(context: ContextTypes.DEFAULT_TYPE) -> None:
             reply_markup = InlineKeyboardMarkup(
                 [[btn("جشنواره", emoji_key="btn_festival", style=NAV, callback_data="menu:festival")]]
             )
-            photo_path = get_notify_image_path("energy")
+            from game.media import get_feature_image_path
+
+            photo_path = get_feature_image_path("festival")
+        elif marker in ("missions", "events"):
+            label, key = ("مأموریت‌ها", "btn_missions") if marker == "missions" else ("رویداد این هفته", "btn_events")
+            reply_markup = InlineKeyboardMarkup([[btn(label, emoji_key=key, style=NAV, callback_data=f"menu:{marker}")]])
         elif marker == "arena_chest_ready":
             chest_id, tier = payload if isinstance(payload, (tuple, list)) else (payload, "silver")
             from bot.buttons import CONFIRM
