@@ -923,10 +923,19 @@ RESEARCH_GOLD_COST = {1: 200_000, 2: 400_000, 3: 700_000, 4: 1_100_000, 5: 1_600
 RESEARCH_DNA_COST = {1: 500, 2: 900, 3: 1_400, 4: 2_000, 5: 2_700}
 
 
-def research_seconds(target_level: int) -> int:
-    """Real-time for a research level: 12h for level 1, +12h for each level after."""
+# The two premium elements cost — and take — twice as much to research as the base four.
+RESEARCH_COST_TIME_MULT = {"elem_crystal": 2, "elem_plasma": 2}
+
+
+def research_mult(key: str | None) -> int:
+    return RESEARCH_COST_TIME_MULT.get(key or "", 1)
+
+
+def research_seconds(target_level: int, key: str | None = None) -> int:
+    """Real-time for a research level: 12h for level 1, +12h for each level after
+    (× research_mult for the track — crystal / plasma take double)."""
     lvl = max(1, min(int(target_level), RESEARCH_MAX_LEVEL))
-    return 12 * lvl * 3600
+    return 12 * lvl * 3600 * research_mult(key)
 
 # A player runs one building upgrade at a time by default. Buying the SECOND builder
 # (a one-time diamond purchase) lets two upgrades run in parallel — halving the

@@ -126,8 +126,8 @@ def _detail_text(key, lab_level, level, remaining, target) -> str:
         lines.append(f"\n🔒 برای سطح بعدی، اول ساختمونِ آزمایشگاه رو به سطح {level + 1} ارتقا بده.")
     else:
         target_level = level + 1
-        gold, dna = research.next_cost(target_level)
-        secs = constants.research_seconds(target_level)
+        gold, dna = research.next_cost(target_level, key)
+        secs = constants.research_seconds(target_level, key)
         lines.append(f"\n🔼 <b>ارتقا به سطح {target_level}</b> (اثر می‌شه {target_level * per * 100:.0f}٪):")
         lines.append(f"{get_emoji('coin')} <b>{gold:,}</b> طلا  ┃  {get_emoji('dna')} <b>{dna:,}</b> DNA")
         lines.append(f"⏳ زمان: <b>{_fmt_remaining(secs)}</b>")

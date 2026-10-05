@@ -130,11 +130,12 @@ def upgrade_for(user: User, key: str) -> ResearchUpgrade | None:
     return ResearchUpgrade.objects.filter(owner=user, key=key).first()
 
 
-def next_cost(target_level: int) -> tuple[int, int]:
-    """(gold, dna) to reach `target_level`."""
+def next_cost(target_level: int, key: str | None = None) -> tuple[int, int]:
+    """(gold, dna) to reach `target_level` on track `key` (crystal / plasma cost double)."""
+    mult = constants.research_mult(key)
     return (
-        constants.RESEARCH_GOLD_COST[target_level],
-        constants.RESEARCH_DNA_COST[target_level],
+        constants.RESEARCH_GOLD_COST[target_level] * mult,
+        constants.RESEARCH_DNA_COST[target_level] * mult,
     )
 
 
@@ -167,7 +168,7 @@ def start_research(user: User, key: str) -> ResearchUpgrade:
             f"لِوِلِ این پژوهش نمی‌تونه از لِوِلِ ساختمونِ آزمایشگاه ({cap}) جلو بزنه — "
             "اول خودِ آزمایشگاه رو ارتقا بده."
         )
-    gold, dna = next_cost(target)
+    gold, dna = next_cost(target, key)
     if user.coins < gold:
         raise InsufficientGoldError(
             f"طلا کافی نداری! این پژوهش <b>{gold:,}</b> طلا می‌خواد (الان {user.coins:,} داری).",
@@ -178,7 +179,7 @@ def start_research(user: User, key: str) -> ResearchUpgrade:
     user.coins -= gold
     user.dna_fragments -= dna
     user.save(update_fields=["coins", "dna_fragments"])
-    finishes_at = timezone.now() + datetime.timedelta(seconds=constants.research_seconds(target))
+    finishes_at = timezone.now() + datetime.timedelta(seconds=constants.research_seconds(target, key))
     return ResearchUpgrade.objects.create(
         owner=user, key=key, target_level=target, finishes_at=finishes_at
     )
