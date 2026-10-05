@@ -365,7 +365,48 @@ def open_chest(user: User, chest_id: int) -> dict:
     if not is_ready:
         raise GameError("تایمر این جعبه هنوز تمام نشده است!")
 
-    cfg = ARENA_CHEST_TIERS.get(chest.chest_type, ARENA_CHEST_TIERS["silver"])
+    contents = grant_chest_contents(user, chest.chest_type, chest.cup_at_drop)
+    cfg = contents["cfg"]
+    coins, dna, diamonds = contents["coins"], contents["dna"], contents["diamonds"]
+    creature, item, rarity = contents["creature"], contents["item"], contents["rarity"]
+
+    chest_type_key = chest.chest_type
+    slot_num = chest.slot
+    chest.delete()
+
+    already_unlocking = set(
+        ArenaChest.objects.filter(user=user, status="unlocking").values_list("id", flat=True)
+    )
+    advance_user_chests(user)
+
+    # only a chest that went from the queue to «unlocking» RIGHT NOW counts — one the
+    # player started by hand earlier used to be announced as «auto-started» too
+    next_started = (
+        ArenaChest.objects.filter(user=user, status="unlocking").exclude(id__in=already_unlocking).first()
+    )
+
+    return {
+        "tier": chest_type_key,
+        "name": cfg["name"],
+        "emoji": cfg["emoji"],
+        "slot": slot_num,
+        "coins": coins,
+        "dna": dna,
+        "diamonds": diamonds,
+        "creature": creature,
+        "item": item,
+        "rarity": rarity,
+        "next_started": next_started,
+    }
+
+
+def grant_chest_contents(user: User, chest_type: str, cup: int, source: str = "arena_chest") -> dict:
+    """Roll and GRANT what a chest of `chest_type` holds for a player at `cup` — gold and
+    DNA scaled by league, a creature OR an item at the tier's guaranteed rarity, and the
+    diamond bonus of the top tiers. `user` must already be locked by the caller. Shared by
+    arena chests (open_chest) and the weekly mission box track (game.daily.claim_box)."""
+    cfg = ARENA_CHEST_TIERS.get(chest_type, ARENA_CHEST_TIERS["silver"])
+    chest = type("_Chest", (), {"chest_type": cfg["key"], "cup_at_drop": cup})
     mult = league_multiplier(chest.cup_at_drop)
 
     coins = round(cfg["base_gold"] * mult)
@@ -404,35 +445,12 @@ def open_chest(user: User, chest_id: int) -> dict:
     user.save(update_fields=["coins", "dna_fragments", "diamonds"])
 
     from game.ledger import record_gain
-    record_gain(user, "arena_chest", coins=coins, dna=dna, diamonds=diamonds)
-
-    chest_type_key = chest.chest_type
-    slot_num = chest.slot
-    chest.delete()
-
-    already_unlocking = set(
-        ArenaChest.objects.filter(user=user, status="unlocking").values_list("id", flat=True)
-    )
-    advance_user_chests(user)
-
-    # only a chest that went from the queue to «unlocking» RIGHT NOW counts — one the
-    # player started by hand earlier used to be announced as «auto-started» too
-    next_started = (
-        ArenaChest.objects.filter(user=user, status="unlocking").exclude(id__in=already_unlocking).first()
-    )
+    record_gain(user, source, coins=coins, dna=dna, diamonds=diamonds)
 
     return {
-        "tier": chest_type_key,
-        "name": cfg["name"],
-        "emoji": cfg["emoji"],
-        "slot": slot_num,
-        "coins": coins,
-        "dna": dna,
-        "diamonds": diamonds,
-        "creature": creature,
-        "item": item,
-        "rarity": rarity,
-        "next_started": next_started,
+        "cfg": cfg, "tier": cfg["key"], "name": cfg["name"], "emoji": cfg["emoji"],
+        "coins": coins, "dna": dna, "diamonds": diamonds,
+        "creature": creature, "item": item, "rarity": rarity,
     }
 
 

@@ -227,20 +227,29 @@ async def dispatch_pick_callback(update: Update, context: ContextTypes.DEFAULT_T
 
 def _go_sync(tg_user, idx, creature_id):
     user, _ = get_or_create_user(tg_user)
+    from game.daily import check_missions, record_action
+
     mission = dispatch.start(user, idx, creature_id)
-    return creature_name(mission.creature), mission.hours
+    record_action(user, "dispatch")
+    done = check_missions(user, "dispatch")
+    return creature_name(mission.creature), mission.hours, done
 
 
 async def dispatch_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     _, _, idx, cid = query.data.split(":")
     try:
-        name, hours = await run_db(_go_sync, update.effective_user, int(idx), int(cid))
+        name, hours, done = await run_db(_go_sync, update.effective_user, int(idx), int(cid))
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🧭 راهی شد!")
-    await _show_panel(update, note=f"🧭 <b>{name}</b> راهی مأموریت شد و <b>{hours} ساعت</b> دیگه برمی‌گرده.")
+    from bot.utils import mission_reward_text
+
+    note = f"🧭 <b>{name}</b> راهی مأموریت شد و <b>{hours} ساعت</b> دیگه برمی‌گرده."
+    for m in done:
+        note += f"\n{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}"
+    await _show_panel(update, note=note)
 
 
 # ── running mission: view / cancel ────────────────────────────────────────────

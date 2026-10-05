@@ -144,6 +144,10 @@ def spin(user: User) -> dict:
     prize = random.choices(prizes, weights=weights, k=1)[0]
     
     _apply_prize(user, prize)
+    # the spin itself is a daily mission (consume_daily above already counted it)
+    from game.daily import check_missions
+
+    prize["missions"] = check_missions(user, "wheel_spin")
     return prize
 
 

@@ -109,7 +109,7 @@ def _mission_lines(completed: list[dict]) -> str:
     if not completed:
         return ""
     lines = [
-        f"{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}"
+        f"{get_emoji('mission')} ماموریت{' هفتگی' if m.get('weekly') else ''} «{m['label']}» تکمیل شد! {mission_reward_text(m)}"
         for m in completed
     ]
     return "\n" + "\n".join(lines)
@@ -2725,7 +2725,7 @@ def _missions_sync(tg_user):
     return mission_status(user)
 
 
-MISSIONS_PAGE_SIZE = 7
+_BOX_LABEL = {"silver": "🥈 نقره‌ای", "golden": "🥇 طلایی", "magical": "🔮 جادویی", "mega": "👑 امگا"}
 
 
 def _mission_panel_reward(m: dict) -> str:
@@ -2735,71 +2735,143 @@ def _mission_panel_reward(m: dict) -> str:
         parts.append(f"<code>+{m['coins']:,}</code> طلا {get_emoji('coin')}")
     if m.get("dna"):
         parts.append(f"<code>+{m['dna']:,}</code> دی‌ان‌ای {get_emoji('dna')}")
+    if m.get("diamonds"):
+        parts.append(f"<code>+{m['diamonds']}</code> الماس {get_emoji('diamond')}")
+    if m.get("capsule"):
+        tier, count = m["capsule"]
+        cap = constants.XP_CAPSULES[tier]
+        parts.append(f"<code>{count}×</code> {cap['label']} {cap['emoji']}")
     if m.get("speedup"):
         parts.append(f"<code>۱×</code> کارت سرعت {constants.speedup_plain_label(m['speedup'])} ⏱")
     return " ، ".join(parts) if parts else "—"
 
 
-def _missions_render(status: list[dict], page: int) -> tuple[str, InlineKeyboardMarkup]:
-    """Missions, in-progress first then completed, split across pages. A player's
-    full mission list plus reward text overran Telegram's message limit and got
-    rejected outright; paging it keeps every screen short and readable."""
-    ordered = sorted(status, key=lambda m: (m["done"], m["label"]))  # unfinished first
-    total = len(ordered)
-    total_pages = max(1, (total + MISSIONS_PAGE_SIZE - 1) // MISSIONS_PAGE_SIZE)
-    page = max(0, min(page, total_pages - 1))
-    chunk = ordered[page * MISSIONS_PAGE_SIZE : (page + 1) * MISSIONS_PAGE_SIZE]
+def _fmt_reset(seconds: int) -> str:
+    d, rem = divmod(max(0, int(seconds)), 86400)
+    h = rem // 3600
+    return f"{d} روز و {h} ساعت" if d else f"{max(1, h)} ساعت"
 
-    done_count = sum(1 for m in status if m["done"])
-    overall_bar = constants.render_bar(done_count, total, width=10)
-    overall_pct = round(100 * done_count / max(1, total))
+
+def _mission_block(m: dict) -> list[str]:
+    reward = f"🎁 {_mission_panel_reward(m)} · ⭐ <code>{m['points']}</code> امتیاز"
+    if m["done"]:
+        return [f"✅ <b>{m['label']}</b> — <s>انجام شد</s>", reward, ""]
+    bar = constants.render_bar(m["progress"], m["target"], width=10)
+    return [f"▫️ <b>{m['label']}</b>", f"⏳ [{bar}] <code>{m['progress']}/{m['target']}</code>", reward, ""]
+
+
+def _missions_render(status: dict, tab: str = "d", note: str = "") -> tuple[str, InlineKeyboardMarkup]:
+    """The missions screen, three tabs: today's missions, this week's missions, and the
+    weekly box track (points → boxes, the last one is the Omega box)."""
     div = "━━━━━━━━━━━━━━━━━━━━"
-    lines = [
-        f"{get_emoji('mission')} <b>ماموریت‌های روزانه</b>",
-        "",
-        f"📊 <b>پیشرفت کل:</b> [{overall_bar}] <code>{overall_pct}%</code> (<code>{done_count}/{total}</code> ماموریت)",
-    ]
-    if total_pages > 1:
-        lines.append(f"📑 صفحه: <code>{page + 1}</code> از <code>{total_pages}</code>")
-    lines += ["", div, ""]
-    for m in chunk:
-        if m["done"]:
-            lines.append(f"✅ <b>{m['label']}:</b> <s>انجام شد</s>")
-            lines.append(f"🎁 پاداش: {_mission_panel_reward(m)}")
-        else:
-            bar = constants.render_bar(m["progress"], m["target"], width=10)
-            lines.append(f"▫️ <b>{m['label']}:</b>")
-            lines.append(f"⏳ [{bar}] <code>{m['progress']}/{m['target']}</code>")
-            lines.append(f"🎁 پاداش: {_mission_panel_reward(m)}")
-        lines.append("")
-    lines.append("<i>ماموریت‌ها نیمه‌شب به وقت تهران ریست می‌شن.</i>")
+    points, max_points = status["points"], status["max_points"]
+    boxes = status["boxes"]
+    next_box = next((b for b in boxes if not b["reached"]), None)
+    ready = [b for b in boxes if b["reached"] and not b["opened"]]
+    lines = [f"{get_emoji('mission')} <b>مأموریت‌ها</b>", ""]
+    if note:
+        lines = [note, ""] + lines
+    target = next_box["need"] if next_box else boxes[-1]["need"]
+    lines.append(
+        f"⭐ امتیاز این هفته: <code>{points}</code> — [{constants.render_bar(min(points, target), target, width=10)}] "
+        + (f"تا باکس {_BOX_LABEL[next_box['tier']]}: <code>{next_box['need'] - points}</code> امتیاز"
+           if next_box else "همه‌ی باکس‌ها باز شدن 🎉")
+    )
+    if ready:
+        lines.append(f"🎁 <b>{len(ready)} باکس آماده‌ی باز شدنه!</b>")
+    lines += [div, ""]
 
     rows = []
-    nav = []
-    if page > 0:
-        nav.append(btn("قبلی", emoji_key="btn_prev", style=NAV, callback_data=f"mission_page:{page - 1}"))
-    if page < total_pages - 1:
-        nav.append(btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=f"mission_page:{page + 1}"))
-    if nav:
-        rows.append(nav)
+    if tab == "w":
+        lines.append("📅 <b>مأموریت‌های هفتگی</b> <i>(سخت‌تر، امتیاز و جایزه‌ی بیشتر)</i>")
+        lines.append("")
+        for m in sorted(status["weekly"], key=lambda m: m["done"]):
+            lines += _mission_block(m)
+        lines.append(f"<i>ریست هفتگی: {_fmt_reset(status['reset_in'])} دیگه (دوشنبه، نیمه‌شب تهران).</i>")
+    elif tab == "b":
+        lines.append("🎁 <b>مسیر باکس‌های هفته</b>")
+        lines.append("<blockquote>با هر مأموریت امتیاز می‌گیری؛ به هر پله که برسی یه باکس باز می‌کنی. "
+                     "آخرین پله باکس 👑 امگاست: برای کسی که تقریباً همه‌ی مأموریت‌های هفته رو انجام بده.</blockquote>")
+        lines.append("")
+        for b in boxes:
+            if b["opened"]:
+                state = "✅ باز شد"
+            elif b["reached"]:
+                state = "🎁 <b>آماده!</b>"
+            else:
+                state = f"🔒 <code>{b['need'] - points}</code> امتیاز مونده"
+            lines.append(f"{b['index']}. <code>{b['need']}</code> امتیاز ← باکس {_BOX_LABEL[b['tier']]} — {state}")
+            if b["reached"] and not b["opened"]:
+                rows.append([btn(f"باز کردن باکس {b['index']}", emoji_key="btn_chests", style=CONFIRM,
+                                 callback_data=f"mission_box:{b['index']}")])
+        lines += ["", f"<i>سقف امتیاز هفته: {max_points} · ریست: {_fmt_reset(status['reset_in'])} دیگه.</i>"]
+    else:
+        tab = "d"
+        lines.append(f"☀️ <b>مأموریت‌های امروز</b> — <code>{status['today_points']}/{status['today_max']}</code> امتیاز")
+        lines.append("")
+        for m in sorted(status["daily"], key=lambda m: m["done"]):
+            lines += _mission_block(m)
+        lines.append("<i>مأموریت‌های روزانه نیمه‌شب تهران ریست می‌شن.</i>")
+
+    def _tab(label, key, emoji_key):
+        return btn(("• " if tab == key else "") + label, emoji_key=emoji_key,
+                   style=(CONFIRM if tab == key else NAV), callback_data=f"mission_tab:{key}")
+
+    box_label = f"باکس‌ها ({len(ready)})" if ready else "باکس‌ها"
+    rows.append([_tab("روزانه", "d", "btn_missions"), _tab("هفتگی", "w", "btn_missions"), _tab(box_label, "b", "btn_chests")])
     rows.append([back_btn("menu:hub_city", "بازگشت به شهر")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 async def missions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     status = await run_db(_missions_sync, update.effective_user)
-    text, keyboard = _missions_render(status, 0)
+    text, keyboard = _missions_render(status, "d")
     from game.media import get_feature_image_path
     photo = get_feature_image_path("missions")
     await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def missions_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Tab switch (mission_tab:d|w|b); also catches the old «mission_page:N» buttons."""
     query = update.callback_query
-    page = int(query.data.split(":")[1])
+    tab = query.data.split(":")[1] if query.data.startswith("mission_tab:") else "d"
     status = await run_db(_missions_sync, update.effective_user)
     await query.answer()
-    text, keyboard = _missions_render(status, page)
+    text, keyboard = _missions_render(status, tab)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _mission_box_sync(tg_user, index):
+    from game.daily import claim_box
+
+    user, _ = get_or_create_user(tg_user)
+    c = claim_box(user, index)
+    lines = [
+        f"{c['emoji']} <b>{c['name']} باز شد!</b>",
+        f"{get_emoji('coin')} طلا: <code>+{c['coins']:,}</code>",
+        f"{get_emoji('dna')} DNA: <code>+{c['dna']:,}</code>",
+    ]
+    if c["diamonds"]:
+        lines.append(f"{get_emoji('diamond')} الماس: <code>+{c['diamonds']}</code>")
+    rarity = constants.RARITY_LABELS.get(c["rarity"], c["rarity"])
+    if c["creature"] is not None:
+        lines.append(f"{get_emoji('creature')} هیولای جدید: <b>{c['creature'].name}</b> [{rarity}] "
+                     f"({constants.element_label(c['creature'].element)})")
+    elif c["item"] is not None:
+        lines.append(f"{get_emoji('gear')} تجهیزات جدید: <b>{c['item'].name}</b> [{rarity}]")
+    return "\n".join(lines), mission_status(user)
+
+
+async def mission_box_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    index = int(query.data.split(":")[1])
+    try:
+        note, status = await run_db(_mission_box_sync, update.effective_user, index)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    await query.answer("🎁 باز شد!")
+    text, keyboard = _missions_render(status, "b", note=note)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -5751,7 +5823,8 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(alliance_kick_confirm_callback, pattern=r"^ally_kick_ok:\d+$"))
     application.add_handler(CallbackQueryHandler(alliance_deposit_confirm_callback, pattern=r"^ally_dep_ok:\d+$"))
     application.add_handler(CallbackQueryHandler(heist_confirm_callback, pattern=r"^heist_ok:\d+$"))
-    application.add_handler(CallbackQueryHandler(missions_page_callback, pattern=r"^mission_page:"))
+    application.add_handler(CallbackQueryHandler(missions_page_callback, pattern=r"^mission_(page|tab):"))
+    application.add_handler(CallbackQueryHandler(mission_box_callback, pattern=r"^mission_box:\d+$"))
     application.add_handler(CallbackQueryHandler(lab_rename_start_callback, pattern=r"^lab_rename$"))
     application.add_handler(CallbackQueryHandler(lab_rename_ok_callback, pattern=r"^lab_rename_ok$"))
     application.add_handler(CallbackQueryHandler(lab_rename_cancel_callback, pattern=r"^lab_rename_cancel$"))

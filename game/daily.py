@@ -80,55 +80,142 @@ def get_daily_count(user: User, action: str) -> int:
     return _get_or_create_log(user, action).count
 
 
-# Daily-mission payouts are multiplied several-fold and scale with the player's lab
-# level, so missions stay a meaningful income even deep into the game (a level-25 lab
-# earns ~5× what a fresh one does for the same mission).
-MISSION_REWARD_BASE_MULT = 3.0
-MISSION_REWARD_LAB_SCALE = 0.08
+# ── missions: daily + weekly, points, and the weekly box track ────────────────
+# Rewards are expressed in «hunt units» so a mission is worth the same number of hunts
+# at every stage of the game: one unit = what a won «هم‌سطح» hunt pays THIS player.
+MISSION_UNIT_MIN_GOLD = 150  # a brand-new player's unit (their real hunt pays less)
 
 
-def mission_reward_multiplier(user: User) -> float:
-    from game import lab
+def week_dates(when=None) -> list[str]:
+    """The seven game days (ISO Monday..Sunday, Asia/Tehran) of the week containing
+    `when` — the same week game.season uses for the arena."""
+    today = timezone.localdate(when) if when is not None else timezone.localdate()
+    monday = today - datetime.timedelta(days=today.weekday())
+    return [(monday + datetime.timedelta(days=i)).isoformat() for i in range(7)]
 
-    return MISSION_REWARD_BASE_MULT * (1 + lab.lab_level(user) * MISSION_REWARD_LAB_SCALE)
+
+def week_key() -> str:
+    from game.season import week_key as _wk
+
+    return _wk()
 
 
-def scaled_mission_reward(defn: dict, mult: float) -> tuple[int, int]:
-    """(coins, dna) for a mission after the lab-scaled multiplier."""
-    return round(defn["coins"] * mult), round(defn["dna"] * mult)
+def seconds_until_week_reset() -> int:
+    now = timezone.localtime()
+    monday = (now - datetime.timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    return max(0, int((monday + datetime.timedelta(days=7) - now).total_seconds()))
+
+
+def mission_unit(user: User) -> tuple[int, int]:
+    """(gold, dna) one hunt unit is worth for this player right now."""
+    from game import hunt
+
+    power = hunt.hunt_benchmark_power(user)
+    lo, hi = hunt.hunt_coin_range(power, "normal")
+    gold = max(MISSION_UNIT_MIN_GOLD, (lo + hi) // 2)
+    dlo, dhi = hunt.hunt_dna_range(power, "normal")
+    dna = max(5, (dlo + dhi) // 2)
+    return gold, dna
+
+
+def mission_reward(defn: dict, unit: tuple[int, int]) -> dict:
+    """The concrete payout of one mission for a player whose hunt unit is `unit`."""
+    gold_unit, dna_unit = unit
+    reward = {
+        "coins": round(defn.get("gold_u", 0) * gold_unit),
+        "dna": round(defn.get("dna_u", 0) * dna_unit),
+        "points": defn.get("points", 0),
+    }
+    for extra in ("speedup", "diamonds", "capsule"):
+        if defn.get(extra):
+            reward[extra] = defn[extra]
+    return reward
+
+
+def _weekly_count(user: User, action: str, dates: list[str]) -> int:
+    from django.db.models import Sum
+
+    return (
+        DailyActionLog.objects.filter(user=user, action=action, day__in=dates).aggregate(s=Sum("count"))["s"] or 0
+    )
+
+
+def _pay_mission(user: User, reward: dict) -> None:
+    """Apply one mission reward. F() updates: the caller's `user` may be stale (it's
+    handed in after the action it just performed), so a balance is never overwritten."""
+    from django.db.models import F
+
+    updates = {}
+    for key, field in (("coins", "coins"), ("dna", "dna_fragments"), ("diamonds", "diamonds")):
+        amount = int(reward.get(key, 0) or 0)
+        if amount:
+            updates[field] = F(field) + amount
+            setattr(user, field, getattr(user, field) + amount)
+    if updates:
+        User.objects.filter(pk=user.pk).update(**updates)
+    if reward.get("capsule"):
+        from game.creature import add_capsules
+
+        with transaction.atomic():
+            locked = User.objects.select_for_update().get(pk=user.pk)
+            tier, count = reward["capsule"]
+            add_capsules(locked, tier, count)
+            locked.save(update_fields=["xp_capsules"])
+            user.xp_capsules = locked.xp_capsules
+    if reward.get("speedup"):
+        # imported here rather than at module level: game.buildings imports
+        # game.creature, which would make this a circular import at load time
+        from game.buildings import grant_speedup_card
+
+        grant_speedup_card(user, reward["speedup"], count=1)
 
 
 def check_missions(user: User, action: str) -> list[dict]:
-    """Call right after record_action() for the same action. Grants rewards for any mission just completed."""
-    day = today_str()
-    completed = []
-    mult = mission_reward_multiplier(user)
-    for key, defn in constants.MISSION_DEFS.items():
-        if defn["action"] != action:
-            continue
-        already = MissionClaim.objects.filter(user=user, mission_key=key, day=day).exists()
-        if already:
-            continue
-        if get_daily_count(user, action) >= defn["target"]:
-            MissionClaim.objects.create(user=user, mission_key=key, day=day)
-            coins_reward, dna_reward = scaled_mission_reward(defn, mult)
-            user.coins += coins_reward
-            user.dna_fragments += dna_reward
-            defn = {**defn, "coins": coins_reward, "dna": dna_reward}  # so the toast shows the real amount
-            if defn.get("speedup"):
-                # imported here rather than at module level: game.buildings imports
-                # game.creature, which would make this a circular import at load time
-                from game.buildings import grant_speedup_card
+    """Call right after record_action() for the same action. Grants the reward of every
+    DAILY and WEEKLY mission that action just completed, and returns them (each a dict
+    with label / coins / dna / extras / points / weekly) for the caller's toast."""
+    daily = [(k, d) for k, d in constants.MISSION_DEFS.items() if d["action"] == action]
+    weekly = [(k, d) for k, d in constants.WEEKLY_MISSION_DEFS.items() if d["action"] == action]
+    if not daily and not weekly:
+        return []
 
-                grant_speedup_card(user, defn["speedup"], count=1)
-            completed.append({**defn, "key": key})
+    day = today_str()
+    completed: list[dict] = []
+    unit = None
+
+    def _try(key: str, defn: dict, period: str, count: int, is_weekly: bool) -> None:
+        nonlocal unit
+        if count < defn["target"]:
+            return
+        if MissionClaim.objects.filter(user=user, mission_key=key, day=period).exists():
+            return
+        # the unique (user, mission_key, day) row IS the «paid once» guard
+        _claim, created = MissionClaim.objects.get_or_create(user=user, mission_key=key, day=period)
+        if not created:
+            return
+        if unit is None:
+            unit = mission_unit(user)
+        reward = mission_reward(defn, unit)
+        _pay_mission(user, reward)
+        completed.append({**defn, **reward, "key": key, "weekly": is_weekly})
+
+    if daily:
+        today_count = get_daily_count(user, action)
+        for key, defn in daily:
+            _try(key, defn, day, today_count, False)
+    if weekly:
+        wk = week_key()
+        week_count = _weekly_count(user, action, week_dates())
+        for key, defn in weekly:
+            _try(key, defn, wk, week_count, True)
+
     if completed:
-        user.save(update_fields=["coins", "dna_fragments"])
         from game.ledger import record_gain
 
         record_gain(
             user, "mission",
             coins=sum(m["coins"] for m in completed), dna=sum(m["dna"] for m in completed),
+            diamonds=sum(m.get("diamonds", 0) for m in completed),
         )
         # imported lazily for the same circular-import reason as grant_speedup_card
         from game import lab
@@ -185,18 +272,74 @@ def mark_group_event(group: Group, event_key: str) -> None:
     GroupEventLog.objects.create(group=group, event_key=event_key, day=today_str())
 
 
-def mission_status(user: User) -> list[dict]:
-    day = today_str()
-    claimed_keys = set(
-        MissionClaim.objects.filter(user=user, day=day).values_list("mission_key", flat=True)
-    )
-    status = []
-    mult = mission_reward_multiplier(user)
+def _week_points(user: User, dates: list[str], wk: str) -> int:
+    """Points scored this week = every claimed daily mission of the week's days + every
+    claimed weekly mission. Computed from the claim rows, so there's no counter to drift."""
+    points = 0
+    for key in MissionClaim.objects.filter(user=user, day__in=dates).values_list("mission_key", flat=True):
+        points += constants.MISSION_DEFS.get(key, {}).get("points", 0)
+    for key in MissionClaim.objects.filter(user=user, day=wk).values_list("mission_key", flat=True):
+        points += constants.WEEKLY_MISSION_DEFS.get(key, {}).get("points", 0)
+    return points
+
+
+def _box_key(index: int) -> str:
+    return f"box_{index}"
+
+
+def mission_status(user: User) -> dict:
+    """Everything the missions screen shows: today's missions, this week's missions, the
+    week's points and the box track (which boxes are reached / opened)."""
+    day, wk, dates = today_str(), week_key(), week_dates()
+    unit = mission_unit(user)
+    claimed_today = set(MissionClaim.objects.filter(user=user, day=day).values_list("mission_key", flat=True))
+    claimed_week = set(MissionClaim.objects.filter(user=user, day=wk).values_list("mission_key", flat=True))
+
+    daily = []
     for key, defn in constants.MISSION_DEFS.items():
         count = get_daily_count(user, defn["action"])
-        coins_reward, dna_reward = scaled_mission_reward(defn, mult)
-        status.append(
-            {**defn, "key": key, "coins": coins_reward, "dna": dna_reward,
-             "progress": min(count, defn["target"]), "done": key in claimed_keys}
-        )
-    return status
+        daily.append({**defn, **mission_reward(defn, unit), "key": key,
+                      "progress": min(count, defn["target"]), "done": key in claimed_today})
+    weekly = []
+    for key, defn in constants.WEEKLY_MISSION_DEFS.items():
+        count = _weekly_count(user, defn["action"], dates)
+        weekly.append({**defn, **mission_reward(defn, unit), "key": key,
+                       "progress": min(count, defn["target"]), "done": key in claimed_week})
+
+    points = _week_points(user, dates, wk)
+    boxes = []
+    for index, (need, tier) in enumerate(constants.mission_box_thresholds(), start=1):
+        boxes.append({
+            "index": index, "need": need, "tier": tier,
+            "reached": points >= need, "opened": _box_key(index) in claimed_week,
+        })
+    return {
+        "daily": daily, "weekly": weekly, "points": points,
+        "max_points": constants.MISSION_WEEK_MAX_POINTS, "boxes": boxes,
+        "reset_in": seconds_until_week_reset(),
+        "today_points": sum(m["points"] for m in daily if m["done"]),
+        "today_max": constants.MISSION_DAILY_POINTS,
+    }
+
+
+@transaction.atomic
+def claim_box(user: User, index: int) -> dict:
+    """Open box #`index` of this week's track (once): it's an arena-chest tier opened on
+    the spot, sized to the player's cup like any chest. Returns the chest contents."""
+    from game.arena_chests import grant_chest_contents
+
+    track = constants.mission_box_thresholds()
+    if not 1 <= index <= len(track):
+        raise GameError("این باکس وجود نداره.")
+    need, tier = track[index - 1]
+    locked = User.objects.select_for_update().get(pk=user.pk)
+    wk = week_key()
+    points = _week_points(locked, week_dates(), wk)
+    if points < need:
+        raise GameError(f"برای این باکس {need} امتیاز لازمه (الان {points} داری).")
+    _claim, created = MissionClaim.objects.get_or_create(user=locked, mission_key=_box_key(index), day=wk)
+    if not created:
+        raise GameError("این باکس رو این هفته قبلاً باز کردی.")
+    contents = grant_chest_contents(locked, tier, locked.cup, source="mission")
+    contents["index"] = index
+    return contents

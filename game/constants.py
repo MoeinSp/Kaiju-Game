@@ -305,45 +305,73 @@ LOGIN_STREAK_DNA_BONUS = 10
 # Missions may pay "speedup": <minutes> on top of coins/dna — that's the main way
 # a player keeps a stock of build-timer cards, since they aren't sold anywhere.
 MISSION_DEFS = {
-    "feed_3": {"action": "feed", "target": 3, "label": "تغذیه موجودات (۳ بار)", "coins": 40, "dna": 0},
-    "feed_10": {
-        "action": "feed", "target": 10, "label": "تغذیه موجودات (۱۰ بار)", "coins": 100, "dna": 5, "speedup": 5,
-    },
-    "train_1": {"action": "train", "target": 1, "label": "انجام تمرین", "coins": 30, "dna": 0, "speedup": 1},
-    "raid_attack_2": {"action": "raid_attack", "target": 2, "label": "هجوم به باس رید (۲ بار)", "coins": 40, "dna": 5},
-    "raid_attack_5": {
-        "action": "raid_attack", "target": 5, "label": "هجوم به باس رید (۵ بار)", "coins": 90, "dna": 8, "speedup": 30,
-    },
-    "fusion_1": {"action": "fusion", "target": 1, "label": "اجرای فیوژن (ترکیب)", "coins": 60, "dna": 0, "speedup": 5},
-    "guardian_challenge_1": {
-        "action": "guardian_challenge",
-        "target": 1,
-        "label": "چالش با محافظ گروه",
-        "coins": 50,
-        "dna": 5,
-    },
-    "hunt_3": {
-        "action": "hunt", "target": 3, "label": "شکار انفرادی (۳ بار)", "coins": 45, "dna": 3, "speedup": 5,
-    },
-    "hunt_10": {
-        "action": "hunt", "target": 10, "label": "شکار انفرادی (۱۰ بار)", "coins": 150, "dna": 10, "speedup": 10,
-    },
-    "arena_attack_3": {
-        "action": "arena_attack",
-        "target": 3,
-        "label": "حمله در آرنا (۳ بار)",
-        "coins": 70,
-        "dna": 5,
-        "speedup": 5,
-    },
-    "collect_5": {
-        "action": "collect",
-        "target": 5,
-        "label": "جمع‌آوری از ساختمان‌ها (۵ بار)",
-        "coins": 60,
-        "dna": 5,
-    },
+    # DAILY missions (reset at Tehran midnight). Every one is doable alone in the private
+    # chat — the weekly box track needs ~88% of ALL points, so nothing here may depend on
+    # a group or an alliance. Rewards are in «hunt units» (game.daily.mission_unit: what
+    # one won «هم‌سطح» hunt pays THIS player), so a mission is worth the same number of
+    # hunts at every stage of the game instead of a flat trickle of gold:
+    #   gold_u × unit gold, dna_u × unit DNA, plus the fixed extras.
+    "hunt_5": {"action": "hunt", "target": 5, "label": "شکار (۵ بار)",
+               "gold_u": 1.5, "dna_u": 1.5, "capsule": ("small", 2), "points": 10},
+    "hunt_15": {"action": "hunt", "target": 15, "label": "شکار (۱۵ بار)",
+                "gold_u": 3.0, "dna_u": 3.0, "speedup": 10, "points": 15},
+    "arena_attack_3": {"action": "arena_attack", "target": 3, "label": "حمله در آرنا (۳ بار)",
+                       "gold_u": 1.5, "dna_u": 1.0, "points": 10},
+    "arena_attack_8": {"action": "arena_attack", "target": 8, "label": "حمله در آرنا (۸ بار)",
+                       "gold_u": 3.0, "dna_u": 2.0, "speedup": 15, "points": 15},
+    "feed_5": {"action": "feed", "target": 5, "label": "تغذیه‌ی هیولا (۵ بار)",
+               "gold_u": 1.0, "dna_u": 0.5, "capsule": ("small", 3), "points": 10},
+    "collect_3": {"action": "collect", "target": 3, "label": "جمع‌آوری از ساختمان‌ها (۳ بار)",
+                  "gold_u": 1.0, "dna_u": 1.0, "points": 10},
+    "dispatch_1": {"action": "dispatch", "target": 1, "label": "فرستادن یک مأموریت اعزامی",
+                   "gold_u": 1.5, "dna_u": 1.0, "speedup": 5, "points": 10},
+    "wheel_1": {"action": "wheel_spin", "target": 1, "label": "چرخوندن گردونه‌ی شانس",
+                "gold_u": 0.5, "dna_u": 0.0, "points": 5},
 }
+
+# WEEKLY missions (reset with the arena week — Monday, Tehran). Harder, more points,
+# bigger rewards. Progress is the SUM of the week's daily counters for the action.
+# The two that need other people (raid = alliance, fusion = spare duplicates) are a
+# small enough share that the top box is reachable without them.
+WEEKLY_MISSION_DEFS = {
+    "w_hunt_70": {"action": "hunt", "target": 70, "label": "شکار (۷۰ بار در هفته)",
+                  "gold_u": 10, "dna_u": 10, "diamonds": 10, "points": 40},
+    "w_arena_35": {"action": "arena_attack", "target": 35, "label": "حمله در آرنا (۳۵ بار در هفته)",
+                   "gold_u": 10, "dna_u": 6, "diamonds": 10, "points": 40},
+    "w_dispatch_10": {"action": "dispatch", "target": 10, "label": "۱۰ مأموریت اعزامی در هفته",
+                      "gold_u": 8, "dna_u": 8, "speedup": 60, "points": 30},
+    "w_collect_15": {"action": "collect", "target": 15, "label": "جمع‌آوری از ساختمان‌ها (۱۵ بار در هفته)",
+                     "gold_u": 5, "dna_u": 5, "points": 20},
+    "w_feed_25": {"action": "feed", "target": 25, "label": "تغذیه‌ی هیولا (۲۵ بار در هفته)",
+                  "gold_u": 5, "dna_u": 2, "capsule": ("medium", 2), "points": 20},
+    "w_raid_10": {"action": "raid_attack", "target": 10, "label": "ضربه به باس رید (۱۰ بار در هفته)",
+                  "gold_u": 6, "dna_u": 6, "diamonds": 5, "points": 25},
+    "w_fusion_1": {"action": "fusion", "target": 1, "label": "یک ادغام در هفته",
+                   "gold_u": 6, "dna_u": 2, "speedup": 60, "points": 15},
+}
+
+MISSION_DAILY_POINTS = sum(m["points"] for m in MISSION_DEFS.values())
+MISSION_WEEKLY_POINTS = sum(m["points"] for m in WEEKLY_MISSION_DEFS.values())
+# everything a player could possibly score in one week
+MISSION_WEEK_MAX_POINTS = MISSION_DAILY_POINTS * 7 + MISSION_WEEKLY_POINTS
+
+# The weekly BOX TRACK: reach a share of the week's maximum points → open a box (an
+# arena-chest tier, opened on the spot). Boxes get better up the track and the last one
+# is the Omega (mega) box at ~88% — i.e. roughly «did almost everything all week».
+MISSION_BOX_TRACK = (
+    (0.08, "silver"),
+    (0.20, "silver"),
+    (0.35, "golden"),
+    (0.52, "golden"),
+    (0.70, "magical"),
+    (0.88, "mega"),
+)
+
+
+def mission_box_thresholds() -> list[tuple[int, str]]:
+    """[(points needed, chest tier)] for the weekly track, rounded to a tidy 5."""
+    return [(int(round(MISSION_WEEK_MAX_POINTS * frac / 5.0)) * 5, tier) for frac, tier in MISSION_BOX_TRACK]
+
 
 # Starter pack of build-timer cards. The early main-hall upgrades are the slowest
 # part of a new player's first session, so they get enough cards to blow through

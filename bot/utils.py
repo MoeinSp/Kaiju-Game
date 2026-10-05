@@ -11,13 +11,21 @@ def mission_reward_text(m: dict) -> str:
     every screen that shows missions (private/group/battle) renders the same
     thing — a mission can pay coins, DNA and a speed-up card, and it's easy to
     forget one of them when each screen formats its own."""
-    parts = [f"+{m['coins']} {get_emoji('coin')}"]
+    parts = [f"+{m['coins']:,} {get_emoji('coin')}"]
     if m.get("dna"):
-        parts.append(f"+{m['dna']} {get_emoji('dna')}")
+        parts.append(f"+{m['dna']:,} {get_emoji('dna')}")
+    if m.get("diamonds"):
+        parts.append(f"+{m['diamonds']} {get_emoji('diamond')}")
+    if m.get("capsule"):
+        tier, count = m["capsule"]
+        cap = constants.XP_CAPSULES[tier]
+        parts.append(f"+{count} {cap['label']} {cap['emoji']}")
     if m.get("speedup"):
         # "+⏱ ۳۰ دقیقه" read as "this mission takes 30 minutes" or "you have 30
         # minutes left". Naming the item and what it does removes both readings.
         parts.append(f"+۱ کارت سرعت {constants.speedup_plain_label(m['speedup'])} ⏱")
+    if m.get("points"):
+        parts.append(f"+{m['points']} امتیاز هفتگی ⭐")
     return " ".join(parts)
 
 
