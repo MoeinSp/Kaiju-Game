@@ -446,6 +446,43 @@ class BreedingJob(models.Model):
         return f"breeding {self.parent_a_id}+{self.parent_b_id} ({self.owner_id})"
 
 
+class DispatchMission(models.Model):
+    """One «🧭 مأموریت اعزامی» (game/dispatch.py): an idle creature sent away on a timed
+    mission. The reward is frozen at dispatch and paid on collect.
+
+    A row stays after it's collected because (owner, offer_day, offer_idx) is ALSO the
+    record that «this player already took today's offer N» — the unique constraint makes
+    a double dispatch impossible. Cancelling deletes the row, which frees the offer.
+    The creature is busy while status == ACTIVE (game.workers reads that)."""
+
+    ACTIVE = "active"
+    COLLECTED = "collected"
+
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="dispatch_missions")
+    creature = models.ForeignKey(Creature, on_delete=models.CASCADE, related_name="+")
+    offer_day = models.CharField(max_length=10)       # game day (Asia/Tehran) the offer belonged to
+    offer_idx = models.PositiveSmallIntegerField()    # position on that day's board
+    template_key = models.CharField(max_length=32)
+    hours = models.PositiveSmallIntegerField()
+    reward = models.JSONField(default=dict)           # frozen at dispatch (incl. the hidden bonus)
+    started_at = models.DateTimeField(auto_now_add=True)
+    finishes_at = models.DateTimeField()
+    status = models.CharField(max_length=12, default=ACTIVE)
+    notified = models.BooleanField(default=False)     # «برگشت» DM sent
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["owner", "offer_day", "offer_idx"], name="uq_dispatch_offer_once"),
+        ]
+        indexes = [
+            models.Index(fields=["owner", "status"], name="dispatch_owner_status_idx"),
+            models.Index(fields=["status", "notified", "finishes_at"], name="dispatch_due_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"dispatch {self.template_key} c{self.creature_id} ({self.owner_id}, {self.status})"
+
+
 class Team(models.Model):
     """A player's chosen squad of up to three creatures for 3v3 team battles
     (game/teambattle.py, used by the campaign). Slots are nullable and SET_NULL so

@@ -36,7 +36,7 @@ PREFERRED = {
     "btn_shop": "🛒", "btn_idle": "😴", "btn_achievements": "🏅", "btn_titles": "👑",
     "btn_cat_rewards": "🎁", "btn_cat_shop": "🏪", "btn_cat_social": "👥",
     "btn_sub_silver": "🥈", "btn_sub_gold": "👑", "btn_subscription": "⭐", "btn_vip": "⭐",
-    "btn_mugen": "🏰", "btn_blackmarket": "🏛", "btn_expedition": "⛵",
+    "btn_mugen": "🏰", "btn_blackmarket": "🏛", "btn_expedition": "⛵", "btn_dispatch": "🧭",
     "btn_exp_join": "➕", "btn_exp_launch": "🚀", "btn_bm_bid": "🏷", "btn_bm_refresh": "🔄",
 }
 
@@ -228,6 +228,7 @@ class Command(BaseCommand):
             "btn_mugen": ["🏰", "🏯", "⚔️", "🛡"],
             "btn_blackmarket": ["🏛", "🏬", "💎", "💰"],
             "btn_expedition": ["⛵", "🚢", "🏹", "🧭"],
+            "btn_dispatch": ["🧭", "🗺", "⛵", "🏹"],
             "btn_exp_join": ["➕", "⛵", "🤝", "✅"],
             "btn_exp_launch": ["🚀", "⛵", "⚔️", "▶️"],
             "btn_bm_bid": ["🏷", "💰", "💎", "✍️"],

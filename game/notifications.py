@@ -176,6 +176,11 @@ def collect_due() -> list[tuple[int, str]]:
             job.notified = True
             job.save(update_fields=["notified"])
 
+        # ── dispatch mission finished ─────────────────────────────────────────
+        from game import dispatch
+
+        out.extend(dispatch.collect_finished_notifications())
+
         # ── building upgrade finished ─────────────────────────────────────────
         for up in BuildingUpgrade.objects.filter(notified=False, finishes_at__lte=now).select_related(
             "owner", "building"

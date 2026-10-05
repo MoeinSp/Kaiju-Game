@@ -24,6 +24,7 @@ from bot.handlers.arena import arena_chests_panel, arena_panel
 from bot.handlers.banner import banner_panel
 from bot.handlers.battlepass import battlepass_panel
 from bot.handlers.campaign import campaign_panel
+from bot.handlers.dispatch import dispatch_panel
 from bot.handlers.codex import codex_panel
 from bot.handlers.events import events_panel
 from bot.handlers.idle import idle_panel
@@ -1064,7 +1065,7 @@ def _mkbtn(spec, locked=frozenset()):
 
 
 # Progressive unlocks: each major feature unlocks at its own specific, balanced level:
-# Level 2: Fusion (ترکیب هیولا), Breeding (غار هیولا), Battlepass, Exchange
+# Level 2: Fusion (ترکیب هیولا), Breeding (غار هیولا), Dispatch (مأموریت اعزامی), Battlepass, Exchange
 # Level 3: Team (تیم من), Blacksmith (آهنگری), League, Events, Shield Shop, Equip Exchange
 # Level 4: Dungeon Campaign (دانجن), Black Market, Casino, Titles, Treasury Rank
 # Level 5: Mugen Tower (برج موگن), Research Lab, Special Banners, Item Shop, Alliance League, Raid Rank
@@ -1072,6 +1073,7 @@ SECTION_HALL_REQ = {
     # Level 2
     "fusion": 2,
     "breeding": 2,
+    "dispatch": 2,
     "battlepass": 2,
     "exchange": 2,
 
@@ -1112,7 +1114,7 @@ _HUBS = {
         [("شکار هیولا", "hunt", "b", "btn_hunt"), ("میدان آرنا", "arena", "b", "btn_arena")],
         [("جعبه‌های آرنا", "arena_chests", "s", "btn_chests"), ("برج موگن", "mugen_tower", "b", "btn_mugen")],
         [("ماجراجویی دانجن", "campaign", "b", "btn_campaign"), ("اعزام کاروان", "expedition", "b", "btn_expedition")],
-        [("جنگ اتحاد", "alliance_war", "b", "btn_war")],
+        [("جنگ اتحاد", "alliance_war", "b", "btn_war"), ("مأموریت اعزامی", "dispatch", "b", "btn_dispatch")],
     ]),
     "hub_creature": ("🦖 <b>هیولا و تجهیزات</b>", [
         [("ارتقای هیولا", "upgrade", "p", "btn_upgrade"), ("کوله تجهیزات", "inventory", "n", "btn_inventory")],
@@ -5315,6 +5317,7 @@ _MENU_ACTIONS = {
     "balance": balance,
     "guide": guide_panel,
     "mugen_tower": mugen_panel,
+    "dispatch": dispatch_panel,
     "blackmarket": blackmarket_panel,
     "buy_open": buy_open_callback,
     "expedition": expedition_panel,

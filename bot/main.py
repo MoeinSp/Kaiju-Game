@@ -24,6 +24,7 @@ from bot.handlers import (
     campaign,
     casino,
     codex,
+    dispatch,
     energy,
     events,
     exchange,
@@ -288,6 +289,7 @@ def main() -> None:
     casino.register(application)
     titles.register(application)
     mugen_tower.register(application)
+    dispatch.register(application)
     blackmarket.register(application)
     groupdrops.register(application)  # flash reward drops in groups (JobQueue)
     notify.register(application)  # periodic re-engagement DMs (JobQueue)

@@ -31,6 +31,7 @@ def record_gain(user: User, source: str, *, coins: int = 0, dna: int = 0, diamon
 # Persian labels for the per-source breakdown line in the owner's report.
 SOURCE_LABELS = {
     "hunt": "شکار",
+    "dispatch": "مأموریت اعزامی",
     "arena": "آرنا",
     "raid": "باس رید",
     "duel": "اتک گروهی",

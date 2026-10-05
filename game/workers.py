@@ -6,6 +6,7 @@ A creature can be doing exactly one thing at a time:
 * being the **active** creature (it fights hunts, arena raids and duels)
 * **working** a production building (game/buildings.py reads the bonus)
 * **breeding** (game/breeding.py)
+* away on a **dispatch mission** (game/dispatch.py)
 
 `assert_free()` is the single gate. Without it each feature would grow its own
 half of the check and they'd disagree — a creature could end up mining while
@@ -16,7 +17,7 @@ the active creature can't be put to work.
 
 from __future__ import annotations
 
-from bio_lab.models import BreedingJob, Building, Creature, CreatureAssignment, User
+from bio_lab.models import BreedingJob, Building, Creature, CreatureAssignment, DispatchMission, User
 from game import constants
 from game.creature import GameError
 
@@ -87,6 +88,10 @@ def busy_creature_ids(user: User) -> set[int]:
     )
     for job in BreedingJob.objects.filter(owner=user):
         ids.update({job.parent_a_id, job.parent_b_id})
+    ids.update(
+        DispatchMission.objects.filter(owner=user, status=DispatchMission.ACTIVE)
+        .values_list("creature_id", flat=True)
+    )
     return ids
 
 
@@ -102,6 +107,8 @@ def creature_status(user: User, creature: Creature) -> str | None:
     for job in BreedingJob.objects.filter(owner=user):
         if creature.id in (job.parent_a_id, job.parent_b_id):
             return "🥚 توی غار هیولا"
+    if DispatchMission.objects.filter(creature=creature, status=DispatchMission.ACTIVE).exists():
+        return "🧭 در مأموریت اعزامی"
     return None
 
 
