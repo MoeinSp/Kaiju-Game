@@ -176,15 +176,19 @@ def collect_due() -> list[tuple[int, str]]:
             job.notified = True
             job.save(update_fields=["notified"])
 
-        # ── world boss (spawn / settle) and festival leaderboard payout ────────
+        # ── world boss (spawn / settle), weekend tournament, festival payout ───
         # Each in its own savepoint: a failure in one must not roll back the rest.
-        for _tick in ("worldboss", "festival"):
+        for _tick in ("worldboss", "tournament", "festival"):
             try:
                 with transaction.atomic():
                     if _tick == "worldboss":
                         from game import worldboss
 
                         out.extend(worldboss.tick())
+                    elif _tick == "tournament":
+                        from game import tournament
+
+                        out.extend(tournament.tick())
                     else:
                         from game import festival
 

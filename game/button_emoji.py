@@ -163,6 +163,7 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_dispatch": ("مأموریت اعزامی", "🧭", "features"),
     "btn_worldboss": ("غول سرگردان", "👹", "features"),
     "btn_festival": ("جشنواره", "🎪", "features"),
+    "btn_tournament": ("جام آخر هفته", "🏟", "features"),
     "btn_exp_join": ("پیوستن به کاروان", "➕", "action"),
     "btn_exp_launch": ("حرکت کاروان", "🚀", "action"),
     "btn_bm_bid": ("ثبت پیشنهاد مزایده", "🏷", "action"),

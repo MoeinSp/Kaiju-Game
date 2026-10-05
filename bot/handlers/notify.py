@@ -254,6 +254,12 @@ async def notify_job(context: ContextTypes.DEFAULT_TYPE) -> None:
             reply_markup = InlineKeyboardMarkup(
                 [[btn("غول سرگردان", emoji_key="btn_worldboss", style=BATTLE, callback_data="menu:worldboss")]]
             )
+        elif marker == "tournament":
+            from bot.buttons import BATTLE
+
+            reply_markup = InlineKeyboardMarkup(
+                [[btn("جام آخر هفته", emoji_key="btn_tournament", style=BATTLE, callback_data="menu:tournament")]]
+            )
         elif marker == "festival":
             reply_markup = InlineKeyboardMarkup(
                 [[btn("جشنواره", emoji_key="btn_festival", style=NAV, callback_data="menu:festival")]]

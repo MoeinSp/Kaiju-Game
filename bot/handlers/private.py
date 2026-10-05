@@ -26,6 +26,7 @@ from bot.handlers.battlepass import battlepass_panel
 from bot.handlers.campaign import campaign_panel
 from bot.handlers.dispatch import dispatch_panel
 from bot.handlers.festival import festival_panel
+from bot.handlers.tournament import tournament_panel
 from bot.handlers.worldboss import worldboss_panel
 from bot.handlers.codex import codex_panel
 from bot.handlers.events import events_panel
@@ -1117,7 +1118,7 @@ _HUBS = {
         [("جعبه‌های آرنا", "arena_chests", "s", "btn_chests"), ("برج موگن", "mugen_tower", "b", "btn_mugen")],
         [("ماجراجویی دانجن", "campaign", "b", "btn_campaign"), ("اعزام کاروان", "expedition", "b", "btn_expedition")],
         [("جنگ اتحاد", "alliance_war", "b", "btn_war"), ("مأموریت اعزامی", "dispatch", "b", "btn_dispatch")],
-        [("غول سرگردان", "worldboss", "b", "btn_worldboss")],
+        [("غول سرگردان", "worldboss", "b", "btn_worldboss"), ("جام آخر هفته", "tournament", "b", "btn_tournament")],
     ]),
     "hub_creature": ("🦖 <b>هیولا و تجهیزات</b>", [
         [("ارتقای هیولا", "upgrade", "p", "btn_upgrade"), ("کوله تجهیزات", "inventory", "n", "btn_inventory")],
@@ -5399,6 +5400,7 @@ _MENU_ACTIONS = {
     "mugen_tower": mugen_panel,
     "dispatch": dispatch_panel,
     "worldboss": worldboss_panel,
+    "tournament": tournament_panel,
     "festival": festival_panel,
     "blackmarket": blackmarket_panel,
     "buy_open": buy_open_callback,

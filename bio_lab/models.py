@@ -559,6 +559,59 @@ class FestivalState(models.Model):
     last_settled_key = models.CharField(max_length=16, default="", blank=True)
 
 
+class Tournament(models.Model):
+    """One «🏟 جام آخر هفته» (game/tournament.py), keyed by ISO week: registration → draw
+    into groups of up to 8 → three hourly knockout rounds on Friday night."""
+
+    REGISTRATION = "registration"
+    RUNNING = "running"
+    FINISHED = "finished"
+
+    week_key = models.CharField(max_length=10, unique=True)
+    status = models.CharField(max_length=14, default=REGISTRATION)
+    round = models.PositiveSmallIntegerField(default=0)  # the round waiting to be played (1..3)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class TournamentEntry(models.Model):
+    """A player's seat in one tournament. `creature` is who they'll field in the next
+    round (changeable until it starts); `place` is filled when they go out or win."""
+
+    tournament = models.ForeignKey(Tournament, on_delete=models.CASCADE, related_name="entries")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
+    creature = models.ForeignKey(Creature, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    group_no = models.PositiveSmallIntegerField(default=0)   # 0 until the draw
+    alive = models.BooleanField(default=True)
+    place = models.PositiveSmallIntegerField(default=0)       # 1 champion, 2 runner-up, 3 semi-final, 5 earlier
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["tournament", "user"], name="uq_tournament_entry")]
+        indexes = [models.Index(fields=["tournament", "group_no"], name="tournament_group_idx")]
+
+
+class TournamentMatch(models.Model):
+    """One knockout match. `b` is NULL for a bye. The fielded creatures' power/element are
+    stored at the moment the round is played, so the bracket can show why someone won."""
+
+    tournament = models.ForeignKey(Tournament, on_delete=models.CASCADE, related_name="matches")
+    group_no = models.PositiveSmallIntegerField()
+    round = models.PositiveSmallIntegerField()
+    slot = models.PositiveSmallIntegerField()  # winners of slots 2k and 2k+1 meet in slot k next round
+    a = models.ForeignKey(TournamentEntry, on_delete=models.CASCADE, related_name="+")
+    b = models.ForeignKey(TournamentEntry, on_delete=models.CASCADE, null=True, blank=True, related_name="+")
+    winner = models.ForeignKey(TournamentEntry, on_delete=models.CASCADE, null=True, blank=True, related_name="+")
+    power_a = models.IntegerField(default=0)
+    power_b = models.IntegerField(default=0)
+    element_a = models.CharField(max_length=16, default="", blank=True)
+    element_b = models.CharField(max_length=16, default="", blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["tournament", "group_no", "round", "slot"], name="uq_tournament_match")
+        ]
+
+
 class Team(models.Model):
     """A player's chosen squad of up to three creatures for 3v3 team battles
     (game/teambattle.py, used by the campaign). Slots are nullable and SET_NULL so

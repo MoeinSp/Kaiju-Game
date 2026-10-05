@@ -232,6 +232,7 @@ class Command(BaseCommand):
             "btn_dispatch": ["🧭", "🗺", "⛵", "🏹"],
             "btn_worldboss": ["👹", "🐲", "💀", "⚔️"],
             "btn_festival": ["🎪", "🎉", "🎁", "🎟"],
+            "btn_tournament": ["🏟", "🏆", "⚔️", "🥇"],
             "btn_exp_join": ["➕", "⛵", "🤝", "✅"],
             "btn_exp_launch": ["🚀", "⛵", "⚔️", "▶️"],
             "btn_bm_bid": ["🏷", "💰", "💎", "✍️"],

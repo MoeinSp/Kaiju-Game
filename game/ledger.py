@@ -35,6 +35,7 @@ SOURCE_LABELS = {
     "league": "جایزه‌ی لیگ هفتگی",
     "worldboss": "غول سرگردان",
     "festival": "جشنواره",
+    "tournament": "جام آخر هفته",
     "arena": "آرنا",
     "raid": "باس رید",
     "duel": "اتک گروهی",

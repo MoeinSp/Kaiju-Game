@@ -27,6 +27,7 @@ from bot.handlers import (
     dispatch,
     energy,
     festival,
+    tournament,
     worldboss,
     events,
     exchange,
@@ -293,6 +294,7 @@ def main() -> None:
     mugen_tower.register(application)
     dispatch.register(application)
     worldboss.register(application)
+    tournament.register(application)
     festival.register(application)
     blackmarket.register(application)
     groupdrops.register(application)  # flash reward drops in groups (JobQueue)
