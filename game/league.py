@@ -34,30 +34,30 @@ DIVISIONS = [
 DIVISION_REWARD = {
     "bronze_1":  {"coins": 500,    "dna": 20},
     "bronze_2":  {"coins": 1_000,  "dna": 40,    "diamonds": 3},
-    "bronze_3":  {"coins": 1_800,  "dna": 70,    "diamonds": 6},
-    "silver_1":  {"coins": 3_000,  "dna": 110,   "diamonds": 10},
-    "silver_2":  {"coins": 4_500,  "dna": 160,   "diamonds": 15},
-    "silver_3":  {"coins": 6_500,  "dna": 220,   "diamonds": 20},
-    "gold_1":    {"coins": 9_000,  "dna": 300,   "diamonds": 28},
-    "gold_2":    {"coins": 12_000, "dna": 400,   "diamonds": 36},
-    "gold_3":    {"coins": 16_000, "dna": 520,   "diamonds": 45},
-    "plat_1":    {"coins": 21_000, "dna": 660,   "diamonds": 55},
-    "plat_2":    {"coins": 27_000, "dna": 820,   "diamonds": 68},
-    "diamond_1": {"coins": 34_000, "dna": 1_000, "diamonds": 82},
-    "diamond_2": {"coins": 42_000, "dna": 1_200, "diamonds": 98},
-    "master":    {"coins": 52_000, "dna": 1_450, "diamonds": 120},
-    "legend":    {"coins": 65_000, "dna": 1_750, "diamonds": 150},
-    "champion":  {"coins": 80_000, "dna": 2_100, "diamonds": 200},
+    "bronze_3":  {"coins": 1_800,  "dna": 70,    "diamonds": 5},
+    "silver_1":  {"coins": 3_000,  "dna": 110,   "diamonds": 8},
+    "silver_2":  {"coins": 4_500,  "dna": 160,   "diamonds": 12},
+    "silver_3":  {"coins": 6_500,  "dna": 220,   "diamonds": 16},
+    "gold_1":    {"coins": 9_000,  "dna": 300,   "diamonds": 22},
+    "gold_2":    {"coins": 12_000, "dna": 400,   "diamonds": 28},
+    "gold_3":    {"coins": 16_000, "dna": 520,   "diamonds": 36},
+    "plat_1":    {"coins": 21_000, "dna": 660,   "diamonds": 44},
+    "plat_2":    {"coins": 27_000, "dna": 820,   "diamonds": 54},
+    "diamond_1": {"coins": 34_000, "dna": 1_000, "diamonds": 66},
+    "diamond_2": {"coins": 42_000, "dna": 1_200, "diamonds": 80},
+    "master":    {"coins": 52_000, "dna": 1_450, "diamonds": 100},
+    "legend":    {"coins": 65_000, "dna": 1_750, "diamonds": 125},
+    "champion":  {"coins": 80_000, "dna": 2_100, "diamonds": 150},
 }
 
 # Extra reward for the week's final RANK, on top of the league reward — what actually
 # makes the top of the table worth fighting over. (max rank, reward), best first.
 RANK_REWARDS = [
-    (1,  {"coins": 100_000, "dna": 2_500, "diamonds": 300}),
-    (3,  {"coins": 60_000,  "dna": 1_500, "diamonds": 180}),
-    (10, {"coins": 30_000,  "dna": 800,   "diamonds": 90}),
-    (25, {"coins": 15_000,  "dna": 400,   "diamonds": 40}),
-    (50, {"coins": 7_000,   "dna": 200,   "diamonds": 20}),
+    (1,  {"coins": 100_000, "dna": 2_500, "diamonds": 200}),
+    (3,  {"coins": 60_000,  "dna": 1_500, "diamonds": 120}),
+    (10, {"coins": 30_000,  "dna": 800,   "diamonds": 60}),
+    (25, {"coins": 15_000,  "dna": 400,   "diamonds": 30}),
+    (50, {"coins": 7_000,   "dna": 200,   "diamonds": 15}),
 ]
 
 
