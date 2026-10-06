@@ -7,11 +7,12 @@ lapsed ones, and settles the first-tap-wins claim.
 import asyncio
 import os
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
 from telegram.ext import CallbackQueryHandler, ContextTypes
 
 from bio_lab.models import GroupDrop
+from bot.buttons import btn
 from bot.utils import get_cached_file_id, invalidate_cached_file_id, run_db, safe_edit_message_text, send_screen, store_cached_file_id
 from game import groupdrops
 from game.emoji import get_emoji
@@ -97,7 +98,7 @@ async def drops_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     # spawn new drops
     for d in await run_db(groupdrops.due_spawns):
         text = _spawn_text(d)
-        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(d["btn"], callback_data=f"gdrop:{d['id']}")]])
+        keyboard = InlineKeyboardMarkup([[btn(d["btn"], emoji_key=d["btn_key"], callback_data=f"gdrop:{d['id']}")]])
         photo_path = get_drop_image_path(d["kind"], state="locked")
         msg = None
         try:

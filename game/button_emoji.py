@@ -39,9 +39,9 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_attack": ("حمله", "⚔️", "action"),
     "btn_revenge": ("انتقام", "⚔️", "action"),
     # compact icon-only buttons in group screens (raid + PvP)
-    "btn_raid_table": ("جدول اتک رید", "📊", "action"),
-    "btn_raid_rank": ("رتبه‌بندی کلی رید", "🐲", "action"),
-    "btn_atk_details": ("جزییات حمله", "🔍", "action"),
+    "btn_raid_table": ("جدول رید", "📊", "action"),
+    "btn_raid_rank": ("رتبه‌بندی رید", "🐲", "action"),
+    "btn_atk_details": ("جزییات حریف", "🔍", "nav"),
     "btn_arena": ("آرنا", "🏆", "action"),
     "btn_feed": ("تغذیه", "🍖", "action"),
     "btn_train": ("تمرین", "🏋️", "action"),
@@ -197,9 +197,6 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_ally_leave": ("خروج از اتحاد", "👋", "action"),
     "btn_guardian_resign": ("استعفا از محافظ", "🚪", "action"),
     "btn_guardian_challenge": ("چالش محافظ گروه", "⚔️", "action"),
-    "btn_raid_table": ("جدول رید", "📊", "action"),
-    "btn_raid_rank": ("رتبه‌بندی رید", "🐲", "action"),
-    "btn_atk_details": ("جزییات حریف", "🔍", "nav"),
     "btn_rarity_common": ("فیلتر معمولی", "⚪", "nav"),
     "btn_rarity_uncommon": ("فیلتر غیرمعمول", "🟢", "nav"),
     "btn_rarity_rare": ("فیلتر کمیاب", "🔵", "nav"),
@@ -210,6 +207,10 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_elem_plasma": ("فیلتر پلاسما", "⚛️", "nav"),
     "btn_rsch_crystal": ("پژوهش کریستال", "🔮", "features"),
     "btn_rsch_plasma": ("پژوهش پلاسما", "⚛️", "features"),
+    # a creature row's «⭐ ۳ ستاره • سطح ۵» button — it used to be inferred as the VIP
+    # button from its ⭐, so the VIP icon showed in front of every star count
+    "btn_star": ("ستاره و سطح هیولا", "⭐", "nav"),
+    "btn_speed_card": ("کارت سرعت", "⏱", "economy"),
 }
 
 BUTTON_CATEGORY_LABELS: dict[str, str] = {

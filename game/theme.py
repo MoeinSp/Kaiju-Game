@@ -38,7 +38,7 @@ from game import button_emoji, button_style, emoji
 SNAPSHOT_VERSION = 1
 
 
-def refresh_theme_caches(couple_glyphs: bool = False) -> None:
+def refresh_theme_caches() -> None:
     """Reload all three in-memory caches from the DB.
 
     Must run from sync context. Every write path that touches a theme table has
@@ -46,7 +46,7 @@ def refresh_theme_caches(couple_glyphs: bool = False) -> None:
     lazily populated because they're read from async handler code, where a
     Django query raises SynchronousOnlyOperation.
     """
-    emoji.refresh_cache(couple_glyphs=couple_glyphs)
+    emoji.refresh_cache()
     button_emoji.refresh_cache()
     button_style.refresh_cache()
 
@@ -166,6 +166,10 @@ def apply_snapshot(snapshot: dict[str, Any]) -> dict[str, int]:
     EmojiOverride.objects.bulk_create(
         [EmojiOverride(**row) for row in clean["emoji"] if row["key"] in emoji.EMOJI_DEFS]
     )
+    # Keys that share a glyph settle its ownership by "most recently set"
+    # (emoji._glyph_owners). A loadout has no such order, so give every row the same
+    # timestamp — an exact tie, which goes to the key registered first, every time.
+    EmojiOverride.objects.update(updated_at=timezone.now())
 
     ButtonEmojiOverride.objects.all().delete()
     ButtonEmojiOverride.objects.bulk_create(

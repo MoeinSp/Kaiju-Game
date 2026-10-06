@@ -103,7 +103,7 @@ def _tab_rows(cands: list, filt: str, cb) -> list:
     for r in reversed(constants.RARITY_ORDER):
         if counts.get(r):
             mark = "• " if filt == r else ""
-            tabs.append(btn(f"{mark}{constants.RARITY_LABELS[r]} ({counts[r]})", style=NAV, callback_data=cb(r)))
+            tabs.append(btn(f"{mark}{constants.RARITY_LABELS[r].split()[-1]} ({counts[r]})", emoji_key=f"btn_rarity_{r}", style=NAV, callback_data=cb(r)))
     return [tabs[i:i + 3] for i in range(0, len(tabs), 3)]
 
 

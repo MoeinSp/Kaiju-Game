@@ -366,7 +366,7 @@ async def receipt_photo_handler(update: Update, context: ContextTypes.DEFAULT_TY
         await message.reply_text("این درخواست دیگه معتبر نیست. از منو دوباره «خرید» رو بزن.")
         return
     await message.reply_text(
-        f"{get_emoji('confirm')} رسیدت دریافت شد و برای تأیید ارسال شد. به‌محض تأیید، موجودی اضافه می‌شه. 🙏"
+        f"{get_emoji('confirm')} رسیدت دریافت شد و برای تأیید ارسال شد. به‌محض تأیید، موجودی اضافه می‌شه. 🙏", parse_mode="HTML"
     )
     # forward the receipt to the owner with review actions
     base_caption = (

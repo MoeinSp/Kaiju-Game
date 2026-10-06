@@ -255,6 +255,19 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "shop": ("فروشگاه روزانه", "🛒", "resources"),
     "vip": ("اشتراک ویژه VIP", "⭐", "progress"),
     "hub_shop": ("هاب فروشگاه و بازار", "🛒", "ui"),
+    # newer features and recurring literals that had no key of their own, so nothing in
+    # the panel could theme them
+    "dispatch": ("مأموریت اعزامی", "🧭", "progress"),
+    "worldboss": ("غول سرگردان", "👹", "battle"),
+    "festival": ("جشنواره", "🎪", "progress"),
+    "luck": ("شانس", "🍀", "progress"),
+    "add": ("افزودن و بعلاوه", "➕", "ui"),
+    "point_down": ("اشاره به پایین", "👇", "ui"),
+    "point_right": ("اشاره به کنار", "👉", "ui"),
+    "smile": ("لبخند", "🙂", "ui"),
+    "bullet_blue": ("نشانگر آبی", "🔹", "ui"),
+    "alarm": ("زنگ و یادآور", "⏰", "ui"),
+    "fast_forward": ("جلو زدن زمان", "⏩", "ui"),
 }
 
 CATEGORY_LABELS: dict[str, str] = {
@@ -313,26 +326,49 @@ def _norm_glyph(g: str) -> str:
     return g.replace("\ufe0f", "").replace("\ufe0e", "").strip()
 
 
+def _glyph_owners(cache: dict[str, EmojiOverride]) -> dict[str, EmojiOverride]:
+    """Which SET key owns each literal glyph (normalised glyph -> that key's override).
+
+    Several keys share one glyph (⚔️ is atk / battle / war / hub_battle), but a literal
+    emoji in a message can only show ONE Premium emoji, so exactly one key has to win:
+      1. a key whose DEFAULT emoji is the glyph beats a key that merely lists it as an
+         alias (💎 belongs to `diamond`, not to `element_crystal`);
+      2. among equals, the key the owner set MOST RECENTLY wins — so whatever was just
+         changed in the panel is what shows;
+      3. exact ties (rows bulk-created by a loadout) go to the key registered first.
+    """
+    best: dict[str, tuple[tuple, EmojiOverride]] = {}
+    for idx, key in enumerate(EMOJI_DEFS):
+        override = cache.get(key)
+        if override is None:
+            continue
+        default = _norm_glyph(DEFAULT_EMOJI[key])
+        stamp = override.updated_at.timestamp() if override.updated_at else 0.0
+        for g in _key_glyphs(key, override.placeholder):
+            rank = (g == default, stamp, -idx)
+            if g not in best or rank > best[g][0]:
+                best[g] = (rank, override)
+    return {g: o for g, (_rank, o) in best.items()}
+
+
 def _load_glyph_map() -> dict[str, str]:
     """Build a mapping of normalised Unicode glyph -> custom_emoji_id.
     Reads from:
-      1) Per-glyph overrides (keys like 'g:⚔')
-      2) Semantic-key overrides (e.g. key 'atk' mapped to custom_emoji_id -> sets '⚔')
+      1) Per-glyph overrides (keys like 'g:⚔') — the pack-wide themes
+      2) Semantic-key overrides, through _glyph_owners() — these WIN: a glyph that a
+         set key owns always shows that key's emoji, whatever a 'g:' row says
     """
     global _glyph_map, _glyph_re
     try:
         cache = _load_cache()
         gm: dict[str, str] = {}
-        for key, glyphs in CANONICAL_KEY_GLYPHS.items():
-            override = cache.get(key)
-            if override is not None:
-                for g in glyphs:
-                    gm[_norm_glyph(g)] = override.custom_emoji_id
         for k, o in cache.items():
             if k.startswith(_GLYPH_PREFIX):
                 raw_glyph = k[len(_GLYPH_PREFIX):]
                 if raw_glyph:
                     gm[_norm_glyph(raw_glyph)] = o.custom_emoji_id
+        for g, o in _glyph_owners(cache).items():
+            gm[g] = o.custom_emoji_id
         for skip in GLYPH_SKIP:
             gm.pop(_norm_glyph(skip), None)
         _glyph_map = gm
@@ -348,13 +384,8 @@ def _load_glyph_map() -> dict[str, str]:
         return {}
 
 
-def refresh_cache(couple_glyphs: bool = True) -> None:
+def refresh_cache() -> None:
     """Call after any EmojiOverride write so lookups reflect it without a bot restart."""
-    if couple_glyphs:
-        try:
-            couple_all_key_glyphs(refresh=False)
-        except Exception:
-            pass
     _load_cache()
     _load_glyph_map()
 
@@ -682,6 +713,17 @@ CANONICAL_KEY_GLYPHS: dict[str, set[str]] = {
     "shop": {"🛒", "🛍", "🛍️"},
     "vip": {"⭐", "🌟"},
     "hub_shop": {"🛒"},
+    "dispatch": {"🧭"},
+    "worldboss": {"👹"},
+    "festival": {"🎪"},
+    "luck": {"🍀"},
+    "add": {"➕"},
+    "point_down": {"👇"},
+    "point_right": {"👉"},
+    "smile": {"🙂"},
+    "bullet_blue": {"🔹"},
+    "alarm": {"⏰"},
+    "fast_forward": {"⏩"},
 }
 
 
@@ -728,6 +770,13 @@ KEY_ALIASES: dict[str, str] = {
 }
 
 
+def _resolve_key(key: str) -> str:
+    # An alias only stands in for a name that is NOT a registry key itself. «cart»,
+    # «cave», «building», «sub_vip»… are real panel entries; aliasing them to another
+    # key made their own setting unreachable (the panel saved it, nothing ever read it).
+    return key if key in EMOJI_DEFS else KEY_ALIASES.get(key, key)
+
+
 def get_emoji(key: str, fallback: str | None = None) -> str:
     """Returns HTML for `key`: a <tg-emoji> wrapper if the owner set a Premium custom
     emoji for it, otherwise the plain unicode default (from EMOJI_DEFS, or `fallback`
@@ -735,14 +784,17 @@ def get_emoji(key: str, fallback: str | None = None) -> str:
     database, after the first (eager-warmed) load. Only usable in message BODY text
     sent with parse_mode="HTML" — Telegram button labels are plain text and can
     never render <tg-emoji>, so never call this for InlineKeyboardButton text."""
-    resolved_key = KEY_ALIASES.get(key, key)
+    resolved_key = _resolve_key(key)
     cache = _cache if _cache is not None else _load_cache()
     override = cache.get(resolved_key)
     if override is None:
+        # unset key: render its default glyph the way premiumize_html would render the
+        # same literal — the key that owns the glyph, or a pack-wide glyph theme
         def_glyph = DEFAULT_EMOJI.get(resolved_key, "")
-        if def_glyph:
-            norm_g = _norm_glyph(def_glyph)
-            override = cache.get(f"{_GLYPH_PREFIX}{norm_g}")
+        gm = _glyph_map if _glyph_map is not None else _load_glyph_map()
+        cid = gm.get(_norm_glyph(def_glyph)) if def_glyph else None
+        if cid:
+            return f'<tg-emoji emoji-id="{cid}">{def_glyph}</tg-emoji>'
     if override is not None:
         ph = override.placeholder
         # If the stored placeholder conflicts with another key (e.g. coin had 🧬),
@@ -760,14 +812,9 @@ def get_emoji(key: str, fallback: str | None = None) -> str:
 def get_plain_emoji(key: str, fallback: str | None = None) -> str:
     """Returns plain unicode glyph for `key` (never wraps in <tg-emoji> tags).
     Use this for Telegram button text, query.answer toasts, or anywhere raw HTML tags are forbidden."""
-    resolved_key = KEY_ALIASES.get(key, key)
+    resolved_key = _resolve_key(key)
     cache = _cache if _cache is not None else _load_cache()
     override = cache.get(resolved_key)
-    if override is None:
-        def_glyph = DEFAULT_EMOJI.get(resolved_key, "")
-        if def_glyph:
-            norm_g = _norm_glyph(def_glyph)
-            override = cache.get(f"{_GLYPH_PREFIX}{norm_g}")
     if override is not None and override.placeholder:
         return override.placeholder
     return fallback if fallback is not None else DEFAULT_EMOJI.get(resolved_key, "")
@@ -815,17 +862,17 @@ def set_emoji(key: str, custom_emoji_id: str, placeholder: str) -> None:
     ):
         clean_placeholder = DEFAULT_EMOJI.get(key, "💰")
 
+    previous = EmojiOverride.objects.filter(key=key).first()
     EmojiOverride.objects.update_or_create(
         key=key, defaults={"custom_emoji_id": custom_emoji_id, "placeholder": clean_placeholder}
     )
-    # ALSO theme the literal glyph(s) for this key, so hard-coded emojis in message
-    # bodies (💥, 💎, ⚔️ …) render as the owner's choice EVERYWHERE — not only where
-    # get_emoji() is used. This is what keeps e.g. the diamond emoji consistent across
-    # every screen instead of differing between get_emoji() and literal 💎.
-    for g in _key_glyphs(key, clean_placeholder):
-        EmojiOverride.objects.update_or_create(
-            key=f"{_GLYPH_PREFIX}{g}", defaults={"custom_emoji_id": custom_emoji_id, "placeholder": g}
-        )
+    # The literal glyph(s) of this key (💥, 💎, ⚔️ … hard-coded in message bodies) follow
+    # it through _glyph_owners() when the cache loads, so no «g:» copy is written here.
+    # Copies an older version made for this key's PREVIOUS emoji are dropped: left
+    # behind, they would keep theming a glyph the key no longer claims.
+    if previous is not None:
+        stale = [f"{_GLYPH_PREFIX}{g}" for g in _key_glyphs(key, previous.placeholder)]
+        EmojiOverride.objects.filter(key__in=stale, custom_emoji_id=previous.custom_emoji_id).delete()
     refresh_cache()
 
 
@@ -834,35 +881,14 @@ def clear_emoji(key: str) -> bool:
     existing = EmojiOverride.objects.filter(key=key).first()
     placeholder = existing.placeholder if existing else ""
     deleted, _ = EmojiOverride.objects.filter(key=key).delete()
-    glyph_keys = [f"{_GLYPH_PREFIX}{g}" for g in _key_glyphs(key, placeholder)]
+    # match on the NORMALISED glyph: the bulk pack stores both «⚔» and «⚔️», and a
+    # leftover variant would keep the literal themed after "back to default"
+    glyphs = _key_glyphs(key, placeholder)
+    glyph_keys = [
+        k for k in EmojiOverride.objects.filter(key__startswith=_GLYPH_PREFIX).values_list("key", flat=True)
+        if _norm_glyph(k[len(_GLYPH_PREFIX):]) in glyphs
+    ]
     if glyph_keys:
         EmojiOverride.objects.filter(key__in=glyph_keys).delete()
     refresh_cache()
     return deleted > 0
-
-
-def couple_all_key_glyphs(refresh: bool = False) -> int:
-    """One-shot backfill: for every semantic emoji the owner has already set, make sure
-    the matching literal glyph is themed too (so pre-existing settings for 💎/💥/… also
-    apply to hard-coded emojis in messages). Idempotent; safe to run at every startup."""
-    # First ensure all canonical glyphs strictly point to their own key's custom emoji
-    for other_k, glyphs in CANONICAL_KEY_GLYPHS.items():
-        override = EmojiOverride.objects.filter(key=other_k).first()
-        if override:
-            for g in glyphs:
-                norm_g = _norm_glyph(g)
-                EmojiOverride.objects.update_or_create(
-                    key=f"{_GLYPH_PREFIX}{norm_g}",
-                    defaults={"custom_emoji_id": override.custom_emoji_id, "placeholder": norm_g}
-                )
-
-    n = 0
-    for o in EmojiOverride.objects.exclude(key__startswith=_GLYPH_PREFIX):
-        for g in _key_glyphs(o.key, o.placeholder):
-            EmojiOverride.objects.update_or_create(
-                key=f"{_GLYPH_PREFIX}{g}", defaults={"custom_emoji_id": o.custom_emoji_id, "placeholder": g}
-            )
-            n += 1
-    if refresh and n:
-        refresh_cache(couple_glyphs=False)
-    return n

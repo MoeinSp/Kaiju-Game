@@ -96,7 +96,7 @@ def _render(view: dict, filt: str = "all", page: int = 0, is_group: bool = False
         rarity_short = constants.RARITY_LABELS[c.rarity].split()[0]
         rows.append([
             btn(f"{mark}{c.name} ({rarity_short})", style=PRIMARY if in_team else LIST, callback_data=f"team_tog:{c.id}"),
-            btn(f"⭐ {c.star_level} | سطح {c.level} | 💪 {power:,}", style=PRIMARY if in_team else NAV, callback_data=f"team_tog:{c.id}"),
+            btn(f"{c.star_level} | سطح {c.level} | 💪 {power:,}", emoji_key="btn_star", style=PRIMARY if in_team else NAV, callback_data=f"team_tog:{c.id}"),
         ])
     rows += nav_rows
     if not is_group:

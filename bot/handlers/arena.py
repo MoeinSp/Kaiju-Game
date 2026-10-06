@@ -428,7 +428,7 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
         f"🦅 موجود شما: <b>{cname}</b>{my_elem_tag}",
         f"💪 قدرت شما: <code>{my_power:,}</code> · {trophy} کاپ <code>{user.cup:,}</code>",
         f"👤 حریف: <b>{opponent['label']}</b>{alliance_str}",
-        f"👹 موجود حریف: <b>{opponent.get('creature_name', '؟')}</b>{opp_elem_tag}",
+        f"{get_emoji('opponent_creature', '👹')} موجود حریف: <b>{opponent.get('creature_name', '؟')}</b>{opp_elem_tag}",
         f"💀 قدرت حریف: <code>{opponent['power']:,}</code> · {trophy} کاپ <code>{opponent['cup']:,}</code>",
     ]
     if adv:
@@ -847,7 +847,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     # win and loss share one frame: title → opponent → HP bars → what changed
     head = [
         f"👤 حریف: <b>{result['opponent_label']}</b>{opp_alliance}",
-        f"👹 موجود حریف: <b>{def_name}</b>{elem_tag}",
+        f"{get_emoji('opponent_creature', '👹')} موجود حریف: <b>{def_name}</b>{elem_tag}",
         f"<blockquote>{hp_line_a}\n{hp_line_b}</blockquote>",
         div,
     ]

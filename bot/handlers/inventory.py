@@ -104,7 +104,7 @@ def _rarity_tab_rows(slot, items, filt):
     for r in reversed(constants.RARITY_ORDER):
         if counts.get(r):
             mark = "• " if filt == r else ""
-            tabs.append(btn(f"{mark}{constants.RARITY_LABELS[r]} ({counts[r]})",
+            tabs.append(btn(f"{mark}{constants.RARITY_LABELS[r].split()[-1]} ({counts[r]})", emoji_key=f"btn_rarity_{r}",
                             style=NAV, callback_data=f"inv_cat:{slot}:{r}:0"))
     return [tabs[i:i + 3] for i in range(0, len(tabs), 3)]
 
@@ -332,7 +332,7 @@ async def inventory_upgrade_do_callback(update: Update, context: ContextTypes.DE
 async def equip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Power-user shortcut — the advertised path is /inventory's buttons."""
     if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text(f"{get_emoji('collection')} برای تجهیز از /inventory استفاده کن.")
+        await update.message.reply_text(f"{get_emoji('collection')} برای تجهیز از /inventory استفاده کن.", parse_mode="HTML")
         return
     try:
         item = await run_db(_equip_sync, update.effective_user, int(context.args[0]))
@@ -351,7 +351,7 @@ async def equip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def unequip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Power-user shortcut — the advertised path is /inventory's buttons."""
     if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text(f"{get_emoji('collection')} برای خارج کردن از /inventory استفاده کن.")
+        await update.message.reply_text(f"{get_emoji('collection')} برای خارج کردن از /inventory استفاده کن.", parse_mode="HTML")
         return
     try:
         item = await run_db(_unequip_sync, update.effective_user, int(context.args[0]))
@@ -364,7 +364,7 @@ async def unequip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def upgrade_item_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Power-user shortcut — the advertised path is /inventory's buttons."""
     if len(context.args) != 2 or not all(a.isdigit() for a in context.args):
-        await update.message.reply_text(f"{get_emoji('collection')} برای ارتقا از /inventory استفاده کن.")
+        await update.message.reply_text(f"{get_emoji('collection')} برای ارتقا از /inventory استفاده کن.", parse_mode="HTML")
         return
     try:
         item = await run_db(
@@ -432,7 +432,7 @@ def _forge_cat_render(user, slot, items, filt: str, page: int) -> tuple[str, Inl
     for r in reversed(constants.RARITY_ORDER):
         if counts.get(r):
             mark = "• " if filt == r else ""
-            tabs.append(btn(f"{mark}{constants.RARITY_LABELS[r]} ({counts[r]})",
+            tabs.append(btn(f"{mark}{constants.RARITY_LABELS[r].split()[-1]} ({counts[r]})", emoji_key=f"btn_rarity_{r}",
                             style=NAV, callback_data=f"forge_cat:{slot}:{r}:0"))
     rows = [tabs[i:i + 3] for i in range(0, len(tabs), 3)]
     shown = items if filt == "all" else [i for i in items if i.rarity == filt]

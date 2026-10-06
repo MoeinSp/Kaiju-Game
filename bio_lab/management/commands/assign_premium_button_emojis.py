@@ -254,6 +254,8 @@ class Command(BaseCommand):
             "btn_hatch": ["🐣", "🥚", "🐤", "🐣"],
             "btn_instant": ["⚡", "⏩", "⏱", "⚡️"],
             "btn_help": ["📖", "📚", "❓", "ℹ️"],
+            "btn_star": ["⭐", "🌟", "✨", "💫"],
+            "btn_speed_card": ["⏱", "⏰", "⏩", "⚡"],
         }
         done, skipped, unmatched = 0, 0, []
         for key, (label, fallback, _cat) in BUTTON_EMOJI_DEFS.items():

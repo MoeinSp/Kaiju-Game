@@ -16,10 +16,12 @@ from game.creature import GameError
 
 
 def energy_refill_button(owner_id: int) -> InlineKeyboardButton:
+    from bot.buttons import btn
     from game import botconfig
 
-    return InlineKeyboardButton(
-        f"⚡ شارژ کامل انرژی ({botconfig.get_energy_refill_cost()} 💎)",
+    return btn(
+        f"شارژ کامل انرژی ({botconfig.get_energy_refill_cost()} 💎)",
+        emoji_key="btn_charge",
         callback_data=f"enr:ask:{owner_id}",
     )
 
@@ -211,15 +213,16 @@ async def energy_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     is_private = update.effective_chat is not None and update.effective_chat.type == "private"
     if is_private:
-        from bot.buttons import NAV, btn
+        from bot.buttons import back_btn
         keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🔙 بازگشت به بازی", callback_data="menu:me"),
+            back_btn("menu:me", "بازگشت به بازی"),
         ]])
     else:
+        from bot.buttons import BACK, btn
         from config import BOT_USERNAME
 
         keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🔙 ادامه توی پیوی ربات", url=f"https://t.me/{BOT_USERNAME}?start=play"),
+            btn("ادامه توی پیوی ربات", emoji_key="btn_back", style=BACK, url=f"https://t.me/{BOT_USERNAME}?start=play"),
         ]])
     await safe_edit_message_text(
         query,

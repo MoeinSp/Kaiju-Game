@@ -660,7 +660,7 @@ def _upgrade_render(user, ranked, filt: str, page: int) -> tuple[str, InlineKeyb
     for r in reversed(constants.RARITY_ORDER):
         if counts.get(r):
             mark = "• " if filt == r else ""
-            tabs.append(btn(f"{mark}{constants.RARITY_LABELS[r]} ({counts[r]})",
+            tabs.append(btn(f"{mark}{constants.RARITY_LABELS[r].split()[-1]} ({counts[r]})", emoji_key=f"btn_rarity_{r}",
                             style=NAV, callback_data=f"upg_page:{r}:0"))
     rows = [tabs[i:i + 3] for i in range(0, len(tabs), 3)]
 
@@ -844,7 +844,7 @@ async def equip_slot_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         for r in reversed(constants.RARITY_ORDER):
             if counts.get(r):
                 mark = "• " if filt == r else ""
-                tabs.append(btn(f"{mark}{constants.RARITY_LABELS[r]} ({counts[r]})",
+                tabs.append(btn(f"{mark}{constants.RARITY_LABELS[r].split()[-1]} ({counts[r]})", emoji_key=f"btn_rarity_{r}",
                                 style=NAV, callback_data=f"upg_slot:{creature_id}:{slot}:{r}:0"))
         rows += [tabs[i:i + 3] for i in range(0, len(tabs), 3)]
 
@@ -1869,10 +1869,10 @@ def _collection_render(ranked, filt: str = "all", page: int = 0) -> tuple[str, I
         circle = _RARITY_CIRCLES.get(c.rarity, "⚪️")
         rows.append([btn(f"{circle} {creature_name(c)} ({rarity_short})", style=LIST, callback_data=f"coll_pick:{c.id}")])
         if c.is_active:
-            rows.append([btn(f"⭐ {c.star_level} ستاره • سطح {c.level} (فعال)", style=CONFIRM, callback_data=f"coll_pick:{c.id}")])
+            rows.append([btn(f"{c.star_level} ستاره • سطح {c.level} (فعال)", emoji_key="btn_star", style=CONFIRM, callback_data=f"coll_pick:{c.id}")])
         else:
             rows.append([
-                btn(f"⭐ {c.star_level} ستاره • سطح {c.level}", style=NAV, callback_data=f"coll_pick:{c.id}"),
+                btn(f"{c.star_level} ستاره • سطح {c.level}", emoji_key="btn_star", style=NAV, callback_data=f"coll_pick:{c.id}"),
                 btn("انتخاب", emoji_key="btn_confirm", style=PRIMARY, callback_data=f"coll_select:{c.id}"),
             ])
     nav = []
@@ -2226,7 +2226,7 @@ def _devour_list_render(target, scored, selected: set[int], page: int = 0, xp_to
         rarity_short = constants.RARITY_LABELS[c.rarity].split()[0]
         rows.append([
             btn(f"{mark} {c.name} ({rarity_short})", style=LIST, callback_data=f"devour_tog:{target.id}:{c.id}"),
-            btn(f"⭐ {c.star_level} | سطح {c.level} (+{xp:,} XP)", style=NAV, callback_data=f"devour_tog:{target.id}:{c.id}"),
+            btn(f"{c.star_level} | سطح {c.level} (+{xp:,} XP)", emoji_key="btn_star", style=NAV, callback_data=f"devour_tog:{target.id}:{c.id}"),
         ])
     if total_pages > 1:
         nav = []
@@ -2431,7 +2431,7 @@ async def select(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Kept registered as a power-user shortcut — the advertised path is
     /collection's buttons (collection_pick_callback -> collection_select_callback)."""
     if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text(f"{get_emoji('collection')} برای انتخاب موجود از /collection استفاده کن.")
+        await update.message.reply_text(f"{get_emoji('collection')} برای انتخاب موجود از /collection استفاده کن.", parse_mode="HTML")
         return
     try:
         user, creature, equipped_items = await run_db(_select_sync, update.effective_user, int(context.args[0]))
@@ -2861,8 +2861,9 @@ def _mission_block(m: dict) -> list[str]:
     reward = f"🎁 {_mission_panel_reward(m)} · ⭐ <code>{m['points']}</code> امتیاز"
     if m["done"]:
         return [f"✅ <b>{m['label']}</b> — <s>انجام شد</s>", reward, ""]
-    bar = constants.render_bar(m["progress"], m["target"], width=10)
-    return [f"▫️ <b>{m['label']}</b>", f"⏳ [{bar}] <code>{m['progress']}/{m['target']}</code>", reward, ""]
+    # progress sits on the title line (no bar): the tab is a photo caption, and with every
+    # mission open three lines each ran to the 1,000-character limit and lost the last line
+    return [f"▫️ <b>{m['label']}</b> — <code>{m['progress']}/{m['target']}</code>", reward, ""]
 
 
 def _open_missions(missions: list[dict]) -> list[str]:
@@ -2903,7 +2904,7 @@ def _missions_render(status: dict, tab: str = "d", note: str = "") -> tuple[str,
 
     rows = []
     if tab == "w":
-        lines.append("📅 <b>مأموریت‌های هفتگی</b> <i>(سخت‌تر، امتیاز و جایزه‌ی بیشتر)</i>")
+        lines.append("📅 <b>مأموریت‌های هفتگی</b>")
         lines.append("")
         lines += _open_missions(status["weekly"])
         lines.append(f"<i>ریست هفتگی: {_fmt_reset(status['reset_in'])} دیگه (دوشنبه، نیمه‌شب تهران).</i>")

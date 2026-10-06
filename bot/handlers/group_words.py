@@ -728,7 +728,7 @@ def _arena_card(user, opponent, loot, shielded_for, data=None) -> tuple[str, Inl
         f"🦅 موجود شما: <b>{data.get('my_name', '—')}</b>{my_tag}",
         f"💪 قدرت شما: <code>{my_power:,}</code> · {trophy} کاپ <code>{user.cup:,}</code>",
         f"👤 حریف: <b>{opponent['label']}</b>",
-        f"👹 موجود حریف: <b>{opponent.get('creature_name', '؟')}</b>{opp_tag}",
+        f"{get_emoji('opponent_creature', '👹')} موجود حریف: <b>{opponent.get('creature_name', '؟')}</b>{opp_tag}",
         f"💀 قدرت حریف: <code>{opponent['power']:,}</code> · {trophy} کاپ <code>{opponent['cup']:,}</code>",
     ]
     if adv:

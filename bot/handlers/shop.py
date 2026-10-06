@@ -81,7 +81,7 @@ def _render(offers, coins, diamonds, special_items=None, gem=None, is_group: boo
             cur = "الماس" if o["currency"] == "diamonds" else "طلا"
             lines.append(f"• {o['title']}: <code>{o['price']:,}</code> {cur}")
             short_name = o['title'].replace("کارت سرعت", "").strip()
-            speedup_row.append(btn(f"⏱ {short_name}", style=SHOP, callback_data=f"shop_buy:{o['key']}"))
+            speedup_row.append(btn(short_name, emoji_key="btn_speed_card", style=SHOP, callback_data=f"shop_buy:{o['key']}"))
         rows.append(speedup_row)
 
     # 5. ⚡ Other offers (e.g. energy)

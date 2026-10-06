@@ -53,12 +53,12 @@ def _panel_sync(tg_user):
 
 
 def _offer_line(o: dict) -> str:
+    # two lines per offer: with a level-5 HQ (7 offers) three lines each hit the caption limit
     need = "" if o["min_rarity"] == "common" else f" · حداقل {constants.RARITY_LABELS[o['min_rarity']]}"
-    special = " ✨ <b>ویژه — جایزه ×۲</b>" if o.get("special") else ""
+    special = " ✨ <b>×۲</b>" if o.get("special") else ""
     return (
         f"{o['emoji']} <b>{o['title']}</b>{special}\n"
-        f"   ⏱ {o['hours']} ساعت · جایزه: {_FOCUS_LABEL[o['focus']]}{need}\n"
-        f"   🔮 عنصر پیشنهادی: {constants.element_label(o['element'])} (+۲۵٪ جایزه)"
+        f"   ⏱ {o['hours']} ساعت · {_FOCUS_LABEL[o['focus']]} · {constants.element_label(o['element'])} +۲۵٪{need}"
     )
 
 
@@ -67,13 +67,13 @@ def _panel_render(data: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup
     lines = [
         "🧭 <b>مأموریت‌های اعزامی</b>",
         _DIV,
-        "<blockquote>هیولاهای بیکارت رو بفرست مأموریت؛ چند ساعت بعد برگرد و جایزه رو بگیر. "
-        "هیولای فعال و هیولاهای مشغول در معدن یا غار نمی‌تونن برن.</blockquote>",
+        "<blockquote>هیولاهای بیکارت رو بفرست مأموریت و چند ساعت بعد جایزه بگیر. "
+        "عنصرِ کنار هر مأموریت ۲۵٪ جایزه‌ی بیشتر می‌ده.</blockquote>",
         f"📦 جایگاه اعزام: <code>{len(missions)}/{slots}</code> · 🏗 پایگاه اعزام: "
         + (f"سطح <code>{data['hq']}</code>" if data["hq"] else "<i>ساخته نشده</i>"),
     ]
     if data["hq"] < len(dispatch.HQ_SLOTS) - 1:
-        lines.append("<i>با ساخت و ارتقای «پایگاه اعزام» (بخش ساختمان‌ها) جایگاه، تعداد مأموریت و جایزه بیشتر می‌شه.</i>")
+        lines.append("<i>ارتقای «پایگاه اعزام» جایگاه، مأموریت و جایزه رو بیشتر می‌کنه.</i>")
     from game import events
 
     if events.current_rule() in ("dispatch_fast", "dispatch_surprise"):
@@ -103,7 +103,7 @@ def _panel_render(data: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup
         lines.append("<i>همه‌ی مأموریت‌های امروز رو فرستادی. فردا فهرست تازه می‌آد.</i>")
     full = len(missions) >= slots
     for o in open_offers:
-        lines += ["", _offer_line(o)]
+        lines.append(_offer_line(o))
         if not full:
             rows.append([btn(f"{o['title']} ({o['hours']} ساعت)", emoji_key="btn_dispatch", style=BATTLE,
                              callback_data=f"dsp:offer:{o['idx']}:0")])

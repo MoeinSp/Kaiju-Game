@@ -227,6 +227,7 @@ SUCCESS = CONFIRM
 
 
 _TG_EMOJI_HTML = re.compile(r"<tg-emoji\b[^>]*>(.*?)</tg-emoji>", re.DOTALL)
+_LEADING_TG_EMOJI = re.compile(r'^\s*<tg-emoji emoji-id="(\d+)">.*?</tg-emoji>\s*', re.DOTALL)
 _ANY_HTML = re.compile(r"<[^>]+>")
 
 
@@ -246,11 +247,22 @@ def btn(
     (``callback_data``, ``url``, …) through as usual.
     """
     if "<" in label and ">" in label:
+        # A label written as f"{get_emoji('coin')} …" starts with that TEXT key's Premium
+        # emoji. A button can't render <tg-emoji>, but it can carry the same emoji as its
+        # icon — so the button follows the text key the call site named, not whichever
+        # button key the leftover placeholder glyph happens to be inferred as.
+        lead = _LEADING_TG_EMOJI.match(label)
+        if lead and emoji_key is None and "icon_custom_emoji_id" not in kwargs:
+            kwargs["icon_custom_emoji_id"] = lead.group(1)
+            label = label[lead.end():]
         label = _TG_EMOJI_HTML.sub(r"\1", label)
         label = _ANY_HTML.sub("", label)
 
     if emoji_key is None:
-        emoji_key = infer_emoji_key(label)
+        # an icon the caller chose itself (above, or the emoji editors' own previews) is
+        # final: inferring a key from the label would replace it with another button's icon
+        if "icon_custom_emoji_id" not in kwargs:
+            emoji_key = infer_emoji_key(label)
     elif emoji_key not in BUTTON_EMOJI_DEFS and f"btn_{emoji_key}" in BUTTON_EMOJI_DEFS:
         emoji_key = f"btn_{emoji_key}"
 
@@ -265,7 +277,9 @@ def btn(
         if has_trailing:
             stripped = _TRAILING_EMOJI.sub("", stripped, count=1)
 
-        if emoji_key == "btn_back" or stripped.strip() in ("بازگشت", "🔙", "") or label in ("بازگشت", "🔙", ""):
+        # (an icon-only label with some OTHER key — «🔍», «◀️» — is not a back button; it
+        # used to match here through the empty-string case and came out as «بازگشت»)
+        if emoji_key == "btn_back" or stripped.strip() == "بازگشت":
             # A back button always SAYS «بازگشت» (it used to be a bare icon, which read as
             # a mystery button). «بازگشت به …» / «منوی اصلی» collapse to the one word; a
             # back-styled button with its own meaning («نه», «یه هیولای دیگه») keeps it.

@@ -6,6 +6,7 @@ import logging
 
 from django.utils import timezone
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity, MessageOriginChannel, Update
+from telegram.constants import MessageLimit
 from telegram.error import TelegramError
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
@@ -112,7 +113,10 @@ def _key_keyboard(category: str) -> InlineKeyboardMarkup:
     buttons = []
     for k in keys_in_cat:
         label = EMOJI_DEFS[k][0]
-        btn_kwargs = {}
+        # always passed (even as None): an explicit icon tells btn() NOT to infer a button
+        # key from the label — «تأیید و تیک سبز» would otherwise show the «تأیید» BUTTON
+        # icon here instead of this text key's own emoji
+        btn_kwargs = {"icon_custom_emoji_id": None}
         if k in overrides:
             override = overrides[k]
             if override.custom_emoji_id:
@@ -135,9 +139,11 @@ def _extract_custom_emoji(message) -> tuple[str, str] | None:
     """Returns (custom_emoji_id, placeholder_text) if `message` contains a Premium
     custom emoji entity, else None."""
     entity = next((e for e in (message.entities or []) if e.type == MessageEntity.CUSTOM_EMOJI), None)
-    if entity is None:
+    if entity is None or not message.text:
         return None
-    placeholder = message.text[entity.offset : entity.offset + entity.length]
+    # entity offsets count UTF-16 units, not Python characters — slicing message.text
+    # directly picks up the wrong characters as soon as anything precedes the emoji
+    placeholder = message.parse_entity(entity)
     return entity.custom_emoji_id, placeholder
 
 
@@ -174,7 +180,7 @@ async def set_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if extracted is None:
         await update.effective_message.reply_text(
             f"{get_emoji('warning')} هیچ ایموجی پرمیومی توی پیامت پیدا نشد. باید خودِ ایموجی پرمیوم (نه یونیکد معمولی) رو بفرستی — "
-            "مطمئن شو اشتراک پرمیومت فعاله و از کیبورد ایموجی «پرمیوم» تلگرام انتخابش کردی، نه ایموجی معمولی."
+            "مطمئن شو اشتراک پرمیومت فعاله و از کیبورد ایموجی «پرمیوم» تلگرام انتخابش کردی، نه ایموجی معمولی.", parse_mode="HTML"
         )
         return
 
@@ -201,17 +207,30 @@ async def set_emoji_category_callback(update: Update, context: ContextTypes.DEFA
     )
 
 
+def _status_marks(rows: int) -> tuple[str, str]:
+    """The «پرمیوم» / «پیش‌فرض» marks for an emoji-editor caption with `rows` lines.
+
+    Telegram renders at most 100 entities per message and silently drops the rest, so
+    in a big category (2 custom emojis per line) the keys past the ~50th showed their
+    plain placeholder — i.e. looked UNSET right after being set. Big categories drop the
+    decorative mark so every key's own emoji still fits."""
+    if 2 * rows + 4 > MessageLimit.MESSAGE_ENTITIES:
+        return "", ""
+    return f"{get_emoji('status_premium')} ", f"{get_emoji('status_default')} "
+
+
 def _text_emoji_category_caption(category: str) -> str:
     """List every text-emoji key in a category with its CURRENT emoji rendered inline
     (premium ones show the real custom emoji), so it's obvious what's set."""
     s_cnt, tot = text_category_stats(category)
     lines = [f"{CATEGORY_LABELS[category]} ({s_cnt}/{tot} تنظیم شده)", "", "<b>ایموجی فعلی هر مورد:</b>"]
+    marks = _status_marks(tot)
     for k, (label, glyph, cat) in EMOJI_DEFS.items():
         if cat != category:
             continue
         rendered = get_emoji(k)  # <tg-emoji> HTML if premium set, else the unicode default
         is_premium = rendered.startswith("<tg-emoji")
-        tag = f"{get_emoji('status_premium')} پرمیوم" if is_premium else f"{get_emoji('status_default')} پیش‌فرض"
+        tag = f"{marks[0]}پرمیوم" if is_premium else f"{marks[1]}پیش‌فرض"
         lines.append(f"{rendered} {label} — {tag}")
     lines.append("\nکدوم مورد رو می‌خوای عوض کنی؟")
     return "\n".join(lines)
@@ -249,6 +268,10 @@ async def set_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     context.user_data["awaiting_emoji_key"] = key
+    # the emoji sent next belongs to THIS key: a prompt left open in the button-emoji
+    # editor (or another admin form) must not be the one that receives it
+    for other in (AWAITING_BUTTON_EMOJI_KEY, AWAITING_ADMIN_KEY, AWAITING_FORCE_JOIN_KEY):
+        context.user_data.pop(other, None)
     await query.answer()
     current = await run_db(_current_text_emoji_sync, key)
     cur_line = (f"ایموجی فعلی: <tg-emoji emoji-id=\"{current[0]}\">{current[1]}</tg-emoji>"
@@ -312,7 +335,7 @@ async def capture_emoji_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         rows.append([back_btn(EMOJI_BACK_CALLBACK, f"{get_emoji('cancel')} لغو و بازگشت به دسته‌ها")])
         await message.reply_text(
             f"{get_emoji('warning')} توی این پیام ایموجی پرمیومی پیدا نکردم. یه ایموجی پرمیوم تک و تنها بفرست.",
-            reply_markup=InlineKeyboardMarkup(rows),
+            reply_markup=InlineKeyboardMarkup(rows), parse_mode="HTML",
         )
         return
 
@@ -857,7 +880,7 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
     if verb == "title":
         context.user_data[AWAITING_ADMIN_KEY] = {"action": "ish_title"}
         await query.answer()
-        await query.message.reply_text(f"{get_emoji('edit')} عنوان آیتم رو بفرست (می‌تونه با ایموجی شروع شه):")
+        await query.message.reply_text(f"{get_emoji('edit')} عنوان آیتم رو بفرست (می‌تونه با ایموجی شروع شه):", parse_mode="HTML")
         return
     if verb == "price":
         cur = []
@@ -1053,7 +1076,7 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
         if context.user_data.get("ish_pending"):
             context.user_data[AWAITING_ADMIN_KEY] = {"action": "ish_cname"}
             await query.answer()
-            await query.message.reply_text(f"{get_emoji('edit')} اسم دلخواه برای این هیولا/تجهیزات رو بفرست:")
+            await query.message.reply_text(f"{get_emoji('edit')} اسم دلخواه برای این هیولا/تجهیزات رو بفرست:", parse_mode="HTML")
         else:
             await query.answer()
         return
@@ -1255,7 +1278,7 @@ async def autobackup_now_callback(update: Update, context: ContextTypes.DEFAULT_
             await context.bot.send_document(
                 chat_id=dest, document=fh, filename=meta["name"], caption="💾 بکاپ دستی دیتابیس",
             )
-        await query.message.reply_text(f"{get_emoji('confirm')} بکاپ ساخته و به مقصد فرستاده شد.")
+        await query.message.reply_text(f"{get_emoji('confirm')} بکاپ ساخته و به مقصد فرستاده شد.", parse_mode="HTML")
     except (TelegramError, OSError) as exc:
         await query.message.reply_text(f"⚠️ نشد بکاپ رو بفرستم: {exc}")
 
@@ -2719,18 +2742,32 @@ async def preview_emoji_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "━━━━━━━━━━━━━━",
         "📋 <b>همه‌ی کلیدها به تفکیک دسته</b> (اگه پرمیوم تنظیم کرده باشی همینجا می‌بینیش):",
     ]
+    # The key list goes out in chunks AFTER the sample card: all keys in one message is
+    # ~7,000 characters and 500+ entities, far past Telegram's 4096 / 100-per-message
+    # caps — it could not be sent at all, let alone render every emoji as Premium.
+    chunks: list[list[str]] = [[]]
     for cat, cat_label in CATEGORY_LABELS.items():
-        lines.append(f"\n<b>{cat_label}</b>")
+        chunks[-1].append(f"\n<b>{cat_label}</b>")
         for key, (label, _default, key_cat) in EMOJI_DEFS.items():
             if key_cat != cat:
                 continue
-            lines.append(f"{get_emoji(key)} {label} (<code>{key}</code>)")
+            if len(chunks[-1]) >= _PREVIEW_KEYS_CHUNK:
+                chunks.append([])
+            chunks[-1].append(f"{get_emoji(key)} {label} (<code>{key}</code>)")
 
     kb = InlineKeyboardMarkup([[back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")]])
     if update.callback_query:
         await safe_edit_message_text(update.callback_query, "\n".join(lines), parse_mode="HTML", reply_markup=kb)
     else:
         await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=kb)
+    for i, chunk in enumerate(chunks):
+        await update.effective_message.reply_text(
+            "\n".join(chunk).strip(), parse_mode="HTML", reply_markup=kb if i == len(chunks) - 1 else None
+        )
+
+
+# each key line carries 2 entities (its emoji + the <code> key), so 40 lines stay under 100
+_PREVIEW_KEYS_CHUNK = 40
 
 
 def _all_premium_emoji_entries_sync():
@@ -3126,7 +3163,7 @@ async def capture_force_join_reply(update: Update, context: ContextTypes.DEFAULT
             hours = int(text)
         else:
             context.user_data[AWAITING_FORCE_JOIN_KEY] = awaiting
-            await message.reply_text(f"{get_emoji('warning')} یه عدد مثبت بفرست (ساعت)، یا بنویس «نامحدود».")
+            await message.reply_text(f"{get_emoji('warning')} یه عدد مثبت بفرست (ساعت)، یا بنویس «نامحدود».", parse_mode="HTML")
             return
         try:
             channel = await run_db(set_duration, channel_id, hours)
@@ -3200,14 +3237,15 @@ def _btn_emoji_category_caption(category: str) -> str:
 
     s_cnt, tot = button_category_stats(category)
     lines = [f"{BUTTON_CATEGORY_LABELS[category]} ({s_cnt}/{tot} تنظیم شده)", "", "<b>ایموجی فعلی هر دکمه:</b>"]
+    marks = _status_marks(tot)
     for k, (label, glyph, cat) in BUTTON_EMOJI_DEFS.items():
         if cat != category:
             continue
         icon = get_button_icon(k)
         if icon:
-            lines.append(f'<tg-emoji emoji-id="{icon}">{glyph}</tg-emoji> {label} — {get_emoji("status_premium")} پرمیوم')
+            lines.append(f'<tg-emoji emoji-id="{icon}">{glyph}</tg-emoji> {label} — {marks[0]}پرمیوم')
         else:
-            lines.append(f"{glyph} {label} — {get_emoji('status_default')} پیش‌فرض")
+            lines.append(f"{glyph} {label} — {marks[1]}پیش‌فرض")
     lines.append("\nکدوم دکمه رو می‌خوای عوض کنی؟ (ایموجی روی خودِ دکمه‌ها هم پیش‌نمایششه)")
     return "\n".join(lines)
 
@@ -3289,6 +3327,10 @@ async def btn_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     context.user_data[AWAITING_BUTTON_EMOJI_KEY] = key
+    # capture_owner_text_reply checks the text-emoji prompt (and the other admin forms)
+    # BEFORE this one — a stale one would swallow the emoji and theme the wrong thing
+    for other in ("awaiting_emoji_key", AWAITING_ADMIN_KEY, AWAITING_FORCE_JOIN_KEY):
+        context.user_data.pop(other, None)
     await query.answer()
     current = await run_db(_current_button_emoji_sync, key)
     cur_line = (f"ایموجی فعلی: <tg-emoji emoji-id=\"{current[0]}\">{current[1]}</tg-emoji>"
@@ -3352,7 +3394,7 @@ async def capture_button_emoji_reply(update: Update, context: ContextTypes.DEFAU
         rows.append([back_btn(BTN_EMOJI_BACK, f"{get_emoji('cancel')} لغو و بازگشت به دسته‌ها")])
         await message.reply_text(
             f"{get_emoji('warning')} توی این پیام ایموجی پرمیومی پیدا نکردم. یه ایموجی پرمیوم تک و تنها بفرست.",
-            reply_markup=InlineKeyboardMarkup(rows),
+            reply_markup=InlineKeyboardMarkup(rows), parse_mode="HTML",
         )
         return
 
@@ -3771,7 +3813,7 @@ async def group_link_set_start(update: Update, context: ContextTypes.DEFAULT_TYP
 async def group_link_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await run_db(botconfig.set_group_link, "", "")
     await update.effective_message.reply_text(
-        f"{get_emoji('confirm')} دکمه‌ی گروه حذف شد.", reply_markup=_group_link_panel_keyboard(False)
+        f"{get_emoji('confirm')} دکمه‌ی گروه حذف شد.", reply_markup=_group_link_panel_keyboard(False), parse_mode="HTML"
     )
 
 
@@ -3906,7 +3948,7 @@ async def buy_link_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def buy_link_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await run_db(botconfig.set_buy_link, "", "")
     await update.effective_message.reply_text(
-        f"{get_emoji('confirm')} دکمه‌ی خرید حذف شد.", reply_markup=_buy_link_panel_keyboard(False)
+        f"{get_emoji('confirm')} دکمه‌ی خرید حذف شد.", reply_markup=_buy_link_panel_keyboard(False), parse_mode="HTML"
     )
 
 
@@ -4899,7 +4941,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         reply_kb = InlineKeyboardMarkup(
             [
-                [btn("🔙 بازگشت به کلکسیون کاربر قبلی", callback_data=f"admin_clist:{old_owner.id}:{rarity}:{page}")],
+                [btn("🔙 بازگشت به کلکسیون کاربر قبلی", emoji_key="btn_back", callback_data=f"admin_clist:{old_owner.id}:{rarity}:{page}")],
                 [btn(f"👤 مشاهده کاربر مقصد ({new_owner.id})", callback_data=f"admin_userback:{new_owner.id}")],
             ]
         )
@@ -5032,7 +5074,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         try:
             await context.bot.send_message(chat_id=target_id, text=f"✉️ <b>پیام از مدیریت:</b>\n\n{text}", parse_mode="HTML")
         except TelegramError:
-            await message.reply_text(f"{get_emoji('warning')} نشد بفرستم — احتمالاً کاربر بات رو بلاک کرده یا استارت نزده.")
+            await message.reply_text(f"{get_emoji('warning')} نشد بفرستم — احتمالاً کاربر بات رو بلاک کرده یا استارت نزده.", parse_mode="HTML")
             return
         await message.reply_text(f"✅ پیام به کاربر <code>{target_id}</code> فرستاده شد.", parse_mode="HTML")
         return
@@ -5060,7 +5102,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
     if action == "set_cup":
         if not text.isdigit():
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text(f"{get_emoji('warning')} یه عدد ۰ یا بیشتر بفرست.")
+            await message.reply_text(f"{get_emoji('warning')} یه عدد ۰ یا بیشتر بفرست.", parse_mode="HTML")
             return
         try:
             user, new_cup = await run_db(set_cup, awaiting["target_id"], int(text))
@@ -5077,7 +5119,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
     if action in ("grant", "deduct"):
         if not text.isdigit() or int(text) <= 0:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text(f"{get_emoji('warning')} یه عدد مثبت بفرست.")
+            await message.reply_text(f"{get_emoji('warning')} یه عدد مثبت بفرست.", parse_mode="HTML")
             return
         try:
             name = await run_db(_display_name_sync, awaiting["target_id"])
@@ -5100,7 +5142,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         coins, dna, diamonds = (int(p) for p in parts)
         if coins == 0 and dna == 0 and diamonds == 0:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text(f"{get_emoji('warning')} حداقل یکی از مقدارها باید غیرصفر باشه.")
+            await message.reply_text(f"{get_emoji('warning')} حداقل یکی از مقدارها باید غیرصفر باشه.", parse_mode="HTML")
             return
         try:
             name = await run_db(_display_name_sync, awaiting["target_id"])
@@ -5117,7 +5159,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
     if action == "delete_creature":
         if not text.isdigit():
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text(f"{get_emoji('warning')} یه شماره‌ی معتبر بفرست.")
+            await message.reply_text(f"{get_emoji('warning')} یه شماره‌ی معتبر بفرست.", parse_mode="HTML")
             return
         creature_id = int(text)
         try:
@@ -5235,7 +5277,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         if channel_id:
             # verify the bot can post there
             try:
-                probe = await context.bot.send_message(chat_id=channel_id, text=f"{get_emoji('confirm')} کانال گزارش خرید تنظیم شد.")
+                probe = await context.bot.send_message(chat_id=channel_id, text=f"{get_emoji('confirm')} کانال گزارش خرید تنظیم شد.", parse_mode="HTML")
                 try:
                     await context.bot.delete_message(chat_id=channel_id, message_id=probe.message_id)
                 except Exception:  # noqa: BLE001
@@ -5254,7 +5296,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         number = "".join(ch for ch in num_part if ch.isdigit())
         if len(number) < 12:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text(f"{get_emoji('warning')} شماره کارت معتبر نیست (حداقل ۱۲ رقم). دوباره بفرست.")
+            await message.reply_text(f"{get_emoji('warning')} شماره کارت معتبر نیست (حداقل ۱۲ رقم). دوباره بفرست.", parse_mode="HTML")
             return
         await run_db(botconfig.set_buy_card, number, holder_part.strip())
         await _show_buy_panel(update, f"{get_emoji('confirm')} کارت ثبت شد.")
@@ -5287,7 +5329,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         digits = text.strip()
         if not digits.isdigit() or int(digits) > 720:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text(f"{get_emoji('warning')} یه عدد ساعت بین 0 تا 720 بفرست (0 = خاموش).")
+            await message.reply_text(f"{get_emoji('warning')} یه عدد ساعت بین 0 تا 720 بفرست (0 = خاموش).", parse_mode="HTML")
             return
         hours = int(digits)
         await run_db(botconfig.set_backup_interval, hours)
@@ -5309,7 +5351,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         chat_id = int(raw)
         await run_db(botconfig.set_backup_chat_id, None if chat_id == 0 else chat_id)
         if chat_id == 0:
-            await message.reply_text(f"{get_emoji('confirm')} مقصد بکاپ شد پیوی مالک.")
+            await message.reply_text(f"{get_emoji('confirm')} مقصد بکاپ شد پیوی مالک.", parse_mode="HTML")
         else:
             await message.reply_text(
                 f"✅ مقصد بکاپ شد <code>{chat_id}</code>. مطمئن شو بات اونجا می‌تونه فایل بفرسته.",
@@ -5341,7 +5383,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         digits = text.strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
         if not digits.isdigit():
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text(f"{get_emoji('warning')} یه عدد بفرست (0 = نامحدود).")
+            await message.reply_text(f"{get_emoji('warning')} یه عدد بفرست (0 = نامحدود).", parse_mode="HTML")
             return
         _ish_draft(context)["max_per_user"] = int(digits)
         await _ish_show_home(update, context, edit=False)
@@ -5401,7 +5443,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         digits = text.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
         if not digits.isdigit():
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text(f"{get_emoji('warning')} یه عدد صحیح بفرست (0 = نامحدود).")
+            await message.reply_text(f"{get_emoji('warning')} یه عدد صحیح بفرست (0 = نامحدود).", parse_mode="HTML")
             return
         for s in draft["states"]:
             if s["key"] == awaiting["key"]:
@@ -5430,7 +5472,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         digits = text.strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
         if not digits.isdigit() or int(digits) <= 0:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text(f"{get_emoji('warning')} یه عدد مثبت بفرست.")
+            await message.reply_text(f"{get_emoji('warning')} یه عدد مثبت بفرست.", parse_mode="HTML")
             return
         _ish_draft(context)["contents"].append({"type": awaiting["kind"], "amount": int(digits)})
         await _ish_show_home(update, context, edit=False)
@@ -5486,11 +5528,11 @@ async def capture_restore_upload(update: Update, context: ContextTypes.DEFAULT_T
     document = message.document
     if document is None:
         context.user_data.pop(AWAITING_RESTORE_KEY, None)
-        await message.reply_text(f"{get_emoji('cancel')} بازیابی لغو شد (فایلی نفرستادی).")
+        await message.reply_text(f"{get_emoji('cancel')} بازیابی لغو شد (فایلی نفرستادی).", parse_mode="HTML")
         return
     if document.file_size and document.file_size > 60 * 1024 * 1024:
         context.user_data.pop(AWAITING_RESTORE_KEY, None)
-        await message.reply_text(f"{get_emoji('warning')} فایل خیلی بزرگه (بیشتر از 60 مگابایت).")
+        await message.reply_text(f"{get_emoji('warning')} فایل خیلی بزرگه (بیشتر از 60 مگابایت).", parse_mode="HTML")
         return
 
     context.user_data.pop(AWAITING_RESTORE_KEY, None)
@@ -5498,7 +5540,7 @@ async def capture_restore_upload(update: Update, context: ContextTypes.DEFAULT_T
         tg_file = await context.bot.get_file(document.file_id)
         raw = await tg_file.download_as_bytearray()
     except TelegramError:
-        await message.reply_text(f"{get_emoji('warning')} نشد فایل رو دانلود کنم. دوباره امتحان کن.")
+        await message.reply_text(f"{get_emoji('warning')} نشد فایل رو دانلود کنم. دوباره امتحان کن.", parse_mode="HTML")
         return
 
     def _validate_and_store():
@@ -5641,7 +5683,8 @@ async def blackmarket_manage_panel(
             
     rows.append([btn("➕ ایجاد مزایده از قالب‌های آماده و متنوع", style=CONFIRM, callback_data="admin_menu:bm_presets")])
     if only_active:
-        rows.append([btn("📜 مشاهده تاریخچه مزایده‌های قبلی", style=NAV, callback_data="bm_adm_view:history")])
+        # explicit key: the word «قبلی» made this one infer as the «صفحه قبلی» button
+        rows.append([btn("📜 مشاهده تاریخچه مزایده‌های قبلی", emoji_key="btn_list", style=NAV, callback_data="bm_adm_view:history")])
     else:
         rows.append([btn("🟢 بازگشت به مزایده‌های فعال", style=NAV, callback_data="bm_adm_view:active")])
     rows.append([btn("⚡ تسویه فوری سررسیدها", style=PRIMARY, callback_data="bm_adm_settle")])

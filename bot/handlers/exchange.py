@@ -267,7 +267,7 @@ async def handle_custom_amount(update: Update, context: ContextTypes.DEFAULT_TYP
     norm = raw.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789"))
     if not norm.isdigit() or int(norm) <= 0:
         context.user_data[AWAITING_PLAYER_KEY] = awaiting  # keep waiting
-        await message.reply_text(f"{get_emoji('warning')} یه عدد درست بفرست (مثلاً 120).")
+        await message.reply_text(f"{get_emoji('warning')} یه عدد درست بفرست (مثلاً 120).", parse_mode="HTML")
         return
     # for buy_gold the number is GOLD to receive → convert to the whole DNA to sell
     amount_dna = exchange.dna_for_gold(int(norm)) if unit == "gold" else int(norm)

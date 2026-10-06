@@ -36,18 +36,18 @@ CLAIM_COOLDOWN_MINUTES = 30
 
 DROP_KINDS = {
     "chest":   {"emoji": "🎁", "title": "صندوقچه‌ی گنج", "flavor": "یه صندوقچه‌ی گنج وسط گروه افتاد!",
-                "btn": "🎁 بازش کن!", "res": {"coins": (240, 520), "dna": (0, 12)}, "weight": 5},
+                "btn": "بازش کن!", "btn_key": "btn_chest_open", "res": {"coins": (240, 520), "dna": (0, 12)}, "weight": 5},
     "ambush":  {"emoji": "⚔️", "title": "هیولای وحشی", "flavor": "یه هیولای وحشی ظاهر شد! سریع باش!",
-                "btn": "⚔️ حمله کن!", "res": {"coins": (180, 400), "dna": (4, 16)}, "weight": 5},
+                "btn": "حمله کن!", "btn_key": "btn_attack", "res": {"coins": (180, 400), "dna": (4, 16)}, "weight": 5},
     "vein":    {"emoji": "💎", "title": "رگه‌ی الماس", "flavor": "یه رگه‌ی الماس درخشید!",
-                "btn": "💎 برش دار!", "res": {"diamonds": (10, 30)}, "weight": 3},
+                "btn": "برش دار!", "btn_key": "btn_diamond", "res": {"diamonds": (10, 30)}, "weight": 3},
     "egg":     {"emoji": "🥚", "title": "تخم رمزآلود", "flavor": "یه تخم رمزآلود از آسمون افتاد!",
-                "btn": "🥚 بردار!", "res": {"dna": (20, 52), "coins": (120, 280)}, "weight": 4},
+                "btn": "بردار!", "btn_key": "btn_hatch", "res": {"dna": (20, 52), "coins": (120, 280)}, "weight": 4},
     "capsule": {"emoji": "⚡", "title": "کپسول انرژی", "flavor": "یه کپسول انرژی پیدا شد!",
-                "btn": "⚡ بگیرش!", "res": {"energy": "full", "coins": (100, 240)}, "weight": 3},
+                "btn": "بگیرش!", "btn_key": "btn_energy", "res": {"energy": "full", "coins": (100, 240)}, "weight": 3},
     "jackpot": {"emoji": "🌟", "title": "جک‌پات نادر", "flavor": "🌟 یه جک‌پات نادر ظاهر شد!!",
                 # gem jackpots are gone from groups — the diamonds are replaced by quadrupled gold
-                "btn": "🌟 شانستو امتحان کن!", "res": {"coins": (1200, 10000)}, "weight": 1},
+                "btn": "شانستو امتحان کن!", "btn_key": "btn_wheel", "res": {"coins": (1200, 10000)}, "weight": 1},
 }
 
 
@@ -195,7 +195,7 @@ def _spawn(group, kind: str, now) -> dict:
     )
     cfg = DROP_KINDS[kind]
     return {"id": drop.id, "group_id": group.id, "kind": kind, "emoji": cfg["emoji"],
-            "title": cfg["title"], "flavor": cfg["flavor"], "btn": cfg["btn"]}
+            "title": cfg["title"], "flavor": cfg["flavor"], "btn": cfg["btn"], "btn_key": cfg["btn_key"]}
 
 
 def set_message_id(drop_id: int, message_id: int) -> None:

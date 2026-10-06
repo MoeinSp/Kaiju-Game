@@ -1,3 +1,4 @@
+import html
 import asyncio
 import datetime
 import os
@@ -872,6 +873,14 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
                 )
                 return
             await query.answer(alert_text(exc), show_alert=True)
+            # the reason also goes INTO the card (with the buttons kept): the pop-up is
+            # gone in a second, and players reported «I can't accept» without knowing why
+            await safe_edit_message_text(
+                query,
+                f"{offer['desc']}\n{_RULE}\n⚠️ <b>قبول نشد:</b> {html.escape(str(exc))[:600]}\n"
+                "<i>بعد از رفع مشکل دوباره «قبول پیشنهاد» رو بزن (پیشنهاد ۵ دقیقه اعتبار داره).</i>",
+                parse_mode="HTML", reply_markup=_offer_receiver_keyboard(token),
+            )
             return
         _PENDING_OFFERS.pop(token, None)
         if offer["kind"] == "c":
@@ -1288,7 +1297,7 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
         f"🦅 موجود شما: <b>{a_cname}</b>{a_tag}",
         f"💪 قدرت شما: <code>{a_power:,}</code>",
         f"👤 حریف: <b>{t_name}</b>",
-        f"👹 موجود حریف: <b>{t_cname}</b>{t_tag}",
+        f"{get_emoji('opponent_creature', '👹')} موجود حریف: <b>{t_cname}</b>{t_tag}",
         f"💀 قدرت حریف: <code>{t_power:,}</code>",
     ]
     if adv:
