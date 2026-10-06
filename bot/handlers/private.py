@@ -1547,7 +1547,7 @@ def _today_state_safe(user):
     from game import today
 
     try:
-        return today.state(user)
+        return today.state(user, full=False)
     except Exception:  # noqa: BLE001 — the badge is a nicety; the menu must always open
         logger.exception("today.state failed")
         return None

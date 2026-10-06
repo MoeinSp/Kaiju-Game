@@ -32,13 +32,31 @@ def _pending_buildings(user: User) -> list[tuple[Building, int, str]]:
     return out
 
 
-def state(user: User) -> dict:
-    """Everything the «امروز» screen shows. Read-only."""
+def _boxes_ready(user: User) -> tuple[int, int]:
+    """(mission boxes reached but not opened, this week's points) straight from the claim
+    rows — three small queries instead of the ~40 the full missions screen needs."""
+    from bio_lab.models import MissionClaim
+    from game import daily
+
+    wk, dates = daily.week_key(), daily.week_dates()
+    points = daily._week_points(user, dates, wk)
+    opened = set(MissionClaim.objects.filter(user=user, day=wk, mission_key__startswith="box_")
+                 .values_list("mission_key", flat=True))
+    ready = sum(1 for i, (need, _tier) in enumerate(constants.mission_box_thresholds(), start=1)
+                if points >= need and daily._box_key(i) not in opened)
+    return ready, points
+
+
+def state(user: User, full: bool = True) -> dict:
+    """Everything the «امروز» screen shows. Read-only. `full=False` is the cheap version
+    for the badge on the main menu (opened on every visit): it skips the per-mission
+    progress, which is by far the most expensive part."""
     from django.utils import timezone
 
+    from bio_lab.models import DailyActionLog
     from game import daily, events, festival, story, tournament, worldboss
     from game.buildings import main_hall_level
-    from game.daily import get_daily_count
+    from game.daily import today_str
     from game.energy import get_max_energy, sync_energy
     from game.lootbox import can_claim_free_diamond_box
 
@@ -47,7 +65,8 @@ def state(user: User) -> dict:
     for _b, amount, resource in _pending_buildings(user):
         pending[resource] = pending.get(resource, 0) + amount
 
-    missions = daily.mission_status(user)
+    boxes_ready, points = _boxes_ready(user)
+    missions = daily.mission_status(user) if full else None
     quest = story.get_active_quest(user)
     boss = worldboss.current_boss()
     boss_hits_left = 0
@@ -67,13 +86,15 @@ def state(user: User) -> dict:
         "event_daily": hall >= EVENTS_HALL_REQ and events.status(user)["can_claim"],
         "story_ready": bool(quest and quest["is_done"]),
         "free_boxes": [t for t in ("bronze", "silver") if can_claim_free_diamond_box(user, t)],
-        "wheel": get_daily_count(user, "wheel_spin") < constants.WHEEL_DAILY_LIMIT,
+        "wheel": not DailyActionLog.objects.filter(
+            user=user, action="wheel_spin", day=today_str(), count__gte=constants.WHEEL_DAILY_LIMIT
+        ).exists(),
         "chests_ready": ArenaChest.objects.filter(user=user, status="ready").count(),
-        "boxes_ready": sum(1 for b in missions["boxes"] if b["reached"] and not b["opened"]),
-        "missions_done": sum(1 for m in missions["daily"] if m["done"]),
-        "missions_total": len(missions["daily"]),
-        "points": missions["points"],
-        "next_box": next((b for b in missions["boxes"] if not b["reached"]), None),
+        "boxes_ready": boxes_ready,
+        "missions_done": sum(1 for m in missions["daily"] if m["done"]) if missions else 0,
+        "missions_total": len(missions["daily"]) if missions else 0,
+        "points": points,
+        "next_box": next((b for b in missions["boxes"] if not b["reached"]), None) if missions else None,
         "boss": {"name": boss.name, "hits_left": boss_hits_left} if boss is not None else None,
         "tournament_open": tournament.registration_open() and tournament.my_entry(user) is None,
         "festival": festival.theme() if festival.active_key() else None,
