@@ -25,7 +25,7 @@ import datetime
 import random
 
 from django.db import transaction
-from django.db.models import F, Sum
+from django.db.models import Count, F, Sum
 from django.utils import timezone
 
 from bio_lab.models import User, WorldBoss, WorldBossHit, WorldBossState
@@ -48,7 +48,11 @@ HIT_DNA_PER_DAMAGE = 0.015
 # first boss ever / fallback when the previous one had no fighters
 DEFAULT_HP = 120_000
 MIN_HP = 60_000
-NEXT_HP_SHARE = 0.80  # of the previous boss's total damage
+# the server should deal about this share of a boss's HP with everyone's hits — killing it
+# takes a better turnout than usual (more fighters, the right element), not a normal day
+TARGET_DAMAGE_SHARE = 0.50
+HP_SAMPLE = 3          # bosses of the same time window averaged for the estimate
+KILLED_GROWTH = 1.5    # a boss that died anyway → the next one of that window is at least this × bigger
 
 # kill rewards
 KILL_CHEST_ALL = "golden"         # every participant
@@ -71,14 +75,19 @@ def _state() -> WorldBossState:
     return state
 
 
-def _next_spawn_after(now: datetime.datetime) -> datetime.datetime:
-    """A random moment inside the next spawn window that starts after `now` (local time)."""
+def _next_spawn_after(now: datetime.datetime, new_window: bool = False) -> datetime.datetime:
+    """A random moment inside the next spawn window after `now` (local time). With
+    `new_window` the window `now` falls in is skipped — used right after a spawn, so each
+    window gets ONE boss (without it a boss that expired at 12:58 scheduled another one for
+    13:13 and a third for 14:28 in the same 12–15 window)."""
     local = timezone.localtime(now)
     for day_offset in range(0, 3):
         day = (local + datetime.timedelta(days=day_offset)).date()
         for start_h, end_h in SPAWN_WINDOWS:
             start = timezone.make_aware(datetime.datetime.combine(day, datetime.time(start_h)), local.tzinfo)
             end = timezone.make_aware(datetime.datetime.combine(day, datetime.time(end_h)), local.tzinfo)
+            if new_window and start <= local:
+                continue  # this window already had its boss
             if end - datetime.timedelta(minutes=DURATION_MINUTES) <= local:
                 continue  # window (almost) over
             lo = max(start, local + datetime.timedelta(minutes=1))
@@ -104,18 +113,47 @@ def next_spawn_at() -> datetime.datetime | None:
     return _state().next_spawn_at
 
 
-def _next_hp() -> int:
-    prev = WorldBoss.objects.exclude(status=WorldBoss.ACTIVE).order_by("-id").first()
-    if prev is None:
+def _window_of(moment: datetime.datetime) -> int:
+    """Index of the spawn window a moment belongs to (the one whose middle is nearest)."""
+    hour = timezone.localtime(moment).hour
+    return min(range(len(SPAWN_WINDOWS)), key=lambda i: abs(hour - sum(SPAWN_WINDOWS[i]) / 2))
+
+
+def potential_damage(boss: WorldBoss) -> int:
+    """What the players who showed up for `boss` could have dealt with ALL their hits:
+    (damage per hit) × fighters × HITS_PER_PLAYER. A boss that died early cut the fight
+    short, so the damage actually dealt (= its HP) says nothing about what the server can
+    do — that was the old sizing bug: 80% of «damage dealt» shrank the boss every time it
+    was killed (120k → 96k → 77k → 61k → 60k) instead of growing it."""
+    agg = WorldBossHit.objects.filter(boss=boss, hits__gt=0).aggregate(d=Sum("damage"), h=Sum("hits"), n=Count("id"))
+    if not agg["h"]:
+        return 0
+    return int(agg["d"] / agg["h"] * agg["n"] * HITS_PER_PLAYER)
+
+
+def _next_hp(now: datetime.datetime | None = None) -> int:
+    """Size the next boss so the server deals about TARGET_DAMAGE_SHARE of its HP: the
+    average potential_damage of the last few bosses of the SAME time window (the evening
+    crowd is ~3× the noon one), divided by the target share. A boss that was killed anyway
+    also sets a floor of KILLED_GROWTH × its HP, so a growing server can't outrun it."""
+    now = now or timezone.now()
+    done = list(WorldBoss.objects.exclude(status=WorldBoss.ACTIVE).order_by("-id")[:12])
+    if not done:
         return DEFAULT_HP
-    dealt = WorldBossHit.objects.filter(boss=prev).aggregate(s=Sum("damage"))["s"] or 0
-    if dealt <= 0:
-        return max(MIN_HP, int(prev.max_hp * 0.6))  # nobody came → an easier one next time
-    return max(MIN_HP, int(dealt * NEXT_HP_SHARE))
+    window = _window_of(now)
+    same = [b for b in done if _window_of(b.spawned_at) == window][:HP_SAMPLE] or done[:HP_SAMPLE]
+    potentials = [p for p in (potential_damage(b) for b in same) if p > 0]
+    if not potentials:
+        return max(MIN_HP, int(same[0].max_hp * 0.6))  # nobody came → an easier one next time
+    hp = int(sum(potentials) / len(potentials) / TARGET_DAMAGE_SHARE)
+    last = same[0]
+    if last.status == WorldBoss.DEAD:
+        hp = max(hp, int(last.max_hp * KILLED_GROWTH))
+    return max(MIN_HP, hp)
 
 
 def _spawn(now: datetime.datetime) -> WorldBoss:
-    hp = _next_hp()
+    hp = _next_hp(now)
     return WorldBoss.objects.create(
         name=random.choice(BOSS_NAMES),
         element=constants.random_element(),
@@ -272,7 +310,7 @@ def tick() -> list[tuple]:
         if state.next_spawn_at > now or current_boss() is not None:
             return out
         boss = _spawn(now)
-        state.next_spawn_at = _next_spawn_after(boss.expires_at)
+        state.next_spawn_at = _next_spawn_after(now, new_window=True)
         state.save(update_fields=["next_spawn_at"])
 
     since = now - datetime.timedelta(days=ANNOUNCE_ACTIVE_DAYS)
