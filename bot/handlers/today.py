@@ -48,9 +48,7 @@ def _render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
         lines.append("")
 
     # ── ready to take ──
-    ready = []
-    if st["pending"]:
-        ready.append("🏗 ساختمان‌ها: " + _amounts(st["pending"]))
+    ready = [f"{label}: <code>+{amount:,}</code>" for label, amount, _resource in st["pending"]]
     if st["dispatch_ready"]:
         ready.append(f"🧭 <code>{st['dispatch_ready']}</code> هیولا از مأموریت برگشته")
     if st["event_daily"]:
@@ -72,19 +70,28 @@ def _render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     else:
         lines.append("<i>چیزی برای جمع کردن نمونده.</i>")
 
-    lines += [
-        "",
-        f"🎯 مأموریت‌های امروز: <code>{st['missions_done']}/{st['missions_total']}</code>"
-        + (f" · تا باکس بعدی <code>{max(0, st['next_box']['need'] - st['points'])}</code> امتیاز" if st["next_box"] else ""),
-        f"{get_emoji('energy')} انرژی: <code>{st['energy']}/{st['max_energy']}</code>",
-    ]
+    # things still worth doing today — each disappears once there's nothing left of it:
+    # the missions when all of today's are done, dispatch when nothing can be sent
+    missions_left = st["missions_total"] - st["missions_done"]
+    lines.append("")
+    if missions_left > 0:
+        lines.append(
+            f"🎯 مأموریت‌های امروز: <code>{st['missions_done']}/{st['missions_total']}</code>"
+            + (f" · تا باکس بعدی <code>{max(0, st['next_box']['need'] - st['points'])}</code> امتیاز" if st["next_box"] else "")
+        )
+    if st["can_dispatch"]:
+        lines.append("🧭 می‌تونی یه هیولا بفرستی مأموریت.")
+    lines.append(f"{get_emoji('energy')} انرژی: <code>{st['energy']}/{st['max_energy']}</code>")
     quick = [btn("شکار", emoji_key="btn_hunt", style=BATTLE, callback_data="menu:hunt"),
              btn("آرنا", emoji_key="btn_arena", style=BATTLE, callback_data="menu:arena")]
     rows.append(quick)
-    more = [btn("مأموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions")]
-    if st["dispatch_open"]:
+    more = []
+    if missions_left > 0:
+        more.append(btn("مأموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions"))
+    if st["can_dispatch"]:
         more.append(btn("اعزام", emoji_key="btn_dispatch", style=NAV, callback_data="menu:dispatch"))
-    rows.append(more)
+    if more:
+        rows.append(more)
     rows.append([back_btn("menu:me", "منوی اصلی")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 

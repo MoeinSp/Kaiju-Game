@@ -19,14 +19,24 @@ from game import constants
 from game.creature import GameError
 
 EVENTS_HALL_REQ = 3  # the «رویدادهای ویژه» section (and its daily reward) opens here
+# a building's output is only offered once this long has passed since it was last
+# collected — otherwise «دریافت همه» lit up again a minute later for a handful of coins
+COLLECT_MIN_MINUTES = 10
 _BOX_NAMES = {"bronze": ("🥉", "باکس برنزی"), "silver": ("🥈", "باکس نقره‌ای")}
 
 
 def _pending_buildings(user: User) -> list[tuple[Building, int, str]]:
+    """(building, amount, resource) for every producer worth collecting now: it has
+    something AND was last collected at least COLLECT_MIN_MINUTES ago."""
+    import datetime
+
+    from django.utils import timezone
+
     from game.buildings import pending_amount, produces
 
+    cutoff = timezone.now() - datetime.timedelta(minutes=COLLECT_MIN_MINUTES)
     out = []
-    for b in Building.objects.filter(owner=user, level__gt=0):
+    for b in Building.objects.filter(owner=user, level__gt=0, last_collected_at__lte=cutoff).order_by("id"):
         if not produces(b.building_type):
             continue
         amount = pending_amount(b)
@@ -64,9 +74,21 @@ def state(user: User, full: bool = True) -> dict:
     from game.lootbox import can_claim_free_diamond_box
 
     hall = main_hall_level(user)
-    pending: dict[str, int] = {}
-    for _b, amount, resource in _pending_buildings(user):
-        pending[resource] = pending.get(resource, 0) + amount
+    # one entry per building, so the screen can name each: (label, amount, resource)
+    pending = [(constants.BUILDING_LABELS.get(b.building_type, b.building_type), amount, resource)
+               for b, amount, resource in _pending_buildings(user)]
+
+    # «اعزام» is only worth a button while a mission can actually be SENT: a free slot and
+    # an offer of today's board that hasn't been taken (checked on the full screen only)
+    can_dispatch = False
+    if full and hall >= 2:
+        from game import dispatch
+
+        level = dispatch.hq_level(user)
+        running = DispatchMission.objects.filter(owner=user, status=DispatchMission.ACTIVE).count()
+        can_dispatch = running < dispatch.slots(user, level) and any(
+            not o["taken"] for o in dispatch.offers_for(user, level=level)
+        )
 
     boxes, points = _reached_boxes(user)
     missions = daily.mission_status(user) if full else None
@@ -85,7 +107,7 @@ def state(user: User, full: bool = True) -> dict:
         "dispatch_ready": DispatchMission.objects.filter(
             owner=user, status=DispatchMission.ACTIVE, finishes_at__lte=timezone.now()
         ).count() if hall >= 2 else 0,
-        "dispatch_open": hall >= 2,
+        "can_dispatch": can_dispatch,
         "event_daily": hall >= EVENTS_HALL_REQ and events.status(user)["can_claim"],
         "story_ready": bool(quest and quest["is_done"]),
         "free_boxes": [t for t in ("bronze", "silver") if can_claim_free_diamond_box(user, t)],
@@ -162,19 +184,20 @@ def collect_all(user: User) -> dict:
             rolls.append(roll)
 
     # ── buildings ──
-    collected = 0
+    built: list[str] = []
     for building, _amount, _resource in _pending_buildings(user):
         try:
             amount, resource = collect(user, building)
         except GameError:
             continue
         totals[resource] = totals.get(resource, 0) + amount
-        collected += 1
+        label = constants.BUILDING_LABELS.get(building.building_type, building.building_type)
+        built.append(f"{label}: <code>+{amount:,}</code>")
         daily.record_action(user, "collect")
         missions_done += daily.check_missions(user, "collect")
+    if built:
+        sections.append(("ساختمان‌ها", built))
     base: list[str] = []
-    if collected:
-        base.append(f"🏗 تولید <code>{collected}</code> ساختمان")
 
     # ── dispatch ──
     hall = main_hall_level(user)
@@ -190,13 +213,15 @@ def collect_all(user: User) -> dict:
     if hall >= EVENTS_HALL_REQ:
         reward = events.claim_daily(user)
         if reward:
+            add(reward)
             base.append(f"🎁 جایزه‌ی رویداد: {events.reward_text(reward)}")
     with transaction.atomic():
         res = story.claim_active_quest(user)
     if res.get("success"):
+        add(res["claimed_quest"]["reward"])
         base.append(f"🎯 «{res['claimed_quest']['title']}»")
     if base:
-        sections.append(("جمع‌آوری", base))
+        sections.append(("جایزه‌ها", base))
 
     # ── wheel ──
     try:
