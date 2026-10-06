@@ -128,11 +128,13 @@ def mission_unit(user: User) -> tuple[int, int]:
     """(gold, dna) one hunt unit is worth for this player right now."""
     from game import hunt
 
+    # ÷ ENERGY_REBASE: a hunt pays 50/30 as much since the energy re-base, but a mission
+    # is worth a share of a DAY's income, and that didn't change.
     power = hunt.hunt_benchmark_power(user)
     lo, hi = hunt.hunt_coin_range(power, "normal")
-    gold = max(MISSION_UNIT_MIN_GOLD, (lo + hi) // 2)
+    gold = max(MISSION_UNIT_MIN_GOLD, round((lo + hi) / 2 / constants.ENERGY_REBASE))
     dlo, dhi = hunt.hunt_dna_range(power, "normal")
-    dna = max(5, (dlo + dhi) // 2)
+    dna = max(5, round((dlo + dhi) / 2 / constants.ENERGY_REBASE))
     return gold, dna
 
 

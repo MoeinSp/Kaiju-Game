@@ -35,8 +35,9 @@ FESTIVAL_END_DAY = FESTIVAL_START_DAY + FESTIVAL_DAYS - 1
 
 # action → (coins per action, how many actions a day earn coins)
 EARN = {
-    "hunt": (1, 40),
-    "arena_attack": (2, 20),
+    # hunts and attacks are 0.6× as many a day since the energy re-base → same coins a day
+    "hunt": (2, 20),
+    "arena_attack": (3, 13),
     "dispatch": (4, 7),
     "worldboss_hit": (3, 6),
     "raid_attack": (2, 5),

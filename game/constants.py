@@ -210,10 +210,11 @@ DUEL_WIN_DNA_PER_OPP_LEVEL = 0.5  # e.g. beating a level-10 opponent → 5 DNA
 def duel_win_reward(opponent_level: int) -> dict:
     """Scaled reward for winning a free duel against a creature at `opponent_level`."""
     lvl = max(1, opponent_level)
+    rebase = 50 / 30  # ENERGY_REBASE (defined further down)
     return {
-        "coins": min(DUEL_WIN_COINS_CAP, DUEL_WIN_COINS_BASE + lvl * DUEL_WIN_COINS_PER_OPP_LEVEL),
-        "xp": DUEL_WIN_XP_BASE + lvl * DUEL_WIN_XP_PER_OPP_LEVEL,
-        "dna": int(lvl * DUEL_WIN_DNA_PER_OPP_LEVEL),
+        "coins": round(min(DUEL_WIN_COINS_CAP, DUEL_WIN_COINS_BASE + lvl * DUEL_WIN_COINS_PER_OPP_LEVEL) * rebase),
+        "xp": round((DUEL_WIN_XP_BASE + lvl * DUEL_WIN_XP_PER_OPP_LEVEL) * rebase),
+        "dna": int(lvl * DUEL_WIN_DNA_PER_OPP_LEVEL * rebase),
     }
 
 # only GOLD is transferable between players — DNA and diamonds are not, to keep
@@ -273,7 +274,15 @@ GUARDIAN_SALARY_MIN_DNA = 40
 
 # regenerating stamina pool spent on feed/raid_attack — refills over real time instead
 # of resetting once a day, so there's a reason to come back every couple hours
-MAX_ENERGY = 50
+# ── Energy re-base (Oct 2026): fewer, bigger actions ──
+# The bar went from 50 @ 6 min to 30 @ 10 min: it still fills in 5 hours, but a full bar
+# is 30 taps instead of 50 (the most active players were pressing «شکار» 100–200 times a
+# day). EVERYTHING paid per energy is multiplied by ENERGY_REBASE (= 50/30) so a full bar
+# and a full day pay exactly what they did, and every «do it N times» target is ×0.6.
+# When adding a reward for an action that costs energy, multiply it by ENERGY_REBASE.
+MAX_ENERGY = 30
+MAX_ENERGY_SUBSCRIBER = 60   # any active subscription (was 100 when the base was 50)
+ENERGY_REBASE = 50 / 30
 # Diamond-vein group drops are the only diamond source that scales with how many
 # groups you're in, so they get a stricter-than-normal gate on top of the general
 # drop cooldown: a per-player 1-hour cooldown AND a hard daily cap. Stops players
@@ -282,7 +291,7 @@ DIAMOND_VEIN_COOLDOWN_MINUTES = 60
 DIAMOND_VEIN_DAILY_CAP = 1  # a player may claim at most one diamond vein per day
 JACKPOT_DROP_DAILY_CAP = 3   # a player may claim at most 3 rare jackpots per day across all groups
 JACKPOT_DROP_MAX_COINS = 10000  # hard max cap on rare jackpot reward
-ENERGY_REGEN_MINUTES = 6   # empty -> full in 5 hours
+ENERGY_REGEN_MINUTES = 10  # empty -> full in 5 hours
 ENERGY_REFILL_DIAMOND_COST = 25  # diamonds to instantly refill energy to full
 FEED_ENERGY_COST = 1
 RAID_ATTACK_ENERGY_COST = 1
@@ -311,15 +320,15 @@ MISSION_DEFS = {
     # one won «هم‌سطح» hunt pays THIS player), so a mission is worth the same number of
     # hunts at every stage of the game instead of a flat trickle of gold:
     #   gold_u × unit gold, dna_u × unit DNA, plus the fixed extras.
-    "hunt_5": {"action": "hunt", "target": 5, "label": "شکار (۵ بار)",
+    "hunt_5": {"action": "hunt", "target": 3, "label": "شکار (۳ بار)",
                "gold_u": 1.5, "dna_u": 1.5, "capsule": ("small", 2), "points": 10},
-    "hunt_15": {"action": "hunt", "target": 15, "label": "شکار (۱۵ بار)",
+    "hunt_15": {"action": "hunt", "target": 9, "label": "شکار (۹ بار)",
                 "gold_u": 3.0, "dna_u": 3.0, "speedup": 10, "points": 15},
-    "arena_attack_3": {"action": "arena_attack", "target": 3, "label": "حمله در آرنا (۳ بار)",
+    "arena_attack_3": {"action": "arena_attack", "target": 2, "label": "حمله در آرنا (۲ بار)",
                        "gold_u": 1.5, "dna_u": 1.0, "points": 10},
-    "arena_attack_8": {"action": "arena_attack", "target": 8, "label": "حمله در آرنا (۸ بار)",
+    "arena_attack_8": {"action": "arena_attack", "target": 5, "label": "حمله در آرنا (۵ بار)",
                        "gold_u": 3.0, "dna_u": 2.0, "speedup": 15, "points": 15},
-    "feed_5": {"action": "feed", "target": 5, "label": "تغذیه‌ی هیولا (۵ بار)",
+    "feed_5": {"action": "feed", "target": 3, "label": "تغذیه‌ی هیولا (۳ بار)",
                "gold_u": 1.0, "dna_u": 0.5, "capsule": ("small", 3), "points": 10},
     "collect_3": {"action": "collect", "target": 3, "label": "جمع‌آوری از ساختمان‌ها (۳ بار)",
                   "gold_u": 1.0, "dna_u": 1.0, "points": 10},
@@ -334,17 +343,17 @@ MISSION_DEFS = {
 # The two that need other people (raid = alliance, fusion = spare duplicates) are a
 # small enough share that the top box is reachable without them.
 WEEKLY_MISSION_DEFS = {
-    "w_hunt_70": {"action": "hunt", "target": 70, "label": "شکار (۷۰ بار در هفته)",
+    "w_hunt_70": {"action": "hunt", "target": 42, "label": "شکار (۴۲ بار در هفته)",
                   "gold_u": 10, "dna_u": 10, "diamonds": 10, "points": 40},
-    "w_arena_35": {"action": "arena_attack", "target": 35, "label": "حمله در آرنا (۳۵ بار در هفته)",
+    "w_arena_35": {"action": "arena_attack", "target": 21, "label": "حمله در آرنا (۲۱ بار در هفته)",
                    "gold_u": 10, "dna_u": 6, "diamonds": 10, "points": 40},
     "w_dispatch_10": {"action": "dispatch", "target": 10, "label": "۱۰ مأموریت اعزامی در هفته",
                       "gold_u": 8, "dna_u": 8, "speedup": 60, "points": 30},
     "w_collect_15": {"action": "collect", "target": 15, "label": "جمع‌آوری از ساختمان‌ها (۱۵ بار در هفته)",
                      "gold_u": 5, "dna_u": 5, "points": 20},
-    "w_feed_25": {"action": "feed", "target": 25, "label": "تغذیه‌ی هیولا (۲۵ بار در هفته)",
+    "w_feed_25": {"action": "feed", "target": 15, "label": "تغذیه‌ی هیولا (۱۵ بار در هفته)",
                   "gold_u": 5, "dna_u": 2, "capsule": ("medium", 2), "points": 20},
-    "w_raid_10": {"action": "raid_attack", "target": 10, "label": "ضربه به باس رید (۱۰ بار در هفته)",
+    "w_raid_10": {"action": "raid_attack", "target": 6, "label": "ضربه به باس رید (۶ بار در هفته)",
                   "gold_u": 6, "dna_u": 6, "diamonds": 5, "points": 25},
     "w_fusion_1": {"action": "fusion", "target": 1, "label": "یک ادغام در هفته",
                    "gold_u": 6, "dna_u": 2, "speedup": 60, "points": 15},
@@ -396,8 +405,10 @@ def lab_rename_cost(renames_done: int) -> int:
     return LAB_RENAME_BASE_COST * (max(0, renames_done) + 1)
 
 
-FEED_COST_COINS = 20
-FEED_XP_GAIN = 15
+# Feeding spends ENERGY as well as gold on purpose — with gold alone a rich player could
+# buy a whole level cap in a minute. Re-based with the energy change (was 20 gold → 15 XP).
+FEED_COST_COINS = 33
+FEED_XP_GAIN = 25
 
 TRAIN_COOLDOWN_HOURS = 4
 TRAIN_XP_GAIN = 40
@@ -1415,11 +1426,17 @@ ARENA_ATTACK_ENERGY_COST = 1
 ARENA_LOOT_CAP_BASE = 22
 ARENA_LOOT_CAP_PER_LEVEL = 4
 
-ARENA_CUP_WIN_BASE = 22
-ARENA_CUP_LOSS_BASE = 14
-ARENA_CUP_MIN_DELTA = 3  # never award/deduct less than this, so every fight moves the needle
-ARENA_CUP_MAX_DELTA = 70  # wider so a big rating gap really swings the cup
-ARENA_CUP_GAP_DIVISOR = 5  # +1 cup per this many points of rating gap (was 8 — steeper now)
+# The swing used to be WIN 22 + gap/5 clamped to [3, 70] and LOSS 14 − gap/5 clamped the
+# same way, so most cards read «+70 / −3»: a jackpot for a win and nothing for a loss.
+# Now the gap matters half as much, a win is worth 5…40 and a loss costs 6…30 — an even
+# match is about +20 / −12 and the extremes are +40 / −6 (underdog) and +5 / −30 (bully).
+ARENA_CUP_WIN_BASE = 20
+ARENA_CUP_LOSS_BASE = 12
+ARENA_CUP_MIN_DELTA = 5   # smallest win
+ARENA_CUP_MAX_DELTA = 40  # biggest win
+ARENA_CUP_LOSS_MIN = 6    # smallest loss
+ARENA_CUP_LOSS_MAX = 30   # biggest loss
+ARENA_CUP_GAP_DIVISOR = 10  # 1 cup per this many points of rating gap
 
 # Arena/PvP wins now also pay a little DNA, scaled by the attacker's level.
 ARENA_WIN_DNA_BASE = 2
@@ -1437,10 +1454,11 @@ RAID_HIT_DNA = 1           # legacy flat drip (kept for back-compat); see raid_h
 # (a mid-tier kaiju landing ~375 still gets half). Weak bosses stay low-reward because a
 # one-shot only lands their small HP once, then the boss is dead.
 RAID_REWARD_MAX_DAMAGE = 750
-RAID_HIT_DNA_MAX = 500
-RAID_HIT_DNA_MIN = 10
-RAID_HIT_COIN_MAX = 10_000
-RAID_HIT_COIN_MIN = 200
+# ×ENERGY_REBASE (were 500 / 10 / 10,000 / 200 when a bar was 50 hits)
+RAID_HIT_DNA_MAX = 833
+RAID_HIT_DNA_MIN = 17
+RAID_HIT_COIN_MAX = 16_667
+RAID_HIT_COIN_MIN = 333
 
 
 def raid_hit_dna(damage: int) -> int:
@@ -1554,8 +1572,10 @@ def arena_fake_loot(cup: int) -> int:
 # reward is roughly a twentieth of the gold (with a little jitter so it isn't a
 # tell-tale exact ratio). Applies to both real-player and bot arena wins.
 ARENA_LOOT_CUP_REF = 4000
-ARENA_LOOT_GOLD_AT_ZERO = (500, 1000)
-ARENA_LOOT_GOLD_AT_REF = (5000, 15000)
+# ×ENERGY_REBASE (were 500–1000 and 5000–15000 when a bar was 50 attacks). Loot taken
+# from a REAL defender is still 10% of what they hold — that is their gold, not minted.
+ARENA_LOOT_GOLD_AT_ZERO = (833, 1667)
+ARENA_LOOT_GOLD_AT_REF = (8333, 25000)
 # a flat multiplier on ALL arena win loot (every cup, both ends of the band and the
 # cap), applied on top of the cup-scaled range — per owner request (+10%)
 ARENA_LOOT_BONUS = 1.10
@@ -1598,6 +1618,10 @@ LEAGUES = [
     {"min_cup": 4300, "key": "legend",    "emoji": "🏵", "name": "اسطوره",    "coins": 850,  "dna": 45},
     {"min_cup": 4750, "key": "champion",  "emoji": "👑", "name": "قهرمان",    "coins": 1000, "dna": 50},
 ]
+# the flat per-WIN league bonus is paid per attack → ×ENERGY_REBASE
+for _lg in LEAGUES:
+    _lg["coins"] = round(_lg["coins"] * ENERGY_REBASE)
+    _lg["dna"] = round(_lg["dna"] * ENERGY_REBASE)
 
 
 def league_for_cup(cup: int) -> dict:

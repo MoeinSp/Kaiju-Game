@@ -72,11 +72,12 @@ LAB_MAX_LEVEL = 50
 # finished building upgrade is worth a lot because it represents hours of real
 # time rather than one tap.
 LAB_XP_AWARDS = {
-    "hunt_win": 6,
-    "hunt_loss": 2,
-    "arena_win": 12,
-    "arena_loss": 4,
-    "duel_win": 15,
+    # the five below are paid per energy spent → ×ENERGY_REBASE (were 6 / 2 / 12 / 4 / 15)
+    "hunt_win": 10,
+    "hunt_loss": 3,
+    "arena_win": 20,
+    "arena_loss": 7,
+    "duel_win": 25,
     "fusion": 40,
     "breeding": 35,
     "mission": 30,

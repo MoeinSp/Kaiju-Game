@@ -24,14 +24,14 @@ SUBSCRIPTION_TIERS = {
         "name": "اشتراک نقره‌ای",
         "badge": "🥈",
         "price_toman": 100_000,
-        "energy_cap": 100,
+        "energy_cap": 60,
         "cave_limit": 1,
         "auto_hunt_bonus": 0.25,
         "queue_chest": True,
         "duration_days": 30,
         "perks": [
             "🥈 نشان اختصاصی پرمیوم در کنار نام",
-            "⚡ سقف انرژی ۱۰۰ (به جای ۵۰)",
+            "⚡ سقف انرژی ۶۰ (به جای ۳۰)",
             "⚡ ۲۵٪ سرعت شارژ سریع‌تر انرژی",
             "📋 امکان در صف گذاشتن یک جعبه آرنا (مانند کلش رویال)",
             "🎯 افزایش ۲۵ درصدی درآمد شکار خودکار",
@@ -42,14 +42,14 @@ SUBSCRIPTION_TIERS = {
         "name": "اشتراک طلایی",
         "badge": "👑",
         "price_toman": 500_000,
-        "energy_cap": 100,
+        "energy_cap": 60,
         "cave_limit": 2,
         "auto_hunt_bonus": 0.50,
         "queue_chest": True,
         "duration_days": 30,
         "perks": [
             "👑 نشان اختصاصی پرمیوم طلایی در کنار نام",
-            "⚡ سقف انرژی ۱۰۰ (به جای ۵۰)",
+            "⚡ سقف انرژی ۶۰ (به جای ۳۰)",
             "⚡ ۵۰٪ سرعت شارژ سریع‌تر انرژی",
             "🕳 افزایش ظرفیت همزمانی غار هیولا به ۲ جفت",
             "📋 امکان در صف گذاشتن یک جعبه آرنا (مانند کلش رویال)",
@@ -107,7 +107,7 @@ def get_subscription_info(user: User) -> dict:
         "until": until,
         "days_left": days_left,
         "hours_left": hours_left,
-        "energy_cap": cfg["energy_cap"] if cfg else 50,
+        "energy_cap": cfg["energy_cap"] if cfg else 30,
         "cave_limit": cfg["cave_limit"] if cfg else 1,
         "auto_hunt_bonus": cfg["auto_hunt_bonus"] if cfg else 0.0,
         "can_queue_chest": cfg["queue_chest"] if cfg else False,
@@ -146,8 +146,8 @@ def activate_subscription(user: User, tier: str, days: int = 30) -> User:
         user.subscription_until = now + datetime.timedelta(days=days)
 
     # Bump energy if needed
-    if user.energy < 100:
-        user.energy = max(user.energy, 100)
+    if user.energy < 60:
+        user.energy = max(user.energy, 60)
 
     user.save(update_fields=["subscription_tier", "subscription_until", "energy"])
     return user

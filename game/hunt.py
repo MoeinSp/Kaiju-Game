@@ -39,15 +39,16 @@ HUNT_DNA_PER_POWER = 0.012
 # a flat multiplier on ALL hunt loot (gold and DNA), applied on top of the ranges below
 # (and after the gold cap) so it lifts the preview, the payout AND the cap together.
 # Two +10% bumps per owner request → 1.10 × 1.10 = 1.21 (+21% over the base curve).
-HUNT_LOOT_BONUS = 1.21
+# … × constants.ENERGY_REBASE: a bar is 30 hunts instead of 50, each pays 50/30 as much.
+HUNT_LOOT_BONUS = 1.21 * constants.ENERGY_REBASE
 # Ceiling on hunt GOLD: the best possible hunt for a FULLY-maxed kaiju tops out at
 # HUNT_MAX_COIN gold, scaled down proportionally for weaker kaiju. This ONLY lowers the
 # top of the range — the minimum (weak-tier / unlucky roll) is never raised or lowered.
 # Anchored to the game-wide MAX_KAIJU_POWER so "max kaiju → max hunt loot" always holds.
-HUNT_MAX_COIN = 4000
+HUNT_MAX_COIN = 4000  # before HUNT_LOOT_BONUS (which now carries the energy re-base)
 HUNT_POWER_FOR_MAX_COIN = constants.MAX_KAIJU_POWER
-HUNT_XP_WIN = 25
-HUNT_XP_LOSE = 8
+HUNT_XP_WIN = 42   # ×ENERGY_REBASE (were 25 / 8)
+HUNT_XP_LOSE = 13
 # «بعدی» (searching for a better target) costs a little gold, scaled by power, so
 # hunting a good loot is a small deliberate spend rather than free infinite rerolls.
 # Halved from 0.012/5 — searching for a hunt should be cheap (arena keeps its own).
@@ -508,7 +509,7 @@ def resolve_encounter_action(user: User, player_creature: Creature, enc_type: st
 
     elif enc_type == "spring":
         if action == "drink":
-            energy_gain = 20
+            energy_gain = 12  # ×0.6 with the 30-point bar (was 20 of 50)
             xp_gain = max(50, round(power * 0.08))
             from game.energy import get_max_energy, sync_energy
             sync_energy(user)

@@ -403,6 +403,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 btn("هدیه به همه", emoji_key="btn_gift", style=ADMIN, callback_data="admin_menu:gift_all"),
                 btn("ارسال همگانی", emoji_key="btn_broadcast", style=ADMIN, callback_data="admin_menu:broadcast_start"),
             ],
+            [btn("شارژ همگانی خودکار", emoji_key="btn_gift", style=ADMIN, callback_data="admin_menu:autogift")],
             [btn("حذف موجود", emoji_key="btn_delete", style=DANGER, callback_data="admin_menu:del_creature_start")],
             [
                 btn(f"ایموجی متن‌ها ({txt_set}/{txt_tot})", emoji_key="btn_settings", style=ADMIN, callback_data="admin_menu:set_emoji_start"),
@@ -3457,6 +3458,72 @@ async def user_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await query.answer("نمایش این کاربر با خطا خورد — لاگ رو چک کن.", show_alert=True)
 
 
+def _autogift_view() -> tuple[str, InlineKeyboardMarkup]:
+    from django.utils import timezone
+
+    from game import autogift
+
+    cfg = autogift.get()
+    nxt = autogift.next_run_at(cfg)
+    lines = [
+        f"{get_emoji('gift')} <b>شارژ همگانی خودکار</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "<blockquote>هر چند روز یک‌بار، به <b>همه‌ی کاربران</b> خودکار طلا و DNA داده می‌شه و به بازیکن‌های "
+        "فعالِ ۷ روز اخیر یه پیام کوتاه می‌ره.</blockquote>",
+        f"وضعیت: <b>{'روشن ✅' if cfg.enabled else 'خاموش ❌'}</b>",
+        f"⏱ هر <b>{cfg.interval_days}</b> روز",
+        f"{get_emoji('coin')} طلا: <code>{cfg.coins:,}</code> · {get_emoji('dna')} DNA: <code>{cfg.dna:,}</code>"
+        + (f" · {get_emoji('diamond')} الماس: <code>{cfg.diamonds:,}</code>" if cfg.diamonds else ""),
+    ]
+    if cfg.last_at:
+        lines.append(f"📅 آخرین شارژ: <code>{timezone.localtime(cfg.last_at):%Y-%m-%d %H:%M}</code> (تا حالا {cfg.runs} بار)")
+    if cfg.enabled and nxt:
+        lines.append(f"⏭ شارژ بعدی: <code>{timezone.localtime(nxt):%Y-%m-%d %H:%M}</code>")
+    kb = InlineKeyboardMarkup([
+        [btn("خاموش کن" if cfg.enabled else "روشن کن", style=DANGER if cfg.enabled else ADMIN,
+             callback_data="admin_menu:autogift_toggle")],
+        [btn("تنظیم مقدار و فاصله", emoji_key="btn_settings", style=ADMIN, callback_data="admin_menu:autogift_set")],
+        [back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")],
+    ])
+    return "\n".join(lines), kb
+
+
+async def autogift_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update):
+        return
+    text, kb = await run_db(_autogift_view)
+    if update.callback_query:
+        await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=kb)
+    else:
+        await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=kb)
+
+
+async def autogift_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update):
+        return
+    from game import autogift
+
+    try:
+        await run_db(autogift.toggle)
+    except GameError as exc:
+        await update.effective_message.reply_text(alert_text(exc, 3500))
+        return
+    await autogift_panel(update, context)
+
+
+async def autogift_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update):
+        return
+    context.user_data[AWAITING_ADMIN_KEY] = {"action": "autogift_set"}
+    await update.effective_message.reply_text(
+        f"{get_emoji('gift')} <b>تنظیم شارژ خودکار</b>\n"
+        "با فاصله بفرست: <code>روز طلا DNA [الماس]</code>\n"
+        "مثلاً <code>4 5000 200</code> یعنی هر ۴ روز، ۵٬۰۰۰ طلا و ۲۰۰ DNA به همه.\n"
+        "<i>اولین شارژ به اندازه‌ی همین فاصله بعد از الان انجام می‌شه.</i>",
+        parse_mode="HTML",
+    )
+
+
 async def gift_all_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data[AWAITING_ADMIN_KEY] = {"action": "gift_all"}
     await update.effective_message.reply_text(
@@ -4903,6 +4970,28 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
+    if action == "autogift_set":
+        from game import autogift
+
+        parts = text.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789")).replace(",", "").split()
+        if len(parts) not in (3, 4) or not all(p.isdigit() for p in parts):
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text(
+                f"{get_emoji('warning')} این‌طوری بفرست: <code>روز طلا DNA [الماس]</code> — مثلاً <code>4 5000 200</code>",
+                parse_mode="HTML")
+            return
+        days, coins, dna = int(parts[0]), int(parts[1]), int(parts[2])
+        diamonds = int(parts[3]) if len(parts) == 4 else 0
+        try:
+            await run_db(autogift.configure, days, coins, dna, diamonds)
+        except GameError as exc:
+            context.user_data[AWAITING_ADMIN_KEY] = awaiting
+            await message.reply_text(alert_text(exc, 3500))
+            return
+        text_, kb = await run_db(_autogift_view)
+        await message.reply_text("✅ ذخیره و روشن شد.\n\n" + text_, parse_mode="HTML", reply_markup=kb)
+        return
+
     if action == "gift_all":
         parts = text.split()
         if len(parts) != 3 or not all(p.lstrip("-").isdigit() for p in parts):
@@ -5839,6 +5928,9 @@ _ADMIN_MENU_ACTIONS.update(
         "buy_channel_set": buy_channel_set_start,
         "users": users_browse_callback,
         "gift_all": gift_all_start,
+        "autogift": autogift_panel,
+        "autogift_toggle": autogift_toggle,
+        "autogift_set": autogift_set_start,
         "global_stats": global_stats_cmd,
         "admin_manage": admin_manage_panel,
         "admin_add": admin_add_start,

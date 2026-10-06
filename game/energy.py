@@ -13,10 +13,10 @@ class EnergyError(GameError):
 
 
 def get_max_energy(user: User) -> int:
-    """Subscribed users (Silver / Gold) have a 100 energy cap; default is MAX_ENERGY (50)."""
+    """Subscribers get MAX_ENERGY_SUBSCRIBER; everyone else MAX_ENERGY."""
     from game.subscription import is_subscription_active
 
-    return 100 if is_subscription_active(user) else constants.MAX_ENERGY
+    return constants.MAX_ENERGY_SUBSCRIBER if is_subscription_active(user) else constants.MAX_ENERGY
 
 
 def get_energy_regen_interval_seconds(user: User) -> float:

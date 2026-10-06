@@ -213,7 +213,7 @@ def cup_delta(attacker: User, defender_cup: int, won: bool, attacker_power: int)
     # the further you sit ABOVE the softcap, the harder you fall — this pulls the top
     # of the ladder back toward the pack so competition stays close.
     raw *= 1 + max(0, attacker.cup - softcap) / softcap
-    delta = max(constants.ARENA_CUP_MIN_DELTA, min(constants.ARENA_CUP_MAX_DELTA, round(raw)))
+    delta = max(constants.ARENA_CUP_LOSS_MIN, min(constants.ARENA_CUP_LOSS_MAX, round(raw)))
     return -delta
 
 

@@ -562,6 +562,19 @@ class FestivalState(models.Model):
     last_settled_key = models.CharField(max_length=16, default="", blank=True)
 
 
+class AutoGift(models.Model):
+    """Singleton (id=1): the admin's «شارژ همگانی خودکار» — every `interval_days` days
+    every player gets this much gold / DNA / diamonds (game/autogift.py)."""
+
+    enabled = models.BooleanField(default=False)
+    interval_days = models.PositiveIntegerField(default=4)
+    coins = models.BigIntegerField(default=0)
+    dna = models.BigIntegerField(default=0)
+    diamonds = models.IntegerField(default=0)
+    last_at = models.DateTimeField(null=True, blank=True)   # when it last paid out
+    runs = models.IntegerField(default=0)
+
+
 class ActivityHour(models.Model):
     """One row per (player, day, hour) in which the player did anything (game/metrics.py)
     — what lets the admin stats compare «today at 15:00» with «yesterday at 15:00».

@@ -107,16 +107,16 @@ PROGRAMME: tuple[dict, ...] = (
     {"key": "treasure", "emoji": "💎", "title": "شب گنجینه", "lots": (
         ("💎 محموله ۵۰۰ تایی الماس خالص", "diamonds", {"amount": 500}, "coins", 50_000),
         ("🎫 بسته ۱۰ عددی بلیط باکس ژنتیکی", "tickets", {"amount": 10}, "coins", 30_000),
-        ("👑 🦖 کایجوی افسانه‌ای ۳ ستاره", "creature", {"rarity": "legendary", "star": 3, "level": 1}, "diamonds", 200),
+        ("👑 🦖 کایجوی تصادفی افسانه‌ای ۳ ستاره", "creature", {"rarity": "legendary", "star": 3, "level": 1}, "diamonds", 200),
     )},
     {"key": "genetics", "emoji": "🧬", "title": "شب ژنتیک", "lots": (
-        ("🥚 تخم کایجوی اساطیری", "egg", {"rarity": "mythic", "minutes": 60}, "diamonds", 300),
+        ("🥚 تخم کایجوی تصادفی اساطیری", "egg", {"rarity": "mythic", "minutes": 60}, "diamonds", 300),
         ("🧬 محموله ۲۰٬۰۰۰ تایی DNA", "dna", {"amount": 20_000}, "coins", 40_000),
         ("👑 جعبه‌ی امگا", "arena_chest", {"tier": "mega", "count": 1}, "coins", 60_000),
     )},
     {"key": "armory", "emoji": "⚔️", "title": "شب جنگ‌افزار", "lots": (
-        ("⚔️ تجهیزات اساطیری (شانسی)", "equip_roll", {"rarity": "mythic", "count": 1}, "diamonds", 150),
-        ("🛡 ۲ تجهیزات افسانه‌ای (شانسی)", "equip_roll", {"rarity": "legendary", "count": 2}, "coins", 80_000),
+        ("⚔️ تجهیزات تصادفی اساطیری", "equip_roll", {"rarity": "mythic", "count": 1}, "diamonds", 150),
+        ("🛡 ۲ تجهیزات تصادفی افسانه‌ای", "equip_roll", {"rarity": "legendary", "count": 2}, "coins", 80_000),
         ("🎫 بسته ۲۰ عددی بلیط باکس ژنتیکی", "tickets", {"amount": 20}, "coins", 60_000),
     )},
     {"key": "speed", "emoji": "⏩", "title": "شب سرعت", "lots": (
@@ -125,7 +125,7 @@ PROGRAMME: tuple[dict, ...] = (
         ("💎 محموله ۳۰۰ تایی الماس", "diamonds", {"amount": 300}, "coins", 30_000),
     )},
     {"key": "grand", "emoji": "👑", "title": "شب بزرگ", "lots": (
-        ("👑 🦖 کایجوی اساطیری ۲ ستاره", "creature", {"rarity": "mythic", "star": 2, "level": 1}, "diamonds", 500),
+        ("👑 🦖 کایجوی تصادفی اساطیری ۲ ستاره", "creature", {"rarity": "mythic", "star": 2, "level": 1}, "diamonds", 500),
         ("💎 محموله ۱٬۰۰۰ تایی الماس خالص", "diamonds", {"amount": 1000}, "coins", 100_000),
         ("💰 صندوق ۱٬۰۰۰٬۰۰۰ طلا", "coins", {"amount": 1_000_000}, "diamonds", 100),
         ("🔮 ۲ جعبه‌ی جادویی", "arena_chest", {"tier": "magical", "count": 2}, "coins", 40_000),

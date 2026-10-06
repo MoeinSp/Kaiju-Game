@@ -252,7 +252,7 @@ NOTIFY_CATEGORIES = {
 _MARKER_CATEGORY = {
     "timer": "timers", "arena": "timers", "arena_chest_ready": "timers",
     "worldboss": "events", "tournament": "events", "festival": "events", "events": "events",
-    "free_box_reminder": "reminders", "missions": "reminders", "nudge": "reminders",
+    "free_box_reminder": "reminders", "missions": "reminders", "nudge": "reminders", "gift": "reminders",
 }
 # Broadcast-type DMs (events + reminders) a player gets per day at most. Timers and attack
 # reports answer something the player did, so they are never capped — only merged.
@@ -304,7 +304,7 @@ def _decorate(item) -> dict:
     elif marker in ("missions", "events"):
         label, key = ("مأموریت‌ها", "btn_missions") if marker == "missions" else ("رویداد این هفته", "btn_events")
         reply_markup = InlineKeyboardMarkup([[btn(label, emoji_key=key, style=NAV, callback_data=f"menu:{marker}")]])
-    elif marker in ("timer", "nudge"):
+    elif marker in ("timer", "nudge", "gift"):
         reply_markup = InlineKeyboardMarkup(
             [[btn("امروز", emoji_key="btn_today", style=NAV, callback_data="menu:today")]]
         )
