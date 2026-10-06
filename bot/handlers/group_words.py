@@ -610,7 +610,7 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
             status_text = (
                 f"{badge} <b>{sub_name}</b> برای شما فعال است\n"
                 f"⏳ زمان باقی‌مانده: <code>{days_left}</code> روز و <code>{hours_left}</code> ساعت\n\n"
-                f"<blockquote>💡 سقف انرژی شما ۱۰۰ است. شارژ کامل با الماس:</blockquote>"
+                f"<blockquote>💡 سقف انرژی شما ۶۰ است. شارژ کامل با الماس:</blockquote>"
             )
             rows.append([
                 btn(
@@ -624,7 +624,7 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
             status_text = (
                 f"<blockquote>"
                 f"👑 <b>مزایای اشتراک نقره‌ای:</b>\n"
-                f"⚡️ سقف انرژی ۲ برابر (۱۰۰ به جای ۵۰)\n"
+                f"⚡️ سقف انرژی ۲ برابر (۶۰ به جای ۳۰)\n"
                 f"📋 باز شدن خودکار جعبه‌های آرنا\n"
                 f"🏹 +۲۵٪ غنیمت شکار خودکار\n"
                 f"🥈 نشان پرمیوم نقره‌ای\n"
@@ -659,44 +659,42 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
             f"{get_emoji('hunt')} حریفی پیدا نشد — دوباره امتحان کن.",
             group_footer_keyboard(user.id),
         )
-    from bot.handlers.private import (element_advantage_line, pct_bar, win_chance_pct, win_label)
+    from bot.handlers.private import element_advantage_line
 
     coin_reward = target["reward"]
     dna_reward = target.get("dna_reward", 0)
     my_power = target.get("my_power", 0)
-    pct = win_chance_pct(my_power, target["power"], target.get("my_element"), target["element"])
     adv = element_advantage_line(target.get("my_element"), target["element"])
-    text = "\n".join([
-        f"{get_emoji('hunt')} <b>حریف آماده نبرد است!</b>",
-        "",
-        "<blockquote>",
-        f"🏰 حریف وحشی: <b>{target['name']}</b>",
-        f"🏷 رده حریف: <i>{target['tier_label']}</i>",
-        f"🎯 عنصر حریف: <b>{constants.element_label(target['element'])}</b>",
-        f"💀 قدرت حریف: <code>{target['power']:,}</code>",
-        "",
-        f"🦅 قدرت شما: <code>{my_power:,}</code>",
-        (f"🔮 مزیت عنصری: {adv}" if adv else ""),
-        "</blockquote>",
-        "",
+    # mirrors the DM hunt card line for line: you → opponent → element → reward → cost
+    lines = [
+        f"{get_emoji('hunt')} <b>شکار · حریف پیدا شد</b>",
         div,
-        "🎁 <b>جوایز برد:</b>",
-        f"{get_emoji('coin')} طلا: <code>+{coin_reward:,}</code>",
-        f"{get_emoji('dna')} دی‌ان‌ای: <code>+{dna_reward:,}</code>",
+        f"💪 قدرت شما: <code>{my_power:,}</code>",
+        f"🏰 حریف: <b>{target['name']}</b> <i>({target['tier_label']})</i>",
+        f"🎯 عنصر حریف: {constants.element_label(target['element'])}",
+        f"⚔️ قدرت حریف: <code>{target['power']:,}</code>",
+    ]
+    if adv:
+        lines.append(adv)
+    lines += [
         div,
-        f"{get_emoji('energy')} هزینه نبرد: <code>1</code> انرژی (موجودی: <code>{energy}</code>/<code>{max_energy}</code>)",
-        f"🔍 هزینه حریف بعدی: <code>{target.get('scout_cost', 0):,}</code> طلا",
-    ])
+        f"🎁 جایزه برد: {get_emoji('coin')} <code>+{coin_reward:,}</code> · {get_emoji('dna')} <code>+{dna_reward:,}</code>",
+        f"{get_emoji('energy')} هزینه حمله: <code>{constants.HUNT_ENERGY_COST}</code> انرژی "
+        f"(داری <code>{energy}</code>/<code>{max_energy}</code>)",
+        f"🔍 حریف بعدی: <code>{target.get('scout_cost', 0):,}</code> طلا",
+    ]
     rows = [
         [
             btn("حمله", emoji_key="btn_attack", style=BATTLE,
                 callback_data=_act("hunt_go", user.id, f"{target['tier']}:{target['seed']}")),
             btn("حریف بعدی", emoji_key="btn_scout_next", style=NAV, callback_data=_act("hunt_next", user.id)),
         ],
-        [btn(f"شکار خودکار ({energy}⚡)", emoji_key="btn_autohunt", style=BATTLE,
+        # no confirm step in the group: one tap spends ALL energy, so the label says so
+        # (the exact amount is on the cost line above)
+        [btn("شکار خودکار (همه انرژی)", emoji_key="btn_autohunt", style=BATTLE,
              callback_data=_act("autohunt", user.id))],
     ]
-    return text, InlineKeyboardMarkup(rows)
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 def _arena_card(user, opponent, loot, shielded_for, data=None) -> tuple[str, InlineKeyboardMarkup]:
@@ -706,7 +704,7 @@ def _arena_card(user, opponent, loot, shielded_for, data=None) -> tuple[str, Inl
             f"{get_emoji('trophy')} <b>آرنا</b> — کاپ تو: <code>{user.cup:,}</code>\n\nحریفی پیدا نشد، بعداً دوباره امتحان کن.",
             group_footer_keyboard(user.id),
         )
-    from bot.handlers.private import (element_advantage_line, pct_bar, win_chance_pct, win_label)
+    from bot.handlers.private import element_advantage_line
     from game import arena as _arena
     from game.energy import get_max_energy
 
@@ -716,49 +714,37 @@ def _arena_card(user, opponent, loot, shielded_for, data=None) -> tuple[str, Inl
     my_element = data.get("my_element")
     dna_win = data.get("dna_win", 0)
     opp_element = opponent.get("element")
-    pct = win_chance_pct(my_power, opponent["power"], my_element, opp_element)
     adv = element_advantage_line(my_element, opp_element)
     win_cup = _arena.cup_delta(user, opponent["cup"], True, my_power)
     loss_cup = _arena.cup_delta(user, opponent["cup"], False, my_power)
     my_tag = f" [{constants.element_label(my_element)}]" if my_element else ""
     opp_tag = f" [{constants.element_label(opp_element)}]" if opp_element else ""
     div = "━━━━━━━━━━━━━━━━━━━━"
+    trophy = get_emoji("trophy")
+    # mirrors the DM arena opponent card: you → opponent → element → reward → cost
     lines = [
-        f"{get_emoji('battle')} <b>حریف پیدا شد!</b>",
-        "",
-        "<blockquote>",
-        f"🦅 موجود شما: <b>{data.get('my_name', '—')}</b>{my_tag}",
-        f"💪 قدرت شما: <code>{my_power:,}</code>",
-        f"🏆 کاپ شما: <code>{user.cup:,}</code>",
-        f"{get_emoji('energy')} انرژی: {pct_bar(energy, max_energy)} (<code>{energy}</code>/<code>{max_energy}</code>)",
-        "",
+        f"{get_emoji('battle')} <b>آرنا · حریف پیدا شد</b>",
         div,
-        "",
+        f"🦅 موجود شما: <b>{data.get('my_name', '—')}</b>{my_tag}",
+        f"💪 قدرت شما: <code>{my_power:,}</code> · {trophy} کاپ <code>{user.cup:,}</code>",
         f"👤 حریف: <b>{opponent['label']}</b>",
         f"👹 موجود حریف: <b>{opponent.get('creature_name', '؟')}</b>{opp_tag}",
-        f"💀 قدرت حریف: <code>{opponent['power']:,}</code>",
-        f"🏆 کاپ حریف: <code>{opponent['cup']:,}</code>",
-        "",
-        div,
+        f"💀 قدرت حریف: <code>{opponent['power']:,}</code> · {trophy} کاپ <code>{opponent['cup']:,}</code>",
     ]
     if adv:
-        lines.append(f"🔮 مزیت عنصری: {adv}")
-    lines.append("</blockquote>")
+        lines.append(adv)
     lines += [
-        "",
         div,
-        "🎁 <b>جوایز تخمینی برد:</b>",
-        f"{get_emoji('coin')} طلا: <code>~+{loot:,}</code>",
-        f"{get_emoji('dna')} دی‌ان‌ای: <code>+{dna_win:,}</code>",
-        div,
-        f"{get_emoji('trophy')} تغییر کاپ برد: <code>+{win_cup}</code>",
-        f"💔 تغییر کاپ باخت: <code>{loss_cup}</code>",
+        f"🎁 جایزه برد: {get_emoji('coin')} <code>~+{loot:,}</code> · {get_emoji('dna')} <code>+{dna_win:,}</code>",
+        f"{trophy} کاپ: برد <code>+{win_cup}</code> | باخت <code>{loss_cup}</code>",
+        f"{get_emoji('energy')} هزینه حمله: <code>{constants.ARENA_ATTACK_ENERGY_COST}</code> انرژی "
+        f"(داری <code>{energy}</code>/<code>{max_energy}</code>)",
     ]
     if shielded_for:
         lines.append(f"🛡 <i>سپر آرنا داری (<code>{shielded_for // 3600}</code> ساعت) — با حمله می‌پره.</i>")
     rows = [
         [
-            btn(f"حمله (-{constants.ARENA_ATTACK_ENERGY_COST}⚡)", emoji_key="btn_attack", style=BATTLE, callback_data=_act("arena_go", user.id)),
+            btn("حمله", emoji_key="btn_attack", style=BATTLE, callback_data=_act("arena_go", user.id)),
             btn("حریف بعدی", emoji_key="btn_recheck", style=NAV, callback_data=_act("arena_find", user.id)),
         ],
         [_pm_button()],
@@ -2036,14 +2022,12 @@ def _action_note(payload: dict) -> str:
     elif kind == "autohunt":
         r = payload["result"]
         note_lines = [
-            "⚡️ <b>شکار خودکار با موفقیت انجام شد!</b>",
+            "⚡️ <b>نتیجه شکار خودکار</b>",
             div,
-            f"📊 خلاصه عملکرد: <code>{r['wins']}</code>/<code>{r['hunts']}</code> برد 📈",
-            div,
-            "💰 <b>مجموع غارت دریافتی (لوت):</b>",
+            f"🗡 برد: <code>{r['wins']}</code> از <code>{r['hunts']}</code> نبرد",
             f"{get_emoji('coin')} طلا: <code>+{r['coins']:,}</code>",
             f"{get_emoji('dna')} دی‌ان‌ای: <code>+{r['dna']:,}</code>",
-            f"📈 تجربه: <code>+{r['xp']:,}</code> XP",
+            f"✨ تجربه: <code>+{r['xp']:,}</code> XP",
         ]
         if r.get("sub_bonus_pct"):
             sub_title = f"اشتراک {r.get('sub_name') or 'ویژه'}"
@@ -2071,26 +2055,25 @@ def _action_note(payload: dict) -> str:
         note = f"🧩 <b>{label} → سطح <code>{payload['new_level']}</code></b> (−<code>{payload['cost']:,}</code> {get_emoji('coin')})"
     elif kind == "hunt":
         r = payload["result"]
+        # one-line banners: the next opponent's card follows right below, so a tall
+        # result block would push the card (and its buttons) down on every tap
         if r["won"]:
-            note = (f"{get_emoji('celebrate')} <b>بردی!</b>\n"
-                    f"{get_emoji('coin')} طلا: <code>+{r['coins']:,}</code>\n"
-                    f"{get_emoji('dna')} دی‌ان‌ای: <code>+{r['dna']:,}</code>")
+            note = (f"{get_emoji('celebrate')} <b>بردی!</b> "
+                    f"{get_emoji('coin')} <code>+{r['coins']:,}</code> · {get_emoji('dna')} <code>+{r['dna']:,}</code>")
         else:
             note = "💀 <b>باختی!</b> دفعه‌ی بعد قوی‌تر برگرد."
     elif kind == "arena":
         r = payload["result"]
         arrow = "▲" if r["cup_delta"] >= 0 else "▼"
         if r["won"]:
-            note = (f"{get_emoji('celebrate')} <b>غارت موفق!</b>\n"
-                    f"{get_emoji('coin')} طلا: <code>+{r['loot']:,}</code>\n"
-                    f"{get_emoji('dna')} دی‌ان‌ای: <code>+{r.get('dna', 0):,}</code>")
+            note = (f"{get_emoji('celebrate')} <b>غارت موفق!</b> "
+                    f"{get_emoji('coin')} <code>+{r['loot']:,}</code> · {get_emoji('dna')} <code>+{r.get('dna', 0):,}</code>")
             if r.get("league_coins"):
-                note += (f"\n{r.get('league_emoji', '🏅')} پاداش لیگ:\n"
-                         f"  ▫️ طلا: <code>+{r['league_coins']:,}</code>\n"
-                         f"  ▫️ دی‌ان‌ای: <code>+{r['league_dna']:,}</code>")
+                note += (f"\n{r.get('league_emoji', '🏅')} پاداش لیگ: "
+                         f"{get_emoji('coin')} <code>+{r['league_coins']:,}</code> · {get_emoji('dna')} <code>+{r['league_dna']:,}</code>")
         else:
             note = "🛡 <b>حمله دفع شد!</b>"
-        note += f"\n{arrow} تغییر کاپ: <code>{abs(r['cup_delta'])}</code> 🏆 (کاپ فعلی: <code>{r['new_cup']:,}</code>)"
+        note += f"\n{get_emoji('trophy')} کاپ: {arrow} <code>{abs(r['cup_delta'])}</code> (الان <code>{r['new_cup']:,}</code>)"
     elif kind == "collect":
         parts = [f"▫️ {get_emoji(_RESOURCE_EMOJI[res])}: <code>+{amount:,}</code>" for res, amount in payload["collected"].items()]
         note = f"{get_emoji('coin')} <b>جمع‌آوری شد!</b>\n" + "\n".join(parts)

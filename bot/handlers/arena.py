@@ -97,86 +97,82 @@ def _arena_home_sync(tg_user):
 def _arena_home_text(user, power, shield_secs, history, week, season_secs, revenges, chests=None) -> str:
     lines = [
         f"{get_emoji('trophy')} <b>آرنا</b>",
-        f"🗓 فصل <code>{week}</code> — <b>{_format_remaining(season_secs)}</b> تا پایان",
+        f"🗓 فصل <code>{week}</code> — <b>{_format_remaining(season_secs)}</b> تا ریست کاپ‌ها",
         _ARENA_DIV,
         f"{get_emoji('trophy')} کاپ شما: <code>{user.cup:,}</code>",
         f"{get_emoji('power')} قدرت شما: <code>{power:,}</code>",
     ]
     _lg = constants.league_for_cup(user.cup)
     _nx = constants.next_league(user.cup)
-    lines.append(f"{_lg['emoji']} لیگ: <b>{_lg['name']}</b>")
-    lines.append(f"{get_emoji('coin')} پاداش طلا هر برد: <code>+{_lg['coins']:,}</code>")
-    lines.append(f"{get_emoji('dna')} پاداش DNA هر برد: <code>+{_lg['dna']:,}</code>")
+    lines.append(
+        f"{_lg['emoji']} لیگ <b>{_lg['name']}</b> — هر برد: "
+        f"{get_emoji('coin')} <code>+{_lg['coins']:,}</code> · {get_emoji('dna')} <code>+{_lg['dna']:,}</code>"
+    )
     if _nx:
         lines.append(f"<i>لیگ بعدی «{_nx['name']}» در کاپ <code>{_nx['min_cup']:,}</code></i>")
     ceiling = deserved_cup(power)
     if user.cup > ceiling:
         lines.append("<i>⚠️ کاپت از قدرت موجودت جلو زده — بردها کاپ کمتری می‌دن تا هیولای شما قوی‌تر شود.</i>")
     if shield_secs > 0:
-        lines.append(f"{get_emoji('def')} سپر محافظ: <b>{_format_remaining(shield_secs)}</b> باقی‌مانده")
-        lines.append(f"<i>هر حمله‌ای که بزنی {constants.SHIELD_ATTACK_COST_HOURS} ساعت از سپرت کم می‌کند.</i>")
+        lines.append(
+            f"{get_emoji('def')} سپر: <b>{_format_remaining(shield_secs)}</b> مونده "
+            f"<i>(هر حمله {constants.SHIELD_ATTACK_COST_HOURS} ساعت ازش کم می‌کنه)</i>"
+        )
     else:
-        lines.append(f"{get_emoji('def')} سپر محافظ: نداری — ممکنه بهت حمله بشه")
+        lines.append(f"{get_emoji('def')} سپر: نداری — ممکنه بهت حمله بشه")
 
+    # the per-slot breakdown lives on the «جعبه‌ها» screen; here one summary line is enough
     chests = chests or []
     if chests:
-        chest_bits = []
-        for c in chests:
-            cfg = ARENA_CHEST_TIERS.get(c.chest_type, {})
-            c_emoji = get_emoji(f"chest_{c.chest_type}", cfg.get("emoji", "📦"))
-            if c.status == "ready":
-                st = f"{get_emoji('gift')} آماده باز کردن"
-            elif c.status == "unlocking":
-                rem = seconds_until_ready(c)
-                st = f"⏳ <code>{_format_remaining(rem)}</code>"
-            elif c.status == "queued":
-                st = "📋 در صف"
-            else:
-                st = "🔒 قفل"
-            chest_bits.append(f"{c_emoji} جایگاه <code>{c.slot}</code>: {st}")
-        lines.append(f"\n{get_emoji('chest_arena')} <b>جعبه‌های آرنا ({len(chests)}/4):</b>\n" + "\n".join(chest_bits))
+        ready = sum(1 for c in chests if c.status == "ready")
+        opening = next((c for c in chests if c.status == "unlocking"), None)
+        bits = []
+        if ready:
+            bits.append(f"{get_emoji('gift')} <code>{ready}</code> آماده")
+        if opening is not None:
+            bits.append(f"⏳ <code>{_format_remaining(seconds_until_ready(opening))}</code> تا باز شدن")
+        if not bits:
+            bits.append("🔒 منتظر بازگشایی")
+        lines.append(f"{get_emoji('chest_arena')} جعبه‌ها (<code>{len(chests)}</code>/4): " + " · ".join(bits))
     else:
-        lines.append(f"\n{get_emoji('chest_arena')} <b>جعبه‌های آرنا (0/4):</b> <i>جایگاه‌ها خالی است (با برد در آرنا به دست می‌آید)</i>")
+        lines.append(f"{get_emoji('chest_arena')} جعبه‌ها (<code>0</code>/4): <i>با برد در آرنا می‌گیری</i>")
 
     if history:
         lines.append("\n<b>آخرین حمله‌ها به شما:</b>")
         for log in history:
             mark = "🔴" if log.attacker_won else "🟢"
             attacker_name = log.attacker_label or lab_display(log.attacker)
-            pwr = f"\n  {get_emoji('power')} قدرت: <code>{log.attacker_power:,}</code>" if log.attacker_power else ""
-            loot_bits = []
+            bits = [f"{mark} <b>{attacker_name}</b>"]
+            if log.attacker_power:
+                bits.append(f"{get_emoji('power')} <code>{log.attacker_power:,}</code>")
             if log.loot_gold:
-                loot_bits.append(f"  {get_emoji('coin')} غارت: <code>−{log.loot_gold:,}</code>")
+                bits.append(f"{get_emoji('coin')} <code>−{log.loot_gold:,}</code>")
             if getattr(log, "loot_dna", 0):
-                loot_bits.append(f"  {get_emoji('dna')} غارت: <code>−{log.loot_dna:,}</code>")
-            loot_str = "\n" + "\n".join(loot_bits) if loot_bits else ""
-            lines.append(f"{mark} <b>{attacker_name}</b>{pwr}{loot_str}")
+                bits.append(f"{get_emoji('dna')} <code>−{log.loot_dna:,}</code>")
+            lines.append(" · ".join(bits))
 
     if revenges:
         lines.append(f"\n{get_emoji('battle')} <b><code>{len(revenges)}</code> انتقام</b> در انتظار — مهلت ۳ روزه")
 
     lines.append(
-        f"\n<blockquote>⚡ هر حمله <code>{constants.ARENA_ATTACK_ENERGY_COST}</code> انرژی مصرف می‌کند.\n"
-        f"در صورت پیروزی <code>{int(constants.ARENA_LOOT_PERCENT * 100)}%</code> طلا و <code>10%</code> DNA حریف غارت می‌شود.\n"
-        "آخر هر هفته کاپ‌ها ریست می‌شوند.</blockquote>"
+        f"\n<blockquote>⚡ هر حمله <code>{constants.ARENA_ATTACK_ENERGY_COST}</code> انرژی · "
+        f"برد = <code>{int(constants.ARENA_LOOT_PERCENT * 100)}%</code> طلا و <code>10%</code> DNA حریف</blockquote>"
     )
     return "\n".join(lines)
 
 
 def _arena_home_keyboard(has_revenges: bool, chest_count: int = 0, ready_chests: int = 0) -> InlineKeyboardMarkup:
-    chest_btn_text = f"جعبه‌های آرنا ({chest_count}/4)"
-    if ready_chests > 0:
-        chest_btn_text = f"جعبه‌های آماده ({ready_chests})"
+    # the counts are in the caption («جعبه‌ها (2/4): 1 آماده»), so the label stays short
+    chest_btn_text = "جعبه‌های آماده" if ready_chests > 0 else "جعبه‌ها"
     chest_emoji = "btn_chest_open" if ready_chests > 0 else "btn_chests"
+    chest_row = [btn(chest_btn_text, emoji_key=chest_emoji, style=SHOP if ready_chests > 0 else NAV, callback_data="arena_chests")]
+    if has_revenges:
+        chest_row.append(btn("انتقام‌ها", emoji_key="btn_revenges", style=DANGER, callback_data="arena_revenges"))
     rows = [
         [btn("جستجوی حریف", emoji_key="btn_attack", style=BATTLE, callback_data="arena_find")],
-        [btn(chest_btn_text, emoji_key=chest_emoji, style=SHOP if ready_chests > 0 else NAV, callback_data="arena_chests")],
-    ]
-    if has_revenges:
-        rows.append([btn("انتقام‌ها", emoji_key="btn_revenges", style=DANGER, callback_data="arena_revenges")])
-    rows += [
+        chest_row,
         [
-            btn("جدول این هفته", emoji_key="btn_rank", style=NAV, callback_data="arena_top"),
+            btn("جدول هفته", emoji_key="btn_rank", style=NAV, callback_data="arena_top"),
             btn("فصل قبل", emoji_key="btn_last_season", style=NAV, callback_data="arena_last_season"),
         ],
         [back_btn("menu:hub_battle", "بازگشت به نبرد")],
@@ -411,7 +407,7 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
                      cname="—", energy=None) -> tuple[str, InlineKeyboardMarkup]:
     """The 'opponent found' arena screen — shared by matchmaking and the «بازگشت» from
     the opponent-details view so the same screen is rebuilt identically."""
-    from bot.handlers.private import (element_advantage_line, pct_bar, win_chance_pct, win_label)
+    from bot.handlers.private import element_advantage_line
     from game.energy import get_max_energy, sync_energy
 
     if energy is None:
@@ -420,39 +416,38 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
     opp_element = opponent.get("element")
     my_elem_tag = f" [{constants.element_label(my_element)}]" if my_element else ""
     opp_elem_tag = f" [{constants.element_label(opp_element)}]" if opp_element else ""
-    pct = win_chance_pct(my_power, opponent["power"], my_element, opp_element)
     adv = element_advantage_line(my_element, opp_element)
     win_cup = cup_delta(user, opponent["cup"], True, my_power)
     loss_cup = cup_delta(user, opponent["cup"], False, my_power)
     alliance_str = f" <i>(🤝 {opponent['alliance']})</i>" if opponent.get("alliance") else ""
+    trophy = get_emoji("trophy")
+    # same order as the hunt card: you → opponent → element → reward → cost
     lines = [
-        f"👤 حریف: <b>{opponent['label']}</b>{alliance_str}",
-        f"👹 موجود حریف: <b>{opponent.get('creature_name', '؟')}</b>{opp_elem_tag}",
-        f"💀 قدرت حریف: <code>{opponent['power']:,}</code>",
-        f"{get_emoji('trophy')} کاپ حریف: <code>{opponent['cup']:,}</code>",
+        f"{get_emoji('battle')} <b>آرنا · حریف پیدا شد</b>",
         _ARENA_DIV,
         f"🦅 موجود شما: <b>{cname}</b>{my_elem_tag}",
-        f"💪 قدرت شما: <code>{my_power:,}</code>",
-        f"{get_emoji('trophy')} کاپ شما: <code>{user.cup:,}</code>",
-        f"{get_emoji('energy')} انرژی فعلی: {pct_bar(energy, max_en, 10)} (<code>{energy}</code>/<code>{max_en}</code>)",
+        f"💪 قدرت شما: <code>{my_power:,}</code> · {trophy} کاپ <code>{user.cup:,}</code>",
+        f"👤 حریف: <b>{opponent['label']}</b>{alliance_str}",
+        f"👹 موجود حریف: <b>{opponent.get('creature_name', '؟')}</b>{opp_elem_tag}",
+        f"💀 قدرت حریف: <code>{opponent['power']:,}</code> · {trophy} کاپ <code>{opponent['cup']:,}</code>",
+    ]
+    if adv:
+        lines.append(adv)
+    lines += [
         _ARENA_DIV,
-        "<blockquote>"
-        + (f"🔮 <b>مزیت عنصری:</b> {adv}\n" if adv else "")
-        + f"{get_emoji('energy')} <b>هزینه نبرد:</b> <code>{constants.ARENA_ATTACK_ENERGY_COST}</code> انرژی\n\n"
-        f"{get_emoji('gift')} <b>پاداش پیروزی:</b>\n"
-        f"{get_emoji('coin')} طلا: <code>+{loot:,}</code>\n"
-        f"{get_emoji('dna')} DNA: <code>+{dna_win:,}</code>\n"
-        f"{get_emoji('trophy')} تغییر کاپ: برد <code>+{win_cup}</code> | باخت <code>{loss_cup}</code>"
-        "</blockquote>",
+        f"{get_emoji('gift')} جایزه برد: {get_emoji('coin')} <code>+{loot:,}</code> · {get_emoji('dna')} <code>+{dna_win:,}</code>",
+        f"{trophy} کاپ: برد <code>+{win_cup}</code> | باخت <code>{loss_cup}</code>",
+        f"{get_emoji('energy')} هزینه حمله: <code>{constants.ARENA_ATTACK_ENERGY_COST}</code> انرژی "
+        f"(داری <code>{energy}</code>/<code>{max_en}</code>)",
     ]
     keyboard = InlineKeyboardMarkup(
         [
-            [btn("شروع حمله", emoji_key="btn_attack", style=BATTLE, callback_data=f"arena_attack:{_opp_ref(opponent)}")],
+            [btn("حمله", emoji_key="btn_attack", style=BATTLE, callback_data=f"arena_attack:{_opp_ref(opponent)}")],
             [
-                btn("جزئیات حریف", emoji_key="btn_atk_details", style=NAV, callback_data="arena_opp_details"),
                 btn("حریف بعدی", emoji_key="btn_recheck", style=NAV, callback_data="arena_find"),
+                btn("تعویض موجود", emoji_key="btn_swap", style=NAV, callback_data="arena_swap"),
             ],
-            [btn("تعویض موجود", emoji_key="btn_swap", style=NAV, callback_data="arena_swap")],
+            [btn("جزئیات حریف", emoji_key="btn_atk_details", style=NAV, callback_data="arena_opp_details")],
             [back_btn("menu:arena", "بازگشت به آرنا")],
         ]
     )
@@ -802,7 +797,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await send_defense_report_now(context, result.get("defense"))
 
     _ally = result.get("opponent_alliance")
-    opp_alliance = f"🤝 ({_ally})" if _ally else "🚫 بدون اتحاد"
+    opp_alliance = f" <i>(🤝 {_ally})</i>" if _ally else ""
 
     loot_gold = result.get("loot", 0)
     loot_dna = result.get("dna", 0)
@@ -837,70 +832,61 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
             hp_line_b = f"❤️  {def_name} [■■■■■■■■■■] 100%"
 
     div = "━━━━━━━━━━━━━━━━━━━━"
+    coin_e, dna_e = get_emoji("coin"), get_emoji("dna")
+
+    def _pair(gold: int, dna: int) -> str:
+        """«💰 +N · 🧬 +N» on one line, skipping whichever side is zero."""
+        bits = []
+        if gold:
+            bits.append(f"{coin_e} <code>+{gold:,}</code>")
+        if dna:
+            bits.append(f"{dna_e} <code>+{dna:,}</code>")
+        return " · ".join(bits)
+
+    elem_tag = f" [{elem_lbl}]" if elem_lbl else ""
+    # win and loss share one frame: title → opponent → HP bars → what changed
+    head = [
+        f"👤 حریف: <b>{result['opponent_label']}</b>{opp_alliance}",
+        f"👹 موجود حریف: <b>{def_name}</b>{elem_tag}",
+        f"<blockquote>{hp_line_a}\n{hp_line_b}</blockquote>",
+        div,
+    ]
+    cup_delta_val = result["cup_delta"]
+    cup_sign = f"+{cup_delta_val}" if cup_delta_val > 0 else str(cup_delta_val)
+    cup_line = f"{get_emoji('trophy')} کاپ: <code>{cup_sign}</code> (الان <code>{result['new_cup']:,}</code>)"
     if result["won"]:
-        cup_sign = f"+{result['cup_delta']}" if result['cup_delta'] > 0 else str(result['cup_delta'])
         reward_lines = [
-            f"{get_emoji('gift')} <b>غنائم غارت‌شده:</b>",
-            f"{get_emoji('coin')} طلا: <code>+{loot_gold:,}</code>",
-            f"{get_emoji('dna')} DNA: <code>+{loot_dna:,}</code>",
+            f"{get_emoji('gift')} غنیمت: {coin_e} <code>+{loot_gold:,}</code> · {dna_e} <code>+{loot_dna:,}</code>",
         ]
         coll_gold = result.get("plundered_collector_gold", 0)
         coll_dna = result.get("plundered_collector_dna", 0)
         if coll_gold or coll_dna:
-            reward_lines.append("\n🏭 <b>غارت از معدن‌های حریف:</b>")
-            if coll_gold:
-                reward_lines.append(f"{get_emoji('coin')} طلا: <code>+{coll_gold:,}</code>")
-            if coll_dna:
-                reward_lines.append(f"{get_emoji('dna')} DNA: <code>+{coll_dna:,}</code>")
+            reward_lines.append(f"🏭 از معدن‌های حریف: {_pair(coll_gold, coll_dna)}")
         if league_gold or league_dna:
             lg_emoji = result.get("league_emoji", "🥉")
             lg_name = result.get("league_name", "")
-            reward_lines.append(f"\n{lg_emoji} <b>پاداش لیگ {lg_name}:</b>")
-            if league_gold:
-                reward_lines.append(f"{get_emoji('coin')} طلا لیگ: <code>+{league_gold:,}</code>")
-            if league_dna:
-                reward_lines.append(f"{get_emoji('dna')} DNA لیگ: <code>+{league_dna:,}</code>")
-        reward_lines.append(f"\n{get_emoji('trophy')} تغییر کاپ: <code>{cup_sign}</code> (کاپ جدید: <code>{result['new_cup']:,}</code>)")
+            reward_lines.append(f"{lg_emoji} پاداش لیگ {lg_name}: {_pair(league_gold, league_dna)}")
+        reward_lines.append(cup_line)
         if result.get("awarded_chest"):
             awarded = result["awarded_chest"]
             awarded_cfg = ARENA_CHEST_TIERS.get(awarded.chest_type, {})
             reward_lines.append(
-                f"\n{get_emoji(f'chest_{awarded.chest_type}', awarded_cfg.get('emoji', '📦'))} <b>جعبه جدید:</b> {awarded_cfg.get('name', 'جعبه آرنا')} (جایگاه <code>{awarded.slot}</code>)"
+                f"{get_emoji(f'chest_{awarded.chest_type}', awarded_cfg.get('emoji', '📦'))} <b>جعبه جدید:</b> {awarded_cfg.get('name', 'جعبه آرنا')} (جایگاه <code>{awarded.slot}</code>)"
             )
         elif result.get("slots_full"):
-            reward_lines.append("\n<i>⚠️ جایگاه‌های جعبه‌ات پر بود — جعبه جدیدی دریافت نشد.</i>")
+            reward_lines.append("<i>⚠️ جایگاه‌های جعبه‌ات پر بود — جعبه جدیدی دریافت نشد.</i>")
 
-        body_lines = [
-            f"{get_emoji('celebrate')} <b>پیروزی در نبرد آرنا!</b>",
-            "",
-            f"👤 <b>آزمایشگاه حریف:</b> {result['opponent_label']} {opp_alliance}",
-            f"🛡 <b>هیولای حریف:</b> {def_name} [{elem_lbl}]",
-            div,
-            f"<blockquote>{hp_line_a}\n{hp_line_b}</blockquote>",
-            div,
-        ] + reward_lines
-        body = "\n".join(body_lines)
+        body_lines = [f"{get_emoji('celebrate')} <b>پیروزی در نبرد آرنا!</b>", div] + head + reward_lines
     else:
-        cup_str = str(result['cup_delta'])
-        body_lines = [
-            "😔 <b>شکست در نبرد آرنا!</b>",
-            "",
-            f"👤 <b>آزمایشگاه حریف:</b> {result['opponent_label']} {opp_alliance}",
-            f"🛡 <b>هیولای حریف:</b> {def_name} [{elem_lbl}]",
-            div,
-            f"<blockquote>{hp_line_a}\n{hp_line_b}</blockquote>",
-            div,
-            f"🏆 تغییر کاپ: <code>{cup_str}</code> (کاپ جدید: <code>{result['new_cup']:,}</code>)",
-        ]
-        body = "\n".join(body_lines)
+        body_lines = ["😔 <b>شکست در نبرد آرنا!</b>", div] + head + [cup_line]
+    body = "\n".join(body_lines)
 
-    buttons = []
+    # the loop action first («حریف بعدی»), then the look-ups, then back
+    buttons = [[btn("حریف بعدی", emoji_key="btn_attack", style=BATTLE, callback_data="arena_find")]]
+    info_row = [btn("جزئیات حمله", emoji_key="btn_atk_details", style=NAV, callback_data="arena_detail")]
     if result.get("awarded_chest"):
-        buttons.append([btn("مشاهده جعبه‌ها", emoji_key="btn_chests", style=SHOP, callback_data="arena_chests")])
-    buttons.append([
-        btn("جزئیات حمله", emoji_key="btn_atk_details", style=NAV, callback_data="arena_detail"),
-        btn("حریف بعدی", emoji_key="btn_attack", style=BATTLE, callback_data="arena_find"),
-    ])
+        info_row.append(btn("جعبه‌ها", emoji_key="btn_chests", style=SHOP, callback_data="arena_chests"))
+    buttons.append(info_row)
     buttons.append([back_btn("menu:arena", "بازگشت به آرنا")])
     keyboard = InlineKeyboardMarkup(buttons)
     await query.answer("🟢 بردی!" if result["won"] else "🔴 باختی.")
@@ -994,23 +980,29 @@ async def arena_revenges_callback(update: Update, context: ContextTypes.DEFAULT_
     shielded = [it for it in items if it["shield_secs"] > 0]
     lines = [f"⚔️ <b>انتقام‌ها</b> — <code>{len(items)}</code> مورد (<code>{len(ready)}</code> آماده)", _ARENA_DIV]
     rows = []
-    for it in ready:
+    # with several attackers every row would read «انتقام | جزئیات» — number the entries
+    # and the buttons so it's obvious which row belongs to whom
+    numbered = len(ready) > 1
+    for n, it in enumerate(ready, start=1):
         res = "غارتت کرد" if it["won"] else "دفاع کردی"
-        loot = f"\n  {get_emoji('coin')} غارت: <code>−{it['loot']:,}</code>" if it["loot"] else ""
+        loot = f" · {get_emoji('coin')} <code>−{it['loot']:,}</code>" if it["loot"] else ""
+        tag = f"<code>{n}</code>. " if numbered else "🔴 "
+        suffix = f" {n}" if numbered else ""
         lines.append(
-            f"🔴 <b>{it['name']}</b>\n"
-            f"  {get_emoji('power')} قدرت: <code>{it['power']:,}</code>\n"
-            f"  {get_emoji('battle')} نتیجه: <b>{res}</b>{loot}\n"
-            f"  ⏳ مهلت: <code>{it['hrs_left']}</code> ساعت"
+            f"{tag}<b>{it['name']}</b> · {get_emoji('power')} <code>{it['power']:,}</code>\n"
+            f"  {res}{loot} · ⏳ <code>{it['hrs_left']}</code> ساعت مهلت"
         )
-        row = [btn("انتقام", emoji_key="btn_revenge", style=DANGER, callback_data=f"arena_revenge:{it['log_id']}")]
+        row = [btn(f"انتقام{suffix}", emoji_key="btn_revenge", style=DANGER, callback_data=f"arena_revenge:{it['log_id']}")]
         if it["attacker_id"]:
-            row.append(btn("جزئیات", emoji_key="btn_atk_details", style=NAV, callback_data=f"defrep_opp:{it['attacker_id']}"))
+            row.append(btn(f"جزئیات{suffix}", emoji_key="btn_atk_details", style=NAV, callback_data=f"defrep_opp:{it['attacker_id']}"))
         rows.append(row)
     if shielded:
-        lines.append("\n🛡 <b>الان سپر دارند</b> <i>(تا سپرشان تمام نشود نمی‌شود انتقام گرفت):</i>")
+        lines.append("\n🛡 <b>سپر دارند</b> <i>(تا تمام نشود نمی‌شود انتقام گرفت):</i>")
         for it in shielded:
-            lines.append(f"▫️ 🛡 <b>{it['name']}</b>\n  💪 قدرت: <code>{it['power']:,}</code>\n  ⏳ سپر: <code>{_fmt_hm(it['shield_secs'])}</code>")
+            lines.append(
+                f"▫️ <b>{it['name']}</b> · {get_emoji('power')} <code>{it['power']:,}</code>"
+                f" · ⏳ <code>{_fmt_hm(it['shield_secs'])}</code>"
+            )
 
     rows.append([back_btn("menu:arena", "بازگشت به آرنا")])
     await safe_edit_message_text(
@@ -1049,14 +1041,12 @@ async def arena_revenge_callback(update: Update, context: ContextTypes.DEFAULT_T
         await query.answer(alert_text(exc), show_alert=True)
         return
 
-    gap = opp_power - my_power
-    odds = "🟢 شانس بالا" if gap < -15 else ("🔴 خطرناک" if gap > 15 else "🟡 پایاپای")
     lines = [
         f"{get_emoji('battle')} <b>انتقام از {attacker_name}</b>",
         _ARENA_DIV,
         "<blockquote>"
         f"{get_emoji('power')} قدرت حریف: <code>{opp_power:,}</code>\n"
-        f"{get_emoji('power')} قدرت شما: <code>{my_power:,}</code> ({odds})\n"
+        f"{get_emoji('power')} قدرت شما: <code>{my_power:,}</code>\n"
         f"{get_emoji('energy')} هزینه نبرد: <code>{constants.ARENA_ATTACK_ENERGY_COST}</code> انرژی",
     ]
     if log.loot_gold:

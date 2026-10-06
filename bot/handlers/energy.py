@@ -89,7 +89,7 @@ async def show_energy_error(query, exc, owner_id: int | None = None, origin: str
                 f"{str(exc)}\n\n"
                 f"✨ <b>اشتراک {info['badge']} {info['tier_name']} برای شما فعال است</b> "
                 f"(<b>{info['days_left']} روز و {info['hours_left']} ساعت</b> باقی‌مانده).\n\n"
-                f"<i>💡 سقف انرژی شما ۱۰۰ است. می‌توانید با الماس آن را فوراً شارژ کامل کنید:</i>"
+                f"<i>💡 سقف انرژی شما ۶۰ است. می‌توانید با الماس آن را فوراً شارژ کامل کنید:</i>"
             )
             rows = [[btn(f"شارژ کامل با {cost} الماس", emoji_key="btn_charge", style=PRIMARY, callback_data=cb_ask)]]
             if origin == "hunt":
@@ -101,7 +101,7 @@ async def show_energy_error(query, exc, owner_id: int | None = None, origin: str
             caption = (
                 f"{str(exc)}\n\n"
                 f"👑 <b>با تهیه اشتراک نقره‌ای:</b>\n"
-                f"  ⚡️ <b>سقف انرژیت ۲ برابر می‌شه (۱۰۰ به جای ۵۰)!</b>\n"
+                f"  ⚡️ <b>سقف انرژیت ۲ برابر می‌شه (۶۰ به جای ۳۰)!</b>\n"
                 f"  📋 جعبه‌های آرنا خودکار و پشت‌سرهم باز می‌شن\n"
                 f"  🏹 درآمدت از شکار خودکار ۲۵٪ بیشتر می‌شه!\n"
                 f"  🥈 نشان پرمیوم نقره‌ای کنار اسمت قرار می‌گیره\n\n"

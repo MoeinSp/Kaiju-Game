@@ -28,11 +28,13 @@ LIVE_BATTLE_REWARDED_WINS_PER_DAY = 3
 
 def _battle_keyboard(battle: InteractiveBattle) -> InlineKeyboardMarkup:
     skill_uses = battle.skill_uses_a if battle.turn == "a" else battle.skill_uses_b
-    buttons = [btn("حمله", emoji_key="btn_attack", style=BATTLE, callback_data=f"battle_action:{battle.id}:attack")]
+    moves = [btn("حمله", emoji_key="btn_attack", style=BATTLE, callback_data=f"battle_action:{battle.id}:attack")]
     if skill_uses > 0:
-        buttons.append(btn("مهارت", emoji_key="btn_skill", style=PRIMARY, callback_data=f"battle_action:{battle.id}:skill"))
-    buttons.append(btn("تسلیم", emoji_key="btn_forfeit", style=DANGER, callback_data=f"battle_action:{battle.id}:forfeit"))
-    return InlineKeyboardMarkup([buttons])
+        moves.append(btn("مهارت", emoji_key="btn_skill", style=PRIMARY, callback_data=f"battle_action:{battle.id}:skill"))
+    # «تسلیم» ends the fight for good — its own row, away from the move buttons, so a
+    # fast «حمله» tap can't land on it
+    forfeit = [btn("تسلیم", emoji_key="btn_forfeit", style=DANGER, callback_data=f"battle_action:{battle.id}:forfeit")]
+    return InlineKeyboardMarkup([moves, forfeit])
 
 
 def _battle_cmd_sync(chat, challenger_tg, opponent_tg):

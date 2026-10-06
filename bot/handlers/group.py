@@ -83,7 +83,7 @@ async def _reply_error(message, exc, owner_id: int) -> None:
                 f"{str(exc)}\n\n"
                 f"<blockquote>"
                 f"👑 <b>مزایای اشتراک نقره‌ای:</b>\n"
-                f"⚡️ سقف انرژی ۲ برابر (۱۰۰ به جای ۵۰)\n"
+                f"⚡️ سقف انرژی ۲ برابر (۶۰ به جای ۳۰)\n"
                 f"📋 باز شدن خودکار جعبه‌های آرنا\n"
                 f"🏹 +۲۵٪ غنیمت شکار خودکار\n"
                 f"🥈 نشان پرمیوم نقره‌ای\n"
@@ -1017,21 +1017,19 @@ def _raid_attack_view(creature, boss, dmg, defeated, completed_missions, reward_
     dna_e = get_emoji("dna", "🧬")
     atk_e = get_emoji("raid_attacks_left", "🔁")
 
+    # one rule under the title; the boss block is a quote, so it needs no rules around it
     lines = [
         "🗡 <b>گزارش نبرد با باس</b>",
         _RULE,
         f"🦅 مهاجم: <b>{creature_name(creature)}</b>",
         f"💥 آسیب وارده: <code>{dmg:,}</code> DMG",
-        _RULE,
         "<blockquote>"
-        f"{boss_e} وضعیت باس: <b>{boss.name}</b> (سطح <code>{boss.level}</code>)\n"
-        f"{hp_e} سلامت باس: {_pct_bar(hp, boss.max_hp)} (<code>{hp:,}</code>/<code>{boss.max_hp:,}</code> HP)"
+        f"{boss_e} باس: <b>{boss.name}</b> (سطح <code>{boss.level}</code>)\n"
+        f"{hp_e} سلامت: {_pct_bar(hp, boss.max_hp)} (<code>{hp:,}</code>/<code>{boss.max_hp:,}</code> HP)"
         "</blockquote>",
-        _RULE,
-        "🎁 <b>پاداش و وضعیت:</b>",
-        f"{coin_e} طلا: <code>+{coin_gain:,}</code>",
-        f"{dna_e} پاداش DNA: <code>+{dna_gain:,}</code>",
+        f"🎁 پاداش: {coin_e} <code>+{coin_gain:,}</code> · {dna_e} <code>+{dna_gain:,}</code>",
         f"{atk_e} اتک باقیمانده امروز: <code>{attacks_left}</code>/<code>{RAID_DAILY_ATTACKS}</code>",
+        f"{get_emoji('energy')} انرژی باقیمانده: <code>{energy_left}</code>",
     ]
     text = "\n".join(lines) + _mission_lines(completed_missions)
     if defeated:
@@ -1254,60 +1252,53 @@ def _fmt_shield_hm(seconds: int) -> str:
 def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, t_power, t_elem,
                        t_shield_secs=0, a_cname="—", t_cname="—", a_energy=0, a_shield_secs=0,
                        a_max_energy=constants.MAX_ENERGY):
-    from bot.handlers.private import (element_advantage_line, pct_bar, win_chance_pct, win_label)
+    from bot.handlers.private import element_advantage_line
 
     # target is group-shielded → say it LOUDLY at the very top so the attacker
     # doesn't waste a tap, and drop the attack button (the attack would be blocked).
     if t_shield_secs and t_shield_secs > 0:
         text = "\n".join([
-            "🛡 <b>حمله ناموفق | هدف تحت حفاظت است</b>",
+            "🛡 <b>حمله ممکن نیست — حریف سپر دارد</b>",
             _RULE,
-            f"👤 کاربر هدف: <b>{t_name}</b>",
-            f"⏳ مدت زمان سپر: <code>{_fmt_shield_hm(t_shield_secs)}</code> باقی‌مانده",
-            _RULE,
-            "📊 <b>مقایسه توان رزمی:</b>",
-            "<blockquote>",
-            f"💪 قدرت شما: <code>{a_power:,}</code>\n"
+            f"👤 حریف: <b>{t_name}</b>",
+            f"⏳ سپر گروهی: <code>{_fmt_shield_hm(t_shield_secs)}</code> باقی‌مانده",
+            f"💪 قدرت شما: <code>{a_power:,}</code>",
             f"💀 قدرت حریف: <code>{t_power:,}</code>",
-            "</blockquote>",
-            _RULE,
-            "<i>⚠️ تا زمان پایان سپر محافظ گروه، امکان هجوم به این پایگاه وجود ندارد.</i>",
         ])
         keyboard = InlineKeyboardMarkup([
-            [btn("جزئیات حریف", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}"),
-             btn("انصراف", emoji_key="btn_cancel", style=DANGER, callback_data=f"gatk_cancel:{attacker_id}")],
+            [btn("جزئیات حریف", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}")],
+            [btn("انصراف", emoji_key="btn_cancel", style=DANGER, callback_data=f"gatk_cancel:{attacker_id}")],
         ])
         return text, keyboard
 
-    pct = win_chance_pct(a_power, t_power, a_elem, t_elem)
     adv = element_advantage_line(a_elem, t_elem)
     a_tag = f" [{constants.element_label(a_elem)}]" if a_elem else ""
     t_tag = f" [{constants.element_label(t_elem)}]" if t_elem else ""
-    tactical = []
-    if adv:
-        tactical.append(f"🔮 مزیت عنصری: {adv}")
-    tactical_block = ("<blockquote>" + "\n".join(tactical) + "</blockquote>") if tactical else ""
 
+    # same order as the hunt/arena cards: you → opponent → element → cost
     lines = [
         "⚔️ <b>پیش‌نمایش نبرد تن‌به‌تن</b>",
         _RULE,
+        f"🦅 موجود شما: <b>{a_cname}</b>{a_tag}",
+        f"💪 قدرت شما: <code>{a_power:,}</code>",
         f"👤 حریف: <b>{t_name}</b>",
         f"👹 موجود حریف: <b>{t_cname}</b>{t_tag}",
         f"💀 قدرت حریف: <code>{t_power:,}</code>",
-        _RULE,
-        f"🦅 موجود شما: <b>{a_cname}</b>{a_tag}",
-        f"💪 قدرت شما: <code>{a_power:,}</code>",
-        f"{get_emoji('energy')} انرژی فعلی: {pct_bar(a_energy, a_max_energy)} (<code>{a_energy}</code>/<code>{a_max_energy}</code>)",
-        _RULE,
-        "🎯 <b>تحلیل تاکتیکی:</b>",
-        tactical_block,
     ]
+    if adv:
+        lines.append(adv)
+    lines += [
+        _RULE,
+        f"{get_emoji('energy')} هزینه حمله: <code>{constants.RAID_ATTACK_ENERGY_COST}</code> انرژی "
+        f"(داری <code>{a_energy}</code>/<code>{a_max_energy}</code>)",
+    ]
+    # attack → swap / details → cancel (the exit is always the last row, alone)
     keyboard = InlineKeyboardMarkup([
-        [btn(f"حمله (-{constants.RAID_ATTACK_ENERGY_COST}⚡)", emoji_key="btn_attack", style=CONFIRM,
+        [btn("حمله", emoji_key="btn_attack", style=CONFIRM,
              callback_data=f"gatk:{attacker_id}:{target_id}")],
-        [btn("تعویض موجود", emoji_key="btn_recheck", style=NAV, callback_data=f"gatk_swap:{attacker_id}:{target_id}")],
-        [btn("جزئیات حریف", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}"),
-         btn("انصراف", emoji_key="btn_cancel", style=DANGER,
+        [btn("تعویض موجود", emoji_key="btn_recheck", style=NAV, callback_data=f"gatk_swap:{attacker_id}:{target_id}"),
+         btn("جزئیات حریف", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}")],
+        [btn("انصراف", emoji_key="btn_cancel", style=DANGER,
              callback_data=f"gatk_cancel:{attacker_id}")],
     ])
     return "\n".join(lines), keyboard
@@ -1687,10 +1678,9 @@ async def _pvp_attack_execute(update, context, query, attacker_id: int, target_i
     if result["attacker_won"]:
         new_coins_note = f" <i>(موجودی: <code>{result['new_coins']:,}</code>)</i>" if result.get("new_coins") is not None else ""
         reward_block = (
-            "💰 <b>پاداش دریافتی:</b>\n"
             f"{get_emoji('coin')} طلا: <code>+{result['loot']:,}</code>{new_coins_note}\n"
-            f"{get_emoji('dna')} پاداش DNA: <code>+{result.get('dna', 0):,}</code>\n"
-            f"📈 تجربه: <code>+{constants.DUEL_WIN_XP}</code> XP"
+            f"{get_emoji('dna')} DNA: <code>+{result.get('dna', 0):,}</code>\n"
+            f"✨ تجربه: <code>+{constants.DUEL_WIN_XP}</code> XP"
         )
     else:
         reward_block = "😔 <b>شکست</b> — بدون کسر امتیاز یا کاپ."
@@ -1701,9 +1691,8 @@ async def _pvp_attack_execute(update, context, query, attacker_id: int, target_i
     _target = result.get("target_name", "")
     header = ["⚔️ <b>خلاصه نبرد</b>", _RULE]
     if _target:
-        header.append(f"👤 حریف: <b>{_target}</b>")
-        header.append(f"🤝 اتحاد: <b>{_tally}</b>" if _tally else "🚫 بدون اتحاد")
-        header.append(_RULE)
+        # the battle report below opens with its own attacker/defender lines — no second rule
+        header.append(f"👤 حریف: <b>{_target}</b>" + (f" <i>(🤝 {_tally})</i>" if _tally else ""))
     text = battle_report(
         result["battle_a"], result["battle_b"], result["battle_winner_name"],
         result["battle_rounds"], result["battle_mult"],

@@ -3013,14 +3013,12 @@ def _hunt_scout_sync(tg_user, charge=False):
 def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> str:
     if target.get("is_encounter"):
         lines = [
-            f"✨ <b>رویداد غیرمنتظره در شکار!</b>",
-            "",
+            "✨ <b>رویداد غیرمنتظره در شکار!</b>",
+            _CARD_DIV,
             f"📌 <b>{target['title']}</b>",
             f"<blockquote>{target['desc']}</blockquote>",
-            "",
-            _CARD_DIV,
-            f"{get_emoji('energy')} انرژی فعلی: <code>{energy}</code>",
-            f"🔍 جستجوی بعدی: <code>{scout_price:,}</code> طلا",
+            f"{get_emoji('energy')} انرژی شما: <code>{energy}</code>",
+            f"🔍 حریف بعدی: <code>{scout_price:,}</code> طلا",
         ]
         return "\n".join(lines)
 
@@ -3033,31 +3031,19 @@ def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> st
     coin_reward, dna_reward = hunt_reward_roll(
         my_power, target["tier"], target.get("seed"), _events.hunt_loot_mult(creature.element)
     )
-    pct = win_chance_pct(my_power, target["power"], creature.element, target["element"])
     adv = element_advantage_line(creature.element, target["element"])
+    # same order on every battle card: you → opponent → element → reward → cost
     lines = [
-        f"{get_emoji('hunt')} <b>حریف آماده نبرد است!</b>",
-        "",
-        f"🏰 حریف وحشی: <b>{target['name']}</b> <i>({tier_label})</i>",
-        f"🎯 عنصر حریف: {constants.element_label(target['element'])}",
-        "",
+        f"{get_emoji('hunt')} <b>شکار · حریف پیدا شد</b>",
         _CARD_DIV,
-        "",
-        "📊 <b>مقایسه وضعیت نبرد:</b>",
         f"💪 قدرت شما: <code>{my_power:,}</code>",
+        f"🏰 حریف: <b>{target['name']}</b> <i>({tier_label})</i>",
+        f"🎯 عنصر حریف: {constants.element_label(target['element'])}",
         f"⚔️ قدرت حریف: <code>{target['power']:,}</code>",
-        "",
-        _CARD_DIV,
-        "",
-        "🔮 <b>مزیت تاکتیکی:</b>",
         adv or "➖ بدون مزیت عنصری",
-        "",
-        "🎁 <b>جوایز نبرد (در صورت برد):</b>",
-        f"{get_emoji('coin')} غنیمت طلا: <code>+{coin_reward:,}</code>",
-        f"{get_emoji('dna')} غنیمت DNA: <code>+{dna_reward:,}</code>",
-        "",
         _CARD_DIV,
-        f"{get_emoji('energy')} هزینه حمله: <code>{constants.HUNT_ENERGY_COST}</code> انرژی",
+        f"🎁 جایزه برد: {get_emoji('coin')} <code>+{coin_reward:,}</code> · {get_emoji('dna')} <code>+{dna_reward:,}</code>",
+        f"{get_emoji('energy')} هزینه حمله: <code>{constants.HUNT_ENERGY_COST}</code> انرژی (داری <code>{energy}</code>)",
         f"🔍 حریف بعدی: <code>{scout_price:,}</code> طلا",
     ]
     return "\n".join(lines)
@@ -3066,29 +3052,38 @@ def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> st
 def _hunt_scout_keyboard(target, scout_price=0) -> InlineKeyboardMarkup:
     if target.get("is_encounter"):
         enc_type = target["enc_type"]
+        nxt = btn("حریف بعدی", emoji_key="btn_scout_next", style=NAV, callback_data="hunt_next")
+        # the event's own action alone on top; skipping it sits beside «حریف بعدی»
         rows = []
         if enc_type == "chest":
             rows.append([btn("باز کردن صندوق", emoji_key="btn_confirm", style=CONFIRM, callback_data="henc:chest:open")])
-            rows.append([btn("رها کردن صندوق", emoji_key="btn_cancel", style=NAV, callback_data="henc:chest:leave")])
+            rows.append([btn("رها کردن", emoji_key="btn_cancel", style=NAV, callback_data="henc:chest:leave"), nxt])
         elif enc_type == "thief":
             rows.append([btn("حمله به دزد", emoji_key="btn_attack", style=BATTLE, callback_data="henc:thief:fight")])
-            rows.append([btn("صرف‌نظر", emoji_key="btn_cancel", style=NAV, callback_data="henc:thief:leave")])
+            rows.append([btn("صرف‌نظر", emoji_key="btn_cancel", style=NAV, callback_data="henc:thief:leave"), nxt])
         elif enc_type == "fork":
-            rows.append([btn("غار کریستالی", emoji_key="btn_diamond", style=PRIMARY, callback_data="henc:fork:crystal")])
-            rows.append([btn("دشت آتشفشانی", emoji_key="btn_charge", style=SHOP, callback_data="henc:fork:volcano")])
+            # two equal choices and no «leave» — side by side
+            rows.append([
+                btn("غار کریستالی", emoji_key="btn_diamond", style=PRIMARY, callback_data="henc:fork:crystal"),
+                btn("دشت آتشفشانی", emoji_key="btn_charge", style=SHOP, callback_data="henc:fork:volcano"),
+            ])
+            rows.append([nxt])
         elif enc_type == "spring":
             rows.append([btn("نوشیدن از چشمه", emoji_key="btn_energy", style=CONFIRM, callback_data="henc:spring:drink")])
-            rows.append([btn("عبور از چشمه", emoji_key="btn_cancel", style=NAV, callback_data="henc:spring:leave")])
-
-        rows.append([btn("حریف بعدی", emoji_key="btn_scout_next", style=NAV, callback_data="hunt_next")])
+            rows.append([btn("عبور", emoji_key="btn_cancel", style=NAV, callback_data="henc:spring:leave"), nxt])
+        else:
+            rows.append([nxt])
         rows.append([back_btn("menu:hub_battle", "بازگشت به نبرد")])
         return InlineKeyboardMarkup(rows)
 
+    # same shape as the arena opponent card: attack → next / swap → extra → back
     return InlineKeyboardMarkup(
         [
             [btn("حمله", emoji_key="btn_attack", style=BATTLE, callback_data=f"hunt_go:{target['tier']}:{target['seed']}")],
-            [btn("تغییر موجود مبارز", emoji_key="btn_swap", style=NAV, callback_data=f"hunt_swap:{target['tier']}:{target['seed']}")],
-            [btn("حریف بعدی", emoji_key="btn_scout_next", style=NAV, callback_data="hunt_next")],
+            [
+                btn("حریف بعدی", emoji_key="btn_scout_next", style=NAV, callback_data="hunt_next"),
+                btn("تعویض موجود", emoji_key="btn_swap", style=NAV, callback_data=f"hunt_swap:{target['tier']}:{target['seed']}"),
+            ],
             [btn("شکار خودکار", emoji_key="btn_autohunt", style=BATTLE, callback_data="autohunt_start")],
             [back_btn("menu:hub_battle", "بازگشت به نبرد")],
         ]
@@ -3185,7 +3180,7 @@ async def hunt_swap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         tag = "🟢" if is_active else ("⛔" if busy else "🧬")
         note = " (مشغول)" if busy else ""
         elem_lbl = constants.ELEMENT_LABELS.get(element, element)
-        rows.append([btn(f"{tag} {name} ({elem_lbl}) - قدرت {power:,}{note}",
+        rows.append([btn(f"{tag} {name} ({elem_lbl}) · {power:,}{note}",
                          style=BATTLE, callback_data=f"hunt_swap_pick:{tier}:{seed}:{cid}")])
     rows.append([back_btn(f"hunt_swap_pick:{tier}:{seed}:0", "بازگشت به حریف")])
     await safe_edit_message_text(
@@ -3269,17 +3264,20 @@ async def hunt_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             await query.answer(alert_text(exc), show_alert=True)
         return
 
+    div = "━━━━━━━━━━━━━━━━━━━━"
     if result["won"]:
+        loot = f"{get_emoji('coin')} <code>+{result['coins']:,}</code>"
+        if result["dna"]:
+            loot += f" · {get_emoji('dna')} <code>+{result['dna']:,}</code>"
         reward_line = (
-            f"{get_emoji('celebrate')} <b>بردی!</b>\n"
-            f"{get_emoji('coin')} طلا: <code>+{result['coins']:,}</code>\n"
-            + (f"{get_emoji('dna')} دی‌ان‌ای: <code>+{result['dna']:,}</code>\n" if result["dna"] else "")
-            + f"✨ تجربه: <code>+{result['xp']:,}</code> XP"
+            f"{get_emoji('celebrate')} <b>بردی!</b>\n{div}\n"
+            f"🎁 غنیمت: {loot}\n"
+            f"✨ تجربه: <code>+{result['xp']:,}</code> XP"
         )
         if result["levels"]:
             reward_line += f"\n🎉 رسید به سطح <code>{creature.level}</code>!"
     else:
-        reward_line = f"😔 باختی...\n✨ تجربه تسلی‌بخش: <code>+{result['xp']:,}</code> XP"
+        reward_line = f"😔 <b>باختی...</b>\n{div}\n✨ تجربه تسلی‌بخش: <code>+{result['xp']:,}</code> XP"
     reward_line += _mission_lines(completed_missions)
 
     keyboard = InlineKeyboardMarkup(
@@ -3288,8 +3286,7 @@ async def hunt_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             [back_btn("menu:hub_battle", "بازگشت به نبرد")],
         ]
     )
-    div = "━━━━━━━━━━━━━━━━━━━━"
-    body = f"{reward_line}\n\n{div}\n{result['log_text']}"
+    body = f"{reward_line}\n{div}\n{result['log_text']}"
     await safe_edit_message_text(
         query,
         body,
@@ -3348,7 +3345,7 @@ def _autohunt_confirm_kb(amount: int):
     text = (
         f"⚡️ <b>تأیید شکار خودکار</b>\n\n"
         f"می‌خوای <code>{amount}</code> انرژی صرف <code>{hunts}</code> نبرد خودکار کنی؟\n\n"
-        f"<blockquote>⚠️ شکار خودکار نسبت به شکار دستی طلا و دی‌ان‌ای کمتری می‌ده (نصف لوت). XP کامل می‌مونه.</blockquote>"
+        f"<blockquote>⚠️ شکار خودکار نسبت به شکار دستی طلا و دی‌ان‌ای کمتری می‌ده (حدود ۶۰٪ لوت). XP کامل می‌مونه.</blockquote>"
     )
     kb = InlineKeyboardMarkup([
         [btn("تأیید و شروع", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"autohunt_do:{amount}")],
@@ -3372,7 +3369,7 @@ async def _autohunt_no_energy(query, energy: int, max_energy: int = 50) -> None:
             f"⚡ <b>انرژی کافی نداری</b> (<code>{energy}/{max_energy}</code>).\n\n"
             f"✨ <b>اشتراک {info['badge']} {info['tier_name']} برای شما فعال است</b> "
             f"(<code>{info['days_left']}</code> روز و <code>{info['hours_left']}</code> ساعت باقی‌مانده).\n\n"
-            f"<i>💡 سقف انرژی شما ۱۰۰ است. می‌توانید با الماس آن را فوراً شارژ کامل کنید:</i>"
+            f"<i>💡 سقف انرژی شما ۶۰ است. می‌توانید با الماس آن را فوراً شارژ کامل کنید:</i>"
         )
         row1 = [btn("شارژ فوری انرژی", emoji_key="btn_charge", style=SHOP, callback_data=f"enr:ask:{query.from_user.id}")]
         row2 = [btn("بازگشت به شکار", emoji_key="btn_hunt", style=NAV, callback_data="menu:hunt")]
@@ -3381,7 +3378,7 @@ async def _autohunt_no_energy(query, energy: int, max_energy: int = 50) -> None:
         caption = (
             f"⚡ <b>انرژی کافی نداری</b> (<code>{energy}/{max_energy}</code>).\n\n"
             f"👑 <b>با تهیه اشتراک نقره‌ای:</b>\n"
-            f"  ⚡️ <b>سقف انرژیت ۲ برابر می‌شه (۱۰۰ به جای ۵۰)!</b>\n"
+            f"  ⚡️ <b>سقف انرژیت ۲ برابر می‌شه (۶۰ به جای ۳۰)!</b>\n"
             f"  📋 جعبه‌های آرنا خودکار و پشت‌سرهم باز می‌شن\n"
             f"  🏹 درآمدت از شکار خودکار ۲۵٪ بیشتر می‌شه!\n"
             f"  🥈 نشان پرمیوم نقره‌ای کنار اسمت قرار می‌گیره\n\n"
