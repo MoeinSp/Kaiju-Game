@@ -577,6 +577,19 @@ class ActivityHour(models.Model):
         indexes = [models.Index(fields=["day", "hour"], name="activity_day_hour_idx")]
 
 
+class ActionHour(models.Model):
+    """How many times a game action (hunt, arena_attack, …) happened in one hour of one
+    day — game/metrics.py. Lets the admin stats compare the same hour across days."""
+
+    day = models.CharField(max_length=10)
+    hour = models.PositiveSmallIntegerField()
+    action = models.CharField(max_length=32)
+    count = models.IntegerField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["day", "hour", "action"], name="uq_action_hour")]
+
+
 class ButtonClick(models.Model):
     """Presses per day of one button key (`menu:hunt`, `dsp:offer`, …) — game/metrics.py."""
 

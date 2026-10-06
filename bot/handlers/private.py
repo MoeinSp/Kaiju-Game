@@ -1118,44 +1118,44 @@ def _locked_actions_for(hall_level) -> frozenset:
 
 
 _HUBS = {
-    "hub_battle": ("⚔️ <b>نبرد و ماجراجویی</b>", [
-        [("شکار هیولا", "hunt", "b", "btn_hunt"), ("میدان آرنا", "arena", "b", "btn_arena")],
-        [("جعبه‌های آرنا", "arena_chests", "s", "btn_chests"), ("برج موگن", "mugen_tower", "b", "btn_mugen")],
-        [("مأموریت اعزامی", "dispatch", "b", "btn_dispatch"), ("ماجراجویی دانجن", "campaign", "b", "btn_campaign")],
-        [("غول سرگردان", "worldboss", "b", "btn_worldboss"), ("جام آخر هفته", "tournament", "b", "btn_tournament")],
+    "hub_battle": ("⚔️ <b>نبرد</b>", [
+        [("شکار", "hunt", "b", "btn_hunt"), ("آرنا", "arena", "b", "btn_arena")],
+        [("جعبه‌ها", "arena_chests", "s", "btn_chests"), ("برج موگن", "mugen_tower", "b", "btn_mugen")],
+        [("اعزام", "dispatch", "b", "btn_dispatch"), ("دانجن", "campaign", "b", "btn_campaign")],
+        [("غول", "worldboss", "b", "btn_worldboss"), ("جام", "tournament", "b", "btn_tournament")],
     ]),
-    "hub_battle_more": ("⚔️ <b>نبرد و ماجراجویی — بیشتر</b>", [
-        [("اعزام کاروان", "expedition", "b", "btn_expedition"), ("جنگ اتحاد", "alliance_war", "b", "btn_war")],
+    "hub_battle_more": ("⚔️ <b>نبرد — بیشتر</b>", [
+        [("کاروان", "expedition", "b", "btn_expedition"), ("جنگ اتحاد", "alliance_war", "b", "btn_war")],
     ]),
-    "hub_creature": ("🦖 <b>هیولا و تجهیزات</b>", [
-        [("ارتقای هیولا", "upgrade", "p", "btn_upgrade"), ("کوله تجهیزات", "inventory", "n", "btn_inventory")],
-        [("آهنگری", "blacksmith", "bu", "btn_forge"), ("غار پرورش", "breeding", "bu", "btn_breeding")],
-        [("تالار ادغام", "fusion", "bu", "btn_fusion"), ("کلکسیون هیولا", "collection", "n", "btn_collection")],
-        [("تیم نبرد", "team", "n", "btn_team")],
+    "hub_creature": ("🦖 <b>هیولا</b>", [
+        [("ارتقا", "upgrade", "p", "btn_upgrade"), ("تجهیزات", "inventory", "n", "btn_inventory")],
+        [("آهنگری", "blacksmith", "bu", "btn_forge"), ("غار", "breeding", "bu", "btn_breeding")],
+        [("ادغام", "fusion", "bu", "btn_fusion"), ("کلکسیون", "collection", "n", "btn_collection")],
+        [("تیم", "team", "n", "btn_team")],
     ]),
-    "hub_base": ("🏰 <b>پایگاه و منابع</b>", [
-        [("ساختمان‌ها", "buildings", "bu", "btn_buildings"), ("آزمایشگاه پژوهش", "research", "bu", "btn_research")],
-        [("خزانه و انبار", "vault", "bu", "btn_vault"), ("صرافی طلا و DNA", "exchange", "s", "btn_exchange")],
-        [("بازیافت تجهیزات", "equip_exchange", "s", "btn_ticket_exchange")],
+    "hub_base": ("🏰 <b>پایگاه</b>", [
+        [("ساختمان‌ها", "buildings", "bu", "btn_buildings"), ("پژوهش", "research", "bu", "btn_research")],
+        [("خزانه", "vault", "bu", "btn_vault"), ("صرافی", "exchange", "s", "btn_exchange")],
+        [("بازیافت", "equip_exchange", "s", "btn_ticket_exchange")],
     ]),
-    "hub_shop": ("🛒 <b>فروشگاه و بازار</b>", [
-        [("فروشگاه روزانه", "shop", "s", "btn_shop"), ("بازار سیاه", "blackmarket", "s", "btn_blackmarket")],
-        [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("جعبه‌های الماسی", "diamond_box", "s", "btn_diamond_box")],
-        [("خرید الماس و طلا", "buy_open", "s", "btn_buy"), ("خرید سپر محافظ", "shield_shop", "s", "btn_shield")],
-        [("اشتراک ویژه VIP", "subscription", "s", "btn_vip")],
+    "hub_shop": ("🛒 <b>فروشگاه</b>", [
+        [("فروشگاه", "shop", "s", "btn_shop"), ("بازار سیاه", "blackmarket", "s", "btn_blackmarket")],
+        [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("باکس الماسی", "diamond_box", "s", "btn_diamond_box")],
+        [("خرید الماس", "buy_open", "s", "btn_buy"), ("سپر", "shield_shop", "s", "btn_shield")],
+        [("اشتراک VIP", "subscription", "s", "btn_vip")],
     ]),
-    "hub_city": ("🌐 <b>شهر، جوایز و کلوپ</b>", [
-        [("مأموریت‌ها", "missions", "s", "btn_missions"), ("گردونه شانس", "wheel", "s", "btn_wheel")],
-        [("رویدادهای ویژه", "events", "s", "btn_events"), ("جشنواره‌ی ماهانه", "festival", "s", "btn_festival")],
-        [("لیگ و رتبه‌بندی", "league", "n", "btn_league"), ("پاس فصلی (بتل‌پاس)", "battlepass", "s", "btn_battlepass")],
-        [("اتحاد و کلن", "alliance_info", "n", "btn_alliance"), ("پروفایل و تنظیمات", "profile", "n", "btn_profile")],
+    "hub_city": ("🌐 <b>شهر</b>", [
+        [("مأموریت‌ها", "missions", "s", "btn_missions"), ("گردونه", "wheel", "s", "btn_wheel")],
+        [("رویداد", "events", "s", "btn_events"), ("جشنواره", "festival", "s", "btn_festival")],
+        [("لیگ", "league", "n", "btn_league"), ("پاس فصلی", "battlepass", "s", "btn_battlepass")],
+        [("اتحاد", "alliance_info", "n", "btn_alliance"), ("پروفایل", "profile", "n", "btn_profile")],
     ]),
-    "hub_city_more": ("🌐 <b>شهر، جوایز و کلوپ — بیشتر</b>", [
-        [("دستاوردها", "achievements", "s", "btn_achievements"), ("راهنمای بازی", "guide", "n", "btn_report")],
-        [("کازینو و تاس", "casino", "s", "btn_casino"), ("بنر ویژه کایجو", "banner", "s", "btn_banner")],
-        [("دعوت دوستان", "referral", "s", "btn_referral"), ("دانشنامه و القاب", "codex", "n", "btn_codex")],
-        [("رتبه‌بندی اتحادها", "rank", "n", "btn_league"), ("لیگ اتحادها", "alliance_league", "n", "btn_league")],
-        [("رتبه‌بندی رید", "raid_rank", "n", "btn_raid_rank")],
+    "hub_city_more": ("🌐 <b>شهر — بیشتر</b>", [
+        [("دستاوردها", "achievements", "s", "btn_achievements"), ("راهنما", "guide", "n", "btn_report")],
+        [("کازینو", "casino", "s", "btn_casino"), ("بنر", "banner", "s", "btn_banner")],
+        [("دعوت", "referral", "s", "btn_referral"), ("دانشنامه", "codex", "n", "btn_codex")],
+        [("رتبه اتحادها", "rank", "n", "btn_league"), ("لیگ اتحادها", "alliance_league", "n", "btn_league")],
+        [("رتبه رید", "raid_rank", "n", "btn_raid_rank")],
     ]),
 }
 
@@ -1218,7 +1218,7 @@ def _hub_keyboard(hub_key: str, locked=frozenset(), hide_locked: bool = False) -
     if hub_key.endswith("_more"):
         rows.append([back_btn(f"menu:{hub_key[:-5]}", "بازگشت")])
     else:
-        rows.append([back_btn("menu:me", "بازگشت به منوی اصلی")])
+        rows.append([back_btn("menu:me", "منوی اصلی")])
     if hidden:
         title += f"\n🔒 <i>{hidden} بخش دیگه با ارتقای «تالار مِهر» باز می‌شه.</i>"
     return title, symmetric_markup(rows)
@@ -1261,17 +1261,17 @@ def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=
 
     # Row 1: Battle & Creature
     rows.append([
-        btn("نبرد و ماجراجویی", emoji_key="btn_hub_battle", style=DANGER, callback_data="menu:hub_battle"),
-        btn("هیولا و تجهیزات", emoji_key="btn_hub_creature", style=PRIMARY, callback_data="menu:hub_creature"),
+        btn("نبرد", emoji_key="btn_hub_battle", style=DANGER, callback_data="menu:hub_battle"),
+        btn("هیولا", emoji_key="btn_hub_creature", style=PRIMARY, callback_data="menu:hub_creature"),
     ])
     # Row 2: Base & Shop
     rows.append([
-        btn("پایگاه و منابع", emoji_key="btn_hub_base", style=CONFIRM, callback_data="menu:hub_base"),
-        btn("فروشگاه و بازار", emoji_key="btn_hub_shop", style=SHOP, callback_data="menu:hub_shop"),
+        btn("پایگاه", emoji_key="btn_hub_base", style=CONFIRM, callback_data="menu:hub_base"),
+        btn("فروشگاه", emoji_key="btn_hub_shop", style=SHOP, callback_data="menu:hub_shop"),
     ])
     # Row 3: City
     rows.append([
-        btn("شهر، جوایز و کلوپ", emoji_key="btn_hub_city", style=PRIMARY, callback_data="menu:hub_city"),
+        btn("شهر", emoji_key="btn_hub_city", style=PRIMARY, callback_data="menu:hub_city"),
     ])
 
     group_link = botconfig.get_group_link()
@@ -1280,10 +1280,10 @@ def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=
         rows.append([btn(title, emoji_key="btn_join_group", style=PRIMARY, url=url)])
     add_group_url = f"https://t.me/{BOT_USERNAME}?startgroup=true"
     rows.append([
-        btn("➕ افزودن به گروه", emoji_key="btn_add_group", style=CONFIRM, url=add_group_url)
+        btn("افزودن به گروه", emoji_key="btn_add_group", style=CONFIRM, url=add_group_url)
     ])
     if is_owner:
-        rows.append([btn("پنل ادمین", emoji_key="btn_admin", style=ADMIN, callback_data="menu:admin")])
+        rows.append([btn("ادمین", emoji_key="btn_admin", style=ADMIN, callback_data="menu:admin")])
     return symmetric_markup(rows)
 
 
@@ -1478,7 +1478,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         text = (
             f"{get_emoji('egg')} <b>به Kaiju Legends خوش اومدی فرمانده!</b>\n\n"
             "<blockquote>یه تخم هیولا توی آزمایشگاهت منتظره. بشکنش تا اولین کایجوت به دنیا بیاد!</blockquote>\n"
-            f"<i>اسم آزمایشگاهت فعلاً «{lab_display(user)}»ـه؛ هر وقت خواستی از «پروفایل و تنظیمات» رایگان عوضش کن.</i>"
+            f"<i>اسم آزمایشگاهت فعلاً «{lab_display(user)}»ـه؛ هر وقت خواستی از «شهر ← پروفایل» رایگان عوضش کن.</i>"
         )
         keyboard = InlineKeyboardMarkup([
             [btn("شکستن اولین تخم کایجو", emoji_key="btn_hatch", style=CONFIRM, callback_data="onboarding:hatch")]
@@ -5347,7 +5347,7 @@ async def expedition_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if group_link is not None:
         url, title = group_link
         rows.append([btn(f"رفتن به گروه برای اعزام ({title})", emoji_key="btn_exp_launch", style=PRIMARY, url=url)])
-    rows.append([back_btn("menu:hub_battle", "بازگشت به نبرد و ماجراجویی")])
+    rows.append([back_btn("menu:hub_battle", "بازگشت")])
     from game.media import get_feature_image_path
     photo = get_feature_image_path("expedition")
     await send_screen(update, "\n".join(lines), photo=photo, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
@@ -5363,7 +5363,7 @@ async def alliance_war_panel(update: Update, context: ContextTypes.DEFAULT_TYPE)
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([
                 [btn("پیوستن یا ساخت اتحاد", emoji_key="btn_alliance", style=PRIMARY, callback_data="menu:alliance_info")],
-                [back_btn("menu:hub_battle", "بازگشت به نبرد و ماجراجویی")],
+                [back_btn("menu:hub_battle", "بازگشت")],
             ]),
         )
         return
@@ -5379,7 +5379,7 @@ async def alliance_war_panel(update: Update, context: ContextTypes.DEFAULT_TYPE)
         [btn("جنگ یک‌روزه اتحاد", emoji_key="btn_war", style=BATTLE, callback_data="ally_war1d")],
         [btn("لیگ و جنگ هفتگی اتحاد", emoji_key="btn_war", style=BATTLE, callback_data="ally_war")],
         [btn("ساختمان‌ها و پرک‌های اتحاد", emoji_key="btn_buildings", style=BUILD, callback_data="ally_perks")],
-        [back_btn("menu:hub_battle", "بازگشت به نبرد و ماجراجویی")],
+        [back_btn("menu:hub_battle", "بازگشت")],
     ]
     from game.media import get_feature_image_path
     photo = get_feature_image_path("war") or get_feature_image_path("alliance")
@@ -5432,7 +5432,7 @@ async def workers_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         status = f"<code>{p['workers_count']}/{p['slots']}</code> کارگر (+<code>{p['bonus_pct']:.0f}%</code>)"
         lines.append(f"▫️ <b>{p['label']}</b> (سطح <code>{p['level']}</code>): {status}")
         rows.append([btn(f"تنظیم کارگران {p['label']}", emoji_key="btn_workers", style=BUILD, callback_data=f"bld_workers:{p['id']}")])
-    rows.append([back_btn("menu:hub_base", "بازگشت به پایگاه و منابع")])
+    rows.append([back_btn("menu:hub_base", "بازگشت")])
     from game.media import get_feature_image_path
     photo = get_feature_image_path("workers") or get_feature_image_path("buildings")
     await send_screen(update, "\n".join(lines), photo=photo, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
@@ -5490,7 +5490,7 @@ async def vault_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         r_emoji = get_emoji("coin") if v["resource"] == "coins" else get_emoji("dna")
         rows.append([btn(f"{r_emoji} {v['label']} (+{v['amount']:,})", emoji_key="btn_vault", style=CONFIRM, callback_data=f"bld_pick:{v['id']}")])
     rows.append([btn("مبادله طلا و DNA (صرافی)", emoji_key="btn_exchange", style=SHOP, callback_data="menu:exchange")])
-    rows.append([back_btn("menu:hub_base", "بازگشت به پایگاه و منابع")])
+    rows.append([back_btn("menu:hub_base", "بازگشت")])
     from game.media import get_feature_image_path
     photo = get_feature_image_path("vault") or get_feature_image_path("buildings")
     await send_screen(update, "\n".join(lines), photo=photo, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))

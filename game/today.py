@@ -3,7 +3,9 @@
 The daily loop was scattered over five hubs (free boxes in the shop, the wheel and the
 missions in the city, collecting in the base, chests in the arena, …) and fewer than half
 of the active players collected even their free rewards. This module gathers the state
-of all of it (state) and takes whatever is a plain «collect» in one go (collect_all).
+of all of it (state) and takes ALL of it in one go (collect_all): building output,
+finished dispatch missions, the event's daily reward, a finished story quest, the daily
+wheel spin, the free monster boxes, ready arena chests and reached mission boxes.
 
 Nothing here adds a reward — it only points at, or collects, what already exists.
 """
@@ -17,6 +19,7 @@ from game import constants
 from game.creature import GameError
 
 EVENTS_HALL_REQ = 3  # the «رویدادهای ویژه» section (and its daily reward) opens here
+_BOX_NAMES = {"bronze": ("🥉", "باکس برنزی"), "silver": ("🥈", "باکس نقره‌ای")}
 
 
 def _pending_buildings(user: User) -> list[tuple[Building, int, str]]:
@@ -32,9 +35,9 @@ def _pending_buildings(user: User) -> list[tuple[Building, int, str]]:
     return out
 
 
-def _boxes_ready(user: User) -> tuple[int, int]:
-    """(mission boxes reached but not opened, this week's points) straight from the claim
-    rows — three small queries instead of the ~40 the full missions screen needs."""
+def _reached_boxes(user: User) -> tuple[list[int], int]:
+    """(indexes of mission boxes reached but not opened, this week's points) straight from
+    the claim rows — three small queries instead of the ~40 the full missions screen needs."""
     from bio_lab.models import MissionClaim
     from game import daily
 
@@ -42,8 +45,8 @@ def _boxes_ready(user: User) -> tuple[int, int]:
     points = daily._week_points(user, dates, wk)
     opened = set(MissionClaim.objects.filter(user=user, day=wk, mission_key__startswith="box_")
                  .values_list("mission_key", flat=True))
-    ready = sum(1 for i, (need, _tier) in enumerate(constants.mission_box_thresholds(), start=1)
-                if points >= need and daily._box_key(i) not in opened)
+    ready = [i for i, (need, _tier) in enumerate(constants.mission_box_thresholds(), start=1)
+             if points >= need and daily._box_key(i) not in opened]
     return ready, points
 
 
@@ -65,7 +68,7 @@ def state(user: User, full: bool = True) -> dict:
     for _b, amount, resource in _pending_buildings(user):
         pending[resource] = pending.get(resource, 0) + amount
 
-    boxes_ready, points = _boxes_ready(user)
+    boxes, points = _reached_boxes(user)
     missions = daily.mission_status(user) if full else None
     quest = story.get_active_quest(user)
     boss = worldboss.current_boss()
@@ -90,12 +93,13 @@ def state(user: User, full: bool = True) -> dict:
             user=user, action="wheel_spin", day=today_str(), count__gte=constants.WHEEL_DAILY_LIMIT
         ).exists(),
         "chests_ready": ArenaChest.objects.filter(user=user, status="ready").count(),
-        "boxes_ready": boxes_ready,
+        "boxes_ready": len(boxes),
         "missions_done": sum(1 for m in missions["daily"] if m["done"]) if missions else 0,
         "missions_total": len(missions["daily"]) if missions else 0,
         "points": points,
         "next_box": next((b for b in missions["boxes"] if not b["reached"]), None) if missions else None,
-        "boss": {"name": boss.name, "hits_left": boss_hits_left} if boss is not None else None,
+        # the boss only counts while it is here AND the player still has a hit left
+        "boss": {"name": boss.name, "hits_left": boss_hits_left} if boss is not None and boss_hits_left else None,
         "tournament_open": tournament.registration_open() and tournament.my_entry(user) is None,
         "festival": festival.theme() if festival.active_key() else None,
         "rule": events.rule_line(),
@@ -104,26 +108,60 @@ def state(user: User, full: bool = True) -> dict:
 
 def collectable_count(st: dict) -> int:
     """How many things «دریافت همه» would take right now."""
-    return (len(st["pending"]) + st["dispatch_ready"] + int(st["event_daily"]) + int(st["story_ready"]))
+    return (len(st["pending"]) + st["dispatch_ready"] + int(st["event_daily"]) + int(st["story_ready"])
+            + len(st["free_boxes"]) + int(st["wheel"]) + st["chests_ready"] + st["boxes_ready"])
 
 
 def waiting_count(st: dict) -> int:
-    """The number on the menu button: everything that's ready, collectable or not."""
-    return (collectable_count(st) + len(st["free_boxes"]) + int(st["wheel"]) + st["chests_ready"]
-            + st["boxes_ready"] + int(bool(st["boss"] and st["boss"]["hits_left"])) + int(st["tournament_open"]))
+    """The number on the menu button: everything collectable plus what is live right now."""
+    return collectable_count(st) + int(bool(st["boss"])) + int(st["tournament_open"])
+
+
+def _loot_roll(contents: dict) -> dict | None:
+    """A chest/box result → the entry game.media.composite_lootbox_batch_image draws."""
+    if contents.get("creature") is not None:
+        return {"kind": "creature", "creature": contents["creature"], "rarity": contents.get("rarity", "")}
+    if contents.get("item") is not None:
+        return {"kind": "equipment", "item": contents["item"], "rarity": contents.get("rarity", "")}
+    return None
+
+
+def _prize_name(contents: dict) -> str:
+    rarity = constants.RARITY_LABELS.get(contents.get("rarity"), "")
+    if contents.get("creature") is not None:
+        return f"{rarity} {contents['creature'].name}".strip()
+    if contents.get("item") is not None:
+        return f"{rarity} «{contents['item'].name}»".strip()
+    return ""
 
 
 def collect_all(user: User) -> dict:
-    """Take every plain «collect»: building output, finished dispatch missions, the event's
-    daily reward and a finished story quest. Each part runs in its own transaction, so one
-    failing never undoes the others. Returns totals + the lines to show."""
-    from game import daily, dispatch, events, story
+    """Take everything that is ready. Each part runs in its own transaction, so one failing
+    never undoes the others. Returns:
+      totals   – gold / DNA / diamonds gained in all of it
+      sections – [(title, [lines])] for the result text, in a fixed order
+      rolls    – creatures/items won, for the collage image
+      missions – missions completed along the way
+    """
+    from game import daily, dispatch, events, story, wheel
+    from game.arena_chests import advance_user_chests, open_chest
     from game.buildings import collect, main_hall_level
+    from game.lootbox import can_claim_free_diamond_box, open_diamond_box
 
     totals = {"coins": 0, "dna_fragments": 0, "diamonds": 0}
-    lines: list[str] = []
+    sections: list[tuple[str, list[str]]] = []
+    rolls: list[dict] = []
     missions_done: list[dict] = []
 
+    def add(contents: dict) -> None:
+        totals["coins"] += int(contents.get("coins", 0) or 0)
+        totals["dna_fragments"] += int(contents.get("dna", 0) or 0)
+        totals["diamonds"] += int(contents.get("diamonds", 0) or 0)
+        roll = _loot_roll(contents)
+        if roll:
+            rolls.append(roll)
+
+    # ── buildings ──
     collected = 0
     for building, _amount, _resource in _pending_buildings(user):
         try:
@@ -134,28 +172,83 @@ def collect_all(user: User) -> dict:
         collected += 1
         daily.record_action(user, "collect")
         missions_done += daily.check_missions(user, "collect")
+    base: list[str] = []
     if collected:
-        lines.append(f"🏗 جمع‌آوری از <code>{collected}</code> ساختمان")
+        base.append(f"🏗 تولید <code>{collected}</code> ساختمان")
 
+    # ── dispatch ──
     hall = main_hall_level(user)
     if hall >= 2:
-        for res in dispatch.collect_all(user):
-            reward = res["reward"]
-            totals["coins"] += int(reward.get("coins", 0))
-            totals["dna_fragments"] += int(reward.get("dna", 0))
-            totals["diamonds"] += int(reward.get("diamonds", 0))
-            _key, emoji, title, _flavor, _focus = dispatch.template(res["mission"])
-            extra = " · 🍀 جایزه‌ی شگفتی" if dispatch.has_bonus(reward) else ""
-            lines.append(f"{emoji} {title}{extra}")
+        back = dispatch.collect_all(user)
+        for res in back:
+            add(res["reward"])
+        if back:
+            lucky = sum(1 for r in back if dispatch.has_bonus(r["reward"]))
+            base.append(f"🧭 <code>{len(back)}</code> مأموریت اعزامی" + (f" (🍀 {lucky} شگفتی)" if lucky else ""))
 
+    # ── event daily + story ──
     if hall >= EVENTS_HALL_REQ:
         reward = events.claim_daily(user)
         if reward:
-            lines.append(f"🎁 جایزه‌ی روزانه‌ی رویداد: {events.reward_text(reward)}")
-
+            base.append(f"🎁 جایزه‌ی رویداد: {events.reward_text(reward)}")
     with transaction.atomic():
         res = story.claim_active_quest(user)
     if res.get("success"):
-        lines.append(f"🎯 مأموریت «{res['claimed_quest']['title']}»: {res['reward_text']}")
+        base.append(f"🎯 «{res['claimed_quest']['title']}»")
+    if base:
+        sections.append(("جمع‌آوری", base))
 
-    return {"totals": totals, "lines": lines, "missions": missions_done}
+    # ── wheel ──
+    try:
+        prize = wheel.spin(user)
+    except GameError:
+        prize = None
+    if prize is not None:
+        if prize.get("kind") in ("coins", "dna", "diamonds"):
+            key = {"coins": "coins", "dna": "dna_fragments", "diamonds": "diamonds"}[prize["kind"]]
+            totals[key] += int(prize.get("amount", 0))
+        elif prize.get("kind") == "jackpot":
+            add(prize)
+        elif prize.get("kind") == "creature" and prize.get("creature_id"):
+            from bio_lab.models import Creature
+
+            creature = Creature.objects.filter(id=prize["creature_id"]).first()
+            if creature is not None:
+                rolls.append({"kind": "creature", "creature": creature, "rarity": prize.get("rarity", "")})
+        missions_done += prize.get("missions", [])
+        sections.append(("گردونه", [f"🎡 {prize['label']}"]))
+
+    # ── boxes and chests ──
+    opened: list[str] = []
+    for tier in ("bronze", "silver"):
+        if not can_claim_free_diamond_box(user, tier):
+            continue
+        try:
+            box = open_diamond_box(user, tier, require_free=True)
+        except GameError:
+            continue
+        add(box)
+        emoji, name = _BOX_NAMES[tier]
+        opened.append(f"{emoji} {name}: {_prize_name(box)}")
+
+    with transaction.atomic():
+        advance_user_chests(user)
+    for chest_id in list(ArenaChest.objects.filter(user=user, status="ready").values_list("id", flat=True)):
+        try:
+            chest = open_chest(user, chest_id)
+        except GameError:
+            continue
+        add(chest)
+        opened.append(f"{chest['emoji']} {chest['name']}: {_prize_name(chest)}")
+
+    for index in _reached_boxes(user)[0]:
+        try:
+            box = daily.claim_box(user, index)
+        except GameError:
+            continue
+        add(box)
+        opened.append(f"{box['emoji']} باکس مأموریت {index}: {_prize_name(box)}")
+    if opened:
+        sections.append(("باکس‌ها و جعبه‌ها", opened))
+
+    return {"totals": totals, "sections": sections, "rolls": rolls, "missions": missions_done}

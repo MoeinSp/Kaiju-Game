@@ -379,12 +379,12 @@ def get_main_reply_keyboard():
     from telegram import KeyboardButton, ReplyKeyboardMarkup
     from game.button_emoji import get_button_label_emoji
 
-    b_battle = f"{get_button_label_emoji('btn_hub_battle') or '⚔️'} نبرد و ماجراجویی"
-    b_creature = f"{get_button_label_emoji('btn_hub_creature') or '🦖'} هیولا و تجهیزات"
-    b_base = f"{get_button_label_emoji('btn_hub_base') or '🏰'} پایگاه و منابع"
-    b_shop = f"{get_button_label_emoji('btn_hub_shop') or '🛒'} فروشگاه و بازار"
-    b_city = f"{get_button_label_emoji('btn_hub_city') or '🌐'} شهر و جوایز"
-    b_me = f"{get_button_label_emoji('btn_profile') or '👤'} آزمایشگاه من"
+    b_battle = f"{get_button_label_emoji('btn_hub_battle') or '⚔️'} نبرد"
+    b_creature = f"{get_button_label_emoji('btn_hub_creature') or '🦖'} هیولا"
+    b_base = f"{get_button_label_emoji('btn_hub_base') or '🏰'} پایگاه"
+    b_shop = f"{get_button_label_emoji('btn_hub_shop') or '🛒'} فروشگاه"
+    b_city = f"{get_button_label_emoji('btn_hub_city') or '🌐'} شهر"
+    b_me = f"{get_button_label_emoji('btn_profile') or '👤'} منو"
 
     keyboard = [
         [KeyboardButton(b_battle), KeyboardButton(b_creature)],

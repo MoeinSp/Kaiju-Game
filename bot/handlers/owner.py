@@ -3504,50 +3504,77 @@ def _parse_stats_day(raw: str):
     return day if day <= today else None
 
 
-def _chg(c: dict) -> str:
-    sign = "+" if c["diff"] > 0 else ""
-    return f"{sign}{c['diff']:,} ({sign}{c['pct']:.0f}٪)"
+_STAT_ACTION_ICONS = {
+    "hunt": "🏹", "arena_attack": "⚔️", "collect": "🏗", "feed": "🍖", "wheel_spin": "🎡", "fusion": "🧪",
+    "dispatch": "🧭", "worldboss_hit": "👹", "raid_attack": "🐲", "free_silver_box": "🥈", "free_bronze_box": "🥉",
+    "word_reward": "💬", "group_jackpot": "🎰", "guardian_stipend": "🛡", "guardian_challenge": "🛡", "heist": "🏴‍☠️",
+    "duel_win": "🥊", "duel_loss": "🥊", "diamond_vein": "💎", "energy_capsule": "⚡", "gold_transfer_received": "💸",
+}
+_JALALI_MONTHS = ("فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند")
+_STAT_DIV = "━━━━━━━━━━━━━━━━━━━━"
+
+
+def _chg(c: dict | None) -> str:
+    """«← 233 ▼ ۱۰٪» — the value compared with and the direction; «—» when nothing to compare."""
+    if c is None:
+        return "—"
+    arrow = {"up": "▲", "down": "▼", "flat": "＝"}[c["trend"]]
+    return f"قبل <code>{c['before']:,}</code> {arrow} <code>{abs(c['pct']):.0f}٪</code>"
 
 
 def _stats_day_text(r: dict, g: dict) -> str:
     from game.battlepass import gregorian_to_jalali
 
     day = r["day"]
-    jy, jm, jd = gregorian_to_jalali(day.year, day.month, day.day)
-    title = "امروز" if r["is_today"] else "روز"
-    lines = [f"{get_emoji('stats')} <b>آمار {title} {jy}/{jm:02d}/{jd:02d}</b> <i>({day.isoformat()})</i>"]
+    _jy, jm, jd = gregorian_to_jalali(day.year, day.month, day.day)
+    lines = [f"{get_emoji('stats')} <b>آمار {'امروز' if r['is_today'] else 'روز'} — {jd} {_JALALI_MONTHS[jm - 1]}</b> <i>({day.isoformat()})</i>"]
     if r["is_today"]:
-        lines.append(f"<i>تا ساعت {r['hour']}:59 — مقایسه با دیروز تا همین ساعت</i>" if r["basis"] == "hourly"
-                     else "<i>مقایسه‌ی هم‌ساعت از فردا فعال می‌شه (داده‌ی ساعتی دیروز ثبت نشده)؛ فعلاً کل امروز با کل دیروز.</i>")
-    elif r["basis"] != "hourly":
-        lines.append("<i>برای این مقایسه داده‌ی ساعتی کامل نیست؛ «فعال» یعنی بازیکنی که حداقل یک کار ثبت‌شده انجام داده.</i>")
-    lines.append("")
+        if r["same_hour"]:
+            lines.append(f"⏱ تا ساعت <b>{r['hour']}:59</b> · مقایسه با <b>دیروز تا همین ساعت</b>")
+        else:
+            lines.append(f"⏱ تا ساعت <b>{r['hour']}:59</b>")
+            lines.append("<i>مقایسه‌ی «دیروز همین ساعت» از فردا نشون داده می‌شه؛ ثبت ساعتی از امروز شروع شده و برای دیروز وجود نداره.</i>")
+    else:
+        lines.append("📆 کل روز · مقایسه با <b>روز قبلش</b>"
+                     + ("" if r["source"] == "hourly" else " <i>(بر اساس کارهای ثبت‌شده)</i>"))
+
+    # ── players ──
     ac = r["active_change"]
-    lines.append(f"🟢 <b>بازیکن فعال: {r['active']:,}</b>"
-                 + (f"  (پیوی/دکمه: {r['active_private']:,})" if r["active_private"] is not None and r["basis"] == "hourly" else ""))
-    lines.append(f"   {'دیروز همین ساعت' if r['is_today'] and r['basis'] == 'hourly' else 'روز قبل'}: {r['active_before']:,} ⟵ {_chg(ac)}")
-    lines.append(f"   <b>{_TREND[ac['trend']]}</b>")
-    if r["active_full_prev"]:
-        lines.append(f"   کل دیروز: {r['active_full_prev']:,}")
-    nc = r["new_change"]
-    lines.append(f"🆕 کاربر جدید: <b>{r['new']:,}</b> (قبل: {r['new_before']:,} ⟵ {_chg(nc)})")
+    lines += ["", _STAT_DIV, "👥 <b>بازیکنان</b>"]
+    lines.append(f"🟢 فعال: <b>{r['active']:,}</b>  ·  {_chg(ac)}")
+    if r["active_private"] is not None:
+        lines.append(f"📱 فعال در پیوی: <b>{r['active_private']:,}</b>  ·  {_chg(r['private_change'])}")
+    lines.append(f"🆕 جدید: <b>{r['new']:,}</b>  ·  {_chg(r['new_change'])}")
     if r["peak"]:
-        lines.append(f"⏰ شلوغ‌ترین ساعت: {r['peak'][0]}:00 با {r['peak'][1]:,} بازیکن")
+        lines.append(f"⏰ شلوغ‌ترین ساعت: <b>{r['peak'][0]}:00</b> ({r['peak'][1]:,} بازیکن)")
+    if ac is not None:
+        sign = "+" if ac["diff"] > 0 else ""
+        lines.append(f"{_TREND[ac['trend']]}: <b>{sign}{ac['diff']:,}</b> بازیکن (<b>{sign}{ac['pct']:.0f}٪</b>)")
+
+    # ── activities ──
     if r["actions"]:
-        lines += ["", "<b>کارهای انجام‌شده</b> (بازیکن · تعداد · تغییر بازیکن نسبت به روز قبل):"]
-        for action, users, total, prev_users in r["actions"]:
-            label = _STAT_ACTION_LABELS.get(action) or _ACTION_LABELS.get(action, action)
-            diff = users - prev_users
-            lines.append(f"• {label}: <b>{users:,}</b> · {total:,} · {'+' if diff > 0 else ''}{diff:,}")
+        lines += ["", _STAT_DIV, "🎮 <b>فعالیت‌ها</b> <i>(تعداد · بازیکن · تغییر تعداد)</i>"]
+        for a in r["actions"]:
+            label = _STAT_ACTION_LABELS.get(a["action"]) or _ACTION_LABELS.get(a["action"], a["action"])
+            icon = _STAT_ACTION_ICONS.get(a["action"], "▫️")
+            c = a["change"]
+            tail = "" if c is None else f" · {'▲' if c['trend'] == 'up' else '▼' if c['trend'] == 'down' else '＝'} {abs(c['pct']):.0f}٪"
+            lines.append(f"{icon} {label}: <b>{a['total']:,}</b> · {a['users']:,} نفر{tail}")
+
+    # ── buttons ──
     if r["top_clicks"]:
-        lines += ["", f"<b>دکمه‌ها</b> (کل ضربه: {r['clicks_total']:,}) — پرکاربردترین:"]
-        lines.append("، ".join(f"<code>{k}</code> {n:,}" for k, n in r["top_clicks"]))
+        lines += ["", _STAT_DIV, f"🔘 <b>دکمه‌ها</b> <i>(کل ضربه: {r['clicks_total']:,})</i>"]
+        lines.append("🔝 " + " · ".join(f"<code>{k}</code> {n:,}" for k, n in r["top_clicks"]))
         if r["low_menu_clicks"]:
-            lines.append("کم‌کاربردترین بخش‌های منو: " + "، ".join(f"<code>{k[5:]}</code> {n:,}" for k, n in r["low_menu_clicks"]))
+            lines.append("🔻 کم‌استفاده: " + " · ".join(f"<code>{k[5:]}</code> {n:,}" for k, n in r["low_menu_clicks"]))
+
+    # ── whole game ──
     lines += [
-        "",
-        f"{get_emoji('users')} کل کاربران: <b>{g['users']:,}</b> (🚫 {g['banned']:,}) · {get_emoji('creature')} موجودات: <b>{g['creatures']:,}</b>",
-        f"{get_emoji('coin')} <b>{g['total_coins']:,}</b> · {get_emoji('dna')} <b>{g['total_dna']:,}</b> · {get_emoji('diamond')} <b>{g['total_diamonds']:,}</b>",
+        "", _STAT_DIV, "🌍 <b>کل بازی</b>",
+        f"{get_emoji('users')} کاربران: <b>{g['users']:,}</b> (🚫 {g['banned']:,})  ·  {get_emoji('creature')} موجودات: <b>{g['creatures']:,}</b>",
+        f"{get_emoji('coin')} <b>{g['total_coins']:,}</b>",
+        f"{get_emoji('dna')} <b>{g['total_dna']:,}</b>",
+        f"{get_emoji('diamond')} <b>{g['total_diamonds']:,}</b>",
     ]
     return "\n".join(lines)
 

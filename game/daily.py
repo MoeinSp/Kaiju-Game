@@ -39,6 +39,7 @@ def _festival_hook(user: User, action: str, new_count: int, n: int) -> None:
     from game import metrics
 
     metrics.mark(user.id)  # «active this hour» for the admin stats (in-memory, no query)
+    metrics.action(action, n)
     try:
         from game import festival
 

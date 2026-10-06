@@ -1,5 +1,6 @@
-"""«📋 امروز» — the private-chat screen for game/today.py: what's ready right now, one
-«دریافت همه» button for everything that is a plain collect, and a shortcut to the rest.
+"""«📋 امروز» — the private-chat screen for game/today.py: what's ready right now and one
+«دریافت همه» button that takes all of it (it also spins the wheel and opens the boxes and
+chests, then shows everything won in one collage).
 
 Kept short on purpose: it is shown as a photo caption (~1,000 chars)."""
 
@@ -7,8 +8,8 @@ from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bio_lab.repository import get_or_create_user
-from bot.buttons import BATTLE, CONFIRM, NAV, SHOP, back_btn, btn
-from bot.utils import mission_reward_text, run_db, send_screen
+from bot.buttons import BATTLE, CONFIRM, NAV, back_btn, btn
+from bot.utils import run_db, send_screen
 from game import today
 from game.emoji import get_emoji
 
@@ -33,11 +34,9 @@ def _render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     rows = []
 
     # ── live, time-limited things first ──
-    if st["boss"]:
-        left = st["boss"]["hits_left"]
-        lines.append(f"👹 <b>غول سرگردان اینجاست!</b> " + (f"<code>{left}</code> ضربه داری." if left else "ضربه‌هات رو زدی."))
-        if left:
-            rows.append([btn("ضربه به غول", emoji_key="btn_worldboss", style=BATTLE, callback_data="menu:worldboss")])
+    if st["boss"]:  # only while a boss is here AND the player still has a hit
+        lines.append(f"👹 <b>غول سرگردان اینجاست!</b> <code>{st['boss']['hits_left']}</code> ضربه داری.")
+        rows.append([btn("ضربه به غول", emoji_key="btn_worldboss", style=BATTLE, callback_data="menu:worldboss")])
     if st["tournament_open"]:
         lines.append("🏟 ثبت‌نام <b>جام آخر هفته</b> بازه (رایگان).")
         rows.append([btn("ثبت‌نام در جام", emoji_key="btn_tournament", style=BATTLE, callback_data="menu:tournament")])
@@ -58,28 +57,20 @@ def _render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
         ready.append("🎁 جایزه‌ی روزانه‌ی رویداد")
     if st["story_ready"]:
         ready.append("🎯 پاداش مأموریت داستانی")
+    if st["wheel"]:
+        ready.append("🎡 گردونه‌ی رایگان امروز")
+    if st["free_boxes"]:
+        ready.append(f"📦 <code>{len(st['free_boxes'])}</code> باکس رایگان")
+    if st["chests_ready"]:
+        ready.append(f"🎁 <code>{st['chests_ready']}</code> جعبه‌ی آرنا")
+    if st["boxes_ready"]:
+        ready.append(f"🎯 <code>{st['boxes_ready']}</code> باکس مأموریت")
     if ready:
         lines += ["✅ <b>آماده‌ی دریافت:</b>"] + ready
         rows.append([btn(f"دریافت همه ({today.collectable_count(st)})", emoji_key="btn_confirm", style=CONFIRM,
                          callback_data="today:all")])
     else:
         lines.append("<i>چیزی برای جمع کردن نمونده.</i>")
-
-    # ── one tap away ──
-    extra = []
-    if st["free_boxes"]:
-        extra.append([btn(f"باکس رایگان ({len(st['free_boxes'])})", emoji_key="btn_diamond_box", style=SHOP,
-                          callback_data="menu:diamond_box")])
-    if st["wheel"]:
-        extra.append([btn("گردونه‌ی رایگان", emoji_key="btn_wheel", style=SHOP, callback_data="menu:wheel")])
-    if st["chests_ready"]:
-        extra.append([btn(f"جعبه‌ی آرنا آماده ({st['chests_ready']})", emoji_key="btn_chests", style=SHOP,
-                          callback_data="menu:arena_chests")])
-    if st["boxes_ready"]:
-        extra.append([btn(f"باکس مأموریت ({st['boxes_ready']})", emoji_key="btn_missions", style=SHOP,
-                          callback_data="menu:missions")])
-    flat = [b for row in extra for b in row]
-    rows += [flat[i:i + 2] for i in range(0, len(flat), 2)]
 
     lines += [
         "",
@@ -98,35 +89,59 @@ def _render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
-async def today_panel(update: Update, context: ContextTypes.DEFAULT_TYPE, note: str = "") -> None:
+async def today_panel(update: Update, context: ContextTypes.DEFAULT_TYPE, note: str = "", photo: str | None = None) -> None:
     st = await run_db(_state_sync, update.effective_user)
     text, keyboard = _render(st, note)
     from game.media import get_feature_image_path
 
-    await send_screen(update, text, photo=get_feature_image_path("missions"), parse_mode="HTML", reply_markup=keyboard)
+    await send_screen(update, text, photo=photo or get_feature_image_path("missions"), parse_mode="HTML",
+                      reply_markup=keyboard)
 
 
 def _collect_all_sync(tg_user):
+    """Collect everything, and build the collage of the creatures/items won HERE (sync):
+    it reads image files and may draw a new one."""
+    from game.media import composite_lootbox_batch_image
+
     user, _ = get_or_create_user(tg_user)
-    return today.collect_all(user)
+    res = today.collect_all(user)
+    try:
+        res["photo"] = composite_lootbox_batch_image(res["rolls"], "جایزه‌های امروز") if res["rolls"] else None
+    except Exception:  # noqa: BLE001 — the picture is a nicety; the rewards are already paid
+        res["photo"] = None
+    return res
+
+
+def _result_note(res: dict) -> str:
+    """The result of «دریافت همه»: totals first, then one tidy block per kind of reward."""
+    out = ["🎉 <b>همه رو گرفتی!</b>"]
+    amounts = _amounts(res["totals"])
+    if amounts:
+        out.append(amounts)
+    budget = 14  # lines — the screen is a photo caption
+    for title, items in res["sections"]:
+        out += ["", f"<b>{title}</b>"]
+        shown = items[:max(1, budget)]
+        out += shown
+        if len(items) > len(shown):
+            out.append(f"<i>و {len(items) - len(shown)} مورد دیگه</i>")
+        budget -= len(shown)
+    done = res["missions"]
+    if done:
+        out += ["", f"{get_emoji('mission')} <b>{len(done)} مأموریت تکمیل شد:</b> "
+                + "، ".join(m["label"] for m in done[:4])]
+    return "\n".join(out)
 
 
 async def today_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     res = await run_db(_collect_all_sync, update.effective_user)
-    if not res["lines"]:
+    if not res["sections"]:
         await query.answer("چیزی برای دریافت نبود.")
         await today_panel(update, context)
         return
     await query.answer("🎁 گرفتی!")
-    note = ["🎉 <b>همه رو گرفتی!</b>"]
-    amounts = _amounts(res["totals"])
-    if amounts:
-        note.append(amounts)
-    note += res["lines"][:6]
-    for m in res["missions"][:3]:
-        note.append(f"{get_emoji('mission')} مأموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}")
-    await today_panel(update, context, note="\n".join(note))
+    await today_panel(update, context, note=_result_note(res), photo=res["photo"])
 
 
 async def today_home_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
