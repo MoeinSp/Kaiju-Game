@@ -27,6 +27,7 @@ from bot.handlers import (
     dispatch,
     energy,
     festival,
+    today,
     tournament,
     worldboss,
     events,
@@ -296,6 +297,7 @@ def main() -> None:
     worldboss.register(application)
     tournament.register(application)
     festival.register(application)
+    today.register(application)
     blackmarket.register(application)
     groupdrops.register(application)  # flash reward drops in groups (JobQueue)
     notify.register(application)  # periodic re-engagement DMs (JobQueue)

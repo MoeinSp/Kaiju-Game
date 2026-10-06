@@ -356,7 +356,7 @@ def upgrade_cost_and_minutes(building: Building) -> tuple[int, int]:
     target = min(building.level + 1, constants.BUILDING_MAX_LEVEL)
     return (
         constants.BUILDING_UPGRADE_GOLD[target],
-        constants.BUILDING_UPGRADE_MINUTES[target],
+        constants.building_upgrade_minutes(building.building_type, target),
     )
 
 
@@ -367,7 +367,7 @@ def upgrade_seconds(building: Building) -> int:
     target = min(building.level + 1, constants.BUILDING_MAX_LEVEL)
     if target <= 1:
         return constants.BUILDING_CONSTRUCT_SECONDS
-    return constants.BUILDING_UPGRADE_MINUTES[target] * 60
+    return constants.building_upgrade_minutes(building.building_type, target) * 60
 
 
 def full_buildout_estimate() -> tuple[int, int]:

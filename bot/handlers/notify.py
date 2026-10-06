@@ -238,67 +238,156 @@ async def notify_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         pass
 
     pending = await run_db(collect_due)
-    for item in pending:
-        # items are (user_id, text[, _unused[, attacker_id]]). The 4th element, when
-        # present, attaches a «🔍 جزییات حریف» button (defense reports). No revenge
-        # button — the defense report never offers revenge (that lives in «انتقام‌ها»).
-        user_id, text = item[0], item[1]
-        marker = item[2] if len(item) > 2 else None
-        payload = item[3] if len(item) > 3 else None
-        photo_path = None
-        if marker == "arena":
-            reply_markup = _arena_button()
-        elif marker == "worldboss":
-            from bot.buttons import BATTLE
+    await _deliver(context, pending)
 
-            reply_markup = InlineKeyboardMarkup(
-                [[btn("غول سرگردان", emoji_key="btn_worldboss", style=BATTLE, callback_data="menu:worldboss")]]
-            )
-        elif marker == "tournament":
-            from bot.buttons import BATTLE
 
-            reply_markup = InlineKeyboardMarkup(
-                [[btn("جام آخر هفته", emoji_key="btn_tournament", style=BATTLE, callback_data="menu:tournament")]]
-            )
-        elif marker == "festival":
-            reply_markup = InlineKeyboardMarkup(
-                [[btn("جشنواره", emoji_key="btn_festival", style=NAV, callback_data="menu:festival")]]
-            )
-            from game.media import get_feature_image_path
+# ── delivery: per-type opt-outs, a daily cap on broadcasts, one message per player ──
+# marker → category the player can switch off in «پروفایل ← اعلان‌ها» (User.notify_off)
+NOTIFY_CATEGORIES = {
+    "timers": ("⏱ تایمرها", "تخم، ساختمان، اعزام، جعبه و پر شدن انرژی"),
+    "attacks": ("⚔️ حمله‌ها", "وقتی به آزمایشگاهت حمله می‌شه"),
+    "events": ("🎪 رویدادها", "غول سرگردان، جام، جشنواره و رویداد هفته"),
+    "reminders": ("🎁 یادآوری‌ها", "باکس رایگان، جایزه‌ی روزانه و باکس مأموریت"),
+}
+_MARKER_CATEGORY = {
+    "timer": "timers", "arena": "timers", "arena_chest_ready": "timers",
+    "worldboss": "events", "tournament": "events", "festival": "events", "events": "events",
+    "free_box_reminder": "reminders", "missions": "reminders", "nudge": "reminders",
+}
+# Broadcast-type DMs (events + reminders) a player gets per day at most. Timers and attack
+# reports answer something the player did, so they are never capped — only merged.
+DAILY_BROADCAST_CAP = 4
+_broadcast_sent: dict[tuple[str, int], int] = {}
 
-            photo_path = get_feature_image_path("festival")
-        elif marker in ("missions", "events"):
-            label, key = ("مأموریت‌ها", "btn_missions") if marker == "missions" else ("رویداد این هفته", "btn_events")
-            reply_markup = InlineKeyboardMarkup([[btn(label, emoji_key=key, style=NAV, callback_data=f"menu:{marker}")]])
-        elif marker == "arena_chest_ready":
-            chest_id, tier = payload if isinstance(payload, (tuple, list)) else (payload, "silver")
-            from bot.buttons import CONFIRM
-            from game.media import get_arena_chest_image_path
-            reply_markup = InlineKeyboardMarkup([
-                [btn("🎁 باز کردن جعبه", style=CONFIRM, callback_data=f"arena_chest_open:{chest_id}")],
-                [btn("منوی اصلی", style=NAV, callback_data="menu:me")],
-            ])
-            photo_path = get_arena_chest_image_path(tier, "ready")
-        elif marker == "free_box_reminder":
-            from bot.buttons import SHOP
-            from game.media import get_feature_image_path
-            rows = []
-            unclaimed = payload or ["bronze", "silver"]
-            if "bronze" in unclaimed:
-                rows.append([btn("🥉 باز کردن باکس برنزی (رایگان)", style=SHOP, callback_data="dbox_pick:bronze")])
-            if "silver" in unclaimed:
-                rows.append([btn("🥈 باز کردن باکس نقره‌ای (رایگان)", style=SHOP, callback_data="dbox_pick:silver")])
-            rows.append([btn("منوی اصلی", style=NAV, callback_data="menu:me")])
-            reply_markup = InlineKeyboardMarkup(rows)
-            photo_path = get_feature_image_path("diamond_box")
-        elif marker == "lab_unlock":
-            reply_markup = _lab_unlock_keyboard(payload)
-        elif marker == "war_settle":
-            reply_markup = None
-            if payload:  # won
-                photo_path = get_notify_image_path("war_win")
-        else:
-            reply_markup = _defense_details_button(payload)
+
+def _category(marker, payload) -> str | None:
+    if isinstance(marker, str) and marker.startswith("arena_revenge"):
+        return "attacks"
+    if marker is None and payload:  # a defense report without a revenge button
+        return "attacks"
+    return _MARKER_CATEGORY.get(marker)
+
+
+def _prefs_sync(user_ids):
+    from bio_lab.models import User
+
+    return dict(User.objects.filter(id__in=user_ids).values_list("id", "notify_off"))
+
+
+def _decorate(item) -> dict:
+    """(user_id, text[, marker[, payload]]) → what to send: text, buttons, photo, category."""
+    user_id, text = item[0], item[1]
+    marker = item[2] if len(item) > 2 else None
+    payload = item[3] if len(item) > 3 else None
+    photo_path = None
+    if marker == "arena":
+        reply_markup = _arena_button()
+    elif marker == "worldboss":
+        from bot.buttons import BATTLE
+
+        reply_markup = InlineKeyboardMarkup(
+            [[btn("غول سرگردان", emoji_key="btn_worldboss", style=BATTLE, callback_data="menu:worldboss")]]
+        )
+    elif marker == "tournament":
+        from bot.buttons import BATTLE
+
+        reply_markup = InlineKeyboardMarkup(
+            [[btn("جام آخر هفته", emoji_key="btn_tournament", style=BATTLE, callback_data="menu:tournament")]]
+        )
+    elif marker == "festival":
+        reply_markup = InlineKeyboardMarkup(
+            [[btn("جشنواره", emoji_key="btn_festival", style=NAV, callback_data="menu:festival")]]
+        )
+        from game.media import get_feature_image_path
+
+        photo_path = get_feature_image_path("festival")
+    elif marker in ("missions", "events"):
+        label, key = ("مأموریت‌ها", "btn_missions") if marker == "missions" else ("رویداد این هفته", "btn_events")
+        reply_markup = InlineKeyboardMarkup([[btn(label, emoji_key=key, style=NAV, callback_data=f"menu:{marker}")]])
+    elif marker in ("timer", "nudge"):
+        reply_markup = InlineKeyboardMarkup(
+            [[btn("امروز", emoji_key="btn_today", style=NAV, callback_data="menu:today")]]
+        )
+    elif marker == "arena_chest_ready":
+        chest_id, tier = payload if isinstance(payload, (tuple, list)) else (payload, "silver")
+        from bot.buttons import CONFIRM
+        from game.media import get_arena_chest_image_path
+        reply_markup = InlineKeyboardMarkup([
+            [btn("🎁 باز کردن جعبه", style=CONFIRM, callback_data=f"arena_chest_open:{chest_id}")],
+            [btn("منوی اصلی", style=NAV, callback_data="menu:me")],
+        ])
+        photo_path = get_arena_chest_image_path(tier, "ready")
+    elif marker == "free_box_reminder":
+        from bot.buttons import SHOP
+        from game.media import get_feature_image_path
+        rows = []
+        unclaimed = payload or ["bronze", "silver"]
+        if "bronze" in unclaimed:
+            rows.append([btn("🥉 باز کردن باکس برنزی (رایگان)", style=SHOP, callback_data="dbox_pick:bronze")])
+        if "silver" in unclaimed:
+            rows.append([btn("🥈 باز کردن باکس نقره‌ای (رایگان)", style=SHOP, callback_data="dbox_pick:silver")])
+        rows.append([btn("منوی اصلی", style=NAV, callback_data="menu:me")])
+        reply_markup = InlineKeyboardMarkup(rows)
+        photo_path = get_feature_image_path("diamond_box")
+    elif marker == "lab_unlock":
+        reply_markup = _lab_unlock_keyboard(payload)
+    elif marker == "war_settle":
+        reply_markup = None
+        if payload:  # won
+            photo_path = get_notify_image_path("war_win")
+    else:
+        reply_markup = _defense_details_button(payload)
+    return {"user_id": user_id, "text": text, "markup": reply_markup, "photo": photo_path,
+            "category": _category(marker, payload)}
+
+
+def _merge(parts: list[dict]) -> dict:
+    """Several DMs for one player in the same tick → ONE message: the texts stacked, the
+    buttons of each kept (deduplicated, at most 5 rows), no photo."""
+    if len(parts) == 1:
+        return parts[0]
+    rows, seen = [], set()
+    for part in parts:
+        for row in (part["markup"].inline_keyboard if part["markup"] else ()):
+            key = tuple(b.callback_data or b.url for b in row)
+            if key in seen or key == ("menu:me",):
+                continue
+            seen.add(key)
+            rows.append(list(row))
+    text = "\n\n━━━━━━━━━━\n".join(part["text"] for part in parts)
+    return {"user_id": parts[0]["user_id"], "text": text[:3900],
+            "markup": InlineKeyboardMarkup(rows[:5]) if rows else None, "photo": None, "category": None}
+
+
+async def _deliver(context, pending) -> None:
+    from game.daily import today_str
+
+    if not pending:
+        return
+    decorated = [_decorate(item) for item in pending]
+    try:
+        prefs = await run_db(_prefs_sync, list({d["user_id"] for d in decorated})) or {}
+    except Exception:  # noqa: BLE001 — a prefs hiccup must not drop the whole batch
+        prefs = {}
+    day = today_str()
+    for key in [k for k in _broadcast_sent if k[0] != day]:
+        _broadcast_sent.pop(key, None)
+
+    by_user: dict[int, list[dict]] = {}
+    for d in decorated:
+        category = d["category"]
+        if category and category in (prefs.get(d["user_id"]) or "").split(","):
+            continue  # the player switched this kind off
+        if category in ("events", "reminders"):
+            sent = _broadcast_sent.get((day, d["user_id"]), 0)
+            if sent >= DAILY_BROADCAST_CAP:
+                continue
+            _broadcast_sent[(day, d["user_id"])] = sent + 1
+        by_user.setdefault(d["user_id"], []).append(d)
+
+    for user_id, parts in by_user.items():
+        msg = _merge(parts)
+        text, reply_markup, photo_path = msg["text"], msg["markup"], msg["photo"]
         try:
             if photo_path and os.path.exists(photo_path):
                 cached_fid = get_cached_file_id(photo_path)
@@ -381,7 +470,44 @@ async def autobackup_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         pass
 
 
+async def metrics_handler(update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Runs before every update's real handler: notes «this player was active this hour»
+    and which button was pressed (game/metrics.py). In-memory only — no query, no await."""
+    from game import metrics
+
+    user, chat, query = update.effective_user, update.effective_chat, update.callback_query
+    if user is None or user.is_bot:
+        return
+    private = chat is not None and chat.type == "private"
+    if query is not None:
+        metrics.mark(user.id, private)
+        metrics.click(query.data)
+    elif private:
+        metrics.mark(user.id, True)
+
+
+async def metrics_flush_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    from game import metrics
+
+    try:
+        await run_db(metrics.flush)
+    except Exception:  # noqa: BLE001 — statistics must never take the bot down
+        import logging
+
+        logging.getLogger(__name__).exception("metrics flush failed")
+
+
+async def metrics_prune_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    from game import metrics
+
+    try:
+        await run_db(metrics.prune)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def register(application) -> None:
+    application.add_handler(TypeHandler(Update, metrics_handler, block=False), group=-50)
     # Immediate level-up delivery: a late-group TypeHandler drains any level-up queued
     # by the action just handled, so the DM is sent within the same interaction (no
     # 5-minute wait). block=False → fire-and-forget, never delays the update. Registered
@@ -397,4 +523,6 @@ def register(application) -> None:
         logging.getLogger(__name__).warning("JobQueue unavailable — push notifications disabled.")
         return
     job_queue.run_repeating(notify_job, interval=NOTIFY_INTERVAL_SECONDS, first=30)
+    job_queue.run_repeating(metrics_flush_job, interval=60, first=45)
+    job_queue.run_repeating(metrics_prune_job, interval=86400, first=3600)
     job_queue.run_repeating(autobackup_job, interval=AUTOBACKUP_CHECK_SECONDS, first=120)

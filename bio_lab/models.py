@@ -72,6 +72,9 @@ class User(models.Model):
     #   in the DM with /off and /on).
     transfers_enabled = models.BooleanField(default=True)
     transfer_notify = models.BooleanField(default=True)
+    # comma-separated notification categories the player switched OFF (see
+    # bot.handlers.notify.NOTIFY_CATEGORIES: timers, attacks, events, reminders)
+    notify_off = models.CharField(max_length=64, default="", blank=True)
     # "started the bot" flag for the public /api/started/ gate (used as a forced-join
     # requirement by another bot). Set True when the user runs /start. Defaults False so a
     # migration (or a bulk update) resets EVERYONE to "not started" — forcing a re-/start —
@@ -557,6 +560,32 @@ class FestivalState(models.Model):
     """Singleton (id=1): the last festival whose leaderboard prizes were paid."""
 
     last_settled_key = models.CharField(max_length=16, default="", blank=True)
+
+
+class ActivityHour(models.Model):
+    """One row per (player, day, hour) in which the player did anything (game/metrics.py)
+    — what lets the admin stats compare «today at 15:00» with «yesterday at 15:00».
+    `user_id` is a plain integer on purpose: this is a write-heavy log, not a relation."""
+
+    user_id = models.BigIntegerField()
+    day = models.CharField(max_length=10)  # "YYYY-MM-DD", game timezone
+    hour = models.PositiveSmallIntegerField()
+    private = models.BooleanField(default=False)  # used the private chat / a button this hour
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user_id", "day", "hour"], name="uq_activity_hour")]
+        indexes = [models.Index(fields=["day", "hour"], name="activity_day_hour_idx")]
+
+
+class ButtonClick(models.Model):
+    """Presses per day of one button key (`menu:hunt`, `dsp:offer`, …) — game/metrics.py."""
+
+    day = models.CharField(max_length=10)
+    key = models.CharField(max_length=48)
+    count = models.IntegerField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["day", "key"], name="uq_button_click")]
 
 
 class AnnouncementMark(models.Model):

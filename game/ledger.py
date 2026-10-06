@@ -39,7 +39,7 @@ SOURCE_LABELS = {
     "arena": "آرنا",
     "raid": "باس رید",
     "duel": "اتک گروهی",
-    "mission": "ماموریت",
+    "mission": "مأموریت",
     "drop": "جایزه‌های گروه",
     "wheel": "گردونه",
     "casino": "کازینو",

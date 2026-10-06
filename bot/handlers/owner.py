@@ -3467,24 +3467,134 @@ async def gift_all_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     )
 
 
+_STAT_ACTION_LABELS = {
+    "free_silver_box": "باکس نقره‌ای رایگان", "free_bronze_box": "باکس برنزی رایگان",
+    "word_reward": "جایزه‌ی کلمه (گروه)", "group_jackpot": "جک‌پات گروه", "dispatch": "مأموریت اعزامی",
+    "worldboss_hit": "ضربه به غول", "diamond_vein": "رگه‌ی الماس", "energy_capsule": "کپسول انرژی",
+    "gold_transfer_received": "دریافت انتقال طلا", "duel_loss": "باخت نبرد گروهی",
+}
+_TREND = {"up": "📈 پیشرفت", "down": "📉 پسرفت", "flat": "➖ تقریباً ثابت"}
+
+
+def _stats_day_sync(day):
+    from game import metrics
+
+    return metrics.day_report(day), global_stats()
+
+
+def _parse_stats_day(raw: str):
+    """«2026-10-05», «1405-07-13» (Jalali) or «-3» (three days ago) → date, or None."""
+    import datetime
+
+    from django.utils import timezone
+
+    raw = (raw or "").strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹/", "0123456789-"))
+    today = timezone.localdate()
+    try:
+        if raw.lstrip("-").isdigit() and len(raw) <= 4:
+            return today - datetime.timedelta(days=abs(int(raw)))
+        y, m, d = (int(x) for x in raw.split("-"))
+        if y < 1700:
+            from game.battlepass import jalali_to_gregorian
+
+            y, m, d = jalali_to_gregorian(y, m, d)
+        day = datetime.date(y, m, d)
+    except (ValueError, TypeError):
+        return None
+    return day if day <= today else None
+
+
+def _chg(c: dict) -> str:
+    sign = "+" if c["diff"] > 0 else ""
+    return f"{sign}{c['diff']:,} ({sign}{c['pct']:.0f}٪)"
+
+
+def _stats_day_text(r: dict, g: dict) -> str:
+    from game.battlepass import gregorian_to_jalali
+
+    day = r["day"]
+    jy, jm, jd = gregorian_to_jalali(day.year, day.month, day.day)
+    title = "امروز" if r["is_today"] else "روز"
+    lines = [f"{get_emoji('stats')} <b>آمار {title} {jy}/{jm:02d}/{jd:02d}</b> <i>({day.isoformat()})</i>"]
+    if r["is_today"]:
+        lines.append(f"<i>تا ساعت {r['hour']}:59 — مقایسه با دیروز تا همین ساعت</i>" if r["basis"] == "hourly"
+                     else "<i>مقایسه‌ی هم‌ساعت از فردا فعال می‌شه (داده‌ی ساعتی دیروز ثبت نشده)؛ فعلاً کل امروز با کل دیروز.</i>")
+    elif r["basis"] != "hourly":
+        lines.append("<i>برای این مقایسه داده‌ی ساعتی کامل نیست؛ «فعال» یعنی بازیکنی که حداقل یک کار ثبت‌شده انجام داده.</i>")
+    lines.append("")
+    ac = r["active_change"]
+    lines.append(f"🟢 <b>بازیکن فعال: {r['active']:,}</b>"
+                 + (f"  (پیوی/دکمه: {r['active_private']:,})" if r["active_private"] is not None and r["basis"] == "hourly" else ""))
+    lines.append(f"   {'دیروز همین ساعت' if r['is_today'] and r['basis'] == 'hourly' else 'روز قبل'}: {r['active_before']:,} ⟵ {_chg(ac)}")
+    lines.append(f"   <b>{_TREND[ac['trend']]}</b>")
+    if r["active_full_prev"]:
+        lines.append(f"   کل دیروز: {r['active_full_prev']:,}")
+    nc = r["new_change"]
+    lines.append(f"🆕 کاربر جدید: <b>{r['new']:,}</b> (قبل: {r['new_before']:,} ⟵ {_chg(nc)})")
+    if r["peak"]:
+        lines.append(f"⏰ شلوغ‌ترین ساعت: {r['peak'][0]}:00 با {r['peak'][1]:,} بازیکن")
+    if r["actions"]:
+        lines += ["", "<b>کارهای انجام‌شده</b> (بازیکن · تعداد · تغییر بازیکن نسبت به روز قبل):"]
+        for action, users, total, prev_users in r["actions"]:
+            label = _STAT_ACTION_LABELS.get(action) or _ACTION_LABELS.get(action, action)
+            diff = users - prev_users
+            lines.append(f"• {label}: <b>{users:,}</b> · {total:,} · {'+' if diff > 0 else ''}{diff:,}")
+    if r["top_clicks"]:
+        lines += ["", f"<b>دکمه‌ها</b> (کل ضربه: {r['clicks_total']:,}) — پرکاربردترین:"]
+        lines.append("، ".join(f"<code>{k}</code> {n:,}" for k, n in r["top_clicks"]))
+        if r["low_menu_clicks"]:
+            lines.append("کم‌کاربردترین بخش‌های منو: " + "، ".join(f"<code>{k[5:]}</code> {n:,}" for k, n in r["low_menu_clicks"]))
+    lines += [
+        "",
+        f"{get_emoji('users')} کل کاربران: <b>{g['users']:,}</b> (🚫 {g['banned']:,}) · {get_emoji('creature')} موجودات: <b>{g['creatures']:,}</b>",
+        f"{get_emoji('coin')} <b>{g['total_coins']:,}</b> · {get_emoji('dna')} <b>{g['total_dna']:,}</b> · {get_emoji('diamond')} <b>{g['total_diamonds']:,}</b>",
+    ]
+    return "\n".join(lines)
+
+
+def _stats_day_keyboard(day) -> InlineKeyboardMarkup:
+    import datetime
+
+    from django.utils import timezone
+
+    today = timezone.localdate()
+    one = datetime.timedelta(days=1)
+    nav = [btn("روز قبل", emoji_key="btn_prev", style=ADMIN, callback_data=f"adm_stats:{(day - one).isoformat()}")]
+    if day < today:
+        nav.append(btn("روز بعد", emoji_key="btn_next", style=ADMIN, callback_data=f"adm_stats:{(day + one).isoformat()}"))
+    rows = [nav, [btn("۷ روز قبل", style=ADMIN, callback_data=f"adm_stats:{(day - 7 * one).isoformat()}")]]
+    if day != today:
+        rows[1].append(btn("امروز", style=ADMIN, callback_data=f"adm_stats:{today.isoformat()}"))
+    rows.append([btn("بروزرسانی", emoji_key="btn_recheck", style=ADMIN, callback_data=f"adm_stats:{day.isoformat()}")])
+    rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
+    return InlineKeyboardMarkup(rows)
+
+
 async def global_stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«آمار» — one day at a time (any day: the buttons step through days, or
+    `/stats 1405-07-13`, `/stats 2026-10-05`, `/stats -3`), compared with the day before.
+    For today the comparison is with yesterday up to the same hour."""
     if not _is_admin(update):
         return
-    s = await run_db(global_stats)
-    text = (
-        f"{get_emoji('stats')} <b>آمار کلی</b>\n\n"
-        f"{get_emoji('users')} کاربران: <b>{s['users']}</b>  (🚫 {s['banned']} مسدود)\n"
-        f"🟢 فعال امروز: <b>{s['active_today']}</b>   🆕 جدید امروز: <b>{s['new_today']}</b>\n"
-        f"{get_emoji('creature')} موجودات: <b>{s['creatures']}</b>\n\n"
-        f"<b>اقتصاد کل بازی:</b>\n"
-        f"{get_emoji('coin')} طلا: <b>{s['total_coins']:,}</b>\n"
-        f"{get_emoji('dna')} DNA: <b>{s['total_dna']:,}</b>\n"
-        f"{get_emoji('diamond')} الماس: <b>{s['total_diamonds']:,}</b>"
-    )
-    kb = InlineKeyboardMarkup([[back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")]])
-    if update.callback_query:
-        await update.callback_query.answer()
-        await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=kb)
+    from django.utils import timezone
+
+    query = update.callback_query
+    day = None
+    if query is not None and query.data.startswith("adm_stats:"):
+        day = _parse_stats_day(query.data.split(":", 1)[1])
+    elif query is None and getattr(context, "args", None):
+        day = _parse_stats_day(context.args[0])
+        if day is None:
+            await update.effective_message.reply_text(
+                "تاریخ رو این‌طوری بفرست: <code>/stats 1405-07-13</code> یا <code>/stats 2026-10-05</code> یا <code>/stats -3</code>",
+                parse_mode="HTML")
+            return
+    day = day or timezone.localdate()
+    report, totals = await run_db(_stats_day_sync, day)
+    text, kb = _stats_day_text(report, totals), _stats_day_keyboard(day)
+    if query:
+        await query.answer()
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
     else:
         await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=kb)
 
@@ -5791,6 +5901,8 @@ def register(application) -> None:
         CallbackQueryHandler(reset_user_confirm_callback, pattern=r"^admin_reset_(do|cancel):")
     )
     application.add_handler(CallbackQueryHandler(admin_menu_callback, pattern=r"^admin_menu:"))
+    application.add_handler(CallbackQueryHandler(global_stats_cmd, pattern=r"^adm_stats:\d{4}-\d{2}-\d{2}$"))
+    application.add_handler(CommandHandler("stats", global_stats_cmd, filters.ChatType.PRIVATE))
     application.add_handler(
         CallbackQueryHandler(set_emoji_category_callback, pattern=f"^{EMOJI_CAT_CALLBACK_PREFIX}")
     )

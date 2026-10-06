@@ -568,7 +568,8 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         # payload for the INSTANT defense DM (None defender_id = bot, no DM)
         "defense": None if defender_user is None else {
             "defender_id": defender_user.id,
-            "notifications_on": defender_user.notifications_on,
+            "notifications_on": (defender_user.notifications_on
+                                 and "attacks" not in (defender_user.notify_off or "").split(",")),
             "log_id": log.id,
             "attacker_id": attacker.id,
             "attacker_name": lab_display(attacker),

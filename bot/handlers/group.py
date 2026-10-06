@@ -51,7 +51,7 @@ def _mission_lines(completed: list[dict]) -> str:
         return ""
     lines = []
     for m in completed:
-        lines.append(f"{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}")
+        lines.append(f"{get_emoji('mission')} مأموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}")
     return "\n" + "\n".join(lines)
 
 
@@ -1608,7 +1608,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         "speedup": speedup_won,
         "defense": {
             "defender_id": target.id,
-            "notifications_on": target.notifications_on,
+            "notifications_on": target.notifications_on and "attacks" not in (target.notify_off or "").split(","),
             "log_id": log.id,
             "attacker_id": attacker.id,
             "attacker_name": lab_display(attacker),

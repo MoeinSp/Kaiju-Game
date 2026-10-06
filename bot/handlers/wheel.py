@@ -40,7 +40,7 @@ async def wheel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"<tg-spoiler>{emoji} {prize['label']}</tg-spoiler>\n\n"
         "<blockquote>فردا دوباره سر بزن، یه چرخش دیگه منتظرته.</blockquote>"
         + "".join(
-            f"\n{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}"
+            f"\n{get_emoji('mission')} مأموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}"
             for m in prize.get("missions", [])
         ),
         photo=photo,

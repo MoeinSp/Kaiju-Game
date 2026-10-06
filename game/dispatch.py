@@ -448,6 +448,7 @@ def collect_finished_notifications() -> list[tuple[int, str]]:
             out.append((
                 mission.owner_id,
                 f"🧭 <b>{name} از مأموریت برگشت!</b>\n{emoji} {title} تموم شد؛ بیا جایزه‌ش رو بگیر.",
+                "timer",
             ))
         mission.notified = True
         mission.save(update_fields=["notified"])

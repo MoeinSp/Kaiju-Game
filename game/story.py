@@ -259,6 +259,20 @@ STORY_QUESTS: list[dict[str, Any]] = [
 ]
 
 
+# «ارتقای تالار مِهر به سطح ۲» used to be the 8th quest, behind 50 arena cups — but hall
+# level 2 is what opens fusion, the cave, dispatch and the season pass, and 86% of players
+# never reached it. It now comes right after the tutorial steps (and the upgrade itself
+# takes minutes — constants.MAIN_HALL_LEVEL2_MINUTES). A player who was mid-story when the
+# order changed at worst re-claims one small quest they had already finished.
+_hall2 = next(q for q in STORY_QUESTS if q["title"] == "ارتقای تالار مِهر به سطح ۲")
+STORY_QUESTS.remove(_hall2)
+STORY_QUESTS.insert(4, {**_hall2, "chapter": 2, "chapter_name": "فصل ۲: نبردهای آرنا",
+                        "cta_label": "🏛 ارتقای تالار مِهر",
+                        "desc": "تالار مِهر رو به سطح ۲ برسون تا ادغام، غار، مأموریت اعزامی و پاس فصلی باز بشن. فقط چند دقیقه طول می‌کشه."})
+for _i, _q in enumerate(STORY_QUESTS):
+    _q["id"] = _i
+
+
 def format_reward_text(reward: dict[str, Any]) -> str:
     parts = []
     if reward.get("coins"):

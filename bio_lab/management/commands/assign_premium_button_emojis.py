@@ -159,6 +159,7 @@ class Command(BaseCommand):
             "btn_biocrate": ["📦", "🎁", "🧰", "🧬"],
             "btn_diamond_box": ["💠", "💎", "🎁", "🔷"],
             "btn_wheel": ["🎡", "🎰", "🎯", "🎲"],
+            "btn_today": ["📋", "📅", "✅", "🗓"],
             "btn_buildings": ["🏗", "🏢", "🏭", "🏛"],
             "btn_alliance": ["🤝", "👥", "🛡", "🏰"],
             "btn_deposit": ["💰", "🪙", "🏦", "📥"],

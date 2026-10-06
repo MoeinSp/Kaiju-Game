@@ -453,7 +453,7 @@ async def building_collect_callback(update: Update, context: ContextTypes.DEFAUL
     text = _building_detail_text(view)
     if completed_missions:
         text += "\n\n" + "\n".join(
-            f"{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}"
+            f"{get_emoji('mission')} مأموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}"
             for m in completed_missions
         )
     from game.media import get_building_image_path

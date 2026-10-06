@@ -104,7 +104,7 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "creature": ("نماد موجود", "🦖", "progress"),
     "trophy": ("رتبه‌بندی", "🏆", "progress"),
     "celebrate": ("تبریک/لول‌آپ", "🎉", "progress"),
-    "mission": ("ماموریت", "🎯", "progress"),
+    "mission": ("مأموریت", "🎯", "progress"),
     "medal_gold": ("نشان طلا", "🥇", "progress"),
     "medal_silver": ("نشان نقره", "🥈", "progress"),
     "medal_bronze": ("نشان برنز", "🥉", "progress"),

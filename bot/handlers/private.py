@@ -1,4 +1,5 @@
 import html
+import logging
 import re
 from django.db import transaction
 from django.db.models import F
@@ -26,6 +27,7 @@ from bot.handlers.battlepass import battlepass_panel
 from bot.handlers.campaign import campaign_panel
 from bot.handlers.dispatch import dispatch_panel
 from bot.handlers.festival import festival_panel
+from bot.handlers.today import today_panel
 from bot.handlers.tournament import tournament_panel
 from bot.handlers.worldboss import worldboss_panel
 from bot.handlers.codex import codex_panel
@@ -94,7 +96,6 @@ from game.creature import (
     feed_capsules,
     list_creatures,
     set_active_creature,
-    train,
     upgrade_part,
 )
 from game.daily import apply_daily_login, check_missions, consume_daily, mission_status, record_action
@@ -112,7 +113,7 @@ def _mission_lines(completed: list[dict]) -> str:
     if not completed:
         return ""
     lines = [
-        f"{get_emoji('mission')} ماموریت{' هفتگی' if m.get('weekly') else ''} «{m['label']}» تکمیل شد! {mission_reward_text(m)}"
+        f"{get_emoji('mission')} مأموریت{' هفتگی' if m.get('weekly') else ''} «{m['label']}» تکمیل شد! {mission_reward_text(m)}"
         for m in completed
     ]
     return "\n" + "\n".join(lines)
@@ -965,8 +966,12 @@ _CARD_DIV = "━━━━━━━━━━━━━━━━━━━━"
 def guide_home_text_and_keyboard(is_first_run: bool = False) -> tuple[str, InlineKeyboardMarkup]:
     lines = [f"{get_emoji('book')} <b>راهنمای Kaiju Legends</b>", ""]
     if is_first_run:
-        lines.append("<b>خوش اومدی! این پنج قدم اولته:</b>")
+        # a newcomer gets three lines and one button — not the whole table of contents
+        lines.append("<b>خوش اومدی! فقط همین سه تا رو یادت باشه:</b>")
         lines.append("<blockquote>" + "\n".join(guide.first_run_lines()) + "</blockquote>")
+        return "\n".join(lines), InlineKeyboardMarkup(
+            [[btn("راهنمای کامل", emoji_key="btn_report", style=NAV, callback_data="guide:home")]]
+        )
     else:
         lines.append(
             "<blockquote>یه بازی پرورش هیولاست: یه هیولا داری، قوی‌ترش می‌کنی، باهاش می‌جنگی "
@@ -1116,9 +1121,11 @@ _HUBS = {
     "hub_battle": ("⚔️ <b>نبرد و ماجراجویی</b>", [
         [("شکار هیولا", "hunt", "b", "btn_hunt"), ("میدان آرنا", "arena", "b", "btn_arena")],
         [("جعبه‌های آرنا", "arena_chests", "s", "btn_chests"), ("برج موگن", "mugen_tower", "b", "btn_mugen")],
-        [("ماجراجویی دانجن", "campaign", "b", "btn_campaign"), ("اعزام کاروان", "expedition", "b", "btn_expedition")],
-        [("جنگ اتحاد", "alliance_war", "b", "btn_war"), ("مأموریت اعزامی", "dispatch", "b", "btn_dispatch")],
+        [("مأموریت اعزامی", "dispatch", "b", "btn_dispatch"), ("ماجراجویی دانجن", "campaign", "b", "btn_campaign")],
         [("غول سرگردان", "worldboss", "b", "btn_worldboss"), ("جام آخر هفته", "tournament", "b", "btn_tournament")],
+    ]),
+    "hub_battle_more": ("⚔️ <b>نبرد و ماجراجویی — بیشتر</b>", [
+        [("اعزام کاروان", "expedition", "b", "btn_expedition"), ("جنگ اتحاد", "alliance_war", "b", "btn_war")],
     ]),
     "hub_creature": ("🦖 <b>هیولا و تجهیزات</b>", [
         [("ارتقای هیولا", "upgrade", "p", "btn_upgrade"), ("کوله تجهیزات", "inventory", "n", "btn_inventory")],
@@ -1138,14 +1145,17 @@ _HUBS = {
         [("اشتراک ویژه VIP", "subscription", "s", "btn_vip")],
     ]),
     "hub_city": ("🌐 <b>شهر، جوایز و کلوپ</b>", [
-        [("پاس فصلی (بتل‌پاس)", "battlepass", "s", "btn_battlepass"), ("دستاوردها", "achievements", "s", "btn_achievements")],
-        [("رویدادهای ویژه", "events", "s", "btn_events"), ("لیگ و رتبه‌بندی", "league", "n", "btn_league")],
-        [("جشنواره‌ی ماهانه", "festival", "s", "btn_festival")],
-        [("اتحاد و کلن", "alliance_info", "n", "btn_alliance"), ("گردونه شانس", "wheel", "s", "btn_wheel")],
+        [("مأموریت‌ها", "missions", "s", "btn_missions"), ("گردونه شانس", "wheel", "s", "btn_wheel")],
+        [("رویدادهای ویژه", "events", "s", "btn_events"), ("جشنواره‌ی ماهانه", "festival", "s", "btn_festival")],
+        [("لیگ و رتبه‌بندی", "league", "n", "btn_league"), ("پاس فصلی (بتل‌پاس)", "battlepass", "s", "btn_battlepass")],
+        [("اتحاد و کلن", "alliance_info", "n", "btn_alliance"), ("پروفایل و تنظیمات", "profile", "n", "btn_profile")],
+    ]),
+    "hub_city_more": ("🌐 <b>شهر، جوایز و کلوپ — بیشتر</b>", [
+        [("دستاوردها", "achievements", "s", "btn_achievements"), ("راهنمای بازی", "guide", "n", "btn_report")],
         [("کازینو و تاس", "casino", "s", "btn_casino"), ("بنر ویژه کایجو", "banner", "s", "btn_banner")],
         [("دعوت دوستان", "referral", "s", "btn_referral"), ("دانشنامه و القاب", "codex", "n", "btn_codex")],
-        [("مأموریت‌های روزانه", "missions", "s", "btn_missions"), ("رتبه‌بندی اتحادها", "rank", "n", "btn_league")],
-        [("لیگ اتحادها", "alliance_league", "n", "btn_league"), ("رتبه‌بندی رید", "raid_rank", "n", "btn_raid_rank")],
+        [("رتبه‌بندی اتحادها", "rank", "n", "btn_league"), ("لیگ اتحادها", "alliance_league", "n", "btn_league")],
+        [("رتبه‌بندی رید", "raid_rank", "n", "btn_raid_rank")],
     ]),
 }
 
@@ -1174,24 +1184,43 @@ def _clean_lab_name(name) -> str:
 def story_quest_card_text(quest: dict | None) -> str:
     if not quest:
         return ""
-    status_icon = "✅ آماده دریافت پاداش!" if quest["is_done"] else "⏳ در حال انجام"
+    # two lines, not five: what to do next and what it pays (the chapter name and the
+    # flavour text made the main card scroll; the button under it says where to go)
+    progress = f" <code>{quest['cur']}/{quest['target']}</code>" if quest["target"] > 1 else ""
+    done = " ✅" if quest["is_done"] else ""
     return (
-        f"🎯 <b>{quest['chapter_name']}</b> (مأموریت {quest['step_num']}/{quest['total_steps']})\n"
-        f"<b>{quest['title']}</b>\n"
-        f"<i>{quest['desc']}</i>\n"
-        f"📊 وضعیت: <code>{quest['cur']}/{quest['target']}</code> — {status_icon}\n"
-        f"🎁 پاداش: {quest['reward_text']}\n"
+        f"🎯 <b>قدم بعدی ({quest['step_num']}/{quest['total_steps']}):</b> {quest['title']}{progress}{done}\n"
+        f"🎁 {quest['reward_text']}\n"
     )
 
 
-def _hub_keyboard(hub_key: str, locked=frozenset()) -> tuple[str, InlineKeyboardMarkup]:
+def _hub_keyboard(hub_key: str, locked=frozenset(), hide_locked: bool = False) -> tuple[str, InlineKeyboardMarkup]:
+    """A hub's buttons (at most 8 — the rarely-used ones sit behind «بیشتر»). With
+    `hide_locked` (a newcomer whose main hall is still level 1) the sections that haven't
+    unlocked are left out instead of shown with a lock, so a new player sees a short menu
+    of things that work; the title says how many more are waiting."""
     if not hub_key.startswith("hub_") and f"hub_{hub_key}" in _HUBS:
         hub_key = f"hub_{hub_key}"
     title, rows_def = _HUBS.get(hub_key, _CATEGORIES.get(hub_key, ("📋 <b>منوی بازی</b>", [])))
-    rows = []
-    for row in rows_def:
-        rows.append([_mkbtn(spec, locked) for spec in row])
-    rows.append([back_btn("menu:me", "بازگشت به منوی اصلی")])
+    more_key = f"{hub_key}_more"
+    specs = [spec for row in rows_def for spec in row]
+    hidden = 0
+    if hide_locked:
+        more_specs = [s for row in _HUBS.get(more_key, ("", []))[1] for s in row]
+        hidden = sum(1 for s in specs + more_specs if s[1] in locked)
+        specs = [s for s in specs if s[1] not in locked]
+    rows = [[_mkbtn(s, locked) for s in specs[i:i + 2]] for i in range(0, len(specs), 2)]
+    has_more = more_key in _HUBS and (
+        not hide_locked or any(s[1] not in locked for row in _HUBS[more_key][1] for s in row)
+    )
+    if has_more:
+        rows.append([btn("بیشتر", emoji_key="btn_next", style=NAV, callback_data=f"menu:{more_key}")])
+    if hub_key.endswith("_more"):
+        rows.append([back_btn(f"menu:{hub_key[:-5]}", "بازگشت")])
+    else:
+        rows.append([back_btn("menu:me", "بازگشت به منوی اصلی")])
+    if hidden:
+        title += f"\n🔒 <i>{hidden} بخش دیگه با ارتقای «تالار مِهر» باز می‌شه.</i>"
     return title, symmetric_markup(rows)
 
 
@@ -1199,8 +1228,11 @@ def _category_keyboard(cat_key: str, locked=frozenset()) -> tuple[str, InlineKey
     return _hub_keyboard(cat_key, locked)
 
 
-def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=frozenset(), research_built=False) -> InlineKeyboardMarkup:
-    """Clean 5-Hub navigation with Live Story Quest CTA banner."""
+def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=frozenset(), research_built=False,
+                      today_state: dict | None = None) -> InlineKeyboardMarkup:
+    """Clean 5-Hub navigation with Live Story Quest CTA banner. `today_state`
+    (game.today.state) adds the count on «امروز» and a row for whatever is LIVE right now
+    (world boss / tournament registration / festival) — those only show while they matter."""
     rows = []
     if quest:
         if quest["is_done"]:
@@ -1209,7 +1241,23 @@ def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=
             # the active quest's own section is exempt from the hall lock (menu_callback
             # lets it through), so the button always goes where the quest says
             cb = quest["cta_callback"]
-            rows.append([btn(f"{quest['cta_label']} (مأموریت)", emoji_key="btn_skill", style=PRIMARY, callback_data=cb)])
+            rows.append([btn(f"قدم بعدی: {quest['cta_label']}", emoji_key="btn_skill", style=PRIMARY, callback_data=cb)])
+
+    from game import today as _today
+
+    waiting = _today.waiting_count(today_state) if today_state else 0
+    rows.append([btn(f"امروز ({waiting})" if waiting else "امروز", emoji_key="btn_today", style=CONFIRM,
+                     callback_data="menu:today")])
+    if today_state:
+        live = []
+        if today_state["boss"] and today_state["boss"]["hits_left"]:
+            live.append(btn("غول سرگردان اینجاست", emoji_key="btn_worldboss", style=DANGER, callback_data="menu:worldboss"))
+        if today_state["tournament_open"]:
+            live.append(btn("ثبت‌نام جام", emoji_key="btn_tournament", style=DANGER, callback_data="menu:tournament"))
+        if today_state["festival"]:
+            live.append(btn("جشنواره", emoji_key="btn_festival", style=SHOP, callback_data="menu:festival"))
+        if live:
+            rows.append(live[:2])
 
     # Row 1: Battle & Creature
     rows.append([
@@ -1239,7 +1287,27 @@ def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=
     return symmetric_markup(rows)
 
 
+logger = logging.getLogger(__name__)
+
 LAB_NAME_MAX_LEN = 32
+
+
+def _auto_lab_name(user, tg_user) -> None:
+    """Give a brand-new player a lab name instead of asking for one. More than half of the
+    people who pressed /start never got past «type a name» — the very first thing the bot
+    asked. The name is unique like any other, and the first rename is free (lab_renames
+    = -1 → constants.lab_rename_cost returns 0)."""
+    first = _clean_lab_name(getattr(tg_user, "first_name", "") or "")
+    first = re.sub(r"[<>&]", "", first).strip()[:18]
+    base = f"آزمایشگاه {first}" if first else "آزمایشگاه"
+    candidates = ([base] if first else []) + [f"{base} {n}" for n in range(2, 6)] + [f"{base} {user.id}"]
+    for name in candidates:
+        name = name[:LAB_NAME_MAX_LEN]
+        if not lab_name_taken(name, exclude_user_id=user.id):
+            user.lab_name = name
+            user.lab_renames = -1
+            user.save(update_fields=["lab_name", "lab_renames"])
+            return
 
 
 def _start_sync(tg_user, referrer_id=None):
@@ -1251,6 +1319,8 @@ def _start_sync(tg_user, referrer_id=None):
     if not user.started_gate:
         user.started_gate = True
         user.save(update_fields=["started_gate"])
+    if user.lab_name is None:
+        _auto_lab_name(user, tg_user)
     if referrer_id is not None:
         from game.referral import register_referral
 
@@ -1270,7 +1340,9 @@ def _start_sync(tg_user, referrer_id=None):
     login_bonus = apply_daily_login(user) if creature else None
     equipped_items = get_equipped_items(creature) if creature else []
     get_or_create_buildings(user)
+    user._story_note = _story_auto_claim(user) if creature else ""
     quest = story.get_active_quest(user)
+    user._today = _today_state_safe(user) if creature else None
     return user, creature, is_new, login_bonus, equipped_items, main_hall_level(user), research.is_unlocked(user), quest
 
 
@@ -1404,9 +1476,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if not user.onboarding_completed and creature is None:
         text = (
-            f"🧪 <b>آزمایشگاه «{lab_display(user)}» تأسیس شد!</b>\n\n"
-            "<blockquote>یک کپسول زیستی حاوی تخم هیولای اولیه کشف شده است.\n"
-            "با شکستن تخم، اولین کایجوی خودت رو متولد کن و فرماندهی رو به دست بگیر!</blockquote>"
+            f"{get_emoji('egg')} <b>به Kaiju Legends خوش اومدی فرمانده!</b>\n\n"
+            "<blockquote>یه تخم هیولا توی آزمایشگاهت منتظره. بشکنش تا اولین کایجوت به دنیا بیاد!</blockquote>\n"
+            f"<i>اسم آزمایشگاهت فعلاً «{lab_display(user)}»ـه؛ هر وقت خواستی از «پروفایل و تنظیمات» رایگان عوضش کن.</i>"
         )
         keyboard = InlineKeyboardMarkup([
             [btn("شکستن اولین تخم کایجو", emoji_key="btn_hatch", style=CONFIRM, callback_data="onboarding:hatch")]
@@ -1430,6 +1502,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             streak_line += f"{get_emoji('dna')} دی‌ان‌ای: <code>+{login_bonus['dna']:,}</code>\n"
         lines.append(f"<blockquote>{streak_line.strip()}</blockquote>\n")
 
+    if getattr(user, "_story_note", ""):
+        lines.append(user._story_note + "\n")
     quest_txt = story_quest_card_text(quest)
     if quest_txt:
         lines.append(f"<blockquote>{quest_txt.strip()}</blockquote>\n")
@@ -1445,11 +1519,38 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "\n".join(lines),
         photo=creature_photo,
         parse_mode="HTML",
-        reply_markup=creature_keyboard(quest, is_owner, _locked_actions_for(hall_level), research_built),
+        reply_markup=creature_keyboard(quest, is_owner, _locked_actions_for(hall_level), research_built,
+                                       today_state=getattr(user, "_today", None)),
     )
 
     if is_new and update.message:
         await send_first_run_guide(update.message)
+
+
+def _story_auto_claim(user) -> str:
+    """A finished story quest is paid the moment the player is back on the main card —
+    no «دریافت پاداش» tap. One quest per visit, so each still gets its own line."""
+    from game import story
+
+    try:
+        res = story.claim_active_quest(user)
+    except Exception:  # noqa: BLE001 — never let the story block the main menu
+        logger.exception("story auto-claim failed")
+        return ""
+    if not res.get("success"):
+        return ""
+    user.refresh_from_db()
+    return f"🎉 <b>مأموریت «{res['claimed_quest']['title']}» انجام شد!</b>\n🎁 {res['reward_text']}"
+
+
+def _today_state_safe(user):
+    from game import today
+
+    try:
+        return today.state(user)
+    except Exception:  # noqa: BLE001 — the badge is a nicety; the menu must always open
+        logger.exception("today.state failed")
+        return None
 
 
 def _me_sync(tg_user):
@@ -1461,7 +1562,9 @@ def _me_sync(tg_user):
     equipped_items = get_equipped_items(creature) if creature else []
     if creature:
         research.attach_research(user, creature)  # buffed power shows on the card
+    user._story_note = _story_auto_claim(user) if creature else ""
     quest = story.get_active_quest(user)
+    user._today = _today_state_safe(user) if creature else None
     return user, creature, equipped_items, main_hall_level(user), research.is_unlocked(user), quest
 
 
@@ -1478,12 +1581,15 @@ async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     card_txt = creature_card_text(user, creature, equipped_items, compact=bool(photo_path))
     quest_txt = story_quest_card_text(quest)
     quest_block = f"<blockquote>{quest_txt.strip()}</blockquote>\n\n" if quest_txt.strip() else ""
-    text = f"👋 <b>آزمایشگاه «{lab_display(user)}»</b>\n\n{quest_block}" + card_txt
+    note = getattr(user, "_story_note", "")
+    note_block = f"{note}\n\n" if note else ""
+    text = f"👋 <b>آزمایشگاه «{lab_display(user)}»</b>\n\n{note_block}{quest_block}" + card_txt
     await send_screen(update,
         text,
         photo=photo_path,
         parse_mode="HTML",
-        reply_markup=creature_keyboard(quest, is_owner, _locked_actions_for(hall_level), research_built),
+        reply_markup=creature_keyboard(quest, is_owner, _locked_actions_for(hall_level), research_built,
+                                       today_state=getattr(user, "_today", None)),
     )
 
 
@@ -1504,13 +1610,6 @@ def _lab_action_sync(tg_user, action, creature_id, count=1):
         record_action(user, "feed")
         completed_missions = check_missions(user, "feed")
         note = "🍖 <b>تغذیه شد!</b>" + (
-            f" {get_emoji('celebrate')} رسید به سطح {creature.level}!" if levels else ""
-        )
-    elif action == "train":
-        levels = train(creature)
-        record_action(user, "train")
-        completed_missions = check_missions(user, "train")
-        note = "🏋️ <b>تمرین کرد!</b>" + (
             f" {get_emoji('celebrate')} رسید به سطح {creature.level}!" if levels else ""
         )
     elif action.startswith("up_"):
@@ -5008,7 +5107,7 @@ def _profile_sync(tg_user):
 
 def _profile_text_and_keyboard(user, stats) -> tuple[str, InlineKeyboardMarkup]:
     rename_cost = constants.lab_rename_cost(user.lab_renames)
-    notif_label = "🔔 اعلان‌ها: فعال" if user.notifications_on else "🔕 اعلان‌ها: غیرفعال"
+    notif_label = "اعلان‌ها: فعال" if user.notifications_on else "اعلان‌ها: خاموش"
     lines = [
         f"{get_emoji('profile')} <b>آزمایشگاه {lab_display(user)}</b>{stats.get('title_label', '')}",
         "━━━━━━━━━━━━━━━━━━━━",
@@ -5027,15 +5126,59 @@ def _profile_text_and_keyboard(user, stats) -> tuple[str, InlineKeyboardMarkup]:
         "━━━━━━━━━━━━━━━━━━━━",
         wallet_line(user),
         "",
-        f"<blockquote>✏️ هزینه تغییر نام آزمایشگاه: <code>{rename_cost}</code> الماس</blockquote>",
+        "<blockquote>✏️ تغییر نام آزمایشگاه: "
+        + ("<b>رایگان</b> (بار اول)" if rename_cost == 0 else f"<code>{rename_cost}</code> الماس") + "</blockquote>",
     ]
     rows = [
         [btn("لقب‌ها", emoji_key="btn_titles", style=NAV, callback_data="menu:titles")],
         [btn("تغییر نام آزمایشگاه", emoji_key="btn_edit", style=SHOP, callback_data="lab_rename")],
-        [btn(notif_label, style=NAV, callback_data="notif_toggle")],
+        [btn(notif_label, emoji_key="btn_settings", style=NAV, callback_data="notif:menu")],
+        [btn("راهنمای بازی", emoji_key="btn_report", style=NAV, callback_data="guide:home")],
         [back_btn("menu:me", "بازگشت به منوی اصلی")],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _notif_menu_sync(tg_user, toggle: str | None = None):
+    """The «اعلان‌ها» screen: the master switch plus one switch per kind of DM
+    (bot.handlers.notify.NOTIFY_CATEGORIES). `toggle` = "all" or a category key."""
+    from bot.handlers.notify import NOTIFY_CATEGORIES
+
+    user, _ = get_or_create_user(tg_user)
+    off = {c for c in (user.notify_off or "").split(",") if c in NOTIFY_CATEGORIES}
+    if toggle == "all":
+        user.notifications_on = not user.notifications_on
+        user.save(update_fields=["notifications_on"])
+    elif toggle in NOTIFY_CATEGORIES:
+        off.symmetric_difference_update({toggle})
+        user.notify_off = ",".join(sorted(off))
+        user.save(update_fields=["notify_off"])
+    lines = [
+        "🔔 <b>اعلان‌ها</b>",
+        _CARD_DIV,
+        "<blockquote>انتخاب کن ربات برای چی بهت پیام بده. اعلان‌های هم‌زمان توی یک پیام می‌آن "
+        "و رویدادها و یادآوری‌ها روزی حداکثر ۴ تا هستن.</blockquote>",
+    ]
+    rows = [[btn("همه‌ی اعلان‌ها: " + ("روشن ✅" if user.notifications_on else "خاموش ❌"),
+                 style=CONFIRM if user.notifications_on else DANGER, callback_data="notif:all")]]
+    if user.notifications_on:
+        for key, (title, desc) in NOTIFY_CATEGORIES.items():
+            on = key not in off
+            lines.append(f"{title} — <i>{desc}</i>")
+            rows.append([btn(f"{title}: {'روشن ✅' if on else 'خاموش ❌'}", style=NAV, callback_data=f"notif:t:{key}")])
+    else:
+        lines.append("<i>همه‌ی اعلان‌ها خاموشه؛ هیچ پیامی از ربات نمی‌گیری.</i>")
+    rows.append([back_btn("menu:profile", "بازگشت")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+async def notif_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    parts = query.data.split(":")
+    toggle = "all" if parts[1] == "all" else (parts[2] if parts[1] == "t" and len(parts) > 2 else None)
+    text, keyboard = await run_db(_notif_menu_sync, update.effective_user, toggle)
+    await query.answer("ذخیره شد." if toggle else None)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _profile_render_sync(tg_user):
@@ -5402,6 +5545,7 @@ _MENU_ACTIONS = {
     "worldboss": worldboss_panel,
     "tournament": tournament_panel,
     "festival": festival_panel,
+    "today": today_panel,
     "blackmarket": blackmarket_panel,
     "buy_open": buy_open_callback,
     "expedition": expedition_panel,
@@ -5613,12 +5757,10 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await query.answer()
     if action.startswith("hub_") or action.startswith("cat_"):
         hub_key = action[4:] if action.startswith("cat_") else action
-        title, keyboard = _hub_keyboard(hub_key, _locked_actions_for(hall_level))
+        title, keyboard = _hub_keyboard(hub_key, _locked_actions_for(hall_level), hide_locked=hall_level <= 1)
         from game.media import get_feature_image_path
-        photo_path = get_feature_image_path(hub_key)
-        await send_screen(
-            update, f"{title}\n\n<i>یکی از بخش‌های زیر را انتخاب کنید:</i>", photo=photo_path, parse_mode="HTML", reply_markup=keyboard
-        )
+        photo_path = get_feature_image_path(hub_key[:-5] if hub_key.endswith("_more") else hub_key)
+        await send_screen(update, title, photo=photo_path, parse_mode="HTML", reply_markup=keyboard)
         return
     handler = _MENU_ACTIONS.get(action)
     if handler is not None:
@@ -5841,6 +5983,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(lab_rename_ok_callback, pattern=r"^lab_rename_ok$"))
     application.add_handler(CallbackQueryHandler(lab_rename_cancel_callback, pattern=r"^lab_rename_cancel$"))
     application.add_handler(CallbackQueryHandler(notif_toggle_callback, pattern=r"^notif_toggle$"))
+    application.add_handler(CallbackQueryHandler(notif_menu_callback, pattern=r"^notif:(menu|all|t:[a-z]+)$"))
     application.add_handler(CallbackQueryHandler(equip_panel_callback, pattern=r"^upg_eq:"))
     application.add_handler(CallbackQueryHandler(equip_slot_callback, pattern=r"^upg_slot:"))
     application.add_handler(CallbackQueryHandler(equip_do_callback, pattern=r"^upg_(equip|unequip):"))

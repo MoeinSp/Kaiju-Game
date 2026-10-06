@@ -165,14 +165,14 @@ def collect_due() -> list[tuple[int, str]]:
         # ── eggs ready to hatch ───────────────────────────────────────────────
         for egg in Egg.objects.filter(notified=False, finishes_at__lte=now).select_related("owner"):
             if egg.owner.notifications_on:
-                out.append((egg.owner_id, "🐣 <b>یه تخم توی غار هیولا سر باز کرد!</b> برو ببین چی ازش دراومد."))
+                out.append((egg.owner_id, "🐣 <b>یه تخم توی غار هیولا سر باز کرد!</b> برو ببین چی ازش دراومد.", "timer"))
             egg.notified = True
             egg.save(update_fields=["notified"])
 
         # ── cave mating finished (go lay the egg) ─────────────────────────────
         for job in BreedingJob.objects.filter(notified=False, finishes_at__lte=now).select_related("owner"):
             if job.owner.notifications_on:
-                out.append((job.owner_id, "💞 <b>جفت‌گیری توی غار تموم شد!</b> برو تخم رو بردار تا والدها آزاد شن."))
+                out.append((job.owner_id, "💞 <b>جفت‌گیری توی غار تموم شد!</b> برو تخم رو بردار تا والدها آزاد شن.", "timer"))
             job.notified = True
             job.save(update_fields=["notified"])
 
@@ -213,7 +213,7 @@ def collect_due() -> list[tuple[int, str]]:
         ):
             if up.owner.notifications_on:
                 label = constants.BUILDING_LABELS.get(up.building.building_type, "ساختمونت")
-                out.append((up.owner_id, f"🏗 <b>ارتقای {label} تموم شد!</b> برو جمعش کن و بعدی رو بساز."))
+                out.append((up.owner_id, f"🏗 <b>ارتقای {label} تموم شد!</b> برو جمعش کن و بعدی رو بساز.", "timer"))
             up.notified = True
             up.save(update_fields=["notified"])
 
@@ -365,7 +365,7 @@ def collect_due() -> list[tuple[int, str]]:
             ).exclude(last_login_day=today).exclude(last_nudge_day=today)
             for user in candidates:
                 out.append(
-                    (user.id, "🎁 <b>جایزه‌ی روزانه و گردونه‌ی شانست منتظرن!</b> یه سر بزن و استریکت رو نگه دار.")
+                    (user.id, "🎁 <b>جایزه‌ی روزانه و گردونه‌ی شانست منتظرن!</b> یه سر بزن و استریکت رو نگه دار.", "nudge")
                 )
                 user.last_nudge_day = today
                 user.save(update_fields=["last_nudge_day"])

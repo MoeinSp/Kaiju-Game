@@ -72,7 +72,7 @@ ARENA_CHEST_TIERS = {
     },
     "mega": {
         "key": "mega",
-        "name": "جعبه مگا / امگا",
+        "name": "جعبه‌ی امگا",
         "emoji": "👑",
         "unlock_hours": 24,
         "weight": 2.5,  # 2.5% drop rate

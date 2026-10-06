@@ -233,7 +233,7 @@ def _battle_action_sync(battle_id, actor_tg_id, action):
         )
         for m in completed_missions:
             reward_lines.append(
-                f"<blockquote>{get_emoji('mission')} <b>ماموریت «{m['label']}» تکمیل شد!</b>\n{mission_reward_text(m)}</blockquote>"
+                f"<blockquote>{get_emoji('mission')} <b>مأموریت «{m['label']}» تکمیل شد!</b>\n{mission_reward_text(m)}</blockquote>"
             )
 
     battle.save()

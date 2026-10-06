@@ -264,7 +264,7 @@ async def dispatch_go_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     note = f"🧭 <b>{name}</b> راهی مأموریت شد و <b>{hours}</b> دیگه برمی‌گرده."
     for m in done:
-        note += f"\n{get_emoji('mission')} ماموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}"
+        note += f"\n{get_emoji('mission')} مأموریت «{m['label']}» تکمیل شد! {mission_reward_text(m)}"
     await _show_panel(update, note=note)
 
 

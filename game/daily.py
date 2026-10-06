@@ -36,6 +36,9 @@ def record_action(user: User, action: str) -> int:
 def _festival_hook(user: User, action: str, new_count: int, n: int) -> None:
     """Every counted action also feeds the monthly festival (a no-op between festivals).
     Guarded: a festival hiccup must never break the action being recorded."""
+    from game import metrics
+
+    metrics.mark(user.id)  # «active this hour» for the admin stats (in-memory, no query)
     try:
         from game import festival
 

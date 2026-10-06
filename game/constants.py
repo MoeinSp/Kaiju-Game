@@ -391,6 +391,8 @@ LAB_RENAME_BASE_COST = 100
 
 
 def lab_rename_cost(renames_done: int) -> int:
+    if renames_done < 0:  # the lab still carries its auto-given name → the first rename is free
+        return 0
     return LAB_RENAME_BASE_COST * (max(0, renames_done) + 1)
 
 
@@ -882,6 +884,16 @@ BUILDING_UNLOCK_HALL_LEVEL = {
 # Doubled across the board, with the top two tiers stretched much further apart:
 # level 4 = 3 days, level 5 = 5 days. Base progression is now a multi-week haul.
 BUILDING_UPGRADE_MINUTES = {1: 48, 2: 288, 3: 1152, 4: 4320, 5: 7200}
+# The main hall's FIRST upgrade (→ level 2) is the gate to fusion, the cave, dispatch and
+# the season pass. 86% of players never got past it behind a ~5-hour timer, so that one
+# step is quick; every other timer is unchanged.
+MAIN_HALL_LEVEL2_MINUTES = 5
+
+
+def building_upgrade_minutes(building_type: str, target_level: int) -> int:
+    if building_type == "main_hall" and target_level == 2:
+        return MAIN_HALL_LEVEL2_MINUTES
+    return BUILDING_UPGRADE_MINUTES[target_level]
 
 # Gold is sized to be *felt but not binding*: the constraint is meant to be the
 # clock, not the wallet. These came down when hunt and raid income was cut — with
