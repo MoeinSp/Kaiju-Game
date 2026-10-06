@@ -25,4 +25,5 @@ urlpatterns = [
     path("app/api/equipment/", miniapp_api.equipment),
     path("app/api/leaderboard/", miniapp_api.leaderboard),
     path("app/img/<str:kind>/<int:obj_id>.jpg", miniapp_api.image),
+    path("app/font/<str:weight>.ttf", miniapp_api.font),
 ]

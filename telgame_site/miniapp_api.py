@@ -31,7 +31,8 @@ from config import BOT_TOKEN
 from game import constants
 from telgame_site.miniapp_views import _DIR, verify_init_data
 
-THUMB_SIZE = 320
+THUMB_SIZE = 320          # grid tiles
+THUMB_SIZE_LARGE = 720    # the detail sheet (`?s=l`)
 LEADERBOARD_SIZE = 50
 _THUMB_DIR_NAME = "thumbs"
 
@@ -134,7 +135,7 @@ def me(request, user: User) -> dict:
         "coins": user.coins, "dna": user.dna_fragments, "diamonds": user.diamonds,
         "energy": sync_energy(user), "max_energy": get_max_energy(user),
         "cup": user.cup,
-        "league": {"name": league["name"], "emoji": league["emoji"]},
+        "league": {"name": league["name"], "key": league["key"]},
         "cup_rank": User.objects.filter(is_banned=False, cup__gt=user.cup).count() + 1,
         "hall_level": main_hall_level(user),
         "creatures": Creature.objects.filter(owner=user).count(),
@@ -190,7 +191,7 @@ def leaderboard(request, user: User) -> dict:
     for rank, row in enumerate(top, start=1):
         league = constants.league_for_cup(row["cup"])
         rows.append({"rank": rank, "name": row["lab_name"] or "آزمایشگاه", "cup": row["cup"],
-                     "league": league["emoji"], "me": row["id"] == user.id})
+                     "league": league["key"], "league_name": league["name"], "me": row["id"] == user.id})
     return {
         "rows": rows,
         "me": {"rank": User.objects.filter(is_banned=False, cup__gt=user.cup).count() + 1, "cup": user.cup,
@@ -199,8 +200,8 @@ def leaderboard(request, user: User) -> dict:
 
 
 # ── images ────────────────────────────────────────────────────────────────────
-def _thumb(source: str) -> Path | None:
-    """A cached ~320 px JPEG of `source` (made on first request)."""
+def _thumb(source: str, size: int = THUMB_SIZE) -> Path | None:
+    """A cached JPEG of `source` at most `size` px on its long side (made on first request)."""
     from PIL import Image
 
     from game.media import CACHE_DIR
@@ -211,13 +212,13 @@ def _thumb(source: str) -> Path | None:
     out_dir = CACHE_DIR / _THUMB_DIR_NAME
     out_dir.mkdir(parents=True, exist_ok=True)
     stat = src.stat()
-    name = hashlib.md5(f"{src}:{stat.st_mtime_ns}:{stat.st_size}:{THUMB_SIZE}".encode()).hexdigest()[:20] + ".jpg"
+    name = hashlib.md5(f"{src}:{stat.st_mtime_ns}:{stat.st_size}:{size}".encode()).hexdigest()[:20] + ".jpg"
     out = out_dir / name
     if not out.exists():
         with Image.open(src) as im:
             im = im.convert("RGB")
-            im.thumbnail((THUMB_SIZE, THUMB_SIZE))
-            im.save(out, "JPEG", quality=78, optimize=True)
+            im.thumbnail((size, size))
+            im.save(out, "JPEG", quality=80 if size > THUMB_SIZE else 78, optimize=True)
     return out
 
 
@@ -231,12 +232,28 @@ def image(request, kind: str, obj_id: int):
     if obj is None:
         raise Http404
     source = get_creature_image_path(obj) if kind == "c" else get_equipment_image_path(obj)
-    thumb = _thumb(source) if source else None
+    size = THUMB_SIZE_LARGE if request.GET.get("s") == "l" else THUMB_SIZE
+    thumb = _thumb(source, size) if source else None
     if thumb is None:
         raise Http404
     resp = FileResponse(open(thumb, "rb"), content_type="image/jpeg")
     # the URL is stable per object but the art changes when it levels/stars up → short cache
     resp["Cache-Control"] = "private, max-age=3600"
+    return resp
+
+
+_FONTS = {"regular": "Vazirmatn-Regular.ttf", "bold": "Vazirmatn-Bold.ttf"}
+
+
+@require_GET
+def font(request, weight: str):
+    """The Persian UI font, from our own domain (font CDNs are unreliable from Iran)."""
+    name = _FONTS.get(weight)
+    path = Path(settings.BASE_DIR) / "assets" / "fonts" / name if name else None
+    if path is None or not path.exists():
+        raise Http404
+    resp = FileResponse(open(path, "rb"), content_type="font/ttf")
+    resp["Cache-Control"] = "public, max-age=2592000, immutable"
     return resp
 
 
