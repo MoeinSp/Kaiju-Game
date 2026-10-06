@@ -1087,7 +1087,7 @@ def _revenge_attack_sync(tg_user, log_id: int):
         "user": target,
         "label": log.attacker_label or lab_display(target),
         "cup": target.cup,
-        "power": creature_power(target_creature) if target_creature else 0,
+        "power": active_power(target),  # same number the revenge card showed (with gear)
         "loot_pool": target.coins,
     }
     result = attack(user, opponent)

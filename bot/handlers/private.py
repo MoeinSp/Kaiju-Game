@@ -3203,7 +3203,7 @@ def _hunt_swap_pick_sync(tg_user, tier, seed, creature_id):
         raise GameError("اول یه موجود فعال انتخاب کن.")
     my_power = _creature_power(creature, get_equipped_items(creature))
     target = rebuild_target(user, tier, int(seed))
-    return creature, my_power, user.cup, target, sync_energy(user), scout_cost(creature)
+    return creature, my_power, user.cup, target, sync_energy(user), scout_cost(creature, power=my_power)
 
 
 async def hunt_swap_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

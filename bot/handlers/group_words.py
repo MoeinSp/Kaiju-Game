@@ -2299,8 +2299,10 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
         u_obj = payload.get("user")
         if u_obj is None:
+            # ORM work belongs in a worker thread, never on the event loop
             from bio_lab.repository import get_or_create_user
-            u_obj, _ = get_or_create_user(update.effective_user)
+
+            u_obj = (await run_db(get_or_create_user, update.effective_user))[0]
         sub_info = get_subscription_info(u_obj)
         cost = botconfig.get_energy_refill_cost()
         kb_rows = []

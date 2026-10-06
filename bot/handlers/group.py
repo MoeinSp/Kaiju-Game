@@ -55,6 +55,15 @@ def _mission_lines(completed: list[dict]) -> str:
     return "\n" + "\n".join(lines)
 
 
+def _subscription_info_sync(owner_id: int) -> dict:
+    """Read in a worker thread — _reply_error used to query the ORM on the event loop."""
+    from bio_lab.models import User
+    from game.subscription import get_subscription_info
+
+    user = User.objects.filter(id=owner_id).first()
+    return get_subscription_info(user) if user else {"is_active": False}
+
+
 async def _reply_error(message, exc, owner_id: int) -> None:
     """Reply to a group message with an error. An out-of-energy error also gets the
     diamond-refill and silver subscription buttons (scoped to `owner_id`)."""
@@ -63,10 +72,7 @@ async def _reply_error(message, exc, owner_id: int) -> None:
     from game.energy import EnergyError
 
     if isinstance(exc, EnergyError):
-        from bio_lab.models import User
-        from game.subscription import get_subscription_info
-        user = User.objects.filter(id=owner_id).first()
-        info = get_subscription_info(user) if user else {"is_active": False}
+        info = await run_db(_subscription_info_sync, owner_id)
 
         if info["is_active"]:
             caption = (
@@ -1700,11 +1706,32 @@ async def _pvp_attack_execute(update, context, query, attacker_id: int, target_i
     )
     text = "\n".join(header) + "\n" + text
     context.user_data["pvp_last_detail"] = result.get("detail_log", "")
-    # keep it uncluttered — a single icon-only «fight details» button, no PM shortcut
-    keyboard = InlineKeyboardMarkup([
-        [btn("جزئیات نبرد", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_detail:{update.effective_user.id}")],
+    context.user_data["pvp_last_summary"] = text  # so «جزئیات» can return to it
+    await safe_edit_message_text(query, text, parse_mode="HTML",
+                                 reply_markup=_pvp_result_keyboard(update.effective_user.id))
+
+
+def _pvp_result_keyboard(owner_id: int) -> InlineKeyboardMarkup:
+    # keep it uncluttered — a single «fight details» button, no PM shortcut
+    return InlineKeyboardMarkup([
+        [btn("جزئیات نبرد", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_detail:{owner_id}")],
     ])
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def pvp_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«بازگشت» under the detail log → the fight summary again (the detail screen used to
+    replace the result with no way back)."""
+    query = update.callback_query
+    _, owner_id = query.data.split(":")
+    if update.effective_user.id != int(owner_id):
+        await query.answer("این کارت مال تو نیست.", show_alert=True)
+        return
+    summary = context.user_data.get("pvp_last_summary")
+    if not summary:
+        await query.answer("خلاصه‌ی این نبرد دیگه در دسترس نیست.", show_alert=True)
+        return
+    await query.answer()
+    await safe_edit_message_text(query, summary, parse_mode="HTML", reply_markup=_pvp_result_keyboard(int(owner_id)))
 
 
 async def pvp_detail_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1719,7 +1746,12 @@ async def pvp_detail_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
     await query.answer()
     # edit the result message in place instead of posting a new one, to keep the group tidy
-    await safe_edit_message_text(query, detail, parse_mode="HTML")
+    back = None
+    if context.user_data.get("pvp_last_summary"):
+        from bot.buttons import back_btn
+
+        back = InlineKeyboardMarkup([[back_btn(f"gatk_sum:{owner_id}", "بازگشت")]])
+    await safe_edit_message_text(query, detail, parse_mode="HTML", reply_markup=back)
 
 
 async def pvp_attack_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2110,6 +2142,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(pvp_attack_confirmed_callback, pattern=r"^gatkc:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_attack_cancel_callback, pattern=r"^gatk_cancel:\d+$"))
     application.add_handler(CallbackQueryHandler(pvp_detail_callback, pattern=r"^gatk_detail:\d+$"))
+    application.add_handler(CallbackQueryHandler(pvp_summary_callback, pattern=r"^gatk_sum:\d+$"))
     application.add_handler(CallbackQueryHandler(gatk_opp_callback, pattern=r"^gatk_opp:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(gatk_back_callback, pattern=r"^gatk_back:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(gatk_swap_callback, pattern=r"^gatk_swap:\d+:\d+$"))
