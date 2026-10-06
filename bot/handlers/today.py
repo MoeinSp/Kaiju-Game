@@ -9,7 +9,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bio_lab.repository import get_or_create_user
 from bot.buttons import BATTLE, CONFIRM, NAV, back_btn, btn
-from bot.utils import run_db, send_screen
+from bot.utils import mission_reward_text, run_db, send_screen
 from game import today
 from game.emoji import get_emoji
 
@@ -28,7 +28,7 @@ def _amounts(totals: dict) -> str:
 
 
 def _render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
-    lines = ["📋 <b>امروز</b>", _DIV]
+    lines = ["📋 <b>پاداش امروز</b>", _DIV]
     if note:
         lines = [note, ""] + lines
     rows = []
@@ -125,7 +125,7 @@ def _result_note(res: dict) -> str:
     amounts = _amounts(res["totals"])
     if amounts:
         out.append(amounts)
-    budget = 14  # lines — the screen is a photo caption
+    budget = 18  # lines — the screen is a photo caption
     for title, items in res["sections"]:
         out += ["", f"<b>{title}</b>"]
         shown = items[:max(1, budget)]
@@ -135,8 +135,8 @@ def _result_note(res: dict) -> str:
         budget -= len(shown)
     done = res["missions"]
     if done:
-        out += ["", f"{get_emoji('mission')} <b>{len(done)} مأموریت تکمیل شد:</b> "
-                + "، ".join(m["label"] for m in done[:4])]
+        out += ["", "<b>مأموریت‌های تکمیل‌شده</b>"]
+        out += [f"{get_emoji('mission')} {m['label']}: {mission_reward_text(m)}" for m in done[:4]]
     return "\n".join(out)
 
 

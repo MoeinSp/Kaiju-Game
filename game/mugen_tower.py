@@ -41,7 +41,7 @@ GUARDIAN_SUFFIXES = [
     "جهنمی", "بلورین", "ویرانگر", "نفرین‌شده", "باستانی", "خونین", "پوچی", "کهن", "موگن", "کوهستان"
 ]
 
-MUGEN_ENERGY_COST = 5
+MUGEN_ENERGY_COST = 3  # was 5 when the bar was 50 (5 × 30/50)
 
 
 def floor_guardian_power(floor: int) -> int:

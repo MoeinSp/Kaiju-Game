@@ -1246,7 +1246,7 @@ def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=
     from game import today as _today
 
     waiting = _today.waiting_count(today_state) if today_state else 0
-    rows.append([btn(f"امروز ({waiting})" if waiting else "امروز", emoji_key="btn_today", style=CONFIRM,
+    rows.append([btn(f"پاداش امروز ({waiting})" if waiting else "پاداش امروز", emoji_key="btn_today", style=CONFIRM,
                      callback_data="menu:today")])
     if today_state:
         live = []
@@ -2865,6 +2865,21 @@ def _mission_block(m: dict) -> list[str]:
     return [f"▫️ <b>{m['label']}</b>", f"⏳ [{bar}] <code>{m['progress']}/{m['target']}</code>", reward, ""]
 
 
+def _open_missions(missions: list[dict]) -> list[str]:
+    """The missions still to do, in full; the finished ones collapse into ONE line (they
+    used to stay in the list with a tick, which made it twice as long by the evening)."""
+    todo = [m for m in missions if not m["done"]]
+    done = len(missions) - len(todo)
+    lines: list[str] = []
+    for m in todo:
+        lines += _mission_block(m)
+    if not todo:
+        lines += ["🎉 <b>همه رو انجام دادی!</b>", ""]
+    elif done:
+        lines += [f"✅ <i>{done} مأموریت انجام‌شده از فهرست برداشته شد.</i>", ""]
+    return lines
+
+
 def _missions_render(status: dict, tab: str = "d", note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     """The missions screen, three tabs: today's missions, this week's missions, and the
     weekly box track (points → boxes, the last one is the Omega box)."""
@@ -2890,8 +2905,7 @@ def _missions_render(status: dict, tab: str = "d", note: str = "") -> tuple[str,
     if tab == "w":
         lines.append("📅 <b>مأموریت‌های هفتگی</b> <i>(سخت‌تر، امتیاز و جایزه‌ی بیشتر)</i>")
         lines.append("")
-        for m in sorted(status["weekly"], key=lambda m: m["done"]):
-            lines += _mission_block(m)
+        lines += _open_missions(status["weekly"])
         lines.append(f"<i>ریست هفتگی: {_fmt_reset(status['reset_in'])} دیگه (دوشنبه، نیمه‌شب تهران).</i>")
     elif tab == "b":
         lines.append("🎁 <b>مسیر باکس‌های هفته</b>")
@@ -2914,8 +2928,7 @@ def _missions_render(status: dict, tab: str = "d", note: str = "") -> tuple[str,
         tab = "d"
         lines.append(f"☀️ <b>مأموریت‌های امروز</b> — <code>{status['today_points']}/{status['today_max']}</code> امتیاز")
         lines.append("")
-        for m in sorted(status["daily"], key=lambda m: m["done"]):
-            lines += _mission_block(m)
+        lines += _open_missions(status["daily"])
         lines.append("<i>مأموریت‌های روزانه نیمه‌شب تهران ریست می‌شن.</i>")
 
     def _tab(label, key, emoji_key):

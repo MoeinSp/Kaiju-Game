@@ -430,6 +430,19 @@ def reward_text(reward: dict, *, with_bonus: bool = True) -> str:
     return " ┃ ".join(parts) or "—"
 
 
+def bonus_text(reward: dict) -> str:
+    """Only the «شگفتی» part of a reward (diamonds / food / speed-up card), spelled out."""
+    parts = []
+    if reward.get("diamonds"):
+        parts.append(f"{get_emoji('diamond')} <code>{int(reward['diamonds'])}</code> الماس")
+    if reward.get("capsule"):
+        cap = constants.XP_CAPSULES[reward["capsule"]]
+        parts.append(f"{cap['emoji']} <code>{int(reward.get('capsule_count', 1))}</code> {cap['label']}")
+    if reward.get("speedup"):
+        parts.append(f"⏩ کارت سرعت <code>{int(reward['speedup'])}</code> دقیقه‌ای")
+    return " ┃ ".join(parts)
+
+
 def has_bonus(reward: dict) -> bool:
     return bool(reward.get("diamonds") or reward.get("capsule") or reward.get("speedup"))
 

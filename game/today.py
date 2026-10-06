@@ -202,24 +202,36 @@ def collect_all(user: User) -> dict:
     # ── dispatch ──
     hall = main_hall_level(user)
     if hall >= 2:
-        back = dispatch.collect_all(user)
-        for res in back:
-            add(res["reward"])
-        if back:
-            lucky = sum(1 for r in back if dispatch.has_bonus(r["reward"]))
-            base.append(f"🧭 <code>{len(back)}</code> مأموریت اعزامی" + (f" (🍀 {lucky} شگفتی)" if lucky else ""))
+        from bio_lab.repository import creature_name
+
+        # one block per mission: who went, what it paid, and — spelled out — what the
+        # «شگفتی» actually was (a bare «🍀 1 شگفتی» told the player nothing)
+        sent: list[str] = []
+        for res in dispatch.collect_all(user):
+            reward = res["reward"]
+            add(reward)
+            _key, emoji, title, _flavor, _focus = dispatch.template(res["mission"])
+            who = creature_name(res["creature"]) if res["creature"] is not None else "هیولا"
+            sent.append(f"{emoji} <b>{title}</b> — {who}")
+            sent.append("   " + dispatch.reward_text(reward, with_bonus=False))
+            if dispatch.has_bonus(reward):
+                sent.append("   🍀 شگفتی: " + dispatch.bonus_text(reward))
+            if res["levels"]:
+                sent.append(f"   ⬆️ {who} به سطح <code>{res['creature'].level}</code> رسید")
+        if sent:
+            sections.append(("مأموریت‌های اعزامی", sent))
 
     # ── event daily + story ──
     if hall >= EVENTS_HALL_REQ:
         reward = events.claim_daily(user)
         if reward:
             add(reward)
-            base.append(f"🎁 جایزه‌ی رویداد: {events.reward_text(reward)}")
+            base.append(f"🎁 جایزه‌ی روزانه‌ی رویداد: {events.reward_text(reward)}")
     with transaction.atomic():
         res = story.claim_active_quest(user)
     if res.get("success"):
         add(res["claimed_quest"]["reward"])
-        base.append(f"🎯 «{res['claimed_quest']['title']}»")
+        base.append(f"🎯 «{res['claimed_quest']['title']}»: {res['reward_text']}")
     if base:
         sections.append(("جایزه‌ها", base))
 
@@ -242,6 +254,17 @@ def collect_all(user: User) -> dict:
                 rolls.append({"kind": "creature", "creature": creature, "rarity": prize.get("rarity", "")})
         missions_done += prize.get("missions", [])
         sections.append(("گردونه", [f"🎡 {prize['label']}"]))
+    # what each chest/box held besides its creature or item
+    def _extras(contents: dict) -> str:
+        parts = []
+        if contents.get("coins"):
+            parts.append(f"<code>+{int(contents['coins']):,}</code> طلا")
+        if contents.get("dna"):
+            parts.append(f"<code>+{int(contents['dna']):,}</code> DNA")
+        if contents.get("diamonds"):
+            parts.append(f"<code>+{int(contents['diamonds'])}</code> الماس")
+        return (" · " + " · ".join(parts)) if parts else ""
+
 
     # ── boxes and chests ──
     opened: list[str] = []
@@ -264,7 +287,7 @@ def collect_all(user: User) -> dict:
         except GameError:
             continue
         add(chest)
-        opened.append(f"{chest['emoji']} {chest['name']}: {_prize_name(chest)}")
+        opened.append(f"{chest['emoji']} {chest['name']}: {_prize_name(chest)}{_extras(chest)}")
 
     for index in _reached_boxes(user)[0]:
         try:
@@ -272,7 +295,7 @@ def collect_all(user: User) -> dict:
         except GameError:
             continue
         add(box)
-        opened.append(f"{box['emoji']} باکس مأموریت {index}: {_prize_name(box)}")
+        opened.append(f"{box['emoji']} باکس مأموریت {index}: {_prize_name(box)}{_extras(box)}")
     if opened:
         sections.append(("باکس‌ها و جعبه‌ها", opened))
 
