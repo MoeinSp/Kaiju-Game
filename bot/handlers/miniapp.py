@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 from telegram import InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
-from bot.buttons import CONFIRM, DANGER, btn
+from bot.buttons import CONFIRM, DANGER, NAV, btn
 from bot.utils import run_db, safe_edit_message_text
 from config import ADMIN_PANEL_URL, WEBHOOK_URL
 
@@ -98,13 +98,16 @@ async def apptest_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     url = f"{origin}/app/test/?u={user.id}&s={sig}"
     keyboard = InlineKeyboardMarkup([
         [btn("باز کردن تست", emoji_key="btn_confirm", style=CONFIRM, web_app=WebAppInfo(url=url))],
+        # phase 1 of the real app (read-only: profile, collection, equipment, leaderboard)
+        [btn("مینی‌اپ بازی (آزمایشی)", emoji_key="btn_collection", style=NAV, web_app=WebAppInfo(url=f"{origin}/app/"))],
         [btn("باز نشد", emoji_key="btn_cancel", style=DANGER, callback_data="apptest:fail")],
     ])
     await update.effective_message.reply_text(
         "🧪 <b>تست مینی‌اپ</b>\n"
         "می‌خوایم ببینیم مینی‌اپ بازی روی گوشی و اینترنت تو باز می‌شه یا نه.\n\n"
         "۱) «باز کردن تست» رو بزن و چند ثانیه صبر کن تا چهار تا چراغ سبز بشه.\n"
-        "۲) اگه صفحه سفید موند یا باز نشد، برگرد و «باز نشد» رو بزن.\n\n"
+        "۲) اگه صفحه سفید موند یا باز نشد، برگرد و «باز نشد» رو بزن.\n"
+        "۳) اگه تست سبز شد، «مینی‌اپ بازی» رو هم باز کن و کلکسیونت رو ببین.\n\n"
         "<i>چیزی ازت نمی‌خواد و فقط چند ثانیه طول می‌کشه. ممنون!</i>",
         parse_mode="HTML", reply_markup=keyboard,
     )

@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Kaiju Legends</title>
+<script src="/app/tg.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #0f131b);
+    --card: var(--tg-theme-secondary-bg-color, #19202d);
+    --text: var(--tg-theme-text-color, #eef1f6);
+    --muted: var(--tg-theme-hint-color, #8793a6);
+    --accent: var(--tg-theme-button-color, #4c8dff);
+    --accent-text: var(--tg-theme-button-text-color, #ffffff);
+    --line: rgba(128, 140, 160, .22);
+    --common: #9aa4b2; --rare: #4c8dff; --epic: #a66bff; --legendary: #f2b53a; --mythic: #ff5a5a;
+    --tabs-h: 58px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif; padding-bottom: calc(var(--tabs-h) + env(safe-area-inset-bottom, 0px) + 10px); }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+  .wrap { padding: 12px 12px 0; max-width: 720px; margin: 0 auto; }
+  h2 { font-size: 16px; margin: 16px 2px 8px; }
+  .muted { color: var(--muted); }
+  .num { direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; }
+
+  /* top resource bar */
+  .bar { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .bar .in { display: flex; gap: 6px; padding: 8px 12px; max-width: 720px; margin: 0 auto; overflow-x: auto; scrollbar-width: none; }
+  .bar .in::-webkit-scrollbar { display: none; }
+  .pill { flex: none; background: var(--card); border-radius: 999px; padding: 4px 11px; font-size: 13px; white-space: nowrap; }
+
+  /* tabs */
+  nav.tabs { position: fixed; inset: auto 0 0 0; z-index: 10; display: flex; background: var(--card); border-top: 1px solid var(--line);
+             height: calc(var(--tabs-h) + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  nav.tabs button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; font-size: 11px; color: var(--muted); }
+  nav.tabs button .ico { font-size: 20px; line-height: 1.2; }
+  nav.tabs button.on { color: var(--accent); font-weight: 600; }
+
+  .card { background: var(--card); border-radius: 14px; padding: 12px 14px; }
+  .rows > div { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .rows > div:last-child { border-bottom: 0; }
+  .progress { height: 7px; border-radius: 999px; background: var(--line); overflow: hidden; margin-top: 8px; }
+  .progress > i { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+
+  /* hero (active creature) */
+  .hero { display: flex; gap: 12px; align-items: center; }
+  .hero img { width: 108px; height: 108px; object-fit: cover; border-radius: 12px; background: #0008; flex: none; }
+  .hero .name { font-size: 17px; font-weight: 700; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+  .stats div { background: var(--bg); border-radius: 10px; padding: 6px 4px; text-align: center; font-size: 12px; }
+  .stats b { display: block; font-size: 14px; }
+
+  /* filters */
+  .filters { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 8px; scrollbar-width: none; }
+  .filters::-webkit-scrollbar { display: none; }
+  .chip { flex: none; background: var(--card); border: 1px solid transparent; border-radius: 999px; padding: 5px 12px; font-size: 13px; white-space: nowrap; }
+  .chip.on { background: var(--accent); color: var(--accent-text); }
+  input.search { width: 100%; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; font: inherit; margin-bottom: 8px; }
+  input.search::placeholder { color: var(--muted); }
+  .count { font-size: 12px; margin: 0 2px 8px; }
+
+  /* grid */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+  .tile { position: relative; background: var(--card); border-radius: 12px; overflow: hidden; border: 2px solid var(--line); text-align: right; display: block; width: 100%; }
+  .tile.common { border-color: var(--common); } .tile.rare { border-color: var(--rare); } .tile.epic { border-color: var(--epic); }
+  .tile.legendary { border-color: var(--legendary); } .tile.mythic { border-color: var(--mythic); }
+  .tile .pic { aspect-ratio: 1 / 1; width: 100%; object-fit: cover; display: block; background: #0006; }
+  .tile .body { padding: 5px 7px 7px; }
+  .tile .nm { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .sub { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; gap: 4px; }
+  .badge { position: absolute; top: 5px; inset-inline-start: 5px; background: #000a; color: #fff; border-radius: 8px; padding: 0 6px; font-size: 11px; line-height: 19px; }
+  .badge.end { inset-inline-start: auto; inset-inline-end: 5px; }
+  .badge.act { background: #1f9d55; } .badge.busy { background: #b7791f; }
+
+  /* leaderboard */
+  .lb > div { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  .lb > div:last-child { border-bottom: 0; }
+  .lb .rk { width: 30px; text-align: center; font-weight: 700; }
+  .lb .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb .me { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+
+  /* sheet */
+  .sheet { position: fixed; inset: 0; z-index: 30; display: none; }
+  .sheet.open { display: block; }
+  .sheet .shade { position: absolute; inset: 0; background: #000a; }
+  .sheet .panel { position: absolute; inset: auto 0 0 0; max-height: 88vh; overflow-y: auto; background: var(--bg); border-radius: 18px 18px 0 0;
+                  padding: 14px 14px calc(18px + env(safe-area-inset-bottom, 0px)); max-width: 720px; margin: 0 auto; }
+  .sheet img.big { width: 100%; border-radius: 14px; display: block; background: #0006; }
+  .sheet .close { display: block; width: 100%; margin-top: 12px; padding: 11px; border-radius: 12px; background: var(--accent); color: var(--accent-text); font-weight: 600; }
+
+  .state { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .state b { display: block; color: var(--text); font-size: 17px; margin-bottom: 6px; }
+  .skel { height: 120px; border-radius: 14px; background: var(--card); margin-bottom: 10px; opacity: .6; }
+</style>
+</head>
+<body>
+<div class="bar"><div class="in" id="bar"></div></div>
+<div class="wrap" id="view"><div class="skel"></div><div class="skel"></div></div>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="profile" class="on"><span class="ico">🏠</span>پروفایل</button>
+  <button data-tab="creatures"><span class="ico">🦖</span>هیولاها</button>
+  <button data-tab="equipment"><span class="ico">🎒</span>تجهیزات</button>
+  <button data-tab="leaderboard"><span class="ico">🏆</span>جدول</button>
+</nav>
+
+<div class="sheet" id="sheet"><div class="shade" data-close></div><div class="panel" id="sheet-body"></div></div>
+
+<script>
+(function () {
+  "use strict";
+  var tg = window.Telegram && window.Telegram.WebApp;
+  try { if (tg) { tg.ready(); tg.expand(); } } catch (e) {}
+  var initData = tg ? (tg.initData || "") : "";
+  var devUser = new URLSearchParams(location.search).get("dev_user");
+  var view = document.getElementById("view"), bar = document.getElementById("bar");
+  var cache = {}, meta = null, tab = "profile";
+  var filt = { creatures: { rarity: "", element: "", q: "", sort: "power" }, equipment: { slot: "", rarity: "", q: "" } };
+
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function n(x) { return '<span class="num">' + Number(x || 0).toLocaleString("en-US") + "</span>"; }
+  function stars(k) { return "⭐".repeat(Math.max(1, Math.min(5, k || 1))); }
+
+  function api(name) {
+    if (cache[name]) return Promise.resolve(cache[name]);
+    var url = "/app/api/" + name + "/" + (devUser ? "?dev_user=" + encodeURIComponent(devUser) : "");
+    return fetch(url, { headers: { "X-Tg-Init-Data": initData } }).then(function (r) {
+      if (!r.ok) { var e = new Error("http " + r.status); e.status = r.status; throw e; }
+      return r.json();
+    }).then(function (j) { cache[name] = j; return j; });
+  }
+
+  function fail(err) {
+    var msg = err && err.status === 401 ? ["باید از داخل تلگرام باز بشه", "این صفحه رو از دکمه‌ی ربات باز کن."]
+            : err && err.status === 404 ? ["هنوز بازی رو شروع نکردی", "اول توی ربات /start بزن و اولین هیولات رو بگیر."]
+            : ["اتصال برقرار نشد", "اینترنتت رو چک کن و دوباره امتحان کن."];
+    view.innerHTML = '<div class="state"><b>' + msg[0] + "</b>" + msg[1] + '<br><br><button class="chip on" id="retry">تلاش دوباره</button></div>';
+    document.getElementById("retry").onclick = function () { cache = {}; show(tab); };
+  }
+
+  function renderBar(me) {
+    bar.innerHTML = [
+      "💰 " + n(me.coins), "🧬 " + n(me.dna), "💎 " + n(me.diamonds),
+      "⚡ " + n(me.energy) + "/" + n(me.max_energy), "🏆 " + n(me.cup)
+    ].map(function (t) { return '<span class="pill">' + t + "</span>"; }).join("");
+  }
+
+  // ── profile ──
+  function profile(me) {
+    var a = me.active, lp = me.lab_progress || {};
+    var el = a ? meta.elements[a.element] : null, ra = a ? meta.rarities[a.rarity] : null;
+    var html = '<div class="card"><div style="font-size:18px;font-weight:700">' + esc(me.lab_name) + "</div>" +
+      '<div class="muted">سطح آزمایشگاه ' + n(me.lab_level) + (me.subscription ? " · " + esc(me.subscription) : "") + "</div>" +
+      (lp.span ? '<div class="progress"><i style="width:' + Math.round((lp.ratio || 0) * 100) + '%"></i></div>' +
+                 '<div class="muted" style="font-size:12px;margin-top:4px">' + n(lp.into) + " / " + n(lp.span) + " XP تا سطح بعد</div>" : "") + "</div>";
+    if (a) {
+      html += "<h2>هیولای فعال</h2>" + '<div class="card"><button class="hero" data-creature="' + a.id + '" style="width:100%;text-align:right">' +
+        '<img src="' + a.img + '" alt="">' + "<div>" + '<div class="name">' + esc(a.name) + "</div>" +
+        "<div>" + (ra ? ra.emoji + " " + esc(ra.label) : "") + " · " + (el ? el.emoji + " " + esc(el.label) : "") + "</div>" +
+        '<div class="muted">' + stars(a.star) + " · سطح " + n(a.level) + "</div>" +
+        "<div>💪 قدرت " + n(a.power) + "</div></div></button>" +
+        '<div class="stats"><div><b>' + n(a.hp) + "</b>جان</div><div><b>" + n(a.atk) + "</b>حمله</div><div><b>" + n(a.def) + "</b>دفاع</div><div><b>" + n(a.spd) + "</b>سرعت</div></div></div>";
+    }
+    html += "<h2>وضعیت</h2>" + '<div class="card rows">' +
+      "<div><span>لیگ</span><span>" + esc(me.league.emoji) + " " + esc(me.league.name) + "</span></div>" +
+      "<div><span>رتبه‌ی کاپ</span><span>" + n(me.cup_rank) + "</span></div>" +
+      "<div><span>تالار مِهر</span><span>سطح " + n(me.hall_level) + "</span></div>" +
+      "<div><span>هیولاها</span><span>" + n(me.creatures) + "</span></div>" +
+      "<div><span>تجهیزات</span><span>" + n(me.equipment) + "</span></div>" +
+      "<div><span>برج موگن</span><span>طبقه‌ی " + n(me.tower_floor) + "</span></div>" +
+      "<div><span>ورود پشت‌سرهم</span><span>" + n(me.streak) + " روز</span></div></div>" +
+      '<p class="muted" style="font-size:12px;text-align:center;margin:14px 0 0">نسخه‌ی آزمایشی · فقط نمایش. بازی کردن فعلاً از داخل ربات.</p>';
+    view.innerHTML = html;
+  }
+
+  // ── creatures ──
+  function chips(items, current, attr) {
+    return items.map(function (it) {
+      return '<button class="chip' + (it[0] === current ? " on" : "") + '" data-' + attr + '="' + esc(it[0]) + '">' + it[1] + "</button>";
+    }).join("");
+  }
+  function creatures(data) {
+    var f = filt.creatures, list = data.creatures.slice();
+    if (f.rarity) list = list.filter(function (c) { return c.rarity === f.rarity; });
+    if (f.element) list = list.filter(function (c) { return c.element === f.element; });
+    if (f.q) { var q = f.q.trim(); list = list.filter(function (c) { return c.name.indexOf(q) >= 0 || c.species.indexOf(q) >= 0; }); }
+    var ro = meta.rarity_order;
+    list.sort(f.sort === "level" ? function (a, b) { return b.level - a.level || b.power - a.power; }
+            : f.sort === "rarity" ? function (a, b) { return ro.indexOf(b.rarity) - ro.indexOf(a.rarity) || b.star - a.star || b.power - a.power; }
+            : function (a, b) { return b.power - a.power; });
+    var rar = [["", "همه"]].concat(ro.slice().reverse().map(function (k) { return [k, meta.rarities[k].emoji + " " + meta.rarities[k].label]; }));
+    var els = [["", "همه‌ی عناصر"]].concat(Object.keys(meta.elements).map(function (k) { return [k, meta.elements[k].emoji + " " + meta.elements[k].label]; }));
+    var html = '<input class="search" id="q" placeholder="جستجوی اسم هیولا…" value="' + esc(f.q) + '">' +
+      '<div class="filters">' + chips(rar, f.rarity, "rarity") + "</div>" +
+      '<div class="filters">' + chips(els, f.element, "element") + "</div>" +
+      '<div class="filters">' + chips([["power", "قوی‌ترین"], ["level", "بالاترین سطح"], ["rarity", "نایاب‌ترین"]], f.sort, "sort") + "</div>" +
+      '<div class="count muted">' + n(list.length) + " از " + n(data.creatures.length) + " هیولا</div>" + '<div class="grid">';
+    list.forEach(function (c) {
+      html += '<button class="tile ' + c.rarity + '" data-creature="' + c.id + '">' +
+        '<img class="pic" loading="lazy" decoding="async" src="' + c.img + '" alt="">' +
+        (c.active ? '<span class="badge act">فعال</span>' : c.busy ? '<span class="badge busy">مشغول</span>' : "") +
+        '<span class="badge end">' + (meta.elements[c.element] ? meta.elements[c.element].emoji : "") + "</span>" +
+        '<div class="body"><div class="nm">' + esc(c.name) + "</div>" +
+        '<div class="sub"><span>' + n(c.star) + "⭐ · " + n(c.level) + '</span><span>💪' + n(c.power) + "</span></div></div></button>";
+    });
+    view.innerHTML = html + "</div>" + (list.length ? "" : '<div class="state">هیولایی با این فیلتر نداری.</div>');
+    var q = document.getElementById("q");
+    q.oninput = function () { f.q = q.value; clearTimeout(q._t); q._t = setTimeout(function () { creatures(data); var x = document.getElementById("q"); x.focus(); x.setSelectionRange(x.value.length, x.value.length); }, 250); };
+  }
+  function creatureSheet(c) {
+    var el = meta.elements[c.element], ra = meta.rarities[c.rarity];
+    var gear = c.gear.length ? c.gear.map(function (g) {
+      var s = meta.slots[g.slot] || { emoji: "", label: g.slot };
+      return "<div><span>" + s.emoji + " " + esc(g.name) + ' <span class="num">+' + g.level + "</span></span><span>" + (meta.rarities[g.rarity] ? meta.rarities[g.rarity].emoji : "") + "</span></div>";
+    }).join("") : '<div><span class="muted">تجهیزاتی نپوشیده</span><span></span></div>';
+    openSheet('<img class="big" src="' + c.img + '" alt="">' +
+      '<div style="font-size:19px;font-weight:700;margin-top:10px">' + esc(c.name) + (c.name !== c.species ? ' <span class="muted" style="font-size:13px">(' + esc(c.species) + ")</span>" : "") + "</div>" +
+      "<div>" + (ra ? ra.emoji + " " + esc(ra.label) : "") + " · " + (el ? el.emoji + " " + esc(el.label) : "") + " · " + stars(c.star) + "</div>" +
+      '<div class="muted">سطح ' + n(c.level) + " · 💪 قدرت " + n(c.power) + (c.active ? " · فعال" : c.busy ? " · مشغول" : "") + "</div>" +
+      '<div class="stats"><div><b>' + n(c.hp) + "</b>جان</div><div><b>" + n(c.atk) + "</b>حمله</div><div><b>" + n(c.def) + "</b>دفاع</div><div><b>" + n(c.spd) + "</b>سرعت</div></div>" +
+      "<h2>تجهیزات</h2>" + '<div class="card rows">' + gear + "</div>");
+  }
+
+  // ── equipment ──
+  function equipment(data) {
+    var f = filt.equipment, list = data.equipment.slice();
+    if (f.slot) list = list.filter(function (e) { return e.slot === f.slot; });
+    if (f.rarity) list = list.filter(function (e) { return e.rarity === f.rarity; });
+    var slots = [["", "همه"]].concat(Object.keys(meta.slots).map(function (k) { return [k, meta.slots[k].emoji + " " + meta.slots[k].label]; }));
+    var rar = [["", "همه‌ی رده‌ها"]].concat(meta.rarity_order.slice().reverse().map(function (k) { return [k, meta.rarities[k].emoji + " " + meta.rarities[k].label]; }));
+    var html = '<div class="filters">' + chips(slots, f.slot, "slot") + "</div>" + '<div class="filters">' + chips(rar, f.rarity, "erarity") + "</div>" +
+      '<div class="count muted">' + n(list.length) + " از " + n(data.equipment.length) + " تجهیزات</div>" + '<div class="grid">';
+    list.forEach(function (e) {
+      html += '<button class="tile ' + e.rarity + '" data-equip="' + e.id + '">' +
+        '<img class="pic" loading="lazy" decoding="async" src="' + e.img + '" alt="">' +
+        (e.on ? '<span class="badge act">پوشیده</span>' : "") + '<span class="badge end num">+' + e.level + "</span>" +
+        '<div class="body"><div class="nm">' + esc(e.name) + "</div>" +
+        '<div class="sub"><span>' + ((meta.slots[e.slot] || {}).label || "") + "</span><span>💪" + n(e.power) + "</span></div></div></button>";
+    });
+    view.innerHTML = html + "</div>" + (list.length ? "" : '<div class="state">تجهیزاتی با این فیلتر نداری.</div>');
+  }
+  function equipSheet(e) {
+    var s = meta.slots[e.slot] || { emoji: "", label: e.slot }, ra = meta.rarities[e.rarity];
+    openSheet('<img class="big" src="' + e.img + '" alt="">' +
+      '<div style="font-size:19px;font-weight:700;margin-top:10px">' + esc(e.name) + ' <span class="num">+' + e.level + "</span></div>" +
+      "<div>" + (ra ? ra.emoji + " " + esc(ra.label) : "") + " · " + s.emoji + " " + esc(s.label) + "</div>" +
+      '<div class="card rows" style="margin-top:10px"><div><span>قدرت</span><span>' + n(e.power) + "</span></div>" +
+      "<div><span>اثر</span><span>" + esc(String(e.bonus || "").replace(/<[^>]+>/g, "")) + "</span></div>" +
+      "<div><span>وضعیت</span><span>" + (e.on ? "روی " + esc(e.on) : "توی کوله") + "</span></div></div>");
+  }
+
+  // ── leaderboard ──
+  function leaderboard(data) {
+    var html = '<div class="card" style="margin-bottom:10px">رتبه‌ی تو: <b>' + n(data.me.rank) + "</b> با 🏆 " + n(data.me.cup) + "</div>" + '<div class="card lb" style="padding:0">';
+    data.rows.forEach(function (r) {
+      var medal = r.rank === 1 ? "🥇" : r.rank === 2 ? "🥈" : r.rank === 3 ? "🥉" : n(r.rank);
+      html += '<div class="' + (r.me ? "me" : "") + '"><span class="rk">' + medal + '</span><span class="nm">' + esc(r.league) + " " + esc(r.name) + "</span><span>🏆 " + n(r.cup) + "</span></div>";
+    });
+    view.innerHTML = html + "</div>";
+  }
+
+  // ── sheet ──
+  var sheet = document.getElementById("sheet"), sheetBody = document.getElementById("sheet-body");
+  function openSheet(html) { sheetBody.innerHTML = html + '<button class="close" data-close>بستن</button>'; sheet.classList.add("open"); sheetBody.scrollTop = 0; }
+  sheet.addEventListener("click", function (ev) { if (ev.target.closest("[data-close]")) sheet.classList.remove("open"); });
+
+  // ── routing ──
+  var renderers = { profile: profile, creatures: creatures, equipment: equipment, leaderboard: leaderboard };
+  var sources = { profile: "me", creatures: "creatures", equipment: "equipment", leaderboard: "leaderboard" };
+  function show(name) {
+    tab = name;
+    Array.prototype.forEach.call(document.querySelectorAll("#tabs button"), function (b) { b.classList.toggle("on", b.dataset.tab === name); });
+    if (!cache[sources[name]]) view.innerHTML = '<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
+    api("me").then(function (me) {
+      meta = me.meta; renderBar(me);
+      return name === "profile" ? me : api(sources[name]);
+    }).then(function (data) { if (tab === name) { renderers[name](data); window.scrollTo(0, 0); } }).catch(fail);
+  }
+  document.getElementById("tabs").addEventListener("click", function (ev) {
+    var b = ev.target.closest("button[data-tab]"); if (b) show(b.dataset.tab);
+  });
+  view.addEventListener("click", function (ev) {
+    var t = ev.target.closest("button"); if (!t) return;
+    var d = t.dataset;
+    if (d.creature) {
+      var c = null, id = Number(d.creature);
+      if (cache.creatures) c = cache.creatures.creatures.filter(function (x) { return x.id === id; })[0];
+      if (!c && cache.me && cache.me.active && cache.me.active.id === id) c = cache.me.active;
+      if (c) creatureSheet(c);
+    } else if (d.equip) {
+      var e = cache.equipment.equipment.filter(function (x) { return x.id === Number(d.equip); })[0];
+      if (e) equipSheet(e);
+    } else if ("rarity" in d) { filt.creatures.rarity = d.rarity; creatures(cache.creatures); }
+    else if ("element" in d) { filt.creatures.element = d.element; creatures(cache.creatures); }
+    else if ("sort" in d) { filt.creatures.sort = d.sort; creatures(cache.creatures); }
+    else if ("slot" in d) { filt.equipment.slot = d.slot; equipment(cache.equipment); }
+    else if ("erarity" in d) { filt.equipment.rarity = d.erarity; equipment(cache.equipment); }
+  });
+  show("profile");
+})();
+</script>
+</body>
+</html>
