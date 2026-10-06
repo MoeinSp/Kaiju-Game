@@ -266,11 +266,17 @@ def btn(
             stripped = _TRAILING_EMOJI.sub("", stripped, count=1)
 
         if emoji_key == "btn_back" or stripped.strip() in ("بازگشت", "🔙", "") or label in ("بازگشت", "🔙", ""):
+            # A back button always SAYS «بازگشت» (it used to be a bare icon, which read as
+            # a mystery button). «بازگشت به …» / «منوی اصلی» collapse to the one word; a
+            # back-styled button with its own meaning («نه», «یه هیولای دیگه») keeps it.
+            word = stripped.strip()
+            if not word or word == "🔙" or word.startswith("بازگشت") or word == "منوی اصلی":
+                word = "بازگشت"
             if icon:
                 kwargs["icon_custom_emoji_id"] = icon
-                label = "\u200c"
+                label = word
             else:
-                label = get_button_label_emoji("btn_back") or "🔙"
+                label = f"{get_button_label_emoji('btn_back') or '🔙'} {word}"
         elif icon:
             # Telegram draws the icon *before* the label, so any emoji baked into the
             # label would render a SECOND time next to the Premium icon. Strip it.

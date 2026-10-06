@@ -96,6 +96,59 @@ def get_min_bid_increment(current_bid: int, currency: str = "coins") -> int:
             return 250
 
 
+# ── the 5-day programme ───────────────────────────────────────────────────────
+# The market used to offer the same three lots every single night. It now cycles through
+# five themed nights (then starts over), so there is a reason to check what's on today
+# and to save gold/diamonds for a particular night. Each lot:
+#   (title, item_type, payload, bid currency, opening bid)
+# Opening bids are low on purpose — the price is set by the bidding (a 500-diamond lot
+# opens at 50k gold and has been closing around 3M).
+PROGRAMME: tuple[dict, ...] = (
+    {"key": "treasure", "emoji": "💎", "title": "شب گنجینه", "lots": (
+        ("💎 محموله ۵۰۰ تایی الماس خالص", "diamonds", {"amount": 500}, "coins", 50_000),
+        ("🎫 بسته ۱۰ عددی بلیط باکس ژنتیکی", "tickets", {"amount": 10}, "coins", 30_000),
+        ("👑 🦖 کایجوی افسانه‌ای ۳ ستاره", "creature", {"rarity": "legendary", "star": 3, "level": 1}, "diamonds", 200),
+    )},
+    {"key": "genetics", "emoji": "🧬", "title": "شب ژنتیک", "lots": (
+        ("🥚 تخم کایجوی اساطیری", "egg", {"rarity": "mythic", "minutes": 60}, "diamonds", 300),
+        ("🧬 محموله ۲۰٬۰۰۰ تایی DNA", "dna", {"amount": 20_000}, "coins", 40_000),
+        ("👑 جعبه‌ی امگا", "arena_chest", {"tier": "mega", "count": 1}, "coins", 60_000),
+    )},
+    {"key": "armory", "emoji": "⚔️", "title": "شب جنگ‌افزار", "lots": (
+        ("⚔️ تجهیزات اساطیری (شانسی)", "equip_roll", {"rarity": "mythic", "count": 1}, "diamonds", 150),
+        ("🛡 ۲ تجهیزات افسانه‌ای (شانسی)", "equip_roll", {"rarity": "legendary", "count": 2}, "coins", 80_000),
+        ("🎫 بسته ۲۰ عددی بلیط باکس ژنتیکی", "tickets", {"amount": 20}, "coins", 60_000),
+    )},
+    {"key": "speed", "emoji": "⏩", "title": "شب سرعت", "lots": (
+        ("⏩ ۵ کارت سرعت ۶۰ دقیقه‌ای", "speedup", {"minutes": 60, "count": 5}, "coins", 30_000),
+        ("🥈 اشتراک نقره‌ای ۷ روزه", "subscription", {"tier": "silver", "days": 7}, "diamonds", 100),
+        ("💎 محموله ۳۰۰ تایی الماس", "diamonds", {"amount": 300}, "coins", 30_000),
+    )},
+    {"key": "grand", "emoji": "👑", "title": "شب بزرگ", "lots": (
+        ("👑 🦖 کایجوی اساطیری ۲ ستاره", "creature", {"rarity": "mythic", "star": 2, "level": 1}, "diamonds", 500),
+        ("💎 محموله ۱٬۰۰۰ تایی الماس خالص", "diamonds", {"amount": 1000}, "coins", 100_000),
+        ("💰 صندوق ۱٬۰۰۰٬۰۰۰ طلا", "coins", {"amount": 1_000_000}, "diamonds", 100),
+        ("🔮 ۲ جعبه‌ی جادویی", "arena_chest", {"tier": "magical", "count": 2}, "coins", 40_000),
+    )},
+)
+
+
+def programme_for(day: datetime.date) -> dict:
+    """The night of the 5-day cycle that `day` (the date the auction ENDS on) falls on."""
+    return PROGRAMME[day.toordinal() % len(PROGRAMME)]
+
+
+def tonight() -> dict:
+    return programme_for(timezone.localtime(get_next_blackmarket_deadline()).date())
+
+
+def upcoming(days: int = 4) -> list[tuple[datetime.date, dict]]:
+    """The next `days` nights after tonight — for the «برنامه‌ی شب‌های بعد» line."""
+    start = timezone.localtime(get_next_blackmarket_deadline()).date()
+    return [(start + datetime.timedelta(days=i), programme_for(start + datetime.timedelta(days=i)))
+            for i in range(1, days + 1)]
+
+
 def get_active_auctions() -> list[BlackMarketAuction]:
     """Get active non-settled auctions."""
     _settle_expired_auctions()
@@ -125,38 +178,12 @@ def _create_daily_auctions_locked(now) -> None:
     # 22:30 Tehran time deadline
     ends_at = get_next_blackmarket_deadline()
 
-    # Auction 1: 500 Diamonds
-    BlackMarketAuction.objects.create(
-        title="💎 محموله ۵۰۰ تایی الماس خالص",
-        item_type="diamonds",
-        item_payload={"amount": 500},
-        bid_currency="coins",
-        min_bid=50000,
-        current_bid=50000,
-        ends_at=ends_at,
-    )
-
-    # Auction 2: 10 Biocrate Tickets
-    BlackMarketAuction.objects.create(
-        title="🎫 بسته ۱۰ عددی بلیط باکس ژنتیکی",
-        item_type="tickets",
-        item_payload={"amount": 10},
-        bid_currency="coins",
-        min_bid=30000,
-        current_bid=30000,
-        ends_at=ends_at,
-    )
-
-    # Auction 3: Legendary Creature Egg (VIP)
-    BlackMarketAuction.objects.create(
-        title="👑 🦖 تخم کایجوی افسانه‌ای ۳ ستاره (VIP)",
-        item_type="creature",
-        item_payload={"rarity": "legendary", "star": 3, "level": 1},
-        bid_currency="diamonds",
-        min_bid=200,
-        current_bid=200,
-        ends_at=ends_at,
-    )
+    night = programme_for(timezone.localtime(ends_at).date())
+    for title, item_type, payload, currency, opening in night["lots"]:
+        BlackMarketAuction.objects.create(
+            title=title, item_type=item_type, item_payload=dict(payload), bid_currency=currency,
+            min_bid=opening, current_bid=opening, ends_at=ends_at,
+        )
 
 
 def validate_bid_preview(user: User, auction_id: int, bid_amount: int) -> dict:
@@ -453,6 +480,18 @@ def _deliver_auction_item(user: User, auction: BlackMarketAuction) -> None:
         from game import energy
         amt = p.get("amount", 50)
         energy.add_energy(user, amt)
+    elif itype == "arena_chest":
+        # real chest contents, opened on the spot and sized to the winner's league
+        from game.arena_chests import grant_chest_contents
+
+        for _ in range(max(1, int(p.get("count", 1)))):
+            grant_chest_contents(user, p.get("tier", "magical"), user.cup, source="blackmarket")
+    elif itype == "equip_roll":
+        # a real piece from the game's own equipment pool at the promised rarity
+        from game.equipment import roll_equipment
+
+        for _ in range(max(1, int(p.get("count", 1)))):
+            roll_equipment(user, p.get("rarity", "legendary"))
     elif itype in ("lootbox", "chest", "diamond_box"):
         tier = p.get("tier", "magical")
         cnt = p.get("count", 1)

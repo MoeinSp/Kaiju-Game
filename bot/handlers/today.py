@@ -36,10 +36,10 @@ def _render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     # ── live, time-limited things first ──
     if st["boss"]:  # only while a boss is here AND the player still has a hit
         lines.append(f"👹 <b>غول سرگردان اینجاست!</b> <code>{st['boss']['hits_left']}</code> ضربه داری.")
-        rows.append([btn("ضربه به غول", emoji_key="btn_worldboss", style=BATTLE, callback_data="menu:worldboss")])
+        rows.append([btn("ضربه به غول", emoji_key="btn_worldboss", style=BATTLE, callback_data="tdy:worldboss")])
     if st["tournament_open"]:
         lines.append("🏟 ثبت‌نام <b>جام آخر هفته</b> بازه (رایگان).")
-        rows.append([btn("ثبت‌نام در جام", emoji_key="btn_tournament", style=BATTLE, callback_data="menu:tournament")])
+        rows.append([btn("ثبت‌نام در جام", emoji_key="btn_tournament", style=BATTLE, callback_data="tdy:tournament")])
     if st["festival"]:
         lines.append(f"{st['festival']['emoji']} جشنواره‌ی «{st['festival']['title']}» در جریانه.")
     if st["rule"]:
@@ -82,14 +82,14 @@ def _render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     if st["can_dispatch"]:
         lines.append("🧭 می‌تونی یه هیولا بفرستی مأموریت.")
     lines.append(f"{get_emoji('energy')} انرژی: <code>{st['energy']}/{st['max_energy']}</code>")
-    quick = [btn("شکار", emoji_key="btn_hunt", style=BATTLE, callback_data="menu:hunt"),
-             btn("آرنا", emoji_key="btn_arena", style=BATTLE, callback_data="menu:arena")]
+    quick = [btn("شکار", emoji_key="btn_hunt", style=BATTLE, callback_data="tdy:hunt"),
+             btn("آرنا", emoji_key="btn_arena", style=BATTLE, callback_data="tdy:arena")]
     rows.append(quick)
     more = []
     if missions_left > 0:
-        more.append(btn("مأموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="menu:missions"))
+        more.append(btn("مأموریت‌ها", emoji_key="btn_missions", style=NAV, callback_data="tdy:missions"))
     if st["can_dispatch"]:
-        more.append(btn("اعزام", emoji_key="btn_dispatch", style=NAV, callback_data="menu:dispatch"))
+        more.append(btn("اعزام", emoji_key="btn_dispatch", style=NAV, callback_data="tdy:dispatch"))
     if more:
         rows.append(more)
     rows.append([back_btn("menu:me", "منوی اصلی")])

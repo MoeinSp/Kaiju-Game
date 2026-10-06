@@ -21,31 +21,33 @@ def _bm_sync(tg_user):
 
 
 def _render_bm_text(user: User, auctions: list[BlackMarketAuction]) -> str:
+    # Short on purpose (it's a photo caption): the deadline is the same for every lot, so
+    # it is said once at the top instead of twice under each one.
+    # name the night only when the lots on sale really ARE that night's (lots created
+    # before the programme existed, or added by an admin, keep the plain header)
+    titles = {a.title for a in auctions}
+    night = next((n for n in blackmarket.PROGRAMME if titles and titles <= {lot[0] for lot in n["lots"]}), None)
     lines = [
-        "⏳ <b>بازار سیاه و مزایده‌های شبانه</b>",
+        f"🏛 <b>بازار سیاه — {night['emoji']} {night['title']}</b>" if night else "🏛 <b>بازار سیاه</b>",
         "━━━━━━━━━━━━━━━━━━━━",
-        "<i>هر شب اقلام نایاب و بسته‌های باارزش برای مزایده گذاشته می‌شوند.</i>\n",
-        f"💰 موجودی طلا: <code>{user.coins:,} طلا</code>",
-        f"💎 موجودی الماس: <code>{user.diamonds:,} الماس</code>",
-        "━━━━━━━━━━━━━━━━━━━━",
+        f"💰 <code>{user.coins:,}</code> طلا · 💎 <code>{user.diamonds:,}</code> الماس",
     ]
     if not auctions:
         lines.append("<i>در حال حاضر مزایده فعالی در بازار موجود نیست.</i>")
     else:
         now = timezone.now()
+        soonest = min(a.ends_at for a in auctions)
+        lines.append(
+            f"⏳ تا پایان مزایده: <b>{blackmarket.format_time_remaining(max(0, (soonest - now).total_seconds()))}</b>"
+            f" <i>({blackmarket.format_persian_deadline(soonest)})</i>"
+        )
         for a in auctions:
             curr = "طلا" if a.bid_currency == "coins" else "الماس"
-            top_bidder = a.highest_bidder_name or "هنوز پیشنهادی ثبت نشده"
-            deadline_str = blackmarket.format_persian_deadline(a.ends_at)
-            rem_secs = max(0, (a.ends_at - now).total_seconds())
-            rem_str = blackmarket.format_time_remaining(rem_secs)
-            lines.append(
-                f"🏷 <b>{a.title}</b>\n"
-                f"<blockquote>💵 بالاترین پیشنهاد: <code>{a.current_bid:,} {curr}</code>\n"
-                f"👤 پیشنهاد دهنده برتر: <b>{top_bidder}</b>\n"
-                f"⏱ مهلت: <code>{deadline_str}</code>\n"
-                f"⏳ زمان باقیمانده: <code>{rem_str}</code></blockquote>\n"
-            )
+            who = f"👤 {a.highest_bidder_name}" if a.highest_bidder_name else "<i>بدون پیشنهاد</i>"
+            own_deadline = "" if a.ends_at == soonest else f" · ⏱ {blackmarket.format_persian_deadline(a.ends_at)}"
+            lines.append(f"\n🏷 <b>{a.title}</b>\n   💵 <code>{a.current_bid:,}</code> {curr} · {who}{own_deadline}")
+    nxt = " ← ".join(f"{n['emoji']} {n['title']}" for _d, n in blackmarket.upcoming(4))
+    lines += ["", f"📅 <b>شب‌های بعد:</b> {nxt}"]
     return "\n".join(lines)
 
 

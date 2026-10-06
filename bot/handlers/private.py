@@ -1569,6 +1569,7 @@ def _me_sync(tg_user):
 
 
 async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data.pop("from_today", None)  # back on the main card → no «came from امروز»
     user, creature, equipped_items, hall_level, research_built, quest = await run_db(_me_sync, update.effective_user)
     if creature is None:
         await send_screen(update,
@@ -5715,9 +5716,27 @@ def _hall_gate_sync(tg_user) -> tuple[int, str | None]:
     return main_hall_level(user), story.active_cta_action(user)
 
 
+FROM_TODAY_KEY = "from_today"
+FROM_TODAY_SECONDS = 20 * 60  # how long «I came here from امروز» is remembered
+
+
 async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     action = query.data.split(":", 1)[1]
+    # «📋 امروز» opens sections with `tdy:<action>` instead of `menu:<action>`. Every
+    # section's own «بازگشت» points at its hub (hunt → نبرد, missions → شهر, …), which
+    # threw a player who came from «امروز» into a category they never opened. So we
+    # remember the origin, and the next «back to a hub» lands on «امروز» instead.
+    import time as _time
+
+    if query.data.startswith("tdy:"):
+        context.user_data[FROM_TODAY_KEY] = _time.time()
+    elif action in ("me", "today"):
+        context.user_data.pop(FROM_TODAY_KEY, None)
+    elif action.startswith(("hub_", "cat_")):
+        came = context.user_data.pop(FROM_TODAY_KEY, None)
+        if came is not None and _time.time() - came < FROM_TODAY_SECONDS:
+            action = "today"
     # Navigating away (incl. every «انصراف» that routes to a menu) cancels a pending
     # text prompt — otherwise the NEXT plain message was still consumed by it (a later
     # number got deposited into the treasury, or kicked a member by id).
@@ -5967,7 +5986,7 @@ def register(application) -> None:
     application.add_handler(CommandHandler("hide_keyboard", hide_keyboard_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("keyboard_off", hide_keyboard_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("nokeyboard", hide_keyboard_cmd, filters.ChatType.PRIVATE))
-    application.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^menu:"))
+    application.add_handler(CallbackQueryHandler(menu_callback, pattern=r"^(menu|tdy):"))
     application.add_handler(CallbackQueryHandler(guide_page_callback, pattern=r"^guide:"))
     application.add_handler(CallbackQueryHandler(upgrade_pick_callback, pattern=r"^upg_pick:"))
     application.add_handler(CallbackQueryHandler(upgrade_fusion_gate_callback, pattern=r"^upg_fusion:"))
