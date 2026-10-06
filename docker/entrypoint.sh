@@ -33,11 +33,14 @@ case "$1" in
   web)
     wait_for_db
     python manage.py migrate --noinput
-    # 2 workers is plenty: the panel is a single-operator tool, and each worker
-    # holds its own long-lived Postgres connection (CONN_MAX_AGE).
+    # Threaded workers: the panel is a single-operator tool, but the Mini App (/app/)
+    # is used by players and serves many small image/API requests at once. Each thread
+    # holds its own long-lived Postgres connection (CONN_MAX_AGE): 3 x 6 = 18 at most.
     exec gunicorn telgame_site.wsgi:application \
       --bind "0.0.0.0:${PORT:-8000}" \
-      --workers "${GUNICORN_WORKERS:-2}" \
+      --worker-class gthread \
+      --workers "${GUNICORN_WORKERS:-3}" \
+      --threads "${GUNICORN_THREADS:-6}" \
       --timeout "${GUNICORN_TIMEOUT:-120}" \
       --access-logfile - --error-logfile -
     ;;

@@ -1,0 +1,13 @@
+.home-logo { text-align: center; margin: 2px 0 12px; }
+.home-logo img { height: 54px; max-width: 78%; object-fit: contain; filter: drop-shadow(0 4px 18px rgba(58,214,255,.3)); }
+.home-lab { position: relative; overflow: hidden; padding: 16px; display: flex; align-items: center; gap: 14px; width: 100%; text-align: right; }
+.home-lab::before { content: ""; position: absolute; inset: 0; background-image: var(--art); background-size: cover; background-position: center 30%; filter: blur(18px) saturate(1.2); opacity: .32; transform: scale(1.2); }
+.home-lab::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(8,11,18,.2), rgba(8,11,18,.86)); }
+.home-lab > * { position: relative; z-index: 1; }
+.home-lab .ring { width: 70px; height: 70px; flex: none; position: relative; display: block; }
+.home-lab .ring svg { width: 70px; height: 70px; transform: rotate(-90deg); }
+.home-lab .lv { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; line-height: 1.05; }
+.home-lab .lv b { font-size: 21px; } .home-lab .lv small { display: block; font-size: 9.5px; color: var(--muted); letter-spacing: .6px; }
+.home-lab .nm { display: block; font-size: 18px; font-weight: 700; line-height: 1.35; }
+.home-lab .vip { display: inline-flex; align-items: center; gap: 4px; margin-top: 5px; font-size: 11.5px; font-weight: 700; color: var(--gold); }
+.home-lab .vip svg { width: 13px; height: 13px; }

@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.shortcuts import redirect
 from django.urls import include, path
 
-from telgame_site import miniapp_api, miniapp_views
+from telgame_site import miniapp_views
 from telgame_site.api import user_started
 
 urlpatterns = [
@@ -18,12 +18,6 @@ urlpatterns = [
     path("app/test/", miniapp_views.test_page),
     path("app/test/img/", miniapp_views.test_image),
     path("app/test/report/", miniapp_views.test_report),
-    # Mini App — phase 1: read-only screens (telgame_site/miniapp_api.py)
-    path("app/", miniapp_api.app_page),
-    path("app/api/me/", miniapp_api.me),
-    path("app/api/creatures/", miniapp_api.creatures),
-    path("app/api/equipment/", miniapp_api.equipment),
-    path("app/api/leaderboard/", miniapp_api.leaderboard),
-    path("app/img/<str:kind>/<int:obj_id>.jpg", miniapp_api.image),
-    path("app/font/<str:weight>.ttf", miniapp_api.font),
+    # Mini App (telgame_site/mini/): shell, static files, images and the discovered API modules
+    path("app/", include("telgame_site.mini.urls")),
 ]
