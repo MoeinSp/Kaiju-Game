@@ -562,6 +562,25 @@ class FestivalState(models.Model):
     last_settled_key = models.CharField(max_length=16, default="", blank=True)
 
 
+class MiniAppProbe(models.Model):
+    """One player's result of the Mini App reachability test (/apptest — see
+    telgame_site/miniapp_views.py): which stages reached the server and how fast."""
+
+    user_id = models.BigIntegerField(unique=True)
+    sent_at = models.DateTimeField(null=True, blank=True)     # the bot sent the button
+    html_at = models.DateTimeField(null=True, blank=True)     # the page request arrived
+    report_at = models.DateTimeField(null=True, blank=True)   # the page's script reported
+    opens = models.IntegerField(default=0)
+    sdk_ok = models.BooleanField(default=False)    # Telegram.WebApp + initData present
+    auth_ok = models.BooleanField(default=False)   # initData signature verified for this user
+    img_ok = models.BooleanField(default=False)
+    load_ms = models.IntegerField(null=True, blank=True)
+    img_ms = models.IntegerField(null=True, blank=True)
+    platform = models.CharField(max_length=24, default="", blank=True)
+    version = models.CharField(max_length=16, default="", blank=True)
+    failed_reported = models.BooleanField(default=False)   # the player tapped «باز نشد»
+
+
 class AutoGift(models.Model):
     """Singleton (id=1): the admin's «شارژ همگانی خودکار» — every `interval_days` days
     every player gets this much gold / DNA / diamonds (game/autogift.py)."""

@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.shortcuts import redirect
 from django.urls import include, path
 
+from telgame_site import miniapp_views
 from telgame_site.api import user_started
 
 urlpatterns = [
@@ -12,4 +13,9 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     # public advertiser API: GET /api/started/?key=...&user=<id or @username>
     path("api/started/", user_started, name="api_user_started"),
+    # Mini App — step 1: can players open one at all? (telgame_site/miniapp_views.py)
+    path("app/tg.js", miniapp_views.sdk_js),
+    path("app/test/", miniapp_views.test_page),
+    path("app/test/img/", miniapp_views.test_image),
+    path("app/test/report/", miniapp_views.test_report),
 ]

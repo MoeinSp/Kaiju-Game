@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>تست مینی‌اپ</title>
+<script>window.__t0 = Date.now();</script>
+<script src="/app/tg.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #10141c);
+    --card: var(--tg-theme-secondary-bg-color, #1a2130);
+    --text: var(--tg-theme-text-color, #eef1f6);
+    --muted: var(--tg-theme-hint-color, #8d98ab);
+    --ok: #3ccf7a; --bad: #ef5d5d; --wait: #e9b949;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px; background: var(--bg); color: var(--text);
+    font: 16px/1.7 system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
+  }
+  h1 { font-size: 20px; margin: 4px 0 2px; }
+  p.sub { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li {
+    display: flex; align-items: center; gap: 10px; background: var(--card);
+    border-radius: 12px; padding: 11px 14px; margin-bottom: 8px;
+  }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--wait); flex: none; }
+  .dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); }
+  .name { flex: 1; }
+  .val { color: var(--muted); font-size: 14px; direction: ltr; }
+  #verdict {
+    margin-top: 14px; padding: 14px; border-radius: 12px; background: var(--card);
+    font-weight: 600; text-align: center;
+  }
+  img#probe { width: 100%; border-radius: 12px; margin-top: 12px; display: none; }
+</style>
+</head>
+<body>
+  <h1>تست مینی‌اپ Kaiju Legends</h1>
+  <p class="sub">این صفحه فقط بررسی می‌کنه مینی‌اپ روی گوشی و اینترنت تو باز می‌شه یا نه. چند ثانیه صبر کن.</p>
+  <ul>
+    <li><span class="dot ok"></span><span class="name">صفحه باز شد</span><span class="val" id="v-page"></span></li>
+    <li><span class="dot" id="d-sdk"></span><span class="name">اتصال به تلگرام</span><span class="val" id="v-sdk"></span></li>
+    <li><span class="dot" id="d-img"></span><span class="name">بارگذاری عکس بازی</span><span class="val" id="v-img"></span></li>
+    <li><span class="dot" id="d-srv"></span><span class="name">ارسال نتیجه به سرور</span><span class="val" id="v-srv"></span></li>
+  </ul>
+  <div id="verdict">در حال بررسی…</div>
+  <img id="probe" alt="">
+<script>
+(function () {
+  var t0 = window.__t0 || Date.now();
+  var qs = location.search || "";
+  function set(id, ok, text) {
+    var d = document.getElementById("d-" + id), v = document.getElementById("v-" + id);
+    if (d) d.className = "dot " + (ok ? "ok" : "bad");
+    if (v && text != null) v.textContent = text;
+  }
+  var tg = window.Telegram && window.Telegram.WebApp;
+  var hasInit = !!(tg && tg.initData);
+  try { if (tg) { tg.ready(); tg.expand(); } } catch (e) {}
+  var loadMs = Date.now() - t0;
+  document.getElementById("v-page").textContent = loadMs + " ms";
+  set("sdk", hasInit, hasInit ? (tg.platform || "") : (tg ? "بدون اطلاعات کاربر" : "در دسترس نیست"));
+
+  var result = { sdk: hasInit, load_ms: loadMs, img_ok: false, img_ms: null,
+                 platform: tg ? (tg.platform || "") : "", version: tg ? (tg.version || "") : "",
+                 init_data: tg ? (tg.initData || "") : "" };
+  var sent = false;
+  function send() {
+    if (sent) return; sent = true;
+    var started = Date.now();
+    fetch("/app/test/report/" + qs, { method: "POST", headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify(result) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        set("srv", !!j.ok, (Date.now() - started) + " ms");
+        var good = j.ok && result.img_ok && hasInit;
+        document.getElementById("verdict").textContent = good
+          ? "✅ همه‌چی درسته! مینی‌اپ روی دستگاه تو کار می‌کنه. می‌تونی این صفحه رو ببندی."
+          : "⚠️ صفحه باز شد ولی یه بخش کامل کار نکرد. نتیجه ثبت شد؛ می‌تونی صفحه رو ببندی.";
+      })
+      .catch(function () {
+        set("srv", false, "ناموفق");
+        document.getElementById("verdict").textContent = "⚠️ نتیجه به سرور نرسید. لطفاً توی ربات دکمه‌ی «باز نشد» رو بزن.";
+      });
+  }
+  var img = document.getElementById("probe"), imgStart = Date.now();
+  img.onload = function () {
+    result.img_ok = true; result.img_ms = Date.now() - imgStart;
+    set("img", true, result.img_ms + " ms"); img.style.display = "block"; send();
+  };
+  img.onerror = function () { set("img", false, "ناموفق"); send(); };
+  img.src = "/app/test/img/?_=" + Date.now();
+  setTimeout(function () { if (!result.img_ok) set("img", false, "خیلی کند"); send(); }, 20000);
+})();
+</script>
+</body>
+</html>
