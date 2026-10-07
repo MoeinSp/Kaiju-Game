@@ -1597,8 +1597,8 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         "battle_mult": battle["mult"],
         "battle_winner_name": battle["winner_name"],
         "attacker_won": attacker_won,
-        "winner_name": display_name(winner_user),
-        "target_name": display_name(target),
+        "winner_name": lab_mention(winner_user),
+        "target_name": lab_mention(target),
         "target_alliance": target.alliance.name if target.alliance_id else None,
         "attacker_cup_change": delta,  # attacker's own swing (+ if won, − if lost)
         "defender_cup_change": defender_cup_change,
