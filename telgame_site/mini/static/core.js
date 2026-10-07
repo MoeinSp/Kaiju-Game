@@ -341,6 +341,21 @@ window.K = (function () {
     }
     tick(); K.every(1000, tick);
   };
+  /* A tile grid that draws `size` tiles and a «نمایش بیشتر» button for the rest (big accounts own thousands of pieces):
+     html = K.grid(list, function (x) { return K.itemTile(x); }) */
+  var grids = {}, gridSeq = 0;
+  K.grid = function (list, fn, size) {
+    size = size || 90; var id = ++gridSeq;
+    grids[id] = { list: list, fn: fn, at: size, size: size }; delete grids[id - 8];
+    return '<div class="grid" id="kg' + id + '">' + list.slice(0, size).map(fn).join("") + "</div>" +
+      (list.length > size ? '<button class="btn ghost block mt" data-grid-more="' + id + '">نمایش بیشتر <span class="num">(' + K.n(list.length - size) + ")</span></button>" : "");
+  };
+  document.addEventListener("click", function (ev) {
+    var b = ev.target.closest && ev.target.closest("[data-grid-more]"); if (!b) return;
+    var g = grids[b.dataset.gridMore], host = g && document.getElementById("kg" + b.dataset.gridMore); if (!host) return;
+    host.insertAdjacentHTML("beforeend", g.list.slice(g.at, g.at + g.size).map(g.fn).join("")); g.at += g.size;
+    if (g.at >= g.list.length) b.remove(); else b.querySelector(".num").textContent = "(" + K.n(g.list.length - g.at) + ")";
+  });
   /* Delegated clicks: K.on(root, "name", fn(el, ev)) handles <… data-act="name"> */
   K.on = function (root, act, fn) {
     root.addEventListener("click", function (ev) { var el = ev.target.closest('[data-act="' + act + '"]'); if (el && root.contains(el)) fn(el, ev); });

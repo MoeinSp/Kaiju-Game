@@ -238,7 +238,8 @@
             '<div class="xs muted">سقف فعلی تجهیزات: <b class="num" style="color:var(--text)">+' + Number(d.cap) + "</b>" + (d.cap < d.max ? " · آخرین سقف +" + Number(d.max) : "") + "</div></div></div>" +
             '<div class="callout mt">' + K.ic("info") + "<span>با <b>طلا</b> سطح تجهیزات رو بالا ببر. از یه سطحی به بعد ممکنه شکست بخوره: طلا خرج می‌شه ولی سطح بالا نمی‌ره. توی صفحه‌ی هر تجهیزات «نمونه‌ی مشابه» و «ترکیب هم‌نوع» هم هست.</span></div>" +
             '<div class="row mt"><button class="chip ' + (forgeSlot ? "" : "on") + '" data-act="fslot" data-slot="">همه <span class="num">(' + d.items.length + ")</span></button>" +
-            Object.keys(K.meta.slots).map(function (k) { return '<button class="chip ' + (forgeSlot === k ? "on" : "") + '" data-act="fslot" data-slot="' + k + '">' + K.ic(K.SLOT_ICON[k] || "chest") + K.esc(K.slotLabel(k)) + ' <span class="num">(' + (counts[k] || 0) + ")</span></button>"; }).join("") + "</div>";
+            Object.keys(K.meta.slots).map(function (k) { return '<button class="chip ' + (forgeSlot === k ? "on" : "") + '" data-act="fslot" data-slot="' + k + '">' + K.ic(K.SLOT_ICON[k] || "chest") + K.esc(K.slotLabel(k)) + ' <span class="num">(' + (counts[k] || 0) + ")</span></button>"; }).join("") + "</div>" +
+            (d.total > d.items.length ? '<p class="note">از ' + K.n(d.total) + " تجهیزاتِ قابل ارتقا، بهترین‌های هر دسته نمایش داده می‌شن.</p>" : "");
           if (!list.length) {
             html += d.items.length ? K.state("search", "چیزی توی این دسته نیست", "هیچ موردی برای ارتقا توی این دسته نداری.")
                   : d.owned ? K.state("anvil", "همه به سقف رسیدن", "همه‌ی تجهیزاتت به سقف فعلی (+" + d.cap + ") رسیدن. برای بالاتر، ساختمون آهنگری رو ارتقا بده.")

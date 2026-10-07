@@ -393,13 +393,18 @@ def _forge_state(user: User) -> dict:
     }
 
 
-def _forge_preview(user: User, item: Equipment) -> dict:
+FORGE_LIST_PER_SLOT = 60
+
+
+def _forge_preview(user: User, item: Equipment, cap: int | None = None) -> dict:
     """`forge_preview` plus what the piece becomes one level up (the game's own functions on
     an unsaved copy)."""
     from game.blacksmith import forge_preview
     from game.equipment import bonus_text, equipment_power
 
-    p = forge_preview(item, user)
+    p = forge_preview(item, user if cap is None else None)
+    if cap is not None:      # the caller already knows the forge's ceiling (saves a query per piece)
+        p["cap"], p["at_max"] = cap, item.level >= cap
     nxt = copy.copy(item)
     nxt.level = p["target_level"]
     return {
@@ -412,18 +417,25 @@ def _forge_preview(user: User, item: Equipment) -> dict:
 @endpoint()
 def forge_list(request, user):
     """bot: `blacksmith_panel` + `forge_cat` — everything still below the forge's ceiling."""
-    from game.blacksmith import forgeable_items
-
     _need_forge_section(user)
+    from game.blacksmith import equipment_cap
+
     order = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
-    items = []
-    for it in forgeable_items(user):
-        d = _item_dict(it)
-        d["forge"] = _forge_preview(user, it)
-        items.append(d)
-    items.sort(key=lambda d: (-order.get(d["rarity"], 0), -d["level"], d["id"]))
+    # big accounts own thousands of pieces: rank on the raw rows, then build only the best of each slot
+    rows = list(Equipment.objects.filter(owner=user, level__lt=equipment_cap(user)).select_related("equipped_on"))
+    rows.sort(key=lambda it: (-order.get(it.rarity, 0), -it.level, it.id))
+    shown, per_slot = [], {}
+    for it in rows:
+        per_slot[it.slot] = per_slot.get(it.slot, 0) + 1
+        if per_slot[it.slot] <= FORGE_LIST_PER_SLOT:
+            shown.append(it)
     out = _forge_state(user)
-    out.update({"items": items, "owned": Equipment.objects.filter(owner=user).count()})
+    items = []
+    for it in shown:
+        d = _item_dict(it)
+        d["forge"] = _forge_preview(user, it, cap=out["cap"])
+        items.append(d)
+    out.update({"items": items, "total": len(rows), "owned": Equipment.objects.filter(owner=user).count()})
     return out
 
 

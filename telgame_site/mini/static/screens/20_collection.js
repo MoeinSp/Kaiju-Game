@@ -28,7 +28,7 @@
             '<div class="row">' + chip("", f.element, "element", "همه‌ی عناصر") + Object.keys(K.meta.elements).map(function (k) { return chip(k, f.element, "element", K.esc(K.elLabel(k)), K.EL_ICON[k], "e-" + k); }).join("") + "</div>" +
             '<div class="seg">' + [["power", "قوی‌ترین"], ["level", "بالاترین سطح"], ["rarity", "نایاب‌ترین"]].map(function (s) { return '<button class="' + (f.sort === s[0] ? "on" : "") + '" data-sort="' + s[0] + '">' + s[1] + "</button>"; }).join("") + "</div>" +
             '<div class="count"><span>' + K.n(list.length) + " هیولا</span><span>از " + K.n(data.creatures.length) + "</span></div>" +
-            (list.length ? '<div class="grid">' + list.map(function (c) { return K.creatureTile(c); }).join("") + "</div>" : K.state("search", "چیزی پیدا نشد", "هیولایی با این فیلتر نداری."));
+            (list.length ? K.grid(list, function (c) { return K.creatureTile(c); }) : K.state("search", "چیزی پیدا نشد", "هیولایی با این فیلتر نداری."));
           var q = root.querySelector("#q");
           q.oninput = function () { f.q = q.value; clearTimeout(q._t); q._t = setTimeout(function () { draw(); var x = root.querySelector("#q"); x.focus(); x.setSelectionRange(x.value.length, x.value.length); }, 260); };
         }
@@ -89,7 +89,7 @@
           root.innerHTML = '<div class="row">' + chip("", f.slot, "slot", "همه") + Object.keys(K.meta.slots).map(function (k) { return chip(k, f.slot, "slot", K.esc(K.slotLabel(k)), K.SLOT_ICON[k]); }).join("") + "</div>" +
             '<div class="row">' + chip("", f.rarity, "erarity", "همه‌ی رده‌ها") + K.meta.rarity_order.slice().reverse().map(function (k) { return chip(k, f.rarity, "erarity", K.esc(K.rarLabel(k)), "gem", "c-" + k); }).join("") + "</div>" +
             '<div class="count"><span>' + K.n(list.length) + " تجهیزات</span><span>از " + K.n(data.equipment.length) + "</span></div>" +
-            (list.length ? '<div class="grid">' + list.map(function (e) { return K.itemTile(e); }).join("") + "</div>" : K.state("chest", "چیزی پیدا نشد", "تجهیزاتی با این فیلتر نداری."));
+            (list.length ? K.grid(list, function (e) { return K.itemTile(e); }) : K.state("chest", "چیزی پیدا نشد", "تجهیزاتی با این فیلتر نداری."));
         }
         draw();
         root.addEventListener("click", function (ev) {
