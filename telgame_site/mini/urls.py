@@ -7,6 +7,7 @@ every file in static/screens/ is loaded by the shell page. Adding a feature = ad
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import hmac
 import importlib
@@ -42,10 +43,46 @@ def shell(request):
     css = ["core.css"] + sorted(p.relative_to(STATIC_DIR).as_posix() for p in (STATIC_DIR / "screens").glob("*.css"))
     js = ["core.js"] + sorted(p.relative_to(STATIC_DIR).as_posix() for p in (STATIC_DIR / "screens").glob("*.js")) + ["boot.js"]
     html = (MINI_DIR / "shell.html").read_text(encoding="utf-8")
-    html = html.replace("<!--CSS-->", "\n".join(f'<link rel="stylesheet" href="{_versioned(c)}">' for c in css))
-    html = html.replace("<!--JS-->", "\n".join(f'<script src="{_versioned(j)}"></script>' for j in js))
+    if settings.DEBUG and "bundle" not in request.GET:   # separate files are easier to debug locally
+        css_html = "\n".join(f'<link rel="stylesheet" href="{_versioned(c)}">' for c in css)
+        js_html = "\n".join(f'<script src="{_versioned(j)}"></script>' for j in js)
+    else:                                                 # production: two requests instead of ~35
+        css_html = f'<link rel="stylesheet" href="/app/bundle.css?v={_bundle("css", css)[0]}">'
+        js_html = f'<script src="/app/bundle.js?v={_bundle("js", js)[0]}"></script>'
+    html = html.replace("<!--CSS-->", css_html).replace("<!--JS-->", js_html)
     resp = HttpResponse(html, content_type="text/html; charset=utf-8")
     resp["Cache-Control"] = "no-store"
+    return resp
+
+
+_BUNDLES: dict = {}   # kind -> (stamp, version, raw, gzipped); static files only, safe to keep per worker
+
+
+def _bundle(kind: str, files: list[str]):
+    """All css (or js) files joined into one body; rebuilt when any file changes."""
+    paths = [STATIC_DIR / rel for rel in files]
+    stamp = tuple((p.name, p.stat().st_mtime_ns) for p in paths)
+    hit = _BUNDLES.get(kind)
+    if hit is None or hit[0] != stamp:
+        sep = "\n;\n" if kind == "js" else "\n"
+        raw = sep.join(f"/* {p.name} */\n" + p.read_text(encoding="utf-8") for p in paths).encode("utf-8")
+        hit = (stamp, hashlib.sha1(raw).hexdigest()[:12], raw, gzip.compress(raw, 6))
+        _BUNDLES[kind] = hit
+    return hit[1], hit[2], hit[3]
+
+
+@require_GET
+def bundle(request, kind: str):
+    names = sorted(p.relative_to(STATIC_DIR).as_posix() for p in (STATIC_DIR / "screens").glob(f"*.{kind}"))
+    files = ["core.css"] + names if kind == "css" else ["core.js"] + names + ["boot.js"]
+    version, raw, packed = _bundle(kind, files)
+    use_gzip = "gzip" in request.headers.get("Accept-Encoding", "")
+    resp = HttpResponse(packed if use_gzip else raw,
+                        content_type=("text/css" if kind == "css" else "application/javascript") + "; charset=utf-8")
+    if use_gzip:
+        resp["Content-Encoding"] = "gzip"
+    resp["Vary"] = "Accept-Encoding"
+    resp["Cache-Control"] = "public, max-age=31536000, immutable" if request.GET.get("v") == version else "no-cache"
     return resp
 
 
@@ -146,6 +183,8 @@ def _api_routes():
 
 urlpatterns = [
     path("", shell),
+    path("bundle.css", bundle, {"kind": "css"}),
+    path("bundle.js", bundle, {"kind": "js"}),
     path("s/<path:rel>", static_file),
     path("font/<str:weight>.ttf", font),
     path("img/a/<path:rel>", asset_image),

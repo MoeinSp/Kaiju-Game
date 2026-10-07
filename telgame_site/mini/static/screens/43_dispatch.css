@@ -1,0 +1,49 @@
+/* «مأموریت اعزامی» (43_dispatch.js). */
+.dp-banner { min-height: 128px; background-position: center 35%; }
+.dp-list { display: grid; gap: 10px; }
+.dp-perks { padding: 6px 14px; font-size: 13px; }
+.dp-perks > div { display: flex; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); line-height: 1.7; }
+.dp-perks > div:last-child { border-bottom: 0; }
+.dp-perks svg { width: 16px; height: 16px; margin-top: 3px; }
+.dp-perks .now svg { color: var(--good); }
+.dp-perks .next { color: var(--muted); } .dp-perks .next svg { color: var(--accent); }
+.dp-perks .hint { color: var(--faint); font-size: 12px; }
+
+/* running missions */
+.dp-run-h { display: flex; align-items: center; gap: 11px; }
+.dp-run .fighter { margin-top: 12px; }
+.dp-run-r { margin-top: 3px; line-height: 1.8; }
+.dp-run.ready { border-color: rgba(53,212,138,.42); background: linear-gradient(135deg, rgba(53,212,138,.1), rgba(58,214,255,.04)); }
+.dp-cancel { margin-top: 10px; height: 40px; color: var(--muted); }
+
+/* the board */
+.dp-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.dp-offer.special { border-color: rgba(255,200,87,.45); background: linear-gradient(135deg, rgba(255,200,87,.11), rgba(255,140,60,.05)); }
+.dp-offer.taken { opacity: .55; }
+.dp-offer.taken .dp-tags { margin-bottom: 8px; }
+.dp-special { color: var(--gold); flex: none; }
+.dp-sent svg { color: var(--good); }
+
+/* candidates */
+.dp-cands { padding: 0 12px; }
+.dp-cand { display: block; width: 100%; text-align: right; padding: 11px 0; min-height: 64px; border-bottom: 1px solid var(--line); }
+.dp-cand:last-child { border-bottom: 0; }
+.dp-cand:active { opacity: .7; }
+.dp-cand-r { margin-top: 2px; line-height: 1.8; }
+.dp-match { height: 21px; font-size: 11px; margin-top: 3px; }
+
+/* confirm sheet */
+.dp-confirm { text-align: right; margin-top: 12px; }
+.dp-cf-line { margin-top: 10px; font-size: 13px; font-weight: 700; }
+.dp-cf-box { margin-top: 10px; padding: 11px 13px; border-radius: 13px; background: var(--surface); border: 1px solid var(--line-2); line-height: 1.9; }
+.dp-cf-amt { font-size: 15.5px; margin: 2px 0 4px; }
+
+/* collect reveal */
+.dp-results { margin-top: 12px; display: grid; gap: 9px; }
+.dp-res { padding: 11px 13px; border-radius: 13px; background: var(--surface); border: 1px solid var(--line); }
+.dp-res-h { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.dp-res-l { line-height: 1.9; }
+.dp-res-l + .dp-bonus, .dp-res-h + .dp-bonus { margin-top: 8px; }
+.dp-bonus { padding: 9px 12px; border-radius: 11px; line-height: 1.9; background: rgba(255,200,87,.1); border: 1px solid rgba(255,200,87,.4); }
+.dp-bonus > .b { color: var(--gold); }
+.dp-bonus + .dp-res-l { margin-top: 6px; }

@@ -1,0 +1,78 @@
+/* creature management + equipment + blacksmith (screens cr_*) */
+
+/* before → after */
+.cr-ba { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; }
+.cr-ba > span { color: var(--muted); font-weight: 400; }
+.cr-ba svg { width: 13px; height: 13px; color: var(--faint); }
+
+/* a button that cannot be used right now: still tappable, it explains why */
+.btn.cr-off { color: var(--faint); background: var(--surface); border: 1px dashed var(--line-2); box-shadow: none; }
+.btn.cr-off .cost { background: rgba(255,84,112,.12); color: var(--bad); }
+
+.cr-head .fighter img { width: 64px; height: 64px; }
+.cr-th { box-shadow: 0 0 0 1.5px currentColor; }
+
+/* success / failure feedback */
+.cr-flash { animation: cr-flash .9s ease both; }
+@keyframes cr-flash {
+  0% { box-shadow: 0 0 0 0 rgba(53,212,138,0); border-color: var(--line); }
+  25% { box-shadow: 0 0 0 2px rgba(53,212,138,.75), 0 0 34px rgba(53,212,138,.4); border-color: var(--good); transform: scale(1.012); }
+  100% { box-shadow: 0 0 0 0 rgba(53,212,138,0); border-color: var(--line); transform: none; }
+}
+.cr-flash .cr-ba b, .cr-flash .cr-lv b { animation: cr-pop .5s cubic-bezier(.2,1.4,.3,1) both; }
+@keyframes cr-pop { from { transform: scale(1.5); } }
+.cr-shake { animation: cr-shake .45s ease both; }
+@keyframes cr-shake {
+  0%, 100% { transform: none; border-color: var(--line); }
+  20% { transform: translateX(7px); border-color: var(--bad); } 40% { transform: translateX(-6px); }
+  60% { transform: translateX(4px); border-color: var(--bad); } 80% { transform: translateX(-2px); }
+}
+
+/* body parts */
+.cr-part { padding: 12px 14px; margin-bottom: 10px; position: relative; overflow: hidden; }
+.cr-part::before { content: ""; position: absolute; inset: 0 0 0 auto; width: 3px; background: var(--pc, var(--accent)); opacity: .8; }
+.cr-part-top { display: flex; align-items: center; gap: 11px; margin-bottom: 10px; }
+.cr-part-stat { text-align: left; line-height: 1.35; }
+.cr-part-stat small { display: block; font-size: 11px; color: var(--muted); }
+.cr-part-stat .cr-ba, .cr-part-stat > b { font-size: 16px; }
+.cr-part .progress > i { background: var(--pc, var(--accent)); }
+.cr-part .progress.gold > i { background: linear-gradient(90deg, #ffd66b, #ffab3d); }
+.cr-part-foot { display: flex; align-items: center; gap: 9px; margin-top: 11px; min-height: 40px; }
+.cr-part-foot .btn { height: 40px; flex: none; }
+
+/* feeding */
+.cr-xp { margin-top: 12px; }
+.cr-xp .progress { margin-top: 6px; }
+.cr-xp .progress > i { background: linear-gradient(90deg, var(--xp), var(--accent-2)); }
+.cr-cap { padding: 12px 14px; margin-bottom: 10px; }
+.cr-cap.cr-none { opacity: .55; }
+.cr-cap-top { display: flex; align-items: center; gap: 11px; }
+.cr-cap-n { text-align: center; min-width: 46px; line-height: 1.25; }
+.cr-cap-n b { display: block; font-size: 19px; } .cr-cap-n small { font-size: 10.5px; color: var(--muted); }
+.cr-cap-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 11px; }
+.cr-cap-btns .btn { height: 40px; }
+.cr-cap-btns small { display: block; text-align: center; font-size: 11.5px; color: var(--muted); margin-top: 4px; min-height: 18px; }
+
+/* equipment slots */
+.cr-slot { padding: 12px; margin-top: 10px; }
+.cr-slot-main { display: flex; align-items: center; gap: 11px; width: 100%; text-align: right; margin-bottom: 11px; min-width: 0; }
+.cr-slot-main img.th { width: 54px; height: 54px; border-radius: 13px; object-fit: cover; flex: none; background: #05070c; }
+.cr-slot-main small { display: block; font-size: 11.5px; line-height: 1.5; }
+.cr-slot-main small svg { width: 12px; height: 12px; }
+.cr-slot .btn { height: 40px; }
+.cr-gain { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+.cr-gain svg { width: 13px; height: 13px; }
+
+/* blacksmith */
+.cr-smith { display: flex; align-items: center; gap: 12px; }
+.cr-price { display: inline-flex; align-items: center; gap: 4px; }
+.cr-price svg { width: 14px; height: 14px; }
+.cr-lv { display: flex; align-items: center; justify-content: center; gap: 14px; font-size: 30px; font-weight: 700; line-height: 1.2; margin: 2px 0 12px; }
+.cr-lv svg { width: 22px; height: 22px; color: var(--faint); }
+.cr-lv b { text-shadow: 0 0 22px rgba(53,212,138,.45); }
+.cr-forge .kv > div > :last-child { max-width: 62%; }
+.cr-fuse > button { transition: background .15s; }
+.cr-fuse > button.on { background: rgba(58,214,255,.08); }
+.cr-check { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border-radius: 8px; border: 1.5px solid var(--line-2); color: transparent; }
+.cr-check svg { width: 15px; height: 15px; }
+.cr-fuse > button.on .cr-check { background: var(--accent); border-color: var(--accent); color: #06131a; }

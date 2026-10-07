@@ -27,7 +27,7 @@
     tab: "home",
     render: function (root) {
       return K.refreshMe().then(function (me) {
-        root.innerHTML = '<div class="home-logo"><img src="/app/s/img/logo.png" alt="Kaiju Legends" onerror="this.parentNode.remove()"></div>' + labCard(me) +
+        root.innerHTML = '<div class="home-top" style="background-image:url(/app/s/img/bg_home.jpg)"><img src="/app/s/img/logo.png" alt="Kaiju Legends"></div>' + labCard(me) +
           '<div id="home-sections"></div>' +
           (me.active ? '<div class="h2">' + K.ic("claw") + "هیولای فعال</div>" + heroCard(me.active) : "") +
           '<p class="note">نسخه‌ی آزمایشی مینی‌اپ</p>';

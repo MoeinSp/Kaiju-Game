@@ -1,0 +1,71 @@
+/* The daily loop: home cards, «پاداش امروز», missions, story quest, wheel (15_daily.js). */
+.dy-block { display: block; }
+.dy-x { display: inline-flex; align-items: center; gap: 4px; }
+.dy-x svg { width: 14px; height: 14px; }
+
+/* reward reveal extras: completed missions, the sections of «دریافت همه» */
+.dy-done { margin-top: 14px; padding: 11px 13px; border-radius: 13px; background: rgba(53,212,138,.08); border: 1px solid rgba(53,212,138,.3); }
+.dy-done-h { display: flex; align-items: center; gap: 7px; font-weight: 700; color: var(--good); margin-bottom: 4px; }
+.dy-done-r { padding: 6px 0; border-top: 1px solid var(--line); line-height: 1.7; }
+.dy-done-r:first-of-type { border-top: 0; }
+.dy-secs { margin-top: 14px; display: grid; gap: 9px; }
+.dy-sec { padding: 10px 13px; border-radius: 13px; background: var(--surface); border: 1px solid var(--line); }
+.dy-sec-h { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 13px; color: #cfd8ee; margin-bottom: 3px; }
+.dy-sec-h svg { color: var(--accent); }
+.dy-ln { font-size: 13px; line-height: 1.75; }
+.dy-ln.sub { color: var(--muted); font-size: 12.5px; padding-inline-start: 14px; }
+
+/* story quest card */
+.dy-quest.done { border-color: rgba(53,212,138,.4); background: linear-gradient(135deg, rgba(53,212,138,.1), rgba(58,214,255,.05)); }
+.dy-quest-top { display: flex; align-items: center; gap: 12px; width: 100%; text-align: right; }
+.dy-quest-t { display: block; font-size: 15.5px; line-height: 1.5; }
+.dy-quest-d { margin: 10px 0 0; color: var(--muted); font-size: 13px; }
+.dy-quest-p { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.dy-quest-p .progress { flex: 1; }
+.dy-quest-r { margin: 9px 0 12px; line-height: 1.9; }
+.dy-quest > .btn svg:last-child { width: 15px; height: 15px; }
+.dy-chapter .progress { margin-top: 10px; }
+
+/* home: «پاداش امروز» */
+.dy-card-top { display: flex; align-items: center; gap: 12px; width: 100%; text-align: right; }
+.dy-chips { margin-top: 12px; padding-bottom: 1px; }
+.dy-live { color: var(--lc, var(--accent)); border-color: color-mix(in srgb, var(--lc, var(--accent)) 45%, transparent); background: color-mix(in srgb, var(--lc, var(--accent)) 10%, var(--surface)); font-weight: 700; min-height: 38px; }
+.dy-rule { margin-top: 10px; }
+.dy-empty { display: grid; justify-items: center; gap: 4px; padding: 26px 18px; text-align: center; color: var(--muted); font-size: 13px; }
+.dy-empty svg { width: 30px; height: 30px; color: var(--good); margin-bottom: 4px; }
+.dy-empty b { color: var(--text); font-size: 15px; }
+
+/* missions */
+.dy-pts .progress { margin-top: 10px; }
+.dy-pts b svg { color: var(--gold); }
+.dy-ph { display: flex; align-items: baseline; justify-content: space-between; margin: 4px 2px 9px; }
+.dy-ms { padding: 2px 14px; }
+.dy-m { display: flex; gap: 11px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.dy-m:last-child { border-bottom: 0; }
+.dy-m.done { opacity: .62; }
+.dy-m-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.dy-m-h b { line-height: 1.5; }
+.dy-m-r { margin-top: 7px; line-height: 1.9; }
+.dy-track { padding: 4px 14px; }
+.dy-box { position: relative; display: flex; align-items: center; gap: 12px; min-height: 66px; padding: 10px 0; }
+.dy-box + .dy-box::before { content: ""; position: absolute; top: -12px; inset-inline-start: 20px; width: 2px; height: 24px; background: var(--line-2); }
+.dy-box.opened + .dy-box::before, .dy-box.ready + .dy-box::before { background: var(--good); }
+.dy-box-ic { position: relative; z-index: 1; width: 42px; height: 42px; flex: none; display: grid; place-items: center; border-radius: 14px; color: var(--bc); background: color-mix(in srgb, var(--bc) 15%, var(--bg-2)); border: 1px solid color-mix(in srgb, var(--bc) 50%, transparent); }
+.dy-box-ic svg { width: 21px; height: 21px; }
+.dy-box.locked .dy-box-ic { color: var(--faint); background: var(--surface-2); border-color: var(--line); }
+.dy-box.opened .dy-box-ic { color: var(--good); background: rgba(53,212,138,.12); border-color: rgba(53,212,138,.4); }
+.dy-box.ready .dy-box-ic { box-shadow: 0 0 18px color-mix(in srgb, var(--bc) 45%, transparent); animation: dy-pulse 1.6s ease-in-out infinite; }
+.dy-box.mega b { color: var(--mythic); }
+.dy-box.opened b { color: var(--muted); }
+@keyframes dy-pulse { 50% { transform: scale(1.07); } }
+
+/* wheel */
+.dy-wheel { position: relative; width: min(84vw, 330px); aspect-ratio: 1 / 1; margin: 8px auto 20px; }
+.dy-wheel::before { content: ""; position: absolute; inset: -4%; border-radius: 50%; background: radial-gradient(circle, rgba(255,200,87,.2), transparent 68%); }
+.dy-wheel-disc { position: relative; width: 100%; height: 100%; border-radius: 50%; background: radial-gradient(circle at 50% 50%, #1a2233, #0d111b 72%); box-shadow: 0 14px 40px rgba(0,0,0,.55), 0 0 0 6px rgba(8,11,18,.9);
+                 transition: transform 4.8s cubic-bezier(.13,.72,.1,1); will-change: transform; }
+.dy-wheel-disc svg { display: block; width: 100%; height: 100%; }
+.dy-wheel-disc path { transition: fill-opacity .3s; }
+.dy-wheel-pin { position: absolute; z-index: 2; top: -9px; left: 50%; width: 0; height: 0; margin-left: -12px; border-left: 12px solid transparent; border-right: 12px solid transparent; border-top: 24px solid var(--gold); filter: drop-shadow(0 3px 5px rgba(0,0,0,.6)); }
+.dy-wheel.off .dy-wheel-disc { filter: grayscale(.75) brightness(.7); }
+.dy-wheel.off .dy-wheel-pin { border-top-color: var(--faint); }

@@ -1,0 +1,85 @@
+/* Hunt (hu_hunt, hu_auto) + the versus pieces shared with the tower and the world boss (K.hu). */
+
+/* ── a side of a `versus` card ── */
+.hu-side { display: flex; flex-direction: column; align-items: center; gap: 1px; width: 100%; min-width: 0; position: relative; }
+.hu-side.common { --rc: color-mix(in srgb, var(--common) 55%, transparent); } .hu-side.rare { --rc: var(--rare); } .hu-side.epic { --rc: var(--epic); }
+.hu-side.legendary { --rc: var(--legendary); } .hu-side.mythic { --rc: var(--mythic); }
+.hu-pic { position: relative; display: block; width: 100%; max-width: 132px; margin-bottom: 7px; }
+.hu-pic img { display: block; transition: filter .3s, box-shadow .3s; }
+.hu-swapdot { position: absolute; bottom: 7px; inset-inline-start: 7px; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; color: var(--accent); background: rgba(8,11,18,.8); border: 1px solid rgba(58,214,255,.5); }
+.hu-swapdot svg { width: 14px; height: 14px; }
+.hu-nm { display: block; max-width: 100%; font-weight: 700; font-size: 13.5px; line-height: 1.45; }
+.hu-pw { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; font-size: 17px; line-height: 1.3; color: var(--accent); }
+.hu-pw svg { width: 14px; height: 14px; }
+.hu-side.foe .hu-pw { color: var(--text); }
+.hu-role { display: block; font-size: 11px; color: var(--muted); line-height: 1.5; }
+.hu-side.lost .hu-pic img { filter: grayscale(.9) brightness(.55); }
+.hu-side.won .hu-pic img { box-shadow: 0 0 0 2px var(--good), 0 0 26px rgba(53,212,138,.45); }
+.hu-in { animation: hu-in .34s cubic-bezier(.2,.9,.3,1.2) both; }
+@keyframes hu-in { from { opacity: 0; transform: translateX(-22px) scale(.92); } }
+
+/* ── the scouted target ── */
+.hu-banner { min-height: 128px; background-position: center 30%; }
+.hu-mine { display: flex; align-items: center; gap: 10px; } .hu-mine .fighter { flex: 1; min-width: 0; }
+.hu-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 3px; }
+.hu-arena { position: relative; overflow: hidden; padding: 12px 8px 14px; --tc: var(--accent); }
+.hu-arena::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(440px 190px at 50% -20px, color-mix(in srgb, var(--tc) 20%, transparent), transparent 72%); }
+.hu-arena > * { position: relative; }
+.hu-t-weak { --tc: var(--good); } .hu-t-normal { --tc: var(--gold); } .hu-t-strong { --tc: var(--bad); }
+.hu-arena { border-color: color-mix(in srgb, var(--tc) 38%, transparent); }
+.hu-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 6px 2px; }
+.hu-tier { color: var(--tc); }
+.hu-arena .versus .side { padding: 10px 4px 6px; }
+.hu-arena .vs, .hu-result .vs { color: var(--tc, var(--muted)); border-color: color-mix(in srgb, var(--tc, #fff) 40%, transparent); background: rgba(8,11,18,.7); }
+.hu-result .vs svg { width: 17px; height: 17px; }
+.hu-adv { text-align: center; margin-top: 4px; }
+.hu-prize { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; margin: 10px 0; border-color: rgba(255,200,87,.3); background: linear-gradient(135deg, rgba(255,200,87,.1), rgba(255,140,60,.04)); }
+.hu-prize .muted svg { color: var(--gold); }
+.hu-prize-v { font-size: 16px; }
+
+/* ── result ── */
+.hu-result { position: relative; overflow: hidden; padding: 16px 10px 16px; text-align: center; }
+.hu-result.win { --tc: var(--good); border-color: rgba(53,212,138,.4); background: linear-gradient(180deg, rgba(53,212,138,.14), var(--bg-2) 62%); }
+.hu-result.lose { --tc: var(--bad); border-color: rgba(255,84,112,.36); background: linear-gradient(180deg, rgba(255,84,112,.12), var(--bg-2) 62%); }
+.hu-verdict { display: flex; align-items: center; justify-content: center; gap: 9px; font-size: 25px; font-weight: 700; line-height: 1.35; color: var(--tc); animation: pop .45s cubic-bezier(.2,1.4,.3,1) both; }
+.hu-verdict svg { width: 26px; height: 26px; }
+.hu-mini { margin-top: 6px; } .hu-mini .side { padding: 8px 4px 2px; } .hu-mini .hu-pic { max-width: 96px; }
+.hu-cap { margin: 12px 0 0; font-size: 12px; color: var(--muted); }
+.hu-loot { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
+.hu-loot .it { display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px; border-radius: 12px; font-weight: 700; font-size: 16px; background: var(--surface); border: 1px solid var(--line-2); animation: rise .35s ease both; }
+.hu-loot .it:nth-child(2) { animation-delay: .07s; } .hu-loot .it:nth-child(3) { animation-delay: .14s; } .hu-loot .it:nth-child(4) { animation-delay: .21s; }
+.hu-loot .it svg { width: 18px; height: 18px; } .hu-loot .it b { color: var(--text); }
+.hu-loot .it.t-bad b { color: var(--bad); }
+.hu-details { margin-top: 12px; overflow: hidden; }
+.hu-details summary { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; font-size: 13px; color: var(--muted); cursor: pointer; list-style: none; }
+.hu-details summary::-webkit-details-marker { display: none; }
+.hu-details summary svg { width: 16px; height: 16px; } .hu-details .hu-chev { margin-inline-start: auto; transform: rotate(-90deg); transition: transform .2s; }
+.hu-details[open] .hu-chev { transform: rotate(90deg); }
+.hu-log { white-space: pre-line; padding: 2px 14px 12px; font-size: 12.5px; line-height: 1.9; color: #b9c4dc; border-top: 1px solid var(--line); }
+
+/* ── random encounter ── */
+.hu-enc { overflow: hidden; border-color: rgba(255,200,87,.35); }
+.hu-enc-art { position: relative; aspect-ratio: 16 / 9; background: #05070c center / cover no-repeat; }
+.hu-enc-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, var(--bg-2) 100%); }
+.hu-enc-body { position: relative; padding: 0 14px 14px; margin-top: -30px; }
+.hu-enc-ttl { font-size: 19px; font-weight: 700; line-height: 1.45; margin-top: 8px; }
+.hu-enc .hu-loot { justify-content: flex-start; margin-top: 12px; }
+
+/* ── swap sheet ── */
+.hu-team > button.dim { opacity: .5; }
+.hu-team .v { display: inline-flex; align-items: center; gap: 4px; } .hu-team .v svg { width: 13px; height: 13px; }
+.hu-team .hu-note { margin-top: 3px; } .hu-team .hu-note .tag { height: 20px; font-size: 11px; padding: 0 7px; }
+.hu-team .hu-on { height: 20px; font-size: 10.5px; padding: 0 7px; color: var(--good); vertical-align: 1px; }
+.hu-team .sm svg { width: 12px; height: 12px; margin-inline-end: 2px; }
+
+/* ── auto-hunt ── */
+.hu-amount { display: flex; align-items: baseline; justify-content: center; gap: 8px; margin: 2px 0 0; }
+.hu-amount b { font-size: 46px; line-height: 1.25; color: var(--energy); text-shadow: 0 0 24px rgba(255,216,74,.35); }
+.hu-amount span { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); } .hu-amount svg { color: var(--energy); width: 15px; height: 15px; }
+.hu-range { display: block; width: 100%; height: 40px; margin: 6px 0 4px; accent-color: var(--accent); }
+.hu-quick { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; }
+.hu-quick .chip { height: 40px; }
+.hu-wl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 10px; }
+.hu-wl > div { padding: 8px 4px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid var(--line); }
+.hu-wl b { display: block; font-size: 21px; line-height: 1.3; } .hu-wl small { font-size: 11px; color: var(--muted); }
+.hu-cbtn { margin-inline-start: auto; align-self: center; flex: none; }

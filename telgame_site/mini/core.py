@@ -355,12 +355,34 @@ def active_creature(user: User) -> Creature:
     return creature
 
 
+_ART: dict | None = None
+
+
+def art() -> dict:
+    """{name: thumbnail URL} for every section picture in assets/images/features/ (the same
+    art the bot shows on each screen) — the app uses them as menu-tile backgrounds.
+    Built once per process: the files are static."""
+    global _ART
+    if _ART is None:
+        from game.media import FEATURES_DIR
+
+        out = {}
+        for f in sorted(FEATURES_DIR.glob("*.jpg")):
+            name = f.stem[5:] if f.stem.startswith("feat_") else f.stem
+            url = asset_img(f"features/{f.name}")
+            if url:
+                out[name] = url
+        _ART = out
+    return _ART
+
+
 def meta() -> dict:
     """Label tables for the front end (sent once with /app/api/profile/me/)."""
     def word(label: str) -> str:
         return label.split(" ", 1)[1] if " " in label else label
 
     return {
+        "art": art(),
         "elements": {k: {"label": constants.ELEMENT_WORDS[k]} for k in constants.ELEMENT_LABELS},
         "rarities": {k: {"label": word(v)} for k, v in constants.RARITY_LABELS.items()},
         "rarity_order": list(constants.RARITY_ORDER),

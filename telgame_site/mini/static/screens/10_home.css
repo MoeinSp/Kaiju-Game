@@ -1,5 +1,6 @@
-.home-logo { text-align: center; margin: 2px 0 12px; }
-.home-logo img { height: 54px; max-width: 78%; object-fit: contain; filter: drop-shadow(0 4px 18px rgba(58,214,255,.3)); }
+.home-top { position: relative; height: 150px; margin: -12px -14px 12px; display: grid; place-items: center; background: var(--bg) center 40% / cover no-repeat; overflow: hidden; }
+.home-top::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8,11,18,.35), rgba(8,11,18,.2) 40%, var(--bg) 100%); }
+.home-top img { position: relative; height: 96px; max-width: 86%; object-fit: contain; filter: drop-shadow(0 6px 22px rgba(0,0,0,.75)); animation: rise .5s ease both; }
 .home-lab { position: relative; overflow: hidden; padding: 16px; display: flex; align-items: center; gap: 14px; width: 100%; text-align: right; }
 .home-lab::before { content: ""; position: absolute; inset: 0; background-image: var(--art); background-size: cover; background-position: center 30%; filter: blur(18px) saturate(1.2); opacity: .32; transform: scale(1.2); }
 .home-lab::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(8,11,18,.2), rgba(8,11,18,.86)); }

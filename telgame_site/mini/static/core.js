@@ -142,7 +142,7 @@ window.K = (function () {
   K.slotLabel = function (s) { var m = K.meta && K.meta.slots[s]; return m ? m.label : s; };
   K.rarTag = function (r) { return '<span class="tag c-' + r + '">' + K.ic("gem") + K.esc(K.rarLabel(r)) + "</span>"; };
   K.elTag = function (e) { return '<span class="tag e-' + e + '">' + K.ic(K.EL_ICON[e] || "atom") + K.esc(K.elLabel(e)) + "</span>"; };
-  K.tag = function (html, color, icon) { return '<span class="tag"' + (color ? ' style="color:' + color + '"' : ' class="tag plain"') + ">" + (icon ? K.ic(icon) : "") + html + "</span>"; };
+  K.tag = function (html, color, icon) { return '<span class="tag' + (color ? '" style="color:' + color + '"' : ' plain"') + ">" + (icon ? K.ic(icon) : "") + html + "</span>"; };
   /* amounts of the three currencies as coloured inline chips: K.amounts({coins:10,dna:2,diamonds:1,xp:5}) */
   K.amounts = function (o, sep) {
     var out = [];
@@ -200,7 +200,9 @@ window.K = (function () {
     post: function (path, body, btn) {
       return request("POST", path, body, btn).catch(function (err) {
         K.haptic("err");
-        if (err.status === 400 || !err.status || err.status >= 500) K.toast(err.message, "err");
+        // out of energy → the toast offers the refill screen (registered by the shop module)
+        if (err.code === "energy" && K.hasScreen("sh_energy")) K.toast(err.message, "err", { label: "شارژ انرژی", run: function () { K.go("sh_energy"); } });
+        else if (err.status === 400 || !err.status || err.status >= 500) K.toast(err.message, "err");
         throw err;
       });
     }
@@ -222,10 +224,12 @@ window.K = (function () {
 
   // ───────────────────────── toasts, sheet, dialogs ─────────────────────────
   var toasts = document.getElementById("toasts");
-  K.toast = function (text, kind) {
+  /* K.toast("متن", "ok"|"err", {label: "شارژ", run: fn}) — the optional third argument adds a tappable action. */
+  K.toast = function (text, kind, action) {
     var el = document.createElement("div");
     el.className = "toast " + (kind === "err" ? "err" : "ok");
-    el.innerHTML = K.ic(kind === "err" ? "warn" : "check") + "<span>" + K.esc(text) + "</span>";
+    el.innerHTML = K.ic(kind === "err" ? "warn" : "check") + "<span>" + K.esc(text) + "</span>" + (action ? '<button class="tact">' + K.esc(action.label) + "</button>" : "");
+    if (action) { el.style.pointerEvents = "auto"; el.querySelector(".tact").onclick = function () { el.remove(); action.run(); }; }
     toasts.appendChild(el);
     while (toasts.children.length > 3) toasts.removeChild(toasts.firstChild);
     setTimeout(function () { el.classList.add("out"); setTimeout(function () { el.remove(); }, 260); }, kind === "err" ? 3600 : 2200);
@@ -234,9 +238,12 @@ window.K = (function () {
   /* Bottom sheet. `html` is the content; returns the box element so you can K.on(box, ...).
      opts.onClose runs when it is dismissed. Close it with K.closeSheet(). */
   K.sheet = function (html, opts) {
-    sheetBox.innerHTML = '<button class="x" data-close aria-label="بستن">' + K.ic("close") + "</button>" + html;
+    // a FRESH inner element per sheet: listeners a caller adds to the returned node die with it
+    // (they used to pile up on the one shared box and fire in every later sheet)
+    sheetBox.innerHTML = '<button class="x" data-close aria-label="بستن">' + K.ic("close") + '</button><div class="sheet-in"></div>';
+    var inner = sheetBox.lastChild; inner.innerHTML = html;
     sheetBox.scrollTop = 0; sheet.classList.add("open"); sheetClose = opts && opts.onClose; K.haptic();
-    return sheetBox;
+    return inner;
   };
   K.closeSheet = function () { if (!sheet.classList.contains("open")) return; sheet.classList.remove("open"); var f = sheetClose; sheetClose = null; if (f) f(); };
   sheet.addEventListener("click", function (ev) { if (ev.target.closest("[data-close]")) K.closeSheet(); });
@@ -326,7 +333,7 @@ window.K = (function () {
     function tick() {
       var now = Date.now() / 1000;
       els.forEach(function (el) {
-        if (el._done) return;
+        if (el._done || !el.isConnected) return;
         var left = Number(el.dataset.until) - now;
         if (left <= 0) { el._done = true; el.classList.add("done"); el.innerHTML = K.ic("check") + (el.dataset.done || "آماده"); if (onDone) onDone(el); }
         else el.innerHTML = K.ic("clock") + '<span class="num">' + (el.dataset.fmt === "long" ? K.dur(left) : K.clock(left)) + "</span>";
@@ -339,7 +346,8 @@ window.K = (function () {
     root.addEventListener("click", function (ev) { var el = ev.target.closest('[data-act="' + act + '"]'); if (el && root.contains(el)) fn(el, ev); });
   };
   /* Creature picker sheet → Promise<creatureDict|null>.
-     opts: {title, sub, filter: fn(c)→bool (false = hidden), disabled: fn(c)→"reason"|"" (shown dimmed), exclude:[ids], note: fn(c)→"html under name"} */
+     opts: {title, sub, filter: fn(c)→bool (false = hidden), disabled: fn(c)→"reason"|"" (shown dimmed), exclude:[ids],
+            note: fn(c)→"short plain text" shown as a badge on the tile (e.g. "+12%"), empty: "text when nothing matches"} */
   K.pickCreature = function (opts) {
     opts = opts || {};
     return K.api.cached("profile/creatures/").then(function (d) {
@@ -347,7 +355,7 @@ window.K = (function () {
         var done = false, ex = opts.exclude || [];
         var list = d.creatures.filter(function (c) { return ex.indexOf(c.id) < 0 && (!opts.filter || opts.filter(c)); });
         var html = '<div class="grab"></div><div class="pad"><div class="ttl" style="font-size:18px">' + K.esc(opts.title || "یه هیولا انتخاب کن") + "</div>" + (opts.sub ? '<p class="lead" style="margin:4px 0 12px">' + K.esc(opts.sub) + "</p>" : '<div style="height:10px"></div>');
-        html += list.length ? '<div class="grid">' + list.map(function (c) { var why = opts.disabled ? opts.disabled(c) : ""; return K.creatureTile(c, { attrs: why ? 'data-why="' + K.esc(why) + '"' : 'data-pick="' + c.id + '"', dim: !!why }); }).join("") + "</div>"
+        html += list.length ? '<div class="grid">' + list.map(function (c) { var why = opts.disabled ? opts.disabled(c) : ""; var note = opts.note ? opts.note(c) : ""; return K.creatureTile(c, { attrs: why ? 'data-why="' + K.esc(why) + '"' : 'data-pick="' + c.id + '"', dim: !!why, flag: note || undefined }); }).join("") + "</div>"
                             : K.state("claw", "هیولای مناسبی نداری", opts.empty || "");
         var box = K.sheet(html + "</div>", { onClose: function () { if (!done) resolve(null); } });
         box.addEventListener("click", function (ev) {
@@ -369,8 +377,11 @@ window.K = (function () {
 
   /* Register a screen. def: {title: "…" | fn(params), tab: "home|creatures|battle|base|more", render(root, params, ctx)} */
   K.screen = function (name, def) { screens[name] = def; };
+  K.hasScreen = function (name) { return !!screens[name]; };
   /* Add a tile to a hub menu ("battle" | "base" | "more"). def: {id, title, sub, icon, color, go, params, order, img, wide, badge(me)} */
   K.hub = function (hub, def) { (hubs[hub] = hubs[hub] || []).push(def); };
+  /* The registered tile with this id (any hub), or null — e.g. to link to another module's screen: K.hubTile("dispatch").go */
+  K.hubTile = function (id) { for (var h in hubs) for (var i = 0; i < hubs[h].length; i++) if (hubs[h][i].id === id) return hubs[h][i]; return null; };
   /* Run `fn` every `ms` while the CURRENT screen is shown (cleared automatically on navigation). */
   K.every = function (ms, fn) { var id = setInterval(fn, ms); timers.push(id); return id; };
   K.after = function (ms, fn) { var id = setTimeout(fn, ms); timers.push(id); return id; };
@@ -428,16 +439,35 @@ window.K = (function () {
   try { if (tg && tg.BackButton) tg.BackButton.onClick(K.back); } catch (e) {}
 
   /* Generic hub renderer, used by the built-in "battle" / "base" / "more" screens. */
+  /* Tile background: the tile's own `img`, else the section art the bot uses for it
+     (K.meta.art, keyed by feature name; HUB_ART maps tile ids that are named differently). */
+  var HUB_ART = { tower: "mugen_tower", boss: "worldboss", chests: "arena_chests", forge: "blacksmith", boxes: "diamond_box", market: "blackmarket",
+                  vip: "subscription", week: "events", pass: "battlepass", leaderboard: "rank", ranks: "rank", settings: "profile", fusion: "fusion",
+                  cave: "cave", missions: "missions", wheel: "wheel", dispatch: "dispatch", hunt: "hunt", arena: "arena", tournament: "tournament",
+                  league: "league", shop: "shop", exchange: "exchange", festival: "festival", achievements: "achievements", alliance: "alliance",
+                  guide: "guide", profile: "profile", recycle: "equip_exchange", gold_shop: "gold_shop", shield: "shield_shop", items: "item_shop" };
+  var HUB_STATIC = { buildings: "/app/s/img/bg_base.jpg", research: "/app/s/img/bg_research.jpg", energy: "/app/s/img/bg_energy.jpg" };
+  /* Section headings inside a hub: [first order, title, icon] — a tile belongs to the last group whose order it reaches. */
+  var HUB_GROUPS = { more: [[0, "فروشگاه و بازار", "cart"], [20, "روزانه", "target"], [30, "رویدادها", "calendar"], [40, "اتحاد و جدول‌ها", "podium"], [85, "حساب و راهنما", "user"]] };
+  function hubArt(t) {
+    var art = (K.meta && K.meta.art) || {};
+    return t.img || HUB_STATIC[t.id] || art[t.art] || art[HUB_ART[t.id]] || art[t.id] || "";
+  }
   K.renderHub = function (root, hub, intro) {
     var me = K.me || {}, items = (hubs[hub] || []).slice().sort(function (a, b) { return (a.order || 50) - (b.order || 50); });
-    var html = intro || "";
+    var html = intro || "", groups = HUB_GROUPS[hub] || [], gi = -1;
     html += '<div class="hub">' + items.map(function (t) {
+      var head = "";
+      while (gi + 1 < groups.length && (t.order || 50) >= groups[gi + 1][0]) { gi++; head = '<div class="h2 hubgroup">' + K.ic(groups[gi][2]) + groups[gi][1] + "</div>"; }
+      return head + tileHtml(t);
+    }).join("") + "</div>";
+    function tileHtml(t) {
       var badge = t.badge ? t.badge(me) : 0;
       var locked = t.hall && me.hall_level < t.hall;
-      return '<button class="hubtile' + (t.wide ? " wide" : "") + (locked ? " locked" : "") + '" data-hub="' + K.esc(t.id) + '" style="--tc:' + (t.color || "var(--accent)") + (t.img ? ";background-image:url('" + t.img + "')" : "") + '">' +
+      return '<button class="hubtile' + (t.wide ? " wide" : "") + (locked ? " locked" : "") + '" data-hub="' + K.esc(t.id) + '" style="--tc:' + (t.color || "var(--accent)") + (hubArt(t) ? ";background-image:url('" + hubArt(t) + "')" : "") + '">' +
         '<span class="hi">' + K.ic(locked ? "lock" : t.icon) + "</span>" + (badge ? '<span class="badge' + (badge === "live" ? " live" : "") + '">' + (badge === "live" ? "فعال" : badge) + "</span>" : "") +
         "<b>" + K.esc(t.title) + "</b><small>" + K.esc(locked ? "از سطح " + t.hall + " تالار مِهر" : (t.sub || "")) + "</small></button>";
-    }).join("") + "</div>";
+    }
     if (!items.length) html += K.state("hourglass", "به‌زودی", "این بخش داره آماده می‌شه.");
     root.innerHTML = html;
     root.addEventListener("click", function (ev) {
@@ -447,9 +477,12 @@ window.K = (function () {
       if (t.go) K.go(t.go, t.params); else if (t.run) t.run();
     });
   };
-  K.screen("battle", { render: function (root) { return K.refreshMe().then(function () { K.renderHub(root, "battle", '<p class="lead">بجنگ، غارت کن و بالا برو.</p>'); }); } });
-  K.screen("base", { render: function (root) { return K.refreshMe().then(function () { K.renderHub(root, "base", '<p class="lead">پایگاهت رو بساز و منابع جمع کن.</p>'); }); } });
-  K.screen("more", { render: function (root) { return K.refreshMe().then(function () { K.renderHub(root, "more", '<p class="lead">فروشگاه، رویدادها، جدول‌ها و بقیه‌ی بخش‌ها.</p>'); }); } });
+  function hubBanner(img, title, sub) {
+    return '<div class="banner hubhead" style="background-image:url(/app/s/img/' + img + ')"><div><div class="ttl">' + title + '</div><div class="sm" style="color:#c5cee2">' + sub + "</div></div></div>";
+  }
+  K.screen("battle", { render: function (root) { return K.refreshMe().then(function () { K.renderHub(root, "battle", hubBanner("bg_battle.jpg", "نبرد", "بجنگ، غارت کن و بالا برو")); }); } });
+  K.screen("base", { render: function (root) { return K.refreshMe().then(function () { K.renderHub(root, "base", hubBanner("bg_base.jpg", "پایگاه", "بساز، ارتقا بده و منابع جمع کن")); }); } });
+  K.screen("more", { render: function (root) { return K.refreshMe().then(function () { K.renderHub(root, "more", hubBanner("bg_more.jpg", "بیشتر", "فروشگاه، رویدادها، جدول‌ها و تنظیمات")); }); } });
 
   /* Profile (`K.me`): lab name/level, league, hall_level, active creature … Refreshed on demand. */
   K.me = null; K.meta = null;

@@ -1,0 +1,28 @@
+/* Mugen Tower (tw_tower). The versus sides come from 50_hunt.css (.hu-side …). */
+.tw-banner { min-height: 132px; align-items: flex-end; gap: 10px; background-position: center 25%; }
+.tw-banner .ttl { font-size: 24px; }
+.tw-arena { position: relative; overflow: hidden; margin-top: 12px; padding: 12px 8px 14px; --tc: var(--epic); border-color: color-mix(in srgb, var(--tc) 40%, transparent); }
+.tw-arena.common { --tc: var(--common); } .tw-arena.rare { --tc: var(--rare); } .tw-arena.epic { --tc: var(--epic); } .tw-arena.legendary { --tc: var(--legendary); } .tw-arena.mythic { --tc: var(--mythic); }
+.tw-arena::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(440px 190px at 50% -20px, color-mix(in srgb, var(--tc) 22%, transparent), transparent 72%); }
+.tw-arena.boss { box-shadow: 0 8px 30px color-mix(in srgb, var(--tc) 22%, transparent); }
+.tw-arena > * { position: relative; }
+.tw-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 6px 2px; }
+.tw-arena .versus .side { padding: 10px 4px 6px; }
+.tw-arena .vs { color: var(--tc); border-color: color-mix(in srgb, var(--tc) 45%, transparent); background: rgba(8,11,18,.7); }
+.tw-adv { text-align: center; margin-top: 4px; }
+.tw-prize { padding: 11px 14px 12px; margin: 10px 0; border-color: rgba(255,200,87,.3); background: linear-gradient(135deg, rgba(255,200,87,.1), rgba(255,140,60,.04)); }
+.tw-prize .muted svg { color: var(--gold); }
+.tw-prize-v { font-size: 15.5px; margin-top: 3px; line-height: 1.9; }
+.tw-cbtn { margin-inline-start: auto; align-self: center; flex: none; }
+.tw-mile { display: flex; align-items: center; gap: 12px; }
+.tw-mile.common { --rc: var(--common); } .tw-mile.rare { --rc: var(--rare); } .tw-mile.epic { --rc: var(--epic); } .tw-mile.legendary { --rc: var(--legendary); } .tw-mile.mythic { --rc: var(--mythic); }
+.tw-mile img { width: 66px; height: 66px; flex: none; border-radius: 14px; object-fit: cover; background: #05070c; box-shadow: 0 0 0 1.5px var(--rc, var(--line)); }
+.tw-mile .sm svg { width: 12px; height: 12px; }
+.tw-mile-v { font-size: 13px; margin-top: 4px; line-height: 1.8; }
+.tw-lb > div { display: flex; align-items: center; gap: 11px; min-height: 44px; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+.tw-lb > div:last-child { border-bottom: 0; }
+.tw-lb .me { background: rgba(58,214,255,.09); }
+.tw-lb .rk { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 50%; font-weight: 700; font-size: 13px; color: var(--muted); background: rgba(255,255,255,.05); }
+.tw-lb .rk.top1 { color: #1b1203; background: var(--gold); } .tw-lb .rk.top2 { color: #10151f; background: #c8d3e6; } .tw-lb .rk.top3 { color: #1b0e03; background: #d58a4f; }
+.tw-lb .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tw-lb .fl { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; white-space: nowrap; } .tw-lb .fl svg { width: 14px; height: 14px; color: var(--epic); }

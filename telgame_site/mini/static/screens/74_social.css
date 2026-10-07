@@ -1,0 +1,47 @@
+/* Alliance, alliance rankings, guide and settings (so_alliance, so_ranks, so_guide, so_topic, so_settings). */
+.so-banner { min-height: 140px; background-position: center 30%; }
+.so-bsub { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.so-bsub .tag { background: rgba(8,11,18,.66); }
+
+/* alliance */
+.so-me { background: rgba(58,214,255,.09); }
+.so-mstat { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.55; white-space: nowrap; }
+.so-mstat small { font-size: 11.5px; font-weight: 700; } .so-mstat svg { width: 13px; height: 13px; }
+.so-rk { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 9px; font-weight: 700; font-size: 13px; color: var(--muted); background: rgba(255,255,255,.05); }
+.so-rk.r1 { color: #1b1203; background: linear-gradient(135deg, #ffd66b, #ffab3d); } .so-rk.r2 { color: #10151f; background: #c8d3e6; } .so-rk.r3 { color: #1b0f05; background: #d58a4f; }
+.so-war { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; text-align: center; }
+.so-score { font-size: 24px; font-weight: 700; line-height: 1.4; }
+.so-vs { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; font-size: 12px; font-weight: 700; color: var(--muted); background: var(--surface-2); border: 1px solid var(--line-2); }
+.so-steps > div { display: flex; gap: 11px; align-items: flex-start; padding: 7px 0; }
+.so-steps span { width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 50%; font-weight: 700; font-size: 13px; color: #06131a; background: linear-gradient(135deg, var(--accent), #7fe6ff); }
+.so-steps p { margin: 1px 0 0; font-size: 13.5px; color: #cfd8ee; }
+.btn.so-leave { color: var(--bad); border-color: rgba(255,84,112,.35); }
+
+/* rankings */
+.so-board > div { display: flex; align-items: center; gap: 11px; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+.so-board > div:last-child { border-bottom: 0; }
+.so-board .sm svg { width: 12px; height: 12px; }
+.so-rw { margin-top: 3px; display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; color: var(--muted); }
+.so-val { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.4; white-space: nowrap; }
+.so-val b { font-size: 15px; } .so-val small { font-size: 10.5px; color: var(--muted); }
+
+/* guide */
+.so-thead { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.so-ttl { font-size: 18px; font-weight: 700; line-height: 1.4; }
+.so-sec { margin-bottom: 9px; }
+.so-sec.hit { border-color: rgba(58,214,255,.45); box-shadow: 0 0 0 1px rgba(58,214,255,.15) inset; }
+.so-sech { display: flex; align-items: flex-start; gap: 9px; font-weight: 700; margin-bottom: 6px; }
+.so-sech .num { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border-radius: 8px; font-size: 12px; color: var(--accent); background: rgba(58,214,255,.12); }
+.so-secb { font-size: 13.5px; line-height: 1.9; color: #cfd8ee; }
+.so-next { display: flex; align-items: center; gap: 11px; width: 100%; padding: 12px 14px; margin-top: 14px; text-align: right; }
+.so-next .ic { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 11px; background: color-mix(in srgb, currentColor 14%, transparent); }
+.so-next .ic svg { width: 19px; height: 19px; } .so-next small { display: block; font-size: 11.5px; } .so-next b { color: var(--text); }
+
+/* settings */
+.so-switch { position: relative; flex: none; width: 50px; height: 40px; }
+.so-switch::before { content: ""; position: absolute; inset: 6px 0; border-radius: 999px; background: var(--surface-3); border: 1px solid var(--line-2); transition: background .18s, border-color .18s; }
+.so-switch i { position: absolute; top: 9px; inset-inline-start: 3px; width: 22px; height: 22px; border-radius: 50%; background: #aab4c8; transition: inset-inline-start .18s, background .18s; }
+.so-switch.on::before { background: rgba(53,212,138,.28); border-color: rgba(53,212,138,.6); }
+.so-switch.on i { inset-inline-start: 25px; background: var(--good); box-shadow: 0 0 10px rgba(53,212,138,.5); }
+.so-off { opacity: .5; }
+.so-labname { font-size: 18px; font-weight: 700; margin: 0 0 12px; overflow-wrap: anywhere; }

@@ -154,13 +154,15 @@ h2 svg, .h2 svg { color: var(--accent); }
 .hubtile { position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; min-height: 112px; padding: 12px; text-align: right; border-radius: var(--r);
            background: var(--surface) center / cover no-repeat; border: 1px solid var(--line); isolation: isolate; transition: transform .12s; }
 .hubtile:active { transform: scale(.97); }
-.hubtile::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(160deg, color-mix(in srgb, var(--tc, var(--accent)) 26%, transparent), transparent 55%), linear-gradient(180deg, rgba(8,11,18,.2), rgba(8,11,18,.94)); }
+.hubtile::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(160deg, color-mix(in srgb, var(--tc, var(--accent)) 30%, transparent), transparent 55%), linear-gradient(180deg, rgba(8,11,18,.35) 0%, rgba(8,11,18,.55) 45%, rgba(8,11,18,.96) 100%); }
 .hubtile .hi { position: absolute; top: 11px; inset-inline-start: 11px; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; color: var(--tc, var(--accent)); background: rgba(8,11,18,.66); border: 1px solid color-mix(in srgb, var(--tc, var(--accent)) 45%, transparent); }
 .hubtile .hi svg { width: 21px; height: 21px; }
 .hubtile b { font-size: 15px; line-height: 1.4; text-shadow: 0 1px 8px #000; } .hubtile small { color: #b7c1d8; font-size: 11.5px; line-height: 1.45; }
 .hubtile .badge { position: absolute; top: 11px; inset-inline-end: 11px; min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 700; display: grid; place-items: center; background: var(--bad); color: #fff; }
 .hubtile .badge.live { background: var(--good); color: #04130c; }
 .hubtile.locked { filter: grayscale(.7) brightness(.75); }
+.hubhead { margin-bottom: 12px; min-height: 132px; background-position: center 35%; }
+.hub .hubgroup { grid-column: 1 / -1; margin: 12px 2px 0; }
 .hubtile.wide { grid-column: 1 / -1; min-height: 96px; }
 
 /* ── progress, timers ── */
@@ -262,6 +264,7 @@ h2 svg, .h2 svg { color: var(--accent); }
 .toasts { position: fixed; inset: auto 0 calc(var(--tabs-h) + env(safe-area-inset-bottom, 0px) + 12px) 0; z-index: 50; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; padding: 0 16px; }
 .toast { max-width: 520px; padding: 10px 15px; border-radius: 13px; font-size: 13.5px; font-weight: 700; display: flex; align-items: center; gap: 8px; color: var(--text); background: rgba(26,34,51,.97); border: 1px solid var(--line-2); box-shadow: 0 10px 30px rgba(0,0,0,.5); animation: rise .25s ease both; }
 .toast svg { width: 18px; height: 18px; flex: none; } .toast.ok svg { color: var(--good); } .toast.err svg { color: var(--bad); } .toast.err { border-color: rgba(255,84,112,.45); }
+.toast .tact { margin-inline-start: 6px; padding: 4px 11px; border-radius: 9px; font-weight: 700; font-size: 12.5px; color: #06131a; background: linear-gradient(135deg, var(--accent), #7fe6ff); white-space: nowrap; }
 .toast.out { opacity: 0; transform: translateY(6px); transition: all .25s; }
 
 /* ── states ── */
