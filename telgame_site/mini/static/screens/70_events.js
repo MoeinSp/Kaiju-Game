@@ -99,15 +99,16 @@
           }
           body.innerHTML = '<div class="ev-shop">' + d.shop.map(function (it) {
             var out = it.left <= 0, poor = d.coins < it.cost;
-            return '<div class="panel ev-item' + (out ? " out" : "") + (it.key === "grand" ? " grand" : "") + '"><span class="ico-box lg" style="color:' + (SHOP_TINT[it.key] || "var(--accent)") + '">' + K.ic(SHOP_ICON[it.key] || "gift") + "</span>" +
-              '<div class="grow"><div class="b">' + K.esc(it.title) + '</div><div class="sm muted">' + (out ? "سقف خرید پر شد" : K.n(it.bought) + " از " + K.n(it.limit) + " خریده شده") + "</div></div>" +
-              '<button class="btn sm ' + (out || poor ? "" : "gold") + '" data-act="fbuy" data-key="' + K.esc(it.key) + '"' + (out ? " disabled" : "") + ">" + (out ? K.ic("check") + "تموم شد" : K.ic("token") + K.n(it.cost)) + "</button></div>";
+            return '<div class="panel ev-item' + (out ? " out" : "") + (it.key === "grand" || it.vip ? " grand" : "") + '"><span class="ico-box lg" style="color:' + (SHOP_TINT[it.key] || (it.vip ? "var(--legendary)" : "var(--accent)")) + '">' + K.ic(SHOP_ICON[it.key] || (it.vip ? "crown" : "gift")) + "</span>" +
+              '<div class="grow"><div class="b">' + K.esc(it.title) + '</div><div class="sm muted">' + (it.locked ? "فقط با اشتراک فعال" : out ? "سقف خرید پر شد" : K.n(it.bought) + " از " + K.n(it.limit) + " خریده شده") + "</div></div>" +
+              '<button class="btn sm ' + (out || poor ? "" : "gold") + '" data-act="fbuy" data-key="' + K.esc(it.key) + '"' + (out ? " disabled" : "") + ">" + (out ? K.ic("check") + "تموم شد" : it.locked ? K.ic("lock") + "اشتراک" : it.cost ? K.ic("token") + K.n(it.cost) : K.ic("gift") + "رایگان") + "</button></div>";
           }).join("") + "</div>";
         }
         draw();
         segEl.addEventListener("click", function (ev) { var b = ev.target.closest("[data-ftab]"); if (!b) return; K.haptic(); festTab = b.dataset.ftab; draw(); });
         K.on(root, "fbuy", function (el) {
           var it = d.shop.filter(function (x) { return x.key === el.dataset.key; })[0]; if (!it) return;
+          if (it.locked) { K.haptic("err"); K.toast("این آیتم فقط برای کساییه که اشتراک فعال دارن.", "err", K.hasScreen("sh_vip") ? { label: "اشتراک", run: function () { K.go("sh_vip"); } } : null); return; }
           if (d.coins < it.cost) { K.haptic("err"); K.toast("سکه‌ی جشنواره کافی نداری (" + d.coins + " از " + it.cost + ").", "err"); return; }
           K.confirm({ title: "خرید از جشنواره", icon: SHOP_ICON[it.key] || "cart", ok: "بخر", cancel: "بی‌خیال",
             html: "<p>«" + K.esc(it.title) + "» رو با <b>" + K.n(it.cost) + "</b> سکه‌ی جشنواره می‌خری؟<br>بعدش " + K.n(d.coins - it.cost) + " سکه برات می‌مونه.</p>" }).then(function (yes) {

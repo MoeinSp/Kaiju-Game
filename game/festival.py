@@ -64,17 +64,43 @@ THEMES = (
 
 # shop: key → (emoji, title, cost in festival coins, per-festival limit)
 SHOP = {
-    "capsule": ("🐭", "۳ موش (غذای هیولا)", 15, 10),
-    "speedup": ("⏩", "کارت سرعت ۳۰ دقیقه‌ای", 25, 8),
-    "gold": ("💰", "کیسه‌ی طلا (۵ شکار)", 40, 8),
-    "dna": ("🧬", "بسته‌ی DNA (۵ شکار)", 40, 8),
-    "diamonds": ("💎", "۱۰ الماس", 90, 5),
+    "capsule": ("🐭", "3 موش (غذای هیولا)", 15, 10),
+    "speedup": ("⏩", "کارت سرعت 30 دقیقه‌ای", 25, 8),
+    "gold": ("💰", "کیسه‌ی طلا (5 شکار)", 40, 8),
+    "dna": ("🧬", "بسته‌ی دی‌ان‌ای (5 شکار)", 40, 8),
+    "diamonds": ("💎", "10 الماس", 90, 5),
     "golden": ("🥇", "جعبه‌ی طلایی", 140, 3),
     "magical": ("🔮", "جعبه‌ی جادویی", 320, 2),
     "grand": ("👑", "هیولای افسانه‌ای جشنواره", 900, 1),
+    # subscribers only (VIP_ONLY) — the free chest is their welcome gift of each festival
+    "vip_chest": ("🎁", "هدیه‌ی اشتراک: جعبه‌ی جادویی", 0, 1),
+    "vip_mythic": ("💠", "هیولای اساطیری کریستال", 1200, 1),
 }
-SHOP_ORDER = ("capsule", "speedup", "gold", "dna", "diamonds", "golden", "magical", "grand")
+SHOP_ORDER = ("capsule", "speedup", "gold", "dna", "diamonds", "golden", "magical", "grand", "vip_chest", "vip_mythic")
 GRAND_RARITY = "legendary"
+
+# ── subscribers («اشتراک») ────────────────────────────────────────────────────
+# Extra festival coins on everything they earn, plus the two VIP_ONLY shop items. At +50%
+# a subscriber who plays every part of the game all week reaches ~1,700 coins, so the
+# mythic (1,200) is a real goal but not a gift; without the bonus the weekly ceiling is
+# ~1,150 — below its price even if the lock weren't there.
+VIP_ONLY = ("vip_chest", "vip_mythic")
+VIP_COIN_BONUS = 0.50
+VIP_MYTHIC_RARITY = "mythic"
+VIP_MYTHIC_ELEMENT = "crystal"
+
+
+def is_vip(user: User) -> bool:
+    from game.subscription import is_subscription_active
+
+    return is_subscription_active(user)
+
+
+def with_bonus(user: User, amount: int) -> int:
+    """`amount` festival coins plus the subscriber bonus (rounded half up, so 1 → 2, 2 → 3)."""
+    if amount <= 0 or not is_vip(user):
+        return amount
+    return amount + int(amount * VIP_COIN_BONUS + 0.5)
 
 # leaderboard (coins EARNED) prizes, paid once when the festival ends: (max rank, diamonds)
 RANK_PRIZES = ((1, 150), (2, 100), (3, 75), (10, 30))
@@ -169,13 +195,14 @@ def on_action(user: User, action: str, new_count: int, n: int = 1) -> int:
     per, cap = rule
     before = new_count - n
     counted = max(0, min(new_count, cap) - min(before, cap))
-    return add_coins(user, counted * per)
+    return add_coins(user, with_bonus(user, counted * per))
 
 
 def on_missions(user: User, completed: list[dict]) -> int:
     if not completed:
         return 0
-    return add_coins(user, sum(MISSION_WEEKLY_COINS if m.get("weekly") else MISSION_DAILY_COINS for m in completed))
+    base = sum(MISSION_WEEKLY_COINS if m.get("weekly") else MISSION_DAILY_COINS for m in completed)
+    return add_coins(user, with_bonus(user, base))
 
 
 # ── state for the screens ─────────────────────────────────────────────────────
@@ -204,7 +231,7 @@ def rank_prize(rank: int) -> int:
 
 def status(user: User) -> dict:
     key = active_key()
-    data = {"active": key is not None, "key": key, "theme": theme(key),
+    data = {"active": key is not None, "key": key, "theme": theme(key), "vip": is_vip(user),
             "seconds_left": seconds_left(), "seconds_until_next": seconds_until_next()}
     if key is None:
         return data
@@ -227,14 +254,16 @@ def shop_state(user: User) -> dict:
         FestivalPurchase.objects.filter(user=user, festival_key=key).values_list("item_key", "count")
     )
     p = progress(user, key)
+    vip = is_vip(user)
     items = []
     for item_key in SHOP_ORDER:
         emoji, title, cost, limit = SHOP[item_key]
         if item_key == "grand":
             title = f"{title} ({constants.element_label(theme(key)['element'])})"
         items.append({"key": item_key, "emoji": emoji, "title": title, "cost": cost,
-                      "left": max(0, limit - bought.get(item_key, 0))})
-    return {"coins": p.coins if p else 0, "items": items, "theme": theme(key)}
+                      "left": max(0, limit - bought.get(item_key, 0)),
+                      "vip": item_key in VIP_ONLY, "locked": item_key in VIP_ONLY and not vip})
+    return {"coins": p.coins if p else 0, "items": items, "theme": theme(key), "vip": vip}
 
 
 # ── shop ──────────────────────────────────────────────────────────────────────
@@ -248,10 +277,10 @@ def _grant(user: User, item_key: str, key: str) -> str:
     if item_key == "capsule":
         add_capsules(user, "small", 3)
         user.save(update_fields=["xp_capsules"])
-        return "۳ موش"
+        return "3 موش"
     if item_key == "speedup":
         grant_speedup_card(user, 30, count=1)
-        return "یک کارت سرعت ۳۰ دقیقه‌ای"
+        return "یک کارت سرعت 30 دقیقه‌ای"
     if item_key in ("gold", "dna"):
         gold_unit, dna_unit = mission_unit(user)
         if item_key == "gold":
@@ -262,14 +291,15 @@ def _grant(user: User, item_key: str, key: str) -> str:
         amount = dna_unit * 5
         user.dna_fragments += amount
         user.save(update_fields=["dna_fragments"])
-        return f"{amount:,} DNA"
+        return f"{amount:,} دی‌ان‌ای"
     if item_key == "diamonds":
         user.diamonds += 10
         user.save(update_fields=["diamonds"])
-        return "۱۰ الماس"
-    if item_key in ("golden", "magical"):
-        c = grant_chest_contents(user, item_key, user.cup, source="festival")
-        got = [f"{c['coins']:,} طلا", f"{c['dna']:,} DNA"]
+        return "10 الماس"
+    if item_key in ("golden", "magical", "vip_chest"):
+        chest = "magical" if item_key == "vip_chest" else item_key
+        c = grant_chest_contents(user, chest, user.cup, source="festival")
+        got = [f"{c['coins']:,} طلا", f"{c['dna']:,} دی‌ان‌ای"]
         if c["diamonds"]:
             got.append(f"{c['diamonds']} الماس")
         rarity = constants.RARITY_LABELS.get(c["rarity"], c["rarity"])
@@ -278,14 +308,15 @@ def _grant(user: User, item_key: str, key: str) -> str:
         elif c["item"] is not None:
             got.append(f"تجهیزات {rarity} «{c['item'].name}»")
         return f"{c['name']}: " + " + ".join(got)
-    if item_key == "grand":
-        element = theme(key)["element"]
-        canon = constants.canonical_base_stats(GRAND_RARITY, 1)
+    if item_key in ("grand", "vip_mythic"):
+        element = VIP_MYTHIC_ELEMENT if item_key == "vip_mythic" else theme(key)["element"]
+        rarity = VIP_MYTHIC_RARITY if item_key == "vip_mythic" else GRAND_RARITY
+        canon = constants.canonical_base_stats(rarity, 1)
         creature = Creature.objects.create(
             owner=user, name=constants.random_species_name(element), element=element,
-            rarity=GRAND_RARITY, is_active=False, **canon,
+            rarity=rarity, is_active=False, **canon,
         )
-        return (f"هیولای {constants.RARITY_LABELS[GRAND_RARITY]} «{creature.name}» "
+        return (f"هیولای {constants.RARITY_LABELS[rarity]} «{creature.name}» "
                 f"({constants.element_label(element)})")
     raise GameError("این آیتم وجود نداره.")
 
@@ -299,6 +330,8 @@ def buy(user: User, item_key: str) -> dict:
         raise GameError("این آیتم وجود نداره.")
     _emoji, title, cost, limit = SHOP[item_key]
     lock_row(user)
+    if item_key in VIP_ONLY and not is_vip(user):
+        raise GameError("این آیتم فقط برای کساییه که اشتراک فعال دارن.")
     FestivalProgress.objects.get_or_create(user=user, festival_key=key)
     p = FestivalProgress.objects.select_for_update().get(user=user, festival_key=key)
     if p.coins < cost:

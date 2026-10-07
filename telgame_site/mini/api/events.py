@@ -106,6 +106,8 @@ def festival_panel(request, user):
         "coins": st["coins"],
         "earned": st["earned"],
         "rank": st["rank"],
+        "vip": st["vip"],
+        "vip_bonus_pct": int(festival.VIP_COIN_BONUS * 100),
         "top": [
             {"rank": r["rank"], "name": _text(r["name"]), "earned": r["earned"],
              "prize": festival.rank_prize(r["rank"]), "me": r["user_id"] == user.id}
@@ -113,7 +115,8 @@ def festival_panel(request, user):
         ],
         "shop": [
             {"key": it["key"], "title": _text(it["title"]).replace("( ", "("), "cost": it["cost"], "left": it["left"],
-             "limit": festival.SHOP[it["key"]][3], "bought": festival.SHOP[it["key"]][3] - it["left"]}
+             "limit": festival.SHOP[it["key"]][3], "bought": festival.SHOP[it["key"]][3] - it["left"],
+             "vip": it["vip"], "locked": it["locked"]}
             for it in shop["items"]
         ],
     })

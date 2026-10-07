@@ -65,7 +65,9 @@ def _festival(now: datetime.datetime) -> list[tuple]:
             "«سکه‌ی جشنواره» می‌گیری و از فروشگاه جشنواره خرج می‌کنی.\n"
             f"{grand[0]} جایزه‌ی بزرگ: <b>هیولای افسانه‌ای {constants.element_label(th['element'])}</b> "
             f"(<code>{grand[2]}</code> سکه)\n"
-            "🏅 نفرات برتر جدول سکه، آخر جشنواره الماس می‌گیرن."
+            "🏅 نفرات برتر جدول سکه، آخر جشنواره الماس می‌گیرن.\n"
+            f"⭐ با اشتراک: <code>+{int(festival.VIP_COIN_BONUS * 100)}%</code> سکه، جعبه‌ی جادویی رایگان "
+            "و هیولای اساطیری کریستال توی فروشگاه جشنواره."
         )
         out.extend((uid, text, "festival") for uid in _active_ids(FESTIVAL_ACTIVE_DAYS))
     elif jd == festival.FESTIVAL_END_DAY and now.hour >= FESTIVAL_LAST_CALL_HOUR and _once(f"fest_last:{key}"):
