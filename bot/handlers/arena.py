@@ -414,40 +414,43 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
         energy = sync_energy(user)
     max_en = get_max_energy(user)
     opp_element = opponent.get("element")
-    my_elem_tag = f" [{constants.element_label(my_element)}]" if my_element else ""
-    opp_elem_tag = f" [{constants.element_label(opp_element)}]" if opp_element else ""
+    my_elem_tag = f" · {constants.element_label(my_element)}" if my_element else ""
+    opp_elem_tag = f" · {constants.element_label(opp_element)}" if opp_element else ""
     adv = element_advantage_line(my_element, opp_element)
     win_cup = cup_delta(user, opponent["cup"], True, my_power)
     loss_cup = cup_delta(user, opponent["cup"], False, my_power)
     alliance_str = f" <i>(🤝 {opponent['alliance']})</i>" if opponent.get("alliance") else ""
     trophy = get_emoji("trophy")
-    # same order as the hunt card: you → opponent → element → reward → cost
+    cost = constants.ARENA_ATTACK_ENERGY_COST
+    # two blocks (you / opponent), two lines each; blank lines instead of dividers
     lines = [
         f"{get_emoji('battle')} <b>آرنا · حریف پیدا شد</b>",
-        _ARENA_DIV,
-        f"🦅 موجود شما: <b>{cname}</b>{my_elem_tag}",
-        f"💪 قدرت شما: <code>{my_power:,}</code> · {trophy} کاپ <code>{user.cup:,}</code>",
-        f"👤 حریف: <b>{opponent['label']}</b>{alliance_str}",
-        f"{get_emoji('opponent_creature', '👹')} موجود حریف: <b>{opponent.get('creature_name', '؟')}</b>{opp_elem_tag}",
-        f"💀 قدرت حریف: <code>{opponent['power']:,}</code> · {trophy} کاپ <code>{opponent['cup']:,}</code>",
+        "",
+        f"{get_emoji('bullet_blue', '🔹')} <b>تو</b>",
+        f"<b>{cname}</b>{my_elem_tag}",
+        f"قدرت <code>{my_power:,}</code> · {trophy} کاپ <code>{user.cup:,}</code>",
+        "",
+        f"{get_emoji('opponent_creature', '👹')} <b>{opponent['label']}</b>{alliance_str}",
+        f"<b>{opponent.get('creature_name', '؟')}</b>{opp_elem_tag}",
+        f"قدرت <code>{opponent['power']:,}</code> · {trophy} کاپ <code>{opponent['cup']:,}</code>",
     ]
     if adv:
-        lines.append(adv)
+        lines += ["", adv]
     lines += [
-        _ARENA_DIV,
-        f"{get_emoji('gift')} جایزه برد: {get_emoji('coin')} <code>+{loot:,}</code> · {get_emoji('dna')} <code>+{dna_win:,}</code>",
-        f"{trophy} کاپ: برد <code>+{win_cup}</code> | باخت <code>{loss_cup}</code>",
-        f"{get_emoji('energy')} هزینه حمله: <code>{constants.ARENA_ATTACK_ENERGY_COST}</code> انرژی "
-        f"(داری <code>{energy}</code>/<code>{max_en}</code>)",
+        "",
+        f"{get_emoji('gift')} برد: {get_emoji('coin')} <code>{loot:,}</code> · {get_emoji('dna')} <code>{dna_win:,}</code> · {trophy} <code>+{win_cup}</code>",
+        f"باخت: {trophy} <code>{loss_cup}</code>",
     ]
+    if energy < cost * 5:   # only worth a line when it is about to run out
+        lines.append(f"{get_emoji('energy')} انرژی: <code>{energy}</code>/<code>{max_en}</code>")
     keyboard = InlineKeyboardMarkup(
         [
-            [btn("حمله", emoji_key="btn_attack", style=BATTLE, callback_data=f"arena_attack:{_opp_ref(opponent)}")],
+            [btn(f"حمله · {cost} انرژی", emoji_key="btn_attack", style=BATTLE, callback_data=f"arena_attack:{_opp_ref(opponent)}")],
             [
                 btn("حریف بعدی", emoji_key="btn_recheck", style=NAV, callback_data="arena_find"),
-                btn("تعویض موجود", emoji_key="btn_swap", style=NAV, callback_data="arena_swap"),
+                btn("تعویض", emoji_key="btn_swap", style=NAV, callback_data="arena_swap"),
+                btn("جزئیات", emoji_key="btn_atk_details", style=NAV, callback_data="arena_opp_details"),
             ],
-            [btn("جزئیات حریف", emoji_key="btn_atk_details", style=NAV, callback_data="arena_opp_details")],
             [back_btn("menu:arena", "بازگشت به آرنا")],
         ]
     )
