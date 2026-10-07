@@ -440,7 +440,7 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
     reward_block = "\n".join([
         f"{get_emoji('gift')} <b>جایزه‌ی برد</b>",
         f"{coin} طلا: <code>+{loot:,}</code>",
-        f"{dna} DNA: <code>+{dna_win:,}</code>",
+        f"{dna} دی‌ان‌ای: <code>+{dna_win:,}</code>",
         f"{trophy} کاپ: <code>+{win_cup}</code>",
     ])
     lines = [

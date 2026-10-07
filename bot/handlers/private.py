@@ -254,9 +254,9 @@ def element_advantage_line(my_elem, opp_elem) -> str:
         return ""
     mult = constants.element_multiplier(my_elem, opp_elem)
     if mult > 1:
-        return "✅ برتری با تو: +۲۰٪ قدرت"
+        return "✅ برتری با تو: <code>+20%</code> قدرت"
     if mult < 1:
-        return "⚠️ برتری با حریف: +۲۰٪ قدرت"
+        return "⚠️ برتری با حریف: <code>+20%</code> قدرت"
     return "➖ بدون مزیت عنصری"
 
 
