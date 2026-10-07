@@ -422,22 +422,26 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
     alliance_str = f" <i>(🤝 {opponent['alliance']})</i>" if opponent.get("alliance") else ""
     trophy = get_emoji("trophy")
     cost = constants.ARENA_ATTACK_ENERGY_COST
-    # two blocks (you / opponent), two lines each; blank lines instead of dividers
-    lines = [
-        f"{get_emoji('battle')} <b>آرنا · حریف پیدا شد</b>",
-        "",
+    # each side is its own quote block (Telegram draws it as a small card) — no divider lines
+    me_block = "\n".join([
         f"{get_emoji('bullet_blue', '🔹')} <b>تو</b>",
         f"<b>{cname}</b>{my_elem_tag}",
         f"قدرت <code>{my_power:,}</code> · {trophy} کاپ <code>{user.cup:,}</code>",
-        "",
+    ])
+    opp_block = "\n".join([
         f"{get_emoji('opponent_creature', '👹')} <b>{opponent['label']}</b>{alliance_str}",
         f"<b>{opponent.get('creature_name', '؟')}</b>{opp_elem_tag}",
         f"قدرت <code>{opponent['power']:,}</code> · {trophy} کاپ <code>{opponent['cup']:,}</code>",
+    ])
+    lines = [
+        f"{get_emoji('battle')} <b>آرنا · حریف پیدا شد</b>",
+        "",
+        f"<blockquote>{me_block}</blockquote>",
+        f"<blockquote>{opp_block}</blockquote>",
     ]
     if adv:
-        lines += ["", adv]
+        lines.append(adv)
     lines += [
-        "",
         f"{get_emoji('gift')} برد: {get_emoji('coin')} <code>{loot:,}</code> · {get_emoji('dna')} <code>{dna_win:,}</code> · {trophy} <code>+{win_cup}</code>",
         f"باخت: {trophy} <code>{loss_cup}</code>",
     ]
