@@ -90,13 +90,18 @@
   K.screen("tr_home", {
     title: "جام آخر هفته", tab: "battle",
     render: function (root, params, ctx) {
-      var data = null;
+      var data = null, tick = null, pending = false;
+      /* a countdown ran out: the game plays the draw / round within a few minutes, so look again
+         shortly — ONE pending re-read, however many countdowns hit zero and however often we redraw */
+      function later() {
+        if (pending) return; pending = true;
+        K.after(20000, function () { pending = false; if (!document.hidden) load().catch(function () {}); else later(); });
+      }
       function draw(d) {
         data = d;
         var state = d.status === "running" ? "در حال برگزاری" : d.registration_open ? "ثبت‌نام بازه" : d.status === "finished" ? "این هفته تموم شد" : "ثبت‌نام بسته‌ست";
         root.innerHTML = '<div class="banner"' + (d.img ? ' style="background-image:url(\'' + d.img + "')\"" : "") + '><div class="grow"><div class="ttl">جام آخر هفته</div><div class="sm" style="color:#c5cee2">' + state + "</div></div></div>" + body(d);
-        // a countdown ran out: the game plays the draw / round within a few minutes, so look again shortly
-        K.timers(root, function (el) { if (root.contains(el)) K.after(20000, function () { load().catch(function () {}); }); });
+        if (tick) tick(); else tick = K.hu.live(root, later);
       }
       function load() { return K.api.get("tournament/").then(function (d) { if (ctx.alive()) draw(d); }); }
       function post(path, bodyData, btn, text) {

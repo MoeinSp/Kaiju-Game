@@ -32,7 +32,12 @@
 .so-sec.hit { border-color: rgba(58,214,255,.45); box-shadow: 0 0 0 1px rgba(58,214,255,.15) inset; }
 .so-sech { display: flex; align-items: flex-start; gap: 9px; font-weight: 700; margin-bottom: 6px; }
 .so-sech .num { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border-radius: 8px; font-size: 12px; color: var(--accent); background: rgba(58,214,255,.12); }
-.so-secb { font-size: 13.5px; line-height: 1.9; color: #cfd8ee; }
+.so-secb { font-size: 14px; line-height: 2; color: #d5ddf0; overflow-wrap: anywhere; }
+.so-secb p { margin: 0; } .so-secb p + p, .so-secb p + .so-pair, .so-pair + p { margin-top: 6px; }
+.so-pair { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px dashed var(--line-2); font-size: 13.5px; line-height: 1.7; }
+.so-pair:last-child { border-bottom: 0; } .so-pair span { color: var(--muted); } .so-pair b { color: var(--text); text-align: left; }
+.so-toc { margin: 0 0 4px; } .so-toc .chip { height: 32px; font-size: 12px; }
+.so-sec { scroll-margin-top: 110px; }
 .so-next { display: flex; align-items: center; gap: 11px; width: 100%; padding: 12px 14px; margin-top: 14px; text-align: right; }
 .so-next .ic { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 11px; background: color-mix(in srgb, currentColor 14%, transparent); }
 .so-next .ic svg { width: 19px; height: 19px; } .so-next small { display: block; font-size: 11.5px; } .so-next b { color: var(--text); }

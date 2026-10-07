@@ -8,6 +8,12 @@ and calls the same game functions in the same order. Numbers shown before an act
 happen" function, the real action is run inside a transaction that is rolled back
 (`_dry_feed`, `_dry_merge`) instead of re-deriving the rule here.
 
+«بلعیدن هیولا» (devour) is here too: the bot's upgrade panel offers it next to feeding.
+
+Big accounts own thousands of pieces, so every list is capped on the server (the best
+candidates of a slot, the cheapest fusion sacrifices of each rarity, …) and says how many
+there are in total; nothing is fetched per row (`_attach_wearers`).
+
 Not here on purpose: feeding with GOLD. The bot's «تغذیه» button only opens the capsule
 panel now (constants: capsules are "the ONLY way to «تغذیه»"); the old `lab:feed` branch
 of `_lab_action_sync` is unreachable from any bot screen.
@@ -19,7 +25,7 @@ import copy
 
 from django.db import transaction
 
-from bio_lab.models import Equipment, User
+from bio_lab.models import Creature, Equipment, User
 from game import constants
 from telgame_site.mini.core import (
     GameError,
@@ -34,7 +40,11 @@ from telgame_site.mini.core import (
     own_equipment,
 )
 
-MAX_FUSE_BATCH = 50  # sacrifices accepted in one fusion request
+MAX_FUSE_BATCH = 50      # sacrifices accepted in one fusion request
+MAX_DEVOUR_BATCH = 40    # creatures accepted in one devour request (the game checks each one's status)
+GEAR_PAGE = 24           # candidates of one slot sent at a time (best for THIS creature first)
+FUSE_PER_RARITY = 40     # fusion sacrifices shown per rarity (cheapest first)
+DUPES_SHOWN = 12         # identical pieces offered for «نمونه‌ی مشابه»
 
 
 # ── small helpers ─────────────────────────────────────────────────────────────
@@ -53,18 +63,42 @@ def _qint(request, key: str) -> int:
         raise GameError("درخواست ناقصه.")
 
 
-def _item_dict(it: Equipment) -> dict:
-    """Same shape as a row of /app/api/profile/equipment/."""
-    from bio_lab.repository import creature_name
-    from game.equipment import bonus_text, equipment_power
+def _attach_wearers(items) -> None:
+    """Load the creatures that wear these pieces in ONE query (for rows that did not come
+    from a select_related queryset) — `_item_dict` then reads the name without a query."""
+    field = Equipment._meta.get_field("equipped_on")
+    need = [it for it in items if it.equipped_on_id and not field.is_cached(it)]
+    if not need:
+        return
+    rows = Creature.objects.in_bulk({it.equipped_on_id for it in need})
+    for it in need:
+        field.set_cached_value(it, rows.get(it.equipped_on_id))
 
+
+def _wearer(it: Equipment) -> str | None:
+    from bio_lab.repository import creature_name
+
+    if not it.equipped_on_id:
+        return None
+    owner = it.equipped_on
+    return creature_name(owner) if owner is not None else None
+
+
+def _item_row(it: Equipment) -> dict:
+    """The short form used in long lists (no bonus text / power)."""
     return {
         "id": it.id, "name": it.name, "slot": it.slot, "rarity": it.rarity, "level": it.level,
-        "power": equipment_power(it), "bonus": clean(bonus_text(it)),
-        "on": creature_name(it.equipped_on) if it.equipped_on_id else None,
-        "on_id": it.equipped_on_id,
-        "img": equipment_img(it),
+        "on": _wearer(it), "on_id": it.equipped_on_id, "img": equipment_img(it),
     }
+
+
+def _item_dict(it: Equipment) -> dict:
+    """Same shape as a row of /app/api/profile/equipment/."""
+    from game.equipment import bonus_text, equipment_power
+
+    out = _item_row(it)
+    out.update({"power": equipment_power(it), "bonus": clean(bonus_text(it))})
+    return out
 
 
 def _load(user: User, creature_id: int):
@@ -252,7 +286,10 @@ def _feed_view(user: User, creature, gear: list, preview: bool = True) -> dict:
             row["one"] = _dry_feed(user, creature, gear, plan_of("one", row["tier"], counts))
             # with a single capsule «همه» is the same plan as «+۱»
             row["all"] = row["one"] if row["count"] == 1 else _dry_feed(user, creature, gear, plan_of("allt", row["tier"], counts))
-        if total > 0:
+        stocked = [row for row in caps if row["count"] > 0]
+        if len(stocked) == 1:
+            everything = stocked[0]["all"]  # one kind of food only: «همه» of that kind IS «تغذیه با همه»
+        elif stocked:
             everything = _dry_feed(user, creature, gear, plan_of("all", "", counts))
     return {"creature": block, "capsules": caps, "total": total, "all": everything}
 
@@ -302,6 +339,48 @@ def rename(request, user, data):
 
 
 # ── equipment on a creature (bot: equip_panel_* / equip_slot_callback) ────────
+def _rank_slot(creature, others: list, candidates: list) -> list[tuple[int, Equipment]]:
+    """[(the creature's power wearing it, piece)] — best for THIS creature first, spare
+    pieces before ones another creature wears. `creature_power` only reads a piece through
+    `equipment_bonus`, so pieces with an identical bonus share one calculation (a big bag
+    has ~2,000 pieces but only a few hundred distinct bonuses)."""
+    from game.creature import creature_power
+    from game.equipment import equipment_bonus
+
+    memo: dict = {}
+    ranked = []
+    for cand in candidates:
+        key = tuple(sorted(equipment_bonus(cand).items()))
+        if key not in memo:
+            memo[key] = creature_power(creature, others + [cand])
+        ranked.append((memo[key], cand))
+    ranked.sort(key=lambda t: (-t[0], t[1].equipped_on_id is not None, t[1].id))
+    return ranked
+
+
+def _slot_block(creature, worn: list, row: dict, skip: int = 0, rarity: str = "") -> dict:
+    """One slot of the loadout: what is in it and ONE page of what could be."""
+    from game.creature import creature_power
+
+    others = [g for g in worn if g.slot != row["slot"]]
+    item = None
+    if row["item"] is not None:
+        item = _item_dict(row["item"])
+        item["power_without"] = creature_power(creature, others)  # the creature's power if it's taken off
+    counts: dict = {}
+    for cand in row["candidates"]:
+        counts[cand.rarity] = counts.get(cand.rarity, 0) + 1
+    pool = [c for c in row["candidates"] if not rarity or c.rarity == rarity]
+    page = _rank_slot(creature, others, pool)[skip:skip + GEAR_PAGE]
+    candidates = []
+    for power_after, cand in page:
+        d = _item_dict(cand)
+        d["power_after"] = power_after  # the creature's power wearing it
+        candidates.append(d)
+    return {"slot": row["slot"], "item": item, "candidates": candidates, "skip": skip, "rarity": rarity,
+            "total": len(pool), "all": len(row["candidates"]), "counts": counts}
+
+
 def _gear_view(user: User, creature) -> dict:
     from game import research
     from game.creature import creature_power
@@ -309,21 +388,8 @@ def _gear_view(user: User, creature) -> dict:
 
     research.attach_research(user, creature)
     worn = get_equipped_items(creature)
-    power = creature_power(creature, worn)
-    slots = []
-    for row in slot_loadout(user, creature):
-        others = [g for g in worn if g.slot != row["slot"]]
-        item = None
-        if row["item"] is not None:
-            item = _item_dict(row["item"])
-            item["power_without"] = creature_power(creature, others)  # the creature's power if it's taken off
-        candidates = []
-        for cand in row["candidates"]:
-            d = _item_dict(cand)
-            d["power_after"] = creature_power(creature, others + [cand])  # the creature's power wearing it
-            candidates.append(d)
-        slots.append({"slot": row["slot"], "item": item, "candidates": candidates})
-    return {"creature": _creature_block(user, creature, worn), "power": power, "slots": slots}
+    slots = [_slot_block(creature, worn, row) for row in slot_loadout(user, creature)]
+    return {"creature": _creature_block(user, creature, worn), "power": creature_power(creature, worn), "slots": slots}
 
 
 @endpoint()
@@ -331,14 +397,42 @@ def gear(request, user):
     return _gear_view(user, own_creature(user, _qint(request, "id")))
 
 
+@endpoint()
+def gear_slot(request, user):
+    """More candidates of one slot (bot: `equip_slot_callback` — rarity tabs + pages)."""
+    from game import research
+    from game.equipment import get_equipped_items, slot_loadout
+
+    creature = own_creature(user, _qint(request, "id"))
+    slot = request.GET.get("slot", "")
+    rarity = request.GET.get("rarity", "")
+    if slot not in constants.EQUIPMENT_SLOTS or (rarity and rarity not in constants.RARITY_ORDER):
+        raise GameError("این جایگاه وجود نداره.")
+    try:
+        skip = max(0, int(request.GET.get("skip", "0")))
+    except ValueError:
+        skip = 0
+    research.attach_research(user, creature)
+    worn = get_equipped_items(creature)
+    row = next(r for r in slot_loadout(user, creature) if r["slot"] == slot)
+    return _slot_block(creature, worn, row, skip, rarity)
+
+
 @endpoint("POST")
 def equip(request, user, data):
-    """bot: `_equip_do_sync` (any creature of the player; the piece moves if it was worn elsewhere)."""
-    from game.equipment import equip_item
+    """bot: `_equip_do_sync` (any creature of the player; the piece moves if it was worn elsewhere).
+    `brief` (sent by the item screen, which shows no loadout) skips the candidate lists."""
+    from game import research
+    from game.creature import creature_power
+    from game.equipment import equip_item, get_equipped_items
 
     creature = own_creature(user, need_int(data, "id", 1))
     item = equip_item(user, creature, need_int(data, "item", 1))
-    out = _gear_view(user, creature)
+    if data.get("brief"):
+        research.attach_research(user, creature)
+        out = {"power": creature_power(creature, get_equipped_items(creature))}
+    else:
+        out = _gear_view(user, creature)
     out["item"] = _item_dict(item)
     return out
 
@@ -351,8 +445,72 @@ def unequip(request, user, data):
     item = own_equipment(user, need_int(data, "item", 1))
     creature = item.equipped_on if item.equipped_on_id else None
     item = unequip_item(user, item.id)
-    out = _gear_view(user, creature) if creature is not None and creature.owner_id == user.id else {}
+    brief = data.get("brief") or creature is None or creature.owner_id != user.id
+    out = {} if brief else _gear_view(user, creature)
     out["item"] = _item_dict(item)
+    return out
+
+
+# ── devouring (bot: devour_* → game.creature.devour_creatures) ────────────────
+def _devour_view(user: User, creature, gear: list) -> dict:
+    """The sacrifices the bot's «بلعیدن هیولا» list offers, with the XP each is worth.
+    The idle creatures come from `workers.free_creatures` — the same rule and the same
+    order as `game.creature.devour_candidates` (not active, not working / breeding / on a
+    mission; rarest first) without its status queries per creature."""
+    from bio_lab.repository import creature_name
+    from game.creature import _devour_xp, xp_to_max_level
+    from game.workers import free_creatures
+    from telgame_site.mini.core import creature_img
+
+    rows = [{
+        "id": c.id, "name": creature_name(c), "species": c.name, "element": c.element, "rarity": c.rarity,
+        "star": c.star_level, "level": c.level, "img": creature_img(c), "xp": _devour_xp(c),
+    } for c in free_creatures(user) if c.id != creature.id]
+    return {"creature": _creature_block(user, creature, gear), "need": xp_to_max_level(creature),
+            "candidates": rows, "max_batch": MAX_DEVOUR_BATCH}
+
+
+@endpoint()
+def devour_panel(request, user):
+    creature, gear = _load(user, _qint(request, "id"))
+    return _devour_view(user, creature, gear)
+
+
+@endpoint("POST")
+def devour(request, user, data):
+    """bot: `_devour_multi_sync` after the tick rules of `_devour_can_add_sync` (a maxed
+    target eats nothing; no extra sacrifice once the ticked ones already reach the cap)."""
+    from game.creature import _devour_xp, creature_power, devour_creatures, xp_to_max_level
+
+    creature, gear = _load(user, need_int(data, "id", 1))
+    raw = data.get("sacrifices")
+    if not isinstance(raw, list) or not raw:
+        raise GameError("اول حداقل یه موجود رو تیک بزن.")
+    if len(raw) > MAX_DEVOUR_BATCH:
+        raise GameError(f"هر بار حداکثر {MAX_DEVOUR_BATCH} هیولا رو می‌شه بلعید.")
+    try:
+        ids = list(dict.fromkeys(int(x) for x in raw))
+    except (TypeError, ValueError):
+        raise GameError("درخواست ناقصه.")
+    need = xp_to_max_level(creature)
+    if need <= 0:
+        raise GameError("این موجود به سقف سطحش رسیده و دیگه نمی‌تونه هیولا بخوره.")
+    worth = {c.id: _devour_xp(c) for c in Creature.objects.filter(id__in=ids, owner=user)}
+    running = 0
+    for sac_id in ids:
+        if running >= need:
+            raise GameError("همین‌ها برای رسیدن به سقف سطح کافیه — بیشتر از این، قربانی هدر می‌ره.")
+        running += worth.get(sac_id, 0)
+    level_before, power_before = creature.level, creature_power(creature, gear)
+    result = devour_creatures(user, creature.id, ids)
+    creature, gear = _load(user, creature.id)
+    out = _devour_view(user, creature, gear)
+    out["done"] = {
+        "count": result["count"], "eaten": result["eaten"][:6], "xp": result["xp"], "levels": result["levels"],
+        "level_before": level_before, "level_after": result["new_level"],
+        "power_before": power_before, "power_after": creature_power(creature, gear),
+        "maxed": out["creature"]["maxed"],
+    }
     return out
 
 
@@ -383,10 +541,11 @@ def _forge_state(user: User) -> dict:
     from game.blacksmith import equipment_cap
     from game.buildings import building_level
 
+    level = building_level(user, "blacksmith")
     return {
         "locked": _forge_lock(user),
-        "level": building_level(user, "blacksmith"),
-        "built": building_level(user, "blacksmith") > 0,
+        "level": level,
+        "built": level > 0,
         "cap": equipment_cap(user),
         "max": constants.EQUIPMENT_MAX_LEVEL,
         "coins": user.coins,
@@ -418,24 +577,27 @@ def _forge_preview(user: User, item: Equipment, cap: int | None = None) -> dict:
 def forge_list(request, user):
     """bot: `blacksmith_panel` + `forge_cat` — everything still below the forge's ceiling."""
     _need_forge_section(user)
-    from game.blacksmith import equipment_cap
+    from game.blacksmith import forge_preview
 
+    out = _forge_state(user)
+    cap = out["cap"]
     order = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
     # big accounts own thousands of pieces: rank on the raw rows, then build only the best of each slot
-    rows = list(Equipment.objects.filter(owner=user, level__lt=equipment_cap(user)).select_related("equipped_on"))
+    rows = list(Equipment.objects.filter(owner=user, level__lt=cap).select_related("equipped_on"))
     rows.sort(key=lambda it: (-order.get(it.rarity, 0), -it.level, it.id))
     shown, per_slot = [], {}
     for it in rows:
         per_slot[it.slot] = per_slot.get(it.slot, 0) + 1
         if per_slot[it.slot] <= FORGE_LIST_PER_SLOT:
             shown.append(it)
-    out = _forge_state(user)
     items = []
     for it in shown:
-        d = _item_dict(it)
-        d["forge"] = _forge_preview(user, it, cap=out["cap"])
+        p = forge_preview(it)  # only cost + risk are used here; the ceiling was applied by the query
+        d = _item_row(it)
+        d["forge"] = {"cost": p["cost"], "fail_chance": p["fail_chance"], "afford": user.coins >= p["cost"]}
         items.append(d)
-    out.update({"items": items, "total": len(rows), "owned": Equipment.objects.filter(owner=user).count()})
+    out.update({"items": items, "total": len(rows), "counts": per_slot,
+                "owned": len(rows) or Equipment.objects.filter(owner=user).count()})
     return out
 
 
@@ -459,24 +621,41 @@ def _item_view(user: User, item: Equipment) -> dict:
     from game.equipment import _fuse_fail_chance, same_slot_candidates
 
     state = _forge_state(user)
-    out = {"item": _item_dict(item), "smith": state, "forge": _forge_preview(user, item)}
+    out = {"item": _item_dict(item), "smith": state, "forge": _forge_preview(user, item, cap=state["cap"])}
 
-    # exact duplicates (same slot + model + rarity) — bot: `_item_detail_sync`
+    # exact duplicates (same slot + model + rarity) — bot: `_item_detail_sync`; spare and
+    # low-level ones first, because the one that is picked gets consumed
     dupes = list(
         Equipment.objects.filter(owner=user, slot=item.slot, template_key=item.template_key, rarity=item.rarity)
-        .exclude(id=item.id).select_related("equipped_on").order_by("equipped_on_id", "level", "id")
+        .exclude(id=item.id).select_related("equipped_on")
     )
-    out["dupes"] = [_item_dict(d) for d in dupes]
+    dupes.sort(key=lambda d: (d.equipped_on_id is not None, d.level, d.id))
+    out["dupes"] = [_item_row(d) for d in dupes[:DUPES_SHOWN]]
+    out["dupes_total"] = len(dupes)
     out["merge"] = _dry_merge(user, item, dupes[0]) if dupes and item.level < constants.EQUIPMENT_MAX_LEVEL else None
 
-    # same-slot fusion sacrifices with their real odds — bot: `_efuse_scored_sync`
-    fuse = []
+    # same-slot fusion sacrifices with their real odds — bot: `_efuse_scored_sync`. The
+    # cheapest of every rarity (spare before worn, low level first) and the totals.
+    fuse, counts = [], {}
     if not state["locked"]:
-        for cand in same_slot_candidates(user, item.id):
-            d = _item_dict(cand)
+        cands = same_slot_candidates(user, item.id)
+        cands.sort(key=lambda c: (c.equipped_on_id is not None, c.level, c.id))
+        shown = []
+        for cand in cands:
+            counts[cand.rarity] = counts.get(cand.rarity, 0) + 1
+            if counts[cand.rarity] <= FUSE_PER_RARITY:
+                shown.append(cand)
+        _attach_wearers(shown)
+        order = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
+        shown.sort(key=lambda c: order.get(c.rarity, 0))  # stable: keeps spare/low-level first inside a rarity
+        for cand in shown:
+            d = _item_row(cand)
             d["fail_chance"] = _fuse_fail_chance(item, cand)
             fuse.append(d)
     out["fuse"] = fuse
+    out["fuse_counts"] = counts
+    out["fuse_total"] = sum(counts.values())
+    out["fuse_batch"] = MAX_FUSE_BATCH
     return out
 
 
@@ -565,9 +744,12 @@ routes = [
     ("feed/", feed_panel),        # GET  ?id=    capsules + exact previews
     ("feed/do/", feed),           # POST {id, kind: one|allt|all, tier}
     ("rename/", rename),          # POST {id, name}
-    ("gear/", gear),              # GET  ?id=    slots, worn pieces, candidates
-    ("equip/", equip),            # POST {id, item}
-    ("unequip/", unequip),        # POST {item}
+    ("gear/", gear),              # GET  ?id=    slots, worn pieces, the best candidates of each
+    ("gear/slot/", gear_slot),    # GET  ?id=&slot=&skip=&rarity=   one more page of a slot
+    ("equip/", equip),            # POST {id, item, brief?}
+    ("unequip/", unequip),        # POST {item, brief?}
+    ("devour/", devour_panel),    # GET  ?id=    idle creatures that can be eaten + the XP each gives
+    ("devour/do/", devour),       # POST {id, sacrifices: [ids]}
     ("forge/", forge_list),       # GET          upgradable gear (hall gate)
     ("item/", item),              # GET  ?id=    forge / merge / fusion options of one piece
     ("forge/do/", forge_do),      # POST {item}

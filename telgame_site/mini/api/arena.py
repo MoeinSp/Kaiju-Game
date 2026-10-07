@@ -76,6 +76,36 @@ def _gate(user, action: str) -> None:
         raise GameError(f"این بخش از سطح {req} «تالار مِهر» باز می‌شه (الان سطح {level}). اول تالار مِهرت رو ارتقا بده.")
 
 
+def _my(user, creature=None) -> dict:
+    """The player's fighter as the card shows it. The owner's research is re-read from the DB
+    first: game.research keeps a per-PROCESS cache, and a web worker's copy can be older than
+    an upgrade finished through the bot or another worker — the card must show the power the
+    duel will really be fought with."""
+    from game import research
+    from game.equipment import get_equipped_items
+
+    creature = creature or active_creature(user)
+    research.attach_research(user, creature)
+    return creature_dict(creature, get_equipped_items(creature))
+
+
+def _fresh_research(*players) -> None:
+    """Refresh this worker's research cache for the players about to fight (see `_my`):
+    game.arena.attack() reads the combat buffs of both sides from that cache."""
+    from game import research
+
+    for player in players:
+        if player is not None:
+            research.research_levels(player)
+
+
+def ready_chest_count(user) -> int:
+    """Chests that can be opened now (one indexed query; nothing is advanced or settled)."""
+    now = timezone.now()
+    rows = ArenaChest.objects.filter(user=user).values_list("status", "unlock_finishes_at")
+    return sum(1 for status, until in rows if status == "ready" or (status == "unlocking" and until and until <= now))
+
+
 def _last_attack_id(user) -> int:
     return AttackLog.objects.filter(attacker_id=user.id).aggregate(m=Max("id"))["m"] or 0
 
@@ -112,9 +142,10 @@ def home(request, user):
     season.close_due_season()
     user.refresh_from_db()
     chests = AC.get_user_chests(user)
-    power = A.active_power(user)
-    lg, nxt = constants.league_for_cup(user.cup), constants.next_league(user.cup)
     creature = Creature.objects.filter(owner=user, is_active=True).first()
+    my = _my(user, creature) if creature is not None else None
+    power = my["power"] if my else 0  # = game.arena.active_power, with this player's research fresh
+    lg, nxt = constants.league_for_cup(user.cup), constants.next_league(user.cup)
     history = []
     for log in A.recent_attacks_received(user):
         history.append({
@@ -134,7 +165,6 @@ def home(request, user):
         "revenges": len(A.revengeable_attacks(user)),
         "energy_cost": constants.ARENA_ATTACK_ENERGY_COST,
         "loot_percent": int(constants.ARENA_LOOT_PERCENT * 100),
-        "active": creature_dict(creature) if creature else None,
         "img": asset_img(get_feature_image_path("arena")),
     }
 
@@ -142,10 +172,7 @@ def home(request, user):
 @endpoint()
 def badges(request, user):
     """Cheap numbers for the hub tiles (one indexed query, nothing is advanced or settled)."""
-    now = timezone.now()
-    rows = ArenaChest.objects.filter(user=user).values_list("status", "unlock_finishes_at")
-    ready = sum(1 for status, until in rows if status == "ready" or (status == "unlocking" and until and until <= now))
-    return {"ready_chests": ready}
+    return {"ready_chests": ready_chest_count(user)}
 
 
 # ══════════════════════════════ matchmaking ══════════════════════════════
@@ -176,12 +203,12 @@ def _refit(user, pending: dict, creature) -> None:
     pending["c"] = creature.id
 
 
-def _card(user, pending: dict, seen: list[int], note: str = "") -> dict:
-    """The «opponent found» card (bot: _render_opponent) + the token that carries it."""
+def _card(user, pending: dict, seen: list[int], note: str = "", creature=None, foe=None) -> dict:
+    """The «opponent found» card (bot: _render_opponent) + the token that carries it.
+    `creature` / `foe` = the two active creatures when the caller has already loaded them."""
     from game.energy import get_max_energy, sync_energy
 
-    creature = active_creature(user)
-    my = creature_dict(creature)
+    my = _my(user, creature)
     opp = {
         "is_fake": bool(pending["is_fake"]), "label": _txt(pending["label"]),
         "alliance": pending.get("alliance") or None,
@@ -193,7 +220,7 @@ def _card(user, pending: dict, seen: list[int], note: str = "") -> dict:
         opp["rarity"], opp["star"] = A._bot_display_tier(int(pending["cup"]))
         opp["img"] = species_img(pending.get("creature_name") or "", pending.get("element") or "fire", opp["rarity"], opp["star"])
     else:
-        tc = Creature.objects.filter(owner_id=pending["user_id"], is_active=True).first()
+        tc = foe or Creature.objects.filter(owner_id=pending["user_id"], is_active=True).first()
         if tc is not None:
             opp.update({"rarity": tc.rarity, "star": tc.star_level, "level": tc.level, "img": creature_img(tc)})
     return {
@@ -214,6 +241,7 @@ def _card(user, pending: dict, seen: list[int], note: str = "") -> dict:
 def _find(user, seen: list[int], note: str = "") -> dict:
     """bot: _find_sync + the bookkeeping of arena_find_callback."""
     opponent = A.find_opponent(user, exclude_ids=seen)
+    foe = None
     if opponent.get("is_fake"):
         loot, dna = constants.arena_loot_roll(user.cup)  # rolled ONCE; card and payout share it
         user_id = None
@@ -225,6 +253,15 @@ def _find(user, seen: list[int], note: str = "") -> dict:
         dna = max(0, target.dna_fragments // 10)
         user_id = target.id
         seen = ([i for i in seen if i != target.id] + [target.id])[-RECENT_MAX:]
+        foe = Creature.objects.filter(owner=target, is_active=True).first()
+        if foe is not None:
+            # = game.arena.active_power(target), with the defender's research re-read (see `_my`)
+            from game import research
+            from game.creature import creature_power
+            from game.equipment import get_equipped_items
+
+            research.attach_research(target, foe)
+            opponent["power"] = creature_power(foe, get_equipped_items(foe))
     pending = {
         "is_fake": opponent["is_fake"], "user_id": user_id, "label": opponent["label"],
         "alliance": opponent.get("alliance"),
@@ -235,7 +272,7 @@ def _find(user, seen: list[int], note: str = "") -> dict:
     }
     creature = active_creature(user)
     pending["c"] = creature.id
-    return _card(user, pending, seen, note)
+    return _card(user, pending, seen, note, creature, foe)
 
 
 _CARD_KEYS = ("is_fake", "label", "cup", "power", "loot_pool", "loot_gold", "loot_dna", "n", "c")
@@ -288,8 +325,9 @@ def card(request, user, data):
     seen = _seen(data)
     if pending is None or pending["n"] != _last_attack_id(user):
         return _find(user, seen, NOTE_STALE)
-    _refit(user, pending, active_creature(user))
-    return _card(user, pending, seen)
+    creature = active_creature(user)
+    _refit(user, pending, creature)
+    return _card(user, pending, seen, creature=creature)
 
 
 @endpoint()
@@ -313,8 +351,9 @@ def swap(request, user, data):
     seen = _seen(data)
     if pending is None or pending["n"] != _last_attack_id(user):
         return _find(user, seen, NOTE_STALE)
-    _refit(user, pending, active_creature(user))
-    return _card(user, pending, seen)
+    creature = active_creature(user)
+    _refit(user, pending, creature)
+    return _card(user, pending, seen, creature=creature)
 
 
 def _creature_details(creature) -> dict:
@@ -385,6 +424,7 @@ def _attack_tx(user, pending: dict):
     opponent = dict(pending)
     opponent["user"] = target
 
+    _fresh_research(user, target)
     result = A.attack(user, opponent)
     user.refresh_from_db()
     record_action(user, "arena_attack")
@@ -512,8 +552,9 @@ def revenge_card(request, user):
     target = log.attacker
     if target is None:
         raise GameError("حریف دیگه در دسترس نیست.")
-    my = creature_dict(active_creature(user))
+    my = _my(user)
     tc = Creature.objects.filter(owner=target, is_active=True).first()
+    _fresh_research(target)
     opp_power = A.active_power(target)
     return {
         "log_id": log.id, "my": my, "my_cup": user.cup,
@@ -556,6 +597,7 @@ def _revenge_tx(user, log_id: int):
     spend_energy(user, constants.ARENA_ATTACK_ENERGY_COST, "انتقام")
     user.save(update_fields=["energy", "energy_updated_at"])
 
+    _fresh_research(user, target)
     opponent = {
         "is_fake": False, "user": target,
         "label": log.attacker_label or lab_display(target),
@@ -663,9 +705,14 @@ def _chests_payload(user) -> dict:
 
 @endpoint()
 def chests(request, user):
-    out = _chests_payload(user)
-    out["guide"] = _chest_guide()
-    return out
+    return _chests_payload(user)
+
+
+@endpoint()
+def chest_guide(request, user):
+    """«راهنمای جوایز لیگ‌ها» — static tables (4 tiers x 16 leagues); the app asks for it once,
+    when the sheet is opened, instead of carrying 8 KB with every chest request."""
+    return {"guide": _chest_guide()}
 
 
 @endpoint("POST")
@@ -771,6 +818,7 @@ routes = [
     ("revenge/", revenge),
     ("season/", season_view),
     ("chests/", chests),
+    ("chests/guide/", chest_guide),
     ("chests/start/", chest_start),
     ("chests/queue/", chest_queue),
     ("chests/speedup/", chest_speedup),

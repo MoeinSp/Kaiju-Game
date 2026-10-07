@@ -1,6 +1,8 @@
 /* Fusion («تالار ادغام») and the Monster Cave («غار هیولا»).
    Screens: br_fusion (ready pairs), br_fuse (one creature's fusion card), br_cave (the cave),
-   br_pair (choose two parents). API: breed/…  */
+   br_pair (choose two parents). API: breed/…
+   The cave redraws from the answer of every action (no second request) and keeps ONE countdown
+   interval however often it redraws. */
 (function (K) {
   "use strict";
 
@@ -15,6 +17,52 @@
   function pct(x) { return '<span class="num">' + Number(x) + "%</span>"; }
   function rar(r) { return '<b class="c-' + r + '">' + K.esc(K.rarLabel(r)) + "</b>"; }
   function noop() {}
+  function fmt(x) { return Number(x || 0).toLocaleString("en-US"); }
+  /* Countdowns that survive in-place redraws: each call replaces the previous interval of its
+     channel (K.timers starts a new one every time and only navigation clears them).
+     <span class="timer" data-left="seconds" data-done="text">, <div class="progress" data-br-left data-br-total><i>. */
+  var ticking = {};
+  function live(root, channel, onDone) {
+    if (ticking[channel]) clearInterval(ticking[channel]);
+    ticking[channel] = null;
+    var els = Array.prototype.slice.call(root.querySelectorAll(".timer[data-left]")), bars = Array.prototype.slice.call(root.querySelectorAll("[data-br-left]"));
+    if (!els.length && !bars.length) return;
+    var t0 = Date.now() / 1000, fired = false;
+    function tick() {
+      var gone = Date.now() / 1000 - t0;
+      els.forEach(function (el) {
+        if (el._done) return;
+        var left = Number(el.dataset.left) - gone;
+        if (left <= 0) { el._done = true; el.classList.add("done"); el.innerHTML = K.ic("check") + (el.dataset.done || "آماده"); if (!fired && onDone) { fired = true; onDone(el); } }
+        else el.innerHTML = K.ic("clock") + '<span class="num">' + K.clock(left) + "</span>";
+      });
+      bars.forEach(function (el) {
+        var total = Number(el.dataset.brTotal), left = Number(el.dataset.brLeft) - gone;
+        if (total > 0 && el.firstChild) el.firstChild.style.width = (Math.max(0, Math.min(1, 1 - left / total)) * 100).toFixed(1) + "%";
+      });
+    }
+    tick(); ticking[channel] = K.every(1000, tick);
+  }
+  function bar(left, total, kind) {
+    var ratio = total > 0 ? 1 - left / total : 1;
+    return '<div class="progress ' + (kind || "") + '" data-br-left="' + Number(left) + '" data-br-total="' + Number(total) + '"><i style="width:' + (Math.max(0, Math.min(1, ratio)) * 100).toFixed(1) + '%"></i></div>';
+  }
+  /* The newborn / the fused creature: its art in a rarity-coloured frame, then what came with it.
+     o: {title, text, creature, chips:[html], items:[item], button} → Promise (resolves when closed) */
+  function reveal(o) {
+    return new Promise(function (resolve) {
+      var c = o.creature;
+      K.sheet('<div class="grab"></div><div class="br-reveal ' + c.rarity + '"><div class="br-rays"></div><div class="br-rart"><img src="' + c.img + '&s=l" alt="">' +
+        '<span class="el e-' + c.element + '">' + K.ic(K.EL_ICON[c.element] || "atom") + "</span></div>" +
+        '<div class="br-rstars">' + K.stars(c.star) + "</div><h3>" + K.esc(o.title) + '</h3><div class="br-rname">' + K.esc(c.name) + "</div>" +
+        '<div class="meta">' + K.rarTag(c.rarity) + K.elTag(c.element) + K.tag("سطح " + K.n(c.level)) + (c.power != null ? K.tag(K.n(c.power), "var(--accent)", "power") : "") + "</div>" +
+        (o.text ? "<p>" + K.esc(o.text) + "</p>" : "") +
+        ((o.chips || []).length ? '<div class="loot"><div class="items">' + o.chips.map(function (h) { return '<span class="it">' + h + "</span>"; }).join("") + "</div></div>" : "") +
+        ((o.items || []).length ? '<div class="loot"><div class="cards">' + o.items.map(function (e) { return K.itemTile(e, { tag: "div" }); }).join("") + "</div></div>" : "") + "</div>" +
+        '<div class="pad" style="margin-top:16px"><button class="btn primary block" data-close>' + K.esc(o.button || "عالیه") + "</button></div>", { onClose: resolve });
+      K.haptic("ok");
+    });
+  }
 
   /* one square slot of a pair: a creature's art, or an empty «choose» box */
   function slot(c, act, label) {
@@ -62,12 +110,12 @@
           } else {
             html += '<div class="h2">' + K.ic("check") + "آماده‌ی ادغام</div>";
             if (present.length > 1) html += '<div class="row"><button class="chip ' + (fFilter ? "" : "on") + '" data-act="filter" data-r="">همه</button>' + present.slice().reverse().map(function (r) {
-              return '<button class="chip ' + (fFilter === r ? "on" : "c-" + r) + '" data-act="filter" data-r="' + r + '">' + K.ic("gem") + K.esc(K.rarLabel(r)) + "</button>"; }).join("") + "</div>";
+              return '<button class="chip ' + (fFilter === r ? "on" : "c-" + r) + '" data-act="filter" data-r="' + r + '">' + K.ic("gem") + K.esc(K.rarLabel(r)) + ' <span class="num">(' + d.pairs.filter(function (p) { return p.rarity === r; }).length + ")</span></button>"; }).join("") + "</div>";
             var last = 0;
             shown.forEach(function (p) {
               if (p.star !== last) { last = p.star; html += '<div class="br-step">' + K.stars(p.star) + K.ic("chevron") + K.stars(p.star + 1) + "</div>"; }
               html += '<button class="panel br-fcard ' + p.rarity + '" data-act="open" data-id="' + p.a.id + '" data-b="' + p.b.id + '">' +
-                '<span class="br-duo"><img src="' + p.a.img + '" alt=""><img src="' + p.b.img + '" alt=""></span>' +
+                '<span class="br-duo"><img loading="lazy" decoding="async" src="' + p.a.img + '" alt=""><img loading="lazy" decoding="async" src="' + p.b.img + '" alt=""></span>' +
                 '<span class="grow"><span class="b cut" style="display:block">' + K.esc(p.name) + (p.count > 2 ? ' <span class="muted sm num">+' + (p.count - 2) + "</span>" : "") + "</span>" +
                 '<span class="sm c-' + p.rarity + '">' + K.esc(K.rarLabel(p.rarity)) + '</span> <span class="sm muted">' + K.n(p.count) + " تا داری</span></span>" +
                 '<span class="br-cost ' + (p.enough ? "t-coin" : "t-bad") + '">' + K.ic("coin") + K.short(p.cost) + '</span><span class="faint">' + K.ic("chevron") + "</span></button>";
@@ -75,7 +123,7 @@
           }
           if (d.blocked.length) {
             html += '<div class="h2">' + K.ic("lock") + 'فعلاً نمی‌شه</div><div class="panel list">' + d.blocked.map(function (b) {
-              return '<button data-act="blocked" data-id="' + b.sample.id + '"><img class="th" src="' + b.sample.img + '" alt=""><span class="t">' + K.esc(b.name) + " " + K.stars(b.star) +
+              return '<button data-act="blocked" data-id="' + b.sample.id + '"><img class="th" loading="lazy" decoding="async" src="' + b.sample.img + '" alt=""><span class="t">' + K.esc(b.name) + " " + K.stars(b.star) +
                 "<small>" + blockedWhy(b, d) + '</small></span><span class="chev">' + K.ic("chevron") + "</span></button>";
             }).join("") + "</div>";
           }
@@ -156,8 +204,10 @@
               });
               var sum = { coins: 0, dna: 0, diamonds: 0 };
               r.missions.forEach(function (m) { sum.coins += m.coins || 0; sum.dna += m.dna || 0; sum.diamonds += m.diamonds || 0; });
-              K.reward({ title: "ادغام موفق بود!", icon: "merge", text: "والدین سوزانده شدن و یه هیولای جدید متولد شد" + (r.inherited ? "؛ یه تجهیزات هم از والدین به ارث رسید." : "."),
-                creatures: [r.child], items: r.inherited ? [r.inherited] : [], coins: sum.coins, dna: sum.dna, diamonds: sum.diamonds, extra: extra }).then(function () {
+              var chips = extra.slice();
+              if (sum.coins || sum.dna || sum.diamonds) chips.unshift(K.amounts(sum));
+              reveal({ title: "ادغام موفق بود!", creature: r.child, chips: chips, items: r.inherited ? [r.inherited] : [],
+                text: "والدین سوزانده شدن و یه هیولای " + r.child.star + " ستاره متولد شد" + (r.inherited ? "؛ یه تجهیزات هم از والدین به ارث رسید." : ".") }).then(function () {
                 if (!ctx.alive()) return;
                 K.back();
                 if (params.from === "creature") K.replace("creature", { id: r.child.id });
@@ -170,16 +220,9 @@
   });
 
   // ═════════════════════════ the cave ═════════════════════════
-  var caveReady = 0, badgeAt = 0;
-  function setBadge(n) {
-    n = Number(n) || 0;
-    if (n === caveReady) return;
-    caveReady = n;
-    var t = document.querySelector('.hubtile[data-hub="cave"]'); if (!t) return;
-    var b = t.querySelector(".badge");
-    if (n) { if (!b) { b = document.createElement("span"); b.className = "badge"; t.insertBefore(b, t.querySelector("b")); } b.textContent = n; }
-    else if (b) b.remove();
-  }
+  /* The tile's badge is server-side (api `badges` → K.badges.cave, refreshed with the profile); after an
+     action here the number is corrected at once so the hub is right the moment the player goes back. */
+  function setBadge(n) { if (K.badges) K.badges.cave = Number(n) || 0; }
   function countReady(d) {
     return d.jobs.filter(function (j) { return j.ready; }).length + d.eggs.filter(function (e) { return e.ready; }).length;
   }
@@ -211,67 +254,86 @@
     title: "غار هیولا", tab: "base",
     render: function (root, params, ctx) {
       return K.api.get("breed/cave/").then(function (d) {
-        setBadge(countReady(d)); badgeAt = Date.now();
+        var refreshing = false;
         K.on(root, "base", function () { K.tab("base"); });
-        if (!d.built) { root.innerHTML = lockedState(d); return; }
+        if (!d.built) { setBadge(0); root.innerHTML = lockedState(d); return; }
         ctx.actions('<button class="iconbtn" id="br-guide" aria-label="راهنما">' + K.ic("info") + "</button>");
         var gb = document.getElementById("br-guide"); if (gb) gb.onclick = function () { guideSheet(d.rules); };
 
-        var html = '<div class="banner"' + (d.img ? ' style="background-image:url(\'' + d.img + '&s=l\')"' : "") + '><div class="grow"><div class="ttl">غار هیولا</div>' +
-          '<div class="sm" style="color:#cfd8ee">دو هیولا بفرست، یه تخمِ اسرارآمیز بگیر.</div></div>' +
-          '<span class="tag" style="color:var(--dna)">' + K.ic("heart") + '<span class="num">' + d.jobs.length + " / " + d.max_jobs + "</span> جفت</span></div>";
-        if (d.rules.luck_pct > 0) html += '<div class="callout good mt">' + K.ic("spark") + "<span><b>هفته‌ی غار خوش‌شانس:</b> تخم‌هایی که این هفته باز می‌شن " + pct(d.rules.luck_pct) + " شانسِ بیشتر برای رده‌ی بالا دارن.</span></div>";
+        function draw() {
+          setBadge(countReady(d));
+          var html = '<div class="banner"' + (d.img ? ' style="background-image:url(\'' + d.img + '&s=l\')"' : "") + '><div class="grow"><div class="ttl">غار هیولا</div>' +
+            '<div class="sm" style="color:#cfd8ee">دو هیولا بفرست، یه تخمِ اسرارآمیز بگیر.</div></div>' +
+            '<span class="tag" style="color:var(--dna)">' + K.ic("heart") + '<span class="num">' + d.jobs.length + " / " + d.max_jobs + "</span> جفت</span></div>";
+          if (d.rules.luck_pct > 0) html += '<div class="callout good mt">' + K.ic("spark") + "<span><b>هفته‌ی غار خوش‌شانس:</b> تخم‌هایی که این هفته باز می‌شن " + pct(d.rules.luck_pct) + " شانسِ بیشتر برای رده‌ی بالا دارن.</span></div>";
 
-        html += '<div class="h2">' + K.ic("heart") + "جفت‌گیری</div>";
-        d.jobs.forEach(function (j, i) {
-          var num = d.max_jobs > 1 || d.jobs.length > 1 ? " " + (i + 1) : "";
-          html += '<div class="panel pad br-job"><div class="flex between"><b>جفت' + num + "</b>" +
-            (j.ready ? '<span class="timer done">' + K.ic("check") + "تموم شد</span>" : '<span class="timer" data-left="' + (j.left + 1) + '" data-done="تموم شد"></span>') + "</div>" +
-            pair(j.a, j.b, "heart", "", "", "", "") +
-            (j.ready ? '<button class="btn good block" data-act="lay" data-id="' + j.id + '">' + K.ic("egg") + "تخم بذار و آزادشون کن</button>"
-              : K.bar(1 - j.left / j.total, "", "") + '<div class="btns mt"><button class="btn" data-act="rush" data-id="' + j.id + '" data-price="' + j.finish_price + '">' + K.ic("bolt") + 'فوری‌کن<span class="cost t-diamond">' + K.ic("gem") + K.n(j.finish_price) + "</span></button>" +
-                '<button class="btn ghost t-bad" data-act="cancel" data-id="' + j.id + '">' + K.ic("close") + "لغو</button></div>") + "</div>";
-        });
-        if (d.jobs.length < d.max_jobs) {
-          html += d.free_count >= 2
-            ? '<button class="panel br-new" data-act="new"><span class="br-plus">' + K.ic("plus") + "</span><b>" + (d.jobs.length ? "جفت بعدی رو بفرست غار" : "جفت بفرست غار") + '</b><small class="muted">غار ' + (d.jobs.length ? "یه جای خالی داره" : "خالیه") + " · " + K.n(d.free_count) + " هیولای آزاد داری</small></button>"
-            : '<div class="callout warn">' + K.ic("warn") + "<span>برای جفت‌گیری حداقل <b>دو</b> هیولای آزاد لازم داری. هیولای فعال و هیولاهایی که سر کارن حساب نمی‌شن.</span></div>";
-        } else if (d.max_jobs === 1) {
-          html += '<p class="note" style="margin-top:10px">ظرفیت غار پره. با اشتراک طلایی می‌تونی 2 جفت همزمان بفرستی.</p>';
+          html += '<div class="h2">' + K.ic("heart") + "جفت‌گیری</div>";
+          d.jobs.forEach(function (j, i) {
+            var num = d.max_jobs > 1 || d.jobs.length > 1 ? " " + (i + 1) : "";
+            html += '<div class="panel pad br-job' + (j.ready ? " ready" : "") + '"><div class="flex between"><b>جفت' + num + "</b>" +
+              (j.ready ? '<span class="timer done">' + K.ic("check") + "تموم شد</span>" : '<span class="timer" data-left="' + (j.left + 1) + '" data-done="تموم شد"></span>') + "</div>" +
+              pair(j.a, j.b, "heart", "", "", "", "") +
+              (j.ready ? '<button class="btn good block" data-act="lay" data-id="' + j.id + '">' + K.ic("egg") + "تخم بذار و آزادشون کن</button>"
+                : bar(j.left, j.total, "") + '<div class="btns mt"><button class="btn" data-act="rush" data-id="' + j.id + '" data-price="' + j.finish_price + '">' + K.ic("bolt") + 'فوری‌کن<span class="cost t-diamond">' + K.ic("gem") + K.n(j.finish_price) + "</span></button>" +
+                  '<button class="btn ghost t-bad" data-act="cancel" data-id="' + j.id + '">' + K.ic("close") + "لغو</button></div>") + "</div>";
+          });
+          if (d.jobs.length < d.max_jobs) {
+            html += d.free_count >= 2
+              ? '<button class="panel br-new" data-act="new"><span class="br-plus">' + K.ic("plus") + "</span><b>" + (d.jobs.length ? "جفت بعدی رو بفرست غار" : "جفت بفرست غار") + '</b><small class="muted">غار ' + (d.jobs.length ? "یه جای خالی داره" : "خالیه") + " · " + K.n(d.free_count) + " هیولای آزاد داری</small></button>"
+              : '<div class="callout warn">' + K.ic("warn") + "<span>برای جفت‌گیری حداقل <b>دو</b> هیولای آزاد لازم داری. هیولای فعال و هیولاهایی که سر کارن حساب نمی‌شن.</span></div>";
+          } else if (d.max_jobs === 1) {
+            html += '<p class="note" style="margin-top:10px">ظرفیت غار پره. با اشتراک طلایی می‌تونی 2 جفت همزمان بفرستی.</p>';
+          }
+
+          if (d.eggs.length) {
+            html += '<div class="h2">' + K.ic("egg") + "تخم‌های در حال رشد (" + K.n(d.eggs.length) + ')</div><div class="panel br-eggs">' + d.eggs.map(function (e, i) {
+              return '<div class="br-egg' + (e.ready ? " ready" : "") + '"><span class="br-eggic">' + K.ic(e.ready ? "hatch" : "egg") + '</span><span class="grow"><b>تخم <span class="num">#' + (i + 1) + "</span></b>" +
+                (e.ready ? '<span class="sm t-good" style="display:block">آماده‌ی سر باز کردنه!</span>' : '<span class="sm" style="display:block"><span class="timer" data-left="' + (e.left + 1) + '"></span></span>' + bar(e.left, e.total, "gold")) + "</span>" +
+                (e.ready ? '<button class="btn good sm" data-act="hatch" data-id="' + e.id + '">' + K.ic("hatch") + "سر باز کن</button>"
+                  : '<button class="btn sm" data-act="egg-rush" data-id="' + e.id + '" data-price="' + e.finish_price + '">' + K.ic("bolt") + 'فوری<span class="cost t-diamond">' + K.ic("gem") + K.n(e.finish_price) + "</span></button>") + "</div>";
+            }).join("") + '</div><p class="note">چی توی تخم‌هاست؟ تا سر باز نکنن هیچ‌کس نمی‌دونه.</p>';
+          }
+          html += '<button class="btn ghost block mt" data-act="guide">' + K.ic("doc") + "راهنمای کامل غار</button>";
+          root.innerHTML = html;
+          // a countdown reached zero: the buttons that speed it up are gone at once (nothing left to pay for)
+          // and the server is asked what is ready now
+          live(root, "cave", function (el) {
+            var card = el.closest(".br-job, .br-egg");
+            if (card) Array.prototype.forEach.call(card.querySelectorAll('[data-act="rush"],[data-act="egg-rush"],[data-act="cancel"]'), function (b) { b.disabled = true; });
+            if (refreshing) return;
+            refreshing = true;
+            K.after(1200, function () {
+              K.api.get("breed/cave/").then(function (f) { refreshing = false; if (ctx.alive()) apply(f); }, function () { refreshing = false; });
+            });
+          });
         }
+        function apply(f) { d = f; draw(); }
+        draw();
 
-        if (d.eggs.length) {
-          html += '<div class="h2">' + K.ic("egg") + "تخم‌های در حال رشد (" + K.n(d.eggs.length) + ')</div><div class="panel br-eggs">' + d.eggs.map(function (e, i) {
-            return '<div class="br-egg' + (e.ready ? " ready" : "") + '"><span class="br-eggic">' + K.ic(e.ready ? "hatch" : "egg") + '</span><span class="grow"><b>تخم <span class="num">#' + (i + 1) + "</span></b>" +
-              (e.ready ? '<span class="sm t-good" style="display:block">آماده‌ی سر باز کردنه!</span>' : '<span class="sm" style="display:block"><span class="timer" data-left="' + (e.left + 1) + '"></span></span>' + K.bar(1 - e.left / e.total, "gold", "")) + "</span>" +
-              (e.ready ? '<button class="btn good sm" data-act="hatch" data-id="' + e.id + '">' + K.ic("hatch") + "سر باز کن</button>"
-                : '<button class="btn sm" data-act="egg-rush" data-id="' + e.id + '" data-price="' + e.finish_price + '">' + K.ic("bolt") + 'فوری<span class="cost t-diamond">' + K.ic("gem") + K.n(e.finish_price) + "</span></button>") + "</div>";
-          }).join("") + '</div><p class="note">چی توی تخم‌هاست؟ تا سر باز نکنن هیچ‌کس نمی‌دونه.</p>';
-        }
-        html += '<button class="btn ghost block mt" data-act="guide">' + K.ic("doc") + "راهنمای کامل غار</button>";
-        root.innerHTML = html;
-
-        var reloading = false;
-        K.timers(root, function () { if (reloading) return; reloading = true; K.after(1500, ctx.reload); });
         K.on(root, "guide", function () { guideSheet(d.rules); });
-        K.on(root, "new", function () { K.go("br_pair", {}); });
+        K.on(root, "new", function () { K.go("br_pair", { cave: d, at: Date.now() }); });
         K.on(root, "lay", function (el) {
-          K.api.post("breed/cave/lay/", { job: +el.dataset.id }, el).then(function () {
-            K.invalidate("profile/creatures/"); K.haptic("ok"); K.toast("تخم گذاشته شد! والدها آزاد شدن."); ctx.reload();
+          K.api.post("breed/cave/lay/", { job: +el.dataset.id }, el).then(function (r) {
+            K.invalidate("profile/creatures/"); K.haptic("ok"); K.toast("تخم گذاشته شد! والدها آزاد شدن."); if (ctx.alive()) apply(r);
           }).catch(noop);
         });
         K.on(root, "hatch", function (el) {
           K.api.post("breed/cave/hatch/", { egg: +el.dataset.id }, el).then(function (r) {
             K.invalidate("profile/creatures/");
-            return K.reward({ title: "تخم سر باز کرد!", icon: "hatch", creatures: [r.child], button: "عالیه",
-              text: (r.top_reached ? "به سقف رده رسید!" : "این‌بار نایابیِ پایین‌تری دراومد.") + " والدین: " + r.parents.join(" و ") });
-          }).then(function () { ctx.reload(); }).catch(noop);
+            if (ctx.alive() && r.cave) apply(r.cave);
+            return reveal({ title: "تخم سر باز کرد!", creature: r.child, button: "عالیه",
+              text: (r.top_reached ? "به بالاترین رده‌ی ممکنِ این جفت رسید!" : "این‌بار نایابیِ پایین‌تری دراومد.") + " والدین: " + r.parents.join(" و ") });
+          }).catch(noop);
         });
         function rush(el, path, body, what, done) {
           K.confirm({ title: what, icon: "bolt", ok: "آره، فوری‌کن", cancel: "نه",
-            html: "<p>با <b class=\"t-diamond\">" + K.n(el.dataset.price) + " الماس</b> " + done + "</p><p class=\"sm\">موجودی الماس: " + K.n(d.diamonds) + "</p>" }).then(function (yes) {
+            html: "<p>با حداکثر <b class=\"t-diamond\">" + K.n(el.dataset.price) + " الماس</b> " + done + "</p><p class=\"sm\">هرچی زمانِ کمتری مونده باشه ارزون‌تر حساب می‌شه. موجودی الماس: " + K.n(K.res ? K.res.diamonds : d.diamonds) + "</p>" }).then(function (yes) {
             if (!yes) return;
-            K.api.post(path, body, el).then(function () { K.invalidate("profile/creatures/"); K.haptic("ok"); K.toast("فوری شد!"); ctx.reload(); }).catch(noop);
+            var before = K.res ? K.res.diamonds : null;
+            K.api.post(path, body, el).then(function (r) {
+              var spent = before != null && K.res ? before - K.res.diamonds : 0;
+              K.invalidate("profile/creatures/"); K.haptic("ok"); K.toast(spent > 0 ? "فوری شد · " + fmt(spent) + " الماس" : "آماده بود؛ الماسی کم نشد."); if (ctx.alive()) apply(r);
+            }).catch(noop);
           });
         }
         K.on(root, "rush", function (el) { rush(el, "breed/cave/finish/", { job: +el.dataset.id }, "فوری‌کردن جفت‌گیری", "همین الان تخم گذاشته می‌شه و والدها آزاد می‌شن."); });
@@ -279,7 +341,7 @@
         K.on(root, "cancel", function (el) {
           K.confirm({ title: "لغو جفت‌گیری", danger: true, ok: "آره، لغو کن", cancel: "انصراف", text: "هر دو هیولا آزاد می‌شن ولی DNAای که خرج کردی برنمی‌گرده. مطمئنی؟" }).then(function (yes) {
             if (!yes) return;
-            K.api.post("breed/cave/cancel/", { job: +el.dataset.id }, el).then(function () { K.invalidate("profile/creatures/"); K.toast("لغو شد. DNA برنمی‌گرده."); ctx.reload(); }).catch(noop);
+            K.api.post("breed/cave/cancel/", { job: +el.dataset.id }, el).then(function (r) { K.invalidate("profile/creatures/"); K.toast("لغو شد. DNA برنمی‌گرده."); if (ctx.alive()) apply(r); }).catch(noop);
           });
         });
       });
@@ -290,8 +352,10 @@
   K.screen("br_pair", {
     title: "جفت بفرست غار", tab: "base",
     render: function (root, params, ctx) {
-      return K.api.get("breed/cave/").then(function (cave) {
+      var fresh = params.cave && Date.now() - (params.at || 0) < 60000;
+      return (fresh ? Promise.resolve(params.cave) : K.api.get("breed/cave/")).then(function (cave) {
         var freeIds = {}, info = null, loading = false, seq = 0;
+        params.cave = null;   // only the first paint may trust it
         cave.free_ids.forEach(function (id) { freeIds[id] = 1; });
         if (params.a && !freeIds[params.a.id]) params.a = null;
         if (params.b && !freeIds[params.b.id]) params.b = null;
@@ -371,27 +435,19 @@
 
   // ═════════════════════════ entry points ═════════════════════════
   K.hub("base", { id: "fusion", title: "ادغام", sub: "دو هیولای یکسان، یه ستاره بالاتر", icon: "merge", color: "var(--accent-2)", go: "br_fusion", order: 40, hall: HALL });
-  K.hub("base", {
-    id: "cave", title: "غار", sub: "جفت بفرست، تخم بگیر", icon: "egg", color: "var(--dna)", go: "br_cave", order: 42, hall: HALL,
-    badge: function (me) {
-      // one light request per minute, never per tile render; the tile is patched when it answers
-      if (me && me.hall_level >= HALL && Date.now() - badgeAt > 60000) {
-        badgeAt = Date.now();
-        K.api.get("breed/badge/").then(function (r) { setBadge(r.cave); }).catch(noop);
-      }
-      return caveReady;
-    }
-  });
+  K.hub("base", { id: "cave", title: "غار", sub: "جفت بفرست، تخم بگیر", icon: "egg", color: "var(--dna)", go: "br_cave", order: 42, hall: HALL });
 
-  /* «ادغام» on the creature screen — only when the (already cached) collection holds another
-     creature of the same species, rarity and star. The fusion card then checks the rest. */
+  /* «ادغام» on the creature screen, like the bot's «ورود به فیوژن (N ستاره)»: always there below the last
+     star — the fusion card explains what is missing. With the collection cached it also says whether a
+     twin is waiting. Drawn as one of the upgrade-path tiles of 30_creature. */
   if (K.creatureActions) K.creatureActions.push({
     order: 40,
     render: function (c, me) {
-      var data = K.cache["profile/creatures/"];
-      if (!data || !me || me.hall_level < HALL || c.star >= 5) return "";
-      var twin = data.creatures.some(function (x) { return x.id !== c.id && x.species === c.species && x.rarity === c.rarity && x.star === c.star; });
-      return twin ? '<button class="btn" data-act="br-fuse">' + K.ic("merge") + "ادغام</button>" : "";
+      if (!me || me.hall_level < HALL || c.star >= 5) return "";
+      var data = K.cache["profile/creatures/"], twins = 0;
+      if (data) data.creatures.forEach(function (x) { if (x.id !== c.id && x.species === c.species && x.rarity === c.rarity && x.star === c.star) twins++; });
+      return '<button class="cr-path wide' + (twins ? "" : " dim") + '" data-act="br-fuse" style="--pc:var(--accent-2)"><span class="ico-box">' + K.ic("merge") + '</span><span class="grow"><b>ادغام · رسیدن به ' + K.n(c.star + 1) + " ستاره</b><small>" +
+        (twins ? K.n(twins) + " هیولای یکسان داری؛ سقف سطح و اندام‌ها بالاتر می‌ره" : "یه «" + K.esc(c.species) + "» دیگه با همین نایابی و ستاره لازمه") + '</small></span><span class="chev">' + K.ic("chevron") + "</span></button>";
     },
     bind: function (root, c) { K.on(root, "br-fuse", function () { K.go("br_fuse", { id: c.id, from: "creature" }); }); }
   });

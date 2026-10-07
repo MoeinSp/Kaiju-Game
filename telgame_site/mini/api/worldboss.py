@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import html
 
+from django.db.models import Q
 from django.utils import timezone
 
-from bio_lab.models import User
+from bio_lab.models import User, WorldBoss, WorldBossHit
 from game import constants, worldboss
 from telgame_site.mini.api.hunt import missions_out, swap_to
 from telgame_site.mini.core import asset_img, clean, creature_dict, endpoint, need_int, species_img
@@ -54,15 +55,48 @@ def _rules() -> dict:
     }
 
 
+def _outcome(status: str) -> str:
+    """How a finished boss ended. A boss whose window ran out stays «active» in the table
+    until the 5-minute job settles it — game.worldboss._settle turns exactly that into an
+    escape, so that is what it already is for the player."""
+    return "dead" if status == WorldBoss.DEAD else "escaped"
+
+
+def _last_fight(user: User) -> dict | None:
+    """The player's own part in the LAST boss — shown while no boss is up, so the end of a
+    fight reads as a result. The boss is sized to ESCAPE on a normal day (about half its HP
+    is dealt): an escape is the usual ending, and every hit was already paid on the spot."""
+    prev = worldboss.last_boss()
+    if prev is None:
+        return None
+    entry = worldboss.my_entry(prev, user)
+    damage = entry.damage if entry else 0
+    out = {
+        "id": prev.id, "outcome": _outcome(prev.status), "element": prev.element,
+        # the same reading as the «فرار کرد» DM of game.worldboss._settle
+        "hp_left_pct": round(100 * max(0, prev.current_hp) / max(1, prev.max_hp)),
+        "max_hp": prev.max_hp, "dealt": prev.max_hp - max(0, prev.current_hp),
+        "my_damage": damage, "my_hits": entry.hits if entry else 0, "my_rank": None,
+        "settled": bool(prev.settled), "killer": prev.killer_id == user.id,
+    }
+    if damage > 0:
+        # same order as the settlement: damage, then who got there first
+        ahead = WorldBossHit.objects.filter(boss=prev).filter(
+            Q(damage__gt=damage) | Q(damage=damage, id__lt=entry.id)).count()
+        out["my_rank"] = ahead + 1
+    return out
+
+
 def _live(user: User, data: dict | None = None) -> dict:
-    """The part that changes while the screen is open (polled every few seconds)."""
+    """The part that changes while the screen is open (the light poll)."""
     data = data or worldboss.panel_state(user)
     boss = data["boss"]
     out = {"active": boss is not None, "energy": data["energy"], "max_energy": data["max_energy"], "has_creature": data["has_creature"]}
     if boss is None:
         last = data.get("last")
         out["next"] = _next_window(data["next_spawn_at"])
-        out["last"] = None if not last else {"name": _name(last["name"]), "status": last["status"], "fighters": last["fighters"]}
+        out["last"] = None if not last else {"name": _name(last["name"]), "outcome": _outcome(last["status"]),
+                                             "fighters": last["fighters"]}
         return out
     out.update({
         "boss": {
@@ -89,6 +123,8 @@ def _state(user: User) -> dict:
     out["rules"] = _rules()
     out["art"] = asset_img(get_feature_image_path("worldboss"))
     out["me"] = None
+    if data["boss"] is None and out.get("last"):
+        out["last"].update(_last_fight(user) or {})
     creature = get_active_creature(user)
     if creature is not None:
         research.attach_research(user, creature)

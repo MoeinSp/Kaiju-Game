@@ -5,12 +5,19 @@ the same order, as bot/handlers/buildings.py and bot/handlers/research.py. Finis
 upgrades are applied lazily at read time exactly like the bot does (active_upgrades →
 check_and_apply_upgrade, research.check_and_apply), so opening a screen after a timer
 ran out is what completes the job.
+
+Every action answers with the screen it was sent from (`view`: "list" | "detail" in the
+body → the same payload as the GET), so the app redraws from the POST and never needs a
+second request. Numbers that are the same for every row (the main-hall cap, builder slots,
+lab level, worker counts) are worked out once per request, not once per building.
 """
 
 from django.db import transaction
 from django.utils import timezone
 
-from bio_lab.models import Building, User
+from django.db.models import Count
+
+from bio_lab.models import Building, CreatureAssignment, User
 from bio_lab.repository import lock_row
 from game import buildings as B
 from game import constants, research, workers
@@ -52,12 +59,27 @@ def _building_img(building: Building) -> str | None:
     return asset_img(get_building_image_path(building.building_type, building.level))
 
 
-def _building_dict(user: User, b: Building, upgrade, busy: int, slots: int, lab_level: int) -> dict:
+def _shared(user: User, rows, busy: int) -> dict:
+    """What every building row needs and is the same for all of them — asked ONCE."""
+    other = next((b.building_type for b in rows if b.building_type != constants.MAIN_BUILDING), None)
+    return {
+        "busy": busy, "slots": B.builder_slots(user), "lab_level": _lab_level(user),
+        # `max_level_for` gives every non-main building the same ceiling (the main hall's level)
+        "cap_main": B.max_level_for(user, constants.MAIN_BUILDING),
+        "cap_other": B.max_level_for(user, other) if other else constants.BUILDING_MAX_LEVEL,
+        "staff": dict(CreatureAssignment.objects.filter(building__owner=user)
+                      .values_list("building_id").annotate(n=Count("id"))),
+    }
+
+
+def _building_dict(user: User, b: Building, upgrade, sh: dict) -> dict:
     """One building as the list card AND the detail header need it. Every number comes
     from the function the bot's screen uses for it."""
     btype = b.building_type
-    cap = B.max_level_for(user, btype)
-    unlocked = B.is_unlocked(user, btype)
+    main = btype == constants.MAIN_BUILDING
+    cap = sh["cap_main"] if main else sh["cap_other"]
+    # a building that stands has passed its gate; only an unbuilt one can still be locked
+    unlocked = True if b.level > 0 else B.is_unlocked(user, btype)
     if upgrade is not None:
         state = "upgrading"
     elif b.level == 0 and not unlocked:
@@ -66,14 +88,14 @@ def _building_dict(user: User, b: Building, upgrade, busy: int, slots: int, lab_
         state = "max"
     elif b.level >= cap:
         state = "capped"
-    elif busy >= slots:
+    elif sh["busy"] >= sh["slots"]:
         state = "busy"  # every builder is working on another building
     else:
         state = "ready"
     out = {
         "id": b.id, "type": btype, "label": clean(constants.BUILDING_LABELS[btype]),
         "level": b.level, "max_level": constants.BUILDING_MAX_LEVEL, "cap": cap,
-        "main": btype == constants.MAIN_BUILDING,
+        "main": main,
         "unlocked": unlocked, "unlock_hall": B.unlock_level_for(btype),
         "state": state, "img": _building_img(b),
         "desc": clean(constants.BUILDING_DESCRIPTIONS[btype]),
@@ -90,18 +112,20 @@ def _building_dict(user: User, b: Building, upgrade, busy: int, slots: int, lab_
         target = b.level + 1
         lab_req = constants.BUILDING_LEVEL_LAB_REQ.get(target, 0)
         out["next"] = {"target": target, "cost": cost, "seconds": B.upgrade_seconds(b),
-                       "lab_req": lab_req, "lab_ok": lab_level >= lab_req}
+                       "lab_req": lab_req, "lab_ok": sh["lab_level"] >= lab_req, "afford": user.coins >= cost}
     if B.produces(btype):
         out["produces"] = True
         out["resource"] = _RES[constants.BUILDING_PRODUCTION[btype]["resource"]]
         if b.level > 0:
-            bonus = workers.worker_bonus(b)
+            staff = sh["staff"].get(b.id, 0)
+            # nobody stationed → the bonus is 0 by definition (worker_bonus sums over the staff)
+            bonus = workers.worker_bonus(b) if staff else 0.0
             out.update({
                 "rate": round(B.production_rate(b, bonus), 1),
                 "base_rate": round(B.production_rate(b, 0.0), 2),
                 "pending": B.pending_amount(b), "store_cap": B.storage_cap(b, bonus),
                 "bonus": round(bonus, 4),
-                "workers": len(workers.assigned_creatures(b)), "slots": workers.worker_slots(b),
+                "workers": staff, "slots": workers.worker_slots(b),
             })
     return out
 
@@ -140,15 +164,14 @@ def _lab_level(user: User) -> int:
 
 
 # ── buildings: list ───────────────────────────────────────────────────────────
-@endpoint()
-def buildings(request, user):
+def _list(user: User) -> dict:
     research.warm(user)  # worker bonuses read creature power → research buffs must be fresh
     upgrades = {u.building_id: u for u in B.active_upgrades(user)}  # lazily finishes due upgrades first
     rows = B.get_or_create_buildings(user)
-    slots, lab_level = B.builder_slots(user), _lab_level(user)
+    sh = _shared(user, rows, len(upgrades))
     # main hall first, then the rest — it's the gate everything else waits on
     rows.sort(key=lambda b: (b.building_type != constants.MAIN_BUILDING, b.building_type))
-    out = [_building_dict(user, b, upgrades.get(b.id), len(upgrades), slots, lab_level) for b in rows]
+    out = [_building_dict(user, b, upgrades.get(b.id), sh) for b in rows]
     waiting = {"coins": 0, "dna": 0, "diamonds": 0}
     for d in out:
         if d.get("pending"):
@@ -156,11 +179,27 @@ def buildings(request, user):
     plunder = None
     if (user.plundered_alert_gold or 0) > 0 or (user.plundered_alert_dna or 0) > 0:
         plunder = {"coins": user.plundered_alert_gold or 0, "dna": user.plundered_alert_dna or 0}
+    hall = next((d["level"] for d in out if d["main"]), 1)
     return {
-        "hall_level": B.main_hall_level(user), "max_level": constants.BUILDING_MAX_LEVEL,
-        "lab_level": lab_level, "builders": _builders(user, len(upgrades)),
+        "hall_level": max(1, hall), "max_level": constants.BUILDING_MAX_LEVEL,
+        "lab_level": sh["lab_level"], "builders": _builders(user, len(upgrades)),
         "buildings": out, "waiting": waiting, "cards": _cards(user), "plunder": plunder,
     }
+
+
+@endpoint()
+def buildings(request, user):
+    return _list(user)
+
+
+def _view(user: User, data: dict, b: Building | None = None) -> dict:
+    """The screen an action was sent from, as fresh as a GET (the action already committed)."""
+    user = User.objects.get(id=user.id)  # the action changed coins / diamonds / builder slots
+    if data.get("view") == "list":
+        return {"list": _list(user)}
+    if data.get("view") == "detail" and b is not None:
+        return {"detail": _detail(user, Building.objects.get(id=b.id))}
+    return {}
 
 
 @endpoint("POST")
@@ -182,8 +221,7 @@ def _detail(user: User, building: Building) -> dict:
     B.active_upgrade(user)  # finish any due upgrades before we count/inspect
     building.refresh_from_db()
     busy = B.active_upgrade_count(user)
-    d = _building_dict(user, building, B.upgrade_for_building(user, building), busy,
-                       B.builder_slots(user), _lab_level(user))
+    d = _building_dict(user, building, B.upgrade_for_building(user, building), _shared(user, [building], busy))
     btype = building.building_type
     d["benefit"] = clean(constants.BUILDING_UPGRADE_BENEFIT.get(btype, ""))
     d["note"] = clean(constants.BUILDING_RULE_NOTE.get(btype, ""))
@@ -202,7 +240,7 @@ def _detail(user: User, building: Building) -> dict:
     d["extras"] = [e for e in extras if e]
 
     out = {"building": d, "builders": _builders(user, busy), "cards": _cards(user),
-           "hall_level": B.main_hall_level(user), "workers": [], "influence": {}}
+           "workers": [], "influence": {}}
     if d["produces"] and building.level > 0:
         from game.equipment import equipped_items_map
 
@@ -240,7 +278,7 @@ def _collect_one(user: User, b: Building) -> tuple[int, str, list[dict]]:
 def collect(request, user, data):
     b = _own_building(user, need_int(data, "id"))
     amount, resource, missions = _collect_one(user, b)
-    return {"amount": amount, "resource": resource, "missions": _mission_dicts(missions)}
+    return {"amount": amount, "resource": resource, "missions": _mission_dicts(missions), **_view(user, data, b)}
 
 
 @endpoint("POST")
@@ -259,7 +297,7 @@ def collect_all(request, user, data):
         missions += done
     if not any(got.values()):
         raise GameError("چیزی برای جمع‌آوری نیست، بعداً دوباره سر بزن.")
-    return {"got": got, "missions": _mission_dicts(missions)}
+    return {"got": got, "missions": _mission_dicts(missions), **_view(user, data)}
 
 
 @endpoint("POST")
@@ -267,7 +305,7 @@ def upgrade(request, user, data):
     b = _own_building(user, need_int(data, "id"))
     built = b.level > 0
     job = B.start_upgrade(user, b)
-    return {"target": job.target_level, "left": _left(job.finishes_at), "construct": not built}
+    return {"target": job.target_level, "left": _left(job.finishes_at), "construct": not built, **_view(user, data, b)}
 
 
 @endpoint("POST")
@@ -289,27 +327,36 @@ def speedup(request, user, data):
             left, completed, used = B.apply_speedup_bulk(user, minutes, count, b.id)
     return {"completed": completed, "used": used, "cards": _cards(user),
             "left": _left(left.finishes_at) if left is not None else 0,
-            "finish_price": B.diamond_finish_price(left) if left is not None else 0}
+            "finish_price": B.diamond_finish_price(left) if left is not None else 0,
+            **(_view(user, data, b) if completed else {})}
 
 
 @endpoint("POST")
 def finish(request, user, data):
+    """`price` = the diamonds the player just confirmed. The price only ever falls while the
+    timer runs, so a different (lower) one is fine; a HIGHER one (the job changed under the
+    sheet) is refused instead of charged."""
     b = _own_building(user, need_int(data, "id"))
+    job = B.upgrade_for_building(user, b)
+    seen = data.get("price")
+    if job is not None and isinstance(seen, int) and job.finishes_at > timezone.now() and B.diamond_finish_price(job) > seen:
+        raise GameError("قیمت اتمام فوری عوض شده؛ دوباره نگاه کن و تأیید کن.")
     done, cost = B.finish_with_diamonds(user, b.id)
-    return {"cost": cost, "level": done.level}
+    return {"cost": cost, "level": done.level, **_view(user, data, b)}
 
 
 @endpoint("POST")
 def cancel(request, user, data):
     b = _own_building(user, need_int(data, "id"))
     _building, refund = B.cancel_upgrade(user, b.id)
-    return {"refund": refund}
+    return {"refund": refund, **_view(user, data, b)}
 
 
 @endpoint("POST")
 def buy_builder(request, user, data):
     B.buy_second_builder(user)
-    return {"slots": constants.MAX_BUILDER_SLOTS}
+    b = Building.objects.filter(id=data.get("id"), owner=user).first() if isinstance(data.get("id"), int) else None
+    return {"slots": constants.MAX_BUILDER_SLOTS, **_view(user, data, b)}
 
 
 @endpoint("POST")
@@ -317,14 +364,14 @@ def assign(request, user, data):
     b = _own_building(user, need_int(data, "id"))
     creature = own_creature(user, need_int(data, "creature"))
     workers.assign(user, b, creature)
-    return {"ok": True}
+    return {"ok": True, **_view(user, data, b)}
 
 
 @endpoint("POST")
 def unassign(request, user, data):
     creature = own_creature(user, need_int(data, "creature"))
-    workers.unassign(user, creature)
-    return {"ok": True}
+    b = workers.unassign(user, creature)
+    return {"ok": True, **_view(user, data, b)}
 
 
 # ── research lab ──────────────────────────────────────────────────────────────
@@ -338,9 +385,7 @@ def _assert_research_open(user: User) -> None:
         raise GameError(f"پژوهش از سطح {need} تالار مِهر باز می‌شه.")
 
 
-@endpoint()
-def research_panel(request, user):
-    _assert_research_open(user)
+def _research(user: User) -> dict:
     research.check_and_apply(user)
     lab_level = research.research_cap(user)
     levels = research.research_levels(user)
@@ -375,13 +420,21 @@ def research_panel(request, user):
             gold, dna = research.next_cost(target, key)
             row["next"] = {"target": target, "coins": gold, "dna": dna,
                            "seconds": constants.research_seconds(target, key),
-                           "effect": round(target * per * 100)}
+                           "effect": round(target * per * 100),
+                           "afford": user.coins >= gold and user.dna_fragments >= dna}
         tracks.append(row)
     return {
         "lab_level": lab_level, "max_level": constants.BUILDING_MAX_LEVEL, "hall_req": _research_hall_req(),
         "lab_id": lab.id if lab else None, "img": _building_img(lab) if lab else None,
         "running": next(iter(running), None), "tracks": tracks,
+        "coins": user.coins, "dna": user.dna_fragments,
     }
+
+
+@endpoint()
+def research_panel(request, user):
+    _assert_research_open(user)
+    return _research(user)
 
 
 @endpoint("POST")
@@ -389,18 +442,26 @@ def research_start(request, user, data):
     _assert_research_open(user)
     key = need_str(data, "key", choices=research.RESEARCH_KEYS)
     job = research.start_research(user, key)
-    return {"target": job.target_level, "left": _left(job.finishes_at)}
+    return {"target": job.target_level, "left": _left(job.finishes_at), "panel": _research(User.objects.get(id=user.id))}
 
 
 @endpoint("POST")
 def research_finish(request, user, data):
+    """`game.research.finish_with_diamonds` charges even when the timer has already run out,
+    so a due job is applied here for free instead (like the building version does itself).
+    `price` = what the player confirmed; a higher price than that is refused, not charged."""
     _assert_research_open(user)
     key = need_str(data, "key", choices=research.RESEARCH_KEYS)
     job = research.upgrade_for(user, key)
     if job is not None and job.finishes_at <= timezone.now():
         research.check_and_apply(user)  # the timer ran out while the confirm was open — free
-        return {"cost": 0}
-    return {"cost": research.finish_with_diamonds(user, key)}
+        cost = 0
+    else:
+        seen = data.get("price")
+        if job is not None and isinstance(seen, int) and research.diamond_finish_price(job) > seen:
+            raise GameError("قیمت اتمام فوری عوض شده؛ دوباره نگاه کن و تأیید کن.")
+        cost = research.finish_with_diamonds(user, key)
+    return {"cost": cost, "panel": _research(User.objects.get(id=user.id))}
 
 
 routes = [

@@ -74,7 +74,8 @@
     return h;
   }
 
-  function depositSheet(d, ctx) {
+  var depositing = false;
+  function depositSheet(d, onDone) {
     var a = d.alliance, have = K.res ? K.res.coins : d.coins;
     var quick = [1000, 10000, 100000, 1000000].filter(function (v) { return v <= have; });
     var box = K.sheet('<div class="grab"></div><div class="pad"><div class="ttl" style="font-size:18px">واریز به خزانه</div>' +
@@ -94,9 +95,13 @@
       K.confirm({ title: "واریز به خزانه", icon: "bank", ok: "واریز کن", cancel: "بی‌خیال",
         html: "<p><b>" + K.n(amount) + "</b> طلا به خزانه‌ی «" + K.esc(a.name) + "» واریز بشه؟<br>این طلا دیگه برنمی‌گرده.</p>" }).then(function (yes) {
         if (!yes) return;
+        if (depositing) return; depositing = true;
         K.api.post("social/alliance/deposit/", { amount: amount }).then(function (r) {
-          K.haptic("ok"); K.toast("واریز شد! خزانه‌ی فعلی: " + Number(r.treasury).toLocaleString("en-US") + " طلا", "ok"); ctx.reload();
-        });
+          depositing = false;
+          K.haptic("ok"); K.toast("واریز شد! خزانه‌ی فعلی: " + Number(r.treasury).toLocaleString("en-US") + " طلا", "ok");
+          a.treasury = r.treasury; if (r.res) d.coins = r.res.coins;
+          if (onDone) onDone();
+        }, function () { depositing = false; });
       });
     };
   }
@@ -107,7 +112,7 @@
       : "طلایی که به خزانه واریز کردی برنمی‌گرده.";
     K.confirm({ title: "خروج از اتحاد", danger: true, ok: "بله، خارج شو", cancel: "بی‌خیال", html: "<p>" + note + "<br>مطمئنی می‌خوای از «" + K.esc(a.name) + "» خارج بشی؟</p>" }).then(function (yes) {
       if (!yes) return;
-      K.api.post("social/alliance/leave/", {}, el).then(function () { K.haptic("ok"); K.toast("از اتحاد خارج شدی.", "ok"); ctx.reload(); });
+      K.api.post("social/alliance/leave/", {}, el).then(function () { rankCache = {}; K.haptic("ok"); K.toast("از اتحاد خارج شدی.", "ok"); ctx.reload(); }, function () {});
     });
   }
 
@@ -130,15 +135,19 @@
         }
         var role = ROLE[a.role] || ROLE.member;
         root.innerHTML = banner(d.banner, "اتحاد " + a.name, K.tag(role[0], role[2], role[1]) + (a.leader ? '<span class="sm" style="color:#c5cee2">رهبر: ' + K.esc(a.leader) + "</span>" : "")) +
-          '<div class="tiles mt">' + stat("users", "t-accent", "اعضا", K.n(a.member_count) + '<span class="faint sm"> / ' + Number(a.capacity) + "</span>") + stat("power", "t-accent", "قدرت کل", K.short(a.power)) +
-          stat("bank", "t-coin", "خزانه", K.short(a.treasury)) + stat("flag", "t-cup", "امتیاز جنگ هفته", K.n(a.war_points)) + "</div>" +
+          '<div class="tiles mt" id="so-astats"></div>' +
           (a.deputy ? '<p class="note" style="margin-top:8px">قائم‌مقام: ' + K.esc(a.deputy) + "</p>" : "") +
           (a.joined_today ? '<div class="callout warn mt">' + K.ic("clock") + "<div>تازه عضو شدی؛ تا نیمه‌شب امشب نمی‌تونی توی رید و جنگ اتحاد شرکت کنی.</div></div>" : "") +
           '<div class="btns mt mb"><button class="btn gold" data-act="deposit">' + K.ic("bank") + 'واریز به خزانه</button><button class="btn" data-act="ranks">' + K.ic("podium") + "جدول اتحادها</button></div>" +
           '<div id="so-aseg"></div><div id="so-abody"></div>' +
           '<div class="callout mt">' + K.ic("info") + "<div>" + BOT_NOTE + "</div></div>" +
           '<button class="btn ghost block mt so-leave" data-act="leave">' + K.ic("logout") + "خروج از اتحاد</button>";
-        var segEl = root.querySelector("#so-aseg"), body = root.querySelector("#so-abody");
+        var segEl = root.querySelector("#so-aseg"), body = root.querySelector("#so-abody"), statsEl = root.querySelector("#so-astats");
+        function stats() {
+          statsEl.innerHTML = stat("users", "t-accent", "اعضا", K.n(a.member_count) + '<span class="faint sm"> / ' + Number(a.capacity) + "</span>") + stat("power", "t-accent", "قدرت کل", K.short(a.power)) +
+            stat("bank", "t-coin", "خزانه", K.short(a.treasury)) + stat("flag", "t-cup", "امتیاز جنگ هفته", K.n(a.war_points));
+        }
+        stats();
         segEl.innerHTML = seg([["members", "اعضا", "users"], ["buildings", "ساختمان‌ها", "building"], ["war", "جنگ و رید", "swords"]], allyTab, "atab");
         function draw() {
           Array.prototype.forEach.call(segEl.querySelectorAll("button"), function (b) { b.classList.toggle("on", b.dataset.atab === allyTab); });
@@ -148,7 +157,7 @@
         // (registered once) refreshes whichever timer element is currently on screen
         var until = Date.now() / 1000 + (a.war ? a.war.seconds_left : 0), fired = false;
         function tick() {
-          var el = body.querySelector(".timer"); if (!el) return;
+          var el = a.war && !a.war.ended ? body.querySelector(".timer") : null; if (!el) return;
           var s = until - Date.now() / 1000;
           if (s > 0) { el.innerHTML = K.ic("clock") + '<span class="num">' + K.dur(s) + "</span>"; return; }
           el.classList.add("done"); el.innerHTML = K.ic("check") + "تموم شد";
@@ -158,7 +167,7 @@
         if (a.war && !a.war.ended && a.war.seconds_left > 0) K.every(1000, tick);
         show();
         segEl.addEventListener("click", function (ev) { var b = ev.target.closest("[data-atab]"); if (!b) return; K.haptic(); allyTab = b.dataset.atab; show(); });
-        K.on(root, "deposit", function () { depositSheet(d, ctx); });
+        K.on(root, "deposit", function () { depositSheet(d, function () { if (ctx.alive()) stats(); }); });
         K.on(root, "ranks", function () { K.go("so_ranks"); });
         K.on(root, "leave", function (el) { leaveFlow(d, ctx, el); });
       });
@@ -168,11 +177,26 @@
   // ───────────────────────── alliance rankings ─────────────────────────
   var BOARDS = { power: ["قدرت", "power", "قدرت کل", "t-accent"], treasury: ["خزانه", "bank", "خزانه", "t-coin"], raid: ["رید", "skull", "سطح رید", "t-bad"], war: ["جنگ هفتگی", "flag", "امتیاز جنگ", "t-cup"] };
 
+  var rankCache = {}, RANK_TTL = 60000;
+  function loadBoard(board) {
+    var hit = rankCache[board];
+    if (hit && Date.now() - hit.at < RANK_TTL) return Promise.resolve(hit.d);
+    return K.api.get("social/ranks/?board=" + board).then(function (d) { rankCache[board] = { d: d, at: Date.now() }; return d; });
+  }
+
   K.screen("so_ranks", {
     title: "جدول اتحادها", tab: "more",
     render: function (root, params) {
-      var board = BOARDS[params.board] ? params.board : "power";
-      return K.api.get("social/ranks/?board=" + board).then(function (d) {
+      var board = BOARDS[params.board] ? params.board : "power", wanted = board;
+      root.addEventListener("click", function (ev) {
+        var b = ev.target.closest("[data-board]"); if (!b || b.dataset.board === wanted) return;
+        K.haptic(); wanted = b.dataset.board; params.board = wanted;
+        Array.prototype.forEach.call(root.querySelectorAll("[data-board]"), function (x) { x.classList.toggle("on", x === b); });
+        var w = wanted;
+        loadBoard(w).then(function (d) { if (w === wanted) paint(d); }, function (err) { K.toast(err.message, "err"); });
+      });
+      return loadBoard(board).then(paint);
+      function paint(d) {
         var meta = BOARDS[d.board];
         var html = banner(d.banner, "برترین اتحادها", "") + '<div class="mt"></div>' +
           seg(d.boards.filter(function (b) { return BOARDS[b]; }).map(function (b) { return [b, BOARDS[b][0], BOARDS[b][1]]; }), d.board, "board");
@@ -194,8 +218,7 @@
         }
         if (!d.in_alliance) html += '<div class="callout mt">' + K.ic("info") + "<div>هنوز عضو هیچ اتحادی نیستی. از «اتحاد» ببین چطور عضو بشی.</div></div>";
         root.innerHTML = html;
-        root.addEventListener("click", function (ev) { var b = ev.target.closest("[data-board]"); if (!b || b.dataset.board === d.board) return; K.haptic(); K.replace("so_ranks", { board: b.dataset.board }); });
-      });
+      }
     }
   });
 
@@ -213,15 +236,32 @@
 
   K.screen("so_guide", {
     title: "راهنما", tab: "more",
-    render: function (root) {
+    render: function (root, params, ctx) {
       return K.api.cached("social/guide/").then(function (d) {
         root.innerHTML = banner(d.banner, "راهنمای بازی", '<span class="sm" style="color:#c5cee2">' + K.n(d.topics.length) + " موضوع</span>") +
           '<div class="search mt">' + K.ic("search") + '<input id="so-q" placeholder="جستجو توی راهنما" value="' + K.esc(guideQ) + '" autocomplete="off"></div><div id="so-glist"></div>';
-        var list = root.querySelector("#so-glist"), q = root.querySelector("#so-q");
+        var list = root.querySelector("#so-glist"), q = root.querySelector("#so-q"), seq = 0, timer = null;
         function row(t, hit) {
           return '<button data-topic="' + K.esc(t.id) + '"><span class="ic" style="color:' + topicTint(t) + '">' + K.ic(topicIcon(t)) + '</span><span class="t">' + K.esc(t.title) + "<small>" + K.esc(hit || t.blurb) + '</small></span><span class="chev">' + K.ic("chevron") + "</span></button>";
         }
-        function draw() {
+        /* titles, blurbs and section headings are searched here; `more` = topics the server found in the text */
+        function results(needle, more) {
+          var found = [], seen = {};
+          d.topics.forEach(function (t) {
+            var hit = null;
+            if (norm(t.title).indexOf(needle) < 0 && norm(t.blurb).indexOf(needle) < 0) {
+              hit = t.heads.filter(function (h) { return norm(h).indexOf(needle) >= 0; })[0];
+              if (!hit) return;
+            }
+            seen[t.id] = 1; found.push(row(t, hit));
+          });
+          (more || []).forEach(function (m) {
+            var t = d.topics.filter(function (x) { return x.id === m.id; })[0];
+            if (t && !seen[t.id]) { seen[t.id] = 1; found.push(row(t, m.h)); }
+          });
+          return found;
+        }
+        function draw(more, pending) {
           var needle = norm(guideQ.trim()), html = "";
           if (!needle) {
             GROUPS.forEach(function (g) {
@@ -229,43 +269,63 @@
               if (rows.length) html += '<div class="h2">' + K.ic(g[2]) + g[1] + '</div><div class="panel list">' + rows.map(function (t) { return row(t); }).join("") + "</div>";
             });
           } else {
-            var found = [];
-            d.topics.forEach(function (t) {
-              var hit = null;
-              if (norm(t.title).indexOf(needle) < 0 && norm(t.blurb).indexOf(needle) < 0) {
-                var r = t.rows.filter(function (x) { return norm(x.h).indexOf(needle) >= 0 || norm(x.b).indexOf(needle) >= 0; })[0];
-                if (!r) return;
-                hit = r.h;
-              }
-              found.push(row(t, hit));
-            });
-            html = '<div class="count"><span>' + K.n(found.length) + " نتیجه</span></div>" + (found.length ? '<div class="panel list">' + found.join("") + "</div>" : K.state("search", "چیزی پیدا نشد", "یه کلمه‌ی دیگه رو امتحان کن."));
+            var found = results(needle, more);
+            html = '<div class="count"><span>' + (pending && !found.length ? "در حال جستجو…" : K.n(found.length) + " نتیجه") + "</span></div>" +
+              (found.length ? '<div class="panel list">' + found.join("") + "</div>" : pending ? "" : K.state("search", "چیزی پیدا نشد", "یه کلمه‌ی دیگه رو امتحان کن."));
           }
           list.innerHTML = html;
         }
-        draw();
-        q.oninput = function () { guideQ = q.value; clearTimeout(q._t); q._t = setTimeout(draw, 180); };
+        function search() {
+          var text = guideQ.trim(), mine = ++seq;
+          clearTimeout(timer);
+          if (text.length < 2) { draw(); return; }
+          draw(null, true);   // what the index already knows, at once
+          timer = setTimeout(function () {
+            if (mine !== seq || !ctx.alive()) return;
+            K.api.cached("social/guide/search/?q=" + encodeURIComponent(text)).then(function (r) { if (mine === seq && ctx.alive()) draw(r.hits); }, function () { if (mine === seq && ctx.alive()) draw(); });
+          }, 350);
+        }
+        if (guideQ.trim().length >= 2) search(); else draw();
+        q.oninput = function () { guideQ = q.value; search(); };
         list.addEventListener("click", function (ev) { var b = ev.target.closest("[data-topic]"); if (b) K.go("so_topic", { id: b.dataset.topic, q: guideQ.trim() }); });
       });
     }
   });
 
+  /* a paragraph of guide text: one block per line, «a ← b» lines as a two-column row */
+  function guideBody(text) {
+    return String(text || "").split("\n").map(function (line) {
+      line = line.replace(/^\s*[•·]\s*/, "");
+      if (!line.trim()) return "";
+      var parts = line.split(" ← ");
+      if (parts.length === 2 && parts[0].length <= 34) return '<div class="so-pair"><span>' + K.esc(parts[0]) + "</span><b>" + K.esc(parts[1]) + "</b></div>";
+      return "<p>" + K.esc(line) + "</p>";
+    }).join("");
+  }
+
   K.screen("so_topic", {
     title: "راهنما", tab: "more",
     render: function (root, params, ctx) {
-      return K.api.cached("social/guide/").then(function (d) {
-        var t = d.topics.filter(function (x) { return x.id === params.id; })[0];
-        if (!t) { root.innerHTML = K.state("doc", "این موضوع پیدا نشد", ""); return; }
+      return Promise.all([K.api.cached("social/guide/"), K.api.cached("social/guide/topic/?id=" + encodeURIComponent(params.id || ""))]).then(function (res) {
+        var d = res[0], t = res[1].topic, meta = d.topics.filter(function (x) { return x.id === t.id; })[0] || t;
         ctx.setTitle(t.title);
         var needle = norm(params.q);
-        var same = d.topics.filter(function (x) { return x.group === t.group; }), i = same.indexOf(t), next = same[i + 1];
+        var same = d.topics.filter(function (x) { return x.group === t.group; }), i = same.indexOf(meta), next = i >= 0 ? same[i + 1] : null;
         root.innerHTML = '<div class="panel pad so-thead"><span class="ico-box lg" style="color:' + topicTint(t) + '">' + K.ic(topicIcon(t)) + '</span><div class="grow"><div class="so-ttl">' + K.esc(t.title) + '</div><div class="sm muted">' + K.esc(t.blurb) + "</div></div></div>" +
+          (t.rows.length > 3 ? '<div class="row so-toc">' + t.rows.map(function (r, n) { return '<button class="chip" data-sec="' + n + '">' + K.esc(r.h) + "</button>"; }).join("") + "</div>" : "") +
           t.rows.map(function (r, n) {
             var hit = needle && (norm(r.h).indexOf(needle) >= 0 || norm(r.b).indexOf(needle) >= 0);
-            return '<div class="panel pad so-sec' + (hit ? " hit" : "") + '"><div class="so-sech"><span class="num">' + (n + 1) + "</span>" + K.esc(r.h) + '</div><div class="so-secb">' + K.esc(r.b).replace(/\n/g, "<br>") + "</div></div>";
+            return '<div class="panel pad so-sec' + (hit ? " hit" : "") + '" id="so-sec' + n + '"><div class="so-sech"><span class="num">' + (n + 1) + "</span>" + K.esc(r.h) + '</div><div class="so-secb">' + guideBody(r.b) + "</div></div>";
           }).join("") +
           (next ? '<button class="panel so-next" data-act="next"><span class="ic" style="color:' + topicTint(next) + '">' + K.ic(topicIcon(next)) + '</span><span class="grow"><small class="muted">موضوع بعدی</small><b>' + K.esc(next.title) + '</b></span><span class="faint">' + K.ic("chevron") + "</span></button>" : "");
         if (next) K.on(root, "next", function () { K.replace("so_topic", { id: next.id }); });
+        root.addEventListener("click", function (ev) {
+          var b = ev.target.closest("[data-sec]"), el = b && root.querySelector("#so-sec" + b.dataset.sec);
+          if (el) { K.haptic(); window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.scrollY - 110)); }
+        });
+        // opened from a search: go to the first section that mentions it
+        var first = needle && root.querySelector(".so-sec.hit");
+        if (first) K.after(60, function () { window.scrollTo(0, Math.max(0, first.getBoundingClientRect().top + window.scrollY - 110)); });
       });
     }
   });
@@ -283,7 +343,7 @@
         root.innerHTML = '<div class="h2" style="margin-top:6px">' + K.ic("bell") + 'اعلان‌ها</div><div id="so-notif"></div>' +
           '<div class="h2">' + K.ic("flask") + 'اسم آزمایشگاه</div><div id="so-name"></div>' +
           '<p class="note">بقیه‌ی تنظیمات حساب از داخل ربات در «پروفایل» در دسترسه.</p>';
-        var notif = root.querySelector("#so-notif"), nameEl = root.querySelector("#so-name");
+        var notif = root.querySelector("#so-notif"), nameEl = root.querySelector("#so-name"), saving = false;
 
         function drawNotif() {
           notif.innerHTML = '<div class="panel list"><div><span class="ic" style="color:' + (d.notifications_on ? "var(--good)" : "var(--bad)") + '">' + K.ic("bell") + '</span><span class="t">همه‌ی اعلان‌ها<small>' + (d.notifications_on ? "ربات برای موارد روشنِ پایین بهت پیام می‌ده" : "همه‌ی اعلان‌ها خاموشه؛ هیچ پیامی از ربات نمی‌گیری") + "</small></span>" + sw("all", d.notifications_on) + "</div></div>" +
@@ -302,12 +362,12 @@
         drawNotif(); drawName();
 
         K.on(root, "notify", function (el) {
-          if (el._busy) return; el._busy = true;
+          if (saving) return; saving = true;   // one switch at a time: each answer redraws all of them
           var key = el.dataset.key, on = !el.classList.contains("on");
           el.classList.toggle("on", on); K.haptic();
           K.api.post("social/settings/notify/", { key: key, on: on }).then(function (r) {
-            d.notifications_on = r.notifications_on; d.categories = r.categories; drawNotif();
-          }, function () { drawNotif(); });
+            saving = false; d.notifications_on = r.notifications_on; d.categories = r.categories; drawNotif();
+          }, function () { saving = false; drawNotif(); });
         });
         K.on(root, "rename", function (el) {
           var input = root.querySelector("#so-newname"), name = input.value;
@@ -318,7 +378,8 @@
               if (!yes) return;
               return K.api.post("social/settings/rename/", { name: name, cost: chk.cost }, el).then(function (r) {
                 K.haptic("ok"); K.toast("اسم آزمایشگاهت شد «" + r.name + "»", "ok");
-                return K.refreshMe().then(ctx.reload, ctx.reload);
+                d = r; if (ctx.alive()) drawName();          // the new name and the next price came with the answer
+                K.refreshMe().catch(function () {});       // the home screen shows the lab name
               });
             });
           }).catch(function () {});

@@ -174,16 +174,20 @@
           root.innerHTML = head + K.state("claw", "هیولای بیکارِ مناسبی نداری", "هیولای فعال و هیولاهای مشغول نمی‌تونن برن؛ یه هیولای دیگه آزاد کن یا از باکس و غار بگیر.");
           return;
         }
-        root.innerHTML = head + '<div class="h2">' + K.ic("claw") + 'کدوم هیولا بره؟<span class="more" style="color:var(--muted)">' + K.n(d.candidates.length) + " هیولای بیکار</span></div>" +
+        root.innerHTML = head + '<div class="h2">' + K.ic("claw") + 'کدوم هیولا بره؟<span class="more" style="color:var(--muted)">' + K.n(d.total || d.candidates.length) + " هیولای بیکار</span></div>" +
           '<div class="seg"><button data-act="dp-sort" data-s="best">بیشترین جایزه</button><button data-act="dp-sort" data-s="rare">کمیاب‌ترین</button></div>' +
           '<div class="panel dp-cands" id="dp-cands"></div>' +
+          (d.total > d.candidates.length ? '<p class="note" style="margin-top:10px">از ' + K.n(d.total) + " هیولای بیکارت، " + K.n(d.candidates.length) + " تای بهتر اینجاست؛ بقیه رو از دکمه‌ی پایین انتخاب کن.</p>" : "") +
           '<button class="btn block mt" data-act="dp-grid">' + K.ic("grid") + "انتخاب از بین همه‌ی هیولاها</button>" +
           '<p class="note">جایزه‌ی هر هیولا همین الان با قدرتش حساب شده' + (d.hq_bonus || o.special ? " (پاداش پایگاه و مأموریت ویژه هم داخلشه)" : "") + ". عنصرِ جور " + K.n(d.element_bonus) + "% بیشتر می‌آره.</p>";
 
+        var shown = 24;
         function draw() {
           var list = d.candidates.slice();   // the server's order = rarest, then strongest (the bot's picker order)
           if (sortBy === "best") list.sort(function (a, b) { return b.coins - a.coins || b.dna - a.dna; });
-          root.querySelector("#dp-cands").innerHTML = list.map(candRow).join("");
+          // 24 rows at a time: every row carries art and star icons, a whole roster is a heavy page
+          root.querySelector("#dp-cands").innerHTML = list.slice(0, shown).map(candRow).join("") +
+            (list.length > shown ? '<button class="btn ghost block dp-more" data-act="dp-more">نمایش بیشتر <span class="num">(' + (list.length - shown) + ")</span></button>" : "");
           Array.prototype.forEach.call(root.querySelectorAll(".seg button"), function (b) { b.classList.toggle("on", b.dataset.s === sortBy); });
         }
         draw();
@@ -206,7 +210,8 @@
             }, function () { ctx.reload(); });
           });
         }
-        K.on(root, "dp-sort", function (el) { K.haptic(); sortBy = el.dataset.s; draw(); });
+        K.on(root, "dp-sort", function (el) { K.haptic(); sortBy = el.dataset.s; shown = 24; draw(); });
+        K.on(root, "dp-more", function () { shown += 24; draw(); });
         K.on(root, "dp-pick", function (el) { var x = byId[+el.dataset.id]; if (x) confirmSend(x); });
         K.on(root, "dp-grid", function () {
           var order = (K.meta && K.meta.rarity_order) || [];
@@ -218,9 +223,17 @@
               if (c.active) return "هیولای فعالت نمی‌تونه بره مأموریت.";
               if (c.busy) return "این هیولا الان مشغوله.";
               if (order.indexOf(c.rarity) < order.indexOf(o.min_rarity)) return "این مأموریت حداقل یه هیولای " + K.rarLabel(o.min_rarity) + " می‌خواد.";
-              return "این هیولا الان نمی‌تونه بره.";
+              // a big collection: the list above is capped, the rest are priced when picked
+              return d.total > d.candidates.length ? "" : "این هیولا الان نمی‌تونه بره.";
             }
-          }).then(function (c) { if (c && byId[c.id]) confirmSend(byId[c.id]); });
+          }).then(function (c) {
+            if (!c) return;
+            if (byId[c.id]) { confirmSend(byId[c.id]); return; }
+            return K.api.get("dispatch/offer/?idx=" + encodeURIComponent(o.idx) + "&creature_id=" + encodeURIComponent(c.id)).then(function (one) {
+              var x = one.candidates[0]; if (!x || !ctx.alive()) return;
+              byId[x.creature.id] = x; confirmSend(x);
+            });
+          }).catch(function (e) { K.toast(e.message, "err"); });
         });
       });
     }

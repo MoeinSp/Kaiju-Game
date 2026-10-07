@@ -3,7 +3,7 @@ board → offer (candidates with their exact previewed reward) → send → coll
 
 from game import dispatch
 from telgame_site.mini.api.daily import capsule_dict, missions_list, speedup_dict
-from telgame_site.mini.core import GameError, clean, creature_list, endpoint, need_int
+from telgame_site.mini.core import GameError, clean, creature_img, creature_list, endpoint, need_int
 
 
 def _hall_req() -> int:
@@ -61,6 +61,24 @@ def _board_meta(level: int) -> dict:
     }
 
 
+CANDIDATES_MAX = 60  # per ordering (see `offer`) — the bot pages its picker for the same reason
+
+
+def _candidate(creature, preview: dict) -> dict:
+    """One row of the picker: only what the row draws (the full creature card — stats, gear —
+    was 350 bytes a row that nothing read) and the exact reward this creature would bring.
+    preview["power"] is creature_power() with research and gear, the number every card shows."""
+    from bio_lab.repository import creature_name
+
+    return {
+        "creature": {"id": creature.id, "name": creature_name(creature), "element": creature.element,
+                     "rarity": creature.rarity, "star": creature.star_level, "level": creature.level,
+                     "power": preview["power"], "img": creature_img(creature)},
+        "coins": preview["coins"], "dna": preview["dna"], "xp": preview["xp"],
+        "match": bool(preview["element_match"]),
+    }
+
+
 @endpoint()
 def panel(request, user):
     from game import events
@@ -103,15 +121,24 @@ def offer(request, user):
     o = dispatch.get_offer(user, idx)
     if o["taken"]:
         raise GameError("این مأموریت رو امروز قبلاً فرستادی.")
-    creatures = dispatch.eligible_creatures(user, o)
-    previews = dispatch.preview_rewards(user, o, creatures)
-    candidates = []
-    for c in creature_list(user, creatures):
-        p = previews[c["id"]]
-        candidates.append({"creature": c, "coins": p["coins"], "dna": p["dna"], "xp": p["xp"],
-                           "power": p["power"], "match": bool(p["element_match"])})
+    creatures = dispatch.eligible_creatures(user, o)  # idle + rare enough; rarest, then strongest
+    if request.GET.get("creature_id"):
+        # ONE creature picked from the full collection grid (it may be outside the capped list)
+        creature_id = need_int(request.GET, "creature_id", minimum=1)
+        creatures = [c for c in creatures if c.id == creature_id]
+        if not creatures:
+            raise GameError("این هیولا الان نمی‌تونه این مأموریت رو بره.")
+    total = len(creatures)
+    previews = dispatch.preview_rewards(user, o, creatures)  # research + all the gear: two queries
+    if total > 2 * CANDIDATES_MAX:
+        # a big collection: the best payers and the head of the bot's own order; every other
+        # idle creature is still reachable through the grid (priced one at a time, see above)
+        best = sorted(creatures, key=lambda c: (-previews[c.id]["coins"], -previews[c.id]["dna"], c.id))[:CANDIDATES_MAX]
+        keep = {c.id for c in best} | {c.id for c in creatures[:CANDIDATES_MAX]}
+        creatures = [c for c in creatures if c.id in keep]
     out = _board_meta(o["hq_level"])
-    out.update({"offer": _offer_dict(o), "hq": o["hq_level"], "candidates": candidates})
+    out.update({"offer": _offer_dict(o), "hq": o["hq_level"], "total": total,
+                "candidates": [_candidate(c, previews[c.id]) for c in creatures]})
     return out
 
 
@@ -140,7 +167,6 @@ def _result(user, res: dict) -> dict:
     out.update({
         "id": mission.id, "key": mission.template_key, "title": clean(title),
         "name": creature_name(creature) if creature is not None else "هیولات",
-        "creature": creature_list(user, [creature])[0] if creature is not None else None,
         "bonus": _bonus(reward), "levels": int(res["levels"] or 0),
         "level": creature.level if creature is not None else None,
     })

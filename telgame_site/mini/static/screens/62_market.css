@@ -35,3 +35,14 @@
 .mk-amt { display: flex; align-items: center; gap: 9px; margin: 9px 0 12px; }
 .mk-amt .input { flex: 1; text-align: center; font-size: 20px; font-weight: 700; height: 50px; }
 .mk-amt .iconbtn { width: 46px; height: 50px; background: var(--surface-2); }
+
+.mk-top { min-height: 150px; background-position: center 30%; }
+.mk-kick { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--accent-2); filter: brightness(1.5); text-shadow: 0 1px 6px #000; }
+.mk-kick svg { width: 14px; height: 14px; }
+.mk-end .timer { height: 28px; padding: 0 11px; border-radius: 999px; background: rgba(8,11,18,.74); border: 1px solid rgba(255,171,61,.45); font-size: 13.5px; }
+.timer.soon { color: var(--bad); animation: mk-blink 1s steps(2) infinite; }
+@keyframes mk-blink { 50% { opacity: .55; } }
+.mk-spin svg { animation: spin .7s linear infinite; }
+.mk-lot.mine::before, .mk-lot.out::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--good); }
+.mk-lot.out::before { background: var(--bad); }
+.mk-acts .btn { min-width: 0; padding: 0 10px; }

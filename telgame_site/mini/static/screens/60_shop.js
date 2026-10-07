@@ -12,7 +12,7 @@
 
   var RAR_BACK = ["mythic", "legendary", "epic", "rare", "common"];
   var tabs = { boxes: "gold", shop: "daily", shield: "arena", ex: "swap", exDir: "buy_dna", rec: "" };
-  var freeBoxes = 0;
+  var freeBoxes = null;   // known once the boxes screen was opened; before that the home summary answers
 
   function money(cur, n) {
     var d = cur === "diamonds";
@@ -42,25 +42,44 @@
   /* in-place screen: `load()` fetches + draws into root without a full repaint (so an open
      sheet — the box reveal — survives and the scroll position is kept) */
   function live(root, ctx, path, draw) {
-    var self = { data: null };
-    self.draw = function () { if (ctx.alive()) draw(self.data); };
-    self.load = function () { return K.api.get(path).then(function (d) { self.data = d; self.draw(); return d; }); };
+    var self = { data: null, at: 0 }, tick = null, fired = false;
+    /* seconds-from-the-fetch → absolute time, so a redraw later still counts down right */
+    self.until = function (seconds) { return Math.round(self.at + Number(seconds || 0)); };
+    self.draw = function () {
+      if (!ctx.alive()) return;
+      draw(self.data);
+      // ONE interval per screen (it re-reads the timers each tick) — redraws never stack intervals
+      if (!tick) tick = ticker(root, function () { if (fired) return; fired = true; K.after(1500, function () { fired = false; self.refresh(); }); });
+      else tick();
+    };
+    /* an action answered with the new state of the screen: show it without another request */
+    self.set = function (d) { if (!d) return self.refresh(); self.data = d; self.at = Date.now() / 1000; self.draw(); };
+    self.load = function () { return K.api.get(path).then(function (d) { self.data = d; self.at = Date.now() / 1000; self.draw(); return d; }); };
     self.refresh = function () { return self.load().catch(function () { ctx.reload(); }); };
     return self;
+  }
+  function ticker(root, onDone) {
+    function tick() {
+      var now = Date.now() / 1000;
+      Array.prototype.forEach.call(root.querySelectorAll("[data-until]"), function (el) {
+        if (el._done) return;
+        var left = Number(el.dataset.until) - now;
+        if (left <= 0) { el._done = true; el.classList.add("done"); el.innerHTML = K.ic("check") + K.esc(el.dataset.done || "آماده"); if (onDone) onDone(el); }
+        else el.innerHTML = K.ic("clock") + '<span class="num">' + (el.dataset.fmt === "long" ? K.dur(left) : K.clock(left)) + "</span>";
+      });
+    }
+    tick(); K.every(1000, tick);
+    return tick;
   }
 
   // ───────────────────────── hub tiles ─────────────────────────
   K.hub("more", { id: "boxes", title: "باکس‌ها", sub: "هیولا و تجهیزات شانسی", icon: "box", color: "var(--gold)", go: "sh_boxes", order: 10,
-                  badge: function () { return freeBoxes; } });
+                  badge: function () { var h = K.dy && K.dy.last && K.dy.last(); return freeBoxes != null ? freeBoxes : (h && h.free_boxes) || 0; } });
   K.hub("more", { id: "shop", title: "فروشگاه", sub: "آفر روزانه، سپر، طلا", icon: "cart", color: "var(--good)", go: "sh_shop", order: 11 });
   K.hub("more", { id: "exchange", title: "صرافی", sub: "طلا، DNA و بازیافت", icon: "swap", color: "var(--dna)", go: "sh_exchange", order: 13, hall: 2 });
   K.hub("more", { id: "energy", title: "شارژ انرژی", sub: "پر کردن انرژی با الماس", icon: "bolt", color: "var(--energy)", go: "sh_energy", order: 14 });
   K.hub("more", { id: "vip", title: "اشتراک VIP", sub: "نقره‌ای و طلایی", icon: "crown", color: "var(--legendary)", go: "sh_vip", order: 15 });
 
-  function refreshBadge() {
-    return K.api.get("shop/badge/").then(function (d) { freeBoxes = d.free_boxes || 0; }).catch(function () {});
-  }
-  try { K.ensure().then(refreshBadge).catch(function () {}); } catch (e) {}
 
   // ───────────────────────── boxes ─────────────────────────
   function oddsRows(list) {
@@ -139,7 +158,7 @@
     render: function (root, params, ctx) {
       if (params.tab) { tabs.boxes = params.tab; params.tab = null; }
       var scr = live(root, ctx, "shop/boxes/", function (d) {
-        freeBoxes = d.free_boxes;
+        freeBoxes = d.free_boxes; if (K.dy && K.dy.touch) K.dy.touch("free_boxes", d.free_boxes);
         var html = seg([["gold", "باکس ژنتیکی", "box"], ["diamond", "باکس هیولا", "gem", d.free_boxes || ""]], tabs.boxes, "tab");
         if (tabs.boxes === "gold") {
           html += banner(d.img_gold, "باکس ژنتیکی", "تجهیزات و هیولای شانسی با طلا و DNA") +
@@ -175,16 +194,20 @@
         root.innerHTML = html;
       });
       function tier(list, key) { return list.filter(function (t) { return t.tier === key; })[0]; }
+      var busy = false;
       function opened(r, again) {
+        busy = false;
         K.invalidate("profile/creatures/", "profile/equipment/");
         reveal(r, again);
-        scr.refresh();
+        scr.set(r.boxes);
       }
+      function failed(reload) { return function () { busy = false; if (reload) scr.refresh(); }; }
       function openGold(key, count, el) {
         var t = tier(scr.data.gold, key); if (!t) return;
         var c = t.cost[String(count)];
         var go = function () {
-          K.api.post("shop/boxes/open/", { tier: key, count: count }, el).then(function (r) { opened(r, function () { openGold(key, count, null); }); }).catch(function () {});
+          if (busy) return; busy = true;
+          K.api.post("shop/boxes/open/", { tier: key, count: count }, el).then(function (r) { opened(r, function () { openGold(key, count, null); }); }, failed(false));
         };
         if (count === 1) return go();
         K.confirm({ title: "باز کردن " + count + " باکس", icon: "box", ok: "باز کن",
@@ -196,7 +219,8 @@
         var t = tier(scr.data.diamond, key); if (!t) return;
         var again = function () { openDiamond(key, mode === "free" ? "buy" : mode, null); };
         if (mode === "free") {
-          K.api.post("shop/boxes/diamond/", { tier: key, free: true }, el).then(function (r) { opened(r, again); }).catch(function () { scr.refresh(); });
+          if (busy) return; busy = true;
+          K.api.post("shop/boxes/diamond/", { tier: key, free: true }, el).then(function (r) { opened(r, again); }, failed(true));
           return;
         }
         var bulk = mode === "bulk", d = scr.data;
@@ -204,8 +228,9 @@
           html: "<p>" + K.esc(t.label) + "</p>" + kv([bulk ? ["تعداد", K.n(d.bulk_pay) + " + " + K.n(d.bulk_open - d.bulk_pay) + " رایگان (" + K.n(d.bulk_open) + " باکس)"] : null,
             ["هزینه", money("diamonds", bulk ? t.bulk_cost : t.cost)], ["الماس تو", money("diamonds", K.res ? K.res.diamonds : 0)]]) })
           .then(function (yes) {
-            if (!yes) return;
-            K.api.post(bulk ? "shop/boxes/diamond_bulk/" : "shop/boxes/diamond/", { tier: key }, el).then(function (r) { opened(r, again); }).catch(function () {});
+            if (!yes || busy) return;
+            busy = true;
+            K.api.post(bulk ? "shop/boxes/diamond_bulk/" : "shop/boxes/diamond/", { tier: key }, el).then(function (r) { opened(r, again); }, failed(false));
           });
       }
       root.addEventListener("click", function (ev) {
@@ -240,15 +265,19 @@
         else if (tabs.shop === "shield") html += shield(d);
         else html += gold(d);
         root.innerHTML = html;
-        K.timers(root, function () { scr.refresh(); });
       });
+      var busy = false;
 
+      /* an offer as a card: picture, what you get, today's limit, the price */
       function offerRow(o) {
-        var out = o.remaining === 0, cut = o.price < o.base;
-        return '<button data-act="offer" data-key="' + K.esc(o.key) + '"' + (out ? " disabled" : "") + '><span class="ic t-' + (o.currency === "diamonds" ? "diamond" : "coin") + '">' + K.ic(o.group === "food" ? "food" : o.group === "speed" ? "hourglass" : "bolt") + "</span>" +
-          '<span class="t">' + K.esc(o.title) + (o.featured ? ' <span class="tag shs-hot">' + K.ic("flame") + "ویژه‌ی امروز</span>" : "") +
-          "<small>" + K.esc(o.gets) + (o.remaining != null ? " · " + (out ? "سقف امروزت پر شد" : K.n(o.remaining) + " عدد مانده") : "") + "</small></span>" +
-          '<span class="v shs-price">' + (cut ? '<s class="faint num">' + Number(o.base).toLocaleString("en-US") + "</s>" : "") + money(o.currency, o.price) + "</span></button>";
+        var out = o.remaining === 0, cut = o.price < o.base, dia = o.currency === "diamonds";
+        var tint = o.group === "food" ? "var(--earth)" : o.group === "speed" ? "var(--accent)" : dia ? "var(--diamond)" : "var(--coin)";
+        return '<button class="panel shs-card' + (out ? " out" : "") + (o.featured ? " hot" : "") + '" data-act="offer" data-key="' + K.esc(o.key) + '"' + (out ? " disabled" : "") + ' style="--tc:' + tint + '">' +
+          '<span class="shs-art"' + (o.img ? ' style="background-image:url(\'' + o.img + '\')"' : "") + '><span class="shs-ai">' + K.ic(o.group === "food" ? "food" : o.group === "speed" ? "hourglass" : "tagp") + "</span>" +
+          (o.featured ? '<span class="shs-hot">' + K.ic("flame") + "ویژه‌ی امروز</span>" : "") + (out ? '<span class="shs-cover">' + K.ic("check") + "سقف امروز پر شد</span>" : "") + "</span>" +
+          '<span class="shs-cb"><b>' + K.esc(o.title) + "</b><small>" + K.esc(o.gets) + "</small>" +
+          '<small class="shs-lim">' + (o.remaining != null ? (out ? "فردا دوباره" : K.n(o.remaining) + " عدد مانده") : o.qty ? "هر تعداد که بخوای" : "") + "</small>" +
+          '<span class="shs-pr">' + (cut ? '<s class="faint num">' + Number(o.base).toLocaleString("en-US") + "</s>" : "") + money(o.currency, o.price) + "</span></span></button>";
       }
       function daily(d) {
         var html = banner(d.img, "فروشگاه روزانه", "آفرها هر روز عوض می‌شن");
@@ -264,17 +293,17 @@
           var list = d.offers.filter(function (o) { return o.group === gr[0]; });
           if (!list.length) return;
           any = true;
-          html += '<div class="h2">' + K.ic(gr[2]) + gr[1] + '</div><div class="panel list">' + list.map(offerRow).join("") + "</div>";
+          html += '<div class="h2">' + K.ic(gr[2]) + gr[1] + '</div><div class="shs-grid">' + list.map(offerRow).join("") + "</div>";
         });
         if (!any && !d.gem) html += K.state("cart", "الان آفری موجود نیست", "بعداً سر بزن.");
         return html;
       }
       function packs(d) {
         if (!d.items.length) return K.state("gift", "فعلاً بسته‌ای نیست", "بسته‌های ویژه هر از گاهی اینجا می‌آن. بعداً سر بزن.");
-        return '<p class="lead">بسته‌های ویژه‌ی فروشگاه. بعضی‌هاشون سقف خرید دارن.</p>' + d.items.map(function (it) {
+        return banner(d.img_pack || d.img, "بسته‌های ویژه", "بعضی‌هاشون سقف خرید دارن") + d.items.map(function (it) {
           var full = it.max_per_user > 0 && it.bought >= it.max_per_user;
           var price = [it.price_coins ? money("coins", it.price_coins) : "", it.price_diamonds ? money("diamonds", it.price_diamonds) : ""].filter(Boolean).join(" + ") || '<span class="t-good b">رایگان</span>';
-          return '<div class="panel pad shs-pack"><div class="flex"><span class="ico-box lg t-gold">' + K.ic("gift") + '</span><div class="grow"><div class="b">' + K.esc(it.title) + '</div><div class="sm muted">' + K.esc(it.gets) + "</div></div></div>" +
+          return '<div class="panel pad shs-pack' + (full ? " out" : "") + '"><div class="flex"><span class="ico-box lg t-gold">' + K.ic(full ? "check" : "gift") + '</span><div class="grow"><div class="b">' + K.esc(it.title) + '</div><div class="sm muted">' + K.esc(it.gets) + "</div></div></div>" +
             '<div class="flex between mt"><div>' + price + (it.max_per_user > 0 ? '<div class="xs muted">خریدهای تو: ' + K.n(it.bought) + " از " + K.n(it.max_per_user) + "</div>" : "") + "</div>" +
             '<button class="btn primary sm" data-act="pack" data-id="' + it.id + '"' + (full ? " disabled" : "") + ">" + (full ? "سقفت پر شد" : "خرید") + "</button></div></div>";
         }).join("");
@@ -286,7 +315,7 @@
         var html = banner(d.img_shield, "سپر محافظ", "با الماس؛ خریدها روی هم جمع می‌شن") +
           seg([["arena", "سپر آرنا", "shield"], ["group", "سپر گروه", "users"]], kind, "shield") +
           '<div class="panel pad ' + (cur.left > 0 ? "glow" : "") + '"><div class="flex"><span class="ico-box lg ' + (cur.left > 0 ? "t-good" : "faint") + '">' + K.ic(cur.left > 0 ? "shieldcheck" : "shield") + '</span><div class="grow"><div class="sm muted">وضعیت الان</div>' +
-          (cur.left > 0 ? '<span class="timer" data-fmt="long" data-left="' + cur.left + '" data-done="تموم شد"></span>' : '<div class="b">سپر فعالی نداری</div>') + "</div></div></div>" +
+          (cur.left > 0 ? '<span class="timer" data-fmt="long" data-until="' + scr.until(cur.left) + '" data-done="تموم شد"></span>' : '<div class="b">سپر فعالی نداری</div>') + "</div></div></div>" +
           '<div class="callout mt mb">' + K.ic("info") + "<div>" + (kind === "arena"
             ? "تا وقتی سپر داری کسی نمی‌تونه توی آرنا بهت حمله کنه. هر حمله‌ای که خودت بزنی " + K.n(s.attack_cost_hours) + " ساعت از سپرت کم می‌کنه."
             : "تا وقتی سپر گروه داری کسی نمی‌تونه توی گروه با «اتک» بهت حمله کنه. از سپر آرنا جداست و ارزون‌تره.") + "</div></div>" +
@@ -299,16 +328,18 @@
       function gold(d) {
         return banner(d.img_gold, "خرید طلا با الماس", "همیشه در دسترس") +
           '<div class="callout mb">' + K.ic("info") + "<div>بسته‌های بزرگ‌تر به‌صرفه‌ترن.</div></div>" +
-          '<div class="panel list">' + d.gold_packs.map(function (p) {
-            return '<button data-act="gold" data-idx="' + p.idx + '"><span class="ic t-coin">' + K.ic("coin") + '</span><span class="t">بسته‌ی ' + K.n(p.gold) + " طلا</span>" +
-              '<span class="v">' + money("diamonds", p.diamonds) + "</span></button>";
+          '<div class="shs-grid">' + d.gold_packs.map(function (p, i) {
+            return '<button class="panel shs-card shs-gold" data-act="gold" data-idx="' + p.idx + '" style="--tc:var(--coin)"><span class="shs-art"><span class="shs-coins s' + Math.min(i, 4) + '">' + K.ic("coin") + K.ic("coin") + K.ic("coin") + "</span></span>" +
+              '<span class="shs-cb"><b class="t-coin num">' + Number(p.gold).toLocaleString("en-US") + "</b><small>طلا</small>" +
+              '<span class="shs-pr">' + money("diamonds", p.diamonds) + "</span></span></button>";
           }).join("") + "</div>";
       }
 
       function buyOffer(o, count, el) {
+        if (busy) return; busy = true;
         return K.api.post("shop/store/buy/", { token: o.token, count: count }, el).then(function (r) {
-          K.closeSheet(); bought(r.title, r.notes); scr.refresh();
-        }).catch(function () { scr.refresh(); });
+          busy = false; K.closeSheet(); bought(r.title, r.notes); scr.set(r.store);
+        }, function () { busy = false; scr.refresh(); });
       }
       function qtySheet(o) {
         var bal = K.res ? (o.currency === "diamonds" ? K.res.diamonds : K.res.coins) : 0;
@@ -365,12 +396,14 @@
         K.confirm({ title: "خرید کایجوی جمی", icon: "gem", ok: "تأیید و خرید",
           html: kv([["هیولا", K.esc(g.name) + " (" + K.esc(K.rarLabel(g.rarity)) + ")"], ["قیمت", money("diamonds", g.price)], ["الماس تو", money("diamonds", K.res ? K.res.diamonds : 0)]]) })
           .then(function (yes) {
-            if (!yes) return;
+            if (!yes || busy) return;
+            busy = true;
             K.api.post("shop/store/gem/", {}, el).then(function (r) {
+              busy = false;
               K.invalidate("profile/creatures/");
-              scr.refresh();
+              scr.set(r.store);
               K.reward({ title: "کایجوی جمی خریده شد", text: "به کلکسیونت اضافه شد؛ می‌تونی فعالش کنی یا برای ادغام استفاده‌ش کنی.", creatures: [r.creature], icon: "gem" });
-            }).catch(function () {});
+            }, function () { busy = false; scr.refresh(); });
           });
       });
       K.on(root, "pack", function (el) {
@@ -379,12 +412,14 @@
           html: kv([["بسته", K.esc(it.title)], ["محتویات", K.esc(it.gets)],
             ["قیمت", [it.price_coins ? money("coins", it.price_coins) : "", it.price_diamonds ? money("diamonds", it.price_diamonds) : ""].filter(Boolean).join(" + ") || "رایگان"]]) })
           .then(function (yes) {
-            if (!yes) return;
+            if (!yes || busy) return;
+            busy = true;
             K.api.post("shop/store/item/", { id: it.id }, el).then(function (r) {
+              busy = false;
               K.invalidate("profile/creatures/", "profile/equipment/");
-              scr.refresh();
+              scr.set(r.store);
               K.reward({ title: "خرید موفق", text: r.title, extra: r.notes.map(function (n) { return K.esc(n); }) });
-            }).catch(function () {});
+            }, function () { busy = false; scr.refresh(); });
           });
       });
       K.on(root, "shield", function (el) {
@@ -392,10 +427,11 @@
         K.confirm({ title: kind === "arena" ? "خرید سپر آرنا" : "خرید سپر گروه", icon: "shield", ok: "تأیید و خرید",
           html: kv([["نوع سپر", K.esc(t.label)], ["مدت", K.n(t.hours) + " ساعت"], ["هزینه", money("diamonds", t.diamonds)], ["الماس تو", money("diamonds", K.res ? K.res.diamonds : 0)]]) })
           .then(function (yes) {
-            if (!yes) return;
+            if (!yes || busy) return;
+            busy = true;
             K.api.post("shop/store/shield/", { kind: kind, tier: t.tier }, el).then(function (r) {
-              K.haptic("ok"); K.toast("سپر فعال شد. الان " + K.dur(r.left) + " محافظت داری.", "ok"); scr.refresh();
-            }).catch(function () {});
+              busy = false; K.haptic("ok"); K.toast("سپر فعال شد. الان " + K.dur(r.left) + " محافظت داری.", "ok"); scr.set(r.store);
+            }, function () { busy = false; });
           });
       });
       K.on(root, "gold", function (el) {
@@ -403,10 +439,11 @@
         K.confirm({ title: "خرید طلا با الماس", icon: "coin", ok: "تأیید و خرید",
           html: kv([["می‌گیری", money("coins", p.gold)], ["می‌دی", money("diamonds", p.diamonds)], ["الماس تو", money("diamonds", K.res ? K.res.diamonds : 0)]]) })
           .then(function (yes) {
-            if (!yes) return;
+            if (!yes || busy) return;
+            busy = true;
             K.api.post("shop/store/gold/", { idx: p.idx }, el).then(function (r) {
-              scr.refresh(); K.reward({ title: "طلا گرفتی", coins: r.gold, icon: "coin" });
-            }).catch(function () {});
+              busy = false; K.reward({ title: "طلا گرفتی", coins: r.gold, icon: "coin" });
+            }, function () { busy = false; });
           });
       });
       return scr.load();
@@ -418,7 +455,7 @@
     title: "صرافی", tab: "more",
     render: function (root, params, ctx) {
       if (params.tab) { tabs.ex = params.tab; params.tab = null; }
-      var amount = { buy_dna: 0, buy_gold: 0 }, deal = null, seq = 0, timer = null, rec = null, picked = {};
+      var amount = { buy_dna: 0, buy_gold: 0 }, deal = null, seq = 0, timer = null, rec = null, picked = {}, swapping = false;
       var scr = live(root, ctx, "shop/exchange/", function (d) {
         var html = seg([["swap", "طلا و DNA", "swap"], ["recycle", "بازیافت تجهیزات", d.recycle.locked ? "lock" : "recycle"]], tabs.ex, "tab");
         root.innerHTML = html + '<div id="shx-body"></div>';
@@ -457,6 +494,7 @@
         if (!amount[dir]) { box.innerHTML = '<div class="muted sm center">یه عدد وارد کن.</div>'; return; }
         box.classList.add("shx-wait");
         timer = setTimeout(function () {
+          if (mine !== seq || !ctx.alive()) return;
           K.api.get("shop/exchange/preview/?direction=" + dir + "&amount=" + amount[dir]).then(function (p) {
             if (mine !== seq || !ctx.alive() || !document.body.contains(box)) return;
             deal = p; box.classList.remove("shx-wait");
@@ -478,12 +516,14 @@
         K.confirm({ title: "تأیید مبادله", icon: "swap", ok: "مبادله کن",
           html: kv([["می‌دی", buyDna ? K.amounts({ coins: p.gold }) : K.amounts({ dna: p.dna })], ["می‌گیری", buyDna ? K.amounts({ dna: p.dna }) : K.amounts({ coins: p.gold })]]) })
           .then(function (yes) {
-            if (!yes) return;
+            if (!yes || swapping) return;
+            swapping = true;
             K.api.post("shop/exchange/do/", { direction: p.direction, dna: p.dna }, el).then(function (r) {
+              swapping = false;
               var o = { title: "مبادله انجام شد", icon: "swap" };
               if (r.direction === "buy_dna") o.dna = r.dna; else o.coins = r.gold;
-              scr.refresh(); K.reward(o);
-            }).catch(function () { preview(0); });
+              scr.set(r.exchange); K.reward(o);
+            }, function () { swapping = false; preview(0); });
           });
       }
 
@@ -545,12 +585,14 @@
         K.confirm({ title: "تبدیل به بلیط", danger: true, icon: "recycle", ok: "بله، تبدیل کن",
           html: warn + "<p>" + K.n(sel.length) + " تجهیز برای همیشه حذف می‌شه و " + K.n(gain) + " بلیط می‌گیری.</p>" })
           .then(function (yes) {
-            if (!yes) return;
+            if (!yes || swapping) return;
+            swapping = true;
             K.api.post("shop/recycle/do/", { ids: sel.map(function (it) { return it.id; }) }, el).then(function (r) {
-              K.invalidate("profile/equipment/"); picked = {}; rec = null;
+              swapping = false;
+              K.invalidate("profile/equipment/"); picked = {}; rec = r.recycle || null;   // the list after the exchange came with the answer
               K.haptic("ok"); K.toast(r.tickets + " بلیط گرفتی. الان " + r.total + " بلیط داری.", "ok");
               scr.draw();
-            }).catch(function () { rec = null; scr.draw(); });
+            }, function () { swapping = false; rec = null; scr.draw(); });
           });
       });
       return scr.load();
@@ -562,28 +604,35 @@
     title: "شارژ انرژی", tab: "more",
     render: function (root, params, ctx) {
       return K.api.get("shop/energy/").then(function (d) {
-        var res = d.res || K.res || {}, full = d.energy >= d.max_energy, left = res.energy_in != null ? res.energy_in : d.next_in;
-        root.innerHTML = '<div class="banner she-top" style="background-image:url(/app/s/img/bg_energy.jpg)"><div class="she-meter"><div class="she-num">' + K.ic("bolt", "f") +
-          '<b class="num">' + d.energy + '</b><span class="num">/' + d.max_energy + "</span></div>" + K.bar(d.energy / d.max_energy, "gold", "thick") +
-          '<div class="sm she-next">' + (full ? '<span class="t-good b">' + K.ic("check") + " انرژیت پره</span>"
-            : 'انرژی بعدی تا <span class="timer" data-left="' + left + '" data-done="رسید"></span>') + "</div></div></div>" +
-          '<div class="tiles mt"><div class="panel info"><span class="ic t-energy">' + K.ic("clock") + "</span><div><small>هر یک انرژی</small><b>" + K.dur(d.regen_seconds) + "</b></div></div>" +
-          '<div class="panel info"><span class="ic t-diamond">' + K.ic("gem") + "</span><div><small>الماس تو</small><b>" + K.n(d.diamonds) + "</b></div></div></div>" +
-          '<div class="panel pad mt"><div class="b">شارژ کامل انرژی</div><div class="sm muted" style="margin:2px 0 12px">انرژیت یک‌جا به ' + K.n(d.max_energy) + " می‌رسه.</div>" +
-          '<button class="btn gold block lg" data-act="refill"' + (full ? " disabled" : "") + ">" + K.ic("bolt", "f") + "<span>" + (full ? "نیازی به شارژ نیست" : "شارژ کن") + '</span><span class="cost">' + K.ic("gem") + " " + K.n(d.cost) + "</span></button>" +
-          (!full && d.diamonds < d.cost ? '<div class="t-bad sm center" style="margin-top:8px">' + K.ic("warn") + " الماس کافی نداری.</div>" : "") + "</div>" +
-          (d.subscriber ? '<div class="callout good mt">' + K.ic("crown") + "<div>اشتراک VIP داری: سقف انرژیت " + K.n(d.max_energy) + " هست و سریع‌تر پر می‌شه.</div></div>"
-            : '<button class="callout mt she-vip" data-act="vip">' + K.ic("crown") + '<div class="grow" style="text-align:right">با اشتراک VIP سقف انرژی ' + K.n(d.sub_max) + " می‌شه (به جای " + K.n(d.base_max) + ") و سریع‌تر پر می‌شه.</div>" + K.ic("chevron") + "</button>");
-        K.timers(root, function () { ctx.reload(); });
+        var busy = false, fired = false, tick = null;
+        function draw() {
+          var full = d.energy >= d.max_energy, nextAt = Math.round(Date.now() / 1000 + Number(d.next_in || 0));
+          root.innerHTML = '<div class="banner she-top" style="background-image:url(/app/s/img/bg_energy.jpg)"><div class="she-meter"><div class="she-num">' + K.ic("bolt", "f") +
+            '<b class="num">' + d.energy + '</b><span class="num">/' + d.max_energy + "</span></div>" + K.bar(d.max_energy ? d.energy / d.max_energy : 0, "gold", "thick") +
+            '<div class="sm she-next">' + (full ? '<span class="t-good b">' + K.ic("check") + " انرژیت پره</span>"
+              : 'انرژی بعدی تا <span class="timer" data-until="' + nextAt + '" data-done="رسید"></span>') + "</div></div></div>" +
+            '<div class="tiles mt"><div class="panel info"><span class="ic t-energy">' + K.ic("clock") + "</span><div><small>هر یک انرژی</small><b>" + K.dur(d.regen_seconds) + "</b></div></div>" +
+            '<div class="panel info"><span class="ic t-diamond">' + K.ic("gem") + "</span><div><small>الماس تو</small><b>" + K.n(d.diamonds) + "</b></div></div></div>" +
+            '<div class="panel pad mt"><div class="b">شارژ کامل انرژی</div><div class="sm muted" style="margin:2px 0 12px">انرژیت یک‌جا به ' + K.n(d.max_energy) + " می‌رسه.</div>" +
+            '<button class="btn gold block lg" data-act="refill"' + (full ? " disabled" : "") + ">" + K.ic("bolt", "f") + "<span>" + (full ? "نیازی به شارژ نیست" : "شارژ کن") + '</span><span class="cost">' + K.ic("gem") + " " + K.n(d.cost) + "</span></button>" +
+            (!full && d.diamonds < d.cost ? '<div class="t-bad sm center" style="margin-top:8px">' + K.ic("warn") + " الماس کافی نداری.</div>" : "") + "</div>" +
+            (d.subscriber ? '<div class="callout good mt">' + K.ic("crown") + "<div>اشتراک VIP داری: سقف انرژیت " + K.n(d.max_energy) + " هست و سریع‌تر پر می‌شه.</div></div>"
+              : '<button class="callout mt she-vip" data-act="vip">' + K.ic("crown") + '<div class="grow" style="text-align:right">با اشتراک VIP سقف انرژی ' + K.n(d.sub_max) + " می‌شه (به جای " + K.n(d.base_max) + ") و سریع‌تر پر می‌شه.</div>" + K.ic("chevron") + "</button>");
+          if (tick) tick();
+        }
+        draw();
+        tick = ticker(root, function () { if (fired) return; fired = true; K.after(800, ctx.reload); });
         K.on(root, "vip", function () { K.go("sh_vip"); });
         K.on(root, "refill", function (el) {
           K.confirm({ title: "شارژ کامل انرژی", icon: "bolt", ok: "بله، شارژ کن", cancel: "بی‌خیال",
             html: "<p>انرژیت به " + K.n(d.max_energy) + " پر می‌شه و " + K.n(d.cost) + " الماس ازت کم می‌شه.</p>" })
             .then(function (yes) {
-              if (!yes) return;
+              if (!yes || busy) return;
+              busy = true;
               K.api.post("shop/energy/refill/", {}, el).then(function (r) {
-                K.haptic("ok"); K.toast("انرژی پر شد (" + r.cost + " الماس کم شد). برگرد و ادامه بده.", "ok"); ctx.reload();
-              }).catch(function () { ctx.reload(); });
+                busy = false; K.haptic("ok"); K.toast("انرژی پر شد (" + r.cost + " الماس کم شد). برگرد و ادامه بده.", "ok");
+                if (r.panel) { d = r.panel; if (ctx.alive()) draw(); } else ctx.reload();
+              }, function () { busy = false; ctx.reload(); });
             });
         });
       });
@@ -609,7 +658,8 @@
         }).join("");
         html += '<div class="callout mt">' + K.ic("info") + "<div>خرید و تمدید اشتراک از داخل ربات انجام می‌شه: «فروشگاه» ← «اشتراک VIP». با خرید دوباره، مدتش به اشتراک فعلیت اضافه می‌شه.</div></div>";
         root.innerHTML = html;
-        K.timers(root, function () { ctx.reload(); });
+        var fired = false;
+        ticker(root, function () { if (fired) return; fired = true; K.after(1500, ctx.reload); });
       });
     }
   });

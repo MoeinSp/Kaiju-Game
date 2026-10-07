@@ -26,3 +26,13 @@
 .tw-lb .rk.top1 { color: #1b1203; background: var(--gold); } .tw-lb .rk.top2 { color: #10151f; background: #c8d3e6; } .tw-lb .rk.top3 { color: #1b0e03; background: #d58a4f; }
 .tw-lb .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tw-lb .fl { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; white-space: nowrap; } .tw-lb .fl svg { width: 14px; height: 14px; color: var(--epic); }
+/* the ten floors up to the next boss floor */
+.tw-steps { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; margin-top: 10px; }
+.tw-steps span { height: 26px; display: grid; place-items: center; border-radius: 8px; font-size: 10.5px; font-weight: 700; color: var(--faint); background: rgba(255,255,255,.04); border: 1px solid var(--line); }
+.tw-steps i { font-style: normal; } .tw-steps svg { width: 12px; height: 12px; }
+.tw-steps .done { color: var(--good); background: rgba(53,212,138,.1); border-color: rgba(53,212,138,.3); }
+.tw-steps .cur { color: #06131a; background: linear-gradient(135deg, var(--accent), #7fe6ff); border-color: transparent; box-shadow: 0 0 14px rgba(58,214,255,.4); }
+.tw-steps .boss { color: var(--mythic); border-color: rgba(255,77,109,.4); }
+.tw-steps .boss.cur { color: #fff; background: linear-gradient(135deg, #ff5470, #d93056); box-shadow: 0 0 14px rgba(255,84,112,.45); }
+.tw-steps .boss.done { color: var(--good); border-color: rgba(53,212,138,.3); }
+@media (max-width: 350px) { .tw-banner .ttl { font-size: 21px; } .tw-steps { gap: 3px; } .tw-steps span { height: 24px; border-radius: 7px; } .tw-mile img { width: 56px; height: 56px; } .tw-lb > div { padding: 8px 10px; gap: 8px; } }

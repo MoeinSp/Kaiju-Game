@@ -58,3 +58,17 @@
 .wb-share { display: block; height: 4px; margin-top: 4px; border-radius: 999px; background: rgba(255,255,255,.07); overflow: hidden; }
 .wb-share > i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #ff8a5c, #ff4d6d); transition: width .5s ease; }
 .wb-top .dm { font-weight: 700; white-space: nowrap; color: #ffb3c0; }
+
+/* ── how the last boss ended (an escape is the usual ending, not an error) ── */
+.wb-hint { display: flex; gap: 7px; margin-top: 9px; font-size: 12px; line-height: 1.7; color: var(--muted); }
+.wb-hint svg { width: 14px; height: 14px; flex: none; margin-top: 3px; color: var(--accent); }
+.wb-last { padding: 14px; }
+.wb-last.esc { --tc: var(--warn); } .wb-last.dead { --tc: var(--gold); border-color: rgba(255,200,87,.4); background: linear-gradient(135deg, rgba(255,200,87,.1), rgba(255,140,60,.04)); }
+.wb-last-h { display: flex; align-items: center; gap: 11px; }
+.wb-last-h .ico-box, .wb-last-h .tag { color: var(--tc); flex: none; }
+.wb-last-bar { margin-top: 12px; } .wb-last-bar .xs { margin-top: 5px; }
+.wb-last .wb-stats { margin: 12px 0 0; }
+.wb-last-note { display: flex; gap: 8px; margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12.5px; line-height: 1.8; color: #cfd8ee; }
+.wb-last-note.muted { color: var(--muted); }
+.wb-last-note svg { width: 16px; height: 16px; flex: none; margin-top: 3px; color: var(--tc); }
+@media (max-width: 345px) { .wb-name .ttl { font-size: 18px; } .wb-me { flex-wrap: wrap; } .wb-me .btn { width: 100%; } }

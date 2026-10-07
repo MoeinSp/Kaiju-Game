@@ -16,11 +16,19 @@
     render: function (root, params, ctx) {
       var S, note = "", lock = false;
 
+      function steps() {          // the ten floors up to the next boss floor
+        var start = S.floor - ((S.floor - 1) % 10), h = '<div class="tw-steps" aria-hidden="true">';
+        for (var n = start; n < start + 10; n++) {
+          h += '<span class="' + (n < S.floor ? "done" : n === S.floor ? "cur" : "") + (n % 10 === 0 ? " boss" : "") + '">' +
+            (n % 10 === 0 ? K.ic("skull") : n < S.floor ? K.ic("check") : '<i class="num">' + n + "</i>") + "</span>";
+        }
+        return h + "</div>";
+      }
       function view() {
         var g = S.guardian, me = S.me, adv = K.advantage(me.element, g.element), m = S.milestone;
         var html = '<div class="banner tw-banner" style="background-image:url(\'' + K.esc(S.art || "") + '\')"><div class="grow"><div class="sm" style="color:#c5cee2">برج بی‌پایان · هر طبقه یه نگهبان</div>' +
           '<div class="ttl">طبقه‌ی ' + K.n(S.floor) + "</div></div>" +
-          '<div class="pow"><b>' + K.n(S.cleared) + "</b><small>طبقه‌ی فتح‌شده</small></div></div>" + note +
+          '<div class="pow"><b>' + K.n(S.cleared) + "</b><small>طبقه‌ی فتح‌شده</small></div></div>" + steps() + note +
           '<div class="panel tw-arena ' + g.rarity + (g.boss ? " boss" : "") + '">' +
           '<div class="tw-head">' + (g.boss ? '<span class="tag" style="color:var(--mythic)">' + K.ic("skull") + "غول طبقه</span>" : '<span class="tag plain">' + K.ic("tower") + "نگهبان طبقه</span>") + K.rarTag(g.rarity) + "</div>" +
           '<div class="versus">' + HU.side(me, { role: "هیولای تو · " + K.esc(K.elLabel(me.element)), act: "swap" }) + '<div class="vs">VS</div>' +
@@ -50,6 +58,7 @@
 
       K.on(root, "fight", function (el) {
         if (lock) return; lock = true;
+        var before = S.me;
         K.api.post("tower/fight/", {}, el).then(function (d) {
           lock = false;
           var r = d.result; S = d; K.invalidate("profile/creatures/");
@@ -61,13 +70,15 @@
               icon: "tower", coins: r.rewards.coins, dna: r.rewards.dna, diamonds: r.rewards.diamonds, xp: r.rewards.xp,
               extra: r.rewards.tickets ? [K.ic("ticket") + '<span class="num">+' + r.rewards.tickets + "</span> بلیط"] : [], button: "ادامه‌ی صعود" });
           } else {
-            note = '<div class="callout bad mt">' + K.ic("skull") + "<span><b>شکست در طبقه‌ی " + K.n(r.floor) + "</b><br>نگهبان برج خیلی قوی بود. هیولات رو قوی‌تر کن، یا با عنصری برو که بهش برتری داره، و دوباره بیا." +
+            note = '<div class="callout bad mt">' + K.ic("skull") + "<span><b>شکست در طبقه‌ی " + K.n(r.floor) + "</b><br>" +
+              "قدرت " + K.esc(before.name) + " " + K.n(r.player_power) + " بود و قدرت نگهبان " + K.n(r.guardian.power) + ". هیولات رو قوی‌تر کن، یا با عنصری برو که بهش برتری داره، و دوباره بیا." +
               (r.levels ? "<br>هیولات رسید به سطح " + K.n(r.level) + "." : "") + "</span></div>" + HU.log(r.log);
             draw(); K.haptic("err");
           }
         }).catch(function () { lock = false; });
       });
       K.on(root, "swap", function () {
+        if (lock) return;
         HU.swapSheet({ enemy: S.guardian.element, sub: "نگهبان عوض نمی‌شه؛ هیولایی که انتخاب کنی هیولای فعالت می‌شه." }).then(function (id) {
           if (!id) return;
           return K.api.post("tower/swap/", { creature_id: id }).then(function (d) {

@@ -72,9 +72,11 @@ def team(user: User) -> list[dict]:
     from game.workers import creature_status
 
     rows = team_choices(user)
-    out = creature_list(user, rows)
+    out = creature_list(user, rows)  # research + gear + the busy set, a fixed number of queries
     for row, c in zip(out, rows):
-        busy = (not c.is_active) and creature_status(user, c)
+        # creature_list already knows WHO is busy (game.workers.busy_creature_ids); only those
+        # are asked for the reason, instead of three queries for every team member
+        busy = creature_status(user, c) if (row["busy"] and not c.is_active) else None
         row["busy"] = bool(busy)
         row["busy_why"] = clean(busy) if busy else ""
     return out
@@ -207,8 +209,9 @@ def _encounter_out(enc_type: str) -> dict:
     }
 
 
-def _state(user: User, card: dict | None = None, token: str | None = None) -> dict:
-    """Everything the hunt screen shows. `card` = the open (already validated) card."""
+def _state(user: User, card: dict | None = None, token: str | None = None, target: dict | None = None) -> dict:
+    """Everything the hunt screen shows. `card` = the open (already validated) card;
+    `target` = the wild it stands for when the caller already has it (a fresh scout)."""
     from game.energy import sync_energy
     from game.media import get_feature_image_path
 
@@ -226,7 +229,7 @@ def _state(user: User, card: dict | None = None, token: str | None = None) -> di
         if card["k"] == "e":
             out["target"] = _encounter_out(card["enc"])
         else:
-            out["target"] = _target_out(creature, power, hunt.rebuild_target(user, card["tier"], card["seed"]))
+            out["target"] = _target_out(creature, power, target or hunt.rebuild_target(user, card["tier"], card["seed"]))
     return out
 
 
@@ -265,7 +268,8 @@ def scout(request, user, data):
         card = {"k": "e", "enc": target["enc_type"], "n": nonce}
     else:
         card = {"k": "t", "tier": target["tier"], "seed": int(target["seed"]), "n": nonce}
-    out = _state(user, card, pack(user, TOKEN_KIND, card))
+    # the wild scout_one() just built IS the card: no second rebuild (it re-prices the whole team)
+    out = _state(user, card, pack(user, TOKEN_KIND, card), None if card["k"] == "e" else target)
     out["paid"] = cost
     return out
 
@@ -296,8 +300,10 @@ def team_view(request, user):
 @endpoint("POST")
 def attack(request, user, data):
     from bio_lab.repository import get_active_creature
+    from game.creature import creature_power
     from game.daily import check_missions, record_action
     from game.energy import spend_energy
+    from game.equipment import get_equipped_items
 
     token = need_str(data, "token", max_len=600)
     with transaction.atomic():
@@ -307,32 +313,29 @@ def attack(request, user, data):
         creature = get_active_creature(user)
         if creature is None:
             raise GameError("اول یه هیولای فعال انتخاب کن.")
-        target = hunt.rebuild_target(user, card["tier"], card["seed"])
-        level_before, lab_before = creature.level, user.lab_xp
+        level_before = creature.level
 
         spend_energy(user, constants.HUNT_ENERGY_COST, "شکار")
         user.save(update_fields=["energy", "energy_updated_at"])
 
         result = hunt.resolve_hunt(user, creature, card["tier"], card["seed"])
-        lab_xp = user.lab_xp - lab_before
         record_action(user, "hunt")  # ← advances the nonce: this card is spent
         completed = check_missions(user, "hunt")
-    out = {
+    # resolve_hunt() fought with this very object (research attached, XP added): one gear
+    # query gives the card of the fighter as it is now
+    gear = get_equipped_items(creature)
+    return {
         "won": result["won"], "coins": result["coins"], "dna": result["dna"], "xp": result["xp"],
         "levels": result["levels"], "level": creature.level, "level_before": level_before,
-        "lab_xp": max(0, lab_xp), "lab_up": result["lab_up"] or None,
+        "lab_up": result["lab_up"] or None,
         "log": battle_log(result["log_text"]),
-        "enemy": {
-            "name": target["name"], "element": target["element"], "rarity": "common", "power": target["power"],
-            "tier": card["tier"], "tier_label": clean(hunt.HUNT_TIERS[card["tier"]]["label"]),
-            "img": species_img(target["name"], target["element"], "common", 1, 1),
-        },
+        # name/element/power/art of the wild are on the card the client attacked (same tier + seed)
+        "enemy": {"name": result["wild_name"], "tier": card["tier"],
+                  "tier_label": clean(hunt.HUNT_TIERS[card["tier"]]["label"])},
         "missions": missions_out(completed),
+        "me": creature_dict(creature, gear),
+        "scout_cost": hunt.scout_cost(creature, power=creature_power(creature, gear)),
     }
-    creature, gear, _power = fighter(user)
-    out["me"] = creature_dict(creature, gear)
-    out["scout_cost"] = hunt.scout_cost(creature, power=_power)
-    return out
 
 
 @endpoint("POST")
@@ -369,9 +372,7 @@ def encounter(request, user, data):
     }
 
 
-@endpoint()
-def auto_panel(request, user):
-    """The auto-hunt prompt: live energy and the bot's quick amounts (همه / نصف / دلخواه)."""
+def _auto_state(user: User) -> dict:
     from game.energy import get_max_energy, sync_energy
     from game.subscription import get_subscription_tier
 
@@ -385,6 +386,12 @@ def auto_panel(request, user):
         "win_floor_pct": int(round(hunt.AUTO_HUNT_WIN_FLOOR * 100)),
         "subscription": get_subscription_tier(user),
     }
+
+
+@endpoint()
+def auto_panel(request, user):
+    """The auto-hunt prompt: live energy and the bot's quick amounts (همه / نصف / دلخواه)."""
+    return _auto_state(user)
 
 
 @endpoint("POST")
@@ -424,15 +431,20 @@ def auto_run(request, user, data):
         "bonus_coins": res["bonus_coins"], "bonus_dna": res["bonus_dna"],
         "energy_left": user.energy, "max_energy": max_en,
         "missions": missions_out(completed),
+        # the prompt for the next batch, so «شکار خودکار مجدد» needs no second request
+        "panel": _auto_state(user),
     }
 
 
 @endpoint()
 def hub(request, user):
-    """Tiny status for the battle hub: is a world boss up, and is the tower open for this player."""
+    """Tiny status for the battle hub tiles, in ONE request: is a world boss up, is the tower
+    open for this player, how many arena chests are ready to open."""
     from game import worldboss
+    from telgame_site.mini.api.arena import ready_chest_count
 
-    return {"boss": worldboss.current_boss() is not None, "tower_open": section_open(user, "mugen_tower")}
+    return {"boss": worldboss.current_boss() is not None, "tower_open": section_open(user, "mugen_tower"),
+            "ready_chests": ready_chest_count(user)}
 
 
 routes = [

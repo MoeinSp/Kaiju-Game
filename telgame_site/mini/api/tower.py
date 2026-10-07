@@ -55,8 +55,9 @@ def _state(user: User) -> dict:
     from game.energy import sync_energy
     from game.media import get_feature_image_path
 
-    status = mugen_tower.get_mugen_status(user)
-    floor = status["floor"]
+    # the floor is a column of the player's row. (mugen_tower.get_mugen_status() would also run
+    # a top-10 query that this screen throws away — the list below is the bot's top 15.)
+    floor = user.mugen_tower_floor or 1
     creature, gear, _power = fighter(user)
     milestone = floor if floor % 10 == 0 else (floor // 10 + 1) * 10
     out = {

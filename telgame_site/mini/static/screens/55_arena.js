@@ -14,16 +14,13 @@
 
   var held = null;      // the opponent card on screen (token, seen, …)
   var seen = [];        // real opponents shown lately — «حریف بعدی» skips them
-  var readyChests = 0;  // hub badge
-  var chestGuide = null;
-
-  function refreshBadge() {
-    return K.api.get("arena/badges/").then(function (d) { readyChests = d.ready_chests || 0; }).catch(function () {});
-  }
-  refreshBadge();
+  var HU = K.hu;        // 50_hunt.js: the one hub-status request and the redraw-safe countdowns
+  /* the «ready chests» badge rides on the battle hub's single status request (hunt/hub/);
+     the arena screens correct it the moment they know better */
+  function setReady(n) { HU.setHub({ ready_chests: n || 0 }); }
 
   K.hub("battle", { id: "arena", title: "آرنا", sub: "غارت، کاپ و لیگ", icon: "swords", color: "var(--bad)", go: "ar_home", order: 2 });
-  K.hub("battle", { id: "chests", title: "جعبه‌ها", sub: "جایزه‌ی بردهای آرنا", icon: "chest", color: "var(--gold)", go: "ar_chests", order: 3, badge: function () { return readyChests; } });
+  K.hub("battle", { id: "chests", title: "جعبه‌ها", sub: "جایزه‌ی بردهای آرنا", icon: "chest", color: "var(--gold)", go: "ar_chests", order: 3, badge: function () { return HU.hubStatus().ready_chests || 0; } });
   K.hub("more", { id: "league", title: "لیگ", sub: "پاداش آخر هفته و جایزه‌ی رتبه", icon: "medal", color: "var(--cup)", go: "ar_league", hall: 3, order: 58 });
 
   // ───────────────────────── small builders ─────────────────────────
@@ -170,7 +167,7 @@
     title: "آرنا", tab: "battle",
     render: function (root, params, ctx) {
       return K.api.get("arena/").then(function (d) {
-        readyChests = d.chests.ready;
+        setReady(d.chests.ready);
         var lg = d.league, nx = d.next_league, ch = d.chests, now = Date.now() / 1000;
         var chestSub = !ch.count ? "با برد در آرنا می‌گیری" : ch.ready ? K.n(ch.ready) + " جعبه آماده‌ی باز کردن" : ch.opening_left != null ? '<span class="timer" data-left="' + ch.opening_left + '"></span> تا باز شدن' : "منتظر بازگشایی";
         root.innerHTML = '<div class="banner"' + (d.img ? ' style="background-image:url(\'' + d.img + "')\"" : "") + '><div class="grow"><div class="ttl">آرنا</div><div class="sm" style="color:#c5cee2">فصل <span class="num">' + K.esc(d.week) + '</span> · <span class="timer" data-left="' + d.season_left + '" data-fmt="long" data-done="ریست شد"></span> تا ریست کاپ‌ها</div></div></div>' +
@@ -222,6 +219,8 @@
     title: "حریف", tab: "battle",
     render: function (root, params, ctx) {
       var last = null;  // the last result (for «جزئیات نبرد»)
+      var busy = false; // an attack / search is in flight: the other buttons wait for its answer
+      function hold(p) { busy = true; return p.then(function (v) { busy = false; return v; }, function (e) { busy = false; throw e; }); }
       function show(c) {
         held = c; seen = c.seen || [];
         root.innerHTML = cardHtml(c);
@@ -238,20 +237,20 @@
         afterFight(r);
       }
       K.on(root, "attack", function (el) {
-        if (!held) return;
-        fight("arena/attack/", { token: held.token, seen: seen }, el).then(function (r) {
+        if (!held || busy) return;
+        hold(fight("arena/attack/", { token: held.token, seen: seen }, el)).then(function (r) {
           if (!r || !ctx.alive()) return;
           if (r.rematch) { show(r); K.toast(r.note || "حریف عوض شد.", "err"); return; }
           showResult(r.result);
         }).catch(function () {});
       });
-      K.on(root, "next", function (el) { find(el).catch(function () {}); });
+      K.on(root, "next", function (el) { if (!busy) hold(find(el)).catch(function () {}); });
       K.on(root, "details", function (el) { if (held) detailsSheet({ token: held.token }, el); });
       K.on(root, "log", function () { showDetail(last && last.detail); });
       K.on(root, "home", function () { K.back(); });
       K.on(root, "to-chests", function () { K.go("ar_chests"); });
       K.on(root, "swap", function (el) {
-        if (!held) return;
+        if (!held || busy) return;
         el.classList.add("busy");
         K.api.get("arena/team/").then(function (d) {
           var box = K.sheet('<div class="grab"></div><div class="pad"><div class="ttl" style="font-size:18px">کدوم هیولا با این حریف بجنگه؟</div><p class="lead" style="margin:4px 0 12px">حریف عوض نمی‌شه؛ فقط هیولای خودت. برتری عنصری یعنی +۲۰٪ قدرت.</p>' +
@@ -321,7 +320,9 @@
       K.on(root, "log", function () { showDetail(last && last.detail); });
       K.on(root, "back", function () { K.back(); });
       K.on(root, "to-chests", function () { K.go("ar_chests"); });
+      var busy = false;
       K.on(root, "revenge", function (el) {
+        if (busy) return; busy = true;
         fight("arena/revenge/", { log_id: c.log_id }, el).then(function (r) {
           if (!r || !ctx.alive()) return;
           last = r.result;
@@ -329,7 +330,7 @@
           root.innerHTML = resultHtml(last, '<div class="btns"><button class="btn" data-act="log">' + K.ic("list") + 'جزئیات نبرد</button><button class="btn primary" data-act="back">' + K.ic("chevron") + "انتقام‌ها</button></div>");
           window.scrollTo(0, 0);
           afterFight(last);
-        }).catch(function () {});
+        }).catch(function () {}).then(function () { busy = false; });
       });
     });
   }
@@ -366,11 +367,15 @@
   K.screen("ar_chests", {
     title: "جعبه‌های آرنا", tab: "battle",
     render: function (root, params, ctx) {
-      var data = null;
+      var data = null, tick = null, refreshing = false;
+      function refresh() {              // a countdown ran out: ONE re-read, however many timers fired
+        if (refreshing) return; refreshing = true;
+        K.api.get("arena/chests/").then(function (x) { refreshing = false; if (ctx.alive()) draw(x); }, function () { refreshing = false; });
+      }
       function byId(id) { var out = null; data.slots.forEach(function (s) { if (s.chest && s.chest.id === id) out = s.chest; }); return out; }
       function draw(d) {
-        data = d;
-        readyChests = d.slots.filter(function (s) { return s.chest && s.chest.status === "ready"; }).length;
+        data = d; d.at = Date.now() / 1000;     // countdowns count from when the data arrived
+        setReady(d.slots.filter(function (s) { return s.chest && s.chest.status === "ready"; }).length);
         root.innerHTML = '<p class="lead">با هر برد توی آرنا یه جعبه می‌گیری (تا ' + K.n(d.slots.length) + " جایگاه). هر بار فقط یه جعبه باز می‌شه.</p>" +
           '<div class="ar-chests">' + d.slots.map(function (s) {
             var c = s.chest;
@@ -378,12 +383,12 @@
             var st = STATUS[c.status] || STATUS.locked;
             return '<button class="ar-chest ' + c.status + " t-" + c.tier + '" data-act="chest" data-id="' + c.id + '"><span class="ar-slot num">' + s.slot + "</span>" +
               (c.img ? '<img src="' + c.img + '" alt="">' : K.ic("chest")) + "<b>" + K.esc(c.name) + "</b>" +
-              (c.status === "unlocking" ? '<span class="timer" data-left="' + c.left + '"></span>' : '<span class="ar-st" style="color:' + st[2] + '">' + K.ic(st[0]) + st[1] + (c.status === "locked" ? " · " + K.n(c.unlock_hours) + " ساعت" : "") + "</span>") +
+              (c.status === "unlocking" ? '<span class="timer" data-until="' + (data.at + c.left) + '"></span>' : '<span class="ar-st" style="color:' + st[2] + '">' + K.ic(st[0]) + st[1] + (c.status === "locked" ? " · " + K.n(c.unlock_hours) + " ساعت" : "") + "</span>") +
               (c.status === "ready" ? '<span class="btn gold sm">' + K.ic("gift") + "باز کن</span>" : "") + "</button>";
           }).join("") + "</div>" +
           '<div class="callout mt">' + K.ic(d.has_sub ? "crown" : "info") + "<div>" + (d.has_sub ? "اشتراک ویژه‌ات فعاله: می‌تونی یه جعبه رو توی صف بذاری تا خودکار بعد از جعبه‌ی فعلی باز بشه." : "با اشتراک ویژه می‌تونی یه جعبه رو توی صف بذاری تا خودکار باز بشه.") + "</div></div>" +
           '<button class="btn block mt" data-act="guide">' + K.ic("list") + "راهنمای جوایز لیگ‌ها</button>";
-        K.timers(root, function (el) { if (root.contains(el)) K.api.get("arena/chests/").then(function (x) { if (ctx.alive()) draw(x); }).catch(function () {}); });
+        if (tick) tick(); else tick = HU.live(root, refresh);
       }
       function act(path, body, btn, okText) {
         return K.api.post(path, body, btn).then(function (d) {
@@ -415,7 +420,7 @@
         }
         var box = K.sheet((c.img ? '<div class="art"><img src="' + c.img + '&s=l" alt=""></div>' : '<div class="grab"></div>') + '<div class="pad"><div class="ttl">' + K.esc(c.name) + '</div><div class="meta">' +
           K.tag("جایگاه " + K.n(c.slot)) + '<span class="tag" style="color:' + st[2] + '">' + K.ic(st[0]) + st[1] + "</span>" +
-          (c.status === "unlocking" ? '<span class="timer" data-left="' + c.left + '"></span>' : "") + "</div>" +
+          (c.status === "unlocking" ? '<span class="timer" data-until="' + (data.at + c.left) + '"></span>' : "") + "</div>" +
           (c.status === "queued" ? '<p class="sm muted">بعد از تموم شدن جعبه‌ی فعلی خودکار باز می‌شه.</p>' : "") +
           (c.status === "locked" && !c.can_start && !c.can_queue ? '<div class="callout warn mt">' + K.ic("hourglass") + "<div>یه جعبه‌ی دیگه داره باز می‌شه." + (data.has_sub ? " صفت هم پره." : " با اشتراک ویژه می‌تونی این یکی رو توی صف بذاری.") + "</div></div>" : "") +
           chestLines(c) + '<div class="mt">' + btns + "</div></div>");
@@ -435,7 +440,7 @@
                   if (!ctx.alive()) return;
                   draw(d);
                   var fresh = byId(c.id); if (fresh) chestSheet(fresh);
-                }).catch(function () { K.api.get("arena/chests/").then(function (x) { if (ctx.alive()) draw(x); }).catch(function () {}); });
+                }).catch(function () { refresh(); });
               });
             }
           };
@@ -445,8 +450,12 @@
         var c = byId(+el.dataset.id); if (!c) return;
         if (c.status === "ready") openChest(c, el.querySelector(".btn")); else chestSheet(c);
       });
-      K.on(root, "guide", function () { if (chestGuide) guideSheet(chestGuide, data.my_league); });
-      return K.api.get("arena/chests/").then(function (d) { chestGuide = d.guide; draw(d); });
+      K.on(root, "guide", function (el) {      // static tables: asked for once per session, on demand
+        el.classList.add("busy");
+        K.api.cached("arena/chests/guide/").then(function (g) { if (ctx.alive()) guideSheet(g.guide, data.my_league); })
+          .catch(function (e) { K.toast(e.message, "err"); }).finally(function () { el.classList.remove("busy"); });
+      });
+      return K.api.get("arena/chests/").then(draw);
     }
   });
 
@@ -456,6 +465,7 @@
     title: "لیگ", tab: "more",
     render: function (root, params, ctx) {
       return K.api.get("arena/league/").then(function (d) {
+        var tick = null, until = Date.now() / 1000 + d.left;   // fixed once: a tab switch must not restart it
         function list() {
           if (leagueTab === "ranks") return '<p class="lead">علاوه بر پاداش لیگ، به ' + K.n(d.rank_limit) + ' نفر اول جدول کاپ داده می‌شه.</p><div class="panel ar-guide">' + d.ranks.map(function (r) {
             var mine = d.cup > 0 && d.rank >= r.from && d.rank <= r.to;
@@ -470,13 +480,13 @@
         }
         function draw() {
           var dv = d.division, nx = d.next;
-          root.innerHTML = '<div class="banner"' + (d.img ? ' style="background-image:url(\'' + d.img + "')\"" : "") + '><div class="grow"><div class="ttl">لیگ رتبه‌بندی</div><div class="sm" style="color:#c5cee2">پایان فصل: <span class="timer" data-left="' + d.left + '" data-fmt="long" data-done="تموم شد"></span></div></div></div>' +
+          root.innerHTML = '<div class="banner"' + (d.img ? ' style="background-image:url(\'' + d.img + "')\"" : "") + '><div class="grow"><div class="ttl">لیگ رتبه‌بندی</div><div class="sm" style="color:#c5cee2">پایان فصل: <span class="timer" data-until="' + until + '" data-fmt="long" data-done="تموم شد"></span></div></div></div>' +
             '<div class="panel pad mt ar-league"><div class="flex">' + medal(dv.key, "big") + '<div class="grow"><div class="b" style="font-size:16px">' + K.esc(dv.title) + '</div><div class="sm t-cup">' + K.ic("trophy") + " " + K.n(d.cup) + ' کاپ</div></div></div>' +
             (nx ? '<div class="mt">' + K.bar((d.cup - dv.min_cup) / Math.max(1, nx.min_cup - dv.min_cup), "gold") + '<div class="xs muted" style="margin-top:5px">تا «' + K.esc(nx.title) + "»: " + K.n(nx.min_cup - d.cup) + " کاپ دیگه</div></div>" : '<div class="xs t-gold mt">توی بالاترین سطح لیگی!</div>') + "</div>" +
             '<div class="panel list mt"><div style="color:var(--gold)"><span class="ic">' + K.ic("gift") + '</span><span class="t">پاداش آخر هفته‌ی لیگت</span><span class="v">' + K.amounts(d.reward, " ") + "</span></div>" +
             (d.cup > 0 ? '<div style="color:var(--accent)"><span class="ic">' + K.ic("podium") + '</span><span class="t">رتبه‌ی فعلی تو: ' + K.n(d.rank) + "<small>" + (d.rank_reward ? "جایزه‌ی این رتبه" : "جایزه‌ی رتبه از " + K.n(d.rank_limit) + " نفر اول شروع می‌شه") + '</small></span><span class="v">' + (d.rank_reward ? K.amounts(d.rank_reward, " ") : "") + "</span></div>" : "") + "</div>" +
             '<div class="seg mt">' + [["divs", "جوایز لیگ‌ها"], ["ranks", "جوایز رتبه"], ["top", "صدرنشین‌ها"]].map(function (t) { return '<button data-tab="' + t[0] + '" class="' + (leagueTab === t[0] ? "on" : "") + '">' + t[1] + "</button>"; }).join("") + "</div>" + list();
-          K.timers(root);
+          if (tick) tick(); else tick = HU.live(root);
         }
         draw();
         root.addEventListener("click", function (ev) { var b = ev.target.closest("[data-tab]"); if (!b) return; K.haptic(); leagueTab = b.dataset.tab; draw(); });

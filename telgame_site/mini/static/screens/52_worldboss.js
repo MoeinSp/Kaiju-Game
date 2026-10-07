@@ -4,7 +4,10 @@
 (function (K) {
   "use strict";
   var HU = K.hu;
-  var POLL_ACTIVE = 5000, POLL_IDLE = 20000;
+  /* the boss is shared, so its HP moves without us — but 8 s is plenty for a 30-minute fight, and a
+     new boss is only ever spawned by a 5-minute job, so the idle screen looks every 45 s. Nothing
+     is asked while the app is in the background. */
+  var POLL_ACTIVE = 8000, POLL_IDLE = 45000;
 
   function rules(r) {
     var win = r.windows.map(function (w) { return K.n(w.from) + " تا " + K.n(w.to); }).join(" و ");
@@ -13,7 +16,8 @@
       li("clock", "var(--accent)", "روزی دو بار (بین ساعت " + win + ") یه غول برای کل سرور پیدا می‌شه و " + K.n(r.minutes) + " دقیقه می‌مونه.") +
       li("sword", "var(--fire)", "هر نفر " + K.n(r.hits) + " ضربه داره. هر ضربه " + K.n(r.energy_cost) + " انرژی می‌خواد و همون لحظه طلا و DNA می‌ده.") +
       li("up", "var(--good)", "عنصر هیولات به عنصر غول برتری داشته باشه: +" + K.n(r.advantage_pct) + "٪ آسیب.") +
-      li("chest", "var(--gold)", "اگه با هم از پا درش بیارید همه «" + K.esc(r.chest_all) + "» می‌گیرن؛ " + K.n(r.top_share_pct) + "٪ برترِ آسیب (دست‌کم ۳ نفر اول) «" + K.esc(r.chest_top) + "».") +
+      li("wind", "var(--warn)", "غول خیلی جون داره و بیشتر وقت‌ها آخرش فرار می‌کنه. این عادیه: جایزه‌ی هر ضربه‌ات همون لحظه قطعی شده.") +
+      li("chest", "var(--gold)", "اگه یه روز با هم از پا درش بیارید همه «" + K.esc(r.chest_all) + "» می‌گیرن؛ " + K.n(r.top_share_pct) + "٪ برترِ آسیب (دست‌کم ۳ نفر اول) «" + K.esc(r.chest_top) + "».") +
       li("gem", "var(--diamond)", "نفر اول تا سوم: " + r.top3_diamonds.map(function (x) { return K.n(x); }).join(" / ") + " الماس · ضربه‌ی آخر: +" + K.n(r.killer_diamonds) + " الماس.") +
       "</div>";
   }
@@ -43,14 +47,31 @@
           '<div class="panel pad mt wb-next"><span class="ico-box lg" style="color:var(--warn)">' + K.ic("hourglass") + '</span><div class="grow"><div class="muted sm">غول بعدی</div>' +
           (n ? '<div class="b wb-when">' + (n.today ? "امروز" : "فردا") + " بین ساعت " + K.n(n.from) + " تا " + K.n(n.to) + '</div><div class="muted xs">زمان دقیقش غافل‌گیریه</div>'
              : '<div class="b wb-when">به‌زودی</div><div class="muted xs">زمانش هنوز مشخص نشده</div>') + "</div></div>";
-        if (l) {
-          var dead = l.status === "dead";
-          html += '<div class="panel list mt"><div><span class="ic" style="color:var(--' + (dead ? "gold" : "muted") + ')">' + K.ic(dead ? "trophy" : "wind") + '</span><span class="t">آخرین غول: <b>' + K.esc(l.name) + "</b><small>" +
-            (dead ? "از پا دراومد" : "فرار کرد") + " · " + K.n(l.fighters) + " مبارز</small></span>" +
-            '<span class="tag" style="color:var(--' + (dead ? "good" : "warn") + ')">' + (dead ? "شکست خورد" : "فرار کرد") + "</span></div></div>";
-        }
+        html += lastCard(l);
         html += '<div class="callout mt">' + K.ic("bell") + "<span>وقتی غول بیاد ربات بهت خبر می‌ده. این صفحه هم خودش به‌روز می‌شه.</span></div>";
         return html + rules(S.rules);
+      }
+
+      /* how the last boss ended. An escape is the NORMAL ending (the boss is sized so about half
+         its HP goes), so it is drawn as a finished fight with the player's own numbers. */
+      function lastCard(l) {
+        if (!l) return "";
+        var dead = l.outcome === "dead", dealt = Math.max(0, Math.min(100, 100 - (l.hp_left_pct || 0)));
+        var h = '<div class="h2">' + K.ic("doc") + 'آخرین غول</div><div class="panel wb-last ' + (dead ? "dead" : "esc") + '">' +
+          '<div class="wb-last-h"><span class="ico-box lg">' + K.ic(dead ? "trophy" : "wind") + '</span><div class="grow"><div class="b cut">' + K.esc(l.name) + "</div>" +
+          '<div class="sm muted">' + K.n(l.fighters) + " مبارز" + (l.element ? ' · <span class="e-' + l.element + '">' + K.esc(K.elLabel(l.element)) + "</span>" : "") + "</div></div>" +
+          '<span class="tag">' + (dead ? "از پا دراومد" : "فرار کرد") + "</span></div>";
+        if (l.max_hp) h += '<div class="wb-last-bar">' + K.bar(dealt / 100, dead ? "good" : "gold", "thick") +
+          '<div class="xs muted">' + (dead ? "همه‌ی جونش رو با هم گرفتید" : K.n(dealt) + "٪ جونش رو با هم گرفتید و بعد وقتش تموم شد") + "</div></div>";
+        if (l.my_damage > 0) {
+          h += '<div class="wb-stats"><div><small>آسیب تو</small><b class="num">' + Number(l.my_damage).toLocaleString("en-US") + '</b></div><div><small>رتبه‌ی تو</small><b class="num">' + Number(l.my_rank || 0) + "</b></div></div>" +
+            '<div class="wb-last-note">' + K.ic(dead ? "gift" : "check") + "<span>" +
+            (dead ? (l.killer ? "ضربه‌ی آخر مال تو بود. " : "") + (l.settled ? "جعبه‌ی جایزه‌ات به حسابت اومده." : "جعبه‌ی جایزه‌ات تا چند دقیقه‌ی دیگه می‌رسه.")
+                  : "طلا و DNA هر ضربه‌ات همون لحظه به حسابت اومد. فرار کردن غول عادیه؛ از پا درآوردنش جایزه‌ی ویژه داره.") + "</span></div>";
+        } else {
+          h += '<div class="wb-last-note muted">' + K.ic("info") + "<span>توی این نبرد ضربه‌ای نزدی. غول بعدی رو از دست نده.</span></div>";
+        }
+        return h + "</div>";
       }
 
       function activeView() {
@@ -59,7 +80,8 @@
           '<span class="wb-live">' + K.ic("boss") + 'توی میدونه</span><span class="wb-left" id="wb-left"></span><div id="wb-float"></div>' +
           '<div class="wb-name"><div class="ttl">' + K.esc(b.name) + "</div>" + K.elTag(b.element) + "</div></div>" +
           '<div class="wb-hp"><div class="wb-hpbar"><i id="wb-bar"></i><b class="num" id="wb-pct"></b></div>' +
-          '<div class="wb-hpline"><span>' + K.ic("heart", "f") + ' <span id="wb-hpnum"></span></span><span id="wb-fighters"></span></div></div></div>';
+          '<div class="wb-hpline"><span>' + K.ic("heart", "f") + ' <span id="wb-hpnum"></span></span><span id="wb-fighters"></span></div>' +
+          '<div class="wb-hint">' + K.ic("info") + "<span>هر ضربه همون لحظه جایزه می‌ده؛ چه غول بمیره، چه آخرش فرار کنه.</span></div></div></div>";
         html += '<div class="panel pad mt wb-mine"><div class="wb-stats"><div><small>ضربه‌های تو</small><div class="wb-pips" id="wb-pips"></div></div>' +
           '<div><small>آسیب تو</small><b class="num" id="wb-mydmg"></b></div></div>';
         if (me) {
@@ -101,7 +123,7 @@
         var el = root.querySelector("#wb-left"); if (!el || !S.active) return;
         var left = end - Date.now() / 1000;
         if (left <= 0) {
-          el.innerHTML = K.ic("clock") + "تموم شد";
+          el.innerHTML = K.ic("wind") + "فرار کرد";
           if (!expired) { expired = true; K.after(1500, function () { ctx.reload(); }); }
           return;
         }
@@ -124,7 +146,7 @@
         setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 1300);
       }
       function poll() {
-        if (busy || !ctx.alive()) return;
+        if (busy || !ctx.alive() || document.hidden) return;
         var was = S.active, id = S.boss && S.boss.id;
         K.api.get("worldboss/live/").then(function (d) {
           if (busy || !ctx.alive()) return;

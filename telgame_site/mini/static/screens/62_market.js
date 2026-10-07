@@ -49,11 +49,42 @@
     if (l.outbid) return '<span class="tag" style="color:var(--bad)">' + K.ic("warn") + "ازت جلو زدن</span>";
     return "";
   }
+  /* ONE interval per screen that re-reads the timers on every tick (redraws never stack intervals) */
+  function ticker(root, onDone) {
+    function tick() {
+      var now = Date.now() / 1000;
+      Array.prototype.forEach.call(root.querySelectorAll("[data-until]"), function (el) {
+        if (el._done) return;
+        var left = Number(el.dataset.until) - now;
+        if (left <= 0) { el._done = true; el.classList.add("done"); el.innerHTML = K.ic("check") + K.esc(el.dataset.done || "آماده"); if (onDone) onDone(el); }
+        else { el.classList.toggle("soon", left < 300); el.innerHTML = K.ic("clock") + '<span class="num">' + K.clock(left) + "</span>"; }
+      });
+    }
+    tick(); K.every(1000, tick);
+    return tick;
+  }
+  /* The market as last fetched: the lot screen opens from it instead of asking again (every bid
+     is checked by the server's preview anyway), and a placed bid updates it from its own answer. */
+  var panel = null, panelAt = 0, PANEL_TTL = 15000;
+  function loadPanel(fresh) {
+    if (!fresh && panel && Date.now() - panelAt < PANEL_TTL) return Promise.resolve(panel);
+    return K.api.get("market/").then(function (d) { panel = d; panelAt = Date.now(); markStatus(d.lots); return d; });
+  }
+  function applyBid(r) {
+    if (!panel || !r || !r.lot) return;
+    panel.lots = panel.lots.map(function (l) { return l.id === r.lot.id ? r.lot : l; });
+    var ends = panel.lots.map(function (l) { return l.ends_at; });
+    if (ends.length) panel.ends_at = Math.min.apply(null, ends);   // a late bid pushes its lot's deadline back
+    markStatus(panel.lots);
+  }
   function vipTag(l) { return l.vip ? '<span class="tag" style="color:var(--legendary)">' + K.ic("crown") + "VIP</span>" : ""; }
 
   /* preview (server) → confirm → bid. `done` runs after a placed bid, `fail` after a refused one. */
+  var bidding = false;   // one bid flow at a time (preview → confirm → bid), whatever is tapped meanwhile
   function bidFlow(lot, amount, el, done, fail) {
     if (!amount) { K.toast("یه مبلغ معتبر وارد کن.", "err"); return; }
+    if (bidding) return;
+    bidding = true;
     if (el) el.classList.add("busy");
     K.api.get("market/preview/?id=" + lot.id + "&amount=" + amount).then(function (p) {
       if (el) el.classList.remove("busy");
@@ -66,13 +97,15 @@
           ["زمان باقی‌مونده", K.esc(K.dur(p.left))]]) +
           '<p class="xs muted" style="margin:8px 0 0">' + (p.is_own_increase ? "فقط اختلاف با پیشنهاد قبلی خودت کم می‌شه. " : "") + "اگه کسی بالاتر بزنه، کل مبلغ همون لحظه بهت برمی‌گرده.</p>" })
         .then(function (yes) {
-          if (!yes) return;
+          if (!yes) { bidding = false; return; }
           return K.api.post("market/bid/", { id: lot.id, amount: p.bid_amount }, el).then(function (r) {
+            bidding = false;
             K.haptic("ok"); K.toast("پیشنهاد " + plain(r.bid_amount) + " " + curName(r.currency) + " ثبت شد.", "ok");
             if (done) done(r);
-          }, function () { if (fail) fail(); });
+          }, function () { bidding = false; if (fail) fail(); });
         });
     }).catch(function (err) {
+      bidding = false;
       if (el) el.classList.remove("busy");
       K.haptic("err"); K.toast(err.message, "err");
       if (fail) fail();
@@ -83,26 +116,25 @@
     return '<div class="panel mk-lot' + (l.mine ? " mine" : l.outbid ? " out" : "") + '"><button class="mk-head" data-act="lot" data-id="' + l.id + '"><span class="ico-box lg t-' + (l.currency === "diamonds" ? "diamond" : "coin") + '">' + K.ic(TYPE_ICON[l.type] || "gift") + "</span>" +
       '<span class="grow"><span class="b mk-ttl">' + K.esc(l.title) + '</span><span class="mk-tags">' + vipTag(l) + statusTag(l) + "</span></span>" +
       '<span class="faint">' + K.ic("chevron") + "</span></button>" +
-      '<div class="mk-bid"><div><small>' + (l.has_bid ? "بالاترین پیشنهاد" : "قیمت شروع") + "</small>" + money(l.currency, l.current_bid) + "</div>" +
-      '<div><small>پیشنهاددهنده</small><span class="cut">' + (l.has_bid ? K.ic("user") + " " + K.esc(l.bidder || "—") : '<span class="muted">بدون پیشنهاد</span>') + "</span></div></div>" +
+      '<div class="mk-bid"><div><small>' + (l.has_bid ? "بالاترین پیشنهاد" : "قیمت شروع · بدون پیشنهاد") + "</small>" + money(l.currency, l.current_bid) + "</div>" +
+      "<div><small>" + (l.has_bid ? "پیشنهاددهنده" : "اولین پیشنهاد") + '</small><span class="cut">' + (l.has_bid ? K.ic("user") + " " + K.esc(l.bidder || "—") : money(l.currency, l.next_bid)) + "</span></div></div>" +
       (l.vip_locked ? '<div class="mk-acts"><button class="btn block" data-act="vip">' + K.ic("lock") + "فقط برای اشتراک VIP</button></div>"
-        : '<div class="mk-acts btns"><button class="btn primary" data-act="next" data-id="' + l.id + '">' + K.ic("gavel") + '<span class="num">' + plain(l.next_bid) + "</span></button>" +
+        : '<div class="mk-acts btns"><button class="btn primary" data-act="next" data-id="' + l.id + '">' + K.ic("gavel") + 'پیشنهاد <span class="num">' + K.short(l.next_bid).replace(/<[^>]+>/g, "") + "</span></button>" +
           '<button class="btn" data-act="lot" data-id="' + l.id + '">پیشنهاد دلخواه</button></div>') + "</div>";
   }
 
   K.screen("mk_market", {
     title: "بازار سیاه", tab: "more",
     render: function (root, params, ctx) {
-      ctx.actions('<button class="iconbtn" id="mk-refresh" aria-label="بروزرسانی">' + K.ic("refresh") + "</button>");
-      var rb = document.getElementById("mk-refresh"); if (rb) rb.onclick = function () { K.haptic(); ctx.reload(); };
-      return K.api.get("market/").then(function (d) {
-        markStatus(d.lots);
+      var d = null, tick = null, fired = false, loading = false;
+      function draw() {
         var lead = d.lots.filter(function (l) { return l.mine; })[0];
-        var html = '<div class="banner mb"' + (d.img ? ' style="background-image:url(\'' + d.img + '\')"' : "") + '><div class="grow"><div class="ttl">' + (d.night ? "بازار سیاه — " + K.esc(d.night.title) : "بازار سیاه") + "</div>" +
-          (d.ends_at ? '<div class="sm mk-end">تا پایان مزایده <span class="timer" data-until="' + d.ends_at + '" data-done="تموم شد"></span> <span>(' + K.esc(d.deadline) + ")</span></div>" : "") + "</div></div>";
+        var html = '<div class="banner mb mk-top"' + (d.img ? ' style="background-image:url(\'' + d.img + '&s=l\')"' : "") + '><div class="grow"><div class="mk-kick">' + K.ic("gavel") + "مزایده‌ی امشب</div>" +
+          '<div class="ttl">' + (d.night ? K.esc(d.night.title) : "بازار سیاه") + "</div>" +
+          (d.ends_at ? '<div class="sm mk-end"><span class="timer" data-until="' + d.ends_at + '" data-done="تموم شد"></span><span>تا پایان · ' + K.esc(d.deadline) + "</span></div>" : "") + "</div></div>";
         if (lead) html += '<div class="callout good mb">' + K.ic("check") + "<div>الان روی «" + K.esc(lead.title) + "» جلویی. تا وقتی جلویی، روی مزایده‌ی دیگه‌ای نمی‌تونی پیشنهاد بدی.</div></div>";
         else if (d.lots.some(function (l) { return l.outbid; })) html += '<div class="callout bad mb">' + K.ic("warn") + "<div>روی یکی از مزایده‌ها ازت جلو زدن و مبلغت برگشته. اگه می‌خوایش، دوباره پیشنهاد بده.</div></div>";
-        html += d.lots.length ? d.lots.map(lotCard).join("") : K.state("gavel", "مزایده‌ی فعالی نیست", "الان چیزی برای مزایده توی بازار نیست. بعداً سر بزن.");
+        html += d.lots.length ? d.lots.map(lotCard).join("") : '<div class="panel">' + K.state("gavel", "مزایده‌ی فعالی نیست", "الان چیزی برای مزایده توی بازار نیست. بعداً سر بزن.") + "</div>";
         html += '<div class="callout mt">' + K.ic("info") + "<div>بالاترین پیشنهاد تا پایان مهلت برنده‌ست و جایزه خودکار به حسابت می‌آد. هر بازیکن هم‌زمان فقط روی یک مزایده می‌تونه جلو باشه. مزایده‌های VIP (الماسی و هیولا) فقط برای دارنده‌های اشتراکه.</div></div>";
         if (d.upcoming.length) {
           html += '<div class="h2">' + K.ic("calendar") + 'شب‌های بعد</div><div class="panel mk-prog">' + d.upcoming.map(function (n) {
@@ -112,14 +144,28 @@
           }).join("") + "</div>";
         }
         root.innerHTML = html;
-        K.timers(root, function () { K.after(1500, function () { ctx.reload(); }); });
-        function find(el) { return d.lots.filter(function (l) { return l.id === +el.dataset.id; })[0]; }
-        K.on(root, "lot", function (el) { var l = find(el); if (l) K.go("mk_lot", { id: l.id }); });
-        K.on(root, "vip", function () { if (K.hasScreen("sh_vip")) K.go("sh_vip"); });
-        K.on(root, "next", function (el) {
-          var l = find(el); if (!l) return;
-          bidFlow(l, l.next_bid, el, function () { ctx.reload(); }, function () { ctx.reload(); });
-        });
+        if (tick) tick();
+      }
+      /* in place: no skeleton flash, the scroll position stays */
+      function refresh(btn) {
+        if (loading) return; loading = true;
+        if (btn) btn.classList.add("mk-spin");
+        loadPanel(true).then(function (x) { d = x; fired = false; if (ctx.alive()) draw(); }, function (err) { K.toast(err.message, "err"); })
+          .then(function () { loading = false; if (btn) btn.classList.remove("mk-spin"); });
+      }
+      ctx.actions('<button class="iconbtn" id="mk-refresh" aria-label="بروزرسانی">' + K.ic("refresh") + "</button>");
+      var rb = document.getElementById("mk-refresh"); if (rb) rb.onclick = function () { K.haptic(); refresh(rb); };
+      function find(el) { return d.lots.filter(function (l) { return l.id === +el.dataset.id; })[0]; }
+      K.on(root, "lot", function (el) { var l = find(el); if (l) K.go("mk_lot", { id: l.id }); });
+      K.on(root, "vip", function () { if (K.hasScreen("sh_vip")) K.go("sh_vip"); });
+      K.on(root, "next", function (el) {
+        var l = find(el); if (!l) return;
+        bidFlow(l, l.next_bid, el, function (r) { applyBid(r); if (ctx.alive()) draw(); }, function () { refresh(); });
+      });
+      // coming back from a lot (or reopening) within a few seconds shows what is already known
+      return loadPanel(!!params.fresh).then(function (x) {
+        d = x; draw();
+        tick = ticker(root, function () { if (fired) return; fired = true; K.after(1500, function () { refresh(); }); });
       });
     }
   });
@@ -127,12 +173,10 @@
   K.screen("mk_lot", {
     title: "مزایده", tab: "more",
     render: function (root, params, ctx) {
-      return K.api.get("market/").then(function (d) {
-        markStatus(d.lots);
-        var l = d.lots.filter(function (x) { return x.id === +params.id; })[0];
+      var l = null, tick = null, fired = false;
+      function draw() {
         if (!l) {
           root.innerHTML = K.state("gavel", "این مزایده تموم شده", "برنده جایزه‌ش رو گرفته. مزایده‌های امشب رو ببین.", '<button class="btn primary" data-act="back" style="margin-top:16px">بازگشت به بازار</button>');
-          K.on(root, "back", function () { ctx.back(); });
           return;
         }
         var html = '<div class="panel pad mk-hero' + (l.mine ? " mine" : l.outbid ? " out" : "") + '"><div class="mk-big t-' + (l.currency === "diamonds" ? "diamond" : "coin") + '">' + K.ic(TYPE_ICON[l.type] || "gift") + "</div>" +
@@ -154,21 +198,28 @@
             '<p class="xs muted" style="margin:10px 0 0">قبل از ثبت، مبلغ دقیقی که از حسابت کم می‌شه رو می‌بینی و باید تأییدش کنی.</p></div>';
         }
         root.innerHTML = html;
-        K.timers(root, function () { K.after(1500, function () { ctx.reload(); }); });
-        var input = root.querySelector("#mk-in");
-        function val() { return input ? toInt(input.value) : 0; }
-        function again() { ctx.reload(); }
-        root.addEventListener("click", function (ev) {
-          var s = ev.target.closest("[data-step]"); if (!s || !input) return;
-          K.haptic(); input.value = Math.max(l.next_bid, (val() || l.next_bid) + l.step * +s.dataset.step);
-        });
-        K.on(root, "min", function () { K.haptic(); input.value = l.next_bid; });
-        K.on(root, "vip", function () { if (K.hasScreen("sh_vip")) K.go("sh_vip"); });
-        K.on(root, "bid", function (el) {
-          var amount = val();
-          if (amount < l.next_bid) { K.haptic("err"); K.toast("حداقل پیشنهاد بعدی " + plain(l.next_bid) + " " + curName(l.currency) + " هست.", "err"); return; }
-          bidFlow(l, amount, el, again, again);
-        });
+        if (tick) tick();
+      }
+      function pick(d) { l = d.lots.filter(function (x) { return x.id === +params.id; })[0] || null; }
+      function refresh() { return loadPanel(true).then(function (d) { pick(d); fired = false; if (ctx.alive()) draw(); }, function () { ctx.reload(); }); }
+      function input() { return root.querySelector("#mk-in"); }
+      function val() { var i = input(); return i ? toInt(i.value) : 0; }
+      root.addEventListener("click", function (ev) {
+        var st = ev.target.closest("[data-step]"), i = input(); if (!st || !i || !l) return;
+        K.haptic(); i.value = Math.max(l.next_bid, (val() || l.next_bid) + l.step * +st.dataset.step);
+      });
+      K.on(root, "back", function () { ctx.back(); });
+      K.on(root, "min", function () { K.haptic(); var i = input(); if (i && l) i.value = l.next_bid; });
+      K.on(root, "vip", function () { if (K.hasScreen("sh_vip")) K.go("sh_vip"); });
+      K.on(root, "bid", function (el) {
+        if (!l) return;
+        var amount = val();
+        if (amount < l.next_bid) { K.haptic("err"); K.toast("حداقل پیشنهاد بعدی " + plain(l.next_bid) + " " + curName(l.currency) + " هست.", "err"); return; }
+        bidFlow(l, amount, el, function (r) { applyBid(r); if (panel) pick(panel); else l = r.lot; if (ctx.alive()) draw(); }, function () { refresh(); });
+      });
+      return loadPanel(false).then(function (d) {
+        pick(d); draw();
+        tick = ticker(root, function () { if (fired) return; fired = true; K.after(1500, function () { refresh(); }); });
       });
     }
   });

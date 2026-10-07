@@ -85,7 +85,25 @@
     K.go(names[0], params);
   }
 
-  K.dy = { reveal: reveal, extras: extras, rewardLine: rewardLine, speedupText: speedupText, capsuleText: capsuleText, go: goAction, num: num };
+  /* Countdowns: <span class="timer" data-until="<unix seconds>">. ONE interval per screen that
+     re-reads the timers on every tick, so redrawing part of a screen never stacks intervals
+     (and the text is there on the first paint). Returns the tick function. */
+  function ticker(root, onDone) {
+    function tick() {
+      var now = Date.now() / 1000;
+      Array.prototype.forEach.call(root.querySelectorAll("[data-until]"), function (el) {
+        if (el._done) return;
+        var left = Number(el.dataset.until) - now;
+        if (left <= 0) { el._done = true; el.classList.add("done"); el.innerHTML = K.ic("check") + K.esc(el.dataset.done || "آماده"); if (onDone) onDone(el); }
+        else el.innerHTML = K.ic("clock") + '<span class="num">' + (el.dataset.fmt === "long" ? K.dur(left) : K.clock(left)) + "</span>";
+      });
+    }
+    tick(); K.every(1000, tick);
+    return tick;
+  }
+  function untilOf(seconds) { return Math.round(Date.now() / 1000 + Number(seconds || 0)); }
+
+  K.dy = { reveal: reveal, extras: extras, rewardLine: rewardLine, speedupText: speedupText, capsuleText: capsuleText, go: goAction, num: num, ticker: ticker };
 
   // ───────────────────────── home summary (one small request for both home blocks) ─────────────────────────
   var last = null, homeP = null;
@@ -101,12 +119,6 @@
   K.dy.touch = touch;
 
   // ───────────────────────── story quest ─────────────────────────
-  function claimStory(btn) {
-    return K.api.post("daily/story/claim/", {}, btn).then(function (r) {
-      return reveal({ icon: "flag", title: "مأموریت انجام شد!", text: r.title, coins: r.reward.coins, dna: r.reward.dna, diamonds: r.reward.diamonds,
-                      extra: extras(r.reward), button: r.next ? "قدم بعدی" : "عالیه" });
-    });
-  }
   function questCard(q, big) {
     var ratio = q.target ? q.cur / q.target : 0;
     return '<div class="panel pad dy-quest' + (q.done ? " done" : "") + '">' +
@@ -121,9 +133,19 @@
       "</div>";
   }
   function bindQuest(root, after) {
+    var busy = false;
     K.on(root, "dy-story", function () { K.go("dy_story"); });
     K.on(root, "dy-cta", function (el) { goAction(el.dataset.go); });
-    K.on(root, "dy-claim", function (el) { claimStory(el).then(after, function () {}); });
+    K.on(root, "dy-claim", function (el) {
+      if (busy) return; busy = true;
+      K.api.post("daily/story/claim/", {}, el).then(function (r) {
+        busy = false;
+        if (last) last.quest = r.next;
+        after(r);   // the screen shows the next step behind the reward sheet
+        reveal({ icon: "flag", title: "مأموریت انجام شد!", text: r.title, coins: r.reward.coins, dna: r.reward.dna, diamonds: r.reward.diamonds,
+                 extra: extras(r.reward), button: r.next ? "قدم بعدی" : "عالیه" });
+      }, function () { busy = false; });
+    });
   }
 
   K.homeSection({
@@ -131,8 +153,9 @@
     render: function (el) {
       return homeData().then(function (d) {
         if (!d.quest) return;
-        el.innerHTML = '<div class="h2">' + K.ic("flag") + "قدم بعدی</div>" + questCard(d.quest, false);
-        bindQuest(el, function () { K.reload(); });
+        function draw(q) { el.innerHTML = q ? '<div class="h2">' + K.ic("flag") + "قدم بعدی</div>" + questCard(q, false) : ""; }
+        draw(d.quest);
+        bindQuest(el, function (r) { draw(r.next); });
       });
     }
   });
@@ -141,13 +164,16 @@
     title: "قدم بعدی", tab: "home",
     render: function (root, params, ctx) {
       return K.api.get("daily/story/").then(function (d) {
-        var q = d.quest;
-        if (!q) { root.innerHTML = K.state("flag", "داستان رو تموم کردی", "همه‌ی مأموریت‌های داستانی انجام شدن. از مأموریت‌های روزانه و هفتگی جا نمونی!", '<button class="btn primary" data-act="dy-missions" style="margin-top:16px">' + K.ic("target") + "مأموریت‌ها</button>"); K.on(root, "dy-missions", function () { K.replace("dy_missions"); }); return; }
-        root.innerHTML = '<div class="panel pad dy-chapter"><div class="flex between"><b>' + K.esc(q.chapter_name) + '</b><span class="sm muted">قدم ' + K.n(q.step) + " از " + K.n(q.total) + "</span></div>" +
-          K.bar((q.step - 1) / q.total, "gold", "thick") + "</div>" +
-          '<div class="mt"></div>' + questCard(q, true) +
-          '<div class="callout mt">' + K.ic("info") + "<span>" + (q.done ? "این قدم رو انجام دادی؛ پاداشت رو بگیر تا قدم بعدی باز بشه." : "هر قدم که تموم بشه پاداشش رو می‌گیری و قدم بعدی باز می‌شه.") + "</span></div>";
-        bindQuest(root, function () { ctx.reload(); });
+        function draw(q) {
+          if (!q) { root.innerHTML = K.state("flag", "داستان رو تموم کردی", "همه‌ی مأموریت‌های داستانی انجام شدن. از مأموریت‌های روزانه و هفتگی جا نمونی!", '<button class="btn primary" data-act="dy-missions" style="margin-top:16px">' + K.ic("target") + "مأموریت‌ها</button>"); return; }
+          root.innerHTML = '<div class="panel pad dy-chapter"><div class="flex between"><b>' + K.esc(q.chapter_name) + '</b><span class="sm muted">قدم ' + K.n(q.step) + " از " + K.n(q.total) + "</span></div>" +
+            K.bar((q.step - 1) / Math.max(1, q.total), "gold", "thick") + "</div>" +
+            '<div class="mt"></div>' + questCard(q, true) +
+            '<div class="callout mt">' + K.ic("info") + "<span>" + (q.done ? "این قدم رو انجام دادی؛ پاداشت رو بگیر تا قدم بعدی باز بشه." : "هر قدم که تموم بشه پاداشش رو می‌گیری و قدم بعدی باز می‌شه.") + "</span></div>";
+        }
+        draw(d.quest);
+        K.on(root, "dy-missions", function () { K.replace("dy_missions"); });
+        bindQuest(root, function (r) { if (ctx.alive()) { draw(r.next); window.scrollTo(0, 0); } });
       });
     }
   });
@@ -204,51 +230,65 @@
   function collectSheet(r) {
     var html = r.sections.map(function (s) {
       return '<div class="dy-sec"><div class="dy-sec-h">' + K.ic(SEC_ICON[s.kind] || "gift") + K.esc(s.title) + "</div>" +
-        s.lines.map(function (l) { return '<div class="dy-ln' + (l.sub ? " sub" : "") + '">' + K.esc(l.text) + "</div>"; }).join("") + "</div>";
+        s.lines.map(function (l) { return '<div class="dy-ln' + (l.sub ? " sub" : "") + (l.tone ? " " + l.tone : "") + '">' + (l.tone === "bonus" ? K.ic("spark") : l.tone === "level" ? K.ic("up") : "") + K.esc(l.text) + "</div>"; }).join("") + "</div>";
     }).join("");
     return reveal({ title: "همه رو گرفتی!", coins: r.totals.coins, dna: r.totals.dna, diamonds: r.totals.diamonds, creatures: r.creatures, items: r.items, fresh: true,
                     html: html ? '<div class="pad dy-secs">' + html + "</div>" : "", missions: r.missions });
+  }
+  function todayHtml(d) {
+    var art = (K.meta && K.meta.art && K.meta.art.missions) || "", has = d.ready.length > 0, html = "", live = "";
+    var auto = d.ready.some(function (r) { return r.kind === "wheel" || r.kind === "free_box" || r.kind === "chest" || r.kind === "mission_box"; });
+    html += '<div class="banner dy-hero' + (has ? " has" : "") + '"' + (art ? ' style="background-image:url(\'' + art + '\')"' : "") + '><div class="grow">' +
+      '<div class="dy-hero-k">' + K.ic(has ? "gift" : "calcheck") + "پاداش امروز</div>" +
+      '<div class="ttl">' + (has ? K.n(d.collectable) + " جایزه منتظرته" : "همه رو گرفتی") + "</div>" +
+      '<div class="sm dy-hero-s">' + (has ? "یک‌جا همه رو بگیر" : "ساختمون‌ها که پر شدن یا هیولایی که برگشت، همین‌جا پیداش می‌شه.") + "</div>" +
+      (has ? '<button class="btn gold lg block dy-hero-b" data-act="dy-collect">' + K.ic("gift") + 'دریافت همه<span class="cost num">' + num(d.collectable) + "</span></button>" : "") + "</div></div>";
+    if (has) {
+      html += '<div class="h2">' + K.ic("gift") + 'آماده‌ی دریافت</div><div class="panel list">' + d.ready.map(readyRow).join("") + "</div>" +
+        (auto ? '<p class="note" style="margin-top:8px">«دریافت همه» گردونه رو هم می‌چرخونه و باکس‌ها و جعبه‌های آماده رو باز می‌کنه.</p>' : "");
+    }
+    if (d.boss) live += row("skull", "var(--bad)", "غول سرگردان اینجاست!", K.esc(d.boss.name) + DOT + K.n(d.boss.hits_left) + " ضربه داری", "", "worldboss");
+    if (d.tournament_open) live += row("trophy", "var(--gold)", "ثبت‌نام جام آخر هفته بازه", "رایگانه", "", "tournament");
+    if (d.festival) live += row("spark", "var(--" + (K.EL_ICON[d.festival.element] ? d.festival.element : "accent") + ")", "جشنواره‌ی «" + K.esc(d.festival.title) + "» در جریانه", "از همه‌ی کارهات سکه‌ی جشنواره می‌افته", "", "festival");
+    if (d.rule) live += row("calendar", "var(--accent-2)", "قانون این هفته", K.esc(d.rule), "", "events");
+    if (live) html += '<div class="h2">' + K.ic("bolt") + 'الان فعاله</div><div class="panel list glow">' + live + "</div>";
+
+    var left = d.missions_total - d.missions_done, todo = "";
+    todo += row("target", "var(--accent)", "مأموریت‌های امروز", left > 0 ? (d.next_box ? "تا باکس بعدی " + K.n(d.next_box.left) + " امتیاز" : "") : "همه رو انجام دادی",
+                '<span class="num">' + num(d.missions_done) + " / " + num(d.missions_total) + "</span>", "missions");
+    if (d.can_dispatch) todo += row("compass", "var(--accent)", "می‌تونی یه هیولا بفرستی مأموریت", "جایگاه خالی و مأموریت باز داری", "", "dispatch");
+    todo += row("bolt", "var(--energy)", "انرژی", "", '<span class="num">' + num(d.energy) + " / " + num(d.max_energy) + "</span>");
+    return html + '<div class="h2">' + K.ic("list") + 'کارهای امروز</div><div class="panel list">' + todo + "</div>" +
+      '<div class="btns mt"><button class="btn" data-act="dy-go" data-go="hunt">' + K.ic("target") + 'شکار</button><button class="btn" data-act="dy-go" data-go="arena">' + K.ic("swords") + "آرنا</button></div>";
+  }
+  /* keep the home card / hub badges in step with what the screen just learned */
+  function syncHome(d) {
+    if (!last) return;
+    last.collectable = d.collectable; last.waiting = d.waiting; last.wheel = d.ready.some(function (r) { return r.kind === "wheel"; });
+    var mb = d.ready.filter(function (r) { return r.kind === "mission_box"; })[0], fb = d.ready.filter(function (r) { return r.kind === "free_box"; })[0];
+    last.boxes_ready = mb ? mb.count : 0; last.free_boxes = fb ? fb.count : 0;
   }
 
   K.screen("dy_today", {
     title: "پاداش امروز", tab: "home",
     render: function (root, params, ctx) {
       return K.api.get("daily/today/").then(function (d) {
-        var html = "", live = "";
-        if (d.boss) live += row("skull", "var(--bad)", "غول سرگردان اینجاست!", K.esc(d.boss.name) + DOT + K.n(d.boss.hits_left) + " ضربه داری", "", "worldboss");
-        if (d.tournament_open) live += row("trophy", "var(--gold)", "ثبت‌نام جام آخر هفته بازه", "رایگانه", "", "tournament");
-        if (d.festival) live += row("spark", "var(--" + (K.EL_ICON[d.festival.element] ? d.festival.element : "accent") + ")", "جشنواره‌ی «" + K.esc(d.festival.title) + "» در جریانه", "", "", "festival");
-        if (d.rule) live += row("calendar", "var(--accent-2)", "قانون این هفته", K.esc(d.rule), "", "events");
-        if (live) html += '<div class="h2" style="margin-top:4px">' + K.ic("bolt") + 'الان فعاله</div><div class="panel list glow">' + live + "</div>";
-
-        html += '<div class="h2"' + (live ? "" : ' style="margin-top:4px"') + ">" + K.ic("gift") + "آماده‌ی دریافت</div>";
-        if (d.ready.length) {
-          var auto = d.ready.some(function (r) { return r.kind === "wheel" || r.kind === "free_box" || r.kind === "chest" || r.kind === "mission_box"; });
-          html += '<div class="panel list">' + d.ready.map(readyRow).join("") + "</div>" +
-            '<button class="btn gold lg block mt" data-act="dy-collect">' + K.ic("gift") + 'دریافت همه<span class="cost num">' + num(d.collectable) + "</span></button>" +
-            (auto ? '<p class="note" style="margin-top:8px">«دریافت همه» گردونه رو هم می‌چرخونه و باکس‌ها و جعبه‌های آماده رو باز می‌کنه.</p>' : "");
-        } else {
-          html += '<div class="panel dy-empty">' + K.ic("calcheck") + "<b>چیزی برای جمع کردن نمونده</b><span>ساختمون‌ها که پر شدن یا هیولایی که برگشت، همین‌جا پیداش می‌شه.</span></div>";
-        }
-
-        var left = d.missions_total - d.missions_done, todo = "";
-        todo += row("target", "var(--accent)", "مأموریت‌های امروز", left > 0 ? (d.next_box ? "تا باکس بعدی " + K.n(d.next_box.left) + " امتیاز" : "") : "همه رو انجام دادی",
-                    '<span class="num">' + num(d.missions_done) + " / " + num(d.missions_total) + "</span>", "missions");
-        if (d.can_dispatch) todo += row("compass", "var(--accent)", "می‌تونی یه هیولا بفرستی مأموریت", "جایگاه خالی و مأموریت باز داری", "", "dispatch");
-        todo += row("bolt", "var(--energy)", "انرژی", "", '<span class="num">' + num(d.energy) + " / " + num(d.max_energy) + "</span>");
-        html += '<div class="h2">' + K.ic("list") + 'کارهای امروز</div><div class="panel list">' + todo + "</div>" +
-          '<div class="btns mt"><button class="btn" data-act="dy-go" data-go="hunt">' + K.ic("target") + 'شکار</button><button class="btn" data-act="dy-go" data-go="arena">' + K.ic("swords") + "آرنا</button></div>";
-        root.innerHTML = html;
-
+        var busy = false;
+        function draw() { root.innerHTML = todayHtml(d); syncHome(d); }
+        draw();
         K.on(root, "dy-go", function (el) {
           if (el.dataset.go === "boxes") K.go("dy_missions", { tab: "b" }); else goAction(el.dataset.go);
         });
         K.on(root, "dy-collect", function (el) {
+          if (busy) return; busy = true;
           K.api.post("daily/today/collect/", {}, el).then(function (r) {
+            busy = false;
             K.invalidate("profile/creatures/", "profile/equipment/");
-            if (r.empty) { K.toast("چیزی برای دریافت نبود."); ctx.reload(); return; }
-            collectSheet(r).then(function () { ctx.reload(); });
-          }, function () {});
+            if (r.today) { d = r.today; if (ctx.alive()) { draw(); window.scrollTo(0, 0); } }   // the new screen came with the answer
+            else ctx.reload();
+            if (r.empty) { K.toast("چیزی برای دریافت نبود."); return; }
+            collectSheet(r);
+          }, function () { busy = false; ctx.reload(); });
         });
       });
     }
@@ -285,42 +325,55 @@
     render: function (root, params, ctx) {
       if (params.tab) { mTab = params.tab; params.tab = ""; }
       return K.api.get("daily/missions/").then(function (d) {
-        var ready = d.boxes.filter(function (b) { return b.reached && !b.opened; });
-        var next = d.boxes.filter(function (b) { return !b.reached; })[0];
-        var target = next ? next.need : (d.boxes.length ? d.boxes[d.boxes.length - 1].need : 1);
-        touch("boxes_ready", ready.length);
+        var weekEnd = untilOf(d.reset_in), dayEnd = untilOf(d.day_reset_in), busy = false;
+        function draw() {
+          var ready = d.boxes.filter(function (b) { return b.reached && !b.opened; });
+          var next = d.boxes.filter(function (b) { return !b.reached; })[0];
+          var target = next ? next.need : (d.boxes.length ? d.boxes[d.boxes.length - 1].need : 1);
+          var dLeft = d.daily.filter(function (m) { return !m.done; }).length, wLeft = d.weekly.filter(function (m) { return !m.done; }).length;
+          touch("boxes_ready", ready.length);
 
-        var html = '<div class="panel pad dy-pts"><div class="flex between"><b>' + K.ic("star") + ' امتیاز این هفته</b><span class="b t-gold num">' + num(d.points) + '<small class="muted"> / ' + num(target) + "</small></span></div>" +
-          K.bar(Math.min(d.points, target) / target, "gold", "thick") +
-          '<div class="sm muted" style="margin-top:8px">' + (next ? "تا «" + K.esc(next.name) + "»: <b style=\"color:var(--text)\">" + K.n(next.need - d.points) + "</b> امتیاز" : "به همه‌ی باکس‌های این هفته رسیدی") + "</div>" +
-          (ready.length ? '<button class="btn gold block mt" data-act="dy-tab" data-t="b">' + K.ic("gift") + K.n(ready.length) + " باکس آماده‌ی باز شدنه</button>" : "") + "</div>" +
-          '<div class="seg mt">' + [["d", "روزانه"], ["w", "هفتگی"], ["b", "باکس‌ها"]].map(function (t) {
-            return '<button data-act="dy-tab" data-t="' + t[0] + '">' + t[1] + (t[0] === "b" && ready.length ? '<span class="cnt">' + ready.length + "</span>" : "") + "</button>";
-          }).join("") + "</div>";
+          var html = '<div class="panel pad dy-pts"><div class="flex between"><b>' + K.ic("star") + ' امتیاز این هفته</b><span class="b t-gold num">' + num(d.points) + '<small class="muted"> / ' + num(target) + "</small></span></div>" +
+            '<div class="dy-rail">' + K.bar(Math.min(d.points, target) / Math.max(1, target), "gold", "thick") + "</div>" +
+            '<div class="dy-steps">' + d.boxes.map(function (b) {
+              var t = TIER[b.tier] || TIER.silver;
+              return '<span class="dy-step' + (b.opened ? " opened" : b.reached ? " ready" : "") + '" style="--bc:' + t[1] + '">' + K.ic(b.opened ? "check" : t[0]) + '<small class="num">' + num(b.need) + "</small></span>";
+            }).join("") + "</div>" +
+            '<div class="sm muted" style="margin-top:8px">' + (next ? "تا «" + K.esc(next.name) + "»: <b style=\"color:var(--text)\">" + K.n(next.need - d.points) + "</b> امتیاز" : "به همه‌ی باکس‌های این هفته رسیدی") + "</div>" +
+            (ready.length ? '<button class="btn gold block mt" data-act="dy-tab" data-t="b">' + K.ic("gift") + K.n(ready.length) + " باکس آماده‌ی باز شدنه</button>" : "") + "</div>" +
+            '<div class="seg mt">' + [["d", "روزانه", dLeft], ["w", "هفتگی", wLeft], ["b", "باکس‌ها", ready.length]].map(function (t) {
+              return '<button data-act="dy-tab" data-t="' + t[0] + '">' + t[1] + (t[0] === "b" && t[2] ? '<span class="cnt">' + t[2] + "</span>" : "") + "</button>";
+            }).join("") + "</div>";
 
-        html += '<div data-pane="d"><div class="dy-ph"><b>مأموریت‌های امروز</b><span class="sm muted">' + K.n(d.today_points) + " / " + K.n(d.today_max) + " امتیاز</span></div>" + missionList(d.daily) +
-          '<p class="note">ریست روزانه (نیمه‌شب تهران): <span class="timer" data-left="' + d.day_reset_in + '" data-done="ریست شد"></span></p></div>';
-        html += '<div data-pane="w"><div class="dy-ph"><b>مأموریت‌های هفتگی</b><span class="sm muted">کل هفته وقت داری</span></div>' + missionList(d.weekly) +
-          '<p class="note">ریست هفتگی (دوشنبه، نیمه‌شب تهران): <span class="timer" data-left="' + d.reset_in + '" data-fmt="long" data-done="ریست شد"></span></p></div>';
-        html += '<div data-pane="b"><div class="callout mb">' + K.ic("info") + "<span>با هر مأموریت امتیاز می‌گیری؛ به هر پله که برسی یه باکس باز می‌کنی. آخرین پله «باکس امگا»ست: برای کسی که تقریباً همه‌ی مأموریت‌های هفته رو انجام بده.</span></div>" +
-          '<div class="panel dy-track">' + d.boxes.map(function (b) { return boxRow(b, d.points); }).join("") + "</div>" +
-          '<p class="note">سقف امتیاز هفته: ' + K.n(d.max_points) + DOT + 'ریست: <span class="timer" data-left="' + d.reset_in + '" data-fmt="long" data-done="ریست شد"></span></p></div>';
-        root.innerHTML = html;
-
+          html += '<div data-pane="d"><div class="dy-ph"><b>مأموریت‌های امروز</b><span class="sm muted">' + K.n(d.today_points) + " / " + K.n(d.today_max) + " امتیاز</span></div>" + missionList(d.daily) +
+            '<p class="note">ریست روزانه (نیمه‌شب تهران): <span class="timer" data-until="' + dayEnd + '" data-done="ریست شد"></span></p></div>';
+          html += '<div data-pane="w"><div class="dy-ph"><b>مأموریت‌های هفتگی</b><span class="sm muted">کل هفته وقت داری</span></div>' + missionList(d.weekly) +
+            '<p class="note">ریست هفتگی (دوشنبه، نیمه‌شب تهران): <span class="timer" data-until="' + weekEnd + '" data-fmt="long" data-done="ریست شد"></span></p></div>';
+          html += '<div data-pane="b"><div class="callout mb">' + K.ic("info") + "<span>با هر مأموریت امتیاز می‌گیری؛ به هر پله که برسی یه باکس باز می‌کنی. آخرین پله «باکس امگا»ست: برای کسی که تقریباً همه‌ی مأموریت‌های هفته رو انجام بده.</span></div>" +
+            '<div class="panel dy-track">' + d.boxes.map(function (b) { return boxRow(b, d.points); }).join("") + "</div>" +
+            '<p class="note">سقف امتیاز هفته: ' + K.n(d.max_points) + DOT + 'ریست: <span class="timer" data-until="' + weekEnd + '" data-fmt="long" data-done="ریست شد"></span></p></div>';
+          root.innerHTML = html;
+          show();
+        }
         function show() {
           Array.prototype.forEach.call(root.querySelectorAll("[data-pane]"), function (p) { p.hidden = p.dataset.pane !== mTab; });
           Array.prototype.forEach.call(root.querySelectorAll(".seg button"), function (b) { b.classList.toggle("on", b.dataset.t === mTab); });
         }
-        show();
-        K.timers(root, function () { K.after(1500, ctx.reload); });
+        if (mTab !== "d" && mTab !== "w" && mTab !== "b") mTab = "d";
+        draw();
+        var fired = false, tick = ticker(root, function () { if (fired) return; fired = true; K.after(1500, ctx.reload); });
         K.on(root, "dy-tab", function (el) { K.haptic(); mTab = el.dataset.t; show(); });
         K.on(root, "dy-box", function (el) {
+          if (busy) return; busy = true;
           K.api.post("daily/missions/box/", { index: +el.dataset.i }, el).then(function (r) {
+            busy = false;
             K.invalidate("profile/creatures/", "profile/equipment/");
+            // the only thing an opened box changes on this screen is its own «opened» mark
+            d.boxes.forEach(function (b) { if (b.index === r.index) b.opened = true; });
             mTab = "b";
-            reveal({ icon: "chest", title: r.name + " باز شد!", coins: r.coins, dna: r.dna, diamonds: r.diamonds, creatures: r.creatures, items: r.items, fresh: true })
-              .then(function () { ctx.reload(); });
-          }, function () {});
+            if (ctx.alive()) { draw(); tick(); }
+            reveal({ icon: "chest", title: r.name + " باز شد!", coins: r.coins, dna: r.dna, diamonds: r.diamonds, creatures: r.creatures, items: r.items, fresh: true });
+          }, function () { busy = false; ctx.reload(); });
         });
       });
     }
@@ -334,19 +387,25 @@
   var STEP = 360 / SEGS.length;
 
   function wheelSvg() {
-    var R = 94, s = '<svg viewBox="-100 -100 200 200" aria-hidden="true">';
+    var R = 90, s = '<svg viewBox="-100 -100 200 200" aria-hidden="true"><defs><radialGradient id="dy-wg" cx="50%" cy="50%" r="50%"><stop offset="55%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".45"/></radialGradient></defs>';
     function pt(deg, r) { var a = deg * Math.PI / 180; return (r * Math.sin(a)).toFixed(2) + " " + (-r * Math.cos(a)).toFixed(2); }
     SEGS.forEach(function (g, i) {
       var a0 = i * STEP - STEP / 2;
-      s += '<path class="dy-slice" data-i="' + i + '" d="M0 0L' + pt(a0, R) + "A" + R + " " + R + " 0 0 1 " + pt(a0 + STEP, R) + 'Z" fill="' + g[3] + '" fill-opacity="' + (i % 2 ? ".16" : ".3") + '" stroke="rgba(255,255,255,.14)" stroke-width=".8"/>';
+      s += '<path class="dy-slice" data-i="' + i + '" d="M0 0L' + pt(a0, R) + "A" + R + " " + R + " 0 0 1 " + pt(a0 + STEP, R) + 'Z" fill="' + g[3] + '" fill-opacity="' + (i % 2 ? ".2" : ".36") + '" stroke="rgba(255,255,255,.16)" stroke-width=".8"/>';
     });
+    s += '<circle r="' + R + '" fill="url(#dy-wg)"/>';
     SEGS.forEach(function (g, i) {
-      s += '<g transform="rotate(' + (i * STEP) + ')"><g transform="translate(-11 -86) scale(.92)" fill="none" stroke="' + g[3] + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (K.icons[g[1]] || "") + "</g>" +
-        '<text x="0" y="-50" text-anchor="middle" font-size="8.6" font-weight="700" fill="#eaf0ff">' + g[2] + "</text>" +
-        '<circle cx="' + pt(STEP / 2, R).split(" ")[0] + '" cy="' + pt(STEP / 2, R).split(" ")[1] + '" r="2.4" fill="#eaf0ff" fill-opacity=".75"/></g>';
+      s += '<g transform="rotate(' + (i * STEP) + ')"><g transform="translate(-11 -82) scale(.92)" fill="none" stroke="' + g[3] + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (K.icons[g[1]] || "") + "</g>" +
+        '<text x="0" y="-46" text-anchor="middle" font-size="8.6" font-weight="700" fill="#eaf0ff">' + g[2] + "</text></g>";
     });
-    return s + '<circle r="' + R + '" fill="none" stroke="rgba(255,200,87,.75)" stroke-width="3.5"/><circle r="17" fill="#131927" stroke="rgba(255,200,87,.75)" stroke-width="2"/>' +
+    return s + '<circle r="' + R + '" fill="none" stroke="rgba(255,200,87,.8)" stroke-width="3"/><circle r="19" fill="#131927" stroke="rgba(255,200,87,.8)" stroke-width="2.5"/>' +
       '<g transform="translate(-10 -10) scale(.84)" fill="none" stroke="#ffc857" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + K.icons.star + "</g></svg>";
+  }
+  /* the ring of bulbs around the wheel (it does not turn) */
+  function bulbs() {
+    var out = "", n = 16;
+    for (var i = 0; i < n; i++) { var a = i * 2 * Math.PI / n; out += '<i style="left:' + (50 + 48.2 * Math.sin(a)).toFixed(2) + "%;top:" + (50 - 48.2 * Math.cos(a)).toFixed(2) + '%"></i>'; }
+    return '<div class="dy-wheel-bulbs">' + out + "</div>";
   }
   function wheelReveal(r) {
     return reveal({
@@ -360,36 +419,52 @@
     title: "گردونه‌ی شانس", tab: "more",
     render: function (root, params, ctx) {
       return K.api.get("daily/wheel/").then(function (d) {
+        var busy = false, resetAt = untilOf(d.reset_in);
         touch("wheel", d.available);
-        root.innerHTML = '<div class="dy-wheel' + (d.available ? "" : " off") + '"><span class="dy-wheel-pin"></span><div class="dy-wheel-disc">' + wheelSvg() + "</div></div>" +
-          (d.available
+        root.innerHTML = '<div class="dy-wheel' + (d.available ? "" : " off") + '">' + bulbs() + '<span class="dy-wheel-pin"></span><button class="dy-wheel-disc" data-act="dy-spin" aria-label="بچرخون">' + wheelSvg() + "</button></div>" +
+          '<div id="dy-wfoot"></div>' +
+          '<div class="callout mt">' + K.ic("info") + "<span>گردونه می‌تونه طلا، DNA، الماس، غذای هیولا، کارت سرعت، یه هیولای تصادفی یا جک‌پات بده. هر چی هیولای فعالت قوی‌تر و کاپت بیشتر باشه، جایزه‌ها بزرگ‌ترن.</span></div>";
+        var wrap = root.querySelector(".dy-wheel"), disc = root.querySelector(".dy-wheel-disc"), foot = root.querySelector("#dy-wfoot");
+        function drawFoot() {
+          wrap.classList.toggle("off", !d.available);
+          foot.innerHTML = d.available
             ? '<button class="btn gold lg block" data-act="dy-spin">' + K.ic("wheel") + "بچرخون</button>" +
               '<p class="note" style="margin-top:10px">هر روز ' + K.n(d.limit) + " چرخش رایگان داری.</p>"
-            : '<div class="panel pad center"><b class="dy-block">چرخش امروزت رو زدی</b><span class="sm muted">چرخش بعدی: </span><span class="timer" data-left="' + d.reset_in + '" data-done="آماده‌ست"></span></div>') +
-          '<div class="callout mt">' + K.ic("info") + "<span>گردونه می‌تونه طلا، DNA، الماس، غذای هیولا، کارت سرعت، یه هیولای تصادفی یا جک‌پات بده. هر چی هیولای فعالت قوی‌تر و کاپت بیشتر باشه، جایزه‌ها بزرگ‌ترن.</span></div>";
-        K.timers(root, function () { K.after(1200, ctx.reload); });
+            : '<div class="panel pad center"><b class="dy-block">چرخش امروزت رو زدی</b><span class="sm muted">چرخش بعدی: </span><span class="timer" data-until="' + resetAt + '" data-done="آماده‌ست"></span></div>';
+        }
+        drawFoot();
+        var fired = false, tick = ticker(root, function () { if (fired) return; fired = true; K.after(1200, ctx.reload); });
 
-        var disc = root.querySelector(".dy-wheel-disc"), busy = false;
         K.on(root, "dy-spin", function (el) {
-          if (busy) return;
+          if (busy || !d.available) return;
           busy = true;
-          K.api.post("daily/wheel/spin/", {}, el).then(function (r) {
+          var btn = foot.querySelector(".btn");
+          K.api.post("daily/wheel/spin/", {}, btn).then(function (r) {
             touch("wheel", false);
             if (r.creatures && r.creatures.length) K.invalidate("profile/creatures/");
             var hits = [];
             SEGS.forEach(function (g, i) { if (g[0] === r.kind) hits.push(i); });
             var i = hits.length ? hits[Math.floor(Math.random() * hits.length)] : 0;
-            var deg = 360 * 6 - i * STEP + (Math.random() - 0.5) * STEP * 0.6;
-            el.disabled = true;
+            var deg = 360 * 6 - i * STEP + (Math.random() - 0.5) * STEP * 0.6, quick = reduced(), spinMs = quick ? 300 : 5000;
+            if (btn) btn.disabled = true;
+            wrap.classList.add("spin");
             disc.style.transform = "rotate(" + deg.toFixed(1) + "deg)";
             K.haptic("hit");
+            // a few light ticks while it slows down (cleared by the router if the player leaves)
+            if (!quick) [350, 750, 1200, 1750, 2400, 3150, 4000].forEach(function (ms) { K.after(ms, function () { K.haptic(); }); });
             setTimeout(function () {
               if (!ctx.alive()) { K.toast("جایزه‌ی گردونه: " + r.label, "ok"); return; }
+              wrap.classList.remove("spin"); wrap.classList.add("won");
               var slice = root.querySelector('.dy-slice[data-i="' + i + '"]');
-              if (slice) slice.setAttribute("fill-opacity", ".7");
-              K.after(reduced() ? 0 : 450, function () { wheelReveal(r).then(function () { ctx.reload(); }); });
-            }, reduced() ? 300 : 5000);
-          }, function () { busy = false; });
+              if (slice) slice.classList.add("hit");
+              K.after(quick ? 0 : 550, function () {
+                // the spin's own answer says when the next one is — no second request
+                d.available = false; resetAt = untilOf(r.reset_in);
+                wrap.classList.remove("won"); drawFoot(); tick();
+                wheelReveal(r);
+              });
+            }, spinMs);
+          }, function () { busy = false; ctx.reload(); });
         });
       });
     }

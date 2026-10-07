@@ -10,7 +10,7 @@ import html
 from django.db import transaction
 from django.utils import timezone
 
-from bio_lab.models import Creature, DailyActionLog, Equipment
+from bio_lab.models import Creature, Equipment
 from bio_lab.repository import lock_row
 from game import constants
 from telgame_site.mini.core import (
@@ -61,12 +61,45 @@ def _theme(th: dict) -> dict:
     return {"title": th["title"], "element": th["element"], "element_label": constants.ELEMENT_WORDS[th["element"]]}
 
 
+# The four blocks of the bot's festival shop (bot.handlers.festival._SECTIONS) and the
+# picture each item gets in the app. Presentation only: prices and limits come from the game.
+_FEST_GROUP = {"golden": "box", "magical": "box", "grand": "grand"}
+_FEST_ART = {
+    "capsule": "drops/drop_capsule.jpg", "dna": "drops/drop_vein.jpg", "gold": "features/feat_gold_shop.jpg",
+    "golden": "chests/golden_locked.jpg", "magical": "chests/magical_locked.jpg", "vip_chest": "chests/magical_open.jpg",
+    "grand": "drops/drop_egg.jpg", "vip_mythic": "drops/drop_jackpot.jpg",
+}
+
+
+def _fest_shop(shop: dict) -> list[dict]:
+    """game.festival.shop_state(...)["items"] for the front end."""
+    from game import festival
+
+    out = []
+    for it in shop["items"]:
+        key = it["key"]
+        limit = festival.SHOP[key][3]
+        out.append({
+            "key": key, "title": _text(it["title"]).replace("( ", "("), "cost": it["cost"], "left": it["left"],
+            "limit": limit, "bought": limit - it["left"], "vip": it["vip"], "locked": it["locked"],
+            "group": "vip" if it["vip"] else _FEST_GROUP.get(key, "res"),
+            "img": asset_img(_FEST_ART[key]) if key in _FEST_ART else None,
+        })
+    return out
+
+
+def _fest_source(row: dict, label: str | None = None) -> dict:
+    """One line of game.festival.today_progress: coins per action, how many are left today."""
+    return {"key": row.get("key"), "label": label or row["label"], "unit": row["unit"], "cap": row["cap"],
+            "done": row["done"], "left": row["left"], "earned": row.get("earned"), "max": row.get("max")}
+
+
 @endpoint()
 def festival_panel(request, user):
     from game import festival
-    from game.daily import today_str
 
     st = festival.status(user)
+    vip = st["vip"]   # subscribers earn more per action — every number is what THIS player gets
     out = {
         "active": st["active"],
         "banner": _feature_img("festival"),
@@ -75,10 +108,15 @@ def festival_panel(request, user):
         "seconds_until_next": st["seconds_until_next"],
         "start_day": festival.FESTIVAL_START_DAY,
         "end_day": festival.FESTIVAL_END_DAY,
+        "days": festival.FESTIVAL_DAYS,
         "prizes": [{"max_rank": r, "diamonds": d} for r, d in festival.RANK_PRIZES],
         "grand_cost": festival.SHOP["grand"][2],
-        "mission_daily": festival.MISSION_DAILY_COINS,
-        "mission_weekly": festival.MISSION_WEEKLY_COINS,
+        "vip": vip,
+        "vip_bonus_pct": int(festival.VIP_COIN_BONUS * 100),
+        "mythic_cost": festival.SHOP["vip_mythic"][2],
+        "mission_daily": festival.unit_value(festival.MISSION_DAILY_COINS, vip),
+        "mission_weekly": festival.unit_value(festival.MISSION_WEEKLY_COINS, vip),
+        "day_max": festival.day_max(vip),
     }
     if not st["active"]:
         # the theme of the festival that starts next (it belongs to the month it starts in)
@@ -87,45 +125,38 @@ def festival_panel(request, user):
         start = (timezone.localtime() + datetime.timedelta(seconds=st["seconds_until_next"] + 3600)).date()
         jy, jm, _jd = gregorian_to_jalali(start.year, start.month, start.day)
         out["theme"] = _theme(festival.theme(f"{jy}-{jm:02d}"))
-        out["earn"] = [{"key": a, "label": festival.EARN_LABELS[a], "per": per, "cap": cap, "day_max": per * cap}
+        out["earn"] = [{"key": a, "label": festival.EARN_LABELS[a], "unit": festival.unit_value(per, vip), "cap": cap,
+                        "max": festival.unit_value(per, vip) * cap}
                        for a, (per, cap) in festival.EARN.items()]
         return out
 
-    # today's counters (read-only — game.daily.get_daily_count would create the rows)
-    counts = dict(
-        DailyActionLog.objects.filter(user=user, day=today_str(), action__in=list(festival.EARN))
-        .values_list("action", "count")
-    )
-    vip = st["vip"]   # subscribers earn more per action — show what THIS player gets
-    out["earn"] = [
-        {"key": a, "label": festival.EARN_LABELS[a], "per": festival.unit_value(per, vip), "cap": cap,
-         "day_max": festival.unit_value(per, vip) * cap, "done": min(cap, counts.get(a, 0))}
-        for a, (per, cap) in festival.EARN.items()
-    ]
-    shop = festival.shop_state(user)
+    # «سکه‌ی امروز»: game.festival.today_progress (already computed by status) — the same
+    # numbers as the bot's screen (bot.handlers.festival._how_text)
+    today = st["today"]
     out.update({
         "coins": st["coins"],
         "earned": st["earned"],
         "rank": st["rank"],
-        "vip": st["vip"],
-        "vip_bonus_pct": int(festival.VIP_COIN_BONUS * 100),
+        "today": {
+            "earned": today["earned"], "left": today["left"], "max": today["max"],
+            "rows": [_fest_source(r) for r in today["rows"]],
+            "daily": _fest_source(today["daily"], "هر مأموریت روزانه"),
+            "weekly": _fest_source(today["weekly"], "هر مأموریت هفتگی"),
+        },
         "top": [
             {"rank": r["rank"], "name": _text(r["name"]), "earned": r["earned"],
              "prize": festival.rank_prize(r["rank"]), "me": r["user_id"] == user.id}
             for r in festival.leaderboard(st["key"])
         ],
-        "shop": [
-            {"key": it["key"], "title": _text(it["title"]).replace("( ", "("), "cost": it["cost"], "left": it["left"],
-             "limit": festival.SHOP[it["key"]][3], "bought": festival.SHOP[it["key"]][3] - it["left"],
-             "vip": it["vip"], "locked": it["locked"]}
-            for it in shop["items"]
-        ],
+        "shop": _fest_shop(festival.shop_state(user)),
     })
     return out
 
 
 @endpoint("POST")
 def festival_buy(request, user, data):
+    """Bot: _buy_sync — festival.buy, then the shop again (sent back so the screen redraws
+    without another request)."""
     from game import festival
     from game.equipment import equipment_power
 
@@ -136,12 +167,18 @@ def festival_buy(request, user, data):
     # what a box / the grand prize dropped, for the reveal
     new_creatures = list(Creature.objects.filter(owner=user, id__gt=last_creature))
     new_items = list(Equipment.objects.filter(owner=user, id__gt=last_item))
+    try:
+        shop = festival.shop_state(user)
+    except GameError:        # the festival ended in the same second: the purchase still stands
+        shop = None
     return {
         "key": key,
         "title": _text(res["title"]),
         "cost": res["cost"],
         "got": _text(res["got"]),
         "coins_left": res["coins_left"],
+        "coins": shop["coins"] if shop else res["coins_left"],
+        "shop": _fest_shop(shop) if shop else None,
         "creatures": creature_list(user, new_creatures) if new_creatures else [],
         "items": [{"id": it.id, "name": it.name, "slot": it.slot, "rarity": it.rarity, "level": it.level,
                    "power": equipment_power(it), "img": equipment_img(it)} for it in new_items],
@@ -186,11 +223,9 @@ def _rotation(count: int = 4) -> list[dict]:
     return out
 
 
-@endpoint()
-def week_panel(request, user):
+def _week_state(user) -> dict:
     from game import events
 
-    _gate(user, "events")
     st = events.status(user)
     return {
         "banner": _feature_img("events"),
@@ -205,6 +240,12 @@ def week_panel(request, user):
     }
 
 
+@endpoint()
+def week_panel(request, user):
+    _gate(user, "events")
+    return _week_state(user)
+
+
 @endpoint("POST")
 def week_claim(request, user, data):
     from game import events
@@ -213,7 +254,8 @@ def week_claim(request, user, data):
     reward = events.claim_daily(user)
     if reward is None:
         raise GameError("جایزه‌ی امروزو قبلاً گرفتی.")
-    return {"reward": _reward(reward)}
+    # claim_daily locked and updated `user` in place, so the panel is rebuilt from it
+    return {"reward": _reward(reward), "state": _week_state(user)}
 
 
 # ── season pass ───────────────────────────────────────────────────────────────
@@ -252,7 +294,7 @@ def pass_claim(request, user, data):
     result = battlepass.claim(user)
     if not result["tiers"]:
         raise GameError("چیزی برای دریافت نیست.")
-    return {"tiers": result["tiers"], "reward": _reward(result["reward"], total=True)}
+    return {"tiers": result["tiers"], "reward": _reward(result["reward"], total=True), "state": _pass_state(user)}
 
 
 @endpoint("POST")
@@ -261,12 +303,11 @@ def pass_premium(request, user, data):
 
     _gate(user, "battlepass")
     battlepass.buy_premium(user)
-    return {"premium": True, "cost": battlepass.PREMIUM_COST_DIAMONDS}
+    return {"premium": True, "cost": battlepass.PREMIUM_COST_DIAMONDS, "state": _pass_state(user)}
 
 
 # ── achievements ──────────────────────────────────────────────────────────────
-@endpoint()
-def achievements_panel(request, user):
+def _achievements_state(user) -> dict:
     from game import achievements
 
     view = achievements.evaluate(user)
@@ -280,6 +321,11 @@ def achievements_panel(request, user):
             for i in view["items"]
         ],
     }
+
+
+@endpoint()
+def achievements_panel(request, user):
+    return _achievements_state(user)
 
 
 @endpoint("POST")
@@ -296,6 +342,7 @@ def achievements_claim(request, user, data):
     return {
         "claimed": [{"key": a.key, "title": clean(a.title)} for a in result["claimed"]],
         "reward": _reward(result["reward"], total=True),
+        "state": _achievements_state(user),
     }
 
 

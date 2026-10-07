@@ -47,3 +47,4 @@
 .dp-bonus { padding: 9px 12px; border-radius: 11px; line-height: 1.9; background: rgba(255,200,87,.1); border: 1px solid rgba(255,200,87,.4); }
 .dp-bonus > .b { color: var(--gold); }
 .dp-bonus + .dp-res-l { margin-top: 6px; }
+.dp-more { margin: 8px 0 10px; }

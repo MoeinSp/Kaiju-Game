@@ -35,6 +35,17 @@ What `endpoint` does for you:
   * adds `"res": {...}` (the player's CURRENT gold / DNA / diamonds / energy / cup, re-read
     from the database) to every successful response, so the app's top bar is always right
     without a second request.
+  * sends the JSON compact and gzip-compressed (when it is big enough and the client
+    accepts it) — nothing to do in the module.
+
+Optional — a badge on your hub tile without a polling endpoint of your own: define
+
+    def hub_badges(user) -> dict:      # {"<hub tile id>": number | "live"}; cheap queries only
+        return {"chests": 2}
+
+in your api module. It is merged into `badges` of /app/api/profile/me/ (see `hub_badges`),
+which the app re-reads in the background anyway; a tile without its own `badge` function
+shows `K.badges[<tile id>]`.
 
 Rules for modules:
   * A view is plain synchronous Django code — call the ORM directly (unlike the bot, there
@@ -51,17 +62,21 @@ Rules for modules:
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import hmac
 import json
 import logging
 import re
+import sys
 import time
 from functools import wraps
 from pathlib import Path
 
 from django.conf import settings
-from django.http import JsonResponse
+from django.core.serializers.json import DjangoJSONEncoder
+from django.db.models import Exists, OuterRef
+from django.http import HttpResponse
 
 from bio_lab.models import Creature, Equipment, User
 from config import BOT_TOKEN
@@ -135,7 +150,10 @@ def player(request) -> User | None:
         user_id = int(request.GET["dev_user"])  # developer machine only
     if not user_id:
         return None
-    return User.objects.filter(id=user_id, is_banned=False).first()
+    # `_started` (does the player own a creature?) rides on the same query: the wrapper used
+    # to spend a second query on it for every request
+    return (User.objects.filter(id=user_id, is_banned=False)
+            .annotate(_started=Exists(Creature.objects.filter(owner_id=OuterRef("pk")))).first())
 
 
 def resources(user: User) -> dict:
@@ -179,32 +197,35 @@ def endpoint(method: str = "GET"):
         @wraps(view)
         def wrapped(request, *args, **kwargs):
             if request.method != method:
-                return JsonResponse({"error": "method"}, status=405)
+                return _json({"error": "method"}, 405)
             user = player(request)
             if user is None:
-                return JsonResponse({"error": "unauthorized"}, status=401)
-            if not Creature.objects.filter(owner=user).exists():
-                return JsonResponse({"error": "not_started"}, status=404)
+                return _json({"error": "unauthorized"}, 401)
+            started = getattr(user, "_started", None)
+            if started is None:  # a `player()` that did not annotate it
+                started = Creature.objects.filter(owner=user).exists()
+            if not started:
+                return _json({"error": "not_started"}, 404)
             data = {}
             if method == "POST":
                 try:
                     data = json.loads(request.body.decode("utf-8") or "{}")
                 except (ValueError, UnicodeDecodeError):
-                    return JsonResponse({"error": "bad body"}, status=400)
+                    return _json({"error": "bad body"}, 400)
                 if not isinstance(data, dict):
-                    return JsonResponse({"error": "bad body"}, status=400)
+                    return _json({"error": "bad body"}, 400)
             _track(user, f"{view.__module__.rsplit('.', 1)[-1]}.{view.__name__}")
             try:
                 payload = view(request, user, data, *args, **kwargs) if method == "POST" else view(request, user, *args, **kwargs)
             except GameError as exc:
                 code = "energy" if isinstance(exc, EnergyError) else "gold" if isinstance(exc, InsufficientGoldError) else "rule"
-                return _json({"error": clean(exc) or "این کار الان ممکن نیست.", "code": code, "res": _safe_res(user)}, 400)
+                return _json({"error": clean(exc) or "این کار الان ممکن نیست.", "code": code, "res": _safe_res(user)}, 400, request)
             except Exception:  # noqa: BLE001
                 logger.exception("mini app endpoint %s failed", view.__name__)
                 return _json({"error": "یه مشکلی پیش اومد. دوباره امتحان کن.", "code": "server"}, 500)
             payload = dict(payload or {})
             payload.setdefault("res", _safe_res(user))
-            return _json(payload)
+            return _json(payload, 200, request)
 
         wrapped.csrf_exempt = True  # authenticated by signed initData, not by a cookie
         return wrapped
@@ -218,9 +239,24 @@ def _safe_res(user: User) -> dict | None:
         return None
 
 
-def _json(payload: dict, status: int = 200) -> JsonResponse:
-    resp = JsonResponse(payload, status=status, json_dumps_params={"ensure_ascii": False})
+GZIP_MIN_BYTES = 1024   # below this the gzip header + CPU cost more than they save
+GZIP_LEVEL = 5
+
+
+def _json(payload: dict, status: int = 200, request=None) -> HttpResponse:
+    """Compact UTF-8 JSON, never cached; gzip-compressed when `request` is given, the client
+    accepts it and the body is big enough to be worth it (a collection is ~14 KB of very
+    repetitive text → ~2 KB, which is what matters on a slow mobile connection)."""
+    body = json.dumps(payload, cls=DjangoJSONEncoder, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    resp = HttpResponse(content_type="application/json")
+    if request is not None:
+        resp["Vary"] = "Accept-Encoding"
+        if len(body) >= GZIP_MIN_BYTES and "gzip" in request.headers.get("Accept-Encoding", ""):
+            body = gzip.compress(body, GZIP_LEVEL, mtime=0)
+            resp["Content-Encoding"] = "gzip"
+    resp.content = body
     resp["Cache-Control"] = "no-store"
+    resp.status_code = status
     return resp
 
 
@@ -266,32 +302,60 @@ def _sig(*parts) -> str:
 
 
 def creature_img(creature) -> str:
-    return f"/app/img/c/{creature.id}.jpg?k={_sig('c', creature.id)}"
+    """Thumbnail URL of a creature. `v` names everything its art depends on (growth stage,
+    star, rarity), so the URL changes exactly when the picture does and the browser may
+    keep it for a month instead of asking again every hour (see urls.object_image)."""
+    level = getattr(creature, "level", 1) or 1
+    stage = min(6, 1 + max(0, level - 1) // 20)           # same steps as game.media.get_creature_stage
+    tier = 1 if level <= 15 else 2 if level <= 35 else 3  # the element-art fallback's steps
+    ver = f"{stage}{tier}{getattr(creature, 'star_level', 1)}{str(getattr(creature, 'rarity', ''))[:2]}"
+    return f"/app/img/c/{creature.id}.jpg?k={_sig('c', creature.id)}&v={ver}"
 
 
 def equipment_img(item) -> str:
-    return f"/app/img/e/{item.id}.jpg?k={_sig('e', item.id)}"
+    ver = f"{getattr(item, 'level', 1)}{str(getattr(item, 'rarity', ''))[:2]}"   # the card shows both
+    return f"/app/img/e/{item.id}.jpg?k={_sig('e', item.id)}&v={ver}"
+
+
+_ASSET_URLS: dict = {}   # path as given -> (checked at, url); static files only, safe per worker
+_ASSET_TTL = 300
 
 
 def asset_img(rel_path: str | None) -> str | None:
     """URL of a thumbnail of a file under assets/images/ (e.g. "features/feat_arena.jpg",
-    or an absolute path returned by game.media.get_*_image_path). None if it doesn't exist."""
+    or an absolute path returned by game.media.get_*_image_path). None if it doesn't exist.
+    The URL carries the file's mtime (`v`), so it is served as immutable; the stat() behind
+    it is remembered for a few minutes instead of being repeated for every row of a list."""
     from game.media import ASSETS_DIR
 
     if not rel_path:
         return None
+    key = str(rel_path)
+    hit = _ASSET_URLS.get(key)
+    now = time.monotonic()
+    if hit is not None and now - hit[0] < _ASSET_TTL:
+        return hit[1]
     path = Path(rel_path)
+    url = None
     if path.is_absolute():
         try:
             rel = path.resolve().relative_to(ASSETS_DIR.resolve()).as_posix()
         except ValueError:
-            return None
+            rel = ""
     else:
         rel = path.as_posix()
         path = ASSETS_DIR / rel
-    if ".." in rel or not path.exists():
+    if rel and ".." not in rel:
+        try:
+            url = f"/app/img/a/{rel}?k={_sig('a', rel)}&v={int(path.stat().st_mtime)}"
+        except OSError:
+            url = None
+    if url is None:               # not remembered: the game may generate the file a moment later
         return None
-    return f"/app/img/a/{rel}?k={_sig('a', rel)}"
+    if len(_ASSET_URLS) > 4000:   # generated cards can be many; never grow without bound
+        _ASSET_URLS.clear()
+    _ASSET_URLS[key] = (now, url)
+    return url
 
 
 def species_img(name: str, element: str = "fire", rarity: str = "common", star: int = 1, level: int = 1) -> str | None:
@@ -376,16 +440,42 @@ def art() -> dict:
     return _ART
 
 
-def meta() -> dict:
-    """Label tables for the front end (sent once with /app/api/profile/me/)."""
-    def word(label: str) -> str:
-        return label.split(" ", 1)[1] if " " in label else label
+_META: dict | None = None
 
-    return {
-        "art": art(),
-        "elements": {k: {"label": constants.ELEMENT_WORDS[k]} for k in constants.ELEMENT_LABELS},
-        "rarities": {k: {"label": word(v)} for k, v in constants.RARITY_LABELS.items()},
-        "rarity_order": list(constants.RARITY_ORDER),
-        "slots": {k: {"label": word(v)} for k, v in constants.EQUIPMENT_SLOT_LABELS.items()},
-        "strong_against": constants.ELEMENT_STRONG_AGAINST,
-    }
+
+def meta() -> dict:
+    """Label tables for the front end. They are the same for every player and never change
+    while the process lives, so they are built once per worker and written INTO the shell
+    page (urls.shell) — /app/api/profile/me/ only repeats them when asked (`?meta=1`)."""
+    global _META
+    if _META is None:
+        def word(label: str) -> str:
+            return label.split(" ", 1)[1] if " " in label else label
+
+        _META = {
+            "art": art(),
+            "elements": {k: {"label": constants.ELEMENT_WORDS[k]} for k in constants.ELEMENT_LABELS},
+            "rarities": {k: {"label": word(v)} for k, v in constants.RARITY_LABELS.items()},
+            "rarity_order": list(constants.RARITY_ORDER),
+            "slots": {k: {"label": word(v)} for k, v in constants.EQUIPMENT_SLOT_LABELS.items()},
+            "strong_against": constants.ELEMENT_STRONG_AGAINST,
+        }
+    return _META
+
+
+def hub_badges(user: User) -> dict:
+    """{hub tile id: number | "live"} collected from every api module that defines
+    `hub_badges(user)` (see the module docstring). One broken module never hides the others."""
+    out: dict = {}
+    prefix = __name__.rsplit(".", 1)[0] + ".api."
+    for name, module in list(sys.modules.items()):
+        fn = getattr(module, "hub_badges", None) if name.startswith(prefix) else None
+        if not callable(fn) or fn is hub_badges or getattr(fn, "csrf_exempt", False):   # not this collector, not a view
+            continue
+        try:
+            for key, value in (fn(user) or {}).items():
+                if value:
+                    out[str(key)] = value
+        except Exception:  # noqa: BLE001 — a badge must never break the profile
+            logger.exception("mini app badges of %s failed", name)
+    return out

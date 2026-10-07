@@ -67,6 +67,15 @@ def _rolls(user, rolls: list[dict]) -> list[dict]:
     return out
 
 
+def _fresh(user):
+    """The player re-read after an action: the game functions charge a locked re-fetch, so the
+    view's `user` is stale (the bot's *_sync helpers call user.refresh_from_db() for the same
+    reason before they draw the screen again)."""
+    from bio_lab.models import User
+
+    return User.objects.get(pk=user.pk)
+
+
 def _best_index(summary: dict) -> int:
     for i, r in enumerate(summary["rolls"]):
         if r is summary["best"]:
@@ -86,8 +95,7 @@ def badge(request, user):
     return {"free_boxes": len(_free_tiers(user))}
 
 
-@endpoint()
-def boxes(request, user):
+def _boxes_payload(user) -> dict:
     from game.lootbox import BULK_OPEN, BULK_PAY, batch_open_cost
 
     gold = []
@@ -122,6 +130,11 @@ def boxes(request, user):
     }
 
 
+@endpoint()
+def boxes(request, user):
+    return _boxes_payload(user)
+
+
 @endpoint("POST")
 def box_open(request, user, data):
     """Gold «باکس ژنتیکی»: 1 or 10 boxes, tickets first (bot: bc_open)."""
@@ -139,6 +152,7 @@ def box_open(request, user, data):
         "from_tickets": summary["from_tickets"], "paid_boxes": summary["paid_boxes"],
         "gold_spent": summary["gold_spent"], "dna_spent": summary["dna_spent"],
         "tickets_left": summary["tickets_left"],
+        "boxes": _boxes_payload(_fresh(user)),   # the screen after the opening (new prices, tickets)
     }
 
 
@@ -155,6 +169,7 @@ def box_diamond(request, user, data):
         "rolls": _rolls(user, [result]), "best": 0, "opened": 1,
         "is_free": bool(result.get("is_free")),
         "diamonds_spent": 0 if result.get("is_free") else cfg["cost_diamonds"],
+        "boxes": _boxes_payload(_fresh(user)),
     }
 
 
@@ -170,6 +185,7 @@ def box_diamond_bulk(request, user, data):
         "rolls": _rolls(user, summary["rolls"]), "best": _best_index(summary),
         "by_rarity": summary["by_rarity"], "opened": summary["opened"], "paid": summary["paid"],
         "is_free": False, "diamonds_spent": BULK_PAY * cfg["cost_diamonds"],
+        "boxes": _boxes_payload(_fresh(user)),
     }
 
 
@@ -188,8 +204,12 @@ def _summary(contents) -> str:
         return ""
 
 
-@endpoint()
-def store(request, user):
+# the picture of an offer card (presentation only)
+_OFFER_ART = {"food": "drops/drop_capsule.jpg"}
+
+
+def _store_payload(user) -> dict:
+    """The whole shop screen — what the bot's _panel_sync / _buy_sync hand to its renderer."""
     from bio_lab.models import ShopItemPurchase
     from bot.handlers.shop import is_quantity_offer
     from game import gemkaiju, itemshop, shop
@@ -197,8 +217,10 @@ def store(request, user):
 
     offers = []
     for o in shop.offers_with_remaining(user):
+        group = _offer_group(o["key"])
         offers.append({
-            "key": o["key"], "title": clean(o["title"]), "group": _offer_group(o["key"]),
+            "key": o["key"], "title": clean(o["title"]), "group": group,
+            "img": asset_img(_OFFER_ART[group]) if group in _OFFER_ART else None,
             "price": o["price"], "base": o["cost"], "currency": o["currency"],
             "featured": bool(o.get("featured")), "limit": int(o.get("limit", 0) or 0),
             "remaining": o["remaining"], "qty": is_quantity_offer(o["key"]),
@@ -237,7 +259,13 @@ def store(request, user):
         "offers": offers, "items": items, "gem": gem, "shield": shield,
         "gold_packs": [{"idx": i, "gold": p["gold"], "diamonds": p["diamonds"]} for i, p in enumerate(shop.GOLD_PACKS)],
         "img": feature_img("shop"), "img_shield": feature_img("shield_shop"), "img_gold": feature_img("gold_shop"),
+        "img_pack": feature_img("item_shop"),
     }
+
+
+@endpoint()
+def store(request, user):
+    return _store_payload(user)
 
 
 def _shield_tiers(table: dict) -> list[dict]:
@@ -258,6 +286,7 @@ def store_buy(request, user, data):
     return {
         "title": clean(offer["title"]), "count": offer["count"], "currency": offer["currency"],
         "total_price": offer["total_price"], "notes": [clean(n) for n in offer["notes"]],
+        "store": _store_payload(_fresh(user)),
     }
 
 
@@ -266,7 +295,8 @@ def store_item(request, user, data):
     from game import itemshop
 
     result = itemshop.buy(user, need_int(data, "id", 1))
-    return {"title": clean(result["title"]), "notes": [clean(n) for n in result["notes"]]}
+    return {"title": clean(result["title"]), "notes": [clean(n) for n in result["notes"]],
+            "store": _store_payload(_fresh(user))}
 
 
 @endpoint("POST")
@@ -274,7 +304,8 @@ def store_gem(request, user, data):
     from game import gemkaiju
 
     result = gemkaiju.buy_gem_kaiju(user)
-    return {"creature": creature_list(user, [result["creature"]])[0], "price": result["price"]}
+    return {"creature": creature_list(user, [result["creature"]])[0], "price": result["price"],
+            "store": _store_payload(_fresh(user))}
 
 
 @endpoint("POST")
@@ -285,7 +316,7 @@ def store_shield(request, user, data):
     kind = need_str(data, "kind", ("arena", "group"))
     tier = need_str(data, "tier")
     result = (buy_shield if kind == "arena" else buy_group_shield)(user, tier)
-    return {"kind": kind, "left": result["remaining"]}
+    return {"kind": kind, "left": result["remaining"], "store": _store_payload(_fresh(user))}
 
 
 @endpoint("POST")
@@ -293,7 +324,7 @@ def store_gold(request, user, data):
     from game import shop
 
     bought = shop.buy_gold_pack(user, need_int(data, "idx"))
-    return {"gold": bought["gold"], "diamonds": bought["diamonds"]}
+    return {"gold": bought["gold"], "diamonds": bought["diamonds"]}   # nothing on the shop screen changes
 
 
 # ── exchange (gold ↔ DNA) ─────────────────────────────────────────────────────
@@ -306,9 +337,7 @@ def _exchange_open(user):
     return ex
 
 
-@endpoint()
-def exchange_panel(request, user):
-    ex = _exchange_open(user)
+def _exchange_payload(user, ex) -> dict:
     recycle = hall_state(user, "equip_exchange")
     return {
         "coins": user.coins, "dna": user.dna_fragments,
@@ -321,6 +350,11 @@ def exchange_panel(request, user):
         "recycle": {"locked": recycle["locked"], "req": recycle["req"]},
         "img": feature_img("exchange"),
     }
+
+
+@endpoint()
+def exchange_panel(request, user):
+    return _exchange_payload(user, _exchange_open(user))
 
 
 @endpoint()
@@ -342,15 +376,14 @@ def exchange_preview(request, user):
 def exchange_do(request, user, data):
     ex = _exchange_open(user)
     result = ex.exchange(user, need_str(data, "direction", ex.DIRECTIONS), need_int(data, "dna", 1))
-    return {"direction": result["direction"], "dna": result["dna"], "gold": result["gold"]}
+    return {"direction": result["direction"], "dna": result["dna"], "gold": result["gold"],
+            "exchange": _exchange_payload(_fresh(user), ex)}
 
 
 # ── gear recycling (legendary / mythic gear → genetic-box tickets) ────────────
-@endpoint()
-def recycle_panel(request, user):
+def _recycle_payload(user) -> dict:
     from game.equipment import exchangeable_equipment, ticket_value
 
-    hall_gate(user, "equip_exchange")
     items = []
     for it in exchangeable_equipment(user):
         row = item_dict(it)
@@ -361,6 +394,12 @@ def recycle_panel(request, user):
         "values": [{"rarity": r, "tickets": v} for r, v in constants.EQUIP_TICKET_VALUE.items()],
         "img": feature_img("equip_exchange"),
     }
+
+
+@endpoint()
+def recycle_panel(request, user):
+    hall_gate(user, "equip_exchange")
+    return _recycle_payload(user)
 
 
 @endpoint("POST")
@@ -376,7 +415,8 @@ def recycle_do(request, user, data):
     except (TypeError, ValueError):
         raise GameError("درخواست ناقصه.")
     result = exchange_for_tickets(user, ids)  # filters by owner / unequipped / ticket-worthy
-    return {"tickets": result["tickets"], "count": result["count"], "total": result["total"]}
+    return {"tickets": result["tickets"], "count": result["count"], "total": result["total"],
+            "recycle": _recycle_payload(_fresh(user))}
 
 
 # ── energy ────────────────────────────────────────────────────────────────────
@@ -389,8 +429,7 @@ def _refill_cost() -> int:
     return botconfig.get_energy_refill_cost()
 
 
-@endpoint()
-def energy_panel(request, user):
+def _energy_payload(user) -> dict:
     from game.energy import get_energy_regen_interval_seconds, get_max_energy, seconds_until_next_point, sync_energy
     from game.subscription import is_subscription_active
 
@@ -405,13 +444,18 @@ def energy_panel(request, user):
     }
 
 
+@endpoint()
+def energy_panel(request, user):
+    return _energy_payload(user)
+
+
 @endpoint("POST")
 def energy_refill(request, user, data):
     from game.energy import refill_energy
 
     _refill_cost()
     result = refill_energy(user)
-    return {"cost": result["cost"], "energy": result["energy"]}
+    return {"cost": result["cost"], "energy": result["energy"], "panel": _energy_payload(_fresh(user))}
 
 
 # ── VIP (read-only; buying happens in the bot) ────────────────────────────────

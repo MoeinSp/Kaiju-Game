@@ -4,9 +4,31 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#080b12">
+<meta name="format-detection" content="telephone=no">
 <title>Kaiju Legends</title>
-<script src="/app/tg.js"></script>
+<script>
+/* Start the profile request NOW, while the css/js bundle is still downloading: the first
+   screen then needs no extra round trip after the code arrives. Telegram hands the signed
+   initData over in the URL fragment (and keeps it in sessionStorage across a reload), so it
+   can be read before its SDK has loaded. core.js picks the result up from window.__KBOOT. */
+(function () {
+  try {
+    var d = new URLSearchParams(location.hash.slice(1)).get("tgWebAppData") || "";
+    if (!d) { try { d = (JSON.parse(sessionStorage.getItem("__telegram__initParams") || "{}") || {}).tgWebAppData || ""; } catch (e) {} }
+    var dev = new URLSearchParams(location.search).get("dev_user");
+    if (!d && !dev) return;
+    window.__KBOOT = { d: d, dev: dev, t: Date.now(), p: fetch("/app/api/profile/me/?meta=0" + (dev ? "&dev_user=" + encodeURIComponent(dev) : ""), { headers: { "X-Tg-Init-Data": d } })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, date: r.headers.get("Date"), j: j }; }); })
+      .catch(function () { return null; }) };
+  } catch (e) {}
+})();
+</script>
+<link rel="preload" as="font" type="font/ttf" href="/app/font/regular.ttf" crossorigin>
+<link rel="preload" as="font" type="font/ttf" href="/app/font/bold.ttf" crossorigin>
 <!--CSS-->
+<!--DATA-->
+<!--SDK-->
 </head>
 <body>
 <header class="hud" id="hud"><div class="in" id="hud-in"></div></header>
@@ -15,10 +37,20 @@
   <div class="ttl" id="title"></div>
   <div class="act" id="topact"></div>
 </div>
-<main class="wrap" id="view"></main>
+<main class="wrap" id="view"><div class="sk" style="height:150px;margin-bottom:12px"></div><div class="sk" style="height:104px;margin-bottom:12px"></div><div class="sk" style="height:260px"></div></main>
 <nav class="tabs"><div class="in" id="tabs"></div></nav>
-<div class="sheet" id="sheet"><div class="scrim" data-close></div><div class="box" id="sheet-box"></div></div>
-<div class="toasts" id="toasts"></div>
+<div class="sheet" id="sheet" aria-hidden="true"><div class="scrim" data-close></div><div class="box" id="sheet-box" role="dialog" aria-modal="true"></div></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 <!--JS-->
+<script>
+/* The code did not arrive (a dropped connection on the bundle): say so instead of showing
+   an endless skeleton. */
+(function () {
+  if (window.K && window.K.started) return;
+  var v = document.getElementById("view");
+  if (!v) return;
+  v.innerHTML = '<div class="state"><b>بارگذاری کامل نشد</b>اینترنتت رو چک کن و دوباره امتحان کن.<br><button class="btn primary" style="margin-top:16px" onclick="location.reload()">تلاش دوباره</button></div>';
+})();
+</script>
 </body>
 </html>

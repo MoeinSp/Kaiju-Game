@@ -190,10 +190,12 @@ def ranks(request, user):
             })
         out["daily_rewards"] = [{"rank": k, "coins": v} for k, v in sorted(alliance_mod.DAILY_TREASURY_REWARD_BY_RANK.items())]
         # «رتبه‌ی اتحاد تو» exactly as the bot's /rank computes it
-        out["total"] = Alliance.objects.count()
         if mine:
             ids = list(Alliance.objects.order_by("-treasury_gold", "id").values_list("id", flat=True))
+            out["total"] = len(ids)
             out["my_rank"] = next((i for i, aid in enumerate(ids, start=1) if aid == mine), None)
+        else:
+            out["total"] = Alliance.objects.count()
         return out
 
     if board == "raid":
@@ -233,19 +235,67 @@ def _guide_text(value) -> str:
     return re.sub(rf"\s*{_ARROW_MARK}\s*", " ← ", out)
 
 
+_GUIDE: list | None = None
+
+
+def _guide_topics() -> list[dict]:
+    """The whole guide as plain text. It is game text — the same for every player and fixed
+    while the process lives — so it is cleaned once per worker, not on every request."""
+    global _GUIDE
+    if _GUIDE is None:
+        from game import guide
+
+        topics = []
+        for group, table in (("concepts", guide.CONCEPTS), ("dm", guide.DM_SECTIONS)):
+            for key, (kind, title, blurb, rows) in table.items():
+                topics.append({
+                    "id": f"{group}:{key}", "key": key, "group": group, "kind": kind,
+                    "title": _guide_text(title), "blurb": _guide_text(blurb),
+                    "rows": [{"h": _guide_text(h), "b": _guide_text(b)} for h, b in rows],
+                })
+        _GUIDE = topics
+    return _GUIDE
+
+
+def _guide_norm(text) -> str:
+    """Search key: no half-space / diacritics, Arabic and Persian letter forms folded together."""
+    out = re.sub("[\u200c\u064b-\u0652]", "", str(text or "").casefold())
+    return out.replace("ي", "ی").replace("ك", "ک")
+
+
 @endpoint()
 def guide_panel(request, user):
-    from game import guide
+    """The index only (titles, blurbs, section headings — about a tenth of the text); a
+    topic's body is fetched when it is opened (guide/topic/)."""
+    return {"banner": _feature_img("guide"), "topics": [
+        {"id": t["id"], "key": t["key"], "group": t["group"], "kind": t["kind"], "title": t["title"],
+         "blurb": t["blurb"], "heads": [r["h"] for r in t["rows"]]}
+        for t in _guide_topics()
+    ]}
 
-    topics = []
-    for group, table in (("concepts", guide.CONCEPTS), ("dm", guide.DM_SECTIONS)):
-        for key, (kind, title, blurb, rows) in table.items():
-            topics.append({
-                "id": f"{group}:{key}", "key": key, "group": group, "kind": kind,
-                "title": _guide_text(title), "blurb": _guide_text(blurb),
-                "rows": [{"h": _guide_text(h), "b": _guide_text(b)} for h, b in rows],
-            })
-    return {"banner": _feature_img("guide"), "topics": topics}
+
+@endpoint()
+def guide_topic(request, user):
+    """?id=<group>:<key> — one topic with its text."""
+    topic_id = request.GET.get("id") or ""
+    topic = next((t for t in _guide_topics() if t["id"] == topic_id), None)
+    if topic is None:
+        raise GameError("این موضوع پیدا نشد.")
+    return {"topic": topic}
+
+
+@endpoint()
+def guide_search(request, user):
+    """?q=<text> — topics whose TEXT mentions it (titles and headings are searched on the
+    device from the index; this covers the bodies it does not have)."""
+    needle = _guide_norm((request.GET.get("q") or "").strip()[:40])
+    hits = []
+    if len(needle) >= 2:
+        for t in _guide_topics():
+            row = next((r for r in t["rows"] if needle in _guide_norm(r["b"]) or needle in _guide_norm(r["h"])), None)
+            if row is not None:
+                hits.append({"id": t["id"], "h": row["h"]})
+    return {"q": needle, "hits": hits}
 
 
 # ── settings ──────────────────────────────────────────────────────────────────
@@ -355,6 +405,8 @@ routes = [
     ("alliance/leave/", alliance_leave),
     ("ranks/", ranks),
     ("guide/", guide_panel),
+    ("guide/topic/", guide_topic),
+    ("guide/search/", guide_search),
     ("settings/", settings_panel),
     ("settings/notify/", settings_notify),
     ("settings/rename/", settings_rename),

@@ -15,7 +15,7 @@ from bio_lab.models import Tournament, TournamentMatch
 from bio_lab.repository import creature_name, lab_display
 from game import arena_chests as AC
 from game import tournament as T
-from telgame_site.mini.core import GameError, asset_img, clean, creature_img, creature_list, endpoint, need_int
+from telgame_site.mini.core import GameError, asset_img, clean, creature_dict, creature_img, endpoint, need_int
 
 
 def _txt(value) -> str:
@@ -150,11 +150,16 @@ def choices(request, user):
     entry = T.my_entry(user)
     if entry is None:
         raise GameError("توی جام این هفته نیستی.")
-    scored = T.creature_choices(user)
-    rows = creature_list(user, [c for c, _ in scored])  # same research + gear power as creature_choices
+    from game.equipment import equipped_items_map
+
+    # creature_choices() already attached the research and ranked by card power; the cards
+    # only need the gear of the 30 it kept (one query — creature_list would redo all of it
+    # and add the three «who is busy» queries this picker has no use for)
+    creatures = [c for c, _ in T.creature_choices(user)]
+    gear = equipped_items_map(creatures)
+    rows = [creature_dict(c, gear[c.id]) for c in creatures]
     for row in rows:
-        row["busy"] = False  # a busy creature may still be fielded (set_creature has no such rule)
-        row["active"] = False
+        row["active"] = False  # a busy / inactive creature may be fielded (set_creature has no such rule)
     return {"creatures": rows, "current": entry.creature_id}
 
 

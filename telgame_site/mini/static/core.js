@@ -29,7 +29,22 @@
    HUBS (bottom tabs): "home" (screen "home"), "creatures", "battle", "base", "more".
    Rules: NO emoji — use K.ic(name). Always escape game/player text with K.esc(). Numbers
    through K.n(). All requests through K.api (it adds auth, updates the top bar from
-   `res`, and shows the server's error text as a toast). Persian UI text, informal tone.   */
+   `res`, and shows the server's error text as a toast). Persian UI text, informal tone.
+
+   SPEED / ROBUSTNESS — what the core does for you, and what to prefer:
+     * K.meFast(onChange) instead of K.refreshMe() at the top of a screen: it answers from memory
+       and re-reads the profile in the background (K.refreshMe() waits for the network).
+     * ctx.reload() re-draws IN PLACE: the old content stays (untouchable) until the new one is
+       ready and the scroll position is kept. «back» returns to where the player was.
+     * K.api.post ignores a second identical POST while the first is running (double tap);
+       K.api.get retries a dropped connection once and gives up after 15 s; K.api.cached shares
+       one request between simultaneous callers.
+     * K.on(root, "act", fn) keeps ONE handler per action per root — binding again replaces it.
+     * A K.every poll or a late callback must check ctx.alive() before touching the page.
+     * Countdowns to a server timestamp use K.now() (server clock), not Date.now().
+     * K.grid(list, fn, size, memo) remembers how far a list was opened; K.asset("img/x.jpg") gives
+       a cache-for-ever URL of a static picture; K.hubRefresh() re-draws the open hub when your
+       badge data arrives; a tile's `hall` may be a function(me) and `open(me)` exempts a player.   */
 
 window.K = (function () {
   "use strict";
@@ -173,66 +188,143 @@ window.K = (function () {
 
   // ───────────────────────── API ─────────────────────────
   K.cache = {};
+  var inflight = {}, posting = {}, postSeq = 0;
+  var GET_TIMEOUT = 15000, POST_TIMEOUT = 30000;
+  /* Server clock − phone clock, in seconds (from the HTTP Date header). Countdowns to a server
+     timestamp use K.now(), so a phone with a wrong clock still shows the right time left. */
+  K.skew = 0;
+  K.now = function () { return Date.now() / 1000 + K.skew; };
+  function noteDate(header) {
+    var t = header ? Date.parse(header) : NaN; if (isNaN(t)) return;
+    var s = t / 1000 - Date.now() / 1000;
+    K.skew = Math.abs(s) < 5 ? 0 : s;   // the header has 1 s resolution and arrives a little late: ignore small differences
+  }
+  /* One HTTP exchange → {r: Response, j: parsed body}. Rejects with err.network = true when the
+     connection failed, the body was cut off, or nothing came back in `ms` (err.timeout = true). */
+  function send(url, opts, ms) {
+    var ctl = window.AbortController ? new AbortController() : null, timer = null, timedOut = false;
+    if (ctl) { opts.signal = ctl.signal; timer = setTimeout(function () { timedOut = true; ctl.abort(); }, ms); }
+    function fail() { clearTimeout(timer); var err = new Error("network"); err.network = true; err.timeout = timedOut; throw err; }
+    return fetch(url, opts).then(function (r) {
+      noteDate(r.headers.get("Date"));
+      return r.json().then(function (j) { clearTimeout(timer); return { r: r, j: j || {} }; }, function () {
+        if (timedOut || r.ok) fail();            // a 200 whose JSON did not arrive whole is a network failure
+        clearTimeout(timer); return { r: r, j: {} };   // an error page from the web server (502 …): not JSON
+      });
+    }, fail);
+  }
   function request(method, path, body, btn) {
     var url = "/app/api/" + path + (devUser ? (path.indexOf("?") >= 0 ? "&" : "?") + "dev_user=" + encodeURIComponent(devUser) : "");
-    var opts = { method: method, headers: { "X-Tg-Init-Data": initData } };
-    if (method === "POST") { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body || {}); }
+    var tries = 0;
     if (btn) btn.classList.add("busy");
-    return fetch(url, opts).then(function (r) {
-      return r.json().catch(function () { return {}; }).then(function (j) {
-        if (j && j.res) K.setRes(j.res);
-        if (!r.ok) { var e = new Error(j.error || ("http " + r.status)); e.status = r.status; e.code = j.code; e.data = j; throw e; }
-        return j;
+    function attempt() {
+      var opts = { method: method, headers: { "X-Tg-Init-Data": initData } };
+      if (method === "POST") { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body || {}); }
+      return send(url, opts, method === "GET" ? GET_TIMEOUT : POST_TIMEOUT).catch(function (err) {
+        // a read is safe to repeat: one silent retry hides a dropped connection (never for POST)
+        if (method === "GET" && !err.timeout && tries++ < 1) return new Promise(function (ok) { setTimeout(ok, 600); }).then(attempt);
+        throw err;
       });
-    }).catch(function (err) {
-      if (!err.status) err.message = "اتصال برقرار نشد. اینترنتت رو چک کن.";
+    }
+    return attempt().then(function (x) {
+      var r = x.r, j = x.j;
+      if (j && j.res) K.setRes(j.res);
+      if (!r.ok) {
+        var e = new Error(j.error && r.status !== 401 && r.status !== 404 && r.status !== 405 ? j.error
+          : r.status === 401 ? (initData ? "نشستت تموم شده. مینی‌اپ رو ببند و دوباره از ربات بازش کن." : "این صفحه فقط از داخل تلگرام باز می‌شه.")
+          : r.status >= 500 ? "سرور الان جواب نمی‌ده. کمی بعد دوباره امتحان کن." : "این کار الان ممکن نیست.");
+        e.status = r.status; e.code = j.code; e.data = j; throw e;
+      }
+      if (method === "POST") { postSeq++; meStale = true; }   // an action may have changed the profile
+      return j;
+    }, function (err) {
+      err.message = !err.timeout ? "اتصال برقرار نشد. اینترنتت رو چک کن."
+        : method === "GET" ? "اتصال خیلی کنده. دوباره امتحان کن."
+        : "جواب سرور نرسید. صفحه رو تازه کن تا نتیجه رو ببینی.";
+      if (method === "POST") { postSeq++; meStale = true; }   // it may have gone through all the same
       throw err;
     }).finally(function () { if (btn) btn.classList.remove("busy"); });
   }
   K.api = {
-    /* GET (no toast on error — screens show an error state through the router) */
+    /* GET (no toast on error — screens show an error state through the router). A dropped
+       connection is retried once by itself; it gives up after 15 s. */
     get: function (path) { return request("GET", path); },
     /* GET with a per-session cache (use for lists that only change through your own actions;
-       call K.invalidate(path) after changing them) */
-    cached: function (path) { return K.cache[path] ? Promise.resolve(K.cache[path]) : request("GET", path).then(function (j) { K.cache[path] = j; return j; }); },
+       call K.invalidate(path) after changing them). Two callers asking at the same moment
+       share one request. */
+    cached: function (path) {
+      if (K.cache[path]) return Promise.resolve(K.cache[path]);
+      if (inflight[path]) return inflight[path];
+      var p = request("GET", path).then(function (j) { if (inflight[path] === p) { K.cache[path] = j; delete inflight[path]; } return j; },
+                                         function (err) { if (inflight[path] === p) delete inflight[path]; throw err; });
+      inflight[path] = p; return p;
+    },
     /* POST. `btn` (optional) gets a spinner while it runs. A failed action shows the server's
-       message as a toast AND rejects, so `.then` only runs on success. */
+       message as a toast AND rejects, so `.then` only runs on success.
+       A second identical POST (same path + body, or the same button) fired while the first is
+       still running is IGNORED — its promise never settles — so a double tap cannot buy twice. */
     post: function (path, body, btn) {
+      var key; try { key = path + "\n" + JSON.stringify(body || {}); } catch (e) { key = path; }
+      if (posting[key] || (btn && btn._kbusy)) return new Promise(function () {});
+      posting[key] = true; if (btn) btn._kbusy = true;
       return request("POST", path, body, btn).catch(function (err) {
         K.haptic("err");
         // out of energy → the toast offers the refill screen (registered by the shop module)
         if (err.code === "energy" && K.hasScreen("sh_energy")) K.toast(err.message, "err", { label: "شارژ انرژی", run: function () { K.go("sh_energy"); } });
-        else if (err.status === 400 || !err.status || err.status >= 500) K.toast(err.message, "err");
+        else K.toast(err.message, "err");
         throw err;
-      });
+      }).finally(function () { delete posting[key]; if (btn) btn._kbusy = false; });
     }
   };
-  K.invalidate = function () { for (var i = 0; i < arguments.length; i++) delete K.cache[arguments[i]]; };
+  /* Forget cached lists: K.invalidate("profile/creatures/", "profile/equipment/"). A request for
+     that path that is still on its way is not stored either. */
+  K.invalidate = function () { for (var i = 0; i < arguments.length; i++) { delete K.cache[arguments[i]]; delete inflight[arguments[i]]; } };
 
   // ───────────────────────── HUD ─────────────────────────
   var hudIn = document.getElementById("hud-in");
   K.res = null;
+  var resShown = "", energyTimer = null;
+  var RES_TITLE = { coins: "طلا", dna: "DNA", diamonds: "الماس", energy: "انرژی", cup: "کاپ" };
   K.setRes = function (res) {
+    if (!res) return;
     var prev = K.res; K.res = res;
-    var items = [["coin", "coins", "coin", K.short(res.coins)], ["dna", "dna", "dna", K.short(res.dna)], ["gem", "diamonds", "diamond", K.short(res.diamonds)],
-                 ["bolt", "energy", "energy", '<span class="num">' + Number(res.energy) + "<small>/" + res.max_energy + "</small></span>"], ["trophy", "cup", "cup", K.n(res.cup)]];
-    hudIn.innerHTML = items.map(function (it) {
-      var changed = prev && prev[it[1]] !== res[it[1]];
-      return '<span class="res t-' + it[2] + (changed ? " bump" : "") + '">' + K.ic(it[0], it[0] === "bolt" ? "f" : "") + '<span style="color:var(--text)">' + it[3] + "</span></span>";
-    }).join("");
+    // every response carries `res`; the bar is only rebuilt when a number really changed
+    var shown = [res.coins, res.dna, res.diamonds, res.energy, res.max_energy, res.cup].join("|");
+    if (shown !== resShown) {
+      resShown = shown;
+      var items = [["coin", "coins", "coin", K.short(res.coins)], ["dna", "dna", "dna", K.short(res.dna)], ["gem", "diamonds", "diamond", K.short(res.diamonds)],
+                   ["bolt", "energy", "energy", '<span class="num">' + Number(res.energy) + "<small>/" + res.max_energy + "</small></span>"], ["trophy", "cup", "cup", K.n(res.cup)]];
+      hudIn.innerHTML = items.map(function (it) {
+        var changed = prev && prev[it[1]] !== res[it[1]];
+        return '<span class="res t-' + it[2] + (changed ? " bump" : "") + '" title="' + RES_TITLE[it[1]] + '">' + K.ic(it[0], it[0] === "bolt" ? "f" : "") + '<span style="color:var(--text)">' + it[3] + "</span></span>";
+      }).join("");
+    }
+    // energy refills by itself: ask again when the server said the next point is due
+    clearTimeout(energyTimer);
+    if (res.energy < res.max_energy && res.energy_in > 0) {
+      energyTimer = setTimeout(function () { if (!document.hidden && K.me) K.refreshMe(true).catch(function () {}); }, (Number(res.energy_in) + 1) * 1000);
+    }
   };
 
   // ───────────────────────── toasts, sheet, dialogs ─────────────────────────
   var toasts = document.getElementById("toasts");
   /* K.toast("متن", "ok"|"err", {label: "شارژ", run: fn}) — the optional third argument adds a tappable action. */
+  var lastToast = "", lastToastAt = 0;
   K.toast = function (text, kind, action) {
+    text = String(text == null ? "" : text); if (!text) return;
+    // the same message twice in a row (two failed taps, two modules reporting one error) shows once
+    var sig = kind + "|" + text, now = Date.now();
+    if (sig === lastToast && now - lastToastAt < 1500) return;
+    lastToast = sig; lastToastAt = now;
     var el = document.createElement("div");
     el.className = "toast " + (kind === "err" ? "err" : "ok");
     el.innerHTML = K.ic(kind === "err" ? "warn" : "check") + "<span>" + K.esc(text) + "</span>" + (action ? '<button class="tact">' + K.esc(action.label) + "</button>" : "");
-    if (action) { el.style.pointerEvents = "auto"; el.querySelector(".tact").onclick = function () { el.remove(); action.run(); }; }
+    el.style.pointerEvents = "auto";
+    el.onclick = function () { el.remove(); };   // tap to dismiss
+    if (action) el.querySelector(".tact").onclick = function (ev) { ev.stopPropagation(); el.remove(); action.run(); };
     toasts.appendChild(el);
     while (toasts.children.length > 3) toasts.removeChild(toasts.firstChild);
-    setTimeout(function () { el.classList.add("out"); setTimeout(function () { el.remove(); }, 260); }, kind === "err" ? 3600 : 2200);
+    setTimeout(function () { el.classList.add("out"); setTimeout(function () { el.remove(); }, 260); }, action ? 5000 : kind === "err" ? 3600 : 2200);
   };
   var sheet = document.getElementById("sheet"), sheetBox = document.getElementById("sheet-box"), sheetClose = null;
   /* Bottom sheet. `html` is the content; returns the box element so you can K.on(box, ...).
@@ -240,13 +332,26 @@ window.K = (function () {
   K.sheet = function (html, opts) {
     // a FRESH inner element per sheet: listeners a caller adds to the returned node die with it
     // (they used to pile up on the one shared box and fire in every later sheet)
+    // a sheet opened over a waiting K.confirm / K.pickCreature / K.reward: that promise is settled
+    // (as "dismissed") instead of hanging for ever. A module's own onClose keeps the old
+    // behaviour: it only runs when its sheet is really closed.
+    var prev = sheetClose; sheetClose = null;
+    if (prev && prev.settle) { try { prev(); } catch (e) { console.error(e); } }
     sheetBox.innerHTML = '<button class="x" data-close aria-label="بستن">' + K.ic("close") + '</button><div class="sheet-in"></div>';
     var inner = sheetBox.lastChild; inner.innerHTML = html;
-    sheetBox.scrollTop = 0; sheet.classList.add("open"); sheetClose = opts && opts.onClose; K.haptic();
+    sheetBox.scrollTop = 0; sheet.classList.add("open"); sheet.setAttribute("aria-hidden", "false"); document.body.classList.add("sheet-open");
+    sheetClose = opts && opts.onClose; K.haptic();
     return inner;
   };
-  K.closeSheet = function () { if (!sheet.classList.contains("open")) return; sheet.classList.remove("open"); var f = sheetClose; sheetClose = null; if (f) f(); };
+  function settle(fn) { fn.settle = true; return fn; }
+  K.sheetOpen = function () { return sheet.classList.contains("open"); };
+  K.closeSheet = function () {
+    if (!sheet.classList.contains("open")) return;
+    sheet.classList.remove("open"); sheet.setAttribute("aria-hidden", "true"); document.body.classList.remove("sheet-open");
+    var f = sheetClose; sheetClose = null; if (f) f();
+  };
   sheet.addEventListener("click", function (ev) { if (ev.target.closest("[data-close]")) K.closeSheet(); });
+  document.addEventListener("keydown", function (ev) { if (ev.key === "Escape") K.closeSheet(); });
   /* K.confirm({title, text, ok: "بفرست", cancel: "نه", danger: false, icon: "warn"}) → Promise<boolean> */
   K.confirm = function (o) {
     return new Promise(function (resolve) {
@@ -254,7 +359,7 @@ window.K = (function () {
       var box = K.sheet('<div class="grab"></div><div class="loot"><div class="burst" style="color:' + (o.danger ? "var(--bad)" : "var(--accent)") + ';background:none;border-color:currentColor">' + K.ic(o.icon || (o.danger ? "warn" : "info")) + "</div>" +
         "<h3>" + K.esc(o.title || "مطمئنی؟") + "</h3>" + (o.html || (o.text ? "<p>" + K.esc(o.text) + "</p>" : "")) + "</div>" +
         '<div class="pad btns" style="margin-top:14px"><button class="btn" data-no>' + K.esc(o.cancel || "نه") + '</button><button class="btn ' + (o.danger ? "danger" : "primary") + '" data-yes>' + K.esc(o.ok || "آره") + "</button></div>",
-        { onClose: function () { if (!done) resolve(false); } });
+        { onClose: settle(function () { if (!done) resolve(false); }) });
       box.querySelector("[data-yes]").onclick = function () { done = true; K.closeSheet(); resolve(true); };
       box.querySelector("[data-no]").onclick = function () { K.closeSheet(); };
     });
@@ -272,7 +377,7 @@ window.K = (function () {
       var cards = (o.creatures || []).map(function (c) { return K.creatureTile(c, { tag: "div" }); }).concat((o.items || []).map(function (e) { return K.itemTile(e, { tag: "div" }); })).join("");
       var box = K.sheet('<div class="grab"></div><div class="loot"><div class="burst">' + K.ic(o.icon || "gift") + "</div><h3>" + K.esc(o.title || "جایزه گرفتی!") + "</h3>" +
         (o.text ? "<p>" + K.esc(o.text) + "</p>" : "") + (chips.length ? '<div class="items">' + chips.join("") + "</div>" : "") + (cards ? '<div class="cards">' + cards + "</div>" : "") + "</div>" +
-        '<div class="pad" style="margin-top:16px"><button class="btn primary block" data-close>' + K.esc(o.button || "عالیه") + "</button></div>", { onClose: resolve });
+        '<div class="pad" style="margin-top:16px"><button class="btn primary block" data-close>' + K.esc(o.button || "عالیه") + "</button></div>", { onClose: settle(function () { resolve(); }) });
       K.haptic("ok"); return box;
     });
   };
@@ -304,7 +409,7 @@ window.K = (function () {
   };
   /* Compact row: thumbnail + name + tags + power. c = creatureDict (or {name,img,rarity,element,star,level,power}) */
   K.fighter = function (c, sub) {
-    return '<div class="fighter ' + (c.rarity || "") + '"><img class="tile ' + (c.rarity || "") + '" style="box-shadow:0 0 0 1.5px var(--rc,var(--line))" src="' + c.img + '" alt=""><div class="grow"><div class="nm cut">' + K.esc(c.name) + "</div>" +
+    return '<div class="fighter ' + (c.rarity || "") + '"><img class="tile ' + (c.rarity || "") + '" style="box-shadow:0 0 0 1.5px var(--rc,var(--line))" loading="lazy" decoding="async" src="' + c.img + '" alt=""><div class="grow"><div class="nm cut">' + K.esc(c.name) + "</div>" +
       '<div class="sm muted">' + (c.star ? K.stars(c.star) + " " : "") + (c.level ? "سطح " + K.n(c.level) : "") + "</div>" + (sub || "") + "</div>" +
       (c.power != null ? '<span class="pw">' + K.ic("power") + K.n(c.power) + "</span>" : "") + "</div>";
   };
@@ -319,8 +424,14 @@ window.K = (function () {
   K.bar = function (ratio, kind, extra) { return '<div class="progress ' + (kind || "") + " " + (extra || "") + '"><i style="width:' + Math.max(0, Math.min(100, (ratio || 0) * 100)).toFixed(1) + '%"></i></div>'; };
   /* Empty / error state */
   K.state = function (icon, title, text, btnHtml) { return '<div class="state"><div class="big">' + K.ic(icon) + "</div><b>" + K.esc(title) + "</b>" + K.esc(text || "") + (btnHtml ? "<br>" + btnHtml : "") + "</div>"; };
+  /* Loading placeholder shown while a screen's render() is running. A screen picks one with
+     `skeleton: "grid" | "hub" | "detail" | "list"` in its K.screen definition (default: three blocks). */
   K.skeleton = function (kind) {
-    if (kind === "grid") { var g = '<div class="sk" style="height:44px;margin-bottom:10px"></div><div class="grid">'; for (var i = 0; i < 9; i++) g += '<div class="sk" style="aspect-ratio:1/1;border-radius:14px"></div>'; return g + "</div>"; }
+    var i, g;
+    if (kind === "grid") { g = '<div class="sk" style="height:44px;margin-bottom:10px"></div><div class="grid">'; for (i = 0; i < 9; i++) g += '<div class="sk" style="aspect-ratio:1/1;border-radius:14px"></div>'; return g + "</div>"; }
+    if (kind === "hub") { g = '<div class="sk" style="height:132px;margin-bottom:12px"></div><div class="hub">'; for (i = 0; i < 6; i++) g += '<div class="sk" style="height:112px"></div>'; return g + "</div>"; }
+    if (kind === "detail") return '<div class="sk" style="aspect-ratio:16/10;margin-bottom:12px"></div><div class="sk" style="height:74px;margin-bottom:12px"></div><div class="sk" style="height:150px"></div>';
+    if (kind === "list") { g = ""; for (i = 0; i < 6; i++) g += '<div class="sk" style="height:62px;margin-bottom:9px"></div>'; return g; }
     return '<div class="sk" style="height:110px;margin-bottom:12px"></div><div class="sk" style="height:220px;margin-bottom:12px"></div><div class="sk" style="height:140px"></div>';
   };
   /* Live countdown: put <span class="timer" data-until="<unix seconds>"></span> (or data-left="<seconds from now>")
@@ -328,37 +439,65 @@ window.K = (function () {
   K.timers = function (root, onDone) {
     var els = Array.prototype.slice.call(root.querySelectorAll("[data-until],[data-left]"));
     if (!els.length) return;
-    var now0 = Date.now() / 1000;
+    var now0 = K.now(), id = null, seen = false, born = Date.now();
     els.forEach(function (el) { if (el.dataset.left != null && el.dataset.until == null) el.dataset.until = now0 + Number(el.dataset.left); });
-    function tick() {
-      var now = Date.now() / 1000;
+    function tick(first) {
+      var now = K.now(), live = 0;
       els.forEach(function (el) {
-        if (el._done || !el.isConnected) return;
+        if (el._done) return;
+        // the first pass also FILLS elements that are not in the page yet (a screen is built
+        // off-screen and attached when ready) — they used to stay empty for a second
+        var conn = el.isConnected;
+        if (conn) { seen = true; live++; } else if (first !== true) return;
         var left = Number(el.dataset.until) - now;
-        if (left <= 0) { el._done = true; el.classList.add("done"); el.innerHTML = K.ic("check") + (el.dataset.done || "آماده"); if (onDone) onDone(el); }
-        else el.innerHTML = K.ic("clock") + '<span class="num">' + (el.dataset.fmt === "long" ? K.dur(left) : K.clock(left)) + "</span>";
+        if (left <= 0) {
+          el.classList.add("done"); el.innerHTML = K.ic("check") + (el.dataset.done || "آماده");
+          if (conn) { el._done = true; live--; if (onDone) onDone(el); }   // onDone only once it is on screen, as before
+        } else el.innerHTML = K.ic("clock") + '<span class="num">' + (el.dataset.fmt === "long" ? K.dur(left) : K.clock(left)) + "</span>";
       });
+      // nothing left to count (all done, or the block was re-drawn / closed): stop this interval
+      // instead of letting one pile up per re-draw until the player leaves the screen
+      if (id !== null && !live && (seen || Date.now() - born > 30000)) clearInterval(id);
     }
-    tick(); K.every(1000, tick);
+    tick(true); id = K.every(1000, tick);
   };
   /* A tile grid that draws `size` tiles and a «نمایش بیشتر» button for the rest (big accounts own thousands of pieces):
-     html = K.grid(list, function (x) { return K.itemTile(x); }) */
+     html = K.grid(list, function (x) { return K.itemTile(x); })
+     Optional 4th argument: an object you keep (e.g. per screen). K.grid stores in `memo.at` how many
+     tiles are open and starts from there next time — so «back» shows the list as far as it was opened.
+     Set memo.at = 0 when the list itself changes (another filter). */
   var grids = {}, gridSeq = 0;
-  K.grid = function (list, fn, size) {
-    size = size || 90; var id = ++gridSeq;
-    grids[id] = { list: list, fn: fn, at: size, size: size }; delete grids[id - 8];
-    return '<div class="grid" id="kg' + id + '">' + list.slice(0, size).map(fn).join("") + "</div>" +
-      (list.length > size ? '<button class="btn ghost block mt" data-grid-more="' + id + '">نمایش بیشتر <span class="num">(' + K.n(list.length - size) + ")</span></button>" : "");
+  function moreLabel(n) { return 'نمایش بیشتر <span class="num">(' + Number(n).toLocaleString("en-US") + ")</span>"; }
+  K.grid = function (list, fn, size, memo) {
+    size = size || 90; var id = ++gridSeq, at = Math.min(list.length, Math.max(size, (memo && memo.at) || 0));
+    grids[id] = { list: list, fn: fn, at: at, size: size, memo: memo || null }; delete grids[id - 24];
+    if (memo) memo.at = at;
+    return '<div class="grid" id="kg' + id + '">' + list.slice(0, at).map(fn).join("") + "</div>" +
+      (list.length > at ? '<button class="btn ghost block mt" data-grid-more="' + id + '">' + moreLabel(list.length - at) + "</button>" : "");
   };
   document.addEventListener("click", function (ev) {
     var b = ev.target.closest && ev.target.closest("[data-grid-more]"); if (!b) return;
     var g = grids[b.dataset.gridMore], host = g && document.getElementById("kg" + b.dataset.gridMore); if (!host) return;
-    host.insertAdjacentHTML("beforeend", g.list.slice(g.at, g.at + g.size).map(g.fn).join("")); g.at += g.size;
-    if (g.at >= g.list.length) b.remove(); else b.querySelector(".num").textContent = "(" + K.n(g.list.length - g.at) + ")";
+    host.insertAdjacentHTML("beforeend", g.list.slice(g.at, g.at + g.size).map(g.fn).join("")); g.at = Math.min(g.list.length, g.at + g.size);
+    if (g.memo) g.memo.at = g.at;
+    // (the counter used to be written with textContent and showed raw «<span …>» markup from the second page on)
+    if (g.at >= g.list.length) b.remove(); else b.innerHTML = moreLabel(g.list.length - g.at);
   });
   /* Delegated clicks: K.on(root, "name", fn(el, ev)) handles <… data-act="name"> */
   K.on = function (root, act, fn) {
-    root.addEventListener("click", function (ev) { var el = ev.target.closest('[data-act="' + act + '"]'); if (el && root.contains(el)) fn(el, ev); });
+    // ONE click listener per root and one handler per action name: calling K.on again for the
+    // same root + action (a screen that re-draws itself and binds again) REPLACES the handler.
+    // It used to add another listener each time, so one tap ran the action two, three … times.
+    var map = root._kon;
+    if (!map) {
+      map = root._kon = {};
+      root.addEventListener("click", function (ev) {
+        var el = ev.target.closest && ev.target.closest("[data-act]");
+        if (!el || !root.contains(el)) return;
+        var h = map[el.dataset.act]; if (h) h(el, ev);
+      });
+    }
+    map[act] = fn;
   };
   /* Creature picker sheet → Promise<creatureDict|null>.
      opts: {title, sub, filter: fn(c)→bool (false = hidden), disabled: fn(c)→"reason"|"" (shown dimmed), exclude:[ids],
@@ -370,9 +509,10 @@ window.K = (function () {
         var done = false, ex = opts.exclude || [];
         var list = d.creatures.filter(function (c) { return ex.indexOf(c.id) < 0 && (!opts.filter || opts.filter(c)); });
         var html = '<div class="grab"></div><div class="pad"><div class="ttl" style="font-size:18px">' + K.esc(opts.title || "یه هیولا انتخاب کن") + "</div>" + (opts.sub ? '<p class="lead" style="margin:4px 0 12px">' + K.esc(opts.sub) + "</p>" : '<div style="height:10px"></div>');
-        html += list.length ? '<div class="grid">' + list.map(function (c) { var why = opts.disabled ? opts.disabled(c) : ""; var note = opts.note ? opts.note(c) : ""; return K.creatureTile(c, { attrs: why ? 'data-why="' + K.esc(why) + '"' : 'data-pick="' + c.id + '"', dim: !!why, flag: note || undefined }); }).join("") + "</div>"
+        // K.grid: a big collection is drawn 60 at a time instead of thousands of tiles at once
+        html += list.length ? K.grid(list, function (c) { var why = opts.disabled ? opts.disabled(c) : ""; var note = opts.note ? opts.note(c) : ""; return K.creatureTile(c, { attrs: why ? 'data-why="' + K.esc(why) + '"' : 'data-pick="' + c.id + '"', dim: !!why, flag: note || undefined }); }, 60)
                             : K.state("claw", "هیولای مناسبی نداری", opts.empty || "");
-        var box = K.sheet(html + "</div>", { onClose: function () { if (!done) resolve(null); } });
+        var box = K.sheet(html + "</div>", { onClose: settle(function () { if (!done) resolve(null); }) });
         box.addEventListener("click", function (ev) {
           var t = ev.target.closest(".tile"); if (!t) return;
           if (t.dataset.why) { K.toast(t.dataset.why, "err"); return; }
@@ -380,20 +520,27 @@ window.K = (function () {
           done = true; var id = Number(t.dataset.pick); K.closeSheet(); resolve(list.filter(function (c) { return c.id === id; })[0]);
         });
       });
+    }, function (err) {
+      // the list could not be loaded: say so and behave like «nothing picked» (callers only handle that)
+      K.toast(err && err.message ? err.message : "لیست هیولاها باز نشد.", "err"); return null;
     });
   };
 
   // ───────────────────────── router ─────────────────────────
   var view = document.getElementById("view"), topbar = document.getElementById("topbar"), titleEl = document.getElementById("title"), topact = document.getElementById("topact"), backEl = document.getElementById("back");
   var tabsEl = document.getElementById("tabs");
-  var screens = {}, hubs = { battle: [], base: [], more: [] }, stack = [], timers = [], renderSeq = 0;
+  var screens = {}, hubs = { battle: [], base: [], more: [] }, stack = [], timers = [], renderSeq = 0, hubRedraw = null;
   K.TABS = [["home", "home", "خانه"], ["creatures", "claw", "هیولاها"], ["battle", "swords", "نبرد"], ["base", "hall", "پایگاه"], ["more", "grid", "بیشتر"]];
   backEl.innerHTML = K.ic("back");
 
-  /* Register a screen. def: {title: "…" | fn(params), tab: "home|creatures|battle|base|more", render(root, params, ctx)} */
+  /* Register a screen. def: {title: "…" | fn(params), tab: "home|creatures|battle|base|more",
+     skeleton: "grid|hub|detail|list" (optional loading placeholder), render(root, params, ctx)} */
   K.screen = function (name, def) { screens[name] = def; };
   K.hasScreen = function (name) { return !!screens[name]; };
-  /* Add a tile to a hub menu ("battle" | "base" | "more"). def: {id, title, sub, icon, color, go, params, order, img, wide, badge(me)} */
+  /* Add a tile to a hub menu ("battle" | "base" | "more"). def: {id, title, sub, icon, color, go, params, order, img, wide,
+     badge(me)  → number | "live" | 0   (without it the tile shows K.badges[id], see core.py `hub_badges`),
+     hall: 3 | function (me) → level    (locked below that main-hall level; a function may return 0 = open, e.g. for an exemption),
+     open(me) → true                    (optional: this player is exempt from `hall`)} */
   K.hub = function (hub, def) { (hubs[hub] = hubs[hub] || []).push(def); };
   /* The registered tile with this id (any hub), or null — e.g. to link to another module's screen: K.hubTile("dispatch").go */
   K.hubTile = function (id) { for (var h in hubs) for (var i = 0; i < hubs[h].length; i++) if (hubs[h][i].id === id) return hubs[h][i]; return null; };
@@ -402,56 +549,94 @@ window.K = (function () {
   K.after = function (ms, fn) { var id = setTimeout(fn, ms); timers.push(id); return id; };
 
   function current() { return stack[stack.length - 1]; }
-  function paint() {
+  function scrollTop() { return window.scrollY || window.pageYOffset || 0; }
+  function showError(err) {
+    var st = err && err.status, expired = st === 401 && !!initData, s;
+    if (st === 401) s = expired ? ["clock", "نشستت تموم شده", "مینی‌اپ رو ببند و دوباره از ربات بازش کن."] : ["lock", "از داخل تلگرام بازش کن", "این صفحه فقط از دکمه‌ی ربات باز می‌شه."];
+    else if (st === 404 && err.data && err.data.error === "not_started") s = ["flask", "هنوز بازی رو شروع نکردی", "اول توی ربات /start بزن و اولین هیولات رو بگیر."];
+    else if (st === 400) s = ["lock", "الان در دسترس نیست", err.message];
+    else if (err && err.network) s = ["wifi", err.timeout ? "اتصال خیلی کنده" : "اتصال برقرار نشد", "اینترنتت رو چک کن و دوباره امتحان کن."];
+    else if (st >= 500) s = ["warn", "سرور جواب نداد", "کمی بعد دوباره امتحان کن."];
+    else s = ["warn", "یه مشکلی پیش اومد", "دوباره امتحان کن. اگه درست نشد مینی‌اپ رو ببند و باز کن."];
+    view.innerHTML = K.state(s[0], s[1], s[2], '<button class="btn primary" id="retry" style="margin-top:16px">' + (expired ? K.ic("close") + "بستن" : K.ic("refresh") + "تلاش دوباره") + "</button>");
+    var b = document.getElementById("retry");
+    if (b) b.onclick = function () { if (expired && tg && tg.close) { try { tg.close(); return; } catch (e) {} } paint(); };
+  }
+  /* Draw the top screen of the stack. `soft` (ctx.reload / K.reload on a screen that is already
+     showing): the old content stays visible, untouchable, until the new one is ready and the
+     scroll position is kept — no skeleton flash and no jump to the top after every action. */
+  function paint(soft) {
     var cur = current(), def = screens[cur.name], seq = ++renderSeq;
     timers.forEach(function (id) { clearInterval(id); clearTimeout(id); }); timers = [];
-    K.closeSheet();
+    K.closeSheet(); hubRedraw = null;
+    soft = soft === true && cur.shown === true;
     var tab = def.tab || cur.name;
     Array.prototype.forEach.call(tabsEl.children, function (b) { b.classList.toggle("on", b.dataset.tab === tab); });
-    var inner = stack.length > 1;
-    topbar.hidden = !inner; topact.innerHTML = "";
-    if (inner) titleEl.textContent = typeof def.title === "function" ? def.title(cur.params) : (def.title || "");
+    var inner = stack.length > 1, acted = false;
+    topbar.hidden = !inner;
+    if (!soft) { topact.innerHTML = ""; if (inner) titleEl.textContent = typeof def.title === "function" ? def.title(cur.params) : (def.title || ""); }
     try { if (tg && tg.BackButton) { if (inner) tg.BackButton.show(); else tg.BackButton.hide(); } } catch (e) {}
-    view.innerHTML = K.skeleton(def.skeleton);
+    if (soft) view.classList.add("reloading");
+    else { view.classList.remove("reloading"); view.innerHTML = K.skeleton(def.skeleton); }
     view.classList.remove("enter");
     var ctx = {
-      reload: function () { if (current() === cur) paint(); },
+      reload: function () { if (current() === cur) paint(true); },
       back: K.back,
-      setTitle: function (t) { titleEl.textContent = t; },
+      setTitle: function (t) { if (seq === renderSeq) titleEl.textContent = t; },
       /* put buttons in the top bar: ctx.actions('<button class="iconbtn" data-act="x">…</button>') */
-      actions: function (html) { topact.innerHTML = html; },
+      actions: function (html) { if (seq === renderSeq) { acted = true; topact.innerHTML = html; } },
+      /* false once the player has moved on — check it before touching the page from a late callback or a K.every poll */
       alive: function () { return seq === renderSeq; }
     };
     var root = document.createElement("div");
     K.ensure().then(function () { return def.render(root, cur.params || {}, ctx); }).then(function () {
       if (seq !== renderSeq) return;
-      view.innerHTML = ""; view.appendChild(root); void view.offsetWidth; view.classList.add("enter");
-      if (!cur.keepScroll) window.scrollTo(0, 0);
-      cur.keepScroll = false;
+      var y = soft ? scrollTop() : (cur.scrollY || 0);
+      if (soft && !acted) topact.innerHTML = "";
+      view.classList.remove("reloading");
+      view.innerHTML = ""; view.appendChild(root);
+      if (!soft) { void view.offsetWidth; view.classList.add("enter"); }
+      window.scrollTo(0, y);
+      cur.scrollY = 0; cur.shown = true;
     }).catch(function (err) {
       if (seq !== renderSeq) return;
       console.error(err);
-      var s = err && err.status === 401 ? ["lock", "از داخل تلگرام بازش کن", "این صفحه فقط از دکمه‌ی ربات باز می‌شه."]
-            : err && err.status === 404 ? ["flask", "هنوز بازی رو شروع نکردی", "اول توی ربات /start بزن و اولین هیولات رو بگیر."]
-            : err && err.status === 400 ? ["lock", "الان در دسترس نیست", err.message]
-            : ["wifi", "اتصال برقرار نشد", (err && err.status) ? "یه مشکلی پیش اومد. دوباره امتحان کن." : "اینترنتت رو چک کن و دوباره امتحان کن."];
-      view.innerHTML = K.state(s[0], s[1], s[2], '<button class="btn primary" id="retry" style="margin-top:16px">' + K.ic("refresh") + "تلاش دوباره</button>");
-      var b = document.getElementById("retry"); if (b) b.onclick = function () { paint(); };
+      view.classList.remove("reloading"); cur.shown = false;
+      showError(err);
     });
   }
   /* Open a screen on top of the current one. */
   K.go = function (name, params) {
     if (!screens[name]) { K.toast("این بخش هنوز آماده نیست.", "err"); return; }
-    K.haptic(); stack.push({ name: name, params: params || {} }); paint();
+    var top = current(), sig; try { sig = name + "|" + JSON.stringify(params || {}); } catch (e) { sig = name + "|" + Math.random(); }
+    if (top && top.sig === sig && Date.now() - top.at < 700) return;   // a double tap would open it twice (and need two «back»)
+    if (top) top.scrollY = scrollTop();                                // «back» returns to where the player was
+    K.haptic(); stack.push({ name: name, params: params || {}, sig: sig, at: Date.now() }); paint();
   };
   /* Replace the current screen (no extra «back» step). */
   K.replace = function (name, params) { if (!screens[name]) return; stack[stack.length - 1] = { name: name, params: params || {} }; paint(); };
-  K.back = function () { if (stack.length > 1) { stack.pop(); current().keepScroll = false; paint(); } };
+  K.back = function () { if (stack.length > 1) { stack.pop(); paint(); } };
   /* Switch bottom tab (resets the stack). */
   K.tab = function (name) { if (!screens[name]) return; stack = [{ name: name, params: {} }]; paint(); };
-  K.reload = function () { paint(); };
-  backEl.onclick = K.back;
-  try { if (tg && tg.BackButton) tg.BackButton.onClick(K.back); } catch (e) {}
+  /* Re-draw the current screen in place (same as ctx.reload()). */
+  K.reload = function () { if (stack.length) paint(true); };
+  /* The «back» the PLAYER presses (top bar, Telegram's BackButton): an open sheet closes first. */
+  function backPressed() { if (K.sheetOpen()) { K.closeSheet(); return; } K.back(); }
+  backEl.onclick = backPressed;
+  try { if (tg && tg.BackButton) tg.BackButton.onClick(backPressed); } catch (e) {}
+
+  /* URL of a file in static/ with its version, so it is cached for good: K.asset("img/bg_home.jpg") */
+  var KV = window.__KV || {};
+  K.asset = function (rel) { return "/app/s/" + rel + (KV[rel] ? "?v=" + KV[rel] : ""); };
+  /* A picture that failed to load on a bad connection is tried once more; a second failure
+     hides the browser's broken-image mark (the dark placeholder stays). */
+  document.addEventListener("error", function (ev) {
+    var el = ev.target; if (!el || el.tagName !== "IMG") return;
+    var src = el.getAttribute("src") || ""; if (src.indexOf("/app/") !== 0) return;
+    if (el._kretry) { el.classList.add("broken"); return; }
+    el._kretry = 1;
+    setTimeout(function () { if (el.isConnected) el.src = src + (src.indexOf("?") >= 0 ? "&" : "?") + "r=1"; }, 1500);
+  }, true);
 
   /* Generic hub renderer, used by the built-in "battle" / "base" / "more" screens. */
   /* Tile background: the tile's own `img`, else the section art the bot uses for it
@@ -461,12 +646,36 @@ window.K = (function () {
                   cave: "cave", missions: "missions", wheel: "wheel", dispatch: "dispatch", hunt: "hunt", arena: "arena", tournament: "tournament",
                   league: "league", shop: "shop", exchange: "exchange", festival: "festival", achievements: "achievements", alliance: "alliance",
                   guide: "guide", profile: "profile", recycle: "equip_exchange", gold_shop: "gold_shop", shield: "shield_shop", items: "item_shop" };
-  var HUB_STATIC = { buildings: "/app/s/img/bg_base.jpg", research: "/app/s/img/bg_research.jpg", energy: "/app/s/img/bg_energy.jpg" };
+  var HUB_STATIC = { buildings: "img/bg_base.jpg", research: "img/bg_research.jpg", energy: "img/bg_energy.jpg" };
   /* Section headings inside a hub: [first order, title, icon] — a tile belongs to the last group whose order it reaches. */
   var HUB_GROUPS = { more: [[0, "فروشگاه و بازار", "cart"], [20, "روزانه", "target"], [30, "رویدادها", "calendar"], [40, "اتحاد و جدول‌ها", "podium"], [85, "حساب و راهنما", "user"]] };
   function hubArt(t) {
     var art = (K.meta && K.meta.art) || {};
-    return t.img || HUB_STATIC[t.id] || art[t.art] || art[HUB_ART[t.id]] || art[t.id] || "";
+    return t.img || (HUB_STATIC[t.id] ? K.asset(HUB_STATIC[t.id]) : "") || art[t.art] || art[HUB_ART[t.id]] || art[t.id] || "";
+  }
+  /* The main-hall level a tile still needs for this player (0 = open). */
+  function hallNeed(t, me) {
+    var need = 0;
+    try {
+      need = typeof t.hall === "function" ? t.hall(me) : t.hall;
+      if (need && typeof t.open === "function" && t.open(me)) need = 0;
+    } catch (e) { need = 0; }
+    return need && me && me.hall_level < need ? need : 0;
+  }
+  /* Server-side badges ({tile id: number | "live"}, from /profile/me/ — see core.py `hub_badges`). */
+  K.badges = {};
+  function tileBadge(t, me) { try { return (t.badge ? t.badge(me) : K.badges[t.id]) || 0; } catch (e) { return 0; } }
+  /* A dot on the bottom tab whose hub has a server-side badge (tiles with their own `badge`
+     function are not asked here: that could start their polling before the hub is opened). */
+  function paintDots() {
+    Array.prototype.forEach.call(tabsEl.children, function (b) {
+      var list = hubs[b.dataset.tab] || [], n = 0, live = false, me = K.me || {};
+      list.forEach(function (t) { var v = t.badge ? 0 : K.badges[t.id]; if (!v || hallNeed(t, me)) return; if (v === "live") live = true; else n += Number(v) || 0; });
+      var dot = b.querySelector(".dot");
+      if (!n && !live) { if (dot) dot.remove(); return; }
+      if (!dot) { dot = document.createElement("i"); dot.className = "dot num"; b.appendChild(dot); }
+      dot.classList.toggle("live", !n); dot.textContent = n ? (n > 99 ? "99+" : n) : "";
+    });
   }
   K.renderHub = function (root, hub, intro) {
     var me = K.me || {}, items = (hubs[hub] || []).slice().sort(function (a, b) { return (a.order || 50) - (b.order || 50); });
@@ -477,45 +686,110 @@ window.K = (function () {
       return head + tileHtml(t);
     }).join("") + "</div>";
     function tileHtml(t) {
-      var badge = t.badge ? t.badge(me) : 0;
-      var locked = t.hall && me.hall_level < t.hall;
-      return '<button class="hubtile' + (t.wide ? " wide" : "") + (locked ? " locked" : "") + '" data-hub="' + K.esc(t.id) + '" style="--tc:' + (t.color || "var(--accent)") + (hubArt(t) ? ";background-image:url('" + hubArt(t) + "')" : "") + '">' +
-        '<span class="hi">' + K.ic(locked ? "lock" : t.icon) + "</span>" + (badge ? '<span class="badge' + (badge === "live" ? " live" : "") + '">' + (badge === "live" ? "فعال" : badge) + "</span>" : "") +
-        "<b>" + K.esc(t.title) + "</b><small>" + K.esc(locked ? "از سطح " + t.hall + " تالار مِهر" : (t.sub || "")) + "</small></button>";
+      var badge = tileBadge(t, me), need = hallNeed(t, me), art = hubArt(t);
+      // the art is a lazy <img> (it was a CSS background, which downloads every tile of a long
+      // menu at once, also the ones far below the screen)
+      return '<button class="hubtile' + (t.wide ? " wide" : "") + (need ? " locked" : "") + '" data-hub="' + K.esc(t.id) + '" style="--tc:' + (t.color || "var(--accent)") + '">' +
+        (art ? '<img class="bg" loading="lazy" decoding="async" src="' + K.esc(art) + '" alt="">' : "") +
+        '<span class="hi">' + K.ic(need ? "lock" : t.icon) + "</span>" + (badge && !need ? '<span class="badge' + (badge === "live" ? " live" : "") + '">' + (badge === "live" ? "فعال" : K.esc(badge)) + "</span>" : "") +
+        "<b>" + K.esc(t.title) + "</b><small>" + K.esc(need ? "از سطح " + need + " تالار مِهر" : (t.sub || "")) + "</small></button>";
     }
     if (!items.length) html += K.state("hourglass", "به‌زودی", "این بخش داره آماده می‌شه.");
     root.innerHTML = html;
+    var bound = !!root._khub; root._khub = items;
+    if (bound) return;                       // re-drawn in place: the click handler is already there
     root.addEventListener("click", function (ev) {
       var b = ev.target.closest("[data-hub]"); if (!b) return;
-      var t = items.filter(function (x) { return x.id === b.dataset.hub; })[0]; if (!t) return;
-      if (t.hall && me.hall_level < t.hall) { K.toast("این بخش از سطح " + t.hall + " تالار مِهر باز می‌شه.", "err"); return; }
+      var t = root._khub.filter(function (x) { return x.id === b.dataset.hub; })[0]; if (!t) return;
+      var need = hallNeed(t, K.me || {});    // asked NOW: the profile may have been refreshed since the tile was drawn
+      if (need) { K.haptic("err"); K.toast("این بخش از سطح " + need + " تالار مِهر باز می‌شه.", "err"); return; }
       if (t.go) K.go(t.go, t.params); else if (t.run) t.run();
     });
   };
+  /* Re-draw the hub that is on screen (no-op elsewhere). A module calls it when its own badge
+     data arrives, so the tile shows the number without waiting for the next visit. */
+  K.hubRefresh = function () { if (hubRedraw) hubRedraw(); };
   function hubBanner(img, title, sub) {
-    return '<div class="banner hubhead" style="background-image:url(/app/s/img/' + img + ')"><div><div class="ttl">' + title + '</div><div class="sm" style="color:#c5cee2">' + sub + "</div></div></div>";
+    return '<div class="banner hubhead" style="background-image:url(' + K.asset("img/" + img) + ')"><div><div class="ttl">' + title + '</div><div class="sm" style="color:#c5cee2">' + sub + "</div></div></div>";
   }
-  K.screen("battle", { render: function (root) { return K.refreshMe().then(function () { K.renderHub(root, "battle", hubBanner("bg_battle.jpg", "نبرد", "بجنگ، غارت کن و بالا برو")); }); } });
-  K.screen("base", { render: function (root) { return K.refreshMe().then(function () { K.renderHub(root, "base", hubBanner("bg_base.jpg", "پایگاه", "بساز، ارتقا بده و منابع جمع کن")); }); } });
-  K.screen("more", { render: function (root) { return K.refreshMe().then(function () { K.renderHub(root, "more", hubBanner("bg_more.jpg", "بیشتر", "فروشگاه، رویدادها، جدول‌ها و تنظیمات")); }); } });
+  /* A hub opens at once from the profile we already have; if that is old (or an action
+     happened since) it is refreshed in the background and the tiles are re-drawn only when
+     something changed. */
+  function hubScreen(hub, img, title, sub) {
+    K.screen(hub, { skeleton: "hub", render: function (root, params, ctx) {
+      function draw() { K.renderHub(root, hub, hubBanner(img, title, sub)); }
+      return K.meFast(function () { if (ctx.alive()) draw(); }).then(function () { draw(); hubRedraw = function () { if (ctx.alive()) draw(); }; });
+    } });
+  }
+  hubScreen("battle", "bg_battle.jpg", "نبرد", "بجنگ، غارت کن و بالا برو");
+  hubScreen("base", "bg_base.jpg", "پایگاه", "بساز، ارتقا بده و منابع جمع کن");
+  hubScreen("more", "bg_more.jpg", "بیشتر", "فروشگاه، رویدادها، جدول‌ها و تنظیمات");
 
-  /* Profile (`K.me`): lab name/level, league, hall_level, active creature … Refreshed on demand. */
-  K.me = null; K.meta = null;
-  K.refreshMe = function () {
-    return K.api.get("profile/me/").then(function (me) { K.me = me; K.meta = me.meta; return me; });
+  /* Profile (`K.me`): lab name/level, league, hall_level, active creature … Refreshed on demand.
+     `K.meta` (label tables) is written into the page by the server. */
+  K.me = null; K.meta = window.__KMETA || null;
+  var meAt = 0, meStale = false, meFlight = null, meFlightSeq = -1, meReq = 0;
+  function applyMe(me) {
+    K.me = me; if (me.meta) K.meta = me.meta;
+    K.badges = me.badges || {}; meAt = Date.now(); paintDots();
+    return me;
+  }
+  /* Fetch the profile from the server → Promise<me>. Calls made at the same moment share one
+     request, and an answer that is less than 1.5 s old is reused (K.refreshMe(true) always asks). */
+  K.refreshMe = function (force) {
+    if (meFlight && meFlightSeq === postSeq) return meFlight;          // already on its way, and no action since it left
+    if (force !== true && K.me && !meStale && Date.now() - meAt < 1500) return Promise.resolve(K.me);
+    var id = ++meReq, seq = postSeq;
+    var p = request("GET", "profile/me/" + (K.meta ? "?meta=0" : "")).then(function (me) {
+      if (id !== meReq) return K.me || me;                             // a newer request overtook this one
+      if (seq === postSeq) meStale = false;
+      return applyMe(me);
+    });
+    meFlight = p; meFlightSeq = seq;
+    function clear() { if (meFlight === p) meFlight = null; }
+    p.then(clear, clear);
+    return p;
+  };
+  /* The profile WITHOUT waiting when we already have one → Promise<me> (resolves at once).
+     If it is older than 20 s, or an action happened since it was read, it is re-read in the
+     background and `onChange(me)` is called if anything differs — re-draw the part that shows it.
+     Use this instead of K.refreshMe() at the top of a screen so navigation never waits. */
+  K.meFast = function (onChange) {
+    if (!K.me) return K.refreshMe();
+    if (meStale || Date.now() - meAt > 20000) {
+      var before = JSON.stringify(K.me);
+      K.refreshMe(true).then(function (me) { if (onChange && JSON.stringify(me) !== before) onChange(me); }).catch(function () {});
+    }
+    return Promise.resolve(K.me);
   };
 
-  /* Resolves once the profile + label tables are loaded (retries after a failed boot). */
+  /* Resolves once the profile + label tables are loaded (retries after a failed boot). The
+     first call uses the request the shell page started before this file had even loaded. */
   var bootP = null;
-  K.ensure = function () { if (!bootP) bootP = K.refreshMe().catch(function (err) { bootP = null; throw err; }); return bootP; };
+  function bootMe() {
+    var b = window.__KBOOT; window.__KBOOT = null;
+    if (!b || !b.p || !K.meta || (b.dev || null) !== (devUser || null) || (!b.dev && b.d !== initData)) return K.refreshMe(true);
+    return b.p.then(function (x) {
+      if (!x || !x.ok || !x.j || x.j.id == null) return K.refreshMe(true);   // failed early: ask again the normal way (with its error handling)
+      noteDate(x.date); if (x.j.res) K.setRes(x.j.res);
+      return applyMe(x.j);
+    });
+  }
+  K.ensure = function () { if (!bootP) bootP = bootMe().catch(function (err) { bootP = null; throw err; }); return bootP; };
   /* Extra blocks on the home screen: K.homeSection({order: 20, render: function (el, me) { el.innerHTML = "…"; }})
      `el` is an empty <section>; return a Promise if you load data (a failure just hides the block). */
   K.homeSections = [];
   K.homeSection = function (def) { K.homeSections.push(def); };
 
+  K.started = false;
   K.start = function () {
+    if (K.started) return; K.started = true;
     tabsEl.innerHTML = K.TABS.map(function (t) { return '<button data-tab="' + t[0] + '">' + K.ic(t[1]) + "<span>" + t[2] + "</span></button>"; }).join("");
     tabsEl.addEventListener("click", function (ev) { var b = ev.target.closest("button[data-tab]"); if (!b) return; K.haptic(); K.tab(b.dataset.tab); });
+    // back from another app / a locked phone: numbers may be old
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden && K.me && Date.now() - meAt > 60000) K.refreshMe(true).then(K.hubRefresh).catch(function () {});
+    });
     K.tab(screens.home ? "home" : "creatures");
   };
   return K;

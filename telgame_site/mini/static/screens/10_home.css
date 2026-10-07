@@ -1,6 +1,6 @@
 .home-top { position: relative; height: 150px; margin: -12px -14px 12px; display: grid; place-items: center; background: var(--bg) center 40% / cover no-repeat; overflow: hidden; }
 .home-top::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8,11,18,.35), rgba(8,11,18,.2) 40%, var(--bg) 100%); }
-.home-top img { position: relative; height: 96px; max-width: 86%; object-fit: contain; filter: drop-shadow(0 6px 22px rgba(0,0,0,.75)); animation: rise .5s ease both; }
+.home-top img { position: relative; width: auto; height: 96px; max-width: 86%; object-fit: contain; filter: drop-shadow(0 6px 22px rgba(0,0,0,.75)); animation: rise .5s ease both; }
 .home-lab { position: relative; overflow: hidden; padding: 16px; display: flex; align-items: center; gap: 14px; width: 100%; text-align: right; }
 .home-lab::before { content: ""; position: absolute; inset: 0; background-image: var(--art); background-size: cover; background-position: center 30%; filter: blur(18px) saturate(1.2); opacity: .32; transform: scale(1.2); }
 .home-lab::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(8,11,18,.2), rgba(8,11,18,.86)); }
@@ -12,3 +12,16 @@
 .home-lab .nm { display: block; font-size: 18px; font-weight: 700; line-height: 1.35; }
 .home-lab .vip { display: inline-flex; align-items: center; gap: 4px; margin-top: 5px; font-size: 11.5px; font-weight: 700; color: var(--gold); }
 .home-lab .vip svg { width: 13px; height: 13px; }
+.home-lab:active { filter: brightness(1.12); }
+.home-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.home-chips:empty { display: none; }
+.home-chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; background: rgba(8,11,18,.55); border: 1px solid currentColor; }
+.home-chip svg { width: 12px; height: 12px; }
+.home-chip.vip { margin-top: 0; }
+#home-lab:empty, #home-hero:empty { display: none; }
+#home-lab { min-height: 104px; }   /* the card's height is reserved, the blocks below do not jump */
+.home-top { margin-inline: calc(-1 * max(14px, env(safe-area-inset-left, 0px))) calc(-1 * max(14px, env(safe-area-inset-right, 0px))); }
+@media (max-width: 380px) {
+  .home-top { height: 132px; } .home-top img { height: 82px; }
+  .home-lab { padding: 13px; gap: 11px; } .home-lab .nm { font-size: 16.5px; }
+}

@@ -4,8 +4,8 @@ game.fusion / game.breeding, in the same order the bot's `*_sync` helpers call t
 
 from bio_lab.models import BreedingJob, Creature, Egg
 from game import breeding, constants
-from telgame_site.mini.core import (GameError, asset_img, clean, creature_list, endpoint, equipment_img,
-                                    need_int, own_creature)
+from telgame_site.mini.core import (GameError, asset_img, clean, creature_img, creature_list, endpoint,
+                                    equipment_img, need_int, own_creature)
 
 
 def _gate(user, action: str) -> None:
@@ -29,6 +29,15 @@ def _dicts(user, creatures) -> dict:
     """{creature id: creatureDict} for a handful of rows (one gear query)."""
     rows = list(creatures)
     return {d["id"]: d for d in creature_list(user, rows)} if rows else {}
+
+
+def _mini(c: Creature) -> dict:
+    """A creature as a THUMBNAIL (list rows, the pair in the cave): the creatureDict keys a
+    picture needs and nothing that costs a query (no power, no gear)."""
+    from bio_lab.repository import creature_name
+
+    return {"id": c.id, "name": creature_name(c), "species": c.name, "element": c.element, "rarity": c.rarity,
+            "star": c.star_level, "level": c.level, "img": creature_img(c)}
 
 
 def _pct(p: float) -> float:
@@ -99,20 +108,18 @@ def fusion_panel(request, user):
             reason = "busy"
         blocked_rows.append((key, members, reason))
 
-    shown = [p["parent_a"] for p in pairs] + [p["parent_b"] for p in pairs] + [m[0] for _k, m, _r in blocked_rows]
-    dicts = _dicts(user, shown)
     out = []
     for p in pairs:
         cost = constants.fusion_cost(p["star"], p["rarity"])
         out.append({
             "name": p["name"], "rarity": p["rarity"], "star": p["star"], "count": p["count"],
             "cost": cost, "enough": user.coins >= cost,
-            "a": dicts[p["parent_a"].id], "b": dicts[p["parent_b"].id],
+            "a": _mini(p["parent_a"]), "b": _mini(p["parent_b"]),
         })
     blocked = [{
         "name": key[0], "rarity": key[1], "star": key[2], "count": len(members),
         "free": sum(1 for m in members if m.id not in busy),
-        "reason": reason, "need_level": key[2] + 1, "sample": dicts[members[0].id],
+        "reason": reason, "need_level": key[2] + 1, "sample": _mini(members[0]),
     } for key, members, reason in blocked_rows]
     blocked.sort(key=lambda b: (-b["star"], b["name"]))
     return {**state, "pairs": out, "blocked": blocked}
@@ -123,7 +130,7 @@ def fusion_pair(request, user):
     """One creature's fusion card: every requirement for raising its star (the bot's «ورود
     به فیوژن» checklist, `_fusion_gate_sync`) and its same-species partners with the busy
     ones marked (`fusion_partners_annotated`)."""
-    from game.fusion import fusion_partners, fusion_partners_annotated
+    from game.fusion import fusion_partners_annotated
     from game.workers import busy_creature_ids, creature_status
 
     _gate(user, "fusion")
@@ -131,9 +138,10 @@ def fusion_pair(request, user):
     state = _fusion_state(user)
     at_cap = creature.star_level >= state["cap"]
     at_max = creature.star_level >= constants.STAR_MAX
-    free_partners = fusion_partners(user, creature)
     cost = constants.fusion_cost(creature.star_level, creature.rarity)
     annotated = fusion_partners_annotated(user, creature)
+    # `fusion_partners` (the bot's «ورود به فیوژن» count) is this same list without the busy ones
+    free_partners = [c for c, is_busy in annotated if not is_busy]
     dicts = _dicts(user, [creature] + [c for c, _busy in annotated])
     partners = []
     for c, is_busy in annotated:
@@ -210,7 +218,6 @@ def _cave_state(user) -> dict:
 
     jobs = breeding.active_jobs(user)
     eggs = breeding.active_eggs(user)
-    dicts = _dicts(user, [p for j in jobs for p in (j.parent_a, j.parent_b)])
     free = breeding.parent_candidates(user)
     user.refresh_from_db(fields=["diamonds", "dna_fragments"])
     return {
@@ -218,7 +225,7 @@ def _cave_state(user) -> dict:
         "lab_label": clean(constants.BUILDING_LABELS[breeding.BREEDING_BUILDING]),
         "max_jobs": breeding.max_cave_jobs(user),
         "jobs": [{
-            "id": j.id, "a": dicts[j.parent_a_id], "b": dicts[j.parent_b_id],
+            "id": j.id, "a": _mini(j.parent_a), "b": _mini(j.parent_b),
             "ready": breeding.ready(j), "left": breeding.seconds_left(j),
             "total": max(1, int((j.finishes_at - j.started_at).total_seconds())),
             "finish_price": breeding.cave_finish_price(j),
@@ -247,15 +254,25 @@ def cave_panel(request, user):
     return _cave_state(user)
 
 
+def _cave_waiting(user) -> int:
+    """How many things in the cave wait for a tap (a finished mating, a ready egg)."""
+    return (sum(1 for j in BreedingJob.objects.filter(owner=user) if breeding.ready(j))
+            + sum(1 for e in Egg.objects.filter(owner=user) if breeding.egg_ready(e)))
+
+
+def hub_badges(user) -> dict:
+    """Hub-tile badge, merged into /app/api/profile/me/ by the core (two tiny queries)."""
+    return {"cave": _cave_waiting(user)}
+
+
 @endpoint()
 def badge(request, user):
-    """How many things in the cave wait for a tap (a finished mating, a ready egg)."""
+    """Kept for copies of the app opened before the badge moved into the profile."""
     try:
         _gate(user, "breeding")
     except GameError:
         return {"cave": 0}
-    return {"cave": sum(1 for j in BreedingJob.objects.filter(owner=user) if breeding.ready(j))
-            + sum(1 for e in Egg.objects.filter(owner=user) if breeding.egg_ready(e))}
+    return {"cave": _cave_waiting(user)}
 
 
 @endpoint()
@@ -328,6 +345,7 @@ def cave_hatch(request, user, data):
     _gate(user, "breeding")
     child, info = breeding.hatch(user, need_int(data, "egg"))
     return {
+        "cave": _cave_state(user),
         "child": creature_list(user, [child])[0],
         "hit_top": bool(info["hit_top"]), "top": info["base_rarity"], "top_reached": info["rarity"] == info["base_rarity"],
         "parents": list(info["parents"]),

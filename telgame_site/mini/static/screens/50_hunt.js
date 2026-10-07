@@ -94,7 +94,26 @@
       });
     });
   };
-  /* tiny status for the battle hub tiles (boss live? tower open?) — refreshed in the background */
+  /* Live countdowns for a screen that REDRAWS itself (K.timers starts a new interval on every
+     call and they pile up until the next navigation). Call once per render; it looks the timers
+     up again on every tick, so a redraw needs nothing but `tick()` (returned) to fill them at once.
+     Same markup as K.timers: <span class="timer" data-left="90" data-fmt="long" data-done="متن">. */
+  HU.live = function (root, onDone) {
+    function tick() {
+      var now = Date.now() / 1000;
+      Array.prototype.forEach.call(root.querySelectorAll("[data-until],[data-left]"), function (el) {
+        if (el._done) return;
+        if (el.dataset.until == null) el.dataset.until = now + Number(el.dataset.left);
+        var left = Number(el.dataset.until) - now;
+        if (left <= 0) { el._done = true; el.classList.add("done"); el.innerHTML = K.ic("check") + K.esc(el.dataset.done || "آماده"); if (onDone) onDone(el); }
+        else el.innerHTML = K.ic("clock") + '<span class="num">' + (el.dataset.fmt === "long" ? K.esc(K.dur(left)) : K.clock(left)) + "</span>";
+      });
+    }
+    tick(); K.every(1000, tick);
+    return tick;
+  };
+  /* one status request for ALL the battle hub tiles (boss live? tower open? chests ready?) —
+     refreshed in the background, at most every 45 s and only while a hub is being drawn */
   var hubStatus = null, hubAt = 0;
   function loadHub() { hubAt = Date.now(); K.api.get("hunt/hub/").then(function (d) { hubStatus = d; }).catch(function () {}); }
   HU.hubStatus = function () { if (Date.now() - hubAt > 45000) loadHub(); return hubStatus || {}; };
@@ -214,8 +233,11 @@
       });
       K.on(root, "attack", function (el) {
         if (lock || !token) return;
+        var card = S.target || {};      // the wild being attacked: the result shows this very card
         guard(K.api.post("hunt/attack/", { token: token }, el)).then(function (r) {
           setToken(null); S.token = null; S.target = null; S.me = r.me; S.scout_cost = r.scout_cost;
+          r.enemy = { name: r.enemy.name || card.name, tier: r.enemy.tier, tier_label: r.enemy.tier_label,
+                      element: card.element, rarity: card.rarity || "common", power: card.power, img: card.img };
           result = r; K.invalidate("profile/creatures/");
           draw(); K.haptic(r.won ? "ok" : "err");
         }).catch(staleMaybe);
@@ -311,19 +333,25 @@
       K.on(root, "step", function (el) { K.haptic(); amount = clamp(amount + Number(el.dataset.d) * D.energy_cost); sync(); });
       K.on(root, "energy", function () { K.go("sh_energy"); });
       K.on(root, "vip", function () { K.go("sh_vip"); });
-      K.on(root, "again", function () { ctx.reload(); });
+      K.on(root, "again", function () {          // the run's answer already carries the next prompt
+        if (!sum || !sum.panel) { ctx.reload(); return; }
+        D = sum.panel; sum = null; amount = D.all; draw();
+      });
       K.on(root, "manual", function () { ctx.back(); });
       K.on(root, "exit", function () { K.tab("battle"); });
+      var running = false;                         // one batch at a time: a second tap must not spend again
       K.on(root, "run", function (el) {
-        var hunts = Math.floor(amount / D.energy_cost);
+        if (running) return;
+        var spend = amount, hunts = Math.floor(spend / D.energy_cost);
+        running = true;
         K.confirm({ title: "تأیید شکار خودکار", icon: "autohunt", ok: "تأیید و شروع", cancel: "انصراف",
-          html: "<p>" + K.n(amount) + " انرژی صرف " + K.n(hunts) + " نبرد خودکار بشه؟</p>" }).then(function (yes) {
+          html: "<p>" + K.n(spend) + " انرژی صرف " + K.n(hunts) + " نبرد خودکار بشه؟</p>" }).then(function (yes) {
           if (!yes) return;
-          return K.api.post("hunt/auto/run/", { energy: amount }, el).then(function (r) {
+          return K.api.post("hunt/auto/run/", { energy: spend }, el).then(function (r) {
             sum = r; setToken(null);              // an auto-hunt also spends any open card
             K.invalidate("profile/creatures/"); draw(); K.haptic("ok");
           });
-        }).catch(function (err) { if (err && err.code === "energy") ctx.reload(); });
+        }).then(function () { running = false; }, function (err) { running = false; if (err && err.code === "energy") ctx.reload(); });
       });
 
       return K.api.get("hunt/auto/").then(function (d) { D = d; amount = d.all; draw(); });

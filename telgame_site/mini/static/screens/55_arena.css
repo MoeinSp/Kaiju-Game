@@ -86,3 +86,13 @@ button.ar-chest:active { transform: scale(.97); }
 .ar-slot { position: absolute; top: 8px; inset-inline-start: 8px; z-index: 1; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; font-size: 11px; font-weight: 700; color: var(--muted); background: rgba(8,11,18,.8); border: 1px solid var(--line-2); }
 .ar-st { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; } .ar-st svg { width: 13px; height: 13px; }
 .ar-chest .btn { margin-top: 2px; }
+
+/* ── 320–350 px wide phones ── */
+@media (max-width: 350px) {
+  .btns > .btn[data-act="next"], .btns > .btn[data-act="swap"], .btns > .btn[data-act="log"], .btns > .btn[data-act="home"],
+  .btns > .btn[data-act="back"], .btns > .btn[data-act="go"], .btns > .btn[data-act="details"] { padding: 0 8px; font-size: 12.5px; gap: 5px; min-width: 0; }
+  .ar-pw { font-size: 14.5px; } .ar-swing b { font-size: 19px; } .ar-sub { flex-wrap: wrap; gap: 3px 8px; }
+  .ar-chest { min-height: 176px; padding: 10px 6px; } .ar-chest b { font-size: 12.5px; }
+  .ar-guide .sm { white-space: normal; } .ar-guide .sm > span { display: flex; justify-content: flex-end; }
+  .ar-table > div, .ar-guide > div { padding: 9px 10px; gap: 8px; }
+}

@@ -83,3 +83,14 @@
 .hu-wl > div { padding: 8px 4px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid var(--line); }
 .hu-wl b { display: block; font-size: 21px; line-height: 1.3; } .hu-wl small { font-size: 11px; color: var(--muted); }
 .hu-cbtn { margin-inline-start: auto; align-self: center; flex: none; }
+
+/* ── 320–350 px wide phones: two buttons side by side must not overflow ── */
+@media (max-width: 350px) {
+  .btns > .btn[data-act="scout"], .btns > .btn[data-act="swap"], .btns > .btn[data-act="auto"], .btns > .btn[data-act="exit"],
+  .btns > .btn[data-act="enc"], .btns > .btn[data-act="manual"] { padding: 0 8px; font-size: 12.5px; gap: 5px; min-width: 0; }
+  .btns > .btn[data-act="scout"] .cost { padding: 1px 5px; font-size: 11px; }
+  .hu-pw { font-size: 15px; } .hu-nm { font-size: 12.5px; } .hu-amount b { font-size: 40px; }
+  .hu-prize { flex-wrap: wrap; } .hu-verdict { font-size: 22px; }
+  .hu-loot .it { height: 36px; padding: 0 10px; font-size: 14.5px; }
+  .hu-mine { flex-wrap: wrap; } .hu-mine .btn { width: 100%; }
+}

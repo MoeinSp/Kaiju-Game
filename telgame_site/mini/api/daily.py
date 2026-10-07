@@ -7,7 +7,7 @@ import datetime
 
 from django.utils import timezone
 
-from bio_lab.models import Creature
+from bio_lab.models import Creature, User
 from game import constants
 from telgame_site.mini.core import GameError, clean, creature_list, endpoint, equipment_img, need_int
 
@@ -117,14 +117,15 @@ def home(request, user):
     out.update({
         "hall": st["hall"], "waiting": today.waiting_count(st), "collectable": today.collectable_count(st),
         "wheel": bool(st["wheel"]), "dispatch_ready": st["dispatch_ready"], "boxes_ready": st["boxes_ready"],
+        "free_boxes": len(st["free_boxes"]),   # the badge of the «باکس‌ها» tile (no request of its own)
         "quest": quest_dict(story.get_active_quest(user)),
     })
     return out
 
 
 # ── «پاداش امروز» ─────────────────────────────────────────────────────────────
-@endpoint()
-def today_state(request, user):
+def _today_payload(user) -> dict:
+    """The «پاداش امروز» screen: game.today.state, row by row."""
     from game import events, story, today
 
     st = today.state(user)
@@ -164,6 +165,20 @@ def today_state(request, user):
     return out
 
 
+@endpoint()
+def today_state(request, user):
+    return _today_payload(user)
+
+
+def _collect_line(line: str) -> dict:
+    """One line of a game.today.collect_all section. Indented lines belong to the line
+    above them (what a dispatch mission paid, its «شگفتی», a level-up)."""
+    sub = line.startswith(" ")
+    text = clean(line.replace("┃", "·"))
+    return {"text": text, "sub": sub,
+            "tone": ("bonus" if text.startswith("شگفتی") else "level" if "به سطح" in text else "") if sub else ""}
+
+
 @endpoint("POST")
 def today_collect(request, user, data):
     """«دریافت همه»: game.today.collect_all — buildings, returned dispatch missions, the
@@ -177,7 +192,7 @@ def today_collect(request, user, data):
     items = [r["item"] for r in res["rolls"] if r.get("kind") == "equipment" and r.get("item") is not None]
     sections = []
     for title, lines in res["sections"]:
-        rows = [{"text": clean(line.replace("┃", "·")), "sub": line.startswith(" ")} for line in lines]
+        rows = [_collect_line(line) for line in lines]
         sections.append({"title": clean(title), "kind": _SECTION_KIND.get(title, "gift"),
                          "lines": [r for r in rows if r["text"]]})
     return {
@@ -188,6 +203,8 @@ def today_collect(request, user, data):
         "creatures": creature_list(user, creatures) if creatures else [],
         "items": [item_dict(i) for i in items],
         "missions": missions_list(res["missions"]),
+        # the screen as it is NOW (balances, energy and the story step changed under `user`)
+        "today": _today_payload(User.objects.get(pk=user.pk)),
     }
 
 
