@@ -19,17 +19,17 @@ _BONUS = f"+{int(festival.VIP_COIN_BONUS * 100)}%"
 
 # short button labels for the shop (the full title is in the text above the buttons)
 _SHORT = {
-    "capsule": "3 موش", "speedup": "کارت سرعت", "gold": "کیسه‌ی طلا", "dna": "دی‌ان‌ای", "diamonds": "10 الماس",
+    "capsule": "3 موش", "speedup": "کارت سرعت", "gold": "کیسه‌ی طلا", "dna": "دی‌ان‌ای",
     "golden": "جعبه‌ی طلایی", "magical": "جعبه‌ی جادویی", "grand": "هیولای افسانه‌ای",
     "vip_chest": "هدیه‌ی اشتراک", "vip_mythic": "اساطیری کریستال",
 }
 _BTN_EMOJI = {
-    "diamonds": "btn_diamond", "speedup": "btn_speed_card", "golden": "btn_chest_golden", "magical": "btn_chest_magical",
+    "speedup": "btn_speed_card", "golden": "btn_chest_golden", "magical": "btn_chest_magical",
     "grand": "btn_chest_mega", "vip_chest": "btn_chest_open", "vip_mythic": "btn_vip",
 }
 # shop sections: (heading, item keys)
 _SECTIONS = (
-    ("🧺 <b>منابع</b>", ("capsule", "speedup", "gold", "dna", "diamonds")),
+    ("🧺 <b>منابع</b>", ("capsule", "speedup", "gold", "dna")),
     ("📦 <b>جعبه‌ها</b>", ("golden", "magical")),
     ("👑 <b>جایزه‌ی بزرگ</b>", ("grand",)),
     ("⭐ <b>ویژه‌ی اشتراک</b>", festival.VIP_ONLY),
@@ -87,6 +87,8 @@ def _home_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
             _DIV,
             f"{COIN} سکه‌ی تو: <code>{st['coins']:,}</code>",
             f"📈 کل سکه‌ی جمع‌شده: <code>{st['earned']:,}</code>",
+            f"📅 سکه‌ی امروز: <code>{st['today']['earned']:,}</code>",
+            f"⏳ مانده‌ی امروز: <code>{st['today']['left']:,}</code>",
         ]
         if st["rank"]:
             lines.append(f"🏅 رتبه‌ی تو: <code>{st['rank']}</code>")
@@ -105,7 +107,7 @@ def _home_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
                 lines.append(f"{r['rank']}. {r['name']}: <code>{r['earned']:,}</code>")
         lines += [_DIV, "<i>سکه‌ها آخر جشنواره باطل می‌شن؛ قبلش خرجشون کن.</i>"]
         rows.append([btn("فروشگاه جشنواره", emoji_key="btn_shop", style=SHOP, callback_data="fest:shop")])
-        rows.append([btn("چطور سکه بگیرم؟", emoji_key="btn_report", style=NAV, callback_data="fest:how"),
+        rows.append([btn("سکه‌ی امروز", emoji_key="btn_report", style=NAV, callback_data="fest:how"),
                      btn("جایزه‌ی رتبه‌ها", emoji_key="btn_rank", style=NAV, callback_data="fest:top")])
     if not st["vip"]:
         rows.append([btn("خرید اشتراک", emoji_key="btn_vip", style=SHOP, callback_data="menu:subscription")])
@@ -131,18 +133,29 @@ async def festival_home_callback(update: Update, context: ContextTypes.DEFAULT_T
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
-def _how_text(vip: bool) -> str:
-    lines = [f"{COIN} <b>چطور سکه‌ی جشنواره بگیرم؟</b>", _DIV]
-    for action, (per, cap) in festival.EARN.items():
-        lines.append(f"• {festival.EARN_LABELS[action]}: <code>{per}</code> سکه (سقف روز <code>{per * cap}</code>)")
+def _how_text(today: dict) -> str:
+    """Today's coins source by source: how many actions are still left, finished ones struck out."""
+    def row(label: str, unit: int, left: int, what: str = "بار") -> str:
+        head = f"{label} (<code>{unit}</code> سکه)"
+        return f"<s>• {head}</s> ✅" if left <= 0 else f"• {head}: <code>{left}</code> {what} مانده"
+
+    lines = [
+        f"{COIN} <b>سکه‌ی امروز</b>", _DIV,
+        f"✅ امروز گرفتی: <code>{today['earned']:,}</code>",
+        f"⏳ امروز مانده: <code>{today['left']:,}</code>",
+        f"🎯 سقف امروز: <code>{today['max']:,}</code>",
+        _DIV,
+    ]
+    lines += [row(r["label"], r["unit"], r["left"]) for r in today["rows"]]
+    lines.append(row("هر مأموریت روزانه", today["daily"]["unit"], today["daily"]["left"], "مأموریت"))
     lines += [
-        f"• هر مأموریت روزانه: <code>{festival.MISSION_DAILY_COINS}</code> سکه",
-        f"• هر مأموریت هفتگی: <code>{festival.MISSION_WEEKLY_COINS}</code> سکه",
         _DIV,
-        (f"⭐ اشتراکت فعاله: روی همه‌ی این‌ها <code>{_BONUS}</code> سکه‌ی بیشتر می‌گیری."
-         if vip else f"⭐ با اشتراک، روی همه‌ی این‌ها <code>{_BONUS}</code> سکه‌ی بیشتر می‌گیری."),
+        "🗓 <b>این هفته</b>",
+        row("هر مأموریت هفتگی", today["weekly"]["unit"], today["weekly"]["left"], "مأموریت"),
         _DIV,
-        "<i>هر کار سقف روزانه داره؛ برای سکه‌ی بیشتر باید به همه‌ی بخش‌های بازی سر بزنی.</i>",
+        (f"⭐ اشتراکت فعاله؛ عددهای بالا با <code>{_BONUS}</code> حساب شدن."
+         if today["vip"] else f"⭐ با اشتراک، هر کدوم از این‌ها <code>{_BONUS}</code> سکه‌ی بیشتر می‌ده."),
+        "<i>سقف‌ها هر شب صفر می‌شن.</i>",
     ]
     return "\n".join(lines)
 
@@ -151,10 +164,11 @@ async def festival_how_callback(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     st = await run_db(_home_sync, update.effective_user)
     await query.answer()
-    await safe_edit_message_text(
-        query, _how_text(st["vip"]), parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([[back_btn("fest:home", "بازگشت")]]),
-    )
+    if not st["active"]:
+        text, keyboard = _home_render(st)
+    else:
+        text, keyboard = _how_text(st["today"]), InlineKeyboardMarkup([[back_btn("fest:home", "بازگشت")]])
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _top_text(st: dict) -> str:

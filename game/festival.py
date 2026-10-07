@@ -62,33 +62,54 @@ THEMES = (
     ("❄️", "رعد یخ‌بندان", "electric"), ("💠", "بلورهای یخی", "crystal"), ("✨", "جشن پایان سال", "plasma"),
 )
 
+# ── subscribers («اشتراک») ────────────────────────────────────────────────────
+# Extra festival coins on everything they earn, plus the two VIP_ONLY shop items. The
+# bonus is applied PER ACTION (unit_value), rounded half up — a 2-coin hunt pays 3, a
+# 3-coin attack 5, a 1-coin collect 2 — so a batch of 10 hunts pays exactly 10 single ones.
+VIP_ONLY = ("vip_chest", "vip_mythic")
+VIP_COIN_BONUS = 0.50
+VIP_MYTHIC_RARITY = "mythic"
+VIP_MYTHIC_ELEMENT = "crystal"
+
+
+def unit_value(per: int, vip: bool) -> int:
+    """Coins ONE action (or mission) worth `per` pays this kind of player."""
+    return per + int(per * VIP_COIN_BONUS + 0.5) if vip else per
+
+
+def day_max(vip: bool = False) -> int:
+    """Coins of a perfect day: every action cap reached and every daily mission done
+    (the weekly missions are not part of a «day»)."""
+    actions = sum(unit_value(per, vip) * cap for per, cap in EARN.values())
+    return actions + unit_value(MISSION_DAILY_COINS, vip) * len(constants.MISSION_DEFS)
+
+
+def _price_of_days(days: int, vip: bool) -> int:
+    """`days` perfect days, rounded up to a ten."""
+    return -(-day_max(vip) * days // 10) * 10
+
+
+# The big prizes are priced in PERFECT DAYS (owner's rule): the grand kaiju takes a
+# non-subscriber at least this many days of hitting every cap; the mythic takes a
+# subscriber the same number of perfect days at the subscriber rate.
+GRAND_PRIZE_DAYS = 4
+VIP_MYTHIC_DAYS = 4
+
 # shop: key → (emoji, title, cost in festival coins, per-festival limit)
 SHOP = {
     "capsule": ("🐭", "3 موش (غذای هیولا)", 15, 10),
     "speedup": ("⏩", "کارت سرعت 30 دقیقه‌ای", 25, 8),
     "gold": ("💰", "کیسه‌ی طلا (5 شکار)", 40, 8),
     "dna": ("🧬", "بسته‌ی دی‌ان‌ای (5 شکار)", 40, 8),
-    "diamonds": ("💎", "10 الماس", 90, 5),
     "golden": ("🥇", "جعبه‌ی طلایی", 140, 3),
     "magical": ("🔮", "جعبه‌ی جادویی", 320, 2),
-    "grand": ("👑", "هیولای افسانه‌ای جشنواره", 900, 1),
+    "grand": ("👑", "هیولای افسانه‌ای جشنواره", _price_of_days(GRAND_PRIZE_DAYS, False), 1),
     # subscribers only (VIP_ONLY) — the free chest is their welcome gift of each festival
     "vip_chest": ("🎁", "هدیه‌ی اشتراک: جعبه‌ی جادویی", 0, 1),
-    "vip_mythic": ("💠", "هیولای اساطیری کریستال", 1200, 1),
+    "vip_mythic": ("💠", "هیولای اساطیری کریستال", _price_of_days(VIP_MYTHIC_DAYS, True), 1),
 }
-SHOP_ORDER = ("capsule", "speedup", "gold", "dna", "diamonds", "golden", "magical", "grand", "vip_chest", "vip_mythic")
+SHOP_ORDER = ("capsule", "speedup", "gold", "dna", "golden", "magical", "grand", "vip_chest", "vip_mythic")
 GRAND_RARITY = "legendary"
-
-# ── subscribers («اشتراک») ────────────────────────────────────────────────────
-# Extra festival coins on everything they earn, plus the two VIP_ONLY shop items.
-# Ceilings when EVERY daily cap and mission is hit: 174 coins a day (150 from actions + 24
-# from the 8 daily missions) and 105 once from the 7 weekly missions → 1,323 a festival;
-# with the +50% bonus 261 a day → ~1,985. So the mythic (1,200) takes a subscriber about
-# 60% of a perfect week.
-VIP_ONLY = ("vip_chest", "vip_mythic")
-VIP_COIN_BONUS = 0.50
-VIP_MYTHIC_RARITY = "mythic"
-VIP_MYTHIC_ELEMENT = "crystal"
 
 
 def is_vip(user: User) -> bool:
@@ -96,12 +117,6 @@ def is_vip(user: User) -> bool:
 
     return is_subscription_active(user)
 
-
-def with_bonus(user: User, amount: int) -> int:
-    """`amount` festival coins plus the subscriber bonus (rounded half up, so 1 → 2, 2 → 3)."""
-    if amount <= 0 or not is_vip(user):
-        return amount
-    return amount + int(amount * VIP_COIN_BONUS + 0.5)
 
 # leaderboard (coins EARNED) prizes, paid once when the festival ends: (max rank, diamonds)
 RANK_PRIZES = ((1, 150), (2, 100), (3, 75), (10, 30))
@@ -196,14 +211,45 @@ def on_action(user: User, action: str, new_count: int, n: int = 1) -> int:
     per, cap = rule
     before = new_count - n
     counted = max(0, min(new_count, cap) - min(before, cap))
-    return add_coins(user, with_bonus(user, counted * per))
+    return add_coins(user, counted * unit_value(per, is_vip(user)))
 
 
 def on_missions(user: User, completed: list[dict]) -> int:
     if not completed:
         return 0
-    base = sum(MISSION_WEEKLY_COINS if m.get("weekly") else MISSION_DAILY_COINS for m in completed)
-    return add_coins(user, with_bonus(user, base))
+    vip = is_vip(user)
+    return add_coins(user, sum(
+        unit_value(MISSION_WEEKLY_COINS if m.get("weekly") else MISSION_DAILY_COINS, vip) for m in completed
+    ))
+
+
+def today_progress(user: User) -> dict:
+    """What the player has earned TODAY and what is still on the table, per source —
+    read-only (never creates counter rows). `left` counts actions/missions, not coins."""
+    from bio_lab.models import DailyActionLog, MissionClaim
+    from game.daily import today_str, week_key
+
+    vip = is_vip(user)
+    day = today_str()
+    counts = dict(DailyActionLog.objects.filter(user=user, day=day, action__in=list(EARN))
+                  .values_list("action", "count"))
+    rows = []
+    for action, (per, cap) in EARN.items():
+        done = min(cap, counts.get(action, 0))
+        unit = unit_value(per, vip)
+        rows.append({"key": action, "label": EARN_LABELS[action], "unit": unit, "cap": cap,
+                     "done": done, "left": cap - done, "earned": done * unit, "max": cap * unit})
+    daily_keys, weekly_keys = set(constants.MISSION_DEFS), set(constants.WEEKLY_MISSION_DEFS)
+    d_done = MissionClaim.objects.filter(user=user, day=day, mission_key__in=daily_keys).count()
+    w_done = MissionClaim.objects.filter(user=user, day=week_key(), mission_key__in=weekly_keys).count()
+    d_unit, w_unit = unit_value(MISSION_DAILY_COINS, vip), unit_value(MISSION_WEEKLY_COINS, vip)
+    daily = {"unit": d_unit, "cap": len(daily_keys), "done": d_done, "left": len(daily_keys) - d_done,
+             "earned": d_done * d_unit, "max": len(daily_keys) * d_unit}
+    weekly = {"unit": w_unit, "cap": len(weekly_keys), "done": w_done, "left": len(weekly_keys) - w_done}
+    earned = sum(r["earned"] for r in rows) + daily["earned"]
+    total = day_max(vip)
+    return {"vip": vip, "rows": rows, "daily": daily, "weekly": weekly,
+            "earned": earned, "max": total, "left": max(0, total - earned)}
 
 
 # ── state for the screens ─────────────────────────────────────────────────────
@@ -238,6 +284,7 @@ def status(user: User) -> dict:
         return data
     p = progress(user, key)
     earned = p.earned if p else 0
+    data["today"] = today_progress(user)
     data.update({
         "coins": p.coins if p else 0,
         "earned": earned,
@@ -293,10 +340,6 @@ def _grant(user: User, item_key: str, key: str) -> str:
         user.dna_fragments += amount
         user.save(update_fields=["dna_fragments"])
         return f"{amount:,} دی‌ان‌ای"
-    if item_key == "diamonds":
-        user.diamonds += 10
-        user.save(update_fields=["diamonds"])
-        return "10 الماس"
     if item_key in ("golden", "magical", "vip_chest"):
         chest = "magical" if item_key == "vip_chest" else item_key
         c = grant_chest_contents(user, chest, user.cup, source="festival")

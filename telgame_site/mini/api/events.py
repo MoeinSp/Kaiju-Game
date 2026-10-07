@@ -96,9 +96,10 @@ def festival_panel(request, user):
         DailyActionLog.objects.filter(user=user, day=today_str(), action__in=list(festival.EARN))
         .values_list("action", "count")
     )
+    vip = st["vip"]   # subscribers earn more per action — show what THIS player gets
     out["earn"] = [
-        {"key": a, "label": festival.EARN_LABELS[a], "per": per, "cap": cap, "day_max": per * cap,
-         "done": min(cap, counts.get(a, 0))}
+        {"key": a, "label": festival.EARN_LABELS[a], "per": festival.unit_value(per, vip), "cap": cap,
+         "day_max": festival.unit_value(per, vip) * cap, "done": min(cap, counts.get(a, 0))}
         for a, (per, cap) in festival.EARN.items()
     ]
     shop = festival.shop_state(user)
