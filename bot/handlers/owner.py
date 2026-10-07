@@ -427,6 +427,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 btn("ارسال همگانی", emoji_key="btn_broadcast", style=ADMIN, callback_data="admin_menu:broadcast_start"),
             ],
             [btn("شارژ همگانی خودکار", emoji_key="btn_gift", style=ADMIN, callback_data="admin_menu:autogift")],
+            [btn("ریست «استارت ربات» (API)", emoji_key="btn_reset", style=ADMIN, callback_data="admin_menu:gate_reset")],
             [btn("حذف موجود", emoji_key="btn_delete", style=DANGER, callback_data="admin_menu:del_creature_start")],
             [
                 btn(f"ایموجی متن‌ها ({txt_set}/{txt_tot})", emoji_key="btn_settings", style=ADMIN, callback_data="admin_menu:set_emoji_start"),
@@ -3553,6 +3554,53 @@ async def autogift_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await autogift_panel(update, context)
 
 
+# ── «استارت ربات» flag of the public /api/started/ gate ───────────────────────
+def _gate_counts() -> tuple[int, int]:
+    return User.objects.filter(started_gate=True).count(), User.objects.count()
+
+
+def _gate_reset_sync() -> int:
+    """Everyone back to «not started» — only the flag the advertiser API reads; no game data."""
+    return User.objects.filter(started_gate=True).update(started_gate=False)
+
+
+async def gate_reset_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update):
+        return
+    started, total = await run_db(_gate_counts)
+    text = "\n".join([
+        "♻️ <b>ریست «استارت ربات» (API)</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "آدرس <code>/api/started/</code> به ربات‌های دیگه می‌گه یه کاربر این ربات رو استارت کرده یا نه.",
+        "",
+        f"✅ الان «استارت‌کرده» حساب می‌شن: <code>{started:,}</code>",
+        f"👥 کل کاربرها: <code>{total:,}</code>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "با ریست، همه «استارت‌نکرده» می‌شن و هر کس باید دوباره <code>/start</code> بزنه تا تأیید بشه.",
+        "<i>به هیچ داده‌ای از بازی (هیولا، طلا، سطح و …) دست نمی‌خوره و برگشت‌پذیر نیست.</i>",
+    ])
+    kb = InlineKeyboardMarkup([
+        [btn("بله، همه رو ریست کن", emoji_key="btn_reset", style=DANGER, callback_data="admin_menu:gate_reset_do")],
+        [back_btn("menu:admin", "بازگشت")],
+    ])
+    await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=kb)
+
+
+async def gate_reset_do(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update):
+        return
+    n = await run_db(_gate_reset_sync)
+    logger.warning("started_gate reset by admin %s: %s users", update.effective_user.id, n)
+    text = "\n".join([
+        "✅ <b>ریست انجام شد</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"♻️ تعداد ریست‌شده: <code>{n:,}</code>",
+        "از الان API فقط کسایی رو تأیید می‌کنه که دوباره <code>/start</code> بزنن.",
+    ])
+    await safe_edit_message_text(update.callback_query, text, parse_mode="HTML",
+                                 reply_markup=InlineKeyboardMarkup([[back_btn("menu:admin", "بازگشت")]]))
+
+
 async def autogift_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_admin(update):
         return
@@ -5974,6 +6022,8 @@ _ADMIN_MENU_ACTIONS.update(
         "autogift": autogift_panel,
         "autogift_toggle": autogift_toggle,
         "autogift_set": autogift_set_start,
+        "gate_reset": gate_reset_panel,
+        "gate_reset_do": gate_reset_do,
         "global_stats": global_stats_cmd,
         "admin_manage": admin_manage_panel,
         "admin_add": admin_add_start,
