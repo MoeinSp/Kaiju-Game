@@ -80,10 +80,11 @@ SHOP_ORDER = ("capsule", "speedup", "gold", "dna", "diamonds", "golden", "magica
 GRAND_RARITY = "legendary"
 
 # ── subscribers («اشتراک») ────────────────────────────────────────────────────
-# Extra festival coins on everything they earn, plus the two VIP_ONLY shop items. At +50%
-# a subscriber who plays every part of the game all week reaches ~1,700 coins, so the
-# mythic (1,200) is a real goal but not a gift; without the bonus the weekly ceiling is
-# ~1,150 — below its price even if the lock weren't there.
+# Extra festival coins on everything they earn, plus the two VIP_ONLY shop items.
+# Ceilings when EVERY daily cap and mission is hit: 174 coins a day (150 from actions + 24
+# from the 8 daily missions) and 105 once from the 7 weekly missions → 1,323 a festival;
+# with the +50% bonus 261 a day → ~1,985. So the mythic (1,200) takes a subscriber about
+# 60% of a perfect week.
 VIP_ONLY = ("vip_chest", "vip_mythic")
 VIP_COIN_BONUS = 0.50
 VIP_MYTHIC_RARITY = "mythic"
