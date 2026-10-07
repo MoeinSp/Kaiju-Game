@@ -447,9 +447,9 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
         [
             [btn(f"حمله · {cost} انرژی", emoji_key="btn_attack", style=BATTLE, callback_data=f"arena_attack:{_opp_ref(opponent)}")],
             [
-                btn("حریف بعدی", emoji_key="btn_recheck", style=NAV, callback_data="arena_find"),
-                btn("تعویض", emoji_key="btn_swap", style=NAV, callback_data="arena_swap"),
                 btn("جزئیات", emoji_key="btn_atk_details", style=NAV, callback_data="arena_opp_details"),
+                btn("تعویض", emoji_key="btn_swap", style=NAV, callback_data="arena_swap"),
+                btn("حریف بعدی", emoji_key="btn_recheck", style=NAV, callback_data="arena_find"),   # rightmost: the one pressed most
             ],
             [back_btn("menu:arena", "بازگشت به آرنا")],
         ]
