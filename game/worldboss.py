@@ -15,8 +15,10 @@ How it runs (no dedicated scheduler — the 5-minute notification job calls tick
 * When HP reaches 0 the boss is DEAD; when the window ends it ESCAPES. Either way tick()
   settles it ONCE: on a kill every participant gets a chest (better for the top damage
   dealers) and the top three get diamonds.
-* HP is self-balancing: the next boss is sized to ~80% of the total damage the server did
-  to the previous one, so a kill needs about the same turnout — close fights, by design.
+* HP is sized from the SERVER, not from the last boss: what the players who are online in
+  that hour could deal with all their hits (server_potential), times the share of it that
+  really shows up, divided by TARGET_DAMAGE_SHARE — so about half the HP goes and a kill
+  is a rare, exceptional turnout. See _next_hp.
 """
 
 from __future__ import annotations
@@ -28,7 +30,7 @@ from django.db import transaction
 from django.db.models import Count, F, Sum
 from django.utils import timezone
 
-from bio_lab.models import User, WorldBoss, WorldBossHit, WorldBossState
+from bio_lab.models import ActivityHour, Creature, User, WorldBoss, WorldBossHit, WorldBossState
 from bio_lab.repository import get_active_creature, lab_display, lock_row
 from game import constants
 from game.creature import GameError, creature_power
@@ -53,6 +55,12 @@ MIN_HP = 60_000
 TARGET_DAMAGE_SHARE = 0.50
 HP_SAMPLE = 3          # bosses of the same time window averaged for the estimate
 KILLED_GROWTH = 1.5    # a boss that died anyway → the next one of that window is at least this × bigger
+# Share of server_potential that really lands on a boss. Measured from bosses that ESCAPED
+# (a killed boss was cut short, so it only proves the share is higher than what it took);
+# until one has escaped this cautious guess is used.
+DEFAULT_TURNOUT = 0.65
+TURNOUT_RANGE = (0.30, 1.00)
+POTENTIAL_MIN_PLAYERS = 10   # fewer online players than this → not a usable sample
 
 # kill rewards
 KILL_CHEST_ALL = "golden"         # every participant
@@ -131,23 +139,73 @@ def potential_damage(boss: WorldBoss) -> int:
     return int(agg["d"] / agg["h"] * agg["n"] * HITS_PER_PLAYER)
 
 
+def _online_ids(moment: datetime.datetime) -> set[int]:
+    """Players who used the bot's private chat in the hour of `moment` or the one before."""
+    local = timezone.localtime(moment)
+    prev = local - datetime.timedelta(hours=1)
+    ids: set[int] = set()
+    for t in (local, prev):
+        ids.update(ActivityHour.objects.filter(day=t.strftime("%Y-%m-%d"), hour=t.hour, private=True)
+                   .values_list("user_id", flat=True))
+    return ids
+
+
+def server_potential(moment: datetime.datetime | None = None) -> int:
+    """The damage the players online around `moment` would deal if EVERY one of them spent
+    all their hits: Σ active-creature power × HITS_PER_PLAYER. Unlike the damage dealt to a
+    past boss this isn't cut short by the boss dying — the old sizing only ever saw the
+    10–17 strongest players who got their hits in first, while 55–95 were online.
+    0 when the sample is too small to mean anything."""
+    from game.equipment import equipped_items_map
+
+    moment = moment or timezone.now()
+    ids = _online_ids(moment)
+    if len(ids) < POTENTIAL_MIN_PLAYERS:   # e.g. the metrics rows of this hour aren't flushed yet
+        ids = _online_ids(moment - datetime.timedelta(days=1))
+    if len(ids) < POTENTIAL_MIN_PLAYERS:
+        return 0
+    creatures = list(Creature.objects.filter(owner_id__in=ids, is_active=True))
+    gear = equipped_items_map(creatures)
+    return int(sum(creature_power(c, gear.get(c.id, [])) for c in creatures) * HITS_PER_PLAYER)
+
+
+def _turnout(same_window: list[WorldBoss]) -> float:
+    """Share of server_potential that really lands, from this window's recent bosses.
+    An escaped boss measures it exactly; a killed one only gives a lower bound."""
+    measured, floors = [], []
+    for boss in same_window:
+        potential = server_potential(boss.spawned_at)
+        if potential <= 0:
+            continue
+        dealt = boss.max_hp - max(0, boss.current_hp)
+        (floors if boss.status == WorldBoss.DEAD else measured).append(dealt / potential)
+    share = sum(measured) / len(measured) if measured else DEFAULT_TURNOUT
+    share = max([share] + floors)          # it was killed with this much → at least that share shows up
+    return max(TURNOUT_RANGE[0], min(TURNOUT_RANGE[1], share))
+
+
 def _next_hp(now: datetime.datetime | None = None) -> int:
-    """Size the next boss so the server deals about TARGET_DAMAGE_SHARE of its HP: the
-    average potential_damage of the last few bosses of the SAME time window (the evening
-    crowd is ~3× the noon one), divided by the target share. A boss that was killed anyway
-    also sets a floor of KILLED_GROWTH × its HP, so a growing server can't outrun it."""
+    """Size the next boss so the server deals about TARGET_DAMAGE_SHARE of its HP:
+    server_potential (everyone online now, all hits) × the share of it that really shows up
+    (_turnout) ÷ the target share. A boss that was killed anyway also sets a floor of
+    KILLED_GROWTH × its HP. Falls back to the past bosses' own numbers when there is no
+    activity sample (fresh server)."""
     now = now or timezone.now()
     done = list(WorldBoss.objects.exclude(status=WorldBoss.ACTIVE).order_by("-id")[:12])
-    if not done:
-        return DEFAULT_HP
     window = _window_of(now)
     same = [b for b in done if _window_of(b.spawned_at) == window][:HP_SAMPLE] or done[:HP_SAMPLE]
-    potentials = [p for p in (potential_damage(b) for b in same) if p > 0]
-    if not potentials:
-        return max(MIN_HP, int(same[0].max_hp * 0.6))  # nobody came → an easier one next time
-    hp = int(sum(potentials) / len(potentials) / TARGET_DAMAGE_SHARE)
-    last = same[0]
-    if last.status == WorldBoss.DEAD:
+    last = same[0] if same else None
+    potential = server_potential(now)
+    if potential > 0:
+        hp = int(potential * _turnout(same) / TARGET_DAMAGE_SHARE)
+    elif not done:
+        return DEFAULT_HP
+    else:
+        potentials = [p for p in (potential_damage(b) for b in same) if p > 0]
+        if not potentials:
+            return max(MIN_HP, int(last.max_hp * 0.6))  # nobody came → an easier one next time
+        hp = int(sum(potentials) / len(potentials) / TARGET_DAMAGE_SHARE)
+    if last is not None and last.status == WorldBoss.DEAD:
         hp = max(hp, int(last.max_hp * KILLED_GROWTH))
     return max(MIN_HP, hp)
 
