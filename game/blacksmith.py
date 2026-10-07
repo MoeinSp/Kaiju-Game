@@ -83,8 +83,9 @@ def forge(user: User, item_id: int) -> dict:
 
 def forgeable_items(user: User) -> list[Equipment]:
     """Only items below the player's current blacksmith-gated ceiling."""
-    return list(
-        Equipment.objects.filter(owner=user, level__lt=equipment_cap(user)).order_by(
-            "slot", "-rarity", "-level"
-        )
+    from game.equipment import rarity_rank
+
+    return sorted(
+        Equipment.objects.filter(owner=user, level__lt=equipment_cap(user)),
+        key=lambda e: (e.slot, -rarity_rank(e.rarity), -e.level, e.id),
     )

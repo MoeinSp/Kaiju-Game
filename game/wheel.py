@@ -172,6 +172,7 @@ def _apply_prize(user: User, prize: dict) -> None:
         tier = prize["tier"]
         count = prize.get("count", 1)
         add_capsules(user, tier, count)
+        user.save(update_fields=["xp_capsules"])  # add_capsules only mutates the dict — this was missing, so the food was lost
     elif kind == "speedup":
         amount = prize["amount"]
         grant_speedup_card(user, amount, count=1)
@@ -192,6 +193,7 @@ def _apply_prize(user: User, prize: dict) -> None:
         _ledger(user, coins=prize["coins"], dna=prize["dna"], diamonds=prize["diamonds"])
         grant_speedup_card(user, prize["speedup"], count=1)
         add_capsules(user, prize["capsule_tier"], prize["capsule_count"])
+        user.save(update_fields=["xp_capsules"])
 
 
 def _ledger(user: User, **kw) -> None:

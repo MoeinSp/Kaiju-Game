@@ -95,7 +95,11 @@ def consume_daily(user: User, action: str) -> int:
 
 
 def get_daily_count(user: User, action: str) -> int:
-    return _get_or_create_log(user, action).count
+    """Today's counter for `action` — read-only (a screen that only looks must not write)."""
+    return (
+        DailyActionLog.objects.filter(user=user, action=action, day=today_str())
+        .values_list("count", flat=True).first() or 0
+    )
 
 
 # ── missions: daily + weekly, points, and the weekly box track ────────────────
@@ -321,14 +325,21 @@ def mission_status(user: User) -> dict:
     claimed_today = set(MissionClaim.objects.filter(user=user, day=day).values_list("mission_key", flat=True))
     claimed_week = set(MissionClaim.objects.filter(user=user, day=wk).values_list("mission_key", flat=True))
 
+    # every counter of the week in ONE query (it was one per daily mission + one per weekly)
+    logs: dict[tuple[str, str], int] = {}
+    for action, log_day, count in DailyActionLog.objects.filter(
+        user=user, day__in=set(dates) | {day}
+    ).values_list("action", "day", "count"):
+        logs[(action, log_day)] = count
+
     daily = []
     for key, defn in constants.MISSION_DEFS.items():
-        count = get_daily_count(user, defn["action"])
+        count = logs.get((defn["action"], day), 0)
         daily.append({**defn, **mission_reward(defn, unit), "key": key,
                       "progress": min(count, defn["target"]), "done": key in claimed_today})
     weekly = []
     for key, defn in constants.WEEKLY_MISSION_DEFS.items():
-        count = _weekly_count(user, defn["action"], dates)
+        count = sum(logs.get((defn["action"], d), 0) for d in dates)
         weekly.append({**defn, **mission_reward(defn, unit), "key": key,
                        "progress": min(count, defn["target"]), "done": key in claimed_week})
 

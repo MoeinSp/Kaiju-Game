@@ -641,6 +641,15 @@ class AnnouncementMark(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
+class BotOutbox(models.Model):
+    """A message the web process (Mini App) queued for the bot process to send
+    (game/outbox.py) — e.g. «someone outbid you». Deleted as soon as the bot takes it."""
+
+    kind = models.CharField(max_length=32)
+    payload = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class Tournament(models.Model):
     """One «🏟 جام آخر هفته» (game/tournament.py), keyed by ISO week: registration → draw
     into groups of up to 8 → three hourly knockout rounds on Friday night."""

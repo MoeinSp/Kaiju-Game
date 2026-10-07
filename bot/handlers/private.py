@@ -3187,7 +3187,7 @@ async def hunt_swap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await safe_edit_message_text(
         query,
         "🔄 <b>کدوم موجود با این حریف بجنگه؟</b>\n<blockquote>حریف عوض نمی‌شه؛ فقط موجودِ خودت. "
-        "عنصر مناسب رو انتخاب کن تا شانس بردت بره بالا.</blockquote>",
+        "عنصری رو انتخاب کن که برتری بگیره: برتری عنصری یعنی +20% قدرت.</blockquote>",
         parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows),
     )
 

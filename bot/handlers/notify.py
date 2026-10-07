@@ -130,6 +130,25 @@ async def send_outbid_notification_now(context, outbid: dict) -> None:
         pass
 
 
+OUTBOX_INTERVAL_SECONDS = 15
+
+
+async def outbox_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Deliver what the web process (Mini App) queued for the bot to send — game/outbox.py."""
+    from game import outbox
+
+    try:
+        rows = await run_db(outbox.pop_all)
+    except Exception:  # noqa: BLE001 — never let a bad row stop the job queue
+        import logging
+
+        logging.getLogger(__name__).exception("outbox read failed")
+        return
+    for kind, payload in rows:
+        if kind == "outbid":
+            await send_outbid_notification_now(context, payload)
+
+
 async def send_war_notifications_now(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send active 1-day alliance war notifications (start, 6h reminder, 30m reminder)."""
     try:
@@ -524,5 +543,6 @@ def register(application) -> None:
         return
     job_queue.run_repeating(notify_job, interval=NOTIFY_INTERVAL_SECONDS, first=30)
     job_queue.run_repeating(metrics_flush_job, interval=60, first=45)
+    job_queue.run_repeating(outbox_job, interval=OUTBOX_INTERVAL_SECONDS, first=20)
     job_queue.run_repeating(metrics_prune_job, interval=86400, first=3600)
     job_queue.run_repeating(autobackup_job, interval=AUTOBACKUP_CHECK_SECONDS, first=120)

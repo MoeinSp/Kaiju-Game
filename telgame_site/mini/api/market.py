@@ -99,7 +99,12 @@ def bid(request, user, data):
     lot_id = need_int(data, "id", 1)
     amount = need_int(data, "amount", 1, MAX_BID)
     res = bm.place_bid(user, lot_id, amount)
-    # the «someone outbid you» message is sent by the bot process; the web process cannot
+    # the «someone outbid you» message is sent by the bot process; the web process cannot,
+    # so it leaves the notice in the outbox the bot drains every few seconds
+    if res.get("outbid_info"):
+        from game import outbox
+
+        outbox.push("outbid", res["outbid_info"])
     auction = res["auction"]
     return {
         "bid_amount": res["bid_amount"], "currency": res["bid_currency"],

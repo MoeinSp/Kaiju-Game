@@ -219,15 +219,11 @@ def _devour_xp(sacrifice: Creature) -> int:
 def devour_candidates(user: User, target_id: int) -> list[Creature]:
     """Creatures that may be fed to `target_id`: any of the player's OTHER creatures
     that aren't currently active or busy (mining / breeding)."""
-    from game.workers import creature_status
+    from game.workers import busy_creature_ids
 
-    out = []
-    for c in Creature.objects.filter(owner=user).exclude(id=target_id):
-        if c.is_active:
-            continue
-        if creature_status(user, c) is not None:
-            continue
-        out.append(c)
+    busy = busy_creature_ids(user)   # the same «working / breeding / on a mission» set, in 3 queries total
+    out = [c for c in Creature.objects.filter(owner=user).exclude(id=target_id)
+           if not c.is_active and c.id not in busy]
     # rarest-then-strongest first, so the best sacrifices sit on the first page
     rank = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
     out.sort(key=lambda c: (rank.get(c.rarity, 0), c.star_level, c.level, c.id), reverse=True)

@@ -16,6 +16,14 @@ def get_equipped_items(creature: Creature) -> list[Equipment]:
     return list(Equipment.objects.filter(equipped_on=creature))
 
 
+def rarity_rank(rarity: str) -> int:
+    """Position of a rarity key in constants.RARITY_ORDER (common = 0 … mythic = 4)."""
+    try:
+        return constants.RARITY_ORDER.index(rarity)
+    except ValueError:
+        return 0
+
+
 def equipped_items_map(creatures) -> dict[int, list[Equipment]]:
     """get_equipped_items() for MANY creatures in ONE query → {creature_id: [items]}.
 
@@ -33,7 +41,8 @@ def equipped_items_map(creatures) -> dict[int, list[Equipment]]:
 
 
 def list_inventory(user: User) -> list[Equipment]:
-    return list(Equipment.objects.filter(owner=user).order_by("slot", "-rarity", "-level"))
+    return sorted(Equipment.objects.filter(owner=user),
+                  key=lambda e: (e.slot, -rarity_rank(e.rarity), -e.level, e.id))
 
 
 def slot_loadout(user: User, creature: Creature) -> list[dict]:
@@ -292,9 +301,9 @@ def exchangeable_equipment(user: User) -> list[Equipment]:
     """The player's gear that can be traded for tickets: legendary/mythic pieces that
     are NOT currently equipped. Rarest first, then highest level."""
     keys = list(constants.EQUIP_TICKET_VALUE)
-    return list(
-        Equipment.objects.filter(owner=user, equipped_on__isnull=True, rarity__in=keys)
-        .order_by("-rarity", "-level")
+    return sorted(
+        Equipment.objects.filter(owner=user, equipped_on__isnull=True, rarity__in=keys),
+        key=lambda e: (-rarity_rank(e.rarity), -e.level, e.id),
     )
 
 
@@ -327,8 +336,10 @@ def same_slot_candidates(user: User, target_id: int) -> list[Equipment]:
     target = Equipment.objects.filter(id=target_id, owner=user).first()
     if target is None:
         return []
-    return list(
-        Equipment.objects.filter(owner=user, slot=target.slot)
-        .exclude(id=target.id)
-        .order_by("equipped_on", "rarity", "level")
+    # unequipped first, then the cheapest sacrifice (lowest rarity, lowest level). Sorted in
+    # Python: ORDER BY equipped_on puts NULLs LAST on Postgres (worn pieces came first) and
+    # ORDER BY rarity sorts the keys alphabetically, not by rank.
+    return sorted(
+        Equipment.objects.filter(owner=user, slot=target.slot).exclude(id=target.id),
+        key=lambda e: (e.equipped_on_id is not None, rarity_rank(e.rarity), e.level, e.id),
     )

@@ -87,7 +87,7 @@ def hunt_benchmark_power(user: User) -> int:
     deploy made hunts unwinnable; the benchmark now tracks what's genuinely available,
     and falls back to the strongest non-busy creature if the team set is all locked."""
     from game.creature import creature_power
-    from game.equipment import get_equipped_items
+    from game.equipment import equipped_items_map
     from game.workers import busy_creature_ids
     from bio_lab.repository import get_active_creature, team_choices
 
@@ -101,12 +101,9 @@ def hunt_benchmark_power(user: User) -> int:
         fieldable.setdefault(c.id, c)
 
     def _best(creatures) -> int:
-        b = 0
-        for c in creatures:
-            if c.id in busy:
-                continue
-            b = max(b, creature_power(c, get_equipped_items(c)))
-        return b
+        free = [c for c in creatures if c.id not in busy]
+        gear = equipped_items_map(free)   # one query for everyone's gear, not one per creature
+        return max((creature_power(c, gear.get(c.id, [])) for c in free), default=0)
 
     best = _best(fieldable.values())
     if best == 0:
