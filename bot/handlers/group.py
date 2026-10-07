@@ -19,6 +19,7 @@ from bio_lab.repository import (
     get_or_create_user,
     group_member_creatures,
     lab_display,
+    lab_mention,
     lock_row,
     mention,
     touch_membership,
@@ -1246,7 +1247,7 @@ def _pvp_preview_sync(attacker_tg, target_tg):
 
     return (
         display_name(attacker), _creature_power(a_creature), a_creature.element,
-        display_name(target), _creature_power(t_creature), t_creature.element,
+        lab_mention(target), _creature_power(t_creature), t_creature.element,
         group_shield_remaining_seconds(target),
         a_creature.name, t_creature.name, sync_energy(attacker),
         group_shield_remaining_seconds(attacker),
@@ -1348,7 +1349,7 @@ def _pvp_preview_by_ids_sync(attacker_id, target_id):
 
     return (
         display_name(attacker), _creature_power(a_creature), a_creature.element,
-        display_name(target), _creature_power(t_creature), t_creature.element,
+        lab_mention(target), _creature_power(t_creature), t_creature.element,
         group_shield_remaining_seconds(target),
         a_creature.name, t_creature.name, sync_energy(attacker),
         group_shield_remaining_seconds(attacker),

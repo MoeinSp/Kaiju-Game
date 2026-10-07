@@ -66,6 +66,16 @@ def lab_display(user: User) -> str:
     return f"{base}{badge}"
 
 
+def lab_mention(user: User) -> str:
+    """lab_display() as a clickable Telegram mention (tg://user link): the visible label is
+    the lab's name, tapping it opens the player's profile. For group cards, where the lab
+    is the game identity but people still want to reach the person behind it."""
+    from game.subscription import subscription_badge
+
+    base = html.escape(user.lab_name) if user.lab_name else f"آزمایشگاه {user.id}"
+    return f'<a href="tg://user?id={user.id}">{base}</a>{subscription_badge(user)}'
+
+
 def get_or_create_group(chat) -> Group:
     group, _ = Group.objects.get_or_create(id=chat.id, defaults={"title": chat.title})
     return group
