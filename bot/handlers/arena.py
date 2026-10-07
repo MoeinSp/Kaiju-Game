@@ -426,22 +426,22 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
     # number has its own line and name — the packed «a · b · c» lines were unreadable.
     coin, dna = get_emoji("coin"), get_emoji("dna")
     me_block = "\n".join([
-        f"{get_emoji('bullet_blue', '🔹')} <b>تو</b>",
-        f"🦅 هیولا: <b>{cname}</b>{my_elem_tag}",
-        f"💪 قدرت: <code>{my_power:,}</code>",
-        f"{trophy} کاپ: <code>{user.cup:,}</code>",
+        f"{get_emoji('bullet_blue', '🔹')}  <b>تو</b>",
+        f"🦅  هیولا: <b>{cname}</b>{my_elem_tag}",
+        f"💪  قدرت: <code>{my_power:,}</code>",
+        f"{trophy}  کاپ: <code>{user.cup:,}</code>",
     ])
     opp_block = "\n".join([
-        f"{get_emoji('opponent_creature', '👹')} <b>حریف: {opponent['label']}</b>{alliance_str}",
-        f"🦅 هیولا: <b>{opponent.get('creature_name', '؟')}</b>{opp_elem_tag}",
-        f"💪 قدرت: <code>{opponent['power']:,}</code>",
-        f"{trophy} کاپ: <code>{opponent['cup']:,}</code>",
+        f"{get_emoji('opponent_creature', '👹')}  <b>حریف: {opponent['label']}</b>{alliance_str}",
+        f"🦅  هیولا: <b>{opponent.get('creature_name', '؟')}</b>{opp_elem_tag}",
+        f"💪  قدرت: <code>{opponent['power']:,}</code>",
+        f"{trophy}  کاپ: <code>{opponent['cup']:,}</code>",
     ])
     reward_block = "\n".join([
-        f"{get_emoji('gift')} <b>جایزه‌ی برد</b>",
-        f"{coin} طلا: <code>+{loot:,}</code>",
-        f"{dna} دی‌ان‌ای: <code>+{dna_win:,}</code>",
-        f"{trophy} کاپ: <code>+{win_cup}</code>",
+        f"{get_emoji('gift')}  <b>جایزه‌ی برد</b>",
+        f"{coin}  طلا: <code>+{loot:,}</code>",
+        f"{dna}  دی‌ان‌ای: <code>+{dna_win:,}</code>",
+        f"{trophy}  کاپ: <code>+{win_cup}</code>",
     ])
     lines = [
         f"{get_emoji('battle')} <b>آرنا · حریف پیدا شد</b>",
