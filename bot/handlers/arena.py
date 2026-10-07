@@ -422,16 +422,26 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
     alliance_str = f" <i>(🤝 {opponent['alliance']})</i>" if opponent.get("alliance") else ""
     trophy = get_emoji("trophy")
     cost = constants.ARENA_ATTACK_ENERGY_COST
-    # each side is its own quote block (Telegram draws it as a small card) — no divider lines
+    # Three quote blocks (you / opponent / reward): ONE labelled fact per line, so every
+    # number has its own line and name — the packed «a · b · c» lines were unreadable.
+    coin, dna = get_emoji("coin"), get_emoji("dna")
     me_block = "\n".join([
         f"{get_emoji('bullet_blue', '🔹')} <b>تو</b>",
-        f"<b>{cname}</b>{my_elem_tag}",
-        f"قدرت <code>{my_power:,}</code> · {trophy} کاپ <code>{user.cup:,}</code>",
+        f"🦅 هیولا: <b>{cname}</b>{my_elem_tag}",
+        f"💪 قدرت: <code>{my_power:,}</code>",
+        f"{trophy} کاپ: <code>{user.cup:,}</code>",
     ])
     opp_block = "\n".join([
-        f"{get_emoji('opponent_creature', '👹')} <b>{opponent['label']}</b>{alliance_str}",
-        f"<b>{opponent.get('creature_name', '؟')}</b>{opp_elem_tag}",
-        f"قدرت <code>{opponent['power']:,}</code> · {trophy} کاپ <code>{opponent['cup']:,}</code>",
+        f"{get_emoji('opponent_creature', '👹')} <b>حریف: {opponent['label']}</b>{alliance_str}",
+        f"🦅 هیولا: <b>{opponent.get('creature_name', '؟')}</b>{opp_elem_tag}",
+        f"💪 قدرت: <code>{opponent['power']:,}</code>",
+        f"{trophy} کاپ: <code>{opponent['cup']:,}</code>",
+    ])
+    reward_block = "\n".join([
+        f"{get_emoji('gift')} <b>جایزه‌ی برد</b>",
+        f"{coin} طلا: <code>+{loot:,}</code>",
+        f"{dna} DNA: <code>+{dna_win:,}</code>",
+        f"{trophy} کاپ: <code>+{win_cup}</code>",
     ])
     lines = [
         f"{get_emoji('battle')} <b>آرنا · حریف پیدا شد</b>",
@@ -440,13 +450,13 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
         f"<blockquote>{opp_block}</blockquote>",
     ]
     if adv:
-        lines.append(adv)
+        lines += [adv, ""]
     lines += [
-        f"{get_emoji('gift')} برد: {get_emoji('coin')} <code>{loot:,}</code> · {get_emoji('dna')} <code>{dna_win:,}</code> · {trophy} <code>+{win_cup}</code>",
-        f"باخت: {trophy} <code>{loss_cup}</code>",
+        f"<blockquote>{reward_block}</blockquote>",
+        f"اگه ببازی: {trophy} <code>{loss_cup}</code> کاپ",
     ]
     if energy < cost * 5:   # only worth a line when it is about to run out
-        lines.append(f"{get_emoji('energy')} انرژی: <code>{energy}</code>/<code>{max_en}</code>")
+        lines.append(f"{get_emoji('energy')} انرژی: <code>{energy}</code> از <code>{max_en}</code>")
     keyboard = InlineKeyboardMarkup(
         [
             [btn(f"حمله · {cost} انرژی", emoji_key="btn_attack", style=BATTLE, callback_data=f"arena_attack:{_opp_ref(opponent)}")],
