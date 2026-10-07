@@ -427,20 +427,27 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
     lines = [
         f"{get_emoji('battle')} <b>آرنا · حریف پیدا شد</b>",
         _ARENA_DIV,
+        # ONE fact per line (owner's rule for this card): never «power · cup» or the whole loot on one line
         f"🦅 موجود شما: <b>{cname}</b>{my_elem_tag}",
-        f"💪 قدرت شما: <code>{my_power:,}</code> · {trophy} کاپ <code>{user.cup:,}</code>",
+        f"💪 قدرت شما: <code>{my_power:,}</code>",
+        f"{trophy} کاپ شما: <code>{user.cup:,}</code>",
+        _ARENA_DIV,
         f"👤 حریف: <b>{opponent['label']}</b>{alliance_str}",
         f"{get_emoji('opponent_creature', '👹')} موجود حریف: <b>{opponent.get('creature_name', '؟')}</b>{opp_elem_tag}",
-        f"💀 قدرت حریف: <code>{opponent['power']:,}</code> · {trophy} کاپ <code>{opponent['cup']:,}</code>",
+        f"💀 قدرت حریف: <code>{opponent['power']:,}</code>",
+        f"{trophy} کاپ حریف: <code>{opponent['cup']:,}</code>",
     ]
     if adv:
-        lines.append(adv)
+        lines += [_ARENA_DIV, adv]
     lines += [
         _ARENA_DIV,
-        f"{get_emoji('gift')} جایزه برد: {get_emoji('coin')} <code>+{loot:,}</code> · {get_emoji('dna')} <code>+{dna_win:,}</code>",
-        f"{trophy} کاپ: برد <code>+{win_cup}</code> | باخت <code>{loss_cup}</code>",
-        f"{get_emoji('energy')} هزینه حمله: <code>{cost}</code> انرژی "
-        f"(داری <code>{energy}</code>/<code>{max_en}</code>)",
+        f"{get_emoji('gift')} <b>جایزه برد</b>",
+        f"{get_emoji('coin')} طلا: <code>+{loot:,}</code>",
+        f"{get_emoji('dna')} دی‌ان‌ای: <code>+{dna_win:,}</code>",
+        f"{trophy} کاپ: <code>+{win_cup}</code>",
+        _ARENA_DIV,
+        f"{trophy} کاپ در صورت باخت: <code>{loss_cup}</code>",
+        f"{get_emoji('energy')} انرژی شما: <code>{energy}</code>/<code>{max_en}</code>",
     ]
     keyboard = InlineKeyboardMarkup(
         [
