@@ -227,7 +227,7 @@ def alliance_raid_members(alliance_id: int, limit: int = 10) -> list[dict]:
     weekly reset). Used by the «جدول رید» inside the alliance section."""
     from django.db.models import Sum
 
-    from bio_lab.repository import display_name
+    from bio_lab.repository import display_name, lab_mention, lab_plain
 
     agg = (
         RaidDamageLog.objects.filter(user__alliance_id=alliance_id)
@@ -241,6 +241,9 @@ def alliance_raid_members(alliance_id: int, limit: int = 10) -> list[dict]:
         rows.append({
             "rank": i, "user_id": entry["user_id"],
             "name": display_name(u) if u else str(entry["user_id"]),
+            # the lab is how players are named in tables: plain for the app, linked for chat
+            "lab": lab_plain(u) if u else str(entry["user_id"]),
+            "mention": lab_mention(u) if u else str(entry["user_id"]),
             "damage": entry["total"] or 0,
         })
     return rows

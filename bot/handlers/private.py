@@ -3693,7 +3693,7 @@ async def ally_raidtable_callback(update: Update, context: ContextTypes.DEFAULT_
         lines.append("<i>این هفته هنوز کسی اتک رید نزده.</i>")
     for m in data["members"]:
         badge = medals.get(m["rank"], f"{m['rank']}.")
-        lines.append(f"{badge} <b>{m['name']}</b>\n   💥 دمیج: <code>{m['damage']:,}</code>")
+        lines.append(f"{badge} <b>{m.get('mention') or m['name']}</b>\n   💥 دمیج: <code>{m['damage']:,}</code>")
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML",
                                  reply_markup=back_only_keyboard("menu:alliance_info", "بازگشت به اتحاد"))
 

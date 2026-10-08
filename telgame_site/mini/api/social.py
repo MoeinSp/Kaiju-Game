@@ -98,7 +98,7 @@ def _alliance_dict(user, al: Alliance) -> dict:
             "level": al.raid_level,
             "boss": ({"name": boss.name, "level": boss.level, "element": boss.element,
                       "hp": max(0, boss.current_hp), "max_hp": boss.max_hp} if boss else None),
-            "top": [{"rank": m["rank"], "name": _text(m["name"]), "damage": m["damage"], "me": m["user_id"] == user.id}
+            "top": [{"rank": m["rank"], "name": _text(m.get("lab") or m["name"]), "damage": m["damage"], "me": m["user_id"] == user.id}
                     for m in alliance_raid_members(al.id, 10)],
         },
         "joined_today": _joined_alliance_today(user),
