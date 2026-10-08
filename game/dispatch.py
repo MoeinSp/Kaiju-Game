@@ -9,7 +9,7 @@ The design goals, in order:
 * **A reason to come back.** Missions run on real-time timers (lazy — no background job
   resolves them; the reward is frozen at dispatch and paid on collect).
 * **Limited, never a second hunt.** A fixed number of offers per day, a couple of slots,
-  and rewards sized to a small slice of a day's hunting (see GOLD_FACTOR).
+  and rewards sized to a real but secondary share of a day's hunting (see GOLD_FACTOR).
 
 Rules:
 
@@ -61,11 +61,14 @@ DURATIONS = (2, 6, 12, 24)
 # sits at index 5 = the first offer the level-3 HQ adds.
 _MASTER_DURATIONS = (2, 6, 12, 2, 6, 24, 12)
 
-# Gold for a gold-focused mission = creature power × this. For scale: one won «هم‌سطح»
-# hunt pays ≈ 0.39 × power, so 2h ≈ 1 hunt, 6h ≈ 3 hunts, 12h ≈ 4.5 hunts (longer is less
-# gold per hour — it's the low-attention option, not the efficient one). With 2 slots and
-# 5 offers a day the whole board is worth roughly 10–13 hunts: a side income.
-GOLD_FACTOR = {2: 0.45, 6: 1.10, 12: 1.80, 24: 2.80}
+# Gold for a gold-focused mission = creature power x this. For scale: one won hunt pays
+# about 0.55-0.70 x power (1 energy = 10 minutes), so 2h is ~2 hunts, 6h ~5, 12h ~7 and
+# 24h ~10. Raised ~2.5-3x on 2026-10-08: at the old values a 2-hour mission paid ONE hunt
+# and the whole daily board ~12% of a day's hunting, so few players bothered (215
+# missions against 7,074 hunts a day). The short missions got the biggest raise: they
+# are the ones that bring a player back several times a day. A full level-5 board is now
+# roughly 30% of a day's hunting.
+GOLD_FACTOR = {2: 1.30, 6: 3.00, 12: 4.50, 24: 6.50}
 DNA_PER_GOLD = 0.03  # same gold:DNA ratio hunts use
 MIN_COINS = 50
 
