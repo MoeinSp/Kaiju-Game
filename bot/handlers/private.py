@@ -3000,6 +3000,11 @@ def _hunt_scout_sync(tg_user, charge=False):
     creature = get_active_creature(user)
     if creature is None:
         raise GameError("اول /start رو بزن تا موجودت رو بگیری.")
+    from game import research
+
+    # same power the fight itself uses (resolve_hunt attaches research) — without this the
+    # prize on the card was a little lower than what a player with research was then paid
+    research.attach_research(user, creature)
     equipped = get_equipped_items(creature)
     my_power = _creature_power(creature, equipped)
     cost = scout_cost(creature, power=my_power)

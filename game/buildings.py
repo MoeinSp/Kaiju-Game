@@ -485,14 +485,16 @@ def apply_speedup_bulk(user: User, minutes: int, count: int, building_id: int | 
         raise GameError("هیچ ارتقایی در حال انجام نیست که سرعتش بدی.")
 
     remaining = (upgrade.finishes_at - timezone.now()).total_seconds()
-    needed = max(1, math.ceil(remaining / (minutes * 60))) if remaining > 0 else 1
-    use = max(1, min(int(count), card.count, needed))
+    # an upgrade whose timer already ran out is simply completed — no card is spent on it
+    needed = math.ceil(remaining / (minutes * 60)) if remaining > 0 else 0
+    use = max(1, min(int(count), card.count, needed)) if needed else 0
 
-    card.count -= use
-    if card.count <= 0:
-        card.delete()
-    else:
-        card.save(update_fields=["count"])
+    if use:
+        card.count -= use
+        if card.count <= 0:
+            card.delete()
+        else:
+            card.save(update_fields=["count"])
 
     upgrade.finishes_at -= datetime.timedelta(minutes=minutes * use)
     if upgrade.finishes_at <= timezone.now():

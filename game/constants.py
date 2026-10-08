@@ -1266,7 +1266,9 @@ def diamond_finish_cost(remaining_seconds: float) -> int:
     """Diamonds needed to instantly finish an upgrade with this much time left."""
     import math as _math
 
-    hours = max(0.0, remaining_seconds) / 3600
+    if remaining_seconds <= 0:
+        return 0  # the timer already ran out — finishing it is free, not the minimum price
+    hours = remaining_seconds / 3600
     return max(DIAMOND_FINISH_MIN_COST, _math.ceil(hours * DIAMOND_FINISH_PER_HOUR))
 
 
