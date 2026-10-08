@@ -8,7 +8,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 
 from bot.utils import alert_text
 from bio_lab.models import InteractiveBattle, User
-from bio_lab.repository import display_name, get_active_creature, get_or_create_group, get_or_create_user, touch_membership
+from bio_lab.repository import display_name, lab_mention, get_active_creature, get_or_create_group, get_or_create_user, touch_membership
 from bot.buttons import BATTLE, CONFIRM, DANGER, PRIMARY, back_btn, btn
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from game import constants
@@ -111,8 +111,8 @@ async def battle_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         ]
     )
     await update.message.reply_text(
-        f"{get_emoji('battle')} <b>{display_name(challenger_user)}</b> با <b>{challenger_creature.name}</b> به "
-        f"<b>{display_name(opponent_user)}</b> پیشنهاد نبرد تعاملی زنده داد!\n"
+        f"{get_emoji('battle')} <b>{lab_mention(challenger_user)}</b> با <b>{challenger_creature.name}</b> به "
+        f"<b>{lab_mention(opponent_user)}</b> پیشنهاد نبرد تعاملی زنده داد!\n"
         f"<i>آیا قبول می‌کنید؟</i> 👇",
         parse_mode="HTML",
         reply_markup=keyboard,

@@ -206,13 +206,13 @@ def set_message_id(drop_id: int, message_id: int) -> None:
 def claim(drop_id: int, tg_user) -> dict:
     """First-writer-wins claim. Returns a result dict:
     {status: 'won'|'taken'|'expired'|'gone', ...}."""
-    from bio_lab.repository import display_name, get_or_create_user, mention
+    from bio_lab.repository import get_or_create_user, lab_plain, mention
 
     drop = GroupDrop.objects.select_for_update().filter(id=drop_id).first()
     if drop is None:
         return {"status": "gone"}
     if drop.claimed_by_id is not None:
-        return {"status": "taken", "winner": display_name(drop.claimed_by)}
+        return {"status": "taken", "winner": lab_plain(drop.claimed_by)}
     if timezone.now() >= drop.expires_at:
         return {"status": "expired"}
 
@@ -290,7 +290,7 @@ def claim(drop_id: int, tg_user) -> dict:
     drop.claimed_at = timezone.now()
     drop.reward_json = json.dumps(reward)
     drop.save(update_fields=["claimed_by", "claimed_at", "reward_json"])
-    return {"status": "won", "winner": display_name(user), "winner_mention": mention(user),
+    return {"status": "won", "winner": lab_plain(user), "winner_mention": mention(user),
             "reward": reward, "kind": drop.kind,
             "drop_id": drop.id, "group_id": drop.group_id, "message_id": drop.message_id}
 

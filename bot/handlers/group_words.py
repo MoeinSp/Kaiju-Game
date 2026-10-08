@@ -2373,8 +2373,8 @@ async def handle_expedition_word(update: Update, context: ContextTypes.DEFAULT_T
             exp = start_expedition_recruitment(user, chat.id, chat.title or "")
 
         members = list(exp.members.all())
-        member_names = [display_name(m) for m in members]
-        creator_name = display_name(exp.creator)
+        member_names = [lab_mention(m) for m in members]
+        creator_name = lab_mention(exp.creator)
         return exp.id, creator_name, exp.target_name, member_names
 
     try:
@@ -2418,8 +2418,8 @@ async def expedition_join_callback(update: Update, context: ContextTypes.DEFAULT
         from game.expedition import join_expedition
         exp = join_expedition(user, exp_id)
         members = list(exp.members.all())
-        member_names = [display_name(m) for m in members]
-        creator_name = display_name(exp.creator)
+        member_names = [lab_mention(m) for m in members]
+        creator_name = lab_mention(exp.creator)
         return exp.id, creator_name, exp.target_name, member_names
 
     try:
@@ -2441,7 +2441,7 @@ async def expedition_launch_callback(update: Update, context: ContextTypes.DEFAU
         user, _ = get_or_create_user(tg_user)
         from game.expedition import launch_expedition
         res = launch_expedition(user, exp_id)
-        members_str = "، ".join([display_name(m) for m in res["members"]])
+        members_str = "، ".join([lab_mention(m) for m in res["members"]])
         return {
             "destination": res["destination"],
             "group_title": res["expedition"].group_title,

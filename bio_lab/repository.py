@@ -31,19 +31,17 @@ def display_name(user: User) -> str:
 
 
 def mention(user: User) -> str:
-    """A clickable Telegram mention of the account (tg://user link), for leaderboards
-    where the person — not the lab or creature — is the identity. The visible label
-    is the escaped account name; tapping it opens the user's profile."""
-    from game.subscription import subscription_badge
+    """A clickable Telegram mention of the player (tg://user link). The visible label is
+    the LAB NAME — the owner wants players named by their lab everywhere in groups, never
+    by @username — and tapping it still opens the person's profile."""
+    return lab_mention(user)
 
-    badge = subscription_badge(user)
-    if user.username:
-        base = f"@{html.escape(user.username)}"
-    elif user.first_name:
-        base = html.escape(user.first_name)
-    else:
-        base = f"بازیکن {user.id}"
-    return f'<a href="tg://user?id={user.id}">{base}</a>{badge}'
+
+def lab_plain(user: User | None) -> str:
+    """The lab's name as PLAIN text (no HTML, no link) — for alerts and button labels."""
+    if user is None:
+        return "—"
+    return user.lab_name or f"آزمایشگاه {user.id}"
 
 
 def lab_display(user: User) -> str:

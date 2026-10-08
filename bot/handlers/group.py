@@ -274,7 +274,7 @@ async def _dm_transfer_received(context, receiver, sender, what: str) -> None:
     text = (
         f"{get_emoji('gift')} <b>انتقال جدید دریافت شد</b>\n"
         f"{_RULE}\n"
-        f"👤 فرستنده: <b>{display_name(sender)}</b>\n"
+        f"👤 فرستنده: <b>{lab_mention(sender)}</b>\n"
         f"🎁 دریافتی: {what}\n"
         f"{_RULE}\n"
         "<i>برای غیرفعال‌سازی این پیام‌ها، /off را ارسال کنید.</i>"
@@ -458,7 +458,7 @@ async def _begin_offer(message, kind: str, sender, receiver, item_id: int, desc:
         await message.reply_text("⏳ این مورد همین الان توی یه پیشنهاد انتقالِ بازه.")
         return
     token = _new_offer(kind, sender.id, receiver.id, item_id=item_id, fee=fee, desc=desc,
-                       sender_name=display_name(sender), receiver_name=display_name(receiver),
+                       sender_name=lab_mention(sender), receiver_name=lab_mention(receiver),
                        sender_cd=sender_cd, receiver_cd=receiver_cd)
     reset_line = f"{_CREATURE_RESET_NOTE}\n" if kind == "c" else ""
     cd_line = f"⏳ کول‌داون فرستنده: <code>{sender_cd}</code> ساعت\n⏳ کول‌داون گیرنده: <code>{receiver_cd}</code> ساعت\n" if kind == "c" else ""
@@ -466,13 +466,13 @@ async def _begin_offer(message, kind: str, sender, receiver, item_id: int, desc:
         f"🤝 <b>پیشنهاد انتقال</b>\n"
         f"{_RULE}\n"
         f"📦 {desc}\n"
-        f"👤 فرستنده: <b>{display_name(sender)}</b>\n"
-        f"🎯 گیرنده: <b>{display_name(receiver)}</b>\n"
+        f"👤 فرستنده: <b>{lab_mention(sender)}</b>\n"
+        f"🎯 گیرنده: <b>{lab_mention(receiver)}</b>\n"
         f"{get_emoji('diamond')} کارمزد انتقال: <code>{fee}</code> الماس (گیرنده می‌دهد)\n"
         f"{cd_line}"
         f"{reset_line}"
         f"{_RULE}\n"
-        f"<b>{display_name(sender)}</b>، قیمت (به طلا) را تعیین کن یا رایگان بفرست 👇\n"
+        f"<b>{lab_mention(sender)}</b>، قیمت (به طلا) را تعیین کن یا رایگان بفرست 👇\n"
         "<i><code>5</code> دقیقه اعتبار دارد.</i>",
         parse_mode="HTML", reply_markup=_seller_step_keyboard(token),
     )
@@ -890,13 +890,13 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
             r_cd = result.get("receiver_cd", offer.get("receiver_cd", 24))
             cd_text = f"⏳ کول‌داون فرستنده: <code>{s_cd}</code> ساعت\n⏳ کول‌داون گیرنده: <code>{r_cd}</code> ساعت"
             body = (f"🦖 هیولای <b>{creature_name(c)}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level} "
-                    f"به <b>{display_name(receiver)}</b> منتقل شد! ✅\n"
+                    f"به <b>{lab_mention(receiver)}</b> منتقل شد! ✅\n"
                     f"<i>♻️ لِوِل و ارتقاهای بدنی ریست شد؛ فقط ستاره‌ها باقی ماندند.</i>")
         else:
             it = result["item"]
             cd_text = "⏳ کول‌داون: <code>۱</code> روز برای هر دو طرف فعال شد."
             body = (f"🎒 تجهیزاتِ <b>{it.name} +{it.level}</b> {constants.RARITY_LABELS[it.rarity]} "
-                    f"به <b>{display_name(receiver)}</b> منتقل شد! ✅")
+                    f"به <b>{lab_mention(receiver)}</b> منتقل شد! ✅")
         price_line = (
             f"\n{get_emoji('coin')} پرداخت: <code>{result['price']:,}</code> طلا به فروشنده"
             if result.get("price") else ""
@@ -993,7 +993,7 @@ def _attack_sync(chat, tg_user):
         reward_lines = []
         for i, (uid, r) in enumerate(sorted(rewards.items(), key=lambda kv: kv[1]["damage"], reverse=True)):
             member = User.objects.filter(id=uid).first()
-            name = display_name(member) if member else str(uid)
+            name = lab_mention(member) if member else str(uid)
             pct = round(100 * r["damage"] / total_dmg)
             reward_lines.append(
                 f"{_raid_rank_label(i)} <b>{name}</b>\n"
@@ -1246,7 +1246,7 @@ def _pvp_preview_sync(attacker_tg, target_tg):
     from game.energy import get_max_energy, sync_energy
 
     return (
-        display_name(attacker), _creature_power(a_creature), a_creature.element,
+        lab_mention(attacker), _creature_power(a_creature), a_creature.element,
         lab_mention(target), _creature_power(t_creature), t_creature.element,
         group_shield_remaining_seconds(target),
         a_creature.name, t_creature.name, sync_energy(attacker),
@@ -1348,7 +1348,7 @@ def _pvp_preview_by_ids_sync(attacker_id, target_id):
     from game.energy import get_max_energy, sync_energy
 
     return (
-        display_name(attacker), _creature_power(a_creature), a_creature.element,
+        lab_mention(attacker), _creature_power(a_creature), a_creature.element,
         lab_mention(target), _creature_power(t_creature), t_creature.element,
         group_shield_remaining_seconds(target),
         a_creature.name, t_creature.name, sync_energy(attacker),
@@ -1842,7 +1842,7 @@ def _guardian_sync(chat, tg_user):
     if top is None:
         raise GameError("هنوز کسی توی این گروه موجودی ثبت نکرده.")
     owner = User.objects.filter(id=top.owner_id).first()
-    return top, display_name(owner) if owner else str(top.owner_id), _creature_power(top)
+    return top, lab_mention(owner) if owner else str(top.owner_id), _creature_power(top)
 
 
 async def guardian(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1964,7 +1964,7 @@ def _guardian_claim_sync(chat, tg_user):
 
     coins, dna = salary_for(top)
     owner = User.objects.filter(id=top.owner_id).first()
-    owner_name = display_name(owner) if owner else f"User {top.owner_id}"
+    owner_name = lab_mention(owner) if owner else f"User {top.owner_id}"
     is_current_user = (top.owner_id == user.id)
 
     return {
@@ -2051,7 +2051,7 @@ async def guardian_daily_payout_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         group_id = p["group_id"]
         user = p["user"]
         creature = p["creature"]
-        user_name = display_name(user)
+        user_name = lab_mention(user)
         c_name = creature.name if creature else "نامشخص"
         coins = p.get("coins", 0)
         dna = p.get("dna", 0)
@@ -2107,7 +2107,7 @@ def _guardian_resign_sync(chat, tg_user):
     if successor is None:
         return None
     owner = User.objects.filter(id=successor.owner_id).first()
-    return display_name(owner) if owner else str(successor.owner_id)
+    return lab_mention(owner) if owner else str(successor.owner_id)
 
 
 async def guardian_resign(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
