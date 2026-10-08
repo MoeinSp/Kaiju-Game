@@ -37,7 +37,7 @@ def _render(data: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     rows = []
     if boss is None:
         lines.append("<blockquote>روزی دو بار یه غول برای کل سرور ظاهر می‌شه و ۳۰ دقیقه می‌مونه. "
-                     f"هر نفر {worldboss.HITS_PER_PLAYER} ضربه داره؛ اگه با هم از پا درش بیارید همه جعبه می‌گیرن.</blockquote>")
+                     f"هر نفر {worldboss.HITS_PER_PLAYER} ضربه داره؛ هر چی سرور بیشتر از جونش بزنه، جعبه‌ی بهتری به همه می‌رسه.</blockquote>")
         nxt = data["next_spawn_at"]
         if nxt is not None:
             local = timezone.localtime(nxt)

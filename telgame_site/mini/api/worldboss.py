@@ -47,10 +47,13 @@ def _rules() -> dict:
         "hits": worldboss.HITS_PER_PLAYER, "energy_cost": worldboss.ENERGY_COST,
         "minutes": worldboss.DURATION_MINUTES,
         "windows": [{"from": a, "to": b} for a, b in worldboss.SPAWN_WINDOWS],
-        "chest_all": _name(ARENA_CHEST_TIERS[worldboss.KILL_CHEST_ALL]["name"]),
-        "chest_top": _name(ARENA_CHEST_TIERS[worldboss.KILL_CHEST_TOP]["name"]),
-        "top_share_pct": int(round(worldboss.TOP_SHARE * 100)),
-        "top3_diamonds": list(worldboss.TOP3_DIAMONDS), "killer_diamonds": worldboss.KILLER_DIAMONDS,
+        "milestones": [{"pct": int(round(need * 100)), "chest": _name(ARENA_CHEST_TIERS[tier]["name"])}
+                       for need, tier in worldboss.MILESTONES],
+        "kill_diamonds_all": worldboss.KILL_DIAMONDS_ALL,
+        "top3_diamonds": list(worldboss.TOP3_DIAMONDS),
+        "top3_diamonds_escaped": list(worldboss.TOP3_DIAMONDS_ESCAPED),
+        "killer_diamonds": worldboss.KILLER_DIAMONDS,
+        "full_hits_speedup": worldboss.FULL_HITS_SPEEDUP_MINUTES,
         "advantage_pct": int(round((constants.ELEMENT_ADVANTAGE_POWER_FACTOR - 1) * 100)),
     }
 

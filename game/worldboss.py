@@ -13,12 +13,13 @@ How it runs (no dedicated scheduler — the 5-minute notification job calls tick
   shows), ×1.20 with the element advantage over the boss — the game's one element rule —
   with a small random swing. Each hit pays gold + DNA on the spot.
 * When HP reaches 0 the boss is DEAD; when the window ends it ESCAPES. Either way tick()
-  settles it ONCE: on a kill every participant gets a chest (better for the top damage
-  dealers) and the top three get diamonds.
-* HP is sized from the SERVER, not from the last boss: what the players who are online in
-  that hour could deal with all their hits (server_potential), times the share of it that
-  really shows up, divided by TARGET_DAMAGE_SHARE — so about half the HP goes and a kill
-  is a rare, exceptional turnout. See _next_hp.
+  settles it ONCE and pays everyone who hit it by how much of its HP the SERVER dealt
+  (MILESTONES: a chest at 25%, another at 50%, another at 75%; a kill adds diamonds for
+  all). The top three damage dealers get diamonds either way — more on a kill.
+* HP follows a simple ladder per time window (_next_hp): killed → the next boss of that
+  window is HP_STEP stronger, escaped → HP_STEP weaker, always a round number. So it
+  hovers around what the server can just about kill. The very first boss of a window (or
+  one far below what the players online could deal) is seeded from server_potential.
 """
 
 from __future__ import annotations
@@ -42,32 +43,32 @@ ENERGY_COST = 1
 SPAWN_WINDOWS = ((12, 15), (19, 23))
 
 DAMAGE_SWING = (0.90, 1.10)
-# reward per hit, as a share of the damage dealt (damage ≈ the creature's power, so a
-# hit pays a bit more than the «هم‌سطح» hunt the same energy would buy: ≈0.39 × power)
-HIT_GOLD_PER_DAMAGE = 0.50
-HIT_DNA_PER_DAMAGE = 0.015
+# reward per hit, as a share of the damage dealt (damage ≈ the creature's power). One hit
+# is worth about three hunts — the boss comes twice a day and people wait for it.
+HIT_GOLD_PER_DAMAGE = 1.50
+HIT_DNA_PER_DAMAGE = 0.045
 
-# first boss ever / fallback when the previous one had no fighters
+# first boss ever / fallback when there is nothing to go on
 DEFAULT_HP = 120_000
 MIN_HP = 60_000
-# the server should deal about this share of a boss's HP with everyone's hits — killing it
-# takes a better turnout than usual (more fighters, the right element), not a normal day
+# HP ladder: each boss is this much stronger than the last one of its window if that one
+# was killed, this much weaker if it escaped (owner's rule, 2026-10-08).
+HP_STEP = 0.05
+# Seed only: with no earlier boss in the window — or one killed while far below what the
+# players online could deal — start from server_potential × turnout ÷ target share.
 TARGET_DAMAGE_SHARE = 0.50
-HP_SAMPLE = 3          # bosses of the same time window averaged for the estimate
-KILLED_GROWTH = 1.5    # a boss that died anyway → the next one of that window is at least this × bigger
-# Share of server_potential that really lands on a boss. Measured from bosses that ESCAPED
-# (a killed boss was cut short, so it only proves the share is higher than what it took);
-# until one has escaped this cautious guess is used.
 DEFAULT_TURNOUT = 0.65
-TURNOUT_RANGE = (0.30, 1.00)
+SEED_CATCHUP = 0.40          # a killed boss under this share of the estimate jumps to the estimate
 POTENTIAL_MIN_PLAYERS = 10   # fewer online players than this → not a usable sample
 
-# kill rewards
-KILL_CHEST_ALL = "golden"         # every participant
-KILL_CHEST_TOP = "magical"        # the top TOP_SHARE of damage dealers (at least the top 3)
-TOP_SHARE = 0.10
-TOP3_DIAMONDS = (50, 30, 20)
+# end-of-fight rewards for EVERY participant, by the share of HP the server dealt — each
+# milestone reached adds its chest (so 50% pays the silver AND the golden one)
+MILESTONES = ((0.25, "silver"), (0.50, "golden"), (0.75, "magical"))
+KILL_DIAMONDS_ALL = 10            # a kill: these on top, for everyone
+TOP3_DIAMONDS = (50, 30, 20)      # top damage dealers when it is killed
+TOP3_DIAMONDS_ESCAPED = (25, 15, 10)   # …and when it escapes
 KILLER_DIAMONDS = 10              # whoever landed the last hit
+FULL_HITS_SPEEDUP_MINUTES = 15    # a speed-up card for spending all HITS_PER_PLAYER hits
 
 # only players seen this recently are told a boss appeared (no DM storm to dead accounts)
 ANNOUNCE_ACTIVE_DAYS = 3
@@ -169,45 +170,32 @@ def server_potential(moment: datetime.datetime | None = None) -> int:
     return int(sum(creature_power(c, gear.get(c.id, [])) for c in creatures) * HITS_PER_PLAYER)
 
 
-def _turnout(same_window: list[WorldBoss]) -> float:
-    """Share of server_potential that really lands, from this window's recent bosses.
-    An escaped boss measures it exactly; a killed one only gives a lower bound."""
-    measured, floors = [], []
-    for boss in same_window:
-        potential = server_potential(boss.spawned_at)
-        if potential <= 0:
-            continue
-        dealt = boss.max_hp - max(0, boss.current_hp)
-        (floors if boss.status == WorldBoss.DEAD else measured).append(dealt / potential)
-    share = sum(measured) / len(measured) if measured else DEFAULT_TURNOUT
-    share = max([share] + floors)          # it was killed with this much → at least that share shows up
-    return max(TURNOUT_RANGE[0], min(TURNOUT_RANGE[1], share))
+def round_hp(hp: float) -> int:
+    """A boss's HP is always a round number (nearest 5,000; 1,000 for small ones)."""
+    step = 5_000 if hp >= 200_000 else 1_000
+    return max(MIN_HP, int(round(hp / step)) * step)
 
 
 def _next_hp(now: datetime.datetime | None = None) -> int:
-    """Size the next boss so the server deals about TARGET_DAMAGE_SHARE of its HP:
-    server_potential (everyone online now, all hits) × the share of it that really shows up
-    (_turnout) ÷ the target share. A boss that was killed anyway also sets a floor of
-    KILLED_GROWTH × its HP. Falls back to the past bosses' own numbers when there is no
-    activity sample (fresh server)."""
+    """The ladder: the last boss of the SAME time window (the evening crowd is much bigger
+    than the noon one) × (1 + HP_STEP) if it was killed, × (1 − HP_STEP) if it escaped,
+    rounded. Seeded from server_potential when the window has no boss yet, or when the
+    killed one was far too small for the players who are online now."""
     now = now or timezone.now()
-    done = list(WorldBoss.objects.exclude(status=WorldBoss.ACTIVE).order_by("-id")[:12])
     window = _window_of(now)
-    same = [b for b in done if _window_of(b.spawned_at) == window][:HP_SAMPLE] or done[:HP_SAMPLE]
-    last = same[0] if same else None
+    last = next((b for b in WorldBoss.objects.exclude(status=WorldBoss.ACTIVE).order_by("-id")[:12]
+                 if _window_of(b.spawned_at) == window), None)
     potential = server_potential(now)
-    if potential > 0:
-        hp = int(potential * _turnout(same) / TARGET_DAMAGE_SHARE)
-    elif not done:
-        return DEFAULT_HP
+    estimate = potential * DEFAULT_TURNOUT / TARGET_DAMAGE_SHARE if potential > 0 else 0
+    if last is None:
+        return round_hp(estimate or DEFAULT_HP)
+    if last.status == WorldBoss.DEAD:
+        hp = last.max_hp * (1 + HP_STEP)
+        if last.max_hp < estimate * SEED_CATCHUP:
+            hp = estimate
     else:
-        potentials = [p for p in (potential_damage(b) for b in same) if p > 0]
-        if not potentials:
-            return max(MIN_HP, int(last.max_hp * 0.6))  # nobody came → an easier one next time
-        hp = int(sum(potentials) / len(potentials) / TARGET_DAMAGE_SHARE)
-    if last is not None and last.status == WorldBoss.DEAD:
-        hp = max(hp, int(last.max_hp * KILLED_GROWTH))
-    return max(MIN_HP, hp)
+        hp = last.max_hp * (1 - HP_STEP)
+    return round_hp(hp)
 
 
 def _spawn(now: datetime.datetime) -> WorldBoss:
@@ -311,39 +299,49 @@ def _settle(boss_id: int) -> list[tuple]:
     boss.settled = True
     boss.save(update_fields=["status", "settled"])
 
+    from game.buildings import grant_speedup_card
+
     entries = list(
         WorldBossHit.objects.filter(boss=boss, damage__gt=0).select_related("user").order_by("-damage", "id")
     )
     out: list[tuple] = []
-    if boss.status != WorldBoss.DEAD:
-        left = round(100 * boss.current_hp / max(1, boss.max_hp))
-        for e in entries:
-            if e.user.notifications_on:
-                out.append((e.user_id,
-                            f"💨 <b>{boss.name} فرار کرد!</b>\nهنوز <code>{left}٪</code> جون داشت. "
-                            "دفعه‌ی بعد بیشتر بیاید تا از پا دربیاد.", "worldboss"))
-        return out
-
-    top_n = max(3, int(len(entries) * TOP_SHARE + 0.999))
+    dead = boss.status == WorldBoss.DEAD
+    share = 1.0 if dead else (boss.max_hp - max(0, boss.current_hp)) / max(1, boss.max_hp)
+    chests = [tier for need, tier in MILESTONES if share >= need]
+    top3 = TOP3_DIAMONDS if dead else TOP3_DIAMONDS_ESCAPED
+    pct = round(100 * share)
     for rank, e in enumerate(entries, start=1):
         user = User.objects.select_for_update().get(id=e.user_id)
-        tier = KILL_CHEST_TOP if rank <= top_n else KILL_CHEST_ALL
-        chest = grant_chest_contents(user, tier, user.cup, source="worldboss")
-        diamonds = TOP3_DIAMONDS[rank - 1] if rank <= len(TOP3_DIAMONDS) else 0
-        if boss.killer_id == user.id:
-            diamonds += KILLER_DIAMONDS
+        got = [grant_chest_contents(user, tier, user.cup, source="worldboss") for tier in chests]
+        diamonds = top3[rank - 1] if rank <= len(top3) else 0
+        if dead:
+            diamonds += KILL_DIAMONDS_ALL
+            if boss.killer_id == user.id:
+                diamonds += KILLER_DIAMONDS
         if diamonds:
             User.objects.filter(pk=user.pk).update(diamonds=F("diamonds") + diamonds)
-        if user.notifications_on:
-            lines = [
-                f"🏆 <b>{boss.name} از پا دراومد!</b>",
-                f"رتبه‌ی تو: <b>{rank}</b> از <code>{len(entries)}</code> · آسیب: <code>{e.damage:,}</code>",
-                f"🎁 {_chest_line(chest)}",
-            ]
-            if diamonds:
-                lines.append(f"💎 جایزه‌ی ویژه: <code>{diamonds}</code> الماس"
-                             + (" (ضربه‌ی آخر مال تو بود!)" if boss.killer_id == user.id else ""))
-            out.append((user.id, "\n".join(lines), "worldboss"))
+        full_hits = e.hits >= HITS_PER_PLAYER
+        if full_hits:
+            grant_speedup_card(user, FULL_HITS_SPEEDUP_MINUTES, count=1)
+        if not user.notifications_on:
+            continue
+        lines = [
+            f"🏆 <b>{boss.name} از پا دراومد!</b>" if dead
+            else f"💨 <b>{boss.name} فرار کرد!</b> سرور <code>{pct}%</code> جونش رو زد.",
+            f"رتبه‌ی تو: <b>{rank}</b> از <code>{len(entries)}</code>",
+            f"آسیب تو: <code>{e.damage:,}</code>",
+        ]
+        lines += [f"🎁 {_chest_line(c)}" for c in got]
+        if diamonds:
+            lines.append(f"💎 الماس: <code>{diamonds}</code>"
+                         + (" (ضربه‌ی آخر مال تو بود!)" if dead and boss.killer_id == user.id else ""))
+        if full_hits:
+            lines.append(f"⏱ کارت سرعت {FULL_HITS_SPEEDUP_MINUTES} دقیقه‌ای (هر {HITS_PER_PLAYER} ضربه رو زدی)")
+        if not dead:
+            nxt = next((need for need, _tier in MILESTONES if share < need), None)
+            lines.append(f"<i>برای جعبه‌ی بعدی باید <code>{round(nxt * 100)}%</code> جونش زده بشه.</i>" if nxt
+                         else "<i>فقط یه قدم تا از پا درآوردنش مونده بود!</i>")
+        out.append((user.id, "\n".join(lines), "worldboss"))
     return out
 
 

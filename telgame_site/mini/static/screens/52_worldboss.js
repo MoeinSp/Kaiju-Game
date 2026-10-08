@@ -16,9 +16,12 @@
       li("clock", "var(--accent)", "روزی دو بار (بین ساعت " + win + ") یه غول برای کل سرور پیدا می‌شه و " + K.n(r.minutes) + " دقیقه می‌مونه.") +
       li("sword", "var(--fire)", "هر نفر " + K.n(r.hits) + " ضربه داره. هر ضربه " + K.n(r.energy_cost) + " انرژی می‌خواد و همون لحظه طلا و DNA می‌ده.") +
       li("up", "var(--good)", "عنصر هیولات به عنصر غول برتری داشته باشه: +" + K.n(r.advantage_pct) + "٪ آسیب.") +
-      li("wind", "var(--warn)", "غول خیلی جون داره و بیشتر وقت‌ها آخرش فرار می‌کنه. این عادیه: جایزه‌ی هر ضربه‌ات همون لحظه قطعی شده.") +
-      li("chest", "var(--gold)", "اگه یه روز با هم از پا درش بیارید همه «" + K.esc(r.chest_all) + "» می‌گیرن؛ " + K.n(r.top_share_pct) + "٪ برترِ آسیب (دست‌کم ۳ نفر اول) «" + K.esc(r.chest_top) + "».") +
-      li("gem", "var(--diamond)", "نفر اول تا سوم: " + r.top3_diamonds.map(function (x) { return K.n(x); }).join(" / ") + " الماس · ضربه‌ی آخر: +" + K.n(r.killer_diamonds) + " الماس.") +
+      li("chest", "var(--gold)", "آخرِ هر غول، همه‌ی کسایی که ضربه زدن بر اساس جونی که کل سرور زده جعبه می‌گیرن: " +
+        (r.milestones || []).map(function (m) { return K.n(m.pct) + "٪ ← «" + K.esc(m.chest) + "»"; }).join("، ") + ". هر پله جعبه‌ی خودش رو اضافه می‌کنه.") +
+      li("boss", "var(--mythic)", "اگه از پا دربیاد، همه " + K.n(r.kill_diamonds_all) + " الماس هم می‌گیرن.") +
+      li("gem", "var(--diamond)", "نفر اول تا سوم: " + (r.top3_diamonds_escaped || []).map(function (x) { return K.n(x); }).join(" / ") + " الماس؛ اگه غول کشته بشه " +
+        r.top3_diamonds.map(function (x) { return K.n(x); }).join(" / ") + " · ضربه‌ی آخر: +" + K.n(r.killer_diamonds) + ".") +
+      li("clock", "var(--accent)", "هر " + K.n(r.hits) + " ضربه‌ات رو بزنی یه کارت سرعت " + K.n(r.full_hits_speedup) + " دقیقه‌ای هم می‌گیری.") +
       "</div>";
   }
   function topList(top) {
@@ -66,8 +69,8 @@
         if (l.my_damage > 0) {
           h += '<div class="wb-stats"><div><small>آسیب تو</small><b class="num">' + Number(l.my_damage).toLocaleString("en-US") + '</b></div><div><small>رتبه‌ی تو</small><b class="num">' + Number(l.my_rank || 0) + "</b></div></div>" +
             '<div class="wb-last-note">' + K.ic(dead ? "gift" : "check") + "<span>" +
-            (dead ? (l.killer ? "ضربه‌ی آخر مال تو بود. " : "") + (l.settled ? "جعبه‌ی جایزه‌ات به حسابت اومده." : "جعبه‌ی جایزه‌ات تا چند دقیقه‌ی دیگه می‌رسه.")
-                  : "طلا و DNA هر ضربه‌ات همون لحظه به حسابت اومد. فرار کردن غول عادیه؛ از پا درآوردنش جایزه‌ی ویژه داره.") + "</span></div>";
+            (dead ? (l.killer ? "ضربه‌ی آخر مال تو بود. " : "") + (l.settled ? "جایزه‌ی پایانی به حسابت اومده." : "جایزه‌ی پایانی تا چند دقیقه‌ی دیگه می‌رسه.")
+                  : (l.settled ? "جایزه‌ی پایانی (بر اساس جونی که سرور زد) به حسابت اومده." : "طلا و DNA هر ضربه‌ات همون لحظه اومد؛ جایزه‌ی پایانی تا چند دقیقه‌ی دیگه می‌رسه.")) + "</span></div>";
         } else {
           h += '<div class="wb-last-note muted">' + K.ic("info") + "<span>توی این نبرد ضربه‌ای نزدی. غول بعدی رو از دست نده.</span></div>";
         }
