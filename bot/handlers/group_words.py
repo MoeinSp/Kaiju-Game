@@ -20,7 +20,7 @@ from telegram.ext import (CallbackQueryHandler, CommandHandler, ContextTypes,
                           MessageHandler, filters)
 
 from bot.utils import alert_text
-from bio_lab.repository import creature_name, display_name, get_active_creature, get_or_create_group, get_or_create_user, lab_display, mention
+from bio_lab.repository import creature_name, display_name, get_active_creature, get_or_create_group, get_or_create_user, lab_display, lab_mention, mention
 from bot.buttons import BACK, BATTLE, BUILD, CONFIRM, NAV, PRIMARY, SHOP, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from config import BOT_USERNAME
@@ -1442,14 +1442,14 @@ def _reward_text(user, result: dict) -> str:
     div = "━━━━━━━━━━━━━━━━━━━━"
     if not result["ok"]:
         return (
-            f"⏳ <b>{display_name(user)}</b> هنوز زوده!\n"
+            f"⏳ <b>{lab_mention(user)}</b> هنوز زوده!\n"
             f"تا جایزه‌ی بعدی <code>{_format_mmss(result['seconds_left'])}</code> مونده."
         )
 
     # off cooldown but a chance-based miss — still starts the fresh random cooldown
     if not result.get("won"):
         return (
-            f"🎲 <b>{display_name(user)}</b>، این‌بار چیزی نبود!\n"
+            f"🎲 <b>{lab_mention(user)}</b>، این‌بار چیزی نبود!\n"
             f"<code>{_format_mmss(result['next_wait'])}</code> دیگه دوباره «جایزه» یا «کایجو» بفرست."
         )
 
@@ -1470,7 +1470,7 @@ def _reward_text(user, result: dict) -> str:
 
     lines = [
         f"{get_emoji('gift')} <b>صندوق پاداش باز شد!</b>",
-        f"👤 بازیکن: <b>{display_name(user)}</b>",
+        f"👤 بازیکن: <b>{lab_mention(user)}</b>",
         div,
         "📦 <b>غنیمت دریافتی:</b>",
         f"▫️ {prize}",
