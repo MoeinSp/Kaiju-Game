@@ -1156,7 +1156,7 @@ def _raid_leaderboard_text(lb: dict) -> str:
     else:
         for i, r in enumerate(lb["rows"][:15]):
             lines.append(
-                f"{_raid_rank_label(i)} <b>{r['name']}</b>\n"
+                f"{_raid_rank_label(i)} <b>{r.get('mention') or r['name']}</b>\n"
                 f"💥 آسیب: <code>{r['damage']:,}</code> (<code>{r['share_pct']}%</code>)\n"
                 f"{get_emoji('coin')} طلا: <code>+{r['coins']:,}</code>\n"
                 f"{get_emoji('dna')} پاداش DNA: <code>+{r['dna']:,}</code>"
