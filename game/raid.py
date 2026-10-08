@@ -192,7 +192,7 @@ def damage_leaderboard(alliance_id: int) -> dict | None:
     """Read-only standings for the ALLIANCE's active boss: each attacker's total damage
     and the reward they've ALREADY earned from it (paid per hit). None when there's no
     active boss."""
-    from bio_lab.repository import display_name
+    from bio_lab.repository import display_name, lab_mention
 
     boss = get_active_boss(alliance_id)
     if boss is None:
@@ -205,6 +205,7 @@ def damage_leaderboard(alliance_id: int) -> dict | None:
         user = User.objects.filter(id=uid).first()
         rows.append({
             "name": display_name(user) if user else str(uid),
+            "mention": lab_mention(user) if user else str(uid),   # HTML: lab name linked to the player
             "damage": t["damage"],
             "share_pct": round(100 * t["damage"] / total_damage),
             "dna": t["dna"],
