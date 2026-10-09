@@ -175,6 +175,25 @@ def delete_backup(name: str) -> None:
     resolve_backup(name).unlink()
 
 
+AUTO_BACKUPS_KEPT = 2
+
+
+def prune_auto_backups(keep: int = AUTO_BACKUPS_KEPT) -> int:
+    """Delete all but the newest `keep` AUTOMATIC backups (`*_auto.json.gz`). Every auto
+    backup is sent to the owner on Telegram the moment it is made, so the server copy is
+    only a short safety net — left alone they filled the disk (1,030 files, 4.4 GB) and
+    took the database down on 2026-10-09. Manual and uploaded backups are never touched."""
+    files = sorted(backup_dir().glob("*_auto.json.gz"), key=lambda f: f.name, reverse=True)
+    removed = 0
+    for old in files[max(0, keep):]:
+        try:
+            old.unlink()
+            removed += 1
+        except OSError:
+            pass
+    return removed
+
+
 def read_payload(source: Path | BinaryIO) -> dict[str, Any]:
     """Parse and sanity-check an archive without applying it."""
     try:

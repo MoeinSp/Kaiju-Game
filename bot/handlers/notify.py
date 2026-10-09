@@ -487,6 +487,33 @@ async def autobackup_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         await run_db(botconfig.mark_backup_done)
     except (Forbidden, TelegramError, OSError):
         pass
+    finally:
+        # the copy on Telegram is the backup; the server only keeps the newest couple
+        from game.backup import prune_auto_backups
+
+        try:
+            await run_db(prune_auto_backups)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+CACHE_PRUNE_SECONDS = 1800
+
+
+async def cache_prune_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Keep the composited-image cache small (game.media.prune_cache)."""
+    from game.media import prune_cache
+
+    try:
+        removed, freed = await run_db(prune_cache)
+        if removed:
+            import logging
+
+            logging.getLogger(__name__).info("image cache: removed %s files, %.0f MB", removed, freed / 1048576)
+    except Exception:  # noqa: BLE001 — housekeeping must never take the bot down
+        import logging
+
+        logging.getLogger(__name__).exception("image cache prune failed")
 
 
 async def metrics_handler(update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -546,3 +573,4 @@ def register(application) -> None:
     job_queue.run_repeating(outbox_job, interval=OUTBOX_INTERVAL_SECONDS, first=20)
     job_queue.run_repeating(metrics_prune_job, interval=86400, first=3600)
     job_queue.run_repeating(autobackup_job, interval=AUTOBACKUP_CHECK_SECONDS, first=120)
+    job_queue.run_repeating(cache_prune_job, interval=CACHE_PRUNE_SECONDS, first=90)

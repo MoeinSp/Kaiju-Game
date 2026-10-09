@@ -20,6 +20,54 @@ CHESTS_DIR = ASSETS_DIR / "chests"
 FONTS_DIR = BASE_DIR / "assets" / "fonts"
 
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+# Composited cards live in CACHE_DIR, inside the container. Two kinds are made PER ITEM
+# (an equipment card per item id, a collage per loot batch) and are almost never asked for
+# twice — 5,600 of them (1 GB) appeared in 28 hours. They are dropped after a few hours;
+# everything else (creature/building cards, shared by many players) stays until the
+# folder passes CACHE_MAX_BYTES, then the oldest go first. A deleted card is simply drawn
+# again the next time someone opens it.
+CACHE_ONE_OFF_PREFIXES = ("equip_card_", "loot_batch_")
+CACHE_ONE_OFF_MAX_AGE = 3 * 3600
+CACHE_MAX_BYTES = 300 * 1024 * 1024
+
+
+def prune_cache() -> tuple[int, int]:
+    """Trim CACHE_DIR (top-level files only — the Mini App's thumbs/ folder is separate).
+    Returns (files removed, bytes freed). Safe to run at any time."""
+    import time
+
+    now = time.time()
+    kept: list[tuple[float, int, Path]] = []
+    removed = freed = 0
+    for f in CACHE_DIR.iterdir():
+        try:
+            if not f.is_file():
+                continue
+            st = f.stat()
+        except OSError:
+            continue
+        if f.name.startswith(CACHE_ONE_OFF_PREFIXES) and now - st.st_mtime > CACHE_ONE_OFF_MAX_AGE:
+            try:
+                f.unlink()
+                removed += 1
+                freed += st.st_size
+            except OSError:
+                pass
+            continue
+        kept.append((st.st_mtime, st.st_size, f))
+    total = sum(size for _m, size, _f in kept)
+    for _mtime, size, f in sorted(kept):          # oldest first
+        if total <= CACHE_MAX_BYTES:
+            break
+        try:
+            f.unlink()
+            removed += 1
+            freed += size
+            total -= size
+        except OSError:
+            pass
+    return removed, freed
 FEATURES_DIR.mkdir(parents=True, exist_ok=True)
 DROPS_DIR.mkdir(parents=True, exist_ok=True)
 CHESTS_DIR.mkdir(parents=True, exist_ok=True)
