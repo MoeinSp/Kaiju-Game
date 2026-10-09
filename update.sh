@@ -23,5 +23,12 @@ echo "==> applying migrations (via the web container's entrypoint)"
 sleep 8
 docker compose exec -T web python manage.py migrate --noinput 2>&1 | tail -3 || true
 
+# Every deploy leaves the previous image and its build layers behind; on this small shared
+# disk they added up to several GB (the disk filled on 2026-10-09). Dangling images and
+# build cache older than three days are safe to drop — they are only a rebuild speed-up.
+echo "==> cleaning old images and build cache"
+docker image prune -f >/dev/null 2>&1 || true
+docker builder prune -f --filter until=72h >/dev/null 2>&1 || true
+
 echo "==> done: now on $(git rev-parse --short HEAD)"
 docker compose ps --format "  {{.Name}}: {{.Status}}"
