@@ -461,7 +461,8 @@ async def _begin_offer(message, kind: str, sender, receiver, item_id: int, desc:
                        sender_name=lab_mention(sender), receiver_name=lab_mention(receiver),
                        sender_cd=sender_cd, receiver_cd=receiver_cd)
     reset_line = f"{_CREATURE_RESET_NOTE}\n" if kind == "c" else ""
-    cd_line = f"⏳ کول‌داون فرستنده: <code>{sender_cd}</code> ساعت\n⏳ کول‌داون گیرنده: <code>{receiver_cd}</code> ساعت\n" if kind == "c" else ""
+    cd_line = (("⏳ کول‌داون فرستنده: ندارد\n" if not sender_cd else f"⏳ کول‌داون فرستنده: <code>{sender_cd}</code> ساعت\n")
+               + f"⏳ کول‌داون گیرنده: <code>{receiver_cd}</code> ساعت\n") if kind == "c" else ""
     await message.reply_text(
         f"🤝 <b>پیشنهاد انتقال</b>\n"
         f"{_RULE}\n"
@@ -489,7 +490,7 @@ async def transfer_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text(
             "🦖 برای انتقال هیولا، روی پیام گیرنده <b>ریپلای</b> کن و بنویس «انتقال کایجو [کد]».\n"
             "<i>کد هیولا رو از «کلکسیون» توی پیوی ربات می‌بینی. اول قیمت می‌ذاری، بعد گیرنده قیمت و "
-            "کارمزد الماس رو می‌بینه و تأیید می‌کنه؛ برای فرستنده کول‌داون پایه (۸ تا ۲۴ ساعت) و برای گیرنده بر اساس ستاره‌ها (پایه × ۲ به توان ستاره) فعال می‌شه.</i>\n"
+            "کارمزد الماس رو می‌بینه و تأیید می‌کنه. فرستنده کول‌داون نداره؛ گیرنده بسته به نایابی ۲ تا ۱۲ ساعت صبر می‌کنه.</i>\n"
             f"{_CREATURE_RESET_NOTE}\n"
             "<i>🤝 انتقال به «تالار تجارت» نیاز داره؛ برای هیولای N⭐ باید هر دو طرف تالار تجارت سطح N داشته باشن.</i>\n\n"
             + transfer.creature_prices_text(),
@@ -695,7 +696,7 @@ def _offer_receiver_text(offer: dict) -> str:
     if offer.get("kind") == "c":
         s_cd = offer.get("sender_cd", 24)
         r_cd = offer.get("receiver_cd", 24)
-        cd_info = f"⏳ کول‌داون فرستنده: <code>{s_cd}</code> ساعت\n⏳ کول‌داون گیرنده: <code>{r_cd}</code> ساعت"
+        cd_info = ("⏳ کول‌داون فرستنده: ندارد" if not s_cd else f"⏳ کول‌داون فرستنده: <code>{s_cd}</code> ساعت") + f"\n⏳ کول‌داون گیرنده: <code>{r_cd}</code> ساعت"
     else:
         cd_info = "⏳ کول‌داون: <code>۱</code> روز برای هر دو طرف"
     return (
@@ -888,7 +889,7 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
             c = result["creature"]
             s_cd = result.get("sender_cd", offer.get("sender_cd", 24))
             r_cd = result.get("receiver_cd", offer.get("receiver_cd", 24))
-            cd_text = f"⏳ کول‌داون فرستنده: <code>{s_cd}</code> ساعت\n⏳ کول‌داون گیرنده: <code>{r_cd}</code> ساعت"
+            cd_text = ("⏳ کول‌داون فرستنده: ندارد" if not s_cd else f"⏳ کول‌داون فرستنده: <code>{s_cd}</code> ساعت") + f"\n⏳ کول‌داون گیرنده: <code>{r_cd}</code> ساعت"
             body = (f"🦖 هیولای <b>{creature_name(c)}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level} "
                     f"به <b>{lab_mention(receiver)}</b> منتقل شد! ✅\n"
                     f"<i>♻️ لِوِل و ارتقاهای بدنی ریست شد؛ فقط ستاره‌ها باقی ماندند.</i>")

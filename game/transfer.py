@@ -2,7 +2,8 @@
 
 Rules (see constants.py):
 * the RECEIVER pays diamonds, scaled by what they're getting;
-* a 1-day cooldown applies to BOTH sides, separately for creatures and gear;
+* creatures: no cooldown for the sender, a short one (2-12 h by rarity) for the receiver;
+  gear: a 1-day cooldown for both sides;
 * the receiver must have progressed far enough (building levels) to hold it, which
   is the real gate against a fresh fake account instantly hoarding rare items.
 Gold transfers stay in game/… «انتقال طلا» — this module is only creatures/gear.

@@ -667,25 +667,24 @@ DUEL_WAGER_MAX = 500
 # account can't instantly stockpile high-star creatures.
 TRANSFER_COOLDOWN_HOURS = 24  # default / equipment transfer, and the mythic base below
 
-# The KAIJU transfer cooldown scales with the transferred creature's rarity AND star:
-# a per-rarity base (common 8h … mythic 24h) times the number of base monsters folded
-# into it (2^(star-1): a 3★ = 4 monsters → ×4). So handing over a mythic 3★ locks both
-# sides for 24×4 = 96h, while a common 1★ is just 8h. (Equipment transfer stays flat.)
+# KAIJU transfer cooldown (changed 2026-10-14 after many player complaints): the SENDER has
+# none, and the RECEIVER gets a short flat lock by rarity — no longer ×2 per star (a mythic
+# 5★ used to lock the receiver for 384 h ≈ 16 days on top of a 1,600-diamond fee). The
+# diamond fee, the receiver's building requirements and the sender's arena-win gate are what
+# stop alt-account farming; the cooldown only keeps one account from being refilled nonstop.
 TRANSFER_COOLDOWN_HOURS_BY_RARITY = {
-    "common": 8, "rare": 12, "epic": 16, "legendary": 20, "mythic": 24,
+    "common": 2, "rare": 4, "epic": 6, "legendary": 8, "mythic": 12,
 }
 
 
 def transfer_sender_cooldown_hours(rarity: str) -> int:
-    """Kaiju-transfer cooldown for the sender: always the 1-star base cooldown for that rarity."""
-    return TRANSFER_COOLDOWN_HOURS_BY_RARITY.get(rarity, TRANSFER_COOLDOWN_HOURS)
+    """Kaiju-transfer cooldown for the sender: none."""
+    return 0
 
 
 def transfer_receiver_cooldown_hours(rarity: str, star_level: int) -> int:
-    """Kaiju-transfer cooldown for the receiver: scales by 2^(star-1) * base_hours."""
-    base = TRANSFER_COOLDOWN_HOURS_BY_RARITY.get(rarity, TRANSFER_COOLDOWN_HOURS)
-    monsters = 2 ** (max(1, int(star_level)) - 1)
-    return base * monsters
+    """Kaiju-transfer cooldown for the receiver: flat by rarity (2-12 h), star does not matter."""
+    return TRANSFER_COOLDOWN_HOURS_BY_RARITY.get(rarity, 12)
 
 
 def transfer_cooldown_hours(rarity: str, star_level: int) -> int:
