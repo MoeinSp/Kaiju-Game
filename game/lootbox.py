@@ -180,10 +180,31 @@ def _charge_diamond_box(user: User, cfg: dict, times: int) -> None:
     user.save(update_fields=["diamonds"])
 
 
+def pity_left(user: User, tier: str) -> int:
+    """How many more opens of this box until its rarity is guaranteed (1 = the next one)."""
+    misses = int((user.box_pity or {}).get(tier, 0))
+    return max(1, constants.DIAMOND_BOX_PITY - misses)
+
+
 def _diamond_box_roll_once(user: User, cfg: dict, tier: str) -> dict:
-    rarity = roll_rarity(cfg["weights"])
+    """One creature from a diamond box. Tracks the guarantee: after DIAMOND_BOX_PITY - 1
+    opens in a row without the box's rarity (or better), the next roll only draws from
+    that rarity and above. The caller holds the user row lock."""
+    order = constants.RARITY_ORDER
+    target = cfg.get("pity")
+    pity = dict(user.box_pity or {})
+    misses = int(pity.get(tier, 0))
+    weights = cfg["weights"]
+    forced = bool(target) and misses >= constants.DIAMOND_BOX_PITY - 1
+    if forced:
+        weights = {r: w for r, w in weights.items() if order.index(r) >= order.index(target)}
+    rarity = roll_rarity(weights)
+    if target:
+        pity[tier] = 0 if order.index(rarity) >= order.index(target) else misses + 1
+        user.box_pity = pity
+        User.objects.filter(pk=user.pk).update(box_pity=pity)
     creature = _roll_creature(user, rarity)
-    return {"kind": "creature", "rarity": rarity, "creature": creature, "tier": tier}
+    return {"kind": "creature", "rarity": rarity, "creature": creature, "tier": tier, "guaranteed": forced}
 
 
 def can_claim_free_diamond_box(user: User, tier: str) -> bool:

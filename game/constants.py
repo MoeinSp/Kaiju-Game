@@ -1350,27 +1350,37 @@ WHEEL_PRIZES = [
 # diamonds" tier. Each tier is a fully independent rarity-weight table; the
 # top tier deliberately skews heavily toward legendary/mythic. ─────────────────
 DIAMOND_BOX_TIERS = {
+    # keys stay bronze/silver/gold/legendary (callbacks, daily free boxes, metrics use them);
+    # the NAMES say what the box is for. Odds raised 2026-10-14 — a mythic used to cost
+    # 2,000-10,000 diamonds on average from these boxes against 300-500 in the black market.
     "bronze": {
-        "label": "🥉 باکس هیولا برنزی",
+        "label": "🔵 باکس نایاب",
         "cost_diamonds": 20,
-        "weights": {"common": 70, "rare": 22, "epic": 6, "legendary": 1.8, "mythic": 0.2},
+        "weights": {"common": 48, "rare": 34, "epic": 13, "legendary": 4.3, "mythic": 0.7},
+        "pity": "rare",
     },
     "silver": {
-        "label": "🥈 باکس هیولا نقره‌ای",
+        "label": "🟣 باکس حماسی",
         "cost_diamonds": 50,
-        "weights": {"common": 50, "rare": 30, "epic": 14, "legendary": 5, "mythic": 1},
+        "weights": {"common": 22, "rare": 35, "epic": 29, "legendary": 11.5, "mythic": 2.5},
+        "pity": "epic",
     },
     "gold": {
-        "label": "🥇 باکس هیولا طلایی",
+        "label": "🟡 باکس افسانه‌ای",
         "cost_diamonds": 120,
-        "weights": {"common": 25, "rare": 30, "epic": 25, "legendary": 15, "mythic": 5},
+        "weights": {"rare": 22, "epic": 40, "legendary": 27, "mythic": 11},
+        "pity": "legendary",
     },
     "legendary": {
-        "label": "🔴 جعبه‌ی افسانه‌ای",
+        "label": "🔴 باکس اساطیری",
         "cost_diamonds": 300,
-        "weights": {"common": 5, "rare": 15, "epic": 30, "legendary": 35, "mythic": 15},
+        "weights": {"legendary": 62, "mythic": 38},
+        "pity": "mythic",
     },
 }
+# Guarantee: within every DIAMOND_BOX_PITY opens of the same box at least one creature of
+# the box's own rarity («pity» above) or better — the 5th open after four misses is forced.
+DIAMOND_BOX_PITY = 5
 
 # ── Blacksmith: levels equipment with pure gold, no duplicate needed (that's what
 # game.equipment.upgrade_item is for). The tradeoff is risk — past a safe floor the

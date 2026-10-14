@@ -305,6 +305,13 @@ def _can_claim_free_diamond_sync(tg_user, tier: str) -> bool:
     return can_claim_free_diamond_box(user, tier)
 
 
+def _pity_left_sync(tg_user, tier: str) -> int:
+    from game.lootbox import pity_left
+
+    user, _ = get_or_create_user(tg_user)
+    return pity_left(user, tier)
+
+
 def _free_diamond_boxes_sync(tg_user) -> set[str]:
     from game.lootbox import can_claim_free_diamond_box
 
@@ -360,7 +367,7 @@ async def diamond_box_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
 
 
-def _diamond_box_detail_text(tier: str, is_free: bool = False) -> str:
+def _diamond_box_detail_text(tier: str, is_free: bool = False, pity_left: int | None = None) -> str:
     cfg = constants.DIAMOND_BOX_TIERS[tier]
     if tier in ("bronze", "silver"):
         if is_free:
@@ -379,6 +386,12 @@ def _diamond_box_detail_text(tier: str, is_free: bool = False) -> str:
     ]
     for rarity, weight in cfg["weights"].items():
         lines.append(f"  • {constants.RARITY_LABELS[rarity]}: <code>{weight:g}٪</code>")
+    if cfg.get("pity"):
+        target = constants.RARITY_LABELS[cfg["pity"]]
+        lines += ["", f"🎯 <b>تضمین:</b> از هر <code>{constants.DIAMOND_BOX_PITY}</code> باکس حداقل یکی {target} یا بهتره."]
+        if pity_left is not None:
+            lines.append("✨ باکس بعدی حتماً " + target + " یا بهتره!" if pity_left <= 1
+                         else f"⏳ حداکثر <code>{pity_left}</code> باکس دیگه تا {target} تضمینی.")
     return "\n".join(lines)
 
 
@@ -408,8 +421,9 @@ async def diamond_box_pick_callback(update: Update, context: ContextTypes.DEFAUL
     is_free = False
     if tier in ("bronze", "silver"):
         is_free = await run_db(_can_claim_free_diamond_sync, update.effective_user, tier)
+    left = await run_db(_pity_left_sync, update.effective_user, tier)
     await safe_edit_message_text(
-        query, _diamond_box_detail_text(tier, is_free), parse_mode="HTML", reply_markup=_diamond_box_detail_keyboard(tier, is_free)
+        query, _diamond_box_detail_text(tier, is_free, left), parse_mode="HTML", reply_markup=_diamond_box_detail_keyboard(tier, is_free)
     )
 
 

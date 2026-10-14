@@ -87,6 +87,8 @@ def _story_reward(reward: dict) -> dict:
            "tickets": reward.get("biocrate_tickets", 0)}
     if reward.get("speedup"):
         out["speedup"] = speedup_dict(reward["speedup"])
+    if reward.get("food"):
+        out["food"] = {"tier": reward["food"][0], "count": reward["food"][1]}
     return out
 
 

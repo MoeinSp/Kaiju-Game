@@ -141,6 +141,8 @@ class User(models.Model):
     # ── Story Quests & Onboarding (خط داستانی فصلی و آموزش اولیه) ──
     story_step = models.IntegerField(default=0)
     onboarding_completed = models.BooleanField(default=False)
+    # diamond-box guarantee (game/lootbox.py): opens in a row WITHOUT the box's target rarity, per tier
+    box_pity = models.JSONField(default=dict, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
 

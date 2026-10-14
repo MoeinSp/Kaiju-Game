@@ -22,7 +22,7 @@ EVENTS_HALL_REQ = 3  # the «رویدادهای ویژه» section (and its dail
 # a building's output is only offered once this long has passed since it was last
 # collected — otherwise «دریافت همه» lit up again a minute later for a handful of coins
 COLLECT_MIN_MINUTES = 10
-_BOX_NAMES = {"bronze": ("🥉", "باکس برنزی"), "silver": ("🥈", "باکس نقره‌ای")}
+_BOX_NAMES = {"bronze": ("🔵", "باکس نایاب"), "silver": ("🟣", "باکس حماسی")}
 
 
 def _pending_buildings(user: User) -> list[tuple[Building, int, str]]:

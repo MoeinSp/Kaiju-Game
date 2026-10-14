@@ -342,9 +342,9 @@ def _decorate(item) -> dict:
         rows = []
         unclaimed = payload or ["bronze", "silver"]
         if "bronze" in unclaimed:
-            rows.append([btn("باز کردن باکس برنزی (رایگان)", emoji_key="btn_diamond_box", style=SHOP, callback_data="dbox_pick:bronze")])
+            rows.append([btn("باز کردن باکس نایاب (رایگان)", emoji_key="btn_diamond_box", style=SHOP, callback_data="dbox_pick:bronze")])
         if "silver" in unclaimed:
-            rows.append([btn("باز کردن باکس نقره‌ای (رایگان)", emoji_key="btn_diamond_box", style=SHOP, callback_data="dbox_pick:silver")])
+            rows.append([btn("باز کردن باکس حماسی (رایگان)", emoji_key="btn_diamond_box", style=SHOP, callback_data="dbox_pick:silver")])
         rows.append([btn("منوی اصلی", style=NAV, callback_data="menu:me")])
         reply_markup = InlineKeyboardMarkup(rows)
         photo_path = get_feature_image_path("diamond_box")

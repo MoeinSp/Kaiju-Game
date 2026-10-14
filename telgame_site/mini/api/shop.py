@@ -84,6 +84,12 @@ def _best_index(summary: dict) -> int:
 
 
 # ── boxes ─────────────────────────────────────────────────────────────────────
+def _pity_left(user, tier: str) -> int:
+    from game.lootbox import pity_left
+
+    return pity_left(user, tier)
+
+
 def _free_tiers(user) -> list[str]:
     from game.lootbox import can_claim_free_diamond_box
 
@@ -122,6 +128,8 @@ def _boxes_payload(user) -> dict:
             "bulk_cost": BULK_PAY * cfg["cost_diamonds"],
             "daily_free": tier in FREE_BOX_TIERS, "free": tier in free,
             "odds": [{"rarity": r, "pct": f"{w:g}"} for r, w in cfg["weights"].items()],
+            "pity_rarity": cfg.get("pity"), "pity_every": constants.DIAMOND_BOX_PITY,
+            "pity_left": _pity_left(user, tier),
         })
     return {
         "tickets": user.biocrate_tickets, "gold": gold, "diamond": diamond,

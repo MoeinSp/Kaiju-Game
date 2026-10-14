@@ -3625,7 +3625,7 @@ async def gift_all_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 _STAT_ACTION_LABELS = {
-    "free_silver_box": "باکس نقره‌ای رایگان", "free_bronze_box": "باکس برنزی رایگان",
+    "free_silver_box": "باکس حماسی رایگان", "free_bronze_box": "باکس نایاب رایگان",
     "word_reward": "جایزه‌ی کلمه (گروه)", "group_jackpot": "جک‌پات گروه", "dispatch": "مأموریت اعزامی",
     "worldboss_hit": "ضربه به غول", "diamond_vein": "رگه‌ی الماس", "energy_capsule": "کپسول انرژی",
     "gold_transfer_received": "دریافت انتقال طلا", "duel_loss": "باخت نبرد گروهی",
