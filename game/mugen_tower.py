@@ -53,16 +53,24 @@ def _curve(floor: int) -> int:
 
 
 def floor_guardian_power(floor: int) -> int:
-    """Power of floor N's guardian. Floors 1-60 follow the original curve. Above that the
-    old curve outgrew the strongest kaiju the game allows (MAX_KAIJU_POWER = 11,500 from
-    about floor 73, 17,500 at floor 100), so those floors were impossible without the
-    element advantage — and 82+ impossible even with it. Now floors 61-100 climb in a
-    straight line from the floor-60 guardian to exactly MAX_KAIJU_POWER at floor 100: a
-    maxed kaiju clears the whole tower (a tie goes to the challenger), the right element
-    makes it easier."""
+    """Power of floor N's guardian. Floors 1-60 follow the original curve; from there each
+    guardian climbs in a straight line to the floor-100 ceiling, and the ceiling depends on
+    whether the guardian's element CAN be countered:
+
+    * fire / water / earth / electric — something beats each of them, so their line ends
+      at MAX_KAIJU_POWER × the element advantage (11,500 × 1.2 = 13,800). On the top floors
+      even a maxed kaiju has to bring the right element: that is the point of the tower.
+    * crystal / plasma — no element beats them (constants.ELEMENT_STRONG_AGAINST), so the
+      advantage can never help; their line ends at MAX_KAIJU_POWER, beatable by a maxed
+      kaiju of any element (a tie goes to the challenger)."""
     if floor <= CURVE_KNEE:
         return _curve(floor)
-    knee, top = _curve(CURVE_KNEE), constants.MAX_KAIJU_POWER
+    _name, element, _rarity = get_floor_guardian_info(floor)
+    counterable = any(constants.is_strong_against(e, element) for e in constants.ELEMENTS)
+    top = constants.MAX_KAIJU_POWER
+    if counterable:
+        top = int(top * constants.ELEMENT_ADVANTAGE_POWER_FACTOR)
+    knee = _curve(CURVE_KNEE)
     step = (top - knee) / (TOWER_TOP_FLOOR - CURVE_KNEE)
     return round(knee + step * (min(floor, TOWER_TOP_FLOOR) - CURVE_KNEE))
 

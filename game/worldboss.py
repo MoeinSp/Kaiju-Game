@@ -40,7 +40,7 @@ DURATION_MINUTES = 30
 HITS_PER_PLAYER = 3
 ENERGY_COST = 1
 # (start hour, end hour) in the game timezone — one boss per window, at a random minute
-SPAWN_WINDOWS = ((12, 15), (19, 23))
+SPAWN_WINDOWS = ((15, 18), (19, 22))   # afternoon/evening only — many players are at school in the morning
 
 DAMAGE_SWING = (0.90, 1.10)
 # reward per hit, as a share of the damage dealt (damage ≈ the creature's power). One hit
