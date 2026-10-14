@@ -44,9 +44,27 @@ GUARDIAN_SUFFIXES = [
 MUGEN_ENERGY_COST = 3  # was 5 when the bar was 50 (5 × 30/50)
 
 
-def floor_guardian_power(floor: int) -> int:
-    """Power curve for floor N: smooth progression starting from ~80 to thousands."""
+TOWER_TOP_FLOOR = 100
+CURVE_KNEE = 60   # up to here the original curve; above it a straight climb to the top
+
+
+def _curve(floor: int) -> int:
     return max(50, round(50 + (floor ** 1.32) * 40))
+
+
+def floor_guardian_power(floor: int) -> int:
+    """Power of floor N's guardian. Floors 1-60 follow the original curve. Above that the
+    old curve outgrew the strongest kaiju the game allows (MAX_KAIJU_POWER = 11,500 from
+    about floor 73, 17,500 at floor 100), so those floors were impossible without the
+    element advantage — and 82+ impossible even with it. Now floors 61-100 climb in a
+    straight line from the floor-60 guardian to exactly MAX_KAIJU_POWER at floor 100: a
+    maxed kaiju clears the whole tower (a tie goes to the challenger), the right element
+    makes it easier."""
+    if floor <= CURVE_KNEE:
+        return _curve(floor)
+    knee, top = _curve(CURVE_KNEE), constants.MAX_KAIJU_POWER
+    step = (top - knee) / (TOWER_TOP_FLOOR - CURVE_KNEE)
+    return round(knee + step * (min(floor, TOWER_TOP_FLOOR) - CURVE_KNEE))
 
 
 def get_floor_guardian_info(floor: int) -> tuple[str, str, str]:

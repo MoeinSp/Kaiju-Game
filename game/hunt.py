@@ -208,6 +208,35 @@ ENCOUNTERS = {
 }
 
 
+# The benchmark a scouted wild was sized against, remembered by (user, seed). It used to be
+# recomputed whenever the card was rebuilt, and the benchmark depends on which creatures
+# are fieldable — so swapping the active creature could change the wild's power under the
+# player («حریف عوض شد»). The bot is one process, so this in-memory memo covers its cards;
+# the Mini App carries the benchmark inside its signed card instead. A miss (bot restart)
+# falls back to recomputing it.
+_BENCH_MEMO: dict[tuple[int, int], int] = {}
+_BENCH_MEMO_MAX = 20_000
+
+
+def _remember_bench(user_id: int, seed: int, bench: int) -> None:
+    if len(_BENCH_MEMO) >= _BENCH_MEMO_MAX:
+        for key in list(_BENCH_MEMO)[: _BENCH_MEMO_MAX // 4]:   # drop the oldest quarter
+            _BENCH_MEMO.pop(key, None)
+    _BENCH_MEMO[(user_id, int(seed))] = int(bench)
+
+
+def bench_for(user: User, seed: int | None, bench: int | None = None) -> int:
+    """The benchmark of the card (user, seed): the given one, the remembered one, or —
+    for an unknown card — the current benchmark."""
+    if bench:
+        return int(bench)
+    if seed is not None:
+        known = _BENCH_MEMO.get((user.id, int(seed)))
+        if known:
+            return known
+    return hunt_benchmark_power(user)
+
+
 def scout_one(user: User, player_creature: Creature, benchmark_power: int | None = None) -> dict:
     """A single previewable opponent — the player searches again ("بعدی") until they
     like what they see. Carries the seed so resolve_hunt rebuilds the exact opponent. The
@@ -236,11 +265,13 @@ def scout_one(user: User, player_creature: Creature, benchmark_power: int | None
     tier = random.choice(list(HUNT_TIERS))
     seed = random.randrange(1_000_000)
     bench = benchmark_power if benchmark_power is not None else hunt_benchmark_power(user)
+    _remember_bench(user.id, seed, bench)
     wild = spawn_wild_creature(bench, tier, seed)
     return {
         "is_encounter": False,
         "tier": tier,
         "seed": seed,
+        "bench": bench,
         "name": wild.name,
         "element": wild.element,
         # canonical power metric (same as profile/arena), so «قدرت حریف» is comparable
@@ -250,14 +281,15 @@ def scout_one(user: User, player_creature: Creature, benchmark_power: int | None
     }
 
 
-def rebuild_target(user: User, tier: str, seed: int) -> dict:
+def rebuild_target(user: User, tier: str, seed: int, bench: int | None = None) -> dict:
     """Rebuild the EXACT same scouted opponent from its (tier, seed) — used when the
     player swaps which creature fights it, so the target stays identical."""
     from game.creature import creature_power
 
-    wild = spawn_wild_creature(hunt_benchmark_power(user), tier, seed)
+    bench = bench_for(user, seed, bench)
+    wild = spawn_wild_creature(bench, tier, seed)
     return {
-        "tier": tier, "seed": seed, "name": wild.name, "element": wild.element,
+        "tier": tier, "seed": seed, "bench": bench, "name": wild.name, "element": wild.element,
         "power": creature_power(wild), "reward_mult": HUNT_TIERS[tier]["reward_mult"],
     }
 
@@ -386,7 +418,7 @@ def resolve_auto_hunt(user: User, creature: Creature, hunts: int,
 
 
 def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal",
-                 seed: int | None = None, loot_mult: float = 1.0) -> dict:
+                 seed: int | None = None, loot_mult: float = 1.0, bench: int | None = None) -> dict:
     """Plays out one solo PvE encounter and applies rewards. Caller handles energy. The
     wild is sized to the player's STRONGEST kaiju (fixed by the seed), so whichever
     creature they bring fights the SAME opponent — switching to the right element is the
@@ -399,7 +431,7 @@ def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal",
 
     loot_mult = loot_mult * events.hunt_loot_mult(player_creature.element)  # «هفته‌ی عنصر»
     research.attach_research(user, player_creature)
-    wild = spawn_wild_creature(hunt_benchmark_power(user), tier, seed)
+    wild = spawn_wild_creature(bench_for(user, seed, bench), tier, seed)   # the same wild the card showed
     winner, log_text = resolve_duel(player_creature, wild)
     won = winner is player_creature
     reward_mult = HUNT_TIERS[tier]["reward_mult"]

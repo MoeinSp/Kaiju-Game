@@ -41,7 +41,7 @@ from telgame_site.mini.core import (GameError, active_creature, asset_img, clean
                                     creature_list, endpoint, equipment_img, need_int, pack, species_img, unpack)
 
 TOKEN = "arena_opp"
-TOKEN_AGE = 15 * 60
+TOKEN_AGE = 60 * 60   # a card held this long is redrawn (the bot keeps its card until the next search)
 RECENT_MAX = 5          # bot: _RECENT_OPPONENTS_MAX
 REVENGE_DAYS = 3
 NOTE_STALE = "این کارت قدیمی بود؛ حریف تازه برات پیدا کردم."
@@ -189,17 +189,8 @@ def _seen(data: dict) -> list[int]:
 
 
 def _refit(user, pending: dict, creature) -> None:
-    """Bind the card to the fighter. Mirrors the bot's _swap_rerender_sync: at the top of the
-    ladder (cup 3700+) a BOT always counters the creature you field — the same rule
-    game.arena._fake_opponent applies when the bot is generated — so swapping your fighter
-    there re-picks the bot's element. Loot, power and cup never change."""
-    if (pending.get("is_fake") and creature.element
-            and (user.cup >= 3700 or int(pending.get("cup", 0)) >= 3700)
-            and not constants.is_strong_against(pending.get("element"), creature.element)):
-        counters = [e for e in constants.ELEMENTS if constants.is_strong_against(e, creature.element)]
-        if counters:
-            pending["element"] = random.choice(counters)
-            pending["creature_name"] = constants.random_species_name(pending["element"])
+    """Bind the card to the fighter. The opponent itself (element, name, power, cup, loot)
+    is fixed when it is found and never changes on a swap — same as the bot."""
     pending["c"] = creature.id
 
 

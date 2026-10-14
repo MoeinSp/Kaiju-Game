@@ -334,15 +334,11 @@ def _swap_rerender_sync(tg_user, creature_id, pending):
         pending["loot_gold"], pending["loot_dna"] = loot, dna_from_pending
     dna_win = pending["loot_dna"]
 
+    # the opponent is fixed when it is found (a top-ladder bot counters the creature you
+    # had active THEN); swapping your fighter never changes it — that is the whole point
+    # of «تعویض»: pick the creature with the element advantage over THIS opponent
     opp_elem = pending.get("element")
     opp_cname = pending.get("creature_name", "؟")
-    if pending.get("is_fake") and (user.cup >= 3700 or int(pending.get("cup", 0)) >= 3700) and creature.element:
-        counters = [e for e in constants.ELEMENTS if constants.is_strong_against(e, creature.element)]
-        if counters:
-            opp_elem = random.choice(counters) if len(counters) > 1 else counters[0]
-            opp_cname = constants.random_species_name(opp_elem)
-            pending["element"] = opp_elem
-            pending["creature_name"] = opp_cname
 
     opponent = {
         "is_fake": pending["is_fake"], "user": None, "user_id": pending.get("user_id"),

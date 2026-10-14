@@ -229,7 +229,7 @@ def _state(user: User, card: dict | None = None, token: str | None = None, targe
         if card["k"] == "e":
             out["target"] = _encounter_out(card["enc"])
         else:
-            out["target"] = _target_out(creature, power, target or hunt.rebuild_target(user, card["tier"], card["seed"]))
+            out["target"] = _target_out(creature, power, target or hunt.rebuild_target(user, card["tier"], card["seed"], card.get("b")))
     return out
 
 
@@ -267,7 +267,7 @@ def scout(request, user, data):
     if target.get("is_encounter"):
         card = {"k": "e", "enc": target["enc_type"], "n": nonce}
     else:
-        card = {"k": "t", "tier": target["tier"], "seed": int(target["seed"]), "n": nonce}
+        card = {"k": "t", "tier": target["tier"], "seed": int(target["seed"]), "b": int(target.get("bench") or 0), "n": nonce}
     # the wild scout_one() just built IS the card: no second rebuild (it re-prices the whole team)
     out = _state(user, card, pack(user, TOKEN_KIND, card), None if card["k"] == "e" else target)
     out["paid"] = cost
@@ -318,7 +318,7 @@ def attack(request, user, data):
         spend_energy(user, constants.HUNT_ENERGY_COST, "شکار")
         user.save(update_fields=["energy", "energy_updated_at"])
 
-        result = hunt.resolve_hunt(user, creature, card["tier"], card["seed"])
+        result = hunt.resolve_hunt(user, creature, card["tier"], card["seed"], bench=card.get("b"))
         record_action(user, "hunt")  # ← advances the nonce: this card is spent
         completed = check_missions(user, "hunt")
     # resolve_hunt() fought with this very object (research attached, XP added): one gear
