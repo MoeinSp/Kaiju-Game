@@ -942,7 +942,7 @@ def _box_genetic_card(user) -> tuple[str, InlineKeyboardMarkup]:
 
 def _bgx_detail_card(user, tier: str) -> tuple[str, InlineKeyboardMarkup]:
     """Genetic-box tier detail (odds) + ×1/×10 open buttons, reusing the DM's text/labels."""
-    from bot.handlers.lootbox import _biocrate_detail_text, _biocrate_ticket_note, _open_label
+    from bot.handlers.lootbox import _biocrate_detail_text, _biocrate_ticket_note
 
     tickets = getattr(user, "biocrate_tickets", 0)
     text = _biocrate_detail_text(tier) + _biocrate_ticket_note(tier, tickets)
