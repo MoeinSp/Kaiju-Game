@@ -462,7 +462,7 @@ async def _begin_offer(message, kind: str, sender, receiver, item_id: int, desc:
                        sender_cd=sender_cd, receiver_cd=receiver_cd)
     reset_line = f"{_CREATURE_RESET_NOTE}\n" if kind == "c" else ""
     cd_line = (("⏳ کول‌داون فرستنده: ندارد\n" if not sender_cd else f"⏳ کول‌داون فرستنده: <code>{sender_cd}</code> ساعت\n")
-               + f"⏳ کول‌داون گیرنده: <code>{receiver_cd}</code> ساعت\n") if kind == "c" else ""
+               + f"⏳ کول‌داون گیرنده: <code>{receiver_cd}</code> ساعت\n")
     await message.reply_text(
         f"🤝 <b>پیشنهاد انتقال</b>\n"
         f"{_RULE}\n"
@@ -638,7 +638,7 @@ async def transfer_equip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE,
         await update.message.reply_text(
             "🎒 برای انتقال تجهیزات، روی پیام گیرنده <b>ریپلای</b> کن و بنویس «انتقال تجهیزات [کد]».\n"
             "<i>کد تجهیزات رو از «تجهیزات» توی پیوی ربات می‌بینی. اول قیمت می‌ذاری، بعد گیرنده قیمت و "
-            "کارمزد الماس رو می‌بینه و تأیید می‌کنه.</i>\n\n"
+            "کارمزد الماس رو می‌بینه و تأیید می‌کنه. فرستنده کول‌داون نداره؛ گیرنده بسته به نایابی ۲ تا ۱۲ ساعت صبر می‌کنه.</i>\n\n"
             + transfer.equip_prices_text(),
             parse_mode="HTML",
         )
@@ -656,7 +656,8 @@ async def transfer_equip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE,
         return
     it = preview["item"]
     desc = f"تجهیزاتِ <b>{it.name} +{it.level}</b> {constants.RARITY_LABELS[it.rarity]}"
-    await _begin_offer(update.message, "e", sender, receiver, it.id, desc, preview["cost"])
+    await _begin_offer(update.message, "e", sender, receiver, it.id, desc, preview["cost"],
+                       sender_cd=preview["sender_cd"], receiver_cd=preview["receiver_cd"])
 
 
 def _transfer_do_sync(kind, sender_id, receiver_id, item_id, price):
@@ -693,12 +694,9 @@ def _offer_receiver_text(offer: dict) -> str:
         if price > 0 else f"{get_emoji('gift')} <b>رایگان</b> (بدون قیمت)"
     )
     reset_line = f"\n{_CREATURE_RESET_NOTE}" if offer.get("kind") == "c" else ""
-    if offer.get("kind") == "c":
-        s_cd = offer.get("sender_cd", 24)
-        r_cd = offer.get("receiver_cd", 24)
-        cd_info = ("⏳ کول‌داون فرستنده: ندارد" if not s_cd else f"⏳ کول‌داون فرستنده: <code>{s_cd}</code> ساعت") + f"\n⏳ کول‌داون گیرنده: <code>{r_cd}</code> ساعت"
-    else:
-        cd_info = "⏳ کول‌داون: <code>۱</code> روز برای هر دو طرف"
+    s_cd = offer.get("sender_cd", 24)
+    r_cd = offer.get("receiver_cd", 24)
+    cd_info = ("⏳ کول‌داون فرستنده: ندارد" if not s_cd else f"⏳ کول‌داون فرستنده: <code>{s_cd}</code> ساعت") + f"\n⏳ کول‌داون گیرنده: <code>{r_cd}</code> ساعت"
     return (
         f"🤝 <b>پیشنهاد انتقال</b>\n"
         f"{_RULE}\n"
@@ -885,17 +883,16 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
             )
             return
         _PENDING_OFFERS.pop(token, None)
+        s_cd = result.get("sender_cd", offer.get("sender_cd", 24))
+        r_cd = result.get("receiver_cd", offer.get("receiver_cd", 24))
+        cd_text = ("⏳ کول‌داون فرستنده: ندارد" if not s_cd else f"⏳ کول‌داون فرستنده: <code>{s_cd}</code> ساعت") + f"\n⏳ کول‌داون گیرنده: <code>{r_cd}</code> ساعت"
         if offer["kind"] == "c":
             c = result["creature"]
-            s_cd = result.get("sender_cd", offer.get("sender_cd", 24))
-            r_cd = result.get("receiver_cd", offer.get("receiver_cd", 24))
-            cd_text = ("⏳ کول‌داون فرستنده: ندارد" if not s_cd else f"⏳ کول‌داون فرستنده: <code>{s_cd}</code> ساعت") + f"\n⏳ کول‌داون گیرنده: <code>{r_cd}</code> ساعت"
             body = (f"🦖 هیولای <b>{creature_name(c)}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level} "
                     f"به <b>{lab_mention(receiver)}</b> منتقل شد! ✅\n"
                     f"<i>♻️ لِوِل و ارتقاهای بدنی ریست شد؛ فقط ستاره‌ها باقی ماندند.</i>")
         else:
             it = result["item"]
-            cd_text = "⏳ کول‌داون: <code>۱</code> روز برای هر دو طرف فعال شد."
             body = (f"🎒 تجهیزاتِ <b>{it.name} +{it.level}</b> {constants.RARITY_LABELS[it.rarity]} "
                     f"به <b>{lab_mention(receiver)}</b> منتقل شد! ✅")
         price_line = (

@@ -2,8 +2,7 @@
 
 Rules (see constants.py):
 * the RECEIVER pays diamonds, scaled by what they're getting;
-* creatures: no cooldown for the sender, a short one (2-12 h by rarity) for the receiver;
-  gear: a 1-day cooldown for both sides;
+* creatures and gear: no cooldown for the sender, a short one (2-12 h by rarity) for the receiver;
 * the receiver must have progressed far enough (building levels) to hold it, which
   is the real gate against a fresh fake account instantly hoarding rare items.
 Gold transfers stay in game/… «انتقال طلا» — this module is only creatures/gear.
@@ -230,7 +229,7 @@ def preview_creature_transfer(sender: User, receiver: User, creature_id: int) ->
 
 
 def preview_equip_transfer(sender: User, receiver: User, equip_id: int) -> dict:
-    """Validate an equipment transfer without moving anything. Returns {item, cost}."""
+    """Validate an equipment transfer without moving anything. Returns {item, cost, sender_cd, receiver_cd}."""
     if sender.id == receiver.id:
         raise GameError("نمی‌تونی به خودت منتقل کنی.")
     _check_transfers_enabled(receiver)
@@ -253,7 +252,8 @@ def preview_equip_transfer(sender: User, receiver: User, equip_id: int) -> dict:
     cost = constants.equip_transfer_cost(item.rarity, item.level)
     if receiver.diamonds < cost:
         raise TransferFundsError(cost, receiver.diamonds, "equip")
-    return {"item": item, "cost": cost}
+    return {"item": item, "cost": cost, "sender_cd": constants.transfer_sender_cooldown_hours(item.rarity),
+            "receiver_cd": constants.transfer_receiver_cooldown_hours(item.rarity)}
 
 
 @transaction.atomic
@@ -409,7 +409,11 @@ def transfer_equipment(sender: User, receiver: User, equip_id: int, price: int =
     item.equipped_on = None  # can't stay equipped on the sender's creature
     item.save(update_fields=["owner", "equipped_on"])
 
-    _set_cooldown([sender, receiver], "equip_transfer_ready_at")
+    # same rule as kaiju: no sender cooldown, the receiver waits 2-12 h by rarity
+    sender_cd = constants.transfer_sender_cooldown_hours(item.rarity)
+    receiver_cd = constants.transfer_receiver_cooldown_hours(item.rarity)
+    _set_cooldown([sender], "equip_transfer_ready_at", sender_cd)
+    _set_cooldown([receiver], "equip_transfer_ready_at", receiver_cd)
     sender.save(update_fields=["equip_transfer_ready_at", "coins"])
     receiver.save(update_fields=["diamonds", "coins", "equip_transfer_ready_at"])
-    return {"item": item, "cost": cost, "price": price}
+    return {"item": item, "cost": cost, "price": price, "sender_cd": sender_cd, "receiver_cd": receiver_cd}

@@ -675,9 +675,9 @@ DUEL_WAGER_MAX = 500
 # what they're getting), a 1-day cooldown applies to both sides, and the receiver
 # must have progressed far enough (building levels) to hold it — so a throwaway fake
 # account can't instantly stockpile high-star creatures.
-TRANSFER_COOLDOWN_HOURS = 24  # default / equipment transfer, and the mythic base below
+TRANSFER_COOLDOWN_HOURS = 24  # fallback only — creatures AND gear use the by-rarity table below
 
-# KAIJU transfer cooldown (changed 2026-10-14 after many player complaints): the SENDER has
+# Transfer cooldown for kaiju (2026-10-14) and gear (2026-10-15, same rule) — the SENDER has
 # none, and the RECEIVER gets a short flat lock by rarity — no longer ×2 per star (a mythic
 # 5★ used to lock the receiver for 384 h ≈ 16 days on top of a 1,600-diamond fee). The
 # diamond fee, the receiver's building requirements and the sender's arena-win gate are what
@@ -688,12 +688,12 @@ TRANSFER_COOLDOWN_HOURS_BY_RARITY = {
 
 
 def transfer_sender_cooldown_hours(rarity: str) -> int:
-    """Kaiju-transfer cooldown for the sender: none."""
+    """Transfer cooldown (kaiju or gear) for the sender: none."""
     return 0
 
 
-def transfer_receiver_cooldown_hours(rarity: str, star_level: int) -> int:
-    """Kaiju-transfer cooldown for the receiver: flat by rarity (2-12 h), star does not matter."""
+def transfer_receiver_cooldown_hours(rarity: str, star_level: int = 1) -> int:
+    """Transfer cooldown (kaiju or gear) for the receiver: flat by rarity (2-12 h); star/level don't matter."""
     return TRANSFER_COOLDOWN_HOURS_BY_RARITY.get(rarity, 12)
 
 
