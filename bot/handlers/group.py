@@ -7,7 +7,8 @@ import time
 
 from django.db import transaction
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
+from telegram.error import TelegramError
+from telegram.ext import CallbackQueryHandler, ChatMemberHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
 from bot.utils import alert_text
 from bio_lab.models import Alliance, Creature, DuelLog, User
@@ -1318,13 +1319,62 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
     return "\n".join(lines), keyboard
 
 
+async def _live_left(bot, chat_id: int, user_id: int) -> bool | None:
+    """Is `user_id` out of the group right now? (None = Telegram didn't say.)"""
+    try:
+        m = await bot.get_chat_member(chat_id, user_id)
+    except TelegramError:
+        return None
+    if m.status in ("left", "kicked"):
+        return True
+    if m.status == "restricted":
+        return not getattr(m, "is_member", True)
+    return False
+
+
+def _left_gate_sync(chat, target_id: int, live_left):
+    from game import group_presence
+
+    left_at = group_presence.observe(chat.id, chat.title, target_id, live_left)
+    target = User.objects.filter(id=target_id).first()
+    return left_at, (lab_mention(target) if target else None)
+
+
+def _left_block_text(name: str, left_at) -> str:
+    from game import group_presence
+
+    return "\n".join([
+        "🚪 <b>این بازیکن دیگه عضو گروه نیست</b>",
+        _RULE,
+        f"👤 بازیکن: <b>{name}</b>",
+        f"🕰 خروج از گروه: <code>{group_presence.ago_text(left_at)}</code> پیش",
+        _RULE,
+        f"⛔️ به کسی که بیش از <b>{group_presence.LEFT_GRACE_HOURS} ساعت</b> از گروه رفته نمی‌شه اتک داد.",
+        "<i>💡 اگه دوباره به گروه برگرده، باز هم می‌تونی بهش حمله کنی.</i>",
+    ])
+
+
 async def _pvp_attack_prompt(update, context, target_tg) -> None:
+    from game import group_presence
+
+    chat = update.effective_chat
+    left_at = None
+    if not target_tg.is_bot and target_tg.id != update.effective_user.id:
+        live = await _live_left(context.bot, chat.id, target_tg.id)
+        left_at, t_name = await run_db(_left_gate_sync, chat, target_tg.id, live)
+        if group_presence.is_gone(left_at):
+            await update.message.reply_text(
+                _left_block_text(t_name or html.escape(target_tg.full_name), left_at), parse_mode="HTML")
+            return
     try:
         data = await run_db(_pvp_preview_sync, update.effective_user, target_tg)
     except GameError as exc:
         await update.message.reply_text(alert_text(exc, 3500))
         return
     text, keyboard = _pvp_prompt_render(update.effective_user.id, target_tg.id, *data)
+    if left_at is not None:  # left, but still inside the grace window
+        text += (f"\n\n🚪 <i>این بازیکن <code>{group_presence.ago_text(left_at)}</code> پیش از گروه رفته؛ "
+                 f"فقط <code>{group_presence.grace_left_text(left_at)}</code> دیگه می‌شه بهش اتک داد.</i>")
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
     # remember the user's own «اتک» message so a later «لغو» can delete it too (the
     # bot's prompt is cleaned up already; the user's command line was left behind)
@@ -1491,6 +1541,12 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     target = User.objects.select_for_update().filter(id=target_id).first()
     if target is None:
         raise GameError("این بازیکن دیگه پیدا نشد.")
+    from game import group_presence
+
+    left_at = group_presence.observe(group.id, group.title, target.id, None)
+    if group_presence.is_gone(left_at):
+        raise GameError(f"🚪 این بازیکن {group_presence.ago_text(left_at)} پیش از این گروه رفته؛ "
+                        f"به کسی که بیش از {group_presence.LEFT_GRACE_HOURS} ساعت از گروه رفته نمی‌شه اتک داد.")
     a_creature = get_active_creature(attacker)
     t_creature = get_active_creature(target)
     if a_creature is None or t_creature is None:
@@ -1625,6 +1681,8 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
             "attacker_cup": attacker.cup,
             "defender_cup": target.cup,
             "cup_change": defender_cup_change,
+            "group_title": chat.title or "",
+            "group_link": f"https://t.me/{chat.username}" if getattr(chat, "username", None) else None,
         },
     }
 
@@ -2139,8 +2197,50 @@ async def gid_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"🆔 شناسه‌ی این گروه:\n<code>{chat.id}</code>\n<i>روی عدد بزن تا کپی بشه.</i>", parse_mode="HTML")
 
 
+async def on_member_left(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«X left the group» service message → remember when (game/group_presence.py)."""
+    from game import group_presence
+
+    gone = update.effective_message.left_chat_member if update.effective_message else None
+    if gone is None or gone.is_bot:
+        return
+    chat = update.effective_chat
+    await run_db(group_presence.mark_left, chat.id, chat.title, gone.id)
+
+
+async def on_members_joined(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from game import group_presence
+
+    chat = update.effective_chat
+    for u in (update.effective_message.new_chat_members or ()):
+        if not u.is_bot:
+            await run_db(group_presence.mark_back, chat.id, u.id)
+
+
+async def on_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """chat_member updates (only sent while the bot is an admin): leave / kick / re-join."""
+    from game import group_presence
+
+    cm = update.chat_member
+    if cm is None or cm.chat.type not in ("group", "supergroup") or cm.new_chat_member.user.is_bot:
+        return
+    new = cm.new_chat_member
+    left = new.status in ("left", "kicked") or (new.status == "restricted" and not getattr(new, "is_member", True))
+    uid = new.user.id
+    if left:
+        await run_db(group_presence.mark_left, cm.chat.id, cm.chat.title, uid)
+    else:
+        await run_db(group_presence.mark_back, cm.chat.id, uid)
+
+
 def register(application) -> None:
     application.add_handler(CommandHandler("gid", gid_cmd, filters.ChatType.GROUPS))
+    # their own handler group so no gameplay handler can swallow these updates first
+    application.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER & filters.ChatType.GROUPS,
+                                           on_member_left), group=11)
+    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS & filters.ChatType.GROUPS,
+                                           on_members_joined), group=11)
+    application.add_handler(ChatMemberHandler(on_chat_member, ChatMemberHandler.CHAT_MEMBER), group=11)
     group_filter = filters.ChatType.GROUPS
     # The gameplay slash commands (/attack /raid_spawn /leaderboard /guardian*)
     # are gone — groups are word-driven («اتک», «احضار», «جدول», «نگهبان» …),

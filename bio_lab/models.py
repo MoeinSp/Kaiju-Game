@@ -972,6 +972,8 @@ class RaidDamageLog(models.Model):
 class GroupMembership(models.Model):
     group = models.ForeignKey(Group, on_delete=models.CASCADE)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
+    # when they LEFT this group (None = still in, as far as we know) — game/group_presence.py
+    left_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["group", "user"], name="uq_group_member")]

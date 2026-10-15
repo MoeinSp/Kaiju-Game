@@ -43,12 +43,19 @@ RAID_NOTIFY_WINDOW = datetime.timedelta(hours=2)
 
 def defense_report_text(attacker_name: str, attacker_power: int, attacker_won: bool,
                         loot: int = 0, cup_change: int = 0, attacker_alliance: str | None = None,
-                        loot_dna: int = 0) -> str:
+                        loot_dna: int = 0, group_title: str | None = None, group_link: str | None = None) -> str:
     """The 'you were attacked' DM body — shared by the immediate send (fired the
     instant a raid resolves) and the periodic catch-up job, so both read identically.
     A successful attacker loots gold and DNA; either way the defender's cup swings, so both
     the looted gold/DNA (on a loss) and the cup change are shown."""
     power_note = f" (قدرت {attacker_power})" if attacker_power else ""
+    where = ""
+    if group_title is not None:  # a group «اتک» — say which group
+        import html as _html
+
+        name = _html.escape(group_title or "بی‌نام")
+        name = f'<a href="{group_link}">{name}</a>' if group_link else name
+        where = f"\n📍 محل حمله: گروه «<b>{name}</b>»"
     ally_note = f" — 🤝 اتحاد: <b>{attacker_alliance}</b>" if attacker_alliance else " — 🚫 بدون اتحاد"
     cup_change = int(cup_change or 0)
     if attacker_won:
@@ -58,13 +65,13 @@ def defense_report_text(attacker_name: str, attacker_power: int, attacker_won: b
         return (
             f"⚔️ <b>به آزمایشگاهت حمله شد!</b>\n"
             f"🏭 مهاجم: <b>{attacker_name}</b>{ally_note}{power_note}"
-            f"{loot_line}{dna_line}{cup_line}"
+            f"{where}{loot_line}{dna_line}{cup_line}"
         )
     cup_line = f"\n🏆 <b>+{cup_change}</b> کاپ گرفتی." if cup_change else ""
     return (
         f"🛡 <b>یکی بهت حمله کرد ولی دفاعت موفق بود!</b>\n"
         f"🏭 مهاجم: <b>{attacker_name}</b>{ally_note}{power_note}"
-        f"{cup_line}"
+        f"{where}{cup_line}"
     )
 
 # the once-a-day "your daily reward is waiting" nudge only fires in this local-hour

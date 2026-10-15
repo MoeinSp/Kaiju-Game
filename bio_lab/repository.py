@@ -119,8 +119,12 @@ def team_choices(user: User, limit: int = 3) -> list[Creature]:
 
 def touch_membership(group: Group, user: User) -> None:
     """Records that `user` has been active in `group`, so group-scoped features
-    (leaderboard, guardian) know who to consider."""
-    GroupMembership.objects.get_or_create(group=group, user=user)
+    (leaderboard, guardian) know who to consider. Writing in the group also means
+    they're back, so a recorded «left» is cleared."""
+    m, _ = GroupMembership.objects.get_or_create(group=group, user=user)
+    if m.left_at is not None:
+        m.left_at = None
+        m.save(update_fields=["left_at"])
 
 
 def group_member_creatures(group: Group) -> list[Creature]:
