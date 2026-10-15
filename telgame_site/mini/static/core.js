@@ -791,11 +791,14 @@ window.K = (function () {
       if (reported[message] || Object.keys(reported).length > 20) return;
       reported[message] = 1;
       K.api.post("profile/client_error/", { message: message, stack: String(stack || "").slice(0, 3000),
-        screen: (location.hash || "") + " " + (K.current ? K.current() : ""), ua: navigator.userAgent }).catch(function () {});
+        screen: (K.current ? K.current() : ""), ua: navigator.userAgent }).catch(function () {});   // never the URL: it carries the signed initData
     } catch (e) { /* never let reporting break the app */ }
   }
   window.addEventListener("error", function (ev) {
     if (!ev || !ev.message) return;   // a failed <img> etc. — not a script error
+    // «Script error.» without a file comes from a script of ANOTHER origin (Telegram's own
+    // webview code, a browser extension): no detail is available and it is not ours
+    if (!ev.filename && /^Script error\.?$/.test(ev.message)) return;
     reportError(ev.message + " @" + String(ev.filename || "").split("/").pop() + ":" + ev.lineno, ev.error && ev.error.stack);
   });
   window.addEventListener("unhandledrejection", function (ev) {

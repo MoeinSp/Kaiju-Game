@@ -152,7 +152,10 @@ def client_error(request, user, data):
     # at most a handful per player per minute — a looping error must not flood the table
     if MiniAppError.objects.filter(kind="client", user_id=user.id,
                                    created_at__gte=timezone.now() - datetime.timedelta(minutes=1)).count() < 5:
-        record_error("client", user.id, str(data.get("screen") or "")[:120], str(data.get("message") or "?")[:300],
+        screen = str(data.get("screen") or "")
+        if "tgWebAppData" in screen or "hash%3D" in screen or "query_id" in screen:   # an old client sent its URL
+            screen = ""
+        record_error("client", user.id, screen[:120], str(data.get("message") or "?")[:300],
                      (str(data.get("stack") or "") + "\n" + str(data.get("ua") or ""))[:4000])
     return {"ok": True}
 
