@@ -427,6 +427,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 btn("ارسال همگانی", emoji_key="btn_broadcast", style=ADMIN, callback_data="admin_menu:broadcast_start"),
             ],
             [btn("شارژ همگانی خودکار", emoji_key="btn_gift", style=ADMIN, callback_data="admin_menu:autogift")],
+            [btn("خطاهای مینی‌اپ", emoji_key="btn_report", style=ADMIN, callback_data="admin_menu:app_errors")],
             [btn("ریست «استارت ربات» (API)", emoji_key="btn_reset", style=ADMIN, callback_data="admin_menu:gate_reset")],
             [btn("حذف موجود", emoji_key="btn_delete", style=DANGER, callback_data="admin_menu:del_creature_start")],
             [
@@ -3601,6 +3602,45 @@ async def gate_reset_do(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                                  reply_markup=InlineKeyboardMarkup([[back_btn("menu:admin", "بازگشت")]]))
 
 
+def _app_errors_sync() -> str:
+    import datetime
+
+    from django.db.models import Count, Max
+
+    from bio_lab.models import MiniAppError
+
+    now = timezone.now()
+    day = MiniAppError.objects.filter(created_at__gte=now - datetime.timedelta(days=1))
+    week = MiniAppError.objects.filter(created_at__gte=now - datetime.timedelta(days=7))
+    lines = [
+        "🧯 <b>خطاهای مینی‌اپ</b>", "━━━━━━━━━━━━━━━━━━━━",
+        f"۲۴ ساعت اخیر: <code>{day.count()}</code> (سرور <code>{day.filter(kind='server').count()}</code> · صفحه <code>{day.filter(kind='client').count()}</code>)",
+        f"۷ روز اخیر: <code>{week.count()}</code> · بازیکن‌های درگیر: <code>{week.exclude(user_id=None).values('user_id').distinct().count()}</code>",
+        "━━━━━━━━━━━━━━━━━━━━",
+    ]
+    top = (week.values("kind", "message").annotate(n=Count("id"), last=Max("created_at"), users=Count("user_id", distinct=True))
+           .order_by("-n")[:8])
+    if not top:
+        lines.append("✅ این هفته هیچ خطایی ثبت نشده.")
+    for row in top:
+        where = week.filter(kind=row["kind"], message=row["message"]).order_by("-id").values_list("where", flat=True).first() or ""
+        lines.append(f"{'🖥' if row['kind'] == 'server' else '📱'} <code>{row['n']}</code>× · {row['users']} نفر · "
+                     f"{timezone.localtime(row['last']).strftime('%m/%d %H:%M')}")
+        lines.append(f"<code>{html.escape(row['message'][:150])}</code>")
+        if where.strip():
+            lines.append(f"↳ {html.escape(where.strip()[:80])}")
+    return "\n".join(lines)
+
+
+async def app_errors_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update):
+        return
+    text = await run_db(_app_errors_sync)
+    kb = InlineKeyboardMarkup([[btn("بروزرسانی", emoji_key="btn_recheck", style=ADMIN, callback_data="admin_menu:app_errors")],
+                               [back_btn("menu:admin", "بازگشت")]])
+    await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=kb)
+
+
 async def autogift_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_admin(update):
         return
@@ -6020,6 +6060,7 @@ _ADMIN_MENU_ACTIONS.update(
         "users": users_browse_callback,
         "gift_all": gift_all_start,
         "autogift": autogift_panel,
+        "app_errors": app_errors_panel,
         "autogift_toggle": autogift_toggle,
         "autogift_set": autogift_set_start,
         "gate_reset": gate_reset_panel,

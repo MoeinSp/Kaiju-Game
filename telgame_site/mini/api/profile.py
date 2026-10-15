@@ -139,8 +139,27 @@ def recycle_gold_do(request, user, data):
     return {"done": res, "recycle": _recycle_view(User.objects.get(pk=user.pk))}
 
 
+@endpoint("POST")
+def client_error(request, user, data):
+    """A script error in the player's webview (core.js reports it once per message per session)."""
+    import datetime
+
+    from django.utils import timezone
+
+    from bio_lab.models import MiniAppError
+    from telgame_site.mini.core import record_error
+
+    # at most a handful per player per minute — a looping error must not flood the table
+    if MiniAppError.objects.filter(kind="client", user_id=user.id,
+                                   created_at__gte=timezone.now() - datetime.timedelta(minutes=1)).count() < 5:
+        record_error("client", user.id, str(data.get("screen") or "")[:120], str(data.get("message") or "?")[:300],
+                     (str(data.get("stack") or "") + "\n" + str(data.get("ua") or ""))[:4000])
+    return {"ok": True}
+
+
 routes = [
     ("me/", me),
+    ("client_error/", client_error),
     ("creatures/", creatures),
     ("equipment/", equipment),
     ("leaderboard/", leaderboard),

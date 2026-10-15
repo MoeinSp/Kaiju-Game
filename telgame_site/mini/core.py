@@ -189,6 +189,27 @@ def _track(user: User, name: str) -> None:
         logger.exception("mini app metrics failed")
 
 
+ERROR_KEEP_DAYS = 30
+
+
+def record_error(kind: str, user_id: int | None, where: str, message: str, detail: str = "") -> None:
+    """Keep one Mini App failure for the admin panel. Never raises: a broken error log must
+    not turn into a second error."""
+    try:
+        import datetime
+
+        from django.utils import timezone
+
+        from bio_lab.models import MiniAppError
+
+        MiniAppError.objects.create(kind=kind[:8], user_id=user_id, where=(where or "")[:120],
+                                    message=(message or "?")[:300], detail=(detail or "")[-4000:])
+        if MiniAppError.objects.count() % 200 == 0:   # cheap, occasional housekeeping
+            MiniAppError.objects.filter(created_at__lt=timezone.now() - datetime.timedelta(days=ERROR_KEEP_DAYS)).delete()
+    except Exception:  # noqa: BLE001
+        logger.exception("could not record a mini app error")
+
+
 def endpoint(method: str = "GET"):
     """Decorator for a feature view — see the module docstring."""
     method = method.upper()
@@ -220,8 +241,11 @@ def endpoint(method: str = "GET"):
             except GameError as exc:
                 code = "energy" if isinstance(exc, EnergyError) else "gold" if isinstance(exc, InsufficientGoldError) else "rule"
                 return _json({"error": clean(exc) or "این کار الان ممکن نیست.", "code": code, "res": _safe_res(user)}, 400, request)
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 logger.exception("mini app endpoint %s failed", view.__name__)
+                import traceback
+
+                record_error("server", user.id, request.path, repr(exc), traceback.format_exc())
                 return _json({"error": "یه مشکلی پیش اومد. دوباره امتحان کن.", "code": "server"}, 500)
             payload = dict(payload or {})
             payload.setdefault("res", _safe_res(user))

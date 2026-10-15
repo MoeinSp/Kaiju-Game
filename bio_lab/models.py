@@ -564,6 +564,19 @@ class FestivalState(models.Model):
     last_settled_key = models.CharField(max_length=16, default="", blank=True)
 
 
+class MiniAppError(models.Model):
+    """A Mini App failure, kept so the owner can see it in the admin panel (container logs are
+    wiped on every deploy). kind = "server" (an API view crashed) or "client" (a script error
+    in the player's webview). Old rows are pruned by telgame_site.mini.core.record_error."""
+
+    kind = models.CharField(max_length=8)
+    user_id = models.BigIntegerField(null=True, blank=True)
+    where = models.CharField(max_length=120, blank=True, default="")
+    message = models.CharField(max_length=300)
+    detail = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+
 class MiniAppProbe(models.Model):
     """One player's result of the Mini App reachability test (/apptest — see
     telgame_site/miniapp_views.py): which stages reached the server and how fast."""

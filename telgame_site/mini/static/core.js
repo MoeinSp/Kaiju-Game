@@ -782,6 +782,28 @@ window.K = (function () {
   K.homeSection = function (def) { K.homeSections.push(def); };
 
   K.started = false;
+  /* Script errors in the webview are sent to the server once per message (admin panel:
+     «خطاهای مینی‌اپ»). Rule refusals (an API answer with a code) are not errors. */
+  var reported = {};
+  function reportError(message, stack) {
+    try {
+      message = String(message || "?").slice(0, 300);
+      if (reported[message] || Object.keys(reported).length > 20) return;
+      reported[message] = 1;
+      K.api.post("profile/client_error/", { message: message, stack: String(stack || "").slice(0, 3000),
+        screen: (location.hash || "") + " " + (K.current ? K.current() : ""), ua: navigator.userAgent }).catch(function () {});
+    } catch (e) { /* never let reporting break the app */ }
+  }
+  window.addEventListener("error", function (ev) {
+    if (!ev || !ev.message) return;   // a failed <img> etc. — not a script error
+    reportError(ev.message + " @" + String(ev.filename || "").split("/").pop() + ":" + ev.lineno, ev.error && ev.error.stack);
+  });
+  window.addEventListener("unhandledrejection", function (ev) {
+    var r = ev && ev.reason;
+    if (!r || r.code || r.status) return;   // an API refusal / network problem, already shown as a toast
+    reportError("unhandled: " + (r.message || r), r.stack);
+  });
+
   K.start = function () {
     if (K.started) return; K.started = true;
     tabsEl.innerHTML = K.TABS.map(function (t) { return '<button data-tab="' + t[0] + '">' + K.ic(t[1]) + "<span>" + t[2] + "</span></button>"; }).join("");
