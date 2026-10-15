@@ -27,77 +27,137 @@ def _fmt(seconds: int) -> str:
 
 
 def _panel_sync(tg_user):
+    """The panel data, plus the bracket picture of the player's group once the draw is done."""
+    from game.media import get_feature_image_path, render_tournament_bracket
+
     user, _ = get_or_create_user(tg_user)
-    return tournament.panel_state(user)
+    d = tournament.panel_state(user)
+    photo = None
+    t = tournament.current()
+    if t is not None and d.get("entered") and d.get("group"):
+        photo = render_tournament_bracket(tournament.group_bracket(t, d["group"]), user.id)
+    return d, photo or get_feature_image_path("tournament")
 
 
 def _who(c: dict) -> str:
-    return f"{c['name']} — {constants.element_label(c['element'])} · قدرت <code>{c['power']:,}</code>"
+    return f"{c['name']} [{constants.element_label(c['element'])}] · قدرت <code>{c['power']:,}</code>"
+
+
+_PRIZE_LINES = [
+    "🏆 قهرمان گروه: جعبه‌ی جادویی + <code>40</code> الماس",
+    "🥈 نایب‌قهرمان: جعبه‌ی طلایی + <code>20</code> الماس",
+    "🥉 نیمه‌نهایی: جعبه‌ی طلایی + <code>10</code> الماس",
+    "🎟 بقیه‌ی شرکت‌کننده‌ها: جعبه‌ی نقره‌ای",
+]
 
 
 def _render(d: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
+    """Short on purpose (photo caption). One state at a time: registration → waiting for the
+    draw → my next match → out / finished. The full rules are behind «راهنمای جام»."""
     lines = ["🏟 <b>جام آخر هفته</b>", _DIV]
     if note:
         lines = [note, ""] + lines
     rows = []
-    intro = ("<blockquote>هر هفته یه جام حذفی: توی گروه‌های ۸ نفره‌ی هم‌سطح قرعه می‌خوری و جمعه‌شب "
-             "ساعت ۲۰، ۲۱ و ۲۲ سه دور بازی می‌شه. قبل از هر دور می‌تونی هیولات رو عوض کنی.</blockquote>")
-    if d["status"] == "running" and d["entered"]:
-        lines.append(f"👥 گروه <b>{d['group']}</b>")
+    status = d["status"]
+    if status == "running" and d["entered"]:
+        lines.append(f"👥 گروه <b>{d['group']}</b> · <code>{d.get('group_size', 0)}</code> نفر · جدول گروهت توی عکس بالاست")
         if d["my"]:
             lines.append(f"🦖 هیولای تو: {_who(d['my'])}")
+        lines.append(_DIV)
         if d["alive"] and "match_round" in d:
-            lines.append("")
-            lines.append(f"⚔️ <b>{tournament.ROUND_NAMES[d['match_round']]}</b> — {_fmt(d['round_in'])} دیگه")
+            lines.append(f"⚔️ <b>{tournament.ROUND_NAMES[d['match_round']]}</b>")
+            lines.append(f"⏰ شروع: <b>{_fmt(d['round_in'])}</b> دیگه")
             if d.get("foe") is None:
-                lines.append("حریف نداری؛ این دور رو بدون بازی بالا می‌ری.")
+                lines.append("😎 این دور حریف نداری؛ بدون بازی صعود می‌کنی.")
             else:
                 f = d["foe"]
-                lines.append(f"حریف: <b>{f['name']}</b>")
-                lines.append(f"هیولای فعلی‌ش: {f['creature']} — {constants.element_label(f['element'])} · قدرت <code>{f['power']:,}</code>")
-                lines.append("<i>اون هم می‌تونه تا شروع دور هیولاش رو عوض کنه. برتری عنصری = +۲۰٪ قدرت.</i>")
+                lines.append(f"🆚 حریف: <b>{f['name']}</b>")
+                lines.append(f"👹 هیولای فعلی‌ش: {f['creature']} [{constants.element_label(f['element'])}] · قدرت <code>{f['power']:,}</code>")
+                lines.append("<i>💡 هیولایی بفرست که بر عنصر حریف برتری داره (+۲۰٪ قدرت). اون هم تا شروع دور می‌تونه عوض کنه.</i>")
             rows.append([btn("عوض‌کردن هیولا", emoji_key="btn_swap", style=BATTLE, callback_data="tour:pick:0")])
-        elif not d["alive"]:
-            lines.append(f"\nاز جام کنار رفتی — جایگاه: <b>{tournament.PLACE_NAMES.get(d['place'] or 5)}</b>. جایزه آخر شب می‌رسه.")
-    elif d["status"] == "finished" and d["entered"]:
-        lines.append(f"جام این هفته تموم شد. جایگاه تو در گروه {d['group']}: <b>{tournament.PLACE_NAMES.get(d['place'] or 5)}</b>")
+        elif d["alive"]:
+            lines.append("⏳ منتظر نتیجه‌ی بقیه‌ی بازی‌های این دور…")
+        else:
+            lines.append(f"❌ از جام کنار رفتی · جایگاه: <b>{tournament.PLACE_NAMES.get(d['place'] or 5)}</b>")
+            lines.append("🎁 جایزه‌ات بعد از فینال (حدود ساعت ۲۲) می‌رسه.")
+    elif status == "finished" and d["entered"]:
+        lines.append(f"🏁 جام این هفته تموم شد · گروه <b>{d['group']}</b>")
+        lines.append(f"🎖 جایگاه تو: <b>{tournament.PLACE_NAMES.get(d['place'] or 5)}</b>")
         if d.get("champion"):
-            lines.append(f"🏆 قهرمان گروه: {d['champion']}")
+            lines.append(f"🏆 قهرمان گروه: <b>{d['champion']}</b>")
+        lines.append(_DIV)
         lines.append(f"⏳ ثبت‌نام جام بعدی: <b>{_fmt(d['next_reg_in'])}</b> دیگه")
     elif d["registration_open"]:
-        lines.append(intro)
-        lines.append(f"📝 ثبت‌نام بازه — قرعه‌کشی <b>{_fmt(d['draw_in'])}</b> دیگه · 👥 <code>{d.get('players', 0)}</code> نفر تا الان")
+        lines.append(f"📝 <b>ثبت‌نام بازه</b> · 👥 <code>{d.get('players', 0)}</code> نفر تا الان")
+        lines.append(f"🎲 قرعه‌کشی: جمعه ساعت ۱۹:۳۰ (<b>{_fmt(d['draw_in'])}</b> دیگه)")
+        lines.append("⚔️ بازی‌ها: جمعه ساعت ۲۰، ۲۱ و ۲۲")
+        lines.append(_DIV)
         if d["entered"]:
-            lines.append("✅ <b>ثبت‌نام کردی.</b>")
+            lines.append("✅ <b>ثبت‌نام کردی.</b> بعد از قرعه‌کشی جدول گروهت اینجا نشون داده می‌شه.")
             if d["my"]:
                 lines.append(f"🦖 هیولای تو: {_who(d['my'])}")
             rows.append([btn("عوض‌کردن هیولا", emoji_key="btn_swap", style=BATTLE, callback_data="tour:pick:0")])
             rows.append([btn("انصراف از جام", emoji_key="btn_cancel", style=DANGER, callback_data="tour:leave")])
         else:
+            lines.append("<blockquote>رایگانه. با بازیکن‌های هم‌سطح خودت توی یه گروه ۸ نفره می‌افتی؛ "
+                         "حتی بازیکن ضعیف‌تر هم می‌تونه قهرمان گروهش بشه.</blockquote>")
             rows.append([btn("ثبت‌نام (رایگان)", emoji_key="btn_confirm", style=CONFIRM, callback_data="tour:join")])
     else:
-        lines.append(intro)
-        lines.append(f"⏳ ثبت‌نام جام بعدی: <b>{_fmt(d['next_reg_in'])}</b> دیگه (پنجشنبه تا جمعه ۱۹:۳۰)")
-    lines.append("")
-    lines.append("🎁 قهرمان: جعبه‌ی جادویی + ۴۰ الماس · نایب‌قهرمان: طلایی + ۲۰ · نیمه‌نهایی: طلایی + ۱۰ · بقیه: نقره‌ای")
-    rows.append([btn("بروزرسانی", emoji_key="btn_recheck", style=NAV, callback_data="tour:home")])
+        lines.append("<blockquote>هر هفته یه جام حذفی بین بازیکن‌های هم‌سطح. پنجشنبه و جمعه ثبت‌نام کن، "
+                     "جمعه‌شب سه دور بازی می‌شه و قهرمان هر گروه جایزه می‌گیره.</blockquote>")
+        lines.append(f"⏳ ثبت‌نام جام بعدی: <b>{_fmt(d['next_reg_in'])}</b> دیگه")
+    lines.append(_DIV)
+    lines += _PRIZE_LINES
+    rows.append([btn("راهنمای جام", emoji_key="btn_report", style=NAV, callback_data="tour:help"),
+                 btn("بروزرسانی", emoji_key="btn_recheck", style=NAV, callback_data="tour:home")])
     rows.append([back_btn("menu:hub_battle", "بازگشت به نبرد")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
-async def tournament_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    d = await run_db(_panel_sync, update.effective_user)
-    text, keyboard = _render(d)
-    from game.media import get_feature_image_path
+_HELP = "\n".join([
+    "📖 <b>راهنمای جام آخر هفته</b>", _DIV,
+    "<b>۱. ثبت‌نام</b>",
+    "پنجشنبه ۰۰:۰۰ تا جمعه ۱۹:۳۰، رایگان.",
+    "",
+    "<b>۲. قرعه‌کشی (جمعه ۱۹:۳۰)</b>",
+    "بر اساس کاپ، گروه‌های حداکثر ۸ نفره‌ی هم‌سطح ساخته می‌شه؛ هر گروه جدول و قهرمان خودش رو داره "
+    "(اسم هم‌گروهی‌هات توی عکس صفحه‌ی جام).",
+    "",
+    "<b>۳. سه دور، هر ساعت یکی</b>",
+    "ساعت ۲۰ یک‌چهارم نهایی، ۲۱ نیمه‌نهایی، ۲۲ فینال. برنده‌ی هر بازی به دور بعد می‌ره و بازنده کنار می‌ره.",
+    "",
+    "<b>۴. کی می‌بره؟</b>",
+    "قدرت بیشتر می‌بره. هیولایی که بر عنصر حریف برتری داره <code>+20%</code> قدرت می‌گیره. "
+    "مساوی بشه، کسی که زودتر ثبت‌نام کرده می‌بره. شانسی در کار نیست.",
+    "",
+    "<b>۵. ترفند اصلی</b>",
+    "تا شروع هر دور هیولای حریفت رو می‌بینی و می‌تونی هیولات رو عوض کنی؛ اون هم می‌تونه.",
+    "",
+    "<b>۶. استراحت</b>",
+    "اگه گروهت کمتر از ۸ نفر باشه، بعضیا دور اول حریف ندارن و بدون بازی صعود می‌کنن.",
+    "",
+    "<b>۷. جایزه‌ها (بعد از فینال)</b>",
+    *_PRIZE_LINES,
+])
 
-    await send_screen(update, text, photo=get_feature_image_path("tournament"), parse_mode="HTML", reply_markup=keyboard)
+
+async def tournament_help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    await safe_edit_message_text(query, _HELP, parse_mode="HTML",
+                                 reply_markup=InlineKeyboardMarkup([[back_btn("tour:home", "بازگشت به جام")]]))
+
+
+async def tournament_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    d, photo = await run_db(_panel_sync, update.effective_user)
+    text, keyboard = _render(d)
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def _refresh(update: Update, note: str = "") -> None:
-    query = update.callback_query
-    d = await run_db(_panel_sync, update.effective_user)
+    d, photo = await run_db(_panel_sync, update.effective_user)
     text, keyboard = _render(d, note)
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+    await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def tournament_home_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -197,6 +257,7 @@ async def tournament_set_callback(update: Update, context: ContextTypes.DEFAULT_
 def register(application) -> None:
     application.add_handler(CommandHandler("tournament", tournament_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(tournament_home_callback, pattern=r"^tour:home$"))
+    application.add_handler(CallbackQueryHandler(tournament_help_callback, pattern=r"^tour:help$"))
     application.add_handler(CallbackQueryHandler(tournament_join_callback, pattern=r"^tour:join$"))
     application.add_handler(CallbackQueryHandler(tournament_leave_callback, pattern=r"^tour:leave$"))
     application.add_handler(CallbackQueryHandler(tournament_pick_callback, pattern=r"^tour:pick:\d+$"))

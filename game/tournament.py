@@ -225,12 +225,23 @@ def _draw(tournament: Tournament) -> list[tuple]:
     tournament.status = Tournament.RUNNING
     tournament.round = 1
     tournament.save(update_fields=["status", "round"])
+    sizes: dict[int, int] = {}
     for e in entries:
-        if e.user.notifications_on:
-            out.append((e.user_id,
-                        f"🏟 <b>قرعه‌کشی جام انجام شد!</b>\nتوی گروه <b>{e.group_no}</b> هستی. "
-                        f"{ROUND_NAMES[1]} ساعت ۲۰ شروع می‌شه؛ حریفت رو ببین و هیولات رو انتخاب کن.",
-                        "tournament"))
+        sizes[e.group_no] = sizes.get(e.group_no, 0) + 1
+    for e in entries:
+        if not e.user.notifications_on:
+            continue
+        m = _next_match_for(e)
+        foe = None if m is None else (m.b if m.a_id == e.id else m.a)
+        foe_line = (f"⚔️ حریف دور اولت: <b>{lab_display(foe.user)}</b>" if foe is not None
+                    else "😎 دور اول حریف نداری و مستقیم به نیمه‌نهایی می‌ری.")
+        out.append((e.user_id, "\n".join([
+            "🏟 <b>قرعه‌کشی جام انجام شد!</b>",
+            f"👥 گروه تو: <b>{e.group_no}</b> ({sizes[e.group_no]} نفر)",
+            foe_line,
+            f"⏰ {ROUND_NAMES[1]}: ساعت ۲۰ امشب",
+            "📊 جدول کامل گروهت رو با /tournament ببین؛ تا قبل از شروع دور می‌تونی هیولات رو عوض کنی.",
+        ]), "tournament"))
     return out
 
 
@@ -346,6 +357,33 @@ def tick() -> list[tuple]:
     return out
 
 
+# ── the bracket of one group (for the picture) ────────────────────────────────
+def group_bracket(tournament: Tournament, group_no: int) -> dict:
+    """Everything the bracket picture needs, plain text only:
+    {"group", "week", "members", "rounds": {1: [match…], 2: […], 3: […]}, "champion"}.
+    A match is {"slot", "a", "b", "winner"} where each side is {"entry", "user", "name"}
+    (b/winner None for a bye / an unplayed match) plus powers and elements once played."""
+    from bio_lab.repository import lab_plain
+
+    def side(e):
+        return None if e is None else {"entry": e.id, "user": e.user_id, "name": lab_plain(e.user)}
+
+    rounds: dict[int, list[dict]] = {r: [] for r in range(1, ROUNDS + 1)}
+    for m in (TournamentMatch.objects.filter(tournament=tournament, group_no=group_no)
+              .select_related("a__user", "b__user", "winner").order_by("round", "slot")):
+        rounds[m.round].append({
+            "slot": m.slot, "a": side(m.a), "b": side(m.b),
+            "winner": None if m.winner_id is None else m.winner_id,
+            "power_a": m.power_a, "power_b": m.power_b, "element_a": m.element_a, "element_b": m.element_b,
+        })
+    members = [side(e) for e in TournamentEntry.objects.filter(tournament=tournament, group_no=group_no)
+               .select_related("user").order_by("-user__cup", "id")]
+    champ = (TournamentEntry.objects.filter(tournament=tournament, group_no=group_no, place=1)
+             .select_related("user").first())
+    return {"group": group_no, "week": tournament.week_key, "members": members, "rounds": rounds,
+            "champion": side(champ), "round": tournament.round, "status": tournament.status}
+
+
 # ── state for the screen ──────────────────────────────────────────────────────
 def panel_state(user: User) -> dict:
     now = timezone.localtime()
@@ -382,6 +420,7 @@ def panel_state(user: User) -> dict:
                 data["foe"] = {"name": lab_display(foe.user),
                                "creature": creature_name(fc) if fc else "؟", "power": fp, "element": fe}
     if entry.group_no:
+        data["group_size"] = TournamentEntry.objects.filter(tournament=tournament, group_no=entry.group_no).count()
         champ = (
             TournamentEntry.objects.filter(tournament=tournament, group_no=entry.group_no, place=1)
             .select_related("user").first()

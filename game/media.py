@@ -27,7 +27,7 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 # everything else (creature/building cards, shared by many players) stays until the
 # folder passes CACHE_MAX_BYTES, then the oldest go first. A deleted card is simply drawn
 # again the next time someone opens it.
-CACHE_ONE_OFF_PREFIXES = ("equip_card_", "loot_batch_")
+CACHE_ONE_OFF_PREFIXES = ("equip_card_", "loot_batch_", "tour_bracket_")
 CACHE_ONE_OFF_MAX_AGE = 3 * 3600
 CACHE_MAX_BYTES = 300 * 1024 * 1024
 
@@ -1022,3 +1022,137 @@ def get_arena_chest_image_path(tier: str, state: str = "locked") -> str | None:
 
 
 
+
+
+
+# ── «🏟 جام آخر هفته»: the bracket of one group ────────────────────────────────
+def render_tournament_bracket(br: dict, me_user_id: int | None = None) -> str | None:
+    """A knockout bracket picture of one tournament group (game.tournament.group_bracket):
+    quarter-final on the right, then semi-final, final and the champion on the left (Persian
+    reads right to left). Winners are green, players who are out are dimmed, the viewer's own
+    boxes are gold. Cached per (week, group, played state, viewer)."""
+    import hashlib
+    import json
+
+    from PIL import Image, ImageDraw, ImageFont
+
+    from game import tournament as T
+
+    state = json.dumps([br["week"], br["group"], br["rounds"], br["champion"], me_user_id], sort_keys=True, default=str)
+    key = hashlib.sha1(state.encode()).hexdigest()[:16]
+    out = CACHE_DIR / f"tour_bracket_{key}.jpg"
+    if out.exists():
+        return str(out)
+    try:
+        W, H = 1280, 940
+        img = Image.new("RGB", (W, H), (12, 15, 26))
+        d = ImageDraw.Draw(img)
+        for y in range(H):   # soft vertical gradient
+            t = y / H
+            d.line([(0, y), (W, y)], fill=(int(14 + 10 * t), int(18 + 6 * t), int(34 - 8 * t)))
+        bold = str(FONTS_DIR / "Vazirmatn-Bold.ttf")
+        reg = str(FONTS_DIR / "Vazirmatn-Regular.ttf")
+        f_title = ImageFont.truetype(bold, 44)
+        f_sub = ImageFont.truetype(reg, 24)
+        f_head = ImageFont.truetype(bold, 26)
+        f_name = ImageFont.truetype(bold, 23)
+        f_small = ImageFont.truetype(reg, 18)
+
+        def text_c(x, y, txt, font, fill):
+            t = shape_persian_text(txt)
+            w = d.textlength(t, font=font)
+            d.text((x - w / 2, y), t, font=font, fill=fill)
+
+        def text_r(x_right, y, txt, font, fill):
+            t = shape_persian_text(txt)
+            w = d.textlength(t, font=font)
+            d.text((x_right - w, y), t, font=font, fill=fill)
+
+        text_c(W / 2, 22, f"جام آخر هفته — گروه {br['group']}", f_title, (255, 216, 120))
+        text_c(W / 2, 80, f"{len(br['members'])} بازیکن · برنده‌ی هر بازی صعود می‌کنه · ساعت ۲۰، ۲۱ و ۲۲", f_sub, (190, 200, 225))
+
+        col_w, box_h = 270, 58
+        cols = {1: 975, 2: 655, 3: 335}           # left x of each round's column
+        champ_x = 30
+        top, bottom = 170, H - 40
+        heads = {1: T.ROUND_NAMES[1], 2: T.ROUND_NAMES[2], 3: T.ROUND_NAMES[3]}
+        for r, x in cols.items():
+            text_c(x + col_w / 2, top - 52, heads[r], f_head, (140, 210, 255))
+        text_c(champ_x + col_w / 2, top - 52, "قهرمان", f_head, (255, 216, 120))
+
+        # vertical centre of every match position, by round
+        n1 = T.GROUP_SIZE // 2
+        span = (bottom - top) / n1
+        centres = {1: [top + span * (i + 0.5) for i in range(n1)]}
+        for r in range(2, T.ROUNDS + 1):
+            prev = centres[r - 1]
+            centres[r] = [(prev[2 * i] + prev[2 * i + 1]) / 2 for i in range(len(prev) // 2)]
+
+        GREEN, DIM, GOLD, LINE = (60, 200, 120), (95, 102, 125), (255, 200, 70), (70, 80, 110)
+
+        def player_box(x, y, side, won, lost, label_if_empty="؟"):
+            mine = side is not None and me_user_id is not None and side["user"] == me_user_id
+            fill = (28, 34, 54)
+            border = LINE
+            name_col = (235, 240, 255)
+            if won:
+                fill, border = (24, 58, 44), GREEN
+            if lost:
+                fill, name_col = (24, 27, 40), DIM
+            if mine:
+                border = GOLD
+            d.rounded_rectangle([x, y, x + col_w, y + box_h], radius=12, fill=fill, outline=border, width=3 if (mine or won) else 2)
+            name = side["name"] if side else label_if_empty
+            if len(name) > 18:
+                name = name[:17] + "…"
+            text_r(x + col_w - 14, y + 13, name, f_name, name_col if side else (120, 130, 155))
+
+        def match_block(r, i, m):
+            cx = cols[r]
+            cy = centres[r][i]
+            gap = 8 if r == 1 else 6
+            ya, yb = cy - box_h - gap / 2, cy + gap / 2
+            a = m.get("a") if m else None
+            b = m.get("b") if m else None
+            w = m.get("winner") if m else None
+            played = w is not None
+            player_box(cx, ya, a, played and a and w == a["entry"], played and a and w != a["entry"])
+            if m is not None and b is None and a is not None:
+                player_box(cx, yb, None, False, False, label_if_empty="استراحت")
+            else:
+                player_box(cx, yb, b, played and b and w == b["entry"], played and b and w != b["entry"])
+            # elbow line to the next round
+            nx = cols.get(r + 1, champ_x) + col_w
+            ny = centres[r + 1][i // 2] if r < T.ROUNDS else centres[T.ROUNDS][0]
+            col = GREEN if played else LINE
+            d.line([(cx, cy), (cx - 18, cy)], fill=col, width=3)
+            d.line([(cx - 18, cy), (cx - 18, ny)], fill=col, width=3)
+            d.line([(cx - 18, ny), (nx, ny)], fill=col, width=3)
+
+        for r in range(1, T.ROUNDS + 1):
+            by_slot = {m["slot"]: m for m in br["rounds"].get(r, [])}
+            for i in range(len(centres[r])):
+                match_block(r, i, by_slot.get(i))
+
+        # champion
+        cy = centres[T.ROUNDS][0]
+        champ = br.get("champion")
+        mine = champ is not None and champ["user"] == me_user_id
+        d.rounded_rectangle([champ_x, cy - 40, champ_x + col_w, cy + 40], radius=16,
+                            fill=(60, 48, 20) if champ else (28, 34, 54), outline=GOLD, width=4 if mine else 3)
+        text_c(champ_x + col_w / 2, cy - 22, (champ["name"][:17] if champ else "؟"), f_name, (255, 230, 160))
+        text_c(champ_x + col_w / 2, cy + 52, "جعبه‌ی جادویی + ۴۰ الماس", f_small, (200, 190, 150))
+
+        # legend
+        ly = H - 32
+        for i, (col, label) in enumerate([(GREEN, "صعود"), (DIM, "حذف"), (GOLD, "تو")]):
+            x = W - 40 - i * 150
+            d.rounded_rectangle([x - 22, ly, x, ly + 20], radius=5, fill=col)
+            text_r(x - 30, ly - 3, label, f_small, (200, 205, 220))
+        img.save(out, "JPEG", quality=90)
+        return str(out)
+    except Exception:  # noqa: BLE001 — a picture must never break the screen
+        import logging
+
+        logging.getLogger(__name__).exception("tournament bracket render failed")
+        return None
