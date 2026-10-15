@@ -81,8 +81,101 @@ def _inv_home_render(counts: dict, is_group: bool = False) -> tuple[str, InlineK
         rows.append(row)
     rows.append([btn("آهنگری", emoji_key="btn_forge", style=SHOP, callback_data="menu:blacksmith")])
     if not is_group:
+        rows.append([btn("بازیافت به طلا", emoji_key="btn_recycle", style=SHOP, callback_data="rcy:menu")])
         rows.append([back_btn("menu:hub_creature", "بازگشت به هیولا")])
     return text, InlineKeyboardMarkup(rows)
+
+
+# ── «بازیافت به طلا» ────────────────────────────────────────────────────────────
+_RCY_LABELS = {
+    "low": "معمولی و نایاب", "common": "⚪ معمولی", "rare": "🔵 نایاب", "epic": "🟣 حماسی",
+    "legendary": "🟡 افسانه‌ای", "mythic": "🔴 اساطیری",
+}
+_RCY_DIV = "━━━━━━━━━━━━━━━━━━━━"
+
+
+def _rcy_summary_sync(tg_user):
+    from game.equipment import recycle_summary
+
+    user, _ = get_or_create_user(tg_user)
+    return recycle_summary(user)
+
+
+def _rcy_menu_render(summary: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
+    lines = ([note, ""] if note else []) + [
+        f"♻️ <b>بازیافت به طلا</b>", _RCY_DIV,
+        "<blockquote>تجهیزاتی که لازم نداری رو یک‌جا به طلا تبدیل کن. فقط تجهیزاتِ <b>پوشیده‌نشده</b> "
+        "بازیافت می‌شن؛ هر چی تن هیولاهاته دست نمی‌خوره. هر سطحِ بالاتر از +۱، طلای بیشتری می‌ده.</blockquote>",
+        _RCY_DIV,
+        "<b>طلای هر تجهیزات (+۱):</b>",
+    ]
+    for rarity in constants.RARITY_ORDER:
+        lines.append(f"{constants.RARITY_LABELS[rarity]}: <code>{constants.EQUIP_RECYCLE_GOLD[rarity]:,}</code> طلا")
+    lines.append(_RCY_DIV)
+    rows = []
+    for key in ("low", "common", "rare", "epic", "legendary", "mythic"):
+        count, gold = summary.get(key, (0, 0))
+        if count:
+            rows.append([btn(f"{_RCY_LABELS[key]} ({count}) · {gold:,} طلا", style=SHOP, callback_data=f"rcy:ask:{key}")])
+    if not rows:
+        lines.append("<i>تجهیزات پوشیده‌نشده‌ای برای بازیافت نداری.</i>")
+    rows.append([back_btn("menu:inventory", "بازگشت به تجهیزات")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+async def recycle_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    summary = await run_db(_rcy_summary_sync, update.effective_user)
+    text, keyboard = _rcy_menu_render(summary)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def recycle_ask_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    key = query.data.split(":")[2]
+    summary = await run_db(_rcy_summary_sync, update.effective_user)
+    count, gold = summary.get(key, (0, 0))
+    if not count:
+        await query.answer("تجهیزات پوشیده‌نشده‌ای از این دسته نداری.", show_alert=True)
+        return
+    await query.answer()
+    text = "\n".join([
+        "♻️ <b>بازیافت به طلا</b>", _RCY_DIV,
+        f"دسته: <b>{_RCY_LABELS.get(key, key)}</b>",
+        f"🛡 تعداد: <code>{count:,}</code> تجهیزات پوشیده‌نشده",
+        f"{get_emoji('coin')} طلایی که می‌گیری: <code>{gold:,}</code>",
+        _RCY_DIV,
+        "⚠️ این کار برگشت‌پذیر نیست؛ تجهیزات بازیافت‌شده پاک می‌شن.",
+    ])
+    keyboard = InlineKeyboardMarkup([
+        [btn(f"بازیافت ({gold:,} طلا)", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"rcy:do:{key}")],
+        [back_btn("rcy:menu", "انصراف")],
+    ])
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _rcy_do_sync(tg_user, key):
+    from game.equipment import recycle_summary, recycle_to_gold
+
+    user, _ = get_or_create_user(tg_user)
+    res = recycle_to_gold(user, key)
+    return res, recycle_summary(user)
+
+
+async def recycle_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    key = query.data.split(":")[2]
+    try:
+        res, summary = await run_db(_rcy_do_sync, update.effective_user, key)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    await query.answer("✅ بازیافت شد!")
+    note = (f"✅ <b>{res['count']:,}</b> تجهیزات بازیافت شد و <code>+{res['gold']:,}</code> طلا گرفتی. "
+            f"موجودی: <code>{res['coins']:,}</code>")
+    text, keyboard = _rcy_menu_render(summary, note)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def _inv_cat_sync(tg_user, slot):
@@ -732,6 +825,9 @@ async def forge_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 def register(application) -> None:
     application.add_handler(CommandHandler("inventory", inventory_cmd, filters.ChatType.PRIVATE))
     application.add_handler(CommandHandler("blacksmith", hall_gated("blacksmith", blacksmith_panel), filters.ChatType.PRIVATE))
+    application.add_handler(CallbackQueryHandler(recycle_menu_callback, pattern=r"^rcy:menu$"))
+    application.add_handler(CallbackQueryHandler(recycle_ask_callback, pattern=r"^rcy:ask:[a-z]+$"))
+    application.add_handler(CallbackQueryHandler(recycle_do_callback, pattern=r"^rcy:do:[a-z]+$"))
     application.add_handler(CallbackQueryHandler(forge_pick_callback, pattern=r"^forge_pick:"))
     application.add_handler(CallbackQueryHandler(forge_cat_callback, pattern=r"^forge_cat:"))
     application.add_handler(CallbackQueryHandler(forge_do_callback, pattern=r"^forge_do:"))

@@ -16,6 +16,53 @@ def get_equipped_items(creature: Creature) -> list[Equipment]:
     return list(Equipment.objects.filter(equipped_on=creature))
 
 
+# ── «بازیافت به طلا» ────────────────────────────────────────────────────────────
+# group key -> rarities it recycles (the bot's buttons; «low» = the everyday clutter)
+RECYCLE_GROUPS = {
+    "low": ("common", "rare"),
+    "common": ("common",), "rare": ("rare",), "epic": ("epic",),
+    "legendary": ("legendary",), "mythic": ("mythic",),
+}
+
+
+def recycle_value(item: Equipment) -> int:
+    base = constants.EQUIP_RECYCLE_GOLD.get(item.rarity, 0)
+    return round(base * (1 + constants.EQUIP_RECYCLE_LEVEL_BONUS * max(0, item.level - 1)))
+
+
+def recycle_summary(user: User) -> dict[str, tuple[int, int]]:
+    """{group: (pieces, gold)} over the player's UNEQUIPPED gear — what each button would pay."""
+    per_rarity: dict[str, list[int]] = {r: [0, 0] for r in constants.RARITY_ORDER}
+    for rarity, level in Equipment.objects.filter(owner=user, equipped_on__isnull=True).values_list("rarity", "level"):
+        if rarity in per_rarity:
+            per_rarity[rarity][0] += 1
+            per_rarity[rarity][1] += round(constants.EQUIP_RECYCLE_GOLD.get(rarity, 0)
+                                           * (1 + constants.EQUIP_RECYCLE_LEVEL_BONUS * max(0, level - 1)))
+    return {key: (sum(per_rarity[r][0] for r in rars), sum(per_rarity[r][1] for r in rars))
+            for key, rars in RECYCLE_GROUPS.items()}
+
+
+@transaction.atomic
+def recycle_to_gold(user: User, group: str) -> dict:
+    """Turn every UNEQUIPPED piece of the group's rarities into gold. Worn gear is never touched."""
+    from game.ledger import record_gain
+
+    rarities = RECYCLE_GROUPS.get(group)
+    if not rarities:
+        raise GameError("این دسته وجود نداره.")
+    user = User.objects.select_for_update().get(pk=user.pk)
+    items = list(Equipment.objects.select_for_update()
+                 .filter(owner=user, equipped_on__isnull=True, rarity__in=rarities))
+    if not items:
+        raise GameError("تجهیزات پوشیده‌نشده‌ای از این دسته نداری.")
+    gold = sum(recycle_value(i) for i in items)
+    Equipment.objects.filter(id__in=[i.id for i in items], equipped_on__isnull=True).delete()
+    user.coins += gold
+    user.save(update_fields=["coins"])
+    record_gain(user, "recycle", coins=gold)
+    return {"count": len(items), "gold": gold, "coins": user.coins}
+
+
 def rarity_rank(rarity: str) -> int:
     """Position of a rarity key in constants.RARITY_ORDER (common = 0 … mythic = 4)."""
     try:

@@ -580,6 +580,14 @@ BIOCRATE_DNA_COST = 30     # doubled per owner request (was 15)
 # Genetic-box TICKETS: earned by exchanging spare gear (see game/equipment.py). One
 # ticket opens one basic genetic box for free. A mythic piece is worth 2, a legendary 1.
 EQUIP_TICKET_VALUE = {"mythic": 2, "legendary": 1}
+
+# «بازیافت به طلا»: unequipped gear turned into gold in bulk (game/equipment.py). Base gold
+# for a +1 piece; each level above +1 adds EQUIP_RECYCLE_LEVEL_BONUS of the base, so some
+# of the forge gold comes back. Kept well under what the gear costs to get: the gear of a
+# basic genetic box (500 gold + 30 DNA) recycles for ~80 gold on average, so buying boxes
+# to recycle them can never make gold.
+EQUIP_RECYCLE_GOLD = {"common": 40, "rare": 100, "epic": 250, "legendary": 450, "mythic": 900}
+EQUIP_RECYCLE_LEVEL_BONUS = 0.5
 BIOCRATE_CREATURE_CHANCE = 0.04  # 4% yields a creature; the other 96% is equipment
 
 # Rarity split used ONLY when the crate rolls a creature (the 10% above). Tuned so
