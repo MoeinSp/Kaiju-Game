@@ -168,3 +168,54 @@ def cancel_subscription(user: User) -> User:
     user.subscription_until = None
     user.save(update_fields=["subscription_tier", "subscription_until"])
     return user
+
+
+
+# ── time-limited discounts («تخفیف اشتراک», admin panel) ─────────────────────────
+MAX_DISCOUNT_PERCENT = 90
+
+
+def discounted(price: int, percent: int) -> int:
+    """Price after `percent` off, rounded to a thousand toman."""
+    return int(round(price * (100 - percent) / 100 / 1000) * 1000)
+
+
+def active_discounts():
+    from bio_lab.models import SubscriptionDiscount
+
+    now = timezone.now()
+    return list(SubscriptionDiscount.objects.filter(cancelled=False, starts_at__lte=now, ends_at__gt=now).order_by("-percent"))
+
+
+def active_discount(tier: str):
+    """The best running discount for this tier, or None."""
+    return next((d for d in active_discounts() if d.tier in (tier, "all")), None)
+
+
+def effective_price(tier: str) -> tuple[int, int, object]:
+    """(price to pay now, list price, the discount row or None)."""
+    base = SUBSCRIPTION_TIERS[tier]["price_toman"]
+    d = active_discount(tier)
+    return (discounted(base, d.percent) if d else base), base, d
+
+
+def start_discount(tier: str, percent: int, hours: int, broadcast: bool) -> list:
+    from bio_lab.models import SubscriptionDiscount
+    from game.creature import GameError
+
+    if tier not in ("gold", "silver", "all"):
+        raise GameError("اشتراک نامعتبره.")
+    if not 1 <= int(percent) <= MAX_DISCOUNT_PERCENT:
+        raise GameError(f"تخفیف باید بین ۱ تا {MAX_DISCOUNT_PERCENT} درصد باشه.")
+    if not 1 <= int(hours) <= 24 * 30:
+        raise GameError("مدت نامعتبره.")
+    now = timezone.now()
+    return [SubscriptionDiscount.objects.create(tier=tier, percent=int(percent), starts_at=now,
+                                                ends_at=now + datetime.timedelta(hours=int(hours)), broadcast=broadcast)]
+
+
+def stop_discounts() -> int:
+    from bio_lab.models import SubscriptionDiscount
+
+    now = timezone.now()
+    return SubscriptionDiscount.objects.filter(cancelled=False, ends_at__gt=now).update(cancelled=True)

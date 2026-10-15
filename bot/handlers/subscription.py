@@ -5,6 +5,7 @@ Two tiers:
 - Gold (۵۰۰,۰۰۰ تومان - ۳۰ روزه)
 """
 
+from django.utils import timezone
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
@@ -18,9 +19,24 @@ from game.emoji import get_emoji
 from game.subscription import SUBSCRIPTION_TIERS, get_subscription_info
 
 
+def _prices_sync() -> dict:
+    """{tier: (price now, list price, discount %, seconds left)} — read in the DB thread, the
+    render helpers below only format it (they run in the event loop)."""
+    from game.subscription import effective_price
+
+    out = {}
+    for tier in ("silver", "gold"):
+        price, base, d = effective_price(tier)
+        left = max(0, int((d.ends_at - timezone.now()).total_seconds())) if d else 0
+        out[tier] = (price, base, d.percent if d else 0, left)
+    return out
+
+
 def _sub_panel_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
-    return user, get_subscription_info(user)
+    info = get_subscription_info(user)
+    info["prices"] = _prices_sync()
+    return user, info
 
 
 def _render_subscription_text(info: dict) -> str:
@@ -59,7 +75,7 @@ def _render_subscription_text(info: dict) -> str:
         f"  • {get_emoji('energy')} <b>۲۵٪ سرعت شارژ سریع‌تر انرژی</b>",
         f"  • 📋 امکان در صف گذاشتن یک جعبه آرنا (بازگشایی خودکار)",
         f"  • {get_emoji('hunt')} افزایش ۲۵ درصدی جوایز و درآمد شکار خودکار",
-        f"  {get_emoji('coin')} قیمت: <b>۱۰۰,۰۰۰ تومان</b>",
+        _price_line(info, "silver"),
         "",
         f"{get_emoji('sub_gold')} <b>اشتراک طلایی (۳۰ روزه):</b>",
         f"  • {get_emoji('sub_gold')} نشان اختصاصی پرمیوم طلایی در کنار نام شما",
@@ -68,16 +84,30 @@ def _render_subscription_text(info: dict) -> str:
         f"  • 🕳 افزایش ظرفیت همزمانی غار هیولا به ۲ جفت همزمان",
         f"  • 📋 امکان در صف گذاشتن یک جعبه آرنا (بازگشایی خودکار)",
         f"  • {get_emoji('hunt')} افزایش ۵۰ درصدی جوایز و درآمد شکار خودکار",
-        f"  {get_emoji('coin')} قیمت: <b>۵۰۰,۰۰۰ تومان</b>",
+        _price_line(info, "gold"),
         "━━━━━━━━━━━━━━━━━━━━",
     ]
     return "\n".join(lines)
 
 
+def _price_line(info: dict, tier: str) -> str:
+    """«قیمت» line of a tier — with the running discount (struck list price + time left) if any."""
+    price, base, pct, left = info["prices"][tier]
+    if not pct:
+        return f"  {get_emoji('coin')} قیمت: <b>{base:,} تومان</b>"
+    return (f"  {get_emoji('coin')} قیمت: <s>{base:,}</s> ← <b>{price:,} تومان</b> 🔥 <b>{pct}٪ تخفیف</b>\n"
+            f"  ⏳ تخفیف تا {left // 3600} ساعت و {left % 3600 // 60} دقیقه‌ی دیگه")
+
+
+def _buy_label(info: dict, tier: str, name: str) -> str:
+    pct = info["prices"][tier][2]
+    return f"خرید {name} ({pct}٪ تخفیف)" if pct else f"خرید {name}"
+
+
 def _render_subscription_keyboard(info: dict, is_group: bool = False) -> InlineKeyboardMarkup:
     rows = [
-        [btn("خرید اشتراک نقره‌ای", emoji_key="btn_sub_silver", style=PRIMARY, callback_data="sub_pick:silver")],
-        [btn("خرید اشتراک طلایی", emoji_key="btn_sub_gold", style=CONFIRM, callback_data="sub_pick:gold")],
+        [btn(_buy_label(info, "silver", "اشتراک نقره‌ای"), emoji_key="btn_sub_silver", style=PRIMARY, callback_data="sub_pick:silver")],
+        [btn(_buy_label(info, "gold", "اشتراک طلایی"), emoji_key="btn_sub_gold", style=CONFIRM, callback_data="sub_pick:gold")],
     ]
     if not is_group:
         rows.append([back_btn("menu:hub_shop", "بازگشت به فروشگاه")])
@@ -214,7 +244,7 @@ async def sub_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             f"<blockquote>✨ اشتراک فعال شما: <b>{info['badge']} {info['tier_name']}</b>\n"
             f"⏳ زمان باقی‌مانده فعلی: <b>{info['days_left']} روز و {info['hours_left']} ساعت</b>\n\n"
             f"📦 اشتراک انتخابی: <b>{sub_cfg.get('name', tier)}</b> (۳۰ روزه)\n"
-            f"{get_emoji('coin')} مبلغ: <b>{sub_cfg.get('price_toman', 0):,} تومان</b></blockquote>\n\n"
+            f"{get_emoji('coin')} مبلغ: <b>{info["prices"][tier][0]:,} تومان</b></blockquote>\n\n"
             f"⚡️ <b>بعد از تأیید پرداخت: {result_tier}، حدود {new_days} روز.</b>"
             + ("\n<i>چون رده‌ی انتخابی با اشتراک فعلیت فرق داره، مدت بر اساس ارزش پولی تبدیل می‌شه.</i>"
                if cur_cfg and info["tier"] != tier else ""),

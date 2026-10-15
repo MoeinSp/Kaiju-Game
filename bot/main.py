@@ -281,6 +281,9 @@ def main() -> None:
     equip_exchange.register(application)
     shop.register(application)
     subscription.register(application)
+    from bot.handlers import subdiscount
+
+    subdiscount.register(application)
     purchase.register(application)
     exchange.register(application)
     casino.register(application)

@@ -469,7 +469,7 @@ def energy_refill(request, user, data):
 # ── VIP (read-only; buying happens in the bot) ────────────────────────────────
 @endpoint()
 def vip(request, user):
-    from game.subscription import SUBSCRIPTION_TIERS, get_subscription_info
+    from game.subscription import SUBSCRIPTION_TIERS, effective_price, get_subscription_info
 
     info = get_subscription_info(user)
     return {
@@ -477,7 +477,9 @@ def vip(request, user):
         "until": int(info["until"].timestamp()) if info["is_active"] and info["until"] else None,
         "days_left": info["days_left"], "hours_left": info["hours_left"],
         "tiers": [{
-            "key": cfg["key"], "name": cfg["name"], "price_toman": cfg["price_toman"], "days": cfg["duration_days"],
+            "key": cfg["key"], "name": cfg["name"], "price_toman": effective_price(cfg["key"])[0],
+            "list_price": cfg["price_toman"], "discount": (lambda d: d.percent if d else 0)(effective_price(cfg["key"])[2]),
+            "days": cfg["duration_days"],
             "perks": [clean(p) for p in cfg["perks"]],
         } for cfg in SUBSCRIPTION_TIERS.values()],
         "img": feature_img("subscription"),

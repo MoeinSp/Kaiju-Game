@@ -428,6 +428,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             ],
             [btn("شارژ همگانی خودکار", emoji_key="btn_gift", style=ADMIN, callback_data="admin_menu:autogift")],
             [btn("خطاهای مینی‌اپ", emoji_key="btn_report", style=ADMIN, callback_data="admin_menu:app_errors")],
+            [btn("تخفیف اشتراک", emoji_key="btn_vip", style=ADMIN, callback_data="admin_menu:sub_discount")],
             [btn("ریست «استارت ربات» (API)", emoji_key="btn_reset", style=ADMIN, callback_data="admin_menu:gate_reset")],
             [btn("حذف موجود", emoji_key="btn_delete", style=DANGER, callback_data="admin_menu:del_creature_start")],
             [
@@ -3632,6 +3633,12 @@ def _app_errors_sync() -> str:
     return "\n".join(lines)
 
 
+async def _sub_discount_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from bot.handlers.subdiscount import discount_panel
+
+    await discount_panel(update, context)
+
+
 async def app_errors_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_admin(update):
         return
@@ -6061,6 +6068,7 @@ _ADMIN_MENU_ACTIONS.update(
         "gift_all": gift_all_start,
         "autogift": autogift_panel,
         "app_errors": app_errors_panel,
+        "sub_discount": _sub_discount_panel,
         "autogift_toggle": autogift_toggle,
         "autogift_set": autogift_set_start,
         "gate_reset": gate_reset_panel,

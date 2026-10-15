@@ -62,7 +62,9 @@ def create_subscription_pending(user: User, tier: str) -> PurchaseRequest:
     cfg = SUBSCRIPTION_TIERS.get(tier)
     if not cfg:
         raise GameError("سطح اشتراک نامعتبر است.")
-    price = cfg["price_toman"]
+    from game.subscription import effective_price
+
+    price, _list_price, _discount = effective_price(tier)   # a running «تخفیف اشتراک» is honoured here
     PurchaseRequest.objects.filter(user=user, status="awaiting_receipt").delete()
     return PurchaseRequest.objects.create(
         user=user,

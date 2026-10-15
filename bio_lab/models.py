@@ -564,6 +564,19 @@ class FestivalState(models.Model):
     last_settled_key = models.CharField(max_length=16, default="", blank=True)
 
 
+class SubscriptionDiscount(models.Model):
+    """A time-limited discount on a VIP subscription (game/subscription.py). tier is
+    "gold", "silver" or "all". Set from the admin panel «تخفیف اشتراک»."""
+
+    tier = models.CharField(max_length=8)
+    percent = models.PositiveSmallIntegerField()
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField(db_index=True)
+    broadcast = models.BooleanField(default=False)
+    cancelled = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class MiniAppError(models.Model):
     """A Mini App failure, kept so the owner can see it in the admin panel (container logs are
     wiped on every deploy). kind = "server" (an API view crashed) or "client" (a script error

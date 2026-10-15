@@ -656,7 +656,7 @@
           return '<div class="h2">' + K.ic("crown") + K.esc(t.name) + " (" + K.n(t.days) + " روزه)" + (mine ? ' <span class="tag" style="color:var(--good)">' + K.ic("check") + "فعال</span>" : "") + "</div>" +
             '<div class="panel shv-tier k-' + K.esc(t.key) + '"><div class="list">' + t.perks.map(function (p) {
               return '<div><span class="ic">' + K.ic("check") + '</span><span class="t">' + K.esc(p) + "</span></div>";
-            }).join("") + '</div><div class="shv-price"><span class="muted sm">قیمت</span><span class="b">' + K.n(t.price_toman) + " تومان</span></div></div>";
+            }).join("") + '</div><div class="shv-price"><span class="muted sm">قیمت</span><span class="b">' + (t.discount ? '<s class="muted">' + K.n(t.list_price) + "</s> " : "") + K.n(t.price_toman) + " تومان" + (t.discount ? ' <span class="tag" style="color:var(--bad)">' + K.n(t.discount) + "٪ تخفیف</span>" : "") + "</span></div></div>";
         }).join("");
         html += '<div class="callout mt">' + K.ic("info") + "<div>خرید و تمدید اشتراک از داخل ربات انجام می‌شه: «فروشگاه» ← «اشتراک VIP». با خرید دوباره، مدتش به اشتراک فعلیت اضافه می‌شه.</div></div>";
         root.innerHTML = html;
