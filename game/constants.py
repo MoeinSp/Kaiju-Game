@@ -48,6 +48,8 @@ def element_label(element: str) -> str:
     """Owner-customizable element label for HTML message bodies."""
     from game.emoji import get_emoji
 
+    if element not in ELEMENT_WORDS:   # e.g. a hunt «encounter» (chest / thief / spring) has no element
+        return "—"
     return f"{get_emoji(ELEMENT_EMOJI_KEYS[element])} {ELEMENT_WORDS[element]}"
 
 
