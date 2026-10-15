@@ -126,6 +126,7 @@ def _state(user: User) -> dict:
     out["rules"] = _rules()
     out["art"] = asset_img(get_feature_image_path("worldboss"))
     out["me"] = None
+    out["unopened"] = data.get("unopened", 0)
     if data["boss"] is None and out.get("last"):
         out["last"].update(_last_fight(user) or {})
     creature = get_active_creature(user)
@@ -180,8 +181,27 @@ def swap(request, user, data):
     return _state(User.objects.get(id=user.id))
 
 
+@endpoint("POST")
+def open_chests(request, user, data):
+    """«باز کردن جعبه‌ها» — every unopened world-boss reward chest (bot: worldboss_open_callback)."""
+    from game import reward_chests
+
+    results = reward_chests.open_all(user, "worldboss")
+    new_creatures = [r["creature"] for r in results if r.get("creature") is not None]
+    out = _state(User.objects.get(id=user.id))
+    out["opened"] = {
+        "count": len(results),
+        "coins": sum(r["coins"] for r in results), "dna": sum(r["dna"] for r in results),
+        "diamonds": sum(r["diamonds"] for r in results),
+        "lines": [_name(worldboss._chest_line(r)) for r in results],
+        "creatures": [creature_dict(c) for c in new_creatures],
+    }
+    return out
+
+
 routes = [
     ("", panel),
+    ("open/", open_chests),
     ("live/", live),
     ("hit/", hit),
     ("swap/", swap),

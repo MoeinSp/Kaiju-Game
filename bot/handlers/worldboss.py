@@ -70,6 +70,10 @@ def _render(data: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
                 lines.append(f"{r['rank']}. {r['name']} — <code>{r['damage']:,}</code>")
         if data["hits_left"] > 0 and data["has_creature"]:
             rows.append([btn("ضربه بزن", emoji_key="btn_attack", style=BATTLE, callback_data="wboss:hit")])
+    if data.get("unopened"):
+        lines += ["", f"🎁 <b>{data['unopened']}</b> جعبه‌ی جایزه‌ی باز نشده داری!"]
+        rows.append([btn(f"باز کردن جعبه‌ها ({data['unopened']})", emoji_key="btn_chest_open", style=BATTLE,
+                         callback_data="wboss:open:all")])
     rows.append([btn("بروزرسانی", emoji_key="btn_recheck", style=NAV, callback_data="wboss:home")])
     rows.append([back_btn("menu:hub_battle", "بازگشت به نبرد")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
@@ -121,7 +125,31 @@ async def worldboss_hit_callback(update: Update, context: ContextTypes.DEFAULT_T
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
+def _open_sync(tg_user, ref):
+    from game import reward_chests
+
+    user, _ = get_or_create_user(tg_user)
+    results = reward_chests.open_all(user, "worldboss", None if ref == "all" else int(ref))
+    return results, worldboss.panel_state(user)
+
+
+async def worldboss_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«باز کردن جعبه‌ها» — from the end-of-fight message or the boss screen."""
+    query = update.callback_query
+    ref = query.data.split(":")[2]
+    try:
+        results, data = await run_db(_open_sync, update.effective_user, ref)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    await query.answer("🎁 باز شد!")
+    lines = ["🎁 <b>جعبه‌ها باز شد!</b>", _DIV] + [f"{worldboss._chest_line(r)}" for r in results]
+    text, keyboard = _render(data, "\n".join(lines))
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
 def register(application) -> None:
+    application.add_handler(CallbackQueryHandler(worldboss_open_callback, pattern=r"^wboss:open:(all|\d+)$"))
     application.add_handler(CommandHandler("boss", worldboss_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(worldboss_home_callback, pattern=r"^wboss:home$"))
     application.add_handler(CallbackQueryHandler(worldboss_hit_callback, pattern=r"^wboss:hit$"))

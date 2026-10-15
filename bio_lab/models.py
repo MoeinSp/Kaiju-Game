@@ -564,6 +564,21 @@ class FestivalState(models.Model):
     last_settled_key = models.CharField(max_length=16, default="", blank=True)
 
 
+class RewardChest(models.Model):
+    """A reward chest waiting to be opened by its owner (game/reward_chests.py). source tells
+    where it came from ("worldboss"), ref which one (the boss id)."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
+    chest_type = models.CharField(max_length=16)
+    source = models.CharField(max_length=16)
+    ref = models.BigIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    opened_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "opened_at"], name="rewardchest_user_open_idx")]
+
+
 class SubscriptionDiscount(models.Model):
     """A time-limited discount on a VIP subscription (game/subscription.py). tier is
     "gold", "silver" or "all". Set from the admin panel «تخفیف اشتراک»."""

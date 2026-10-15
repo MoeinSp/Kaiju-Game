@@ -289,7 +289,7 @@ def _chest_line(c: dict) -> str:
 @transaction.atomic
 def _settle(boss_id: int) -> list[tuple]:
     """Pay the end-of-fight rewards of one finished boss, exactly once. Returns DMs."""
-    from game.arena_chests import grant_chest_contents
+    from game import reward_chests
 
     boss = WorldBoss.objects.select_for_update().get(id=boss_id)
     if boss.settled:
@@ -312,7 +312,8 @@ def _settle(boss_id: int) -> list[tuple]:
     pct = round(100 * share)
     for rank, e in enumerate(entries, start=1):
         user = User.objects.select_for_update().get(id=e.user_id)
-        got = [grant_chest_contents(user, tier, user.cup, source="worldboss") for tier in chests]
+        for tier in chests:   # given UNOPENED — the message carries an «open» button
+            reward_chests.give(user, tier, "worldboss", boss.id)
         diamonds = top3[rank - 1] if rank <= len(top3) else 0
         if dead:
             diamonds += KILL_DIAMONDS_ALL
@@ -331,7 +332,11 @@ def _settle(boss_id: int) -> list[tuple]:
             f"رتبه‌ی تو: <b>{rank}</b> از <code>{len(entries)}</code>",
             f"آسیب تو: <code>{e.damage:,}</code>",
         ]
-        lines += [f"🎁 {_chest_line(c)}" for c in got]
+        if chests:
+            from game.arena_chests import ARENA_CHEST_TIERS
+
+            names = "، ".join(f"{ARENA_CHEST_TIERS[t]['emoji']} {ARENA_CHEST_TIERS[t]['name']}" for t in chests)
+            lines.append(f"🎁 جعبه‌هات: {names}")
         if diamonds:
             lines.append(f"💎 الماس: <code>{diamonds}</code>"
                          + (" (ضربه‌ی آخر مال تو بود!)" if dead and boss.killer_id == user.id else ""))
@@ -341,7 +346,9 @@ def _settle(boss_id: int) -> list[tuple]:
             nxt = next((need for need, _tier in MILESTONES if share < need), None)
             lines.append(f"<i>برای جعبه‌ی بعدی باید <code>{round(nxt * 100)}%</code> جونش زده بشه.</i>" if nxt
                          else "<i>فقط یه قدم تا از پا درآوردنش مونده بود!</i>")
-        out.append((user.id, "\n".join(lines), "worldboss"))
+        if chests:
+            lines.append("\n👇 «باز کردن جعبه‌ها» رو بزن تا ببینی چی گرفتی.")
+        out.append((user.id, "\n".join(lines), "worldboss_chests" if chests else "worldboss", boss.id))
     return out
 
 
@@ -403,7 +410,10 @@ def panel_state(user: User) -> dict:
             "seconds_left": max(0, int((boss.expires_at - timezone.now()).total_seconds())),
             "advantage": bool(creature and constants.is_strong_against(creature.element, boss.element)),
         })
-    else:
+    from game import reward_chests
+
+    data["unopened"] = reward_chests.unopened(user, "worldboss").count()
+    if boss is None:
         prev = last_boss()
         data["last"] = None if prev is None else {
             "name": prev.name, "status": prev.status,

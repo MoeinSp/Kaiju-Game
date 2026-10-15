@@ -133,8 +133,12 @@
         el.classList.toggle("soon", left < 120);
         el.innerHTML = K.ic("clock") + '<span class="num">' + K.clock(left) + "</span>";
       }
+      function chestsCallout() {
+        return S.unopened ? '<div class="callout good mb">' + K.ic("gift") + '<div class="grow"><b>' + K.n(S.unopened) +
+          ' جعبه‌ی جایزه‌ی باز نشده داری!</b></div><button class="btn sm gold" data-act="open-chests">' + K.ic("chest") + "باز کن</button></div>" : "";
+      }
       function draw() {
-        root.innerHTML = S.active ? activeView() : absentView();
+        root.innerHTML = chestsCallout() + (S.active ? activeView() : absentView());
         if (S.active) { end = Date.now() / 1000 + S.boss.seconds_left; patch(); tick(); }
         HU.setHub({ boss: !!S.active });
       }
@@ -162,6 +166,13 @@
         }).catch(function () {});
       }
 
+      K.on(root, "open-chests", function (el) {
+        K.api.post("worldboss/open/", {}, el).then(function (d) {
+          var o = d.opened; S = d; draw();
+          K.reward({ title: K.n(o.count) + " جعبه باز شد!", icon: "chest", coins: o.coins, dna: o.dna, diamonds: o.diamonds,
+                     creatures: o.creatures, text: o.lines.join(" · "), button: "عالیه" });
+        });
+      });
       K.on(root, "hit", function (el) {
         if (busy) return; busy = true;
         K.api.post("worldboss/hit/", {}, el).then(function (d) {

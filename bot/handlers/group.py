@@ -2133,7 +2133,17 @@ async def guardian_resign(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text(text, parse_mode="HTML")
 
 
+async def gid_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/gid — this group's numeric chat id (needed for force-join settings, links, support)."""
+    chat = update.effective_chat
+    if chat is None or update.effective_message is None:
+        return
+    await update.effective_message.reply_text(
+        f"🆔 شناسه‌ی این گروه:\n<code>{chat.id}</code>\n<i>روی عدد بزن تا کپی بشه.</i>", parse_mode="HTML")
+
+
 def register(application) -> None:
+    application.add_handler(CommandHandler("gid", gid_cmd, filters.ChatType.GROUPS))
     group_filter = filters.ChatType.GROUPS
     # The gameplay slash commands (/attack /raid_spawn /leaderboard /guardian*)
     # are gone — groups are word-driven («اتک», «احضار», «جدول», «نگهبان» …),
