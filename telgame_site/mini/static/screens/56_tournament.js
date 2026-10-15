@@ -100,7 +100,9 @@
       function draw(d) {
         data = d;
         var state = d.status === "running" ? "در حال برگزاری" : d.registration_open ? "ثبت‌نام بازه" : d.status === "finished" ? "این هفته تموم شد" : "ثبت‌نام بسته‌ست";
-        root.innerHTML = '<div class="banner"' + (d.img ? ' style="background-image:url(\'' + d.img + "')\"" : "") + '><div class="grow"><div class="ttl">جام آخر هفته</div><div class="sm" style="color:#c5cee2">' + state + "</div></div></div>" + body(d);
+        root.innerHTML = '<div class="banner"' + (d.img ? ' style="background-image:url(\'' + d.img + "')\"" : "") + '><div class="grow"><div class="ttl">جام آخر هفته</div><div class="sm" style="color:#c5cee2">' + state + "</div></div></div>" +
+          (d.bracket_img ? '<div class="panel" style="padding:6px;margin-bottom:12px"><img src="' + d.bracket_img + '" alt="جدول گروه" style="width:100%;height:auto;display:block;border-radius:12px"></div>' : "") +
+          body(d);
         if (tick) tick(); else tick = K.hu.live(root, later);
       }
       function load() { return K.api.get("tournament/").then(function (d) { if (ctx.alive()) draw(d); }); }

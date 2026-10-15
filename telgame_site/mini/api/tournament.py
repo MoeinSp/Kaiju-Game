@@ -124,6 +124,11 @@ def _panel(user) -> dict:
         out["match"] = match
     if entry.group_no:
         out["history"] = _history(entry)
+        from game.media import render_tournament_bracket
+
+        t = T.current()
+        picture = render_tournament_bracket(T.group_bracket(t, entry.group_no), user.id) if t else None
+        out["bracket_img"] = (asset_img(picture) + "&s=l") if picture and asset_img(picture) else None   # large: the names must be readable
     return out
 
 

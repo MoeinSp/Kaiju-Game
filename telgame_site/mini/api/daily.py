@@ -88,7 +88,8 @@ def _story_reward(reward: dict) -> dict:
     if reward.get("speedup"):
         out["speedup"] = speedup_dict(reward["speedup"])
     if reward.get("food"):
-        out["food"] = {"tier": reward["food"][0], "count": reward["food"][1]}
+        tier, count = reward["food"]
+        out["capsule"] = {"tier": tier, "count": count, "label": clean(constants.XP_CAPSULES.get(tier, {}).get("label", "غذا"))}
     return out
 
 

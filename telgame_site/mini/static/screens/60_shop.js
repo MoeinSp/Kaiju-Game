@@ -178,14 +178,16 @@
           }).join("");
         } else {
           html += banner(d.img_diamond, "باکس هیولا", "همیشه یه هیولای جدید می‌ده") +
-            (d.free_boxes ? '<div class="callout good mb">' + K.ic("gift") + "<div><b>باکس رایگان امروزت آماده‌ست.</b> هر روز یه برنزی و یه نقره‌ای رایگان داری.</div></div>"
-                          : '<p class="lead">هرچی سطح باکس بالاتر باشه، شانس نایاب بودن هیولا بیشتره. برنزی و نقره‌ای روزی یه بار رایگانن.</p>');
+            (d.free_boxes ? '<div class="callout good mb">' + K.ic("gift") + "<div><b>باکس رایگان امروزت آماده‌ست.</b> هر روز یه باکس نایاب و یه باکس حماسی رایگان داری.</div></div>"
+                          : '<p class="lead">هر باکس همیشه یه هیولا می‌ده و از هر ۵ باکس حداقل یکی هم‌رده‌ی اسم باکسه. باکس نایاب و حماسی روزی یه بار رایگانن.</p>');
           html += d.diamond.map(function (t) {
             var top = t.odds.slice().reverse().slice(0, 2).map(function (o) { return '<span class="c-' + o.rarity + '">' + K.esc(K.rarLabel(o.rarity)) + " " + pct(o.pct) + "</span>"; }).join(" · ");
             return '<div class="panel pad shb-box d-' + t.tier + (t.free ? " free" : "") + '"><div class="flex"><span class="ico-box lg">' + K.ic("gem") + '</span><div class="grow"><div class="b">' + K.esc(t.label) + "</div>" +
               '<div class="sm">' + (t.free ? '<span class="t-good b">' + K.ic("gift") + " رایگان امروز</span>" : money("diamonds", t.cost) + (t.daily_free ? ' <span class="muted">(رایگان امروز مصرف شده)</span>' : "")) + "</div></div>" +
               '<button class="btn sm ghost" data-act="odds" data-box="diamond" data-tier="' + t.tier + '">' + K.ic("info") + "شانس‌ها</button></div>" +
               '<div class="sm muted shb-sum">' + top + "</div>" +
+              (t.pity_rarity ? '<div class="xs muted">' + K.ic("target") + " تضمین: از هر " + K.n(t.pity_every) + " باکس یکی " + K.esc(K.rarLabel(t.pity_rarity)) + " یا بهتر · " +
+                (t.pity_left <= 1 ? '<b class="t-good">باکس بعدی تضمینیه!</b>' : K.n(t.pity_left) + " باکس تا تضمین") + "</div>" : "") +
               '<div class="shb-acts">' + (t.free ? '<button class="btn good" data-act="dfree" data-tier="' + t.tier + '">' + K.ic("gift") + "باز کردن رایگان</button>"
                 : '<button class="btn primary" data-act="dbuy" data-tier="' + t.tier + '"><span>خرید و باز کردن</span><span class="shb-price">' + money("diamonds", t.cost) + "</span></button>") +
               '<button class="btn" data-act="dbulk" data-tier="' + t.tier + '"><span>بسته‌ای ' + K.n(d.bulk_pay) + "+" + K.n(d.bulk_open - d.bulk_pay) + '</span><span class="shb-price">' + money("diamonds", t.bulk_cost) + "</span></button></div></div>";

@@ -106,9 +106,44 @@ def leaderboard(request, user):
     }
 
 
+_RECYCLE_ORDER = ("low", "common", "rare", "epic", "legendary", "mythic")
+_RECYCLE_LABELS = {"low": "معمولی و نایاب", "common": "معمولی", "rare": "نایاب", "epic": "حماسی",
+                   "legendary": "افسانه‌ای", "mythic": "اساطیری"}
+
+
+def _recycle_view(user) -> dict:
+    from game.equipment import recycle_summary
+
+    summary = recycle_summary(user)
+    return {
+        "groups": [{"key": k, "label": _RECYCLE_LABELS[k], "count": summary[k][0], "gold": summary[k][1]}
+                   for k in _RECYCLE_ORDER if summary[k][0]],
+        "values": [{"rarity": r, "gold": constants.EQUIP_RECYCLE_GOLD[r]} for r in constants.RARITY_ORDER],
+        "level_bonus_pct": int(constants.EQUIP_RECYCLE_LEVEL_BONUS * 100),
+    }
+
+
+@endpoint()
+def recycle_gold(request, user):
+    """«بازیافت به طلا» (bot: inventory recycle_menu_callback) — what each group would pay."""
+    return _recycle_view(user)
+
+
+@endpoint("POST")
+def recycle_gold_do(request, user, data):
+    from game.equipment import RECYCLE_GROUPS, recycle_to_gold
+    from telgame_site.mini.core import need_str
+
+    group = need_str(data, "group", choices=tuple(RECYCLE_GROUPS))
+    res = recycle_to_gold(user, group)
+    return {"done": res, "recycle": _recycle_view(User.objects.get(pk=user.pk))}
+
+
 routes = [
     ("me/", me),
     ("creatures/", creatures),
     ("equipment/", equipment),
     ("leaderboard/", leaderboard),
+    ("recycle_gold/", recycle_gold),
+    ("recycle_gold/do/", recycle_gold_do),
 ]

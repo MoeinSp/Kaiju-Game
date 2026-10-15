@@ -26,7 +26,6 @@ defender's shield under a row lock and raises OpponentUnavailableError.
 
 import datetime
 import html
-import random
 
 from django.db import transaction
 from django.db.models import Max

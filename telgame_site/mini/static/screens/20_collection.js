@@ -133,10 +133,34 @@
         }
         root.innerHTML = '<div class="row">' + chip("", f.slot, "slot", "همه") + Object.keys(K.meta.slots).map(function (k) { return chip(k, f.slot, "slot", K.esc(K.slotLabel(k)), K.SLOT_ICON[k]); }).join("") + "</div>" +
           '<div class="row">' + chip("", f.rarity, "erarity", "همه‌ی رده‌ها") + K.meta.rarity_order.slice().reverse().map(function (k) { return chip(k, f.rarity, "erarity", K.esc(K.rarLabel(k)), "gem", "c-" + k); }).join("") + "</div>" +
+          '<button class="btn ghost block mb" data-act="rcy-open">' + K.ic("coin") + "بازیافت تجهیزات اضافه به طلا</button>" +
           '<div id="eq-list"></div>';
         drawList(true);
+        function recycleSheet() {
+          K.api.get("profile/recycle_gold/").then(function (r) {
+            var box = K.sheet('<div class="h2">' + K.ic("coin") + "بازیافت به طلا</div>" +
+              '<p class="sm muted">فقط تجهیزاتِ <b>پوشیده‌نشده</b> بازیافت می‌شن؛ هر چی تن هیولاهاته دست نمی‌خوره. هر سطح بالاتر از +۱، ' + K.n(r.level_bonus_pct) + "٪ طلای بیشتر.</p>" +
+              '<div class="sm mb">' + r.values.map(function (v) { return '<span class="c-' + v.rarity + '">' + K.esc(K.rarLabel(v.rarity)) + "</span> " + K.n(v.gold); }).join(" · ") + "</div>" +
+              (r.groups.length ? '<div class="panel list">' + r.groups.map(function (g) {
+                return '<button data-act="rcy-go" data-key="' + g.key + '" data-count="' + g.count + '" data-gold="' + g.gold + '"><span class="grow"><b>' + K.esc(g.label) + "</b> <span class=\"muted\">(" + K.n(g.count) + ")</span></span>" +
+                  '<span class="t-coin b">' + K.ic("coin") + K.n(g.gold) + "</span></button>";
+              }).join("") + "</div>" : K.state("chest", "چیزی برای بازیافت نیست", "تجهیزات پوشیده‌نشده‌ای نداری.")));
+            K.on(box, "rcy-go", function (el) {
+              K.confirm({ title: "بازیافت به طلا", danger: true, icon: "coin", ok: "بازیافت کن", cancel: "بی‌خیال",
+                html: "<p>" + K.n(+el.dataset.count) + " تجهیزات پوشیده‌نشده‌ی «" + K.esc(r.groups.filter(function (g) { return g.key === el.dataset.key; })[0].label) +
+                  "» پاک می‌شن و <b>" + K.n(+el.dataset.gold) + "</b> طلا می‌گیری. برگشت‌پذیر نیست.</p>" }).then(function (yes) {
+                if (!yes) return;
+                K.api.post("profile/recycle_gold/do/", { group: el.dataset.key }, el).then(function (res) {
+                  K.haptic("ok"); K.toast(K.n(res.done.count) + " تجهیزات بازیافت شد · +" + K.n(res.done.gold) + " طلا");
+                  K.invalidate("profile/equipment/"); K.closeSheet(); K.reload();
+                });
+              });
+            });
+          });
+        }
         root.addEventListener("click", function (ev) {
           var t = ev.target.closest("button"); if (!t) return; var d = t.dataset;
+          if (d.act === "rcy-open") { recycleSheet(); return; }
           if (d.equip) K.go("item", { id: +d.equip });
           else if ("slot" in d) { K.haptic(); f.slot = d.slot; light(t); drawList(); }
           else if ("erarity" in d) { K.haptic(); f.rarity = d.erarity; light(t); drawList(); }
