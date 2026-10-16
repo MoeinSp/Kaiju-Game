@@ -1269,20 +1269,19 @@ def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=
         btn("پایگاه", emoji_key="btn_hub_base", style=CONFIRM, callback_data="menu:hub_base"),
         btn("فروشگاه", emoji_key="btn_hub_shop", style=SHOP, callback_data="menu:hub_shop"),
     ])
-    # Row 3: City
-    rows.append([
-        btn("شهر", emoji_key="btn_hub_city", style=PRIMARY, callback_data="menu:hub_city"),
-    ])
-    # the Mini App (public since 2026-10-15, out of beta 2026-10-16). Only ever in private chats — Telegram
-    # refuses web_app buttons in groups, and this keyboard is only sent in private.
+    # Row 3: City + the Mini App beside it (public since 2026-10-15, out of beta 2026-10-16).
+    # Only ever in private chats — Telegram refuses web_app buttons in groups, and this
+    # keyboard is only sent in private.
     from bot.handlers.miniapp import base_url as _app_origin
 
+    city_row = [btn("شهر", emoji_key="btn_hub_city", style=PRIMARY, callback_data="menu:hub_city")]
     origin = _app_origin()
     if origin:
         from telegram import WebAppInfo
 
-        rows.append([btn("مینی‌اپ بازی", emoji_key="btn_collection", style=PRIMARY,
-                         web_app=WebAppInfo(url=f"{origin}/app/"))])
+        city_row.append(btn("مینی‌اپ بازی", emoji_key="btn_collection", style=PRIMARY,
+                            web_app=WebAppInfo(url=f"{origin}/app/")))
+    rows.append(city_row)
 
     group_link = botconfig.get_group_link()
     if group_link is not None:
