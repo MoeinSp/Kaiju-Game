@@ -133,7 +133,7 @@ async def _configure_menu_button(application: Application) -> None:
         return
     try:
         await application.bot.set_chat_menu_button(
-            menu_button=MenuButtonWebApp(text="بازی", web_app=WebAppInfo(url=f"{origin}/app/")))
+            menu_button=MenuButtonWebApp(text="Play", web_app=WebAppInfo(url=f"{origin}/app/")))
     except Exception:  # noqa: BLE001 — a menu-button hiccup must never stop the bot starting
         logging.exception("could not set the Mini App menu button")
 
