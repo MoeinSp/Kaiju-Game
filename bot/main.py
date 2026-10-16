@@ -121,6 +121,23 @@ async def _configure_commands(application: Application) -> None:
     await bot.set_my_commands(_GROUP_COMMANDS, scope=BotCommandScopeAllGroupChats())
 
 
+async def _configure_menu_button(application: Application) -> None:
+    """The blue button left of the message box opens the Mini App (instead of the
+    command list). Set on every start so it follows the configured site URL."""
+    from telegram import MenuButtonWebApp, WebAppInfo
+
+    from bot.handlers.miniapp import base_url
+
+    origin = base_url()
+    if not origin:
+        return
+    try:
+        await application.bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(text="بازی", web_app=WebAppInfo(url=f"{origin}/app/")))
+    except Exception:  # noqa: BLE001 — a menu-button hiccup must never stop the bot starting
+        logging.exception("could not set the Mini App menu button")
+
+
 async def _warn_if_group_privacy_on(application: Application) -> None:
     """Telegram's group privacy mode silently withholds ordinary messages from
     bots, which makes the entire word-driven group experience look broken while
@@ -171,6 +188,7 @@ async def _post_init(application: Application) -> None:
 
     install_answer_guard()
     await _configure_commands(application)
+    await _configure_menu_button(application)
     await _warn_if_group_privacy_on(application)
 
 
