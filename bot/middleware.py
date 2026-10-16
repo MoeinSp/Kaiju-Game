@@ -312,7 +312,7 @@ async def react_to_user_message(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 def register(application) -> None:
-    application.add_handler(TypeHandler(Update, react_to_user_message), group=-4)
+    # the ❤ reaction on every private message was turned off 2026-10-16 (owner's request)
     application.add_handler(TypeHandler(Update, capture_referral), group=-3)
     application.add_handler(TypeHandler(Update, enforce_ban), group=-2)
     application.add_handler(TypeHandler(Update, enforce_force_join), group=-1)

@@ -1509,32 +1509,11 @@ async def _maybe_capture_group_reply(update: Update, context: ContextTypes.DEFAU
     return True
 
 
-# How long the bot's reply (and the triggering user message) survive in a group
-# before being auto-deleted, per action. Keeps groups from filling with transient
-# cards. The leaderboard lingers longer; everything else is short-lived.
-_GROUP_TTL_DEFAULT = 60
-_GROUP_TTL = {"leaderboard": 300, "casino": 600, "reward": 300}  # casino is a multi-step play session
-
-
-async def _delete_msgs_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id, ids = context.job.data
-    for mid in ids:
-        try:
-            await context.bot.delete_message(chat_id, mid)
-        except TelegramError:
-            pass
-
-
 def _schedule_cleanup(context, chat_id: int, message_ids, action: str) -> None:
-    """Auto-delete messages only for leaderboard ('جدول'). All other messages
-    (attacks, rewards, monsters, etc.) are permanently kept in the group."""
-    if action != "leaderboard":
-        return
-    jq = getattr(context, "job_queue", None)
-    ids = [m for m in message_ids if m]
-    if jq is None or not ids:
-        return
-    jq.run_once(_delete_msgs_job, _GROUP_TTL.get(action, 300), data=(chat_id, ids))
+    """Disabled 2026-10-16 at the owner's request: no message in a group — the bot's or a
+    player's — is auto-deleted any more (it used to remove «جدول» after 5 minutes).
+    Kept as a no-op so the call sites don't change."""
+    return
 
 
 async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
