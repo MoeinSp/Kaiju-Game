@@ -135,13 +135,12 @@ def _state(user: User) -> dict:
         gear = get_equipped_items(creature)
         out["me"] = creature_dict(creature, gear)
         if data["boss"] is not None:
-            # what ONE hit pays: game.worldboss.hit_reward() of the damage this creature deals
-            # before the random swing (its power, with the element bonus when it has it)
+            # what ONE hit deals and pays: its power, with the element bonus when it has it
+            # (exact — the boss has no random swing)
             power = creature_power(creature, gear)
             about = round(power * (constants.ELEMENT_ADVANTAGE_POWER_FACTOR if data["advantage"] else 1.0))
             coins, dna = worldboss.hit_reward(about)
-            out["per_hit"] = {"damage": about, "coins": coins, "dna": dna,
-                              "swing_pct": int(round((worldboss.DAMAGE_SWING[1] - 1) * 100))}
+            out["per_hit"] = {"damage": about, "coins": coins, "dna": dna}
     return out
 
 

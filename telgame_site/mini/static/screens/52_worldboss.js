@@ -91,7 +91,7 @@
           html += '<div class="wb-me">' + K.fighter(me, '<div class="wb-tags">' + K.elTag(me.element) +
             (S.advantage ? '<span class="tag" style="color:var(--good)">' + K.ic("up") + "برتری با تو: +۲۰٪ آسیب</span>" : '<span class="tag plain">بدون برتری عنصری</span>') + "</div>") +
             '<button class="btn sm" data-act="swap">' + K.ic("swap") + "تعویض</button></div>";
-          if (p) html += '<div class="wb-per">' + K.ic("gift") + "<span>هر ضربه حدود " + K.n(p.damage) + " آسیب می‌زنه (" + K.n(p.swing_pct) + "٪ بالا و پایین) و حدود " +
+          if (p) html += '<div class="wb-per">' + K.ic("gift") + "<span>هر ضربه دقیقاً " + K.n(p.damage) + " آسیب می‌زنه و " +
             K.amounts({ coins: p.coins, dna: p.dna }, " و ") + " می‌ده.</span></div>";
         } else {
           html += '<div class="callout warn mt">' + K.ic("warn") + "<span>اول یه هیولای فعال انتخاب کن.</span></div>";

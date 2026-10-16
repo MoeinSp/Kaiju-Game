@@ -10,8 +10,9 @@ How it runs (no dedicated scheduler — the 5-minute notification job calls tick
   next window (SPAWN_WINDOWS, Asia/Tehran). When it's due, tick() spawns a boss and
   returns the announcement DMs for recently-active players.
 * A hit costs 1 energy. Damage = the active creature's power (the same number every card
-  shows), ×1.20 with the element advantage over the boss — the game's one element rule —
-  with a small random swing. Each hit pays gold + DNA on the spot.
+  shows), ×1.20 with the element advantage over the boss — the game's one element rule.
+  No random swing (removed 2026-10-16): equal power always deals equal damage, and a tie
+  on the leaderboard goes to whoever hit first. Each hit pays gold + DNA on the spot.
 * When HP reaches 0 the boss is DEAD; when the window ends it ESCAPES. Either way tick()
   settles it ONCE and pays everyone who hit it by how much of its HP the SERVER dealt
   (MILESTONES: a chest at 25%, another at 50%, another at 75%; a kill adds diamonds for
@@ -42,7 +43,6 @@ ENERGY_COST = 1
 # (start hour, end hour) in the game timezone — one boss per window, at a random minute
 SPAWN_WINDOWS = ((15, 18), (19, 22))   # afternoon/evening only — many players are at school in the morning
 
-DAMAGE_SWING = (0.90, 1.10)
 # reward per hit, as a share of the damage dealt (damage ≈ the creature's power). One hit
 # is worth about three hunts — the boss comes twice a day and people wait for it.
 HIT_GOLD_PER_DAMAGE = 1.50
@@ -249,7 +249,7 @@ def hit(user: User) -> dict:
     research.attach_research(user, creature)
     power = creature_power(creature, get_equipped_items(creature))
     advantage = constants.is_strong_against(creature.element, boss.element)
-    raw = power * (constants.ELEMENT_ADVANTAGE_POWER_FACTOR if advantage else 1.0) * random.uniform(*DAMAGE_SWING)
+    raw = power * (constants.ELEMENT_ADVANTAGE_POWER_FACTOR if advantage else 1.0)
     damage = max(1, min(int(round(raw)), boss.current_hp))  # overkill doesn't count
 
     coins, dna = hit_reward(damage)
