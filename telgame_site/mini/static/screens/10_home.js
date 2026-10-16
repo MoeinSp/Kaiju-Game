@@ -43,8 +43,7 @@
         root.innerHTML = '<div class="home-top" style="background-image:url(' + K.asset("img/bg_home.jpg") + ')"><img src="' + K.asset("img/logo.png") + '" alt="Kaiju Legends" width="255" height="96"></div>' +
           '<div id="home-lab"></div>' +
           '<div id="home-sections"></div>' +
-          '<div id="home-hero"></div>' +
-          '<p class="note">نسخه‌ی آزمایشی مینی‌اپ</p>';
+          '<div id="home-hero"></div>';
         cards(me);
         K.on(root, "profile", function () { K.go("profile"); });
         K.on(root, "creature", function (el) { K.go("creature", { id: +el.dataset.id }); });
