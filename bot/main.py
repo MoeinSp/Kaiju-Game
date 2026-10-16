@@ -122,20 +122,16 @@ async def _configure_commands(application: Application) -> None:
 
 
 async def _configure_menu_button(application: Application) -> None:
-    """The blue button left of the message box opens the Mini App (instead of the
-    command list). Set on every start so it follows the configured site URL."""
-    from telegram import MenuButtonWebApp, WebAppInfo
+    """The blue button left of the message box shows the COMMAND list. It opened the Mini
+    App for a few hours on 2026-10-16, but Telegram allows only one of the two and the
+    commands disappeared — so it is pinned back to commands on every start (the Mini App
+    stays reachable from the main menu's «مینی‌اپ بازی» button)."""
+    from telegram import MenuButtonCommands
 
-    from bot.handlers.miniapp import base_url
-
-    origin = base_url()
-    if not origin:
-        return
     try:
-        await application.bot.set_chat_menu_button(
-            menu_button=MenuButtonWebApp(text="Play", web_app=WebAppInfo(url=f"{origin}/app/")))
+        await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
     except Exception:  # noqa: BLE001 — a menu-button hiccup must never stop the bot starting
-        logging.exception("could not set the Mini App menu button")
+        logging.exception("could not set the menu button")
 
 
 async def _warn_if_group_privacy_on(application: Application) -> None:
