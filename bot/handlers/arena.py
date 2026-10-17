@@ -33,10 +33,8 @@ from game.arena import (
     attack,
     creature_power,
     cup_delta,
-    deserved_cup,
     find_opponent,
     mark_revenge_taken,
-    recent_attacks_received,
     revengeable_attacks,
     shield_remaining_seconds,
 )
@@ -77,6 +75,20 @@ def _format_remaining(seconds: int) -> str:
     return f"{minutes} دقیقه"
 
 
+def _attacks_summary(user) -> dict:
+    """What happened to this player in the arena over the last 24 hours (for the arena home)."""
+    from django.db.models import Count, Q, Sum
+
+    since = tz.now() - datetime.timedelta(hours=24)
+    agg = AttackLog.objects.filter(defender=user, created_at__gte=since).aggregate(
+        lost=Count("id", filter=Q(attacker_won=True)),
+        held=Count("id", filter=Q(attacker_won=False)),
+        gold=Sum("loot_gold", filter=Q(attacker_won=True)),
+        dna=Sum("loot_dna", filter=Q(attacker_won=True)),
+    )
+    return {k: v or 0 for k, v in agg.items()}
+
+
 def _arena_home_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
     close_due_season()
@@ -86,7 +98,7 @@ def _arena_home_sync(tg_user):
         user,
         active_power(user),
         shield_remaining_seconds(user),
-        recent_attacks_received(user),
+        _attacks_summary(user),
         current_week(),
         seconds_until_next_week(),
         revengeable_attacks(user),
@@ -94,71 +106,49 @@ def _arena_home_sync(tg_user):
     )
 
 
-def _arena_home_text(user, power, shield_secs, history, week, season_secs, revenges, chests=None) -> str:
-    lines = [
-        f"{get_emoji('trophy')} <b>آرنا</b>",
-        f"🗓 فصل <code>{week}</code> — <b>{_format_remaining(season_secs)}</b> تا ریست کاپ‌ها",
-        _ARENA_DIV,
-        f"{get_emoji('trophy')} کاپ شما: <code>{user.cup:,}</code>",
-        f"{get_emoji('power')} قدرت شما: <code>{power:,}</code>",
+def _arena_home_text(user, power, shield_secs, summary, week, season_secs, revenges, chests=None) -> str:
+    """The arena home — a short status, grouped: you (cup, league) → protection (shield,
+    chests) → what happened (last 24 h, revenges). Anything the opponent card or a button
+    already shows (power, energy cost, loot rule, per-win reward) is left out (owner, 2026-10-17)."""
+    trophy = get_emoji("trophy")
+    sections = [[
+        f"{trophy} <b>آرنا</b>",
+        f"⏳ <b>{_format_remaining(season_secs)}</b> تا ریست کاپ‌ها",
+    ]]
+    lg = constants.league_for_cup(user.cup)
+    nx = constants.next_league(user.cup)
+    you = [
+        f"{trophy} کاپ: <code>{user.cup:,}</code>",
+        f"{lg['emoji']} لیگ: <b>{lg['name']}</b>",
     ]
-    _lg = constants.league_for_cup(user.cup)
-    _nx = constants.next_league(user.cup)
-    lines.append(
-        f"{_lg['emoji']} لیگ <b>{_lg['name']}</b> — هر برد: "
-        f"{get_emoji('coin')} <code>+{_lg['coins']:,}</code> · {get_emoji('dna')} <code>+{_lg['dna']:,}</code>"
-    )
-    if _nx:
-        lines.append(f"<i>لیگ بعدی «{_nx['name']}» در کاپ <code>{_nx['min_cup']:,}</code></i>")
-    ceiling = deserved_cup(power)
-    if user.cup > ceiling:
-        lines.append("<i>⚠️ کاپت از قدرت موجودت جلو زده — بردها کاپ کمتری می‌دن تا هیولای شما قوی‌تر شود.</i>")
+    if nx:
+        you.append(f"📈 <code>{max(0, nx['min_cup'] - user.cup):,}</code> کاپ تا <b>{nx['name']}</b>")
+    sections.append(you)
+
+    guard = []
     if shield_secs > 0:
-        lines.append(
-            f"{get_emoji('def')} سپر: <b>{_format_remaining(shield_secs)}</b> مونده "
-            f"<i>(هر حمله {constants.SHIELD_ATTACK_COST_HOURS} ساعت ازش کم می‌کنه)</i>"
-        )
-    else:
-        lines.append(f"{get_emoji('def')} سپر: نداری — ممکنه بهت حمله بشه")
-
-    # the per-slot breakdown lives on the «جعبه‌ها» screen; here one summary line is enough
+        guard.append(f"{get_emoji('def')} سپر: <b>{_format_remaining(shield_secs)}</b> مونده")
     chests = chests or []
-    if chests:
-        ready = sum(1 for c in chests if c.status == "ready")
-        opening = next((c for c in chests if c.status == "unlocking"), None)
-        bits = []
-        if ready:
-            bits.append(f"{get_emoji('gift')} <code>{ready}</code> آماده")
-        if opening is not None:
-            bits.append(f"⏳ <code>{_format_remaining(seconds_until_ready(opening))}</code> تا باز شدن")
-        if not bits:
-            bits.append("🔒 منتظر بازگشایی")
-        lines.append(f"{get_emoji('chest_arena')} جعبه‌ها (<code>{len(chests)}</code>/4): " + " · ".join(bits))
-    else:
-        lines.append(f"{get_emoji('chest_arena')} جعبه‌ها (<code>0</code>/4): <i>با برد در آرنا می‌گیری</i>")
+    ready = sum(1 for c in chests if c.status == "ready")
+    if ready:
+        guard.append(f"{get_emoji('gift')} <code>{ready}</code> جعبه آماده‌ی باز کردن")
+    elif len(chests) >= 4:
+        guard.append(f"{get_emoji('chest_arena')} جعبه‌ها پره (<code>{len(chests)}</code>/4)")
+    if guard:
+        sections.append(guard)
 
-    if history:
-        lines.append("\n<b>آخرین حمله‌ها به شما:</b>")
-        for log in history:
-            mark = "🔴" if log.attacker_won else "🟢"
-            attacker_name = log.attacker_label or lab_display(log.attacker)
-            bits = [f"{mark} <b>{attacker_name}</b>"]
-            if log.attacker_power:
-                bits.append(f"{get_emoji('power')} <code>{log.attacker_power:,}</code>")
-            if log.loot_gold:
-                bits.append(f"{get_emoji('coin')} <code>−{log.loot_gold:,}</code>")
-            if getattr(log, "loot_dna", 0):
-                bits.append(f"{get_emoji('dna')} <code>−{log.loot_dna:,}</code>")
-            lines.append(" · ".join(bits))
-
+    news = []
+    if summary.get("lost"):
+        news.append(f"📉 ۲۴ ساعت اخیر: <code>{summary['lost']}</code> بار غارت شدی")
+        news.append(f"💸 از دست رفته: {get_emoji('coin')} <code>{summary['gold']:,}</code> · "
+                    f"{get_emoji('dna')} <code>{summary['dna']:,}</code>")
+    if summary.get("held"):
+        news.append(f"{get_emoji('def')} دفاع موفق: <code>{summary['held']}</code> بار")
     if revenges:
-        lines.append(f"\n{get_emoji('battle')} <b><code>{len(revenges)}</code> انتقام</b> در انتظار — مهلت ۳ روزه")
-
-    lines.append(
-        f"\n<blockquote>⚡ هر حمله <code>{constants.ARENA_ATTACK_ENERGY_COST}</code> انرژی · "
-        f"برد = <code>{int(constants.ARENA_LOOT_PERCENT * 100)}%</code> طلا و <code>10%</code> DNA حریف</blockquote>"
-    )
-    return "\n".join(lines)
+        news.append(f"{get_emoji('battle')} <code>{len(revenges)}</code> انتقام در انتظار (مهلت ۳ روز)")
+    if news:
+        sections.append(news)
+    return f"\n{_ARENA_DIV}\n".join("\n".join(sec) for sec in sections)
 
 
 def _arena_home_keyboard(has_revenges: bool, chest_count: int = 0, ready_chests: int = 0) -> InlineKeyboardMarkup:
@@ -187,14 +177,14 @@ def _arena_home_keyboard(has_revenges: bool, chest_count: int = 0, ready_chests:
 
 
 async def arena_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user, power, shield_secs, history, week, season_secs, revenges, chests = await run_db(
+    user, power, shield_secs, summary, week, season_secs, revenges, chests = await run_db(
         _arena_home_sync, update.effective_user
     )
     from game.media import get_feature_image_path
     photo = get_feature_image_path("arena")
     ready_count = sum(1 for c in chests if c.status == "ready")
     await send_screen(update,
-        _arena_home_text(user, power, shield_secs, history, week, season_secs, revenges, chests),
+        _arena_home_text(user, power, shield_secs, summary, week, season_secs, revenges, chests),
         photo=photo,
         parse_mode="HTML",
         reply_markup=_arena_home_keyboard(bool(revenges), chest_count=len(chests), ready_chests=ready_count),
