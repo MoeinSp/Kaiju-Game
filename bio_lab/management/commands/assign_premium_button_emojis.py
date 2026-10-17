@@ -31,7 +31,7 @@ from game.button_emoji import BUTTON_EMOJI_DEFS, set_button_emoji
 PREFERRED = {
     "btn_attack": "🗡", "btn_train": "💪", "btn_breeding": "🐣", "btn_collect": "💰",
     "btn_build": "🏭", "btn_speedup": "⚡", "btn_report": "📊", "btn_charge": "💵",
-    "btn_campaign": "🏰", "btn_team": "🛡", "btn_league": "🎖", "btn_codex": "📚",
+    "btn_campaign": "🏰", "btn_team": "🛡", "btn_attack_team": "⚔️", "btn_defense_team": "🛡", "btn_league": "🎖", "btn_codex": "📚",
     "btn_referral": "🎁", "btn_battlepass": "🎟", "btn_events": "⏳", "btn_banner": "🎰",
     "btn_shop": "🛒", "btn_idle": "😴", "btn_achievements": "🏅", "btn_titles": "👑",
     "btn_cat_rewards": "🎁", "btn_cat_shop": "🏪", "btn_cat_social": "👥",
@@ -178,6 +178,8 @@ class Command(BaseCommand):
             "btn_lab": ["🔬", "⚗️", "🧪", "🧫"],
             "btn_campaign": ["🗺", "🏰", "⚔️", "🧭"],
             "btn_team": ["🛡", "👥", "🤝", "⚔️"],
+            "btn_attack_team": ["⚔️", "🗡", "💥", "🔪"],
+            "btn_defense_team": ["🛡", "🔰", "🏰", "🧱"],
             "btn_league": ["🎖", "🏆", "🥇", "⭐"],
             "btn_codex": ["📖", "📚", "📕", "📜"],
             "btn_referral": ["🎁", "👥", "🤝", "🎉"],

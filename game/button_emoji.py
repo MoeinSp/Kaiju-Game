@@ -105,6 +105,8 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     # the owner themes them in the panel (they're first-class keys now, so they can be)
     "btn_campaign": ("دانجن", "🗺", "features"),
     "btn_team": ("تیم من", "🛡", "features"),
+    "btn_attack_team": ("تیم حمله (آرنا)", "⚔️", "features"),
+    "btn_defense_team": ("تیم دفاع (آرنا)", "🛡", "features"),
     "btn_league": ("لیگ رتبه‌بندی", "🎖", "features"),
     "btn_codex": ("دانشنامه", "📖", "features"),
     "btn_referral": ("دعوت دوستان", "🎁", "features"),

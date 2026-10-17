@@ -163,22 +163,27 @@ def _arena_home_text(user, power, shield_secs, history, week, season_secs, reven
 
 def _arena_home_keyboard(has_revenges: bool, chest_count: int = 0, ready_chests: int = 0) -> InlineKeyboardMarkup:
     # the counts are in the caption («جعبه‌ها (2/4): 1 آماده»), so the label stays short
+    from bot.buttons import symmetric_markup
+
     chest_btn_text = "جعبه‌های آماده" if ready_chests > 0 else "جعبه‌ها"
     chest_emoji = "btn_chest_open" if ready_chests > 0 else "btn_chests"
-    chest_row = [btn(chest_btn_text, emoji_key=chest_emoji, style=SHOP if ready_chests > 0 else NAV, callback_data="arena_chests")]
-    if has_revenges:
-        chest_row.append(btn("انتقام‌ها", emoji_key="btn_revenges", style=DANGER, callback_data="arena_revenges"))
+    # every row is one button or a same-style pair (symmetric_markup); «فصل قبل» lives
+    # under the weekly table now
     rows = [
         [btn("جستجوی حریف", emoji_key="btn_attack", style=BATTLE, callback_data="arena_find")],
-        chest_row,
-        [btn("تیم دفاع", emoji_key="btn_team", style=PRIMARY, callback_data="dteam:open")],
         [
-            btn("جدول هفته", emoji_key="btn_rank", style=NAV, callback_data="arena_top"),
-            btn("فصل قبل", emoji_key="btn_last_season", style=NAV, callback_data="arena_last_season"),
+            btn("تیم حمله", emoji_key="btn_attack_team", style=PRIMARY, callback_data="arena_team"),
+            btn("تیم دفاع", emoji_key="btn_defense_team", style=PRIMARY, callback_data="dteam:open"),
         ],
-        [back_btn("menu:hub_battle", "بازگشت به نبرد")],
+        [
+            btn(chest_btn_text, emoji_key=chest_emoji, style=SHOP if ready_chests > 0 else NAV, callback_data="arena_chests"),
+            btn("جدول هفته", emoji_key="btn_rank", style=SHOP if ready_chests > 0 else NAV, callback_data="arena_top"),
+        ],
     ]
-    return InlineKeyboardMarkup(rows)
+    if has_revenges:
+        rows.append([btn("انتقام‌ها", emoji_key="btn_revenges", style=DANGER, callback_data="arena_revenges")])
+    rows.append([back_btn("menu:hub_battle", "بازگشت به نبرد")])
+    return symmetric_markup(rows)
 
 
 async def arena_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1206,7 +1211,10 @@ async def arena_top_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     for row in ranked:
         rank = medals[row["rank"] - 1] if row["rank"] <= 3 else f"{row['rank']}."
         lines.append(f"{rank} {mention(row['user'])}\n  🏆 کاپ: <code>{row['cup']:,}</code> <i>(ریست به <code>{row['reset_to']:,}</code>)</i>")
-    keyboard = InlineKeyboardMarkup([[back_btn("menu:arena")]])
+    keyboard = InlineKeyboardMarkup([
+        [btn("فصل قبل", emoji_key="btn_last_season", style=NAV, callback_data="arena_last_season")],
+        [back_btn("menu:arena")],
+    ])
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -1219,7 +1227,7 @@ async def arena_last_season_callback(update: Update, context: ContextTypes.DEFAU
     query = update.callback_query
     week, results = await run_db(_last_season_sync)
     await query.answer()
-    keyboard = InlineKeyboardMarkup([[back_btn("menu:arena")]])
+    keyboard = InlineKeyboardMarkup([[back_btn("arena_top", "بازگشت به جدول هفته")]])
     if not results:
         await safe_edit_message_text(
             query,

@@ -63,7 +63,8 @@ def _panel_sync(tg_user):
     }
 
 
-def _render(view: dict, filt: str = "all", page: int = 0, is_group: bool = False) -> tuple[str, InlineKeyboardMarkup]:
+def _render(view: dict, filt: str = "all", page: int = 0, is_group: bool = False,
+            back: str = "menu:hub_creature") -> tuple[str, InlineKeyboardMarkup]:
     from bot.handlers.private import creature_picker_frame
 
     lines = [
@@ -100,7 +101,8 @@ def _render(view: dict, filt: str = "all", page: int = 0, is_group: bool = False
         ])
     rows += nav_rows
     if not is_group:
-        rows.append([back_btn("menu:hub_creature", "بازگشت به هیولا")])
+        rows.append([back_btn("menu:arena", "بازگشت به آرنا") if back == "menu:arena"
+                     else back_btn("menu:hub_creature", "بازگشت به هیولا")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -108,13 +110,20 @@ def _team_view(context):
     return context.user_data.get("team_view", ("all", 0))
 
 
+def _team_back(context) -> str:
+    return context.user_data.get("team_back", "menu:hub_creature")
+
+
 async def team_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     if update.callback_query:
         await update.callback_query.answer()
+    # opened from the arena («تیم حمله») → back to the arena; from the creature hub → there
+    context.user_data["team_back"] = (
+        "menu:arena" if update.callback_query and update.callback_query.data == "arena_team" else "menu:hub_creature")
     view = await run_db(_panel_sync, update.effective_user)
     filt, page = _team_view(context)
-    text, keyboard = _render(view, filt, page, is_group=is_group)
+    text, keyboard = _render(view, filt, page, is_group=is_group, back=_team_back(context))
     from game.media import get_feature_image_path
     photo = get_feature_image_path("team")
     await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
@@ -127,7 +136,7 @@ async def team_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data["team_view"] = (filt, int(page))
     view = await run_db(_panel_sync, update.effective_user)
     await query.answer()
-    text, keyboard = _render(view, filt, int(page), is_group=is_group)
+    text, keyboard = _render(view, filt, int(page), is_group=is_group, back=_team_back(context))
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -163,12 +172,13 @@ async def team_toggle_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     await query.answer()
     filt, page = _team_view(context)
-    text, keyboard = _render(view, filt, page, is_group=is_group)
+    text, keyboard = _render(view, filt, page, is_group=is_group, back=_team_back(context))
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def register(application) -> None:
     application.add_handler(CommandHandler("team", hall_gated("team", team_panel), filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(team_panel, pattern=r"^menu:team$"))
+    application.add_handler(CallbackQueryHandler(hall_gated("team", team_panel), pattern=r"^arena_team$"))
     application.add_handler(CallbackQueryHandler(team_toggle_callback, pattern=r"^team_tog:"))
     application.add_handler(CallbackQueryHandler(team_page_callback, pattern=r"^team_page:"))
