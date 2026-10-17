@@ -764,6 +764,22 @@ class Team(models.Model):
         return f"team of {self.owner_id}"
 
 
+class DefenseTeam(models.Model):
+    """Up to three creatures that DEFEND this player in the arena (game/defense.py). When
+    someone attacks, the one that fares best against the attacker's creature is picked
+    automatically. Independent of Team: a creature may sit in both. Empty → the active
+    creature defends, as before."""
+
+    owner = models.OneToOneField(User, on_delete=models.CASCADE, related_name="defense_team")
+    slot1 = models.ForeignKey(Creature, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    slot2 = models.ForeignKey(Creature, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    slot3 = models.ForeignKey(Creature, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"defense team of {self.owner_id}"
+
+
 class CodexEntry(models.Model):
     """One species a player has discovered (ever owned). Persistent so the Codex
     stays complete even after the creature is fused or released. Recorded lazily

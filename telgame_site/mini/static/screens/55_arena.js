@@ -163,6 +163,37 @@
     }).catch(function (e) { K.toast(e.message, "err"); }).finally(function () { btn.classList.remove("busy"); });
   }
 
+  // «تیم دفاع» (bot: bot/handlers/defense_team.py)
+  function defenseSheet(btn) {
+    btn.classList.add("busy");
+    K.api.get("arena/defense/").then(function (d) {
+      var box = null;
+      function body(v) {
+        var head = v.members.length
+          ? '<div class="panel list">' + v.members.map(function (c) { return "<div>" + K.fighter(c, '<div style="margin-top:4px">' + K.elTag(c.element) + "</div>") + "</div>"; }).join("") + "</div>"
+          : '<div class="panel pad muted sm center">تیم دفاعت خالیه؛ فعلاً هیولای فعالت ازت دفاع می‌کنه.</div>';
+        return '<div class="grab"></div><div class="pad"><div class="ttl" style="font-size:18px">تیم دفاع</div>' +
+          '<p class="lead" style="margin:4px 0 12px">وقتی کسی بهت حمله کنه، از بین این‌ها بهترین جواب به هیولای مهاجم (با حساب برتری عنصری) خودکار انتخاب می‌شه. هیولاهای قوی با عنصرهای مختلف بذار. یه هیولا می‌تونه هم توی تیم عادی باشه هم اینجا؛ هیولای مشغول (معدن، مأموریت، غار) دفاع نمی‌کنه.</p>' +
+          head + '<div class="h2">' + K.ic("plus") + "انتخاب (" + K.n(v.members.length) + "/" + K.n(v.max) + ")</div>" +
+          v.creatures.map(function (c) {
+            return '<button class="panel ar-pick' + (c.in_defense ? " on" : "") + '" data-dt="' + c.id + '">' +
+              K.fighter(c, '<div style="margin-top:4px">' + K.elTag(c.element) + " " + (c.in_defense ? K.tag("در تیم دفاع", "var(--good)", "check") : "") + "</div>") + "</button>";
+          }).join("") + "</div>";
+      }
+      function wire(v) {
+        box.querySelectorAll("[data-dt]").forEach(function (b) {
+          b.onclick = function () {
+            K.api.post("arena/defense/toggle/", { creature_id: +b.dataset.dt }, b).then(function (nv) {
+              K.haptic("ok"); box.innerHTML = body(nv); wire(nv);
+            }).catch(function () {});
+          };
+        });
+      }
+      box = K.sheet(body(d));
+      wire(d);
+    }).catch(function (e) { K.toast(e.message, "err"); }).finally(function () { btn.classList.remove("busy"); });
+  }
+
   K.screen("ar_home", {
     title: "آرنا", tab: "battle",
     render: function (root, params, ctx) {
@@ -183,6 +214,7 @@
           '<div class="panel list mt">' +
           '<button data-act="chests" style="color:var(--gold)"><span class="ic">' + K.ic("chest") + '</span><span class="t">جعبه‌ها <span class="num muted">(' + ch.count + "/" + ch.max + ")</span><small>" + chestSub + '</small></span><span class="chev">' + K.ic("chevron") + "</span></button>" +
           '<button data-act="revenges" style="color:var(--bad)"><span class="ic">' + K.ic("revenge") + '</span><span class="t">انتقام‌ها<small>' + (d.revenges ? K.n(d.revenges) + " انتقام در انتظار · مهلت " + K.n(3) + " روزه" : "کسی اخیراً بهت حمله نکرده") + "</small></span>" + (d.revenges ? '<span class="ar-cnt num">' + d.revenges + "</span>" : "") + '<span class="chev">' + K.ic("chevron") + "</span></button>" +
+          '<button data-act="defense" style="color:var(--good)"><span class="ic">' + K.ic("shield") + '</span><span class="t">تیم دفاع<small>تا ' + K.n(3) + " هیولا؛ بهترینش خودکار جلوی مهاجم می‌ایسته</small></span><span class=\"chev\">" + K.ic("chevron") + "</span></button>" +
           '<button data-act="season" style="color:var(--accent)"><span class="ic">' + K.ic("podium") + '</span><span class="t">جدول هفته و فصل قبل<small>ده نفر اول و کاپ بعد از ریست</small></span><span class="chev">' + K.ic("chevron") + "</span></button>" +
           '<button data-act="league" style="color:var(--cup)"><span class="ic">' + K.ic("medal") + '</span><span class="t">لیگ<small>پاداش آخر هفته و جایزه‌ی رتبه</small></span><span class="chev">' + K.ic("chevron") + "</span></button></div>" +
           '<div class="h2">' + K.ic("shield") + "آخرین حمله‌ها به تو</div>" +
@@ -197,6 +229,7 @@
         K.on(root, "revenges", function () { K.go("ar_revenge"); });
         K.on(root, "league", function () { if (K.me && K.me.hall_level < 3) K.toast("لیگ از سطح 3 تالار مِهر باز می‌شه.", "err"); else K.go("ar_league"); });
         K.on(root, "season", function (el) { seasonSheet(el); });
+        K.on(root, "defense", function (el) { defenseSheet(el); });
       });
     }
   });
@@ -208,6 +241,8 @@
       '<div class="panel ar-card">' + versus(c.my, c.my_cup, o) +
       '<div class="ar-lab">' + K.ic(o.is_fake ? "flask" : "user") + '<span class="cut">' + K.esc(o.label) + "</span>" + (o.alliance ? '<span class="muted sm cut">· اتحاد ' + K.esc(o.alliance) + "</span>" : "") + "</div>" +
       '<div class="center" style="padding:0 12px 12px">' + adv.html + "</div></div>" +
+      (c.win ? '<div class="callout good mt">' + K.ic("check") + "<div><b>با این هیولا می‌بری!</b></div></div>"
+             : '<div class="callout warn mt">' + K.ic("warn") + "<div><b>این حریف از هیولات قوی‌تره.</b> «تعویض هیولا» یا «حریف بعدی» رو بزن.</div></div>") +
       '<div class="panel pad mt"><div class="flex between"><span class="muted">' + K.ic("gift") + " جایزه‌ی برد</span><span>" + (K.amounts(c.loot) || K.n(0)) + "</span></div>" + swing(c.cup_win, c.cup_loss) + "</div>" +
       shieldNote(c) +
       '<div class="mt">' + attackBtn("attack", "حمله", c) + "</div>" +

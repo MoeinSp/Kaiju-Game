@@ -43,7 +43,8 @@ RAID_NOTIFY_WINDOW = datetime.timedelta(hours=2)
 
 def defense_report_text(attacker_name: str, attacker_power: int, attacker_won: bool,
                         loot: int = 0, cup_change: int = 0, attacker_alliance: str | None = None,
-                        loot_dna: int = 0, group_title: str | None = None, group_link: str | None = None) -> str:
+                        loot_dna: int = 0, group_title: str | None = None, group_link: str | None = None,
+                        defender_creature: str | None = None) -> str:
     """The 'you were attacked' DM body — shared by the immediate send (fired the
     instant a raid resolves) and the periodic catch-up job, so both read identically.
     A successful attacker loots gold and DNA; either way the defender's cup swings, so both
@@ -56,6 +57,10 @@ def defense_report_text(attacker_name: str, attacker_power: int, attacker_won: b
         name = _html.escape(group_title or "بی‌نام")
         name = f'<a href="{group_link}">{name}</a>' if group_link else name
         where = f"\n📍 محل حمله: گروه «<b>{name}</b>»"
+    if defender_creature:  # arena: who of your «تیم دفاع» fought
+        import html as _html
+
+        where += f"\n🛡 مدافع تو: <b>{_html.escape(defender_creature)}</b>"
     ally_note = f" — 🤝 اتحاد: <b>{attacker_alliance}</b>" if attacker_alliance else " — 🚫 بدون اتحاد"
     cup_change = int(cup_change or 0)
     if attacker_won:

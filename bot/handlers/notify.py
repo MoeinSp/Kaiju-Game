@@ -77,6 +77,7 @@ async def send_defense_report_now(context, defense: dict, *, group: bool = False
         attacker_alliance=defense.get("attacker_alliance"),
         loot_dna=defense.get("loot_dna", 0),
         group_title=defense.get("group_title"), group_link=defense.get("group_link"),
+        defender_creature=defense.get("defender_creature"),
     )
     try:
         d = await run_db(_user_details_sync, defense["attacker_id"])

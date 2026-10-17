@@ -210,11 +210,13 @@ def _card(user, pending: dict, seen: list[int], note: str = "", creature=None, f
         opp["rarity"], opp["star"] = A._bot_display_tier(int(pending["cup"]))
         opp["img"] = species_img(pending.get("creature_name") or "", pending.get("element") or "fire", opp["rarity"], opp["star"])
     else:
-        tc = foe or Creature.objects.filter(owner_id=pending["user_id"], is_active=True).first()
+        tc = foe or _defender_of(pending)
         if tc is not None:
             opp.update({"rarity": tc.rarity, "star": tc.star_level, "level": tc.level, "img": creature_img(tc)})
     return {
         "note": note,
+        # the duel is deterministic (constants.duel_attacker_wins): say who wins up front
+        "win": constants.duel_attacker_wins(my["power"], my["element"], pending["power"], pending.get("element")),
         "token": pack(user, TOKEN, pending),
         "seen": seen,
         "my": my, "my_cup": user.cup,
@@ -226,6 +228,18 @@ def _card(user, pending: dict, seen: list[int], note: str = "", creature=None, f
         "energy": sync_energy(user), "max_energy": get_max_energy(user),
         "shield": A.shield_remaining_seconds(user), "shield_cost_hours": constants.SHIELD_ATTACK_COST_HOURS,
     }
+
+
+def _defender_of(pending: dict):
+    """The real opponent's creature the card shows: its «تیم دفاع» pick (token key ``d``),
+    else — an older token — the active creature."""
+    if pending.get("is_fake") or not pending.get("user_id"):
+        return None
+    if pending.get("d"):
+        tc = Creature.objects.filter(owner_id=pending["user_id"], id=pending["d"]).first()
+        if tc is not None:
+            return tc
+    return Creature.objects.filter(owner_id=pending["user_id"], is_active=True).first()
 
 
 def _find(user, seen: list[int], note: str = "") -> dict:
@@ -243,15 +257,8 @@ def _find(user, seen: list[int], note: str = "") -> dict:
         dna = max(0, target.dna_fragments // 10)
         user_id = target.id
         seen = ([i for i in seen if i != target.id] + [target.id])[-RECENT_MAX:]
-        foe = Creature.objects.filter(owner=target, is_active=True).first()
-        if foe is not None:
-            # = game.arena.active_power(target), with the defender's research re-read (see `_my`)
-            from game import research
-            from game.creature import creature_power
-            from game.equipment import get_equipped_items
-
-            research.attach_research(target, foe)
-            opponent["power"] = creature_power(foe, get_equipped_items(foe))
+        # the «تیم دفاع» pick find_opponent made (its power already has the research)
+        foe = Creature.objects.filter(owner=target, id=opponent.get("defender_creature_id")).first()
     pending = {
         "is_fake": opponent["is_fake"], "user_id": user_id, "label": opponent["label"],
         "alliance": opponent.get("alliance"),
@@ -259,6 +266,7 @@ def _find(user, seen: list[int], note: str = "") -> dict:
         "cup": opponent["cup"], "power": opponent["power"], "element": opponent.get("element"),
         "loot_pool": opponent["loot_pool"], "loot_gold": loot, "loot_dna": dna,
         "n": _last_attack_id(user),
+        "d": opponent.get("defender_creature_id"),
     }
     creature = active_creature(user)
     pending["c"] = creature.id
@@ -365,7 +373,11 @@ def _creature_details(creature) -> dict:
 
 def _details_of(target_id: int | None, fallback: dict) -> dict:
     target = User.objects.filter(id=target_id).select_related("alliance").first() if target_id else None
-    creature = Creature.objects.filter(owner=target, is_active=True).first() if target else None
+    creature = None
+    if target is not None and fallback.get("d"):
+        creature = Creature.objects.filter(owner=target, id=fallback["d"]).first()
+    if creature is None and target is not None:
+        creature = Creature.objects.filter(owner=target, is_active=True).first()
     out = {"is_fake": creature is None, "label": _txt(fallback.get("label") or (lab_display(target) if target else "این بازیکن")),
            "alliance": target.alliance.name if (target and target.alliance_id) else None}
     if creature is None:
@@ -392,6 +404,33 @@ def details(request, user, data):
     return {"details": _details_of(None if pending["is_fake"] else pending.get("user_id"), pending)}
 
 
+def _defense_view(user) -> dict:
+    from game import defense
+
+    ids = defense.member_ids(user)
+    mine = list(Creature.objects.filter(owner=user))
+    rows = creature_list(user, mine)
+    for row in rows:
+        row["in_defense"] = row["id"] in ids
+    by_id = {r["id"]: r for r in rows}
+    return {"members": [by_id[i] for i in ids if i in by_id], "creatures": rows, "max": defense.MAX_SLOTS}
+
+
+@endpoint()
+def defense_team(request, user):
+    """«تیم دفاع» (bot: bot/handlers/defense_team.py): who defends you in the arena."""
+    return _defense_view(user)
+
+
+@endpoint("POST")
+def defense_toggle(request, user, data):
+    from game import defense
+
+    with transaction.atomic():
+        defense.toggle(user, need_int(data, "creature_id", 1))
+    return _defense_view(user)
+
+
 # ══════════════════════════════ attack ══════════════════════════════
 @transaction.atomic
 def _attack_tx(user, pending: dict):
@@ -413,6 +452,7 @@ def _attack_tx(user, pending: dict):
 
     opponent = dict(pending)
     opponent["user"] = target
+    opponent["defender_creature_id"] = pending.get("d")
 
     _fresh_research(user, target)
     result = A.attack(user, opponent)
@@ -542,10 +582,12 @@ def revenge_card(request, user):
     target = log.attacker
     if target is None:
         raise GameError("حریف دیگه در دسترس نیست.")
-    my = _my(user)
-    tc = Creature.objects.filter(owner=target, is_active=True).first()
+    from game.defense import pick_defender
+
+    mine = active_creature(user)
+    my = _my(user, mine)
     _fresh_research(target)
-    opp_power = A.active_power(target)
+    tc, opp_power = pick_defender(target, mine, my["power"])
     return {
         "log_id": log.id, "my": my, "my_cup": user.cup,
         "opponent": {
@@ -587,12 +629,17 @@ def _revenge_tx(user, log_id: int):
     spend_energy(user, constants.ARENA_ATTACK_ENERGY_COST, "انتقام")
     user.save(update_fields=["energy", "energy_updated_at"])
 
+    from game.defense import pick_defender
+
     _fresh_research(user, target)
+    mine = active_creature(user)
+    tc, tc_power = pick_defender(target, mine, _my(user, mine)["power"])
     opponent = {
         "is_fake": False, "user": target,
         "label": log.attacker_label or lab_display(target),
         "cup": target.cup,
-        "power": A.active_power(target),  # same number the revenge card showed (with gear)
+        "power": tc_power,  # same pick and number the revenge card showed
+        "defender_creature_id": tc.id if tc else None,
         "loot_pool": target.coins,
     }
     result = A.attack(user, opponent)
@@ -800,6 +847,8 @@ routes = [
     ("find/", find),
     ("card/", card),
     ("team/", team),
+    ("defense/", defense_team),
+    ("defense/toggle/", defense_toggle),
     ("swap/", swap),
     ("details/", details),
     ("attack/", attack),

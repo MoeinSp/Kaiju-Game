@@ -249,13 +249,15 @@ def _fake_opponent(attacker: User) -> dict:
     Built from the attacker's CUP, not their power, so it enforces the ladder.
     Guarantees that bots never have elemental weakness against the player, and
     walls out players around 4000 cup."""
-    bot_cup = max(0, attacker.cup + random.randint(-40, 90))
+    # symmetric around the attacker's cup and ±6% around the curve (2026-10-17): it used to
+    # lean upward (−40…+90 cup, ±200 flat), so almost every bot looked a bit stronger
+    bot_cup = max(0, attacker.cup + random.randint(-60, 60))
     expected = power_for_cup(bot_cup)
     if bot_cup >= 3850 or attacker.cup >= 3850:
         # Near and above the 4000 ceiling, bots strictly overpower any player (max player power is 9822)
         power = max(10800, expected + random.randint(200, 600))
     else:
-        power = max(1, expected + random.randint(-200, 200))
+        power = max(1, round(expected * random.uniform(0.94, 1.06)))
     rarity, star = _bot_display_tier(bot_cup)
 
     # Bot element selection:
@@ -345,15 +347,20 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
     weights = [1.0 / (1 + abs(u.cup - attacker.cup) * 0.05) for u in pool]
     target = random.choices(pool, weights=weights, k=1)[0]
     _reserve_opponent(attacker.id, target.id)
-    target_creature = Creature.objects.filter(owner=target, is_active=True).first()
+    from game.defense import pick_defender
+
+    # the defender: from the target's «تیم دفاع», the best answer to the attacker's creature
+    my_creature = Creature.objects.filter(owner=attacker, is_active=True).first()
+    target_creature, target_power = pick_defender(target, my_creature, active_power(attacker))
     return {
         "is_fake": False,
         "user": target,
         "label": lab_display(target),
         "alliance": target.alliance.name if target.alliance_id else None,
         "creature_name": target_creature.name if target_creature else "موجود ناشناس",
+        "defender_creature_id": target_creature.id if target_creature else None,
         "cup": target.cup,
-        "power": active_power(target),
+        "power": target_power,
         "element": target_creature.element if target_creature else constants.random_element(),
         "loot_pool": target.coins,
     }
@@ -397,7 +404,15 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         defender_user = User.objects.select_for_update().get(id=opponent["user"].id)
         if attacker.alliance_id and defender_user.alliance_id == attacker.alliance_id:
             raise OpponentUnavailableError("🤝 این بازیکن هم‌اتحادی شماست! امکان حمله به اعضای اتحاد خودت وجود نداره.")
-        defender_creature = Creature.objects.filter(owner=defender_user, is_active=True).first()
+        from game.defense import pick_defender
+
+        # «تیم دفاع»: the defender the card showed if it can still fight, else the best
+        # answer to the attacker's creature (game/defense.py)
+        defender_creature, _ = pick_defender(
+            defender_user, attacker_creature,
+            creature_power(attacker_creature, get_equipped_items(attacker_creature)),
+            prefer_id=opponent.get("defender_creature_id"),
+        )
         if defender_creature is None:
             raise OpponentUnavailableError("این حریف دیگه موجود فعالی نداره.")
         if is_shielded(defender_user):
@@ -583,6 +598,7 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
             "attacker_cup": attacker.cup,
             "defender_cup": defender_user.cup,
             "cup_change": (-delta if won else abs(delta)) if award_cup else 0,
+            "defender_creature": sb["name"],
         },
     }
 

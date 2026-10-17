@@ -171,6 +171,7 @@ def _arena_home_keyboard(has_revenges: bool, chest_count: int = 0, ready_chests:
     rows = [
         [btn("جستجوی حریف", emoji_key="btn_attack", style=BATTLE, callback_data="arena_find")],
         chest_row,
+        [btn("تیم دفاع", emoji_key="btn_team", style=PRIMARY, callback_data="dteam:open")],
         [
             btn("جدول هفته", emoji_key="btn_rank", style=NAV, callback_data="arena_top"),
             btn("فصل قبل", emoji_key="btn_last_season", style=NAV, callback_data="arena_last_season"),
@@ -243,6 +244,7 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         "user_id": None if opponent["is_fake"] else opponent["user"].id,
         "label": opponent["label"],
         "creature_name": opponent.get("creature_name", "؟"),
+        "defender_creature_id": opponent.get("defender_creature_id"),
         "cup": opponent["cup"],
         "power": opponent["power"],
         "element": opponent.get("element"),
@@ -435,6 +437,12 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
     ]
     if adv:
         lines += [_ARENA_DIV, adv]
+    # the duel is deterministic (constants.duel_attacker_wins), so say who wins up front
+    if constants.duel_attacker_wins(my_power, my_element, opponent["power"], opp_element):
+        verdict = "✅ <b>با این موجود می‌بری!</b>"
+    else:
+        verdict = "❌ <b>این حریف از موجودت قوی‌تره</b>\n<i>«تعویض» یا «حریف بعدی» رو بزن.</i>"
+    lines += [_ARENA_DIV, verdict]
     lines += [
         _ARENA_DIV,
         f"{get_emoji('gift')} <b>جایزه برد</b>",
@@ -485,7 +493,11 @@ def _opponent_details_sync(pending: dict) -> dict:
     # resolve the alliance name in this sync context (a lazy FK load on the event loop
     # would raise SynchronousOnlyOperation)
     alliance_name = target.alliance.name if (target and target.alliance_id) else None
-    creature = Creature.objects.filter(owner=target, is_active=True).first() if target else None
+    creature = None
+    if target is not None and pending.get("defender_creature_id"):
+        creature = Creature.objects.filter(owner=target, id=pending["defender_creature_id"]).first()
+    if creature is None and target is not None:
+        creature = Creature.objects.filter(owner=target, is_active=True).first()
     if creature is None:
         d = _bot(pending)
         d["alliance"] = alliance_name
@@ -683,12 +695,15 @@ def _reconstruct_pending_sync(tg_user, ref):
             or abs(target.cup - user.cup) > constants.ARENA_MATCH_CUP_BAND
         ):
             raise OpponentUnavailableError("این حریف دیگه در محدوده‌ی کاپ تو نیست، یکی دیگه پیدا کن.")
-        tc = Creature.objects.filter(owner=target, is_active=True).first()
+        from game.defense import pick_defender
+
+        mine = Creature.objects.filter(owner=user, is_active=True).first()
+        tc, tc_power = pick_defender(target, mine, active_power(user))
         if tc is None:
             raise OpponentUnavailableError("این حریف دیگه موجود فعالی نداره، یکی دیگه پیدا کن.")
         return {
             "is_fake": False, "user_id": target.id, "label": lab_display(target),
-            "creature_name": tc.name, "cup": target.cup, "power": active_power(target),
+            "creature_name": tc.name, "defender_creature_id": tc.id, "cup": target.cup, "power": tc_power,
             "element": tc.element, "loot_pool": target.coins,
             "loot_gold": loot_gold, "loot_dna": loot_dna,
         }
@@ -700,6 +715,7 @@ def _reconstruct_pending_sync(tg_user, ref):
         "is_fake": opp["is_fake"],
         "user_id": None if opp["is_fake"] else opp["user"].id,
         "label": opp["label"], "creature_name": opp.get("creature_name", "؟"),
+        "defender_creature_id": opp.get("defender_creature_id"),
         "cup": opp["cup"], "power": opp["power"], "element": opp.get("element"),
         "loot_pool": opp["loot_pool"], "loot_gold": loot_gold, "loot_dna": loot_dna,
     }
@@ -1027,8 +1043,12 @@ def _revenge_find_sync(tg_user, log_id: int):
     if log.created_at < tz.now() - datetime.timedelta(days=3):
         raise GameError("مهلت 3 روزه‌ی انتقام گذشته.")
 
+    from bio_lab.models import Creature
+    from game.defense import pick_defender
+
     my_power = active_power(user)
-    opponent_power = active_power(log.attacker) if log.attacker else 0
+    mine = Creature.objects.filter(owner=user, is_active=True).first()
+    opponent_power = pick_defender(log.attacker, mine, my_power)[1] if log.attacker else 0
     attacker_name = log.attacker_label or lab_display(log.attacker)
     return user, log, my_power, opponent_power, attacker_name
 
@@ -1082,7 +1102,10 @@ def _revenge_attack_sync(tg_user, log_id: int):
     if target is None:
         raise GameError("حریف دیگه در دسترس نیست.")
 
-    target_creature = Creature.objects.filter(owner=target, is_active=True).first()
+    from game.defense import pick_defender
+
+    mine = Creature.objects.filter(owner=user, is_active=True).first()
+    target_creature, target_power = pick_defender(target, mine, active_power(user))
 
     spend_energy(user, constants.ARENA_ATTACK_ENERGY_COST, "انتقام")
     user.save(update_fields=["energy", "energy_updated_at"])
@@ -1092,7 +1115,8 @@ def _revenge_attack_sync(tg_user, log_id: int):
         "user": target,
         "label": log.attacker_label or lab_display(target),
         "cup": target.cup,
-        "power": active_power(target),  # same number the revenge card showed (with gear)
+        "power": target_power,  # same pick and number the revenge card showed
+        "defender_creature_id": target_creature.id if target_creature else None,
         "loot_pool": target.coins,
     }
     result = attack(user, opponent)
