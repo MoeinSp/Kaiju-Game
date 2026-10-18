@@ -133,6 +133,17 @@ def spend_group_shield_on_attack(user: User) -> int:
     return max(0, int((user.group_shield_until - now).total_seconds())) if user.group_shield_until else 0
 
 
+def _refuse_shield_in_debt(user: User) -> None:
+    """A negative diamond balance (diamonds taken back after an exploit): no bought shields —
+    only the natural shield a player gets after being raided."""
+    if user.diamonds < 0:
+        raise GameError(
+            "⛔️ خرید سپر برات قفله!\n\n"
+            f"موجودی الماست منفیه ({user.diamonds:,} 💎). تا وقتی این بدهی صاف نشه نمی‌تونی سپر بخری؛ "
+            "فقط سپر خودکاری که بعد از هر حمله بهت می‌رسه فعال می‌شه."
+        )
+
+
 @transaction.atomic
 def buy_shield(user: User, tier: str) -> dict:
     """Buy an arena shield with diamonds. Stacks onto any time already left, so a
@@ -141,6 +152,7 @@ def buy_shield(user: User, tier: str) -> dict:
     if cfg is None:
         raise GameError("این نوع سپر وجود نداره.")
     user = User.objects.select_for_update().get(id=user.id)
+    _refuse_shield_in_debt(user)
     if user.diamonds < cfg["diamonds"]:
         raise GameError(f"الماس کافی نداری! این سپر {cfg['diamonds']} الماس هزینه داره.")
     now = timezone.now()
@@ -159,6 +171,7 @@ def buy_group_shield(user: User, tier: str) -> dict:
     if cfg is None:
         raise GameError("این نوع سپر وجود نداره.")
     user = User.objects.select_for_update().get(id=user.id)
+    _refuse_shield_in_debt(user)
     if user.diamonds < cfg["diamonds"]:
         raise GameError(f"الماس کافی نداری! این سپر {cfg['diamonds']} الماس هزینه داره.")
     now = timezone.now()
