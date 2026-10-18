@@ -1,6 +1,7 @@
 """Midnight Black Market (بازار سیاه و مزایده‌های نیمه‌شب).
 
-Auctions run with rare items, genetic crates, diamond packs, or high-tier creatures.
+Auctions run with rare items, chests, eggs, gear or high-tier creatures. Diamond packs and
+subscriptions were taken out of the nightly programme on 2026-10-18 (owner's request).
 Players place bids; outbid players are instantly refunded.
 """
 
@@ -105,7 +106,7 @@ def get_min_bid_increment(current_bid: int, currency: str = "coins") -> int:
 # opens at 50k gold and has been closing around 3M).
 PROGRAMME: tuple[dict, ...] = (
     {"key": "treasure", "emoji": "💎", "title": "شب گنجینه", "lots": (
-        ("💎 محموله ۵۰۰ تایی الماس خالص", "diamonds", {"amount": 500}, "coins", 50_000),
+        ("👑 ۲ جعبه‌ی امگا", "arena_chest", {"tier": "mega", "count": 2}, "coins", 100_000),
         ("🎫 بسته ۱۰ عددی بلیط باکس ژنتیکی", "tickets", {"amount": 10}, "coins", 30_000),
         ("👑 🦖 کایجوی تصادفی افسانه‌ای ۳ ستاره", "creature", {"rarity": "legendary", "star": 3, "level": 1}, "diamonds", 200),
     )},
@@ -121,12 +122,12 @@ PROGRAMME: tuple[dict, ...] = (
     )},
     {"key": "speed", "emoji": "⏩", "title": "شب سرعت", "lots": (
         ("⏩ ۵ کارت سرعت ۶۰ دقیقه‌ای", "speedup", {"minutes": 60, "count": 5}, "coins", 30_000),
-        ("🥈 اشتراک نقره‌ای ۷ روزه", "subscription", {"tier": "silver", "days": 7}, "diamonds", 100),
-        ("💎 محموله ۳۰۰ تایی الماس", "diamonds", {"amount": 300}, "coins", 30_000),
+        ("🥚 تخم کایجوی افسانه‌ای (همون لحظه آماده)", "egg", {"rarity": "legendary", "minutes": 0}, "coins", 60_000),
+        ("⏩ ۱۰ کارت سرعت ۳۰ دقیقه‌ای", "speedup", {"minutes": 30, "count": 10}, "coins", 30_000),
     )},
     {"key": "grand", "emoji": "👑", "title": "شب بزرگ", "lots": (
         ("👑 🦖 کایجوی تصادفی اساطیری ۲ ستاره", "creature", {"rarity": "mythic", "star": 2, "level": 1}, "diamonds", 500),
-        ("💎 محموله ۱٬۰۰۰ تایی الماس خالص", "diamonds", {"amount": 1000}, "coins", 100_000),
+        ("⚔️ ۲ تجهیزات تصادفی اساطیری", "equip_roll", {"rarity": "mythic", "count": 2}, "coins", 150_000),
         ("💰 صندوق ۱٬۰۰۰٬۰۰۰ طلا", "coins", {"amount": 1_000_000}, "diamonds", 100),
         ("🔮 ۲ جعبه‌ی جادویی", "arena_chest", {"tier": "magical", "count": 2}, "coins", 40_000),
     )},
