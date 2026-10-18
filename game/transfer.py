@@ -99,6 +99,20 @@ def reset_user_transfer_cooldown(user: User) -> None:
     user.save(update_fields=["kaiju_transfer_ready_at", "equip_transfer_ready_at"])
 
 
+def check_no_diamond_debt(sender: User, receiver: User | None) -> None:
+    """A player whose diamond balance is NEGATIVE (diamonds taken back after an exploit) can
+    neither give nor receive anything — kaiju, gear or gold — until the debt is paid off."""
+    for who, u in (("فرستنده", sender), ("گیرنده", receiver)):
+        if u is not None and u.diamonds < 0:
+            raise GameError(
+                "⛔️ داد و ستد قفله!\n\n"
+                f"موجودی الماس {who} منفیه ({u.diamonds:,} 💎). تا وقتی این بدهی صاف نشه، "
+                f"{who} نمی‌تونه هیولا، تجهیزات یا طلا بده یا بگیره.\n\n"
+                "💡 الماس‌هایی که از جایزه‌های بازی میاد اول صرف صاف کردن بدهی می‌شه؛ "
+                "وقتی موجودی به صفر یا بیشتر برسه، داد و ستد خودکار باز می‌شه."
+            )
+
+
 def _check_transfers_enabled(receiver: User) -> None:
     """The receiver can switch OFF incoming transfers (group «انتقال خاموش»). When
     off, nobody can send them gold/kaiju/equipment."""
@@ -189,6 +203,7 @@ def preview_creature_transfer(sender: User, receiver: User, creature_id: int) ->
     if sender.id == receiver.id:
         raise GameError("نمی‌تونی به خودت منتقل کنی.")
     _check_transfers_enabled(receiver)
+    check_no_diamond_debt(sender, receiver)
     _check_account_maturity_gate(sender)
     _check_cooldown(sender, "kaiju_transfer_ready_at", "فرستنده")
     _check_cooldown(receiver, "kaiju_transfer_ready_at", "گیرنده")
@@ -233,6 +248,7 @@ def preview_equip_transfer(sender: User, receiver: User, equip_id: int) -> dict:
     if sender.id == receiver.id:
         raise GameError("نمی‌تونی به خودت منتقل کنی.")
     _check_transfers_enabled(receiver)
+    check_no_diamond_debt(sender, receiver)
     _check_account_maturity_gate(sender)
     _check_cooldown(sender, "equip_transfer_ready_at", "فرستنده")
     _check_cooldown(receiver, "equip_transfer_ready_at", "گیرنده")
@@ -276,6 +292,7 @@ def transfer_creature(sender: User, receiver: User, creature_id: int, price: int
     locked = {u.id: u for u in User.objects.select_for_update().filter(id__in=ids).order_by("id")}
     sender, receiver = locked[sender.id], locked[receiver.id]
     _check_transfers_enabled(receiver)
+    check_no_diamond_debt(sender, receiver)
     _check_account_maturity_gate(sender)
     _check_cooldown(sender, "kaiju_transfer_ready_at", "فرستنده")
     _check_cooldown(receiver, "kaiju_transfer_ready_at", "گیرنده")
@@ -371,6 +388,7 @@ def transfer_equipment(sender: User, receiver: User, equip_id: int, price: int =
     locked = {u.id: u for u in User.objects.select_for_update().filter(id__in=ids).order_by("id")}
     sender, receiver = locked[sender.id], locked[receiver.id]
     _check_transfers_enabled(receiver)
+    check_no_diamond_debt(sender, receiver)
     _check_account_maturity_gate(sender)
     _check_cooldown(sender, "equip_transfer_ready_at", "فرستنده")
     _check_cooldown(receiver, "equip_transfer_ready_at", "گیرنده")

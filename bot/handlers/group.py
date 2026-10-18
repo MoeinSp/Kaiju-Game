@@ -129,8 +129,9 @@ def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
         receiver = locked.get(receiver_id)
         if receiver is None:
             raise GameError("این بازیکن هنوز بازی رو شروع نکرده.")
-        from game.transfer import _check_account_maturity_gate
+        from game.transfer import _check_account_maturity_gate, check_no_diamond_debt
 
+        check_no_diamond_debt(sender, receiver)
         _check_account_maturity_gate(sender)
         # «تالار تجارت» gate: transfer is bounded by the SMALLER of their two per-level gold caps,
         # and the receiver cannot receive more than their Trade Hall gold cap per day in total.
