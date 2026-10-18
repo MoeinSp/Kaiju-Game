@@ -328,6 +328,7 @@ def attack(request, user, data):
         "won": result["won"], "coins": result["coins"], "dna": result["dna"], "xp": result["xp"],
         "levels": result["levels"], "level": creature.level, "level_before": level_before,
         "lab_up": result["lab_up"] or None,
+        "encounter_found": bool(result.get("encounter_found")),
         "log": battle_log(result["log_text"]),
         # name/element/power/art of the wild are on the card the client attacked (same tier + seed)
         "enemy": {"name": result["wild_name"], "tier": card["tier"],

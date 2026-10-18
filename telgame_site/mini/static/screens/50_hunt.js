@@ -198,6 +198,7 @@
         if (r.levels) html += '<div class="callout good mt">' + K.ic("up") + "<span><b>" + K.esc(r.me.name) + "</b> رسید به سطح <b>" + K.n(r.level) + "</b>!</span></div>";
         if (r.lab_up) html += '<div class="callout good mt">' + K.ic("flask") + "<span>آزمایشگاهت رفت سطح <b>" + K.n(r.lab_up.to) + "</b>!</span></div>";
         if (!r.won) html += '<div class="callout mt">' + K.ic("info") + "<span>هیولات رو قوی‌تر کن، یا با عنصری برو که به حریف برتری داره.</span></div>";
+        if (r.encounter_found) html += '<div class="callout good mt">' + K.ic("gift") + "<span><b>یه رویداد ویژه پیدا کردی!</b> «حریف بعدی» رو بزن تا ببینیش.</span></div>";
         return html + HU.missions(r.missions) + againButtons() + HU.log(r.log);
       }
 

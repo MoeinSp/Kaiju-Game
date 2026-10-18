@@ -3296,6 +3296,8 @@ async def hunt_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     else:
         reward_line = f"😔 <b>باختی...</b>\n{div}\n✨ تجربه تسلی‌بخش: <code>+{result['xp']:,}</code> XP"
     reward_line += _mission_lines(completed_missions)
+    if result.get("encounter_found"):
+        reward_line += "\n\n🎁 <b>یه رویداد ویژه پیدا کردی!</b> «حریف بعدی» رو بزن تا ببینیش."
 
     keyboard = InlineKeyboardMarkup(
         [

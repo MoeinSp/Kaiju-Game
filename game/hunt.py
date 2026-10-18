@@ -176,7 +176,35 @@ def spawn_wild_creature(benchmark_power: int, tier: str = "normal", seed: int | 
     )
 
 
-ENCOUNTER_CHANCE = 0.02  # 2% chance for a special random encounter instead of standard wild
+# A special random encounter is EARNED by a real hunt (energy spent), not rolled on every
+# «حریف بعدی»: each finished hunt has this chance to bank one encounter, and the next scout
+# shows it. It used to be a 2% roll on every scout — a scout costs ~70 gold and no energy, so
+# auto-clickers farmed up to 2,500 diamonds a day from the chest / crystal-cave encounters
+# (2026-10-18). Encounters per day are now bounded by hunts, i.e. by energy.
+ENCOUNTER_CHANCE = 0.05
+_ENCOUNTER_CREDIT = "hunt_enc_credit"  # DailyActionLog action: encounters earned, not yet shown
+
+
+def _grant_encounter_credit(user: User) -> None:
+    from django.db.models import F
+
+    from bio_lab.models import DailyActionLog
+    from game.daily import today_str
+
+    row, _ = DailyActionLog.objects.get_or_create(user=user, action=_ENCOUNTER_CREDIT, day=today_str())
+    DailyActionLog.objects.filter(pk=row.pk).update(count=F("count") + 1)
+
+
+def _take_encounter_credit(user: User) -> bool:
+    """Spend one earned encounter (atomic: two parallel scouts can't both use it)."""
+    from django.db.models import F
+
+    from bio_lab.models import DailyActionLog
+    from game.daily import today_str
+
+    return DailyActionLog.objects.filter(
+        user=user, action=_ENCOUNTER_CREDIT, day=today_str(), count__gt=0,
+    ).update(count=F("count") - 1) > 0
 
 # The encounter a player was actually SHOWN and hasn't resolved yet: {user_id: enc_type}.
 # resolve_encounter_action() pops it, so a card pays exactly once — without this, every
@@ -244,8 +272,8 @@ def scout_one(user: User, player_creature: Creature, benchmark_power: int | None
     creatures to fight it."""
     from game.creature import creature_power
 
-    # 2% chance for special random encounter
-    if random.random() < ENCOUNTER_CHANCE:
+    # an encounter only if a real hunt earned one (see ENCOUNTER_CHANCE)
+    if _take_encounter_credit(user):
         enc_type = random.choice(list(ENCOUNTERS.keys()))
         _PENDING_ENCOUNTERS[user.id] = enc_type
         return {
@@ -456,10 +484,15 @@ def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal",
     levels = add_xp(player_creature, xp_gain)
     player_creature.save()
     lab_up = lab.award(user, "hunt_win" if won else "hunt_loss")
+    # a finished hunt may earn a special encounter — shown on the next «حریف بعدی»
+    encounter_found = random.random() < ENCOUNTER_CHANCE
+    if encounter_found:
+        _grant_encounter_credit(user)
 
     return {
         "won": won,
         "lab_up": lab_up,
+        "encounter_found": encounter_found,
         "log_text": log_text,
         "wild_name": wild.name,
         "tier": tier,
