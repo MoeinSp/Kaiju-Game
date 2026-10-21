@@ -55,16 +55,38 @@
             (out.length ? K.grid(out, function (c) { return K.creatureTile(c); }, 60, memo.creatures)
                         : K.state("search", "چیزی پیدا نشد", "هیولایی با این فیلتر نداری.", '<button class="btn" data-act="clear" style="margin-top:14px">' + K.ic("close") + "حذف فیلتر</button>"));
         }
+        var SORTS = [["power", "قوی‌ترین"], ["level", "بالاترین سطح"], ["rarity", "نایاب‌ترین"]];
+        function sortLabel() { return SORTS.filter(function (s) { return s[0] === f.sort; })[0][1]; }
+        /* one bar instead of five stacked rows: search, a filter button (rarity + element in a
+           sheet, with a count of what is on) and a sort button that steps through the orders */
+        function fbtn() { var n = (f.rarity ? 1 : 0) + (f.element ? 1 : 0); return K.ic("sliders") + (n ? '<i class="num">' + n + "</i>" : ""); }
         function drawHead() {
           root.querySelector("#cl-head").innerHTML =
             '<div class="seg"><button class="on">' + K.ic("claw") + 'هیولاها</button><button data-act="equip-list">' + K.ic("chest") + "تجهیزات</button></div>" +
-            '<div class="search">' + K.ic("search") + '<input id="q" type="search" enterkeyhint="search" placeholder="جستجوی اسم هیولا" value="' + K.esc(f.q) + '" autocomplete="off" autocapitalize="off" spellcheck="false"></div>' +
-            '<div class="row">' + chip("", f.rarity, "rarity", "همه") + ro.slice().reverse().map(function (k) { return chip(k, f.rarity, "rarity", K.esc(K.rarLabel(k)), "gem", "c-" + k); }).join("") + "</div>" +
-            '<div class="row">' + chip("", f.element, "element", "همه‌ی عناصر") + Object.keys(K.meta.elements).map(function (k) { return chip(k, f.element, "element", K.esc(K.elLabel(k)), K.EL_ICON[k], "e-" + k); }).join("") + "</div>" +
-            '<div class="seg">' + [["power", "قوی‌ترین"], ["level", "بالاترین سطح"], ["rarity", "نایاب‌ترین"]].map(function (s) { return '<button class="' + (f.sort === s[0] ? "on" : "") + '" data-sort="' + s[0] + '">' + s[1] + "</button>"; }).join("") + "</div>";
+            '<div class="cl-bar"><div class="search">' + K.ic("search") + '<input id="q" type="search" enterkeyhint="search" placeholder="جستجوی اسم هیولا" value="' + K.esc(f.q) + '" autocomplete="off" autocapitalize="off" spellcheck="false"></div>' +
+            '<button class="cl-fbtn' + (f.rarity || f.element ? " on" : "") + '" data-act="filters" aria-label="فیلتر">' + fbtn() + "</button>" +
+            '<button class="cl-sort" data-act="sort">' + K.ic("swap") + "<span>" + sortLabel() + "</span></button></div>";
           var q = root.querySelector("#q");
           q.oninput = function () { f.q = q.value; clearTimeout(timer); timer = setTimeout(function () { drawList(); }, 220); };
           q.onkeydown = function (ev) { if (ev.key === "Enter") q.blur(); };
+        }
+        function filterSheet() {
+          function body() {
+            return '<div class="grab"></div><div class="pad"><div class="ttl" style="font-size:18px;padding-inline-start:44px">فیلتر هیولاها</div>' +
+              '<div class="h2">' + K.ic("gem") + "رده</div>" +
+              '<div class="cl-chips">' + chip("", f.rarity, "rarity", "همه") + ro.slice().reverse().map(function (k) { return chip(k, f.rarity, "rarity", K.esc(K.rarLabel(k)), "gem", "c-" + k); }).join("") + "</div>" +
+              '<div class="h2">' + K.ic("spark") + "عنصر</div>" +
+              '<div class="cl-chips">' + chip("", f.element, "element", "همه‌ی عناصر") + Object.keys(K.meta.elements).map(function (k) { return chip(k, f.element, "element", K.esc(K.elLabel(k)), K.EL_ICON[k], "e-" + k); }).join("") + "</div>" +
+              '<div class="btns" style="margin-top:16px"><button class="btn" data-act="f-clear">' + K.ic("close") + 'پاک کردن</button><button class="btn primary grow" data-close>نمایش ' + K.n(list().length) + " هیولا</button></div></div>";
+          }
+          var box = K.sheet(body());
+          box.addEventListener("click", function (ev) {
+            var b = ev.target.closest("button"); if (!b || b.hasAttribute("data-close")) return; var d = b.dataset;
+            if ("rarity" in d) f.rarity = d.rarity; else if ("element" in d) f.element = d.element;
+            else if (d.act === "f-clear") { f.rarity = ""; f.element = ""; } else return;
+            K.haptic(); box.innerHTML = body(); drawList(); var fb = root.querySelector(".cl-fbtn");
+            if (fb) { fb.innerHTML = fbtn(); fb.classList.toggle("on", !!(f.rarity || f.element)); }
+          });
         }
         root.innerHTML = '<div id="cl-head"></div><div id="cl-list"></div>';
         drawHead(); drawList(true);
@@ -73,9 +95,11 @@
           if (d.creature) K.go("creature", { id: +d.creature });
           else if (d.act === "equip-list") K.go("equipment");
           else if (d.act === "clear") { K.haptic(); f.rarity = ""; f.element = ""; f.q = ""; drawHead(); drawList(); }
-          else if ("rarity" in d) { K.haptic(); f.rarity = d.rarity; light(t); drawList(); }
-          else if ("element" in d) { K.haptic(); f.element = d.element; light(t); drawList(); }
-          else if ("sort" in d) { K.haptic(); f.sort = d.sort; light(t); drawList(); }
+          else if (d.act === "filters") filterSheet();
+          else if (d.act === "sort") {
+            K.haptic(); var i = SORTS.map(function (s) { return s[0]; }).indexOf(f.sort);
+            f.sort = SORTS[(i + 1) % SORTS.length][0]; t.querySelector("span").textContent = sortLabel(); drawList();
+          }
         });
       });
     }

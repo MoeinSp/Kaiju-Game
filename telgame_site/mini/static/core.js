@@ -115,6 +115,7 @@ window.K = (function () {
     list: '<path d="M8.500 6.500h11M8.500 12h11M8.500 17.500h11M4.500 6.500h.1M4.500 12h.1M4.500 17.500h.1"/>',
     grid: '<path d="M4 4h6.500v6.500H4zM13.500 4H20v6.500h-6.500zM4 13.500h6.500V20H4zM13.500 13.500H20V20h-6.500z"/>',
     more: '<circle cx="5.500" cy="12" r="1.300"/><circle cx="12" cy="12" r="1.300"/><circle cx="18.500" cy="12" r="1.300"/>',
+    sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.200"/><circle cx="9" cy="17" r="2.200"/>',
     swap: '<path d="M7 4v15M7 19l-3.500-3.500M7 19l3.500-3.500M17 20V5M17 5l-3.500 3.500M17 5l3.500 3.500"/>',
     food: '<path d="M6 3.500v7a3 3 0 0 0 3 3V21M6 3.500V9M9 3.500V9M12 3.500V10.500a3 3 0 0 1-3 3M17.500 21v-8M17.500 13c-2 0-3-2-3-5s1.500-4.500 3-4.500z"/>',
     send: '<path d="M20.500 3.500 3.500 10.500l6.500 3 3 6.500zM10 13.500l4.500-4.500"/>',
@@ -538,6 +539,31 @@ window.K = (function () {
   var screens = {}, hubs = { battle: [], base: [], more: [] }, stack = [], timers = [], renderSeq = 0, hubRedraw = null;
   K.TABS = [["home", "home", "خانه"], ["creatures", "claw", "هیولاها"], ["battle", "swords", "نبرد"], ["base", "hall", "پایگاه"], ["more", "grid", "بیشتر"]];
   backEl.innerHTML = K.ic("back");
+  /* Full-colour game icons for the bottom tabs (the line icons of K.ic looked thin down there). */
+  var TAB_ART = {
+    home: '<defs><linearGradient id="tgR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff8a5c"/><stop offset="1" stop-color="#d63c3c"/></linearGradient>' +
+      '<linearGradient id="tgB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7fd6ff"/><stop offset="1" stop-color="#2f7fd8"/></linearGradient></defs>' +
+      '<rect x="21" y="6" width="3.2" height="7" rx=".8" fill="#a8452f"/>' +
+      '<path d="M7 14.5V26a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 25 26V14.5L16 7z" fill="url(#tgB)"/>' +
+      '<path d="M3.6 15.2 16 4.6l12.4 10.6a1.4 1.4 0 0 1-1.8 2.1L16 8.3 5.4 17.3a1.4 1.4 0 0 1-1.8-2.1z" fill="url(#tgR)"/>' +
+      '<path d="M13 27.5v-5.5a3 3 0 0 1 6 0v5.5z" fill="#ffd36b"/><rect x="9.5" y="16.5" width="3.4" height="3.4" rx=".7" fill="#e9f8ff"/><rect x="19.1" y="16.5" width="3.4" height="3.4" rx=".7" fill="#e9f8ff"/>',
+    creatures: '<defs><linearGradient id="tgM" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9df07a"/><stop offset="1" stop-color="#2f9e5a"/></linearGradient></defs>' +
+      '<path d="M8.6 11.5 5 3.2l7.6 5.2zM23.4 11.5 27 3.2l-7.6 5.2z" fill="#f1e2b8"/>' +
+      '<path d="M16 6.5c6.4 0 10.5 4.3 10.5 10.3 0 6.6-4.6 11.2-10.5 11.2S5.5 23.4 5.5 16.8C5.5 10.8 9.6 6.5 16 6.5z" fill="url(#tgM)"/>' +
+      '<path d="M9.2 14.8l5.6 1.9-1 2.6c-2.4.2-4.2-1.6-4.6-4.5zM22.8 14.8l-5.6 1.9 1 2.6c2.4.2 4.2-1.6 4.6-4.5z" fill="#ffe14d"/>' +
+      '<path d="M10.8 22h10.4l-1.6 3h-7.2z" fill="#20112a"/><path d="M12.6 22l1.1 1.7 1.1-1.7zM17.2 22l1.1 1.7 1.1-1.7z" fill="#fff"/>',
+    battle: '<defs><linearGradient id="tgS" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#b9c6dc"/></linearGradient></defs>' +
+      '<g transform="rotate(45 16 16)"><path d="M16 1.2l2.3 3.2V21h-4.6V4.4z" fill="url(#tgS)"/><path d="M16 3v17.6" stroke="rgba(120,140,170,.55)" stroke-width=".8"/><rect x="10.2" y="20.6" width="11.6" height="2.8" rx="1.4" fill="#ffc53d"/><rect x="14.8" y="23.2" width="2.4" height="4.8" fill="#8a4420"/><circle cx="16" cy="29.4" r="1.9" fill="#ffc53d"/></g>' +
+      '<g transform="rotate(-45 16 16)"><path d="M16 1.2l2.3 3.2V21h-4.6V4.4z" fill="url(#tgS)"/><path d="M16 3v17.6" stroke="rgba(120,140,170,.55)" stroke-width=".8"/><rect x="10.2" y="20.6" width="11.6" height="2.8" rx="1.4" fill="#ffc53d"/><rect x="14.8" y="23.2" width="2.4" height="4.8" fill="#8a4420"/><circle cx="16" cy="29.4" r="1.9" fill="#ffc53d"/></g>',
+    base: '<defs><linearGradient id="tgK" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c9d6ea"/><stop offset="1" stop-color="#6c7fa3"/></linearGradient></defs>' +
+      '<path d="M16 3v10" stroke="#e8d9b0" stroke-width="1.3"/><path d="M16.6 3.2h6l-1.7 2.1 1.7 2.1h-6z" fill="#ff5470"/>' +
+      '<path d="M10.5 28V12.5h2.2v1.8h2.1v-1.8h2.4v1.8h2.1v-1.8h2.2V28z" fill="url(#tgK)"/>' +
+      '<path d="M3.5 28V9h2.6v2.2h2.3V9H11v19zM21 28V9h2.6v2.2h2.3V9h2.6v19z" fill="url(#tgK)"/>' +
+      '<path d="M13.4 28v-4.6a2.6 2.6 0 0 1 5.2 0V28z" fill="#1b2335"/><rect x="5.9" y="14.5" width="2.6" height="3.6" rx="1.3" fill="#ffd36b"/><rect x="23.5" y="14.5" width="2.6" height="3.6" rx="1.3" fill="#ffd36b"/>',
+    more: '<rect x="4" y="4" width="10.8" height="10.8" rx="3.2" fill="#3ad6ff"/><rect x="17.2" y="4" width="10.8" height="10.8" rx="3.2" fill="#a77bff"/>' +
+      '<rect x="4" y="17.2" width="10.8" height="10.8" rx="3.2" fill="#ffc53d"/><rect x="17.2" y="17.2" width="10.8" height="10.8" rx="3.2" fill="#35d48a"/>' +
+      '<path d="M6.2 7.4a1.6 1.6 0 0 1 1.6-1.6h3.4M19.4 7.4a1.6 1.6 0 0 1 1.6-1.6h3.4M6.2 20.6a1.6 1.6 0 0 1 1.6-1.6h3.4M19.4 20.6a1.6 1.6 0 0 1 1.6-1.6h3.4" stroke="rgba(255,255,255,.7)" stroke-width="1.4" fill="none" stroke-linecap="round"/>'
+  };
 
   /* Register a screen. def: {title: "…" | fn(params), tab: "home|creatures|battle|base|more",
      skeleton: "grid|hub|detail|list" (optional loading placeholder), render(root, params, ctx)} */
@@ -683,32 +709,60 @@ window.K = (function () {
       dot.classList.toggle("live", !n); dot.textContent = n ? (n > 99 ? "99+" : n) : "";
     });
   }
-  K.renderHub = function (root, hub, intro) {
+  /* Hub layout, game style: the scene art behind a short title, the big modes (HUB_HERO) as a
+     sideways carousel of tall cards, the rest as a compact grid — or, in a hub with groups
+     («بیشتر»), as rows of app-like icons under each group title. */
+  var HUB_HERO = { battle: ["hunt", "arena", "dungeon", "boss"], base: ["buildings", "research"] };
+  K.renderHub = function (root, hub, head) {
     var me = K.me || {}, items = (hubs[hub] || []).slice().sort(function (a, b) { return (a.order || 50) - (b.order || 50); });
-    var html = intro || "", groups = HUB_GROUPS[hub] || [], gi = -1;
-    html += '<div class="hub">' + items.map(function (t) {
-      var head = "";
-      while (gi + 1 < groups.length && (t.order || 50) >= groups[gi + 1][0]) { gi++; head = '<div class="h2 hubgroup">' + K.ic(groups[gi][2]) + groups[gi][1] + "</div>"; }
-      return head + tileHtml(t);
-    }).join("") + "</div>";
-    function tileHtml(t) {
+    var groups = HUB_GROUPS[hub] || [], heroIds = HUB_HERO[hub] || [], html = "";
+    head = head || {};
+    html += '<div class="hx-bg"' + (head.img ? ' style="background-image:url(' + K.asset("img/" + head.img) + ')"' : "") + '><i class="lb-fog"></i><i class="lb-motes"></i></div>';
+    if (head.title) html += '<div class="hx-head"><b>' + head.title + "</b><span>" + (head.sub || "") + "</span></div>";
+    var hero = heroIds.map(function (id) { return items.filter(function (t) { return t.id === id; })[0]; }).filter(Boolean);
+    var rest = items.filter(function (t) { return hero.indexOf(t) < 0; });
+    if (hero.length) html += '<div class="hx-hero' + (hero.length < 3 ? " duo" : "") + '">' + hero.map(heroHtml).join("") + "</div>";
+    if (groups.length) {
+      var gi = -1, out = "";
+      rest.forEach(function (t) {
+        var opened = false;
+        while (gi + 1 < groups.length && (t.order || 50) >= groups[gi + 1][0]) { gi++; opened = true; }
+        if (opened) out += (out ? "</div>" : "") + '<div class="hx-gh">' + K.ic(groups[gi][2]) + "<span>" + groups[gi][1] + '</span></div><div class="hx-drawer">';
+        out += appHtml(t);
+      });
+      html += out + (out ? "</div>" : "");
+    } else if (rest.length) html += '<div class="hx-grid">' + rest.map(cardHtml).join("") + "</div>";
+    function parts(t) {
       var badge = tileBadge(t, me), need = hallNeed(t, me), art = hubArt(t);
-      // the art is a lazy <img> (it was a CSS background, which downloads every tile of a long
-      // menu at once, also the ones far below the screen)
-      return '<button class="hubtile' + (t.wide ? " wide" : "") + (need ? " locked" : "") + '" data-hub="' + K.esc(t.id) + '" style="--tc:' + (t.color || "var(--accent)") + '">' +
-        (art ? '<img class="bg" loading="lazy" decoding="async" src="' + K.esc(art) + '" alt="">' : "") +
-        '<span class="hi">' + K.ic(need ? "lock" : t.icon) + "</span>" + (badge && !need ? '<span class="badge' + (badge === "live" ? " live" : "") + '">' + (badge === "live" ? "فعال" : K.esc(badge)) + "</span>" : "") +
-        "<b>" + K.esc(t.title) + "</b><small>" + K.esc(need ? "از سطح " + need + " تالار مِهر" : (t.sub || "")) + "</small></button>";
+      return {
+        need: need, attrs: ' data-hub="' + K.esc(t.id) + '" style="--tc:' + (t.color || "var(--accent)") + '"',
+        // the art is a lazy <img> (a CSS background would download every tile of a long menu at once)
+        art: art ? '<img class="bg" loading="lazy" decoding="async" src="' + K.esc(art) + '" alt="">' : "",
+        icon: '<span class="hx-ic">' + K.ic(need ? "lock" : t.icon) + "</span>",
+        badge: badge && !need ? '<i class="hx-badge' + (badge === "live" ? " live" : "") + '">' + (badge === "live" ? "" : K.esc(badge)) + "</i>" : "",
+        sub: need ? "از سطح " + need + " تالار مِهر" : (t.sub || "")
+      };
+    }
+    function heroHtml(t) {
+      var p = parts(t);
+      return '<button class="hx-hcard' + (p.need ? " locked" : "") + '"' + p.attrs + ">" + p.art + p.icon + p.badge +
+        '<span class="hx-txt"><b>' + K.esc(t.title) + "</b><small>" + K.esc(p.sub) + "</small></span>" +
+        '<span class="hx-go">' + (p.need ? K.ic("lock") : "ورود" + K.ic("chevron")) + "</span></button>";
+    }
+    function cardHtml(t) {
+      var p = parts(t);
+      return '<button class="hx-card' + (p.need ? " locked" : "") + '"' + p.attrs + ">" + p.art + p.icon + p.badge +
+        "<b>" + K.esc(t.title) + "</b>" + (p.need ? "<small>" + K.esc(p.sub) + "</small>" : "") + "</button>";
+    }
+    function appHtml(t) {
+      var p = parts(t);
+      return '<button class="hx-app' + (p.need ? " locked" : "") + '"' + p.attrs + '><span class="hx-thumb">' + p.art + p.icon + "</span>" + p.badge +
+        "<b>" + K.esc(t.title) + "</b></button>";
     }
     if (!items.length) html += K.state("hourglass", "به‌زودی", "این بخش داره آماده می‌شه.");
-    root.innerHTML = html;
-    // a lone tile at the end of a two-column run would leave a hole next to it: stretch it
-    var run = [];
-    function closeRun() { if (run.length % 2) run[run.length - 1].classList.add("wide", "solo"); run = []; }
-    Array.prototype.forEach.call(root.querySelectorAll(".hub > *"), function (el) {
-      if (el.classList.contains("hubtile") && !el.classList.contains("wide")) run.push(el); else closeRun();
-    });
-    closeRun();
+    var old = root.querySelector(".hx-hero"), keep = old ? old.scrollLeft : 0;   // a re-draw must not snap the carousel back
+    root.innerHTML = '<div class="hubx hubx-' + hub + '">' + html + "</div>";
+    if (keep) { var nw = root.querySelector(".hx-hero"); if (nw) nw.scrollLeft = keep; }
     var bound = !!root._khub; root._khub = items;
     if (bound) return;                       // re-drawn in place: the click handler is already there
     root.addEventListener("click", function (ev) {
@@ -722,15 +776,12 @@ window.K = (function () {
   /* Re-draw the hub that is on screen (no-op elsewhere). A module calls it when its own badge
      data arrives, so the tile shows the number without waiting for the next visit. */
   K.hubRefresh = function () { if (hubRedraw) hubRedraw(); };
-  function hubBanner(img, title, sub) {
-    return '<div class="banner hubhead" style="background-image:url(' + K.asset("img/" + img) + ')"><div><div class="ttl">' + title + '</div><div class="sm" style="color:#c5cee2">' + sub + "</div></div></div>";
-  }
   /* A hub opens at once from the profile we already have; if that is old (or an action
      happened since) it is refreshed in the background and the tiles are re-drawn only when
      something changed. */
   function hubScreen(hub, img, title, sub) {
     K.screen(hub, { skeleton: "hub", render: function (root, params, ctx) {
-      function draw() { K.renderHub(root, hub, hubBanner(img, title, sub)); }
+      function draw() { K.renderHub(root, hub, { img: img, title: title, sub: sub }); }
       return K.meFast(function () { if (ctx.alive()) draw(); }).then(function () { draw(); hubRedraw = function () { if (ctx.alive()) draw(); }; });
     } });
   }
@@ -822,7 +873,9 @@ window.K = (function () {
 
   K.start = function () {
     if (K.started) return; K.started = true;
-    tabsEl.innerHTML = K.TABS.map(function (t) { return '<button data-tab="' + t[0] + '">' + K.ic(t[1]) + "<span>" + t[2] + "</span></button>"; }).join("");
+    tabsEl.innerHTML = K.TABS.map(function (t) {
+      return '<button data-tab="' + t[0] + '"><i class="ti">' + (TAB_ART[t[0]] ? '<svg viewBox="0 0 32 32" aria-hidden="true">' + TAB_ART[t[0]] + "</svg>" : K.ic(t[1])) + "</i><span>" + t[2] + "</span></button>";
+    }).join("");
     tabsEl.addEventListener("click", function (ev) { var b = ev.target.closest("button[data-tab]"); if (!b) return; K.haptic(); K.tab(b.dataset.tab); });
     // back from another app / a locked phone: numbers may be old
     document.addEventListener("visibilitychange", function () {

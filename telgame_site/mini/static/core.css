@@ -406,20 +406,102 @@ body::after { content: ""; position: fixed; inset: 0; z-index: -1; pointer-event
   box-shadow: 0 8px 22px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.06); }
 .hud { background: linear-gradient(180deg, rgba(8,11,18,.92), rgba(8,11,18,.78)); box-shadow: 0 6px 18px rgba(0,0,0,.35); }
 
-nav.tabs { background: linear-gradient(180deg, rgba(16,21,34,.94), rgba(8,11,18,.98)); border-top: 1px solid rgba(255,255,255,.09);
-  box-shadow: 0 -8px 24px rgba(0,0,0,.45); overflow: visible; }
-nav.tabs .in { overflow: visible; }
-nav.tabs button[data-tab="battle"] { color: #fff; }
-nav.tabs button[data-tab="battle"] svg { width: 30px; height: 30px; position: relative; z-index: 1; }
-nav.tabs button[data-tab="battle"]::after { content: ""; position: absolute; top: -18px; width: 62px; height: 62px; border-radius: 50%; z-index: 0;
-  background: radial-gradient(circle at 35% 30%, #ff8a8a, #d6264f 70%); border: 2px solid rgba(255,190,190,.6);
-  box-shadow: 0 6px 0 #8f1531, 0 10px 24px rgba(214,38,79,.5); }
-nav.tabs button[data-tab="battle"] svg { transform: translateY(-14px); filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
-nav.tabs button[data-tab="battle"] span { position: relative; z-index: 1; margin-top: -8px; font-weight: 700; }
-nav.tabs button[data-tab="battle"].on::before { display: none; }
-nav.tabs button[data-tab="battle"].on::after { animation: tabPulse 2.4s ease-in-out infinite; }
-nav.tabs button[data-tab="battle"].on svg { transform: translateY(-14px); }
-nav.tabs button[data-tab="battle"]:active svg { transform: translateY(-11px) scale(.92); }
-nav.tabs button[data-tab="battle"] .dot { top: -14px; inset-inline-end: calc(50% - 36px); z-index: 2; }
-@keyframes tabPulse { 50% { box-shadow: 0 6px 0 #8f1531, 0 10px 34px rgba(255,80,120,.75); } }
-@media (prefers-reduced-motion: reduce) { nav.tabs button[data-tab="battle"].on::after { animation: none; } }
+nav.tabs { background: linear-gradient(180deg, #161d2e, #0a0e18 70%); border-top: 1px solid rgba(255,255,255,.1);
+  box-shadow: 0 -10px 26px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.05); overflow: visible; }
+nav.tabs .in { overflow: visible; gap: 2px; }
+nav.tabs button { justify-content: flex-end; gap: 2px; padding-bottom: 7px; color: #7d89a6; }
+/* each tab = a full-colour icon on a small plate; asleep it is dimmed, the open tab lifts and glows */
+nav.tabs .ti { position: relative; width: 40px; height: 34px; display: grid; place-items: center; border-radius: 12px; transition: transform .2s var(--ease), background .2s; }
+nav.tabs .ti svg { width: 27px; height: 27px; filter: grayscale(.55) brightness(.78) drop-shadow(0 2px 2px rgba(0,0,0,.5)); transition: filter .2s, transform .2s; }
+nav.tabs button.on { color: #fff; }
+nav.tabs button.on .ti { transform: translateY(-4px); background: radial-gradient(circle at 50% 30%, rgba(58,214,255,.32), rgba(58,214,255,.06) 70%);
+  box-shadow: 0 0 0 1px rgba(58,214,255,.45), 0 6px 14px rgba(0,0,0,.45), 0 0 16px rgba(58,214,255,.3); }
+nav.tabs button.on .ti svg { filter: drop-shadow(0 2px 3px rgba(0,0,0,.55)); transform: scale(1.08); }
+nav.tabs button.on::before { display: none; }
+nav.tabs button:active .ti { transform: translateY(-1px) scale(.92); }
+nav.tabs button:active svg { transform: none; }
+nav.tabs .dot { top: 2px; inset-inline-end: calc(50% - 26px); z-index: 2; box-shadow: 0 0 0 2px #10151f; }
+nav.tabs .dot.live { top: 4px; }
+/* the battle tab: a raised red round button with the label under it on the bar */
+nav.tabs button[data-tab="battle"] { color: #ffd0d8; font-weight: 700; }
+nav.tabs button[data-tab="battle"] .ti { position: absolute; top: -22px; left: 50%; width: 60px; height: 60px; margin-left: -30px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #ff8f8f, #e0304f 55%, #a5163a); border: 2px solid rgba(255,200,200,.7);
+  box-shadow: 0 5px 0 #7d1230, 0 10px 24px rgba(214,38,79,.55), inset 0 2px 0 rgba(255,255,255,.35); transform: none; }
+nav.tabs button[data-tab="battle"] .ti svg { width: 36px; height: 36px; filter: drop-shadow(0 2px 2px rgba(80,0,20,.6)); transform: none; }
+nav.tabs button[data-tab="battle"].on { color: #fff; }
+nav.tabs button[data-tab="battle"].on .ti { transform: none; animation: tabPulse 2.4s ease-in-out infinite; }
+nav.tabs button[data-tab="battle"]:active .ti { transform: translateY(3px); box-shadow: 0 2px 0 #7d1230, 0 6px 14px rgba(214,38,79,.45); }
+nav.tabs button[data-tab="battle"] .dot { top: -24px; inset-inline-end: calc(50% - 34px); }
+@keyframes tabPulse { 50% { box-shadow: 0 5px 0 #7d1230, 0 10px 34px rgba(255,80,120,.8), inset 0 2px 0 rgba(255,255,255,.35); } }
+@media (prefers-reduced-motion: reduce) { nav.tabs button[data-tab="battle"].on .ti { animation: none; } }
+
+/* ── hubs (battle / base / more), game style — K.renderHub in core.js ── */
+.hubx { position: relative; margin: -12px calc(-1 * max(14px, env(safe-area-inset-left, 0px))) 0; padding: 14px max(14px, env(safe-area-inset-left, 0px)) 6px;
+  min-height: calc(100dvh - var(--hud-h) - var(--safe-top) - var(--tabs-h) - var(--safe-bottom) - 30px); overflow: hidden; }
+.hx-bg { position: absolute; inset: 0 0 auto 0; height: 480px; z-index: 0; overflow: hidden; background: #070910 center 30% / cover no-repeat; }
+.hx-bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8,11,18,.3), rgba(8,11,18,.6) 45%, var(--bg) 100%); }
+.hubx > :not(.hx-bg) { position: relative; z-index: 2; }
+.hubx img.bg { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
+.hx-head { display: flex; flex-direction: column; gap: 1px; margin: 0 2px 12px; }
+.hx-head b { font-size: 25px; font-weight: 800; line-height: 1.3; text-shadow: 0 3px 12px #000, 0 0 22px rgba(58,214,255,.3); }
+.hx-head span { font-size: 12.5px; color: #c9d2e6; text-shadow: 0 1px 4px #000; }
+.hx-ic { position: absolute; top: 12px; inset-inline-start: 12px; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 13px; color: var(--tc);
+  background: rgba(8,11,18,.72); border: 1px solid color-mix(in srgb, var(--tc) 55%, transparent); box-shadow: 0 0 12px color-mix(in srgb, var(--tc) 30%, transparent); }
+.hx-ic svg { width: 22px; height: 22px; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--tc) 55%, transparent)); }
+.hx-badge { position: absolute; top: 10px; inset-inline-end: 10px; z-index: 3; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; display: grid; place-items: center;
+  font-size: 11px; font-weight: 700; font-style: normal; color: #fff; background: var(--bad); box-shadow: 0 0 0 2px #0d111b; }
+.hx-badge.live { min-width: 13px; width: 13px; height: 13px; padding: 0; background: var(--good); animation: lbBlink 1.4s ease-in-out infinite; }
+.hx-hcard, .hx-card, .hx-thumb { transition: transform .15s var(--ease), filter .15s; }
+.hx-hcard:active, .hx-card:active, .hx-app:active .hx-thumb { transform: scale(.96); filter: brightness(1.12); }
+.hubx .locked { filter: grayscale(.75) brightness(.7); }
+
+/* the big modes: a sideways carousel of tall cards */
+.hx-hero { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain;
+  margin: 0 calc(-1 * max(14px, env(safe-area-inset-left, 0px))); padding: 4px max(14px, env(safe-area-inset-left, 0px)) 16px;
+  scroll-padding-inline: max(14px, env(safe-area-inset-left, 0px)); }
+.hx-hero::-webkit-scrollbar { display: none; }
+.hx-hcard { position: relative; flex: 0 0 64%; max-width: 270px; height: 250px; scroll-snap-align: start; border-radius: 20px; overflow: hidden; isolation: isolate;
+  display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start; padding: 14px; text-align: start; background: #0d111b;
+  border: 1.5px solid color-mix(in srgb, var(--tc) 65%, transparent);
+  box-shadow: 0 10px 24px rgba(0,0,0,.5), 0 0 18px color-mix(in srgb, var(--tc) 26%, transparent), inset 0 1px 0 rgba(255,255,255,.12); }
+.hx-hcard::before { content: ""; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(180deg, transparent 28%, rgba(8,11,18,.62) 58%, rgba(8,11,18,.97)), linear-gradient(160deg, color-mix(in srgb, var(--tc) 32%, transparent), transparent 45%); }
+.hx-txt { display: block; width: 100%; }
+.hx-txt b { display: block; font-size: 21px; font-weight: 800; line-height: 1.35; text-shadow: 0 2px 10px #000; }
+.hx-txt small { display: block; margin-top: 2px; font-size: 12px; line-height: 1.5; color: #c5cee2; }
+.hx-go { margin-top: 10px; display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 14px 0 10px; border-radius: 999px; font-size: 13px; font-weight: 700; color: #fff;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tc) 80%, #fff 20%), color-mix(in srgb, var(--tc) 72%, #000 28%));
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--tc) 40%, #000 60%), inset 0 1px 0 rgba(255,255,255,.3); text-shadow: 0 1px 2px rgba(0,0,0,.45); }
+.hx-go svg { width: 15px; height: 15px; }
+
+/* the other modes: a compact grid (a short last row stretches, no holes) */
+.hx-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+.hx-card { position: relative; flex: 1 1 calc(33.333% - 7px); min-width: calc(33.333% - 7px); height: 120px; border-radius: 16px; overflow: hidden; isolation: isolate;
+  display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 1px; padding: 8px 6px; text-align: center; background: #0d111b;
+  border: 1px solid color-mix(in srgb, var(--tc) 48%, transparent); box-shadow: 0 6px 14px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.08); }
+.hx-card::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(8,11,18,.25), rgba(8,11,18,.55) 45%, rgba(8,11,18,.95)); }
+.hx-card .hx-ic { top: 14px; inset-inline-start: calc(50% - 18px); width: 36px; height: 36px; border-radius: 12px; }
+.hx-card b { font-size: 13.5px; line-height: 1.35; text-shadow: 0 1px 6px #000; }
+.hx-card small { font-size: 10px; color: #c5cee2; }
+.hx-card .hx-badge { top: 8px; inset-inline-end: 8px; }
+
+/* «بیشتر»: app-like icons under each group title */
+.hx-gh { display: flex; align-items: center; gap: 8px; margin: 14px 2px 10px; font-size: 14.5px; font-weight: 800; }
+.hx-gh svg { width: 18px; height: 18px; color: var(--accent); filter: drop-shadow(0 0 6px rgba(58,214,255,.5)); }
+.hx-gh::after { content: ""; flex: 1; height: 1px; background: linear-gradient(270deg, rgba(255,255,255,.2), transparent); }
+.hubx > .hx-gh:first-of-type { margin-top: 2px; }
+.hx-drawer { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px 8px; }
+.hx-app { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+.hx-thumb { position: relative; width: 100%; max-width: 72px; aspect-ratio: 1; border-radius: 20px; overflow: hidden; isolation: isolate; display: grid; place-items: center; background: #0d111b;
+  border: 1.5px solid color-mix(in srgb, var(--tc) 60%, transparent);
+  box-shadow: 0 6px 12px rgba(0,0,0,.45), 0 0 12px color-mix(in srgb, var(--tc) 22%, transparent), inset 0 1px 0 rgba(255,255,255,.15); }
+.hx-thumb::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(circle at 50% 45%, rgba(8,11,18,.15), rgba(8,11,18,.7)); }
+.hx-thumb .hx-ic { position: static; width: 38px; height: 38px; background: rgba(8,11,18,.55); }
+.hx-app b { max-width: 100%; font-size: 11.5px; font-weight: 700; line-height: 1.3; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hx-app .hx-badge { top: -5px; inset-inline-end: 2px; }
+@media (max-width: 380px) {
+  .hx-hcard { flex-basis: 68%; height: 232px; } .hx-txt b { font-size: 19px; }
+  .hx-card { height: 110px; } .hx-drawer { gap: 10px 6px; } .hx-thumb { border-radius: 17px; }
+}
+.hx-hero.duo { overflow: visible; } .hx-hero.duo .hx-hcard { flex: 1 1 0; min-width: 0; max-width: none; height: 236px; }
+.hx-hero.duo .hx-txt b { font-size: 18px; }

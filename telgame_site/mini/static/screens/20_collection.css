@@ -32,3 +32,16 @@
   .lb > div { padding: 9px 11px; gap: 9px; }
   .podium { gap: 7px; }
 }
+
+/* the one-line filter bar (search · filter sheet · sort) */
+.cl-bar { display: flex; gap: 8px; align-items: center; margin: 10px 0 8px; }
+.cl-bar .search { flex: 1; min-width: 0; margin: 0; }
+.cl-fbtn, .cl-sort { position: relative; flex: none; height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border-radius: 13px;
+  background: linear-gradient(180deg, rgba(30,39,58,.95), rgba(13,17,27,.95)); border: 1px solid var(--line-2); color: var(--text); box-shadow: 0 4px 10px rgba(0,0,0,.3); }
+.cl-fbtn { width: 46px; } .cl-fbtn svg { width: 21px; height: 21px; }
+.cl-fbtn.on { color: var(--accent); border-color: rgba(58,214,255,.55); box-shadow: 0 0 12px rgba(58,214,255,.25); }
+.cl-fbtn i { position: absolute; top: -6px; inset-inline-end: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; display: grid; place-items: center;
+  font-size: 10.5px; font-style: normal; font-weight: 700; color: #06131a; background: var(--accent); }
+.cl-sort { padding: 0 11px; font-size: 12px; font-weight: 700; } .cl-sort svg { width: 16px; height: 16px; color: var(--gold); }
+.cl-fbtn:active, .cl-sort:active { transform: scale(.94); }
+.cl-chips { display: flex; flex-wrap: wrap; gap: 7px; }
