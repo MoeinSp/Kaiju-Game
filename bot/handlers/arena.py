@@ -698,7 +698,8 @@ def _reconstruct_pending_sync(tg_user, ref):
             raise OpponentUnavailableError("این حریف دیگه موجود فعالی نداره، یکی دیگه پیدا کن.")
         return {
             "is_fake": False, "user_id": target.id, "label": lab_display(target),
-            "creature_name": tc.name, "defender_creature_id": tc.id, "cup": target.cup, "power": tc_power,
+            "creature_name": tc.name + (" 🌑" if tc.shadow_level else ""), "defender_creature_id": tc.id,
+            "cup": target.cup, "power": tc_power,
             "element": tc.element, "loot_pool": target.coins,
             "loot_gold": loot_gold, "loot_dna": loot_dna,
         }
