@@ -285,9 +285,10 @@ def main() -> None:
     codex.register(application)
     referral.register(application)
     team.register(application)
-    from bot.handlers import defense_team
+    from bot.handlers import defense_team, dungeon as dungeon_handlers
 
     defense_team.register(application)
+    dungeon_handlers.register(application)
     campaign.register(application)
     events.register(application)
     banner.register(application)

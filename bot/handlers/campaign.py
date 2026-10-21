@@ -7,7 +7,7 @@ from bot.gates import hall_gated
 from bot.utils import alert_text
 from bio_lab.models import Team
 from bio_lab.repository import get_or_create_user
-from bot.buttons import BATTLE, PRIMARY, back_btn, back_only_keyboard, btn
+from bot.buttons import BATTLE, NAV, PRIMARY, back_btn, back_only_keyboard, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import campaign
 from game.creature import GameError
@@ -49,8 +49,12 @@ def _panel_sync(tg_user):
 def _render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
     st = view["status"]
     if st["next_stage"] is None:
-        text = f"{get_emoji('dungeon')} <b>دانجن</b>\n━━━━━━━━━━━━━━━━━━━━\n{get_emoji('trophy')} <b>کل دانجن رو فتح کردی!</b>\n<i>منتظر مراحل جدید باش.</i>"
-        return text, InlineKeyboardMarkup([[back_btn("menu:hub_battle", "بازگشت به نبرد")]])
+        text = (f"{get_emoji('dungeon')} <b>دانجن</b>\n━━━━━━━━━━━━━━━━━━━━\n{get_emoji('trophy')} <b>کل دانجن رو فتح کردی!</b>\n"
+                "🕳 <b>سیاه‌چال</b> برات باز شده: هر روز با کلید وارد شو، از درها رد شو و باس رو شکست بده.")
+        return text, InlineKeyboardMarkup([
+            [btn("سیاه‌چال", emoji_key="btn_dungeon", style=BATTLE, callback_data="dg:home")],
+            [back_btn("menu:hub_battle", "بازگشت به نبرد")],
+        ])
 
     boss = f" {get_emoji('hunt')} <b>(باس!)</b>" if st["next_is_boss"] else ""
     rew_lines = _reward_lines(st["next_reward"])
@@ -76,6 +80,9 @@ def _render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
             btn("شروع نبرد", emoji_key="btn_hunt", style=BATTLE, callback_data="camp_fight"),
             btn("مدیریت تیم", emoji_key="btn_team", style=PRIMARY, callback_data="menu:team"),
         ])
+    # the «سیاه‌چال» teaser: it opens after the last stage (game/dungeon.py)
+    lines.append(f"\n🔒 <i>سیاه‌چال بعد از مرحله‌ی {campaign.MAX_STAGE} باز می‌شه.</i>")
+    rows.append([btn("سیاه‌چال (قفل)", emoji_key="btn_dungeon", style=NAV, callback_data="dg:home")])
     rows.append([back_btn("menu:hub_battle", "بازگشت به نبرد")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
