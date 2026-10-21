@@ -117,8 +117,15 @@
     title: function () { return "هیولا"; },
     render: function (root, params, ctx) {
       // the profile is not waited for (K.meFast answers from memory); it is only handed to the action buttons
-      return Promise.all([findIn("profile/creatures/", "creatures", params.id), K.meFast()]).then(function (r) {
+      return Promise.all([findIn("profile/creatures/", "creatures", params.id), K.meFast(), K.api.cached("profile/creatures/").catch(function () { return null; })]).then(function (r) {
         var c = r[0];
+        // the stat bars measure each stat against the player's own best in it
+        var best = null;
+        if (r[2] && r[2].creatures) {
+          best = { hp: 0, atk: 0, def: 0, spd: 0 };
+          r[2].creatures.forEach(function (x) { for (var k in best) if (x[k] > best[k]) best[k] = x[k]; });
+          if (c) for (var k in best) if (c[k] > best[k]) best[k] = c[k];
+        }
         if (!c) { root.innerHTML = K.state("claw", "این هیولا پیدا نشد", "شاید ادغام یا منتقل شده.", '<button class="btn" data-act="gone" style="margin-top:14px">برگشت به کلکسیون</button>'); K.on(root, "gone", function () { ctx.back(); }); return; }
         ctx.setTitle(c.name);
         var acts = K.creatureActions.slice().sort(function (a, b) { return (a.order || 50) - (b.order || 50); });
@@ -133,11 +140,12 @@
               '<span class="lv num">+' + g.level + '</span><small class="cut">' + K.esc(g.name) + "</small></button>"
             : '<div class="cr-slot"><span class="ic">' + K.ic(K.SLOT_ICON[s] || "chest") + '</span><small>' + K.esc(K.slotLabel(s)) + "</small></div>";
         }).join("") + "</div>";
-        root.innerHTML = '<div class="panel hero ' + c.rarity + '"><div class="art"><img src="' + c.img + '&s=l" alt="" decoding="async"><div class="over"><div><div class="ttl">' + K.esc(c.name) + "</div>" + K.stars(c.star) + "</div>" +
+        root.innerHTML = '<div class="panel hero ' + c.rarity + '" data-el="' + c.element + '"><div class="art"><img src="' + c.img + '&s=l" alt="" decoding="async"><div class="over"><div><div class="ttl">' + K.esc(c.name) + "</div>" + K.stars(c.star) + "</div>" +
           '<div class="pow"><b>' + K.n(c.power) + "</b><small>قدرت</small></div></div></div>" +
           '<div class="meta">' + K.rarTag(c.rarity) + K.elTag(c.element) + K.tag("سطح " + K.n(c.level)) +
           (c.active ? K.tag("فعال", "var(--good)", "check") : c.busy ? K.tag("مشغول", "var(--warn)", "clock") : "") +
-          (c.name !== c.species ? K.tag(K.esc(c.species)) : "") + "</div>" + K.statGrid(c) + "</div>" +
+          (c.name !== c.species ? K.tag(K.esc(c.species)) : "") + "</div>" + K.statGrid(c, best) +
+          (best ? '<div class="xs muted stat-note">نوار هر آمار: در مقایسه با بهترین هیولای تو</div>' : "") + "</div>" +
           (buttons ? '<div class="creature-actions">' + buttons + "</div>" : "") +
           '<div class="h2">' + K.ic("chest") + "تجهیزات</div>" + gear;
         K.on(root, "gear", function (el) { K.go("item", { id: +el.dataset.id }); });

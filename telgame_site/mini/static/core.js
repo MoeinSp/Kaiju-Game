@@ -397,21 +397,25 @@ window.K = (function () {
   };
 
   // ───────────────────────── shared components ─────────────────────────
-  K.statGrid = function (c) {
-    return '<div class="stats">' +
-      '<div class="stat hp">' + K.ic("heart", "f") + "<b>" + K.n(c.hp) + "</b><small>جان</small></div>" +
-      '<div class="stat atk">' + K.ic("sword") + "<b>" + K.n(c.atk) + "</b><small>حمله</small></div>" +
-      '<div class="stat def">' + K.ic("shield") + "<b>" + K.n(c.def) + "</b><small>دفاع</small></div>" +
-      '<div class="stat spd">' + K.ic("wind") + "<b>" + K.n(c.spd) + "</b><small>سرعت</small></div></div>";
+  /* `ref` (optional) = {hp, atk, def, spd} to measure against (e.g. the player's best in each):
+     each stat then gets a bar showing how close it is. */
+  K.statGrid = function (c, ref) {
+    function one(k, icon, cls, label) {
+      var bar = ref && ref[k] > 0 ? '<i class="sb"><i style="width:' + Math.max(4, Math.min(100, 100 * c[k] / ref[k])).toFixed(0) + '%"></i></i>' : "";
+      return '<div class="stat ' + k + '">' + K.ic(icon, cls) + "<b>" + K.n(c[k]) + "</b><small>" + label + "</small>" + bar + "</div>";
+    }
+    return '<div class="stats' + (ref ? " bars" : "") + '">' + one("hp", "heart", "f", "جان") + one("atk", "sword", "", "حمله") +
+      one("def", "shield", "", "دفاع") + one("spd", "wind", "", "سرعت") + "</div>";
   };
   /* A creature in the image grid. opts: {tag:"button"|"div", attrs:'data-act="x"', sel:bool, dim:bool, flag:"متن"} */
   K.creatureTile = function (c, opts) {
     opts = opts || {}; var tag = opts.tag || "button";
     var flag = opts.flag ? '<span class="flag new">' + K.esc(opts.flag) + "</span>" : c.active ? '<span class="flag act">' + K.ic("check") + "فعال</span>" : c.busy ? '<span class="flag busy">' + K.ic("clock") + "مشغول</span>" : "";
-    return "<" + tag + ' class="tile ' + c.rarity + K.shadowCls(c) + (opts.sel ? " sel" : "") + (opts.dim ? " dim" : "") + '" data-creature="' + (c.id || "") + '" ' + (opts.attrs || "") + ">" +
+    return "<" + tag + ' class="tile ' + c.rarity + K.shadowCls(c) + (opts.sel ? " sel" : "") + (opts.dim ? " dim" : "") + '" data-creature="' + (c.id || "") + '" data-el="' + (c.element || "") + '" ' + (opts.attrs || "") + ">" +
       '<img class="pic" loading="lazy" decoding="async" src="' + c.img + '" alt=""><span class="shade"></span>' + K.shadowFx(c) + flag +
       '<span class="el e-' + c.element + '">' + K.ic(K.EL_ICON[c.element] || "atom") + "</span>" +
-      '<span class="body"><span class="nm">' + K.esc(c.name) + '</span><span class="sub">' + K.stars(c.star) + (c.power != null ? '<span class="p">' + K.ic("power") + K.n(c.power) + "</span>" : "") + "</span></span></" + tag + ">";
+      // the rarity is also written out: colour alone must never be the only difference
+      '<span class="body"><span class="nm">' + K.esc(c.name) + '</span><span class="rl c-' + c.rarity + '">' + K.esc(K.rarLabel(c.rarity)) + '</span><span class="sub">' + K.stars(c.star) + (c.power != null ? '<span class="p">' + K.ic("power") + K.n(c.power) + "</span>" : "") + "</span></span></" + tag + ">";
   };
   /* An equipment piece in the image grid. e: {id,name,slot,rarity,level,power?,img,on?} */
   K.itemTile = function (e, opts) {
