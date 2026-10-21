@@ -406,34 +406,31 @@ body::after { content: ""; position: fixed; inset: 0; z-index: -1; pointer-event
   box-shadow: 0 8px 22px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.06); }
 .hud { background: linear-gradient(180deg, rgba(8,11,18,.92), rgba(8,11,18,.78)); box-shadow: 0 6px 18px rgba(0,0,0,.35); }
 
-nav.tabs { background: linear-gradient(180deg, #161d2e, #0a0e18 70%); border-top: 1px solid rgba(255,255,255,.1);
-  box-shadow: 0 -10px 26px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.05); overflow: visible; }
-nav.tabs .in { overflow: visible; gap: 2px; }
-nav.tabs button { justify-content: flex-end; gap: 2px; padding-bottom: 7px; color: #7d89a6; }
-/* each tab = a full-colour icon on a small plate; asleep it is dimmed, the open tab lifts and glows */
-nav.tabs .ti { position: relative; width: 40px; height: 34px; display: grid; place-items: center; border-radius: 12px; transition: transform .2s var(--ease), background .2s; }
-nav.tabs .ti svg { width: 27px; height: 27px; filter: grayscale(.55) brightness(.78) drop-shadow(0 2px 2px rgba(0,0,0,.5)); transition: filter .2s, transform .2s; }
-nav.tabs button.on { color: #fff; }
-nav.tabs button.on .ti { transform: translateY(-4px); background: radial-gradient(circle at 50% 30%, rgba(58,214,255,.32), rgba(58,214,255,.06) 70%);
-  box-shadow: 0 0 0 1px rgba(58,214,255,.45), 0 6px 14px rgba(0,0,0,.45), 0 0 16px rgba(58,214,255,.3); }
-nav.tabs button.on .ti svg { filter: drop-shadow(0 2px 3px rgba(0,0,0,.55)); transform: scale(1.08); }
+/* bottom bar, Clash Royale style: five beveled tiles; the open one is wider and blue, its icon
+   rises over the bar and only it shows its name. The battle tile is always red. */
+nav.tabs { background: linear-gradient(180deg, #131b2c, #070a12); border-top: 2px solid #2a3550; box-shadow: 0 -8px 22px rgba(0,0,0,.55); overflow: visible; }
+nav.tabs .in { gap: 5px; padding: 0 8px; align-items: center; overflow: visible; }
+nav.tabs button { flex: 1 1 0; min-width: 0; height: 50px; padding: 0; gap: 0; justify-content: center; border-radius: 12px; color: #fff;
+  background: linear-gradient(180deg, #2a3650 0%, #18213a 55%, #111829); border: 1px solid rgba(255,255,255,.09);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), inset 0 -3px 0 rgba(0,0,0,.35), 0 2px 0 #03050a; transition: flex-grow .25s var(--ease), background .2s; }
+nav.tabs button span { display: none; }
+nav.tabs .ti { position: relative; width: 34px; height: 34px; display: grid; place-items: center; transition: transform .25s var(--ease); }
+nav.tabs .ti svg { width: 31px; height: 31px; filter: drop-shadow(0 2px 1px rgba(0,0,0,.55)); transform: none; }
+nav.tabs button.on { flex-grow: 1.65; justify-content: flex-end; padding-bottom: 5px;
+  background: linear-gradient(180deg, #62b0f7 0%, #3077d6 55%, #1f52a8); border-color: #a9d6ff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.5), inset 0 -3px 0 rgba(0,0,0,.25), 0 2px 0 #03050a, 0 0 16px rgba(80,160,255,.45); }
 nav.tabs button.on::before { display: none; }
-nav.tabs button:active .ti { transform: translateY(-1px) scale(.92); }
-nav.tabs button:active svg { transform: none; }
-nav.tabs .dot { top: 2px; inset-inline-end: calc(50% - 26px); z-index: 2; box-shadow: 0 0 0 2px #10151f; }
-nav.tabs .dot.live { top: 4px; }
-/* the battle tab: a raised red round button with the label under it on the bar */
-nav.tabs button[data-tab="battle"] { color: #ffd0d8; font-weight: 700; }
-nav.tabs button[data-tab="battle"] .ti { position: absolute; top: -22px; left: 50%; width: 60px; height: 60px; margin-left: -30px; border-radius: 50%;
-  background: radial-gradient(circle at 35% 28%, #ff8f8f, #e0304f 55%, #a5163a); border: 2px solid rgba(255,200,200,.7);
-  box-shadow: 0 5px 0 #7d1230, 0 10px 24px rgba(214,38,79,.55), inset 0 2px 0 rgba(255,255,255,.35); transform: none; }
-nav.tabs button[data-tab="battle"] .ti svg { width: 36px; height: 36px; filter: drop-shadow(0 2px 2px rgba(80,0,20,.6)); transform: none; }
-nav.tabs button[data-tab="battle"].on { color: #fff; }
-nav.tabs button[data-tab="battle"].on .ti { transform: none; animation: tabPulse 2.4s ease-in-out infinite; }
-nav.tabs button[data-tab="battle"]:active .ti { transform: translateY(3px); box-shadow: 0 2px 0 #7d1230, 0 6px 14px rgba(214,38,79,.45); }
-nav.tabs button[data-tab="battle"] .dot { top: -24px; inset-inline-end: calc(50% - 34px); }
-@keyframes tabPulse { 50% { box-shadow: 0 5px 0 #7d1230, 0 10px 34px rgba(255,80,120,.8), inset 0 2px 0 rgba(255,255,255,.35); } }
-@media (prefers-reduced-motion: reduce) { nav.tabs button[data-tab="battle"].on .ti { animation: none; } }
+nav.tabs button.on .ti { position: absolute; top: -22px; left: 50%; width: 50px; height: 50px; margin-left: -25px; }
+nav.tabs button.on .ti svg { width: 48px; height: 48px; filter: drop-shadow(0 4px 3px rgba(0,0,0,.5)); transform: none; }
+nav.tabs button.on span { display: block; font-size: 12px; font-weight: 800; line-height: 1; color: #fff; text-shadow: 0 1px 0 #0b2a5c, 0 0 4px rgba(0,0,0,.5); }
+nav.tabs button[data-tab="battle"] { background: linear-gradient(180deg, #ff6f82 0%, #d4304e 55%, #9c1835); border-color: #ffb3bf; }
+nav.tabs button[data-tab="battle"].on { background: linear-gradient(180deg, #ff8a9a 0%, #e5385a 55%, #ad1c3d); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), inset 0 -3px 0 rgba(0,0,0,.25), 0 2px 0 #03050a, 0 0 18px rgba(255,80,110,.55); }
+nav.tabs button[data-tab="battle"].on span { text-shadow: 0 1px 0 #6b0f24, 0 0 4px rgba(0,0,0,.5); }
+nav.tabs button:active { transform: translateY(2px); }
+nav.tabs button:active .ti { transform: scale(.92); }
+nav.tabs button.on:active .ti { transform: none; }
+nav.tabs .dot { top: -6px; inset-inline-end: -4px; z-index: 3; box-shadow: 0 0 0 2px #0b0f18; }
+nav.tabs .dot.live { top: -3px; inset-inline-end: -2px; }
 
 /* ── hubs (battle / base / more), game style — K.renderHub in core.js ── */
 .hubx { position: relative; margin: -12px calc(-1 * max(14px, env(safe-area-inset-left, 0px))) 0; padding: 14px max(14px, env(safe-area-inset-left, 0px)) 6px;
@@ -505,3 +502,51 @@ nav.tabs button[data-tab="battle"] .dot { top: -24px; inset-inline-end: calc(50%
 }
 .hx-hero.duo { overflow: visible; } .hx-hero.duo .hx-hcard { flex: 1 1 0; min-width: 0; max-width: none; height: 236px; }
 .hx-hero.duo .hx-txt b { font-size: 18px; }
+
+/* ── resource bar, game style (K.setRes in core.js) ── */
+.hud .in { gap: 10px; padding: 9px 12px 8px; padding-inline-start: 22px; overflow: visible; }
+.res { position: relative; flex: 1 1 auto; min-width: 0; height: 27px; padding: 0 7px; padding-inline-start: 20px; justify-content: center; gap: 0; border-radius: 8px;
+  background: linear-gradient(180deg, #232d44, #0d121e); border: 1.5px solid #3a4865; color: #fff; font: inherit;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), inset 0 -2px 0 rgba(0,0,0,.35), 0 2px 0 #04060a; }
+.res .ri { position: absolute; inset-inline-start: -13px; top: 50%; width: 31px; height: 31px; margin-top: -15.5px; filter: drop-shadow(0 2px 2px rgba(0,0,0,.6)); }
+.res .ri svg { display: block; width: 100%; height: 100%; }
+.res b { font-size: 13px; font-weight: 800; line-height: 1; white-space: nowrap; color: #fff; text-shadow: 0 1px 0 #000, 0 0 3px rgba(0,0,0,.8); }
+.res b small { font-size: 9.5px; font-weight: 700; color: #9aa6c2; }
+.res.plus { padding-inline-end: 23px; }
+.res .rp { position: absolute; inset-inline-end: 3px; top: 50%; width: 17px; height: 17px; margin-top: -8.5px; border-radius: 5px; display: grid; place-items: center;
+  font-style: normal; font-size: 14px; font-weight: 900; line-height: 1; color: #fff; text-shadow: 0 1px 0 #0d4d22;
+  background: linear-gradient(180deg, #62e889, #1fa04a); border: 1px solid #0d4d22; box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 1px 0 #04060a; }
+.res .rf { position: absolute; bottom: 2px; inset-inline-start: 18px; height: 2px; border-radius: 2px; background: #ffd23d; box-shadow: 0 0 4px #ffb800; }
+.res[data-go]:active { transform: translateY(1px); }
+@media (max-width: 380px) {
+  .hud .in { gap: 9px; padding-inline: 8px; padding-inline-start: 19px; }
+  .res { padding: 0 5px; padding-inline-start: 17px; } .res.plus { padding-inline-end: 21px; }
+  .res .ri { width: 28px; height: 28px; margin-top: -14px; inset-inline-start: -12px; }
+  .res b { font-size: 12px; } .res b small { display: none; }
+}
+
+/* ── «نبرد» as a map: round medallions on paths (K.renderHub, HUB_MAP) ── */
+.hubx-battle .hx-bg { height: 100%; }
+.hubx-battle .hx-bg::after { background: linear-gradient(180deg, rgba(8,11,18,.35), rgba(8,11,18,.62) 40%, rgba(8,11,18,.78) 75%, var(--bg)); }
+.mp { position: relative; margin: 0 -6px; }
+.mp-lines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 0; }
+.mp-lines path { fill: none; stroke: rgba(255,214,120,.7); stroke-width: 3; stroke-dasharray: 2 9; stroke-linecap: round; vector-effect: non-scaling-stroke; animation: mpFlow 1.4s linear infinite; }
+.mp-lines path.glow { stroke: rgba(255,190,80,.13); stroke-width: 11; stroke-dasharray: none; animation: none; }
+@keyframes mpFlow { to { stroke-dashoffset: -22; } }
+.mp-node { position: absolute; z-index: 1; width: 156px; margin-left: -78px; display: flex; flex-direction: column; align-items: center; --tc: var(--accent); }
+.mp-med { position: relative; width: var(--m); height: var(--m); border-radius: 50%; overflow: hidden; isolation: isolate; background: #0d111b; border: 3px solid var(--tc);
+  box-shadow: 0 0 0 3px #0b0f18, 0 0 0 5px rgba(255,255,255,.18), 0 10px 20px rgba(0,0,0,.6), 0 0 26px color-mix(in srgb, var(--tc) 45%, transparent); transition: transform .15s var(--ease); }
+.mp-med::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 50% 35%, transparent 45%, rgba(8,11,18,.55)); }
+.mp-ic { position: absolute; top: calc(var(--m) - 15px); left: 50%; width: 30px; height: 30px; margin-left: -15px; z-index: 2; border-radius: 50%; display: grid; place-items: center; color: #fff;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--tc) 65%, #fff 35%), var(--tc) 60%, color-mix(in srgb, var(--tc) 60%, #000 40%));
+  border: 2px solid #0b0f18; box-shadow: 0 3px 8px rgba(0,0,0,.55); }
+.mp-ic svg { width: 16px; height: 16px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.5)); }
+.mp-name { margin-top: 19px; padding: 3px 12px 4px; border-radius: 9px; font-size: 13.5px; font-weight: 800; white-space: nowrap; text-shadow: 0 1px 3px #000;
+  background: linear-gradient(180deg, #2c3854, #141b2b); border: 1px solid color-mix(in srgb, var(--tc) 55%, transparent); box-shadow: 0 4px 10px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.1); }
+.mp-node.big .mp-name { font-size: 15.5px; padding: 4px 16px 5px; }
+.mp-sub { margin-top: 3px; max-width: 150px; font-size: 10.5px; line-height: 1.4; color: #c5cee2; text-shadow: 0 1px 3px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mp-node .hx-badge { top: -2px; inset-inline-end: calc(50% - var(--m) / 2 - 6px); }
+.mp-node.hot .mp-med { animation: mpPulse 2.2s ease-in-out infinite; }
+@keyframes mpPulse { 50% { box-shadow: 0 0 0 3px #0b0f18, 0 0 0 5px rgba(255,255,255,.32), 0 10px 20px rgba(0,0,0,.6), 0 0 40px color-mix(in srgb, var(--tc) 80%, transparent); } }
+.mp-node:active .mp-med { transform: scale(.93); }
+.mp-node.locked { filter: grayscale(.8) brightness(.7); }

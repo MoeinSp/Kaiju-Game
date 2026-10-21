@@ -283,9 +283,13 @@ window.K = (function () {
 
   // ───────────────────────── HUD ─────────────────────────
   var hudIn = document.getElementById("hud-in");
+  hudIn.addEventListener("click", function (ev) { var b = ev.target.closest("[data-go]"); if (b && K.hasScreen(b.dataset.go)) { K.haptic(); K.go(b.dataset.go); } });
   K.res = null;
   var resShown = "", energyTimer = null;
   var RES_TITLE = { coins: "طلا", dna: "DNA", diamonds: "الماس", energy: "انرژی", cup: "کاپ" };
+  /* The resource bar, game style: a beveled pill per resource with its big icon hanging over the
+     edge, a green «+» on what can be topped up and a thin fill line under the energy. A pill
+     with a screen opens it. */
   K.setRes = function (res) {
     if (!res) return;
     var prev = K.res; K.res = res;
@@ -293,11 +297,15 @@ window.K = (function () {
     var shown = [res.coins, res.dna, res.diamonds, res.energy, res.max_energy, res.cup].join("|");
     if (shown !== resShown) {
       resShown = shown;
-      var items = [["coin", "coins", "coin", K.short(res.coins)], ["dna", "dna", "dna", K.short(res.dna)], ["gem", "diamonds", "diamond", K.short(res.diamonds)],
-                   ["bolt", "energy", "energy", '<span class="num">' + Number(res.energy) + "<small>/" + res.max_energy + "</small></span>"], ["trophy", "cup", "cup", K.n(res.cup)]];
+      var er = res.max_energy ? Math.max(0, Math.min(1, res.energy / res.max_energy)) : 0;
+      var items = [["coin", "coins", K.short(res.coins), "sh_shop", false], ["dna", "dna", K.short(res.dna), "", false],
+                   ["gem", "diamonds", K.short(res.diamonds), "sh_shop", true],
+                   ["energy", "energy", Number(res.energy) + "<small>/" + res.max_energy + "</small>", "sh_energy", true], ["cup", "cup", K.n(res.cup), "leaderboard", false]];
       hudIn.innerHTML = items.map(function (it) {
         var changed = prev && prev[it[1]] !== res[it[1]];
-        return '<span class="res t-' + it[2] + (changed ? " bump" : "") + '" title="' + RES_TITLE[it[1]] + '">' + K.ic(it[0], it[0] === "bolt" ? "f" : "") + '<span style="color:var(--text)">' + it[3] + "</span></span>";
+        return '<button class="res t-' + it[0] + (it[4] ? " plus" : "") + (changed ? " bump" : "") + '"' + (it[3] ? ' data-go="' + it[3] + '"' : "") + ' title="' + RES_TITLE[it[1]] + '">' +
+          '<i class="ri">' + K.resArt(it[0]) + '</i><b class="num">' + it[2] + "</b>" + (it[4] ? '<i class="rp">+</i>' : "") +
+          (it[1] === "energy" ? '<i class="rf" style="width:calc((100% - 30px) * ' + er.toFixed(3) + ')"></i>' : "") + "</button>";
       }).join("");
     }
     // energy refills by itself: ask again when the server said the next point is due
@@ -539,31 +547,48 @@ window.K = (function () {
   var screens = {}, hubs = { battle: [], base: [], more: [] }, stack = [], timers = [], renderSeq = 0, hubRedraw = null;
   K.TABS = [["home", "home", "خانه"], ["creatures", "claw", "هیولاها"], ["battle", "swords", "نبرد"], ["base", "hall", "پایگاه"], ["more", "grid", "بیشتر"]];
   backEl.innerHTML = K.ic("back");
-  /* Full-colour game icons for the bottom tabs (the line icons of K.ic looked thin down there). */
+  /* Full-colour game icons for the bottom tabs and the resource bar. Flat fills only: the
+     iPhone webview of Telegram does not always draw SVG gradients referenced by id. */
   var TAB_ART = {
-    home: '<defs><linearGradient id="tgR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff8a5c"/><stop offset="1" stop-color="#d63c3c"/></linearGradient>' +
-      '<linearGradient id="tgB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7fd6ff"/><stop offset="1" stop-color="#2f7fd8"/></linearGradient></defs>' +
-      '<rect x="21" y="6" width="3.2" height="7" rx=".8" fill="#a8452f"/>' +
-      '<path d="M7 14.5V26a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 25 26V14.5L16 7z" fill="url(#tgB)"/>' +
-      '<path d="M3.6 15.2 16 4.6l12.4 10.6a1.4 1.4 0 0 1-1.8 2.1L16 8.3 5.4 17.3a1.4 1.4 0 0 1-1.8-2.1z" fill="url(#tgR)"/>' +
+    home: '<rect x="21" y="6" width="3.2" height="7" rx=".8" fill="#a8452f"/>' +
+      '<path d="M7 14.5V26a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 25 26V14.5L16 7z" fill="#3d9be9"/>' +
+      '<path d="M7 22.5h18V26a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 7 26z" fill="#2a72c4"/>' +
+      '<path d="M3.6 15.2 16 4.6l12.4 10.6a1.4 1.4 0 0 1-1.8 2.1L16 8.3 5.4 17.3a1.4 1.4 0 0 1-1.8-2.1z" fill="#e0443b"/>' +
+      '<path d="M5.4 15.1 16 6.1l10.6 9" fill="none" stroke="#ff9a6b" stroke-width="1.3" stroke-linecap="round"/>' +
       '<path d="M13 27.5v-5.5a3 3 0 0 1 6 0v5.5z" fill="#ffd36b"/><rect x="9.5" y="16.5" width="3.4" height="3.4" rx=".7" fill="#e9f8ff"/><rect x="19.1" y="16.5" width="3.4" height="3.4" rx=".7" fill="#e9f8ff"/>',
-    creatures: '<defs><linearGradient id="tgM" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9df07a"/><stop offset="1" stop-color="#2f9e5a"/></linearGradient></defs>' +
-      '<path d="M8.6 11.5 5 3.2l7.6 5.2zM23.4 11.5 27 3.2l-7.6 5.2z" fill="#f1e2b8"/>' +
-      '<path d="M16 6.5c6.4 0 10.5 4.3 10.5 10.3 0 6.6-4.6 11.2-10.5 11.2S5.5 23.4 5.5 16.8C5.5 10.8 9.6 6.5 16 6.5z" fill="url(#tgM)"/>' +
+    creatures: '<path d="M8.6 11.5 5 3.2l7.6 5.2zM23.4 11.5 27 3.2l-7.6 5.2z" fill="#f1e2b8"/>' +
+      '<path d="M16 6.5c6.4 0 10.5 4.3 10.5 10.3 0 6.6-4.6 11.2-10.5 11.2S5.5 23.4 5.5 16.8C5.5 10.8 9.6 6.5 16 6.5z" fill="#43b863"/>' +
+      '<path d="M5.7 18.5c.9 5.5 5 9.5 10.3 9.5s9.4-4 10.3-9.5c-1.6 3.3-5.4 5.6-10.3 5.6s-8.7-2.3-10.3-5.6z" fill="#2f8f4c"/>' +
+      '<path d="M9.8 10.6c1.6-1.8 3.7-2.7 6.2-2.7s4.6.9 6.2 2.7" fill="none" stroke="#a6f28a" stroke-width="1.5" stroke-linecap="round"/>' +
       '<path d="M9.2 14.8l5.6 1.9-1 2.6c-2.4.2-4.2-1.6-4.6-4.5zM22.8 14.8l-5.6 1.9 1 2.6c2.4.2 4.2-1.6 4.6-4.5z" fill="#ffe14d"/>' +
       '<path d="M10.8 22h10.4l-1.6 3h-7.2z" fill="#20112a"/><path d="M12.6 22l1.1 1.7 1.1-1.7zM17.2 22l1.1 1.7 1.1-1.7z" fill="#fff"/>',
-    battle: '<defs><linearGradient id="tgS" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#b9c6dc"/></linearGradient></defs>' +
-      '<g transform="rotate(45 16 16)"><path d="M16 1.2l2.3 3.2V21h-4.6V4.4z" fill="url(#tgS)"/><path d="M16 3v17.6" stroke="rgba(120,140,170,.55)" stroke-width=".8"/><rect x="10.2" y="20.6" width="11.6" height="2.8" rx="1.4" fill="#ffc53d"/><rect x="14.8" y="23.2" width="2.4" height="4.8" fill="#8a4420"/><circle cx="16" cy="29.4" r="1.9" fill="#ffc53d"/></g>' +
-      '<g transform="rotate(-45 16 16)"><path d="M16 1.2l2.3 3.2V21h-4.6V4.4z" fill="url(#tgS)"/><path d="M16 3v17.6" stroke="rgba(120,140,170,.55)" stroke-width=".8"/><rect x="10.2" y="20.6" width="11.6" height="2.8" rx="1.4" fill="#ffc53d"/><rect x="14.8" y="23.2" width="2.4" height="4.8" fill="#8a4420"/><circle cx="16" cy="29.4" r="1.9" fill="#ffc53d"/></g>',
-    base: '<defs><linearGradient id="tgK" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c9d6ea"/><stop offset="1" stop-color="#6c7fa3"/></linearGradient></defs>' +
-      '<path d="M16 3v10" stroke="#e8d9b0" stroke-width="1.3"/><path d="M16.6 3.2h6l-1.7 2.1 1.7 2.1h-6z" fill="#ff5470"/>' +
-      '<path d="M10.5 28V12.5h2.2v1.8h2.1v-1.8h2.4v1.8h2.1v-1.8h2.2V28z" fill="url(#tgK)"/>' +
-      '<path d="M3.5 28V9h2.6v2.2h2.3V9H11v19zM21 28V9h2.6v2.2h2.3V9h2.6v19z" fill="url(#tgK)"/>' +
-      '<path d="M13.4 28v-4.6a2.6 2.6 0 0 1 5.2 0V28z" fill="#1b2335"/><rect x="5.9" y="14.5" width="2.6" height="3.6" rx="1.3" fill="#ffd36b"/><rect x="23.5" y="14.5" width="2.6" height="3.6" rx="1.3" fill="#ffd36b"/>',
+    battle: '<g transform="rotate(45 16 16)"><path d="M16 1.2l2.3 3.2V21h-4.6V4.4z" fill="#eef3fb"/><path d="M16 1.2l2.3 3.2V21H16z" fill="#b9c6dc"/><rect x="10.2" y="20.6" width="11.6" height="2.8" rx="1.4" fill="#ffc53d"/><rect x="14.8" y="23.2" width="2.4" height="4.8" fill="#8a4420"/><circle cx="16" cy="29.4" r="1.9" fill="#ffc53d"/></g>' +
+      '<g transform="rotate(-45 16 16)"><path d="M16 1.2l2.3 3.2V21h-4.6V4.4z" fill="#eef3fb"/><path d="M16 1.2l2.3 3.2V21H16z" fill="#b9c6dc"/><rect x="10.2" y="20.6" width="11.6" height="2.8" rx="1.4" fill="#ffc53d"/><rect x="14.8" y="23.2" width="2.4" height="4.8" fill="#8a4420"/><circle cx="16" cy="29.4" r="1.9" fill="#ffc53d"/></g>',
+    base: '<path d="M16 3v10" stroke="#e8d9b0" stroke-width="1.3"/><path d="M16.6 3.2h6l-1.7 2.1 1.7 2.1h-6z" fill="#ff5470"/>' +
+      '<path d="M10.5 28V12.5h2.2v1.8h2.1v-1.8h2.4v1.8h2.1v-1.8h2.2V28z" fill="#b4c2dc"/>' +
+      '<path d="M3.5 28V9h2.6v2.2h2.3V9H11v19zM21 28V9h2.6v2.2h2.3V9h2.6v19z" fill="#a3b3d0"/>' +
+      '<path d="M8.6 11.2H11V28H8.6zM26 11.2h2.5V28H26z" fill="#7d8fb1"/><path d="M3.5 24.5h25V28h-25z" fill="#6c7fa3"/>' +
+      '<path d="M13.4 28v-4.6a2.6 2.6 0 0 1 5.2 0V28z" fill="#1b2335"/><rect x="5.4" y="14.5" width="2.6" height="3.6" rx="1.3" fill="#ffd36b"/><rect x="23" y="14.5" width="2.6" height="3.6" rx="1.3" fill="#ffd36b"/>',
     more: '<rect x="4" y="4" width="10.8" height="10.8" rx="3.2" fill="#3ad6ff"/><rect x="17.2" y="4" width="10.8" height="10.8" rx="3.2" fill="#a77bff"/>' +
       '<rect x="4" y="17.2" width="10.8" height="10.8" rx="3.2" fill="#ffc53d"/><rect x="17.2" y="17.2" width="10.8" height="10.8" rx="3.2" fill="#35d48a"/>' +
       '<path d="M6.2 7.4a1.6 1.6 0 0 1 1.6-1.6h3.4M19.4 7.4a1.6 1.6 0 0 1 1.6-1.6h3.4M6.2 20.6a1.6 1.6 0 0 1 1.6-1.6h3.4M19.4 20.6a1.6 1.6 0 0 1 1.6-1.6h3.4" stroke="rgba(255,255,255,.7)" stroke-width="1.4" fill="none" stroke-linecap="round"/>'
   };
+  var RES_ART = {
+    coin: '<circle cx="16" cy="16.6" r="13.4" fill="#a86a0c"/><circle cx="16" cy="15.2" r="12.6" fill="#ffc53d"/><circle cx="16" cy="15.2" r="9.2" fill="#f0a51b"/>' +
+      '<path d="M16 9.4l1.8 3.7 4 .5-3 2.8.8 4-3.6-2-3.6 2 .8-4-3-2.8 4-.5z" fill="#ffe08a"/><ellipse cx="10.8" cy="8.8" rx="3.3" ry="1.7" transform="rotate(-32 10.8 8.8)" fill="#fff6d6"/>',
+    gem: '<path d="M8.6 4.5h14.8l6.1 7.6L16 28.6 2.5 12.1z" fill="#0d6fb8"/><path d="M3.6 12.1h24.8L16 27.2z" fill="#1d97e6"/><path d="M11 12.1h10L16 27.2z" fill="#5ccaff"/>' +
+      '<path d="M9.2 5.6h13.6l5.1 6.5H4.1z" fill="#8fe3ff"/><path d="M12.8 5.6h6.4l1.8 6.5H11z" fill="#d9f7ff"/><path d="M6.5 11.2l2.4-2.7" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/>',
+    dna: '<path d="M11.7 8.5h8.6M11.2 13h9.6M11.2 19h9.6M11.7 23.5h8.6" stroke="#c9ffe0" stroke-width="1.8" stroke-linecap="round"/>' +
+      '<path d="M10 3.5c0 7 12 7.5 12 12.5S10 21.5 10 28.5" fill="none" stroke="#1fb866" stroke-width="3.6" stroke-linecap="round"/>' +
+      '<path d="M22 3.5c0 7-12 7.5-12 12.5s12 5.5 12 12.5" fill="none" stroke="#7ef0ae" stroke-width="3.6" stroke-linecap="round"/>',
+    energy: '<path d="M18.8 2 6.4 18.2h8.1l-2.1 11.8 12.9-17.4h-8.6z" fill="#ffd23d" stroke="#b85f00" stroke-width="1.7" stroke-linejoin="round"/>' +
+      '<path d="M17.2 6.8 10.6 15.9h4.6" fill="none" stroke="#fff6c2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+    cup: '<path d="M8.5 7.2H4.6v2.6a5.4 5.4 0 0 0 5.4 5.4M23.5 7.2h3.9v2.6a5.4 5.4 0 0 1-5.4 5.4" fill="none" stroke="#c7861a" stroke-width="2.4"/>' +
+      '<path d="M8 4h16v7.5a8 8 0 0 1-16 0z" fill="#ffc53d"/><path d="M16 4h8v7.5a8 8 0 0 1-8 8z" fill="#f0a51b"/><path d="M14 18.8h4V23h-4z" fill="#c7861a"/>' +
+      '<path d="M9.4 23.2h13.2l1.6 4.8H7.8z" fill="#9a5c0a"/><path d="M11.2 6.5v4.6" stroke="#fff3c4" stroke-width="1.8" stroke-linecap="round"/>'
+  };
+  K.resArt = function (k) { return '<svg viewBox="0 0 32 32" aria-hidden="true">' + (RES_ART[k] || "") + "</svg>"; };
+
 
   /* Register a screen. def: {title: "…" | fn(params), tab: "home|creatures|battle|base|more",
      skeleton: "grid|hub|detail|list" (optional loading placeholder), render(root, params, ctx)} */
@@ -712,15 +737,20 @@ window.K = (function () {
   /* Hub layout, game style: the scene art behind a short title, the big modes (HUB_HERO) as a
      sideways carousel of tall cards, the rest as a compact grid — or, in a hub with groups
      («بیشتر»), as rows of app-like icons under each group title. */
-  var HUB_HERO = { battle: ["hunt", "arena", "dungeon", "boss"], base: ["buildings", "research"] };
+  var HUB_HERO = { base: ["buildings", "research"] };
+  /* «نبرد» is a map: rows of round medallions (one in the middle, or a pair) joined by glowing
+     paths, like the world map of a mobile RPG. Tiles not placed here are added below in pairs. */
+  var HUB_MAP = { battle: { rows: [["hunt"], ["arena", "boss"], ["dungeon"], ["tower", "tournament"], ["chests", "dispatch"]], big: ["hunt", "dungeon"] } };
   K.renderHub = function (root, hub, head) {
     var me = K.me || {}, items = (hubs[hub] || []).slice().sort(function (a, b) { return (a.order || 50) - (b.order || 50); });
     var groups = HUB_GROUPS[hub] || [], heroIds = HUB_HERO[hub] || [], html = "";
     head = head || {};
     html += '<div class="hx-bg"' + (head.img ? ' style="background-image:url(' + K.asset("img/" + head.img) + ')"' : "") + '><i class="lb-fog"></i><i class="lb-motes"></i></div>';
     if (head.title) html += '<div class="hx-head"><b>' + head.title + "</b><span>" + (head.sub || "") + "</span></div>";
+    var map = HUB_MAP[hub];
+    if (map) { html += mapHtml(); heroIds = []; }
     var hero = heroIds.map(function (id) { return items.filter(function (t) { return t.id === id; })[0]; }).filter(Boolean);
-    var rest = items.filter(function (t) { return hero.indexOf(t) < 0; });
+    var rest = map ? [] : items.filter(function (t) { return hero.indexOf(t) < 0; });
     if (hero.length) html += '<div class="hx-hero' + (hero.length < 3 ? " duo" : "") + '">' + hero.map(heroHtml).join("") + "</div>";
     if (groups.length) {
       var gi = -1, out = "";
@@ -742,6 +772,33 @@ window.K = (function () {
         badge: badge && !need ? '<i class="hx-badge' + (badge === "live" ? " live" : "") + '">' + (badge === "live" ? "" : K.esc(badge)) + "</i>" : "",
         sub: need ? "از سطح " + need + " تالار مِهر" : (t.sub || "")
       };
+    }
+    function mapHtml() {
+      var byId = {}; items.forEach(function (t) { byId[t.id] = t; });
+      var rows = map.rows.map(function (r) { return r.filter(function (id) { return byId[id]; }); }).filter(function (r) { return r.length; });
+      var placed = [].concat.apply([], rows), extra = items.filter(function (t) { return placed.indexOf(t.id) < 0; }).map(function (t) { return t.id; });
+      for (var i = 0; i < extra.length; i += 2) rows.push(extra.slice(i, i + 2));
+      var y = 0, nodes = "", pts = [], lines = "";
+      rows.forEach(function (r) {
+        var big = r.length === 1 && map.big.indexOf(r[0]) >= 0, m = big ? 96 : 78, h = big ? 168 : 150;
+        pts.push(r.map(function (id, k) {
+          var x = r.length === 1 ? 50 : (k ? 76 : 24), t = byId[id], p = parts(t);
+          nodes += '<button class="mp-node' + (big ? " big" : "") + (p.need ? " locked" : "") + (p.badge ? " hot" : "") + '"' +
+            p.attrs.replace('style="', 'style="left:' + x + "%;top:" + (y + 6) + "px;--m:" + m + "px;") + ">" +
+            '<span class="mp-med">' + p.art + '</span><span class="mp-ic">' + K.ic(p.need ? "lock" : t.icon) + "</span>" + p.badge +
+            '<span class="mp-name">' + K.esc(t.title) + '</span><small class="mp-sub">' + K.esc(p.sub) + "</small></button>";
+          return [x, y + 6 + m / 2];
+        }));
+        y += h;
+      });
+      for (var j = 1; j < pts.length; j++) pts[j - 1].forEach(function (a, ai) {
+        pts[j].forEach(function (b, bi) {
+          if (pts[j - 1].length === 2 && pts[j].length === 2 && ai !== bi) return;   // pair → pair: each side keeps to its own lane
+          var ym = (a[1] + b[1]) / 2, d = "M" + a[0] + " " + a[1] + "C" + a[0] + " " + ym + " " + b[0] + " " + ym + " " + b[0] + " " + b[1];
+          lines += '<path class="glow" d="' + d + '"/><path d="' + d + '"/>';
+        });
+      });
+      return '<div class="mp" style="height:' + (y + 4) + 'px"><svg class="mp-lines" viewBox="0 0 100 ' + (y + 4) + '" preserveAspectRatio="none" aria-hidden="true">' + lines + "</svg>" + nodes + "</div>";
     }
     function heroHtml(t) {
       var p = parts(t);
