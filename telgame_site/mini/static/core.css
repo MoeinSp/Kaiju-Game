@@ -664,3 +664,105 @@ svg.i.art { fill: none; stroke: none; width: 1.3em; height: 1.3em; vertical-alig
 @keyframes sbGrow { from { transform: scaleX(0); } to { transform: none; } }
 .stat-note { padding: 0 14px 12px; margin-top: -6px; }
 @media (prefers-reduced-motion: reduce) { .tile.mythic::before, .panel.hero.mythic::before, .lb-kaiju.mythic .lb-card::before, .stat .sb i { animation: none; } }
+
+/* ───────── game skin, part 2: the inner screens ─────────
+   The lobby, the hubs and the tab bar are built as game pieces — a bevelled face on a dark lip,
+   pressed down when tapped. The screens behind them were still the old flat lab cards; the rules
+   below give every shared piece (card, list row, icon box, chip, field, bar, sheet, toast) the
+   same build, so a screen that only uses core classes matches the lobby without its own CSS.
+   Colour still carries meaning only: blue = the open / chosen one, the button colours as above. */
+
+/* The screen-change slide moves the content 28px off-screen for a moment. With `overflow-x:
+   hidden` on <body> that overflow still reached the viewport as scroll room (hidden ≠ unscrollable),
+   and a focus or scrollIntoView during the slide then shifted the whole page — tab bar included —
+   sideways for good. <body> now CLIPS it (clip makes no scroll container, so the sticky bars still
+   work); <html> takes `clip` too, otherwise body's overflow would be handed to the viewport, where
+   clip turns back into a scrollable hidden. */
+html, body { overflow-x: clip; }
+
+/* cards */
+.panel { border: 1px solid #2b3753; background: linear-gradient(180deg, #232d45 0%, #161d30 40%, #0f1524 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.09), inset 0 -2px 0 rgba(0,0,0,.3), 0 3px 0 #05070d, 0 10px 22px rgba(0,0,0,.32); }
+.panel.glow { border-color: #3a74aa; background: linear-gradient(180deg, #1d3a5c 0%, #142640 45%, #0e1728);
+  box-shadow: inset 0 1px 0 rgba(160,220,255,.22), inset 0 -2px 0 rgba(0,0,0,.3), 0 3px 0 #05101d, 0 0 18px rgba(58,160,255,.16); }
+.panel.gold { border-color: #9a7428; background: linear-gradient(180deg, #3a2e14 0%, #251d0d 45%, #15110a);
+  box-shadow: inset 0 1px 0 rgba(255,225,150,.22), inset 0 -2px 0 rgba(0,0,0,.3), 0 3px 0 #120c03, 0 0 18px rgba(255,190,59,.12); }
+button.panel:active { transform: translateY(2px); filter: brightness(1.1); box-shadow: inset 0 1px 0 rgba(255,255,255,.09), 0 1px 0 #05070d; }
+.banner { border: 1.5px solid #34405e; box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 3px 0 #05070d, 0 10px 22px rgba(0,0,0,.4); }
+
+/* section titles: the icon sits on a small blue key */
+.h2 > svg.i:first-child { box-sizing: border-box; width: 26px; height: 26px; padding: 5px; border-radius: 8px; color: #fff; filter: none;
+  background: linear-gradient(180deg, #5aa8f5, #2f6fd0); border: 1px solid #a9d6ff; box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 2px 0 #173d7a; }
+.h2::after { background: linear-gradient(270deg, transparent, #2b3753 30%, #2b3753 70%, transparent); height: 2px; border-radius: 2px; }
+
+/* top bar: a solid strip, the back button a key */
+.topbar { background: linear-gradient(180deg, rgba(16,22,36,.97), rgba(10,14,24,.93)); border-bottom: 2px solid #222c44; box-shadow: 0 6px 14px rgba(0,0,0,.35); }
+.topbar .back, .iconbtn, .sheet .x { background: linear-gradient(180deg, #2a3650 0%, #18213a 55%, #111829); border: 1px solid rgba(255,255,255,.1); color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.14), inset 0 -2px 0 rgba(0,0,0,.35), 0 2px 0 #03050a; transition: transform .08s, box-shadow .08s; }
+.topbar .back:active, .iconbtn:active, .sheet .x:active { transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 0 0 #03050a; }
+
+/* list rows: engraved dividers, icon boxes as little coloured keys, the chevron a round stud */
+.list > * { border-bottom: 1px solid rgba(0,0,0,.45); box-shadow: 0 1px 0 rgba(255,255,255,.035); }
+.list > *:last-child { box-shadow: none; }
+.list > button:active { background: rgba(90,168,245,.08); }
+.list .ic, .ico-box, .info .ic { border-radius: 12px;
+  background: linear-gradient(180deg, color-mix(in srgb, currentColor 34%, #1b2338), color-mix(in srgb, currentColor 12%, #0d121e));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.16), inset 0 0 0 1px color-mix(in srgb, currentColor 45%, transparent), 0 2px 0 #05070d; }
+.list .ic svg, .ico-box svg, .info .ic svg { filter: drop-shadow(0 1px 1px rgba(0,0,0,.5)); }
+.list .chev { width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 50%; color: #c9d2e6;
+  background: linear-gradient(180deg, #2a3650, #141b2d); box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 2px 0 #03050a; }
+.list .chev svg { width: 14px; height: 14px; }
+.info b { font-family: var(--display); font-weight: 400; font-size: 17px; letter-spacing: .2px; }
+
+/* chips: keys; the chosen one is the same raised blue key as the open tab */
+.chip { color: #c9d2e6; background: linear-gradient(180deg, #252f48, #141b2d); border: 1px solid #33405e;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 2px 0 #05070d; transition: transform .08s, box-shadow .08s; }
+.chip.on { color: #fff; background: linear-gradient(180deg, #5aa8f5, #2f6fd0); border-color: #a9d6ff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 2px 0 #173d7a, 0 0 12px rgba(80,160,255,.3); text-shadow: 0 1px 0 #173d7a; }
+.chip.on svg { color: #fff; }
+.chip:active { transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 0 0 #05070d; }
+
+/* fields: sunk into the card */
+.search input, .input { background: #080b14; border: 1px solid #27324a; box-shadow: inset 0 2px 5px rgba(0,0,0,.55); }
+.search input:focus, .input:focus { border-color: #5aa8f5; box-shadow: inset 0 2px 5px rgba(0,0,0,.55), 0 0 0 3px rgba(90,168,245,.18); }
+.stepper { background: #080b14; border-color: #27324a; box-shadow: inset 0 2px 5px rgba(0,0,0,.5); overflow: visible; padding: 3px; gap: 3px; }
+.stepper button { width: 36px; height: 36px; border-radius: 9px; color: #fff; background: linear-gradient(180deg, #2a3650, #141b2d);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 2px 0 #03050a; }
+.stepper button:active { transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(255,255,255,.12); }
+.stepper b { font-family: var(--display); font-weight: 400; font-size: 17px; }
+
+/* bars: a sunk track and a glossy fill */
+.progress { background: #070a12; box-shadow: inset 0 1px 3px rgba(0,0,0,.7), 0 0 0 1px #222c44; }
+.progress > i { box-shadow: inset 0 1px 0 rgba(255,255,255,.45), inset 0 -2px 0 rgba(0,0,0,.18); }
+
+/* stat boxes */
+.stat { background: linear-gradient(180deg, #222b42, #121828); border-color: #2c3854; box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 2px 0 #05070d; }
+.stat b { font-family: var(--display); font-weight: 400; font-size: 18px; letter-spacing: .3px; }
+
+/* notes: a coloured edge on the reading side */
+.callout { border-inline-start-width: 4px; box-shadow: 0 2px 0 #05070d; }
+
+/* empty / locked states and the reward: a medallion instead of a rounded square */
+.state .big { border-radius: 50%; width: 76px; height: 76px; border: 3px solid currentColor; background: radial-gradient(circle at 50% 35%, #26314b, #0d121e);
+  box-shadow: 0 0 0 4px #0b0f18, 0 0 22px color-mix(in srgb, currentColor 35%, transparent), inset 0 2px 0 rgba(255,255,255,.14); }
+.loot .burst { border-radius: 50%; border: 3px solid currentColor;
+  box-shadow: 0 0 0 4px #0b0f18, 0 0 26px color-mix(in srgb, currentColor 45%, transparent), inset 0 2px 0 rgba(255,255,255,.18); }
+.loot .it { background: linear-gradient(180deg, #252f48, #141b2d); border: 1px solid #33405e; box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 3px 0 #05070d; }
+.loot .it span { font-family: var(--display); font-weight: 400; font-size: 16px; letter-spacing: .3px; }
+
+/* bottom sheets: a game panel sliding up */
+.sheet .box { background: linear-gradient(180deg, #1c2439 0, #10162a 160px, #0b0f19); border-top: 2px solid #3a4865;
+  box-shadow: 0 -12px 34px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.08); }
+.sheet .art::after { background: linear-gradient(180deg, transparent 55%, #10162a); }
+.sheet .foot { background: linear-gradient(180deg, transparent, #0b0f19 30%); }
+.sheet .grab { width: 46px; height: 5px; background: #3a4865; box-shadow: inset 0 1px 0 rgba(255,255,255,.12); }
+
+/* toasts */
+.toast { background: linear-gradient(180deg, #26314b, #141b2d); border: 1px solid #3a4865; box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 3px 0 #05070d, 0 10px 24px rgba(0,0,0,.5); }
+.toast.err { border-color: #a8344d; }
+
+/* browsers without color-mix(): plain keys */
+@supports not (color: color-mix(in srgb, red 50%, blue)) {
+  .list .ic, .ico-box, .info .ic { background: linear-gradient(180deg, #26314b, #121828); box-shadow: inset 0 1px 0 rgba(255,255,255,.16), 0 2px 0 #05070d; }
+  .state .big, .loot .burst { box-shadow: 0 0 0 4px #0b0f18, inset 0 2px 0 rgba(255,255,255,.14); }
+}
