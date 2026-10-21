@@ -398,7 +398,7 @@ def species_img(name: str, element: str = "fire", rarity: str = "common", star: 
 
 # ── serialisers ───────────────────────────────────────────────────────────────
 def gear_dict(g: Equipment) -> dict:
-    return {"id": g.id, "name": g.name, "slot": g.slot, "rarity": g.rarity, "level": g.level}
+    return {"id": g.id, "name": g.name, "slot": g.slot, "rarity": g.rarity, "level": g.level, "img": equipment_img(g)}
 
 
 def creature_dict(c: Creature, gear: list | None = None, busy: set[int] | None = None) -> dict:

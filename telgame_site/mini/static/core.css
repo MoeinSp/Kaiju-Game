@@ -574,3 +574,55 @@ nav.tabs .dot.live { top: -3px; inset-inline-end: -2px; }
 @keyframes scrIn { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
 @keyframes scrBack { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
 @keyframes scrTab { from { opacity: 0; transform: scale(.985); } to { opacity: 1; transform: none; } }
+
+/* ── full-colour currency icons from K.ic (coin / dna / diamond) ── */
+svg.i.art { fill: none; stroke: none; width: 1.3em; height: 1.3em; vertical-align: -.32em; filter: drop-shadow(0 1px 1px rgba(0,0,0,.45)); }
+
+/* ── 3D game buttons: a coloured face on a darker lip; pressing pushes the face down ── */
+.btn { border-radius: 14px; color: var(--text); background: linear-gradient(180deg, #2e3a55, #1a2236); border: 1px solid #3d4b6a;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 3px 0 #090d16; transition: transform .08s, box-shadow .08s, filter .15s; }
+.btn:active { transform: translateY(2px); filter: none; box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 1px 0 #090d16; }
+.btn.primary, .btn.gold, .btn.danger, .btn.good { color: #fff; font-family: var(--display); font-weight: 400; font-size: 16px; letter-spacing: .2px; }
+.btn.primary { background: linear-gradient(180deg, #62deff 0%, #22a7e0 55%, #1585bd); border-color: #b5efff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 4px 0 #0b5a86, 0 8px 18px rgba(30,160,220,.28); text-shadow: 0 1px 0 #0b5a86, 0 0 3px rgba(0,0,0,.25); }
+.btn.gold { background: linear-gradient(180deg, #ffd65e 0%, #f2a51c 55%, #d98a06); border-color: #fff0b8;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 4px 0 #8a4b00, 0 8px 18px rgba(240,165,30,.25); text-shadow: 0 1px 0 #8a4b00, 0 0 3px rgba(0,0,0,.25); }
+.btn.danger { background: linear-gradient(180deg, #ff7d8f 0%, #e0385a 55%, #b8233f); border-color: #ffc0ca;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 4px 0 #7d1230, 0 8px 18px rgba(214,48,80,.28); text-shadow: 0 1px 0 #7d1230, 0 0 3px rgba(0,0,0,.25); }
+.btn.good { background: linear-gradient(180deg, #62e889 0%, #25b052 55%, #1a913f); border-color: #b8ffcb;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 4px 0 #0d5a27, 0 8px 18px rgba(40,180,90,.25); text-shadow: 0 1px 0 #0d5a27, 0 0 3px rgba(0,0,0,.25); }
+.btn.primary:active { box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 1px 0 #0b5a86; transform: translateY(3px); }
+.btn.gold:active { box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 1px 0 #8a4b00; transform: translateY(3px); }
+.btn.danger:active { box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 1px 0 #7d1230; transform: translateY(3px); }
+.btn.good:active { box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 1px 0 #0d5a27; transform: translateY(3px); }
+.btn.ghost { background: rgba(255,255,255,.03); box-shadow: none; border-color: var(--line); }
+.btn.lg { height: 54px; } .btn.lg.primary, .btn.lg.gold, .btn.lg.danger, .btn.lg.good { font-size: 19px; }
+.btn.sm.primary, .btn.sm.gold, .btn.sm.danger, .btn.sm.good { font-size: 13.5px; }
+.btn .cost { background: rgba(0,0,0,.24); box-shadow: inset 0 1px 2px rgba(0,0,0,.35); text-shadow: none; }
+.btn:disabled { filter: grayscale(.6); }
+
+/* ── segmented tabs: the open one is a raised blue key ── */
+.seg { padding: 4px; border-radius: 14px; background: #0b0f19; border: 1px solid #27324a; box-shadow: inset 0 2px 6px rgba(0,0,0,.5); }
+.seg button { height: 34px; border-radius: 10px; }
+.seg button.on { color: #fff; background: linear-gradient(180deg, #5aa8f5, #2f6fd0); box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 2px 0 #173d7a; text-shadow: 0 1px 0 #173d7a; }
+
+/* ── creature screen: the card glows in its rarity, the name and power in the display face ── */
+.hero.common { --rc: var(--common); } .hero.rare { --rc: var(--rare); } .hero.epic { --rc: var(--epic); }
+.hero.legendary { --rc: var(--legendary); } .hero.mythic { --rc: var(--mythic); }
+.panel.hero { border: 1.5px solid color-mix(in srgb, var(--rc, var(--line)) 60%, transparent);
+  box-shadow: 0 10px 26px rgba(0,0,0,.4), 0 0 26px color-mix(in srgb, var(--rc, transparent) 25%, transparent), inset 0 1px 0 rgba(255,255,255,.08); }
+.hero .ttl { font-family: var(--display); font-weight: 400; font-size: 27px; line-height: 1.2; }
+.hero .pow b { font-family: var(--display); font-weight: 400; font-size: 26px; }
+.cr-slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
+.cr-slot { position: relative; aspect-ratio: 1 / 1.18; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  background: linear-gradient(180deg, #1a2236, #0d121e); border: 1.5px dashed #34405c; color: var(--faint); }
+.cr-slot .ic svg { width: 24px; height: 24px; opacity: .55; }
+.cr-slot small { font-size: 10.5px; max-width: 92%; text-align: center; }
+.cr-slot.on { border: 2px solid var(--rc); color: #fff; justify-content: flex-end; padding-bottom: 5px;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--rc) 35%, transparent), inset 0 1px 0 rgba(255,255,255,.1); }
+.cr-slot.on img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+.cr-slot.on::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(8,11,18,.92)); z-index: 0; }
+.cr-slot.on > :not(img) { position: relative; z-index: 1; }
+.cr-slot .lv { position: absolute; top: 4px; inset-inline-start: 5px; z-index: 1; font-size: 11px; font-weight: 800; padding: 0 5px; border-radius: 6px; background: rgba(8,11,18,.75); color: #fff; }
+.cr-slot.on small { font-weight: 700; text-shadow: 0 1px 3px #000; }
+.cr-slot.on:active { transform: scale(.95); }

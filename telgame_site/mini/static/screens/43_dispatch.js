@@ -31,7 +31,7 @@
   // ═════════════════════════ collect: the reveal ═════════════════════════
   function bonusHtml(b) {
     var parts = [];
-    if (b.diamonds) parts.push('<span class="t-diamond b">' + K.ic("gem") + " " + K.n(b.diamonds) + " الماس</span>");
+    if (b.diamonds) parts.push('<span class="t-diamond b">' + K.ic("diamond") + " " + K.n(b.diamonds) + " الماس</span>");
     extras(b).forEach(function (h) { parts.push('<span class="b dy-x">' + h + "</span>"); });
     return parts.join(DOT);
   }

@@ -559,7 +559,7 @@
         '<input class="input" id="cr-name" maxlength="' + Number(rn.max_len) + '" placeholder="مثلاً: شاه‌نیش" autocomplete="off">' +
         '<div class="callout mt ' + (free ? "good" : "") + '">' + K.ic(free ? "gift" : "gem") + "<span>" +
         (free ? "اولین تغییر نام این هیولا <b>رایگانه</b>. دفعه‌های بعد هر بار " + K.n(rn.step) + " الماس گرون‌تر می‌شه." : "هزینه‌ی این تغییر نام: <b class=\"t-diamond\">" + K.n(rn.cost) + " الماس</b> (هر بار " + K.n(rn.step) + " تا گرون‌تر می‌شه).") + "</span></div>" +
-        '<button class="btn primary block mt" data-go>' + K.ic("pencil") + "ثبت اسم" + (free ? "" : '<span class="cost">' + K.ic("gem") + K.n(rn.cost) + "</span>") + "</button></div>");
+        '<button class="btn primary block mt" data-go>' + K.ic("pencil") + "ثبت اسم" + (free ? "" : '<span class="cost">' + K.ic("diamond") + K.n(rn.cost) + "</span>") + "</button></div>");
       var input = box.querySelector("#cr-name");
       function send(name, btn) {
         K.api.post("creature/rename/", { id: c.id, name: name }, btn).then(function (r) {
@@ -602,7 +602,7 @@
       path("cr-gear", "chest", "var(--accent)", "تجهیزات", K.n((c.gear || []).length) + " از " + K.n(slots) + " جایگاه پره", false) +
       path("cr-devour", "jaws", "var(--bad)", "بلعیدن", cr && cr.maxed ? "به سقف سطح رسیده" : "XP از هیولاهای اضافه", cr && cr.maxed) +
       "</div>";
-    h += '<button class="btn ghost sm block" data-act="cr-rename">' + K.ic("pencil") + "تغییر نام" + (d ? (d.rename.cost ? '<span class="cost t-diamond">' + K.ic("gem") + K.n(d.rename.cost) + "</span>" : '<span class="cost t-good">رایگان</span>') : "") + "</button>";
+    h += '<button class="btn ghost sm block" data-act="cr-rename">' + K.ic("pencil") + "تغییر نام" + (d ? (d.rename.cost ? '<span class="cost t-diamond">' + K.ic("diamond") + K.n(d.rename.cost) + "</span>" : '<span class="cost t-good">رایگان</span>') : "") + "</button>";
     return h;
   }
 

@@ -129,7 +129,7 @@
   function topPanel(d) {
     return (d.top.length ? '<div class="panel ev-lb">' + d.top.map(function (r) {
       return '<div class="' + (r.me ? "me" : "") + '"><span class="rk num">' + r.rank + '</span><span class="nm">' + K.esc(r.name) + (r.me ? ' <span class="faint sm">(تو)</span>' : "") + "</span>" +
-        '<span class="ev-topv"><span class="t-gold b">' + K.ic("token") + " " + K.n(r.earned) + "</span>" + (r.prize ? '<small class="t-diamond">' + K.ic("gem") + " " + K.n(r.prize) + "</small>" : "") + "</span></div>";
+        '<span class="ev-topv"><span class="t-gold b">' + K.ic("token") + " " + K.n(r.earned) + "</span>" + (r.prize ? '<small class="t-diamond">' + K.ic("diamond") + " " + K.n(r.prize) + "</small>" : "") + "</span></div>";
     }).join("") + "</div>" : '<div class="panel">' + K.state("podium", "هنوز کسی سکه جمع نکرده", "اولین نفر جدول تو باش.") + "</div>") +
       (d.rank && !d.top.some(function (r) { return r.me; }) ? '<div class="panel ev-mine mt"><span class="rk num">' + d.rank + '</span><span class="grow">رتبه‌ی تو</span><span class="t-gold b">' + K.ic("token") + " " + K.n(d.earned) + "</span></div>" : "") + prizesPanel(d);
   }
@@ -288,7 +288,7 @@
             '<div style="margin:12px 0 6px">' + K.bar(d.span ? d.into / d.span : 1, d.premium ? "gold" : "", "thick") + "</div>" +
             '<div class="flex between sm muted"><span>' + (maxed ? "به آخرین مرحله‌ی پاس رسیدی!" : "تا سطح " + K.n(d.tier + 1)) + '</span><span class="num">' + num(d.into) + " / " + num(d.span) + "</span></div></div>" +
             (d.has_claimable || !d.premium ? '<div class="btns mt">' + (d.has_claimable ? '<button class="btn gold" data-act="pclaim">' + K.ic("gift") + "دریافت جوایز (" + ready + ")</button>" : "") +
-              (d.premium ? "" : '<button class="btn" data-act="pbuy">' + K.ic("crown") + 'پاس ویژه <span class="cost t-diamond">' + K.ic("gem") + K.n(d.premium_cost) + "</span></button>") + "</div>" : "") +
+              (d.premium ? "" : '<button class="btn" data-act="pbuy">' + K.ic("crown") + 'پاس ویژه <span class="cost t-diamond">' + K.ic("diamond") + K.n(d.premium_cost) + "</span></button>") + "</div>" : "") +
             (!d.has_claimable && d.premium ? '<div class="callout good mt">' + K.ic("check") + "<div>همه‌ی جایزه‌های مرحله‌هایی که رسیدی رو گرفتی.</div></div>" : "") +
             '<div id="ev-track">' + track() + "</div>" +
             '<div class="callout mt">' + K.ic("info") + "<div>کسب امتیاز از طریق: شکار، پیروزی در آرنا، ارتقای ساختمان و ورود روزانه. " + (d.premium ? "" : "پاس ویژه جایزه‌ی ویژه‌ی همه‌ی مرحله‌هایی که رسیدی رو هم باز می‌کنه.") + "</div></div>";

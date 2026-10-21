@@ -274,7 +274,7 @@
               (j.ready ? '<span class="timer done">' + K.ic("check") + "تموم شد</span>" : '<span class="timer" data-left="' + (j.left + 1) + '" data-done="تموم شد"></span>') + "</div>" +
               pair(j.a, j.b, "heart", "", "", "", "") +
               (j.ready ? '<button class="btn good block" data-act="lay" data-id="' + j.id + '">' + K.ic("egg") + "تخم بذار و آزادشون کن</button>"
-                : bar(j.left, j.total, "") + '<div class="btns mt"><button class="btn" data-act="rush" data-id="' + j.id + '" data-price="' + j.finish_price + '">' + K.ic("bolt") + 'فوری‌کن<span class="cost t-diamond">' + K.ic("gem") + K.n(j.finish_price) + "</span></button>" +
+                : bar(j.left, j.total, "") + '<div class="btns mt"><button class="btn" data-act="rush" data-id="' + j.id + '" data-price="' + j.finish_price + '">' + K.ic("bolt") + 'فوری‌کن<span class="cost t-diamond">' + K.ic("diamond") + K.n(j.finish_price) + "</span></button>" +
                   '<button class="btn ghost t-bad" data-act="cancel" data-id="' + j.id + '">' + K.ic("close") + "لغو</button></div>") + "</div>";
           });
           if (d.jobs.length < d.max_jobs) {
@@ -290,7 +290,7 @@
               return '<div class="br-egg' + (e.ready ? " ready" : "") + '"><span class="br-eggic">' + K.ic(e.ready ? "hatch" : "egg") + '</span><span class="grow"><b>تخم <span class="num">#' + (i + 1) + "</span></b>" +
                 (e.ready ? '<span class="sm t-good" style="display:block">آماده‌ی سر باز کردنه!</span>' : '<span class="sm" style="display:block"><span class="timer" data-left="' + (e.left + 1) + '"></span></span>' + bar(e.left, e.total, "gold")) + "</span>" +
                 (e.ready ? '<button class="btn good sm" data-act="hatch" data-id="' + e.id + '">' + K.ic("hatch") + "سر باز کن</button>"
-                  : '<button class="btn sm" data-act="egg-rush" data-id="' + e.id + '" data-price="' + e.finish_price + '">' + K.ic("bolt") + 'فوری<span class="cost t-diamond">' + K.ic("gem") + K.n(e.finish_price) + "</span></button>") + "</div>";
+                  : '<button class="btn sm" data-act="egg-rush" data-id="' + e.id + '" data-price="' + e.finish_price + '">' + K.ic("bolt") + 'فوری<span class="cost t-diamond">' + K.ic("diamond") + K.n(e.finish_price) + "</span></button>") + "</div>";
             }).join("") + '</div><p class="note">چی توی تخم‌هاست؟ تا سر باز نکنن هیچ‌کس نمی‌دونه.</p>';
           }
           html += '<button class="btn ghost block mt" data-act="guide">' + K.ic("doc") + "راهنمای کامل غار</button>";

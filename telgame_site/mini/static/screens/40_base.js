@@ -235,7 +235,7 @@
           html += '<div class="banner bs-hallhead"' + (hall.img ? ' style="background-image:url(\'' + hall.img + "&s=l')\"" : "") + '><div class="grow"><div class="ttl">تالار مِهر · سطح ' + K.n(d.hall_level) + ' <span class="sm" style="color:#c5cee2;font-weight:400">از ' + K.n(d.max_level) + "</span></div>" +
             pips(d.hall_level, d.max_level) + '<div class="bs-top-meta">' + buildersLine(bl) + (cardsTotal ? '<span class="bs-builders">' + K.ic("bs_card") + "کارت سرعت " + '<b class="num">' + cardsTotal + "</b></span>" : "") + "</div></div></div>" +
             '<p class="note bs-rule">هیچ ساختمونی از سطح تالار مِهر جلو نمی‌زنه.</p>' +
-            (bl.second_cost ? '<button class="btn sm block mb" data-act="builder">' + K.ic("plus") + "بنّای دوم (دو ارتقای هم‌زمان)" + '<span class="cost t-diamond">' + K.ic("gem") + K.n(bl.second_cost) + "</span></button>" : "");
+            (bl.second_cost ? '<button class="btn sm block mb" data-act="builder">' + K.ic("plus") + "بنّای دوم (دو ارتقای هم‌زمان)" + '<span class="cost t-diamond">' + K.ic("diamond") + K.n(bl.second_cost) + "</span></button>" : "");
           if (anyWaiting) {
             html += '<div class="panel pad glow bs-wait"><div class="grow"><div class="sm muted">آماده‌ی برداشت</div><div class="bs-wait-sum">' + K.amounts(w) + '</div></div><button class="btn good" data-act="collect-all">' + K.ic("check") + "جمع‌آوری همه</button></div>";
           }
@@ -269,7 +269,7 @@
     if (up) {
       h += '<div class="panel pad gold bs-up"><div class="flex between"><b>' + K.ic("hammer") + " " + (build ? "در حال ساخت" : "در حال ارتقا تا سطح " + K.n(up.target)) + '</b><span class="timer" data-left="' + up.left + '" data-done="تموم شد"></span></div>' +
         '<div class="mt">' + progress(up.left, up.total) + "</div>" +
-        '<div class="btns mt"><button class="btn gold" data-timed data-act="speed">' + K.ic("bs_card") + 'کارت سرعت</button><button class="btn" data-timed data-act="finish">' + K.ic("bolt") + "اتمام فوری" + '<span class="cost t-diamond">' + K.ic("gem") + K.n(up.finish_price) + "</span></button></div>" +
+        '<div class="btns mt"><button class="btn gold" data-timed data-act="speed">' + K.ic("bs_card") + 'کارت سرعت</button><button class="btn" data-timed data-act="finish">' + K.ic("bolt") + "اتمام فوری" + '<span class="cost t-diamond">' + K.ic("diamond") + K.n(up.finish_price) + "</span></button></div>" +
         '<button class="btn ghost block sm mt t-bad" data-timed data-act="cancel">' + K.ic("close") + (build ? "لغو ساخت" : "لغو ارتقا") + "</button></div>";
       return h;
     }
@@ -282,7 +282,7 @@
       "<div><span>مدت زمان</span><span>" + K.dur(nx.seconds) + "</span></div>" +
       (nx.lab_req ? "<div><span>سطح آزمایشگاه لازم</span><span class=\"" + (nx.lab_ok ? "t-good" : "t-bad") + '">' + K.n(nx.lab_req) + "</span></div>" : "") + "</div>";
     if (b.state === "busy") h += '<div class="pad-in"><div class="callout warn">' + K.ic("hourglass") + "<span>بنّاهات مشغول ساختمون‌های دیگه‌ان (" + '<span class="num">' + bl.busy + "/" + bl.slots + "</span>). صبر کن یکی تموم بشه" + (bl.second_cost ? " یا بنّای دوم بخر" : "") + ".</span></div>" +
-      (bl.second_cost ? '<button class="btn block mt" data-act="builder">' + K.ic("plus") + "بنّای دوم" + '<span class="cost t-diamond">' + K.ic("gem") + K.n(bl.second_cost) + "</span></button>" : "") + "</div>";
+      (bl.second_cost ? '<button class="btn block mt" data-act="builder">' + K.ic("plus") + "بنّای دوم" + '<span class="cost t-diamond">' + K.ic("diamond") + K.n(bl.second_cost) + "</span></button>" : "") + "</div>";
     else h += '<div class="pad-in">' + (nx.lab_ok ? "" : '<div class="callout warn mb">' + K.ic("flask") + "<span>سطح آزمایشگاهت هنوز به " + K.n(nx.lab_req) + " نرسیده. با بازی‌کردن و فعالیت بالا می‌ره.</span></div>") +
       (poor && nx.lab_ok ? '<div class="callout warn mb">' + K.ic("coin") + "<span>طلا کم داری؛ " + K.n(nx.cost - have("coins")) + " طلای دیگه لازمه.</span></div>" : "") +
       '<button class="btn ' + (poor || !nx.lab_ok ? "bs-off" : "primary") + ' block lg" data-act="upgrade">' + K.ic(build ? "hammer" : "up") + (build ? "شروع ساخت" : "شروع ارتقا") + '<span class="cost">' + K.ic("coin") + K.short(nx.cost) + "</span></button></div>";
@@ -476,7 +476,7 @@
             var left = Math.max(1, t.upgrade.left - elapsed());
             h += '<div class="panel pad gold mt"><div class="flex between"><b>در حال پژوهش تا سطح ' + K.n(t.upgrade.target) + '</b><span class="timer" data-left="' + left + '" data-done="تموم شد"></span></div><div class="mt">' + progress(left, t.upgrade.total) + "</div>" +
               '<div class="sm muted mt">پژوهش فقط با الماس زودتر تموم می‌شه؛ کارت سرعت اینجا کار نمی‌کنه.</div></div>' +
-              '<div class="foot"><button class="btn gold block lg" data-go="finish">' + K.ic("bolt") + "تمومش کن" + '<span class="cost">' + K.ic("gem") + K.n(t.upgrade.finish_price) + "</span></button></div>";
+              '<div class="foot"><button class="btn gold block lg" data-go="finish">' + K.ic("bolt") + "تمومش کن" + '<span class="cost">' + K.ic("diamond") + K.n(t.upgrade.finish_price) + "</span></button></div>";
           } else if (t.state === "max") h += '<div class="callout good mt">' + K.ic("trophy") + "<span>به سقف نهایی رسیده.</span></div>";
           else if (t.state === "capped") {
             h += '<div class="callout warn mt">' + K.ic("lock") + "<span>" + (d.lab_level > 0 ? "سطح پژوهش از سطح ساختمون آزمایشگاه (" + K.n(d.lab_level) + ") جلو نمی‌زنه؛ اول خود آزمایشگاه رو ارتقا بده."
@@ -509,7 +509,7 @@
           var run = d.running && byKey[d.running];
           if (run) {
             html += '<div class="panel pad gold bs-run mt" data-act="track" data-key="' + run.key + '" role="button"><div class="flex"><span class="ico-box lg" style="color:' + trackColor(run) + '">' + K.ic(trackIcon(run)) + '</span><div class="grow"><div class="b cut">' + K.esc(run.label) + ' <span class="muted sm">تا سطح ' + K.n(run.upgrade.target) + "</span></div>" +
-              '<span class="timer" data-left="' + run.upgrade.left + '" data-done="تموم شد"></span></div><button class="btn sm gold" data-timed data-act="finish" data-key="' + run.key + '">' + K.ic("bolt") + '<span class="cost">' + K.ic("gem") + K.n(run.upgrade.finish_price) + "</span></button></div>" +
+              '<span class="timer" data-left="' + run.upgrade.left + '" data-done="تموم شد"></span></div><button class="btn sm gold" data-timed data-act="finish" data-key="' + run.key + '">' + K.ic("bolt") + '<span class="cost">' + K.ic("diamond") + K.n(run.upgrade.finish_price) + "</span></button></div>" +
               '<div class="mt">' + progress(run.upgrade.left, run.upgrade.total) + "</div></div>";
           }
           html += '<div class="h2">' + K.ic("flask") + "رشته‌های پژوهش</div>" + '<div class="bs-tracks">' + d.tracks.map(function (t) {

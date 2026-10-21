@@ -122,16 +122,23 @@
         ctx.setTitle(c.name);
         var acts = K.creatureActions.slice().sort(function (a, b) { return (a.order || 50) - (b.order || 50); });
         var buttons = acts.map(function (a) { try { return a.render(c, r[1]) || ""; } catch (e) { console.error(e); return ""; } }).join("");
-        var gear = c.gear.length ? c.gear.map(function (g) {
-          return '<button class="c-' + g.rarity + '" data-act="gear" data-id="' + g.id + '"><span class="ic">' + K.ic(K.SLOT_ICON[g.slot] || "chest") + '</span><span class="t">' + K.esc(g.name) + ' <span class="num b">+' + g.level + "</span><small>" + K.esc(K.slotLabel(g.slot)) + " · " + K.esc(K.rarLabel(g.rarity)) + '</small></span><span class="chev">' + K.ic("chevron") + "</span></button>";
-        }).join("") : '<div><span class="ic" style="color:var(--faint)">' + K.ic("chest") + '</span><span class="t muted">تجهیزاتی نپوشیده</span></div>';
-        root.innerHTML = '<div class="panel hero"><div class="art"><img src="' + c.img + '&s=l" alt="" decoding="async"><div class="over"><div><div class="ttl">' + K.esc(c.name) + "</div>" + K.stars(c.star) + "</div>" +
+        // one picture slot per equipment slot, like the gear screen of an RPG; empty ones show the slot's icon
+        var slots = Object.keys((K.meta && K.meta.slots) || {});
+        c.gear.forEach(function (g) { if (slots.indexOf(g.slot) < 0) slots.push(g.slot); });
+        var gear = '<div class="cr-slots">' + slots.map(function (s) {
+          var g = c.gear.filter(function (x) { return x.slot === s; })[0];
+          return g ? '<button class="cr-slot on" style="--rc:var(--' + g.rarity + ')" data-act="gear" data-id="' + g.id + '">' +
+              (g.img ? '<img src="' + g.img + '" alt="" loading="lazy" decoding="async">' : '<span class="ic">' + K.ic(K.SLOT_ICON[s] || "chest") + "</span>") +
+              '<span class="lv num">+' + g.level + '</span><small class="cut">' + K.esc(g.name) + "</small></button>"
+            : '<div class="cr-slot"><span class="ic">' + K.ic(K.SLOT_ICON[s] || "chest") + '</span><small>' + K.esc(K.slotLabel(s)) + "</small></div>";
+        }).join("") + "</div>";
+        root.innerHTML = '<div class="panel hero ' + c.rarity + '"><div class="art"><img src="' + c.img + '&s=l" alt="" decoding="async"><div class="over"><div><div class="ttl">' + K.esc(c.name) + "</div>" + K.stars(c.star) + "</div>" +
           '<div class="pow"><b>' + K.n(c.power) + "</b><small>قدرت</small></div></div></div>" +
           '<div class="meta">' + K.rarTag(c.rarity) + K.elTag(c.element) + K.tag("سطح " + K.n(c.level)) +
           (c.active ? K.tag("فعال", "var(--good)", "check") : c.busy ? K.tag("مشغول", "var(--warn)", "clock") : "") +
           (c.name !== c.species ? K.tag(K.esc(c.species)) : "") + "</div>" + K.statGrid(c) + "</div>" +
           (buttons ? '<div class="creature-actions">' + buttons + "</div>" : "") +
-          '<div class="h2">' + K.ic("chest") + "تجهیزات</div>" + '<div class="panel list">' + gear + "</div>";
+          '<div class="h2">' + K.ic("chest") + "تجهیزات</div>" + gear;
         K.on(root, "gear", function (el) { K.go("item", { id: +el.dataset.id }); });
         acts.forEach(function (a) { if (a.bind) try { a.bind(root, c, ctx); } catch (e) { console.error(e); } });
       });

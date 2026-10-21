@@ -128,7 +128,12 @@ window.K = (function () {
   };
   K.icons = ICONS;
   K.addIcons = function (map) { for (var k in map) ICONS[k] = map[k]; };
-  K.ic = function (name, cls) { return '<svg class="i ' + (cls || "") + '" viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[name] || ICONS.info) + "</svg>"; };
+  /* coin / dna / diamond are drawn in full colour (the same art as the resource bar) wherever they appear */
+  var ART_IC = { coin: "coin", dna: "dna", diamond: "gem" };
+  K.ic = function (name, cls) {
+    if (ART_IC[name] && typeof RES_ART !== "undefined") return '<svg class="i art ' + (cls || "") + '" viewBox="0 0 32 32" aria-hidden="true">' + RES_ART[ART_IC[name]] + "</svg>";
+    return '<svg class="i ' + (cls || "") + '" viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[name] || ICONS.info) + "</svg>";
+  };
   K.EL_ICON = { fire: "flame", water: "drop", earth: "mountain", electric: "bolt", crystal: "crystal", plasma: "atom" };
   K.SLOT_ICON = { weapon: "sword", armor: "shield", rune: "ring", offhand: "vial" };
 
@@ -164,7 +169,7 @@ window.K = (function () {
     var out = [];
     if (o.coins) out.push('<span class="t-coin b">' + K.ic("coin") + " " + K.n(o.coins) + "</span>");
     if (o.dna) out.push('<span class="t-dna b">' + K.ic("dna") + " " + K.n(o.dna) + "</span>");
-    if (o.diamonds) out.push('<span class="t-diamond b">' + K.ic("gem") + " " + K.n(o.diamonds) + "</span>");
+    if (o.diamonds) out.push('<span class="t-diamond b">' + K.ic("diamond") + " " + K.n(o.diamonds) + "</span>");
     if (o.energy) out.push('<span class="t-energy b">' + K.ic("bolt", "f") + " " + K.n(o.energy) + "</span>");
     if (o.xp) out.push('<span class="t-xp b">' + K.ic("up") + " " + K.n(o.xp) + " XP</span>");
     if (o.cup) out.push('<span class="t-cup b">' + K.ic("trophy") + " " + (o.cup > 0 ? "+" : "") + Number(o.cup) + "</span>");
@@ -378,7 +383,7 @@ window.K = (function () {
   K.reward = function (o) {
     return new Promise(function (resolve) {
       var chips = [];
-      [["coins", "coin", "t-coin"], ["dna", "dna", "t-dna"], ["diamonds", "gem", "t-diamond"], ["energy", "bolt", "t-energy"], ["xp", "up", "t-xp"]].forEach(function (c) {
+      [["coins", "coin", "t-coin"], ["dna", "dna", "t-dna"], ["diamonds", "diamond", "t-diamond"], ["energy", "bolt", "t-energy"], ["xp", "up", "t-xp"]].forEach(function (c) {
         if (o[c[0]]) chips.push('<span class="it ' + c[2] + '">' + K.ic(c[1]) + '<span style="color:var(--text)">+' + Number(o[c[0]]).toLocaleString("en-US") + (c[0] === "xp" ? " XP" : "") + "</span></span>");
       });
       if (o.cup) chips.push('<span class="it t-cup">' + K.ic("trophy") + '<span style="color:var(--text)" class="num">' + (o.cup > 0 ? "+" : "") + o.cup + "</span></span>");

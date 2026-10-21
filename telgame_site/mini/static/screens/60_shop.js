@@ -288,7 +288,7 @@
           html += '<div class="h2">' + K.ic("gem") + 'کایجوی جمی امروز</div><div class="panel pad glow"><div class="fighter ' + g.rarity + '">' + (g.img ? '<img src="' + g.img + '" alt="">' : "") +
             '<div class="grow"><div class="nm cut">' + K.esc(g.name) + '</div><div class="shs-tags">' + K.rarTag(g.rarity) + K.elTag(g.element) + '</div><div class="sm muted">هم‌گونه و هم‌رده‌ی یکی از قوی‌ترین هیولاهات؛ روزی یه بار.</div></div></div>' +
             (g.claimed ? '<button class="btn block mt" disabled>' + K.ic("check") + "امروز خریدی</button>"
-                       : '<button class="btn primary block mt" data-act="gem"><span>خرید</span><span class="cost">' + K.ic("gem") + " " + K.n(g.price) + "</span></button>") + "</div>";
+                       : '<button class="btn primary block mt" data-act="gem"><span>خرید</span><span class="cost">' + K.ic("diamond") + " " + K.n(g.price) + "</span></button>") + "</div>";
         }
         var any = false;
         GROUPS.forEach(function (gr) {
@@ -614,9 +614,9 @@
             '<div class="sm she-next">' + (full ? '<span class="t-good b">' + K.ic("check") + " انرژیت پره</span>"
               : 'انرژی بعدی تا <span class="timer" data-until="' + nextAt + '" data-done="رسید"></span>') + "</div></div></div>" +
             '<div class="tiles mt"><div class="panel info"><span class="ic t-energy">' + K.ic("clock") + "</span><div><small>هر یک انرژی</small><b>" + K.dur(d.regen_seconds) + "</b></div></div>" +
-            '<div class="panel info"><span class="ic t-diamond">' + K.ic("gem") + "</span><div><small>الماس تو</small><b>" + K.n(d.diamonds) + "</b></div></div></div>" +
+            '<div class="panel info"><span class="ic t-diamond">' + K.ic("diamond") + "</span><div><small>الماس تو</small><b>" + K.n(d.diamonds) + "</b></div></div></div>" +
             '<div class="panel pad mt"><div class="b">شارژ کامل انرژی</div><div class="sm muted" style="margin:2px 0 12px">انرژیت یک‌جا به ' + K.n(d.max_energy) + " می‌رسه.</div>" +
-            '<button class="btn gold block lg" data-act="refill"' + (full ? " disabled" : "") + ">" + K.ic("bolt", "f") + "<span>" + (full ? "نیازی به شارژ نیست" : "شارژ کن") + '</span><span class="cost">' + K.ic("gem") + " " + K.n(d.cost) + "</span></button>" +
+            '<button class="btn gold block lg" data-act="refill"' + (full ? " disabled" : "") + ">" + K.ic("bolt", "f") + "<span>" + (full ? "نیازی به شارژ نیست" : "شارژ کن") + '</span><span class="cost">' + K.ic("diamond") + " " + K.n(d.cost) + "</span></button>" +
             (!full && d.diamonds < d.cost ? '<div class="t-bad sm center" style="margin-top:8px">' + K.ic("warn") + " الماس کافی نداری.</div>" : "") + "</div>" +
             (d.subscriber ? '<div class="callout good mt">' + K.ic("crown") + "<div>اشتراک VIP داری: سقف انرژیت " + K.n(d.max_energy) + " هست و سریع‌تر پر می‌شه.</div></div>"
               : '<button class="callout mt she-vip" data-act="vip">' + K.ic("crown") + '<div class="grow" style="text-align:right">با اشتراک VIP سقف انرژی ' + K.n(d.sub_max) + " می‌شه (به جای " + K.n(d.base_max) + ") و سریع‌تر پر می‌شه.</div>" + K.ic("chevron") + "</button>");

@@ -376,7 +376,7 @@
     return '<div class="panel kv mt"><div><span>لیگِ زمان دریافت</span><span>' + K.esc(c.league) + ' <span class="muted">(کاپ ' + K.n(c.cup) + ")</span></span></div>" +
       "<div><span>زمان بازگشایی</span><span>" + K.n(c.unlock_hours) + " ساعت</span></div>" +
       "<div><span>طلا و DNA</span><span>" + K.amounts({ coins: c.coins, dna: c.dna }) + "</span></div>" +
-      (c.has_diamonds ? '<div><span>الماس</span><span class="t-diamond">' + K.ic("gem") + " بونس ویژه</span></div>" : "") +
+      (c.has_diamonds ? '<div><span>الماس</span><span class="t-diamond">' + K.ic("diamond") + " بونس ویژه</span></div>" : "") +
       "<div><span>هیولا یا تجهیزات</span><span>" + (c.creature_chance >= 1 ? "همیشه هیولا" : K.pct(c.creature_chance) + " هیولا، وگرنه تجهیزات") + "</span></div>" +
       "<div><span>حداقل نایابی</span><span>" + K.rarTag(c.min_rarity) + "</span></div>" +
       (c.mythic_chance != null ? "<div><span>شانس " + K.esc(K.rarLabel("mythic")) + "</span><span>" + K.pct(c.mythic_chance) + "</span></div>" : "") + "</div>";
@@ -388,7 +388,7 @@
       var box = K.sheet('<div class="grab"></div><div class="pad"><div class="ttl" style="font-size:18px">راهنمای جوایز جعبه‌ها</div>' +
         '<div class="seg mt">' + guide.map(function (x) { return '<button data-tier="' + x.tier + '" class="' + (x.tier === cur ? "on" : "") + '">' + K.esc(x.name.replace("جعبه‌ی ", "").replace("جعبه ", "")) + "</button>"; }).join("") + "</div>" +
         '<div class="flex">' + (g.img ? '<img class="ar-gimg" src="' + g.img + '" alt="">' : "") + '<div class="grow sm"><div class="b" style="font-size:15px">' + K.esc(g.name) + '</div><div class="muted">بازگشایی: ' + K.n(g.unlock_hours) + " ساعت</div><div class=\"muted\">" + (g.creature_chance >= 1 ? "همیشه یه هیولا" : K.pct(g.creature_chance) + " هیولا، وگرنه یه تجهیزات") + "</div>" +
-        (g.has_diamonds ? '<div class="t-diamond">' + K.ic("gem") + " الماس بونس داره</div>" : "") +
+        (g.has_diamonds ? '<div class="t-diamond">' + K.ic("diamond") + " الماس بونس داره</div>" : "") +
         (g.mythic_min != null ? '<div class="muted">شانس ' + K.esc(K.rarLabel("mythic")) + ": از " + K.pct(g.mythic_min) + " تا " + K.pct(g.mythic_max) + " (بسته به لیگ)</div>" : "") + "</div></div>" +
         '<div class="panel ar-guide mt">' + g.rows.map(function (r) {
           return '<div class="' + (r.key === mine ? "me" : "") + '">' + medal(r.key) + '<span class="grow"><b>' + K.esc(r.league) + '</b><small class="muted"> کاپ ' + K.n(r.min_cup) + '+ · حداقل <span class="c-' + r.min_rarity + '">' + K.esc(K.rarLabel(r.min_rarity)) + '</span></small></span><span class="sm">' + K.amounts({ coins: r.coins, dna: r.dna }, " ") + "</span></div>";
@@ -450,7 +450,7 @@
         else {
           if (c.can_start) btns += '<button class="btn primary block" data-do="start">' + K.ic("play") + "شروع بازگشایی (" + c.unlock_hours + " ساعت)</button>";
           else if (c.can_queue) btns += '<button class="btn primary block" data-do="queue">' + K.ic("list") + "بذار توی صف</button>";
-          btns += '<button class="btn block' + (btns ? " mt" : "") + '" data-do="speed">' + K.ic("bolt") + 'بازگشایی فوری<span class="cost t-diamond">' + K.ic("gem") + K.n(c.speedup_cost) + "</span></button>";
+          btns += '<button class="btn block' + (btns ? " mt" : "") + '" data-do="speed">' + K.ic("bolt") + 'بازگشایی فوری<span class="cost t-diamond">' + K.ic("diamond") + K.n(c.speedup_cost) + "</span></button>";
         }
         var box = K.sheet((c.img ? '<div class="art"><img src="' + c.img + '&s=l" alt=""></div>' : '<div class="grab"></div>') + '<div class="pad"><div class="ttl">' + K.esc(c.name) + '</div><div class="meta">' +
           K.tag("جایگاه " + K.n(c.slot)) + '<span class="tag" style="color:' + st[2] + '">' + K.ic(st[0]) + st[1] + "</span>" +
