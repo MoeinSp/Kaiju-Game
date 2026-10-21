@@ -63,3 +63,19 @@
 @keyframes coachRing { 0% { transform: scale(.5); opacity: .9; } 100% { transform: scale(1.6); opacity: 0; } }
 @keyframes coachTap { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-4px, -9px); } }
 @keyframes coachTapUp { 0%, 100% { transform: rotate(180deg) translate(0, 0); } 50% { transform: rotate(180deg) translate(4px, -9px); } }
+
+/* reward sheets: the gift shakes open, then each card flips in after the other with its rarity glow */
+.loot .burst { animation: pop .5s cubic-bezier(.2,1.4,.3,1) both, fxShake .5s ease-in-out .5s 2; }
+@keyframes fxShake { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-9deg) scale(1.05); } 75% { transform: rotate(9deg) scale(1.05); } }
+.loot .cards > * { animation: fxFlip .55s cubic-bezier(.2,1.2,.4,1) both; transform-origin: 50% 50%; backface-visibility: hidden; }
+.loot .cards > :nth-child(1) { animation-delay: .35s; } .loot .cards > :nth-child(2) { animation-delay: .55s; } .loot .cards > :nth-child(3) { animation-delay: .75s; }
+.loot .cards > :nth-child(4) { animation-delay: .95s; } .loot .cards > :nth-child(5) { animation-delay: 1.15s; } .loot .cards > :nth-child(n+6) { animation-delay: 1.35s; }
+@keyframes fxFlip { 0% { transform: perspective(600px) rotateY(90deg) scale(.8); opacity: 0; } 60% { opacity: 1; } 100% { transform: none; opacity: 1; } }
+.loot .cards > .legendary, .loot .cards > .mythic { box-shadow: 0 0 0 1.5px var(--rc, var(--line)), 0 0 22px color-mix(in srgb, var(--rc, #ffc53d) 55%, transparent); }
+.loot .items .it { animation: rsPop .35s cubic-bezier(.2,1.5,.4,1) both; }
+.loot .items .it:nth-child(2) { animation-delay: .08s; } .loot .items .it:nth-child(3) { animation-delay: .16s; } .loot .items .it:nth-child(n+4) { animation-delay: .24s; }
+
+/* weak phones: the frosted-glass blur under the two bars costs a lot and their backgrounds are nearly opaque anyway */
+.hud, nav.tabs { -webkit-backdrop-filter: none; backdrop-filter: none; }
+.hud { background: linear-gradient(180deg, rgba(8,11,18,.97), rgba(8,11,18,.9)); }
+@media (prefers-reduced-motion: reduce) { .loot .burst, .loot .cards > *, .loot .items .it { animation: none !important; } }
