@@ -390,6 +390,9 @@ window.K = (function () {
       '<div class="stat def">' + K.ic("shield") + "<b>" + K.n(c.def) + "</b><small>دفاع</small></div>" +
       '<div class="stat spd">' + K.ic("wind") + "<b>" + K.n(c.spd) + "</b><small>سرعت</small></div></div>";
   };
+  /* The rarity printed on a tile, above the name: the frame shows it too, but colour must never
+     be the only way to tell two rarities apart. */
+  K.rarLine = function (r) { return r ? '<span class="rr c-' + r + '">' + K.esc(K.rarLabel(r)) + "</span>" : ""; };
   /* A creature in the image grid. opts: {tag:"button"|"div", attrs:'data-act="x"', sel:bool, dim:bool, flag:"متن"} */
   K.creatureTile = function (c, opts) {
     opts = opts || {}; var tag = opts.tag || "button";
@@ -397,7 +400,7 @@ window.K = (function () {
     return "<" + tag + ' class="tile ' + c.rarity + (opts.sel ? " sel" : "") + (opts.dim ? " dim" : "") + '" data-creature="' + (c.id || "") + '" ' + (opts.attrs || "") + ">" +
       '<img class="pic" loading="lazy" decoding="async" src="' + c.img + '" alt=""><span class="shade"></span>' + flag +
       '<span class="el e-' + c.element + '">' + K.ic(K.EL_ICON[c.element] || "atom") + "</span>" +
-      '<span class="body"><span class="nm">' + K.esc(c.name) + '</span><span class="sub">' + K.stars(c.star) + (c.power != null ? '<span class="p">' + K.ic("power") + K.n(c.power) + "</span>" : "") + "</span></span></" + tag + ">";
+      '<span class="body">' + K.rarLine(c.rarity) + '<span class="nm">' + K.esc(c.name) + '</span><span class="sub">' + K.stars(c.star) + (c.power != null ? '<span class="p">' + K.ic("power") + K.n(c.power) + "</span>" : "") + "</span></span></" + tag + ">";
   };
   /* An equipment piece in the image grid. e: {id,name,slot,rarity,level,power?,img,on?} */
   K.itemTile = function (e, opts) {
@@ -405,7 +408,7 @@ window.K = (function () {
     return "<" + tag + ' class="tile ' + e.rarity + (opts.sel ? " sel" : "") + (opts.dim ? " dim" : "") + '" data-equip="' + (e.id || "") + '" ' + (opts.attrs || "") + ">" +
       '<img class="pic" loading="lazy" decoding="async" src="' + e.img + '" alt=""><span class="shade"></span>' +
       (e.on ? '<span class="flag act">' + K.ic("check") + "پوشیده</span>" : "") + '<span class="lvl num">+' + e.level + "</span>" +
-      '<span class="body"><span class="nm">' + K.esc(e.name) + '</span><span class="sub"><span>' + K.esc(K.slotLabel(e.slot)) + "</span>" + (e.power != null ? '<span class="p">' + K.ic("power") + K.n(e.power) + "</span>" : "") + "</span></span></" + tag + ">";
+      '<span class="body">' + K.rarLine(e.rarity) + '<span class="nm">' + K.esc(e.name) + '</span><span class="sub"><span>' + K.esc(K.slotLabel(e.slot)) + "</span>" + (e.power != null ? '<span class="p">' + K.ic("power") + K.n(e.power) + "</span>" : "") + "</span></span></" + tag + ">";
   };
   /* Compact row: thumbnail + name + tags + power. c = creatureDict (or {name,img,rarity,element,star,level,power}) */
   K.fighter = function (c, sub) {
