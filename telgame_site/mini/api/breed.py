@@ -36,7 +36,7 @@ def _mini(c: Creature) -> dict:
     picture needs and nothing that costs a query (no power, no gear)."""
     from bio_lab.repository import creature_name
 
-    return {"id": c.id, "name": creature_name(c), "species": c.name, "element": c.element, "rarity": c.rarity,
+    return {"id": c.id, "name": creature_name(c, mark=False), "species": c.name, "element": c.element, "rarity": c.rarity,
             "star": c.star_level, "level": c.level, "img": creature_img(c)}
 
 

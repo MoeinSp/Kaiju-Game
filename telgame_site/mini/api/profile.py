@@ -80,7 +80,7 @@ def equipment(request, user):
         out.append({
             "id": it.id, "name": it.name, "slot": it.slot, "rarity": it.rarity, "level": it.level,
             "power": equipment_power(it), "bonus": clean(bonus_text(it)),
-            "on": creature_name(it.equipped_on) if it.equipped_on_id else None,
+            "on": creature_name(it.equipped_on, mark=False) if it.equipped_on_id else None,
             "on_id": it.equipped_on_id,
             "img": equipment_img(it),
         })

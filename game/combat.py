@@ -73,9 +73,11 @@ def _simulate(creature_a: Creature, creature_b: Creature, *, seed: int | None = 
     # power_a/power_b a caller displayed (bots, tower guardians). The simulated exchange
     # above is cosmetic; we make its HP report agree with the decided winner, so a
     # «می‌بری» card can never be followed by a loss.
-    cap = constants.MAX_KAIJU_POWER
-    pa = power_a if power_a is not None else min(cap, combat_rating(fa.stats))
-    pb = power_b if power_b is not None else min(cap, combat_rating(fb.stats))
+    # the same formula as creature_power (black-form bonus, per-creature cap)
+    pa = power_a if power_a is not None else min(constants.power_cap(creature_a),
+                                                 combat_rating(fa.stats) + constants.shadow_bonus(creature_a))
+    pb = power_b if power_b is not None else min(constants.power_cap(creature_b),
+                                                 combat_rating(fb.stats) + constants.shadow_bonus(creature_b))
     intended = fa if constants.duel_attacker_wins(pa, creature_a.element, pb, creature_b.element) else fb
     loser = fb if intended is fa else fa
     if winner is not intended:

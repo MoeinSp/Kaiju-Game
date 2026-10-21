@@ -333,6 +333,8 @@ def creature_img(creature) -> str:
     stage = min(6, 1 + max(0, level - 1) // 20)           # same steps as game.media.get_creature_stage
     tier = 1 if level <= 15 else 2 if level <= 35 else 3  # the element-art fallback's steps
     ver = f"{stage}{tier}{getattr(creature, 'star_level', 1)}{str(getattr(creature, 'rarity', ''))[:2]}"
+    if getattr(creature, "shadow_level", 0):   # the black-form aura is part of the picture
+        ver += f"s{creature.shadow_level}"
     return f"/app/img/c/{creature.id}.jpg?k={_sig('c', creature.id)}&v={ver}"
 
 
@@ -410,11 +412,12 @@ def creature_dict(c: Creature, gear: list | None = None, busy: set[int] | None =
         gear = get_equipped_items(c)
     stats = effective_stats(c, gear)
     return {
-        "id": c.id, "name": creature_name(c), "species": c.name,
+        "id": c.id, "name": creature_name(c, mark=False), "species": c.name,
         "element": c.element, "rarity": c.rarity, "star": c.star_level, "level": c.level,
         "power": creature_power(c, gear),
         "hp": round(stats["hp"]), "atk": round(stats["atk"]), "def": round(stats["def"]), "spd": round(stats["spd"]),
         "active": c.is_active, "busy": bool(busy and c.id in busy),
+        "shadow": c.shadow_level,   # «فرم سیاه» level (0 = none) — drives the animated aura
         "gear": [gear_dict(g) for g in gear],
         "img": creature_img(c),
     }

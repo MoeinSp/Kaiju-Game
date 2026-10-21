@@ -60,7 +60,7 @@ def _fielded(entry) -> dict | None:
     creature, power, element = T._power(entry)
     if creature is None:
         return None
-    return {"id": creature.id, "name": _txt(creature_name(creature)), "species": creature.name, "element": element,
+    return {"id": creature.id, "name": _txt(creature_name(creature, mark=False)), "species": creature.name, "element": element,
             "rarity": creature.rarity, "star": creature.star_level, "level": creature.level, "power": power,
             "img": creature_img(creature)}
 

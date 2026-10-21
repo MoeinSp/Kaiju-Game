@@ -81,7 +81,7 @@ def _wearer(it: Equipment) -> str | None:
     if not it.equipped_on_id:
         return None
     owner = it.equipped_on
-    return creature_name(owner) if owner is not None else None
+    return creature_name(owner, mark=False) if owner is not None else None
 
 
 def _item_row(it: Equipment) -> dict:
@@ -463,7 +463,7 @@ def _devour_view(user: User, creature, gear: list) -> dict:
     from telgame_site.mini.core import creature_img
 
     rows = [{
-        "id": c.id, "name": creature_name(c), "species": c.name, "element": c.element, "rarity": c.rarity,
+        "id": c.id, "name": creature_name(c, mark=False), "species": c.name, "element": c.element, "rarity": c.rarity,
         "star": c.star_level, "level": c.level, "img": creature_img(c), "xp": _devour_xp(c),
     } for c in free_creatures(user) if c.id != creature.id]
     return {"creature": _creature_block(user, creature, gear), "need": xp_to_max_level(creature),

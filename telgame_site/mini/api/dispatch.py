@@ -71,7 +71,7 @@ def _candidate(creature, preview: dict) -> dict:
     from bio_lab.repository import creature_name
 
     return {
-        "creature": {"id": creature.id, "name": creature_name(creature), "element": creature.element,
+        "creature": {"id": creature.id, "name": creature_name(creature, mark=False), "element": creature.element,
                      "rarity": creature.rarity, "star": creature.star_level, "level": creature.level,
                      "power": preview["power"], "img": creature_img(creature)},
         "coins": preview["coins"], "dna": preview["dna"], "xp": preview["xp"],
@@ -154,7 +154,7 @@ def send(request, user, data):
     mission = dispatch.start(user, idx, creature_id)
     record_action(user, "dispatch")
     done = check_missions(user, "dispatch")
-    return {"id": mission.id, "name": creature_name(mission.creature), "left": dispatch.seconds_left(mission),
+    return {"id": mission.id, "name": creature_name(mission.creature, mark=False), "left": dispatch.seconds_left(mission),
             "reward": _guaranteed(mission.reward or {}), "missions": missions_list(done)}
 
 
@@ -166,7 +166,7 @@ def _result(user, res: dict) -> dict:
     out = _guaranteed(reward)
     out.update({
         "id": mission.id, "key": mission.template_key, "title": clean(title),
-        "name": creature_name(creature) if creature is not None else "هیولات",
+        "name": creature_name(creature, mark=False) if creature is not None else "هیولات",
         "bonus": _bonus(reward), "levels": int(res["levels"] or 0),
         "level": creature.level if creature is not None else None,
     })

@@ -3,7 +3,7 @@
 import hashlib
 import os
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 # Base directory for assets
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -323,6 +323,72 @@ def composite_rarity_and_stage(
     return comp
 
 
+_ROMAN = ("", "I", "II", "III", "IV", "V")
+
+
+def apply_shadow_aura(img: Image.Image, level: int, seed: int = 0) -> Image.Image:
+    """The «فرم سیاه» look on a creature card: a violet edge glow, dark smoke creeping in from
+    the borders, glowing cracks (more of them per level) and a SHADOW sigil with the level.
+    Everything thickens with the level, so a «سایه ۵» card is unmistakable."""
+    import random as _random
+
+    level = max(1, min(5, int(level)))
+    rng = _random.Random(seed * 31 + level)
+    base = img.convert("RGB")
+    w, h = base.size
+
+    # 1. a cold violet grade over the whole card
+    tint = Image.new("RGB", (w, h), (120, 70, 210))
+    base = Image.blend(base, ImageChops.multiply(base, tint), 0.18 + 0.06 * level)
+
+    # 2. smoke from the borders (a soft dark frame)
+    smoke = Image.new("L", (w, h), 0)
+    sd = ImageDraw.Draw(smoke)
+    thick = 26 + 10 * level
+    for i in range(thick):
+        a = int(230 * (1 - i / thick) ** 1.8)
+        sd.rectangle((i, i, w - 1 - i, h - 1 - i), outline=a)
+    smoke = smoke.filter(ImageFilter.GaussianBlur(10))
+    base = Image.composite(Image.new("RGB", (w, h), (12, 4, 26)), base, smoke)
+
+    # 3. glowing cracks reaching in from the edges
+    cracks = Image.new("L", (w, h), 0)
+    cd = ImageDraw.Draw(cracks)
+    for _ in range(2 + 2 * level):
+        side = rng.choice("tlr")  # never from the bottom: the name and stats live there
+        x, y = {"t": (rng.uniform(0, w), 0), "b": (rng.uniform(0, w), h), "l": (0, rng.uniform(0, h)), "r": (w, rng.uniform(0, h))}[side]
+        tx, ty = w * rng.uniform(0.3, 0.7), h * rng.uniform(0.25, 0.5)
+        pts = [(x, y)]
+        for step in range(1, 7):
+            f = step / 7 * rng.uniform(0.35, 0.6)
+            pts.append((x + (tx - x) * f + rng.uniform(-18, 18), y + (ty - y) * f + rng.uniform(-18, 18)))
+        cd.line(pts, fill=255, width=3)
+    glow = cracks.filter(ImageFilter.GaussianBlur(6))
+    base = Image.composite(Image.new("RGB", (w, h), (176, 96, 255)), base, glow.point(lambda v: int(v * (0.55 + 0.08 * level))))
+    base = Image.composite(Image.new("RGB", (w, h), (238, 214, 255)), base, cracks.point(lambda v: int(v * 0.85)))
+
+    # 4. the violet edge glow
+    edge = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(edge).rounded_rectangle((8, 8, w - 9, h - 9), radius=28, outline=255, width=4 + level)
+    edge_glow = edge.filter(ImageFilter.GaussianBlur(9 + 2 * level))
+    base = Image.composite(Image.new("RGB", (w, h), (168, 92, 255)), base, edge_glow)
+    base = Image.composite(Image.new("RGB", (w, h), (226, 196, 255)), base, edge.point(lambda v: int(v * 0.7)))
+
+    # 5. the sigil: «SHADOW · III» in the top corner
+    d = ImageDraw.Draw(base)
+    font = _load_ui_font(30, bold=True)
+    label = f"SHADOW  {_ROMAN[level]}"
+    tw = d.textlength(label, font=font)
+    x0, y0 = 34, 30
+    pill = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(pill).rounded_rectangle((x0 - 14, y0 - 8, x0 + tw + 14, y0 + 44), radius=22, fill=200)
+    base = Image.composite(Image.new("RGB", (w, h), (24, 8, 46)), base, pill)
+    d = ImageDraw.Draw(base)
+    d.rounded_rectangle((x0 - 14, y0 - 8, x0 + tw + 14, y0 + 44), radius=22, outline=(190, 120, 255), width=2)
+    d.text((x0, y0), label, font=font, fill=(232, 205, 255))
+    return base
+
+
 def get_creature_image_path(creature) -> str | None:
     """Returns the local image file path for a creature based on species, stage, and rarity."""
     if creature is None:
@@ -341,10 +407,12 @@ def get_creature_image_path(creature) -> str | None:
 
     stage = get_creature_stage(level)
     is_max = (level >= 120)
+    shadow = int(getattr(creature, "shadow_level", 0) or 0)
 
     # 1. Species-based progression
     if slug:
-        cache_file = CACHE_DIR / f"creature_{slug}_s{stage}_{rarity}_star{star_level}.jpg"
+        aura = f"_shadow{shadow}" if shadow else ""
+        cache_file = CACHE_DIR / f"creature_{slug}_s{stage}_{rarity}_star{star_level}{aura}.jpg"
         if cache_file.exists() and cache_file.stat().st_size > 5000:
             return str(cache_file)
 
@@ -368,6 +436,8 @@ def get_creature_image_path(creature) -> str | None:
                     star_level=star_level,
                     level=level,
                 )
+                if shadow:  # «فرم سیاه»: the dark aura (game/shadow.py)
+                    comp = apply_shadow_aura(comp, shadow, seed=len(slug))
                 comp.save(cache_file, "JPEG", quality=93, progressive=True)
                 return str(cache_file)
             except Exception:

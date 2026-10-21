@@ -150,6 +150,20 @@ RARITY_STAT_MULTIPLIER = {
 # little (a balance tweak, a new part cap), the reward percentages don't silently
 # move with it — everything stays balanced until this value is deliberately changed.
 MAX_KAIJU_POWER = 11500
+# «فرم سیاه» (game/shadow.py): each of its levels adds this much power to a creature AND lifts
+# that creature's own cap by the same amount (11,500 → 12,500 at level 5). Nothing else moves
+# the cap — see power_cap().
+SHADOW_MAX_LEVEL = 5
+SHADOW_POWER_PER_LEVEL = 200
+
+
+def power_cap(creature) -> int:
+    """This creature's power ceiling: MAX_KAIJU_POWER, raised by its black-form level."""
+    return MAX_KAIJU_POWER + SHADOW_POWER_PER_LEVEL * max(0, int(getattr(creature, "shadow_level", 0) or 0))
+
+
+def shadow_bonus(creature) -> int:
+    return SHADOW_POWER_PER_LEVEL * max(0, int(getattr(creature, "shadow_level", 0) or 0))
 
 # A creature's MAX level is set by its rarity (the base ceiling) plus its star tier
 # (fusion raises the ceiling). So rarity matters twice — higher rarity has both

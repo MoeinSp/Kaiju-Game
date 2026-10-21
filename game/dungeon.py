@@ -35,7 +35,15 @@ KEY_CAP = 4                # the daily refill stops here (bought keys may go abo
 KEY_HARD_CAP = 10
 LOSS_PAYOUT = 0.5          # share of the banked loot kept after a defeat / quitting
 HP_POWER_FLOOR = 0.6       # a kaiju at 1 HP fights at 60% of its power, full HP at 100%
-RELIC_CHANCE = {"normal": 0.25}
+# difficulty tiers: enemy power ×, gold/DNA ×, black runes ×, relic chance on a win, shadow cores
+# dropped by the boss (min, max), and the tier that must be cleared first (best_difficulty)
+DIFFICULTIES = {
+    "normal": {"label": "معمولی", "power": 1.0, "loot": 1.0, "runes": 1, "relic": 0.25, "cores": (0, 0), "need": 0},
+    "hard": {"label": "سخت", "power": 1.4, "loot": 1.6, "runes": 2, "relic": 0.45, "cores": (1, 1), "need": 1},
+    "nightmare": {"label": "کابوس", "power": 2.3, "loot": 2.5, "runes": 3, "relic": 0.70, "cores": (2, 3), "need": 2},
+}
+_DIFF_RANK = {k: i + 1 for i, k in enumerate(DIFFICULTIES)}   # cleared normal → 1, hard → 2, nightmare → 3
+_DIFF_BADGE = {"normal": "explorer", "hard": "hard", "nightmare": "nightmare"}
 # normal difficulty is sized to a team that just cleared campaign stage 50 (~13k team power,
 # ~4.4k per kaiju); maxed players get their challenge from the harder tiers (phase 2)
 ROOM_POWER = (3000, 5000)  # first room → last room, before the boss
@@ -68,6 +76,7 @@ SHOP = {
     "legendary_gear": {"label": "تجهیزات افسانه‌ای تصادفی", "price": 60},
     "relic": {"label": "اثر باستانی تصادفی (۳ روزه)", "price": 70},
     "mega_chest": {"label": "جعبه‌ی امگا", "price": 90},
+    "shadow_core": {"label": "هسته‌ی سایه (فرم سیاه)", "price": 60},
 }
 
 
@@ -154,12 +163,13 @@ def duel(state: dict, member: dict, enemy: dict) -> tuple[int, int]:
 def _enemy(state: dict, kind: str) -> dict:
     rng = _rng(state)
     room = state["room"]
+    tier = DIFFICULTIES[state.get("difficulty", "normal")]["power"]
     if kind == "boss":
-        power = round(BOSS_POWER * rng.uniform(0.97, 1.03))
+        power = round(BOSS_POWER * tier * rng.uniform(0.97, 1.03))
         name = rng.choice(BOSS_NAMES)
     else:
         power = (ROOM_POWER[0] + (room - 1) * (ROOM_POWER[1] - ROOM_POWER[0]) / max(1, ROOMS - 1)) * rng.uniform(0.95, 1.05)
-        power = round(power * (1.25 if kind == "elite" else 1.0))
+        power = round(power * tier * (1.25 if kind == "elite" else 1.0))
         name = rng.choice(ENEMY_NAMES)
     return {"kind": kind, "name": name, "element": rng.choice(constants.ELEMENTS), "power": power}
 
@@ -177,8 +187,9 @@ def _doors(state: dict) -> list[str]:
 
 
 def _loot_add(state: dict, coins: int = 0, dna: int = 0, runes: int = 0) -> dict:
-    boost = 1 + 0.25 * _rune_count(state, "treasure_hunter")
-    got = {"coins": round(coins * boost), "dna": round(dna * boost), "runes": runes}
+    diff = DIFFICULTIES[state.get("difficulty", "normal")]
+    boost = (1 + 0.25 * _rune_count(state, "treasure_hunter")) * diff["loot"]
+    got = {"coins": round(coins * boost), "dna": round(dna * boost), "runes": runes * diff["runes"]}
     for k, v in got.items():
         state["loot"][k] = state["loot"].get(k, 0) + v
     return got
@@ -243,8 +254,10 @@ def _need(run: DungeonRun, phase: str) -> dict:
 
 
 @transaction.atomic
-def start(user: User) -> DungeonRun:
+def start(user: User, difficulty: str = "normal") -> DungeonRun:
     user = User.objects.select_for_update().get(id=user.id)
+    if difficulty not in DIFFICULTIES:
+        raise GameError("این سطح سختی وجود نداره.")
     if not unlocked(user):
         raise GameError(f"🔒 سیاه‌چال بعد از فتح هر {UNLOCK_STAGE} مرحله‌ی دانجن باز می‌شه "
                         f"(الان مرحله‌ی {user.campaign_stage}).")
@@ -256,12 +269,18 @@ def start(user: User) -> DungeonRun:
         raise GameError("اول از «تیم حمله» حداقل یه هیولا توی تیمت بذار.")
     prof = profile(user)
     prof = DungeonProfile.objects.select_for_update().get(pk=prof.pk)
+    need = DIFFICULTIES[difficulty]["need"]
+    if prof.best_difficulty < need:
+        prev = list(DIFFICULTIES)[need - 1]
+        raise GameError(f"🔒 سختی «{DIFFICULTIES[difficulty]['label']}» بعد از یه برد در «{DIFFICULTIES[prev]['label']}» باز می‌شه.")
     if prof.keys < 1:
         raise GameError("🗝 کلید نداری! هر روز ۲ کلید رایگان می‌گیری، یا از فروشگاه سیاه‌چال بخر.")
     prof.keys -= 1
     prof.runs += 1
     prof.save(update_fields=["keys", "runs"])
-    return DungeonRun.objects.create(user=user, difficulty="normal", state=_new_state(user, members))
+    state = _new_state(user, members)
+    state["difficulty"] = difficulty   # read by _enemy / _loot_add
+    return DungeonRun.objects.create(user=user, difficulty=difficulty, state=state)
 
 
 @transaction.atomic
@@ -422,22 +441,36 @@ def _finish(user: User, run: DungeonRun, status: str) -> dict:
     share = 1.0 if status == DungeonRun.WON else LOSS_PAYOUT
     loot = {k: int(v * share) for k, v in state["loot"].items()}
     relic = None
+    diff = DIFFICULTIES.get(run.difficulty, DIFFICULTIES["normal"])
+    loot["cores"] = 0
+    badge = None
     if status == DungeonRun.WON:
-        bonus = random.randint(1, 3)
-        loot["runes"] += bonus
-        if random.random() < RELIC_CHANCE.get(run.difficulty, 0.25):
+        loot["runes"] += random.randint(1, 3) * diff["runes"]
+        loot["cores"] = random.randint(*diff["cores"])
+        if random.random() < diff["relic"]:
             relic = relics.grant(user)
+        from game import shadow
+
+        if shadow.award_badge(user, _DIFF_BADGE.get(run.difficulty, "explorer")):
+            badge = shadow.BADGES[user.dungeon_badge]
     from django.db.models import F
 
     User.objects.filter(id=user.id).update(coins=F("coins") + loot["coins"], dna_fragments=F("dna_fragments") + loot["dna"])
     record_gain(user, "dungeon", coins=loot["coins"], dna=loot["dna"])
     prof = DungeonProfile.objects.select_for_update().get(user=user)
     prof.black_runes += loot["runes"]
+    prof.shadow_cores += loot["cores"]
     reached = min(state["room"], ROOMS + 1)
     prof.best_room = max(prof.best_room, reached)
+    unlocked_tier = None
     if status == DungeonRun.WON:
         prof.clears += 1
-    prof.save(update_fields=["black_runes", "best_room", "clears"])
+        rank = _DIFF_RANK.get(run.difficulty, 1)
+        if rank > prof.best_difficulty:
+            prof.best_difficulty = rank
+            nxt = [k for k, d in DIFFICULTIES.items() if d["need"] == rank]
+            unlocked_tier = DIFFICULTIES[nxt[0]]["label"] if nxt else None
+    prof.save(update_fields=["black_runes", "shadow_cores", "best_room", "clears", "best_difficulty"])
     run.status = status
     run.finished_at = timezone.now()
     run.state = state
@@ -446,7 +479,8 @@ def _finish(user: User, run: DungeonRun, status: str) -> dict:
         from game import lab
 
         lab.award(user, "campaign_win")
-    return {"status": status, "loot": loot, "relic": relic, "room": reached, "share": share}
+    return {"status": status, "loot": loot, "relic": relic, "room": reached, "share": share,
+            "difficulty": run.difficulty, "badge": badge, "unlocked": unlocked_tier}
 
 
 @transaction.atomic
@@ -476,8 +510,10 @@ def shop_buy(user: User, key: str) -> dict:
         from game import relics
 
         out["relic"] = relics.grant(user)
+    elif key == "shadow_core":
+        prof.shadow_cores += 1
     prof.black_runes -= item["price"]
-    prof.save(update_fields=["black_runes", "keys"])
+    prof.save(update_fields=["black_runes", "keys", "shadow_cores"])
     return out
 
 
@@ -491,6 +527,10 @@ def view(user: User) -> dict:
         "unlocked": unlocked(user), "stage": user.campaign_stage, "unlock_stage": UNLOCK_STAGE,
         "keys": prof.keys if prof else 0, "black_runes": prof.black_runes if prof else 0,
         "runs": prof.runs if prof else 0, "clears": prof.clears if prof else 0,
+        "shadow_cores": prof.shadow_cores if prof else 0,
+        "best_difficulty": prof.best_difficulty if prof else 0,
+        "difficulties": [{"key": k, "label": d["label"], "open": (prof.best_difficulty if prof else 0) >= d["need"]}
+                         for k, d in DIFFICULTIES.items()],
         "run": None,
     }
     if run is not None:

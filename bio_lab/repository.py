@@ -56,7 +56,9 @@ def lab_display(user: User) -> str:
     are game-facing lists where the lab is the identity, not the person."""
     from game.subscription import subscription_badge
 
-    badge = subscription_badge(user)
+    from game.shadow import badge_mark
+
+    badge = subscription_badge(user) + badge_mark(user)
     if user.lab_name:
         base = html.escape(user.lab_name)
     else:
@@ -68,10 +70,11 @@ def lab_mention(user: User) -> str:
     """lab_display() as a clickable Telegram mention (tg://user link): the visible label is
     the lab's name, tapping it opens the player's profile. For group cards, where the lab
     is the game identity but people still want to reach the person behind it."""
+    from game.shadow import badge_mark
     from game.subscription import subscription_badge
 
     base = html.escape(user.lab_name) if user.lab_name else f"آزمایشگاه {user.id}"
-    return f'<a href="tg://user?id={user.id}">{base}</a>{subscription_badge(user)}'
+    return f'<a href="tg://user?id={user.id}">{base}</a>{subscription_badge(user)}{badge_mark(user)}'
 
 
 def get_or_create_group(chat) -> Group:
@@ -79,13 +82,15 @@ def get_or_create_group(chat) -> Group:
     return group
 
 
-def creature_name(creature: Creature) -> str:
+def creature_name(creature: Creature, mark: bool = True) -> str:
     """A creature's display name: the player's chosen nickname (نام) if set, else its
     species/breed (نژاد). Custom names are validated in game/naming.py to contain no
     HTML metacharacters, so this is safe to interpolate into parse_mode="HTML" bodies
-    exactly like the trusted species name it replaces."""
+    exactly like the trusted species name it replaces. A «فرم سیاه» creature carries the
+    🌑 mark (`mark=False` for the Mini App, which has no emoji)."""
     nick = (getattr(creature, "custom_name", "") or "").strip()
-    return nick or creature.name
+    name = nick or creature.name
+    return f"{name} 🌑" if mark and getattr(creature, "shadow_level", 0) else name
 
 
 def creature_has_nickname(creature: Creature) -> bool:

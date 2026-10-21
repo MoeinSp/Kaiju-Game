@@ -106,9 +106,17 @@ def combat_rating(stats: dict) -> int:
 def creature_power(creature: Creature, equipped_items: list | None = None) -> int:
     """Canonical strength score for any creature — the single source of truth every
     display, leaderboard and matchmaker delegates to, so a power number always
-    means the same thing and always predicts combat. Clamped to the game-wide
-    MAX_KAIJU_POWER ceiling so nothing ever reads above the true maximum."""
-    return min(constants.MAX_KAIJU_POWER, combat_rating(effective_stats(creature, equipped_items)))
+    means the same thing and always predicts combat. Clamped to the creature's ceiling —
+    MAX_KAIJU_POWER, raised only by its «فرم سیاه» level, which also adds its power bonus
+    (constants.power_cap / shadow_bonus)."""
+    rating = combat_rating(effective_stats(creature, equipped_items)) + constants.shadow_bonus(creature)
+    return min(constants.power_cap(creature), rating)
+
+
+def raw_power(creature: Creature, equipped_items: list | None = None) -> int:
+    """The rating before any cap and without the black form — «has this creature reached the
+    cap?» (the black-form requirement)."""
+    return combat_rating(effective_stats(creature, equipped_items))
 
 
 def creature_base_power(creature: Creature, equipped_items: list | None = None) -> int:

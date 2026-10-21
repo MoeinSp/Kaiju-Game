@@ -90,6 +90,8 @@ class User(models.Model):
 
     # highest PvE campaign stage cleared (game/campaign.py); 0 = none yet
     campaign_stage = models.IntegerField(default=0)
+    # «سیاه‌چال» badge shown next to the lab name (game/shadow.py BADGES); "" = none
+    dungeon_badge = models.CharField(max_length=16, blank=True, default="")
 
     # last day the player claimed the limited-time event's daily reward
     # (game/events.py), so it can be claimed once per day during an event
@@ -298,6 +300,9 @@ class Creature(models.Model):
     armor_lvl = models.IntegerField(default=0)
     fangs_lvl = models.IntegerField(default=0)
     poison_lvl = models.IntegerField(default=0)
+    # «فرم سیاه» level 0–5 (game/shadow.py): each level adds SHADOW_POWER_PER_LEVEL power and
+    # lifts this creature's power cap by the same amount
+    shadow_level = models.IntegerField(default=0)
 
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -572,6 +577,8 @@ class DungeonProfile(models.Model):
     keys = models.IntegerField(default=0)
     keys_day = models.CharField(max_length=10, blank=True, default="")  # last daily refill (game day)
     black_runes = models.IntegerField(default=0)
+    shadow_cores = models.IntegerField(default=0)   # «هسته‌ی سایه», spent on the black form
+    best_difficulty = models.IntegerField(default=0)  # 0 none · 1 normal · 2 hard · 3 nightmare cleared
     runs = models.IntegerField(default=0)
     clears = models.IntegerField(default=0)
     best_room = models.IntegerField(default=0)
