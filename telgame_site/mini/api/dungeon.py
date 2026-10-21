@@ -49,6 +49,9 @@ def _state(user: User) -> dict:
         "relics": len(relics.active(user)) if v["unlocked"] else 0,
         "daily_keys": D.DAILY_KEYS, "rooms": D.ROOMS, "run": None,
         "shadow_cores": v["shadow_cores"], "difficulties": v["difficulties"],
+        "endless_open": v.get("endless_open", False),
+        "week_el": v.get("week_el"), "week_favoured": v.get("week_favoured", []),
+        "week_boost": round(D.WEEK_BOOST * 100),
     }
     run = v["run"]
     if run is None:
@@ -58,9 +61,11 @@ def _state(user: User) -> dict:
     imgs = {cid: creature_img(c) for cid, c in rows.items()}
     enemy = st.get("enemy")
     out["run"] = {
-        "phase": st["phase"], "room": st["room"], "boss": st["room"] > D.ROOMS,
+        "phase": st["phase"], "room": st["room"],
+        "endless": bool(st.get("endless")),
+        "boss": (st["room"] % D.ENDLESS_BOSS_EVERY == 0) if st.get("endless") else st["room"] > D.ROOMS,
         "difficulty": st.get("difficulty", "normal"),
-        "difficulty_label": D.DIFFICULTIES[st.get("difficulty", "normal")]["label"],
+        "difficulty_label": D._diff(st.get("difficulty"))["label"],
         "members": [{
             "id": m["id"], "name": _txt(m["name"]), "element": m["element"], "rarity": m["rarity"], "star": m["star"],
             "hp": m["hp"], "power": m["now_power"], "img": imgs.get(m["id"]),
@@ -85,7 +90,9 @@ def _finish(fin: dict | None) -> dict | None:
     return {"status": fin["status"], "loot": fin["loot"], "room": fin["room"], "share": fin["share"],
             "relic": _relic(fin["relic"]) if fin.get("relic") else None,
             "difficulty": fin.get("difficulty", "normal"), "unlocked": fin.get("unlocked"),
-            "badge": fin["badge"][1] if fin.get("badge") else None}
+            "badge": fin["badge"][1] if fin.get("badge") else None,
+            "endless": bool(fin.get("endless")), "floor": fin.get("floor"), "week_best": fin.get("week_best"),
+            "rank": fin.get("rank"), "new_record": bool(fin.get("new_record"))}
 
 
 @endpoint()
@@ -95,7 +102,7 @@ def home(request, user):
 
 @endpoint("POST")
 def start(request, user, data):
-    D.start(user, need_str(data, "difficulty", choices=tuple(D.DIFFICULTIES)) if data.get("difficulty") else "normal")
+    D.start(user, need_str(data, "difficulty", choices=tuple(D.DIFFICULTIES) + (D.ENDLESS,)) if data.get("difficulty") else "normal")
     return _state(User.objects.get(id=user.id))
 
 
@@ -211,6 +218,27 @@ def shadow_ascend(request, user, data):
     return out
 
 
+@endpoint()
+def endless_board(request, user):
+    """«جدول هفتگی بی‌انتها» (bot: dungeon_board)."""
+    from bio_lab.repository import lab_display
+
+    b = D.board(user)
+    last = None
+    if b["last"]:
+        ids = [r["user_id"] for r in b["last"]["results"][:3]]
+        names = {u.id: _txt(lab_display(u)) for u in User.objects.filter(id__in=ids)}
+        last = {"week": b["last"]["week"],
+                "top": [{"rank": r["rank"], "name": names.get(r["user_id"], "—"), "floor": r["floor"]} for r in b["last"]["results"][:3]]}
+    return {
+        "week": b["week"], "left": b["left"],
+        "rows": [{"rank": r["rank"], "name": _txt(lab_display(r["user"])), "floor": r["floor"], "me": r["user"].id == user.id}
+                 for r in b["rows"]],
+        "mine": b["mine"], "last": last,
+        "rewards": [{"rank": rank, "runes": runes, "cores": cores} for rank, runes, cores in b["rewards"]],
+    }
+
+
 routes = [
     ("", home),
     ("start/", start),
@@ -223,5 +251,6 @@ routes = [
     ("shop/buy/", shop_buy),
     ("relics/", relic_album),
     ("shadow/", shadow_view),
+    ("endless/", endless_board),
     ("shadow/ascend/", shadow_ascend),
 ]

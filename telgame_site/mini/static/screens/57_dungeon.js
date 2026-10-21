@@ -31,19 +31,27 @@
       '<div class="tiles mt">' +
       '<div class="panel info" style="color:var(--good)"><span class="ic">' + K.ic("trophy") + "</span><span><small>ورود موفق</small><b>" + K.n(d.clears) + " / " + K.n(d.runs) + "</b></span></div>" +
       '<div class="panel info" style="color:var(--accent)"><span class="ic">' + K.ic("ring") + "</span><span><small>آثار فعال</small><b>" + K.n(d.relics) + "</b></span></div></div>" +
+      (d.week_el ? '<div class="panel pad mt dg-week"><div class="flex between"><span class="b">' + K.ic("spark") + " عنصر هفته</span>" + K.elTag(d.week_el) + "</div>" +
+        '<div class="sm muted" style="margin-top:6px">بیشتر دشمن‌ها این عنصرن. برکت هفته: هیولاهای ' +
+        d.week_favoured.map(function (e) { return K.esc(K.elLabel(e)); }).join("، ") + " +" + K.n(d.week_boost) + "٪ قدرت.</div></div>" : "") +
       '<button class="panel dg-shadow-cta mt" data-act="shadow"><span class="dg-core">' + K.ic("atom") + '</span><span class="grow"><b>فرم سیاه</b>' +
       '<small class="muted">هسته‌ی سایه: ' + K.n(d.shadow_cores) + " · قدرتی فراتر از سقف</small></span>" + K.ic("chevron") + "</button>";
     if (d.run) {
       html += '<div class="callout warn mt">' + K.ic("warn") + "<div>یه ورود نیمه‌کاره داری · " + (d.run.boss ? "باس" : "اتاق " + K.n(d.run.room) + " از " + K.n(d.rooms)) + "</div></div>" +
         '<button class="btn danger lg block mt" data-act="go">' + K.ic("swords") + "ادامه‌ی ورود</button>";
     } else {
-      html += d.difficulties.map(function (t) {
-        if (!t.open) return '<div class="callout mt dg-tier-lock">' + K.ic("lock") + "<div>سختی «" + K.esc(t.label) + "» بعد از یه برد در سختی قبلی باز می‌شه.</div></div>";
-        return '<button class="btn ' + (t.key === "normal" ? "danger" : "dg-hard") + ' lg block mt" data-act="start" data-tier="' + t.key + '">' + K.ic(t.key === "nightmare" ? "skull" : "swords") +
-          "ورود · " + K.esc(t.label) + '<span class="cost">' + K.ic("lock") + " ۱</span></button>";
-      }).join("");
+      var open = d.difficulties.filter(function (t) { return t.open; }), locked = d.difficulties.filter(function (t) { return !t.open; });
+      if (d.endless_open) open.push({ key: "endless", label: "بی‌انتها" });
+      html += '<div class="h2">' + K.ic("swords") + 'ورود <span class="muted sm">(هر ورود ' + K.ic("lock") + " ۱ کلید)</span></div>" +
+        '<div class="dg-entries">' + open.map(function (t) {
+          return '<button class="btn ' + (t.key === "normal" ? "danger" : t.key === "endless" ? "dg-endless" : "dg-hard") + ' lg" data-act="start" data-tier="' + t.key + '">' +
+            K.ic(t.key === "nightmare" ? "skull" : t.key === "endless" ? "tower" : "swords") + K.esc(t.label) + "</button>";
+        }).join("") + "</div>" +
+        locked.map(function (t) { return '<div class="callout mt dg-tier-lock">' + K.ic("lock") + "<div>سختی «" + K.esc(t.label) + "» بعد از یه برد در سختی قبلی باز می‌شه.</div></div>"; }).join("") +
+        (d.endless_open ? "" : '<div class="callout mt dg-tier-lock">' + K.ic("lock") + "<div>«بی‌انتها» بعد از یه برد در سختی «سخت» باز می‌شه.</div></div>");
     }
     html += '<div class="btns mt"><button class="btn" data-act="shop">' + K.ic("cart") + 'فروشگاه</button><button class="btn" data-act="relics">' + K.ic("ring") + "آثار باستانی</button></div>" +
+      '<button class="btn block mt" data-act="board">' + K.ic("podium") + "جدول هفتگی بی‌انتها</button>" +
       '<p class="note">تیم حمله‌ات وارد می‌شه. سر هر اتاق یه در انتخاب کن؛ بعد هر برد یه رون موقت می‌گیری. با باخت یا ترک، نصف غنیمت بهت می‌رسه.</p>';
     return html;
   }
@@ -58,6 +66,7 @@
           K.api.post("dungeon/start/", { difficulty: el.dataset.tier || "normal" }, el).then(function () { K.haptic("ok"); K.go("dg_run"); }).catch(function () {});
         });
         K.on(root, "shadow", function (el) { shadowSheet(el, function () { if (ctx.alive()) K.reload(); }); });
+        K.on(root, "board", function (el) { boardSheet(el); });
         K.on(root, "shop", function (el) { shopSheet(el, function () { if (ctx.alive()) K.reload(); }); });
         K.on(root, "relics", function (el) { relicsSheet(el); });
       });
@@ -111,7 +120,7 @@
     var r = d.run;
     var got = loot(r.loot);
     return '<div class="banner dg-banner sm-banner ' + r.difficulty + '"><div class="grow"><div class="sm" style="color:#c5cee2">سیاه‌چال · ' + K.esc(r.difficulty_label) + '</div><div class="ttl">' +
-      (r.boss ? "باس" : "اتاق " + K.n(r.room) + " از " + K.n(d.rooms)) + "</div></div></div>" +
+      (r.endless ? (r.boss ? "باس طبقه‌ی " : "طبقه‌ی ") + K.n(r.room) : r.boss ? "باس" : "اتاق " + K.n(r.room) + " از " + K.n(d.rooms)) + "</div></div></div>" +
       '<div class="panel dg-loot mt"><span class="muted sm">' + K.ic("box") + " غنیمت</span><span>" + (got || '<span class="faint sm">هنوز چیزی نیست</span>') + "</span></div>" +
       (note ? '<div class="callout mt"><div class="dg-note">' + note + "</div></div>" : "") +
       teamHtml(r) +
@@ -124,8 +133,12 @@
   function finishHtml(f) {
     var head = { won: ["trophy", "باس سیاه‌چال رو شکست دادی!", "var(--gold)"], lost: ["skull", "تیمت از پا افتاد…", "var(--bad)"],
       quit: ["back", "از سیاه‌چال بیرون اومدی.", "var(--accent)"] }[f.status];
+    if (f.endless) head = f.status === "lost" ? ["tower", "سفرت توی بی‌انتها تموم شد", "var(--mythic)"] : ["back", "از بی‌انتها بیرون اومدی.", "var(--accent)"];
     return '<div class="panel pad center dg-finish"><div class="dg-sigil" style="color:' + head[2] + '">' + K.ic(head[0]) + "</div><h3>" + head[1] + "</h3>" +
       (f.share < 1 ? '<p class="sm muted">نصف غنیمت جمع‌شده بهت رسید.</p>' : "") +
+      (f.endless ? '<div class="dg-floor"><b class="num">' + K.n(f.floor) + "</b><small>طبقه</small></div>" +
+        (f.new_record ? '<div class="tag" style="color:var(--gold)">' + K.ic("trophy") + "رکورد جدید این هفته!</div>" : "") +
+        '<p class="sm muted mt">رکورد هفته‌ات: طبقه‌ی ' + K.n(f.week_best) + " · رتبه‌ی " + (f.rank ? K.n(f.rank) : "—") + "</p>" : "") +
       '<div class="mt">' + loot(f.loot) + (f.loot.cores ? ' <span class="faint">·</span> <span class="dg-rn b">' + K.ic("atom") + " " + K.n(f.loot.cores) + " هسته‌ی سایه</span>" : "") + "</div>" +
       (f.unlocked ? '<div class="callout good mt">' + K.ic("lock") + "<div><b>سختی «" + K.esc(f.unlocked) + "» باز شد!</b></div></div>" : "") +
       (f.badge ? '<div class="callout mt dg-badge">' + K.ic("medal") + "<div><b>نشان جدید: " + K.esc(f.badge) + '</b><br><span class="sm muted">از این به بعد کنار اسم آزمایشگاهت دیده می‌شه.</span></div></div>' : "") +
@@ -245,6 +258,26 @@
         });
       }
       box = K.sheet(body(d)); wire();
+    }).catch(function (e) { K.toast(e.message, "err"); }).finally(function () { btn.classList.remove("busy"); });
+  }
+
+  // «جدول هفتگی بی‌انتها»
+  function boardSheet(btn) {
+    btn.classList.add("busy");
+    K.api.get("dungeon/endless/").then(function (b) {
+      var rows = b.rows.length ? '<div class="panel list">' + b.rows.map(function (r) {
+        return '<div class="' + (r.me ? "me" : "") + '"><span class="ic num">' + K.n(r.rank) + '</span><span class="t">' + K.esc(r.name) + '</span><span class="v">طبقه‌ی ' + K.n(r.floor) + "</span></div>";
+      }).join("") + "</div>" : '<div class="panel pad center muted">هنوز کسی این هفته وارد بی‌انتها نشده — اولین نفر باش!</div>';
+      var rew = b.rewards.slice(0, 3).map(function (x) { return "رتبه " + K.n(x.rank) + ": " + K.n(x.runes) + " رون و " + K.n(x.cores) + " هسته"; }).join(" · ") +
+        " · ۴ تا ۱۰: " + K.n(b.rewards[3].runes) + " رون و " + K.n(b.rewards[3].cores) + " هسته";
+      var box = K.sheet('<div class="grab"></div><div class="pad"><div class="ttl" style="font-size:18px">جدول هفتگی بی‌انتها</div>' +
+        '<p class="lead" style="margin:4px 0 12px"><span class="timer" data-left="' + b.left + '" data-fmt="long" data-done="تموم شد"></span> تا پایان هفته</p>' + rows +
+        '<div class="panel pad mt">' + (b.mine ? "تو: طبقه‌ی " + K.n(b.mine.floor) + " · رتبه‌ی " + K.n(b.mine.rank) : "تو هنوز این هفته طبقه‌ای ثبت نکردی.") + "</div>" +
+        '<div class="h2">' + K.ic("gift") + 'جایزه‌ی آخر هفته</div><p class="sm muted">' + rew + "</p>" +
+        (b.last ? '<div class="h2">' + K.ic("podium") + "برنده‌های هفته‌ی قبل</div>" + '<div class="panel list">' + b.last.top.map(function (r) {
+          return '<div><span class="ic num">' + K.n(r.rank) + '</span><span class="t">' + K.esc(r.name) + '</span><span class="v">طبقه‌ی ' + K.n(r.floor) + "</span></div>";
+        }).join("") + "</div>" : "") + "</div>");
+      K.timers(box);
     }).catch(function (e) { K.toast(e.message, "err"); }).finally(function () { btn.classList.remove("busy"); });
   }
 
