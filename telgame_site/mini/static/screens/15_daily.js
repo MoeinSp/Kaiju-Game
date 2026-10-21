@@ -105,7 +105,7 @@
 
   K.dy = { reveal: reveal, extras: extras, rewardLine: rewardLine, speedupText: speedupText, capsuleText: capsuleText, go: goAction, num: num, ticker: ticker };
 
-  // ───────────────────────── home summary (one small request for both home blocks) ─────────────────────────
+  // ───────────────────────── home summary (the lobby's data; also feeds the shop / event tile badges) ─────────────────────────
   var last = null, homeP = null;
   function homeData() {
     if (!homeP) {
@@ -117,6 +117,7 @@
   function touch(key, value) { if (last) last[key] = value; }
   K.dy.last = function () { return last; };
   K.dy.touch = touch;
+  K.dy.home = homeData;   // 10_home.js (the lobby)
 
   // ───────────────────────── story quest ─────────────────────────
   function questCard(q, big) {
@@ -148,18 +149,6 @@
     });
   }
 
-  K.homeSection({
-    order: 20,
-    render: function (el) {
-      return homeData().then(function (d) {
-        if (!d.quest) return;
-        function draw(q) { el.innerHTML = q ? '<div class="h2">' + K.ic("flag") + "قدم بعدی</div>" + questCard(q, false) : ""; }
-        draw(d.quest);
-        bindQuest(el, function (r) { draw(r.next); });
-      });
-    }
-  });
-
   K.screen("dy_story", {
     title: "قدم بعدی", tab: "home",
     render: function (root, params, ctx) {
@@ -174,34 +163,6 @@
         draw(d.quest);
         K.on(root, "dy-missions", function () { K.replace("dy_missions"); });
         bindQuest(root, function (r) { if (ctx.alive()) { draw(r.next); window.scrollTo(0, 0); } });
-      });
-    }
-  });
-
-  // ───────────────────────── home: the «پاداش امروز» card ─────────────────────────
-  function liveChips(d) {
-    var out = [];
-    if (d.boss) out.push('<button class="chip dy-live" style="--lc:var(--bad)" data-act="dy-go" data-go="worldboss">' + K.ic("skull") + "غول سرگردان" + DOT + K.n(d.boss.hits_left) + " ضربه</button>");
-    if (d.tournament_open) out.push('<button class="chip dy-live" style="--lc:var(--gold)" data-act="dy-go" data-go="tournament">' + K.ic("trophy") + "ثبت‌نام جام بازه</button>");
-    if (d.festival) out.push('<button class="chip dy-live" style="--lc:var(--' + (K.EL_ICON[d.festival.element] ? d.festival.element : "accent") + ')" data-act="dy-go" data-go="festival">' + K.ic("spark") + K.esc(d.festival.title) + "</button>");
-    if (d.wheel) out.push('<button class="chip dy-live" style="--lc:var(--accent-2)" data-act="dy-go" data-go="wheel">' + K.ic("wheel") + "گردونه‌ی رایگان</button>");
-    return out;
-  }
-  K.homeSection({
-    order: 22,
-    render: function (el) {
-      return homeData().then(function (d) {
-        var has = d.collectable > 0, chips = liveChips(d);
-        el.innerHTML = '<div class="h2">' + K.ic("gift") + "پاداش امروز</div>" +
-          '<div class="panel pad dy-card' + (has ? " gold" : "") + '"><button class="dy-card-top" data-act="dy-today">' +
-          '<span class="ico-box lg" style="color:' + (has ? "var(--gold)" : "var(--muted)") + '">' + K.ic(has ? "gift" : "calcheck") + "</span>" +
-          '<span class="grow"><b class="dy-block">' + (d.waiting ? K.n(d.waiting) + " چیز منتظرته" : "همه رو گرفتی") + "</b>" +
-          '<span class="sm muted dy-block">' + (has ? (d.collectable === d.waiting ? "یک‌جا همه رو بگیر" : K.n(d.collectable) + " تاش آماده‌ی دریافته") : d.waiting ? "یه سر به رویدادهای زنده بزن" : "فعلاً چیزی برای جمع کردن نمونده") + "</span></span>" +
-          '<span class="btn sm ' + (has ? "gold" : "") + '">' + (has ? "دریافت" : "ببین") + "</span></button>" +
-          (chips.length ? '<div class="row dy-chips">' + chips.join("") + "</div>" : "") +
-          (d.rule ? '<div class="xs muted dy-rule">' + K.ic("calendar") + " قانون این هفته: <b>" + K.esc(d.rule) + "</b></div>" : "") + "</div>";
-        K.on(el, "dy-today", function () { K.go("dy_today"); });
-        K.on(el, "dy-go", function (b) { goAction(b.dataset.go); });
       });
     }
   });

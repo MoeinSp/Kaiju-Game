@@ -702,6 +702,13 @@ window.K = (function () {
     }
     if (!items.length) html += K.state("hourglass", "به‌زودی", "این بخش داره آماده می‌شه.");
     root.innerHTML = html;
+    // a lone tile at the end of a two-column run would leave a hole next to it: stretch it
+    var run = [];
+    function closeRun() { if (run.length % 2) run[run.length - 1].classList.add("wide", "solo"); run = []; }
+    Array.prototype.forEach.call(root.querySelectorAll(".hub > *"), function (el) {
+      if (el.classList.contains("hubtile") && !el.classList.contains("wide")) run.push(el); else closeRun();
+    });
+    closeRun();
     var bound = !!root._khub; root._khub = items;
     if (bound) return;                       // re-drawn in place: the click handler is already there
     root.addEventListener("click", function (ev) {

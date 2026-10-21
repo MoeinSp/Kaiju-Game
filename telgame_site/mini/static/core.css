@@ -389,3 +389,37 @@ nav.tabs .dot.live { top: 11px; min-width: 9px; width: 9px; height: 9px; padding
 .fighter.shadow .nm { color: #e3ccff; text-shadow: 0 0 8px rgba(170, 100, 255, .7); }
 .cr-head.shadow { border-color: rgba(176, 110, 255, .55); background: linear-gradient(160deg, rgba(90, 40, 170, .22), transparent 70%); }
 @media (prefers-reduced-motion: reduce) { .shadow, .shadow .aura i { animation: none !important; } }
+
+/* ───────── game skin (2026-10): a living background, glossier panels, a raised «نبرد» tab ───────── */
+body::before {
+  background:
+    radial-gradient(900px 480px at 85% -140px, rgba(58,214,255,.16), transparent 60%),
+    radial-gradient(760px 420px at -5% 8%, rgba(143,107,255,.16), transparent 60%),
+    radial-gradient(700px 520px at 50% 115%, rgba(255,77,109,.10), transparent 60%),
+    repeating-linear-gradient(0deg, rgba(255,255,255,.022) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.022) 0 1px, transparent 1px 34px),
+    linear-gradient(180deg, #0a0e18, #070910 60%, #0a0812);
+}
+body::after { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(140% 90% at 50% 40%, transparent 55%, rgba(0,0,0,.55)); }
+.panel { background: linear-gradient(180deg, rgba(30,39,58,.92), rgba(13,17,27,.94)); border-color: rgba(255,255,255,.085);
+  box-shadow: 0 8px 22px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.06); }
+.hud { background: linear-gradient(180deg, rgba(8,11,18,.92), rgba(8,11,18,.78)); box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+
+nav.tabs { background: linear-gradient(180deg, rgba(16,21,34,.94), rgba(8,11,18,.98)); border-top: 1px solid rgba(255,255,255,.09);
+  box-shadow: 0 -8px 24px rgba(0,0,0,.45); overflow: visible; }
+nav.tabs .in { overflow: visible; }
+nav.tabs button[data-tab="battle"] { color: #fff; }
+nav.tabs button[data-tab="battle"] svg { width: 30px; height: 30px; position: relative; z-index: 1; }
+nav.tabs button[data-tab="battle"]::after { content: ""; position: absolute; top: -18px; width: 62px; height: 62px; border-radius: 50%; z-index: 0;
+  background: radial-gradient(circle at 35% 30%, #ff8a8a, #d6264f 70%); border: 2px solid rgba(255,190,190,.6);
+  box-shadow: 0 6px 0 #8f1531, 0 10px 24px rgba(214,38,79,.5); }
+nav.tabs button[data-tab="battle"] svg { transform: translateY(-14px); filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
+nav.tabs button[data-tab="battle"] span { position: relative; z-index: 1; margin-top: -8px; font-weight: 700; }
+nav.tabs button[data-tab="battle"].on::before { display: none; }
+nav.tabs button[data-tab="battle"].on::after { animation: tabPulse 2.4s ease-in-out infinite; }
+nav.tabs button[data-tab="battle"].on svg { transform: translateY(-14px); }
+nav.tabs button[data-tab="battle"]:active svg { transform: translateY(-11px) scale(.92); }
+nav.tabs button[data-tab="battle"] .dot { top: -14px; inset-inline-end: calc(50% - 36px); z-index: 2; }
+@keyframes tabPulse { 50% { box-shadow: 0 6px 0 #8f1531, 0 10px 34px rgba(255,80,120,.75); } }
+@media (prefers-reduced-motion: reduce) { nav.tabs button[data-tab="battle"].on::after { animation: none; } }
