@@ -276,16 +276,20 @@
         var tint = o.group === "food" ? "var(--earth)" : o.group === "speed" ? "var(--accent)" : dia ? "var(--diamond)" : "var(--coin)";
         return '<button class="panel shs-card' + (out ? " out" : "") + (o.featured ? " hot" : "") + '" data-act="offer" data-key="' + K.esc(o.key) + '"' + (out ? " disabled" : "") + ' style="--tc:' + tint + '">' +
           '<span class="shs-art"' + (o.img ? ' style="background-image:url(\'' + o.img + '\')"' : "") + '><span class="shs-ai">' + K.ic(o.group === "food" ? "food" : o.group === "speed" ? "hourglass" : "tagp") + "</span>" +
+          (cut && !out ? '<span class="shs-off num">-' + Math.round(100 * (1 - o.price / o.base)) + "%</span>" : "") +
           (o.featured ? '<span class="shs-hot">' + K.ic("flame") + "ویژه‌ی امروز</span>" : "") + (out ? '<span class="shs-cover">' + K.ic("check") + "سقف امروز پر شد</span>" : "") + "</span>" +
           '<span class="shs-cb"><b>' + K.esc(o.title) + "</b><small>" + K.esc(o.gets) + "</small>" +
           '<small class="shs-lim">' + (o.remaining != null ? (out ? "فردا دوباره" : K.n(o.remaining) + " عدد مانده") : o.qty ? "هر تعداد که بخوای" : "") + "</small>" +
           '<span class="shs-pr">' + (cut ? '<s class="faint num">' + Number(o.base).toLocaleString("en-US") + "</s>" : "") + money(o.currency, o.price) + "</span></span></button>";
       }
       function daily(d) {
-        var html = banner(d.img, "فروشگاه روزانه", "آفرها هر روز عوض می‌شن");
+        // a live countdown to the midnight turnover, like the «refresh in» clock of a game shop
+        var clock = d.resets_in != null ? '<span class="shs-clock">' + K.ic("clock") + 'آفرهای تازه تا <span class="timer" data-until="' + scr.until(d.resets_in) + '" data-done="الان"></span></span>' : "";
+        var html = banner(d.img, "فروشگاه روزانه", clock || "آفرها هر روز عوض می‌شن");
         if (d.gem) {
           var g = d.gem;
-          html += '<div class="h2">' + K.ic("gem") + 'کایجوی جمی امروز</div><div class="panel pad glow"><div class="fighter ' + g.rarity + '">' + (g.img ? '<img src="' + g.img + '" alt="">' : "") +
+          html += '<div class="h2">' + K.ic("gem") + 'کایجوی جمی امروز</div><div class="panel pad glow shs-gem' + (g.claimed ? "" : " live") + '">' +
+            (g.claimed ? "" : '<span class="shs-ribbon">پیشنهاد امروز</span>') + '<div class="fighter ' + g.rarity + '">' + (g.img ? '<img src="' + g.img + '" alt="">' : "") +
             '<div class="grow"><div class="nm cut">' + K.esc(g.name) + '</div><div class="shs-tags">' + K.rarTag(g.rarity) + K.elTag(g.element) + '</div><div class="sm muted">هم‌گونه و هم‌رده‌ی یکی از قوی‌ترین هیولاهات؛ روزی یه بار.</div></div></div>' +
             (g.claimed ? '<button class="btn block mt" disabled>' + K.ic("check") + "امروز خریدی</button>"
                        : '<button class="btn primary block mt" data-act="gem"><span>خرید</span><span class="cost">' + K.ic("diamond") + " " + K.n(g.price) + "</span></button>") + "</div>";

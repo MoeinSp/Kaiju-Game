@@ -65,6 +65,12 @@
       '<span class="lb-q-go">' + (q.done ? "دریافت" : K.ic("chevron")) + "</span></button>";
   }
 
+  /* the season (or the running festival) as a small chip across from the player's plate */
+  function seasonChip(d) {
+    if (d.festival) return '<button class="lb-season fest" data-act="go" data-go="' + (tileGo("festival") || "") + '">' + K.ic("spark") + K.esc(d.festival.title) + "</button>";
+    return K.season ? '<span class="lb-season s-' + K.season.key + '"><i></i>' + K.season.label + "</span>" : "";
+  }
+
   function lobby(me, d) {
     d = d || {};
     var left = [
@@ -80,8 +86,8 @@
       sideBtn("go", "users", "اتحاد", "var(--rare)", badgeOf("alliance"), tileGo("alliance")),
     ];
     return '<div class="lobby">' +
-      '<div class="lb-bg" style="background-image:url(' + K.asset("img/bg_home.jpg") + ')"><i class="lb-fog"></i><i class="lb-motes"></i></div>' +
-      '<div class="lb-top">' + plate(me) + "</div>" +
+      '<div class="lb-bg" style="background-image:url(' + K.asset("img/bg_home.jpg") + ')"><i class="lb-fog"></i><i class="lb-motes"></i>' + (K.seasonFx ? K.seasonFx() : "") + "</div>" +
+      '<div class="lb-top">' + plate(me) + seasonChip(d) + "</div>" +
       liveStrip(d) +
       '<div class="lb-stage"><div class="lb-side">' + left.join("") + "</div>" + stage(me.active) + '<div class="lb-side">' + right.join("") + "</div></div>" +
       collect(d) + quest(d.quest) +
@@ -101,7 +107,9 @@
           if (ctx.alive()) K.coach(root.querySelector(".lb-collect"), "همه‌ی جایزه‌هات رو با یه لمس بگیر", "lb_collect");
         }, 900);
       }
-      (K.dy && K.dy.home ? K.dy.home() : K.api.get("daily/home/")).then(function (d) { daily = d; draw(); }).catch(function () {});
+      (K.dy && K.dy.home ? K.dy.home() : K.api.get("daily/home/")).then(function (d) {
+        daily = d; if (K.setFestival) K.setFestival(d.festival && d.festival.element); draw();
+      }).catch(function () {});
       return K.meFast(function (me) { me0 = me; draw(); }).then(function (me) {
         me0 = me; draw();
         K.on(root, "profile", function () { K.go("profile"); });

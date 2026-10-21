@@ -120,6 +120,35 @@
     ["pointerdown", "scroll"].forEach(function (ev) { window.addEventListener(ev, uncoach, { once: true, passive: true, capture: true }); });
   };
 
+  /* ── seasons: the scene's tint and falling particles follow the season (Tehran calendar), or the
+     element of a running festival. K.season = {key, label}; K.seasonFx() → particle layer html;
+     K.setFestival(element|null) is called by the lobby when the home summary arrives. ── */
+  var SEASONS = { spring: "بهار", summer: "تابستان", autumn: "پاییز", winter: "زمستان" };
+  function seasonKey(d) {
+    var md = (d.getMonth() + 1) * 100 + d.getDate();   // the Persian seasons start on the 21st–23rd
+    return md >= 321 && md < 622 ? "spring" : md >= 622 && md < 923 ? "summer" : md >= 923 && md < 1222 ? "autumn" : "winter";
+  }
+  K.season = { key: seasonKey(new Date()), label: "" };
+  K.season.label = SEASONS[K.season.key];
+  var tint = document.createElement("div");
+  tint.id = "season-tint"; document.body.insertBefore(tint, document.body.firstChild);
+  document.body.classList.add("season-" + K.season.key);
+  K.setFestival = function (element) {
+    if (element) { document.body.dataset.fest = element; document.body.style.setProperty("--fest", "var(--" + element + ")"); }
+    else { delete document.body.dataset.fest; document.body.style.removeProperty("--fest"); }
+  };
+  var fxHtml = null;   // one layout per visit: a redraw must not make the leaves jump
+  K.seasonFx = function () {
+    if (reduced) return "";
+    if (fxHtml) return fxHtml;
+    var n = K.season.key === "winter" ? 22 : 14, out = "";
+    for (var i = 0; i < n; i++) {
+      out += '<i style="--x:' + (Math.random() * 100).toFixed(1) + "%;--s:" + (K.season.key === "winter" ? 3 + Math.random() * 4 : 7 + Math.random() * 6).toFixed(1) +
+        "px;--d:" + (7 + Math.random() * 8).toFixed(1) + "s;--w:-" + (Math.random() * 12).toFixed(1) + "s;--dx:" + Math.round(Math.random() * 120 - 60) + "px;--r:" + Math.round(Math.random() * 360) + 'deg"></i>';
+    }
+    return (fxHtml = '<span class="season-fx" aria-hidden="true">' + out + "</span>");
+  };
+
   /* ── K.reward: hold the count-up while the sheet is open, then fly on «عالیه» ── */
   var baseReward = K.reward;
   K.reward = function (o) {

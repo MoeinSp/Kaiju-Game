@@ -79,3 +79,39 @@
 .hud, nav.tabs { -webkit-backdrop-filter: none; backdrop-filter: none; }
 .hud { background: linear-gradient(180deg, rgba(8,11,18,.97), rgba(8,11,18,.9)); }
 @media (prefers-reduced-motion: reduce) { .loot .burst, .loot .cards > *, .loot .items .it { animation: none !important; } }
+
+/* ── seasons (K.season / K.setFestival): a tint over the page background + falling particles ── */
+#season-tint { position: fixed; inset: 0; z-index: -1; pointer-events: none; transition: background .6s; }
+.season-autumn #season-tint { background: radial-gradient(820px 460px at 82% -120px, rgba(255,140,40,.2), transparent 60%), radial-gradient(700px 420px at 0% 34%, rgba(200,70,30,.13), transparent 60%); }
+.season-winter #season-tint { background: radial-gradient(820px 460px at 82% -120px, rgba(170,225,255,.2), transparent 60%), radial-gradient(700px 420px at 0% 34%, rgba(225,240,255,.1), transparent 60%); }
+.season-spring #season-tint { background: radial-gradient(820px 460px at 82% -120px, rgba(120,230,140,.16), transparent 60%), radial-gradient(700px 420px at 0% 34%, rgba(255,150,200,.14), transparent 60%); }
+.season-summer #season-tint { background: radial-gradient(820px 460px at 82% -120px, rgba(255,210,80,.18), transparent 60%), radial-gradient(700px 420px at 0% 34%, rgba(58,214,255,.12), transparent 60%); }
+body[data-fest] #season-tint { background: radial-gradient(820px 460px at 82% -120px, color-mix(in srgb, var(--fest) 28%, transparent), transparent 60%),
+  radial-gradient(700px 420px at 0% 34%, color-mix(in srgb, var(--fest) 16%, transparent), transparent 60%); }
+
+.season-fx { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; }
+.season-fx i { position: absolute; top: -24px; left: var(--x); width: var(--s); height: var(--s); opacity: 0; animation: sFall var(--d) linear var(--w) infinite; }
+@keyframes sFall { 0% { transform: translate(0, 0) rotate(var(--r)); opacity: 0; } 8% { opacity: .85; } 85% { opacity: .75; }
+  100% { transform: translate(var(--dx), 820px) rotate(calc(var(--r) + 420deg)); opacity: 0; } }
+.season-autumn .season-fx i { border-radius: 0 75% 0 75%; background: linear-gradient(135deg, #ffbe55, #d9541e); }
+.season-autumn .season-fx i:nth-child(3n) { background: linear-gradient(135deg, #ffd36b, #b8860b); }
+.season-winter .season-fx i { border-radius: 50%; background: #fff; box-shadow: 0 0 6px rgba(255,255,255,.9); }
+.season-spring .season-fx i { border-radius: 75% 0 75% 0; background: linear-gradient(135deg, #ffd6e8, #ff8fbf); }
+.season-summer .season-fx i, body[data-fest] .season-fx i { top: auto; bottom: -10px; width: calc(var(--s) * .5); height: calc(var(--s) * .5); border-radius: 50%;
+  background: #ffe98a; box-shadow: 0 0 10px 2px rgba(255,220,90,.8); animation-name: sRise; }
+body[data-fest] .season-fx i { background: color-mix(in srgb, var(--fest) 70%, #fff); box-shadow: 0 0 10px 2px color-mix(in srgb, var(--fest) 80%, transparent); }
+@keyframes sRise { 0% { transform: translate(0, 0); opacity: 0; } 15% { opacity: .9; } 50% { transform: translate(var(--dx), -380px); } 85% { opacity: .7; }
+  100% { transform: translate(calc(var(--dx) * -.5), -760px); opacity: 0; } }
+
+/* the season / festival chip across from the player's plate */
+.lb-top { justify-content: space-between; align-items: flex-start; gap: 8px; }
+.lb-season { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 30px; margin-top: 8px; padding: 0 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; color: #fff;
+  background: rgba(8,11,18,.72); border: 1px solid rgba(255,255,255,.18); box-shadow: 0 4px 12px rgba(0,0,0,.35); }
+.lb-season i { width: 10px; height: 10px; border-radius: 0 75% 0 75%; background: linear-gradient(135deg, #ffbe55, #d9541e); }
+.lb-season.s-winter i { border-radius: 50%; background: #fff; box-shadow: 0 0 6px #fff; }
+.lb-season.s-spring i { border-radius: 75% 0 75% 0; background: #ff8fbf; }
+.lb-season.s-summer i { border-radius: 50%; background: #ffe98a; box-shadow: 0 0 8px #ffd23d; }
+.lb-season.fest { color: var(--fest, var(--accent)); border-color: color-mix(in srgb, var(--fest, var(--accent)) 60%, transparent); max-width: 44%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.lb-season.fest svg { width: 14px; height: 14px; flex: none; }
+@media (prefers-reduced-motion: reduce) { .season-fx { display: none; } }
+.lb-top .lb-plate { flex: 0 1 auto; min-width: 0; }

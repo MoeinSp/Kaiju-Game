@@ -106,3 +106,20 @@
 .shv-tier .list > * { padding: 8px 14px; font-size: 13.5px; }
 .shv-price { display: flex; justify-content: space-between; align-items: center; padding: 11px 14px; border-top: 1px solid var(--line); background: rgba(255,255,255,.025); }
 .shv-price .b { color: var(--tv, var(--text)); font-size: 15px; }
+
+/* ── game-shop dressing: refresh clock, discount badges, the day's special in a gold frame ── */
+.shs-clock { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #fff;
+  background: rgba(8,11,18,.7); border: 1px solid rgba(255,255,255,.18); }
+.shs-clock svg { width: 13px; height: 13px; color: var(--gold); } .shs-clock .timer { font-family: var(--display); font-size: 14px; color: var(--gold); letter-spacing: .4px; }
+.shs-off { position: absolute; z-index: 2; bottom: 8px; inset-inline-end: 8px; padding: 2px 7px; border-radius: 8px; font-family: var(--display); font-size: 14px; color: #fff;
+  background: linear-gradient(180deg, #ff6f82, #d4304e); border: 1px solid #ffc0ca; box-shadow: 0 2px 0 #7d1230; transform: rotate(-6deg); }
+.shs-card.hot { position: relative; border: 2px solid #ffc53d; box-shadow: 0 0 0 1px #8a4b00, 0 8px 24px rgba(255,170,40,.28); }
+.shs-card.hot::before { content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none; border-radius: inherit;
+  background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,.28) 48%, transparent 60%); background-size: 260% 100%; animation: shsShine 3.2s ease-in-out infinite; }
+@keyframes shsShine { 0% { background-position: 130% 0; } 60%, 100% { background-position: -130% 0; } }
+.shs-hot { background: linear-gradient(180deg, #ffd65e, #e89a12); color: #5a2e00; border: 1px solid #fff0b8; box-shadow: 0 2px 0 #8a4b00; }
+.shs-gem { position: relative; overflow: hidden; }
+.shs-gem.live { border: 2px solid #ffc53d; box-shadow: 0 0 0 1px #8a4b00, 0 8px 26px rgba(255,170,40,.25); }
+.shs-ribbon { position: absolute; z-index: 2; top: 16px; inset-inline-end: -34px; width: 140px; padding: 4px 0; text-align: center; transform: rotate(-38deg);
+  font-family: var(--display); font-size: 13px; color: #fff; background: linear-gradient(180deg, #ff6f82, #d4304e); box-shadow: 0 3px 8px rgba(0,0,0,.45); text-shadow: 0 1px 0 #7d1230; }
+@media (prefers-reduced-motion: reduce) { .shs-card.hot::before { animation: none; } }

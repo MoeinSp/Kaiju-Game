@@ -263,7 +263,15 @@ def _store_payload(user) -> dict:
         "arena": {"left": shield_remaining_seconds(user), "tiers": _shield_tiers(constants.SHIELD_SHOP_TIERS)},
         "group": {"left": group_shield_remaining_seconds(user), "tiers": _shield_tiers(constants.GROUP_SHIELD_SHOP_TIERS)},
     }
+    # the daily offers, their limits and the gem kaiju all turn over at midnight (game.daily.today_str)
+    import datetime
+
+    from django.utils import timezone
+
+    now = timezone.localtime()
+    midnight = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     return {
+        "resets_in": max(0, int((midnight - now).total_seconds())),
         "offers": offers, "items": items, "gem": gem, "shield": shield,
         "gold_packs": [{"idx": i, "gold": p["gold"], "diamonds": p["diamonds"]} for i, p in enumerate(shop.GOLD_PACKS)],
         "img": feature_img("shop"), "img_shield": feature_img("shield_shop"), "img_gold": feature_img("gold_shop"),

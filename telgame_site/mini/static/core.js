@@ -751,7 +751,7 @@ window.K = (function () {
     var me = K.me || {}, items = (hubs[hub] || []).slice().sort(function (a, b) { return (a.order || 50) - (b.order || 50); });
     var groups = HUB_GROUPS[hub] || [], heroIds = HUB_HERO[hub] || [], html = "";
     head = head || {};
-    html += '<div class="hx-bg"' + (head.img ? ' style="background-image:url(' + K.asset("img/" + head.img) + ')"' : "") + '><i class="lb-fog"></i><i class="lb-motes"></i></div>';
+    html += '<div class="hx-bg"' + (head.img ? ' style="background-image:url(' + K.asset("img/" + head.img) + ')"' : "") + '><i class="lb-fog"></i><i class="lb-motes"></i>' + (K.seasonFx ? K.seasonFx() : "") + "</div>";
     if (head.title) html += '<div class="hx-head"><b>' + head.title + "</b><span>" + (head.sub || "") + "</span></div>";
     var map = HUB_MAP[hub];
     if (map) { html += mapHtml(); heroIds = []; }
