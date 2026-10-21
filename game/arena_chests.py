@@ -230,7 +230,7 @@ def advance_user_chests(user: User) -> None:
                 queued = ArenaChest.objects.filter(user=user, status="queued").order_by("slot").first()
                 if queued:
                     cfg = ARENA_CHEST_TIERS.get(queued.chest_type, ARENA_CHEST_TIERS["silver"])
-                    duration = datetime.timedelta(hours=cfg["unlock_hours"])
+                    duration = _unlock_duration(user, cfg)
                     start_time = finish_time
                     fin_time = start_time + duration
                     queued.unlock_starts_at = start_time
@@ -252,7 +252,7 @@ def advance_user_chests(user: User) -> None:
             queued = ArenaChest.objects.filter(user=user, status="queued").order_by("slot").first()
             if queued:
                 cfg = ARENA_CHEST_TIERS.get(queued.chest_type, ARENA_CHEST_TIERS["silver"])
-                duration = datetime.timedelta(hours=cfg["unlock_hours"])
+                duration = _unlock_duration(user, cfg)
                 start_time = now
                 fin_time = start_time + duration
                 queued.unlock_starts_at = start_time
@@ -267,6 +267,13 @@ def advance_user_chests(user: User) -> None:
                     break
             else:
                 break
+
+
+def _unlock_duration(user: User, cfg: dict) -> datetime.timedelta:
+    """How long a chest of this tier takes to open for this player («ساعت شنی» relic: −15%)."""
+    from game import relics
+
+    return datetime.timedelta(hours=cfg["unlock_hours"] * relics.mult(user, "sand_clock"))
 
 
 @transaction.atomic
@@ -286,7 +293,7 @@ def start_unlock(user: User, chest_id: int) -> ArenaChest:
 
     cfg = ARENA_CHEST_TIERS.get(chest.chest_type, ARENA_CHEST_TIERS["silver"])
     now = timezone.now()
-    duration = datetime.timedelta(hours=cfg["unlock_hours"])
+    duration = _unlock_duration(user, cfg)
 
     chest.status = "unlocking"
     chest.unlock_starts_at = now

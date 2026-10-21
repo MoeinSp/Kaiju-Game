@@ -122,7 +122,10 @@ def slots(user: User, level: int | None = None) -> int:
     from game.subscription import is_subscription_active
 
     level = hq_level(user) if level is None else level
-    return HQ_SLOTS[level] + (SLOTS_SUBSCRIBER_EXTRA if is_subscription_active(user) else 0)
+    from game import relics
+
+    return (HQ_SLOTS[level] + (SLOTS_SUBSCRIBER_EXTRA if is_subscription_active(user) else 0)
+            + relics.bonus(user, "compass"))  # «قطب‌نمای کهن» (dungeon relic)
 
 
 def bonus_chance(hours: int, level: int) -> float:

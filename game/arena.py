@@ -507,6 +507,13 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
             else:
                 loot, dna_win = constants.arena_loot_roll(attacker.cup)
 
+        # «پرچم جنگ» (dungeon relic): +10% on top for the attacker — the defender still
+        # loses only what was taken from them
+        from game import relics
+
+        banner = relics.mult(attacker, "war_banner")
+        if banner > 1:
+            loot, dna_win = round(loot * banner), round(dna_win * banner)
         attacker.coins += (loot + plundered_collector_gold)
         attacker.dna_fragments += (dna_win + plundered_collector_dna)
         # flat league bonus per WINNING raid (only in the real ranked arena)

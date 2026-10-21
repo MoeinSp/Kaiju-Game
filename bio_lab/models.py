@@ -564,6 +564,48 @@ class FestivalState(models.Model):
     last_settled_key = models.CharField(max_length=16, default="", blank=True)
 
 
+class DungeonProfile(models.Model):
+    """A player's «سیاه‌چال» wallet and record (game/dungeon.py): keys, the black-rune
+    currency, and lifetime stats."""
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="dungeon")
+    keys = models.IntegerField(default=0)
+    keys_day = models.CharField(max_length=10, blank=True, default="")  # last daily refill (game day)
+    black_runes = models.IntegerField(default=0)
+    runs = models.IntegerField(default=0)
+    clears = models.IntegerField(default=0)
+    best_room = models.IntegerField(default=0)
+
+
+class DungeonRun(models.Model):
+    """One trip through the dungeon. Its whole state is the JSON `state` (game/dungeon.py
+    owns the schema); one ACTIVE run per player at a time."""
+
+    ACTIVE, WON, LOST, QUIT = "active", "won", "lost", "quit"
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="dungeon_runs")
+    difficulty = models.CharField(max_length=16, default="normal")
+    status = models.CharField(max_length=8, default=ACTIVE)
+    state = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "status"], name="dungeonrun_user_status_idx")]
+
+
+class UserRelic(models.Model):
+    """An «اثر باستانی» a player holds until `expires_at` (game/relics.py). A repeat drop
+    extends it; it is never permanent."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="relics")
+    key = models.CharField(max_length=24)
+    expires_at = models.DateTimeField()
+    times = models.IntegerField(default=1)  # how many times it dropped (album)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "key"], name="uq_user_relic")]
+
+
 class RewardChest(models.Model):
     """A reward chest waiting to be opened by its owner (game/reward_chests.py). source tells
     where it came from ("worldboss"), ref which one (the boss id)."""

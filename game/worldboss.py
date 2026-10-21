@@ -249,7 +249,10 @@ def hit(user: User) -> dict:
     research.attach_research(user, creature)
     power = creature_power(creature, get_equipped_items(creature))
     advantage = constants.is_strong_against(creature.element, boss.element)
-    raw = power * (constants.ELEMENT_ADVANTAGE_POWER_FACTOR if advantage else 1.0)
+    from game import relics
+
+    raw = (power * (constants.ELEMENT_ADVANTAGE_POWER_FACTOR if advantage else 1.0)
+           * relics.mult(user, "titan_fang"))  # «نیش تایتان» (dungeon relic)
     damage = max(1, min(int(round(raw)), boss.current_hp))  # overkill doesn't count
 
     coins, dna = hit_reward(damage)

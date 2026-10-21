@@ -14,9 +14,11 @@ class EnergyError(GameError):
 
 def get_max_energy(user: User) -> int:
     """Subscribers get MAX_ENERGY_SUBSCRIBER; everyone else MAX_ENERGY."""
+    from game import relics
     from game.subscription import is_subscription_active
 
-    return constants.MAX_ENERGY_SUBSCRIBER if is_subscription_active(user) else constants.MAX_ENERGY
+    base = constants.MAX_ENERGY_SUBSCRIBER if is_subscription_active(user) else constants.MAX_ENERGY
+    return base + relics.bonus(user, "heart_stone")  # «سنگ قلب» (dungeon relic)
 
 
 def get_energy_regen_interval_seconds(user: User) -> float:

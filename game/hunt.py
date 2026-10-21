@@ -468,6 +468,10 @@ def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal",
     if won:
         # seed-based so the scout card's shown number equals the actual payout
         coins, dna = hunt_reward_roll(power, tier, seed, loot_mult)
+        from game import relics  # «بت طلایی» / «شیشه‌ی ژن» (dungeon relics)
+
+        coins = round(coins * relics.mult(user, "golden_idol"))
+        dna = round(dna * relics.mult(user, "dna_vial"))
         xp_gain = round(HUNT_XP_WIN * reward_mult)
     else:
         coins = 0
