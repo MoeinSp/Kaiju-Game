@@ -394,8 +394,8 @@ window.K = (function () {
   K.creatureTile = function (c, opts) {
     opts = opts || {}; var tag = opts.tag || "button";
     var flag = opts.flag ? '<span class="flag new">' + K.esc(opts.flag) + "</span>" : c.active ? '<span class="flag act">' + K.ic("check") + "فعال</span>" : c.busy ? '<span class="flag busy">' + K.ic("clock") + "مشغول</span>" : "";
-    return "<" + tag + ' class="tile ' + c.rarity + (opts.sel ? " sel" : "") + (opts.dim ? " dim" : "") + '" data-creature="' + (c.id || "") + '" ' + (opts.attrs || "") + ">" +
-      '<img class="pic" loading="lazy" decoding="async" src="' + c.img + '" alt=""><span class="shade"></span>' + flag +
+    return "<" + tag + ' class="tile ' + c.rarity + K.shadowCls(c) + (opts.sel ? " sel" : "") + (opts.dim ? " dim" : "") + '" data-creature="' + (c.id || "") + '" ' + (opts.attrs || "") + ">" +
+      '<img class="pic" loading="lazy" decoding="async" src="' + c.img + '" alt=""><span class="shade"></span>' + K.shadowFx(c) + flag +
       '<span class="el e-' + c.element + '">' + K.ic(K.EL_ICON[c.element] || "atom") + "</span>" +
       '<span class="body"><span class="nm">' + K.esc(c.name) + '</span><span class="sub">' + K.stars(c.star) + (c.power != null ? '<span class="p">' + K.ic("power") + K.n(c.power) + "</span>" : "") + "</span></span></" + tag + ">";
   };
@@ -408,8 +408,14 @@ window.K = (function () {
       '<span class="body"><span class="nm">' + K.esc(e.name) + '</span><span class="sub"><span>' + K.esc(K.slotLabel(e.slot)) + "</span>" + (e.power != null ? '<span class="p">' + K.ic("power") + K.n(e.power) + "</span>" : "") + "</span></span></" + tag + ">";
   };
   /* Compact row: thumbnail + name + tags + power. c = creatureDict (or {name,img,rarity,element,star,level,power}) */
+  /* «فرم سیاه» (game/shadow.py): c.shadow = level 0..5. The class drives the animated aura in
+     core.css; the badge names the level. */
+  K.shadowCls = function (c) { return c && c.shadow ? " shadow s" + c.shadow : ""; };
+  K.shadowFx = function (c) {
+    return c && c.shadow ? '<span class="aura" aria-hidden="true"><i></i><i></i><i></i></span><span class="shadow-tag">فرم سیاه ' + K.n(c.shadow) + "</span>" : "";
+  };
   K.fighter = function (c, sub) {
-    return '<div class="fighter ' + (c.rarity || "") + '"><img class="tile ' + (c.rarity || "") + '" style="box-shadow:0 0 0 1.5px var(--rc,var(--line))" loading="lazy" decoding="async" src="' + c.img + '" alt=""><div class="grow"><div class="nm cut">' + K.esc(c.name) + "</div>" +
+    return '<div class="fighter ' + (c.rarity || "") + K.shadowCls(c) + '"><img class="tile ' + (c.rarity || "") + '" style="box-shadow:0 0 0 1.5px var(--rc,var(--line))" loading="lazy" decoding="async" src="' + c.img + '" alt=""><div class="grow"><div class="nm cut">' + K.esc(c.name) + "</div>" +
       '<div class="sm muted">' + (c.star ? K.stars(c.star) + " " : "") + (c.level ? "سطح " + K.n(c.level) : "") + "</div>" + (sub || "") + "</div>" +
       (c.power != null ? '<span class="pw">' + K.ic("power") + K.n(c.power) + "</span>" : "") + "</div>";
   };

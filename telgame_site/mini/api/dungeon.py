@@ -48,18 +48,23 @@ def _state(user: User) -> dict:
         "keys": v["keys"], "black_runes": v["black_runes"], "runs": v["runs"], "clears": v["clears"],
         "relics": len(relics.active(user)) if v["unlocked"] else 0,
         "daily_keys": D.DAILY_KEYS, "rooms": D.ROOMS, "run": None,
+        "shadow_cores": v["shadow_cores"], "difficulties": v["difficulties"],
     }
     run = v["run"]
     if run is None:
         return out
     st = run["state"]
-    imgs = {c.id: creature_img(c) for c in Creature.objects.filter(id__in=[m["id"] for m in run["members"]])}
+    rows = {c.id: c for c in Creature.objects.filter(id__in=[m["id"] for m in run["members"]])}
+    imgs = {cid: creature_img(c) for cid, c in rows.items()}
     enemy = st.get("enemy")
     out["run"] = {
         "phase": st["phase"], "room": st["room"], "boss": st["room"] > D.ROOMS,
+        "difficulty": st.get("difficulty", "normal"),
+        "difficulty_label": D.DIFFICULTIES[st.get("difficulty", "normal")]["label"],
         "members": [{
             "id": m["id"], "name": _txt(m["name"]), "element": m["element"], "rarity": m["rarity"], "star": m["star"],
             "hp": m["hp"], "power": m["now_power"], "img": imgs.get(m["id"]),
+            "shadow": rows[m["id"]].shadow_level if m["id"] in rows else 0,
             "vs": m.get("vs"), "enemy_vs": m.get("enemy_vs"), "wins": m.get("wins"),
         } for m in run["members"]],
         "doors": [{"type": d} for d in st["doors"]] if st["phase"] == "doors" else [],
@@ -78,7 +83,9 @@ def _finish(fin: dict | None) -> dict | None:
     if not fin:
         return None
     return {"status": fin["status"], "loot": fin["loot"], "room": fin["room"], "share": fin["share"],
-            "relic": _relic(fin["relic"]) if fin.get("relic") else None}
+            "relic": _relic(fin["relic"]) if fin.get("relic") else None,
+            "difficulty": fin.get("difficulty", "normal"), "unlocked": fin.get("unlocked"),
+            "badge": fin["badge"][1] if fin.get("badge") else None}
 
 
 @endpoint()
@@ -88,7 +95,7 @@ def home(request, user):
 
 @endpoint("POST")
 def start(request, user, data):
-    D.start(user)
+    D.start(user, need_str(data, "difficulty", choices=tuple(D.DIFFICULTIES)) if data.get("difficulty") else "normal")
     return _state(User.objects.get(id=user.id))
 
 
@@ -166,6 +173,44 @@ def relic_album(request, user):
             "relics": [dict(r, desc=_txt(r["desc"])) for r in relics.album(user)]}
 
 
+# ══════════════════════════ «فرم سیاه» ══════════════════════════
+def _shadow_state(user: User) -> dict:
+    from game import constants, shadow
+    from game.equipment import equipped_items_map
+
+    rows = shadow.candidates(user)
+    prof = D.profile(user) if D.unlocked(user) else None
+    gear = equipped_items_map([r["creature"] for r in rows])
+    out = []
+    for r in rows:
+        c = r["creature"]
+        out.append({
+            "id": c.id, "name": _txt(c.name), "element": c.element, "rarity": c.rarity, "star": c.star_level,
+            "level": c.level, "power": r["power"], "img": creature_img(c), "shadow": r["level"],
+            "ok": r["ok"], "why": _txt(r["why"]), "next": r["next"], "max": r["next"] is None,
+            "gear": len(gear.get(c.id, [])),
+        })
+    return {"creatures": out, "cores": prof.shadow_cores if prof else 0,
+            "coins": User.objects.values_list("coins", flat=True).get(id=user.id),
+            "max_level": constants.SHADOW_MAX_LEVEL, "per_level": constants.SHADOW_POWER_PER_LEVEL,
+            "cap": constants.MAX_KAIJU_POWER}
+
+
+@endpoint()
+def shadow_view(request, user):
+    return _shadow_state(user)
+
+
+@endpoint("POST")
+def shadow_ascend(request, user, data):
+    from game import shadow
+
+    res = shadow.ascend(user, need_int(data, "creature_id", 1))
+    out = _shadow_state(User.objects.get(id=user.id))
+    out["done"] = {"name": _txt(res["creature"].name), "level": res["level"], "lord": res["lord"]}
+    return out
+
+
 routes = [
     ("", home),
     ("start/", start),
@@ -177,4 +222,6 @@ routes = [
     ("shop/", shop),
     ("shop/buy/", shop_buy),
     ("relics/", relic_album),
+    ("shadow/", shadow_view),
+    ("shadow/ascend/", shadow_ascend),
 ]

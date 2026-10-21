@@ -22,8 +22,8 @@
 
   function heroCard(a) {
     return '<div class="h2">' + K.ic("claw") + "هیولای فعال</div>" +
-      '<button class="panel hero" data-act="creature" data-id="' + a.id + '">' +
-      '<div class="art"><img src="' + a.img + '&s=l" alt="" decoding="async"><div class="over"><div><div class="ttl">' + K.esc(a.name) + "</div>" + K.stars(a.star) + "</div>" +
+      '<button class="panel hero' + K.shadowCls(a) + '" data-act="creature" data-id="' + a.id + '">' +
+      '<div class="art"><img src="' + a.img + '&s=l" alt="" decoding="async">' + K.shadowFx(a) + '<div class="over"><div><div class="ttl">' + K.esc(a.name) + "</div>" + K.stars(a.star) + "</div>" +
       '<div class="pow"><b>' + K.n(a.power) + "</b><small>قدرت</small></div></div></div>" +
       '<div class="meta">' + K.rarTag(a.rarity) + K.elTag(a.element) + K.tag("سطح " + K.n(a.level)) + "</div>" + K.statGrid(a) + "</button>";
   }

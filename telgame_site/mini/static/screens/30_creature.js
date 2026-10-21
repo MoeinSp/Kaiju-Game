@@ -62,7 +62,7 @@
   }
   /* the creature on top of every screen of this module: art, level against its ceiling, power */
   function creatureHead(c, extra, flash) {
-    return '<div class="panel pad cr-head' + (flash ? " cr-flash" : "") + '"><div class="fighter ' + c.rarity + '"><img class="tile ' + c.rarity + '" src="' + c.img + '" alt=""><div class="grow"><div class="nm cut">' + K.esc(c.name) + "</div>" +
+    return '<div class="panel pad cr-head' + (flash ? " cr-flash" : "") + K.shadowCls(c) + '"><div class="fighter ' + c.rarity + K.shadowCls(c) + '"><img class="tile ' + c.rarity + '" src="' + c.img + '" alt=""><div class="grow"><div class="nm cut">' + K.esc(c.name) + "</div>" +
       '<div class="sm muted">' + K.stars(c.star) + ' سطح <b class="num" style="color:var(--text)">' + Number(c.level) + '</b><span class="num"> / ' + Number(c.max_level) + "</span></div></div>" +
       '<span class="pw">' + K.ic("power") + K.n(c.power) + "</span></div>" + (extra || "") + "</div>";
   }

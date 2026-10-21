@@ -29,3 +29,18 @@
 .dg-loot .muted svg { width: 14px; height: 14px; }
 .dg-note { line-height: 1.9; word-break: break-word; }
 .dg-note svg { width: 14px; height: 14px; vertical-align: -2px; }
+
+.dg-banner.hard { border-color: rgba(255, 120, 90, .45); background: radial-gradient(420px 180px at 70% -30px, rgba(255,90,70,.3), transparent 70%), linear-gradient(160deg, #1d0a0e, #06070d); }
+.dg-banner.nightmare { border-color: rgba(200, 60, 255, .6); background: radial-gradient(420px 180px at 70% -30px, rgba(200,40,255,.45), transparent 70%), linear-gradient(160deg, #18041f, #030306); }
+.btn.dg-hard { background: linear-gradient(135deg, #6d28d9, #3b0764); color: #f3e8ff; border-color: rgba(190, 130, 255, .6); }
+.dg-shadow-cta { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; text-align: start; border-color: rgba(176,110,255,.5);
+  background: linear-gradient(135deg, rgba(110,40,200,.25), rgba(20,8,40,.4)); }
+.dg-shadow-cta small { display: block; }
+.dg-core { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; color: #e3ccff; background: radial-gradient(circle, rgba(170,100,255,.45), rgba(40,10,80,.6)); box-shadow: 0 0 14px rgba(160,90,255,.6); animation: shadowPulse 2.6s ease-in-out infinite; --sh: 1; }
+.dg-tier-lock { opacity: .75; }
+.dg-badge { border-color: rgba(255, 200, 87, .45); }
+.dg-pips { display: inline-flex; gap: 4px; }
+.dg-pips i { width: 14px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.12); }
+.dg-pips i.on { background: linear-gradient(90deg, #a855f7, #e9d5ff); box-shadow: 0 0 6px rgba(170,100,255,.8); }
+.dg-sh-row .btn { width: 100%; }
+.dg-banner.dg-art { min-height: 150px; background-size: cover; background-position: center 40%; box-shadow: inset 0 -80px 60px -20px rgba(6,3,14,.95); }
