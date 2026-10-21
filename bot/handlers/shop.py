@@ -42,9 +42,9 @@ def _render(offers, coins, diamonds, special_items=None, gem=None, is_group: boo
     if gem:
         label = constants.RARITY_LABELS[gem["rarity"]]
         if gem.get("claimed"):
-            lines.append(f"💎 <b>کایجوی جمی امروز:</b> {gem['name']} <i>(خریداری شد ✅)</i>")
+            lines.append(f"💎 <b>کایجوی الماسی امروز:</b> {gem['name']} <i>(خریداری شد ✅)</i>")
         else:
-            lines.append(f"💎 <b>کایجوی جمی:</b> {gem['name']} ({label}) — <code>{gem['price']:,}</code> 💎")
+            lines.append(f"💎 <b>کایجوی الماسی:</b> {gem['name']} ({label}) — <code>{gem['price']:,}</code> 💎")
             rows.append([btn(f"💎 خرید {gem['name']}", emoji_key="btn_creature", style=SHOP, callback_data="gemk_buy")])
 
     # 2. 🛍 Special Items / Packs (if active)
@@ -646,12 +646,12 @@ async def gem_kaiju_buy_callback(update: Update, context: ContextTypes.DEFAULT_T
     query = update.callback_query
     offers, coins, diamonds, items, gem = await run_db(_panel_sync, update.effective_user)
     if not gem or gem.get("claimed"):
-        await query.answer("آفر کایجوی جمی امروز فعال نیست یا دریافت شده.", show_alert=True)
+        await query.answer("آفر کایجوی الماسی امروز فعال نیست یا دریافت شده.", show_alert=True)
         return
     await query.answer()
     label = constants.RARITY_LABELS[gem["rarity"]]
     lines = [
-        f"{get_emoji('diamond')} <b>تأیید خرید کایجوی جمی</b>",
+        f"{get_emoji('diamond')} <b>تأیید خرید کایجوی الماسی</b>",
         "━━━━━━━━━━━━━━━━━━━━",
         f"<blockquote>🧬 هیولا: <b>{gem['name']}</b> ({label})\n"
         f"💰 قیمت: <code>{gem['price']:,} الماس</code>\n"
@@ -677,12 +677,12 @@ async def gem_kaiju_do_buy_callback(update: Update, context: ContextTypes.DEFAUL
             return
         await query.answer(alert_text(exc), show_alert=True)
         return
-    await query.answer("✅ کایجوی جمی خریداری شد!")
+    await query.answer("✅ کایجوی الماسی خریداری شد!")
     c = result["creature"]
     text, keyboard = _render(offers, coins, diamonds, items, gem)
     await safe_edit_message_text(
         query,
-        f"✅ <b>کایجوی جمی خریده شد!</b>\n"
+        f"✅ <b>کایجوی الماسی خریده شد!</b>\n"
         f"🧬 <b>{c.name}</b> ({constants.RARITY_LABELS[c.rarity]}) به کلکسیونت اضافه شد.\n"
         f"💎 هزینه: <code>{result['price']:,}</code> الماس\n\n"
         f"<blockquote>از «🗂 کلکسیون» می‌تونی فعالش کنی یا برای فیوژن استفاده کنی.</blockquote>\n\n"

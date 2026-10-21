@@ -288,7 +288,7 @@
         var html = banner(d.img, "فروشگاه روزانه", clock || "آفرها هر روز عوض می‌شن");
         if (d.gem) {
           var g = d.gem;
-          html += '<div class="h2">' + K.ic("gem") + 'کایجوی جمی امروز</div><div class="panel pad glow shs-gem' + (g.claimed ? "" : " live") + '">' +
+          html += '<div class="h2">' + K.ic("gem") + 'کایجوی الماسی امروز</div><div class="panel pad glow shs-gem' + (g.claimed ? "" : " live") + '">' +
             (g.claimed ? "" : '<span class="shs-ribbon">پیشنهاد امروز</span>') + '<div class="fighter ' + g.rarity + '">' + (g.img ? '<img src="' + g.img + '" alt="">' : "") +
             '<div class="grow"><div class="nm cut">' + K.esc(g.name) + '</div><div class="shs-tags">' + K.rarTag(g.rarity) + K.elTag(g.element) + '</div><div class="sm muted">هم‌گونه و هم‌رده‌ی یکی از قوی‌ترین هیولاهات؛ روزی یه بار.</div></div></div>' +
             (g.claimed ? '<button class="btn block mt" disabled>' + K.ic("check") + "امروز خریدی</button>"
@@ -399,7 +399,7 @@
       });
       K.on(root, "gem", function (el) {
         var g = scr.data.gem;
-        K.confirm({ title: "خرید کایجوی جمی", icon: "gem", ok: "تأیید و خرید",
+        K.confirm({ title: "خرید کایجوی الماسی", icon: "gem", ok: "تأیید و خرید",
           html: kv([["هیولا", K.esc(g.name) + " (" + K.esc(K.rarLabel(g.rarity)) + ")"], ["قیمت", money("diamonds", g.price)], ["الماس تو", money("diamonds", K.res ? K.res.diamonds : 0)]]) })
           .then(function (yes) {
             if (!yes || busy) return;
@@ -408,7 +408,7 @@
               busy = false;
               K.invalidate("profile/creatures/");
               scr.set(r.store);
-              K.reward({ title: "کایجوی جمی خریده شد", text: "به کلکسیونت اضافه شد؛ می‌تونی فعالش کنی یا برای ادغام استفاده‌ش کنی.", creatures: [r.creature], icon: "gem" });
+              K.reward({ title: "کایجوی الماسی خریده شد", text: "به کلکسیونت اضافه شد؛ می‌تونی فعالش کنی یا برای ادغام استفاده‌ش کنی.", creatures: [r.creature], icon: "gem" });
             }, function () { busy = false; scr.refresh(); });
           });
       });

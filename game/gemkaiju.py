@@ -1,4 +1,4 @@
-"""💎 Daily «کایجوی جمی» — a once-a-day gem-kaiju offer in the special-items shop.
+"""💎 Daily «کایجوی الماسی» — a once-a-day gem-kaiju offer in the special-items shop.
 
 Each day the shop offers ONE kaiju that is the same species AND rarity as one of the
 player's three strongest high-rarity kaiju (mythic / legendary / epic) — a perfect
@@ -50,11 +50,11 @@ def buy_gem_kaiju(user: User) -> dict:
     same-species/same-rarity kaiju (1★, level 1). Returns the created creature + balances."""
     user = User.objects.select_for_update().get(id=user.id)
     if user.gem_kaiju_claimed_on == _today():
-        raise GameError("کایجوی جمیِ امروز رو قبلاً خریدی — فردا دوباره بیا.")
+        raise GameError("کایجوی الماسیِ امروز رو قبلاً خریدی — فردا دوباره بیا.")
     offer = gem_offer(user)
     if offer is None:
         raise GameError(
-            "الان کایجوی جمی برات موجود نیست — باید حداقل یه کایجوی حماسی، افسانه‌ای یا اساطیری داشته باشی."
+            "الان کایجوی الماسی برات موجود نیست — باید حداقل یه کایجوی حماسی، افسانه‌ای یا اساطیری داشته باشی."
         )
     price = offer["price"]
     if user.diamonds < price:
