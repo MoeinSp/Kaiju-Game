@@ -6,6 +6,8 @@
 
 @font-face { font-family: "Vazirmatn"; src: url("/app/font/regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
 @font-face { font-family: "Vazirmatn"; src: url("/app/font/bold.ttf") format("truetype"); font-weight: 700; font-display: swap; }
+/* «لاله‌زار» (OFL, assets/fonts): the game display face — titles, big numbers and the main buttons only */
+@font-face { font-family: "Lalezar"; src: url("/app/font/display.ttf") format("truetype"); font-weight: 400; font-display: swap; }
 
 :root {
   --bg: #080b12; --bg-2: #0d111b; --surface: #131927; --surface-2: #1a2233; --surface-3: #232d42; --line: rgba(255,255,255,.07); --line-2: rgba(255,255,255,.13);
@@ -550,3 +552,25 @@ nav.tabs .dot.live { top: -3px; inset-inline-end: -2px; }
 @keyframes mpPulse { 50% { box-shadow: 0 0 0 3px #0b0f18, 0 0 0 5px rgba(255,255,255,.32), 0 10px 20px rgba(0,0,0,.6), 0 0 40px color-mix(in srgb, var(--tc) 80%, transparent); } }
 .mp-node:active .mp-med { transform: scale(.93); }
 .mp-node.locked { filter: grayscale(.8) brightness(.7); }
+
+/* ── display face: titles, big numbers, main buttons (Lalezar has one weight: never fake-bold it) ── */
+:root { --display: "Lalezar", "Vazirmatn", system-ui, sans-serif; }
+.hx-head b, .hx-txt b, .mp-name, .lb-fight span, .lb-hunt span, .lb-name b, .lb-power b, .lb-ring b, .topbar .ttl, .sheet .ttl, .loot h3,
+.banner .ttl, .h2, .res b, .btn.lg, .btn.primary, .cl-sort span, .lb-q-go {
+  font-family: var(--display); font-weight: 400; letter-spacing: .2px; }
+.hx-head b { font-size: 30px; line-height: 1.2; }
+.mp-name { font-size: 15px; } .mp-node.big .mp-name { font-size: 17px; }
+.lb-fight span { font-size: 26px; } .lb-hunt span { font-size: 14px; }
+.lb-name b { font-size: 21px; } .lb-power b { font-size: 17px; }
+.topbar .ttl { font-size: 19px; } .sheet .ttl { font-size: 23px; } .loot h3 { font-size: 24px; }
+.h2 { font-size: 16.5px; }
+.res b { font-size: 14.5px; letter-spacing: .4px; }
+@media (max-width: 380px) { .res b { font-size: 13.5px; } }
+
+/* ── screen changes: forward slides in from the reading side, «back» the other way, a tab fades ── */
+.wrap.enter.e-fwd { animation: scrIn .26s var(--ease) both; }
+.wrap.enter.e-back { animation: scrBack .24s var(--ease) both; }
+.wrap.enter.e-tab { animation: scrTab .24s var(--ease) both; }
+@keyframes scrIn { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+@keyframes scrBack { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes scrTab { from { opacity: 0; transform: scale(.985); } to { opacity: 1; transform: none; } }

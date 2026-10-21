@@ -66,14 +66,15 @@
           if (r.won) {
             note = "";
             draw();
-            K.reward({ title: "طبقه‌ی " + r.floor + " فتح شد!", text: r.guardian.name + " شکست خورد. طبقه‌ی " + r.next_floor + " باز شد." + (r.levels ? " هیولات رسید به سطح " + r.level + "!" : ""),
-              icon: "tower", coins: r.rewards.coins, dna: r.rewards.dna, diamonds: r.rewards.diamonds, xp: r.rewards.xp,
+            K.result({ won: true, title: "طبقه‌ی " + r.floor + " فتح شد!", sub: r.guardian.name + " شکست خورد. طبقه‌ی " + r.next_floor + " باز شد." + (r.levels ? " هیولات رسید به سطح " + r.level + "!" : ""),
+              coins: r.rewards.coins, dna: r.rewards.dna, diamonds: r.rewards.diamonds, xp: r.rewards.xp,
               extra: r.rewards.tickets ? [K.ic("ticket") + '<span class="num">+' + r.rewards.tickets + "</span> بلیط"] : [], button: "ادامه‌ی صعود" });
           } else {
             note = '<div class="callout bad mt">' + K.ic("skull") + "<span><b>شکست در طبقه‌ی " + K.n(r.floor) + "</b><br>" +
               "قدرت " + K.esc(before.name) + " " + K.n(r.player_power) + " بود و قدرت نگهبان " + K.n(r.guardian.power) + ". هیولات رو قوی‌تر کن، یا با عنصری برو که بهش برتری داره، و دوباره بیا." +
               (r.levels ? "<br>هیولات رسید به سطح " + K.n(r.level) + "." : "") + "</span></div>" + HU.log(r.log);
-            draw(); K.haptic("err");
+            draw();
+            K.result({ won: false, title: "شکست", sub: "نگهبان طبقه‌ی " + K.n(r.floor) + " قوی‌تر بود (" + K.n(r.guardian.power) + " در برابر " + K.n(r.player_power) + ")." });
           }
         }).catch(function () { lock = false; });
       });

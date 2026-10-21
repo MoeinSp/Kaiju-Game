@@ -154,7 +154,17 @@
       var busy = false;
       function show(d, note) {
         if (!ctx.alive()) return;
-        if (d.finish) { root.innerHTML = finishHtml(d.finish); K.haptic(d.finish.status === "won" ? "ok" : "err"); window.scrollTo(0, 0); return; }
+        if (d.finish) {
+          root.innerHTML = finishHtml(d.finish); window.scrollTo(0, 0);
+          var fl = d.finish.loot || {};
+          if (d.finish.status === "won" || d.finish.status === "lost") K.result({
+            won: d.finish.status === "won" && !d.finish.endless,
+            title: d.finish.endless ? "طبقه‌ی " + K.n(d.finish.floor) : d.finish.status === "won" ? "باس شکست خورد!" : "تیمت از پا افتاد",
+            sub: d.finish.endless ? (d.finish.new_record ? "رکورد جدید این هفته!" : "سفرت توی بی‌انتها تموم شد.") : "",
+            coins: fl.coins, dna: fl.dna, diamonds: fl.diamonds });
+          else K.haptic("");
+          return;
+        }
         if (!d.run) { K.back(); return; }
         root.innerHTML = runHtml(d, note); window.scrollTo(0, 0);
       }

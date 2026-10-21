@@ -545,6 +545,7 @@ window.K = (function () {
   var view = document.getElementById("view"), topbar = document.getElementById("topbar"), titleEl = document.getElementById("title"), topact = document.getElementById("topact"), backEl = document.getElementById("back");
   var tabsEl = document.getElementById("tabs");
   var screens = {}, hubs = { battle: [], base: [], more: [] }, stack = [], timers = [], renderSeq = 0, hubRedraw = null;
+  var navDir = "tab";   // how the next screen arrives: "fwd" (K.go) slides in, "back" slides the other way, "tab" fades
   K.TABS = [["home", "home", "خانه"], ["creatures", "claw", "هیولاها"], ["battle", "swords", "نبرد"], ["base", "hall", "پایگاه"], ["more", "grid", "بیشتر"]];
   backEl.innerHTML = K.ic("back");
   /* Full-colour game icons for the bottom tabs and the resource bar. Flat fills only: the
@@ -652,7 +653,7 @@ window.K = (function () {
       if (soft && !acted) topact.innerHTML = "";
       view.classList.remove("reloading");
       view.innerHTML = ""; view.appendChild(root);
-      if (!soft) { void view.offsetWidth; view.classList.add("enter"); }
+      if (!soft) { view.classList.remove("e-fwd", "e-back", "e-tab"); void view.offsetWidth; view.classList.add("enter", "e-" + navDir); }
       window.scrollTo(0, y);
       cur.scrollY = 0; cur.shown = true;
     }).catch(function (err) {
@@ -668,13 +669,13 @@ window.K = (function () {
     var top = current(), sig; try { sig = name + "|" + JSON.stringify(params || {}); } catch (e) { sig = name + "|" + Math.random(); }
     if (top && top.sig === sig && Date.now() - top.at < 700) return;   // a double tap would open it twice (and need two «back»)
     if (top) top.scrollY = scrollTop();                                // «back» returns to where the player was
-    K.haptic(); stack.push({ name: name, params: params || {}, sig: sig, at: Date.now() }); paint();
+    K.haptic(); navDir = "fwd"; stack.push({ name: name, params: params || {}, sig: sig, at: Date.now() }); paint();
   };
   /* Replace the current screen (no extra «back» step). */
   K.replace = function (name, params) { if (!screens[name]) return; stack[stack.length - 1] = { name: name, params: params || {} }; paint(); };
-  K.back = function () { if (stack.length > 1) { stack.pop(); paint(); } };
+  K.back = function () { if (stack.length > 1) { navDir = "back"; stack.pop(); paint(); } };
   /* Switch bottom tab (resets the stack). */
-  K.tab = function (name) { if (!screens[name]) return; stack = [{ name: name, params: {} }]; paint(); };
+  K.tab = function (name) { if (!screens[name]) return; navDir = "tab"; stack = [{ name: name, params: {} }]; paint(); };
   /* Re-draw the current screen in place (same as ctx.reload()). */
   K.reload = function () { if (stack.length) paint(true); };
   /* The «back» the PLAYER presses (top bar, Telegram's BackButton): an open sheet closes first. */

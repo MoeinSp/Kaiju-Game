@@ -240,7 +240,9 @@
           r.enemy = { name: r.enemy.name || card.name, tier: r.enemy.tier, tier_label: r.enemy.tier_label,
                       element: card.element, rarity: card.rarity || "common", power: card.power, img: card.img };
           result = r; K.invalidate("profile/creatures/");
-          draw(); K.haptic(r.won ? "ok" : "err");
+          draw();
+          K.result({ won: r.won, sub: (r.won ? "شکارت: " : "حریف: ") + (r.enemy.name || ""), img: r.me && r.me.img,
+                     coins: r.won ? r.coins : 0, dna: r.won ? r.dna : 0, xp: r.won ? r.xp : 0 });
         }).catch(staleMaybe);
       });
       K.on(root, "enc", function (el) {

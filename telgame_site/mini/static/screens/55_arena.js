@@ -105,11 +105,10 @@
   }
   function afterFight(r) {
     K.invalidate("profile/creatures/");
-    K.haptic(r.won ? "ok" : "err");
-    if (r.won) K.reward({
-      title: "بردی!", icon: "trophy", button: "ادامه",
-      coins: r.coins + r.plunder.coins + r.league.coins, dna: r.dna + r.plunder.dna + r.league.dna, cup: r.cup_delta,
-      extra: r.chest ? [K.ic("chest") + '<span style="color:var(--text)">' + K.esc(r.chest.name) + "</span>"] : []
+    K.result({
+      won: r.won, sub: (r.won ? "حریف: " : "باختی به ") + r.opponent.label, img: r.me && r.me.img,
+      coins: r.won ? r.coins + r.plunder.coins + r.league.coins : 0, dna: r.won ? r.dna + r.plunder.dna + r.league.dna : 0, cup: r.cup_delta,
+      extra: r.won && r.chest ? [K.ic("chest") + "<span>" + K.esc(r.chest.name) + "</span>"] : []
     });
   }
 

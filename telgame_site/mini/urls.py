@@ -31,7 +31,7 @@ from telgame_site.mini.core import MINI_DIR, STATIC_DIR, _sig, meta
 
 THUMB_SIZE = 320          # grid tiles
 THUMB_SIZE_LARGE = 720    # detail views (`&s=l`)
-_FONTS = {"regular": "Vazirmatn-Regular.ttf", "bold": "Vazirmatn-Bold.ttf"}
+_FONTS = {"regular": "Vazirmatn-Regular.ttf", "bold": "Vazirmatn-Bold.ttf", "display": "Lalezar-Regular.ttf"}
 _SDK = MINI_DIR.parent / "miniapp" / "telegram-web-app.js"
 IMMUTABLE = "public, max-age=31536000, immutable"
 
