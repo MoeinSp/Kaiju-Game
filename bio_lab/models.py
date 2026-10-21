@@ -600,6 +600,29 @@ class DungeonRun(models.Model):
         indexes = [models.Index(fields=["user", "status"], name="dungeonrun_user_status_idx")]
 
 
+class EndlessScore(models.Model):
+    """A player's deepest floor in the «بی‌انتها» dungeon this week (game/dungeon.py). The
+    weekly table ranks by floor, ties going to whoever reached it first."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="endless_scores")
+    week = models.CharField(max_length=10)        # game.season.week_key()
+    best_floor = models.IntegerField(default=0)
+    reached_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "week"], name="uq_endless_user_week")]
+        indexes = [models.Index(fields=["week", "-best_floor", "reached_at"], name="endless_week_rank_idx")]
+
+
+class EndlessWeek(models.Model):
+    """One settled week of the «بی‌انتها» table: who placed where and what they got. Its unique
+    `week` is the lock that pays a week exactly once."""
+
+    week = models.CharField(max_length=10, unique=True)
+    settled_at = models.DateTimeField(auto_now_add=True)
+    results = models.JSONField(default=list)      # [{rank, user_id, floor, runes, cores}]
+
+
 class UserRelic(models.Model):
     """An «اثر باستانی» a player holds until `expires_at` (game/relics.py). A repeat drop
     extends it; it is never permanent."""

@@ -111,6 +111,7 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_dungeon_shop": ("فروشگاه سیاه‌چال", "🔮", "features"),
     "btn_relics": ("آثار باستانی", "🏺", "features"),
     "btn_shadow_form": ("فرم سیاه", "🌑", "features"),
+    "btn_dungeon_endless": ("سیاه‌چال بی‌انتها", "🌀", "features"),
     "btn_league": ("لیگ رتبه‌بندی", "🎖", "features"),
     "btn_codex": ("دانشنامه", "📖", "features"),
     "btn_referral": ("دعوت دوستان", "🎁", "features"),

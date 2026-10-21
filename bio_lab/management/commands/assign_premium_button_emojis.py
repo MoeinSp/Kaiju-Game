@@ -184,6 +184,7 @@ class Command(BaseCommand):
             "btn_dungeon_shop": ["🔮", "💜", "🛒", "✨"],
             "btn_relics": ["🏺", "🗿", "📜", "💎"],
             "btn_shadow_form": ["🌑", "🖤", "💜", "🔮"],
+            "btn_dungeon_endless": ["🌀", "♾", "🌌", "🕳"],
             "btn_league": ["🎖", "🏆", "🥇", "⭐"],
             "btn_codex": ["📖", "📚", "📕", "📜"],
             "btn_referral": ["🎁", "👥", "🤝", "🎉"],

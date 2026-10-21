@@ -44,6 +44,48 @@ DIFFICULTIES = {
 }
 _DIFF_RANK = {k: i + 1 for i, k in enumerate(DIFFICULTIES)}   # cleared normal → 1, hard → 2, nightmare → 3
 _DIFF_BADGE = {"normal": "explorer", "hard": "hard", "nightmare": "nightmare"}
+
+# «بی‌انتها»: floors without end, a boss every ENDLESS_BOSS_EVERY floors, opened by a hard win.
+# Enemies grow ENDLESS_GROWTH per floor from ENDLESS_BASE; the run only ends when the team falls
+# (or the player leaves), and pays everything banked — there is no «win» to lose half of.
+# The deepest floor of the week goes on the weekly table; the top 10 are paid at the week's end.
+ENDLESS = "endless"
+# loot ×0.2: a deep endless run is ~50 floors, so per-floor pay must be a fraction of a normal
+# room's or it would out-earn nightmare (simulated: ×1.0 paid a maxed team ~430k gold a key)
+ENDLESS_DIFF = {"label": "بی‌انتها", "power": 1.0, "loot": 0.2, "runes": 1, "relic": 0.0, "cores": (0, 0), "need": 2}
+ENDLESS_BOSS_EVERY = 10
+ENDLESS_BASE = 3000
+ENDLESS_GROWTH = 0.07
+ENDLESS_BOSS_RELIC = 0.30
+ENDLESS_CORE_FROM = 30      # a shadow core on boss floors 30, 50, 70, … (every ENDLESS_CORE_EVERY from here)
+ENDLESS_CORE_EVERY = 20
+ENDLESS_REWARDS = ((1, 300, 5), (2, 200, 4), (3, 150, 3)) + tuple((r, 80, 1) for r in range(4, 11))  # rank, runes, cores
+
+# «عنصر هفته»: every week the dungeon leans to one element — most enemies have it, and kaiju
+# strong against it fight WEEK_BOOST stronger in every dungeon mode
+WEEK_BOOST = 0.10
+WEEK_ELEMENT_SHARE = 0.65
+WEEK_ELEMENTS = ("fire", "water", "earth", "electric")
+
+
+def _diff(key: str | None) -> dict:
+    return ENDLESS_DIFF if key == ENDLESS else DIFFICULTIES.get(key or "normal", DIFFICULTIES["normal"])
+
+
+def weekly_element(week: str | None = None) -> str:
+    """The week's dominant element (game.season.week_key, so it turns over with the arena season)."""
+    from game.season import week_key
+
+    w = week or week_key()
+    year, _, num = w.partition("-W")
+    # only the four base elements: crystal and plasma have no counter, so a week of them would
+    # bless nobody
+    return WEEK_ELEMENTS[(int(year) + int(num or 0)) % len(WEEK_ELEMENTS)]
+
+
+def week_favoured(element: str) -> list[str]:
+    """Elements that beat the week's element — their kaiju get WEEK_BOOST in the dungeon."""
+    return [e for e in constants.ELEMENTS if constants.is_strong_against(e, element)]
 # normal difficulty is sized to a team that just cleared campaign stage 50 (~13k team power,
 # ~4.4k per kaiju); maxed players get their challenge from the harder tiers (phase 2)
 ROOM_POWER = (3000, 5000)  # first room → last room, before the boss
@@ -143,6 +185,8 @@ def member_power(state: dict, member: dict, *, for_fight: bool = True) -> int:
     mult += 0.12 * sum(1 for r in state["runes"] if r == f"fury:{member['element']}")
     if for_fight and state.get("first_strike"):
         mult += 0.30
+    if state.get("week_el") and constants.is_strong_against(member["element"], state["week_el"]):
+        mult += WEEK_BOOST   # «برکت هفته»
     return round(member["power"] * hp_factor * mult)
 
 
@@ -163,15 +207,21 @@ def duel(state: dict, member: dict, enemy: dict) -> tuple[int, int]:
 def _enemy(state: dict, kind: str) -> dict:
     rng = _rng(state)
     room = state["room"]
-    tier = DIFFICULTIES[state.get("difficulty", "normal")]["power"]
-    if kind == "boss":
+    tier = _diff(state.get("difficulty"))["power"]
+    if state.get("endless"):
+        base = ENDLESS_BASE * (1 + ENDLESS_GROWTH * (room - 1)) * rng.uniform(0.95, 1.05)
+        power = round(base * {"boss": 1.4, "elite": 1.25}.get(kind, 1.0))
+        name = rng.choice(BOSS_NAMES if kind == "boss" else ENEMY_NAMES)
+    elif kind == "boss":
         power = round(BOSS_POWER * tier * rng.uniform(0.97, 1.03))
         name = rng.choice(BOSS_NAMES)
     else:
         power = (ROOM_POWER[0] + (room - 1) * (ROOM_POWER[1] - ROOM_POWER[0]) / max(1, ROOMS - 1)) * rng.uniform(0.95, 1.05)
         power = round(power * tier * (1.25 if kind == "elite" else 1.0))
         name = rng.choice(ENEMY_NAMES)
-    return {"kind": kind, "name": name, "element": rng.choice(constants.ELEMENTS), "power": power}
+    week_el = state.get("week_el")
+    element = week_el if week_el and rng.random() < WEEK_ELEMENT_SHARE else rng.choice(constants.ELEMENTS)
+    return {"kind": kind, "name": name, "element": element, "power": power}
 
 
 def _doors(state: dict) -> list[str]:
@@ -187,7 +237,7 @@ def _doors(state: dict) -> list[str]:
 
 
 def _loot_add(state: dict, coins: int = 0, dna: int = 0, runes: int = 0) -> dict:
-    diff = DIFFICULTIES[state.get("difficulty", "normal")]
+    diff = _diff(state.get("difficulty"))
     boost = (1 + 0.25 * _rune_count(state, "treasure_hunter")) * diff["loot"]
     got = {"coins": round(coins * boost), "dna": round(dna * boost), "runes": runes * diff["runes"]}
     for k, v in got.items():
@@ -206,6 +256,14 @@ def _log(state: dict, line: str) -> None:
 def _next_room(state: dict) -> None:
     state["room"] += 1
     state["enemy"] = None
+    if state.get("endless"):
+        if state["room"] % ENDLESS_BOSS_EVERY == 0:
+            state["phase"] = "fight"
+            state["enemy"] = _enemy(state, "boss")
+        else:
+            state["phase"] = "doors"
+            state["doors"] = _doors(state)
+        return
     if state["room"] > ROOMS:
         state["phase"] = "fight"
         state["enemy"] = _enemy(state, "boss")
@@ -225,12 +283,13 @@ def _rune_offer(state: dict) -> list[str]:
     return pool[:3]
 
 
-def _new_state(user: User, members: list[Creature]) -> dict:
+def _new_state(user: User, members: list[Creature], endless: bool = False) -> dict:
     state = {
         "seed": random.randrange(1 << 30), "n": 0, "room": 1, "phase": "doors",
+        "endless": endless, "week_el": weekly_element(),
         "team": [{"id": c.id, "name": c.name, "element": c.element, "rarity": c.rarity, "star": c.star_level,
                   "power": _power_of(user, c), "hp": 100} for c in members],
-        "runes": [], "loot": {"coins": 0, "dna": 0, "runes": 0}, "log": [],
+        "runes": [], "loot": {"coins": 0, "dna": 0, "runes": 0, "cores": 0}, "log": [],
         "enemy": None, "doors": [], "rune_offer": [], "merchant": [], "first_strike": False,
     }
     state["doors"] = _doors(state)
@@ -253,10 +312,17 @@ def _need(run: DungeonRun, phase: str) -> dict:
     return state
 
 
+def _progress(user: User, state: dict) -> None:
+    """«بی‌انتها»: every cleared floor counts on the weekly table straight away (a run left
+    open still keeps its best)."""
+    if state.get("endless") and state.get("room", 1) > 1:
+        record_floor(user, state["room"] - 1)
+
+
 @transaction.atomic
 def start(user: User, difficulty: str = "normal") -> DungeonRun:
     user = User.objects.select_for_update().get(id=user.id)
-    if difficulty not in DIFFICULTIES:
+    if difficulty not in DIFFICULTIES and difficulty != ENDLESS:
         raise GameError("این سطح سختی وجود نداره.")
     if not unlocked(user):
         raise GameError(f"🔒 سیاه‌چال بعد از فتح هر {UNLOCK_STAGE} مرحله‌ی دانجن باز می‌شه "
@@ -269,17 +335,23 @@ def start(user: User, difficulty: str = "normal") -> DungeonRun:
         raise GameError("اول از «تیم حمله» حداقل یه هیولا توی تیمت بذار.")
     prof = profile(user)
     prof = DungeonProfile.objects.select_for_update().get(pk=prof.pk)
-    need = DIFFICULTIES[difficulty]["need"]
+    need = _diff(difficulty)["need"]
     if prof.best_difficulty < need:
         prev = list(DIFFICULTIES)[need - 1]
-        raise GameError(f"🔒 سختی «{DIFFICULTIES[difficulty]['label']}» بعد از یه برد در «{DIFFICULTIES[prev]['label']}» باز می‌شه.")
+        raise GameError(f"🔒 «{_diff(difficulty)['label']}» بعد از یه برد در سختی «{DIFFICULTIES[prev]['label']}» باز می‌شه.")
     if prof.keys < 1:
         raise GameError("🗝 کلید نداری! هر روز ۲ کلید رایگان می‌گیری، یا از فروشگاه سیاه‌چال بخر.")
     prof.keys -= 1
     prof.runs += 1
     prof.save(update_fields=["keys", "runs"])
-    state = _new_state(user, members)
+    state = _new_state(user, members, endless=difficulty == ENDLESS)
     state["difficulty"] = difficulty   # read by _enemy / _loot_add
+    if difficulty == ENDLESS:   # the week's best before this run — «a new record?» at the end
+        from bio_lab.models import EndlessScore
+        from game.season import week_key
+
+        state["start_best"] = (EndlessScore.objects.filter(user=user, week=week_key())
+                               .values_list("best_floor", flat=True).first() or 0)
     return DungeonRun.objects.create(user=user, difficulty=difficulty, state=state)
 
 
@@ -318,6 +390,7 @@ def choose_door(user: User, index: int) -> dict:
         offers = _rune_offer(state)[:2]
         state["merchant"] = [{"rune": r, "price": round((3000 + 500 * room) * rng.uniform(0.9, 1.1), -2)} for r in offers]
         state["phase"] = "merchant"
+    _progress(user, state)
     run.state = state
     run.save(update_fields=["state"])
     event["state"] = state
@@ -347,15 +420,26 @@ def fight(user: User, creature_id: int) -> dict:
         if _rune_count(state, "vampire"):
             member["hp"] = min(100, member["hp"] + 15)
         room = state["room"]
-        if enemy["kind"] == "boss":
+        if enemy["kind"] == "boss" and state.get("endless"):
+            got = _loot_add(state, 3000 + 300 * room, 120 + 10 * room, 4)
+            if room >= ENDLESS_CORE_FROM and (room - ENDLESS_CORE_FROM) % ENDLESS_CORE_EVERY == 0:
+                state["loot"]["cores"] = state["loot"].get("cores", 0) + 1
+                got["cores"] = 1
+            if random.random() < ENDLESS_BOSS_RELIC:
+                from game import relics
+
+                found = relics.grant(user)
+                got["relic"] = found["label"]
+                _log(state, f"🏺 اثر باستانی پیدا کردی: {found['label']}")
+        elif enemy["kind"] == "boss":
             got = _loot_add(state, 6000, 250, 4)
         elif enemy["kind"] == "elite":
-            got = _loot_add(state, 2 * (1200 + 250 * room), 2 * (30 + 8 * room), 2)
+            got = _loot_add(state, 2 * (1200 + 250 * room), 2 * (30 + 8 * room), 0 if state.get("endless") else 2)
         else:
-            got = _loot_add(state, 1200 + 250 * room, 30 + 8 * room, 1)
+            got = _loot_add(state, 1200 + 250 * room, 30 + 8 * room, 0 if state.get("endless") else 1)
         result.update(hp_lost=loss, got=got)
         _log(state, f"⚔️ {member['name']} «{enemy['name']}» رو شکست داد ({mine:,} در برابر {theirs:,}).")
-        if enemy["kind"] == "boss":
+        if enemy["kind"] == "boss" and not state.get("endless"):
             run.state = state
             result["finish"] = _finish(user, run, DungeonRun.WON)
             return result
@@ -397,6 +481,7 @@ def pick_rune(user: User, index: int) -> dict:
     _apply_rune(state, key)
     state["rune_offer"] = []
     _next_room(state)
+    _progress(user, state)
     run.state = state
     run.save(update_fields=["state"])
     return {"rune": key, "state": state}
@@ -421,6 +506,7 @@ def merchant_buy(user: User, index: int | None) -> dict:
         _log(state, f"🛒 از تاجر «{rune_label(offer['rune'])[0]}» خریدی ({price:,} طلا).")
     state["merchant"] = []
     _next_room(state)
+    _progress(user, state)
     run.state = state
     run.save(update_fields=["state"])
     return {"bought": bought, "state": state}
@@ -438,11 +524,12 @@ def _finish(user: User, run: DungeonRun, status: str) -> dict:
     from game.ledger import record_gain
 
     state = run.state
-    share = 1.0 if status == DungeonRun.WON else LOSS_PAYOUT
+    endless = bool(state.get("endless"))
+    share = 1.0 if (status == DungeonRun.WON or endless) else LOSS_PAYOUT
     loot = {k: int(v * share) for k, v in state["loot"].items()}
+    loot["cores"] = state["loot"].get("cores", 0) if endless else 0
     relic = None
-    diff = DIFFICULTIES.get(run.difficulty, DIFFICULTIES["normal"])
-    loot["cores"] = 0
+    diff = _diff(run.difficulty)
     badge = None
     if status == DungeonRun.WON:
         loot["runes"] += random.randint(1, 3) * diff["runes"]
@@ -460,7 +547,7 @@ def _finish(user: User, run: DungeonRun, status: str) -> dict:
     prof = DungeonProfile.objects.select_for_update().get(user=user)
     prof.black_runes += loot["runes"]
     prof.shadow_cores += loot["cores"]
-    reached = min(state["room"], ROOMS + 1)
+    reached = state["room"] if endless else min(state["room"], ROOMS + 1)
     prof.best_room = max(prof.best_room, reached)
     unlocked_tier = None
     if status == DungeonRun.WON:
@@ -479,8 +566,13 @@ def _finish(user: User, run: DungeonRun, status: str) -> dict:
         from game import lab
 
         lab.award(user, "campaign_win")
-    return {"status": status, "loot": loot, "relic": relic, "room": reached, "share": share,
-            "difficulty": run.difficulty, "badge": badge, "unlocked": unlocked_tier}
+    out = {"status": status, "loot": loot, "relic": relic, "room": reached, "share": share,
+           "difficulty": run.difficulty, "badge": badge, "unlocked": unlocked_tier, "endless": endless}
+    if endless:
+        out["floor"] = max(0, state["room"] - 1)
+        out.update(record_floor(user, out["floor"]))
+        out["new_record"] = out["floor"] > state.get("start_best", 0)   # floors are saved as they're cleared
+    return out
 
 
 @transaction.atomic
@@ -531,6 +623,9 @@ def view(user: User) -> dict:
         "best_difficulty": prof.best_difficulty if prof else 0,
         "difficulties": [{"key": k, "label": d["label"], "open": (prof.best_difficulty if prof else 0) >= d["need"]}
                          for k, d in DIFFICULTIES.items()],
+        "endless_open": (prof.best_difficulty if prof else 0) >= ENDLESS_DIFF["need"],
+        "week_el": weekly_element(),
+        "week_favoured": week_favoured(weekly_element()),
         "run": None,
     }
     if run is not None:
@@ -544,3 +639,83 @@ def view(user: User) -> dict:
             members.append(row)
         out["run"] = {"id": run.id, "state": state, "members": members, "rooms": ROOMS}
     return out
+
+
+# ══════════════════════════ «بی‌انتها»: the weekly table ══════════════════════════
+def record_floor(user: User, floor: int) -> dict:
+    """Keep the player's deepest floor of the week. Returns {week_best, rank, new_record}."""
+    from bio_lab.models import EndlessScore
+    from game.season import week_key
+
+    week = week_key()
+    row, _ = EndlessScore.objects.get_or_create(user=user, week=week)
+    new = floor > row.best_floor
+    if new:
+        row.best_floor = floor
+        row.reached_at = timezone.now()
+        row.save(update_fields=["best_floor", "reached_at"])
+    return {"week_best": row.best_floor, "rank": _rank(row), "new_record": new}
+
+
+def _rank(row) -> int:
+    from bio_lab.models import EndlessScore
+    from django.db.models import Q
+
+    if row.best_floor <= 0:
+        return 0
+    return EndlessScore.objects.filter(week=row.week).filter(
+        Q(best_floor__gt=row.best_floor) | Q(best_floor=row.best_floor, reached_at__lt=row.reached_at)).count() + 1
+
+
+def board(user: User, limit: int = 10) -> dict:
+    """This week's table (top `limit`), the player's own line, and last week's winners."""
+    from bio_lab.models import EndlessScore, EndlessWeek
+    from game.season import seconds_until_next_week, week_key
+
+    week = week_key()
+    rows = list(EndlessScore.objects.filter(week=week, best_floor__gt=0).select_related("user")
+                .order_by("-best_floor", "reached_at")[:limit])
+    mine = EndlessScore.objects.filter(user=user, week=week).first()
+    last = EndlessWeek.objects.order_by("-week").first()
+    return {
+        "week": week, "left": seconds_until_next_week(),
+        "rows": [{"rank": i, "user": r.user, "floor": r.best_floor} for i, r in enumerate(rows, start=1)],
+        "mine": {"floor": mine.best_floor, "rank": _rank(mine)} if mine and mine.best_floor else None,
+        "rewards": ENDLESS_REWARDS,
+        "last": {"week": last.week, "results": last.results} if last else None,
+    }
+
+
+def settle_due_week() -> list[tuple[int, str]]:
+    """Pay last week's top 10 (once — EndlessWeek.week is unique). Returns the DMs to send."""
+    import datetime
+
+    from django.db import IntegrityError
+
+    from bio_lab.models import EndlessScore, EndlessWeek
+    from game.season import week_key
+
+    last_week = week_key(timezone.now() - datetime.timedelta(days=7))
+    if EndlessWeek.objects.filter(week=last_week).exists():
+        return []
+    rows = list(EndlessScore.objects.filter(week=last_week, best_floor__gt=0)
+                .order_by("-best_floor", "reached_at")[:len(ENDLESS_REWARDS)])
+    dms = []
+    try:
+        with transaction.atomic():
+            results = []
+            for (rank, runes, cores), row in zip(ENDLESS_REWARDS, rows):
+                prof, _ = DungeonProfile.objects.select_for_update().get_or_create(user_id=row.user_id)
+                prof.black_runes += runes
+                prof.shadow_cores += cores
+                prof.save(update_fields=["black_runes", "shadow_cores"])
+                results.append({"rank": rank, "user_id": row.user_id, "floor": row.best_floor, "runes": runes, "cores": cores})
+                dms.append((row.user_id,
+                            f"🌀 <b>جدول هفتگی سیاه‌چال بی‌انتها</b>\n━━━━━━━━━━━━━━━━━━━━\n"
+                            f"رتبه‌ی <b>{rank}</b> شدی با رسیدن به طبقه‌ی <code>{row.best_floor}</code>!\n"
+                            f"🔮 <code>+{runes}</code> رون سیاه · 🌑 <code>+{cores}</code> هسته‌ی سایه"))
+            EndlessWeek.objects.create(week=last_week, results=results)
+    except IntegrityError:   # another process settled it a moment ago
+        return []
+    return dms
+

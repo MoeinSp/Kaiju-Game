@@ -62,27 +62,38 @@ def _home_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
         f"🌑 هسته‌ی سایه: <code>{v['shadow_cores']}</code>",
         f"🏆 ورود موفق: <code>{v['clears']}</code> از <code>{v['runs']}</code>",
         f"🏺 آثار فعال: <code>{v['relics']}</code>",
+        _DIV,
+        f"🌀 <b>عنصر هفته: {_el(v['week_el'])}</b> — بیشتر دشمن‌ها این عنصرن",
+        "✨ برکت هفته: هیولاهای " + "، ".join(_el(e) for e in v["week_favoured"]) + f" <code>+{round(D.WEEK_BOOST * 100)}%</code> قدرت",
     ]
     rows = []
     if v["run"]:
         st = v["run"]["state"]
-        room = "باس" if st["room"] > D.ROOMS else f"اتاق {st['room']} از {D.ROOMS}"
-        lines += [_DIV, f"⚠️ یه ورود نیمه‌کاره داری — <b>{room}</b>"]
+        lines += [_DIV, f"⚠️ یه ورود نیمه‌کاره داری — <b>{_where(st)}</b>"]
         rows.append([btn("ادامه‌ی ورود", emoji_key="btn_dungeon", style=BATTLE, callback_data="dg:run")])
     else:
         lines += [_DIV, "<i>با تیم حمله‌ات وارد شو: ۷ اتاق، سر هر اتاق چند در، و آخرش باس. "
                         "جون هیولاها تا آخر ورود می‌مونه، پس با فکر در انتخاب کن!</i>"]
+        lines.append("<i>هر ورود ۱ کلید.</i>")
+        entries = []
         for d in v["difficulties"]:
             if d["open"]:
-                rows.append([btn(f"ورود · {d['label']} · ۱ کلید", emoji_key="btn_dungeon",
-                                 style=BATTLE if d["key"] == "normal" else DANGER, callback_data=f"dg:start:{d['key']}")])
+                entries.append(btn(d["label"], emoji_key="btn_dungeon", style=BATTLE, callback_data=f"dg:start:{d['key']}"))
             else:
                 lines.append(f"🔒 <i>سختی «{d['label']}» بعد از یه برد در سختی قبلی باز می‌شه.</i>")
+        if v["endless_open"]:
+            entries.append(btn("بی‌انتها", emoji_key="btn_dungeon_endless", style=BATTLE, callback_data="dg:start:endless"))
+        else:
+            lines.append("🔒 <i>«بی‌انتها» بعد از یه برد در سختی «سخت» باز می‌شه.</i>")
+        rows += [entries[i:i + 2] for i in range(0, len(entries), 2)]   # two entries a row
+    rows.append([
+        btn("فرم سیاه", emoji_key="btn_shadow_form", style=PRIMARY, callback_data="dg:sh"),
+        btn("جدول بی‌انتها", emoji_key="btn_rank", style=PRIMARY, callback_data="dg:lb"),
+    ])
     rows.append([
         btn("فروشگاه", emoji_key="btn_dungeon_shop", style=SHOP, callback_data="dg:shop"),
         btn("آثار باستانی", emoji_key="btn_relics", style=SHOP, callback_data="dg:relics"),
     ])
-    rows.append([btn("فرم سیاه", emoji_key="btn_shadow_form", style=PRIMARY, callback_data="dg:sh")])
     rows.append([back_btn("menu:campaign", "بازگشت به دانجن")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -103,9 +114,8 @@ def _run_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     if run is None:
         return _home_render(v)
     st = run["state"]
-    room = "👑 <b>باس سیاه‌چال</b>" if st["room"] > D.ROOMS else f"اتاق <code>{st['room']}</code> از <code>{D.ROOMS}</code>"
-    tier = D.DIFFICULTIES[st.get("difficulty", "normal")]["label"]
-    lines = [f"🕳 <b>سیاه‌چال · {tier}</b> · {room}", _DIV]
+    tier = D._diff(st.get("difficulty"))["label"]
+    lines = [f"🕳 <b>سیاه‌چال · {tier}</b> · {_where(st, html_=True)}", _DIV]
     if note:
         lines += [note, _DIV]
     for m in run["members"]:
@@ -158,6 +168,16 @@ def _run_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
+def _where(st: dict, html_: bool = False) -> str:
+    """«اتاق ۳ از ۷» / «باس» — or «طبقه ۱۲» / «باس طبقه ۲۰» in the endless dungeon."""
+    room = st["room"]
+    b = (lambda x: f"<b>{x}</b>") if html_ else (lambda x: x)
+    c = (lambda x: f"<code>{x}</code>") if html_ else (lambda x: str(x))
+    if st.get("endless"):
+        return ("👑 " + b(f"باس طبقه‌ی {room}")) if room % D.ENDLESS_BOSS_EVERY == 0 else f"طبقه‌ی {c(room)}"
+    return ("👑 " + b("باس سیاه‌چال")) if room > D.ROOMS else f"اتاق {c(room)} از {c(D.ROOMS)}"
+
+
 def _finish_render(fin: dict, v: dict) -> tuple[str, InlineKeyboardMarkup]:
     loot = fin["loot"]
     head = {
@@ -165,7 +185,13 @@ def _finish_render(fin: dict, v: dict) -> tuple[str, InlineKeyboardMarkup]:
         "lost": "💀 <b>تیمت از پا افتاد…</b>",
         "quit": "🚪 <b>از سیاه‌چال بیرون اومدی.</b>",
     }[fin["status"]]
+    if fin.get("endless"):
+        head = ("🌀 <b>سفرت توی بی‌انتها تموم شد</b>" if fin["status"] == "lost" else "🚪 <b>از بی‌انتها بیرون اومدی.</b>")
     lines = [head, _DIV]
+    if fin.get("endless"):
+        lines += [f"🏁 رسیدی به طبقه‌ی <b>{fin['floor']}</b>"
+                  + (" — <b>رکورد جدید این هفته!</b> 🎉" if fin.get("new_record") else ""),
+                  f"🏆 رکورد هفته‌ات: طبقه‌ی <code>{fin['week_best']}</code> · رتبه‌ی <code>{fin['rank'] or '—'}</code>", _DIV]
     if fin["share"] < 1:
         lines.append(f"<i>نصف غنیمت جمع‌شده بهت رسید (رسیدی به {'باس' if fin['room'] > D.ROOMS else 'اتاق ' + str(fin['room'])}).</i>")
     lines += [
@@ -398,7 +424,72 @@ async def shadow_screen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await send_screen(update, text, parse_mode="HTML", reply_markup=kb)
 
 
+# ══════════════════════════ «بی‌انتها»: the weekly table ══════════════════════════
+def _board_sync(tg_user):
+    from bio_lab.repository import lab_mention
+
+    user, _ = get_or_create_user(tg_user)
+    b = D.board(user)
+    b["rows"] = [dict(r, name=lab_mention(r["user"])) for r in b["rows"]]
+    if b["last"]:
+        from bio_lab.models import User as U
+
+        ids = [r["user_id"] for r in b["last"]["results"][:3]]
+        names = {u.id: lab_mention(u) for u in U.objects.filter(id__in=ids)}
+        b["last_top"] = [(r["rank"], names.get(r["user_id"], "—"), r["floor"]) for r in b["last"]["results"][:3]]
+    return b
+
+
+async def dungeon_board(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    b = await run_db(_board_sync, update.effective_user)
+    await query.answer()
+    days, rem = divmod(b["left"], 86400)
+    lines = ["🌀 <b>جدول هفتگی سیاه‌چال بی‌انتها</b>", _DIV,
+             f"⏳ <code>{days}</code> روز و <code>{rem // 3600}</code> ساعت تا پایان هفته", _DIV]
+    medals = ("🥇", "🥈", "🥉")
+    if not b["rows"]:
+        lines.append("<i>هنوز کسی این هفته وارد بی‌انتها نشده — اولین نفر باش!</i>")
+    for r in b["rows"]:
+        lines.append(f"{medals[r['rank'] - 1] if r['rank'] <= 3 else str(r['rank']) + '.'} {r['name']} — طبقه‌ی <code>{r['floor']}</code>")
+    lines.append(_DIV)
+    lines.append(f"📍 تو: طبقه‌ی <code>{b['mine']['floor']}</code> · رتبه‌ی <code>{b['mine']['rank']}</code>" if b["mine"]
+                 else "📍 تو هنوز این هفته طبقه‌ای ثبت نکردی.")
+    lines += [_DIV, "🎁 <b>جایزه‌ی آخر هفته:</b>",
+              "🥇 ۳۰۰ 🔮 + ۵ 🌑 · 🥈 ۲۰۰ 🔮 + ۴ 🌑 · 🥉 ۱۵۰ 🔮 + ۳ 🌑",
+              "۴ تا ۱۰: ۸۰ 🔮 + ۱ 🌑"]
+    if b.get("last_top"):
+        lines += [_DIV, f"🏁 <b>برنده‌های هفته‌ی قبل ({b['last']['week']}):</b>"]
+        lines += [f"{medals[rank - 1]} {name} — طبقه‌ی <code>{floor}</code>" for rank, name, floor in b["last_top"]]
+    await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML",
+                                 reply_markup=InlineKeyboardMarkup([[back_btn("dg:home", "بازگشت به سیاه‌چال")]]))
+
+
+async def dungeon_week_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Pays last week's «بی‌انتها» top 10 once the week turns over, and DMs them."""
+    import asyncio
+
+    from telegram.error import TelegramError
+
+    try:
+        dms = await run_db(D.settle_due_week)
+    except Exception:  # noqa: BLE001 — a settle hiccup must not stop the job queue
+        import logging
+
+        logging.getLogger(__name__).exception("dungeon week settle failed")
+        return
+    for uid, text in dms:
+        try:
+            await context.bot.send_message(chat_id=uid, text=text, parse_mode="HTML")
+        except TelegramError:
+            pass
+        await asyncio.sleep(0.05)
+
+
 def register(application) -> None:
+    application.add_handler(CallbackQueryHandler(dungeon_board, pattern=r"^dg:lb$"))
+    if application.job_queue:
+        application.job_queue.run_repeating(dungeon_week_job, interval=1800, first=90)
     application.add_handler(CallbackQueryHandler(dungeon_home, pattern=r"^dg:home$"))
     application.add_handler(CallbackQueryHandler(dungeon_shop, pattern=r"^dg:(shop|buy:[a-z_]+)$"))
     application.add_handler(CallbackQueryHandler(dungeon_relics, pattern=r"^dg:relics$"))
