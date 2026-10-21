@@ -313,6 +313,9 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
             f"🎖 سطح: <code>{creature.level}/{max_level}</code>" + (" <i>(بیشینه ✅)</i>" if is_maxed else f" ({pct_bar(creature.xp, xp_needed, 6)})"),
             f"💪 قدرت کل: <code>{power:,}</code>",
         ]
+        if creature.shadow_level:
+            lines.append(f"🌑 فرم سیاه: <b>سایه {creature.shadow_level}</b> "
+                         f"(+<code>{creature.shadow_level * constants.SHADOW_POWER_PER_LEVEL}</code> قدرت)")
         return "\n".join(lines)
 
     if energy >= max_energy:
@@ -341,6 +344,9 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
         f"🔮 عنصر: <b>{constants.element_label(creature.element)}</b>",
         f"🎖 سطح موجود: <code>{creature.level}/{max_level}</code>" + (" <i>(بیشینه ✅)</i>" if is_maxed else ""),
     ]
+    if creature.shadow_level:
+        lines.append(f"🌑 فرم سیاه: <b>سایه {creature.shadow_level}</b> "
+                     f"(+<code>{creature.shadow_level * constants.SHADOW_POWER_PER_LEVEL}</code> قدرت)")
     if not is_maxed:
         lines.append(f"📈 پیشرفت لول: {pct_bar(creature.xp, xp_needed)} (<code>{creature.xp:,}/{xp_needed:,}</code> تجربه)")
     lines += [
@@ -1970,6 +1976,9 @@ def collection_creature_detail_text(creature, equipped_items: list | None = None
         f"🔮 عنصر: <b>{constants.element_label(creature.element)}</b>",
         f"🎖 سطح موجود: <code>{creature.level}/{max_level}</code>" + (" <i>(بیشینه ✅)</i>" if is_maxed else ""),
     ]
+    if creature.shadow_level:
+        lines.append(f"🌑 فرم سیاه: <b>سایه {creature.shadow_level}</b> "
+                     f"(+<code>{creature.shadow_level * constants.SHADOW_POWER_PER_LEVEL}</code> قدرت)")
     if not is_maxed:
         lines.append(f"📈 پیشرفت لول: {pct_bar(creature.xp, xp_needed)} (<code>{creature.xp:,}/{xp_needed:,}</code> تجربه)")
 

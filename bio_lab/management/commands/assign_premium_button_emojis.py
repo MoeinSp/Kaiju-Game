@@ -183,6 +183,7 @@ class Command(BaseCommand):
             "btn_dungeon": ["🕳", "🌑", "💀", "🗝"],
             "btn_dungeon_shop": ["🔮", "💜", "🛒", "✨"],
             "btn_relics": ["🏺", "🗿", "📜", "💎"],
+            "btn_shadow_form": ["🌑", "🖤", "💜", "🔮"],
             "btn_league": ["🎖", "🏆", "🥇", "⭐"],
             "btn_codex": ["📖", "📚", "📕", "📜"],
             "btn_referral": ["🎁", "👥", "🤝", "🎉"],

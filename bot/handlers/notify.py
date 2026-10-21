@@ -149,6 +149,11 @@ async def outbox_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     for kind, payload in rows:
         if kind == "outbid":
             await send_outbid_notification_now(context, payload)
+        elif kind == "group_post":   # e.g. the «ارباب سایه» announcement (game/shadow.py)
+            try:
+                await context.bot.send_message(chat_id=payload["chat_id"], text=payload["text"], parse_mode="HTML")
+            except TelegramError:
+                pass
 
 
 async def send_war_notifications_now(context: ContextTypes.DEFAULT_TYPE) -> None:

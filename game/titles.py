@@ -16,6 +16,14 @@ def _codex_count(user: User) -> int:
     return CodexEntry.objects.filter(user=user).count()
 
 
+def _badge_at_least(user: User, key: str) -> bool:
+    from game.shadow import BADGES
+
+    order = list(BADGES)
+    have = getattr(user, "dungeon_badge", "") or ""
+    return have in order and order.index(have) >= order.index(key)
+
+
 # each: key, emoji, title, and a predicate over the player's state
 TITLES = [
     {"key": "rookie", "emoji": "🔰", "title": "تازه‌کار", "check": lambda u: True},
@@ -27,6 +35,11 @@ TITLES = [
     {"key": "scholar", "emoji": "📖", "title": "دانشنامه‌دار", "check": lambda u: _codex_count(u) >= len(constants.SPECIES)},
     {"key": "master", "emoji": "🧪", "title": "استادِ آزمایشگاه", "check": lambda u: lab.lab_level(u) >= 40},
     {"key": "legend", "emoji": "💎", "title": "اسطوره", "check": lambda u: u.cup >= 600 or u.campaign_stage >= 50},
+    # «سیاه‌چال» (game/shadow.py BADGES) — unlocked by the badge on the player's row
+    {"key": "dg_explorer", "emoji": "🕳", "title": "کاوشگر سیاه‌چال", "check": lambda u: _badge_at_least(u, "explorer")},
+    {"key": "dg_hard", "emoji": "⚔️", "title": "فاتح سخت", "check": lambda u: _badge_at_least(u, "hard")},
+    {"key": "dg_nightmare", "emoji": "💀", "title": "فاتح کابوس", "check": lambda u: _badge_at_least(u, "nightmare")},
+    {"key": "dg_shadow_lord", "emoji": "🌑", "title": "ارباب سایه", "check": lambda u: _badge_at_least(u, "shadow_lord")},
 ]
 TITLES_BY_KEY = {t["key"]: t for t in TITLES}
 

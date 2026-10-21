@@ -59,6 +59,7 @@ def _home_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
         _DIV,
         f"🗝 کلید: <code>{v['keys']}</code>  <i>(هر روز ۲ کلید رایگان)</i>",
         f"🔮 رون سیاه: <code>{v['black_runes']}</code>",
+        f"🌑 هسته‌ی سایه: <code>{v['shadow_cores']}</code>",
         f"🏆 ورود موفق: <code>{v['clears']}</code> از <code>{v['runs']}</code>",
         f"🏺 آثار فعال: <code>{v['relics']}</code>",
     ]
@@ -71,11 +72,17 @@ def _home_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
     else:
         lines += [_DIV, "<i>با تیم حمله‌ات وارد شو: ۷ اتاق، سر هر اتاق چند در، و آخرش باس. "
                         "جون هیولاها تا آخر ورود می‌مونه، پس با فکر در انتخاب کن!</i>"]
-        rows.append([btn("ورود به سیاه‌چال · ۱ کلید", emoji_key="btn_dungeon", style=BATTLE, callback_data="dg:start")])
+        for d in v["difficulties"]:
+            if d["open"]:
+                rows.append([btn(f"ورود · {d['label']} · ۱ کلید", emoji_key="btn_dungeon",
+                                 style=BATTLE if d["key"] == "normal" else DANGER, callback_data=f"dg:start:{d['key']}")])
+            else:
+                lines.append(f"🔒 <i>سختی «{d['label']}» بعد از یه برد در سختی قبلی باز می‌شه.</i>")
     rows.append([
         btn("فروشگاه", emoji_key="btn_dungeon_shop", style=SHOP, callback_data="dg:shop"),
         btn("آثار باستانی", emoji_key="btn_relics", style=SHOP, callback_data="dg:relics"),
     ])
+    rows.append([btn("فرم سیاه", emoji_key="btn_shadow_form", style=PRIMARY, callback_data="dg:sh")])
     rows.append([back_btn("menu:campaign", "بازگشت به دانجن")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -83,9 +90,11 @@ def _home_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
 async def dungeon_home(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.callback_query:
         await update.callback_query.answer()
+    from game.media import get_feature_image_path
+
     v = await run_db(_home_sync, update.effective_user)
     text, kb = _home_render(v)
-    await send_screen(update, text, parse_mode="HTML", reply_markup=kb)
+    await send_screen(update, text, photo=get_feature_image_path("dungeon"), parse_mode="HTML", reply_markup=kb)
 
 
 # ══════════════════════════ the run ══════════════════════════
@@ -95,7 +104,8 @@ def _run_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
         return _home_render(v)
     st = run["state"]
     room = "👑 <b>باس سیاه‌چال</b>" if st["room"] > D.ROOMS else f"اتاق <code>{st['room']}</code> از <code>{D.ROOMS}</code>"
-    lines = [f"🕳 <b>سیاه‌چال</b> · {room}", _DIV]
+    tier = D.DIFFICULTIES[st.get("difficulty", "normal")]["label"]
+    lines = [f"🕳 <b>سیاه‌چال · {tier}</b> · {room}", _DIV]
     if note:
         lines += [note, _DIV]
     for m in run["members"]:
@@ -163,6 +173,12 @@ def _finish_render(fin: dict, v: dict) -> tuple[str, InlineKeyboardMarkup]:
         f"🧬 DNA: <code>+{loot['dna']:,}</code>",
         f"🔮 رون سیاه: <code>+{loot['runes']}</code>",
     ]
+    if loot.get("cores"):
+        lines.append(f"🌑 هسته‌ی سایه: <code>+{loot['cores']}</code>")
+    if fin.get("unlocked"):
+        lines += [_DIV, f"🔓 <b>سختی «{fin['unlocked']}» باز شد!</b>"]
+    if fin.get("badge"):
+        lines += [_DIV, f"{fin['badge'][0]} <b>نشان جدید: {fin['badge'][1]}</b>\n<i>از این به بعد کنار اسم آزمایشگاهت دیده می‌شه.</i>"]
     if fin.get("relic"):
         r = fin["relic"]
         lines += [_DIV, f"🏺 <b>اثر باستانی: {r['label']}</b>",
@@ -170,7 +186,8 @@ def _finish_render(fin: dict, v: dict) -> tuple[str, InlineKeyboardMarkup]:
                   "⏳ " + ("۳ روز به زمانش اضافه شد" if r["extended"] else "۳ روز فعاله")]
     rows = []
     if v["keys"] > 0:
-        rows.append([btn(f"ورود دوباره · {v['keys']} کلید", emoji_key="btn_dungeon", style=BATTLE, callback_data="dg:start")])
+        rows.append([btn(f"ورود دوباره · {v['keys']} کلید", emoji_key="btn_dungeon", style=BATTLE,
+                         callback_data=f"dg:start:{fin.get('difficulty', 'normal')}")])
     rows.append([btn("سیاه‌چال", emoji_key="btn_dungeon", style=NAV, callback_data="dg:home")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -179,7 +196,7 @@ def _act_sync(tg_user, action: str, arg):
     user, _ = get_or_create_user(tg_user)
     out = None
     if action == "start":
-        D.start(user)
+        D.start(user, arg or "normal")
     elif action == "door":
         out = D.choose_door(user, arg)
     elif action == "fight":
@@ -227,7 +244,9 @@ async def dungeon_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if action is None:
         await query.answer()
         return
-    if cmd in ("d", "f", "r"):
+    if cmd == "start":
+        arg = parts[2] if len(parts) > 2 else "normal"
+    elif cmd in ("d", "f", "r"):
         arg = int(parts[2])
     elif cmd == "m":
         arg = None if parts[2] == "x" else int(parts[2])
@@ -315,8 +334,73 @@ async def dungeon_relics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                                  reply_markup=InlineKeyboardMarkup([[back_btn("dg:home", "بازگشت به سیاه‌چال")]]))
 
 
+# ══════════════════════════ «فرم سیاه» ══════════════════════════
+def _shadow_sync(tg_user, action: str | None, cid: int | None):
+    from game import shadow
+
+    user, _ = get_or_create_user(tg_user)
+    done = None
+    if action == "ok":
+        done = shadow.ascend(user, cid)
+    prof = D.profile(user) if D.unlocked(user) else None
+    return {"rows": shadow.candidates(user), "cores": prof.shadow_cores if prof else 0,
+            "coins": type(user).objects.values_list("coins", flat=True).get(id=user.id), "done": done}
+
+
+def _shadow_render(v: dict, focus: int | None = None) -> tuple[str, InlineKeyboardMarkup]:
+    from game import shadow
+
+    lines = ["🌑 <b>فرم سیاه</b>", _DIV,
+             f"🌑 هسته‌ی سایه: <code>{v['cores']}</code> · 💰 طلا: <code>{v['coins']:,}</code>",
+             f"<i>هیولای اساطیری ۵ ستاره‌ای که قدرتش به سقف ({constants.MAX_KAIJU_POWER:,}) رسیده، با هسته‌ی سایه "
+             f"تا {constants.SHADOW_MAX_LEVEL} سطح فرم سیاه می‌گیره: هر سطح +{constants.SHADOW_POWER_PER_LEVEL} قدرت "
+             f"و سقفش هم همون‌قدر بالا می‌ره. هسته از باس سخت و کابوس سیاه‌چال یا فروشگاهش میاد.</i>", _DIV]
+    if v.get("done"):
+        d = v["done"]
+        lines += [f"✨ <b>{html.escape(d['creature'].name)} به {shadow.LEVEL_NAMES[d['level']]} رسید!</b>"
+                  + ("\n👑 <b>ارباب سایه شدی!</b> نشان 🌑 کنار اسمت نشست." if d["lord"] else ""), _DIV]
+    rows = []
+    if not v["rows"]:
+        lines.append("<i>هنوز هیولای اساطیری ۵ ستاره نداری.</i>")
+    for r in v["rows"][:8]:
+        c = r["creature"]
+        lvl = f" · {shadow.LEVEL_NAMES[r['level']]}" if r["level"] else ""
+        lines.append(f"{'🌑' if r['level'] else '▫️'} <b>{html.escape(c.name)}</b>{lvl} · 💪 <code>{r['power']:,}</code>")
+        if r["next"] is None:
+            lines.append("   👑 <i>آخرین سطح</i>")
+        elif not r["ok"]:
+            lines.append(f"   <i>{html.escape(r['why'])}</i>")
+        else:
+            nxt = r["next"]
+            lines.append(f"   سطح بعد: 🌑 <code>{nxt['cores']}</code> هسته · 💰 <code>{nxt['coins']:,}</code> طلا")
+            if focus == c.id:
+                rows.append([btn(f"تأیید: {c.name} ← {shadow.LEVEL_NAMES[r['level'] + 1]}", emoji_key="btn_confirm",
+                                 style=CONFIRM, callback_data=f"dg:shok:{c.id}")])
+            else:
+                rows.append([btn(f"{c.name} ← {shadow.LEVEL_NAMES[r['level'] + 1]}", emoji_key="btn_shadow_form",
+                                 style=PRIMARY, callback_data=f"dg:sha:{c.id}")])
+    rows.append([back_btn("dg:home", "بازگشت به سیاه‌چال")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+async def shadow_screen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    parts = query.data.split(":")
+    action = {"sha": "ask", "shok": "ok"}.get(parts[1])
+    cid = int(parts[2]) if len(parts) > 2 else None
+    try:
+        v = await run_db(_shadow_sync, update.effective_user, action, cid)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    await query.answer("✨ فرم سیاه!" if v.get("done") else None)
+    text, kb = _shadow_render(v, focus=cid if action == "ask" else None)
+    await send_screen(update, text, parse_mode="HTML", reply_markup=kb)
+
+
 def register(application) -> None:
     application.add_handler(CallbackQueryHandler(dungeon_home, pattern=r"^dg:home$"))
     application.add_handler(CallbackQueryHandler(dungeon_shop, pattern=r"^dg:(shop|buy:[a-z_]+)$"))
     application.add_handler(CallbackQueryHandler(dungeon_relics, pattern=r"^dg:relics$"))
-    application.add_handler(CallbackQueryHandler(dungeon_callback, pattern=r"^dg:(run|start|quit|quitok|d:\d+|f:\d+|r:\d+|m:(\d+|x))$"))
+    application.add_handler(CallbackQueryHandler(dungeon_callback, pattern=r"^dg:(run|start(:[a-z]+)?|quit|quitok|d:\d+|f:\d+|r:\d+|m:(\d+|x))$"))
+    application.add_handler(CallbackQueryHandler(shadow_screen, pattern=r"^dg:(sh|sha:\d+|shok:\d+)$"))
