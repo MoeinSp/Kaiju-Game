@@ -408,31 +408,24 @@ body::after { content: ""; position: fixed; inset: 0; z-index: -1; pointer-event
   box-shadow: 0 8px 22px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.06); }
 .hud { background: linear-gradient(180deg, rgba(8,11,18,.92), rgba(8,11,18,.78)); box-shadow: 0 6px 18px rgba(0,0,0,.35); }
 
-/* bottom bar, Clash Royale style: five beveled tiles; the open one is wider and blue, its icon
-   rises over the bar and only it shows its name. The battle tile is always red. */
-nav.tabs { background: linear-gradient(180deg, #131b2c, #070a12); border-top: 2px solid #2a3550; box-shadow: 0 -8px 22px rgba(0,0,0,.55); overflow: visible; }
-nav.tabs .in { gap: 5px; padding: 0 8px; align-items: center; overflow: visible; }
-nav.tabs button { flex: 1 1 0; min-width: 0; height: 50px; padding: 0; gap: 0; justify-content: center; border-radius: 12px; color: #fff;
-  background: linear-gradient(180deg, #2a3650 0%, #18213a 55%, #111829); border: 1px solid rgba(255,255,255,.09);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), inset 0 -3px 0 rgba(0,0,0,.35), 0 2px 0 #03050a; transition: flex-grow .25s var(--ease), background .2s; }
-nav.tabs button span { display: none; }
-nav.tabs .ti { position: relative; width: 34px; height: 34px; display: grid; place-items: center; transition: transform .25s var(--ease); }
-nav.tabs .ti svg { width: 31px; height: 31px; filter: drop-shadow(0 2px 1px rgba(0,0,0,.55)); transform: none; }
-nav.tabs button.on { flex-grow: 1.65; justify-content: flex-end; padding-bottom: 5px;
-  background: linear-gradient(180deg, #62b0f7 0%, #3077d6 55%, #1f52a8); border-color: #a9d6ff;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.5), inset 0 -3px 0 rgba(0,0,0,.25), 0 2px 0 #03050a, 0 0 16px rgba(80,160,255,.45); }
-nav.tabs button.on::before { display: none; }
-nav.tabs button.on .ti { position: absolute; top: -22px; left: 50%; width: 50px; height: 50px; margin-left: -25px; }
-nav.tabs button.on .ti svg { width: 48px; height: 48px; filter: drop-shadow(0 4px 3px rgba(0,0,0,.5)); transform: none; }
-nav.tabs button.on span { display: block; font-size: 12px; font-weight: 800; line-height: 1; color: #fff; text-shadow: 0 1px 0 #0b2a5c, 0 0 4px rgba(0,0,0,.5); }
-nav.tabs button[data-tab="battle"] { background: linear-gradient(180deg, #ff6f82 0%, #d4304e 55%, #9c1835); border-color: #ffb3bf; }
-nav.tabs button[data-tab="battle"].on { background: linear-gradient(180deg, #ff8a9a 0%, #e5385a 55%, #ad1c3d); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), inset 0 -3px 0 rgba(0,0,0,.25), 0 2px 0 #03050a, 0 0 18px rgba(255,80,110,.55); }
-nav.tabs button[data-tab="battle"].on span { text-shadow: 0 1px 0 #6b0f24, 0 0 4px rgba(0,0,0,.5); }
-nav.tabs button:active { transform: translateY(2px); }
-nav.tabs button:active .ti { transform: scale(.92); }
-nav.tabs button.on:active .ti { transform: none; }
-nav.tabs .dot { top: -6px; inset-inline-end: -4px; z-index: 3; box-shadow: 0 0 0 2px #0b0f18; }
-nav.tabs .dot.live { top: -3px; inset-inline-end: -2px; }
+/* bottom bar: a dark glass strip under a thin cyan line. Every tab shows a solid one-piece icon
+   (TAB_SOLID in core.js) with its name under it; the open one turns cyan and glows. */
+nav.tabs { background: rgba(7,10,20,.94); border-top: 1px solid rgba(58,214,255,.24); box-shadow: 0 -10px 26px rgba(0,0,0,.5);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); overflow: visible; }
+nav.tabs .in { gap: 0; padding: 0 6px; align-items: stretch; }
+nav.tabs button { flex: 1 1 0; min-width: 0; height: var(--tabs-h); padding: 0; gap: 4px; justify-content: center; border-radius: 0; color: #7e89a6;
+  background: none; border: 0; box-shadow: none; transition: color .2s; }
+nav.tabs button span { display: block; font-size: 11px; font-weight: 400; line-height: 1; }
+nav.tabs .ti { position: relative; width: 26px; height: 26px; display: grid; place-items: center; transition: transform .2s var(--ease); }
+nav.tabs .ti svg { width: 25px; height: 25px; fill: currentColor; stroke: none; transition: filter .2s; }
+nav.tabs button.on { color: var(--accent); }
+nav.tabs button.on span { font-weight: 700; }
+nav.tabs button.on .ti { transform: translateY(-1px); }
+nav.tabs button.on .ti svg { filter: drop-shadow(0 0 7px rgba(58,214,255,.8)); }
+nav.tabs button.on::before, nav.tabs button.on::after { display: none; }
+nav.tabs button:active .ti { transform: scale(.88); }
+nav.tabs .dot { top: 6px; inset-inline-end: calc(50% - 24px); z-index: 3; box-shadow: 0 0 0 2px #070a14; }
+nav.tabs .dot.live { top: 8px; inset-inline-end: calc(50% - 20px); }
 
 /* ── hubs (battle / base / more), game style — K.renderHub in core.js ── */
 .hubx { position: relative; margin: -12px calc(-1 * max(14px, env(safe-area-inset-left, 0px))) 0; padding: 14px max(14px, env(safe-area-inset-left, 0px)) 6px;
@@ -505,26 +498,26 @@ nav.tabs .dot.live { top: -3px; inset-inline-end: -2px; }
 .hx-hero.duo { overflow: visible; } .hx-hero.duo .hx-hcard { flex: 1 1 0; min-width: 0; max-width: none; height: 236px; }
 .hx-hero.duo .hx-txt b { font-size: 18px; }
 
-/* ── resource bar, game style (K.setRes in core.js) ── */
-.hud .in { gap: 10px; padding: 9px 12px 8px; padding-inline-start: 22px; overflow: visible; }
-.res { position: relative; flex: 1 1 auto; min-width: 0; height: 27px; padding: 0 7px; padding-inline-start: 20px; justify-content: center; gap: 0; border-radius: 8px;
-  background: linear-gradient(180deg, #232d44, #0d121e); border: 1.5px solid #3a4865; color: #fff; font: inherit;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), inset 0 -2px 0 rgba(0,0,0,.35), 0 2px 0 #04060a; }
-.res .ri { position: absolute; inset-inline-start: -13px; top: 50%; width: 31px; height: 31px; margin-top: -15.5px; filter: drop-shadow(0 2px 2px rgba(0,0,0,.6)); }
+/* ── resource bar, neon line (K.setRes in core.js): one outlined pill per resource, the thin line
+   icon BESIDE its number (never on top of it), coloured by the resource and lightly glowing ── */
+.hud .in { gap: 6px; padding: 9px 12px 8px; overflow: visible; }
+.res { position: relative; flex: 1 1 auto; min-width: 0; height: 30px; padding: 0 9px; gap: 5px; justify-content: center; direction: ltr; border-radius: 999px;
+  background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.12); box-shadow: none; font: inherit; }
+.res .ri { flex: none; display: grid; place-items: center; width: 17px; height: 17px; filter: drop-shadow(0 0 4px currentColor); }
 .res .ri svg { display: block; width: 100%; height: 100%; }
-.res b { font-size: 13px; font-weight: 800; line-height: 1; white-space: nowrap; color: #fff; text-shadow: 0 1px 0 #000, 0 0 3px rgba(0,0,0,.8); }
-.res b small { font-size: 9.5px; font-weight: 700; color: #9aa6c2; }
-.res.plus { padding-inline-end: 23px; }
-.res .rp { position: absolute; inset-inline-end: 3px; top: 50%; width: 17px; height: 17px; margin-top: -8.5px; border-radius: 5px; display: grid; place-items: center;
-  font-style: normal; font-size: 14px; font-weight: 900; line-height: 1; color: #fff; text-shadow: 0 1px 0 #0d4d22;
-  background: linear-gradient(180deg, #62e889, #1fa04a); border: 1px solid #0d4d22; box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 1px 0 #04060a; }
-.res .rf { position: absolute; bottom: 2px; inset-inline-start: 18px; height: 2px; border-radius: 2px; background: #ffd23d; box-shadow: 0 0 4px #ffb800; }
-.res[data-go]:active { transform: translateY(1px); }
+.hud .res b { font-family: "Vazirmatn", system-ui, sans-serif; font-size: 13.5px; font-weight: 700; line-height: 1; letter-spacing: 0; white-space: nowrap; color: #fff; text-shadow: none; }
+.res b small { font-size: 10px; font-weight: 400; color: #8f9bb5; }
+.res .rp { flex: none; width: 15px; height: 15px; margin-inline-start: 1px; border-radius: 50%; display: grid; place-items: center;
+  font-style: normal; font-size: 12px; font-weight: 700; line-height: 1; color: var(--good); border: 1px solid rgba(53,212,138,.6); }
+.res .rf { position: absolute; bottom: 3px; inset-inline-start: 12px; height: 2px; border-radius: 2px; background: currentColor; box-shadow: 0 0 6px currentColor; opacity: .85; }
+.res.t-gem { color: var(--diamond); }   /* the plaque is keyed by its icon (gem), the colour token by the resource */
+.res[data-go]:active { transform: scale(.96); }
 @media (max-width: 380px) {
-  .hud .in { gap: 9px; padding-inline: 8px; padding-inline-start: 19px; }
-  .res { padding: 0 5px; padding-inline-start: 17px; } .res.plus { padding-inline-end: 21px; }
-  .res .ri { width: 28px; height: 28px; margin-top: -14px; inset-inline-start: -12px; }
-  .res b { font-size: 12px; } .res b small { display: none; }
+  .hud .in { gap: 4px; padding-inline: 8px; }
+  .res { padding: 0 6px; gap: 4px; }
+  .res .ri { width: 15px; height: 15px; }
+  .hud .res b { font-size: 12.5px; } .res b small { display: none; }
+  .res .rp { display: none; }
 }
 
 /* ── «نبرد» as a map: round medallions on paths (K.renderHub, HUB_MAP) ── */

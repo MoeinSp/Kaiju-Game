@@ -295,6 +295,18 @@ window.K = (function () {
   /* The resource bar, game style: a beveled pill per resource with its big icon hanging over the
      edge, a green «+» on what can be topped up and a thin fill line under the energy. A pill
      with a screen opens it. */
+  /* the bottom tabs: solid one-piece glyphs filled with the tab's colour (grey, cyan when open).
+     The monster's eyes and mouth and the castle's door are holes (evenodd), so they read on any fill. */
+  var TAB_SOLID = {
+    home: '<path d="M2.6 11.4 12 3.3l9.4 8.1-1.3 1.5-.9-.8V20a1 1 0 0 1-1 1h-4.4v-5.4h-3.6V21H5.8a1 1 0 0 1-1-1v-7.9l-.9.8z"/>',
+    creatures: '<path fill-rule="evenodd" d="M4.4 3.4 8 7.6a8.6 8.6 0 0 1 8 0l3.6-4.2.7 6.6c.8 1 1.2 2.3 1.2 3.6 0 5-4.2 8.4-9.5 8.4S2.5 18.6 2.5 13.6c0-1.3.4-2.6 1.2-3.6zM8 12.4l3.4 1.2-1 1.8C9 15.4 8.2 14 8 12.4zm8 0-3.4 1.2 1 1.8c1.4 0 2.2-1.4 2.4-3zM9.4 17.4h5.2l-.9 1.6h-3.4z"/>',
+    battle: '<path d="M3 3h3.6l9 9-1.8 1.8L3 6.6zM21 3h-3.6l-9 9 1.8 1.8L21 6.6zM6.4 14.2l3.4 3.4-1.4 1.4-1-1-2.6 2.6-1.4-1.4 2.6-2.6-1-1zM17.6 14.2l-3.4 3.4 1.4 1.4 1-1 2.6 2.6 1.4-1.4-2.6-2.6 1-1z"/>',
+    base: '<path d="M2.5 21V7.5h3v2h2v-2h3v3h3v-3h3v2h2v-2h3V21h-7v-4.2a2 2 0 0 0-4 0V21z"/>',
+    more: '<rect x="3" y="3" width="7.6" height="7.6" rx="2.2"/><rect x="13.4" y="3" width="7.6" height="7.6" rx="2.2"/><rect x="3" y="13.4" width="7.6" height="7.6" rx="2.2"/><rect x="13.4" y="13.4" width="7.6" height="7.6" rx="2.2"/>'
+  };
+  /* the resource bar's icons: the thin line set, coloured by the plaque's t-<res> class */
+  var RES_LINE = { coin: "coin", dna: "dna", gem: "gem", energy: "bolt", cup: "trophy" };
+  function resLine(k) { return '<svg class="i" viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[RES_LINE[k]] || "") + "</svg>"; }
   K.setRes = function (res) {
     if (!res) return;
     var prev = K.res; K.res = res;
@@ -309,7 +321,7 @@ window.K = (function () {
       hudIn.innerHTML = items.map(function (it) {
         var changed = prev && prev[it[1]] !== res[it[1]];
         return '<button class="res t-' + it[0] + (it[4] ? " plus" : "") + (changed ? " bump" : "") + '"' + (it[3] ? ' data-go="' + it[3] + '"' : "") + ' title="' + RES_TITLE[it[1]] + '">' +
-          '<i class="ri">' + K.resArt(it[0]) + '</i><b class="num">' + it[2] + "</b>" + (it[4] ? '<i class="rp">+</i>' : "") +
+          '<i class="ri">' + resLine(it[0]) + '</i><b class="num">' + it[2] + "</b>" + (it[4] ? '<i class="rp">+</i>' : "") +
           (it[1] === "energy" ? '<i class="rf" style="width:calc((100% - 30px) * ' + er.toFixed(3) + ')"></i>' : "") + "</button>";
       }).join("");
     }
@@ -557,32 +569,9 @@ window.K = (function () {
   var navDir = "tab";   // how the next screen arrives: "fwd" (K.go) slides in, "back" slides the other way, "tab" fades
   K.TABS = [["home", "home", "خانه"], ["creatures", "claw", "هیولاها"], ["battle", "swords", "نبرد"], ["base", "hall", "پایگاه"], ["more", "grid", "بیشتر"]];
   backEl.innerHTML = K.ic("back");
-  /* Full-colour game icons for the bottom tabs and the resource bar. Flat fills only: the
-     iPhone webview of Telegram does not always draw SVG gradients referenced by id. */
-  var TAB_ART = {
-    home: '<rect x="21" y="6" width="3.2" height="7" rx=".8" fill="#a8452f"/>' +
-      '<path d="M7 14.5V26a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 25 26V14.5L16 7z" fill="#3d9be9"/>' +
-      '<path d="M7 22.5h18V26a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 7 26z" fill="#2a72c4"/>' +
-      '<path d="M3.6 15.2 16 4.6l12.4 10.6a1.4 1.4 0 0 1-1.8 2.1L16 8.3 5.4 17.3a1.4 1.4 0 0 1-1.8-2.1z" fill="#e0443b"/>' +
-      '<path d="M5.4 15.1 16 6.1l10.6 9" fill="none" stroke="#ff9a6b" stroke-width="1.3" stroke-linecap="round"/>' +
-      '<path d="M13 27.5v-5.5a3 3 0 0 1 6 0v5.5z" fill="#ffd36b"/><rect x="9.5" y="16.5" width="3.4" height="3.4" rx=".7" fill="#e9f8ff"/><rect x="19.1" y="16.5" width="3.4" height="3.4" rx=".7" fill="#e9f8ff"/>',
-    creatures: '<path d="M8.6 11.5 5 3.2l7.6 5.2zM23.4 11.5 27 3.2l-7.6 5.2z" fill="#f1e2b8"/>' +
-      '<path d="M16 6.5c6.4 0 10.5 4.3 10.5 10.3 0 6.6-4.6 11.2-10.5 11.2S5.5 23.4 5.5 16.8C5.5 10.8 9.6 6.5 16 6.5z" fill="#43b863"/>' +
-      '<path d="M5.7 18.5c.9 5.5 5 9.5 10.3 9.5s9.4-4 10.3-9.5c-1.6 3.3-5.4 5.6-10.3 5.6s-8.7-2.3-10.3-5.6z" fill="#2f8f4c"/>' +
-      '<path d="M9.8 10.6c1.6-1.8 3.7-2.7 6.2-2.7s4.6.9 6.2 2.7" fill="none" stroke="#a6f28a" stroke-width="1.5" stroke-linecap="round"/>' +
-      '<path d="M9.2 14.8l5.6 1.9-1 2.6c-2.4.2-4.2-1.6-4.6-4.5zM22.8 14.8l-5.6 1.9 1 2.6c2.4.2 4.2-1.6 4.6-4.5z" fill="#ffe14d"/>' +
-      '<path d="M10.8 22h10.4l-1.6 3h-7.2z" fill="#20112a"/><path d="M12.6 22l1.1 1.7 1.1-1.7zM17.2 22l1.1 1.7 1.1-1.7z" fill="#fff"/>',
-    battle: '<g transform="rotate(45 16 16)"><path d="M16 1.2l2.3 3.2V21h-4.6V4.4z" fill="#eef3fb"/><path d="M16 1.2l2.3 3.2V21H16z" fill="#b9c6dc"/><rect x="10.2" y="20.6" width="11.6" height="2.8" rx="1.4" fill="#ffc53d"/><rect x="14.8" y="23.2" width="2.4" height="4.8" fill="#8a4420"/><circle cx="16" cy="29.4" r="1.9" fill="#ffc53d"/></g>' +
-      '<g transform="rotate(-45 16 16)"><path d="M16 1.2l2.3 3.2V21h-4.6V4.4z" fill="#eef3fb"/><path d="M16 1.2l2.3 3.2V21H16z" fill="#b9c6dc"/><rect x="10.2" y="20.6" width="11.6" height="2.8" rx="1.4" fill="#ffc53d"/><rect x="14.8" y="23.2" width="2.4" height="4.8" fill="#8a4420"/><circle cx="16" cy="29.4" r="1.9" fill="#ffc53d"/></g>',
-    base: '<path d="M16 3v10" stroke="#e8d9b0" stroke-width="1.3"/><path d="M16.6 3.2h6l-1.7 2.1 1.7 2.1h-6z" fill="#ff5470"/>' +
-      '<path d="M10.5 28V12.5h2.2v1.8h2.1v-1.8h2.4v1.8h2.1v-1.8h2.2V28z" fill="#b4c2dc"/>' +
-      '<path d="M3.5 28V9h2.6v2.2h2.3V9H11v19zM21 28V9h2.6v2.2h2.3V9h2.6v19z" fill="#a3b3d0"/>' +
-      '<path d="M8.6 11.2H11V28H8.6zM26 11.2h2.5V28H26z" fill="#7d8fb1"/><path d="M3.5 24.5h25V28h-25z" fill="#6c7fa3"/>' +
-      '<path d="M13.4 28v-4.6a2.6 2.6 0 0 1 5.2 0V28z" fill="#1b2335"/><rect x="5.4" y="14.5" width="2.6" height="3.6" rx="1.3" fill="#ffd36b"/><rect x="23" y="14.5" width="2.6" height="3.6" rx="1.3" fill="#ffd36b"/>',
-    more: '<rect x="4" y="4" width="10.8" height="10.8" rx="3.2" fill="#3ad6ff"/><rect x="17.2" y="4" width="10.8" height="10.8" rx="3.2" fill="#a77bff"/>' +
-      '<rect x="4" y="17.2" width="10.8" height="10.8" rx="3.2" fill="#ffc53d"/><rect x="17.2" y="17.2" width="10.8" height="10.8" rx="3.2" fill="#35d48a"/>' +
-      '<path d="M6.2 7.4a1.6 1.6 0 0 1 1.6-1.6h3.4M19.4 7.4a1.6 1.6 0 0 1 1.6-1.6h3.4M6.2 20.6a1.6 1.6 0 0 1 1.6-1.6h3.4M19.4 20.6a1.6 1.6 0 0 1 1.6-1.6h3.4" stroke="rgba(255,255,255,.7)" stroke-width="1.4" fill="none" stroke-linecap="round"/>'
-  };
+  /* Full-colour currency art, used by K.ic("coin" | "dna" | "diamond") inside the screens (prices,
+     rewards). Flat fills only: the iPhone webview of Telegram does not always draw SVG gradients
+     referenced by id. The resource bar and the tab bar use the thin line icons instead. */
   var RES_ART = {
     coin: '<circle cx="16" cy="16.6" r="13.4" fill="#a86a0c"/><circle cx="16" cy="15.2" r="12.6" fill="#ffc53d"/><circle cx="16" cy="15.2" r="9.2" fill="#f0a51b"/>' +
       '<path d="M16 9.4l1.8 3.7 4 .5-3 2.8.8 4-3.6-2-3.6 2 .8-4-3-2.8 4-.5z" fill="#ffe08a"/><ellipse cx="10.8" cy="8.8" rx="3.3" ry="1.7" transform="rotate(-32 10.8 8.8)" fill="#fff6d6"/>',
@@ -942,7 +931,7 @@ window.K = (function () {
   K.start = function () {
     if (K.started) return; K.started = true;
     tabsEl.innerHTML = K.TABS.map(function (t) {
-      return '<button data-tab="' + t[0] + '"><i class="ti">' + (TAB_ART[t[0]] ? '<svg viewBox="0 0 32 32" aria-hidden="true">' + TAB_ART[t[0]] + "</svg>" : K.ic(t[1])) + "</i><span>" + t[2] + "</span></button>";
+      return '<button data-tab="' + t[0] + '"><i class="ti">' + (TAB_SOLID[t[0]] ? '<svg viewBox="0 0 24 24" aria-hidden="true">' + TAB_SOLID[t[0]] + "</svg>" : K.ic(t[1])) + "</i><span>" + t[2] + "</span></button>";
     }).join("");
     tabsEl.addEventListener("click", function (ev) { var b = ev.target.closest("button[data-tab]"); if (!b) return; K.haptic(); K.tab(b.dataset.tab); });
     // back from another app / a locked phone: numbers may be old
