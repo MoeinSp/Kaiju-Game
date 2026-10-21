@@ -119,10 +119,11 @@ def _rune_count(state: dict, key: str) -> int:
     return sum(1 for r in state["runes"] if r == key or r.startswith(key + ":"))
 
 
-def rune_label(key: str) -> tuple[str, str]:
+def rune_label(key: str, plain: bool = False) -> tuple[str, str]:
+    """(label, description) of a run-rune. `plain` = no emoji (the Mini App's rule)."""
     base, _, el = key.partition(":")
     label, desc = RUNES[base]
-    el_name = constants.element_label(el) if el else ""
+    el_name = (constants.ELEMENT_WORDS.get(el, el) if plain else constants.element_label(el)) if el else ""
     return label.format(el=el_name), desc.format(el=el_name)
 
 

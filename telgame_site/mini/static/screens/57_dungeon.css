@@ -1,0 +1,31 @@
+/* «سیاه‌چال» (dg_home, dg_run) */
+.dg-banner { min-height: 104px; align-items: flex-end; background: radial-gradient(420px 180px at 70% -30px, rgba(150,90,255,.35), transparent 70%), linear-gradient(160deg, #120a22, #06070d); border-color: rgba(150,90,255,.3); }
+.dg-banner.sm-banner { min-height: 78px; }
+.dg-banner .pow { text-align: end; font-size: 13px; line-height: 1.8; }
+.dg-locked .dg-sigil, .dg-finish .dg-sigil { width: 64px; height: 64px; margin: 4px auto 8px; display: grid; place-items: center; border-radius: 50%; color: var(--mythic); background: radial-gradient(circle, rgba(150,90,255,.25), transparent 70%); }
+.dg-locked .dg-sigil svg, .dg-finish .dg-sigil svg { width: 34px; height: 34px; }
+.dg-rn { color: var(--mythic); }
+.dg-team { margin-top: 12px; }
+.dg-team .dg-down { opacity: .45; filter: grayscale(.8); }
+.dg-hp { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.dg-hp .progress { flex: 1; min-width: 60px; }
+.dg-runes { display: flex; flex-wrap: wrap; gap: 6px; }
+.dg-doors { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 10px; }
+.dg-door { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 8px; color: var(--dc); border-color: color-mix(in srgb, var(--dc) 40%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--dc) 14%, transparent), transparent); }
+.dg-door b { color: var(--text); }
+.dg-door-ic svg { width: 30px; height: 30px; }
+.dg-enemy { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 10px 12px; --ec: var(--bad); border-color: color-mix(in srgb, var(--ec) 40%, transparent); }
+.dg-enemy.elite { --ec: var(--mythic); } .dg-enemy.boss { --ec: var(--gold); box-shadow: 0 8px 30px rgba(255,200,87,.15); }
+.dg-enemy img { width: 64px; height: 64px; flex: none; border-radius: 14px; object-fit: cover; background: #05070c; box-shadow: 0 0 0 1.5px var(--ec); }
+.dg-picks { display: grid; gap: 8px; }
+.dg-pick { display: flex; align-items: center; gap: 10px; padding: 12px; text-align: start; }
+.dg-pick.win { border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+.dg-pick.lose { opacity: .8; }
+.dg-rune { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; width: 100%; padding: 12px 14px; margin-bottom: 8px; text-align: start; border-color: rgba(150,90,255,.3); }
+.dg-rune.dim { opacity: .55; }
+.dg-log { font-size: 13px; color: var(--muted); line-height: 1.9; }
+.dg-loot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; }
+.dg-loot .muted svg { width: 14px; height: 14px; }
+.dg-note { line-height: 1.9; word-break: break-word; }
+.dg-note svg { width: 14px; height: 14px; vertical-align: -2px; }
