@@ -3,7 +3,7 @@
    core.js, so every screen that already shows a reward gets the effect for free.
 
      K.result({won, title, sub, img, coins, dna, diamonds, energy, cup, xp, extra: ["…html…"],
-               button: "ادامه"}) → Promise (resolves when closed)
+               button: "ادامه", auto: ms}) → Promise (resolves when closed; `auto` closes it by itself)
      K.fly(key, fromRect, amount)   key: coins | dna | diamonds | energy | cup */
 (function (K) {
   "use strict";
@@ -22,7 +22,21 @@
   /* ── count-up in the resource bar ──
      A number that went UP is first shown at its old value; it rolls to the new one when the
      flying icons land (or at once when nothing is flying). */
-  var pend = {}, hold = 0, fallback = null;
+  var pend = {}, hold = 0, flying = 0, fallback = null;
+  function showing() { return K.sheetOpen() || !!document.querySelector(".rs"); }
+  /* Roll what is waiting once nothing holds it. A reward sheet that another sheet replaced never
+     reports its close, so «held» also ends when no reward is on screen any more (or after ~10 s). */
+  function scheduleRoll() {
+    clearTimeout(fallback);
+    var tries = 0;
+    (function check() {
+      fallback = setTimeout(function () {
+        if (flying) return check();
+        if (hold && showing() && ++tries < 20) return check();
+        hold = 0; rollAll();
+      }, tries ? 500 : 450);
+    })();
+  }
   function roll(key) {
     var p = pend[key]; if (!p) return; delete pend[key];
     var el = pill(key), b = el && el.querySelector("b"); if (!b) return;
@@ -44,21 +58,22 @@
     var any = false;
     Object.keys(KIND).forEach(function (key) {
       if (res[key] > prev[key]) {
-        var from = pend[key] ? pend[key].from : prev[key];
-        pend[key] = { from: from, to: res[key] }; any = true;
-        var b = pill(key) && pill(key).querySelector("b"); if (b) b.innerHTML = fmt(key, from);
-      }
+        pend[key] = { from: pend[key] ? pend[key].from : prev[key], to: res[key] }; any = true;
+      } else if (pend[key] && res[key] !== pend[key].to) delete pend[key];   // spent meanwhile: just show it
     });
-    if (any) { clearTimeout(fallback); fallback = setTimeout(function () { if (!hold) rollAll(); }, 450); }
+    // the bar was just rebuilt with the new numbers: everything still waiting goes back to its old value
+    Object.keys(pend).forEach(function (key) { var b = pill(key) && pill(key).querySelector("b"); if (b) b.innerHTML = fmt(key, pend[key].from); });
+    if (any) scheduleRoll();
   };
 
   /* ── flying icons ── */
   K.fly = function (key, from, amount) {
     var target = pill(key), ri = target && target.querySelector(".ri");
-    if (!KIND[key] || !ri || !from || reduced) { roll(key); return Promise.resolve(); }
+    if (!KIND[key] || !ri || !from || reduced || !Element.prototype.animate) { roll(key); return Promise.resolve(); }
     var to = ri.getBoundingClientRect(), n = Math.max(3, Math.min(8, 2 + Math.round(Math.log10(Math.max(1, Math.abs(amount || 1))) * 1.5)));
     var x0 = from.left + from.width / 2, y0 = from.top + from.height / 2, x1 = to.left + to.width / 2, y1 = to.top + to.height / 2;
     var landed = 0;
+    flying++;
     return new Promise(function (resolve) {
       for (var i = 0; i < n; i++) (function (i) {
         var el = document.createElement("i");
@@ -74,7 +89,7 @@
         a.onfinish = function () {
           el.remove(); landed++;
           if (landed === 1) roll(key);
-          if (landed === n) resolve();
+          if (landed === n) { flying = Math.max(0, flying - 1); resolve(); }
         };
       })(i);
     });
@@ -101,7 +116,10 @@
   var coachEl = null;
   function seen(key) { try { return localStorage.getItem("kcoach:" + key) === "1"; } catch (e) { return true; } }
   function markSeen(key) { try { localStorage.setItem("kcoach:" + key, "1"); } catch (e) {} }
-  function uncoach() { if (coachEl) { coachEl.remove(); coachEl = null; } }
+  function uncoach() {
+    if (coachEl) { coachEl.remove(); coachEl = null; }
+    window.removeEventListener("pointerdown", uncoach, true); window.removeEventListener("scroll", uncoach, true);
+  }
   K.coach = function (target, text, key) {
     if (!target || !target.isConnected || seen(key) || coachEl || K.sheetOpen()) return;
     var r = target.getBoundingClientRect();
@@ -116,8 +134,14 @@
     document.body.appendChild(el);
     var tip = el.querySelector(".coach-tip"), tw = tip.offsetWidth;   // keep the bubble on screen
     tip.style.marginLeft = (Math.max(10, Math.min(window.innerWidth - tw - 10, x - tw / 2)) - x) + "px";
-    setTimeout(uncoach, 6500);
-    ["pointerdown", "scroll"].forEach(function (ev) { window.addEventListener(ev, uncoach, { once: true, passive: true, capture: true }); });
+    var mine = el, born = Date.now();
+    // gone with its target: a screen change (even one that no tap started) takes the hint away too
+    (function watch() {
+      if (coachEl !== mine) return;
+      if (!target.isConnected || Date.now() - born > 6500) return uncoach();
+      setTimeout(watch, 250);
+    })();
+    window.addEventListener("pointerdown", uncoach, true); window.addEventListener("scroll", uncoach, true);
   };
 
   /* ── seasons: the scene's tint and falling particles follow the season (Tehran calendar), or the
@@ -216,7 +240,9 @@
         resolve();
       }
       el.querySelector(".rs-btn").onclick = close;
-      el.addEventListener("click", function (ev) { if (ev.target === el && Date.now() - opened > 700) close(); });
+      // o.auto (ms): a quick loop (hunting) must not stop for a tap — it closes by itself, and any tap closes it at once
+      if (o.auto) { el.classList.add("auto"); setTimeout(close, o.auto); el.addEventListener("click", close); }
+      else el.addEventListener("click", function (ev) { if (ev.target === el && Date.now() - opened > 700) close(); });
     });
   };
 })(window.K);

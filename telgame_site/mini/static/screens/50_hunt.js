@@ -242,7 +242,7 @@
           result = r; K.invalidate("profile/creatures/");
           draw();
           K.result({ won: r.won, sub: (r.won ? "شکارت: " : "حریف: ") + (r.enemy.name || ""), img: r.me && r.me.img,
-                     coins: r.won ? r.coins : 0, dna: r.won ? r.dna : 0, xp: r.won ? r.xp : 0 });
+                     coins: r.won ? r.coins : 0, dna: r.won ? r.dna : 0, xp: r.won ? r.xp : 0, auto: r.won ? 2200 : 1800 });
         }).catch(staleMaybe);
       });
       K.on(root, "enc", function (el) {

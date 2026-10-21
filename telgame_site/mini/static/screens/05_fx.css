@@ -115,3 +115,15 @@ body[data-fest] .season-fx i { background: color-mix(in srgb, var(--fest) 70%, #
 .lb-season.fest svg { width: 14px; height: 14px; flex: none; }
 @media (prefers-reduced-motion: reduce) { .season-fx { display: none; } }
 .lb-top .lb-plate { flex: 0 1 auto; min-width: 0; }
+/* a self-closing result (hunting): a thin bar runs down how long it stays */
+.rs.auto .rs-btn { position: relative; overflow: hidden; }
+.rs.auto .rs-btn::after { content: ""; position: absolute; inset: auto 0 0 0; height: 4px; background: rgba(255,255,255,.55); transform-origin: right; animation: rsAuto 2s linear .2s both; }
+@keyframes rsAuto { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+/* the narrowest phones (≤340 px): five pills only fit without the «+» keys (the pill itself still opens the shop) */
+@media (max-width: 340px) {
+  .hud .in { gap: 8px; padding-inline: 6px; padding-inline-start: 17px; }
+  .res, .res.plus { padding: 0 4px; padding-inline-start: 15px; }
+  .res .rp { display: none; }
+  .res .ri { width: 25px; height: 25px; margin-top: -12.5px; inset-inline-start: -11px; }
+  .res b { font-size: 12px; letter-spacing: 0; }
+}
