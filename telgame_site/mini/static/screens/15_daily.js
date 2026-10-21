@@ -45,17 +45,19 @@
      completed (o.missions) and a «جدید» flag on the creatures won (o.fresh). → Promise */
   function reveal(o) {
     return new Promise(function (resolve) {
-      var chips = [];
-      [["coins", "coin", "t-coin"], ["dna", "dna", "t-dna"], ["diamonds", "gem", "t-diamond"], ["xp", "up", "t-xp"]].forEach(function (c) {
+      var chips = [], box = null;
+      if (K.fxHold) K.fxHold();   // 05_fx.js: the bar's numbers wait, then the loot flies into it on close
+      [["coins", "coin", "t-coin"], ["dna", "dna", "t-dna"], ["diamonds", "diamond", "t-diamond"], ["xp", "up", "t-xp"]].forEach(function (c) {
         if (o[c[0]]) chips.push('<span class="it ' + c[2] + '">' + K.ic(c[1]) + '<span class="num" style="color:var(--text)">+' + num(o[c[0]]) + (c[0] === "xp" ? " XP" : "") + "</span></span>");
       });
       (o.extra || []).forEach(function (h) { chips.push('<span class="it">' + h + "</span>"); });
       var cards = (o.creatures || []).map(function (c) { return K.creatureTile(c, { tag: "div", flag: o.fresh ? "جدید" : "" }); })
         .concat((o.items || []).map(function (e) { return K.itemTile(e, { tag: "div" }); })).join("");
-      K.sheet('<div class="grab"></div><div class="loot"><div class="burst">' + K.ic(o.icon || "gift") + "</div><h3>" + K.esc(o.title || "جایزه گرفتی!") + "</h3>" +
+      box = K.sheet('<div class="grab"></div><div class="loot"><div class="burst">' + K.ic(o.icon || "gift") + "</div><h3>" + K.esc(o.title || "جایزه گرفتی!") + "</h3>" +
         (o.text ? "<p>" + K.esc(o.text) + "</p>" : "") + (chips.length ? '<div class="items">' + chips.join("") + "</div>" : "") + (cards ? '<div class="cards">' + cards + "</div>" : "") + "</div>" +
         (o.html || "") + doneMissions(o.missions) +
-        '<div class="pad" style="margin-top:16px"><button class="btn primary block" data-close>' + K.esc(o.button || "عالیه") + "</button></div>", { onClose: resolve });
+        '<div class="pad" style="margin-top:16px"><button class="btn primary block" data-close>' + K.esc(o.button || "عالیه") + "</button></div>",
+        { onClose: function () { if (K.fxRelease) K.fxRelease(box && box.querySelector(".loot"), o); resolve(); } });
       K.haptic("ok");
     });
   }
@@ -118,6 +120,14 @@
   K.dy.last = function () { return last; };
   K.dy.touch = touch;
   K.dy.home = homeData;   // 10_home.js (the lobby)
+  /* «دریافت همه» from anywhere (the lobby's banner): collect, show what came, forget the cached summary */
+  K.dy.collectAll = function (btn) {
+    return K.api.post("daily/today/collect/", {}, btn).then(function (r) {
+      K.invalidate("profile/creatures/", "profile/equipment/"); homeP = null;
+      if (r.empty) { K.toast("چیزی برای دریافت نبود."); return r; }
+      return collectSheet(r).then(function () { return r; });
+    });
+  };
 
   // ───────────────────────── story quest ─────────────────────────
   function questCard(q, big) {

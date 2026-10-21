@@ -101,3 +101,18 @@
   .lb-side { gap: 10px; } .lb-lbl { font-size: 9.5px; }
 }
 @media (prefers-reduced-motion: reduce) { .lb-fog, .lb-motes, .lb-card, .lb-pedestal, .lb-live, .lb-dot.live, .lb-quest.done { animation: none !important; } }
+
+/* «دریافت همه»: a golden banner with a bouncing chest, only while something is waiting */
+.lb-collect { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px 8px 10px; border-radius: 16px; text-align: start; color: #fff;
+  background: linear-gradient(180deg, #ffcf4d, #f09a12 60%, #d07c00); border: 2px solid #fff0b8;
+  box-shadow: 0 5px 0 #8a4b00, 0 10px 24px rgba(240,160,20,.35), inset 0 2px 0 rgba(255,255,255,.5); animation: lbShine 2.4s ease-in-out infinite; }
+.lb-c-ic { width: 42px; height: 42px; flex: none; animation: lbChest 1.6s ease-in-out infinite; filter: drop-shadow(0 3px 2px rgba(0,0,0,.4)); }
+.lb-c-ic svg { width: 100%; height: 100%; }
+.lb-collect b { display: block; font-family: var(--display); font-weight: 400; font-size: 20px; line-height: 1.2; text-shadow: 0 2px 0 #8a4b00; }
+.lb-collect small { display: block; font-size: 12px; font-weight: 700; color: #fff7dc; text-shadow: 0 1px 0 #8a4b00; }
+.lb-c-go { flex: none; padding: 6px 14px; border-radius: 11px; font-family: var(--display); font-size: 16px; color: #fff;
+  background: linear-gradient(180deg, #5be37d, #1fa04a); border: 1.5px solid #b8ffcb; box-shadow: 0 3px 0 #0d5a27; text-shadow: 0 1px 0 #0d5a27; }
+.lb-collect:active { transform: translateY(3px); box-shadow: 0 2px 0 #8a4b00, 0 6px 14px rgba(240,160,20,.3), inset 0 2px 0 rgba(255,255,255,.5); }
+@keyframes lbChest { 0%, 100% { transform: translateY(0) rotate(0); } 20% { transform: translateY(-5px) rotate(-6deg); } 40% { transform: translateY(0) rotate(5deg); } 55% { transform: rotate(0); } }
+@keyframes lbShine { 50% { box-shadow: 0 5px 0 #8a4b00, 0 10px 30px rgba(255,190,40,.6), inset 0 2px 0 rgba(255,255,255,.5); } }
+@media (prefers-reduced-motion: reduce) { .lb-collect, .lb-c-ic { animation: none !important; } }

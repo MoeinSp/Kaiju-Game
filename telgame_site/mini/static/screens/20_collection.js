@@ -90,6 +90,7 @@
         }
         root.innerHTML = '<div id="cl-head"></div><div id="cl-list"></div>';
         drawHead(); drawList(true);
+        if (K.coach) setTimeout(function () { K.coach(root.querySelector(".cl-fbtn"), "فیلتر رده و عنصر اینجاست", "cl_filter"); }, 900);
         root.addEventListener("click", function (ev) {
           var t = ev.target.closest("button"); if (!t) return; var d = t.dataset;
           if (d.creature) K.go("creature", { id: +d.creature });

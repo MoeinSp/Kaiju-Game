@@ -826,6 +826,7 @@ window.K = (function () {
     var old = root.querySelector(".hx-hero"), keep = old ? old.scrollLeft : 0;   // a re-draw must not snap the carousel back
     root.innerHTML = '<div class="hubx hubx-' + hub + '">' + html + "</div>";
     if (keep) { var nw = root.querySelector(".hx-hero"); if (nw) nw.scrollLeft = keep; }
+    if (map && K.coach) setTimeout(function () { K.coach(root.querySelector('.mp-node[data-hub="dungeon"]:not(.locked) .mp-med'), "سیاه‌چال باز شده! یه سر بزن", "map_dungeon"); }, 900);
     var bound = !!root._khub; root._khub = items;
     if (bound) return;                       // re-drawn in place: the click handler is already there
     root.addEventListener("click", function (ev) {

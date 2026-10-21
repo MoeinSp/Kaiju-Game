@@ -45,6 +45,16 @@
     return out.length ? '<div class="lb-strip">' + out.join("") + "</div>" : "";
   }
 
+  /* «دریافت همه»: whenever something is waiting (buildings, finished missions, free boxes, the
+     wheel, ready chests …) one golden banner takes all of it — the «امروز» screen's button, one tap from home */
+  var CHEST = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 13h24v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" fill="#a8641c"/><path d="M4 13v-3a6 6 0 0 1 6-6h12a6 6 0 0 1 6 6v3z" fill="#d9892a"/>' +
+    '<path d="M4 13h24v3H4z" fill="#ffc53d"/><path d="M9 4.6V28M23 4.6V28" stroke="#ffc53d" stroke-width="2"/><path d="M13.6 11h4.8v8h-4.8z" fill="#ffe08a" stroke="#8a4b00" stroke-width="1.2"/></svg>';
+  function collect(d) {
+    if (!(d.collectable > 0)) return "";
+    return '<button class="lb-collect" data-act="collect"><span class="lb-c-ic">' + CHEST + '</span><span class="grow"><b>دریافت همه</b>' +
+      "<small>" + K.n(d.collectable) + ' جایزه منتظرته</small></span><span class="lb-c-go">بگیر</span></button>';
+  }
+
   function quest(q) {
     if (!q) return "";
     var ratio = q.target ? Math.min(1, q.cur / q.target) : 0;
@@ -74,7 +84,7 @@
       '<div class="lb-top">' + plate(me) + "</div>" +
       liveStrip(d) +
       '<div class="lb-stage"><div class="lb-side">' + left.join("") + "</div>" + stage(me.active) + '<div class="lb-side">' + right.join("") + "</div></div>" +
-      quest(d.quest) +
+      collect(d) + quest(d.quest) +
       '<div class="lb-cta"><button class="lb-fight" data-act="battle">' + K.ic("swords") + "<span>نبرد</span></button>" +
       '<button class="lb-hunt" data-act="go" data-go="' + (tileGo("hunt") || "") + '">' + K.ic("target") + "<span>شکار</span></button></div>" +
       "</div>";
@@ -84,7 +94,13 @@
     tab: "home",
     render: function (root, params, ctx) {
       var me0 = null, daily = null;
-      function draw() { if (me0 && ctx.alive()) root.innerHTML = lobby(me0, daily); }
+      function draw() {
+        if (!me0 || !ctx.alive()) return;
+        root.innerHTML = lobby(me0, daily);
+        if (K.coach) setTimeout(function () {
+          if (ctx.alive()) K.coach(root.querySelector(".lb-collect"), "همه‌ی جایزه‌هات رو با یه لمس بگیر", "lb_collect");
+        }, 900);
+      }
       (K.dy && K.dy.home ? K.dy.home() : K.api.get("daily/home/")).then(function (d) { daily = d; draw(); }).catch(function () {});
       return K.meFast(function (me) { me0 = me; draw(); }).then(function (me) {
         me0 = me; draw();
@@ -93,6 +109,12 @@
         K.on(root, "today", function () { K.go("dy_today"); });
         K.on(root, "quest", function () { K.go("dy_story"); });
         K.on(root, "battle", function () { K.tab("battle"); });
+        var collecting = false;
+        K.on(root, "collect", function (el) {
+          if (collecting || !K.dy || !K.dy.collectAll) return; collecting = true;
+          K.dy.collectAll(el).then(function () { return K.dy.home(); }).then(function (d) { collecting = false; daily = d; draw(); },
+            function () { collecting = false; });
+        });
         K.on(root, "go", function (el) { if (el.dataset.go) K.go(el.dataset.go); });
       });
     }
