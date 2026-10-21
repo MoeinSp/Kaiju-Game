@@ -292,9 +292,6 @@ window.K = (function () {
   K.res = null;
   var resShown = "", energyTimer = null;
   var RES_TITLE = { coins: "طلا", dna: "DNA", diamonds: "الماس", energy: "انرژی", cup: "کاپ" };
-  /* The resource bar, game style: a beveled pill per resource with its big icon hanging over the
-     edge, a green «+» on what can be topped up and a thin fill line under the energy. A pill
-     with a screen opens it. */
   /* the bottom tabs: solid one-piece glyphs filled with the tab's colour (grey, cyan when open).
      The monster's eyes and mouth and the castle's door are holes (evenodd), so they read on any fill. */
   var TAB_SOLID = {
@@ -307,6 +304,9 @@ window.K = (function () {
   /* the resource bar's icons: the thin line set, coloured by the plaque's t-<res> class */
   var RES_LINE = { coin: "coin", dna: "dna", gem: "gem", energy: "bolt", cup: "trophy" };
   function resLine(k) { return '<svg class="i" viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[RES_LINE[k]] || "") + "</svg>"; }
+  /* The resource bar: an outlined pill per resource with its line icon beside the number, a small
+     «+» on what can be topped up and a thin fill line under the energy. A pill with a screen opens
+     it. 05_fx.js wraps this (count-up, flying rewards) and relies on .res.t-<key> > .ri / b. */
   K.setRes = function (res) {
     if (!res) return;
     var prev = K.res; K.res = res;
