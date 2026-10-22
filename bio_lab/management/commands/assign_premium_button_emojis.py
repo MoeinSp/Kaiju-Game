@@ -191,6 +191,8 @@ class Command(BaseCommand):
             "btn_serum_use": ["💉", "🧪", "⚡", "✨"],
             "btn_serum_up": ["⏫", "⬆️", "📈", "✨"],
             "btn_backpack": ["🎒", "📦", "🧰", "🗃"],
+            "btn_merchant": ["📜", "🧾", "🛒", "💰"],
+            "btn_merchant_deliver": ["🤝", "📦", "✅", "💰"],
             "btn_league": ["🎖", "🏆", "🥇", "⭐"],
             "btn_codex": ["📖", "📚", "📕", "📜"],
             "btn_referral": ["🎁", "👥", "🤝", "🎉"],

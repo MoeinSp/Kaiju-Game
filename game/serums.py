@@ -302,6 +302,25 @@ def use(user: User, kind: str, member_id: int | None = None) -> dict:
     return {"kind": kind, "label": label, "note": note, "state": state(user)}
 
 
+
+def stock_of(user: User, kind: str) -> int:
+    """Serums of this kind on the shelf now (brews finished by now included)."""
+    row, _ = _fresh(user, lock=False)
+    return int((row.stock or {}).get(kind, 0))
+
+
+def hand_over(user: User, kind: str, count: int) -> None:
+    """Take `count` serums off the shelf for something other than using them (a merchant
+    order). Not a «use»: the daily cap is untouched. Runs inside the caller's transaction."""
+    row, _ = _fresh(user)
+    have = int((row.stock or {}).get(kind, 0))
+    if have < count:
+        raise GameError(f"سرم «{KINDS[kind]['label']}» کافی نداری ({have} از {count}).")
+    row.stock = {**row.stock, kind: have - count}
+    if row.queue and row.brew_started_at is None:   # a paused queue starts again now there is room
+        row.brew_started_at = timezone.now()
+    row.save()
+
 def upgrade(user: User, kind: str) -> dict:
     """Raise one serum a level (gold + DNA, takes real time, one at a time, never above the building)."""
     from bio_lab.repository import lock_row

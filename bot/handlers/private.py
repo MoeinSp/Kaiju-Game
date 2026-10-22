@@ -1089,6 +1089,7 @@ SECTION_HALL_REQ = {
     "breeding": 2,
     "dispatch": 2,
     "serums": 2,
+    "merchant": 2,
     "battlepass": 2,
     "exchange": 2,
 
@@ -1144,7 +1145,7 @@ _HUBS = {
         [("ساختمان‌ها", "buildings", "bu", "btn_buildings"), ("پژوهش", "research", "bu", "btn_research")],
         [("خزانه", "vault", "bu", "btn_vault"), ("صرافی", "exchange", "s", "btn_exchange")],
         [("بازیافت", "equip_exchange", "s", "btn_ticket_exchange"), ("آزمایشگاه سرم", "serums", "bu", "btn_serums")],
-        [("انبار", "backpack", "n", "btn_backpack")],
+        [("انبار", "backpack", "n", "btn_backpack"), ("سفارش تاجر", "merchant", "s", "btn_merchant")],
     ]),
     "hub_shop": ("🛒 <b>فروشگاه</b>", [
         [("فروشگاه", "shop", "s", "btn_shop"), ("بازار سیاه", "blackmarket", "s", "btn_blackmarket")],
@@ -5554,6 +5555,12 @@ async def backpack_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await backpack(update, context)
 
 
+async def merchant_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from bot.handlers.merchant import merchant_board
+
+    await merchant_board(update, context)
+
+
 _MENU_ACTIONS = {
     "me": me,
     "collection": collection,
@@ -5612,6 +5619,7 @@ _MENU_ACTIONS = {
     "vault": vault_panel,
     "serums": serums_panel,
     "backpack": backpack_panel,
+    "merchant": merchant_panel,
 }
 
 
@@ -5631,7 +5639,7 @@ _KEYWORD_TO_MENU = {
     "blacksmith": "blacksmith", "forge": "blacksmith", "buy": "buy_open", "purchase": "buy_open",
     "expedition": "expedition", "caravan": "expedition", "war": "alliance_war",
     "workers": "workers", "vault": "vault",
-    "serum": "serums", "backpack": "backpack",
+    "serum": "serums", "backpack": "backpack", "merchant": "merchant", "orders": "merchant",
 }
 
 

@@ -1,0 +1,429 @@
+"""«تابلوی سفارش تاجر» — a Hay Day–style order board.
+
+Three merchants wait on the board at once, each with an order of two things the player can
+make or spare (DNA, gold, serums, a spare creature of some rarity, unworn gear). Delivering
+pays gold and lab XP, sometimes an extra (a speed card, a dungeon key, a chest, legendary
+gear) and rarely a few diamonds. Delivering or turning an order down empties its slot for
+an hour; then a new merchant arrives. One harder special order a day pays more.
+
+Fairness rules:
+  - everything is sized to the player's power, in «hunts' worth» of loot;
+  - a creature is only asked for when the player has a spare one of that rarity, and the
+    one handed over is always the weakest spare: never the active creature, a team or
+    defence-team member, a dungeon/tournament fighter, a busy one, a 2★+ or a shadow form;
+  - only unworn gear is ever handed over;
+  - at most DAILY_ORDERS normal deliveries and DIAMOND_CAP diamonds a day.
+"""
+
+from __future__ import annotations
+
+import datetime
+import random
+
+from django.db import transaction
+from django.utils import timezone
+
+from bio_lab.models import Creature, Equipment, MerchantBoard, User
+from game import constants
+from game.creature import GameError
+
+SLOTS = 3
+REFILL = datetime.timedelta(hours=1)
+DAILY_ORDERS = 12
+DIAMOND_CAP = 10
+UNLOCK_HALL = 2
+
+MERCHANTS = {
+    "alchemist": "کیمیاگر پیر",
+    "captain": "ناخدای ابرکشتی",
+    "cyborg": "مهندس سایبورگ",
+    "huntress": "شکارچی جنگل",
+    "witch": "ساحره‌ی بازار شب",
+    "monk": "راهب کوهستان",
+}
+
+# value of one unit, in «hunts' worth» of loot
+CREATURE_VALUE = {"common": 3, "rare": 6, "epic": 12, "legendary": 25, "mythic": 50}
+GEAR_VALUE = {"common": 0.5, "rare": 1, "epic": 2, "legendary": 4, "mythic": 8}
+SERUM_VALUE = 2.5
+ASKED_RARITIES = ("common", "rare", "epic")   # nobody is asked to give up a legendary or mythic
+RARITY_FA = {"common": "معمولی", "rare": "نایاب", "epic": "حماسی", "legendary": "افسانه‌ای", "mythic": "اساطیری"}
+CHEST_FA = {"golden": "جعبه‌ی طلایی", "magical": "جعبه‌ی جادویی"}
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+def _today() -> str:
+    from game.daily import today_str
+
+    return today_str()
+
+
+def _nice(n: float) -> int:
+    """Round to a number that reads well on a card: 1,234 → 1,250 · 48,310 → 48,500."""
+    n = max(1, int(round(n)))
+    step = 10 if n < 1000 else 50 if n < 10000 else 500 if n < 100000 else 5000
+    return max(step, int(round(n / step)) * step)
+
+
+def unlocked(user: User) -> bool:
+    from game.buildings import building_level
+
+    return building_level(user, constants.MAIN_BUILDING) >= UNLOCK_HALL
+
+
+def hunt_units(user: User) -> tuple[float, float]:
+    """(gold, DNA) of one won hunt for this player — the yardstick every order is sized by."""
+    from game.arena import active_power
+    from game.hunt import HUNT_COIN_PER_POWER, HUNT_DNA_PER_POWER, HUNT_LOOT_BONUS
+
+    power = max(800, active_power(user))
+    return power * HUNT_COIN_PER_POWER * HUNT_LOOT_BONUS, power * HUNT_DNA_PER_POWER * HUNT_LOOT_BONUS
+
+
+def spare_creatures(user: User, rarity: str | None = None) -> list[Creature]:
+    """Creatures the player could hand over without losing anything they use, weakest first."""
+    from bio_lab.models import DefenseTeam, DungeonRun, InteractiveBattle, Team, TournamentEntry
+    from game.workers import busy_creature_ids
+
+    keep = set(busy_creature_ids(user))
+    for model in (Team, DefenseTeam):
+        for row in model.objects.filter(owner=user).values("slot1_id", "slot2_id", "slot3_id"):
+            keep.update(v for v in row.values() if v)
+    for run in DungeonRun.objects.filter(user=user, status=DungeonRun.ACTIVE).only("state"):
+        keep.update(m["id"] for m in (run.state or {}).get("team", []))
+    keep.update(TournamentEntry.objects.filter(user=user, place=0).exclude(creature=None).values_list("creature_id", flat=True))
+    keep.update(InteractiveBattle.objects.filter(player_a=user).values_list("creature_a_id", flat=True))
+    keep.update(InteractiveBattle.objects.filter(player_b=user).values_list("creature_b_id", flat=True))
+    qs = Creature.objects.filter(owner=user, is_active=False, star_level=1, shadow_level=0).exclude(id__in=keep)
+    if rarity:
+        qs = qs.filter(rarity=rarity)
+    return list(qs.order_by("level", "xp", "id"))
+
+
+def spare_gear(user: User, rarity: str) -> list[Equipment]:
+    return list(Equipment.objects.filter(owner=user, equipped_on__isnull=True, rarity=rarity).order_by("level", "id"))
+
+
+def _serum_kinds(user: User) -> list[str]:
+    from game import serums
+
+    level = serums.lab_level(user)
+    return [k for k in serums.ORDER if level >= serums.KINDS[k]["unlock"]] if level else []
+
+
+# ── making orders ─────────────────────────────────────────────────────────────
+def _context(user: User) -> dict:
+    from collections import Counter
+
+    gold, dna = hunt_units(user)
+    spare = Counter(c.rarity for c in spare_creatures(user) if c.rarity in ASKED_RARITIES)
+    gear = Counter(Equipment.objects.filter(owner=user, equipped_on__isnull=True).values_list("rarity", flat=True))
+    return {"gold": gold, "dna": dna, "serums": _serum_kinds(user), "spare": spare, "gear": gear}
+
+
+def _req(kind: str, ctx: dict, big: bool) -> tuple[dict, float]:
+    """One requirement and its value in hunts' worth."""
+    if kind == "dna":
+        k = random.randint(3, 7) * (2 if big else 1)
+        return {"t": "dna", "n": _nice(k * ctx["dna"])}, k
+    if kind == "gold":
+        k = random.randint(3, 7) * (2 if big else 1)
+        return {"t": "gold", "n": _nice(k * ctx["gold"])}, k * 0.8   # gold for gold is no profit
+    if kind == "serum":
+        n = random.randint(2, 3) if big else random.randint(1, 2)
+        return {"t": "serum", "k": random.choice(ctx["serums"]), "n": n}, n * SERUM_VALUE
+    if kind == "creature":
+        rarity = random.choice(sorted(ctx["spare"]))
+        return {"t": "creature", "r": rarity, "n": 1}, CREATURE_VALUE.get(rarity, 3)
+    rarities = sorted(ctx["gear"], key=lambda r: constants.RARITY_ORDER.index(r) if r in constants.RARITY_ORDER else 0)
+    rarity = random.choice(rarities[:3])
+    n = max(1, min(3 if big else 2, ctx["gear"][rarity]))
+    return {"t": "gear", "r": rarity, "n": n}, n * GEAR_VALUE.get(rarity, 1)
+
+
+def _extra(user: User, big: bool) -> dict | None:
+    from game import dungeon
+
+    pool = [({"t": "card", "m": 60 if big else random.choice((15, 30))}, 40),
+            ({"t": "chest", "tier": "magical" if big else "golden"}, 25),
+            ({"t": "gear", "r": "legendary"}, 30 if big else 10)]
+    if dungeon.unlocked(user):
+        pool.append(({"t": "key", "n": 1}, 25))
+    items, weights = zip(*pool)
+    return dict(random.choices(items, weights)[0])
+
+
+def make_order(user: User, seq: int, special: bool = False, ctx: dict | None = None) -> dict:
+    ctx = ctx or _context(user)
+    pool = {"dna": 3, "gold": 2}
+    if ctx["serums"]:
+        pool["serum"] = 2
+    if ctx["spare"]:
+        pool["creature"] = 1.5
+    if ctx["gear"]:
+        pool["gear"] = 2
+    picks: list[str] = []
+    for _ in range(min(3 if special else 2, len(pool))):
+        keys = [k for k in pool if k not in picks]
+        picks.append(random.choices(keys, [pool[k] for k in keys])[0])
+    reqs, value = [], 0.0
+    for kind in picks:
+        r, v = _req(kind, ctx, special)
+        reqs.append(r)
+        value += v
+    coins = _nice(value * ctx["gold"] * (1.9 if special else 1.25))
+    xp = min(600 if special else 300, max(20, round(value * (12 if special else 6))))
+    extra = _extra(user, special) if special or random.random() < 0.35 else None
+    diamonds = 5 if special else (random.randint(2, 4) if random.random() < 0.08 else 0)
+    return {"id": seq, "who": random.choice(list(MERCHANTS)), "special": special, "reqs": reqs,
+            "reward": {"coins": coins, "xp": xp, "extra": extra, "diamonds": diamonds}}
+
+
+# ── the board ─────────────────────────────────────────────────────────────────
+def _board(user: User, lock: bool = False) -> MerchantBoard:
+    qs = MerchantBoard.objects.select_for_update() if lock else MerchantBoard.objects
+    row, _ = qs.get_or_create(user_id=user.id)
+    return row
+
+
+def _refresh(user: User, row: MerchantBoard) -> bool:
+    """Fill empty or due slots, roll a new day's counters and special order."""
+    changed, now, today = False, timezone.now().timestamp(), _today()
+    ctx = None
+    slots = list(row.slots or [])
+    while len(slots) < SLOTS:
+        slots.append({"wait_until": 0})
+    for i, s in enumerate(slots):
+        if "reqs" not in s and s.get("wait_until", 0) <= now:
+            ctx = ctx or _context(user)
+            row.seq += 1
+            slots[i] = make_order(user, row.seq, ctx=ctx)
+            changed = True
+    if row.day != today:
+        row.day, row.done_today, row.diamonds_today = today, 0, 0
+        changed = True
+    if row.special_day != today:
+        ctx = ctx or _context(user)
+        row.seq += 1
+        row.special, row.special_day = make_order(user, row.seq, special=True, ctx=ctx), today
+        changed = True
+    if changed:
+        row.slots = slots
+    return changed
+
+
+def have(user: User, req: dict) -> int:
+    t = req["t"]
+    if t == "dna":
+        return user.dna_fragments
+    if t == "gold":
+        return user.coins
+    if t == "serum":
+        from game import serums
+
+        return serums.stock_of(user, req["k"])
+    if t == "creature":
+        return len(spare_creatures(user, req["r"]))
+    return Equipment.objects.filter(owner=user, equipped_on__isnull=True, rarity=req["r"]).count()
+
+
+def req_label(req: dict) -> str:
+    from game import serums
+
+    t, n = req["t"], req["n"]
+    if t == "dna":
+        return f"{n:,} DNA"
+    if t == "gold":
+        return f"{n:,} طلا"
+    if t == "serum":
+        return f"{n} سرم {serums.KINDS[req['k']]['label']}"
+    if t == "creature":
+        return f"{n} هیولای {RARITY_FA.get(req['r'], req['r'])} (یک ستاره)"
+    return f"{n} تجهیزات {RARITY_FA.get(req['r'], req['r'])} (پوشیده‌نشده)"
+
+
+def extra_label(extra: dict | None) -> str:
+    if not extra:
+        return ""
+    t = extra["t"]
+    if t == "card":
+        return f"کارت سرعت {constants.SPEEDUP_PLAIN_LABELS.get(extra['m'], str(extra['m']) + ' دقیقه‌ای')}"
+    if t == "chest":
+        return CHEST_FA.get(extra["tier"], "جعبه")
+    if t == "key":
+        return "کلید سیاه‌چال"
+    return "تجهیزات افسانه‌ای"
+
+
+def _order_view(user: User, order: dict, slot) -> dict:
+    reqs = []
+    for r in order["reqs"]:
+        h = have(user, r)
+        reqs.append({**r, "label": req_label(r), "have": h, "ok": h >= r["n"]})
+    rw = order["reward"]
+    return {"slot": slot, "id": order["id"], "who": order["who"], "name": MERCHANTS.get(order["who"], "تاجر"),
+            "special": order.get("special", False), "reqs": reqs, "ready": all(r["ok"] for r in reqs),
+            "coins": rw["coins"], "xp": rw["xp"], "diamonds": rw["diamonds"],
+            "extra": rw.get("extra"), "extra_label": extra_label(rw.get("extra")),
+            "gives_creature": any(r["t"] == "creature" for r in order["reqs"])}
+
+
+def state(user: User) -> dict:
+    if not unlocked(user):
+        return {"unlocked": False, "unlock_hall": UNLOCK_HALL}
+    with transaction.atomic():
+        row = _board(user, lock=True)
+        if _refresh(user, row):
+            row.save()
+    user.refresh_from_db(fields=["coins", "dna_fragments"])
+    now = timezone.now().timestamp()
+    slots = []
+    for i, s in enumerate(row.slots):
+        if "reqs" in s:
+            slots.append(_order_view(user, s, i))
+        else:
+            slots.append({"slot": i, "wait": max(0, int(s.get("wait_until", 0) - now))})
+    tomorrow = (timezone.localtime() + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return {
+        "unlocked": True, "slots": slots,
+        "special": _order_view(user, row.special, "s") if row.special else None,
+        "special_in": max(0, int((tomorrow - timezone.localtime()).total_seconds())),
+        "done_today": row.done_today, "daily": DAILY_ORDERS,
+        "diamonds_today": row.diamonds_today, "diamond_cap": DIAMOND_CAP, "done_total": row.done_total,
+    }
+
+
+def _find(row: MerchantBoard, slot, order_id: int) -> dict:
+    if slot == "s":
+        order = row.special
+    else:
+        slot = int(slot)
+        order = row.slots[slot] if 0 <= slot < len(row.slots or []) else None
+    if not order or "reqs" not in order or order.get("id") != order_id:
+        raise GameError("این سفارش دیگه روی تابلو نیست؛ تابلو رو دوباره باز کن.")
+    return order
+
+
+def preview_handover(user: User, slot, order_id: int) -> list[str]:
+    """Names of the creatures a delivery would hand over — shown before asking to confirm."""
+    row = _board(user)
+    order = _find(row, slot, order_id)
+    out = []
+    for r in order["reqs"]:
+        if r["t"] == "creature":
+            out += [f"{c.custom_name or c.name} · سطح {c.level}" for c in spare_creatures(user, r["r"])[: r["n"]]]
+    return out
+
+
+def deliver(user: User, slot, order_id: int) -> dict:
+    from bio_lab.repository import lock_row
+    from game import serums
+    from game.ledger import record_gain
+
+    with transaction.atomic():
+        user = lock_row(user) or User.objects.select_for_update().get(id=user.id)
+        row = _board(user, lock=True)
+        _refresh(user, row)
+        order = _find(row, slot, order_id)
+        special = slot == "s"
+        if not special and row.done_today >= DAILY_ORDERS:
+            raise GameError(f"امروز {DAILY_ORDERS} سفارش تحویل دادی؛ تاجرها فردا دوباره سفارش می‌گیرن.")
+        for r in order["reqs"]:
+            h = have(user, r)
+            if h < r["n"]:
+                raise GameError(f"برای «{req_label(r)}» کم داری ({h:,} از {r['n']:,}).")
+        handed = []
+        for r in order["reqs"]:
+            t, n = r["t"], r["n"]
+            if t == "dna":
+                user.dna_fragments -= n
+            elif t == "gold":
+                user.coins -= n
+            elif t == "serum":
+                serums.hand_over(user, r["k"], n)
+            elif t == "creature":
+                gone = spare_creatures(user, r["r"])[:n]
+                handed += [c.custom_name or c.name for c in gone]
+                Equipment.objects.filter(equipped_on__in=gone).update(equipped_on=None)
+                Creature.objects.filter(id__in=[c.id for c in gone]).delete()
+            else:
+                ids = [e.id for e in spare_gear(user, r["r"])[:n]]
+                Equipment.objects.filter(id__in=ids, equipped_on__isnull=True).delete()
+        rw = order["reward"]
+        user.coins += rw["coins"]
+        got = {"coins": rw["coins"], "xp": rw["xp"], "extra": None, "diamonds": 0}
+        extra = rw.get("extra")
+        if extra:
+            got["extra"] = _grant_extra(user, row, extra)
+        dia = min(rw["diamonds"], DIAMOND_CAP - row.diamonds_today)
+        if dia > 0:
+            user.diamonds += dia
+            row.diamonds_today += dia
+            got["diamonds"] = dia
+        user.save(update_fields=["coins", "dna_fragments", "diamonds"])
+        record_gain(user, "merchant", coins=rw["coins"], diamonds=dia)
+        if special:
+            row.special = None
+        else:
+            row.slots[int(slot)] = {"wait_until": (timezone.now() + REFILL).timestamp()}
+            row.done_today += 1
+        row.done_total += 1
+        row.save()
+    from game.lab import add_lab_xp
+
+    got["levelup"] = add_lab_xp(user, rw["xp"])
+    got["handed"] = handed
+    got["name"] = MERCHANTS.get(order["who"], "تاجر")
+    return got
+
+
+def _grant_extra(user: User, row: MerchantBoard, extra: dict) -> str:
+    """Grant an order's extra; returns what it turned into, for the result line."""
+    t = extra["t"]
+    if t == "card":
+        from game.buildings import grant_speedup_card
+
+        grant_speedup_card(user, extra["m"])
+        return extra_label(extra)
+    if t == "key":
+        from game import dungeon
+
+        prof = dungeon.profile(user)
+        if prof.keys < dungeon.KEY_HARD_CAP:
+            prof.keys += 1
+            prof.save(update_fields=["keys"])
+            return extra_label(extra)
+        extra = {"t": "chest", "tier": "golden"}   # a full key ring: a chest instead
+        t = "chest"
+    if t == "chest":
+        from game.arena_chests import grant_chest_contents
+
+        tier = extra["tier"]
+        if tier == "magical" and row.diamonds_today + 5 > DIAMOND_CAP:
+            tier = "golden"   # a magical chest's diamonds count toward the daily cap
+        res = grant_chest_contents(user, tier, user.cup, source="merchant")
+        row.diamonds_today += res.get("diamonds", 0)
+        bits = [f"{res['coins']:,} طلا", f"{res['dna']:,} DNA"]
+        if res.get("creature"):
+            bits.append(f"هیولای {res['creature'].name}")
+        if res.get("item"):
+            bits.append(res["item"].name)
+        if res.get("diamonds"):
+            bits.append(f"{res['diamonds']} الماس")
+        return f"{CHEST_FA.get(tier, 'جعبه')}: " + "، ".join(bits)
+    from game.equipment import roll_equipment
+
+    item = roll_equipment(user, "legendary")
+    return f"تجهیزات افسانه‌ای: {item.name}"
+
+
+def reject(user: User, slot, order_id: int) -> dict:
+    """Turn an order down: the merchant leaves and a new one comes in an hour."""
+    if slot == "s":
+        raise GameError("سفارش ویژه رد نمی‌شه؛ تا آخر روز روی تابلو می‌مونه.")
+    with transaction.atomic():
+        row = _board(user, lock=True)
+        _find(row, slot, order_id)
+        row.slots[int(slot)] = {"wait_until": (timezone.now() + REFILL).timestamp()}
+        row.save()
+    return {"wait": int(REFILL.total_seconds())}

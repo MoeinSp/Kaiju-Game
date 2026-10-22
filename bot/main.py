@@ -285,11 +285,12 @@ def main() -> None:
     codex.register(application)
     referral.register(application)
     team.register(application)
-    from bot.handlers import defense_team, dungeon as dungeon_handlers, serums as serum_handlers
+    from bot.handlers import defense_team, dungeon as dungeon_handlers, merchant as merchant_handlers, serums as serum_handlers
 
     defense_team.register(application)
     dungeon_handlers.register(application)
     serum_handlers.register(application)
+    merchant_handlers.register(application)
     campaign.register(application)
     events.register(application)
     banner.register(application)

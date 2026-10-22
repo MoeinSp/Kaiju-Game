@@ -587,6 +587,21 @@ class SerumLab(models.Model):
     used_count = models.PositiveSmallIntegerField(default=0)
 
 
+
+class MerchantBoard(models.Model):
+    """«تابلوی سفارش تاجر» (game/merchant.py), one row per player: three order slots (an order,
+    or the time the next one arrives), today's special order, and the daily counters."""
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True, related_name="merchant_board")
+    slots = models.JSONField(default=list)            # [order dict | {"wait_until": unix}] × 3
+    special = models.JSONField(null=True, blank=True)  # today's special order (None once delivered)
+    special_day = models.CharField(max_length=10, blank=True, default="")
+    day = models.CharField(max_length=10, blank=True, default="")
+    done_today = models.PositiveSmallIntegerField(default=0)
+    diamonds_today = models.PositiveSmallIntegerField(default=0)
+    done_total = models.PositiveIntegerField(default=0)
+    seq = models.PositiveIntegerField(default=0)      # order ids, so a stale button can't deliver a newer order
+
 class DungeonProfile(models.Model):
     """A player's «سیاه‌چال» wallet and record (game/dungeon.py): keys, the black-rune
     currency, and lifetime stats."""
