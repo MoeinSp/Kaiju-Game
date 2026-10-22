@@ -87,7 +87,8 @@
     ];
     return '<div class="lobby">' +
       '<div class="lb-bg" style="background-image:url(' + K.asset("img/bg_home.jpg") + ')"><i class="lb-fog"></i><i class="lb-motes"></i>' + (K.seasonFx ? K.seasonFx() : "") + "</div>" +
-      '<div class="lb-top">' + plate(me) + seasonChip(d) + "</div>" +
+      // across from the plate: the season chip and the «پیشنهاد ویژه» bubble with its countdown (08_offers.js)
+      '<div class="lb-top">' + plate(me) + '<div class="lb-tl">' + seasonChip(d) + (K.offers ? K.offers.bubble() : "") + "</div></div>" +
       liveStrip(d) +
       '<div class="lb-stage"><div class="lb-side">' + left.join("") + "</div>" + stage(me.active) + '<div class="lb-side">' + right.join("") + "</div></div>" +
       collect(d) + quest(d.quest) +
@@ -109,6 +110,12 @@
       }
       (K.dy && K.dy.home ? K.dy.home() : K.api.get("daily/home/")).then(function (d) {
         daily = d; if (K.setFestival) K.setFestival(d.festival && d.festival.element); draw();
+        // the offers come after the home summary: the bubble appears, and once a day the offer card
+        if (K.offers) K.offers.list().then(function () {
+          if (!ctx.alive()) return;
+          draw();
+          setTimeout(function () { if (ctx.alive()) K.offers.maybePopup(); }, 1400);
+        });
       }).catch(function () {});
       return K.meFast(function (me) { me0 = me; draw(); }).then(function (me) {
         me0 = me; draw();
@@ -117,6 +124,7 @@
         K.on(root, "today", function () { K.go("dy_today"); });
         K.on(root, "quest", function () { K.go("dy_story"); });
         K.on(root, "battle", function () { K.tab("battle"); });
+        K.on(root, "offer", function () { if (K.offers) K.offers.open(K.offers.top()); });
         var collecting = false;
         K.on(root, "collect", function (el) {
           if (collecting || !K.dy || !K.dy.collectAll) return; collecting = true;

@@ -1350,6 +1350,13 @@ class ShopItem(models.Model):
     sort_order = models.IntegerField(default=0)
     max_per_user = models.IntegerField(default=0)  # 0 = unlimited; N = each player may buy at most N
     created_at = models.DateTimeField(auto_now_add=True)
+    # «پیشنهاد ویژه»: also pushed in the Mini App (a once-a-day popup, a bubble on the home
+    # screen, the top of the shop) until offer_ends_at. offer_discount is the «-N%» shown with
+    # a crossed-out «was» price; offer_art names a picture in telgame_site/mini/static/img.
+    is_offer = models.BooleanField(default=False)
+    offer_ends_at = models.DateTimeField(null=True, blank=True)
+    offer_discount = models.PositiveSmallIntegerField(default=0)
+    offer_art = models.CharField(max_length=32, blank=True, default="")
 
     def __str__(self) -> str:
         return f"{self.title} ({self.price_coins}c/{self.price_diamonds}d)"

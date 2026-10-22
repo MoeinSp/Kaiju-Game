@@ -759,6 +759,7 @@ def _ish_home_markup(draft: dict):
     if not is_daily and not is_user:
         limit = draft.get("max_per_user", 0)
         lines.append(f"🔢 محدودیت خرید: <b>{'هر نفر ' + str(limit) + ' بار' if limit else 'نامحدود'}</b>")
+        lines.append(f"⭐ پیشنهاد ویژه: <b>{_ish_offer_status(draft)}</b>")
     lines.append(f"🎁 محتوا ({len(draft['contents'])}): {contents}")
     if is_daily:
         lines.append("\n<i>سقف خرید روزانه رو بعداً توی «تنظیم امروز/فردا» تعیین می‌کنی.</i>")
@@ -769,7 +770,8 @@ def _ish_home_markup(draft: dict):
     if not is_user:
         rows[0].append(btn(f"{get_emoji('coin')} قیمت", style=ADMIN, callback_data="ish:price"))
     if not is_daily and not is_user:
-        rows.append([btn("🔢 محدودیت خرید", style=ADMIN, callback_data="ish:limit")])
+        rows.append([btn("🔢 محدودیت خرید", style=ADMIN, callback_data="ish:limit"),
+                     btn("⭐ پیشنهاد ویژه", style=ADMIN, callback_data="ish:offer")])
     rows.append([btn("➕ افزودن محتوا", style=CONFIRM, callback_data="ish:addc")])
     if draft["contents"]:
         rows.append([btn("↩️ حذف آخرین محتوا", style=NAV, callback_data="ish:rmlast")])
@@ -791,6 +793,54 @@ def _ish_home_markup(draft: dict):
         back_target = "admin_menu:itemshop"
     rows.append([btn(f"{get_emoji('delete')} پاک‌کردن پیش‌نویس", style=DANGER, callback_data="ish:discard"),
                  back_btn(back_target, "بازگشت")])
+    return text, InlineKeyboardMarkup(rows)
+
+
+_ISH_OFFER_HOURS = [6, 12, 24, 48, 72, 168]
+_ISH_OFFER_DISCOUNTS = [0, 20, 30, 40, 50, 70]
+_ISH_OFFER_ART_LABELS = {"gold_5": "گنج طلا", "gold_4": "صندوق طلا", "hub_chests": "جعبه‌ها", "hub_boxes": "کپسول شانسی",
+                         "hub_vip": "تاج VIP", "hub_energy": "انرژی", "hub_fusion": "ادغام", "hub_shop": "فروشگاه",
+                         "hub_dungeon": "سیاه‌چال", "hub_pass": "بلیت"}
+
+
+def _ish_offer_status(draft: dict) -> str:
+    """One line for the builder: whether this pack is pushed as «پیشنهاد ویژه» in the Mini App."""
+    import datetime
+
+    o = draft.get("offer") or {}
+    if not o.get("on"):
+        return "خاموش"
+    bits = ["روشن"]
+    if o.get("ends"):
+        left = o["ends"] - datetime.datetime.now(datetime.timezone.utc).timestamp()
+        bits.append(f"تا {max(0, int(left // 3600))} ساعت دیگه" if left > 0 else "تموم شده")
+    if o.get("discount"):
+        bits.append(f"{o['discount']}٪ تخفیف نمایشی")
+    if o.get("art"):
+        bits.append("عکس: " + _ISH_OFFER_ART_LABELS.get(o["art"], o["art"]))
+    return " · ".join(bits)
+
+
+def _ish_offer_markup(draft: dict):
+    """The «پیشنهاد ویژه» settings of the pack in the builder: on/off, how long, the «-N%»
+    badge (shown with a crossed-out «was» price) and the picture of the popup."""
+    o = draft.setdefault("offer", {"on": False, "ends": None, "discount": 0, "art": ""})
+    text = "\n\n".join([
+        "⭐ <b>پیشنهاد ویژه</b>",
+        "پیشنهاد ویژه توی مینی‌اپ دیده می‌شه: روزی یه بار وسط صفحه، یه حباب با تایمر روی صفحه‌ی خانه و بالای فروشگاه — "
+        "تا وقتی زمانش تموم بشه یا بازیکن به سقف خریدش برسه.",
+        f"وضعیت: <b>{_ish_offer_status(draft)}</b>",
+        "<i>بعد از تغییر، «ذخیره» رو توی صفحه‌ی آیتم بزن.</i>",
+    ])
+    rows = [[btn("🟢 روشن" if not o.get("on") else "⚪️ خاموش کن", style=CONFIRM if not o.get("on") else NAV, callback_data="ish:offon")],
+            [btn(f"{h // 24} روز" if h >= 24 and h % 24 == 0 else f"{h} ساعت", style=ADMIN, callback_data=f"ish:offh:{h}") for h in _ISH_OFFER_HOURS[:3]],
+            [btn(f"{h // 24} روز" if h >= 24 and h % 24 == 0 else f"{h} ساعت", style=ADMIN, callback_data=f"ish:offh:{h}") for h in _ISH_OFFER_HOURS[3:]],
+            [btn(("✓ " if o.get("discount") == d else "") + (f"-{d}٪" if d else "بدون تخفیف"), style=ADMIN, callback_data=f"ish:offd:{d}") for d in _ISH_OFFER_DISCOUNTS[:3]],
+            [btn(("✓ " if o.get("discount") == d else "") + f"-{d}٪", style=ADMIN, callback_data=f"ish:offd:{d}") for d in _ISH_OFFER_DISCOUNTS[3:]]]
+    arts = list(_ISH_OFFER_ART_LABELS.items())
+    for i in range(0, len(arts), 2):
+        rows.append([btn(("✓ " if o.get("art") == k else "🖼 ") + label, style=ADMIN, callback_data=f"ish:offa:{k}") for k, label in arts[i:i + 2]])
+    rows.append([back_btn("ish:home", "بازگشت به آیتم")])
     return text, InlineKeyboardMarkup(rows)
 
 
@@ -1082,6 +1132,25 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
             await query.message.reply_text(f"{get_emoji('edit')} اسم دلخواه برای این هیولا/تجهیزات رو بفرست:", parse_mode="HTML")
         else:
             await query.answer()
+        return
+    if verb in ("offer", "offon", "offh", "offd", "offa"):
+        import datetime
+
+        o = draft.setdefault("offer", {"on": False, "ends": None, "discount": 0, "art": ""})
+        if verb == "offon":
+            o["on"] = not o.get("on")
+            if o["on"] and not o.get("ends"):   # a fresh offer runs 24 h unless another length is picked
+                o["ends"] = datetime.datetime.now(datetime.timezone.utc).timestamp() + 24 * 3600
+        elif verb == "offh" and len(parts) > 2 and parts[2].isdigit():
+            o["ends"] = datetime.datetime.now(datetime.timezone.utc).timestamp() + int(parts[2]) * 3600
+            o["on"] = True
+        elif verb == "offd" and len(parts) > 2 and parts[2].isdigit():
+            o["discount"] = max(0, min(90, int(parts[2])))
+        elif verb == "offa" and len(parts) > 2:
+            o["art"] = parts[2] if parts[2] in _ISH_OFFER_ART_LABELS else ""
+        await query.answer()
+        text, kb = _ish_offer_markup(draft)
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
         return
     if verb == "limit":
         context.user_data[AWAITING_ADMIN_KEY] = {"action": "ish_limit"}

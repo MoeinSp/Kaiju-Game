@@ -207,13 +207,42 @@ def _summary(contents) -> str:
     from game import itemshop
 
     try:
-        return clean(itemshop.content_summary(contents or []))
+        # the bot writes diamonds as «500 💎»; the app strips emoji, so the word goes in instead
+        return clean(itemshop.content_summary(contents or []).replace("💎", "الماس"))
     except (KeyError, TypeError):
         return ""
 
 
 # the picture of an offer card (presentation only)
 _OFFER_ART = {"food": "drops/drop_capsule.jpg"}
+
+
+def offers_payload(user) -> list[dict]:
+    """The «پیشنهاد ویژه» packs this player can buy now (game.itemshop.active_offers), as the
+    Mini App shows them: the popup, the home-screen bubble and the top of the shop."""
+    from game import itemshop
+
+    out = []
+    for o in itemshop.active_offers(user):
+        it = o["item"]
+        try:
+            contents = json.loads(it.contents_json)
+        except (ValueError, TypeError):
+            contents = []
+        art = it.offer_art or ("gold_5" if any(c.get("type") == "coins" for c in contents) else "hub_chests")
+        out.append({
+            "id": it.id, "title": clean(it.title), "gets": _summary(contents),
+            "price_coins": it.price_coins, "price_diamonds": it.price_diamonds,
+            "was_coins": o["was_coins"], "was_diamonds": o["was_diamonds"], "discount": it.offer_discount,
+            "ends_in": o["ends_in"], "max": it.max_per_user or 0, "bought": o["bought"],
+            "art": f"img/{art}.jpg",
+        })
+    return out
+
+
+@endpoint()
+def offers(request, user):
+    return {"offers": offers_payload(user)}
 
 
 def _store_payload(user) -> dict:
@@ -272,6 +301,7 @@ def _store_payload(user) -> dict:
     midnight = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     return {
         "resets_in": max(0, int((midnight - now).total_seconds())),
+        "special": offers_payload(user),
         "offers": offers, "items": items, "gem": gem, "shield": shield,
         "gold_packs": [{"idx": i, "gold": p["gold"], "diamonds": p["diamonds"]} for i, p in enumerate(shop.GOLD_PACKS)],
         "img": feature_img("shop"), "img_shield": feature_img("shield_shop"), "img_gold": feature_img("gold_shop"),
@@ -503,6 +533,7 @@ routes = [
     ("store/", store),
     ("store/buy/", store_buy),
     ("store/item/", store_item),
+    ("offers/", offers),            # GET  the «پیشنهاد ویژه» packs (popup, home bubble, shop top)
     ("store/gem/", store_gem),
     ("store/shield/", store_shield),
     ("store/gold/", store_gold),

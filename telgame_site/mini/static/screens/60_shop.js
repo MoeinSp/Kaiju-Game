@@ -282,10 +282,25 @@
           '<small class="shs-lim">' + (o.remaining != null ? (out ? "فردا دوباره" : K.n(o.remaining) + " عدد مانده") : o.qty ? "هر تعداد که بخوای" : "") + "</small>" +
           '<span class="shs-pr">' + (cut ? '<s class="faint num">' + Number(o.base).toLocaleString("en-US") + "</s>" : "") + money(o.currency, o.price) + "</span></span></button>";
       }
+      /* «پیشنهاد ویژه» at the very top of the shop: one wide card per offer, sideways when several */
+      function special(list) {
+        if (!list || !list.length || !K.offers) return "";
+        K.offers.set(list);
+        var items = K.offers.top() ? list : [];
+        if (!items.length) return "";
+        return '<div class="of-strip' + (items.length > 1 ? " many" : "") + '">' + items.map(function (o) {
+          var dia = !!o.price_diamonds, n = o.price_diamonds || o.price_coins, w = dia ? o.was_diamonds : o.was_coins;
+          return '<button class="of-scard" data-act="special" data-id="' + o.id + '"><img src="' + K.asset(o.art) + '" alt="">' +
+            (o.discount ? '<span class="of-off num">-' + o.discount + "%</span>" : "") +
+            '<span class="of-sbody"><small class="of-kick">' + K.ic("spark") + "پیشنهاد ویژه</small><b>" + K.esc(o.title) + "</b>" +
+            (o.ends_in != null ? '<span class="of-stime">' + K.ic("clock") + '<span class="num" data-oend="' + (Date.now() + o.ends_in * 1000) + '"></span></span>' : "") +
+            '<span class="of-sprice">' + (w > n ? '<s class="num">' + K.n(w) + "</s>" : "") + K.ic(dia ? "diamond" : "coin") + '<span class="num">' + K.n(n) + "</span></span></span></button>";
+        }).join("") + "</div>";
+      }
       function daily(d) {
         // a live countdown to the midnight turnover, like the «refresh in» clock of a game shop
         var clock = d.resets_in != null ? '<span class="shs-clock">' + K.ic("clock") + 'آفرهای تازه تا <span class="timer" data-until="' + scr.until(d.resets_in) + '" data-done="الان"></span></span>' : "";
-        var html = banner(d.img, "فروشگاه روزانه", clock || "آفرها هر روز عوض می‌شن");
+        var html = special(d.special) + banner(d.img, "فروشگاه روزانه", clock || "آفرها هر روز عوض می‌شن");
         if (d.gem) {
           var g = d.gem;
           html += '<div class="h2">' + K.ic("gem") + 'کایجوی الماسی امروز</div><div class="panel pad glow shs-gem' + (g.claimed ? "" : " live") + '">' +
@@ -408,6 +423,10 @@
         K.confirm({ title: "تأیید خرید", icon: "gem", ok: "تأیید و خرید",
           html: kv([["آیتم", K.esc(o.title)], ["می‌گیری", K.esc(o.gets)], ["مبلغ", money("diamonds", o.price)], ["الماس تو", money("diamonds", K.res ? K.res.diamonds : 0)]]) })
           .then(function (yes) { if (yes) buyOffer(o, 1, el); });
+      });
+      K.on(root, "special", function (el) {
+        var o = (scr.data && scr.data.special || []).filter(function (x) { return x.id === +el.dataset.id; })[0];
+        if (o && K.offers) K.offers.open(K.offers.top() && K.offers.top().id === o.id ? K.offers.top() : o);
       });
       K.on(root, "gem", function (el) {
         var g = scr.data.gem;

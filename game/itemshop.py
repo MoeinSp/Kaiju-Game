@@ -13,6 +13,7 @@ import json
 import random
 
 from django.db import transaction
+from django.utils import timezone
 
 from bio_lab.models import Creature, Equipment, ShopItem, User
 from game import constants
@@ -136,12 +137,54 @@ def parse_price_line(text: str) -> tuple[int, int]:
     return coins, diamonds
 
 
+# «پیشنهاد ویژه» (ShopItem.is_offer …): the owner's builder keeps it in draft["offer"] =
+# {"on": bool, "ends": unix time | None, "discount": 0-90, "art": picture key}
+OFFER_FIELDS = ("is_offer", "offer_ends_at", "offer_discount", "offer_art")
+OFFER_ARTS = ("gold_5", "gold_4", "hub_chests", "hub_boxes", "hub_vip", "hub_energy", "hub_fusion", "hub_shop", "hub_dungeon", "hub_pass")
+
+
+def _offer_fields(draft: dict) -> dict:
+    import datetime
+
+    o = draft.get("offer") or {}
+    ends = o.get("ends")
+    return {
+        "is_offer": bool(o.get("on")),
+        "offer_ends_at": datetime.datetime.fromtimestamp(ends, tz=datetime.timezone.utc) if ends else None,
+        "offer_discount": max(0, min(90, int(o.get("discount") or 0))),
+        "offer_art": o.get("art") if o.get("art") in OFFER_ARTS else "",
+    }
+
+
+def active_offers(user: User) -> list[dict]:
+    """The «پیشنهاد ویژه» packs this player can still buy right now, soonest-ending first:
+    active, flagged as an offer, not past their end, and under the player's purchase limit."""
+    from django.db.models import Q
+
+    from bio_lab.models import ShopItemPurchase
+
+    now = timezone.now()
+    items = list(ShopItem.objects.filter(is_active=True, is_offer=True)
+                 .filter(Q(offer_ends_at__isnull=True) | Q(offer_ends_at__gt=now)).order_by("offer_ends_at", "sort_order", "id"))
+    bought = dict(ShopItemPurchase.objects.filter(user=user, item__in=items).values_list("item_id", "count")) if items else {}
+    out = []
+    for it in items:
+        n = bought.get(it.id, 0)
+        if it.max_per_user and n >= it.max_per_user:
+            continue
+        was = (lambda price: int(round(price / (1 - it.offer_discount / 100))) if it.offer_discount and price else 0)
+        out.append({"item": it, "bought": n, "was_coins": was(it.price_coins), "was_diamonds": was(it.price_diamonds),
+                    "ends_in": max(0, int((it.offer_ends_at - now).total_seconds())) if it.offer_ends_at else None})
+    return out
+
+
 def create_item_from_draft(draft: dict) -> ShopItem:
     return ShopItem.objects.create(
         title=draft["title"][:64], emoji=draft.get("emoji", "🎁"),
         price_coins=draft.get("price_coins", 0), price_diamonds=draft.get("price_diamonds", 0),
         contents_json=json.dumps(draft["contents"], ensure_ascii=False),
         max_per_user=max(0, int(draft.get("max_per_user", 0))),
+        **_offer_fields(draft),
     )
 
 
@@ -156,8 +199,10 @@ def update_item_from_draft(item_id: int, draft: dict) -> ShopItem:
     item.price_diamonds = draft.get("price_diamonds", 0)
     item.contents_json = json.dumps(draft["contents"], ensure_ascii=False)
     item.max_per_user = max(0, int(draft.get("max_per_user", 0)))
+    for k, v in _offer_fields(draft).items():
+        setattr(item, k, v)
     item.save(update_fields=["title", "emoji", "price_coins", "price_diamonds",
-                             "contents_json", "max_per_user"])
+                             "contents_json", "max_per_user", *OFFER_FIELDS])
     return item
 
 
@@ -169,6 +214,8 @@ def item_to_draft(item: ShopItem) -> dict:
         "price_coins": item.price_coins, "price_diamonds": item.price_diamonds,
         "contents": json.loads(item.contents_json), "max_per_user": item.max_per_user,
         "edit_id": item.id,
+        "offer": {"on": item.is_offer, "ends": item.offer_ends_at.timestamp() if item.offer_ends_at else None,
+                  "discount": item.offer_discount, "art": item.offer_art},
     }
 
 
@@ -366,6 +413,8 @@ def buy(user: User, item_id: int) -> dict:
     item = ShopItem.objects.select_for_update().filter(id=item_id, is_active=True).first()
     if item is None:
         raise GameError("این آیتم دیگه در دسترس نیست.")
+    if item.is_offer and item.offer_ends_at and item.offer_ends_at <= timezone.now():
+        raise GameError("زمان این پیشنهاد ویژه تموم شده.")
     # per-user purchase limit
     purchase = None
     if item.max_per_user and item.max_per_user > 0:

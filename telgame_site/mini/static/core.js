@@ -276,7 +276,9 @@ window.K = (function () {
       return request("POST", path, body, btn).catch(function (err) {
         K.haptic("err");
         // out of energy → the toast offers the refill screen (registered by the shop module)
-        if (err.code === "energy" && K.hasScreen("sh_energy")) K.toast(err.message, "err", { label: "شارژ انرژی", run: function () { K.go("sh_energy"); } });
+        // short of energy / gold → the way out as a sheet (08_offers.js), at most every 45 s; else a toast
+        if ((err.code === "energy" || err.code === "gold") && K.offers && K.offers.need(err.code, err.message)) { /* shown */ }
+        else if (err.code === "energy" && K.hasScreen("sh_energy")) K.toast(err.message, "err", { label: "شارژ انرژی", run: function () { K.go("sh_energy"); } });
         else K.toast(err.message, "err");
         throw err;
       }).finally(function () { delete posting[key]; if (btn) btn._kbusy = false; });
