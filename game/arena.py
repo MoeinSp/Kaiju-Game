@@ -57,6 +57,14 @@ class OpponentUnavailableError(GameError):
     than dead-ending, so a found opponent never leaves the player stuck."""
 
 
+def attack_power(user: User) -> int:
+    """The attacker's power as every arena card shows it: the active creature with an armed
+    «سرم خشم» counted (attack() spends it on the fight)."""
+    from game import serums
+
+    return round(active_power(user) * serums.peek(user, "rage"))
+
+
 def active_power(user: User) -> int:
     creature = Creature.objects.filter(owner=user, is_active=True).first()
     if creature is None:
@@ -364,10 +372,7 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
 
     # the defender: from the target's «تیم دفاع», the best answer to the attacker's creature
     my_creature = Creature.objects.filter(owner=attacker, is_active=True).first()
-    target_creature, target_power = pick_defender(target, my_creature, active_power(attacker))
-    from game import serums
-
-    target_power = round(target_power * serums.peek(target, "shell"))   # «سرم پوسته»: the card shows it
+    target_creature, target_power = pick_defender(target, my_creature, active_power(attacker))   # «سرم پوسته» included
     return {
         "is_fake": False,
         "user": target,

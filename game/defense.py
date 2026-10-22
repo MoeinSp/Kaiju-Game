@@ -92,6 +92,16 @@ def pick_defender(owner: User, attacker_creature: Creature | None = None, attack
                   prefer_id: int | None = None) -> tuple[Creature | None, int]:
     """(creature, power) that defends `owner` against `attacker_creature`. `prefer_id` keeps
     the defender already shown on a card, as long as it can still defend."""
+    c, p = _pick_defender(owner, attacker_creature, attacker_power, prefer_id)
+    if c is not None:
+        from game import serums
+
+        p = round(p * serums.peek(owner, "shell"))   # «سرم پوسته»: every card shows what attack() will fight
+    return c, p
+
+
+def _pick_defender(owner: User, attacker_creature: Creature | None, attacker_power: int | None,
+                   prefer_id: int | None) -> tuple[Creature | None, int]:
     pool = _available(owner)
     if not pool:
         return None, 0

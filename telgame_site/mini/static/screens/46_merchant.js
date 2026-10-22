@@ -63,8 +63,9 @@
           if (K.sfx) K.sfx("coin");
           if (r.levelup) K.after(900, function () { K.toast("آزمایشگاهت رسید به سطح " + pn(r.levelup.to), "ok"); });
         }
-        function deliver(el) {
+        function deliver(el, creature) {
           var body = { slot: el.dataset.slot, id: +el.dataset.id };
+          if (creature) body.creature = creature;   // the one the player confirmed
           K.api.post("merchant/deliver/", body, el).then(done, function () { busy = false; });
         }
         draw();
@@ -72,8 +73,8 @@
           if (busy) return; busy = true;
           K.api.get("merchant/preview/?slot=" + el.dataset.slot + "&id=" + el.dataset.id).then(function (p) {
             if (!p.creatures.length) return deliver(el);
-            K.confirm({ title: "این هیولا به تاجر داده می‌شه", text: p.creatures.join("، ") + " · تجهیزاتش برمی‌گرده به انبار.", ok: "تحویل بده", cancel: "بی‌خیال" })
-              .then(function (yes) { if (yes) deliver(el); else busy = false; });
+            K.confirm({ title: "این هیولا به تاجر داده می‌شه", text: p.creatures.map(function (c) { return c.name; }).join("، ") + " · تجهیزاتش برمی‌گرده به انبار.", ok: "تحویل بده", cancel: "بی‌خیال" })
+              .then(function (yes) { if (yes) deliver(el, p.creatures[0].id); else busy = false; });
           }, function () { busy = false; });
         });
         K.on(root, "reject", function (el) {

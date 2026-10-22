@@ -58,12 +58,24 @@ def lab_level(user: User) -> int:
     return building_level(user, LAB)
 
 
+def power_basis(user: User) -> int:
+    """The player's strongest kaiju (gear included) — what serum prices and merchant orders are
+    sized by. Not the active creature: that one can be swapped in a tap, which would let a player
+    brew with a weak creature selected and deliver/refund with a strong one (two queries)."""
+    from bio_lab.models import Creature
+    from game.creature import creature_power
+    from game.equipment import equipped_items_map
+
+    creatures = list(Creature.objects.filter(owner=user))
+    gear = equipped_items_map(creatures)
+    return max((creature_power(c, gear.get(c.id, [])) for c in creatures), default=0)
+
+
 def brew_cost(user: User) -> int:
     """DNA per serum: about two and a half hunts' worth of DNA for this player's power."""
-    from game.arena import active_power
     from game.hunt import HUNT_DNA_PER_POWER, HUNT_LOOT_BONUS
 
-    return max(50, round(active_power(user) * HUNT_DNA_PER_POWER * HUNT_LOOT_BONUS * 2.5))
+    return max(50, round(power_basis(user) * HUNT_DNA_PER_POWER * HUNT_LOOT_BONUS * 2.5))
 
 
 def effect(kind: str, level: int) -> float:
@@ -103,8 +115,11 @@ def _advance(row: SerumLab, level: int, now: datetime.datetime) -> bool:
         stock = dict(row.stock or {})
         queue = list(row.queue)
         started = row.brew_started_at or now
+        paid = list(row.paid or [])
         while queue and sum(stock.values()) < cap and started + step <= now:
             kind = queue.pop(0)
+            if paid:
+                paid.pop(0)
             stock[kind] = stock.get(kind, 0) + 1
             started = started + step
         # a full shelf pauses the brewing: the clock restarts once there is room again
@@ -113,7 +128,7 @@ def _advance(row: SerumLab, level: int, now: datetime.datetime) -> bool:
         # None = paused (full shelf): use() restarts the clock when it frees a place
         new_start = started if queue else None
         if stock != (row.stock or {}) or queue != row.queue or new_start != row.brew_started_at:
-            row.stock, row.queue, row.brew_started_at = stock, queue, new_start
+            row.stock, row.queue, row.brew_started_at, row.paid = stock, queue, new_start, paid
             changed = True
     elif not row.queue and row.brew_started_at:
         row.brew_started_at = None
@@ -232,6 +247,7 @@ def brew(user: User, kind: str, count: int = 1) -> dict:
         if not row.queue:
             row.brew_started_at = timezone.now()
         row.queue = list(row.queue) + [kind] * count
+        row.paid = list(row.paid or []) + [cost // count] * count   # refunds give back what was paid
         row.save()
     return {"queued": count, "cost": cost, "state": state(user)}
 
@@ -247,8 +263,10 @@ def cancel_last(user: User) -> dict:
             raise GameError("سرمی توی صف نیست که بشه لغوش کرد (اونی که در حال ساخته رو نمی‌شه لغو کرد).")
         kind = row.queue[-1]
         row.queue = list(row.queue[:-1])
+        paid = list(row.paid or [])
+        refund = paid.pop() if len(paid) > len(row.queue) else brew_cost(user)
+        row.paid = paid[: len(row.queue)]
         row.save()
-        refund = brew_cost(user)
         user.dna_fragments += refund
         user.save(update_fields=["dna_fragments"])
     return {"kind": kind, "refund": refund, "state": state(user)}
@@ -304,8 +322,13 @@ def use(user: User, kind: str, member_id: int | None = None) -> dict:
 
 
 def stock_of(user: User, kind: str) -> int:
-    """Serums of this kind on the shelf now (brews finished by now included)."""
-    row, _ = _fresh(user, lock=False)
+    """Serums of this kind on the shelf now (brews finished by now included). Read-only: the
+    finished brews are counted, not saved — writing an unlocked row here could overwrite a
+    brew() running at the same moment."""
+    row = SerumLab.objects.filter(user_id=user.id).first()
+    if row is None:
+        return 0
+    _advance(row, lab_level(user), timezone.now())
     return int((row.stock or {}).get(kind, 0))
 
 

@@ -31,6 +31,7 @@ from game.arena import (
     OpponentUnavailableError,
     active_power,
     attack,
+    attack_power,
     creature_power,
     cup_delta,
     find_opponent,
@@ -214,7 +215,7 @@ def _find_sync(tg_user, exclude_ids=None):
     from game.energy import sync_energy
 
     cname = creature.name if creature is not None else "—"
-    return (user, opponent, active_power(user), loot, my_element,
+    return (user, opponent, attack_power(user), loot, my_element,
             dna_win, cname, sync_energy(user))
 
 
@@ -619,7 +620,7 @@ def _opponent_reshow_sync(tg_user, pending):
     from game.energy import sync_energy
 
     cname = creature.name if creature is not None else "—"
-    return (user, active_power(user), pending["loot_gold"], my_element, pending["loot_dna"],
+    return (user, attack_power(user), pending["loot_gold"], my_element, pending["loot_dna"],
             cname, sync_energy(user))
 
 
@@ -1046,9 +1047,9 @@ def _revenge_find_sync(tg_user, log_id: int):
     from bio_lab.models import Creature
     from game.defense import pick_defender
 
-    my_power = active_power(user)
+    my_power = attack_power(user)
     mine = Creature.objects.filter(owner=user, is_active=True).first()
-    opponent_power = pick_defender(log.attacker, mine, my_power)[1] if log.attacker else 0
+    opponent_power = pick_defender(log.attacker, mine, active_power(user))[1] if log.attacker else 0
     attacker_name = log.attacker_label or lab_display(log.attacker)
     return user, log, my_power, opponent_power, attacker_name
 

@@ -75,6 +75,14 @@ def _gate(user, action: str) -> None:
         raise GameError(f"این بخش از سطح {req} «تالار مِهر» باز می‌شه (الان سطح {level}). اول تالار مِهرت رو ارتقا بده.")
 
 
+def _with_rage(user, my: dict) -> dict:
+    """«سرم خشم» armed: the card and its verdict count it (attack() spends it on the fight)."""
+    from game import serums
+
+    rage = serums.peek(user, "rage")
+    return {**my, "power": round(my["power"] * rage), "rage": True} if rage > 1 else my
+
+
 def _my(user, creature=None) -> dict:
     """The player's fighter as the card shows it. The owner's research is re-read from the DB
     first: game.research keeps a per-PROCESS cache, and a web worker's copy can be older than
@@ -198,12 +206,7 @@ def _card(user, pending: dict, seen: list[int], note: str = "", creature=None, f
     `creature` / `foe` = the two active creatures when the caller has already loaded them."""
     from game.energy import get_max_energy, sync_energy
 
-    from game import serums
-
-    my = _my(user, creature)
-    rage = serums.peek(user, "rage")   # «سرم خشم» armed: the card and its verdict count it
-    if rage > 1:
-        my = {**my, "power": round(my["power"] * rage), "rage": True}
+    my = _with_rage(user, _my(user, creature))
     opp = {
         "is_fake": bool(pending["is_fake"]), "label": _txt(pending["label"]),
         "alliance": pending.get("alliance") or None,
@@ -594,6 +597,7 @@ def revenge_card(request, user):
     my = _my(user, mine)
     _fresh_research(target)
     tc, opp_power = pick_defender(target, mine, my["power"])
+    my = _with_rage(user, my)
     return {
         "log_id": log.id, "my": my, "my_cup": user.cup,
         "opponent": {

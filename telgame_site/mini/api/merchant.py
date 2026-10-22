@@ -44,12 +44,13 @@ def board(request, user):
 @endpoint()
 def preview(request, user):
     q = request.GET
-    return {"creatures": [clean(n) for n in M.preview_handover(user, _slot(q), need_int(q, "id", 1))]}
+    return {"creatures": [{"id": cid, "name": clean(n)} for cid, n in M.preview_handover(user, _slot(q), need_int(q, "id", 1))]}
 
 
 @endpoint("POST")
 def deliver(request, user, data):
-    got = M.deliver(user, _slot(data), need_int(data, "id", 1))
+    cid = data.get("creature")
+    got = M.deliver(user, _slot(data), need_int(data, "id", 1), [int(cid)] if str(cid or "").isdigit() else None)
     return {"name": got["name"], "coins": got["coins"], "xp": got["xp"], "diamonds": got["diamonds"],
             "extra": clean(got["extra"] or ""), "levelup": got.get("levelup"),
             "handed": [clean(n) for n in got["handed"]], "state": _state(user)}

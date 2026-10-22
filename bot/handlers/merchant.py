@@ -14,16 +14,11 @@ from bio_lab.repository import get_or_create_user
 from bot.buttons import CONFIRM, DANGER, NAV, PRIMARY, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import merchant as M
+from game.blackmarket import format_time_remaining as _left
 from game.creature import GameError
 
 _DIV = "──────────"
 _NUM = {0: "۱", 1: "۲", 2: "۳"}
-
-
-def _left(seconds: int) -> str:
-    s = max(0, int(seconds))
-    h, m = s // 3600, s % 3600 // 60
-    return f"{h} ساعت و {m} دقیقه" if h else f"{max(1, m)} دقیقه"
 
 
 def _order_lines(o: dict, title: str) -> list[str]:
@@ -78,7 +73,7 @@ def _render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
-def _sync(tg_user, action: str, slot, order_id: int | None):
+def _sync(tg_user, action: str, slot, order_id: int | None, creature_id: int | None = None):
     user, _ = get_or_create_user(tg_user)
     note, ask = "", None
     try:
@@ -89,7 +84,7 @@ def _sync(tg_user, action: str, slot, order_id: int | None):
             else:
                 action = "dd"
         if action == "dd":
-            got = M.deliver(user, slot, order_id)
+            got = M.deliver(user, slot, order_id, [creature_id] if creature_id else None)
             bits = [f"💰 +{got['coins']:,}", f"⭐ +{got['xp']} XP"]
             if got["extra"]:
                 bits.append(f"🎁 {html.escape(got['extra'])}")
@@ -113,6 +108,7 @@ async def merchant_board(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     action = parts[1]
     slot = parts[2] if len(parts) > 2 else None
     order_id = int(parts[3]) if len(parts) > 3 and parts[3].isdigit() else None
+    creature_id = int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else None
     own = bool(q and q.data.startswith("mo:"))   # «menu:merchant» was answered by the menu router
     if own:
         await q.answer()
@@ -123,14 +119,14 @@ async def merchant_board(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 btn("رد کن", emoji_key="btn_confirm", style=DANGER, callback_data=f"mo:xx:{slot}:{order_id}"),
                 btn("نگهش دار", emoji_key="btn_cancel", style=NAV, callback_data="mo:home")]]))
         return
-    st, note, ask = await run_db(_sync, update.effective_user, action, slot, order_id)
+    st, note, ask = await run_db(_sync, update.effective_user, action, slot, order_id, creature_id)
     if ask:
-        who = "\n".join(f"   • {html.escape(n)}" for n in ask)
+        who = "\n".join(f"   • {html.escape(n)}" for _cid, n in ask)
         await safe_edit_message_text(
             q, f"🤝 <b>تحویل سفارش</b>\n\nاین هیولا به تاجر داده می‌شه (ضعیف‌ترین هیولای اضافه‌ات؛ تجهیزاتش برمی‌گرده به انبار):\n{who}\n\nمطمئنی؟",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
-                btn("تحویل بده", emoji_key="btn_merchant_deliver", style=CONFIRM, callback_data=f"mo:dd:{slot}:{order_id}"),
+                btn("تحویل بده", emoji_key="btn_merchant_deliver", style=CONFIRM, callback_data=f"mo:dd:{slot}:{order_id}:{ask[0][0]}"),
                 btn("بی‌خیال", emoji_key="btn_cancel", style=NAV, callback_data="mo:home")]]))
         return
     text, kb = _render(st, note)
@@ -143,4 +139,4 @@ async def merchant_board(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 def register(application) -> None:
-    application.add_handler(CallbackQueryHandler(merchant_board, pattern=r"^mo:(home|(d|dd|x|xx):(s|[0-2]):\d+)$"))
+    application.add_handler(CallbackQueryHandler(merchant_board, pattern=r"^mo:(home|(d|dd|x|xx):(s|[0-2]):\d+(:\d+)?)$"))

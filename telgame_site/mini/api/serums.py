@@ -23,7 +23,8 @@ def home(request, user):
 
 @endpoint("POST")
 def brew(request, user, data):
-    r = SR.brew(user, need_str(data, "kind", choices=SR.ORDER), int(data.get("count") or 1))
+    count = need_int(data, "count", 1, 8) if data.get("count") not in (None, "") else 1
+    r = SR.brew(user, need_str(data, "kind", choices=SR.ORDER), count)
     return {"queued": r["queued"], "cost": r["cost"], "state": _state(user)}
 
 

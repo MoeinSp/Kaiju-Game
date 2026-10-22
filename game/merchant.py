@@ -73,10 +73,10 @@ def unlocked(user: User) -> bool:
 
 def hunt_units(user: User) -> tuple[float, float]:
     """(gold, DNA) of one won hunt for this player — the yardstick every order is sized by."""
-    from game.arena import active_power
     from game.hunt import HUNT_COIN_PER_POWER, HUNT_DNA_PER_POWER, HUNT_LOOT_BONUS
+    from game.serums import power_basis
 
-    power = max(800, active_power(user))
+    power = max(800, power_basis(user))   # the strongest kaiju: swapping the active one can't game it
     return power * HUNT_COIN_PER_POWER * HUNT_LOOT_BONUS, power * HUNT_DNA_PER_POWER * HUNT_LOOT_BONUS
 
 
@@ -212,19 +212,33 @@ def _refresh(user: User, row: MerchantBoard) -> bool:
     return changed
 
 
-def have(user: User, req: dict) -> int:
+def _holdings(user: User) -> dict:
+    """What the player could hand over, looked up once per board view."""
+    from collections import Counter
+
+    from bio_lab.models import SerumLab
+    from game import serums
+
+    row = SerumLab.objects.filter(user_id=user.id).first()
+    if row is not None:
+        serums._advance(row, serums.lab_level(user), timezone.now())   # counted, not saved
+    return {"spare": Counter(c.rarity for c in spare_creatures(user)),
+            "gear": Counter(Equipment.objects.filter(owner=user, equipped_on__isnull=True).values_list("rarity", flat=True)),
+            "serum": dict(row.stock or {}) if row else {}}
+
+
+def have(user: User, req: dict, held: dict | None = None) -> int:
     t = req["t"]
     if t == "dna":
         return user.dna_fragments
     if t == "gold":
         return user.coins
+    held = held or _holdings(user)
     if t == "serum":
-        from game import serums
-
-        return serums.stock_of(user, req["k"])
+        return int(held["serum"].get(req["k"], 0))
     if t == "creature":
-        return len(spare_creatures(user, req["r"]))
-    return Equipment.objects.filter(owner=user, equipped_on__isnull=True, rarity=req["r"]).count()
+        return held["spare"][req["r"]]
+    return held["gear"][req["r"]]
 
 
 def req_label(req: dict) -> str:
@@ -255,10 +269,10 @@ def extra_label(extra: dict | None) -> str:
     return "تجهیزات افسانه‌ای"
 
 
-def _order_view(user: User, order: dict, slot) -> dict:
+def _order_view(user: User, order: dict, slot, held: dict) -> dict:
     reqs = []
     for r in order["reqs"]:
-        h = have(user, r)
+        h = have(user, r, held)
         reqs.append({**r, "label": req_label(r), "have": h, "ok": h >= r["n"]})
     rw = order["reward"]
     return {"slot": slot, "id": order["id"], "who": order["who"], "name": MERCHANTS.get(order["who"], "تاجر"),
@@ -277,16 +291,17 @@ def state(user: User) -> dict:
             row.save()
     user.refresh_from_db(fields=["coins", "dna_fragments"])
     now = timezone.now().timestamp()
+    held = _holdings(user)
     slots = []
     for i, s in enumerate(row.slots):
         if "reqs" in s:
-            slots.append(_order_view(user, s, i))
+            slots.append(_order_view(user, s, i, held))
         else:
             slots.append({"slot": i, "wait": max(0, int(s.get("wait_until", 0) - now))})
     tomorrow = (timezone.localtime() + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     return {
         "unlocked": True, "slots": slots,
-        "special": _order_view(user, row.special, "s") if row.special else None,
+        "special": _order_view(user, row.special, "s", held) if row.special else None,
         "special_in": max(0, int((tomorrow - timezone.localtime()).total_seconds())),
         "done_today": row.done_today, "daily": DAILY_ORDERS,
         "diamonds_today": row.diamonds_today, "diamond_cap": DIAMOND_CAP, "done_total": row.done_total,
@@ -304,18 +319,19 @@ def _find(row: MerchantBoard, slot, order_id: int) -> dict:
     return order
 
 
-def preview_handover(user: User, slot, order_id: int) -> list[str]:
-    """Names of the creatures a delivery would hand over — shown before asking to confirm."""
+def preview_handover(user: User, slot, order_id: int) -> list[tuple[int, str]]:
+    """(id, name) of the creature a delivery would hand over — shown before asking to confirm;
+    deliver() is then given that id, so the creature that goes is the one the player saw."""
     row = _board(user)
     order = _find(row, slot, order_id)
     out = []
     for r in order["reqs"]:
         if r["t"] == "creature":
-            out += [f"{c.custom_name or c.name} · سطح {c.level}" for c in spare_creatures(user, r["r"])[: r["n"]]]
+            out += [(c.id, f"{c.custom_name or c.name} · سطح {c.level}") for c in spare_creatures(user, r["r"])[: r["n"]]]
     return out
 
 
-def deliver(user: User, slot, order_id: int) -> dict:
+def deliver(user: User, slot, order_id: int, creature_ids: list[int] | None = None) -> dict:
     from bio_lab.repository import lock_row
     from game import serums
     from game.ledger import record_gain
@@ -342,7 +358,13 @@ def deliver(user: User, slot, order_id: int) -> dict:
             elif t == "serum":
                 serums.hand_over(user, r["k"], n)
             elif t == "creature":
-                gone = spare_creatures(user, r["r"])[:n]
+                spare = spare_creatures(user, r["r"])
+                if creature_ids:   # the ones the player confirmed — still spare and of this rarity?
+                    gone = [c for c in spare if c.id in set(creature_ids)][:n]
+                    if len(gone) < n:
+                        raise GameError("هیولایی که تأیید کردی دیگه قابل تحویل نیست؛ تابلو رو دوباره باز کن.")
+                else:
+                    gone = spare[:n]
                 handed += [c.custom_name or c.name for c in gone]
                 Equipment.objects.filter(equipped_on__in=gone).update(equipped_on=None)
                 Creature.objects.filter(id__in=[c.id for c in gone]).delete()

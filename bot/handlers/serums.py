@@ -14,16 +14,11 @@ from bio_lab.repository import get_or_create_user
 from bot.buttons import BUILD, CONFIRM, NAV, PRIMARY, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import arena_chests as AC, serums as SR
+from game.blackmarket import format_time_remaining as _left
 from game.creature import GameError
 
 _DIV = "──────────"
 _ICON = {"rage": "🔥", "tracker": "🎯", "adrenaline": "⚡", "shell": "🛡", "heal": "💖", "slayer": "🐉"}
-
-
-def _left(seconds: int) -> str:
-    s = max(0, int(seconds))
-    h, m = s // 3600, s % 3600 // 60
-    return f"{h} ساعت و {m} دقیقه" if h else f"{max(1, m)} دقیقه"
 
 
 def _photo(level: int) -> Path:

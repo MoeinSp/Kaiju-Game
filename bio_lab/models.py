@@ -579,6 +579,7 @@ class SerumLab(models.Model):
     stock = models.JSONField(default=dict)            # {kind: count} ready on the shelf
     levels = models.JSONField(default=dict)           # {kind: 1..5}; a missing kind is level 1
     queue = models.JSONField(default=list)            # kinds waiting to be brewed, in order
+    paid = models.JSONField(default=list)             # DNA paid for each queued serum (refunds), same order
     brew_started_at = models.DateTimeField(null=True, blank=True)   # when the head of the queue started
     upgrade_kind = models.CharField(max_length=16, blank=True, default="")
     upgrade_ends_at = models.DateTimeField(null=True, blank=True)

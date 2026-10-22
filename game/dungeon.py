@@ -664,10 +664,9 @@ def view(user: User) -> dict:
                 row.update(vs=mine, enemy_vs=theirs, wins=mine >= theirs)
             members.append(row)
         out["run"] = {"id": run.id, "state": state, "members": members, "rooms": ROOMS}
-        from bio_lab.models import SerumLab
+        from game import serums
 
-        lab = SerumLab.objects.filter(user_id=user.id).only("stock").first()
-        out["heal_serums"] = int(((lab.stock if lab else None) or {}).get("heal", 0))
+        out["heal_serums"] = serums.stock_of(user, "heal")
     return out
 
 
