@@ -80,6 +80,7 @@ def _state(user: User) -> dict:
         "first_strike": bool(st.get("first_strike")),
         "loot": st["loot"],
         "log": [_txt(x) for x in (st.get("log") or [])[-3:]],
+        "heal_serums": v.get("heal_serums", 0),
     }
     return out
 

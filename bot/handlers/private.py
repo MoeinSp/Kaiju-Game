@@ -1088,6 +1088,7 @@ SECTION_HALL_REQ = {
     "fusion": 2,
     "breeding": 2,
     "dispatch": 2,
+    "serums": 2,
     "battlepass": 2,
     "exchange": 2,
 
@@ -1142,7 +1143,8 @@ _HUBS = {
     "hub_base": ("🏰 <b>پایگاه</b>", [
         [("ساختمان‌ها", "buildings", "bu", "btn_buildings"), ("پژوهش", "research", "bu", "btn_research")],
         [("خزانه", "vault", "bu", "btn_vault"), ("صرافی", "exchange", "s", "btn_exchange")],
-        [("بازیافت", "equip_exchange", "s", "btn_ticket_exchange")],
+        [("بازیافت", "equip_exchange", "s", "btn_ticket_exchange"), ("آزمایشگاه سرم", "serums", "bu", "btn_serums")],
+        [("انبار", "backpack", "n", "btn_backpack")],
     ]),
     "hub_shop": ("🛒 <b>فروشگاه</b>", [
         [("فروشگاه", "shop", "s", "btn_shop"), ("بازار سیاه", "blackmarket", "s", "btn_blackmarket")],
@@ -5540,6 +5542,18 @@ async def vault_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await send_screen(update, "\n".join(lines), photo=photo, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
 
+async def serums_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from bot.handlers.serums import serum_lab
+
+    await serum_lab(update, context)
+
+
+async def backpack_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from bot.handlers.serums import backpack
+
+    await backpack(update, context)
+
+
 _MENU_ACTIONS = {
     "me": me,
     "collection": collection,
@@ -5596,6 +5610,8 @@ _MENU_ACTIONS = {
     "alliance_war": alliance_war_panel,
     "workers": workers_panel,
     "vault": vault_panel,
+    "serums": serums_panel,
+    "backpack": backpack_panel,
 }
 
 
@@ -5615,6 +5631,7 @@ _KEYWORD_TO_MENU = {
     "blacksmith": "blacksmith", "forge": "blacksmith", "buy": "buy_open", "purchase": "buy_open",
     "expedition": "expedition", "caravan": "expedition", "war": "alliance_war",
     "workers": "workers", "vault": "vault",
+    "serum": "serums", "backpack": "backpack",
 }
 
 

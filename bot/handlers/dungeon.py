@@ -164,6 +164,8 @@ def _run_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
             lines.append(f"▫️ <b>{label}</b>: {desc} — <code>{int(o['price']):,}</code> طلا")
             rows.append([btn(f"{label} · {int(o['price']):,} طلا", style=SHOP, callback_data=f"dg:m:{i}")])
         rows.append([btn("رد شدن", style=NAV, callback_data="dg:m:x")])
+    if v.get("heal_serums") and any(0 < m["hp"] < 100 for m in run["members"]):
+        rows.append([btn(f"سرم ترمیم · {v['heal_serums']} عدد", emoji_key="btn_serum_use", style=CONFIRM, callback_data="dg:h")])
     rows.append([btn("ترک سیاه‌چال", emoji_key="btn_cancel", style=DANGER, callback_data="dg:quit")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -233,6 +235,10 @@ def _act_sync(tg_user, action: str, arg):
         out = D.merchant_buy(user, arg)
     elif action == "quit":
         out = D.quit_run(user)
+    elif action == "heal":
+        from game import serums
+
+        out = serums.use(user, "heal")
     v = D.view(user)
     return out, v
 
@@ -253,7 +259,7 @@ async def dungeon_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     action, arg = {
         "run": ("view", None), "start": ("start", None),
         "d": ("door", None), "f": ("fight", None), "r": ("rune", None), "m": ("merchant", None),
-        "quitok": ("quit", None),
+        "quitok": ("quit", None), "h": ("heal", None),
     }.get(cmd, (None, None))
     if cmd == "quit":
         await query.answer()
@@ -291,6 +297,8 @@ async def dungeon_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         note = _fight_note(out)
     elif action == "rune":
         note = f"🔮 «{D.rune_label(out['rune'])[0]}» گرفتی."
+    elif action == "heal":
+        note = f"💖 سرم ترمیم · {html.escape(out['note'])}"
     text, kb = _run_render(v, note)
     await send_screen(update, text, parse_mode="HTML", reply_markup=kb)
 
@@ -493,5 +501,5 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(dungeon_home, pattern=r"^dg:home$"))
     application.add_handler(CallbackQueryHandler(dungeon_shop, pattern=r"^dg:(shop|buy:[a-z_]+)$"))
     application.add_handler(CallbackQueryHandler(dungeon_relics, pattern=r"^dg:relics$"))
-    application.add_handler(CallbackQueryHandler(dungeon_callback, pattern=r"^dg:(run|start(:[a-z]+)?|quit|quitok|d:\d+|f:\d+|r:\d+|m:(\d+|x))$"))
+    application.add_handler(CallbackQueryHandler(dungeon_callback, pattern=r"^dg:(run|start(:[a-z]+)?|quit|quitok|h|d:\d+|f:\d+|r:\d+|m:(\d+|x))$"))
     application.add_handler(CallbackQueryHandler(shadow_screen, pattern=r"^dg:(sh|sha:\d+|shok:\d+)$"))

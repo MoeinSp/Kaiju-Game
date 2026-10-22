@@ -9,6 +9,7 @@
 .dg-team .dg-down { opacity: .45; filter: grayscale(.8); }
 .dg-hp { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
 .dg-hp .progress { flex: 1; min-width: 60px; }
+.dg-heal.btn.sm { display: inline-flex; margin-top: 6px; height: 26px; padding: 0 9px; font-size: 11.5px; border-radius: 9px; }
 .dg-runes { display: flex; flex-wrap: wrap; gap: 6px; }
 .dg-doors { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 10px; }
 .dg-door { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 8px; color: var(--dc); border-color: color-mix(in srgb, var(--dc) 40%, transparent);

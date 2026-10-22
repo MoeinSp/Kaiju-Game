@@ -76,9 +76,10 @@
   // ───────────────────────── the run ─────────────────────────
   function teamHtml(r) {
     return '<div class="panel list dg-team">' + r.members.map(function (m) {
-      var down = m.hp <= 0;
+      var down = m.hp <= 0, heal = r.heal_serums > 0 && m.hp > 0 && m.hp < 100;
       return '<div class="' + (down ? "dg-down" : "") + '">' + K.fighter({ name: m.name, img: m.img, rarity: m.rarity, star: m.star, shadow: m.shadow, power: down ? null : m.power },
-        down ? '<div class="sm t-bad">از پا افتاده</div>' : '<div class="dg-hp">' + hpBar(m.hp) + '<span class="num sm">' + K.n(m.hp) + "%</span> " + K.elTag(m.element) + "</div>") + "</div>";
+        down ? '<div class="sm t-bad">از پا افتاده</div>' : '<div class="dg-hp">' + hpBar(m.hp) + '<span class="num sm">' + K.n(m.hp) + "%</span> " + K.elTag(m.element) + "</div>" +
+        (heal ? '<button class="btn sm good dg-heal" data-act="heal" data-id="' + m.id + '">' + K.ic("heart") + "ترمیم</button>" : "")) + "</div>";
     }).join("") + "</div>";
   }
 
@@ -188,6 +189,13 @@
       });
       K.on(root, "rune", function (el) { act("rune/", { i: +el.dataset.i }, el, function (d) { return d.picked ? K.ic("spark") + " «" + K.esc(d.picked.label) + "» گرفتی." : ""; }); });
       K.on(root, "buy", function (el) { act("merchant/", { i: +el.dataset.i }, el); });
+      K.on(root, "heal", function (el) {   // «سرم ترمیم» from the serum lab, on the member tapped
+        if (busy) return; busy = true;
+        K.api.post("serums/use/", { kind: "heal", member: +el.dataset.id }, el).then(function (s) {
+          K.haptic("ok"); K.sfx && K.sfx("collect");
+          return K.api.get("dungeon/").then(function (d) { busy = false; show(d, K.ic("heart") + " سرم ترمیم · " + K.esc(s.note)); });
+        }).catch(function () { busy = false; });
+      });
       K.on(root, "skip", function (el) { act("merchant/", { i: null }, el); });
       K.on(root, "quit", function () {
         K.confirm({ title: "از سیاه‌چال بیرون بیای؟", text: "نصف غنیمتی که تا الان جمع کردی بهت می‌رسه و کلیدت برنمی‌گرده.", ok: "بیرون بیا", cancel: "ادامه می‌دم", danger: true })
