@@ -1716,11 +1716,14 @@ async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # ── 🧪 capsule feeding panel ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━──
 def _feedcap_view_sync(tg_user, creature_id):
+    from game import story
+
     user, _ = get_or_create_user(tg_user)
     try:
         creature = Creature.objects.get(id=creature_id, owner=user)
     except Creature.DoesNotExist:
         raise GameError("این موجود توی کلکسیون تو نیست.")
+    story.starter_food(user)   # «اولین غذا» with an empty pantry: a one-time starter pack
     return user, creature, capsule_counts(user), creature_is_maxed(creature)
 
 
@@ -5956,6 +5959,7 @@ def _onboarding_upgrade_sync(tg_user):
         creature.base_def, creature.base_spd = canon["base_def"], canon["base_spd"]
         creature.save()
     user.onboarding_completed = True
+    foods = []   # the skipped quests' food (filled below): the next quest («اولین غذا») needs some
     if user.story_step < 2:
         # the tutorial IS quests 0 and 1 (hatch + first hunt) — pay their rewards while
         # skipping them, so finishing the tutorial isn't worth less than abandoning it
@@ -5963,6 +5967,8 @@ def _onboarding_upgrade_sync(tg_user):
         for q in story.STORY_QUESTS[user.story_step:2]:
             for k in skipped:
                 skipped[k] += q["reward"].get(k, 0)
+            if q["reward"].get("food"):
+                foods.append(q["reward"]["food"])
         type(user).objects.filter(pk=user.pk).update(
             coins=F("coins") + skipped["coins"],
             dna_fragments=F("dna_fragments") + skipped["dna"],
@@ -5972,7 +5978,11 @@ def _onboarding_upgrade_sync(tg_user):
         user.dna_fragments += skipped["dna"]
         user.diamonds += skipped["diamonds"]
         user.story_step = 2
-    user.save(update_fields=["onboarding_completed", "story_step"])
+        from game.creature import add_capsules
+
+        for tier, count in foods:
+            add_capsules(user, tier, count)
+    user.save(update_fields=["onboarding_completed", "story_step"] + (["xp_capsules"] if foods else []))
     equipped_items = get_equipped_items(creature) if creature else []
     quest = story.get_active_quest(user)
     return user, creature, equipped_items, main_hall_level(user), research.is_unlocked(user), quest

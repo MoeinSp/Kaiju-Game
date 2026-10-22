@@ -296,7 +296,10 @@ def _feed_view(user: User, creature, gear: list, preview: bool = True) -> dict:
 
 @endpoint()
 def feed_panel(request, user):
+    from game import story
+
     creature, gear = _load(user, _qint(request, "id"))
+    story.starter_food(user)   # «اولین غذا» with an empty pantry: a one-time starter pack (as in the bot)
     return _feed_view(user, creature, gear)
 
 
