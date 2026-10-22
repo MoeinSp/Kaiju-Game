@@ -365,6 +365,9 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
     # the defender: from the target's «تیم دفاع», the best answer to the attacker's creature
     my_creature = Creature.objects.filter(owner=attacker, is_active=True).first()
     target_creature, target_power = pick_defender(target, my_creature, active_power(attacker))
+    from game import serums
+
+    target_power = round(target_power * serums.peek(target, "shell"))   # «سرم پوسته»: the card shows it
     return {
         "is_fake": False,
         "user": target,
@@ -433,12 +436,19 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         if is_shielded(defender_user):
             raise OpponentUnavailableError("این حریف الان سپر محافظ داره، یکی دیگه رو امتحان کن.")
 
+    # «سرم خشم» (attacker) and «سرم پوسته» (a real defender) are spent by this fight
+    from game import serums
+
+    rage = serums.take(attacker, "rage")
+    shell = serums.take(defender_user, "shell") if defender_user is not None else 1.0
+    power_a = round(creature_power(attacker_creature, get_equipped_items(attacker_creature)) * rage) if rage > 1 else None
     # a bot fights with exactly the power its card showed (the stand-in creature built
     # from that number can be off by a few points of rounding)
-    battle_res = resolve_battle(
-        attacker_creature, defender_creature,
-        power_b=opponent["power"] if opponent["is_fake"] else None,
-    )
+    if opponent["is_fake"]:
+        power_b = opponent["power"]
+    else:
+        power_b = round(creature_power(defender_creature, get_equipped_items(defender_creature)) * shell) if shell > 1 else None
+    battle_res = resolve_battle(attacker_creature, defender_creature, power_a=power_a, power_b=power_b)
     winner = battle_res["winner"]
     log_text = battle_res["compact"]
     detail_log = battle_res["detail"]

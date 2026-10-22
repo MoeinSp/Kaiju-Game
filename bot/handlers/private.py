@@ -3057,8 +3057,10 @@ def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> st
     # a single random (seed-based) prize instead of a range — matches the actual payout
     from game import events as _events
 
+    from game import serums as _serums  # «سرم ردیاب» armed → the card shows the doubled prize
+
     coin_reward, dna_reward = hunt_reward_roll(
-        my_power, target["tier"], target.get("seed"), _events.hunt_loot_mult(creature.element)
+        my_power, target["tier"], target.get("seed"), _events.hunt_loot_mult(creature.element) * _serums.peek(creature.owner, "tracker")
     )
     adv = element_advantage_line(creature.element, target["element"])
     # same order on every battle card: you → opponent → element → reward → cost

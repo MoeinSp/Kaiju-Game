@@ -89,7 +89,7 @@
       if (r.league.coins || r.league.dna) rows += row("medal", "var(--cup)", "پاداش لیگ " + K.esc(r.league.name), K.amounts(r.league));
     }
     rows += row("trophy", "var(--cup)", "کاپ", '<span class="' + (r.cup_delta >= 0 ? "t-good" : "t-bad") + '">' + signed(r.cup_delta) + "</span>", "الان " + K.n(r.new_cup));
-    var chest = r.chest ? '<button class="panel ar-won-chest mt" data-act="to-chests"><img src="' + (r.chest.img || "") + '" alt=""><span class="grow"><b>جعبه‌ی جدید: ' + K.esc(r.chest.name) + '</b><small class="muted">جایگاه ' + K.n(r.chest.slot) + " — برو بازش کن</small></span>" + K.ic("chevron") + "</button>"
+    var chest = r.chest ? '<button class="panel ar-won-chest mt" data-act="to-chests"><img src="' + (r.chest.img || "") + '" alt=""><span class="grow"><b>جعبه‌ی جدید: ' + K.esc(r.chest.name) + '</b><small class="muted">' + (r.chest.stored ? "جایگاه‌ها پر بود؛ رفت توی انبار" : "جایگاه " + K.n(r.chest.slot) + " — برو بازش کن") + "</small></span>" + K.ic("chevron") + "</button>"
       : r.slots_full ? '<div class="callout warn mt">' + K.ic("chest") + "<div>جایگاه‌های جعبه‌ات پر بود؛ جعبه‌ی جدیدی نگرفتی.</div></div>" : "";
     var missions = r.missions.length ? '<div class="h2">' + K.ic("calcheck") + 'مأموریت‌های کامل‌شده</div><div class="panel list">' + r.missions.map(function (m) {
       return '<div style="color:var(--good)"><span class="ic">' + K.ic("check") + '</span><span class="t">' + K.esc(m.label) + "<small>" + (m.weekly ? "هفتگی" : "روزانه") + '</small></span><span class="v">' + K.amounts(m) + "</span></div>";

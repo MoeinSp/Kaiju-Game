@@ -569,6 +569,24 @@ class FestivalState(models.Model):
     last_settled_key = models.CharField(max_length=16, default="", blank=True)
 
 
+class SerumLab(models.Model):
+    """«آزمایشگاه سرم» (game/serums.py), one row per player. The building itself is a normal
+    Building («serum_lab»); this row holds what it makes: serums on the shelf, each serum's
+    own level (1-5, raised here), the brewing queue, an upgrade in progress, the effects a
+    player has «armed» for their next fight / hunt / boss hit, and today's use count."""
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True, related_name="serum_lab")
+    stock = models.JSONField(default=dict)            # {kind: count} ready on the shelf
+    levels = models.JSONField(default=dict)           # {kind: 1..5}; a missing kind is level 1
+    queue = models.JSONField(default=list)            # kinds waiting to be brewed, in order
+    brew_started_at = models.DateTimeField(null=True, blank=True)   # when the head of the queue started
+    upgrade_kind = models.CharField(max_length=16, blank=True, default="")
+    upgrade_ends_at = models.DateTimeField(null=True, blank=True)
+    armed = models.JSONField(default=dict)            # {kind: {"lvl": n, "until": unix | None}}
+    used_day = models.CharField(max_length=10, blank=True, default="")
+    used_count = models.PositiveSmallIntegerField(default=0)
+
+
 class DungeonProfile(models.Model):
     """A player's «سیاه‌چال» wallet and record (game/dungeon.py): keys, the black-rune
     currency, and lifetime stats."""
@@ -1543,6 +1561,7 @@ class ArenaChest(models.Model):
         ("unlocking", "unlocking"),
         ("queued", "queued"),
         ("ready", "ready"),
+        ("stored", "stored"),   # «انبار»: won while the 4 slots were full; slot > 100, moved to a slot later
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="arena_chests")

@@ -189,7 +189,10 @@ def _target_out(creature, power: int, target: dict) -> dict:
     (hunt_reward_roll with the scouted seed and this week's element rule)."""
     from game import events
 
-    coins, dna = hunt.hunt_reward_roll(power, target["tier"], target.get("seed"), events.hunt_loot_mult(creature.element))
+    from game import serums
+
+    coins, dna = hunt.hunt_reward_roll(power, target["tier"], target.get("seed"),
+                                       events.hunt_loot_mult(creature.element) * serums.peek(creature.owner, "tracker"))
     return {
         "kind": "target", "tier": target["tier"], "tier_label": clean(hunt.HUNT_TIERS[target["tier"]]["label"]),
         "name": target["name"], "element": target["element"], "rarity": "common", "power": target["power"],

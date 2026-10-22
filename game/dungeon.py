@@ -253,6 +253,32 @@ def _log(state: dict, line: str) -> None:
     state["log"] = (state.get("log") or [])[-5:] + [line]
 
 
+def heal_member(user: User, member_id: int | None, pct: int) -> str:
+    """«سرم ترمیم» (game/serums.py): +pct HP to one team member still standing — the one asked
+    for, or the most hurt. A downed member can't be brought back with it."""
+    user, run = _load(user)
+    state = run.state
+    alive = [m for m in state["team"] if 0 < m["hp"] < 100]
+    if member_id is not None:
+        m = next((x for x in state["team"] if x["id"] == member_id), None)
+        if m is None:
+            raise GameError("این هیولا توی تیم سیاه‌چالت نیست.")
+        if m["hp"] <= 0:
+            raise GameError("این عضو از پا افتاده؛ ترمیم فقط روی عضوی اثر داره که هنوز سرپاست.")
+        if m["hp"] >= 100:
+            raise GameError("جون این عضو پره.")
+    else:
+        if not alive:
+            raise GameError("هیچ عضوی از تیمت زخمی نیست (یا همه از پا افتادن).")
+        m = min(alive, key=lambda x: x["hp"])
+    before = m["hp"]
+    m["hp"] = min(100, m["hp"] + int(pct))
+    _log(state, f"سرم ترمیم: {m['name']} +{m['hp'] - before}٪ جون")
+    run.state = state
+    run.save(update_fields=["state"])
+    return f"{m['name']}: جون از {before}٪ رسید به {m['hp']}٪"
+
+
 def _next_room(state: dict) -> None:
     state["room"] += 1
     state["enemy"] = None

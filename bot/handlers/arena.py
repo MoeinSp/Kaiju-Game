@@ -323,7 +323,9 @@ def _swap_rerender_sync(tg_user, creature_id, pending):
     creature = Creature.objects.filter(owner=user, is_active=True).first()
     if creature is None:
         raise GameError("اول یه موجود فعال انتخاب کن.")
-    my_power = active_power_of(creature)
+    from game import serums
+
+    my_power = round(active_power_of(creature) * serums.peek(user, "rage"))   # «سرم خشم» armed
     # keep the loot fixed to what was rolled when this opponent was found (swapping your
     # fighter must not re-roll the prize)
     if pending.get("loot_gold") is None:
@@ -887,8 +889,10 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
         if result.get("awarded_chest"):
             awarded = result["awarded_chest"]
             awarded_cfg = ARENA_CHEST_TIERS.get(awarded.chest_type, {})
+            where = ("رفت توی انبار؛ جایگاه که خالی شد منتقلش کن" if awarded.status == "stored"
+                     else f"جایگاه <code>{awarded.slot}</code>")
             reward_lines.append(
-                f"{get_emoji(f'chest_{awarded.chest_type}', awarded_cfg.get('emoji', '📦'))} <b>جعبه جدید:</b> {awarded_cfg.get('name', 'جعبه آرنا')} (جایگاه <code>{awarded.slot}</code>)"
+                f"{get_emoji(f'chest_{awarded.chest_type}', awarded_cfg.get('emoji', '📦'))} <b>جعبه جدید:</b> {awarded_cfg.get('name', 'جعبه آرنا')} ({where})"
             )
         elif result.get("slots_full"):
             reward_lines.append("<i>⚠️ جایگاه‌های جعبه‌ات پر بود — جعبه جدیدی دریافت نشد.</i>")

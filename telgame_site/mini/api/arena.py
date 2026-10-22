@@ -198,7 +198,12 @@ def _card(user, pending: dict, seen: list[int], note: str = "", creature=None, f
     `creature` / `foe` = the two active creatures when the caller has already loaded them."""
     from game.energy import get_max_energy, sync_energy
 
+    from game import serums
+
     my = _my(user, creature)
+    rage = serums.peek(user, "rage")   # «سرم خشم» armed: the card and its verdict count it
+    if rage > 1:
+        my = {**my, "power": round(my["power"] * rage), "rage": True}
     opp = {
         "is_fake": bool(pending["is_fake"]), "label": _txt(pending["label"]),
         "alliance": pending.get("alliance") or None,
@@ -484,6 +489,7 @@ def _chest_brief(chest) -> dict | None:
 
     cfg = AC.ARENA_CHEST_TIERS.get(chest.chest_type, {})
     return {"tier": chest.chest_type, "name": cfg.get("name", "جعبه آرنا"), "slot": chest.slot,
+            "stored": chest.status == "stored",   # «انبار»: the slots were full
             "img": asset_img(get_arena_chest_image_path(chest.chest_type, "locked"))}
 
 

@@ -170,7 +170,7 @@ def get_user_chests(user: User) -> list[ArenaChest]:
     """Return all chests belonging to user, sorted by slot number (1..4).
     Also refreshes any chest whose unlock timer has elapsed."""
     advance_user_chests(user)
-    return list(ArenaChest.objects.filter(user=user).order_by("slot"))
+    return list(ArenaChest.objects.filter(user=user, slot__lte=ARENA_CHEST_MAX_SLOTS).order_by("slot"))
 
 
 def get_free_slot(user: User) -> int | None:
@@ -199,18 +199,45 @@ def league_multiplier(cup: int) -> float:
 
 @transaction.atomic
 def award_chest_on_win(user: User) -> ArenaChest | None:
-    """Award a chest upon winning a ranked arena duel. Returns the chest, or None if slots are full."""
+    """Award a chest upon winning a ranked arena duel. With the 4 slots full it goes to the
+    «انبار» (status "stored", a slot number above STORED_SLOT_BASE) instead of being lost;
+    the player moves it into a slot later (move_to_slot)."""
     slot = get_free_slot(user)
+    status = "locked"
     if slot is None:
-        return None
+        status = "stored"
+        top = ArenaChest.objects.filter(user=user, slot__gt=STORED_SLOT_BASE).order_by("-slot").values_list("slot", flat=True).first()
+        slot = (top or STORED_SLOT_BASE) + 1
     tier = roll_chest_tier()
     chest = ArenaChest.objects.create(
         user=user,
         slot=slot,
         chest_type=tier,
         cup_at_drop=user.cup,
-        status="locked",
+        status=status,
     )
+    return chest
+
+
+# «انبار»: chests won with full slots wait here, numbered above this (the 4 real slots stay 1-4)
+STORED_SLOT_BASE = 100
+
+
+def stored_chests(user: User) -> list[ArenaChest]:
+    return list(ArenaChest.objects.filter(user=user, status="stored").order_by("slot"))
+
+
+@transaction.atomic
+def move_to_slot(user: User, chest_id: int) -> ArenaChest:
+    """Bring a stored chest into a free slot (then it is unlocked like any other)."""
+    chest = ArenaChest.objects.select_for_update().filter(id=chest_id, user=user, status="stored").first()
+    if chest is None:
+        raise GameError("این جعبه توی انبار نیست.")
+    slot = get_free_slot(user)
+    if slot is None:
+        raise GameError("هر ۴ جایگاه جعبه پره. اول یکی رو باز کن.")
+    chest.slot, chest.status = slot, "locked"
+    chest.save(update_fields=["slot", "status"])
     return chest
 
 

@@ -251,8 +251,11 @@ def hit(user: User) -> dict:
     advantage = constants.is_strong_against(creature.element, boss.element)
     from game import relics
 
+    from game import serums
+
     raw = (power * (constants.ELEMENT_ADVANTAGE_POWER_FACTOR if advantage else 1.0)
-           * relics.mult(user, "titan_fang"))  # «نیش تایتان» (dungeon relic)
+           * relics.mult(user, "titan_fang")    # «نیش تایتان» (dungeon relic)
+           * serums.take(user, "slayer"))       # «سرم غول‌کش», spent by this hit
     damage = max(1, min(int(round(raw)), boss.current_hp))  # overkill doesn't count
 
     coins, dna = hit_reward(damage)

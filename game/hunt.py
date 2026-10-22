@@ -472,6 +472,10 @@ def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal",
 
         coins = round(coins * relics.mult(user, "golden_idol"))
         dna = round(dna * relics.mult(user, "dna_vial"))
+        from game import serums  # «سرم ردیاب»: spent by this won hunt
+
+        tracker = serums.take(user, "tracker")
+        coins, dna = round(coins * tracker), round(dna * tracker)
         xp_gain = round(HUNT_XP_WIN * reward_mult)
     else:
         coins = 0
