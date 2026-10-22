@@ -253,29 +253,28 @@ def _finish(entry: TournamentEntry, place: int) -> None:
 
 
 def _pay_prizes(tournament: Tournament) -> list[tuple]:
-    from game.arena_chests import grant_chest_contents
+    """Each player's prize box goes in as an unopened reward chest (game/reward_chests.py, source
+    «tournament», ref = this cup) that they open with «باز کردن جعبه» — from the message or the
+    cup screen — like the world boss boxes. The diamonds are paid straight away."""
+    from game import reward_chests
+    from game.arena_chests import ARENA_CHEST_TIERS
+    from game.ledger import record_gain
 
     out: list[tuple] = []
     for e in TournamentEntry.objects.filter(tournament=tournament).select_related("user"):
         place = e.place or 5
         tier, diamonds = PRIZES.get(place, PRIZES[5])
         user = User.objects.select_for_update().get(id=e.user_id)
-        chest = grant_chest_contents(user, tier, user.cup, source="tournament")
+        reward_chests.give(user, tier, "tournament", tournament.id)
         if diamonds:
             User.objects.filter(pk=user.pk).update(diamonds=F("diamonds") + diamonds)
+            record_gain(user, "tournament", diamonds=diamonds)
         if user.notifications_on:
-            got = [f"{chest['coins']:,} طلا", f"{chest['dna']:,} DNA"]
-            total_diamonds = diamonds + chest["diamonds"]
-            if total_diamonds:
-                got.append(f"{total_diamonds} الماس")
-            rarity = constants.RARITY_LABELS.get(chest["rarity"], chest["rarity"])
-            if chest["creature"] is not None:
-                got.append(f"هیولای {rarity} «{chest['creature'].name}»")
-            elif chest["item"] is not None:
-                got.append(f"تجهیزات {rarity} «{chest['item'].name}»")
+            cfg = ARENA_CHEST_TIERS.get(tier, ARENA_CHEST_TIERS["silver"])
+            prize = f"{cfg['emoji']} <b>{cfg['name']}</b>" + (f" + <code>{diamonds}</code> الماس" if diamonds else "")
             out.append((user.id,
                         f"🏟 <b>جام آخر هفته تموم شد!</b>\nجایگاه تو در گروه {e.group_no}: <b>{PLACE_NAMES[place]}</b>\n"
-                        f"🎁 {chest['emoji']} {chest['name']}: " + " + ".join(got), "tournament"))
+                        f"🎁 جایزه‌ات: {prize}\nجعبه رو با دکمه‌ی زیر باز کن.", "tournament_prize", tournament.id))
     return out
 
 
@@ -385,10 +384,24 @@ def group_bracket(tournament: Tournament, group_no: int) -> dict:
 
 
 # ── state for the screen ──────────────────────────────────────────────────────
+def unopened_prizes(user: User) -> int:
+    from game import reward_chests
+
+    return reward_chests.unopened(user, "tournament").count()
+
+
+def open_prizes(user: User) -> list[dict]:
+    """Open every prize box the player won in a cup and hasn't opened yet."""
+    from game import reward_chests
+
+    return reward_chests.open_all(user, "tournament")
+
+
 def panel_state(user: User) -> dict:
     now = timezone.localtime()
     tournament = current()
     data = {
+        "unopened": unopened_prizes(user),
         "status": tournament.status if tournament else None,
         "registration_open": registration_open(),
         "draw_in": max(0, int((draw_at(now) - now).total_seconds())),

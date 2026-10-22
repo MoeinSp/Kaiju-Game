@@ -272,7 +272,7 @@ NOTIFY_CATEGORIES = {
 }
 _MARKER_CATEGORY = {
     "timer": "timers", "arena": "timers", "arena_chest_ready": "timers",
-    "worldboss": "events", "tournament": "events", "festival": "events", "events": "events",
+    "worldboss": "events", "tournament": "events", "tournament_prize": "events", "festival": "events", "events": "events",
     "free_box_reminder": "reminders", "missions": "reminders", "nudge": "reminders", "gift": "reminders",
 }
 # Broadcast-type DMs (events + reminders) a player gets per day at most. Timers and attack
@@ -315,6 +315,13 @@ def _decorate(item) -> dict:
         reply_markup = InlineKeyboardMarkup([
             [btn("باز کردن جعبه‌ها", emoji_key="btn_chest_open", style=CONFIRM, callback_data=f"wboss:open:{payload}")],
             [btn("غول سرگردان", emoji_key="btn_worldboss", style=BATTLE, callback_data="menu:worldboss")],
+        ])
+    elif marker == "tournament_prize":
+        from bot.buttons import BATTLE, CONFIRM
+
+        reply_markup = InlineKeyboardMarkup([
+            [btn("باز کردن جعبه‌ی جایزه", emoji_key="btn_chest_open", style=CONFIRM, callback_data="tour:open")],
+            [btn("جام آخر هفته", emoji_key="btn_tournament", style=BATTLE, callback_data="menu:tournament")],
         ])
     elif marker == "tournament":
         from bot.buttons import BATTLE
