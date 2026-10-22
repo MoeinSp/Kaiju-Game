@@ -1,0 +1,48 @@
+/* ═════════ performance pass (loaded last on purpose) ═════════
+   Scrolling stuttered even on strong phones. What a phone's GPU can move cheaply is transform
+   and opacity; everything below that animated something else (a box-shadow, a blur filter, a
+   background position, a custom-property gradient) repainted its whole area on every frame, and
+   blend modes / backdrop blurs made each scrolled frame recompose the layers under them.
+   The looks stay: the glows become still, the shines move by transform, the turning mythic
+   frame becomes a still gradient frame. */
+
+/* fixed full-screen layers live on their own GPU layer: scrolling doesn't repaint them */
+body::before, body::after, #season-tint { will-change: transform; transform: translateZ(0); }
+
+/* no frosted glass under the bars (their backgrounds are opaque enough) */
+.hud, .topbar, nav.tabs { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+.topbar { background: linear-gradient(180deg, rgba(8,14,22,.98), rgba(8,14,22,.94)); }
+
+/* scene art: no colour-blend layer, no blurred animated fog / pedestal */
+.lb-bg::before, .hx-bg::before { display: none; }
+.lb-fog, .lb-pedestal { filter: none; }
+.lb-fog { opacity: .8; }
+
+/* «فرم سیاه» aura: no blend mode and no blurred smoke (the soft gradients carry it), no box-shadow pulse */
+.shadow .aura { mix-blend-mode: normal; opacity: .85; }
+.shadow .aura i { filter: none; }
+.tile.shadow, .hero.shadow .art, .fighter.shadow > img.tile { animation: none !important; }
+
+/* mythic frame: still (it repainted every mythic card on every frame) */
+.tile.mythic:not(.shadow)::before, .panel.hero.mythic::before, .lb-kaiju.mythic .lb-card::before { animation: none !important; background: conic-gradient(from 210deg, #ff4d6d, #ffc53d, #a77bff, #3ad6ff, #ff4d6d); }
+
+/* glow pulses → still glows; the fight button «breathes» by scale instead */
+.lobby .lb-fight { animation: perfBreath 2.6s ease-in-out infinite !important; }
+@keyframes perfBreath { 50% { transform: scale(1.018); } }
+.lobby .lb-collect, .lb-live, .lb-quest.done, .mp-node.hot .mp-med, .of-buy, nav.tabs button[data-tab="battle"].on .ti { animation: none !important; }
+.mp-node.hot .mp-med { box-shadow: 0 0 0 3px #0b0f18, 0 0 0 5px rgba(255,255,255,.28), 0 10px 20px rgba(0,0,0,.6), 0 0 34px color-mix(in srgb, var(--tc) 70%, transparent); }
+.mp-lines path { animation: none !important; }
+
+/* shine sweeps: the light band moves by transform (it used to animate background-position) */
+.shs-card.hot::before, .gp.top::before, .of-art::before { background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,.22) 50%, transparent 70%) !important;
+  background-size: 100% 100% !important; animation: perfShine 3.4s ease-in-out infinite !important; }
+@keyframes perfShine { 0% { transform: translateX(-110%); } 60%, 100% { transform: translateX(110%); } }
+
+/* the offer bubble is no taller than the player's plate: the timer sits on the picture, so the
+   row never grows (and pushes the screen down) when the bubble arrives */
+.lobby .of-bubble { width: 52px; height: 52px; margin-top: 2px; }
+.of-bimg { width: 52px; height: 52px; }
+.of-btime { position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%); white-space: nowrap; z-index: 2; }
+.lb-top { min-height: 60px; }
+
+@media (prefers-reduced-motion: reduce) { .lobby .lb-fight, .shs-card.hot::before, .gp.top::before, .of-art::before { animation: none !important; } }

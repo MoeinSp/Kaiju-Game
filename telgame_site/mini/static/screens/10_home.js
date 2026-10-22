@@ -101,22 +101,30 @@
     tab: "home",
     render: function (root, params, ctx) {
       var me0 = null, daily = null;
+      /* The lobby is drawn once the home summary is here (or after a short wait), and re-drawn only
+         when its HTML really changed: every re-draw rebuilt the whole scene (pictures, particles) and
+         the parts that arrived late (banner, bubble) pushed the screen down — it «jumped». */
+      var shown = "", ready = false, painted, firstDraw = new Promise(function (ok) { painted = ok; });
       function draw() {
-        if (!me0 || !ctx.alive()) return;
-        root.innerHTML = lobby(me0, daily);
+        if (!me0 || !ctx.alive() || !ready) return;
+        var html = lobby(me0, daily);
+        if (html === shown) return;
+        shown = html; root.innerHTML = html; painted();   // the screen shows its skeleton until this first draw
         if (K.coach) setTimeout(function () {
           if (ctx.alive()) K.coach(root.querySelector(".lb-collect"), "همه‌ی جایزه‌هات رو با یه لمس بگیر", "lb_collect");
         }, 900);
       }
+      setTimeout(function () { ready = true; draw(); }, 700);   // a slow summary must not leave the screen empty
       (K.dy && K.dy.home ? K.dy.home() : K.api.get("daily/home/")).then(function (d) {
-        daily = d; if (K.setFestival) K.setFestival(d.festival && d.festival.element); draw();
-        // the offers come after the home summary: the bubble appears, and once a day the offer card
+        daily = d; ready = true; if (K.setFestival) K.setFestival(d.festival && d.festival.element); draw();
+        // the offers come after the summary: the bubble is slotted in place (no re-draw), and once a day the card
         if (K.offers) K.offers.list().then(function () {
           if (!ctx.alive()) return;
-          draw();
+          var slot = root.querySelector(".lb-tl");
+          if (slot && !slot.querySelector(".of-bubble")) { slot.insertAdjacentHTML("beforeend", K.offers.bubble()); shown = lobby(me0, daily); }
           setTimeout(function () { if (ctx.alive()) K.offers.maybePopup(); }, 1400);
         });
-      }).catch(function () {});
+      }).catch(function () { ready = true; draw(); });
       return K.meFast(function (me) { me0 = me; draw(); }).then(function (me) {
         me0 = me; draw();
         K.on(root, "profile", function () { K.go("profile"); });
@@ -132,6 +140,7 @@
             function () { collecting = false; });
         });
         K.on(root, "go", function (el) { if (el.dataset.go) K.go(el.dataset.go); });
+        return firstDraw;
       });
     }
   });
