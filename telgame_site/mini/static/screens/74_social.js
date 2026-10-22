@@ -342,6 +342,10 @@
       return K.api.get("social/settings/").then(function (d) {
         root.innerHTML = '<div class="h2" style="margin-top:6px">' + K.ic("bell") + 'اعلان‌ها</div><div id="so-notif"></div>' +
           '<div class="h2">' + K.ic("flask") + 'اسم آزمایشگاه</div><div id="so-name"></div>' +
+          // sound lives on this phone only (05_fx.js K.sfx), so it needs no request
+          (K.setSound ? '<div class="h2">' + K.ic("bolt") + 'صدا</div><div class="panel list"><div><span class="ic t-accent">' + K.ic("bolt") +
+            '</span><span class="t">افکت‌های صوتی<small>صدای دکمه‌ها، جایزه‌ها، برد و باخت</small></span><button class="so-switch' + (K.soundOn() ? " on" : "") +
+            '" role="switch" aria-checked="' + (K.soundOn() ? "true" : "false") + '" data-act="sound"><i></i></button></div></div>' : "") +
           '<p class="note">بقیه‌ی تنظیمات حساب از داخل ربات در «پروفایل» در دسترسه.</p>';
         var notif = root.querySelector("#so-notif"), nameEl = root.querySelector("#so-name"), saving = false;
 
@@ -361,6 +365,11 @@
         }
         drawNotif(); drawName();
 
+        K.on(root, "sound", function (el) {
+          var on = !el.classList.contains("on");
+          el.classList.toggle("on", on); el.setAttribute("aria-checked", on ? "true" : "false");
+          K.setSound(on); K.haptic(); if (on) setTimeout(function () { K.sfx("collect"); }, 250);
+        });
         K.on(root, "notify", function (el) {
           if (saving) return; saving = true;   // one switch at a time: each answer redraws all of them
           var key = el.dataset.key, on = !el.classList.contains("on");

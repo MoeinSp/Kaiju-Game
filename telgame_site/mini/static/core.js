@@ -706,6 +706,9 @@ window.K = (function () {
   /* Section headings inside a hub: [first order, title, icon] — a tile belongs to the last group whose order it reaches. */
   var HUB_GROUPS = { more: [[0, "فروشگاه و بازار", "cart"], [20, "روزانه", "target"], [30, "رویدادها", "calendar"], [40, "اتحاد و جدول‌ها", "podium"], [85, "حساب و راهنما", "user"]] };
   function hubArt(t) {
+    // the Mini App's own art (static/img/hub_<id>.jpg, the neon-lab set) comes first; the bot keeps its pictures
+    var own = "img/hub_" + t.id + ".jpg";
+    if (KV[own]) return K.asset(own);
     var art = (K.meta && K.meta.art) || {};
     return t.img || (HUB_STATIC[t.id] ? K.asset(HUB_STATIC[t.id]) : "") || art[t.art] || art[HUB_ART[t.id]] || art[t.id] || "";
   }

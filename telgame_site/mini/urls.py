@@ -90,12 +90,13 @@ def _inline_json(value) -> str:
 
 
 def _static_versions() -> dict:
-    """{"img/bg_home.jpg": mtime, …} for the pictures in static/img — the app builds versioned
+    """{"img/bg_home.jpg": mtime, …} for the pictures in static/img and the sounds in static/sfx — the app builds versioned
     (= cache-forever) URLs from it with K.asset()."""
     out = {}
-    for f in sorted((STATIC_DIR / "img").glob("*")):
-        if f.is_file():
-            out[f"img/{f.name}"] = int(f.stat().st_mtime)
+    for folder in ("img", "sfx"):   # pictures and the sound effects (05_fx.js K.sfx)
+        for f in sorted((STATIC_DIR / folder).glob("*")):
+            if f.is_file():
+                out[f"{folder}/{f.name}"] = int(f.stat().st_mtime)
     return out
 
 

@@ -88,7 +88,7 @@
         ], { duration: 820 + i * 55, delay: i * 45, easing: "cubic-bezier(.55,0,.35,1)", fill: "forwards" });
         a.onfinish = function () {
           el.remove(); landed++;
-          if (landed === 1) roll(key);
+          if (landed === 1) { roll(key); K.sfx("coin"); }
           if (landed === n) { flying = Math.max(0, flying - 1); resolve(); }
         };
       })(i);
@@ -109,7 +109,7 @@
 
   /* For a module with its own reward sheet (15_daily.js reveal): hold the count-up while it is
      open, then fly from its loot pills when it closes. */
-  K.fxHold = function () { hold++; };
+  K.fxHold = function () { hold++; K.sfx("collect"); };
   K.fxRelease = function (box, amounts) { hold = Math.max(0, hold - 1); flyFrom(box, amounts || {}); };
 
   /* ── coach marks: a pointing hand + a bubble on an element, once per key on this device ── */
@@ -173,11 +173,63 @@
     return (fxHtml = '<span class="season-fx" aria-hidden="true">' + out + "</span>");
   };
 
+  /* ── sound effects (static/sfx/*.mp3, made for the game): K.sfx(name). Off with K.setSound(false)
+     (settings screen); decoded once with WebAudio on the first tap, which phones require anyway. ── */
+  // gains even out the files' loudness (measured RMS: hit −5 dB … tap −43 dB) so UI sounds stay soft and rewards stand out
+  var SFX = { tap: 1, tab: .35, open: .55, coin: .5, collect: .6, chest: .45, card: .6, win: .6, lose: .3, levelup: .3, error: .4, hit: .12 };
+  var actx = null, bufs = {}, lastAt = {};
+  K.soundOn = function () { try { return localStorage.getItem("ksfx") !== "0"; } catch (e) { return true; } };
+  K.setSound = function (on) { try { localStorage.setItem("ksfx", on ? "1" : "0"); } catch (e) {} if (on) unlock(); };
+  function unlock() {
+    if (!K.soundOn()) return;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!actx) {
+      try { actx = new AC(); } catch (e) { return; }
+      Object.keys(SFX).forEach(function (n) {
+        fetch(K.asset("sfx/" + n + ".mp3")).then(function (r) { return r.arrayBuffer(); })
+          .then(function (b) { return new Promise(function (ok, no) { actx.decodeAudioData(b, ok, no); }); })
+          .then(function (buf) { bufs[n] = buf; }).catch(function () {});
+      });
+    }
+    if (actx.state === "suspended") actx.resume().catch(function () {});
+  }
+  K.sfx = function (name, delay) {
+    if (!K.soundOn() || !actx || !bufs[name]) return;
+    var now = Date.now();
+    if (!delay) {   // the same sound twice in a blink is one (planned ones, e.g. card flips, all play)
+      if (lastAt[name] && now - lastAt[name] < 90) return;
+      lastAt[name] = now;
+    }
+    try {
+      var src = actx.createBufferSource(), g = actx.createGain();
+      g.gain.value = SFX[name] || .5; src.buffer = bufs[name]; src.connect(g); g.connect(actx.destination);
+      src.start(actx.currentTime + (delay || 0));
+    } catch (e) {}
+  };
+  window.addEventListener("pointerdown", unlock, { capture: true, passive: true });
+  // which sound a tap makes: the bottom tabs swish, an attack hits, everything else clicks softly
+  document.addEventListener("click", function (ev) {
+    var t = ev.target;
+    if (!t || !t.closest) return;
+    if (t.closest("nav.tabs button")) return K.sfx("tab");
+    if (t.closest('[data-act="attack"]')) return K.sfx("hit");
+    if (t.closest("button, [data-hub], .tile, a")) K.sfx("tap");
+  }, true);
+  var baseHaptic = K.haptic;
+  K.haptic = function (kind) { if (kind === "err") K.sfx("error"); return baseHaptic.apply(this, arguments); };
+  var baseSheet = K.sheet;
+  K.sheet = function () { K.sfx("open"); return baseSheet.apply(this, arguments); };
+
   /* ── K.reward: hold the count-up while the sheet is open, then fly on «عالیه» ── */
   var baseReward = K.reward;
   K.reward = function (o) {
     hold++;
     var p = baseReward(o), box = document.querySelector(".sheet .loot");
+    // the gift's sound, then one flip per card as they turn over (the delays of .loot .cards in 05_fx.css)
+    var cards = ((o && o.creatures) || []).length + ((o && o.items) || []).length;
+    K.sfx(cards ? "chest" : "collect");
+    for (var ci = 0; ci < Math.min(cards, 6); ci++) K.sfx("card", .35 + ci * .2);
     return p.then(function () {
       hold = Math.max(0, hold - 1);
       flyFrom(box, o || {});
@@ -212,6 +264,8 @@
       '<button class="rs-btn">' + K.esc(o.button || "ادامه") + "</button></div>";
     document.body.appendChild(el);
     K.haptic(won ? "ok" : "err");
+    K.sfx(won ? "win" : "lose");
+    if (o.levelup) K.sfx("levelup", 1.1);
     requestAnimationFrame(function () { el.classList.add("on"); });
     // the loot numbers count up after the banner has landed
     setTimeout(function () {
