@@ -164,7 +164,8 @@ def _bp_sync(tg_user, move_id: int | None):
     return {
         "chests": [(c.id, AC.ARENA_CHEST_TIERS.get(c.chest_type, {}).get("name", "جعبه آرنا")) for c in AC.stored_chests(user)],
         "free": AC.get_free_slot(user) is not None,
-        "boss": reward_chests.unopened(user).count(),
+        "boss": reward_chests.unopened(user, "worldboss").count(),
+        "cup": reward_chests.unopened(user, "tournament").count(),
         "cards": [(c.minutes, c.count) for c in list_speedup_cards(user)],
         "serums": [(k, SR.KINDS[k]["label"], int((row.stock or {}).get(k, 0))) for k in SR.ORDER if row and int((row.stock or {}).get(k, 0)) > 0],
     }, note
@@ -185,6 +186,10 @@ def _bp_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
         lines.append("📦 جعبه‌ی آرنا: <i>نداری</i>")
     if v["boss"]:
         lines.append(f"🐉 جعبه‌های غول: <code>{v['boss']}</code>")
+        rows.append([btn("باز کردن جعبه‌های غول", emoji_key="btn_chest_open", style=CONFIRM, callback_data="wboss:open:all")])
+    if v["cup"]:
+        lines.append(f"🏟 جعبه‌های جام: <code>{v['cup']}</code>")
+        rows.append([btn("باز کردن جعبه‌های جام", emoji_key="btn_chest_open", style=CONFIRM, callback_data="tour:open")])
     lines.append("⏱ کارت سرعت: " + ("، ".join(f"{m} دقیقه ×{n}" for m, n in v["cards"]) if v["cards"] else "<i>نداری</i>"))
     lines.append("🧪 سرم‌ها: " + ("، ".join(f"{label} ×{n}" for _k, label, n in v["serums"]) if v["serums"] else "<i>نداری</i>"))
     if note:

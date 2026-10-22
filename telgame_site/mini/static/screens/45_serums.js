@@ -123,6 +123,8 @@
             : '<p class="note">جعبه‌ای توی انبار نیست؛ وقتی جایگاه‌های جعبه پر باشه، جعبه‌ی تازه اینجا میاد.</p>');
           if (d.boss_chests) html += '<div class="h2">' + K.ic("skull") + 'جعبه‌های غول</div><button class="panel info" data-act="boss"><span class="ic t-mythic">' + K.ic("chest") +
             "</span><div class='grow'><b>" + K.n(d.boss_chests) + ' جعبه‌ی بازنشده</b><small class="muted">از نبرد با غول سرگردان</small></div>' + K.ic("chevron") + "</button>";
+          if (d.cup_chests) html += '<div class="h2">' + K.ic("trophy") + 'جعبه‌های جام</div><button class="panel info" data-act="cup"><span class="ic t-coin">' + K.ic("chest") +
+            "</span><div class='grow'><b>" + K.n(d.cup_chests) + ' جعبه‌ی بازنشده</b><small class="muted">جایزه‌ی جام آخر هفته</small></div>' + K.ic("chevron") + "</button>";
           html += '<div class="h2">' + K.ic("hourglass") + "کارت‌های سرعت</div>" + (d.speedups.length
             ? '<div class="bp-chips">' + d.speedups.map(function (s) { return '<span class="bp-chip">' + K.ic("hourglass") + K.n(s.minutes) + " دقیقه <b>×" + K.n(s.count) + "</b></span>"; }).join("") +
               '</div><p class="note">کارت سرعت رو موقع ارتقای ساختمون‌ها مصرف می‌کنی.</p>'
@@ -139,6 +141,7 @@
           });
         });
         K.on(root, "boss", function () { K.go("wb_boss"); });
+        K.on(root, "cup", function () { K.go("tr_home"); });
         K.on(root, "lab", function () { K.go("sr_lab"); });
       });
     }

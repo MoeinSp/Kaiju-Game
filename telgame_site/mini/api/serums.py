@@ -62,12 +62,13 @@ def _backpack(user) -> dict:
 
     chests = [{"id": c.id, "tier": c.chest_type, "name": AC.ARENA_CHEST_TIERS.get(c.chest_type, {}).get("name", "جعبه آرنا"),
                "img": asset_img(get_arena_chest_image_path(c.chest_type, "locked"))} for c in AC.stored_chests(user)]
-    boss = reward_chests.unopened(user).count()
+    boss = reward_chests.unopened(user, "worldboss").count()
+    cup = reward_chests.unopened(user, "tournament").count()
     row = SerumLab.objects.filter(user_id=user.id).first()
     stock = {k: int(v) for k, v in ((row.stock if row else {}) or {}).items() if int(v) > 0}
     return {
         "chests": chests, "free_slot": AC.get_free_slot(user) is not None,
-        "boss_chests": boss,
+        "boss_chests": boss, "cup_chests": cup,
         "speedups": [{"minutes": c.minutes, "count": c.count} for c in list_speedup_cards(user)],
         "serums": [{"key": k, "label": SR.KINDS[k]["label"], "count": stock[k], "img": f"img/serum_{k}.jpg"} for k in SR.ORDER if k in stock],
     }
