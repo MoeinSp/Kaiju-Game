@@ -159,7 +159,7 @@ STORY_QUESTS: list[dict[str, Any]] = [
        lambda u: (1 if Creature.objects.filter(owner=u).exists() else 0, 1, Creature.objects.filter(owner=u).exists()),
        {"coins": 1000, "dna": 200, "diamonds": 20}, "🥚 شکستن تخم", "onboarding:hatch"),
     _q(1, "اولین شکار", "با کایجوت برو شکار و غنیمت جمع کن. قبل از حمله قدرت حریف رو ببین.",
-       lambda u: _check_hunts(u, 1), {"coins": 1500, "dna": 300, "diamonds": 10}, "🎯 شکار", "menu:hunt"),
+       lambda u: _check_hunts(u, 1), {"coins": 1500, "dna": 300, "diamonds": 10, "food": ("small", 3)}, "🎯 شکار", "menu:hunt"),
     _q(1, "اولین غذا", "به کایجوت غذا بده تا تجربه بگیره و سطحش بالا بره.",
        lambda u: _check_action(u, "feed", 1), {"coins": 1000, "food": ("small", 3)}, "🍖 تغذیه", "menu:feed"),
     _q(1, "کایجو سطح ۲", "با غذا یا ارتقای اندام‌ها، کایجوت رو به سطح ۲ برسون.",
@@ -282,6 +282,32 @@ def get_active_quest(user: User) -> dict[str, Any] | None:
         "step_num": step + 1,
         "total_steps": len(STORY_QUESTS),
     }
+
+
+FEED_QUEST_TITLE = "اولین غذا"
+
+
+def starter_food(user: User) -> bool:
+    """«اولین غذا» asks for one feeding, and feeding needs food. The tutorial used to skip the
+    steps before it without paying their food, so players reached it with none and could not
+    move on (2026-10-22: 92 of 144 players on that step had no food at all). A player on that
+    step with an empty pantry gets 3 small foods, once ever. Call it where the feed screen
+    opens. Returns True when it gave the food."""
+    step = getattr(user, "story_step", 0)
+    if step >= len(STORY_QUESTS) or STORY_QUESTS[step]["title"] != FEED_QUEST_TITLE:
+        return False
+    from game.creature import add_capsules, capsule_counts
+    from game.daily import record_action
+
+    with transaction.atomic():
+        locked = User.objects.select_for_update().get(id=user.id)
+        if sum(capsule_counts(locked).values()) > 0 or _sum_action(locked, "story_food") > 0:
+            return False
+        add_capsules(locked, "small", 3)
+        locked.save(update_fields=["xp_capsules"])
+        record_action(locked, "story_food")
+    user.xp_capsules = locked.xp_capsules
+    return True
 
 
 def claim_active_quest(user: User) -> dict[str, Any]:
