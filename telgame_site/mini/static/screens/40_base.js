@@ -15,9 +15,9 @@
   var RESEARCH_HALL = 5;   // SECTION_HALL_REQ["research"] — the server enforces it
   var RES = { coins: { name: "طلا", icon: "coin", cls: "t-coin" }, dna: { name: "DNA", icon: "dna", cls: "t-dna" }, diamonds: { name: "الماس", icon: "gem", cls: "t-diamond" } };
   var TYPE_ICON = { main_hall: "hall", gold_collector: "coin", diamond_collector: "gem", dna_lab: "dna", blacksmith: "hammer", fusion_lab: "star",
-                    trade_hall: "swap", research_lab: "flask", dispatch_hq: "compass" };
+                    trade_hall: "swap", research_lab: "flask", dispatch_hq: "compass", serum_lab: "vial" };
   /* a building card links to the section it runs, like the bot's card does: [hub tile id, title] */
-  var SECTION = { dispatch_hq: ["dispatch", "مأموریت‌های اعزامی"], blacksmith: ["forge", "آهنگری"], fusion_lab: ["fusion", "تالار ادغام"] };
+  var SECTION = { dispatch_hq: ["dispatch", "مأموریت‌های اعزامی"], blacksmith: ["forge", "آهنگری"], fusion_lab: ["fusion", "تالار ادغام"], serum_lab: ["serums", "آزمایشگاه سرم"] };
   function sectionOf(type) {
     if (type === "research_lab") return { go: "bs_research", title: "پژوهش‌ها", icon: "flask" };
     var s = SECTION[type], t = s && K.hubTile ? K.hubTile(s[0]) : null;

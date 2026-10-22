@@ -155,6 +155,7 @@ def state(user: User) -> dict:
             "key": k, "label": meta["label"], "where": meta["where"], "unlock": meta["unlock"],
             "unlocked": level >= meta["unlock"], "level": klvl, "effect": effect_text(k, klvl),
             "next_effect": effect_text(k, klvl + 1) if klvl < MAX_LEVEL else "",
+            "all": [effect_text(k, lv) for lv in range(1, MAX_LEVEL + 1)],
             "stock": int((row.stock or {}).get(k, 0)), "queued": row.queue.count(k),
             "armed": k in (row.armed or {}),
             "upgrade": {"gold": nxt[0], "dna": nxt[1], "hours": nxt[2], "capped": klvl + 1 > level} if nxt else None,

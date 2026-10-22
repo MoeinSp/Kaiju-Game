@@ -473,6 +473,7 @@ BUILDING_TITLES = {
     "trade_hall": ("SILK ROAD EXCHANGE", "🤝 تالار تجارت", 5),
     "research_lab": ("JAMSHID ARCHIVES", "🔬 آزمایشگاه", 5),
     "dispatch_hq": ("EXPEDITION OUTPOST", "🧭 پایگاه اعزام", 5),
+    "serum_lab": ("SERUM FOUNDRY", "🧪 آزمایشگاه سرم", 5),
     # Alliance
     "hall": ("ALLIANCE BASTION", "🏰 تالار اتحاد", 4),
     "xp": ("WAR ACADEMY", "🎓 آکادمی", 5),
