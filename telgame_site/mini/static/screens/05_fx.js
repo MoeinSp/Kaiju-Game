@@ -175,9 +175,28 @@
 
   /* ── sound effects (static/sfx/*.mp3, made for the game): K.sfx(name). Off with K.setSound(false)
      (settings screen); decoded once with WebAudio on the first tap, which phones require anyway. ── */
-  // gains even out the files' loudness (measured RMS: hit −5 dB … tap −43 dB) so UI sounds stay soft and rewards stand out
-  var SFX = { tap: 1, tab: .35, open: .55, coin: .5, collect: .6, chest: .45, card: .6, win: .6, lose: .3, levelup: .3, error: .4, hit: .12 };
+  /* Each file is prepared once after decoding (prep): the silence around it is cut (a click must
+     sound the instant of the tap), the ends fade so nothing clicks, UI sounds are capped short, and
+     the loudness is evened out per kind — soft for the interface, louder for rewards and results. */
+  var SFX = { tap: "ui", tab: "ui", open: "ui", card: "ui", error: "ui", coin: "reward", collect: "reward", chest: "reward", levelup: "reward", win: "big", lose: "big", hit: "big" };
+  var TARGET = { ui: .035, reward: .07, big: .09 }, MAXLEN = { tap: .25, tab: .4, open: .6, card: .5, error: .5, coin: .8 };
   var actx = null, bufs = {}, lastAt = {};
+  function prep(buf, name) {
+    var ch = buf.getChannelData(0), n = ch.length, sr = buf.sampleRate, thr = .01, s = 0, e = n - 1, i, c;
+    while (s < n && Math.abs(ch[s]) < thr) s++;
+    while (e > s && Math.abs(ch[e]) < thr) e--;
+    s = Math.max(0, s - Math.round(sr * .005)); e = Math.min(n - 1, e + Math.round(sr * .03));
+    if (MAXLEN[name]) e = Math.min(e, s + Math.round(sr * MAXLEN[name]));
+    var len = Math.max(1, e - s + 1), out = actx.createBuffer(buf.numberOfChannels, len, sr), sum = 0, peak = 0;
+    for (i = s; i <= e; i++) { sum += ch[i] * ch[i]; peak = Math.max(peak, Math.abs(ch[i])); }
+    var gain = Math.min(TARGET[SFX[name]] / (Math.sqrt(sum / len) || .01), .95 / (peak || 1));
+    var fi = Math.min(len, Math.round(sr * .004)), fo = Math.min(len, Math.round(sr * .06));
+    for (c = 0; c < buf.numberOfChannels; c++) {
+      var src = buf.getChannelData(c), dst = out.getChannelData(c);
+      for (i = 0; i < len; i++) { var v = src[s + i] * gain; if (i < fi) v *= i / fi; if (i > len - fo) v *= (len - i) / fo; dst[i] = v; }
+    }
+    return out;
+  }
   K.soundOn = function () { try { return localStorage.getItem("ksfx") !== "0"; } catch (e) { return true; } };
   K.setSound = function (on) { try { localStorage.setItem("ksfx", on ? "1" : "0"); } catch (e) {} if (on) unlock(); };
   function unlock() {
@@ -189,7 +208,7 @@
       Object.keys(SFX).forEach(function (n) {
         fetch(K.asset("sfx/" + n + ".mp3")).then(function (r) { return r.arrayBuffer(); })
           .then(function (b) { return new Promise(function (ok, no) { actx.decodeAudioData(b, ok, no); }); })
-          .then(function (buf) { bufs[n] = buf; }).catch(function () {});
+          .then(function (buf) { bufs[n] = prep(buf, n); }).catch(function () {});
       });
     }
     if (actx.state === "suspended") actx.resume().catch(function () {});
@@ -203,7 +222,7 @@
     }
     try {
       var src = actx.createBufferSource(), g = actx.createGain();
-      g.gain.value = SFX[name] || .5; src.buffer = bufs[name]; src.connect(g); g.connect(actx.destination);
+      g.gain.value = 1; src.buffer = bufs[name]; src.connect(g); g.connect(actx.destination);
       src.start(actx.currentTime + (delay || 0));
     } catch (e) {}
   };
