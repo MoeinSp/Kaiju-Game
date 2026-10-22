@@ -306,6 +306,11 @@ def collect_due() -> list[tuple[int, str]]:
         # ── one-day alliance wars whose 24h is up ─────────────────────────────
         out.extend(alliance.settle_due_wars())
 
+        # ── «سرم آماده‌ست» (opt-in in the serum lab) ─────────────────────────
+        from game import serums
+
+        out.extend(serums.due_pings(now))
+
         # ── arena chests ready to open ────────────────────────────────────────
         from game.arena_chests import ARENA_CHEST_TIERS, advance_user_chests
         users_with_due_chests = list(

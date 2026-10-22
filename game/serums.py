@@ -24,6 +24,7 @@ from game.creature import GameError, InsufficientGoldError
 
 LAB = "serum_lab"
 DAILY_USES = 6
+PING_DAILY = 2   # «سرم آماده‌ست» DMs a day at most (opt-in)
 SHELL_HOURS = 8
 MAX_LEVEL = 5
 
@@ -183,6 +184,7 @@ def state(user: User) -> dict:
         "upgrading": {"kind": row.upgrade_kind, "label": KINDS[row.upgrade_kind]["label"],
                       "left": max(0, int((row.upgrade_ends_at - now).total_seconds()))} if row.upgrade_kind else None,
         "armed": sorted((row.armed or {}).keys()),
+        "notify": row.notify,
         "shell_left": max(0, int(shell["until"] - now.timestamp())) if shell and shell.get("until") else 0,
     }
 
@@ -248,6 +250,7 @@ def brew(user: User, kind: str, count: int = 1) -> dict:
             row.brew_started_at = timezone.now()
         row.queue = list(row.queue) + [kind] * count
         row.paid = list(row.paid or []) + [cost // count] * count   # refunds give back what was paid
+        row.ping_armed = True
         row.save()
     return {"queued": count, "cost": cost, "state": state(user)}
 
@@ -319,6 +322,37 @@ def use(user: User, kind: str, member_id: int | None = None) -> dict:
         row.save()
     return {"kind": kind, "label": label, "note": note, "state": state(user)}
 
+
+
+def set_notify(user: User, on: bool) -> dict:
+    """Switch the «سرم آماده‌ست» DM on or off for this player."""
+    row = _row(user)
+    row.notify = bool(on)
+    row.save(update_fields=["notify"])
+    return state(user)
+
+
+def due_pings(now=None) -> list[tuple[int, str, str, None]]:
+    """For game/notifications.collect_due: players who opted in, brewed since their last ping,
+    and whose lab has stopped (queue done, or paused on a full shelf). Runs inside its transaction."""
+    now = now or timezone.now()
+    today = _today()
+    out = []
+    for row in SerumLab.objects.select_for_update().filter(notify=True, ping_armed=True).select_related("user"):
+        _advance(row, lab_level(row.user), now)
+        if row.queue and row.brew_started_at is not None:   # still brewing
+            row.save()
+            continue
+        row.ping_armed = False
+        if row.ping_day != today:
+            row.ping_day, row.ping_count = today, 0
+        ready = sum((row.stock or {}).values())
+        if ready and row.ping_count < PING_DAILY and row.user.notifications_on:
+            row.ping_count += 1
+            full = " · قفسه پره و ساخت تا مصرف یکی صبر می‌کنه" if row.queue else ""
+            out.append((row.user_id, f"🧪 <b>سرم‌هات آماده‌ان!</b>\n{ready} سرم روی قفسه‌ی آزمایشگاه منتظرته{full}.", "serum_ready", None))
+        row.save()
+    return out
 
 
 def stock_of(user: User, kind: str) -> int:

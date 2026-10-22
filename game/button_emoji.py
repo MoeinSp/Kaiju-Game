@@ -118,6 +118,7 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_serum_use": ("مصرف سرم", "💉", "features"),
     "btn_serum_up": ("ارتقای سرم‌ها", "⏫", "features"),
     "btn_backpack": ("انبار", "🎒", "features"),
+    "btn_notify": ("اعلان", "🔔", "features"),
     "btn_merchant": ("تابلوی سفارش تاجر", "📜", "features"),
     "btn_merchant_deliver": ("تحویل سفارش", "🤝", "features"),
     "btn_league": ("لیگ رتبه‌بندی", "🎖", "features"),

@@ -45,7 +45,9 @@
           }
           if (st.upgrading) html += '<div class="callout good mt">' + K.ic("up") + "<div>در حال ارتقای «" + K.esc(st.upgrading.label) + '» · <span class="timer" data-left="' + st.upgrading.left + '"></span></div></div>';
           html += '<div class="h2">' + K.ic("flask") + 'سرم‌ها</div><div class="sr-grid">' + st.kinds.map(card).join("") + "</div>" +
-            '<p class="note">هزینه‌ی ساخت هر سرم: ' + dna(st.brew_cost) + " · سرم‌ها رو اینجا ارتقا می‌دی؛ سطح هر سرم از سطح ساختمون بالاتر نمی‌ره.</p>";
+            '<p class="note">هزینه‌ی ساخت هر سرم: ' + dna(st.brew_cost) + " · سرم‌ها رو اینجا ارتقا می‌دی؛ سطح هر سرم از سطح ساختمون بالاتر نمی‌ره.</p>" +
+            '<button class="panel sr-notify" data-act="notify">' + K.ic("bell") + '<span class="grow">خبرم کن وقتی سرم‌ها آماده شد<small>حداکثر روزی ۲ پیام توی ربات</small></span>' +
+            K.tag(st.notify ? "روشن" : "خاموش", st.notify ? "var(--good)" : "var(--muted)") + "</button>";
           root.innerHTML = html;
           K.timers(root, function () { K.after(1200, ctx.reload); });
         }
@@ -89,6 +91,12 @@
           if (busy) return; busy = true;
           K.api.post("serums/use/", { kind: el.dataset.key }, el).then(function (r) {
             busy = false; st = r.state; draw(); K.toast("«" + r.label + "» · " + r.note, "ok"); if (K.sfx) K.sfx("levelup");
+          }, function () { busy = false; });
+        });
+        K.on(root, "notify", function (el) {
+          if (busy) return; busy = true;
+          K.api.post("serums/notify/", { on: !st.notify }, el).then(function (r) {
+            busy = false; st = r.state; draw(); K.toast(st.notify ? "وقتی سرم‌ها آماده شد خبرت می‌کنم" : "اعلان خاموش شد", "ok");
           }, function () { busy = false; });
         });
         K.on(root, "cancel", function (el) {

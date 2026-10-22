@@ -66,7 +66,8 @@ def _lab_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
             if k["stock"]:
                 row.append(btn(f"مصرف {k['label']}", emoji_key="btn_serum_use", style=CONFIRM, callback_data=f"sr:u:{k['key']}"))
             rows.append(row)
-    tail = [btn("ارتقای سرم‌ها", emoji_key="btn_serum_up", style=PRIMARY, callback_data="sr:up")]
+    tail = [btn("ارتقای سرم‌ها", emoji_key="btn_serum_up", style=PRIMARY, callback_data="sr:up"),
+            btn("اعلان آماده‌شدن: " + ("روشن" if st.get("notify") else "خاموش"), emoji_key="btn_notify", style=NAV, callback_data="sr:n")]
     if len(st["queue"]) > (1 if st["next_in"] is not None else 0):
         tail.append(btn("لغو آخری", emoji_key="btn_cancel", style=NAV, callback_data="sr:x"))
     rows.append(tail)
@@ -115,6 +116,10 @@ def _lab_sync(tg_user, action: str, kind: str | None):
         elif action == "x":
             r = SR.cancel_last(user)
             note = f"↩️ آخرین سرم صف لغو شد · <code>{r['refund']:,}</code> DNA برگشت"
+        elif action == "n":
+            on = not SR.state(user)["notify"]
+            SR.set_notify(user, on)
+            note = "🔔 وقتی سرم‌هات آماده شد خبرت می‌کنم (حداکثر روزی ۲ بار)" if on else "🔕 اعلان آماده‌شدن سرم خاموش شد"
         elif action == "ug":
             r = SR.upgrade(user, kind)
             note = f"⏫ ارتقای «{SR.KINDS[kind]['label']}» به سطح {r['to']} شروع شد · {r['hours']} ساعت"
@@ -130,7 +135,7 @@ async def serum_lab(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     kind = parts[2] if len(parts) > 2 and parts[2] in SR.KINDS else None
     if q and q.data.startswith("sr:"):   # «menu:serums» was answered by the menu router
         await q.answer()
-    st, note = await run_db(_lab_sync, update.effective_user, action if action in ("b", "u", "x", "ug") else "", kind)
+    st, note = await run_db(_lab_sync, update.effective_user, action if action in ("b", "u", "x", "ug", "n") else "", kind)
     if action in ("up", "ug"):
         text, kb = _up_render(st, note)
     else:
@@ -205,5 +210,5 @@ async def backpack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def register(application) -> None:
-    application.add_handler(CallbackQueryHandler(serum_lab, pattern=r"^sr:(home|up|x|[bu]:[a-z]+|ug:[a-z]+)$"))
+    application.add_handler(CallbackQueryHandler(serum_lab, pattern=r"^sr:(home|up|x|n|[bu]:[a-z]+|ug:[a-z]+)$"))
     application.add_handler(CallbackQueryHandler(backpack, pattern=r"^bp:(home|mv:\d+)$"))

@@ -42,6 +42,12 @@ def use(request, user, data):
 
 
 @endpoint("POST")
+def notify(request, user, data):
+    SR.set_notify(user, bool(data.get("on")))
+    return {"state": _state(user)}
+
+
+@endpoint("POST")
 def upgrade(request, user, data):
     r = SR.upgrade(user, need_str(data, "kind", choices=SR.ORDER))
     return {"to": r["to"], "hours": r["hours"], "state": _state(user)}
@@ -84,6 +90,7 @@ routes = [
     ("cancel/", cancel),
     ("use/", use),
     ("upgrade/", upgrade),
+    ("notify/", notify),
     ("backpack/", backpack),
     ("backpack/move/", backpack_move),
 ]

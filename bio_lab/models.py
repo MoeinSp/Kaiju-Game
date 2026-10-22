@@ -586,6 +586,11 @@ class SerumLab(models.Model):
     armed = models.JSONField(default=dict)            # {kind: {"lvl": n, "until": unix | None}}
     used_day = models.CharField(max_length=10, blank=True, default="")
     used_count = models.PositiveSmallIntegerField(default=0)
+    # «سرم آماده‌ست» DM — opt-in, at most PING_DAILY a day, only after the player brewed something
+    notify = models.BooleanField(default=False)
+    ping_armed = models.BooleanField(default=False)   # set by brew(); the ping goes once brewing stops
+    ping_day = models.CharField(max_length=10, blank=True, default="")
+    ping_count = models.PositiveSmallIntegerField(default=0)
 
 
 

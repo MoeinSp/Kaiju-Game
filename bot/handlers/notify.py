@@ -276,7 +276,7 @@ NOTIFY_CATEGORIES = {
     "reminders": ("🎁 یادآوری‌ها", "باکس رایگان، جایزه‌ی روزانه و باکس مأموریت"),
 }
 _MARKER_CATEGORY = {
-    "timer": "timers", "arena": "timers", "arena_chest_ready": "timers",
+    "timer": "timers", "arena": "timers", "arena_chest_ready": "timers", "serum_ready": "timers",
     "worldboss": "events", "tournament": "events", "festival": "events", "events": "events",
     "free_box_reminder": "reminders", "missions": "reminders", "nudge": "reminders", "gift": "reminders",
 }
@@ -341,6 +341,9 @@ def _decorate(item) -> dict:
         reply_markup = InlineKeyboardMarkup(
             [[btn("امروز", emoji_key="btn_today", style=NAV, callback_data="menu:today")]]
         )
+    elif marker == "serum_ready":
+        from bot.buttons import CONFIRM
+        reply_markup = InlineKeyboardMarkup([[btn("آزمایشگاه سرم", emoji_key="btn_serums", style=CONFIRM, callback_data="sr:home")]])
     elif marker == "arena_chest_ready":
         chest_id, tier = payload if isinstance(payload, (tuple, list)) else (payload, "silver")
         from bot.buttons import CONFIRM
