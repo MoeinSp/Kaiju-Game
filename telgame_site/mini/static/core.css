@@ -759,3 +759,100 @@ button.panel:active { transform: translateY(2px); filter: brightness(1.1); box-s
   .list .ic, .ico-box, .info .ic { background: linear-gradient(180deg, #26314b, #121828); box-shadow: inset 0 1px 0 rgba(255,255,255,.16), 0 2px 0 #05070d; }
   .state .big, .loot .burst { box-shadow: 0 0 0 4px #0b0f18, inset 0 2px 0 rgba(255,255,255,.14); }
 }
+
+/* ═════════ theme «آزمایشگاه نئونی» (2026-10-22): one look for the whole app ═════════
+   A dark navy-teal lab lit by one neon colour. Colour now carries meaning only:
+     cyan  (--accent) = the action / the open or chosen thing      gold = a reward
+     red   = danger and fights                                       element / rarity colours = monster cards only
+   Buttons are lit glass with a neon edge (no thick 3D lips); the scene art is toned to the lab's
+   teal so photos from different sets read as one place. Loaded last: overrides the skins above. */
+:root { --neon: #3ad6ff; --neon-hi: #9bf0ff; --neon-deep: #0b5f7a; --lab: #050a10; --glass: rgba(10,20,32,.9); --glass-line: rgba(58,214,255,.18); }
+
+/* the page: navy-teal with a faint hologram grid */
+body::before {
+  background:
+    radial-gradient(900px 500px at 80% -160px, rgba(58,214,255,.16), transparent 62%),
+    radial-gradient(700px 460px at 0% 30%, rgba(20,160,170,.10), transparent 62%),
+    repeating-linear-gradient(0deg, rgba(58,214,255,.045) 0 1px, transparent 1px 32px),
+    repeating-linear-gradient(90deg, rgba(58,214,255,.045) 0 1px, transparent 1px 32px),
+    linear-gradient(180deg, #071019, #050a10 55%, #04080d);
+}
+#season-tint { opacity: .45; }
+
+/* scene art (lobby, hubs): toned to the lab's teal, a scanline sheen on top */
+.lb-bg::before, .hx-bg::before { content: ""; position: absolute; inset: 0; z-index: 0; background: #0b5966; mix-blend-mode: color; opacity: .62; pointer-events: none; }
+.lb-bg::after { background: radial-gradient(120% 70% at 50% 52%, rgba(5,12,20,.2), rgba(5,10,16,.86) 70%),
+  linear-gradient(180deg, rgba(5,10,16,.55), transparent 30%, transparent 60%, var(--lab) 100%),
+  repeating-linear-gradient(0deg, rgba(155,240,255,.035) 0 1px, transparent 1px 4px); }
+.hx-bg::after { background: linear-gradient(180deg, rgba(5,10,16,.35), rgba(5,10,16,.66) 45%, var(--lab) 100%),
+  repeating-linear-gradient(0deg, rgba(155,240,255,.035) 0 1px, transparent 1px 4px); }
+
+/* glass panels with a hairline neon edge */
+.panel { background: linear-gradient(180deg, rgba(14,26,40,.94), rgba(8,15,24,.95)); border: 1px solid var(--glass-line);
+  box-shadow: inset 0 1px 0 rgba(155,240,255,.07), 0 8px 22px rgba(0,0,0,.35); }
+.panel.glow { border-color: rgba(58,214,255,.5); background: linear-gradient(180deg, rgba(14,48,64,.92), rgba(8,20,30,.95));
+  box-shadow: inset 0 1px 0 rgba(155,240,255,.14), 0 0 20px rgba(58,214,255,.16); }
+.panel.gold { border-color: rgba(255,200,87,.5); box-shadow: inset 0 1px 0 rgba(255,225,150,.14), 0 0 18px rgba(255,190,59,.12); }
+button.panel:active { transform: translateY(1px); box-shadow: inset 0 1px 0 rgba(155,240,255,.07), 0 0 0 1px rgba(58,214,255,.3); }
+.banner { border: 1px solid var(--glass-line); box-shadow: inset 0 1px 0 rgba(155,240,255,.1), 0 8px 22px rgba(0,0,0,.4); }
+
+/* buttons: lit glass. primary = the action, gold = take a reward, danger = a fight / a risk */
+.btn { color: #d6f6ff; background: var(--glass); border: 1px solid rgba(58,214,255,.26); text-shadow: none;
+  box-shadow: inset 0 1px 0 rgba(155,240,255,.08), 0 4px 12px rgba(0,0,0,.3); }
+.btn:active { transform: translateY(1px) scale(.99); background: rgba(58,214,255,.12); box-shadow: inset 0 1px 0 rgba(155,240,255,.08); }
+.btn.primary, .btn.good { color: #03222c; background: linear-gradient(180deg, #74eaff, #24b9e0); border: 1px solid #b9f5ff; text-shadow: none;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 0 0 1px rgba(58,214,255,.25), 0 6px 18px rgba(58,214,255,.3); }
+.btn.gold { color: #3a2600; background: linear-gradient(180deg, #ffdf86, #eaa82a); border: 1px solid #fff1c4; text-shadow: none;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 6px 18px rgba(255,190,59,.28); }
+.btn.danger { color: #fff; background: linear-gradient(180deg, #ff6f8c, #d92f58); border: 1px solid #ffb8c6; text-shadow: 0 1px 0 rgba(90,0,25,.4);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 6px 18px rgba(255,60,100,.28); }
+.btn.primary:active, .btn.good:active, .btn.gold:active, .btn.danger:active { transform: translateY(1px) scale(.99); filter: brightness(.95); box-shadow: inset 0 1px 0 rgba(255,255,255,.5); }
+.btn.ghost { background: transparent; border-color: var(--glass-line); box-shadow: none; }
+.btn .cost { background: rgba(0,0,0,.18); box-shadow: none; }
+
+/* the open / chosen thing: neon cyan everywhere (tabs, chips, section keys, fields) */
+.seg { background: rgba(4,9,15,.85); border-color: var(--glass-line); }
+.seg button.on, .chip.on { color: #dffaff; background: rgba(58,214,255,.16); border: 1px solid rgba(58,214,255,.7); text-shadow: none;
+  box-shadow: inset 0 0 12px rgba(58,214,255,.18), 0 0 12px rgba(58,214,255,.25); }
+.chip.on svg { color: var(--neon); }
+.chip { background: var(--glass); border-color: var(--glass-line); box-shadow: none; }
+.h2 > svg.i:first-child { color: var(--neon); background: rgba(58,214,255,.12); border: 1px solid rgba(58,214,255,.45); box-shadow: 0 0 10px rgba(58,214,255,.2); }
+.h2::after { background: linear-gradient(270deg, transparent, rgba(58,214,255,.28) 30%, rgba(58,214,255,.12) 80%, transparent); height: 1px; }
+.search input:focus, .input:focus { border-color: var(--neon); box-shadow: inset 0 2px 5px rgba(0,0,0,.55), 0 0 0 3px rgba(58,214,255,.18); }
+.list > button:active { background: rgba(58,214,255,.08); }
+.topbar .back, .iconbtn, .sheet .x { background: var(--glass); border: 1px solid var(--glass-line); box-shadow: none; }
+.stat { background: rgba(10,20,32,.85); border-color: var(--glass-line); box-shadow: none; }
+.sheet .box { background: linear-gradient(180deg, #0d1b28 0, #08121c 160px, #060c13); border-top: 1px solid rgba(58,214,255,.4); }
+.sheet .art::after { background: linear-gradient(180deg, transparent 55%, #08121c); }
+.toast { background: rgba(10,20,32,.96); border-color: var(--glass-line); box-shadow: 0 10px 24px rgba(0,0,0,.5); }
+
+/* lobby: one colour for the side shortcuts, the fight button is THE action */
+.lobby .lb-side-btn { --c: var(--neon) !important; }
+.lobby .lb-orb { background: radial-gradient(circle at 50% 30%, rgba(58,214,255,.2), rgba(6,14,22,.92) 70%); border: 1px solid rgba(58,214,255,.45);
+  box-shadow: 0 0 14px rgba(58,214,255,.18), inset 0 1px 0 rgba(155,240,255,.15); }
+.lobby .lb-fight { color: #03222c; background: linear-gradient(180deg, #74eaff, #1fb2db); border: 1px solid #b9f5ff; text-shadow: none;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 0 0 1px rgba(58,214,255,.25), 0 0 30px rgba(58,214,255,.35); animation: labPulse 2.6s ease-in-out infinite; }
+.lobby .lb-fight:active { transform: translateY(1px) scale(.99); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 0 16px rgba(58,214,255,.3); }
+@keyframes labPulse { 50% { box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 0 0 1px rgba(58,214,255,.35), 0 0 42px rgba(58,214,255,.5); } }
+.lobby .lb-hunt { background: var(--glass); border: 1px solid rgba(58,214,255,.4); box-shadow: 0 0 14px rgba(58,214,255,.12); }
+.lobby .lb-hunt:active { transform: translateY(1px); box-shadow: none; }
+.lobby .lb-hunt svg { color: var(--neon); }
+.lobby .lb-collect { box-shadow: 0 0 24px rgba(255,190,40,.3), inset 0 1px 0 rgba(255,255,255,.5); border-width: 1px; }
+.lobby .lb-collect:active { transform: translateY(1px); box-shadow: 0 0 12px rgba(255,190,40,.25); }
+.lobby .lb-c-go { color: #5a3600; background: #fff3cf; border: 1px solid #fff; box-shadow: none; text-shadow: none; }
+.lobby .lb-plate, .lobby .lb-season, .lobby .lb-power { background: rgba(6,14,22,.82); border-color: var(--glass-line); }
+
+/* hubs and the battle map: one neon colour for every mode */
+.hubx [data-hub], .shs-card { --tc: var(--neon) !important; }
+.mp-lines path { stroke: rgba(58,214,255,.75); }
+.mp-lines path.glow { stroke: rgba(58,214,255,.14); }
+.mp-name { background: rgba(6,14,22,.88); }
+.hx-go { color: #03222c; background: linear-gradient(180deg, #74eaff, #24b9e0); box-shadow: 0 0 12px rgba(58,214,255,.35); text-shadow: none; }
+
+/* the result screen: the gold stays for the win, the button is the action colour */
+.rs .rs-btn { color: #03222c; background: linear-gradient(180deg, #74eaff, #1fb2db); border: 1px solid #b9f5ff; text-shadow: none;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 0 26px rgba(58,214,255,.4); }
+.rs .rs-btn:active { transform: translateY(1px); box-shadow: 0 0 14px rgba(58,214,255,.3); }
+body .rs.lose .rs-btn { background: linear-gradient(180deg, #74eaff, #1fb2db); border-color: #b9f5ff; box-shadow: 0 0 22px rgba(58,214,255,.3); text-shadow: none; }
+body .rs.lose { background: radial-gradient(120% 80% at 50% 40%, rgba(10,40,56,.86), rgba(3,6,10,.96)); }
+@media (prefers-reduced-motion: reduce) { .lb-fight { animation: none; } }
