@@ -331,14 +331,26 @@
           }).join("") + "</div>";
         return html;
       }
+      /* gold packs, game-shop style: a picture that grows with the pack (pouch → vault, static/img/gold_N.jpg),
+         the gold in big type, «+N%» = how much more gold per diamond than the smallest pack, and the
+         biggest pack across the top as «بهترین ارزش» */
       function gold(d) {
+        var packs = d.gold_packs.slice(), last = packs.length - 1;
+        var base = packs.length && packs[0].diamonds ? packs[0].gold / packs[0].diamonds : 0;
+        function card(p, i, top) {
+          var bonus = base && p.diamonds ? Math.round(100 * (p.gold / p.diamonds / base - 1)) : 0;
+          return '<button class="gp' + (top ? " top" : "") + '" data-act="gold" data-idx="' + p.idx + '">' +
+            '<span class="gp-art"><img src="' + K.asset("img/gold_" + Math.min(i + 1, 5) + ".jpg") + '" alt="" loading="lazy" decoding="async">' +
+            (bonus > 0 ? '<span class="gp-bonus"><span class="num">+' + bonus + "%</span> بیشتر</span>" : "") + "</span>" +
+            (top ? '<span class="shs-ribbon">بهترین ارزش</span>' : "") +
+            '<span class="gp-body"><b class="gp-amt">' + K.ic("coin") + '<span class="num">' + Number(p.gold).toLocaleString("en-US") + "</span></b>" +
+            (top ? '<small class="gp-sub">بیشترین طلا به ازای هر الماس</small>' : "") +
+            '<span class="gp-buy">' + K.ic("diamond") + '<span class="num">' + K.n(p.diamonds) + "</span></span></span></button>";
+        }
         return banner(d.img_gold, "خرید طلا با الماس", "همیشه در دسترس") +
-          '<div class="callout mb">' + K.ic("info") + "<div>بسته‌های بزرگ‌تر به‌صرفه‌ترن.</div></div>" +
-          '<div class="shs-grid">' + d.gold_packs.map(function (p, i) {
-            return '<button class="panel shs-card shs-gold" data-act="gold" data-idx="' + p.idx + '" style="--tc:var(--coin)"><span class="shs-art"><span class="shs-coins s' + Math.min(i, 4) + '">' + K.ic("coin") + K.ic("coin") + K.ic("coin") + "</span></span>" +
-              '<span class="shs-cb"><b class="t-coin num">' + Number(p.gold).toLocaleString("en-US") + "</b><small>طلا</small>" +
-              '<span class="shs-pr">' + money("diamonds", p.diamonds) + "</span></span></button>";
-          }).join("") + "</div>";
+          '<div class="gp-grid">' + (last >= 0 ? card(packs[last], last, true) : "") +
+          packs.slice(0, Math.max(0, last)).map(function (p, i) { return card(p, i, false); }).join("") + "</div>" +
+          '<p class="note">هرچی بسته بزرگ‌تر باشه، به ازای هر الماس طلای بیشتری می‌گیری.</p>';
       }
 
       function buyOffer(o, count, el) {

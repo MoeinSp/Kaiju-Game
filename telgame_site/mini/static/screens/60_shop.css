@@ -123,3 +123,34 @@
 .shs-ribbon { position: absolute; z-index: 2; top: 16px; inset-inline-end: -34px; width: 140px; padding: 4px 0; text-align: center; transform: rotate(-38deg);
   font-family: var(--display); font-size: 13px; color: #fff; background: linear-gradient(180deg, #ff6f82, #d4304e); box-shadow: 0 3px 8px rgba(0,0,0,.45); text-shadow: 0 1px 0 #7d1230; }
 @media (prefers-reduced-motion: reduce) { .shs-card.hot::before { animation: none; } }
+
+/* ── gold packs (gold() in 60_shop.js): picture, big amount, value badge, a lit price key ── */
+.gp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.gp { position: relative; display: flex; flex-direction: column; min-width: 0; border-radius: 16px; overflow: hidden; text-align: start;
+  background: rgba(10,20,32,.94); border: 1px solid rgba(255,200,87,.3); box-shadow: inset 0 1px 0 rgba(255,230,160,.08), 0 8px 20px rgba(0,0,0,.35); transition: transform .12s; }
+.gp:active { transform: scale(.97); }
+.gp-art { position: relative; display: block; aspect-ratio: 4 / 3; overflow: hidden; background: #05080d; }
+.gp-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gp-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgba(10,20,32,.95)); }
+.gp-bonus { position: absolute; z-index: 1; top: 8px; inset-inline-start: 8px; padding: 2px 8px; border-radius: 9px; font-size: 11px; font-weight: 700; color: #052614;
+  background: linear-gradient(180deg, #8dffbb, #2fd17a); box-shadow: 0 2px 8px rgba(0,0,0,.45); }
+.gp-bonus .num { font-family: var(--display); font-weight: 400; font-size: 14px; }
+.gp-body { display: flex; flex-direction: column; gap: 8px; padding: 6px 10px 10px; margin-top: -14px; position: relative; z-index: 1; }
+.gp-amt { display: flex; align-items: center; gap: 6px; font-family: var(--display); font-weight: 400; font-size: 23px; line-height: 1.2; color: #ffd46b;
+  text-shadow: 0 2px 0 rgba(0,0,0,.55), 0 0 14px rgba(255,190,59,.35); }
+.gp-amt svg { width: 22px; height: 22px; }
+.gp-sub { font-size: 11.5px; color: #e6cf98; }
+.gp-buy { display: flex; align-items: center; justify-content: center; gap: 6px; height: 38px; border-radius: 11px; font-family: var(--display); font-size: 18px; color: #03222c;
+  background: linear-gradient(180deg, #74eaff, #24b9e0); border: 1px solid #b9f5ff; box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 0 14px rgba(58,214,255,.25); }
+.gp-buy svg { width: 19px; height: 19px; }
+/* the best-value pack: across the top, picture beside the text, gold frame and a shine */
+.gp.top { grid-column: 1 / -1; flex-direction: row; border: 1.5px solid #ffc53d; box-shadow: 0 0 0 1px #8a4b00, 0 0 26px rgba(255,170,40,.25); }
+.gp.top .gp-art { flex: 0 0 54%; aspect-ratio: auto; min-height: 156px; }
+.gp.top .gp-art::after { background: linear-gradient(270deg, transparent 50%, rgba(10,20,32,.95)); }
+.gp.top .gp-body { flex: 1; justify-content: center; margin: 0; padding: 12px; }
+.gp.top .gp-amt { font-size: 27px; }
+.gp.top::before { content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,.22) 48%, transparent 60%); background-size: 260% 100%; animation: shsShine 3.4s ease-in-out infinite; }
+.gp.top .shs-ribbon { inset-inline-end: auto; inset-inline-start: -36px; transform: rotate(38deg); }
+.gp.top .gp-bonus { top: auto; bottom: 10px; }
+@media (prefers-reduced-motion: reduce) { .gp.top::before { animation: none; } }
