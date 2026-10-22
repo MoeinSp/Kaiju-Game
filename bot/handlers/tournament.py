@@ -108,6 +108,9 @@ def _render(d: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
         lines.append(f"⏳ ثبت‌نام جام بعدی: <b>{_fmt(d['next_reg_in'])}</b> دیگه")
     lines.append(_DIV)
     lines += _PRIZE_LINES
+    if d.get("unopened"):
+        lines += [_DIV, f"🎁 <b>{d['unopened']} جعبه‌ی جایزه‌ی جام</b> منتظر باز شدنه!"]
+        rows.insert(0, [btn("باز کردن جعبه‌ی جایزه", emoji_key="btn_chest_open", style=CONFIRM, callback_data="tour:open")])
     rows.append([btn("راهنمای جام", emoji_key="btn_report", style=NAV, callback_data="tour:help"),
                  btn("بروزرسانی", emoji_key="btn_recheck", style=NAV, callback_data="tour:home")])
     rows.append([back_btn("menu:hub_battle", "بازگشت به نبرد")])
@@ -163,6 +166,25 @@ async def _refresh(update: Update, note: str = "") -> None:
 async def tournament_home_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.callback_query.answer()
     await _refresh(update)
+
+
+def _open_sync(tg_user):
+    from game.worldboss import _chest_line
+
+    user, _ = get_or_create_user(tg_user)
+    return [_chest_line(r) for r in tournament.open_prizes(user)]
+
+
+async def tournament_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«باز کردن جعبه‌ی جایزه» — from the end-of-cup message or the cup screen."""
+    query = update.callback_query
+    try:
+        lines = await run_db(_open_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    await query.answer("🎁 باز شد!")
+    await _refresh(update, "🎁 <b>جعبه‌ی جایزه باز شد!</b>\n" + "\n".join(lines))
 
 
 def _join_sync(tg_user):
@@ -258,6 +280,7 @@ def register(application) -> None:
     application.add_handler(CommandHandler("tournament", tournament_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(tournament_home_callback, pattern=r"^tour:home$"))
     application.add_handler(CallbackQueryHandler(tournament_help_callback, pattern=r"^tour:help$"))
+    application.add_handler(CallbackQueryHandler(tournament_open_callback, pattern=r"^tour:open$"))
     application.add_handler(CallbackQueryHandler(tournament_join_callback, pattern=r"^tour:join$"))
     application.add_handler(CallbackQueryHandler(tournament_leave_callback, pattern=r"^tour:leave$"))
     application.add_handler(CallbackQueryHandler(tournament_pick_callback, pattern=r"^tour:pick:\d+$"))

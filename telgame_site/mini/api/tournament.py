@@ -99,6 +99,7 @@ def _panel(user) -> dict:
         "prizes": _prizes(), "schedule": _schedule(),
         "round_names": {str(k): v for k, v in T.ROUND_NAMES.items()},
         "img": asset_img(get_feature_image_path("tournament")),
+        "unopened": d.get("unopened", 0),
     }
     if not d["entered"]:
         return out
@@ -174,8 +175,27 @@ def set_creature(request, user, data):
     return _panel(user)
 
 
+@endpoint("POST")
+def open_prizes(request, user, data):
+    """«باز کردن جعبه‌ی جایزه» — every unopened cup prize box (bot: tournament_open_callback)."""
+    from game import worldboss
+    from telgame_site.mini.core import creature_dict
+
+    results = T.open_prizes(user)
+    out = _panel(user)
+    out["opened"] = {
+        "count": len(results),
+        "coins": sum(r["coins"] for r in results), "dna": sum(r["dna"] for r in results),
+        "diamonds": sum(r["diamonds"] for r in results),
+        "lines": [_txt(worldboss._chest_line(r)) for r in results],
+        "creatures": [creature_dict(r["creature"]) for r in results if r.get("creature") is not None],
+    }
+    return out
+
+
 routes = [
     ("", home),
+    ("open/", open_prizes),
     ("register/", register),
     ("unregister/", unregister),
     ("choices/", choices),

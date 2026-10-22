@@ -101,6 +101,8 @@
         data = d;
         var state = d.status === "running" ? "در حال برگزاری" : d.registration_open ? "ثبت‌نام بازه" : d.status === "finished" ? "این هفته تموم شد" : "ثبت‌نام بسته‌ست";
         root.innerHTML = '<div class="banner"' + (d.img ? ' style="background-image:url(\'' + d.img + "')\"" : "") + '><div class="grow"><div class="ttl">جام آخر هفته</div><div class="sm" style="color:#c5cee2">' + state + "</div></div></div>" +
+          (d.unopened ? '<div class="callout good mb">' + K.ic("gift") + '<div class="grow"><b>' + K.n(d.unopened) +
+            ' جعبه‌ی جایزه‌ی جام منتظر باز شدنه!</b></div><button class="btn sm gold" data-act="open-prizes">' + K.ic("chest") + "باز کن</button></div>" : "") +
           (d.bracket_img ? '<div class="panel" style="padding:6px;margin-bottom:12px"><img src="' + d.bracket_img + '" alt="جدول گروه" style="width:100%;height:auto;display:block;border-radius:12px"></div>' : "") +
           body(d);
         if (tick) tick(); else tick = K.hu.live(root, later);
@@ -112,6 +114,13 @@
       ctx.actions('<button class="iconbtn" data-act="refresh" aria-label="بروزرسانی">' + K.ic("refresh") + "</button>");
       var rb = document.querySelector('#topact [data-act="refresh"]');
       if (rb) rb.onclick = function () { K.haptic(); ctx.reload(); };
+      K.on(root, "open-prizes", function (el) {
+        K.api.post("tournament/open/", {}, el).then(function (d) {
+          var o = d.opened; if (ctx.alive()) draw(d);
+          K.reward({ title: K.n(o.count) + " جعبه باز شد!", icon: "chest", coins: o.coins, dna: o.dna, diamonds: o.diamonds,
+                     creatures: o.creatures, text: o.lines.join(" · "), button: "عالیه" });
+        }).catch(function () {});
+      });
       K.on(root, "join", function (el) { post("tournament/register/", {}, el, "توی جام این هفته ثبت‌نام شدی.").catch(function () {}); });
       K.on(root, "leave", function (el) {
         K.confirm({ title: "انصراف از جام؟", text: "تا قبل از قرعه‌کشی می‌تونی دوباره ثبت‌نام کنی.", ok: "انصراف", cancel: "می‌مونم", danger: true }).then(function (yes) {
