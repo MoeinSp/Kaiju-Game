@@ -1,0 +1,53 @@
+/* 61_store.js: «خرید الماس و طلا» */
+.st-ban { min-height: 150px; }
+.st-tabs { margin-bottom: 10px; }
+.st-tabs button svg { width: 15px; height: 15px; }
+.st-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.st-item { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 8px 10px; border-radius: 18px; text-align: center; min-width: 0;
+  background: linear-gradient(180deg, rgba(20,34,52,.95), rgba(8,14,22,.95)); border: 1px solid var(--glass-line, var(--line)); color: inherit;
+  box-shadow: inset 0 1px 0 rgba(155,240,255,.08), 0 6px 16px rgba(0,0,0,.35); }
+.st-item:active { transform: scale(.98); }
+.st-art { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 12px; overflow: hidden; }
+.st-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.st-name { font-family: var(--display); font-size: 16px; line-height: 1.3; margin-top: 2px; }
+.st-amt { font-size: 15px; font-weight: 700; display: inline-flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; }
+.st-amt svg { width: 16px; height: 16px; }
+.st-price { width: 100%; margin-top: 4px; padding: 7px 6px; border-radius: 12px; font-weight: 700; font-size: 14px; color: #04130c;
+  background: linear-gradient(135deg, #46e39a, #2bbd79); box-shadow: inset 0 -2px 0 rgba(0,0,0,.18); }
+.st-price small { font-weight: 400; font-size: 11px; }
+.st-price s { color: rgba(4,19,12,.6); font-weight: 400; }
+.st-ribbon { position: absolute; top: 14px; inset-inline-end: 14px; z-index: 1; padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 700; color: #fff; background: var(--bad); }
+.st-vips { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.st-vip { display: flex; gap: 10px; padding: 10px; overflow: hidden; }
+.st-vip > img { width: 96px; height: 96px; flex: none; border-radius: 16px; object-fit: cover; }
+.st-vip.k-gold { border-color: rgba(255,196,64,.55); background: linear-gradient(160deg, rgba(255,196,64,.12), rgba(10,20,32,.92) 60%); }
+.st-vip.k-silver { border-color: rgba(200,215,235,.45); }
+.st-vip-b { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.st-vip-b > b { font-family: var(--display); font-weight: 400; font-size: 18px; }
+.st-vip-b ul { list-style: none; margin: 2px 0; padding: 0; font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
+.st-vip-b li { display: flex; gap: 5px; align-items: flex-start; line-height: 1.5; }
+.st-vip-b li svg { width: 13px; height: 13px; flex: none; margin-top: 3px; color: var(--good); }
+.st-vip-b .btn small { font-size: 11px; font-weight: 400; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--accent); text-align: start; }
+.st-custom .st-row { display: flex; align-items: center; gap: 8px; }
+.st-custom .st-row > span:first-child { flex: 1; display: inline-flex; align-items: center; gap: 5px; }
+.st-custom .st-row svg { width: 15px; height: 15px; }
+.st-val { min-width: 80px; text-align: center; font-weight: 700; }
+.st-rate { margin: 2px 0 10px; }
+.st-total { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); margin-bottom: 8px; }
+.st-total b { font-size: 18px; }
+.st-how ol { margin: 6px 0 0; padding-inline-start: 18px; font-size: 13px; line-height: 1.8; color: var(--muted); }
+.st-how b svg { width: 15px; height: 15px; vertical-align: -2px; margin-inline-end: 4px; }
+.st-how { margin-top: 14px; }
+/* pay sheet */
+.st-pay { display: flex; flex-direction: column; gap: 12px; }
+.st-order { display: flex; flex-direction: column; gap: 2px; }
+.st-sum { font-size: 22px; font-weight: 700; color: var(--good); }
+.st-step { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.7; }
+.st-no { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: #03222c; background: var(--accent); }
+.st-card { display: flex; align-items: center; justify-content: space-between; width: 100%; margin: 6px 0; padding: 10px 12px; border-radius: 12px;
+  background: rgba(5,10,16,.7); border: 1px dashed rgba(58,214,255,.55); color: #fff; direction: ltr; }
+.st-card .num { font-size: 18px; letter-spacing: 2px; font-weight: 700; }
+.st-copy { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--accent); direction: rtl; }
+.st-copy svg { width: 14px; height: 14px; }
+.callout.gold { border-color: rgba(255,196,64,.55); background: rgba(255,196,64,.1); } .callout.gold > svg { color: var(--coin); }

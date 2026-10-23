@@ -135,6 +135,25 @@ async def send_outbid_notification_now(context, outbid: dict) -> None:
 OUTBOX_INTERVAL_SECONDS = 15
 
 
+def _purchase_req_sync(req_id: int):
+    from bio_lab.models import PurchaseRequest
+
+    return PurchaseRequest.objects.filter(id=req_id, status="awaiting_receipt").first()
+
+
+async def _send_purchase_card(context: ContextTypes.DEFAULT_TYPE, payload: dict) -> None:
+    from bot.handlers.purchase import _receipt_screen
+
+    req = await run_db(_purchase_req_sync, int(payload.get("req_id") or 0))
+    if req is None or req.user_id != int(payload.get("user_id") or 0):
+        return
+    text, kb = _receipt_screen(req)
+    try:
+        await context.bot.send_message(chat_id=req.user_id, text=text, parse_mode="HTML", reply_markup=kb)
+    except TelegramError:
+        pass
+
+
 async def outbox_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Deliver what the web process (Mini App) queued for the bot to send — game/outbox.py."""
     from game import outbox
@@ -149,6 +168,8 @@ async def outbox_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     for kind, payload in rows:
         if kind == "outbid":
             await send_outbid_notification_now(context, payload)
+        elif kind == "purchase_card":   # an order placed in the Mini App store: the card + «send the receipt here»
+            await _send_purchase_card(context, payload)
         elif kind == "group_post":   # e.g. the «ارباب سایه» announcement (game/shadow.py)
             try:
                 await context.bot.send_message(chat_id=payload["chat_id"], text=payload["text"], parse_mode="HTML")

@@ -504,9 +504,31 @@ def energy_refill(request, user, data):
     return {"cost": result["cost"], "energy": result["energy"], "panel": _energy_payload(_fresh(user))}
 
 
-# ── VIP (read-only; buying happens in the bot) ────────────────────────────────
-@endpoint()
-def vip(request, user):
+# ── real-money store: packs, preset packages, VIP, custom amount (game/purchase.py) ──
+# The bot's «خرید الماس» flow, unchanged: an order is a PurchaseRequest «awaiting_receipt»; the
+# player pays card-to-card and sends the receipt PHOTO in the bot chat, where the bot's receipt
+# handler finds the request by user (it looks back RECEIPT_WINDOW_H hours) and the owner approves.
+RECEIPT_WINDOW_H = 2
+# ready-made packages, priced by the owner's per-unit prices (nothing here sets a price)
+PRESETS = {
+    "diamonds": [(100, "مشت الماس"), (250, "کیسه‌ی الماس"), (500, "صندوق الماس"), (1000, "ویترین الماس"), (2500, "گنجینه‌ی الماس")],
+    "coins": [(500_000, "کیسه‌ی طلا"), (1_000_000, "کوزه‌ی طلا"), (2_500_000, "صندوق طلا"), (5_000_000, "گاوصندوق طلا"), (10_000_000, "کوه طلا")],
+    "dna": [(10_000, "ویال DNA"), (25_000, "سه‌ویال DNA"), (50_000, "کیف DNA"), (100_000, "راکتور DNA")],
+}
+PRESET_ART = {"diamonds": "diamond", "coins": "gold", "dna": "dna"}
+
+
+def _pack_art(p: dict) -> str:
+    kinds = [r for r in ("coins", "dna", "diamonds") if p[r]]
+    if len(kinds) != 1:
+        return "img/pack_bundle.jpg"
+    res = kinds[0]
+    sizes = [a for a, _n in PRESETS[res]]
+    idx = sum(1 for a in sizes if p[res] >= a)                  # bigger pack → bigger pile
+    return f"img/{PRESET_ART[res]}_{max(1, min(idx, len(sizes)))}.jpg"
+
+
+def _vip_data(user) -> dict:
     from game.subscription import SUBSCRIPTION_TIERS, effective_price, get_subscription_info
 
     info = get_subscription_info(user)
@@ -522,6 +544,99 @@ def vip(request, user):
         } for cfg in SUBSCRIPTION_TIERS.values()],
         "img": feature_img("subscription"),
     }
+
+
+@endpoint()
+def vip(request, user):
+    return _vip_data(user)
+
+
+def _pending(user):
+    import datetime
+
+    from django.utils import timezone
+
+    from bio_lab.models import PurchaseRequest
+
+    since = timezone.now() - datetime.timedelta(hours=RECEIPT_WINDOW_H)
+    return PurchaseRequest.objects.filter(user=user, status="awaiting_receipt", created_at__gte=since).order_by("-id").first()
+
+
+def _pay_info(req) -> dict:
+    from config import BOT_USERNAME
+    from game import botconfig, purchase
+
+    card, holder = botconfig.get_buy_card()
+    return {"id": req.id, "summary": clean(purchase.request_summary(req)), "price": req.price_toman,
+            "card": card, "holder": holder, "bot": BOT_USERNAME or None, "hours": RECEIPT_WINDOW_H}
+
+
+@endpoint()
+def paid(request, user):
+    """The store page: is it open, owner packs, ready-made packages, VIP, the custom builder."""
+    from game import botconfig, purchase
+
+    botconfig.refresh_cache()   # prices / card / packs are set from the bot (another process)
+    prices = botconfig.get_buy_prices()
+    minimum = botconfig.get_buy_min()
+    custom = botconfig.inbot_purchase_ready()
+    link = botconfig.get_buy_link()
+    packs = [dict(p, contents=clean(p["contents"]), img=_pack_art(p)) for p in purchase.list_active_packs()] \
+        if botconfig.packs_ready() else []
+    presets = []
+    if custom:
+        for res, rows in PRESETS.items():
+            for i, (amount, name) in enumerate(rows, 1):
+                price = round(amount * prices[res])
+                if prices[res] > 0 and price >= minimum and amount <= purchase.MAX_UNITS[res]:
+                    presets.append({"res": res, "amount": amount, "name": name, "price": price,
+                                    "img": f"img/{PRESET_ART[res]}_{min(i, 5 if res != 'dna' else 4)}.jpg"})
+    pending = _pending(user)
+    return {
+        "ready": botconfig.store_ready(), "custom": custom, "min": minimum,
+        "link": {"url": link[0], "title": clean(link[1])} if link else None,
+        "prices": prices, "steps": purchase.STEP, "max": purchase.MAX_UNITS,
+        "packs": packs, "presets": presets, "vip": _vip_data(user),
+        "pending": {"summary": clean(purchase.request_summary(pending)), "price": pending.price_toman} if pending else None,
+        "banner": "img/store_banner.jpg",
+    }
+
+
+@endpoint("POST")
+def paid_order(request, user, data):
+    """Place an order (pack / ready-made package / VIP / custom amount) and get the card to pay;
+    the bot also sends the card and the receipt instructions to the player's chat."""
+    from game import botconfig, outbox, purchase
+
+    botconfig.refresh_cache()
+    kind = need_str(data, "kind", ("pack", "preset", "vip", "custom"))
+    if kind == "vip":
+        req = purchase.create_subscription_pending(user, need_str(data, "tier"))
+    else:
+        if not botconfig.store_ready():
+            raise GameError("خرید درون‌برنامه‌ای الان فعال نیست.")
+        if kind == "pack":
+            req = purchase.create_pack_pending(user, need_int(data, "id", 1))
+        elif kind == "preset":
+            res = need_str(data, "res", tuple(PRESETS))
+            amount = need_int(data, "amount", 1)
+            if amount not in {a for a, _n in PRESETS[res]}:
+                raise GameError("این بسته وجود نداره.")
+            req = purchase.create_pending(user, **{"coins": 0, "dna": 0, "diamonds": 0, res: amount})
+        else:
+            amt = {r: need_int(data, r, 0, purchase.MAX_UNITS[r]) if data.get(r) not in (None, "") else 0 for r in ("coins", "dna", "diamonds")}
+            req = purchase.create_pending(user, **amt)
+    outbox.push("purchase_card", {"user_id": user.id, "req_id": req.id})
+    return _pay_info(req)
+
+
+@endpoint()
+def paid_card(request, user):
+    """The card again for the player's open order (the «پرداخت و ارسال رسید» callout)."""
+    req = _pending(user)
+    if req is None:
+        raise GameError("سفارش بازی نداری؛ اگه رسید فرستادی، منتظر تأیید باش.")
+    return _pay_info(req)
 
 
 routes = [
@@ -545,4 +660,7 @@ routes = [
     ("energy/", energy_panel),
     ("energy/refill/", energy_refill),
     ("vip/", vip),
+    ("paid/", paid),                # GET  the real-money store
+    ("paid/order/", paid_order),    # POST place an order → card to pay (+ the bot DMs it)
+    ("paid/card/", paid_card),      # GET  the card again for the open order
 ]

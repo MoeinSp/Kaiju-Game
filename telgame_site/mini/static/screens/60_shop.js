@@ -693,8 +693,10 @@
               return '<div><span class="ic">' + K.ic("check") + '</span><span class="t">' + K.esc(p) + "</span></div>";
             }).join("") + '</div><div class="shv-price"><span class="muted sm">قیمت</span><span class="b">' + (t.discount ? '<s class="muted">' + K.n(t.list_price) + "</s> " : "") + K.n(t.price_toman) + " تومان" + (t.discount ? ' <span class="tag" style="color:var(--bad)">' + K.n(t.discount) + "٪ تخفیف</span>" : "") + "</span></div></div>";
         }).join("");
-        html += '<div class="callout mt">' + K.ic("info") + "<div>خرید و تمدید اشتراک از داخل ربات انجام می‌شه: «فروشگاه» ← «اشتراک VIP». با خرید دوباره، مدتش به اشتراک فعلیت اضافه می‌شه.</div></div>";
+        html += '<button class="btn gold block lg mt" data-act="buyvip">' + K.ic("crown") + "خرید یا تمدید اشتراک</button>" +
+          '<p class="note center">با خرید دوباره، مدتش به اشتراک فعلیت اضافه می‌شه.</p>';
         root.innerHTML = html;
+        K.on(root, "buyvip", function () { K.go("sh_buy"); });
         var fired = false;
         ticker(root, function () { if (fired) return; fired = true; K.after(1500, ctx.reload); });
       });
