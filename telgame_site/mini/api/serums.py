@@ -3,8 +3,8 @@ menu:serums / menu:backpack screens, same game functions."""
 
 from __future__ import annotations
 
-from game import arena_chests as AC, serums as SR
-from telgame_site.mini.core import asset_img, clean, endpoint, need_int, need_str
+from game import serums as SR
+from telgame_site.mini.core import clean, endpoint, need_int, need_str
 
 
 def _state(user) -> dict:
@@ -58,17 +58,13 @@ def _backpack(user) -> dict:
     from bio_lab.models import SerumLab
     from game import reward_chests
     from game.buildings import list_speedup_cards
-    from game.media import get_arena_chest_image_path
 
-    chests = [{"id": c.id, "tier": c.chest_type, "name": AC.ARENA_CHEST_TIERS.get(c.chest_type, {}).get("name", "جعبه آرنا"),
-               "img": asset_img(get_arena_chest_image_path(c.chest_type, "locked"))} for c in AC.stored_chests(user)]
     boss = reward_chests.unopened(user, "worldboss").count()
     cup = reward_chests.unopened(user, "tournament").count()
     war = reward_chests.unopened(user, "alliance_war").count()
     row = SerumLab.objects.filter(user_id=user.id).first()
     stock = {k: int(v) for k, v in ((row.stock if row else {}) or {}).items() if int(v) > 0}
     return {
-        "chests": chests, "free_slot": AC.get_free_slot(user) is not None,
         "boss_chests": boss, "cup_chests": cup, "war_chests": war,
         "speedups": [{"minutes": c.minutes, "count": c.count} for c in list_speedup_cards(user)],
         "serums": [{"key": k, "label": SR.KINDS[k]["label"], "count": stock[k], "img": f"img/serum_{k}.jpg"} for k in SR.ORDER if k in stock],
@@ -80,12 +76,6 @@ def backpack(request, user):
     return _backpack(user)
 
 
-@endpoint("POST")
-def backpack_move(request, user, data):
-    c = AC.move_to_slot(user, need_int(data, "id", 1))
-    return {"slot": c.slot, "backpack": _backpack(user)}
-
-
 routes = [
     ("", home),
     ("brew/", brew),
@@ -94,5 +84,4 @@ routes = [
     ("upgrade/", upgrade),
     ("notify/", notify),
     ("backpack/", backpack),
-    ("backpack/move/", backpack_move),
 ]

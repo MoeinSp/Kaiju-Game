@@ -1599,7 +1599,6 @@ class ArenaChest(models.Model):
         ("unlocking", "unlocking"),
         ("queued", "queued"),
         ("ready", "ready"),
-        ("stored", "stored"),   # «انبار»: won while the 4 slots were full; slot > 100, moved to a slot later
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="arena_chests")

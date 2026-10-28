@@ -1,7 +1,7 @@
 /* «آزمایشگاه سرم» and «انبار» (api/serums.py → game/serums.py, game/arena_chests.py).
    Lab: one card per serum (picture, level, effect, how many on the shelf) with «ساخت» and
    «مصرف»; the brewing queue with its clock; a details sheet with every level and the upgrade.
-   Backpack: stored arena chests (move into a slot), boss chests, speed-up cards, serums. */
+   Backpack: unopened prize boxes (boss, cup, alliance war), speed-up cards, serums. */
 (function (K) {
   "use strict";
   function pn(n) { return Number(n || 0).toLocaleString("en-US"); }   // a plain number, for toasts (K.n returns HTML)
@@ -113,13 +113,8 @@
       return K.api.get("serums/backpack/").then(function (d) {
         function draw() {
           var html = '<div class="banner sr-ban" style="background-image:url(\'' + K.asset("img/hub_backpack.jpg") + '\')"><div><div class="ttl">انبار</div>' +
-            '<div class="sm">هیچ جایزه‌ای گم نمی‌شه: جعبه‌ای که جایگاهش پر بود اینجا منتظرته.</div></div></div>';
-          html += '<div class="h2">' + K.ic("chest") + "جعبه‌های آرنا در انبار</div>" + (d.chests.length
-            ? '<div class="panel list">' + d.chests.map(function (c) {
-              return '<div><img class="th" src="' + c.img + '" alt=""><span class="t">' + K.esc(c.name) + "<small>منتظر یه جایگاه خالی</small></span>" +
-                '<button class="btn sm primary" data-act="move" data-id="' + c.id + '"' + (d.free_slot ? "" : " disabled") + ">به جایگاه</button></div>";
-            }).join("") + "</div>" + (d.free_slot ? "" : '<p class="note">هر ۴ جایگاه پره؛ اول یکی رو باز کن.</p>')
-            : '<p class="note">جعبه‌ای توی انبار نیست؛ وقتی جایگاه‌های جعبه پر باشه، جعبه‌ی تازه اینجا میاد.</p>');
+            '<div class="sm">جعبه‌های جایزه‌ی باز نشده، کارت‌های سرعت و سرم‌هات.</div></div></div>';
+          if (!d.boss_chests && !d.cup_chests && !d.war_chests) html += '<div class="h2">' + K.ic("chest") + 'جعبه‌های جایزه</div><p class="note">جعبه‌ی جایزه‌ی باز نشده‌ای نداری.</p>';
           if (d.boss_chests) html += '<div class="h2">' + K.ic("skull") + 'جعبه‌های غول</div><button class="panel info" data-act="boss"><span class="ic t-mythic">' + K.ic("chest") +
             "</span><div class='grow'><b>" + K.n(d.boss_chests) + ' جعبه‌ی بازنشده</b><small class="muted">از نبرد با غول سرگردان</small></div>' + K.ic("chevron") + "</button>";
           if (d.cup_chests) html += '<div class="h2">' + K.ic("trophy") + 'جعبه‌های جام</div><button class="panel info" data-act="cup"><span class="ic t-coin">' + K.ic("chest") +
@@ -136,11 +131,6 @@
           root.innerHTML = html;
         }
         draw();
-        K.on(root, "move", function (el) {
-          K.api.post("serums/backpack/move/", { id: +el.dataset.id }, el).then(function (r) {
-            d = r.backpack; draw(); K.invalidate("arena/chests/"); K.toast("جعبه رفت توی جایگاه " + pn(r.slot), "ok");
-          });
-        });
         K.on(root, "boss", function () { K.go("wb_boss"); });
         K.on(root, "cup", function () { K.go("tr_home"); });
         K.on(root, "war", function (el) {

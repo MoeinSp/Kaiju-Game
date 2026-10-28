@@ -113,7 +113,9 @@ RUNES = {
 }
 
 SHOP = {
-    "key": {"label": "کلید سیاه‌چال", "price": 40},
+    # 80, not 40: a nightmare win pays ~40-50 runes back, so a 40-rune key bought itself again
+    # and farmed shadow cores without end
+    "key": {"label": "کلید سیاه‌چال", "price": 80},
     "magical_chest": {"label": "جعبه‌ی جادویی", "price": 40},
     "legendary_gear": {"label": "تجهیزات افسانه‌ای تصادفی", "price": 60},
     "relic": {"label": "اثر باستانی تصادفی (۳ روزه)", "price": 70},

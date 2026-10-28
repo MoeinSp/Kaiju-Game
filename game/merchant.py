@@ -1,13 +1,13 @@
 """«تابلوی سفارش تاجر» — a Hay Day–style order board.
 
-Three merchants wait on the board at once, each with an order of two things the player can
-make or spare (DNA, gold, serums, a spare creature of some rarity, unworn gear). Delivering
+Three merchants wait on the board at once, each with an order of up to two things the player
+can make or spare (serums, a spare creature of some rarity, unworn gear — never raw DNA or gold,
+the exchange already trades those; with nothing to sell, no merchant comes). Delivering
 pays gold and lab XP, sometimes an extra (a speed card, a dungeon key, a chest, legendary
 gear) and rarely a few diamonds. Delivering or turning an order down empties its slot for
 an hour; then a new merchant arrives. One harder special order a day pays more.
 
 Fairness rules:
-  - everything is sized to the player's power, in «hunts' worth» of loot;
   - a creature is only asked for when the player has a spare one of that rarity, and the
     one handed over is always the weakest spare: never the active creature, a team or
     defence-team member, a dungeon/tournament fighter, a busy one, a 2★+ or a shadow form;
@@ -29,6 +29,7 @@ from game.creature import GameError
 
 SLOTS = 3
 REFILL = datetime.timedelta(hours=1)
+IDLE_RETRY = 10 * 60   # seconds: with nothing to sell, an empty slot looks again this often
 DAILY_ORDERS = 12
 DIAMOND_CAP = 10
 UNLOCK_HALL = 2
@@ -46,11 +47,9 @@ MERCHANTS = {
 CREATURE_VALUE = {"common": 3, "rare": 6, "epic": 12, "legendary": 25, "mythic": 50}
 GEAR_VALUE = {"common": 0.5, "rare": 1, "epic": 2, "legendary": 4, "mythic": 8}
 SERUM_VALUE = 2.5
-# The GOLD an order pays is priced per item, not by hunts' worth: hunt gold per DNA is ~33, but
-# the exchange sells DNA for 25 gold, so paying by hunts let a player buy DNA there and sell it
-# here at a profit (and gold-crate gear / creatures the same way). Each price sits between what
-# the game already pays and charges for that thing, so an order beats selling but never beats buying.
-GOLD_PER_DNA = 15                         # exchange: sell 10 / buy 25 gold per DNA
+# The GOLD an order pays is priced per item, between what the game already pays and charges for
+# that thing, so an order beats selling but never beats buying (no buy-here-sell-there loop).
+GOLD_PER_DNA = 15                         # a serum's worth = the DNA it took to brew × this
 CREATURE_GOLD = {"common": 2000, "rare": 6000, "epic": 15000}    # a crate costs far more per creature
 GEAR_GOLD = {r: round(g * 2.5) for r, g in constants.EQUIP_RECYCLE_GOLD.items()}   # recycle pays ×1
 ASKED_RARITIES = ("common", "rare", "epic")   # nobody is asked to give up a legendary or mythic
@@ -76,15 +75,6 @@ def unlocked(user: User) -> bool:
     from game.buildings import building_level
 
     return building_level(user, constants.MAIN_BUILDING) >= UNLOCK_HALL
-
-
-def hunt_units(user: User) -> tuple[float, float]:
-    """(gold, DNA) of one won hunt for this player — the yardstick every order is sized by."""
-    from game.hunt import HUNT_COIN_PER_POWER, HUNT_DNA_PER_POWER, HUNT_LOOT_BONUS
-    from game.serums import power_basis
-
-    power = max(800, power_basis(user))   # the strongest kaiju: swapping the active one can't game it
-    return power * HUNT_COIN_PER_POWER * HUNT_LOOT_BONUS, power * HUNT_DNA_PER_POWER * HUNT_LOOT_BONUS
 
 
 def spare_creatures(user: User, rarity: str | None = None) -> list[Creature]:
@@ -122,24 +112,27 @@ def _serum_kinds(user: User) -> list[str]:
 def _context(user: User) -> dict:
     from collections import Counter
 
-    gold, dna = hunt_units(user)
     spare = Counter(c.rarity for c in spare_creatures(user) if c.rarity in ASKED_RARITIES)
     gear = Counter(Equipment.objects.filter(owner=user, equipped_on__isnull=True).values_list("rarity", flat=True))
     from game.serums import brew_cost
 
-    return {"gold": gold, "dna": dna, "serums": _serum_kinds(user), "spare": spare, "gear": gear, "brew": brew_cost(user)}
+    return {"serums": _serum_kinds(user), "spare": spare, "gear": gear, "brew": brew_cost(user)}
+
+
+def _pool(ctx: dict) -> dict[str, float]:
+    """What merchants may ask this player for (weights); empty = nothing to sell yet."""
+    pool = {}
+    if ctx["serums"]:
+        pool["serum"] = 2
+    if ctx["spare"]:
+        pool["creature"] = 1.5
+    if ctx["gear"]:
+        pool["gear"] = 2
+    return pool
 
 
 def _req(kind: str, ctx: dict, big: bool) -> tuple[dict, float, int]:
     """One requirement: (requirement, value in hunts' worth — sizes the XP, gold it is worth)."""
-    if kind == "dna":
-        k = random.randint(3, 7) * (2 if big else 1)
-        n = _nice(k * ctx["dna"])
-        return {"t": "dna", "n": n}, k, n * GOLD_PER_DNA
-    if kind == "gold":
-        k = random.randint(3, 7) * (2 if big else 1)
-        n = _nice(k * ctx["gold"])
-        return {"t": "gold", "n": n}, k * 0.8, n   # gold for gold: paid back, the order's bonus is the XP / extra
     if kind == "serum":
         n = random.randint(2, 3) if big else random.randint(1, 2)
         return {"t": "serum", "k": random.choice(ctx["serums"]), "n": n}, n * SERUM_VALUE, n * ctx["brew"] * GOLD_PER_DNA
@@ -164,29 +157,23 @@ def _extra(user: User, big: bool) -> dict | None:
     return dict(random.choices(items, weights)[0])
 
 
-def make_order(user: User, seq: int, special: bool = False, ctx: dict | None = None) -> dict:
+def make_order(user: User, seq: int, special: bool = False, ctx: dict | None = None) -> dict | None:
+    """A new order, or None when the player has nothing a merchant buys."""
     ctx = ctx or _context(user)
-    pool = {"dna": 3, "gold": 2}
-    if ctx["serums"]:
-        pool["serum"] = 2
-    if ctx["spare"]:
-        pool["creature"] = 1.5
-    if ctx["gear"]:
-        pool["gear"] = 2
+    pool = _pool(ctx)
+    if not pool:
+        return None
     picks: list[str] = []
     for _ in range(min(3 if special else 2, len(pool))):
         keys = [k for k in pool if k not in picks]
         picks.append(random.choices(keys, [pool[k] for k in keys])[0])
-    reqs, value, worth, back = [], 0.0, 0, 0
+    reqs, value, worth = [], 0.0, 0
     for kind in picks:
         r, v, g = _req(kind, ctx, special)
         reqs.append(r)
         value += v
-        if kind == "gold":
-            back += g          # gold asked for is paid back at face value, special or not
-        else:
-            worth += g
-    coins = _nice(back + worth * (1.3 if special else 1.0))
+        worth += g
+    coins = _nice(worth * (1.3 if special else 1.0))
     xp = min(600 if special else 300, max(20, round(value * (12 if special else 6))))
     extra = _extra(user, special) if special or random.random() < 0.35 else None
     diamonds = 5 if special else (random.randint(2, 4) if random.random() < 0.08 else 0)
@@ -211,17 +198,23 @@ def _refresh(user: User, row: MerchantBoard) -> bool:
     for i, s in enumerate(slots):
         if "reqs" not in s and s.get("wait_until", 0) <= now:
             ctx = ctx or _context(user)
-            row.seq += 1
-            slots[i] = make_order(user, row.seq, ctx=ctx)
+            order = make_order(user, row.seq + 1, ctx=ctx)
+            if order is None:   # nothing to sell: look again in a few minutes
+                slots[i] = {"wait_until": now + IDLE_RETRY}
+            else:
+                row.seq += 1
+                slots[i] = order
             changed = True
     if row.day != today:
         row.day, row.done_today, row.diamonds_today = today, 0, 0
         changed = True
     if row.special_day != today:
         ctx = ctx or _context(user)
-        row.seq += 1
-        row.special, row.special_day = make_order(user, row.seq, special=True, ctx=ctx), today
-        changed = True
+        special = make_order(user, row.seq + 1, special=True, ctx=ctx)
+        if special is not None:   # else tried again on the next visit today
+            row.seq += 1
+            row.special, row.special_day = special, today
+            changed = True
     if changed:
         row.slots = slots
     return changed
@@ -244,10 +237,6 @@ def _holdings(user: User) -> dict:
 
 def have(user: User, req: dict, held: dict | None = None) -> int:
     t = req["t"]
-    if t == "dna":
-        return user.dna_fragments
-    if t == "gold":
-        return user.coins
     held = held or _holdings(user)
     if t == "serum":
         return int(held["serum"].get(req["k"], 0))
@@ -260,10 +249,6 @@ def req_label(req: dict) -> str:
     from game import serums
 
     t, n = req["t"], req["n"]
-    if t == "dna":
-        return f"{n:,} DNA"
-    if t == "gold":
-        return f"{n:,} طلا"
     if t == "serum":
         return f"{n} سرم {serums.KINDS[req['k']]['label']}"
     if t == "creature":
@@ -314,8 +299,10 @@ def state(user: User) -> dict:
         else:
             slots.append({"slot": i, "wait": max(0, int(s.get("wait_until", 0) - now))})
     tomorrow = (timezone.localtime() + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    # no order anywhere and nothing a merchant buys → say why the board is empty
+    idle = not row.special and not any("reqs" in s for s in row.slots) and not _pool(_context(user))
     return {
-        "unlocked": True, "slots": slots,
+        "unlocked": True, "slots": slots, "idle": idle,
         "special": _order_view(user, row.special, "s", held) if row.special else None,
         "special_in": max(0, int((tomorrow - timezone.localtime()).total_seconds())),
         "done_today": row.done_today, "daily": DAILY_ORDERS,
@@ -366,11 +353,7 @@ def deliver(user: User, slot, order_id: int, creature_ids: list[int] | None = No
         handed = []
         for r in order["reqs"]:
             t, n = r["t"], r["n"]
-            if t == "dna":
-                user.dna_fragments -= n
-            elif t == "gold":
-                user.coins -= n
-            elif t == "serum":
+            if t == "serum":
                 serums.hand_over(user, r["k"], n)
             elif t == "creature":
                 spare = spare_creatures(user, r["r"])

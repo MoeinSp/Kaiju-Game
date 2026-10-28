@@ -1,7 +1,8 @@
-"""«آزمایشگاه سرم» and «انبار» — the bot screens of game/serums.py and the stored arena chests.
+"""«آزمایشگاه سرم» and «انبار» — the bot screens of game/serums.py and the backpack (prize boxes
+waiting to be opened, speed-up cards, serums).
 
 Callbacks: «sr:» for the lab (home, b:<kind> brew, u:<kind> use, x cancel, up upgrades,
-ug:<kind> start an upgrade), «bp:» for the backpack (home, mv:<chest id>).
+ug:<kind> start an upgrade), «bp:home» for the backpack.
 """
 
 from pathlib import Path
@@ -13,7 +14,7 @@ from telegram.ext import CallbackQueryHandler, ContextTypes
 from bio_lab.repository import get_or_create_user
 from bot.buttons import BUILD, CONFIRM, NAV, PRIMARY, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
-from game import arena_chests as AC, serums as SR
+from game import serums as SR
 from game.blackmarket import format_time_remaining as _left
 from game.creature import GameError
 
@@ -146,44 +147,27 @@ async def serum_lab(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 # ── the backpack ────────────────────────────────────────────────────────────────
-def _bp_sync(tg_user, move_id: int | None):
+def _bp_sync(tg_user):
     from bio_lab.models import SerumLab
     from game import reward_chests
     from game.buildings import list_speedup_cards
 
     user, _ = get_or_create_user(tg_user)
-    note = ""
-    if move_id:
-        try:
-            c = AC.move_to_slot(user, move_id)
-            note = f"✅ جعبه رفت توی جایگاه <code>{c.slot}</code>"
-        except GameError as e:
-            note = f"⚠️ {e}"
     row = SerumLab.objects.filter(user_id=user.id).first()
     return {
-        "chests": [(c.id, AC.ARENA_CHEST_TIERS.get(c.chest_type, {}).get("name", "جعبه آرنا")) for c in AC.stored_chests(user)],
-        "free": AC.get_free_slot(user) is not None,
         "boss": reward_chests.unopened(user, "worldboss").count(),
         "cup": reward_chests.unopened(user, "tournament").count(),
         "war": reward_chests.unopened(user, "alliance_war").count(),
         "cards": [(c.minutes, c.count) for c in list_speedup_cards(user)],
         "serums": [(k, SR.KINDS[k]["label"], int((row.stock or {}).get(k, 0))) for k in SR.ORDER if row and int((row.stock or {}).get(k, 0)) > 0],
-    }, note
+    }
 
 
-def _bp_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
-    lines = ["🎒 <b>انبار</b>", _DIV, "<i>هیچ جایزه‌ای گم نمی‌شه؛ جعبه‌ای که جایگاهش پر بود اینجاست.</i>", _DIV]
+def _bp_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
+    lines = ["🎒 <b>انبار</b>", _DIV, "<i>جعبه‌های جایزه‌ی باز نشده، کارت‌های سرعت و سرم‌هات.</i>", _DIV]
     rows = []
-    if v["chests"]:
-        lines.append(f"📦 جعبه‌های آرنا: <code>{len(v['chests'])}</code>")
-        for cid, name in v["chests"][:8]:
-            lines.append(f"     {name}")
-            if v["free"]:
-                rows.append([btn(f"{name} ← جایگاه", emoji_key="btn_chests", style=CONFIRM, callback_data=f"bp:mv:{cid}")])
-        if not v["free"]:
-            lines.append("     <i>هر ۴ جایگاه پره؛ اول یکی رو باز کن.</i>")
-    else:
-        lines.append("📦 جعبه‌ی آرنا: <i>نداری</i>")
+    if not (v["boss"] or v["cup"] or v["war"]):
+        lines.append("📦 جعبه‌ی جایزه‌ی باز نشده: <i>نداری</i>")
     if v["boss"]:
         lines.append(f"🐉 جعبه‌های غول: <code>{v['boss']}</code>")
         rows.append([btn("باز کردن جعبه‌های غول", emoji_key="btn_chest_open", style=CONFIRM, callback_data="wboss:open:all")])
@@ -195,8 +179,6 @@ def _bp_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
         rows.append([btn("باز کردن جعبه‌های جنگ", emoji_key="btn_chest_open", style=CONFIRM, callback_data="ally_war_open")])
     lines.append("⏱ کارت سرعت: " + ("، ".join(f"{m} دقیقه ×{n}" for m, n in v["cards"]) if v["cards"] else "<i>نداری</i>"))
     lines.append("🧪 سرم‌ها: " + ("، ".join(f"{label} ×{n}" for _k, label, n in v["serums"]) if v["serums"] else "<i>نداری</i>"))
-    if note:
-        lines += [_DIV, note]
     rows.append([btn("آزمایشگاه سرم", emoji_key="btn_serums", style=PRIMARY, callback_data="sr:home"),
                  btn("جعبه‌های آرنا", emoji_key="btn_chests", style=PRIMARY, callback_data="arena_chests")])
     rows.append([back_btn("menu:buildings", "ساختمان‌ها")])
@@ -205,18 +187,13 @@ def _bp_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
 
 async def backpack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
-    parts = (q.data if q and q.data.startswith("bp:") else "bp:home").split(":")
-    move_id = int(parts[2]) if len(parts) > 2 and parts[1] == "mv" and parts[2].isdigit() else None
     if q and q.data.startswith("bp:"):
         await q.answer()
-    v, note = await run_db(_bp_sync, update.effective_user, move_id)
-    text, kb = _bp_render(v, note)
-    if q and move_id:
-        await safe_edit_message_text(q, text, parse_mode="HTML", reply_markup=kb)
-    else:
-        await send_screen(update, text, parse_mode="HTML", reply_markup=kb)
+    v = await run_db(_bp_sync, update.effective_user)
+    text, kb = _bp_render(v)
+    await send_screen(update, text, parse_mode="HTML", reply_markup=kb)
 
 
 def register(application) -> None:
     application.add_handler(CallbackQueryHandler(serum_lab, pattern=r"^sr:(home|up|x|n|[bu]:[a-z]+|ug:[a-z]+)$"))
-    application.add_handler(CallbackQueryHandler(backpack, pattern=r"^bp:(home|mv:\d+)$"))
+    application.add_handler(CallbackQueryHandler(backpack, pattern=r"^bp:home$"))

@@ -41,13 +41,16 @@ def _render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     if not st["unlocked"]:
         text = "\n".join(["📜 <b>تابلوی سفارش تاجر</b>", _DIV,
                           f"🔒 از سطح {st['unlock_hall']} تالار مِهر باز می‌شه.", _DIV,
-                          "<i>تاجرها DNA، طلا، سرم، هیولا و تجهیزات اضافه‌ات رو می‌خرن و طلا و XP می‌دن.</i>"])
+                          "<i>تاجرها سرم، هیولا و تجهیزات اضافه‌ات رو می‌خرن و طلا و XP می‌دن.</i>"])
         return text, InlineKeyboardMarkup([[back_btn("menu:hub_base", "پایگاه")]])
     lines = ["📜 <b>تابلوی سفارش تاجر</b>", _DIV,
              f"📦 تحویل امروز: <code>{st['done_today']}/{st['daily']}</code>",
              f"💎 الماس امروز: <code>{st['diamonds_today']}/{st['diamond_cap']}</code>"]
     if note:
         lines += [_DIV, note]
+    if st.get("idle"):
+        lines += [_DIV, "<i>تاجرها فقط سرم، هیولای اضافه‌ی یک‌ستاره و تجهیزات پوشیده‌نشده می‌خرن؛ "
+                        "فعلاً چیزی برای فروش نداری. یه سرم بساز یا هیولا و تجهیزات اضافه جمع کن.</i>"]
     rows = []
     for s in st["slots"]:
         lines.append(_DIV)

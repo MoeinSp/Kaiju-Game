@@ -38,19 +38,4 @@ class Migration(migrations.Migration):
                 ("used_count", models.PositiveSmallIntegerField(default=0)),
             ],
         ),
-        migrations.AlterField(
-            model_name="arenachest",
-            name="status",
-            field=models.CharField(
-                choices=[
-                    ("locked", "locked"),
-                    ("unlocking", "unlocking"),
-                    ("queued", "queued"),
-                    ("ready", "ready"),
-                    ("stored", "stored"),
-                ],
-                default="locked",
-                max_length=16,
-            ),
-        ),
     ]

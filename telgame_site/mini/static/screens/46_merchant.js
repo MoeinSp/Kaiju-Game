@@ -4,7 +4,7 @@
 (function (K) {
   "use strict";
   function pn(n) { return Number(n || 0).toLocaleString("en-US"); }   // a plain number, for toasts (K.n returns HTML)
-  var REQ_IC = { dna: "dna", gold: "coin", serum: "vial", creature: "claw", gear: "shield" };
+  var REQ_IC = { serum: "vial", creature: "claw", gear: "shield" };
 
   K.hub("base", { id: "merchant", title: "سفارش تاجر", sub: "اضافه‌هات رو بفروش، طلا و XP بگیر", icon: "cart", color: "var(--gold)", go: "mo_board", order: 48, hall: 2 });
 
@@ -43,6 +43,7 @@
           var html = '<div class="banner mo-ban"' + (st.banner ? ' style="background-image:url(\'' + K.asset(st.banner) + '\')"' : "") + '><div class="grow"><div class="ttl">تابلوی سفارش تاجر</div>' +
             '<div class="mo-meta"><span>' + K.ic("box") + "تحویل امروز " + K.n(st.done_today) + " از " + K.n(st.daily) + "</span><span>" + K.ic("gem") + "الماس امروز " +
             K.n(st.diamonds_today) + " از " + K.n(st.diamond_cap) + "</span></div></div></div>";
+          if (st.idle) html += '<div class="callout mb">' + K.ic("info") + "<div>تاجرها فقط سرم، هیولای اضافه‌ی یک‌ستاره و تجهیزات پوشیده‌نشده می‌خرن؛ فعلاً چیزی برای فروش نداری. یه سرم بساز یا هیولا و تجهیزات اضافه جمع کن.</div></div>";
           html += st.special ? card(st.special)
             : '<div class="panel pad mo-wait special">' + K.ic("star") + '<span class="grow">سفارش ویژه‌ی بعدی</span><span class="timer" data-left="' + st.special_in + '"></span></div>';
           html += '<div class="h2">' + K.ic("users") + "تاجرها</div>";

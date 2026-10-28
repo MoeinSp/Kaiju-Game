@@ -492,7 +492,6 @@ def _chest_brief(chest) -> dict | None:
 
     cfg = AC.ARENA_CHEST_TIERS.get(chest.chest_type, {})
     return {"tier": chest.chest_type, "name": cfg.get("name", "جعبه آرنا"), "slot": chest.slot,
-            "stored": chest.status == "stored",   # «انبار»: the slots were full
             "img": asset_img(get_arena_chest_image_path(chest.chest_type, "locked"))}
 
 

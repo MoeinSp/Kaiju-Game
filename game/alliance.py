@@ -983,10 +983,10 @@ WAR_MAX_BASE_COINS = 8500
 WAR_MAX_BASE_DNA = 700
 WAR_MVP_BONUS_DIAMONDS = 0  # No extra reward for MVP - normal reward only
 
-# Reward chests for every member who rallied, on top of the gold/DNA: the winners get the
-# better chest, the losers one chest fewer. Stored unopened (source "alliance_war") — the
+# One reward chest for every member who rallied, on top of the gold/DNA — its tier by the
+# result (win magical, draw golden, loss silver). Stored unopened (source "alliance_war") — the
 # player opens them from the result message, the war panel or «انبار».
-WAR_CHESTS = {"win": ("magical", 2), "draw": ("golden", 2), "lose": ("golden", 1)}
+WAR_CHESTS = {"win": ("magical", 1), "draw": ("golden", 1), "lose": ("silver", 1)}
 
 
 def war_chest_text(tier: str, count: int) -> str:
