@@ -15,8 +15,11 @@ from game.emoji import get_emoji
 
 
 def _bm_sync(tg_user):
+    from game import reward_chests
+
     user, _ = get_or_create_user(tg_user)
     auctions = blackmarket.get_active_auctions()
+    user.bm_unopened = reward_chests.unopened(user, "blackmarket").count()   # boxes won at auction
     return user, auctions
 
 
@@ -48,11 +51,15 @@ def _render_bm_text(user: User, auctions: list[BlackMarketAuction]) -> str:
             lines.append(f"\n🏷 <b>{a.title}</b>\n   💵 <code>{a.current_bid:,}</code> {curr} · {who}{own_deadline}")
     nxt = " ← ".join(f"{n['emoji']} {n['title']}" for _d, n in blackmarket.upcoming(4))
     lines += ["", f"📅 <b>شب‌های بعد:</b> {nxt}"]
+    if getattr(user, "bm_unopened", 0):
+        lines += ["", f"🎁 <b>{user.bm_unopened} جعبه‌ی مزایده</b> منتظر باز شدنه!"]
     return "\n".join(lines)
 
 
-def _render_bm_keyboard(auctions: list[BlackMarketAuction], is_group: bool = False) -> InlineKeyboardMarkup:
+def _render_bm_keyboard(auctions: list[BlackMarketAuction], is_group: bool = False, unopened: int = 0) -> InlineKeyboardMarkup:
     rows = []
+    if unopened and not is_group:
+        rows.append([btn(f"باز کردن جعبه‌ها ({unopened})", emoji_key="btn_chest_open", style=CONFIRM, callback_data="bm:open")])
     for a in auctions:
         curr = "طلا" if a.bid_currency == "coins" else "الماس"
         step = blackmarket.get_min_bid_increment(a.current_bid, a.bid_currency)
@@ -135,8 +142,30 @@ async def blackmarket_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         _render_bm_text(user, auctions),
         photo=photo,
         parse_mode="HTML",
-        reply_markup=_render_bm_keyboard(auctions, is_group=is_group),
+        reply_markup=_render_bm_keyboard(auctions, is_group=is_group, unopened=getattr(user, "bm_unopened", 0)),
     )
+
+
+def _open_sync(tg_user):
+    from game import reward_chests
+    from game.worldboss import _chest_line
+
+    user, _ = get_or_create_user(tg_user)
+    return [_chest_line(r) for r in reward_chests.open_all(user, "blackmarket")]
+
+
+async def bm_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«باز کردن جعبه‌ها» — boxes won at auction (from the win message or the market screen)."""
+    query = update.callback_query
+    try:
+        lines = await run_db(_open_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    await query.answer("🎁 باز شد!")
+    await send_screen(update, "🎁 <b>جعبه‌های مزایده باز شد!</b>\n━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(lines),
+                      parse_mode="HTML",
+                      reply_markup=InlineKeyboardMarkup([[btn("بازار سیاه", emoji_key="btn_blackmarket", style=NAV, callback_data="menu:blackmarket")]]))
 
 
 async def bm_refresh_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -155,7 +184,7 @@ async def bm_refresh_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         _render_bm_text(user, auctions),
         photo=photo,
         parse_mode="HTML",
-        reply_markup=_render_bm_keyboard(auctions, is_group=is_group),
+        reply_markup=_render_bm_keyboard(auctions, is_group=is_group, unopened=getattr(user, "bm_unopened", 0)),
     )
 
 
@@ -306,6 +335,7 @@ async def bm_bid_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 def register(application) -> None:
     application.add_handler(CommandHandler(["blackmarket", "market"], blackmarket_panel))
     application.add_handler(CallbackQueryHandler(bm_refresh_callback, pattern=r"^bm:refresh$"))
+    application.add_handler(CallbackQueryHandler(bm_open_callback, pattern=r"^bm:open$"))
     application.add_handler(CallbackQueryHandler(bm_bid_callback, pattern=r"^bm_bid:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(bm_bid_go_callback, pattern=r"^bm_bid_go:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(bm_custom_callback, pattern=r"^bm_custom:\d+$"))

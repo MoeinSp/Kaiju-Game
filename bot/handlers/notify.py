@@ -267,9 +267,14 @@ async def notify_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         from game.blackmarket import settle_and_collect_winner_notifications
 
         bm_notifications = await run_db(settle_and_collect_winner_notifications)
-        for user_id, text in bm_notifications:
+        for user_id, text, boxes in bm_notifications:
+            kb = None
+            if boxes:
+                from bot.buttons import CONFIRM
+
+                kb = InlineKeyboardMarkup([[btn("باز کردن جعبه‌ها", emoji_key="btn_chest_open", style=CONFIRM, callback_data="bm:open")]])
             try:
-                await context.bot.send_message(chat_id=user_id, text=text, parse_mode="HTML")
+                await context.bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=kb)
             except Forbidden:
                 await run_db(_opt_out, user_id)
             except TelegramError:

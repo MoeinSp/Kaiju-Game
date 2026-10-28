@@ -132,10 +132,12 @@
         var html = '<div class="banner mb mk-top"' + (d.img ? ' style="background-image:url(\'' + d.img + '&s=l\')"' : "") + '><div class="grow"><div class="mk-kick">' + K.ic("gavel") + "مزایده‌ی امشب</div>" +
           '<div class="ttl">' + (d.night ? K.esc(d.night.title) : "بازار سیاه") + "</div>" +
           (d.ends_at ? '<div class="sm mk-end"><span class="timer" data-until="' + d.ends_at + '" data-done="تموم شد"></span><span>تا پایان · ' + K.esc(d.deadline) + "</span></div>" : "") + "</div></div>";
+        if (d.unopened) html += '<div class="callout good mb">' + K.ic("gift") + '<div class="grow"><b>' + K.n(d.unopened) +
+          ' جعبه‌ی مزایده منتظر باز شدنه!</b></div><button class="btn sm gold" data-act="open-boxes">' + K.ic("chest") + "باز کن</button></div>";
         if (lead) html += '<div class="callout good mb">' + K.ic("check") + "<div>الان روی «" + K.esc(lead.title) + "» جلویی. تا وقتی جلویی، روی مزایده‌ی دیگه‌ای نمی‌تونی پیشنهاد بدی.</div></div>";
         else if (d.lots.some(function (l) { return l.outbid; })) html += '<div class="callout bad mb">' + K.ic("warn") + "<div>روی یکی از مزایده‌ها ازت جلو زدن و مبلغت برگشته. اگه می‌خوایش، دوباره پیشنهاد بده.</div></div>";
         html += d.lots.length ? d.lots.map(lotCard).join("") : '<div class="panel">' + K.state("gavel", "مزایده‌ی فعالی نیست", "الان چیزی برای مزایده توی بازار نیست. بعداً سر بزن.") + "</div>";
-        html += '<div class="callout mt">' + K.ic("info") + "<div>بالاترین پیشنهاد تا پایان مهلت برنده‌ست و جایزه خودکار به حسابت می‌آد. هر بازیکن هم‌زمان فقط روی یک مزایده می‌تونه جلو باشه. مزایده‌های VIP (الماسی و هیولا) فقط برای دارنده‌های اشتراکه.</div></div>";
+        html += '<div class="callout mt">' + K.ic("info") + "<div>بالاترین پیشنهاد تا پایان مهلت برنده‌ست و جایزه به حسابت می‌آد (جعبه‌ها رو خودت باز می‌کنی). هر بازیکن هم‌زمان فقط روی یک مزایده می‌تونه جلو باشه. مزایده‌های VIP (الماسی و هیولا) فقط برای دارنده‌های اشتراکه.</div></div>";
         if (d.upcoming.length) {
           html += '<div class="h2">' + K.ic("calendar") + 'شب‌های بعد</div><div class="panel mk-prog">' + d.upcoming.map(function (n) {
             return '<details><summary><span class="mk-day">' + K.esc(n.weekday) + '</span><span class="b grow">' + K.esc(n.title) + '</span><span class="faint">' + K.ic("chevron") + '</span></summary><div class="mk-plots">' + n.lots.map(function (l) {
@@ -158,6 +160,13 @@
       function find(el) { return d.lots.filter(function (l) { return l.id === +el.dataset.id; })[0]; }
       K.on(root, "lot", function (el) { var l = find(el); if (l) K.go("mk_lot", { id: l.id }); });
       K.on(root, "vip", function () { if (K.hasScreen("sh_vip")) K.go("sh_vip"); });
+      K.on(root, "open-boxes", function (el) {
+        K.api.post("market/open/", {}, el).then(function (o) {
+          d.unopened = o.unopened; if (ctx.alive()) draw();
+          K.reward({ title: K.n(o.count) + " جعبه باز شد!", icon: "chest", coins: o.coins, dna: o.dna, diamonds: o.diamonds,
+                     creatures: o.creatures, text: o.lines.join(" · "), button: "عالیه" });
+        }).catch(function () {});
+      });
       K.on(root, "next", function (el) {
         var l = find(el); if (!l) return;
         bidFlow(l, l.next_bid, el, function (r) { applyBid(r); if (ctx.alive()) draw(); }, function () { refresh(); });

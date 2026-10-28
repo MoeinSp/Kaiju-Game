@@ -363,7 +363,7 @@ WEEKLY_MISSION_DEFS = {
                   "gold_u": 10, "dna_u": 10, "diamonds": 10, "points": 40},
     "w_arena_35": {"action": "arena_attack", "target": 21, "label": "حمله در آرنا (۲۱ بار در هفته)",
                    "gold_u": 10, "dna_u": 6, "diamonds": 10, "points": 40},
-    "w_dispatch_10": {"action": "dispatch", "target": 10, "label": "۱۰ مأموریت اعزامی در هفته",
+    "w_dispatch_10": {"action": "dispatch_done", "target": 10, "label": "۱۰ مأموریت اعزامی کامل در هفته",
                       "gold_u": 8, "dna_u": 8, "speedup": 60, "points": 30},
     "w_collect_15": {"action": "collect", "target": 15, "label": "جمع‌آوری از ساختمان‌ها (۱۵ بار در هفته)",
                      "gold_u": 5, "dna_u": 5, "points": 20},

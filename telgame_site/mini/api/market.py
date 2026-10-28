@@ -70,7 +70,28 @@ def panel(request, user):
             } for lot in night["lots"]],
         } for day, night in bm.upcoming(4)],
         "img": feature_img("blackmarket"),
+        "unopened": _unopened(user),
     }
+
+
+def _unopened(user) -> int:
+    from game import reward_chests
+
+    return reward_chests.unopened(user, "blackmarket").count()
+
+
+@endpoint("POST")
+def open_boxes(request, user, data):
+    """«باز کردن جعبه‌ها» — boxes won at auction (bot: bm_open_callback)."""
+    from game import reward_chests, worldboss
+    from telgame_site.mini.core import creature_dict
+
+    results = reward_chests.open_all(user, "blackmarket")
+    return {"count": len(results), "unopened": _unopened(user),
+            "coins": sum(r["coins"] for r in results), "dna": sum(r["dna"] for r in results),
+            "diamonds": sum(r["diamonds"] for r in results),
+            "lines": [_name(worldboss._chest_line(r)) for r in results],
+            "creatures": [creature_dict(r["creature"]) for r in results if r.get("creature") is not None]}
 
 
 @endpoint()
@@ -116,4 +137,5 @@ routes = [
     ("", panel),
     ("preview/", preview),
     ("bid/", bid),
+    ("open/", open_boxes),
 ]

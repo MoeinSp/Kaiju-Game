@@ -1228,6 +1228,16 @@ async def raid_leaderboard_callback(update: Update, context: ContextTypes.DEFAUL
 
 # ── PvP: reply-to-attack another player ───────────────────────────────────────
 
+def _group_defender(target, a_creature):
+    """Who defends `target` against `a_creature` in a group «اتک»: their «تیم دفاع» (the best
+    answer to this attacker, game/defense.py — the arena's rule), else their active creature.
+    The same pick on the preview card, the details view and the fight, so the card is right."""
+    from game.defense import pick_defender
+
+    creature, _power = pick_defender(target, a_creature, _creature_power(a_creature) if a_creature else None)
+    return creature or get_active_creature(target)
+
+
 def _pvp_preview_sync(attacker_tg, target_tg):
     """Read-only power comparison before a reply-attack is confirmed."""
     if target_tg.id == attacker_tg.id or target_tg.is_bot:
@@ -1237,7 +1247,7 @@ def _pvp_preview_sync(attacker_tg, target_tg):
     if target is None:
         raise GameError("این بازیکن هنوز بازی رو شروع نکرده — نمی‌شه بهش حمله کرد.")
     a_creature = get_active_creature(attacker)
-    t_creature = get_active_creature(target)
+    t_creature = _group_defender(target, a_creature) if a_creature else None
     if a_creature is None:
         raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
     if t_creature is None:
@@ -1390,7 +1400,7 @@ def _pvp_preview_by_ids_sync(attacker_id, target_id):
     if attacker is None or target is None:
         raise GameError("یکی از طرف‌ها دیگه پیدا نشد.")
     a_creature = get_active_creature(attacker)
-    t_creature = get_active_creature(target)
+    t_creature = _group_defender(target, a_creature) if a_creature else None
     if a_creature is None or t_creature is None:
         raise GameError("یکی از دو طرف موجود فعال نداره.")
     from game.arena import group_shield_remaining_seconds
@@ -1406,14 +1416,15 @@ def _pvp_preview_by_ids_sync(attacker_id, target_id):
     )
 
 
-def _gatk_opp_details_sync(target_id):
+def _gatk_opp_details_sync(target_id, attacker_id=None):
     from bio_lab.repository import lab_display
     from bot.handlers.arena import _opponent_details_sync
 
     target = User.objects.filter(id=target_id).first()
     if target is None:
         raise GameError("این بازیکن دیگه پیدا نشد.")
-    creature = get_active_creature(target)
+    attacker = User.objects.filter(id=attacker_id).first() if attacker_id else None
+    creature = _group_defender(target, get_active_creature(attacker) if attacker else None)
     power = _creature_power(creature) if creature is not None else 0
     element = creature.element if creature is not None else None
     pending = {"is_fake": False, "user_id": target_id, "label": lab_display(target),
@@ -1429,7 +1440,7 @@ async def gatk_opp_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await query.answer("این دکمه مال تو نیست 🙂", show_alert=True)
         return
     try:
-        d = await run_db(_gatk_opp_details_sync, int(target_id))
+        d = await run_db(_gatk_opp_details_sync, int(target_id), int(attacker_id))
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
         return
@@ -1549,7 +1560,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         raise GameError(f"🚪 این بازیکن {group_presence.ago_text(left_at)} پیش از این گروه رفته؛ "
                         f"به کسی که بیش از {group_presence.LEFT_GRACE_HOURS} ساعت از گروه رفته نمی‌شه اتک داد.")
     a_creature = get_active_creature(attacker)
-    t_creature = get_active_creature(target)
+    t_creature = _group_defender(target, a_creature) if a_creature else None   # «تیم دفاع» defends here too
     if a_creature is None or t_creature is None:
         raise GameError("یکی از دو طرف موجود فعال نداره.")
 
@@ -1852,6 +1863,46 @@ def _creature_power(c: Creature) -> int:
     return creature_power(c, get_equipped_items(c))
 
 
+# «is this player still in the group?» answers from getChatMember, per (chat, user), for a while
+_PRESENT_TTL = 3 * 3600
+_present_cache: dict[tuple[int, int], tuple[float, bool]] = {}
+LEADERBOARD_SIZE = 10
+
+
+async def drop_departed(bot, chat, creatures: list, keep: int = LEADERBOARD_SIZE) -> list:
+    """The first `keep` creatures whose owner is still in `chat`. Players who left before the
+    bot recorded it (or before leave-tracking existed) are found with a live getChatMember on
+    the candidates only, recorded as left, and skipped — so the group table shows members."""
+    import time
+
+    from telegram.error import BadRequest, TelegramError
+
+    from game import group_presence
+
+    now, out = time.monotonic(), []
+    for c in creatures:
+        if len(out) >= keep:
+            break
+        key = (chat.id, c.owner_id)
+        hit = _present_cache.get(key)
+        if hit and now - hit[0] < _PRESENT_TTL:
+            present = hit[1]
+        else:
+            try:
+                status = (await bot.get_chat_member(chat.id, c.owner_id)).status
+                present = status not in ("left", "kicked")
+            except BadRequest as exc:   # «user not found» / «participant invalid» = not in the group
+                present = not any(w in str(exc).lower() for w in ("not found", "invalid"))
+            except TelegramError:
+                present = True          # can't tell right now: keep them
+            _present_cache[key] = (now, present)
+            if not present:
+                await run_db(group_presence.mark_left, chat.id, chat.title, c.owner_id)
+        if present:
+            out.append(c)
+    return out
+
+
 def _leaderboard_sync(chat, tg_user):
     from game import research
 
@@ -1860,7 +1911,8 @@ def _leaderboard_sync(chat, tg_user):
     touch_membership(group, user)
     members = group_member_creatures(group)
     research.attach_research_multi(members)  # include lab effects for every owner (see leaderboard fix)
-    ranked = sorted(members, key=_creature_power, reverse=True)[:10]
+    # a few spare candidates: drop_departed() may skip some who have left the group
+    ranked = sorted(members, key=_creature_power, reverse=True)[:LEADERBOARD_SIZE * 3]
     # pair each with its (gear-inclusive) power now, in sync context, so the async
     # render never has to touch the DB again
     return [(c, _creature_power(c)) for c in ranked]
@@ -1868,6 +1920,8 @@ def _leaderboard_sync(chat, tg_user):
 
 async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     creatures = await run_db(_leaderboard_sync, update.effective_chat, update.effective_user)
+    power = dict((c.id, p) for c, p in creatures)
+    creatures = [(c, power[c.id]) for c in await drop_departed(context.bot, update.effective_chat, [c for c, _p in creatures])]
     keyboard = group_footer_keyboard(update.effective_user.id, skip="leaderboard")
     if not creatures:
         await update.message.reply_text(

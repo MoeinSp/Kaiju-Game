@@ -349,6 +349,11 @@ def _pay(user: User, mission: DispatchMission) -> dict:
     if reward.get("speedup"):
         grant_speedup_card(user, int(reward["speedup"]), count=1)
     record_gain(user, "dispatch", coins=coins, dna=dna, diamonds=diamonds)
+    # the weekly «۱۰ مأموریت اعزامی» counts missions that came back, not ones sent (a send can be cancelled)
+    from game.daily import check_missions, record_action
+
+    record_action(user, "dispatch_done")
+    done = check_missions(user, "dispatch_done")
 
     levels = 0
     creature = mission.creature
@@ -358,7 +363,7 @@ def _pay(user: User, mission: DispatchMission) -> dict:
         creature.save()
     mission.status = DispatchMission.COLLECTED
     mission.save(update_fields=["status"])
-    return {"mission": mission, "reward": reward, "levels": levels, "creature": creature}
+    return {"mission": mission, "reward": reward, "levels": levels, "creature": creature, "missions": done}
 
 
 @transaction.atomic
@@ -391,7 +396,7 @@ def collect_all(user: User) -> list[dict]:
 
 @transaction.atomic
 def cancel(user: User, mission_id: int) -> None:
-    """Call the creature back early: no reward, and the offer can be taken again."""
+    """Call the creature back early: no reward, and the offer stays taken for today."""
     mission = (
         DispatchMission.objects.select_for_update()
         .filter(id=mission_id, owner=user, status=DispatchMission.ACTIVE)
@@ -401,14 +406,15 @@ def cancel(user: User, mission_id: int) -> None:
         raise GameError("این مأموریت پیدا نشد.")
     if is_ready(mission):
         raise GameError("این مأموریت تموم شده — جایزه‌ش رو بگیر.")
-    mission.delete()
+    mission.status = DispatchMission.CANCELLED
+    mission.save(update_fields=["status"])
 
 
 def prune_old(user: User, keep_days: int = 7) -> None:
-    """Collected rows only matter for «offer already taken today»; drop the old ones."""
+    """Finished rows only matter for «offer already taken today»; drop the old ones."""
     cutoff = (timezone.localdate() - datetime.timedelta(days=keep_days)).isoformat()
     DispatchMission.objects.filter(
-        owner=user, status=DispatchMission.COLLECTED, offer_day__lt=cutoff
+        owner=user, status__in=(DispatchMission.COLLECTED, DispatchMission.CANCELLED), offer_day__lt=cutoff
     ).delete()
 
 

@@ -409,8 +409,9 @@ def settle_expired_auctions() -> int:
 _settle_expired_auctions = settle_expired_auctions
 
 
-def settle_and_collect_winner_notifications() -> list[tuple[int, str]]:
-    """Settle all expired auctions and return a list of (user_telegram_id, message_text) for winners."""
+def settle_and_collect_winner_notifications() -> list[tuple[int, str, bool]]:
+    """Settle all expired auctions and return (user_telegram_id, message_text, has_boxes) for
+    winners — has_boxes: the prize is boxes waiting to be opened (the message gets a button)."""
     settle_expired_auctions()
 
     unnotified = BlackMarketAuction.objects.filter(
@@ -427,14 +428,17 @@ def settle_and_collect_winner_notifications() -> list[tuple[int, str]]:
                 continue
             winner = auc.highest_bidder
             curr = "طلا" if auc.bid_currency == "coins" else "الماس"
+            boxes = auc.item_type == "arena_chest"
+            got = ("🎁 <i>جعبه‌هات منتظر باز شدنن؛ با دکمه‌ی زیر (یا از منوی «بازار سیاه») بازشون کن.</i>\n" if boxes
+                   else "🎁 <i>جایزه این مزایده به طور خودکار به حساب / انبار شما واریز گردید.</i>\n")
             text = (
                 "🎉 <b>تبریک! شما برنده مزایده بازار سیاه شدید!</b>\n\n"
                 f"🏷 <b>نام آیتم:</b> «<b>{auc.title}</b>»\n"
                 f"💵 <b>مبلغ نهایی ثبت شده:</b> <code>{auc.current_bid:,}</code> {curr}\n\n"
-                "🎁 <i>جایزه این مزایده به طور خودکار به حساب / انبار شما واریز گردید.</i>\n"
+                + got +
                 "✨ جهت شرکت در مزایده‌های جدید، به منوی «⏳ بازار سیاه» سر بزنید."
             )
-            notifications.append((winner.id, text))
+            notifications.append((winner.id, text, boxes))
             auc.winner_notified = True
             auc.save(update_fields=["winner_notified"])
 
@@ -482,11 +486,12 @@ def _deliver_auction_item(user: User, auction: BlackMarketAuction) -> None:
         amt = p.get("amount", 50)
         energy.add_energy(user, amt)
     elif itype == "arena_chest":
-        # real chest contents, opened on the spot and sized to the winner's league
-        from game.arena_chests import grant_chest_contents
+        # unopened reward chests the winner opens themselves («باز کردن جعبه», like the world boss
+        # and cup prizes); the contents are rolled at opening, sized to their league then
+        from game import reward_chests
 
         for _ in range(max(1, int(p.get("count", 1)))):
-            grant_chest_contents(user, p.get("tier", "magical"), user.cup, source="blackmarket")
+            reward_chests.give(user, p.get("tier", "magical"), "blackmarket", auction.id)
     elif itype == "equip_roll":
         # a real piece from the game's own equipment pool at the promised rarity
         from game.equipment import roll_equipment

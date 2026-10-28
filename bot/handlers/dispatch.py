@@ -317,7 +317,7 @@ async def dispatch_cancel_callback(update: Update, context: ContextTypes.DEFAULT
     await safe_edit_message_text(
         query,
         "⚠️ <b>هیولا رو برگردونم؟</b>\n\nمأموریت لغو می‌شه و <b>هیچ جایزه‌ای نمی‌گیری</b>. "
-        "همین مأموریت رو امروز می‌تونی دوباره بفرستی.",
+        "این مأموریت تا فردا دیگه برات باز نمی‌شه.",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
             btn("بله، برگرده", emoji_key="btn_confirm", style=DANGER, callback_data=f"dsp:cancelok:{mission_id}"),

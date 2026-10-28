@@ -128,7 +128,7 @@
         });
         K.on(root, "dp-cancel", function (el) {
           K.confirm({ title: "هیولا رو برگردونم؟", danger: true, ok: "بله، برگرده", cancel: "نه",
-                      text: "«" + el.dataset.name + "» برمی‌گرده؛ مأموریت لغو می‌شه و هیچ جایزه‌ای نمی‌گیری. همین مأموریت رو امروز می‌تونی دوباره بفرستی." }).then(function (yes) {
+                      text: "«" + el.dataset.name + "» برمی‌گرده؛ مأموریت لغو می‌شه و هیچ جایزه‌ای نمی‌گیری. این مأموریت تا فردا دیگه برات باز نمی‌شه." }).then(function (yes) {
             if (!yes) return;
             K.api.post("dispatch/cancel/", { id: +el.dataset.id }, el).then(function () {
               K.invalidate("profile/creatures/");
