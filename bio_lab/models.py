@@ -457,11 +457,13 @@ class DispatchMission(models.Model):
 
     A row stays after it's collected because (owner, offer_day, offer_idx) is ALSO the
     record that «this player already took today's offer N» — the unique constraint makes
-    a double dispatch impossible. Cancelling deletes the row, which frees the offer.
+    a double dispatch impossible. A cancelled mission keeps its row (CANCELLED), so the
+    offer stays taken for the day — send → cancel can't be repeated to farm the counters.
     The creature is busy while status == ACTIVE (game.workers reads that)."""
 
     ACTIVE = "active"
     COLLECTED = "collected"
+    CANCELLED = "cancelled"
 
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="dispatch_missions")
     creature = models.ForeignKey(Creature, on_delete=models.CASCADE, related_name="+")

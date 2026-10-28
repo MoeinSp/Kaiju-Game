@@ -1340,7 +1340,8 @@ def _card_sync(tg_user, chat, action):
             # aren't in the process cache) so the ranking power INCLUDES lab effects —
             # without this, foreign owners' research was silently dropped on a cold miss.
             research.attach_research_multi(members)
-            data["ranked"] = sorted(members, key=_creature_power, reverse=True)[:10]
+            # spare candidates: the caller drops anyone who has left (group.drop_departed)
+            data["ranked"] = sorted(members, key=_creature_power, reverse=True)[:30]
             data["powers"] = {c.id: _creature_power(c) for c in data["ranked"]}
     return data
 
@@ -1705,6 +1706,10 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if action in _CARD_ACTIONS or action == "help":
         try:
             data = await run_db(_card_sync, update.effective_user, message.chat, action)
+            if action == "leaderboard" and data.get("ranked"):
+                from bot.handlers.group import drop_departed
+
+                data["ranked"] = await drop_departed(context.bot, message.chat, data["ranked"])
             text, keyboard = _render(action, data)
             photo_path = None
             if action in ("creature", "upgrade") and data.get("creature"):
@@ -1755,6 +1760,10 @@ async def group_card_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     try:
         data = await run_db(_card_sync, update.effective_user, query.message.chat, action)
+        if action == "leaderboard" and data.get("ranked"):
+            from bot.handlers.group import drop_departed
+
+            data["ranked"] = await drop_departed(context.bot, query.message.chat, data["ranked"])
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
         return
