@@ -31,7 +31,9 @@
   function left(ms) {
     var s = Math.max(0, Math.round((ms - Date.now()) / 1000)), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
     function p(n) { return (n < 10 ? "0" : "") + n; }
-    return d ? d + " روز و " + p(h) + ":" + p(m) : p(h) + ":" + p(m) + ":" + p(s % 60);
+    // the clock sits in an ltr «.num» span: the «N روز و hh:mm» phrase is isolated as rtl (with the
+    // time inside it ltr) or it read «123:38 روز و» instead of «1 روز و 23:38»
+    return d ? "⁧" + d + " روز و ⁦" + p(h) + ":" + p(m) + "⁩⁩" : p(h) + ":" + p(m) + ":" + p(s % 60);
   }
   setInterval(function () {
     Array.prototype.forEach.call(document.querySelectorAll("[data-oend]"), function (el) { el.textContent = left(+el.dataset.oend); });
