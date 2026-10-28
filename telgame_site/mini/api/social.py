@@ -94,6 +94,10 @@ def _alliance_dict(user, al: Alliance) -> dict:
         "war": war,
         "war_points": alliance_mod.perks_info(al)["war_points"],
         "war_week_bonus": alliance_mod.WAR_WINNER_TREASURY_BONUS,
+        "war_member_gold": alliance_mod.WAR_WINNER_MEMBER_GOLD,
+        "war_active_min": alliance_mod.WAR_ACTIVE_MIN_POINTS,
+        "war_chests": alliance_mod.unopened_war_chests(user),
+        "war_chest_rule": {k: clean(alliance_mod.war_chest_text(*v)) for k, v in alliance_mod.WAR_CHESTS.items()},
         "raid": {
             "level": al.raid_level,
             "boss": ({"name": boss.name, "level": boss.level, "element": boss.element,
@@ -133,6 +137,20 @@ def alliance_deposit(request, user, data):
     amount = need_int(data, "amount", minimum=1, maximum=2_000_000_000)
     al = deposit_treasury(user, amount)
     return {"amount": amount, "treasury": al.treasury_gold, "name": al.name}
+
+
+@endpoint("POST")
+def alliance_war_open(request, user, data):
+    """«باز کردن جعبه‌های جنگ» — one-day war reward chests (bot: alliancewar.war_open_callback)."""
+    from game import alliance as alliance_mod, worldboss
+    from telgame_site.mini.core import creature_dict
+
+    results = alliance_mod.open_war_chests(user)
+    return {"count": len(results), "unopened": alliance_mod.unopened_war_chests(user),
+            "coins": sum(r["coins"] for r in results), "dna": sum(r["dna"] for r in results),
+            "diamonds": sum(r["diamonds"] for r in results),
+            "lines": [html.unescape(clean(worldboss._chest_line(r))) for r in results],
+            "creatures": [creature_dict(r["creature"]) for r in results if r.get("creature") is not None]}
 
 
 @endpoint("POST")
@@ -215,7 +233,8 @@ def ranks(request, user):
         return out
 
     # weekly war points (the «جنگ هفتگی» board inside the alliance menu — not gated)
-    out.update({"banner": _feature_img("alliance"), "bonus": alliance_mod.WAR_WINNER_TREASURY_BONUS})
+    out.update({"banner": _feature_img("alliance"), "bonus": alliance_mod.WAR_WINNER_TREASURY_BONUS,
+                "member_gold": alliance_mod.WAR_WINNER_MEMBER_GOLD})
     for i, r in enumerate(alliance_mod.war_leaderboard(), start=1):
         out["rows"].append({"rank": i, "name": r["name"], "value": r["war_points"], "members": None,
                             "me": r["id"] == mine, "reward": None})
@@ -403,6 +422,7 @@ routes = [
     ("alliance/", alliance_panel),
     ("alliance/deposit/", alliance_deposit),
     ("alliance/leave/", alliance_leave),
+    ("alliance/war/open/", alliance_war_open),
     ("ranks/", ranks),
     ("guide/", guide_panel),
     ("guide/topic/", guide_topic),

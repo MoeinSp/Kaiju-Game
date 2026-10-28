@@ -49,6 +49,8 @@
   }
   function warHtml(a) {
     var w = a.war, h = '<div class="h2">' + K.ic("swords") + "جنگ یک‌روزه</div>";
+    if (a.war_chests) h += '<div class="callout good mb">' + K.ic("gift") + '<div class="grow"><b>' + K.n(a.war_chests) +
+      ' جعبه‌ی جنگ منتظر باز شدنه!</b></div><button class="btn sm gold" data-act="war-open">' + K.ic("chest") + "باز کن</button></div>";
     if (w) {
       var total = Math.max(1, w.my_score + w.foe_score);
       h += '<div class="panel pad"><div class="so-war"><div><div class="b cut">' + K.esc(w.my_name) + '</div><div class="so-score t-accent">' + K.n(w.my_score) + '</div><small class="muted">' + K.n(w.my_participants) + " نفر</small></div>" +
@@ -62,8 +64,13 @@
         }).join("") + "</div>";
       }
     } else h += '<div class="panel pad muted sm">الان جنگ فعالی نیست. رهبر یا قائم‌مقام می‌تونه از داخل ربات جنگ یک‌روزه رو شروع کنه.</div>';
+    var cr = a.war_chest_rule;
+    h += '<div class="panel kv mt"><div><span>جعبه‌ی برنده‌ها</span><span>' + K.esc(cr.win) + "</span></div><div><span>جعبه‌ی مساوی</span><span>" + K.esc(cr.draw) +
+      "</span></div><div><span>جعبه‌ی بازنده‌ها</span><span>" + K.esc(cr.lose) + '</span></div></div><p class="note">جعبه فقط به کسایی می‌رسه که توی جنگ شرکت کردن.</p>';
     h += '<div class="h2">' + K.ic("flag") + 'جنگ هفتگی</div><div class="panel kv"><div><span>امتیاز جنگ این هفته</span><span>' + K.n(a.war_points) + "</span></div>" +
-      "<div><span>جایزه‌ی اتحاد اول هفته</span><span>" + K.amounts({ coins: a.war_week_bonus }) + " به خزانه</span></div></div>";
+      "<div><span>جایزه‌ی اتحاد اول هفته</span><span>" + K.amounts({ coins: a.war_week_bonus }) + " به خزانه</span></div>" +
+      "<div><span>جایزه‌ی هر عضو فعال</span><span>" + K.amounts({ coins: a.war_member_gold }) + '</span></div></div>' +
+      '<p class="note">عضو فعال: کسی که اون هفته حداقل ' + K.n(a.war_active_min) + " امتیاز جنگ آورده یا توی یه جنگ یک‌روزه شرکت کرده.</p>";
     var rd = a.raid, b = rd.boss;
     h += '<div class="h2">' + K.ic("skull") + 'رید اتحاد</div><div class="panel pad"><div class="flex between"><span class="b">سطح رید اتحاد: ' + K.n(rd.level) + "</span>" + (b ? K.elTag(b.element) : "") + "</div>" +
       (b ? '<div class="sm" style="margin-top:8px">باس فعال: <b>' + K.esc(b.name) + "</b> · سطح " + K.n(b.level) + '</div><div style="margin:8px 0 5px">' + K.bar(b.hp / Math.max(1, b.max_hp), "bad", "thick") + '</div><div class="sm muted num" style="text-align:left">' + Number(b.hp).toLocaleString("en-US") + " / " + Number(b.max_hp).toLocaleString("en-US") + " HP</div>"
@@ -170,6 +177,13 @@
         K.on(root, "deposit", function () { depositSheet(d, function () { if (ctx.alive()) stats(); }); });
         K.on(root, "ranks", function () { K.go("so_ranks"); });
         K.on(root, "leave", function (el) { leaveFlow(d, ctx, el); });
+        K.on(root, "war-open", function (el) {
+          K.api.post("social/alliance/war/open/", {}, el).then(function (o) {
+            a.war_chests = o.unopened; if (ctx.alive()) draw();
+            K.reward({ title: Number(o.count).toLocaleString("en-US") + " جعبه باز شد!", icon: "chest", coins: o.coins, dna: o.dna, diamonds: o.diamonds,
+                       creatures: o.creatures, text: o.lines.join(" · "), button: "عالیه" });
+          }).catch(function () {});
+        });
       });
     }
   });
@@ -213,7 +227,7 @@
           var note = d.board === "power" ? (d.league_open ? "جایزه‌ی «لیگ اتحادها» آخر هفته به هر عضوِ ۱۰ اتحاد اول داده می‌شه." : "جایزه‌های «لیگ اتحادها» از سطح " + d.league_hall + " تالار مِهر نمایش داده می‌شه.")
             : d.board === "treasury" ? "جدول بر اساس میانگین خزانه‌ی امروزه؛ هر روز به خزانه‌ی ۳ اتحاد اول طلا واریز می‌شه."
             : d.board === "raid" ? "جایزه‌ی هفتگی رید بین ریدرهای برترِ اتحادهای بالای جدول تقسیم می‌شه."
-            : "به خزانه‌ی اتحاد اولِ هر هفته " + Number(d.bonus).toLocaleString("en-US") + " طلا واریز می‌شه.";
+            : "به خزانه‌ی اتحاد اولِ هر هفته " + Number(d.bonus).toLocaleString("en-US") + " طلا واریز می‌شه و هر عضو فعالش " + Number(d.member_gold).toLocaleString("en-US") + " طلا می‌گیره.";
           html += '<p class="note">' + note + "</p>";
         }
         if (!d.in_alliance) html += '<div class="callout mt">' + K.ic("info") + "<div>هنوز عضو هیچ اتحادی نیستی. از «اتحاد» ببین چطور عضو بشی.</div></div>";

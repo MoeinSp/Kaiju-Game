@@ -13,7 +13,7 @@ from bot.utils import alert_text
 from bio_lab.models import Alliance
 from bio_lab.repository import creature_name, get_or_create_user
 from bot.buttons import BATTLE, BUILD, CONFIRM, DANGER, back_btn, btn
-from bot.utils import run_db, safe_edit_message_text
+from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import alliance
 from game.creature import GameError
 
@@ -150,7 +150,8 @@ def _war_sync(tg_user):
     my_name = None
     if my_id:
         my_name = Alliance.objects.filter(id=my_id).values_list("name", flat=True).first()
-    return {"board": board, "my_id": my_id, "my_name": my_name, "bonus": alliance.WAR_WINNER_TREASURY_BONUS}
+    return {"board": board, "my_id": my_id, "my_name": my_name, "bonus": alliance.WAR_WINNER_TREASURY_BONUS,
+            "member_gold": alliance.WAR_WINNER_MEMBER_GOLD, "active_min": alliance.WAR_ACTIVE_MIN_POINTS}
 
 
 async def war_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -161,7 +162,9 @@ async def war_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "⚔️ <b>جنگ هفتگی اتحادها</b>",
         "━━━━━━━━━━━━━━━━━━━━",
         f"<blockquote>هر فعالیتِ اعضا امتیاز جنگ می‌ده. آخر هفته خزانه‌ی اتحاد اول "
-        f"<b>{view['bonus']:,} طلا</b> جایزه می‌گیره!</blockquote>",
+        f"<b>{view['bonus']:,} طلا</b> جایزه می‌گیره و <b>هر عضو فعالش {view['member_gold']:,} طلا</b>!\n"
+        f"<i>عضو فعال: کسی که اون هفته حداقل {view['active_min']} امتیاز جنگ آورده "
+        f"یا توی یه جنگ یک‌روزه شرکت کرده.</i></blockquote>",
         "",
     ]
     medals = ["🥇", "🥈", "🥉"]
@@ -198,7 +201,40 @@ def _war1d_sync(tg_user):
     # leader OR deputy may start the war (the deputy has the leader's full powers)
     al = Alliance.objects.filter(id=user.alliance_id).first()
     can_start = al is not None and user.id in (al.leader_id, al.deputy_id)
-    return {"in_alliance": True, "view": view, "is_leader": can_start}
+    return {"in_alliance": True, "view": view, "is_leader": can_start,
+            "chests": alliance.unopened_war_chests(user)}
+
+
+def _chests(outcome: str) -> str:
+    return alliance.war_chest_text(*alliance.WAR_CHESTS[outcome])
+
+
+def _chest_rows(data: dict) -> list:
+    if not data.get("chests"):
+        return []
+    return [[btn(f"باز کردن جعبه‌های جنگ ({data['chests']})", emoji_key="btn_chest_open", style=CONFIRM,
+                 callback_data="ally_war_open")]]
+
+
+def _war_open_sync(tg_user):
+    from game.worldboss import _chest_line
+
+    user, _ = get_or_create_user(tg_user)
+    return [_chest_line(r) for r in alliance.open_war_chests(user)]
+
+
+async def war_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«باز کردن جعبه‌های جنگ» — from the war-result message, the war panel or «انبار»."""
+    query = update.callback_query
+    try:
+        lines = await run_db(_war_open_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    await query.answer("🎁 باز شد!")
+    await send_screen(update, "🎁 <b>جعبه‌های جنگ اتحاد باز شد!</b>\n━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(lines),
+                      parse_mode="HTML",
+                      reply_markup=InlineKeyboardMarkup([[back_btn("ally_war1d", "جنگ یک‌روزه")]]))
 
 
 def _war1d_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
@@ -209,9 +245,10 @@ def _war1d_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
             "<blockquote>یه حریف هم‌قدرت پیدا می‌شه و ۲۴ ساعت باهاش می‌جنگید. "
             "امتیاز شروع فقط یه بخش کوچیک از قدرت اتحاده — <b>بقیه‌شو باید اعضا با «شرکت» بسازن</b>. "
             "پس هر چی اعضای بیشتری بیان، شانس بردتون بیشتره!\n\n"
-            "🎁 هر کسی که شرکت کنه پاداش می‌گیره و اعضای تیم برنده پاداش خیلی بیشتری می‌گیرن.</blockquote>",
+            "🎁 هر کسی که شرکت کنه پاداش می‌گیره و اعضای تیم برنده پاداش خیلی بیشتری می‌گیرن.\n"
+            f"📦 جعبه: برنده‌ها {_chests('win')} · مساوی {_chests('draw')} · بازنده‌ها {_chests('lose')}</blockquote>",
         ]
-        rows = []
+        rows = _chest_rows(data)
         if data["is_leader"]:
             rows.append([btn("پیدا کردن حریف و شروع جنگ", emoji_key="btn_search", style=BATTLE, callback_data="ally_war_start")])
         else:
@@ -234,7 +271,7 @@ def _war1d_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
         for i, c in enumerate(view["contributors"]):
             tag = medals[i] if i < 3 else "▫️"
             lines.append(f"{tag} {c['name']} — <b>{c['power']:,}</b> امتیاز")
-    rows = []
+    rows = _chest_rows(data)
     if view["ended"]:
         lines.append("\n<i>جنگ تموم شده — نتیجه و پاداش‌ها به‌زودی اعلام می‌شه.</i>")
     elif view["already_rallied"]:
@@ -387,3 +424,4 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(own(war_start_confirm_callback), pattern=r"^ally_war_go$"))
     application.add_handler(CallbackQueryHandler(own(war_rally_callback), pattern=r"^ally_war_rally$"))
     application.add_handler(CallbackQueryHandler(own(war_rally_go_callback), pattern=r"^ally_war_rally_go$"))
+    application.add_handler(CallbackQueryHandler(own(war_open_callback), pattern=r"^ally_war_open$"))

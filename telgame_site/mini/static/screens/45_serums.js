@@ -125,6 +125,8 @@
             "</span><div class='grow'><b>" + K.n(d.boss_chests) + ' جعبه‌ی بازنشده</b><small class="muted">از نبرد با غول سرگردان</small></div>' + K.ic("chevron") + "</button>";
           if (d.cup_chests) html += '<div class="h2">' + K.ic("trophy") + 'جعبه‌های جام</div><button class="panel info" data-act="cup"><span class="ic t-coin">' + K.ic("chest") +
             "</span><div class='grow'><b>" + K.n(d.cup_chests) + ' جعبه‌ی بازنشده</b><small class="muted">جایزه‌ی جام آخر هفته</small></div>' + K.ic("chevron") + "</button>";
+          if (d.war_chests) html += '<div class="h2">' + K.ic("swords") + 'جعبه‌های جنگ اتحاد</div><div class="panel info"><span class="ic t-accent">' + K.ic("chest") +
+            "</span><div class='grow'><b>" + K.n(d.war_chests) + ' جعبه‌ی بازنشده</b><small class="muted">جایزه‌ی جنگ یک‌روزه</small></div><button class="btn sm gold" data-act="war">باز کن</button></div>';
           html += '<div class="h2">' + K.ic("hourglass") + "کارت‌های سرعت</div>" + (d.speedups.length
             ? '<div class="bp-chips">' + d.speedups.map(function (s) { return '<span class="bp-chip">' + K.ic("hourglass") + K.n(s.minutes) + " دقیقه <b>×" + K.n(s.count) + "</b></span>"; }).join("") +
               '</div><p class="note">کارت سرعت رو موقع ارتقای ساختمون‌ها مصرف می‌کنی.</p>'
@@ -142,6 +144,13 @@
         });
         K.on(root, "boss", function () { K.go("wb_boss"); });
         K.on(root, "cup", function () { K.go("tr_home"); });
+        K.on(root, "war", function (el) {
+          K.api.post("social/alliance/war/open/", {}, el).then(function (o) {
+            d.war_chests = o.unopened; draw();
+            K.reward({ title: Number(o.count).toLocaleString("en-US") + " جعبه باز شد!", icon: "chest", coins: o.coins, dna: o.dna, diamonds: o.diamonds,
+                       creatures: o.creatures, text: o.lines.join(" · "), button: "عالیه" });
+          }).catch(function () {});
+        });
         K.on(root, "lab", function () { K.go("sr_lab"); });
       });
     }

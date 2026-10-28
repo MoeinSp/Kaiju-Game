@@ -400,8 +400,14 @@ def _decorate(item) -> dict:
         photo_path = get_feature_image_path("diamond_box")
     elif marker == "lab_unlock":
         reply_markup = _lab_unlock_keyboard(payload)
-    elif marker == "war_settle":
+    elif marker in ("war_settle", "war_chests"):
         reply_markup = None
+        if marker == "war_chests":  # rallied → reward chests waiting to be opened
+            from bot.buttons import CONFIRM
+
+            reply_markup = InlineKeyboardMarkup(
+                [[btn("باز کردن جعبه‌های جنگ", emoji_key="btn_chest_open", style=CONFIRM, callback_data="ally_war_open")]]
+            )
         if payload:  # won
             photo_path = get_notify_image_path("war_win")
     else:

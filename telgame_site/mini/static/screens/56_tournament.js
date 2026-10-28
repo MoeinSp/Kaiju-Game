@@ -117,7 +117,7 @@
       K.on(root, "open-prizes", function (el) {
         K.api.post("tournament/open/", {}, el).then(function (d) {
           var o = d.opened; if (ctx.alive()) draw(d);
-          K.reward({ title: K.n(o.count) + " جعبه باز شد!", icon: "chest", coins: o.coins, dna: o.dna, diamonds: o.diamonds,
+          K.reward({ title: Number(o.count).toLocaleString("en-US") + " جعبه باز شد!", icon: "chest", coins: o.coins, dna: o.dna, diamonds: o.diamonds,
                      creatures: o.creatures, text: o.lines.join(" · "), button: "عالیه" });
         }).catch(function () {});
       });

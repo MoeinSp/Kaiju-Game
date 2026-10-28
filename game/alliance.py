@@ -659,6 +659,10 @@ CAPACITY_PER_LEVEL = 5        # تالار: +5 member slots per level
 PERK_MAX_LEVEL = 5
 HALL_MAX_LEVEL = 4
 WAR_WINNER_TREASURY_BONUS = 5000  # gold added to the top alliance's treasury each week
+WAR_WINNER_MEMBER_GOLD = 25_000   # and paid to EACH active member of that alliance (5× the treasury prize)
+# «active» = earned this many weekly-war points for the alliance during the week (≈10 hunt wins);
+# rallying in a one-day war counts as active on its own
+WAR_ACTIVE_MIN_POINTS = 100
 
 # Member capacity: starts at 10 and تالار adds CAPACITY_PER_LEVEL (5) per level up to 30.
 ALLIANCE_BASE_CAPACITY = 10
@@ -787,6 +791,25 @@ def add_war_points(user: User, points: int) -> None:
         alliance.war_week = week
     alliance.war_points += int(points)
     alliance.save(update_fields=["war_points", "war_week"])
+    _note_member_points(user.id, alliance.id, week, points)
+
+
+def _note_member_points(user_id: int, alliance_id: int, week: str, points: int) -> None:
+    """Remember this member's share of the week's war points (who counts as «active»)."""
+    from bio_lab.models import AllianceWarMember
+
+    row, _ = AllianceWarMember.objects.get_or_create(week=week, user_id=user_id, alliance_id=alliance_id)
+    AllianceWarMember.objects.filter(pk=row.pk).update(points=F("points") + int(points))
+
+
+def active_member_ids(alliance_id: int, week: str) -> list[int]:
+    """Members still in the alliance who were active for it during `week`."""
+    from bio_lab.models import AllianceWarMember
+
+    ids = AllianceWarMember.objects.filter(
+        week=week, alliance_id=alliance_id, points__gte=WAR_ACTIVE_MIN_POINTS
+    ).values_list("user_id", flat=True)
+    return list(User.objects.filter(id__in=list(ids), alliance_id=alliance_id).values_list("id", flat=True))
 
 
 def war_leaderboard(limit: int = 10) -> list[dict]:
@@ -873,15 +896,26 @@ def collect_vault(user: User) -> dict:
 
 
 def settle_war_if_needed() -> list[tuple[int, str]]:
-    """Weekly: once the ISO week rolls over, award the top alliance's treasury a
-    bonus and DM its members, then leave points to reset on next award. Returns
-    (user_id, text) DMs. Safe to call often — settles each week exactly once."""
+    """Weekly: once the ISO week rolls over, award the top alliance's treasury a bonus, pay
+    each of its ACTIVE members WAR_WINNER_MEMBER_GOLD and DM its members, then leave points
+    to reset on next award. Returns (user_id, text) DMs. Safe to call often — settles each
+    week exactly once (the state row is locked)."""
     from bio_lab.models import AllianceWarState
 
     current = _war_week()
-    state, _ = AllianceWarState.objects.get_or_create(id=1)
-    if state.last_settled_week == current:
+    if AllianceWarState.objects.filter(id=1, last_settled_week=current).exists():
         return []
+    AllianceWarState.objects.get_or_create(id=1)
+    with transaction.atomic():
+        state = AllianceWarState.objects.select_for_update().get(id=1)
+        if state.last_settled_week == current:
+            return []
+        return _settle_week(state, current)
+
+
+def _settle_week(state, current: str) -> list[tuple[int, str]]:
+    from bio_lab.models import AllianceWarMember
+    from game.ledger import record_gain
 
     out: list[tuple[int, str]] = []
     # the winner is the top alliance of the week that JUST ended — it used to be the top
@@ -902,12 +936,24 @@ def settle_war_if_needed() -> list[tuple[int, str]]:
         winner.war_points = 0
         winner.war_week = current
         winner.save(update_fields=["treasury_gold", "war_points", "war_week"])
+        active = set(active_member_ids(winner.id, closing))
+        if active:
+            User.objects.filter(id__in=active).update(coins=F("coins") + WAR_WINNER_MEMBER_GOLD)
+            for uid in active:
+                record_gain(User(id=uid), "alliance_war", coins=WAR_WINNER_MEMBER_GOLD)
+        head = (f"🏰 <b>اتحادت «{winner.name}» جنگ هفتگی رو برد!</b>\n"
+                f"خزانه‌ی اتحاد {WAR_WINNER_TREASURY_BONUS:,} طلا جایزه گرفت.")
         for member_id in User.objects.filter(alliance_id=winner.id, notifications_on=True).values_list(
             "id", flat=True
         ):
-            out.append(
-                (member_id, f"🏰 <b>اتحادت «{winner.name}» جنگ هفتگی رو برد!</b> خزانه {WAR_WINNER_TREASURY_BONUS} طلا جایزه گرفت.")
-            )
+            if member_id in active:
+                line = f"\n\n🎁 <b>جایزه‌ی تو:</b> {WAR_WINNER_MEMBER_GOLD:,} طلا — چون این هفته عضو فعال بودی!"
+            else:
+                line = (f"\n\n<i>این هفته عضو فعال نبودی (کمتر از {WAR_ACTIVE_MIN_POINTS} امتیاز جنگ)، "
+                        f"برای همین جایزه‌ی {WAR_WINNER_MEMBER_GOLD:,} طلایی اعضای فعال بهت نرسید.</i>")
+            out.append((member_id, head + line))
+    # only the closing week's rows are needed (for the payout above) — drop older ones
+    AllianceWarMember.objects.exclude(week__in=[closing, current]).delete()
     state.last_settled_week = current
     state.save(update_fields=["last_settled_week", "updated_at"])
     return out
@@ -936,6 +982,30 @@ WAR_MAX_WIN_DNA = 2000
 WAR_MAX_BASE_COINS = 8500
 WAR_MAX_BASE_DNA = 700
 WAR_MVP_BONUS_DIAMONDS = 0  # No extra reward for MVP - normal reward only
+
+# Reward chests for every member who rallied, on top of the gold/DNA: the winners get the
+# better chest, the losers one chest fewer. Stored unopened (source "alliance_war") — the
+# player opens them from the result message, the war panel or «انبار».
+WAR_CHESTS = {"win": ("magical", 2), "draw": ("golden", 2), "lose": ("golden", 1)}
+
+
+def war_chest_text(tier: str, count: int) -> str:
+    from game.arena_chests import ARENA_CHEST_TIERS
+
+    t = ARENA_CHEST_TIERS[tier]
+    return f"{count} × {t['emoji']} {t['name']}"
+
+
+def unopened_war_chests(user: User) -> int:
+    from game import reward_chests
+
+    return reward_chests.unopened(user, "alliance_war").count()
+
+
+def open_war_chests(user: User) -> list[dict]:
+    from game import reward_chests
+
+    return reward_chests.open_all(user, "alliance_war")
 
 
 def _member_power(user: User) -> int:
@@ -1079,6 +1149,8 @@ def rally_war(user: User) -> dict:
     contribution = round(base * barracks_multiplier(my_alliance))
 
     AllianceWarHit.objects.create(war=war, user=user, power=contribution)
+    # fighting in a one-day war makes the member «active» for the weekly war's member prize
+    _note_member_points(user.id, user.alliance_id, _war_week(), WAR_ACTIVE_MIN_POINTS)
     if war.alliance_a_id == user.alliance_id:
         type(war).objects.filter(pk=war.pk).update(score_a=F("score_a") + contribution)
         war.refresh_from_db(fields=["score_a", "score_b"])
@@ -1158,8 +1230,13 @@ def _grant_war_rewards(war, winner) -> dict[int, dict]:
                 mvp_uid = h.user_id
                 break
 
+    from game import reward_chests
+
     for h in hits:
         won = winner is not None and h.user.alliance_id == winner.id
+        tier, n_chests = WAR_CHESTS["win" if won else "draw" if winner is None else "lose"]
+        for _ in range(n_chests):
+            reward_chests.give(h.user, tier, "alliance_war", war.id)
         p_ratio = min(1.0, max(0.15, float(h.power) / MAX_WAR_POWER))
         base_coins = round(WAR_MAX_BASE_COINS * p_ratio)
         base_dna = round(WAR_MAX_BASE_DNA * p_ratio)
@@ -1173,7 +1250,7 @@ def _grant_war_rewards(war, winner) -> dict[int, dict]:
         )
         personal[h.user_id] = {
             "coins": coins, "dna": dna, "diamonds": 0,
-            "mvp": False, "participated": True,
+            "mvp": False, "participated": True, "chests": (tier, n_chests),
         }
     return personal
 
@@ -1237,9 +1314,11 @@ def settle_due_wars() -> list[tuple]:
                     if pers["diamonds"]:
                         reward_bits.append(f"{pers['diamonds']} 💎")
                     line = "\n\n🎁 <b>پاداش مشارکتت:</b> " + " + ".join(reward_bits)
+                    line += (f"\n📦 <b>جعبه‌ی جایزه:</b> {war_chest_text(*pers['chests'])}"
+                             "\n<i>با دکمه‌ی زیر بازشون کن (یا بعداً از «انبار»).</i>")
                     if pers["mvp"]:
                         line += "\n👑 <b>تو بهترین جنگجوی این نبرد بودی (MVP)!</b>"
-                    out.append((uid, head + line, "war_settle", is_win))
+                    out.append((uid, head + line, "war_chests", is_win))
                 else:
                     out.append((
                         uid,

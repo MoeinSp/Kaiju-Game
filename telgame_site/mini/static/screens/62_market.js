@@ -163,7 +163,7 @@
       K.on(root, "open-boxes", function (el) {
         K.api.post("market/open/", {}, el).then(function (o) {
           d.unopened = o.unopened; if (ctx.alive()) draw();
-          K.reward({ title: K.n(o.count) + " جعبه باز شد!", icon: "chest", coins: o.coins, dna: o.dna, diamonds: o.diamonds,
+          K.reward({ title: Number(o.count).toLocaleString("en-US") + " جعبه باز شد!", icon: "chest", coins: o.coins, dna: o.dna, diamonds: o.diamonds,
                      creatures: o.creatures, text: o.lines.join(" · "), button: "عالیه" });
         }).catch(function () {});
       });

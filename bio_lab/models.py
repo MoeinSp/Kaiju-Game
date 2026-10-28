@@ -278,6 +278,21 @@ class AllianceWarHit(models.Model):
         ]
 
 
+class AllianceWarMember(models.Model):
+    """A member's weekly-war points for one alliance and ISO week — who was «active» when the
+    week's winner pays each active member (game/alliance.settle_war_if_needed)."""
+
+    week = models.CharField(max_length=10)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
+    alliance = models.ForeignKey(Alliance, on_delete=models.CASCADE, related_name="+")
+    points = models.IntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["week", "user", "alliance"], name="uq_alliance_war_member")
+        ]
+
+
 class Creature(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="creatures")
     name = models.CharField(max_length=64)  # the species/breed (نژاد) — never player-set
