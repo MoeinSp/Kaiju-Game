@@ -8,8 +8,11 @@ giant-slayer are «armed» and spent by the next arena attack / hunt / defence /
 Each serum also has its own level, 1 to 5, raised inside the lab (gold + DNA + time, one at
 a time, never above the building's level). The level sets the size of its effect.
 
-Rules that keep it fair: no daily cap — the shelf size and the brewing time are the limit;
-nothing is ever lost — a full shelf only pauses the brewing; no serum touches diamonds.
+Rules that keep it fair: brewing has no daily cap — the shelf size and the brewing time are the
+limit — but adrenaline is capped (ADRENALINE_DAILY): a hunt costs 1 energy, so an uncapped
++8-energy serum paid its own DNA back and printed gold without end; the heal serum is capped per
+dungeon run (dungeon.HEALS_PER_RUN). Nothing is ever lost — a full shelf only pauses the brewing;
+no serum touches diamonds.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ from game.creature import GameError, InsufficientGoldError
 
 LAB = "serum_lab"
 PING_DAILY = 2   # «سرم آماده‌ست» DMs a day at most (opt-in)
+ADRENALINE_DAILY = 6   # adrenaline uses a day (the only use cap; see the module docstring)
 SHELL_HOURS = 8
 MAX_LEVEL = 5
 
@@ -179,7 +183,7 @@ def state(user: User) -> dict:
     return {
         "level": level, "capacity": cap, "brew_minutes": step // 60, "brew_cost": brew_cost(user) if level else 0,
         "stock_total": sum((row.stock or {}).values()), "queue": list(row.queue), "next_in": next_in,
-        "used": used, "kinds": kinds,
+        "used": used, "adrenaline_daily": ADRENALINE_DAILY, "kinds": kinds,
         "upgrading": {"kind": row.upgrade_kind, "label": KINDS[row.upgrade_kind]["label"],
                       "left": max(0, int((row.upgrade_ends_at - now).total_seconds()))} if row.upgrade_kind else None,
         "armed": sorted((row.armed or {}).keys()),
@@ -287,7 +291,9 @@ def use(user: User, kind: str, member_id: int | None = None) -> dict:
         if int((row.stock or {}).get(kind, 0)) <= 0:
             raise GameError(f"سرم «{label}» نداری. اول بسازش.")
         today = _today()
-        used = row.used_count if row.used_day == today else 0   # counted for stats only, no cap
+        used = row.used_count if row.used_day == today else 0   # adrenaline used today
+        if kind == "adrenaline" and used >= ADRENALINE_DAILY:
+            raise GameError(f"امروز {ADRENALINE_DAILY} آدرنالین مصرف کردی؛ سقف روزانه‌ی آدرنالین پر شده. فردا دوباره.")
         if kind in ARMED and kind in (row.armed or {}):
             raise GameError(f"یه «{label}» الان فعاله و منتظر لحظه‌شه.")
         klvl = int((row.levels or {}).get(kind, 1))
@@ -311,7 +317,8 @@ def use(user: User, kind: str, member_id: int | None = None) -> dict:
             row.armed = {**(row.armed or {}), kind: {"lvl": klvl, "until": until}}
             note = "فعال شد: " + KINDS[kind]["where"]
         row.stock = {**row.stock, kind: int(row.stock.get(kind, 0)) - 1}
-        row.used_day, row.used_count = today, used + 1
+        if kind == "adrenaline":
+            row.used_day, row.used_count = today, used + 1
         if not row.queue:   # room on the shelf again: a paused queue would restart here anyway
             row.brew_started_at = None
         elif row.brew_started_at is None:

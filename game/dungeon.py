@@ -35,6 +35,9 @@ KEY_CAP = 4                # the daily refill stops here (bought keys may go abo
 KEY_HARD_CAP = 10
 LOSS_PAYOUT = 0.5          # share of the banked loot kept after a defeat / quitting
 HP_POWER_FLOOR = 0.6       # a kaiju at 1 HP fights at 60% of its power, full HP at 100%
+# «سرم ترمیم» per run: runs have no time limit and serums brew without a daily cap, so without
+# this a player could wait between rooms, brew, and enter every fight at full HP
+HEALS_PER_RUN = 2
 # difficulty tiers: enemy power ×, gold/DNA ×, black runes ×, relic chance on a win, shadow cores
 # dropped by the boss (min, max), and the tier that must be cleared first (best_difficulty)
 DIFFICULTIES = {
@@ -88,8 +91,12 @@ def week_favoured(element: str) -> list[str]:
     return [e for e in constants.ELEMENTS if constants.is_strong_against(e, element)]
 # normal difficulty is sized to a team that just cleared campaign stage 50 (~13k team power,
 # ~4.4k per kaiju); maxed players get their challenge from the harder tiers (phase 2)
-ROOM_POWER = (3000, 5000)  # first room → last room, before the boss
+ROOM_POWER = (3000, 5000)  # first room → last room, before the boss — the base hard / nightmare multiply
 BOSS_POWER = 6500
+# «معمولی» on its own, softer base: on the one above, a fresh stage-50 team (~4.4k a kaiju) won
+# only ~11% of normal runs (simulated); hard and nightmare keep the base above
+NORMAL_ROOM_POWER = (2500, 4000)
+NORMAL_BOSS_POWER = 5200
 
 DOOR_WEIGHTS = {"fight": 45, "elite": 15, "treasure": 15, "spring": 10, "trap": 10, "merchant": 5}
 DOORS = {
@@ -116,10 +123,12 @@ SHOP = {
     # 80, not 40: a nightmare win pays ~40-50 runes back, so a 40-rune key bought itself again
     # and farmed shadow cores without end
     "key": {"label": "کلید سیاه‌چال", "price": 80},
-    "magical_chest": {"label": "جعبه‌ی جادویی", "price": 40},
+    # chests priced well above a run's runes: a maxed player earns ~85-110 runes a day, so a
+    # 90-rune omega (30-70% mythic) was a mythic every other day
+    "magical_chest": {"label": "جعبه‌ی جادویی", "price": 80},
     "legendary_gear": {"label": "تجهیزات افسانه‌ای تصادفی", "price": 60},
     "relic": {"label": "اثر باستانی تصادفی (۳ روزه)", "price": 70},
-    "mega_chest": {"label": "جعبه‌ی امگا", "price": 90},
+    "mega_chest": {"label": "جعبه‌ی امگا", "price": 200},
     "shadow_core": {"label": "هسته‌ی سایه (فرم سیاه)", "price": 60},
 }
 
@@ -215,10 +224,12 @@ def _enemy(state: dict, kind: str) -> dict:
         power = round(base * {"boss": 1.4, "elite": 1.25}.get(kind, 1.0))
         name = rng.choice(BOSS_NAMES if kind == "boss" else ENEMY_NAMES)
     elif kind == "boss":
-        power = round(BOSS_POWER * tier * rng.uniform(0.97, 1.03))
+        boss = NORMAL_BOSS_POWER if state.get("difficulty", "normal") == "normal" else BOSS_POWER
+        power = round(boss * tier * rng.uniform(0.97, 1.03))
         name = rng.choice(BOSS_NAMES)
     else:
-        power = (ROOM_POWER[0] + (room - 1) * (ROOM_POWER[1] - ROOM_POWER[0]) / max(1, ROOMS - 1)) * rng.uniform(0.95, 1.05)
+        lo, hi = NORMAL_ROOM_POWER if state.get("difficulty", "normal") == "normal" else ROOM_POWER
+        power = (lo + (room - 1) * (hi - lo) / max(1, ROOMS - 1)) * rng.uniform(0.95, 1.05)
         power = round(power * tier * (1.25 if kind == "elite" else 1.0))
         name = rng.choice(ENEMY_NAMES)
     week_el = state.get("week_el")
@@ -260,6 +271,8 @@ def heal_member(user: User, member_id: int | None, pct: int) -> str:
     for, or the most hurt. A downed member can't be brought back with it."""
     user, run = _load(user)
     state = run.state
+    if state.get("heals", 0) >= HEALS_PER_RUN:
+        raise GameError(f"توی هر ورود به سیاه‌چال فقط {HEALS_PER_RUN} سرم ترمیم می‌شه زد.")
     alive = [m for m in state["team"] if 0 < m["hp"] < 100]
     if member_id is not None:
         m = next((x for x in state["team"] if x["id"] == member_id), None)
@@ -275,6 +288,7 @@ def heal_member(user: User, member_id: int | None, pct: int) -> str:
         m = min(alive, key=lambda x: x["hp"])
     before = m["hp"]
     m["hp"] = min(100, m["hp"] + int(pct))
+    state["heals"] = state.get("heals", 0) + 1
     _log(state, f"سرم ترمیم: {m['name']} +{m['hp'] - before}٪ جون")
     run.state = state
     run.save(update_fields=["state"])
