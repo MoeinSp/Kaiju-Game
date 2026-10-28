@@ -158,6 +158,7 @@ def _bp_sync(tg_user):
         "boss": reward_chests.unopened(user, "worldboss").count(),
         "cup": reward_chests.unopened(user, "tournament").count(),
         "war": reward_chests.unopened(user, "alliance_war").count(),
+        "offer": reward_chests.unopened(user, "offer").count(),
         "cards": [(c.minutes, c.count) for c in list_speedup_cards(user)],
         "serums": [(k, SR.KINDS[k]["label"], int((row.stock or {}).get(k, 0))) for k in SR.ORDER if row and int((row.stock or {}).get(k, 0)) > 0],
     }
@@ -166,7 +167,7 @@ def _bp_sync(tg_user):
 def _bp_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
     lines = ["🎒 <b>انبار</b>", _DIV, "<i>جعبه‌های جایزه‌ی باز نشده، کارت‌های سرعت و سرم‌هات.</i>", _DIV]
     rows = []
-    if not (v["boss"] or v["cup"] or v["war"]):
+    if not (v["boss"] or v["cup"] or v["war"] or v["offer"]):
         lines.append("📦 جعبه‌ی جایزه‌ی باز نشده: <i>نداری</i>")
     if v["boss"]:
         lines.append(f"🐉 جعبه‌های غول: <code>{v['boss']}</code>")
@@ -177,6 +178,9 @@ def _bp_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
     if v["war"]:
         lines.append(f"⚔️ جعبه‌های جنگ اتحاد: <code>{v['war']}</code>")
         rows.append([btn("باز کردن جعبه‌های جنگ", emoji_key="btn_chest_open", style=CONFIRM, callback_data="ally_war_open")])
+    if v["offer"]:
+        lines.append(f"🎁 جعبه‌های بسته‌ی خریدنی: <code>{v['offer']}</code>")
+        rows.append([btn("باز کردن جعبه‌های بسته", emoji_key="btn_chest_open", style=CONFIRM, callback_data="rc:open:offer")])
     lines.append("⏱ کارت سرعت: " + ("، ".join(f"{m} دقیقه ×{n}" for m, n in v["cards"]) if v["cards"] else "<i>نداری</i>"))
     lines.append("🧪 سرم‌ها: " + ("، ".join(f"{label} ×{n}" for _k, label, n in v["serums"]) if v["serums"] else "<i>نداری</i>"))
     rows.append([btn("آزمایشگاه سرم", emoji_key="btn_serums", style=PRIMARY, callback_data="sr:home"),
@@ -194,6 +198,29 @@ async def backpack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await send_screen(update, text, parse_mode="HTML", reply_markup=kb)
 
 
+def _open_sync(tg_user, source):
+    from game import reward_chests
+    from game.worldboss import _chest_line
+
+    user, _ = get_or_create_user(tg_user)
+    return [_chest_line(r) for r in reward_chests.open_all(user, source)]
+
+
+async def open_chests(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«باز کردن جعبه‌ها» for boxes that have no screen of their own (rc:open:<source>) —
+    today the boxes inside a bought pack."""
+    q = update.callback_query
+    try:
+        lines = await run_db(_open_sync, update.effective_user, q.data.split(":")[2])
+    except GameError as e:
+        await q.answer(str(e), show_alert=True)
+        return
+    await q.answer("🎁 باز شد!")
+    await send_screen(update, "🎁 <b>جعبه‌ها باز شد!</b>\n" + _DIV + "\n" + "\n".join(lines), parse_mode="HTML",
+                      reply_markup=InlineKeyboardMarkup([[btn("انبار", emoji_key="btn_backpack", style=PRIMARY, callback_data="bp:home")]]))
+
+
 def register(application) -> None:
     application.add_handler(CallbackQueryHandler(serum_lab, pattern=r"^sr:(home|up|x|n|[bu]:[a-z]+|ug:[a-z]+)$"))
     application.add_handler(CallbackQueryHandler(backpack, pattern=r"^bp:home$"))
+    application.add_handler(CallbackQueryHandler(open_chests, pattern=r"^rc:open:offer$"))

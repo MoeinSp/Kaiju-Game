@@ -231,6 +231,43 @@ def create_pack_pending(user: User, pack_id: int) -> PurchaseRequest:
     )
 
 
+def create_item_pending(user: User, item_id: int) -> PurchaseRequest:
+    """An awaiting-receipt request for a real-money shop item («پیشنهاد ویژه» / بسته‌ی ویژه).
+    Its contents are snapshotted now; the per-player limit counts orders under review too."""
+    import json
+
+    from bio_lab.models import ShopItem, ShopItemPurchase
+
+    if user.receipt_blocked:
+        raise GameError("⛔ دسترسی تو به ثبت رسید خرید مسدود شده. با پشتیبانی در تماس باش.")
+    item = ShopItem.objects.filter(id=item_id, is_active=True).first()
+    if item is None or not item.price_toman:
+        raise GameError("این بسته دیگه در دسترس نیست.")
+    if item.is_offer and item.offer_ends_at and item.offer_ends_at <= timezone.now():
+        raise GameError("زمان این پیشنهاد ویژه تموم شده.")
+    if item.max_per_user:
+        bought = ShopItemPurchase.objects.filter(user=user, item=item).values_list("count", flat=True).first() or 0
+        waiting = PurchaseRequest.objects.filter(user=user, shop_item=item, status="pending").count()
+        if bought + waiting >= item.max_per_user:
+            raise GameError(f"این بسته رو هر نفر حداکثر {item.max_per_user} بار می‌تونه بخره و تو سقفت رو زدی"
+                            + (" (یکی هم در انتظار تأییده)." if waiting else "."))
+    PurchaseRequest.objects.filter(user=user, status="awaiting_receipt").delete()
+    snapshot = {"id": item.id, "title": item.title, "contents": json.loads(item.contents_json)}
+    return PurchaseRequest.objects.create(
+        user=user, price_toman=item.price_toman, status="awaiting_receipt",
+        shop_item=item, item_json=json.dumps(snapshot, ensure_ascii=False),
+    )
+
+
+def item_snapshot(req: PurchaseRequest) -> dict | None:
+    import json
+
+    try:
+        return json.loads(req.item_json) if req.item_json else None
+    except ValueError:
+        return None
+
+
 def attach_receipt(req_id: int, user_id: int, file_id: str) -> PurchaseRequest | None:
     """Bind the uploaded receipt photo to the request and move it to 'pending' review.
     Returns the request, or None if it's gone / not this user's / not awaiting a receipt."""
@@ -256,6 +293,18 @@ def approve(req_id: int) -> dict:
     if req.subscription_tier:
         from game.subscription import activate_subscription
         activate_subscription(user, req.subscription_tier, days=30)
+    notes, chests = [], False
+    snap = item_snapshot(req)
+    if snap:
+        from bio_lab.models import ShopItemPurchase
+        from game import itemshop
+
+        notes = itemshop.grant_contents(user, snap["contents"], ref=snap.get("id"))
+        chests = any(c.get("type") == "chest" for c in snap["contents"])
+        if req.shop_item_id:
+            row, _ = ShopItemPurchase.objects.select_for_update().get_or_create(user=user, item_id=req.shop_item_id)
+            row.count += 1
+            row.save(update_fields=["count"])
     user.coins += req.coins
     user.dna_fragments += req.dna
     user.diamonds += req.diamonds
@@ -275,6 +324,8 @@ def approve(req_id: int) -> dict:
         "price": req.price_toman,
         "channel_chat_id": req.channel_chat_id,
         "channel_message_id": req.channel_message_id,
+        "item": snap["title"] if snap else None, "notes": notes, "chests": chests,
+        "summary": request_summary(req),
     }
 
 
@@ -297,6 +348,7 @@ def reject(req_id: int) -> dict:
         "subscription_tier": req.subscription_tier,
         "channel_chat_id": req.channel_chat_id,
         "channel_message_id": req.channel_message_id,
+        "summary": request_summary(req),
     }
 
 
@@ -344,6 +396,8 @@ def daily_purchase_report(day) -> dict:
         total_toman += req.price_toman or 0
         if req.subscription_tier:
             sub_counts[req.subscription_tier] = sub_counts.get(req.subscription_tier, 0) + 1
+        elif req.item_json:
+            pass   # a pack: counted in the total, its contents are in the row summary
         else:
             res_totals["coins"] += req.coins
             res_totals["dna"] += req.dna
@@ -371,6 +425,11 @@ def daily_purchase_report(day) -> dict:
 
 def request_summary(req: PurchaseRequest) -> str:
     """A one-line-per-resource summary of what a request buys (only non-zero items)."""
+    snap = item_snapshot(req)
+    if snap:
+        from game import itemshop
+
+        return f"🎁 {snap['title']}: {itemshop.content_summary(snap['contents'])}"
     if getattr(req, "subscription_tier", None):
         from game.subscription import SUBSCRIPTION_TIERS
         sub = SUBSCRIPTION_TIERS.get(req.subscription_tier)

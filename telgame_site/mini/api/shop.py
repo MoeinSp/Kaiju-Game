@@ -233,6 +233,7 @@ def offers_payload(user) -> list[dict]:
         out.append({
             "id": it.id, "title": clean(it.title), "gets": _summary(contents),
             "price_coins": it.price_coins, "price_diamonds": it.price_diamonds,
+            "price_toman": it.price_toman, "was_toman": o["was_toman"],
             "was_coins": o["was_coins"], "was_diamonds": o["was_diamonds"], "discount": it.offer_discount,
             "ends_in": o["ends_in"], "max": it.max_per_user or 0, "bought": o["bought"],
             "art": f"img/{art}.jpg",
@@ -277,7 +278,7 @@ def _store_payload(user) -> dict:
             contents = []
         items.append({
             "id": it.id, "title": clean(it.title), "gets": _summary(contents),
-            "price_coins": it.price_coins, "price_diamonds": it.price_diamonds,
+            "price_coins": it.price_coins, "price_diamonds": it.price_diamonds, "price_toman": it.price_toman,
             "max_per_user": it.max_per_user or 0, "bought": bought.get(it.id, 0),
         })
 
@@ -609,9 +610,11 @@ def paid_order(request, user, data):
     from game import botconfig, outbox, purchase
 
     botconfig.refresh_cache()
-    kind = need_str(data, "kind", ("pack", "preset", "vip", "custom"))
+    kind = need_str(data, "kind", ("pack", "preset", "vip", "custom", "item"))
     if kind == "vip":
         req = purchase.create_subscription_pending(user, need_str(data, "tier"))
+    elif kind == "item":   # a real-money «پیشنهاد ویژه» / بسته‌ی ویژه (ShopItem.price_toman)
+        req = purchase.create_item_pending(user, need_int(data, "id", 1))
     else:
         if not botconfig.store_ready():
             raise GameError("خرید درون‌برنامه‌ای الان فعال نیست.")

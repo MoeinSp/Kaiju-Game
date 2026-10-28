@@ -575,6 +575,25 @@ async def item_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await query.answer("این آیتم در دسترس نیست.", show_alert=True)
         return
 
+    if item.price_toman:   # real money: show what it holds, then the card-to-card flow
+        from game import itemshop
+
+        await query.answer()
+        lines = [
+            "🛍 <b>خرید بسته‌ی ویژه</b>",
+            "━━━━━━━━━━━━━━━━━━━━",
+            f"<blockquote>📦 بسته: {item.emoji} <b>{item.title}</b>\n"
+            f"🎁 محتویات: <i>{itemshop.content_summary(json.loads(item.contents_json))}</i>\n"
+            f"💰 قیمت: <b>{item.price_toman:,} تومان</b></blockquote>",
+            "پرداخت کارت‌به‌کارته: کارت رو می‌بینی، واریز می‌کنی و عکس رسید رو همین‌جا می‌فرستی.",
+        ]
+        keyboard = InlineKeyboardMarkup([[
+            btn("پرداخت", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"sitem_pay:{item.id}"),
+            back_btn("menu:shop", "انصراف"),
+        ]])
+        await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
+        return
+
     # If it costs diamonds, ask for confirmation
     if item.price_diamonds > 0:
         _, _, diamonds, _, _ = await run_db(_panel_sync, update.effective_user)
@@ -602,6 +621,29 @@ async def item_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     # If coins only, buy directly
     await item_do_buy_callback(update, context)
+
+
+def _item_pay_sync(tg_user, item_id):
+    from game import purchase
+
+    user, _ = get_or_create_user(tg_user)
+    return purchase.create_item_pending(user, item_id)
+
+
+async def item_pay_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """A real-money pack: open the order and show the card (the receipt photo goes here)."""
+    from bot.handlers.purchase import _AWAIT_RECEIPT_KEY, _receipt_screen
+
+    query = update.callback_query
+    try:
+        req = await run_db(_item_pay_sync, update.effective_user, int(query.data.split(":")[1]))
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    context.user_data[_AWAIT_RECEIPT_KEY] = req.id
+    await query.answer()
+    text, kb = _receipt_screen(req)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
 
 
 async def item_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -909,5 +951,6 @@ def register(application) -> None:
     application.add_handler(CommandHandler("items", hall_gated("item_shop", item_shop_panel), filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(item_buy_callback, pattern=r"^sitem_buy:\d+$"))
     application.add_handler(CallbackQueryHandler(item_do_buy_callback, pattern=r"^sitem_do_buy:\d+$"))
+    application.add_handler(CallbackQueryHandler(item_pay_callback, pattern=r"^sitem_pay:\d+$"))
     application.add_handler(CallbackQueryHandler(gem_kaiju_buy_callback, pattern=r"^gemk_buy$"))
     application.add_handler(CallbackQueryHandler(gem_kaiju_do_buy_callback, pattern=r"^gemk_do_buy$"))

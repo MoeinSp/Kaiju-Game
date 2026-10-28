@@ -137,6 +137,8 @@ def parse_price_line(text: str) -> tuple[int, int]:
     return coins, diamonds
 
 
+OFFER_CHEST_SOURCE = "offer"   # reward_chests source of the boxes inside a shop pack
+
 # «پیشنهاد ویژه» (ShopItem.is_offer …): the owner's builder keeps it in draft["offer"] =
 # {"on": bool, "ends": unix time | None, "discount": 0-90, "art": picture key}
 OFFER_FIELDS = ("is_offer", "offer_ends_at", "offer_discount", "offer_art")
@@ -174,6 +176,7 @@ def active_offers(user: User) -> list[dict]:
             continue
         was = (lambda price: int(round(price / (1 - it.offer_discount / 100))) if it.offer_discount and price else 0)
         out.append({"item": it, "bought": n, "was_coins": was(it.price_coins), "was_diamonds": was(it.price_diamonds),
+                    "was_toman": was(it.price_toman),
                     "ends_in": max(0, int((it.offer_ends_at - now).total_seconds())) if it.offer_ends_at else None})
     return out
 
@@ -182,6 +185,7 @@ def create_item_from_draft(draft: dict) -> ShopItem:
     return ShopItem.objects.create(
         title=draft["title"][:64], emoji=draft.get("emoji", "🎁"),
         price_coins=draft.get("price_coins", 0), price_diamonds=draft.get("price_diamonds", 0),
+        price_toman=draft.get("price_toman", 0),
         contents_json=json.dumps(draft["contents"], ensure_ascii=False),
         max_per_user=max(0, int(draft.get("max_per_user", 0))),
         **_offer_fields(draft),
@@ -197,11 +201,12 @@ def update_item_from_draft(item_id: int, draft: dict) -> ShopItem:
     item.emoji = draft.get("emoji", "🎁")
     item.price_coins = draft.get("price_coins", 0)
     item.price_diamonds = draft.get("price_diamonds", 0)
+    item.price_toman = draft.get("price_toman", 0)
     item.contents_json = json.dumps(draft["contents"], ensure_ascii=False)
     item.max_per_user = max(0, int(draft.get("max_per_user", 0)))
     for k, v in _offer_fields(draft).items():
         setattr(item, k, v)
-    item.save(update_fields=["title", "emoji", "price_coins", "price_diamonds",
+    item.save(update_fields=["title", "emoji", "price_coins", "price_diamonds", "price_toman",
                              "contents_json", "max_per_user", *OFFER_FIELDS])
     return item
 
@@ -211,7 +216,7 @@ def item_to_draft(item: ShopItem) -> dict:
     with the same button flow, then re-save (draft carries edit_id)."""
     return {
         "title": item.title, "emoji": item.emoji or "🎁",
-        "price_coins": item.price_coins, "price_diamonds": item.price_diamonds,
+        "price_coins": item.price_coins, "price_diamonds": item.price_diamonds, "price_toman": item.price_toman,
         "contents": json.loads(item.contents_json), "max_per_user": item.max_per_user,
         "edit_id": item.id,
         "offer": {"on": item.is_offer, "ends": item.offer_ends_at.timestamp() if item.offer_ends_at else None,
@@ -298,10 +303,34 @@ def content_summary(contents: list[dict]) -> str:
         elif t == "equipment":
             nm = f" «{c['name']}»" if c.get("name") else ""
             parts.append(f"{constants.EQUIPMENT_SLOT_LABELS[c['slot']]} {constants.RARITY_LABELS[c['rarity']]}{nm}")
+        elif t in EXTRA_TYPES:
+            parts.append(extra_label(c))
     return " + ".join(parts) or "—"
 
 
+# Contents only a real-money pack used to lack: prize boxes (opened by the player), VIP days,
+# dungeon keys and shadow cores. Granted by grant_contents like the rest.
+EXTRA_TYPES = ("chest", "vip", "dungeon_keys", "shadow_cores")
+
+
+def extra_label(c: dict) -> str:
+    t = c["type"]
+    if t == "chest":
+        from game.arena_chests import ARENA_CHEST_TIERS
+
+        return f"{c.get('count', 1)}× {ARENA_CHEST_TIERS[c['tier']]['name']}"
+    if t == "vip":
+        from game.subscription import SUBSCRIPTION_TIERS
+
+        return f"{SUBSCRIPTION_TIERS[c['tier']]['name']} {c['days']} روزه"
+    if t == "dungeon_keys":
+        return f"{c['amount']} کلید سیاه‌چال"
+    return f"{c['amount']} هسته‌ی سایه"
+
+
 def price_text(item: ShopItem) -> str:
+    if item.price_toman:
+        return f"{item.price_toman:,} تومان"
     bits = []
     if item.price_coins:
         bits.append(f"{item.price_coins:,} طلا")
@@ -364,9 +393,10 @@ def _make_equipment(user: User, slot: str, rarity: str, name: str | None = None)
     )
 
 
-def grant_contents(user: User, contents: list[dict]) -> list[str]:
+def grant_contents(user: User, contents: list[dict], ref: int | None = None) -> list[str]:
     """Apply every component to `user` and return human-readable notes. Coins/dna/
-    diamonds are batched into one save; creatures/equipment are created as rows."""
+    diamonds are batched into one save; creatures/equipment are created as rows; prize boxes
+    wait unopened (reward_chests, source "offer", `ref` = the shop item)."""
     notes = []
     money_fields = set()
     for c in contents:
@@ -401,6 +431,25 @@ def grant_contents(user: User, contents: list[dict]) -> list[str]:
         elif t == "equipment":
             it = _make_equipment(user, c["slot"], c["rarity"], c.get("name"))
             notes.append(f"{constants.EQUIPMENT_SLOT_LABELS[c['slot']]} «{it.name}» {constants.RARITY_LABELS[c['rarity']]}")
+        elif t == "chest":
+            from game import reward_chests
+
+            for _ in range(max(1, int(c.get("count", 1)))):
+                reward_chests.give(user, c["tier"], OFFER_CHEST_SOURCE, ref)
+            notes.append(extra_label(c) + " (باز نشده)")
+        elif t == "vip":
+            from game.subscription import activate_subscription
+
+            activate_subscription(user, c["tier"], days=int(c["days"]))
+            notes.append(extra_label(c))
+        elif t in ("dungeon_keys", "shadow_cores"):
+            from bio_lab.models import DungeonProfile
+            from django.db.models import F
+
+            field = "keys" if t == "dungeon_keys" else "shadow_cores"
+            prof, _ = DungeonProfile.objects.get_or_create(user=user)
+            DungeonProfile.objects.filter(pk=prof.pk).update(**{field: F(field) + int(c["amount"])})
+            notes.append(extra_label(c))
     if money_fields:
         user.save(update_fields=list(money_fields))
     return notes
@@ -413,6 +462,8 @@ def buy(user: User, item_id: int) -> dict:
     item = ShopItem.objects.select_for_update().filter(id=item_id, is_active=True).first()
     if item is None:
         raise GameError("این آیتم دیگه در دسترس نیست.")
+    if item.price_toman:
+        raise GameError("این بسته با پرداخت کارت‌به‌کارت خریده می‌شه، نه با طلا و الماس.")
     if item.is_offer and item.offer_ends_at and item.offer_ends_at <= timezone.now():
         raise GameError("زمان این پیشنهاد ویژه تموم شده.")
     # per-user purchase limit
@@ -438,7 +489,7 @@ def buy(user: User, item_id: int) -> dict:
     user.save(update_fields=["coins", "diamonds"])
 
     contents = json.loads(item.contents_json)
-    notes = grant_contents(user, contents)
+    notes = grant_contents(user, contents, ref=item.id)
     if purchase is not None:
         purchase.count += 1
         purchase.save(update_fields=["count"])

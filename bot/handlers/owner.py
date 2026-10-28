@@ -719,14 +719,19 @@ _ISH_PRESETS = {
     "coins": [1000, 5000, 10000, 50000, 100000],
     "diamonds": [10, 50, 100, 500, 1000],
     "dna": [50, 100, 200, 500, 1000],
+    "dungeon_keys": [1, 2, 3, 5],
+    "shadow_cores": [1, 2, 3, 5, 10],
 }
-# quick price presets for the button-driven price picker (💎 and 🪙)
+# quick price presets for the button-driven price picker (💎, 🪙 and real-money Toman)
 _ISH_PRICE_DIAMONDS = [10, 50, 100, 200, 300, 500, 800, 1000, 2000]
 _ISH_PRICE_COINS = [1000, 5000, 10000, 50000, 100000, 500000, 1000000]
+_ISH_PRICE_TOMAN = [29_000, 49_000, 79_000, 99_000, 149_000, 199_000, 299_000]
 _ISH_CTYPE_LABELS = {
     "coins": f"{get_emoji('coin')} طلا", "diamonds": f"{get_emoji('diamond')} جم", "dna": f"{get_emoji('dna')} DNA",
     "speedup": "⏱ کارت سرعت", "creature": "🐉 هیولا", "equipment": f"{get_emoji('atk')} تجهیزات",
+    "chest": "📦 جعبه", "vip": "👑 اشتراک VIP", "dungeon_keys": "🗝 کلید سیاه‌چال", "shadow_cores": "🌑 هسته‌ی سایه",
 }
+_ISH_VIP_DAYS = [3, 7, 15, 30]
 
 
 def _ish_draft(context) -> dict:
@@ -744,6 +749,8 @@ def _ish_home_markup(draft: dict):
         price_bits.append(f"{draft['price_coins']:,} طلا")
     if draft["price_diamonds"]:
         price_bits.append(f"{draft['price_diamonds']} 💎")
+    if draft.get("price_toman"):
+        price_bits.append(f"{draft['price_toman']:,} تومان (پرداخت کارت‌به‌کارت)")
     price = " + ".join(price_bits) or "— (تنظیم نشده)"
     contents = itemshop.content_summary(draft["contents"]) if draft["contents"] else "— (خالی)"
     target = draft.get("target")
@@ -778,7 +785,7 @@ def _ish_home_markup(draft: dict):
     if is_user:
         ready = bool(draft["title"]) and bool(draft["contents"])
     else:
-        ready = bool(draft["title"]) and (draft["price_coins"] or draft["price_diamonds"]) and draft["contents"]
+        ready = bool(draft["title"]) and (draft["price_coins"] or draft["price_diamonds"] or draft.get("price_toman")) and draft["contents"]
     if ready:
         save_label = (f"{get_emoji('gift')} بده به کاربر" if is_user
                       else f"{get_emoji('confirm')} افزودن به شاپ روزانه" if is_daily
@@ -941,19 +948,44 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
             cur.append(f"{draft['price_coins']:,} طلا")
         if draft["price_diamonds"]:
             cur.append(f"{draft['price_diamonds']} 💎")
+        if draft.get("price_toman"):
+            cur.append(f"{draft['price_toman']:,} تومان")
         cur_txt = " + ".join(cur) or "— (تنظیم نشده)"
         rows = [
             [btn(f"{get_emoji('diamond')} قیمت جم", style=ADMIN, callback_data="ish:pd"),
              btn(f"{get_emoji('coin')} قیمت طلا", style=ADMIN, callback_data="ish:pc")],
         ]
-        if draft["price_coins"] or draft["price_diamonds"]:
+        if draft.get("target") is None:   # the daily shop and gifts take no real money
+            rows.append([btn("💵 قیمت تومانی (پولی)", style=ADMIN, callback_data="ish:pt")])
+        if draft["price_coins"] or draft["price_diamonds"] or draft.get("price_toman"):
             rows.append([btn("🧹 پاک‌کردن قیمت", style=DANGER, callback_data="ish:pclr")])
         rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:home")])
         await query.answer()
         await safe_edit_message_text(
-            query, f"💰 <b>قیمت‌گذاری</b>\nقیمت فعلی: <b>{cur_txt}</b>\n\nکدوم ارز رو تنظیم کنم؟",
+            query, f"💰 <b>قیمت‌گذاری</b>\nقیمت فعلی: <b>{cur_txt}</b>\n\nکدوم ارز رو تنظیم کنم؟\n"
+                   "<i>قیمت تومانی یعنی خرید با کارت‌به‌کارت و رسید (مثل بقیه‌ی خریدهای پولی)؛ "
+                   "با گذاشتنش قیمت طلا و جم صفر می‌شه و برعکس.</i>",
             parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows),
         )
+        return
+    if verb == "pt":
+        rows = [[btn(f"{v:,} تومان", style=ADMIN, callback_data=f"ish:ptv:{v}")] for v in _ISH_PRICE_TOMAN]
+        rows.append([btn("🔢 مبلغ دلخواه", style=NAV, callback_data="ish:ptx")])
+        rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:price")])
+        await query.answer()
+        await safe_edit_message_text(query, "💵 قیمت تومانی رو انتخاب کن:", parse_mode="HTML",
+                                     reply_markup=InlineKeyboardMarkup(rows))
+        return
+    if verb == "ptv":
+        draft["price_toman"] = int(parts[2])
+        draft["price_coins"] = draft["price_diamonds"] = 0
+        await query.answer("قیمت تومانی تنظیم شد.")
+        await _ish_show_home(update, context)
+        return
+    if verb == "ptx":
+        context.user_data[AWAITING_ADMIN_KEY] = {"action": "ish_price_one", "field": "price_toman"}
+        await query.answer()
+        await query.message.reply_text("🔢 مبلغ رو به تومان بفرست (مثلاً 99000):")
         return
     if verb in ("pd", "pc"):
         is_dia = verb == "pd"
@@ -969,11 +1001,13 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
         return
     if verb == "pdv":
         draft["price_diamonds"] = int(parts[2])
+        draft["price_toman"] = 0
         await query.answer("قیمت جم تنظیم شد.")
         await _ish_show_home(update, context)
         return
     if verb == "pcv":
         draft["price_coins"] = int(parts[2])
+        draft["price_toman"] = 0
         await query.answer("قیمت طلا تنظیم شد.")
         await _ish_show_home(update, context)
         return
@@ -986,12 +1020,16 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
     if verb == "pclr":
         draft["price_coins"] = 0
         draft["price_diamonds"] = 0
+        draft["price_toman"] = 0
         await query.answer("قیمت پاک شد.")
         await _ish_show_home(update, context)
         return
     if verb == "addc":
-        rows = [[btn(_ISH_CTYPE_LABELS[k], style=ADMIN, callback_data=f"ish:ct:{k}")]
-                for k in ("coins", "diamonds", "dna", "speedup", "creature", "equipment")]
+        kinds = ["coins", "diamonds", "dna", "speedup", "creature", "equipment", "chest", "dungeon_keys", "shadow_cores"]
+        if draft.get("target") != "daily":   # VIP days only in packs and gifts
+            kinds.append("vip")
+        rows = [[btn(_ISH_CTYPE_LABELS[k], style=ADMIN, callback_data=f"ish:ct:{k}") for k in kinds[i:i + 2]]
+                for i in range(0, len(kinds), 2)]
         rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:home")])
         await query.answer()
         await safe_edit_message_text(query, "➕ <b>نوع محتوا رو انتخاب کن:</b>", parse_mode="HTML",
@@ -1024,6 +1062,23 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
             await safe_edit_message_text(query, "🐉 نایابیِ هیولا رو انتخاب کن:", parse_mode="HTML",
                                          reply_markup=InlineKeyboardMarkup(rows))
             return
+        if kind == "chest":
+            from game.arena_chests import ARENA_CHEST_TIERS
+
+            rows = [[btn(f"{t['emoji']} {t['name']}", style=ADMIN, callback_data=f"ish:ch:{k}")] for k, t in ARENA_CHEST_TIERS.items()]
+            rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:addc")])
+            await query.answer()
+            await safe_edit_message_text(query, "📦 نوع جعبه رو انتخاب کن (بازیکن خودش بازش می‌کنه):", parse_mode="HTML",
+                                         reply_markup=InlineKeyboardMarkup(rows))
+            return
+        if kind == "vip":
+            from game.subscription import SUBSCRIPTION_TIERS
+
+            rows = [[btn(f"{t['badge']} {t['name']}", style=ADMIN, callback_data=f"ish:vp:{k}")] for k, t in SUBSCRIPTION_TIERS.items()]
+            rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:addc")])
+            await query.answer()
+            await safe_edit_message_text(query, "👑 کدوم اشتراک؟", parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+            return
         if kind == "equipment":
             rows = [[btn(constants.EQUIPMENT_SLOT_LABELS[s], style=ADMIN, callback_data=f"ish:eq:{s}")]
                     for s in constants.EQUIPMENT_SLOTS]
@@ -1051,6 +1106,28 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
         await query.answer()
         await safe_edit_message_text(query, f"تعداد کارت {minutes}دقیقه‌ای:", parse_mode="HTML",
                                      reply_markup=InlineKeyboardMarkup(rows))
+        return
+    if verb == "ch":
+        rows = [[btn(f"×{c}", style=ADMIN, callback_data=f"ish:chc:{parts[2]}:{c}") for c in (1, 2, 3, 5)]]
+        rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:ct:chest")])
+        await query.answer()
+        await safe_edit_message_text(query, "📦 چندتا؟", parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+        return
+    if verb == "chc":
+        draft["contents"].append({"type": "chest", "tier": parts[2], "count": int(parts[3])})
+        await query.answer("اضافه شد.")
+        await _ish_show_home(update, context)
+        return
+    if verb == "vp":
+        rows = [[btn(f"{d} روز", style=ADMIN, callback_data=f"ish:vpd:{parts[2]}:{d}") for d in _ISH_VIP_DAYS]]
+        rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:ct:vip")])
+        await query.answer()
+        await safe_edit_message_text(query, "👑 چند روز؟", parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+        return
+    if verb == "vpd":
+        draft["contents"].append({"type": "vip", "tier": parts[2], "days": int(parts[3])})
+        await query.answer("اضافه شد.")
+        await _ish_show_home(update, context)
         return
     if verb == "spc":
         draft["contents"].append({"type": "speedup", "minutes": int(parts[2]), "count": int(parts[3])})
@@ -1200,7 +1277,7 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
             )
             return
 
-        if not (draft.get("title") and (draft["price_coins"] or draft["price_diamonds"]) and draft["contents"]):
+        if not (draft.get("title") and (draft["price_coins"] or draft["price_diamonds"] or draft.get("price_toman")) and draft["contents"]):
             await query.answer("عنوان، قیمت و حداقل یه محتوا لازمه.", show_alert=True)
             return
         # the SAME builder feeds two destinations: the special-items shop (ShopItem)
@@ -5573,7 +5650,13 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
             await message.reply_text("فقط یه عدد بفرست (مثلاً 500).")
             return
-        _ish_draft(context)[awaiting["field"]] = int(digits)
+        draft = _ish_draft(context)
+        draft[awaiting["field"]] = int(digits)
+        # real money and gold/diamond prices never mix
+        if awaiting["field"] == "price_toman":
+            draft["price_coins"] = draft["price_diamonds"] = 0
+        else:
+            draft["price_toman"] = 0
         await _ish_show_home(update, context, edit=False)
         return
 

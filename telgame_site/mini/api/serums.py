@@ -62,10 +62,11 @@ def _backpack(user) -> dict:
     boss = reward_chests.unopened(user, "worldboss").count()
     cup = reward_chests.unopened(user, "tournament").count()
     war = reward_chests.unopened(user, "alliance_war").count()
+    offer = reward_chests.unopened(user, "offer").count()
     row = SerumLab.objects.filter(user_id=user.id).first()
     stock = {k: int(v) for k, v in ((row.stock if row else {}) or {}).items() if int(v) > 0}
     return {
-        "boss_chests": boss, "cup_chests": cup, "war_chests": war,
+        "boss_chests": boss, "cup_chests": cup, "war_chests": war, "offer_chests": offer,
         "speedups": [{"minutes": c.minutes, "count": c.count} for c in list_speedup_cards(user)],
         "serums": [{"key": k, "label": SR.KINDS[k]["label"], "count": stock[k], "img": f"img/serum_{k}.jpg"} for k in SR.ORDER if k in stock],
     }
@@ -76,6 +77,24 @@ def backpack(request, user):
     return _backpack(user)
 
 
+@endpoint("POST")
+def backpack_open(request, user, data):
+    """«باز کردن جعبه‌ها» for boxes with no screen of their own — the boxes in a bought pack
+    (bot: serums.open_chests, «rc:open:offer»)."""
+    import html
+
+    from game import reward_chests, worldboss
+    from telgame_site.mini.core import creature_dict
+
+    source = need_str(data, "source", ("offer",))
+    results = reward_chests.open_all(user, source)
+    return {"count": len(results), "unopened": reward_chests.unopened(user, source).count(),
+            "coins": sum(r["coins"] for r in results), "dna": sum(r["dna"] for r in results),
+            "diamonds": sum(r["diamonds"] for r in results),
+            "lines": [html.unescape(clean(worldboss._chest_line(r))) for r in results],
+            "creatures": [creature_dict(r["creature"]) for r in results if r.get("creature") is not None]}
+
+
 routes = [
     ("", home),
     ("brew/", brew),
@@ -84,4 +103,5 @@ routes = [
     ("upgrade/", upgrade),
     ("notify/", notify),
     ("backpack/", backpack),
+    ("backpack/open/", backpack_open),
 ]

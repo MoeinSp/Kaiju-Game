@@ -1401,6 +1401,9 @@ class ShopItem(models.Model):
     description = models.CharField(max_length=256, blank=True, default="")
     price_coins = models.IntegerField(default=0)
     price_diamonds = models.IntegerField(default=0)
+    # real money (card-to-card, game/purchase.py): when set the item is bought only through a
+    # receipt the owner approves, and the gold/diamond prices stay 0
+    price_toman = models.BigIntegerField(default=0)
     contents_json = models.TextField(default="[]")  # list[{"type": ..., ...}]
     is_active = models.BooleanField(default=True)
     sort_order = models.IntegerField(default=0)
@@ -1582,6 +1585,10 @@ class PurchaseRequest(models.Model):
     channel_chat_id = models.BigIntegerField(null=True, blank=True)
     channel_message_id = models.BigIntegerField(null=True, blank=True)
     subscription_tier = models.CharField(max_length=16, default="", blank=True)
+    # a real-money ShopItem («پیشنهاد ویژه» / بسته‌ی ویژه): what it held when ordered, as
+    # {"id", "title", "contents"} — approval grants this snapshot even if the item is edited later
+    shop_item = models.ForeignKey("ShopItem", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    item_json = models.TextField(default="", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
 

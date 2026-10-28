@@ -18,6 +18,11 @@
     var d = cur === "diamonds";
     return '<span class="b ' + (d ? "t-diamond" : "t-coin") + '">' + K.ic(d ? "gem" : "coin") + " " + K.n(n) + "</span>";
   }
+  // a pack's price: real money (card-to-card) or gold / diamonds
+  function packPrice(it) {
+    if (it.price_toman) return '<span class="b t-gold num">' + K.n(it.price_toman) + '</span> <small>تومان</small>';
+    return [it.price_coins ? money("coins", it.price_coins) : "", it.price_diamonds ? money("diamonds", it.price_diamonds) : ""].filter(Boolean).join(" + ");
+  }
   function pct(s) { return '<span class="num">' + K.esc(s) + "</span>٪"; }
   function seg(items, current, attr) {
     return '<div class="seg">' + items.map(function (it) {
@@ -290,11 +295,13 @@
         if (!items.length) return "";
         return '<div class="of-strip' + (items.length > 1 ? " many" : "") + '">' + items.map(function (o) {
           var dia = !!o.price_diamonds, n = o.price_diamonds || o.price_coins, w = dia ? o.was_diamonds : o.was_coins;
+          var cost = o.price_toman ? K.offers.price(o, true)
+            : (w > n ? '<s class="num">' + K.n(w) + "</s>" : "") + K.ic(dia ? "diamond" : "coin") + '<span class="num">' + K.n(n) + "</span>";
           return '<button class="of-scard" data-act="special" data-id="' + o.id + '"><img src="' + K.asset(o.art) + '" alt="">' +
             (o.discount ? '<span class="of-off num">-' + o.discount + "%</span>" : "") +
             '<span class="of-sbody"><small class="of-kick">' + K.ic("spark") + "پیشنهاد ویژه</small><b>" + K.esc(o.title) + "</b>" +
             (o.ends_in != null ? '<span class="of-stime">' + K.ic("clock") + '<span class="num" data-oend="' + (Date.now() + o.ends_in * 1000) + '"></span></span>' : "") +
-            '<span class="of-sprice">' + (w > n ? '<s class="num">' + K.n(w) + "</s>" : "") + K.ic(dia ? "diamond" : "coin") + '<span class="num">' + K.n(n) + "</span></span></span></button>";
+            '<span class="of-sprice">' + cost + "</span></span></button>";
         }).join("") + "</div>";
       }
       function daily(d) {
@@ -323,7 +330,7 @@
         if (!d.items.length) return K.state("gift", "فعلاً بسته‌ای نیست", "بسته‌های ویژه هر از گاهی اینجا می‌آن. بعداً سر بزن.");
         return banner(d.img_pack || d.img, "بسته‌های ویژه", "بعضی‌هاشون سقف خرید دارن") + d.items.map(function (it) {
           var full = it.max_per_user > 0 && it.bought >= it.max_per_user;
-          var price = [it.price_coins ? money("coins", it.price_coins) : "", it.price_diamonds ? money("diamonds", it.price_diamonds) : ""].filter(Boolean).join(" + ") || '<span class="t-good b">رایگان</span>';
+          var price = packPrice(it) || '<span class="t-good b">رایگان</span>';
           return '<div class="panel pad shs-pack' + (full ? " out" : "") + '"><div class="flex"><span class="ico-box lg t-gold">' + K.ic(full ? "check" : "gift") + '</span><div class="grow"><div class="b">' + K.esc(it.title) + '</div><div class="sm muted">' + K.esc(it.gets) + "</div></div></div>" +
             '<div class="flex between mt"><div>' + price + (it.max_per_user > 0 ? '<div class="xs muted">خریدهای تو: ' + K.n(it.bought) + " از " + K.n(it.max_per_user) + "</div>" : "") + "</div>" +
             '<button class="btn primary sm" data-act="pack" data-id="' + it.id + '"' + (full ? " disabled" : "") + ">" + (full ? "سقفت پر شد" : "خرید") + "</button></div></div>";
@@ -445,12 +452,17 @@
       });
       K.on(root, "pack", function (el) {
         var it = scr.data.items.filter(function (x) { return x.id === +el.dataset.id; })[0]; if (!it) return;
-        K.confirm({ title: "خرید بسته‌ی ویژه", icon: "gift", ok: "تأیید و خرید",
-          html: kv([["بسته", K.esc(it.title)], ["محتویات", K.esc(it.gets)],
-            ["قیمت", [it.price_coins ? money("coins", it.price_coins) : "", it.price_diamonds ? money("diamonds", it.price_diamonds) : ""].filter(Boolean).join(" + ") || "رایگان"]]) })
+        K.confirm({ title: "خرید بسته‌ی ویژه", icon: "gift", ok: it.price_toman ? "پرداخت" : "تأیید و خرید",
+          html: kv([["بسته", K.esc(it.title)], ["محتویات", K.esc(it.gets)], ["قیمت", packPrice(it) || "رایگان"]]) +
+            (it.price_toman ? '<p class="note">پرداخت کارت‌به‌کارته؛ بعد از تأیید رسید، بسته به حسابت می‌آد.</p>' : "") })
           .then(function (yes) {
             if (!yes || busy) return;
             busy = true;
+            if (it.price_toman) {
+              K.api.post("shop/paid/order/", { kind: "item", id: it.id }, el).then(function (p) { busy = false; if (K.paySheet) K.paySheet(p); },
+                function () { busy = false; });
+              return;
+            }
             K.api.post("shop/store/item/", { id: it.id }, el).then(function (r) {
               busy = false;
               K.invalidate("profile/creatures/", "profile/equipment/");

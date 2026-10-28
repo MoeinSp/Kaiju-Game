@@ -38,6 +38,7 @@
       if (ev.target.closest("[data-bot]")) openBot(p.bot);
     });
   }
+  K.paySheet = paySheet;
 
   K.screen("sh_buy", {
     title: "خرید الماس و طلا", tab: "more",

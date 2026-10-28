@@ -1,7 +1,8 @@
 /* «پیشنهاد ویژه»: the owner's special packs (ShopItem.is_offer, set in the bot's pack builder)
    pushed where players see them — a mid-screen card once a day, a bubble with a countdown on the
    home screen, a strip at the top of the shop — plus the right moment: out of energy, short of
-   gold, just lost a fight. Buying goes through the shop's own endpoint (shop/store/item/).
+   gold, just lost a fight. Buying goes through the shop's own endpoint (shop/store/item/); a
+   real-money pack (price_toman) opens an order instead and shows the card (K.paySheet, 61_store).
 
      K.offers.list(fresh) → Promise<[offer]>     K.offers.top() → the soonest-ending offer or null
      K.offers.open(offer)                          K.offers.bubble() → html for the home screen
@@ -36,7 +37,13 @@
     Array.prototype.forEach.call(document.querySelectorAll("[data-oend]"), function (el) { el.textContent = left(+el.dataset.oend); });
   }, 1000);
   function clock(o) { return o.endAt ? '<span class="num" data-oend="' + o.endAt + '">' + left(o.endAt) + "</span>" : ""; }
+  function toman(o, was) {
+    return (was && o.was_toman > o.price_toman ? '<s class="num">' + K.n(o.was_toman) + "</s>" : "") +
+      '<span class="num">' + K.n(o.price_toman) + '</span> <small>تومان</small>';
+  }
+  K.offers.price = function (o, was) { return o.price_toman ? toman(o, was) : price(o, was); };
   function price(o, was) {
+    if (o.price_toman) return toman(o, was);
     var cur = o.price_diamonds ? "diamond" : "coin", n = o.price_diamonds || o.price_coins, w = o.price_diamonds ? o.was_diamonds : o.was_coins;
     var both = o.price_diamonds && o.price_coins ? ' <span class="of-plus">+ ' + K.ic("coin") + K.n(o.price_coins) + "</span>" : "";
     return (was && w > n ? '<s class="num">' + K.n(w) + "</s>" : "") + K.ic(cur) + '<span class="num">' + K.n(n) + "</span>" + both;
@@ -68,6 +75,12 @@
     buy.onclick = function () {
       // the first tap arms it (the price is right there on the key), the second one buys
       if (!armed || Date.now() - armed > 4000) { armed = Date.now(); el.classList.add("sure"); K.haptic(); return; }
+      if (o.price_toman) {   // real money: an order and the card to pay; granted when the receipt is approved
+        K.api.post("shop/paid/order/", { kind: "item", id: o.id }, buy).then(function (p) {
+          close(); if (K.paySheet) K.paySheet(p);
+        }, function () { el.classList.remove("sure"); armed = 0; });
+        return;
+      }
       K.api.post("shop/store/item/", { id: o.id }, buy).then(function (r) {
         close();
         if (r.store && r.store.special) K.offers.set(r.store.special);

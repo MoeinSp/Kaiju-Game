@@ -114,7 +114,9 @@
         function draw() {
           var html = '<div class="banner sr-ban" style="background-image:url(\'' + K.asset("img/hub_backpack.jpg") + '\')"><div><div class="ttl">انبار</div>' +
             '<div class="sm">جعبه‌های جایزه‌ی باز نشده، کارت‌های سرعت و سرم‌هات.</div></div></div>';
-          if (!d.boss_chests && !d.cup_chests && !d.war_chests) html += '<div class="h2">' + K.ic("chest") + 'جعبه‌های جایزه</div><p class="note">جعبه‌ی جایزه‌ی باز نشده‌ای نداری.</p>';
+          if (d.offer_chests) html += '<div class="h2">' + K.ic("gift") + 'جعبه‌های بسته‌ی خریدنی</div><div class="panel info"><span class="ic t-gold">' + K.ic("chest") +
+            "</span><div class='grow'><b>" + K.n(d.offer_chests) + ' جعبه‌ی بازنشده</b><small class="muted">از بسته‌ای که خریدی</small></div><button class="btn sm gold" data-act="offer">باز کن</button></div>';
+          if (!d.boss_chests && !d.cup_chests && !d.war_chests && !d.offer_chests) html += '<div class="h2">' + K.ic("chest") + 'جعبه‌های جایزه</div><p class="note">جعبه‌ی جایزه‌ی باز نشده‌ای نداری.</p>';
           if (d.boss_chests) html += '<div class="h2">' + K.ic("skull") + 'جعبه‌های غول</div><button class="panel info" data-act="boss"><span class="ic t-mythic">' + K.ic("chest") +
             "</span><div class='grow'><b>" + K.n(d.boss_chests) + ' جعبه‌ی بازنشده</b><small class="muted">از نبرد با غول سرگردان</small></div>' + K.ic("chevron") + "</button>";
           if (d.cup_chests) html += '<div class="h2">' + K.ic("trophy") + 'جعبه‌های جام</div><button class="panel info" data-act="cup"><span class="ic t-coin">' + K.ic("chest") +
@@ -133,6 +135,13 @@
         draw();
         K.on(root, "boss", function () { K.go("wb_boss"); });
         K.on(root, "cup", function () { K.go("tr_home"); });
+        K.on(root, "offer", function (el) {
+          K.api.post("serums/backpack/open/", { source: "offer" }, el).then(function (o) {
+            d.offer_chests = o.unopened; draw();
+            K.reward({ title: Number(o.count).toLocaleString("en-US") + " جعبه باز شد!", icon: "chest", coins: o.coins, dna: o.dna, diamonds: o.diamonds,
+                       creatures: o.creatures, text: o.lines.join(" · "), button: "عالیه" });
+          }).catch(function () {});
+        });
         K.on(root, "war", function (el) {
           K.api.post("social/alliance/war/open/", {}, el).then(function (o) {
             d.war_chests = o.unopened; draw();

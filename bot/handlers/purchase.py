@@ -5,6 +5,8 @@ upload a receipt photo. Owner side: gets the receipt with تایید / رد / ب
 مدیریت کاربر buttons. Approval credits the resources (game.purchase).
 """
 
+import html
+
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
@@ -407,9 +409,9 @@ async def receipt_photo_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 # ── owner: review actions ─────────────────────────────────────────────────────
-async def _notify_user(context, user_id: int, text: str) -> None:
+async def _notify_user(context, user_id: int, text: str, reply_markup=None) -> None:
     try:
-        await context.bot.send_message(chat_id=user_id, text=text, parse_mode="HTML")
+        await context.bot.send_message(chat_id=user_id, text=text, parse_mode="HTML", reply_markup=reply_markup)
     except Exception:  # noqa: BLE001
         pass
 
@@ -420,6 +422,8 @@ async def _update_channel_status(context, res: dict, status_html: str) -> None:
     if not chat_id or not msg_id:
         return
     bits = []
+    if res.get("summary") and res.get("item"):
+        bits.append(res["summary"])
     if res.get("subscription_tier"):
         from game.subscription import SUBSCRIPTION_TIERS
         sub = SUBSCRIPTION_TIERS.get(res["subscription_tier"])
@@ -471,10 +475,14 @@ async def buy_approve_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     if res["diamonds"]:
         bits.append(f"{res['diamonds']:,} {get_emoji('diamond')}")
     notify_text = f"{get_emoji('confirm')} <b>خریدت تأیید شد!</b>\n{get_emoji('gift')} " + ("\n".join(bits) if res.get("subscription_tier") else ("به حسابت اضافه شد: " + " · ".join(bits)))
-    await _notify_user(
-        context, res["user_id"],
-        notify_text,
-    )
+    markup = None
+    if res.get("item"):   # a pack: its own contents, and an open button for any boxes in it
+        notify_text = (f"{get_emoji('confirm')} <b>خریدت تأیید شد!</b>\n{get_emoji('gift')} <b>{html.escape(res['item'])}</b>\n"
+                       + "\n".join(f"• {html.escape(n)}" for n in res["notes"]))
+        if res.get("chests"):
+            markup = InlineKeyboardMarkup([[btn("باز کردن جعبه‌ها", emoji_key="btn_chest_open", style=CONFIRM,
+                                                callback_data="rc:open:offer")]])
+    await _notify_user(context, res["user_id"], notify_text, markup)
     if query.message is not None and query.message.caption is not None:
         await query.edit_message_caption(
             caption=(query.message.caption_html or "") + f"\n\n{get_emoji('confirm')} <b>تأیید شد.</b>", parse_mode="HTML"
