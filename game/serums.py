@@ -8,8 +8,8 @@ giant-slayer are «armed» and spent by the next arena attack / hunt / defence /
 Each serum also has its own level, 1 to 5, raised inside the lab (gold + DNA + time, one at
 a time, never above the building's level). The level sets the size of its effect.
 
-Rules that keep it fair: at most DAILY_USES uses a day; nothing is ever lost — a full shelf
-only pauses the brewing; no serum touches diamonds.
+Rules that keep it fair: no daily cap — the shelf size and the brewing time are the limit;
+nothing is ever lost — a full shelf only pauses the brewing; no serum touches diamonds.
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ from bio_lab.models import SerumLab, User
 from game.creature import GameError, InsufficientGoldError
 
 LAB = "serum_lab"
-DAILY_USES = 6
 PING_DAILY = 2   # «سرم آماده‌ست» DMs a day at most (opt-in)
 SHELL_HOURS = 8
 MAX_LEVEL = 5
@@ -47,7 +46,7 @@ ORDER = ["rage", "tracker", "adrenaline", "shell", "heal", "slayer"]
 ARMED = ("rage", "tracker", "shell", "slayer")     # wait for their moment; the others act at once
 
 # by building level: shelf size and minutes per serum
-CAPACITY = {1: 3, 2: 4, 3: 5, 4: 6, 5: 8}
+CAPACITY = {1: 3, 2: 3, 3: 4, 4: 4, 5: 5}   # 3 places, +1 at levels 3 and 5
 BREW_MINUTES = {1: 30, 2: 30, 3: 25, 4: 20, 5: 15}
 # raising a serum TO level n: (gold, dna, hours)
 UPGRADE = {2: (20_000, 400, 2), 3: (60_000, 1_000, 6), 4: (150_000, 2_000, 12), 5: (300_000, 4_000, 24)}
@@ -180,7 +179,7 @@ def state(user: User) -> dict:
     return {
         "level": level, "capacity": cap, "brew_minutes": step // 60, "brew_cost": brew_cost(user) if level else 0,
         "stock_total": sum((row.stock or {}).values()), "queue": list(row.queue), "next_in": next_in,
-        "used": used, "daily": DAILY_USES, "kinds": kinds,
+        "used": used, "kinds": kinds,
         "upgrading": {"kind": row.upgrade_kind, "label": KINDS[row.upgrade_kind]["label"],
                       "left": max(0, int((row.upgrade_ends_at - now).total_seconds()))} if row.upgrade_kind else None,
         "armed": sorted((row.armed or {}).keys()),
@@ -288,9 +287,7 @@ def use(user: User, kind: str, member_id: int | None = None) -> dict:
         if int((row.stock or {}).get(kind, 0)) <= 0:
             raise GameError(f"سرم «{label}» نداری. اول بسازش.")
         today = _today()
-        used = row.used_count if row.used_day == today else 0
-        if used >= DAILY_USES:
-            raise GameError(f"امروز {DAILY_USES} سرم مصرف کردی؛ سقف روزانه پر شده. فردا دوباره.")
+        used = row.used_count if row.used_day == today else 0   # counted for stats only, no cap
         if kind in ARMED and kind in (row.armed or {}):
             raise GameError(f"یه «{label}» الان فعاله و منتظر لحظه‌شه.")
         klvl = int((row.levels or {}).get(kind, 1))
