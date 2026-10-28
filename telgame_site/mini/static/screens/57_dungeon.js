@@ -213,7 +213,10 @@
   function shopSheet(btn, onDone) {
     btn.classList.add("busy");
     K.api.get("dungeon/shop/").then(function (d) {
-      var box = null;
+      // the screen behind is refreshed only once the sheet (or the reward shown over it) is
+      // closed — refreshing at once closed the sheet and swallowed the purchase message
+      var box = null, dirty = false;
+      function refresh() { if (dirty && onDone) { dirty = false; onDone(); } }
       function body(s, note) {
         return '<div class="grab"></div><div class="pad"><div class="ttl" style="font-size:18px">فروشگاه سیاه‌چال</div>' +
           '<p class="lead" style="margin:4px 0 12px">رون سیاه: ' + runes(s.black_runes) + " · کلید: " + K.n(s.keys) + "</p>" + (note || "") +
@@ -230,12 +233,23 @@
                 (x.relic ? "<br>" + K.esc(x.relic.label) + ": " + K.esc(x.relic.desc) : "") + (x.item ? "<br>" + K.esc(x.item.name) : "") +
                 (x.chest ? "<br>" + K.amounts(x.chest) : "") + "</div></div>";
               K.haptic("ok"); box.innerHTML = body(s, note); wire();
-              if (onDone) onDone();
+              dirty = true;
+              // a chest / gear / relic: a reward card (it takes the sheet's place); a key or a core:
+              // a toast, and the sheet stays open with the note on top
+              if (x.chest) {
+                K.reward({ title: "«" + x.label + "» باز شد!", icon: "chest", coins: x.chest.coins, dna: x.chest.dna, diamonds: x.chest.diamonds,
+                           creatures: x.chest.creatures, text: x.chest.item || "", button: "عالیه" }).then(refresh);
+              } else if (x.relic || x.item) {
+                K.reward({ title: "«" + x.label + "» خریدی!", icon: "gift", button: "عالیه",
+                           text: x.relic ? x.relic.label + ": " + x.relic.desc : x.item.name }).then(refresh);
+              } else {
+                K.toast("«" + x.label + "» خریدی · الان " + (b.dataset.buy === "key" ? Number(s.keys).toLocaleString("en-US") + " کلید" : Number(s.shadow_cores).toLocaleString("en-US") + " هسته‌ی سایه") + " داری", "ok");
+              }
             }).catch(function () {});
           };
         });
       }
-      box = K.sheet(body(d)); wire();
+      box = K.sheet(body(d), { onClose: refresh }); wire();
     }).catch(function (e) { K.toast(e.message, "err"); }).finally(function () { btn.classList.remove("busy"); });
   }
 
@@ -268,8 +282,10 @@
                 var x = s.done;
                 K.haptic("ok");
                 if (x.lord) K.toast("ارباب سایه شدی! نشانش کنار اسمت نشست.");
-                box = K.sheet(body(s, '<div class="callout good mt">' + K.ic("spark") + "<div><b>" + K.esc(x.name) + " به فرم سیاه " + K.n(x.level) + " رسید!</b></div></div>")); wire();
-                if (onDone) onDone();
+                // the screen behind refreshes when this sheet closes (at once it closed the sheet too)
+                box = K.sheet(body(s, '<div class="callout good mt">' + K.ic("spark") + "<div><b>" + K.esc(x.name) + " به فرم سیاه " + K.n(x.level) + " رسید!</b></div></div>"),
+                              { onClose: function () { if (onDone) onDone(); } }); wire();
+                K.toast(x.name + " به فرم سیاه " + x.level + " رسید!", "ok");
               }).catch(function () {});
             });
           };

@@ -150,7 +150,7 @@ def quit_run(request, user, data):
 
 def _shop_state(user: User) -> dict:
     prof = D.profile(user)
-    return {"black_runes": prof.black_runes, "keys": prof.keys,
+    return {"black_runes": prof.black_runes, "keys": prof.keys, "shadow_cores": prof.shadow_cores,
             "items": [{"key": k, "label": v["label"], "price": v["price"]} for k, v in D.SHOP.items()]}
 
 
@@ -168,8 +168,12 @@ def shop_buy(request, user, data):
     if got.get("item") is not None:
         res["item"] = {"name": _txt(got["item"].name), "rarity": got["item"].rarity}
     if got.get("chest"):
-        res["chest"] = {"coins": got["chest"].get("coins", 0), "dna": got["chest"].get("dna", 0),
-                        "diamonds": got["chest"].get("diamonds", 0)}
+        from telgame_site.mini.core import creature_dict
+
+        c = got["chest"]
+        res["chest"] = {"coins": c.get("coins", 0), "dna": c.get("dna", 0), "diamonds": c.get("diamonds", 0),
+                        "creatures": [creature_dict(c["creature"])] if c.get("creature") is not None else [],
+                        "item": _txt(c["item"].name) if c.get("item") is not None else None}
     out = _shop_state(User.objects.get(id=user.id))
     out["bought"] = res
     return out
