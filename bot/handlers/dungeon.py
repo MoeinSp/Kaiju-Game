@@ -51,7 +51,7 @@ def _home_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
             f"🔒 بعد از فتح هر <b>{v['unlock_stage']}</b> مرحله‌ی دانجن باز می‌شه.",
             f"{'▰' * filled}{'▱' * (10 - filled)} <code>{done}</code>/<code>{v['unlock_stage']}</code>",
             _DIV,
-            "<i>یه سیاه‌چال پر از در و تله و گنج، با باس آخر، رون‌های سیاه و آثار باستانی 🏺</i>",
+            "<i>یه سیاه‌چال پر از نبرد و در مرموز، با باس آخر، رون‌های سیاه و آثار باستانی 🏺</i>",
         ])
         return text, InlineKeyboardMarkup([[back_btn("menu:campaign", "بازگشت به دانجن")]])
     lines = [
@@ -124,8 +124,12 @@ def _run_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
         else:
             lines.append(f"🟢 <b>{html.escape(m['name'])}</b> [{_el(m['element'])}] {_bar(m['hp'])} "
                          f"<code>{m['hp']}%</code> · 💪 <code>{m['now_power']:,}</code>")
-    if st["runes"]:
-        lines.append("🔮 رون‌ها: " + "، ".join(D.rune_label(r)[0] for r in st["runes"]))
+    active = [D.rune_label(r) for r in dict.fromkeys(st["runes"])]
+    ready = [D.rune_label(k) for k in ("first_strike", "ward") if st.get(k)]
+    if active or ready:
+        lines.append("🔮 <b>رون‌های فعال:</b>")
+        lines += [f"  ▫️ <b>{label}</b>: <i>{desc}</i>" for label, desc in active]
+        lines += [f"  ⚡ <b>{label}</b> آماده‌ست: <i>{desc}</i>" for label, desc in ready]
     loot = st["loot"]
     lines.append(f"🎒 غنیمت: 💰 <code>{loot['coins']:,}</code> · 🧬 <code>{loot['dna']:,}</code> · 🔮 <code>{loot['runes']}</code>")
     if st.get("log"):
@@ -136,6 +140,10 @@ def _run_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     phase = st["phase"]
     if phase == "doors":
         lines.append("🚪 <b>کدوم در رو باز می‌کنی؟</b>")
+        if all(d in D.COMBAT_DOORS for d in st["doors"]):
+            lines.append("<i>اینجا راهی جز نبرد نیست — بعد از هر اتاق آروم، اتاق بعدی نبرده.</i>")
+        if "mystery" in st["doors"]:
+            lines.append("<i>❓ پشت در مرموز: گنج، تله یا کمین.</i>")
         rows.append([btn(f"{D.DOORS[d][0]} {D.DOORS[d][1]}", style=PRIMARY, callback_data=f"dg:d:{i}")
                      for i, d in enumerate(st["doors"])])
     elif phase == "fight":
@@ -151,8 +159,10 @@ def _run_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
                                  style=CONFIRM if m.get("wins") else NAV, callback_data=f"dg:f:{m['id']}")])
         if st.get("first_strike"):
             lines.append("<i>«ضربه‌ی اول» فعاله: +۳۰٪ قدرت توی این نبرد.</i>")
+        if st.get("ward"):
+            lines.append("<i>«سپر سایه» آماده‌ست: اگه ببازی، هیولات با ۲۰٪ جون سرپا می‌مونه.</i>")
     elif phase == "rune":
-        lines.append("🔮 <b>یه رون انتخاب کن</b> (تا آخر همین ورود می‌مونه):")
+        lines.append("🔮 <b>یه رون انتخاب کن</b> (رون‌ها تا آخر همین ورود می‌مونن؛ هر کدوم یه بار):")
         for i, r in enumerate(st["rune_offer"]):
             label, desc = D.rune_label(r)
             lines.append(f"▫️ <b>{label}</b>: {desc}")
@@ -250,6 +260,9 @@ def _fight_note(out: dict) -> str:
         got = out.get("got") or {}
         return (f"✅ <b>{html.escape(out['member'])}</b> برد! (<code>{out['mine']:,}</code> در برابر <code>{out['theirs']:,}</code>)"
                 f" · −{out.get('hp_lost', 0)}٪ جون\n🎒 +{got.get('coins', 0):,} طلا · +{got.get('dna', 0):,} DNA · +{got.get('runes', 0)} 🔮")
+    if out.get("warded"):
+        return (f"🛡 <b>{html.escape(out['member'])}</b> باخت ولی «سپر سایه» با ۲۰٪ جون سرپا نگهش داشت "
+                f"(<code>{out['mine']:,}</code> در برابر <code>{out['theirs']:,}</code>).")
     return (f"❌ <b>{html.escape(out['member'])}</b> باخت و از پا افتاد "
             f"(<code>{out['mine']:,}</code> در برابر <code>{out['theirs']:,}</code>). یکی دیگه رو بفرست!")
 
@@ -303,7 +316,10 @@ async def dungeon_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         text, kb = _finish_render(out["finish"], v)
         await send_screen(update, text, parse_mode="HTML", reply_markup=kb)
         return
-    if action == "fight":
+    if action == "door" and isinstance(out, dict) and out.get("mystery"):
+        note = {"treasure": "❓ پشت در مرموز <b>گنج</b> بود!", "trap": "❓ پشت در مرموز <b>تله</b> بود!",
+                "ambush": "❓ پشت در مرموز <b>کمین</b> بود — آماده‌ی نبرد شو!"}[out["mystery"]]
+    elif action == "fight":
         note = _fight_note(out)
     elif action == "rune":
         note = f"🔮 «{D.rune_label(out['rune'])[0]}» گرفتی."

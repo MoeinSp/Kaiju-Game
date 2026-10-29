@@ -57,11 +57,14 @@ ENDLESS = "endless"
 # room's or it would out-earn nightmare (simulated: ×1.0 paid a maxed team ~430k gold a key)
 ENDLESS_DIFF = {"label": "بی‌انتها", "power": 1.0, "loot": 0.2, "runes": 1, "relic": 0.0, "cores": (0, 0), "need": 2}
 ENDLESS_BOSS_EVERY = 10
-ENDLESS_BASE = 3000
-ENDLESS_GROWTH = 0.07
+# compound growth (was +7% of the base per floor, linear): a team of 8k-power kaiju reached floor 40
+# with stacked runes and could have gone on — now the floor that stops a team depends on its power
+# (fresh stage-50 team ≈ 12-15, 8k kaiju ≈ 25, maxed ≈ 35-40)
+ENDLESS_BASE = 2500
+ENDLESS_GROWTH = 1.06
 ENDLESS_BOSS_RELIC = 0.30
-ENDLESS_CORE_FROM = 30      # a shadow core on boss floors 30, 50, 70, … (every ENDLESS_CORE_EVERY from here)
-ENDLESS_CORE_EVERY = 20
+ENDLESS_CORE_FROM = 20      # a shadow core on boss floors 20, 30, 40, … (every ENDLESS_CORE_EVERY from here)
+ENDLESS_CORE_EVERY = 10
 ENDLESS_REWARDS = ((1, 300, 5), (2, 200, 4), (3, 150, 3)) + tuple((r, 80, 1) for r in range(4, 11))  # rank, runes, cores
 
 # «عنصر هفته»: every week the dungeon leans to one element — most enemies have it, and kaiju
@@ -98,10 +101,19 @@ BOSS_POWER = 6500
 NORMAL_ROOM_POWER = (2500, 4000)
 NORMAL_BOSS_POWER = 5200
 
-DOOR_WEIGHTS = {"fight": 45, "elite": 15, "treasure": 15, "spring": 10, "trap": 10, "merchant": 5}
+# Doors (2026-10-30 redesign — players walked treasure → treasure → spring to the boss and won ~95%
+# of runs without fighting): every room has a fight door; the «calm» doors (no fight) are capped per
+# run (per ENDLESS_BOSS_EVERY floors in the endless) and never come two rooms in a row — after a calm
+# room the next one is fight / elite only. A treasure is no longer a visible free door: it hides
+# behind «در مرموز» with a trap or an ambush.
+COMBAT_DOORS = ("fight", "elite")
+CALM_CAPS = {"mystery": 2, "spring": 1, "merchant": 1}
+SPRING_FROM_ROOM = 3
+MYSTERY_ODDS = {"treasure": 55, "trap": 30, "ambush": 15}
 DOORS = {
-    "fight": ("⚔️", "نبرد"), "elite": ("💀", "نخبه"), "treasure": ("🎁", "گنج"),
-    "spring": ("⛲", "چشمه"), "trap": ("⚠️", "تله"), "merchant": ("🛒", "تاجر"),
+    "fight": ("⚔️", "نبرد"), "elite": ("💀", "نخبه"), "mystery": ("❓", "در مرموز"),
+    "spring": ("⛲", "چشمه"), "merchant": ("🛒", "تاجر"),
+    "treasure": ("🎁", "گنج"), "trap": ("⚠️", "تله"),   # doors of runs started before the redesign
 }
 ENEMY_NAMES = ("سایه‌خوار", "نگهبان تاریک", "شبح غار", "خزنده‌ی سنگی", "گرگ سایه", "عنکبوت بلور",
                "دیو مه", "مار استخوانی", "شکارچی کور", "روح زنجیری")
@@ -113,11 +125,21 @@ RUNES = {
     "fury": ("خشم {el}", "+۱۲٪ قدرت هیولاهای {el}"),
     "stone_skin": ("پوست سنگی", "جونی که نبردها کم می‌کنن ۳۰٪ کمتر"),
     "vampire": ("خون‌آشام", "بعد از هر برد، ۱۵٪ جون برنده برمی‌گرده"),
-    "first_strike": ("ضربه‌ی اول", "نبرد بعدی +۳۰٪ قدرت"),
     "treasure_hunter": ("گنج‌یاب", "+۲۵٪ طلا و DNA از اینجا به بعد"),
     "elemental_edge": ("برتری مضاعف", "برتری عنصری ×۱.۳ به‌جای ×۱.۲"),
+    "momentum": ("عطش نبرد", "هر برد توی این ورود +۳٪ قدرت (تا ۱۵٪)"),
+    "lucky": ("بخت بلند", "پشت در مرموز همیشه گنجه"),
+    # one-shot: ready until used, then gone (offered again only once spent)
+    "first_strike": ("ضربه‌ی اول", "نبرد بعدی +۳۰٪ قدرت (یه‌بار مصرف)"),
+    "ward": ("سپر سایه", "اولین شکست بعدی: هیولا با ۲۰٪ جون سرپا می‌مونه (یه‌بار مصرف)"),
+    # instant: take effect on the spot, nothing is kept
     "revive": ("احیا", "یکی از هیولاهای از پا افتاده با ۴۰٪ جون برمی‌گرده"),
+    "rest": ("استراحت", "همین حالا +۲۵٪ جون همه‌ی هیولاهای سرپا"),
+    "spoils": ("کیسه‌ی غنیمت", "همین حالا یه کیسه طلا و DNA"),
 }
+# each kept rune comes once a run (they used to stack: 6× «خشم» = +72% power, 6× «گنج‌یاب» = +150% loot)
+KEPT_RUNES = ("resolve", "stone_skin", "vampire", "treasure_hunter", "elemental_edge", "momentum", "lucky")
+MOMENTUM_STEP, MOMENTUM_CAP = 0.03, 5
 
 SHOP = {
     # «daily» = buys a day. 80 runes and once a day: a nightmare win pays ~40-50 runes back, so a
@@ -210,6 +232,8 @@ def member_power(state: dict, member: dict, *, for_fight: bool = True) -> int:
     hp_factor = HP_POWER_FLOOR + (1 - HP_POWER_FLOOR) * max(0, member["hp"]) / 100
     mult = 1 + 0.06 * _rune_count(state, "resolve")
     mult += 0.12 * sum(1 for r in state["runes"] if r == f"fury:{member['element']}")
+    if _rune_count(state, "momentum"):
+        mult += MOMENTUM_STEP * min(MOMENTUM_CAP, state.get("wins", 0))
     if for_fight and state.get("first_strike"):
         mult += 0.30
     if state.get("week_el") and constants.is_strong_against(member["element"], state["week_el"]):
@@ -236,8 +260,8 @@ def _enemy(state: dict, kind: str) -> dict:
     room = state["room"]
     tier = _diff(state.get("difficulty"))["power"]
     if state.get("endless"):
-        base = ENDLESS_BASE * (1 + ENDLESS_GROWTH * (room - 1)) * rng.uniform(0.95, 1.05)
-        power = round(base * {"boss": 1.4, "elite": 1.25}.get(kind, 1.0))
+        base = ENDLESS_BASE * ENDLESS_GROWTH ** (room - 1) * rng.uniform(0.95, 1.05)
+        power = round(base * {"boss": 1.2, "elite": 1.15}.get(kind, 1.0))   # on compound growth a 1.4 boss was one wall for every team
         name = rng.choice(BOSS_NAMES if kind == "boss" else ENEMY_NAMES)
     elif kind == "boss":
         boss = NORMAL_BOSS_POWER if state.get("difficulty", "normal") == "normal" else BOSS_POWER
@@ -253,15 +277,28 @@ def _enemy(state: dict, kind: str) -> dict:
     return {"kind": kind, "name": name, "element": element, "power": power}
 
 
+def _segment_start(state: dict) -> bool:
+    """The first room of the run — or, in the endless, the first floor after a boss."""
+    room = state["room"]
+    return room == 1 or (bool(state.get("endless")) and room % ENDLESS_BOSS_EVERY == 1)
+
+
 def _doors(state: dict) -> list[str]:
+    """One fight door (sometimes the elite instead) and up to two calm doors still under their
+    cap — or fight + elite only in the first room and right after a calm room."""
     rng = _rng(state)
-    count = 3 if rng.random() < 0.7 else 2
-    pool = dict(DOOR_WEIGHTS)
-    out = []
-    while len(out) < count and pool:
-        pick = rng.choices(list(pool), weights=list(pool.values()), k=1)[0]
-        out.append(pick)
-        pool.pop(pick)
+    if _segment_start(state) or state.get("calm"):
+        out = list(COMBAT_DOORS)
+        rng.shuffle(out)
+        return out
+    used = state.get("calm_used") or {}
+    pool = [k for k, cap in CALM_CAPS.items()
+            if used.get(k, 0) < cap and not (k == "spring" and state["room"] < SPRING_FROM_ROOM and not state.get("endless"))]
+    rng.shuffle(pool)
+    out = ["fight" if rng.random() < 0.75 else "elite"] + pool[:rng.choice((1, 2))]
+    if len(out) == 1:
+        out = list(COMBAT_DOORS)
+    rng.shuffle(out)
     return out
 
 
@@ -314,6 +351,8 @@ def heal_member(user: User, member_id: int | None, pct: int) -> str:
 def _next_room(state: dict) -> None:
     state["room"] += 1
     state["enemy"] = None
+    if state.get("endless") and _segment_start(state):
+        state["calm_used"] = {}   # the calm-door caps count per stretch between bosses
     if state.get("endless"):
         if state["room"] % ENDLESS_BOSS_EVERY == 0:
             state["phase"] = "fight"
@@ -330,15 +369,26 @@ def _next_room(state: dict) -> None:
         state["doors"] = _doors(state)
 
 
-def _rune_offer(state: dict) -> list[str]:
+def _rune_offer(state: dict, count: int = 3, fillers: tuple = ("rest", "spoils")) -> list[str]:
+    """Runes the run doesn't have yet (a kept rune comes once; a one-shot only while not ready),
+    «احیا» when someone is down — topped up with instant boons once few are left."""
     rng = _rng(state)
+    owned = set(state["runes"])
     elements = sorted({m["element"] for m in state["team"]})
-    pool = ["resolve", "stone_skin", "vampire", "first_strike", "treasure_hunter", "elemental_edge"]
-    pool += [f"fury:{el}" for el in elements]
+    pool = [k for k in KEPT_RUNES if k not in owned]
+    pool += [f"fury:{el}" for el in elements if f"fury:{el}" not in owned]
+    if not state.get("first_strike"):
+        pool.append("first_strike")
+    if not state.get("ward"):
+        pool.append("ward")
     if any(m["hp"] <= 0 for m in state["team"]):
         pool.append("revive")
     rng.shuffle(pool)
-    return pool[:3]
+    out = pool[:count]
+    for f in fillers:
+        if len(out) < count:
+            out.append(f)
+    return out
 
 
 def _new_state(user: User, members: list[Creature], endless: bool = False) -> dict:
@@ -349,6 +399,7 @@ def _new_state(user: User, members: list[Creature], endless: bool = False) -> di
                   "power": _power_of(user, c), "hp": 100} for c in members],
         "runes": [], "loot": {"coins": 0, "dna": 0, "runes": 0, "cores": 0}, "log": [],
         "enemy": None, "doors": [], "rune_offer": [], "merchant": [], "first_strike": False,
+        "ward": False, "wins": 0, "calm": False, "calm_used": {},
     }
     state["doors"] = _doors(state)
     return state
@@ -422,12 +473,24 @@ def choose_door(user: User, index: int) -> dict:
     kind = state["doors"][index]
     room = state["room"]
     event = {"door": kind}
-    if kind in ("fight", "elite"):
-        state["enemy"] = _enemy(state, kind)
-        state["phase"] = "fight"
-    elif kind == "treasure":
+    calm = kind not in COMBAT_DOORS
+    if calm:
+        used = state.setdefault("calm_used", {})
+        used[kind] = used.get(kind, 0) + 1
+    if kind == "mystery":
         rng = _rng(state)
-        got = _loot_add(state, 2000 + 300 * room, 60 + 10 * room, rng.choice((0, 0, 1, 2)))
+        kind = "treasure" if _rune_count(state, "lucky") else rng.choices(list(MYSTERY_ODDS), weights=list(MYSTERY_ODDS.values()), k=1)[0]
+        event["mystery"] = kind
+    state["calm"] = calm and kind != "ambush"
+    if kind in COMBAT_DOORS or kind == "ambush":
+        state["enemy"] = _enemy(state, "elite" if kind == "ambush" else kind)
+        state["phase"] = "fight"
+        if kind == "ambush":
+            _log(state, f"❓ کمین! «{state['enemy']['name']}» پشت در منتظرت بود.")
+    elif kind == "treasure":
+        # about a plain fight's pay (it used to beat one, with no risk): the fights are the loot
+        rng = _rng(state)
+        got = _loot_add(state, 1500 + 250 * room, 40 + 8 * room, rng.choice((0, 1, 1, 2)))
         _log(state, f"🎁 گنج پیدا کردی: {got['coins']:,} طلا، {got['dna']:,} DNA"
                     + (f"، {got['runes']} رون سیاه" if got["runes"] else ""))
         event["got"] = got
@@ -445,7 +508,7 @@ def choose_door(user: User, index: int) -> dict:
         _next_room(state)
     else:  # merchant
         rng = _rng(state)
-        offers = _rune_offer(state)[:2]
+        offers = _rune_offer(state, count=2, fillers=("rest",))
         state["merchant"] = [{"rune": r, "price": round((3000 + 500 * room) * rng.uniform(0.9, 1.1), -2)} for r in offers]
         state["phase"] = "merchant"
     _progress(user, state)
@@ -470,8 +533,9 @@ def fight(user: User, creature_id: int) -> dict:
     state["first_strike"] = False
     result = {"won": won, "mine": mine, "theirs": theirs, "member": member["name"], "enemy": enemy}
     if won:
+        state["wins"] = state.get("wins", 0) + 1
         margin = mine / max(1, theirs)
-        loss = max(10, min(40, round(40 - (margin - 1) * 100)))
+        loss = max(15, min(45, round(45 - (margin - 1) * 100)))   # was 10-40: one strong kaiju carried a whole hard run
         if _rune_count(state, "stone_skin"):
             loss = round(loss * 0.7)
         member["hp"] = max(1, member["hp"] - loss)
@@ -504,6 +568,11 @@ def fight(user: User, creature_id: int) -> dict:
         state["enemy"] = None
         state["rune_offer"] = _rune_offer(state)
         state["phase"] = "rune"
+    elif state.get("ward"):
+        state["ward"] = False
+        member["hp"] = 20
+        result["warded"] = True
+        _log(state, f"🛡 سپر سایه {member['name']} رو جلوی «{enemy['name']}» با ۲۰٪ جون سرپا نگه داشت ({mine:,} در برابر {theirs:,}).")
     else:
         member["hp"] = 0
         _log(state, f"💀 {member['name']} جلوی «{enemy['name']}» از پا افتاد ({mine:,} در برابر {theirs:,}).")
@@ -524,9 +593,24 @@ def _apply_rune(state: dict, key: str) -> None:
             down["hp"] = 40
             _log(state, f"✨ {down['name']} احیا شد.")
         return
-    if key == "first_strike":
+    if key == "rest":
+        for m in _alive(state):
+            m["hp"] = min(100, m["hp"] + 25)
+        _log(state, "😮‍💨 استراحت: همه‌ی هیولاهای سرپا ۲۵٪ جون گرفتن.")
+        return
+    if key == "spoils":
+        room = state["room"]
+        got = _loot_add(state, 1500 + 200 * room, 40 + 6 * room)
+        _log(state, f"💰 کیسه‌ی غنیمت: {got['coins']:,} طلا، {got['dna']:,} DNA")
+        return
+    if key == "first_strike":   # one-shot: a flag until the next fight, not a kept rune
         state["first_strike"] = True
-    state["runes"].append(key)
+        return
+    if key == "ward":
+        state["ward"] = True
+        return
+    if key not in state["runes"]:
+        state["runes"].append(key)
 
 
 @transaction.atomic

@@ -3,11 +3,12 @@
 (function (K) {
   "use strict";
 
-  K.hub("battle", { id: "dungeon", title: "سیاه‌چال", sub: "در، تله، گنج و باس", icon: "skull", color: "var(--mythic)", go: "dg_home", order: 8 });
+  K.hub("battle", { id: "dungeon", title: "سیاه‌چال", sub: "نبرد، در مرموز و باس", icon: "skull", color: "var(--mythic)", go: "dg_home", order: 8 });
 
   var DOOR = {
     fight: ["swords", "نبرد", "var(--bad)"], elite: ["skull", "نخبه", "var(--mythic)"], treasure: ["chest", "گنج", "var(--gold)"],
     spring: ["drop", "چشمه", "var(--good)"], trap: ["warn", "تله", "var(--warn)"], merchant: ["cart", "تاجر", "var(--accent)"],
+    mystery: ["compass", "در مرموز", "var(--rare)"],
   };
 
   function runes(n) { return '<span class="dg-rn b">' + K.ic("spark") + " " + K.n(n) + "</span>"; }
@@ -36,7 +37,7 @@
   }
   function teamSheet(msg) {
     K.api.get("dungeon/team/").then(function (d) {
-      var box = K.sheet('<div class="dg-pick">' + pickHtml(d, msg) + "</div>"), wrap = box.querySelector(".dg-pick"), busy = false;
+      var box = K.sheet('<div class="dg-teampick">' + pickHtml(d, msg) + "</div>"), wrap = box.querySelector(".dg-teampick"), busy = false;
       wrap.addEventListener("click", function (ev) {
         var pick = ev.target.closest("[data-pick]");
         if (pick && !busy) {
@@ -59,7 +60,7 @@
       return '<div class="panel pad dg-locked center">' + '<div class="dg-sigil">' + K.ic("lock") + "</div>" +
         '<div class="ttl">سیاه‌چال</div><p class="lead">بعد از فتح هر ' + K.n(d.unlock_stage) + " مرحله‌ی دانجن باز می‌شه.</p>" +
         K.bar(done / d.unlock_stage, "gold", "thick") + '<div class="sm muted mt">' + K.n(done) + " از " + K.n(d.unlock_stage) + " مرحله</div>" +
-        '<p class="note">یه سیاه‌چال پر از در و تله و گنج، با باس آخر، رون‌های سیاه و آثار باستانی.</p></div>';
+        '<p class="note">یه سیاه‌چال پر از نبرد و در مرموز، با باس آخر، رون‌های سیاه و آثار باستانی.</p></div>';
     }
     var art = (K.meta && K.meta.art && K.meta.art.dungeon) || "";
     var html = '<div class="banner dg-banner dg-art"' + (art ? ' style="background-image:url(\'' + K.esc(art) + '\')"' : "") + '><div class="grow"><div class="ttl">سیاه‌چال</div><div class="sm" style="color:#c5cee2">' + K.n(d.rooms) + " اتاق و یه باس · جون هیولاها تا آخر می‌مونه</div></div></div>" +
@@ -123,10 +124,14 @@
 
   function phaseHtml(r) {
     if (r.phase === "doors") {
-      return '<div class="h2">' + K.ic("grid") + 'کدوم در رو باز می‌کنی؟</div><div class="dg-doors">' + r.doors.map(function (d, i) {
-        var t = DOOR[d.type];
+      var mystery = r.doors.some(function (d) { return d.type === "mystery"; });
+      return '<div class="h2">' + K.ic("grid") + 'کدوم در رو باز می‌کنی؟</div>' +
+        (r.combat_only ? '<p class="sm muted" style="margin:-4px 0 8px">اینجا راهی جز نبرد نیست — بعد از هر اتاق آروم، اتاق بعدی نبرده.</p>' : "") +
+        '<div class="dg-doors">' + r.doors.map(function (d, i) {
+        var t = DOOR[d.type] || DOOR.fight;
         return '<button class="panel dg-door" style="--dc:' + t[2] + '" data-act="door" data-i="' + i + '"><span class="dg-door-ic">' + K.ic(t[0]) + "</span><b>" + t[1] + "</b></button>";
-      }).join("") + "</div>";
+      }).join("") + "</div>" +
+        (mystery ? '<p class="sm muted mt">پشت در مرموز: گنج، تله یا کمین.</p>' : "");
     }
     if (r.phase === "fight") {
       var e = r.enemy;
@@ -134,6 +139,7 @@
         '<div class="grow"><div class="sm muted">' + (e.kind === "boss" ? "باس سیاه‌چال" : e.kind === "elite" ? "دشمن نخبه" : "دشمن") + '</div><div class="b">' + K.esc(e.name) + "</div>" +
         '<div class="sm">' + K.elTag(e.element) + ' <span class="t-accent">' + K.ic("power") + " " + K.n(e.power) + "</span></div></div></div>";
       return head + (r.first_strike ? '<div class="callout good mt">' + K.ic("spark") + "<div>«ضربه‌ی اول» فعاله: +۳۰٪ قدرت توی این نبرد.</div></div>" : "") +
+        (r.ward ? '<div class="callout mt">' + K.ic("shield") + "<div>«سپر سایه» آماده‌ست: اگه ببازی، هیولات با ۲۰٪ جون سرپا می‌مونه.</div></div>" : "") +
         '<div class="h2">' + K.ic("swords") + 'کی بجنگه؟</div><div class="dg-picks">' + r.members.filter(function (m) { return m.hp > 0; }).map(function (m) {
           return '<button class="panel dg-pick ' + (m.wins ? "win" : "lose") + '" data-act="fight" data-id="' + m.id + '">' +
             '<span class="grow b cut">' + K.esc(m.name) + '</span><span class="num">' + K.n(m.vs) + ' <span class="faint">در برابر</span> ' + K.n(m.enemy_vs) + "</span>" +
@@ -141,7 +147,7 @@
         }).join("") + "</div>";
     }
     if (r.phase === "rune") {
-      return '<div class="h2">' + K.ic("spark") + 'یه رون انتخاب کن</div><p class="sm muted" style="margin:-4px 0 8px">تا آخر همین ورود می‌مونه.</p>' +
+      return '<div class="h2">' + K.ic("spark") + 'یه رون انتخاب کن</div><p class="sm muted" style="margin:-4px 0 8px">تا آخر همین ورود می‌مونه؛ هر رون فقط یه بار میاد.</p>' +
         r.rune_offer.map(function (o, i) {
           return '<button class="panel dg-rune" data-act="rune" data-i="' + i + '"><b>' + K.esc(o.label) + '</b><span class="sm muted">' + K.esc(o.desc) + "</span></button>";
         }).join("");
@@ -163,7 +169,10 @@
       '<div class="panel dg-loot mt"><span class="muted sm">' + K.ic("box") + " غنیمت</span><span>" + (got || '<span class="faint sm">هنوز چیزی نیست</span>') + "</span></div>" +
       (note ? '<div class="callout mt"><div class="dg-note">' + note + "</div></div>" : "") +
       teamHtml(r) +
-      (r.runes.length ? '<div class="dg-runes mt">' + r.runes.map(function (x) { return K.tag(K.esc(x.label), "var(--mythic)", "spark"); }).join(" ") + "</div>" : "") +
+      (r.runes.length || r.ready.length ? '<div class="panel pad dg-active mt"><div class="sm muted mb">' + K.ic("spark") + " رون‌های فعال</div>" +
+        r.runes.map(function (x) { return '<div class="dg-arune"><b>' + K.esc(x.label) + '</b> <span class="sm muted">' + K.esc(x.desc) + "</span></div>"; }).join("") +
+        r.ready.map(function (x) { return '<div class="dg-arune ready"><b>' + K.esc(x.label) + '</b> <span class="tag">آماده</span> <span class="sm muted">' + K.esc(x.desc) + "</span></div>"; }).join("") +
+        "</div>" : "") +
       phaseHtml(r) +
       (r.log.length ? '<div class="panel pad dg-log mt">' + r.log.map(function (x) { return "<div>" + K.esc(x) + "</div>"; }).join("") + "</div>" : "") +
       '<button class="btn ghost block mt" data-act="quit">' + K.ic("back") + "ترک سیاه‌چال</button>";
@@ -213,8 +222,10 @@
       }
       K.on(root, "door", function (el) {
         act("door/", { i: +el.dataset.i }, el, function (d) {
-          var g = d.event && d.event.got;
-          return g ? K.ic("chest") + " گنج: " + loot({ coins: g.coins, dna: g.dna, runes: g.runes }) : "";
+          var ev = d.event || {}, g = ev.got;
+          var behind = { treasure: "گنج", trap: "تله", ambush: "کمین — آماده‌ی نبرد شو!" }[ev.mystery];
+          return (behind ? K.ic("compass") + " پشت در مرموز <b>" + behind + "</b> بود. " : "") +
+            (g ? K.ic("chest") + " گنج: " + loot({ coins: g.coins, dna: g.dna, runes: g.runes }) : "");
         });
       });
       K.on(root, "fight", function (el) {
@@ -222,6 +233,7 @@
           var f = d.fight; if (!f) return "";
           K.haptic(f.won ? "ok" : "err");
           return f.won ? K.ic("check") + " <b>" + K.esc(f.member) + "</b> برد (" + K.n(f.mine) + " در برابر " + K.n(f.theirs) + ") · " + K.n(f.hp_lost) + "٪ جون کم شد · " + loot(f.got || {})
+            : f.warded ? K.ic("shield") + " <b>" + K.esc(f.member) + "</b> باخت ولی «سپر سایه» با ۲۰٪ جون سرپا نگهش داشت (" + K.n(f.mine) + " در برابر " + K.n(f.theirs) + ")."
             : K.ic("skull") + " <b>" + K.esc(f.member) + "</b> باخت و از پا افتاد (" + K.n(f.mine) + " در برابر " + K.n(f.theirs) + "). یکی دیگه رو بفرست!";
         });
       });

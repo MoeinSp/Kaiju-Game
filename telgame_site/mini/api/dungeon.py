@@ -74,10 +74,14 @@ def _state(user: User) -> dict:
         } for m in run["members"]],
         "doors": [{"type": d} for d in st["doors"]] if st["phase"] == "doors" else [],
         "enemy": dict(enemy, name=_txt(enemy["name"]), img=_enemy_img(enemy)) if enemy else None,
-        "runes": [_rune(r) for r in st["runes"]],
+        "runes": [_rune(r) for r in dict.fromkeys(st["runes"])],
         "rune_offer": [_rune(r) for r in st["rune_offer"]] if st["phase"] == "rune" else [],
         "merchant": [dict(_rune(o["rune"]), price=int(o["price"])) for o in st["merchant"]] if st["phase"] == "merchant" else [],
         "first_strike": bool(st.get("first_strike")),
+        "ward": bool(st.get("ward")),
+        # the one-shots that are ready, shown with the kept runes
+        "ready": [_rune(k) for k in ("first_strike", "ward") if st.get(k)],
+        "combat_only": st["phase"] == "doors" and all(d in D.COMBAT_DOORS for d in st["doors"]),
         "loot": st["loot"],
         "log": [_txt(x) for x in (st.get("log") or [])[-3:]],
         "heal_serums": v.get("heal_serums", 0),
@@ -137,7 +141,7 @@ def team_toggle(request, user, data):
 def door(request, user, data):
     ev = D.choose_door(user, need_int(data, "i"))
     out = _state(User.objects.get(id=user.id))
-    out["event"] = {"door": ev["door"], "got": ev.get("got")}
+    out["event"] = {"door": ev["door"], "got": ev.get("got"), "mystery": ev.get("mystery")}
     return out
 
 
@@ -146,7 +150,7 @@ def fight(request, user, data):
     res = D.fight(user, need_int(data, "creature_id", 1))
     out = _state(User.objects.get(id=user.id))
     out["fight"] = {"won": res["won"], "mine": res["mine"], "theirs": res["theirs"], "member": _txt(res["member"]),
-                    "hp_lost": res.get("hp_lost", 0), "got": res.get("got")}
+                    "hp_lost": res.get("hp_lost", 0), "got": res.get("got"), "warded": bool(res.get("warded"))}
     out["finish"] = _finish(res.get("finish"))
     return out
 

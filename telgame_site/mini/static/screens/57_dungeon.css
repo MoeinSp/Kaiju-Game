@@ -54,3 +54,8 @@
   background: radial-gradient(circle, rgba(150, 90, 255, .35), rgba(20, 8, 40, .7)); box-shadow: 0 0 22px rgba(150, 90, 255, .5); }
 .dg-floor b { font-size: 30px; line-height: 1; } .dg-floor small { font-size: 11px; color: var(--muted); }
 .list .me { background: rgba(150, 90, 255, .12); }
+
+/* active runes of the run: each with what it does; a ready one-shot is marked */
+.dg-active .dg-arune { padding: 4px 0; line-height: 1.5; }
+.dg-active .dg-arune + .dg-arune { border-top: 1px solid var(--line); }
+.dg-active .dg-arune .tag { height: 18px; font-size: 10.5px; padding: 0 7px; color: var(--good); vertical-align: 1px; }
