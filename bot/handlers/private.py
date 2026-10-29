@@ -3039,7 +3039,15 @@ def _hunt_scout_sync(tg_user, charge=False):
         if not paid:
             raise GameError(f"برای جستجوی دوباره {cost:,} طلا لازمه (الان {user.coins:,} داری).")
         user.coins -= cost
-    return creature, my_power, user.cup, scout_one(user, creature), sync_energy(user), cost
+    target = scout_one(user, creature)
+    target["tracker"] = _serums_peek(user, "tracker")   # read here: the card is built off the DB thread
+    return creature, my_power, user.cup, target, sync_energy(user), cost
+
+
+def _serums_peek(user, kind: str) -> float:
+    from game import serums
+
+    return serums.peek(user, kind)
 
 
 def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> str:
@@ -3060,10 +3068,10 @@ def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> st
     # a single random (seed-based) prize instead of a range — matches the actual payout
     from game import events as _events
 
-    from game import serums as _serums  # «سرم ردیاب» armed → the card shows the doubled prize
-
+    # «سرم ردیاب» armed → the card shows the doubled prize (target["tracker"] is read by the
+    # *_sync helper: this runs in the event loop, where the ORM is off limits)
     coin_reward, dna_reward = hunt_reward_roll(
-        my_power, target["tier"], target.get("seed"), _events.hunt_loot_mult(creature.element) * _serums.peek(creature.owner, "tracker")
+        my_power, target["tier"], target.get("seed"), _events.hunt_loot_mult(creature.element) * target.get("tracker", 1.0)
     )
     adv = element_advantage_line(creature.element, target["element"])
     # same order on every battle card: you → opponent → element → reward → cost
@@ -3237,6 +3245,7 @@ def _hunt_swap_pick_sync(tg_user, tier, seed, creature_id):
         raise GameError("اول یه موجود فعال انتخاب کن.")
     my_power = _creature_power(creature, get_equipped_items(creature))
     target = rebuild_target(user, tier, int(seed))
+    target["tracker"] = _serums_peek(user, "tracker")   # read here: the card is built off the DB thread
     return creature, my_power, user.cup, target, sync_energy(user), scout_cost(creature, power=my_power)
 
 

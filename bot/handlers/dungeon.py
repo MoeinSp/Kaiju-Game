@@ -240,6 +240,8 @@ def _act_sync(tg_user, action: str, arg):
 
         out = serums.use(user, "heal")
     v = D.view(user)
+    # no run any more (a stale «ادامه‌ی ورود» tap) → _run_render falls back to the home screen
+    v["relics"] = len(relics.active(user)) if v["unlocked"] else 0
     return out, v
 
 
