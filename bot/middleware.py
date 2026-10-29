@@ -202,6 +202,14 @@ async def enforce_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE)
     is_check_callback = (
         update.callback_query is not None and update.callback_query.data == FORCE_JOIN_CHECK_CALLBACK
     )
+    chat = update.effective_chat
+    if chat is not None and chat.type in _GROUP_CHAT_TYPES:
+        # owner's call (2026-10-30): playing in a group never needs the channels — a newcomer's
+        # first game there must not hit a join wall. The private chat keeps the gate.
+        if is_check_callback:   # «بررسی مجدد» on an old prompt left in the group
+            await update.callback_query.answer("توی گروه عضویت لازم نیست؛ بازی کن!")
+            raise ApplicationHandlerStop
+        return
 
     # same idea as the ban gate: only go to the thread pool when the 60s cache has
     # expired (or the player pressed «بررسی مجدد», which must see fresh data)
