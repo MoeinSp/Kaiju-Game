@@ -102,6 +102,7 @@ def clean(text) -> str:
     """Game text → plain text for the app: HTML/<tg-emoji> tags and emoji removed, spaces
     tidied. Use it on GameError messages and on any label that comes from the game."""
     out = _EMOJI.sub("", _TAG.sub("", str(text or "")))
+    out = re.sub(r"^[‏ ]+$", "", out, flags=re.M)   # a «6-2» divider line leaves only its RLM
     out = re.sub(r"[ \t]+", " ", out)
     out = re.sub(r" *\n *", "\n", out).strip(" \n·-—:|")
     return out

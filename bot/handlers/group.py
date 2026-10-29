@@ -1783,9 +1783,9 @@ async def _pvp_attack_execute(update, context, query, attacker_id: int, target_i
     reward_block += _mission_lines(result["missions"]) + _speedup_note(result["speedup"])
     _tally = result.get("target_alliance")
     _target = result.get("target_name", "")
-    header = ["⚔️ <b>خلاصه نبرد</b>", _RULE]
+    # no rule under the title: the report draws the message's two «6-2» divider lines
+    header = ["⚔️ <b>خلاصه نبرد</b>"]
     if _target:
-        # the battle report below opens with its own attacker/defender lines — no second rule
         header.append(f"👤 حریف: <b>{_target}</b>" + (f" <i>(🤝 {_tally})</i>" if _tally else ""))
     text = battle_report(
         result["battle_a"], result["battle_b"], result["battle_winner_name"],

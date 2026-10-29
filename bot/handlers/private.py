@@ -57,7 +57,7 @@ from bot.buttons import (ADMIN, BACK, BATTLE, BUILD, CONFIRM, DANGER, LIST, NAV,
                          get_main_reply_keyboard, symmetric_markup)
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text, send_screen
 from config import BOT_USERNAME, OWNER_TELEGRAM_ID
-from game import botconfig, constants, keywords
+from game import botconfig, constants, dividers, keywords
 
 
 def _is_admin_user(user_id: int | None) -> bool:
@@ -3298,7 +3298,7 @@ async def hunt_go_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             await query.answer(alert_text(exc), show_alert=True)
         return
 
-    div = "━━━━━━━━━━━━━━━━━━━━"
+    div = dividers.line()   # two «6-2» lines; the battle report under them uses blank lines
     if result["won"]:
         loot = f"{get_emoji('coin')} <code>+{result['coins']:,}</code>"
         if result["dna"]:

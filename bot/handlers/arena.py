@@ -9,7 +9,7 @@ from bio_lab.models import AttackLog
 from bio_lab.repository import creature_name, get_or_create_user, lab_display, lock_row, mention
 from bot.buttons import BATTLE, CONFIRM, DANGER, NAV, PRIMARY, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
-from game import constants
+from game import constants, dividers
 import datetime
 
 from django.db import transaction
@@ -851,7 +851,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
             hp_line_a = f"💀  {atk_name} [□□□□□□□□□□] 0%"
             hp_line_b = f"❤️  {def_name} [■■■■■■■■■■] 100%"
 
-    div = "━━━━━━━━━━━━━━━━━━━━"
+    div = dividers.line()   # the result's two «6-2» lines
     coin_e, dna_e = get_emoji("coin"), get_emoji("dna")
 
     def _pair(gold: int, dna: int) -> str:
@@ -1144,7 +1144,7 @@ async def arena_revenge_attack_callback(update: Update, context: ContextTypes.DE
 
     loot_gold = result.get("loot", 0)
     loot_dna = result.get("dna", 0)
-    div = _ARENA_DIV
+    div = dividers.line()   # two «6-2» lines; the report in the quote uses blank lines
 
     if result["won"]:
         cup_sign = f"+{result['cup_delta']}" if result['cup_delta'] > 0 else str(result['cup_delta'])

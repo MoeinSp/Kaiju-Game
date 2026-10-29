@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from bio_lab.models import Creature
 from bio_lab.repository import creature_name
-from game import constants
+from game import constants, dividers
 from game.creature import combat_rating, effective_stats
 from game.emoji import get_emoji
 from game.equipment import get_equipped_items
@@ -110,8 +110,11 @@ def battle_report(sa: dict, sb: dict, winner_name: str, rounds: int, mult: float
     """The unified end-of-battle text, shared by every mode (hunt, group boss, PvP,
     arena) so they all read identically. `victor_line` adds a «پیروز میدان» mention
     for player-vs-player fights; `reward_block` is inserted just before the element
-    cycle so loot always sits in the same place. Attacker is `sa`, defender is `sb`."""
-    div = "──────────────"
+    cycle so loot always sits in the same place. Attacker is `sa`, defender is `sb`.
+
+    Without a reward block the report is embedded in a screen that draws its own two
+    «6-2» divider lines, so it only uses blank lines (two lines per message at most)."""
+    div = dividers.line() if reward_block else ""
     a_lbl = constants.element_label(sa["element"])
     b_lbl = constants.element_label(sb["element"])
     if mult > 1:
@@ -127,7 +130,7 @@ def battle_report(sa: dict, sb: dict, winner_name: str, rounds: int, mult: float
         div,
         _hp_compact(sa),
         _hp_compact(sb),
-        div,
+        "",
         f"{get_emoji('trophy')} فاتح نبرد: <code>{winner_name}</code> (در {rounds} راند)",
     ]
     if victor_line:
@@ -138,7 +141,7 @@ def battle_report(sa: dict, sb: dict, winner_name: str, rounds: int, mult: float
 
 
 def _detail_text(fa: Fighter, fb: Fighter, winner: Fighter, rounds: int, blow_by_blow: list[str]) -> str:
-    div = "──────────────"
+    div = dividers.line()
     a_emoji = get_emoji(constants.ELEMENT_EMOJI_KEYS[fa.creature.element])
     b_emoji = get_emoji(constants.ELEMENT_EMOJI_KEYS[fb.creature.element])
     return "\n".join([
