@@ -6,8 +6,15 @@
 (function (K) {
   "use strict";
 
-  /* what the players open most (web log, 2026-10-29), fetched once per visit after the lobby */
-  var PREFETCH = ["profile/creatures/", "hunt/", "arena/", "daily/today/", "dungeon/", "serums/", "merchant/", "shop/store/", "base/"];
+  /* Every screen's first GET (all read-only), fetched once per visit after the lobby so any
+     section opens at once: the most-opened first (web log, 2026-10-29), then the rest. */
+  var PREFETCH = ["profile/creatures/", "hunt/", "arena/", "daily/today/", "dungeon/", "serums/", "merchant/", "shop/store/", "base/",
+    "worldboss/", "tower/", "tournament/", "arena/chests/", "dispatch/", "daily/missions/", "daily/wheel/", "daily/story/",
+    "events/week/", "events/pass/", "events/achievements/", "events/festival/", "shop/boxes/", "shop/energy/", "shop/vip/",
+    "shop/exchange/", "serums/backpack/", "breed/cave/", "breed/fusion/", "base/research/", "market/", "social/alliance/",
+    "profile/leaderboard/", "social/ranks/?board=power", "arena/league/", "arena/revenges/", "hunt/auto/", "social/settings/",
+    "profile/equipment/", "social/guide/"];
+  var PREFETCH_CACHED = ["profile/creatures/", "profile/equipment/", "social/guide/"];   // read through K.api.cached
   var prefetched = false;
 
   function badgeOf(id) { var v = K.badges && K.badges[id]; return v === "live" ? "live" : Number(v) || 0; }
@@ -122,7 +129,7 @@
       (K.dy && K.dy.home ? K.dy.home() : K.api.get("daily/home/")).then(function (d) {
         daily = d; ready = true; if (K.setFestival) K.setFestival(d.festival && d.festival.element); draw();
         // once the lobby is up, the most-opened screens are fetched quietly: they then open at once
-        if (K.prefetch && !prefetched) { prefetched = true; setTimeout(function () { K.prefetch(PREFETCH, ["profile/creatures/"]); }, 1500); }
+        if (K.prefetch && !prefetched) { prefetched = true; setTimeout(function () { K.prefetch(PREFETCH, PREFETCH_CACHED); }, 1500); }
         // the offers come after the summary: the bubble is slotted in place (no re-draw), and once a day the card
         if (K.offers) K.offers.list().then(function () {
           if (!ctx.alive()) return;

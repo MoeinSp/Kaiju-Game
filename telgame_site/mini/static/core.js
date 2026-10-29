@@ -200,14 +200,19 @@ window.K = (function () {
      while the server is asked again behind it; if the new answer differs, the screen is
      re-drawn in place (refreshShown). Polls, timers and ctx.reload after an action are outside
      that window and always wait for the server. K.prefetch fills the memo after the lobby. */
-  var memo = {}, reuseUntil = 0, freshUntil = 0, SKIP_MS = 3000, STALE_MS = 10 * 60 * 1000, MEMO_MAX = 300000;
+  var memo = {}, pending = {}, reuseUntil = 0, freshUntil = 0, SKIP_MS = 3000, STALE_MS = 30 * 60 * 1000, MEMO_MAX = 300000;
   K.reuseRecent = function () { reuseUntil = Date.now() + 500; };
   function fetchGet(path) {
-    var seq = postSeq;
-    return request("GET", path).then(function (j) {
+    var seq = postSeq, q = pending[path];
+    if (q && q.seq === seq) return q.p;   // already on its way (a prefetch) and nothing was done since: share it
+    var p = request("GET", path).then(function (j) {
       try { var s = JSON.stringify(j); if (s.length < MEMO_MAX) memo[path] = { t: Date.now(), seq: seq, s: s }; } catch (e) {}
       return j;
     });
+    pending[path] = { seq: seq, p: p };
+    function done() { if (pending[path] && pending[path].p === p) delete pending[path]; }
+    p.then(done, done);
+    return p;
   }
   /* The screen `seq` showed an old answer and a different one has arrived: re-draw it in place
      (old content stays until the new is ready, scroll kept) — not under an open sheet, a field
