@@ -2,17 +2,17 @@
 
 The building («serum_lab», built like any other) brews one serum at a time from a queue, with
 DNA paid when the serum is queued. Finished serums wait on a shelf whose size grows with the
-building. A serum is then USED: adrenaline and repair act at once; rage, tracker, shell and
-giant-slayer are «armed» and spent by the next arena attack / hunt / defence / boss hit.
+building. A serum is then USED: repair acts at once; rage, tracker, shell and giant-slayer are
+«armed» and spent by the next arena attack / hunt / defence / boss hit.
 
 Each serum also has its own level, 1 to 5, raised inside the lab (gold + DNA + time, one at
 a time, never above the building's level). The level sets the size of its effect.
 
 Rules that keep it fair: brewing has no daily cap — the shelf size and the brewing time are the
-limit — but adrenaline is capped (ADRENALINE_DAILY): a hunt costs 1 energy, so an uncapped
-+8-energy serum paid its own DNA back and printed gold without end; the heal serum is capped per
-dungeon run (dungeon.HEALS_PER_RUN). Nothing is ever lost — a full shelf only pauses the brewing;
-no serum touches diamonds.
+limit; the heal serum is capped per dungeon run (dungeon.HEALS_PER_RUN). There is no energy
+serum: a hunt costs 1 energy, so an uncapped +energy serum paid its own DNA back and made gold
+without end (it was removed). Nothing is ever lost — a full shelf only pauses the brewing; no
+serum touches diamonds.
 """
 
 from __future__ import annotations
@@ -27,7 +27,6 @@ from game.creature import GameError, InsufficientGoldError
 
 LAB = "serum_lab"
 PING_DAILY = 2   # «سرم آماده‌ست» DMs a day at most (opt-in)
-ADRENALINE_DAILY = 6   # adrenaline uses a day (the only use cap; see the module docstring)
 SHELL_HOURS = 8
 MAX_LEVEL = 5
 
@@ -37,8 +36,6 @@ KINDS: dict[str, dict] = {
              "text": "+{v}٪ قدرت در حمله‌ی بعدی آرنا"},
     "tracker": {"label": "ردیاب", "where": "شکار بعدی", "unlock": 1, "fx": [1.5, 1.75, 2.0, 2.25, 2.5],
                 "text": "غنیمت شکار بعدی ×{v}"},
-    "adrenaline": {"label": "آدرنالین", "where": "همون لحظه", "unlock": 2, "fx": [3, 4, 5, 6, 8],
-                   "text": "+{v} انرژی فوری"},
     "shell": {"label": "پوسته", "where": f"دفاع بعدی آرنا (تا {SHELL_HOURS} ساعت)", "unlock": 3, "fx": [10, 12, 14, 17, 20],
               "text": "+{v}٪ قدرت مدافعت در حمله‌ی بعدی آرنا که بهت می‌شه"},
     "heal": {"label": "ترمیم", "where": "سیاه‌چال", "unlock": 3, "fx": [30, 35, 40, 45, 50],
@@ -46,7 +43,7 @@ KINDS: dict[str, dict] = {
     "slayer": {"label": "غول‌کش", "where": "ضربه‌ی بعدی به غول", "unlock": 4, "fx": [15, 18, 22, 26, 30],
                "text": "+{v}٪ آسیب در ضربه‌ی بعدی به غول سرگردان"},
 }
-ORDER = ["rage", "tracker", "adrenaline", "shell", "heal", "slayer"]
+ORDER = ["rage", "tracker", "shell", "heal", "slayer"]
 ARMED = ("rage", "tracker", "shell", "slayer")     # wait for their moment; the others act at once
 
 # by building level: shelf size and minutes per serum
@@ -183,7 +180,7 @@ def state(user: User) -> dict:
     return {
         "level": level, "capacity": cap, "brew_minutes": step // 60, "brew_cost": brew_cost(user) if level else 0,
         "stock_total": sum((row.stock or {}).values()), "queue": list(row.queue), "next_in": next_in,
-        "used": used, "adrenaline_daily": ADRENALINE_DAILY, "kinds": kinds,
+        "used": used, "kinds": kinds,
         "upgrading": {"kind": row.upgrade_kind, "label": KINDS[row.upgrade_kind]["label"],
                       "left": max(0, int((row.upgrade_ends_at - now).total_seconds()))} if row.upgrade_kind else None,
         "armed": sorted((row.armed or {}).keys()),
@@ -279,7 +276,7 @@ def cancel_last(user: User) -> dict:
 
 
 def use(user: User, kind: str, member_id: int | None = None) -> dict:
-    """Use a serum from the shelf. Adrenaline and repair act now; the rest wait for their moment."""
+    """Use a serum from the shelf. Repair acts now; the rest wait for their moment."""
     from bio_lab.repository import lock_row
 
     if kind not in KINDS:
@@ -291,24 +288,12 @@ def use(user: User, kind: str, member_id: int | None = None) -> dict:
         if int((row.stock or {}).get(kind, 0)) <= 0:
             raise GameError(f"سرم «{label}» نداری. اول بسازش.")
         today = _today()
-        used = row.used_count if row.used_day == today else 0   # adrenaline used today
-        if kind == "adrenaline" and used >= ADRENALINE_DAILY:
-            raise GameError(f"امروز {ADRENALINE_DAILY} آدرنالین مصرف کردی؛ سقف روزانه‌ی آدرنالین پر شده. فردا دوباره.")
+        used = row.used_count if row.used_day == today else 0   # counted for stats only
         if kind in ARMED and kind in (row.armed or {}):
             raise GameError(f"یه «{label}» الان فعاله و منتظر لحظه‌شه.")
         klvl = int((row.levels or {}).get(kind, 1))
         note = ""
-        if kind == "adrenaline":
-            from game.energy import get_max_energy, sync_energy
-
-            cur, top = sync_energy(user), get_max_energy(user)
-            if cur >= top:
-                raise GameError("انرژیت پره؛ آدرنالین رو بذار برای وقتی که لازمت شد.")
-            gain = min(int(effect(kind, klvl)), top - cur)
-            user.energy = cur + gain
-            user.save(update_fields=["energy", "energy_updated_at"])
-            note = f"+{gain} انرژی"
-        elif kind == "heal":
+        if kind == "heal":
             from game import dungeon
 
             note = dungeon.heal_member(user, member_id, int(effect(kind, klvl)))
@@ -317,8 +302,7 @@ def use(user: User, kind: str, member_id: int | None = None) -> dict:
             row.armed = {**(row.armed or {}), kind: {"lvl": klvl, "until": until}}
             note = "فعال شد: " + KINDS[kind]["where"]
         row.stock = {**row.stock, kind: int(row.stock.get(kind, 0)) - 1}
-        if kind == "adrenaline":
-            row.used_day, row.used_count = today, used + 1
+        row.used_day, row.used_count = today, used + 1
         if not row.queue:   # room on the shelf again: a paused queue would restart here anyway
             row.brew_started_at = None
         elif row.brew_started_at is None:

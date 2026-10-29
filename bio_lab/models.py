@@ -638,6 +638,9 @@ class DungeonProfile(models.Model):
     runs = models.IntegerField(default=0)
     clears = models.IntegerField(default=0)
     best_room = models.IntegerField(default=0)
+    # today's buys of the shop items with a daily cap (game.dungeon.SHOP «daily»): {key: n}
+    shop_day = models.CharField(max_length=10, blank=True, default="")
+    shop_bought = models.JSONField(default=dict, blank=True)
 
 
 class DungeonRun(models.Model):

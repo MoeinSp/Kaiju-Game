@@ -151,7 +151,7 @@ def quit_run(request, user, data):
 def _shop_state(user: User) -> dict:
     prof = D.profile(user)
     return {"black_runes": prof.black_runes, "keys": prof.keys, "shadow_cores": prof.shadow_cores,
-            "items": [{"key": k, "label": v["label"], "price": v["price"]} for k, v in D.SHOP.items()]}
+            "items": D.shop_items(prof)}
 
 
 @endpoint()

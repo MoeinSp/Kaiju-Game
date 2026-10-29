@@ -151,7 +151,7 @@ def _extra(user: User, big: bool) -> dict | None:
     pool = [({"t": "card", "m": 60 if big else random.choice((15, 30))}, 40),
             ({"t": "chest", "tier": "magical" if big else "golden"}, 25),
             ({"t": "gear", "r": "legendary"}, 30 if big else 10)]
-    if dungeon.unlocked(user):
+    if big and dungeon.unlocked(user):   # a dungeon key only in the daily special order (≤1 a day)
         pool.append(({"t": "key", "n": 1}, 25))
     items, weights = zip(*pool)
     return dict(random.choices(items, weights)[0])

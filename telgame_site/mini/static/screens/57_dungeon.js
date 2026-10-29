@@ -221,8 +221,9 @@
         return '<div class="grab"></div><div class="pad"><div class="ttl" style="font-size:18px">فروشگاه سیاه‌چال</div>' +
           '<p class="lead" style="margin:4px 0 12px">رون سیاه: ' + runes(s.black_runes) + " · کلید: " + K.n(s.keys) + "</p>" + (note || "") +
           s.items.map(function (it) {
-            var can = s.black_runes >= it.price;
-            return '<button class="panel dg-rune' + (can ? "" : " dim") + '" data-buy="' + it.key + '"><b>' + K.esc(it.label) + "</b>" + runes(it.price) + "</button>";
+            var out = it.left === 0, can = !out && s.black_runes >= it.price;
+            var cap = out ? '<small class="muted">امروز خریدی؛ فردا دوباره</small>' : it.left != null ? '<small class="muted">روزی ۱ بار</small>' : "";
+            return '<button class="panel dg-rune' + (can ? "" : " dim") + '" data-buy="' + it.key + '"' + (out ? " disabled" : "") + "><b>" + K.esc(it.label) + "</b>" + cap + runes(it.price) + "</button>";
           }).join("") + "</div>";
       }
       function wire() {

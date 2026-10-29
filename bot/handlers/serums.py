@@ -19,7 +19,7 @@ from game.blackmarket import format_time_remaining as _left
 from game.creature import GameError
 
 _DIV = "──────────"
-_ICON = {"rage": "🔥", "tracker": "🎯", "adrenaline": "⚡", "shell": "🛡", "heal": "💖", "slayer": "🐉"}
+_ICON = {"rage": "🔥", "tracker": "🎯", "shell": "🛡", "heal": "💖", "slayer": "🐉"}
 
 
 def _photo(level: int) -> Path:
@@ -41,8 +41,7 @@ def _lab_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     lines = [f"🧪 <b>آزمایشگاه سرم · سطح {st['level']}</b>", _DIV,
              f"🧴 قفسه: <code>{st['stock_total']}/{st['capacity']}</code>",
              f"⏱ هر سرم: <code>{st['brew_minutes']}</code> دقیقه",
-             f"🧬 هزینه‌ی هر سرم: <code>{st['brew_cost']:,}</code> DNA",
-             f"⚡ آدرنالین امروز: <code>{st['used']}/{st['adrenaline_daily']}</code>"]
+             f"🧬 هزینه‌ی هر سرم: <code>{st['brew_cost']:,}</code> DNA"]
     if st["queue"]:
         nxt = f" · بعدی تا {_left(st['next_in'])}" if st["next_in"] is not None else " · منتظر جای خالی"
         lines.append(f"⚗️ در حال ساخت: <code>{len(st['queue'])}</code>{nxt}")

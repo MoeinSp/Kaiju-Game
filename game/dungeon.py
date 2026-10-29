@@ -120,16 +120,16 @@ RUNES = {
 }
 
 SHOP = {
-    # 80, not 40: a nightmare win pays ~40-50 runes back, so a 40-rune key bought itself again
-    # and farmed shadow cores without end
-    "key": {"label": "کلید سیاه‌چال", "price": 80},
+    # «daily» = buys a day. 80 runes and once a day: a nightmare win pays ~40-50 runes back, so a
+    # cheap uncapped key bought itself again and farmed shadow cores without end
+    "key": {"label": "کلید سیاه‌چال", "price": 80, "daily": 1},
     # chests priced well above a run's runes: a maxed player earns ~85-110 runes a day, so a
     # 90-rune omega (30-70% mythic) was a mythic every other day
     "magical_chest": {"label": "جعبه‌ی جادویی", "price": 80},
     "legendary_gear": {"label": "تجهیزات افسانه‌ای تصادفی", "price": 60},
     "relic": {"label": "اثر باستانی تصادفی (۳ روزه)", "price": 70},
     "mega_chest": {"label": "جعبه‌ی امگا", "price": 200},
-    "shadow_core": {"label": "هسته‌ی سایه (فرم سیاه)", "price": 60},
+    "shadow_core": {"label": "هسته‌ی سایه (فرم سیاه)", "price": 100, "daily": 1},
 }
 
 
@@ -149,11 +149,20 @@ def profile(user: User) -> DungeonProfile:
         with transaction.atomic():
             prof = DungeonProfile.objects.select_for_update().get(pk=prof.pk)
             if prof.keys_day != today:
-                extra = relics.bonus(user, "shadow_key")
+                extra = relics.bonus(user, "shadow_key") + gold_vip_keys(user)
                 prof.keys = max(prof.keys, min(KEY_CAP + extra, prof.keys + DAILY_KEYS + extra))
                 prof.keys_day = today
                 prof.save(update_fields=["keys", "keys_day"])
     return prof
+
+
+GOLD_VIP_KEYS = 1   # «اشتراک طلایی»: an extra free key a day
+
+
+def gold_vip_keys(user: User) -> int:
+    from game.subscription import get_subscription_tier
+
+    return GOLD_VIP_KEYS if get_subscription_tier(user) == "gold" else 0
 
 
 def active_run(user: User, lock: bool = False) -> DungeonRun | None:
@@ -625,6 +634,9 @@ def shop_buy(user: User, key: str) -> dict:
     if item is None:
         raise GameError("این کالا وجود نداره.")
     prof = DungeonProfile.objects.select_for_update().get(pk=profile(user).pk)
+    bought = shop_bought_today(prof)
+    if item.get("daily") and bought.get(key, 0) >= item["daily"]:
+        raise GameError(f"«{item['label']}» رو روزی {item['daily']} بار می‌شه خرید؛ فردا دوباره.")
     if prof.black_runes < item["price"]:
         raise GameError(f"رون سیاه کافی نداری ({item['price']} لازمه، {prof.black_runes} داری).")
     out = {"key": key, "label": item["label"]}
@@ -647,8 +659,26 @@ def shop_buy(user: User, key: str) -> dict:
     elif key == "shadow_core":
         prof.shadow_cores += 1
     prof.black_runes -= item["price"]
-    prof.save(update_fields=["black_runes", "keys", "shadow_cores"])
+    if item.get("daily"):
+        from game.daily import today_str
+
+        prof.shop_day, prof.shop_bought = today_str(), {**bought, key: bought.get(key, 0) + 1}
+    prof.save(update_fields=["black_runes", "keys", "shadow_cores", "shop_day", "shop_bought"])
     return out
+
+
+def shop_bought_today(prof: DungeonProfile) -> dict:
+    """{key: n} bought today of the daily-capped shop items."""
+    from game.daily import today_str
+
+    return dict(prof.shop_bought or {}) if prof.shop_day == today_str() else {}
+
+
+def shop_items(prof: DungeonProfile) -> list[dict]:
+    """The shop with what is left of each daily cap (None = no cap) — bot and Mini App."""
+    bought = shop_bought_today(prof)
+    return [{"key": k, "label": v["label"], "price": v["price"],
+             "left": (v["daily"] - bought.get(k, 0)) if v.get("daily") else None} for k, v in SHOP.items()]
 
 
 # ══════════════════════════ read-only view ══════════════════════════
@@ -662,6 +692,7 @@ def view(user: User) -> dict:
         "keys": prof.keys if prof else 0, "black_runes": prof.black_runes if prof else 0,
         "runs": prof.runs if prof else 0, "clears": prof.clears if prof else 0,
         "shadow_cores": prof.shadow_cores if prof else 0,
+        "shop": shop_items(prof) if prof else [],
         "best_difficulty": prof.best_difficulty if prof else 0,
         "difficulties": [{"key": k, "label": d["label"], "open": (prof.best_difficulty if prof else 0) >= d["need"]}
                          for k, d in DIFFICULTIES.items()],

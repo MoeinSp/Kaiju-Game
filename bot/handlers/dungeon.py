@@ -308,8 +308,14 @@ def _shop_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     lines = ["🔮 <b>فروشگاه سیاه‌چال</b>", _DIV, f"🔮 رون سیاه: <code>{v['black_runes']}</code>"]
     if note:
         lines += [_DIV, note]
-    rows = [[btn(f"{item['label']} · {item['price']} 🔮", style=SHOP if v["black_runes"] >= item["price"] else NAV,
-                 callback_data=f"dg:buy:{key}")] for key, item in D.SHOP.items()]
+    rows = []
+    for item in v["shop"]:
+        if item["left"] == 0:
+            label, style = f"{item['label']} · امروز خریدی", NAV
+        else:
+            cap = " (روزی ۱)" if item["left"] is not None else ""
+            label, style = f"{item['label']} · {item['price']} 🔮{cap}", SHOP if v["black_runes"] >= item["price"] else NAV
+        rows.append([btn(label, style=style, callback_data=f"dg:buy:{item['key']}")])
     rows.append([back_btn("dg:home", "بازگشت به سیاه‌چال")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 

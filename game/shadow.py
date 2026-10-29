@@ -22,7 +22,7 @@ from game import constants
 from game.creature import GameError, raw_power
 
 # cores and gold to go from level L to L+1 (index L)
-CORE_COST = (5, 8, 12, 18, 25)
+CORE_COST = (8, 12, 16, 22, 30)   # 88 in all (was 68): ~3-4 weeks for a first black form, simulated
 GOLD_COST = (200_000, 400_000, 700_000, 1_000_000, 1_500_000)
 LEVEL_NAMES = ("", "سایه ۱", "سایه ۲", "سایه ۳", "سایه ۴", "سایه ۵")
 

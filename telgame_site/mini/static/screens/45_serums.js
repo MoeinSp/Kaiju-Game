@@ -26,8 +26,7 @@
           var shelf = st.stock_total, cap = st.capacity, queued = st.queue.length;
           var html = '<div class="banner sr-ban" style="background-image:url(\'' + K.asset("img/hub_serums.jpg") + '\')"><div class="grow">' +
             '<div class="ttl">آزمایشگاه سرم · سطح ' + K.n(st.level) + "</div>" +
-            '<div class="sr-meta"><span>' + K.ic("vial") + "قفسه " + K.n(shelf) + "/" + K.n(cap) + "</span><span>" + K.ic("clock") + K.n(st.brew_minutes) + " دقیقه هر سرم</span>" +
-            "<span>" + K.ic("bolt") + "آدرنالین امروز " + K.n(st.used) + " از " + K.n(st.adrenaline_daily) + "</span></div>" + K.bar(cap ? (shelf + queued) / cap : 0, "good") + "</div></div>";
+            '<div class="sr-meta"><span>' + K.ic("vial") + "قفسه " + K.n(shelf) + "/" + K.n(cap) + "</span><span>" + K.ic("clock") + K.n(st.brew_minutes) + " دقیقه هر سرم</span></div>" + K.bar(cap ? (shelf + queued) / cap : 0, "good") + "</div></div>";
           // armed serums waiting for their moment
           var armed = st.kinds.filter(function (k) { return k.armed; });
           if (armed.length) html += '<div class="sr-armed">' + armed.map(function (k) {
