@@ -19,7 +19,7 @@ from game.blackmarket import format_time_remaining as _left
 from game.creature import GameError
 
 _DIV = "──────────"
-_ICON = {"rage": "🔥", "tracker": "🎯", "shell": "🛡", "heal": "💖", "slayer": "🐉"}
+_ICON = {"rage": "🔥", "tracker": "🎯", "warrior": "⚔️", "shell": "🛡", "heal": "💖", "slayer": "🐉"}
 
 
 def _photo(level: int) -> Path:

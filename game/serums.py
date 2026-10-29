@@ -2,8 +2,9 @@
 
 The building («serum_lab», built like any other) brews one serum at a time from a queue, with
 DNA paid when the serum is queued. Finished serums wait on a shelf whose size grows with the
-building. A serum is then USED: repair acts at once; rage, tracker, shell and giant-slayer are
-«armed» and spent by the next arena attack / hunt / defence / boss hit.
+building. A serum is then USED: repair acts at once; rage, tracker, warrior, shell and
+giant-slayer are «armed» and spent by the next arena attack / hunt / group «اتک» / defence /
+boss hit.
 
 Each serum also has its own level, 1 to 5, raised inside the lab (gold + DNA + time, one at
 a time, never above the building's level). The level sets the size of its effect.
@@ -36,6 +37,8 @@ KINDS: dict[str, dict] = {
              "text": "+{v}٪ قدرت در حمله‌ی بعدی آرنا"},
     "tracker": {"label": "ردیاب", "where": "شکار بعدی", "unlock": 1, "fx": [1.5, 1.75, 2.0, 2.25, 2.5],
                 "text": "غنیمت شکار بعدی ×{v}"},
+    "warrior": {"label": "جنگاور", "where": "اتک گروهی بعدی", "unlock": 2, "fx": [10, 12, 14, 17, 20],
+                "text": "+{v}٪ قدرت در اتک گروهی بعدی"},
     "shell": {"label": "پوسته", "where": f"دفاع بعدی آرنا (تا {SHELL_HOURS} ساعت)", "unlock": 3, "fx": [10, 12, 14, 17, 20],
               "text": "+{v}٪ قدرت مدافعت در حمله‌ی بعدی آرنا که بهت می‌شه"},
     "heal": {"label": "ترمیم", "where": "سیاه‌چال", "unlock": 3, "fx": [30, 35, 40, 45, 50],
@@ -43,8 +46,8 @@ KINDS: dict[str, dict] = {
     "slayer": {"label": "غول‌کش", "where": "ضربه‌ی بعدی به غول", "unlock": 4, "fx": [15, 18, 22, 26, 30],
                "text": "+{v}٪ آسیب در ضربه‌ی بعدی به غول سرگردان"},
 }
-ORDER = ["rage", "tracker", "shell", "heal", "slayer"]
-ARMED = ("rage", "tracker", "shell", "slayer")     # wait for their moment; the others act at once
+ORDER = ["rage", "tracker", "warrior", "shell", "heal", "slayer"]
+ARMED = ("rage", "tracker", "warrior", "shell", "slayer")     # wait for their moment; heal acts at once
 
 # by building level: shelf size and minutes per serum
 CAPACITY = {1: 3, 2: 3, 3: 4, 4: 4, 5: 5}   # 3 places, +1 at levels 3 and 5

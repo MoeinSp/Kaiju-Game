@@ -1238,6 +1238,13 @@ def _group_defender(target, a_creature):
     return creature or get_active_creature(target)
 
 
+def _group_attack_power(attacker, a_creature) -> int:
+    """The attacker's power as the «اتک» card shows it — with an armed «سرم جنگاور»."""
+    from game import serums
+
+    return round(_creature_power(a_creature) * serums.peek(attacker, "warrior"))
+
+
 def _pvp_preview_sync(attacker_tg, target_tg):
     """Read-only power comparison before a reply-attack is confirmed."""
     if target_tg.id == attacker_tg.id or target_tg.is_bot:
@@ -1256,7 +1263,7 @@ def _pvp_preview_sync(attacker_tg, target_tg):
     from game.energy import get_max_energy, sync_energy
 
     return (
-        lab_mention(attacker), _creature_power(a_creature), a_creature.element,
+        lab_mention(attacker), _group_attack_power(attacker, a_creature), a_creature.element,
         lab_mention(target), _creature_power(t_creature), t_creature.element,
         group_shield_remaining_seconds(target),
         a_creature.name, t_creature.name, sync_energy(attacker),
@@ -1407,7 +1414,7 @@ def _pvp_preview_by_ids_sync(attacker_id, target_id):
     from game.energy import get_max_energy, sync_energy
 
     return (
-        lab_mention(attacker), _creature_power(a_creature), a_creature.element,
+        lab_mention(attacker), _group_attack_power(attacker, a_creature), a_creature.element,
         lab_mention(target), _creature_power(t_creature), t_creature.element,
         group_shield_remaining_seconds(target),
         a_creature.name, t_creature.name, sync_energy(attacker),
@@ -1572,8 +1579,11 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
 
     spend_energy(attacker, constants.RAID_ATTACK_ENERGY_COST, "حمله")
 
-    a_power = _creature_power(a_creature)
-    battle = resolve_battle(a_creature, t_creature)
+    from game import serums
+
+    warrior = serums.take(attacker, "warrior")   # «سرم جنگاور», spent by this attack
+    a_power = round(_creature_power(a_creature) * warrior)
+    battle = resolve_battle(a_creature, t_creature, power_a=a_power if warrior > 1 else None)
     winner_creature = battle["winner"]
     log_text, detail_log = battle["compact"], battle["detail"]
     attacker_won = winner_creature.id == a_creature.id
