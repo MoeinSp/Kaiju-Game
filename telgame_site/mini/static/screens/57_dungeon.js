@@ -23,27 +23,41 @@
     retryStart = function () { start(tier, null, then); };
     K.api.post("dungeon/start/", { difficulty: tier }, el).then(function (d) { K.haptic("ok"); then(d); }).catch(function () {});
   }
+  /* The team sheet: the three slots on top (tap one to take it out), the rest of the
+     collection under them (tap to add), «ورود» pinned at the bottom. */
   function pickHtml(d, msg) {
-    var n = d.members.length;
-    return '<div class="grab"></div><div class="pad"><div class="ttl" style="font-size:18px">تیم حمله <span class="num faint">' + K.n(n) + "/" + K.n(d.max) + "</span></div>" +
-      '<p class="lead" style="margin:4px 0 12px">' + K.esc(msg || "روی هیولا بزن تا به تیم اضافه یا ازش حذف شه (حداکثر " + K.n(d.max) + ").") + "</p>" +
-      '<div class="panel list hu-team">' + d.creatures.map(function (c) {
-        return '<button data-pick="' + c.id + '" class="' + (c.in_team ? "on" : "") + '">' +
-          '<img class="th" src="' + c.img + '" alt=""><span class="t"><span class="b">' + K.esc(c.name) + '</span> <span class="e-' + c.element + ' sm">' + K.ic(K.EL_ICON[c.element] || "atom") + K.esc(K.elLabel(c.element)) + "</span>" +
-          (c.in_team ? ' <span class="tag hu-on">' + K.ic("check") + "توی تیم</span>" : "") + "</span>" +
+    var n = d.members.length, byId = {};
+    d.creatures.forEach(function (c) { byId[c.id] = c; });
+    var slots = "";
+    for (var i = 0; i < d.max; i++) {
+      var c = byId[d.members[i]];
+      slots += c ? '<button class="dg-tp-slot" data-pick="' + c.id + '"><img src="' + c.img + '" alt=""><b class="cut">' + K.esc(c.name) + "</b>" +
+          '<span class="num t-accent">' + K.ic("power") + K.n(c.power) + '</span><i class="dg-tp-x">' + K.ic("close") + "</i></button>"
+        : '<div class="dg-tp-slot empty">' + K.ic("plus") + "<span>جای خالی</span></div>";
+    }
+    var rest = d.creatures.filter(function (c) { return !c.in_team; });
+    return '<div class="grab"></div><div class="pad">' +
+      '<div class="ttl dg-tp-ttl">تیم حمله <span class="num faint">' + K.n(n) + "/" + K.n(d.max) + "</span></div>" +
+      '<p class="lead dg-tp-lead">' + K.esc(n ? "برای حذف روی هیولای تیم بزن، برای اضافه کردن از لیست پایین انتخاب کن." : (msg || "از لیست پایین تا " + K.n(d.max) + " هیولا انتخاب کن.")) + "</p>" +
+      '<div class="dg-tp-slots">' + slots + "</div>" +
+      '<div class="sm muted dg-tp-h">' + K.ic("users") + " هیولاهات" + (n >= d.max ? " · تیم پره؛ اول یکی رو بردار" : "") + "</div>" +
+      '<div class="panel list hu-team dg-tp-list' + (n >= d.max ? " full" : "") + '">' + rest.map(function (c) {
+        return '<button data-pick="' + c.id + '"><img class="th" src="' + c.img + '" alt="">' +
+          '<span class="t"><span class="b">' + K.esc(c.name) + '</span> <span class="e-' + c.element + ' sm">' + K.ic(K.EL_ICON[c.element] || "atom") + K.esc(K.elLabel(c.element)) + "</span></span>" +
           '<span class="v t-accent">' + K.ic("power") + " " + K.n(c.power) + "</span></button>";
       }).join("") + "</div></div>" +
-      '<div class="foot"><button class="btn primary block" data-enter' + (n ? "" : " disabled") + ">" + K.ic("swords") + "ورود به سیاه‌چال</button></div>";
+      '<div class="foot dg-tp-foot"><button class="btn primary block" data-enter' + (n ? "" : " disabled") + ">" + K.ic("swords") + "ورود به سیاه‌چال</button></div>";
   }
   function teamSheet(msg) {
     K.api.get("dungeon/team/").then(function (d) {
-      var box = K.sheet('<div class="dg-teampick">' + pickHtml(d, msg) + "</div>"), wrap = box.querySelector(".dg-teampick"), busy = false;
-      wrap.addEventListener("click", function (ev) {
+      // K.sheet hands back a fresh element per sheet, so this listener dies with it
+      var box = K.sheet(pickHtml(d, msg)), busy = false;
+      box.addEventListener("click", function (ev) {
         var pick = ev.target.closest("[data-pick]");
         if (pick && !busy) {
           busy = true;
           K.api.post("dungeon/team/toggle/", { creature_id: +pick.dataset.pick }, pick).then(function (nd) {
-            d = nd; wrap.innerHTML = pickHtml(d, msg); K.haptic("ok");   // the sheet keeps its scroll
+            d = nd; box.innerHTML = pickHtml(d, msg); K.haptic("ok");   // the sheet keeps its scroll
           }).catch(function () {}).finally(function () { busy = false; });
           return;
         }
