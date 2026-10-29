@@ -74,3 +74,6 @@ svg.i.art, .stars .on, .list .ic svg, .ico-box svg, .info .ic svg, .mp-ic svg, .
 .dy-hero-b, .dy-wheel-bulbs i, button.br-slot.empty, .wb-hpbar > i.low { animation: none !important; }
 .dy-wheel.spin .dy-wheel-bulbs i { animation: dy-bulb 1.4s steps(2) infinite !important; }   /* the bulbs flash only while the wheel turns */
 
+
+/* screens now open from the kept answer at once: a short slide-in reads as instant */
+.wrap.enter.e-fwd { animation-duration: .16s; } .wrap.enter.e-back { animation-duration: .15s; } .wrap.enter.e-tab { animation-duration: .14s; }

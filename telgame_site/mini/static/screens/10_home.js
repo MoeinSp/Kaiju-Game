@@ -6,6 +6,10 @@
 (function (K) {
   "use strict";
 
+  /* what the players open most (web log, 2026-10-29), fetched once per visit after the lobby */
+  var PREFETCH = ["profile/creatures/", "hunt/", "arena/", "daily/today/", "dungeon/", "serums/", "merchant/", "shop/store/", "base/"];
+  var prefetched = false;
+
   function badgeOf(id) { var v = K.badges && K.badges[id]; return v === "live" ? "live" : Number(v) || 0; }
   function tileGo(id) { var t = K.hubTile(id); return t ? t.go : null; }
   function dot(n) { return n === "live" ? '<i class="lb-dot live"></i>' : n ? '<i class="lb-dot num">' + (n > 99 ? "99+" : n) + "</i>" : ""; }
@@ -117,6 +121,8 @@
       setTimeout(function () { ready = true; draw(); }, 700);   // a slow summary must not leave the screen empty
       (K.dy && K.dy.home ? K.dy.home() : K.api.get("daily/home/")).then(function (d) {
         daily = d; ready = true; if (K.setFestival) K.setFestival(d.festival && d.festival.element); draw();
+        // once the lobby is up, the most-opened screens are fetched quietly: they then open at once
+        if (K.prefetch && !prefetched) { prefetched = true; setTimeout(function () { K.prefetch(PREFETCH, ["profile/creatures/"]); }, 1500); }
         // the offers come after the summary: the bubble is slotted in place (no re-draw), and once a day the card
         if (K.offers) K.offers.list().then(function () {
           if (!ctx.alive()) return;

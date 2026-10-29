@@ -195,10 +195,45 @@ window.K = (function () {
   // ───────────────────────── API ─────────────────────────
   K.cache = {};
   var inflight = {}, posting = {}, postSeq = 0;
-  /* the last answer of each GET, reused only while a screen is re-drawn by «back» or a tab tap
-     (reuseUntil) and only if it is fresh — polls and ordinary opens always ask the server */
-  var memo = {}, reuseUntil = 0, REUSE_MS = 15000;
+  /* Screens open with no wait: the last answer of each GET is kept (memo), and a screen opened
+     by the player (K.go / «back» / a tab — the reuseUntil window) is drawn from it at once
+     while the server is asked again behind it; if the new answer differs, the screen is
+     re-drawn in place (refreshShown). Polls, timers and ctx.reload after an action are outside
+     that window and always wait for the server. K.prefetch fills the memo after the lobby. */
+  var memo = {}, reuseUntil = 0, freshUntil = 0, SKIP_MS = 3000, STALE_MS = 10 * 60 * 1000, MEMO_MAX = 300000;
   K.reuseRecent = function () { reuseUntil = Date.now() + 500; };
+  function fetchGet(path) {
+    var seq = postSeq;
+    return request("GET", path).then(function (j) {
+      try { var s = JSON.stringify(j); if (s.length < MEMO_MAX) memo[path] = { t: Date.now(), seq: seq, s: s }; } catch (e) {}
+      return j;
+    });
+  }
+  /* The screen `seq` showed an old answer and a different one has arrived: re-draw it in place
+     (old content stays until the new is ready, scroll kept) — not under an open sheet, a field
+     being typed in, or after the player acted (that action reloads the screen itself). */
+  function refreshShown(seq, pseq) {
+    var tries = 0;
+    (function attempt() {
+      if (seq !== renderSeq || pseq !== postSeq) return;
+      var cur = current(), el = document.activeElement;
+      var busy = !cur || !cur.shown || K.sheetOpen() || (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+      if (busy) { if (tries++ < 40) setTimeout(attempt, 400); return; }
+      freshUntil = Date.now() + 500; paint(true);
+    })();
+  }
+  /* Ask for these GETs now, quietly, so the screens behind them open instantly later.
+     A path in `cachedPaths` goes into the per-session K.api.cached store its screen reads. */
+  K.prefetch = function (paths, cachedPaths) {
+    cachedPaths = cachedPaths || [];
+    var queue = paths.filter(function (p) { return cachedPaths.indexOf(p) >= 0 ? !K.cache[p] : !memo[p]; });
+    function next() {
+      var p = queue.shift();
+      if (!p || document.visibilityState === "hidden") return;
+      (cachedPaths.indexOf(p) >= 0 ? K.api.cached(p) : fetchGet(p)).catch(function () {}).then(next);
+    }
+    next(); next();   // two at a time
+  };
   var GET_TIMEOUT = 15000, POST_TIMEOUT = 30000;
   /* Server clock − phone clock, in seconds (from the HTTP Date header). Countdowns to a server
      timestamp use K.now(), so a phone with a wrong clock still shows the right time left. */
@@ -226,6 +261,7 @@ window.K = (function () {
   function request(method, path, body, btn) {
     var url = "/app/api/" + path + (devUser ? (path.indexOf("?") >= 0 ? "&" : "?") + "dev_user=" + encodeURIComponent(devUser) : "");
     var tries = 0;
+    if (method === "POST") reuseUntil = 0;   // whatever the screen reads after an action comes from the server
     if (btn) btn.classList.add("busy");
     function attempt() {
       var opts = { method: method, headers: { "X-Tg-Init-Data": initData } };
@@ -259,14 +295,19 @@ window.K = (function () {
     /* GET (no toast on error — screens show an error state through the router). A dropped
        connection is retried once by itself; it gives up after 15 s. */
     get: function (path) {
-      // «back» / a tab tap re-opens a screen seen moments ago: draw it from that answer at once
-      // (nothing was done since — any POST moves postSeq) instead of a skeleton and a round trip
-      var m = memo[path];
-      if (Date.now() < reuseUntil && m && m.seq === postSeq && Date.now() - m.t < REUSE_MS) return Promise.resolve(JSON.parse(m.s));
-      return request("GET", path).then(function (j) {
-        try { memo[path] = { t: Date.now(), seq: postSeq, s: JSON.stringify(j) }; } catch (e) {}
-        return j;
-      });
+      var m = memo[path], now = Date.now();
+      // the re-draw refreshShown asked for: the answer that has just arrived
+      if (m && now < freshUntil && m.seq === postSeq) return Promise.resolve(JSON.parse(m.s));
+      if (m && now < reuseUntil && now - m.t < STALE_MS) {
+        // opened by the player: draw the kept answer now, check it with the server behind it
+        // (an answer from the last few seconds with no action since is simply used)
+        if (now - m.t > SKIP_MS || m.seq !== postSeq) {
+          var seq = renderSeq, pseq = postSeq;
+          fetchGet(path).then(function () { if (memo[path] && memo[path].s !== m.s) refreshShown(seq, pseq); }).catch(function () {});
+        }
+        return Promise.resolve(JSON.parse(m.s));
+      }
+      return fetchGet(path);
     },
     /* GET with a per-session cache (use for lists that only change through your own actions;
        call K.invalidate(path) after changing them). Two callers asking at the same moment
@@ -651,7 +692,7 @@ window.K = (function () {
     else { view.classList.remove("reloading"); view.innerHTML = K.skeleton(def.skeleton); }
     view.classList.remove("enter");
     var ctx = {
-      reload: function () { if (current() === cur) paint(true); },
+      reload: function () { if (current() === cur) { reuseUntil = 0; paint(true); } },   // after an action: always the server's answer
       back: K.back,
       setTitle: function (t) { if (seq === renderSeq) titleEl.textContent = t; },
       /* put buttons in the top bar: ctx.actions('<button class="iconbtn" data-act="x">…</button>') */
@@ -661,6 +702,12 @@ window.K = (function () {
     };
     var root = document.createElement("div");
     K.ensure().then(function () { return def.render(root, cur.params || {}, ctx); }).then(function () {
+      // a quiet re-draw swaps in pictures that are already decoded (no blank frame); 150 ms at most
+      if (!soft || !window.Promise || !Promise.all) return;
+      var imgs = Array.prototype.slice.call(root.querySelectorAll("img"), 0, 16).filter(function (i) { return i.decode; });
+      return Promise.race([Promise.all(imgs.map(function (i) { return i.decode().catch(function () {}); })),
+                           new Promise(function (ok) { setTimeout(ok, 150); })]);
+    }).then(function () {
       if (seq !== renderSeq) return;
       var y = soft ? scrollTop() : (cur.scrollY || 0);
       if (soft && !acted) topact.innerHTML = "";
@@ -682,15 +729,15 @@ window.K = (function () {
     var top = current(), sig; try { sig = name + "|" + JSON.stringify(params || {}); } catch (e) { sig = name + "|" + Math.random(); }
     if (top && top.sig === sig && Date.now() - top.at < 700) return;   // a double tap would open it twice (and need two «back»)
     if (top) top.scrollY = scrollTop();                                // «back» returns to where the player was
-    K.haptic(); navDir = "fwd"; stack.push({ name: name, params: params || {}, sig: sig, at: Date.now() }); paint();
+    K.haptic(); navDir = "fwd"; stack.push({ name: name, params: params || {}, sig: sig, at: Date.now() }); K.reuseRecent(); paint();
   };
   /* Replace the current screen (no extra «back» step). */
-  K.replace = function (name, params) { if (!screens[name]) return; stack[stack.length - 1] = { name: name, params: params || {} }; paint(); };
+  K.replace = function (name, params) { if (!screens[name]) return; stack[stack.length - 1] = { name: name, params: params || {} }; K.reuseRecent(); paint(); };
   K.back = function () { if (stack.length > 1) { navDir = "back"; stack.pop(); K.reuseRecent(); paint(); } };
   /* Switch bottom tab (resets the stack). */
   K.tab = function (name) { if (!screens[name]) return; navDir = "tab"; stack = [{ name: name, params: {} }]; K.reuseRecent(); paint(); };
   /* Re-draw the current screen in place (same as ctx.reload()). */
-  K.reload = function () { if (stack.length) paint(true); };
+  K.reload = function () { if (stack.length) { reuseUntil = 0; paint(true); } };
   /* The «back» the PLAYER presses (top bar, Telegram's BackButton): an open sheet closes first. */
   function backPressed() { if (K.sheetOpen()) { K.closeSheet(); return; } K.back(); }
   backEl.onclick = backPressed;
