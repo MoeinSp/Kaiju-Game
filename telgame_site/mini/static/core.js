@@ -195,6 +195,10 @@ window.K = (function () {
   // ───────────────────────── API ─────────────────────────
   K.cache = {};
   var inflight = {}, posting = {}, postSeq = 0;
+  /* the last answer of each GET, reused only while a screen is re-drawn by «back» or a tab tap
+     (reuseUntil) and only if it is fresh — polls and ordinary opens always ask the server */
+  var memo = {}, reuseUntil = 0, REUSE_MS = 15000;
+  K.reuseRecent = function () { reuseUntil = Date.now() + 500; };
   var GET_TIMEOUT = 15000, POST_TIMEOUT = 30000;
   /* Server clock − phone clock, in seconds (from the HTTP Date header). Countdowns to a server
      timestamp use K.now(), so a phone with a wrong clock still shows the right time left. */
@@ -254,7 +258,16 @@ window.K = (function () {
   K.api = {
     /* GET (no toast on error — screens show an error state through the router). A dropped
        connection is retried once by itself; it gives up after 15 s. */
-    get: function (path) { return request("GET", path); },
+    get: function (path) {
+      // «back» / a tab tap re-opens a screen seen moments ago: draw it from that answer at once
+      // (nothing was done since — any POST moves postSeq) instead of a skeleton and a round trip
+      var m = memo[path];
+      if (Date.now() < reuseUntil && m && m.seq === postSeq && Date.now() - m.t < REUSE_MS) return Promise.resolve(JSON.parse(m.s));
+      return request("GET", path).then(function (j) {
+        try { memo[path] = { t: Date.now(), seq: postSeq, s: JSON.stringify(j) }; } catch (e) {}
+        return j;
+      });
+    },
     /* GET with a per-session cache (use for lists that only change through your own actions;
        call K.invalidate(path) after changing them). Two callers asking at the same moment
        share one request. */
@@ -673,9 +686,9 @@ window.K = (function () {
   };
   /* Replace the current screen (no extra «back» step). */
   K.replace = function (name, params) { if (!screens[name]) return; stack[stack.length - 1] = { name: name, params: params || {} }; paint(); };
-  K.back = function () { if (stack.length > 1) { navDir = "back"; stack.pop(); paint(); } };
+  K.back = function () { if (stack.length > 1) { navDir = "back"; stack.pop(); K.reuseRecent(); paint(); } };
   /* Switch bottom tab (resets the stack). */
-  K.tab = function (name) { if (!screens[name]) return; navDir = "tab"; stack = [{ name: name, params: {} }]; paint(); };
+  K.tab = function (name) { if (!screens[name]) return; navDir = "tab"; stack = [{ name: name, params: {} }]; K.reuseRecent(); paint(); };
   /* Re-draw the current screen in place (same as ctx.reload()). */
   K.reload = function () { if (stack.length) paint(true); };
   /* The «back» the PLAYER presses (top bar, Telegram's BackButton): an open sheet closes first. */

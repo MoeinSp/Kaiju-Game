@@ -46,3 +46,31 @@ body::before, body::after, #season-tint { will-change: transform; transform: tra
 .lb-top { min-height: 60px; }
 
 @media (prefers-reduced-motion: reduce) { .lobby .lb-fight, .shs-card.hot::before, .gp.top::before, .of-art::before { animation: none !important; } }
+
+/* ═════════ pass 2 (2026-10-29): «it still hangs on a strong phone» ═════════
+   Measured in the app: the JS and layout of every screen take a few ms, so the hangs were the
+   GPU. Two things kept it busy:
+   1) `filter: drop-shadow` on small icons — every filtered icon is painted into its own
+      offscreen surface (139 of them on the collection screen, 82 on the battle pass), and
+      scrolling re-composed them all;
+   2) ambient loops that never stop (fog, drifting motes, smoke, blinking dots, pulsing glows)
+      — 31 animations ran at once on the lobby, so a 90/120 Hz screen redrew the whole page
+      every frame even with nobody touching it, and the moving layers under the content made
+      the browser lift most of the page onto extra layers.
+   The icons keep their colours (a dark outline still comes from the art itself), the scenes
+   stay as still pictures; the loops that point at something to do (the fight button, a
+   ready chest) keep moving, by transform only. */
+svg.i.art, .stars .on, .list .ic svg, .ico-box svg, .info .ic svg, .mp-ic svg, .res .ri, .hx-ic svg, .hx-gh svg,
+.lb-orb svg, nav.tabs button.on svg, nav.tabs button.on .ti svg, .lb-c-ic, .shs-coins, .rs-stars i, .coach-hand { filter: none !important; }
+
+/* still scenery: fog, motes, the shadow-form smoke and the pedestal glow */
+.lb-fog, .lb-motes, .lb-pedestal, .shadow .aura i { animation: none !important; }
+/* season particles: a few on the lobby only — not behind every hub */
+.hx-bg .season-fx { display: none; }
+.season-fx i:nth-child(n+9) { display: none; }
+
+/* blinking «live» dots and glow pulses become still marks */
+.lb-dot.live, .hx-badge.live, .wb-live::before, .timer.soon { animation: none !important; }
+.dy-hero-b, .dy-wheel-bulbs i, button.br-slot.empty, .wb-hpbar > i.low { animation: none !important; }
+.dy-wheel.spin .dy-wheel-bulbs i { animation: dy-bulb 1.4s steps(2) infinite !important; }   /* the bulbs flash only while the wheel turns */
+
