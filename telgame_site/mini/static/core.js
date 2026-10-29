@@ -200,6 +200,7 @@ window.K = (function () {
      while the server is asked again behind it; if the new answer differs, the screen is
      re-drawn in place (refreshShown). Polls, timers and ctx.reload after an action are outside
      that window and always wait for the server. K.prefetch fills the memo after the lobby. */
+  var cacheAt = {};   // when each K.api.cached answer was read
   var memo = {}, pending = {}, reuseUntil = 0, freshUntil = 0, SKIP_MS = 3000, STALE_MS = 30 * 60 * 1000, MEMO_MAX = 300000;
   K.reuseRecent = function () { reuseUntil = Date.now() + 500; };
   function fetchGet(path) {
@@ -221,11 +222,14 @@ window.K = (function () {
   function refreshShown(seq, pseq) {
     var tries = 0;
     (function attempt() {
-      if (seq !== renderSeq || pseq !== postSeq) return;
+      if (seq !== renderSeq) return;
       var cur = current(), el = document.activeElement;
       var busy = !cur || !cur.shown || K.sheetOpen() || (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
       if (busy) { if (tries++ < 40) setTimeout(attempt, 400); return; }
-      freshUntil = Date.now() + 500; paint(true);
+      // an action went out meanwhile (the player's, or one the screen sends by itself, e.g. «plunder
+      // seen»): the answer that just came may be older than it — re-read from the server instead
+      if (pseq === postSeq) freshUntil = Date.now() + 500;
+      paint(true);
     })();
   }
   /* Ask for these GETs now, quietly, so the screens behind them open instantly later.
@@ -317,7 +321,9 @@ window.K = (function () {
         // (an answer from the last few seconds with no action since is simply used)
         if (now - m.t > SKIP_MS || m.seq !== postSeq) {
           var seq = renderSeq, pseq = postSeq;
-          fetchGet(path).then(function () { if (memo[path] && memo[path].s !== m.s) refreshShown(seq, pseq); }).catch(function () {});
+          // re-draw when the answer changed, or when an action went out meanwhile (then the
+          // screen re-reads: this answer may predate it, see refreshShown)
+          fetchGet(path).then(function () { if (pseq !== postSeq || (memo[path] && memo[path].s !== m.s)) refreshShown(seq, pseq); }).catch(function () {});
         }
         return Promise.resolve(JSON.parse(m.s));
       }
@@ -327,9 +333,23 @@ window.K = (function () {
        call K.invalidate(path) after changing them). Two callers asking at the same moment
        share one request. */
     cached: function (path) {
-      if (K.cache[path]) return Promise.resolve(K.cache[path]);
+      if (K.cache[path]) {
+        // opened by the player and kept a while (the lobby prefetch, an earlier visit): check it
+        // behind the screen too — the bot may have changed it (a new kaiju, a gear drop …)
+        var at = cacheAt[path] || 0, now = Date.now();
+        if (now < reuseUntil && now - at > SKIP_MS && !inflight[path]) {
+          var seq = renderSeq, pseq = postSeq, before = JSON.stringify(K.cache[path]);
+          inflight[path] = request("GET", path).then(function (j) {
+            delete inflight[path];
+            if (pseq !== postSeq) return;   // an action since: its own invalidate/reload decides
+            K.cache[path] = j; cacheAt[path] = Date.now();
+            if (JSON.stringify(j) !== before) refreshShown(seq, pseq);
+          }, function () { delete inflight[path]; });
+        }
+        return Promise.resolve(K.cache[path]);
+      }
       if (inflight[path]) return inflight[path];
-      var p = request("GET", path).then(function (j) { if (inflight[path] === p) { K.cache[path] = j; delete inflight[path]; } return j; },
+      var p = request("GET", path).then(function (j) { if (inflight[path] === p) { K.cache[path] = j; cacheAt[path] = Date.now(); delete inflight[path]; } return j; },
                                          function (err) { if (inflight[path] === p) delete inflight[path]; throw err; });
       inflight[path] = p; return p;
     },
