@@ -13,12 +13,12 @@ from bio_lab.models import Creature, Team
 from bio_lab.repository import get_or_create_user
 from bot.buttons import LIST, NAV, PRIMARY, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
-from game import constants
+from game import attack_team, constants
 from game.creature import GameError
 from game.emoji import get_emoji
 from game.teambattle import team_power
 
-MAX_SLOTS = 3
+MAX_SLOTS = attack_team.MAX_SLOTS
 TEAM_PAGE = 8
 
 
@@ -27,16 +27,7 @@ def _team_members(team: Team) -> list[int]:
 
 
 def _prune_team(team: Team, owned_ids: set[int]) -> list[int]:
-    """Drop any slot pointing to a creature the player no longer owns (transferred,
-    fused, devoured…). Those dangling slots used to still count toward the 3-cap, so a
-    team that really had 2 creatures reported as 'full' — the reported bug. Persists the
-    cleanup and returns the valid, ordered member ids."""
-    valid = [cid for cid in (team.slot1_id, team.slot2_id, team.slot3_id) if cid in owned_ids]
-    cleaned = (valid + [None, None, None])[:3]
-    if [team.slot1_id, team.slot2_id, team.slot3_id] != cleaned:
-        team.slot1_id, team.slot2_id, team.slot3_id = cleaned
-        team.save(update_fields=["slot1", "slot2", "slot3", "updated_at"])
-    return valid
+    return attack_team.prune(team, owned_ids)
 
 
 def _panel_sync(tg_user):
@@ -102,6 +93,7 @@ def _render(view: dict, filt: str = "all", page: int = 0, is_group: bool = False
     rows += nav_rows
     if not is_group:
         rows.append([back_btn("menu:arena", "بازگشت به آرنا") if back == "menu:arena"
+                     else back_btn("dg:home", "بازگشت به سیاه‌چال") if back == "dg:home"
                      else back_btn("menu:hub_creature", "بازگشت به هیولا")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -118,9 +110,9 @@ async def team_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     is_group = bool(update.effective_chat and update.effective_chat.type in ("group", "supergroup"))
     if update.callback_query:
         await update.callback_query.answer()
-    # opened from the arena («تیم حمله») → back to the arena; from the creature hub → there
-    context.user_data["team_back"] = (
-        "menu:arena" if update.callback_query and update.callback_query.data == "arena_team" else "menu:hub_creature")
+    # opened from the arena («تیم حمله») → back to the arena; from the dungeon → there; else the creature hub
+    data = update.callback_query.data if update.callback_query else ""
+    context.user_data["team_back"] = {"arena_team": "menu:arena", "dg_team": "dg:home"}.get(data, "menu:hub_creature")
     view = await run_db(_panel_sync, update.effective_user)
     filt, page = _team_view(context)
     text, keyboard = _render(view, filt, page, is_group=is_group, back=_team_back(context))
@@ -142,22 +134,7 @@ async def team_page_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 def _toggle_sync(tg_user, creature_id):
     user, _ = get_or_create_user(tg_user)
-    creature = Creature.objects.filter(id=creature_id, owner=user).first()
-    if creature is None:
-        raise GameError("این موجود توی کلکسیون تو نیست.")
-    team, _ = Team.objects.get_or_create(owner=user)
-    # prune dangling slots first, so the 3-cap counts only creatures the player owns
-    owned_ids = set(Creature.objects.filter(owner=user).values_list("id", flat=True))
-    members = _prune_team(team, owned_ids)
-    if creature_id in members:
-        members = [m for m in members if m != creature_id]
-    else:
-        if len(members) >= MAX_SLOTS:
-            raise GameError("تیم پره! (حداکثر ۳ هیولا) — اول یکی رو بردار.")
-        members.append(creature_id)
-    members = (members + [None, None, None])[:3]
-    team.slot1_id, team.slot2_id, team.slot3_id = members
-    team.save(update_fields=["slot1", "slot2", "slot3", "updated_at"])
+    attack_team.toggle(user, creature_id)   # GameError: not yours / the team is full
     return _panel_sync(tg_user)
 
 
@@ -180,5 +157,6 @@ def register(application) -> None:
     application.add_handler(CommandHandler("team", hall_gated("team", team_panel), filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(team_panel, pattern=r"^menu:team$"))
     application.add_handler(CallbackQueryHandler(hall_gated("team", team_panel), pattern=r"^arena_team$"))
+    application.add_handler(CallbackQueryHandler(hall_gated("team", team_panel), pattern=r"^dg_team$"))
     application.add_handler(CallbackQueryHandler(team_toggle_callback, pattern=r"^team_tog:"))
     application.add_handler(CallbackQueryHandler(team_page_callback, pattern=r"^team_page:"))

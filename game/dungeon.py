@@ -133,6 +133,13 @@ SHOP = {
 }
 
 
+class EmptyTeamError(GameError):
+    """The attack team is empty: the bot and the Mini App answer it with the team picker
+    instead of a dead-end message (code "team" in the Mini App API)."""
+
+    code = "team"
+
+
 # ══════════════════════════ profile / keys ══════════════════════════
 def unlocked(user: User) -> bool:
     return user.campaign_stage >= UNLOCK_STAGE
@@ -383,7 +390,7 @@ def start(user: User, difficulty: str = "normal") -> DungeonRun:
     team = Team.objects.filter(owner=user).first()
     members = team.creatures() if team else []
     if not members:
-        raise GameError("اول از «تیم حمله» حداقل یه هیولا توی تیمت بذار.")
+        raise EmptyTeamError("تیم حمله‌ت خالیه! برای ورود به سیاه‌چال حداقل یه هیولا توی تیم حمله بذار.")
     prof = profile(user)
     prof = DungeonProfile.objects.select_for_update().get(pk=prof.pk)
     need = _diff(difficulty)["need"]

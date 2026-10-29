@@ -286,6 +286,14 @@ async def dungeon_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         arg = None if parts[2] == "x" else int(parts[2])
     try:
         out, v = await run_db(_act_sync, update.effective_user, action, arg)
+    except D.EmptyTeamError as exc:
+        # no dead end: the note comes with the way to fill the team (and back here after)
+        await query.answer()
+        await send_screen(update, f"⚠️ <b>{html.escape(str(exc))}</b>\n\nتا ۳ هیولا انتخاب کن و بعد برگرد و وارد شو.",
+                          parse_mode="HTML", reply_markup=InlineKeyboardMarkup([
+                              [btn("چیدن تیم حمله", emoji_key="btn_team", style=PRIMARY, callback_data="dg_team")],
+                              [back_btn("dg:home", "بازگشت به سیاه‌چال")]]))
+        return
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
         return

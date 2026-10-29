@@ -206,7 +206,8 @@ window.K = (function () {
     var seq = postSeq, q = pending[path];
     if (q && q.seq === seq) return q.p;   // already on its way (a prefetch) and nothing was done since: share it
     var p = request("GET", path).then(function (j) {
-      try { var s = JSON.stringify(j); if (s.length < MEMO_MAX) memo[path] = { t: Date.now(), seq: seq, s: s }; } catch (e) {}
+      // an action that went out meanwhile may have changed this answer: it is not kept
+      try { var s = JSON.stringify(j); if (seq === postSeq && s.length < MEMO_MAX) memo[path] = { t: Date.now(), seq: seq, s: s }; } catch (e) {}
       return j;
     });
     pending[path] = { seq: seq, p: p };
@@ -266,7 +267,13 @@ window.K = (function () {
   function request(method, path, body, btn) {
     var url = "/app/api/" + path + (devUser ? (path.indexOf("?") >= 0 ? "&" : "?") + "dev_user=" + encodeURIComponent(devUser) : "");
     var tries = 0;
-    if (method === "POST") reuseUntil = 0;   // whatever the screen reads after an action comes from the server
+    if (method === "POST") {
+      reuseUntil = 0;   // whatever the screen reads after an action comes from the server
+      // the kept answers of the same feature (dungeon/start/ → dungeon/…) are out of date now: a
+      // screen of it opened next must wait for the server, not show the state before the action
+      var mod = path.split("/")[0] + "/";
+      for (var k in memo) if (k.indexOf(mod) === 0) delete memo[k];
+    }
     if (btn) btn.classList.add("busy");
     function attempt() {
       var opts = { method: method, headers: { "X-Tg-Init-Data": initData } };
@@ -296,6 +303,8 @@ window.K = (function () {
       throw err;
     }).finally(function () { if (btn) btn.classList.remove("busy"); });
   }
+  /* A refusal code a module handles itself instead of the error toast: K.onCode.team = function (err) {…} */
+  K.onCode = {};
   K.api = {
     /* GET (no toast on error — screens show an error state through the router). A dropped
        connection is retried once by itself; it gives up after 15 s. */
@@ -338,6 +347,7 @@ window.K = (function () {
         // short of energy / gold → the way out as a sheet (08_offers.js), at most every 45 s; else a toast
         if ((err.code === "energy" || err.code === "gold") && K.offers && K.offers.need(err.code, err.message)) { /* shown */ }
         else if (err.code === "energy" && K.hasScreen("sh_energy")) K.toast(err.message, "err", { label: "شارژ انرژی", run: function () { K.go("sh_energy"); } });
+        else if (K.onCode[err.code]) K.onCode[err.code](err);   // a module answers this refusal with its own way out
         else K.toast(err.message, "err");
         throw err;
       }).finally(function () { delete posting[key]; if (btn) btn._kbusy = false; });
@@ -345,7 +355,7 @@ window.K = (function () {
   };
   /* Forget cached lists: K.invalidate("profile/creatures/", "profile/equipment/"). A request for
      that path that is still on its way is not stored either. */
-  K.invalidate = function () { for (var i = 0; i < arguments.length; i++) { delete K.cache[arguments[i]]; delete inflight[arguments[i]]; } };
+  K.invalidate = function () { for (var i = 0; i < arguments.length; i++) { delete K.cache[arguments[i]]; delete inflight[arguments[i]]; delete memo[arguments[i]]; } };
 
   // ───────────────────────── HUD ─────────────────────────
   var hudIn = document.getElementById("hud-in");

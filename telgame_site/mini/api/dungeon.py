@@ -107,6 +107,32 @@ def start(request, user, data):
     return _state(User.objects.get(id=user.id))
 
 
+def _team(user: User) -> dict:
+    """The «تیم حمله» sheet: every creature (team first, then rarest/strongest) and who is in."""
+    from game import attack_team
+    from telgame_site.mini.core import creature_list
+
+    members = attack_team.member_ids(user)
+    rows = creature_list(user)
+    for r in rows:
+        r["in_team"] = r["id"] in members
+    rows.sort(key=lambda r: (not r["in_team"], -r.get("power", 0)))
+    return {"members": members, "max": attack_team.MAX_SLOTS, "creatures": rows}
+
+
+@endpoint()
+def team(request, user):
+    return _team(user)
+
+
+@endpoint("POST")
+def team_toggle(request, user, data):
+    from game import attack_team
+
+    attack_team.toggle(user, need_int(data, "creature_id", 1))
+    return _team(user)
+
+
 @endpoint("POST")
 def door(request, user, data):
     ev = D.choose_door(user, need_int(data, "i"))
@@ -247,6 +273,8 @@ def endless_board(request, user):
 routes = [
     ("", home),
     ("start/", start),
+    ("team/", team),
+    ("team/toggle/", team_toggle),
     ("door/", door),
     ("fight/", fight),
     ("rune/", rune),

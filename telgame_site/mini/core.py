@@ -240,7 +240,8 @@ def endpoint(method: str = "GET"):
             try:
                 payload = view(request, user, data, *args, **kwargs) if method == "POST" else view(request, user, *args, **kwargs)
             except GameError as exc:
-                code = "energy" if isinstance(exc, EnergyError) else "gold" if isinstance(exc, InsufficientGoldError) else "rule"
+                code = ("energy" if isinstance(exc, EnergyError) else "gold" if isinstance(exc, InsufficientGoldError)
+                        else getattr(exc, "code", None) or "rule")   # e.g. "team": the dungeon's empty attack team
                 return _json({"error": clean(exc) or "این کار الان ممکن نیست.", "code": code, "res": _safe_res(user)}, 400, request)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("mini app endpoint %s failed", view.__name__)

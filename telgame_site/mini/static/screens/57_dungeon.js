@@ -14,6 +14,44 @@
   function loot(l) { return K.amounts({ coins: l.coins, dna: l.dna }) + (l.runes ? ' <span class="faint">·</span> ' + runes(l.runes) : ""); }
   function hpBar(hp) { return K.bar(hp / 100, hp > 60 ? "good" : hp > 30 ? "gold" : "bad"); }
 
+  // ───────────────────────── start / the attack team ─────────────────────────
+  /* Enter the dungeon. An empty attack team is answered (API code "team", K.onCode) with the
+     team sheet, whose «ورود» button runs this same start again. */
+  var retryStart = null;
+  function start(tier, el, then) {
+    retryStart = function () { start(tier, null, then); };
+    K.api.post("dungeon/start/", { difficulty: tier }, el).then(function (d) { K.haptic("ok"); then(d); }).catch(function () {});
+  }
+  function pickHtml(d, msg) {
+    var n = d.members.length;
+    return '<div class="grab"></div><div class="pad"><div class="ttl" style="font-size:18px">تیم حمله <span class="num faint">' + K.n(n) + "/" + K.n(d.max) + "</span></div>" +
+      '<p class="lead" style="margin:4px 0 12px">' + K.esc(msg || "روی هیولا بزن تا به تیم اضافه یا ازش حذف شه (حداکثر " + K.n(d.max) + ").") + "</p>" +
+      '<div class="panel list hu-team">' + d.creatures.map(function (c) {
+        return '<button data-pick="' + c.id + '" class="' + (c.in_team ? "on" : "") + '">' +
+          '<img class="th" src="' + c.img + '" alt=""><span class="t"><span class="b">' + K.esc(c.name) + '</span> <span class="e-' + c.element + ' sm">' + K.ic(K.EL_ICON[c.element] || "atom") + K.esc(K.elLabel(c.element)) + "</span>" +
+          (c.in_team ? ' <span class="tag hu-on">' + K.ic("check") + "توی تیم</span>" : "") + "</span>" +
+          '<span class="v t-accent">' + K.ic("power") + " " + K.n(c.power) + "</span></button>";
+      }).join("") + "</div></div>" +
+      '<div class="foot"><button class="btn primary block" data-enter' + (n ? "" : " disabled") + ">" + K.ic("swords") + "ورود به سیاه‌چال</button></div>";
+  }
+  function teamSheet(msg) {
+    K.api.get("dungeon/team/").then(function (d) {
+      var box = K.sheet('<div class="dg-pick">' + pickHtml(d, msg) + "</div>"), wrap = box.querySelector(".dg-pick"), busy = false;
+      wrap.addEventListener("click", function (ev) {
+        var pick = ev.target.closest("[data-pick]");
+        if (pick && !busy) {
+          busy = true;
+          K.api.post("dungeon/team/toggle/", { creature_id: +pick.dataset.pick }, pick).then(function (nd) {
+            d = nd; wrap.innerHTML = pickHtml(d, msg); K.haptic("ok");   // the sheet keeps its scroll
+          }).catch(function () {}).finally(function () { busy = false; });
+          return;
+        }
+        if (ev.target.closest("[data-enter]") && d.members.length) { K.closeSheet(); if (retryStart) retryStart(); }
+      });
+    }).catch(function (e) { K.toast(e.message, "err"); });
+  }
+  K.onCode.team = function (err) { teamSheet(err.message); };
+
   // ───────────────────────── home ─────────────────────────
   function homeHtml(d) {
     if (!d.unlocked) {
@@ -63,7 +101,7 @@
         root.innerHTML = homeHtml(d);
         K.on(root, "go", function () { K.go("dg_run"); });
         K.on(root, "start", function (el) {
-          K.api.post("dungeon/start/", { difficulty: el.dataset.tier || "normal" }, el).then(function () { K.haptic("ok"); K.go("dg_run"); }).catch(function () {});
+          start(el.dataset.tier || "normal", el, function () { K.go("dg_run"); });
         });
         K.on(root, "shadow", function (el) { shadowSheet(el, function () { if (ctx.alive()) K.reload(); }); });
         K.on(root, "board", function (el) { boardSheet(el); });
@@ -202,7 +240,7 @@
           .then(function (yes) { if (yes) act("quit/", {}, null); });
       });
       K.on(root, "again", function (el) {
-        K.api.post("dungeon/start/", { difficulty: el.dataset.tier || "normal" }, el).then(function (d) { K.haptic("ok"); show(d); }).catch(function () {});
+        start(el.dataset.tier || "normal", el, function (d) { if (ctx.alive()) show(d); else K.go("dg_run"); });
       });
       K.on(root, "home", function () { K.back(); });
       return K.api.get("dungeon/").then(function (d) { show(d); });
