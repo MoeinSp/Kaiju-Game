@@ -188,6 +188,19 @@ def _board(user: User, lock: bool = False) -> MerchantBoard:
     return row
 
 
+def _valid(order: dict | None) -> bool:
+    """An order saved under older rules (DNA/gold asks, a removed serum) can't be shown or filled."""
+    from game import serums
+
+    for r in (order or {}).get("reqs", []):
+        if r.get("t") == "serum":
+            if r.get("k") not in serums.KINDS:
+                return False
+        elif r.get("t") not in ("creature", "gear") or "r" not in r:
+            return False
+    return True
+
+
 def _refresh(user: User, row: MerchantBoard) -> bool:
     """Fill empty or due slots, roll a new day's counters and special order."""
     changed, now, today = False, timezone.now().timestamp(), _today()
@@ -195,7 +208,12 @@ def _refresh(user: User, row: MerchantBoard) -> bool:
     slots = list(row.slots or [])
     while len(slots) < SLOTS:
         slots.append({"wait_until": 0})
+    if row.special and not _valid(row.special):
+        row.special, row.special_day = None, ""
+        changed = True
     for i, s in enumerate(slots):
+        if "reqs" in s and not _valid(s):
+            s = {"wait_until": 0}
         if "reqs" not in s and s.get("wait_until", 0) <= now:
             ctx = ctx or _context(user)
             order = make_order(user, row.seq + 1, ctx=ctx)
