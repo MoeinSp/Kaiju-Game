@@ -419,35 +419,37 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
     trophy = get_emoji("trophy")
     cost = constants.ARENA_ATTACK_ENERGY_COST
     # same order as the hunt card: you → opponent → element → reward → cost
-    # (the owner tried quote blocks / one fact per line here and preferred this divider layout)
+    # two «6-2» lines at most (owner's rule): title | the match-up | what's at stake, the
+    # groups inside a part split by blank lines
     lines = [
         f"{get_emoji('battle')} <b>آرنا · حریف پیدا شد</b>",
-        _ARENA_DIV,
+        dividers.line(),
         # ONE fact per line (owner's rule for this card): never «power · cup» or the whole loot on one line
         f"🦅 موجود شما: <b>{cname}</b>{my_elem_tag}",
         f"💪 قدرت شما: <code>{my_power:,}</code>",
         f"{trophy} کاپ شما: <code>{user.cup:,}</code>",
-        _ARENA_DIV,
+        "",
         f"👤 حریف: <b>{opponent['label']}</b>{alliance_str}",
         f"{get_emoji('opponent_creature', '👹')} موجود حریف: <b>{opponent.get('creature_name', '؟')}</b>{opp_elem_tag}",
         f"💀 قدرت حریف: <code>{opponent['power']:,}</code>",
         f"{trophy} کاپ حریف: <code>{opponent['cup']:,}</code>",
     ]
+    lines.append("")
     if adv:
-        lines += [_ARENA_DIV, adv]
+        lines.append(adv)
     # the duel is deterministic (constants.duel_attacker_wins), so say who wins up front
     if constants.duel_attacker_wins(my_power, my_element, opponent["power"], opp_element):
         verdict = "✅ <b>با این موجود می‌بری!</b>"
     else:
         verdict = "❌ <b>این حریف از موجودت قوی‌تره</b>\n<i>«تعویض» یا «حریف بعدی» رو بزن.</i>"
-    lines += [_ARENA_DIV, verdict]
+    lines.append(verdict)
     lines += [
-        _ARENA_DIV,
+        dividers.line(),
         f"{get_emoji('gift')} <b>جایزه برد</b>",
         f"{get_emoji('coin')} طلا: <code>+{loot:,}</code>",
         f"{get_emoji('dna')} دی‌ان‌ای: <code>+{dna_win:,}</code>",
         f"{trophy} کاپ: <code>+{win_cup}</code>",
-        _ARENA_DIV,
+        "",
         f"{trophy} کاپ در صورت باخت: <code>{loss_cup}</code>",
         f"{get_emoji('energy')} انرژی شما: <code>{energy}</code>/<code>{max_en}</code>",
     ]
