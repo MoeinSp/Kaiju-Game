@@ -25,7 +25,7 @@
     try { if (K.tg && K.tg.openTelegramLink) { K.tg.openTelegramLink(url); return; } } catch (e) {}
     window.open(url, "_blank");
   }
-  var BOT_NOTE = "ساخت و پیوستن به اتحاد، مدیریت اعضا، ارتقای ساختمان‌ها، شبیخون، رید و جنگ از داخل ربات انجام می‌شه.";
+  var BOT_NOTE = "ساخت اتحاد، اخراج و قائم‌مقام، ارتقای ساختمان‌ها، شبیخون، رید و جنگ از داخل ربات انجام می‌شه.";
 
   // ───────────────────────── alliance ─────────────────────────
   var ROLE = { leader: ["رهبر", "crown", "var(--gold)"], deputy: ["قائم‌مقام", "shieldcheck", "var(--accent)"], member: ["عضو", "user", "var(--muted)"] };
@@ -129,16 +129,8 @@
       return K.api.get("social/alliance/").then(function (d) {
         var a = d.alliance;
         if (!a) {
-          root.innerHTML = banner(d.banner, "اتحاد", '<span class="sm" style="color:#c5cee2">توی هیچ اتحادی نیستی</span>') +
-            '<div class="panel pad mt"><div class="b" style="margin-bottom:8px">چطور عضو بشم؟</div><div class="so-steps">' +
-            '<div><span class="num">1</span><p>توی ربات برو «شهر» و بعد «اتحاد».</p></div>' +
-            '<div><span class="num">2</span><p>«پیوستن به اتحاد» رو بزن و از لیست یا با جستجوی اسم، اتحادت رو انتخاب کن. بعضی اتحادها درخواستت رو باید تأیید کنن.</p></div>' +
-            '<div><span class="num">3</span><p>یا با «ساخت اتحاد» اتحاد خودت رو بساز — هزینه‌ش ' + Number(d.create_cost).toLocaleString("en-US") + " طلاست.</p></div></div></div>" +
-            '<div class="callout mt">' + K.ic("info") + "<div>اعضای اتحاد با هم رید می‌زنن، جنگ می‌کنن و از ساختمان‌های اتحاد (XP و امتیاز پاس بیشتر) سود می‌برن. " + BOT_NOTE + "</div></div>" +
-            '<div class="btns mt">' + (d.bot ? '<button class="btn primary" data-act="bot">' + K.ic("send") + "باز کردن ربات</button>" : "") + '<button class="btn" data-act="ranks">' + K.ic("podium") + "جدول اتحادها</button></div>";
-          K.on(root, "bot", function () { openBot(d.bot); });
-          K.on(root, "ranks", function () { K.go("so_ranks"); });
-          return;
+          // no alliance: the finder (75_recruit.js) — suggestions, filters, search, join in place
+          return K.recruit.browse(root, ctx, banner(d.banner, "پیدا کردن اتحاد", '<span class="sm" style="color:#c5cee2">توی هیچ اتحادی نیستی</span>'));
         }
         var role = ROLE[a.role] || ROLE.member;
         root.innerHTML = banner(d.banner, "اتحاد " + a.name, K.tag(role[0], role[2], role[1]) + (a.leader ? '<span class="sm" style="color:#c5cee2">رهبر: ' + K.esc(a.leader) + "</span>" : "")) +
@@ -146,6 +138,7 @@
           (a.deputy ? '<p class="note" style="margin-top:8px">قائم‌مقام: ' + K.esc(a.deputy) + "</p>" : "") +
           (a.joined_today ? '<div class="callout warn mt">' + K.ic("clock") + "<div>تازه عضو شدی؛ تا نیمه‌شب امشب نمی‌تونی توی رید و جنگ اتحاد شرکت کنی.</div></div>" : "") +
           '<div class="btns mt mb"><button class="btn gold" data-act="deposit">' + K.ic("bank") + 'واریز به خزانه</button><button class="btn" data-act="ranks">' + K.ic("podium") + "جدول اتحادها</button></div>" +
+          (a.role === "leader" || a.role === "deputy" ? '<button class="btn primary block mb" data-act="recruit">' + K.ic("users") + "جذب و دعوت (آگهی، دعوت، لینک)</button>" : "") +
           '<div id="so-aseg"></div><div id="so-abody"></div>' +
           '<div class="callout mt">' + K.ic("info") + "<div>" + BOT_NOTE + "</div></div>" +
           '<button class="btn ghost block mt so-leave" data-act="leave">' + K.ic("logout") + "خروج از اتحاد</button>";
@@ -174,6 +167,7 @@
         if (a.war && !a.war.ended && a.war.seconds_left > 0) K.every(1000, tick);
         show();
         segEl.addEventListener("click", function (ev) { var b = ev.target.closest("[data-atab]"); if (!b) return; K.haptic(); allyTab = b.dataset.atab; show(); });
+        K.on(root, "recruit", function () { K.go("so_recruit"); });
         K.on(root, "deposit", function () { depositSheet(d, function () { if (ctx.alive()) stats(); }); });
         K.on(root, "ranks", function () { K.go("so_ranks"); });
         K.on(root, "leave", function (el) { leaveFlow(d, ctx, el); });

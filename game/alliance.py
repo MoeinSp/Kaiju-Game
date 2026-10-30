@@ -75,6 +75,11 @@ def _join_stamp(user: User, alliance: Alliance) -> None:
     user.alliance = alliance
     user.alliance_joined_at = timezone.now()
     user.save(update_fields=["alliance", "alliance_joined_at"])
+    # every way in (auto-join, approved request, invite, link) passes here: the player's other
+    # invites close and «پاداش رشد» is paid when it applies (game/alliance_recruit.py)
+    from game import alliance_recruit
+
+    alliance_recruit.on_joined(user, alliance)
 
 
 def join_alliance(user: User, name: str) -> Alliance:
@@ -145,7 +150,15 @@ def _request_or_join(user: User, alliance: Alliance) -> dict:
 
     from bio_lab.models import AllianceJoinRequest
 
-    _, created = AllianceJoinRequest.objects.get_or_create(user=user, alliance=alliance)
+    req, created = AllianceJoinRequest.objects.get_or_create(user=user, alliance=alliance)
+    if created:   # the leaders' inbox: approve / reject from there too
+        from game import alliance_recruit
+
+        who = user.lab_name or user.first_name or str(user.id)
+        for mid in {alliance.leader_id, alliance.deputy_id} - {None}:
+            alliance_recruit.send_mail(mid, "ally_request", f"درخواست عضویت از {who}",
+                                       f"«{who}» (قدرت {power:,}) می‌خواد به «{alliance.name}» بپیونده.",
+                                       {"request": req.id, "alliance": alliance.id}, dm=False)
     return {
         "joined": False, "alliance": alliance, "already": not created,
         "requester_power": power,
@@ -194,6 +207,11 @@ def approve_request(actor: User, request_id: int) -> dict:
     _assert_has_room(alliance)
 
     _join_stamp(applicant, alliance)
+    from game import alliance_recruit
+
+    alliance_recruit.close_request_mails(req.id)
+    alliance_recruit.send_mail(applicant.id, "ally_result", f"درخواستت به «{alliance.name}» قبول شد",
+                               f"حالا عضو اتحاد «{alliance.name}» هستی.", dm=False)   # the bot DMs this itself
     # invalidate every OTHER pending request of this applicant — they've joined here
     others = list(
         AllianceJoinRequest.objects.filter(user=applicant).exclude(id=req.id).select_related("alliance")
@@ -220,6 +238,11 @@ def reject_request(actor: User, request_id: int) -> dict:
     if not _is_manager(actor, req.alliance):
         raise GameError("فقط رهبر یا قائم‌مقام می‌تونه درخواست‌ها رو رد کنه.")
     result = {"applicant": req.user, "alliance_name": req.alliance.name}
+    from game import alliance_recruit
+
+    alliance_recruit.close_request_mails(req.id)
+    alliance_recruit.send_mail(req.user_id, "ally_result", f"درخواستت به «{req.alliance.name}» رد شد",
+                               "می‌تونی به یه اتحاد دیگه درخواست بدی.", dm=False)   # the bot DMs this itself
     req.delete()
     return result
 
@@ -342,6 +365,10 @@ def kick_member(actor: User, target_id: int) -> dict:
         alliance.save(update_fields=["deputy"])
     target.alliance = None
     target.save(update_fields=["alliance"])
+    from game import alliance_recruit
+
+    alliance_recruit.send_mail(target.id, "ally_kick", f"از اتحاد «{alliance.name}» حذف شدی",
+                               "می‌تونی از بخش اتحاد، یه اتحاد دیگه پیدا کنی.")
     return {"name": _display(target)}
 
 

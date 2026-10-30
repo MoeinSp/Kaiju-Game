@@ -175,6 +175,10 @@ async def outbox_job(context: ContextTypes.DEFAULT_TYPE) -> None:
                 await context.bot.send_message(chat_id=payload["chat_id"], text=payload["text"], parse_mode="HTML")
             except TelegramError:
                 pass
+        elif kind == "dm":   # a «صندوق نامه» letter (game/alliance_recruit.send_mail) told in private too
+            from bot.handlers.alliance_recruit import send_mail_dm
+
+            await send_mail_dm(context, payload)
 
 
 async def send_war_notifications_now(context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -210,6 +210,12 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_time_info": ("زمان‌های غار", "⏱", "action"),
     "btn_confirm_pay": ("تأیید پرداخت", "💳", "confirm"),
     "btn_ally_join": ("عضویت در اتحاد", "➕", "action"),
+    # finding / recruiting (game/alliance_recruit.py) and the «صندوق نامه»
+    "btn_inbox": ("صندوق نامه", "📬", "nav"),
+    "btn_ally_tab": ("تب‌های اتحادها", "⭐", "nav"),
+    "btn_ally_recruit": ("جذب و دعوت", "📣", "admin"),
+    "btn_ally_invite": ("دعوت بازیکن به اتحاد", "✉️", "action"),
+    "btn_ally_link": ("لینک دعوت اتحاد", "🔗", "nav"),
     "btn_ally_leave": ("خروج از اتحاد", "👋", "action"),
     "btn_guardian_resign": ("استعفا از محافظ", "🚪", "action"),
     "btn_guardian_challenge": ("چالش محافظ گروه", "⚔️", "action"),

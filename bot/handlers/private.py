@@ -1158,6 +1158,7 @@ _HUBS = {
         [("رویداد", "events", "s", "btn_events"), ("جشنواره", "festival", "s", "btn_festival")],
         [("لیگ", "league", "n", "btn_league"), ("پاس فصلی", "battlepass", "s", "btn_battlepass")],
         [("اتحاد", "alliance_info", "n", "btn_alliance"), ("پروفایل", "profile", "n", "btn_profile")],
+        [("نامه‌ها", "inbox", "n", "btn_inbox")],
     ]),
     "hub_city_more": ("🌐 <b>شهر — بیشتر</b>", [
         [("دستاوردها", "achievements", "s", "btn_achievements"), ("راهنما", "guide", "n", "btn_report")],
@@ -1468,6 +1469,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             from bot.handlers.subscription import subscription_panel
             await subscription_panel(update, context)
             return
+        elif arg.startswith("ally_"):   # an alliance's invite link (bot/handlers/alliance_recruit.py)
+            from bot.handlers.alliance_recruit import start_link
+
+            if await start_link(update, context, arg[5:]):
+                return
+            # a brand-new player: the invite waits in their inbox, onboarding goes on
 
     referrer_id = None
     if context.args:
@@ -3756,6 +3763,7 @@ def _alliance_action_keyboard(in_alliance: bool) -> InlineKeyboardMarkup:
         rows = [
             [btn("ساخت اتحاد", emoji_key="btn_alliance", style=BUILD, callback_data="ally_create")],
             [btn("پیوستن به اتحاد", emoji_key="btn_alliance", style=PRIMARY, callback_data="ally_join")],
+            [btn("صندوق نامه (دعوت‌ها)", emoji_key="btn_inbox", style=NAV, callback_data="inbox")],
             [btn("برترین اتحادها", emoji_key="btn_rank", style=NAV, callback_data="ally_top")],
         ]
     rows.append([back_btn("menu:hub_city", "بازگشت به شهر")])
@@ -4060,6 +4068,7 @@ def _settings_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
     rows = [
         [btn(toggle_label, emoji_key="btn_settings", style=CONFIRM, callback_data="ally_toggle_auto")],
         [btn("حداقل قدرت ورود", emoji_key="btn_filter", style=NAV, callback_data="ally_set_minpow")],
+        [btn("جذب و دعوت (آگهی، دعوت، لینک)", emoji_key="btn_ally_recruit", style=PRIMARY, callback_data="arec")],
         [back_btn("ally_members", "بازگشت به اعضا")],
     ]
     return text, InlineKeyboardMarkup(rows)
@@ -4282,11 +4291,10 @@ def _alliance_browse_render(data: dict, search_results=None, search_query: str =
 
 
 async def alliance_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
-    data = await run_db(list_alliances_page, 0)
-    text, keyboard = _alliance_browse_render(data)
-    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+    """«پیوستن به اتحاد»: the suggestions / filters screen (bot/handlers/alliance_recruit.py)."""
+    from bot.handlers.alliance_recruit import browse_open
+
+    await browse_open(update, context)
 
 
 async def alliance_browse_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -4582,6 +4590,12 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
     message = update.effective_message
     action = awaiting["action"]
     text = (override_text if override_text is not None else (message.text or "")).strip()
+
+    if action in ("ally_invite", "ally_note"):
+        from bot.handlers.alliance_recruit import handle_text
+
+        await handle_text(update, context, awaiting, text)
+        return
 
     if action == "exchange_custom":
         from bot.handlers.exchange import handle_custom_amount
@@ -5570,8 +5584,16 @@ async def merchant_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await merchant_board(update, context)
 
 
+async def inbox_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«صندوق نامه» (bot/handlers/alliance_recruit.py)."""
+    from bot.handlers.alliance_recruit import inbox_open
+
+    await inbox_open(update, context)
+
+
 _MENU_ACTIONS = {
     "me": me,
+    "inbox": inbox_panel,
     "collection": collection,
     "hunt": hunt,
     "missions": missions,

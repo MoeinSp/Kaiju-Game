@@ -1,0 +1,17 @@
+/* finding an alliance, the inbox and «جذب و دعوت» (75_recruit.js) */
+.rc-card { margin-bottom: 10px; }
+.rc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rc-head b { min-width: 0; font-size: 15.5px; }
+.rc-tags { display: inline-flex; gap: 4px; flex: none; }
+.rc-tags .tag { height: 20px; font-size: 10.5px; padding: 0 7px; }
+.rc-stats { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; }
+.rc-stats span { display: inline-flex; align-items: center; gap: 3px; } .rc-stats svg { width: 13px; height: 13px; }
+.rc-note { margin-top: 8px; padding: 7px 10px; border-radius: 10px; background: rgba(255,255,255,.04); font-size: 13px; color: var(--text); line-height: 1.6; }
+.mt-xs { margin-top: 4px; }
+.rc-search { display: flex; gap: 8px; } .rc-search .input { flex: 1; min-width: 0; } .rc-search .btn { flex: none; width: 48px; padding: 0; justify-content: center; }
+.rc-filters { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px 0 8px; } .rc-filters::-webkit-scrollbar { display: none; }
+.rc-mail { margin-bottom: 10px; } .rc-mail.unread { border-color: rgba(58,214,255,.45); box-shadow: inset 3px 0 0 var(--accent); }
+.rc-body { margin-top: 6px; line-height: 1.7; }
+.rc-row { display: flex; align-items: center; gap: 6px; padding: 8px 0; } .rc-row + .rc-row { border-top: 1px solid var(--line); }
+.rc-link { margin-top: 6px; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.04); font-size: 12px; direction: ltr; text-align: left; word-break: break-all; }
+textarea.input { width: 100%; resize: none; line-height: 1.6; padding-top: 8px; height: auto; }

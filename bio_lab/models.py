@@ -126,6 +126,10 @@ class User(models.Model):
     # when the player joined their CURRENT alliance — a brand-new member is gated from
     # raid attacks / war rallies until the next midnight (game/raid, game/alliance)
     alliance_joined_at = models.DateTimeField(null=True, blank=True)
+    # «دعوت نگیرم»: leaders can't send this player alliance invites (game/alliance_recruit.py)
+    block_alliance_invites = models.BooleanField(default=False)
+    # the one-time «پاداش رشد» for joining a small alliance has been paid
+    ally_bonus_claimed = models.BooleanField(default=False)
 
     is_banned = models.BooleanField(default=False)
     is_admin = models.BooleanField(default=False)  # granted by the owner; full panel except admin management
@@ -203,8 +207,64 @@ class Alliance(models.Model):
     auto_accept = models.BooleanField(default=True)
     min_join_power = models.IntegerField(default=0)
 
+    # recruiting (game/alliance_recruit.py): a short ad shown on the alliance's card, a
+    # «دنبال عضو» flag that lifts it in the suggestions, and the code of its invite link
+    # (t.me/<bot>?start=ally_<code>; a new code revokes the old link)
+    recruit_note = models.CharField(max_length=120, blank=True, default="")
+    recruiting = models.BooleanField(default=False)
+    invite_code = models.CharField(max_length=16, blank=True, default="")
+
     def __str__(self) -> str:
         return self.name
+
+
+class AllianceInvite(models.Model):
+    """A leader's / deputy's invitation to one player (or the player's use of the alliance's
+    invite link). Accepting it joins at once: no approval queue, no min-power gate."""
+
+    PENDING, ACCEPTED, DECLINED, CANCELLED, EXPIRED = "pending", "accepted", "declined", "cancelled", "expired"
+    alliance = models.ForeignKey(Alliance, on_delete=models.CASCADE, related_name="invites")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="alliance_invites")
+    inviter = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    via_link = models.BooleanField(default=False)
+    status = models.CharField(max_length=10, default=PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "status"], name="allyinvite_user_status_idx"),
+                   models.Index(fields=["alliance", "status"], name="allyinvite_ally_status_idx")]
+
+
+class AllianceBonusLog(models.Model):
+    """One «پاداش رشد» paid for joining a small alliance (audit + the per-alliance daily cap)."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
+    alliance = models.ForeignKey(Alliance, on_delete=models.CASCADE, related_name="+")
+    coins = models.IntegerField(default=0)
+    treasury = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["alliance", "created_at"], name="allybonus_ally_time_idx")]
+
+
+class Mail(models.Model):
+    """«صندوق نامه»: a message to one player, shown in the bot and the Mini App. `kind` decides
+    how it is drawn and which actions it has (an alliance invite: accept / decline); `data`
+    carries the ids those actions need. `done` = acted on, its buttons are gone."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="mails")
+    kind = models.CharField(max_length=24)
+    title = models.CharField(max_length=120)
+    body = models.TextField(blank=True, default="")
+    data = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+    done = models.BooleanField(default=False)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "-created_at"], name="mail_user_recent_idx")]
 
 
 class AllianceJoinRequest(models.Model):
