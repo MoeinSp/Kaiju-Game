@@ -1036,7 +1036,7 @@ def _revenge_find_sync(tg_user, log_id: int):
     user, _ = get_or_create_user(tg_user)
     try:
         log = AttackLog.objects.select_related("attacker").get(
-            id=log_id, defender=user, revenge_taken=False, is_fake_defender=False
+            id=log_id, defender=user, revenge_taken=False, is_fake_defender=False, from_group=False
         )
     except AttackLog.DoesNotExist:
         raise GameError("این انتقام دیگه در دسترس نیست.")

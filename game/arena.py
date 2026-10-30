@@ -665,8 +665,9 @@ def recent_attacks_received(user: User, limit: int = 5) -> list[AttackLog]:
 
 
 def revengeable_attacks(user: User, limit: int = 10) -> list[AttackLog]:
-    """Real attacks on the user (won OR defended) not yet revenged and < 3 days old —
-    you can strike back at anyone who came for you, even if your defence held."""
+    """Real arena attacks on the user (won OR defended) not yet revenged and < 3 days old —
+    you can strike back at anyone who came for you, even if your defence held. A group «اتک»
+    is not one of them."""
     deadline = timezone.now() - datetime.timedelta(days=3)
     return list(
         AttackLog.objects.filter(
@@ -674,6 +675,7 @@ def revengeable_attacks(user: User, limit: int = 10) -> list[AttackLog]:
             is_fake_defender=False,
             attacker__isnull=False,
             revenge_taken=False,
+            from_group=False,
             created_at__gte=deadline,
         )
         .select_related("attacker")
@@ -684,7 +686,7 @@ def revengeable_attacks(user: User, limit: int = 10) -> list[AttackLog]:
 def mark_revenge_taken(log_id: int, defender: User) -> AttackLog | None:
     """Atomically marks an AttackLog as revenged. Returns it if still open, None if already done."""
     updated = AttackLog.objects.filter(
-        id=log_id, defender=defender, revenge_taken=False
+        id=log_id, defender=defender, revenge_taken=False, from_group=False
     ).update(revenge_taken=True)
     if not updated:
         return None

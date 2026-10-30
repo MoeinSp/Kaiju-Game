@@ -1217,6 +1217,9 @@ class AttackLog(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     defender_notified = models.BooleanField(default=False)  # "you were raided" DM sent to the defender
     revenge_taken = models.BooleanField(default=False)      # defender has revenged this attack
+    # a group «اتک» (bot/handlers/group.py): reported to the defender like a raid, but never
+    # revengeable — the arena revenge paid cups for a fight that happened outside the arena
+    from_group = models.BooleanField(default=False)
 
     class Meta:
         indexes = [

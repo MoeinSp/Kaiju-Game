@@ -1644,8 +1644,8 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         group_id=group.id, challenger_id=attacker.id, opponent_id=target.id,
         winner_id=winner_user.id, wager_gold=loot, log_text=log_text,
     )
-    # log it as a real attack too, so the target gets a report + can revenge,
-    # and give the target a 4h group shield so they can't be farmed in the group
+    # log it as a real attack too, so the target gets a report (from_group: no arena revenge
+    # for it), and give the target a 4h group shield so they can't be farmed in the group
     from bio_lab.models import AttackLog
     from bio_lab.repository import lab_display
     from game.arena import apply_group_shield
@@ -1662,6 +1662,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         loot_dna=dna_win,
         cup_delta=delta,
         defender_notified=True,  # DM'd instantly from the callback below
+        from_group=True,
     )
     apply_group_shield(target)
     return {
