@@ -327,9 +327,12 @@ def safe_truncate_html(text: str, max_chars: int = 1000) -> str:
     for match in tag_pattern.finditer(truncated):
         tag_name = match.group(1)
         if tag_name.startswith("/"):
-            name = tag_name[1:]
-            if open_tags and open_tags[-1] == name:
-                open_tags.pop()
+            name = tag_name[1:].lower()
+            if name in [t.lower() for t in open_tags]:
+                while open_tags and open_tags[-1].lower() != name:
+                    open_tags.pop()
+                if open_tags:
+                    open_tags.pop()
         else:
             if not match.group(0).endswith("/>"):
                 open_tags.append(tag_name)
@@ -358,7 +361,7 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
         return re.sub(r"</?tg-emoji[^>]*>", "", s) if s else ""
 
     def _strip_html(s: str) -> str:
-        return re.sub(r"<[^>]+>", "", s) if s else ""
+        return html.unescape(re.sub(r"<[^>]+>", "", s)).strip() if s else ""
 
     if valid_photo:
         if parse_mode == "HTML":
@@ -720,7 +723,7 @@ async def safe_edit_message_text(query, text, **kwargs):
         return re.sub(r"</?tg-emoji[^>]*>", "", s) if s else ""
 
     def _strip_html(s: str) -> str:
-        return re.sub(r"<[^>]+>", "", s) if s else ""
+        return html.unescape(re.sub(r"<[^>]+>", "", s)).strip() if s else ""
 
     if getattr(query, "message", None) and getattr(query.message, "photo", None):
         caption = safe_truncate_html(text, 1024) if parse_mode == "HTML" else (text[:1024] if text else "")

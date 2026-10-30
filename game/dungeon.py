@@ -438,8 +438,13 @@ def start(user: User, difficulty: str = "normal") -> DungeonRun:
                         f"(الان مرحله‌ی {user.campaign_stage}).")
     if active_run(user) is not None:
         raise GameError("یه ورود نیمه‌کاره داری؛ اول اون رو تموم کن.")
+    from game import attack_team
+
     team = Team.objects.filter(owner=user).first()
-    members = team.creatures() if team else []
+    if team:
+        user_cids = set(Creature.objects.filter(owner=user).values_list("id", flat=True))
+        attack_team.prune(team, user_cids)
+    members = [c for c in (team.creatures() if team else []) if c.owner_id == user.id]
     if not members:
         raise EmptyTeamError("تیم حمله‌ت خالیه! برای ورود به سیاه‌چال حداقل یه هیولا توی تیم حمله بذار.")
     prof = profile(user)
@@ -711,7 +716,7 @@ def _finish(user: User, run: DungeonRun, status: str) -> dict:
     out = {"status": status, "loot": loot, "relic": relic, "room": reached, "share": share,
            "difficulty": run.difficulty, "badge": badge, "unlocked": unlocked_tier, "endless": endless}
     if endless:
-        out["floor"] = max(0, state["room"] - 1)
+        out["floor"] = state["room"] if (status == DungeonRun.WON or state.get("phase") == "rune") else max(0, state["room"] - 1)
         out.update(record_floor(user, out["floor"]))
         out["new_record"] = out["floor"] > state.get("start_best", 0)   # floors are saved as they're cleared
     return out

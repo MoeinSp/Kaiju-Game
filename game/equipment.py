@@ -296,6 +296,7 @@ def fuse_equipment(user: User, target_id: int, sacrifice_id: int) -> dict:
     return {"success": success, "target": target, "fail_chance": fail_chance, "new_level": target.level}
 
 
+@transaction.atomic
 def fuse_equipment_many(user: User, target_id: int, sacrifice_ids: list[int]) -> dict:
     """Multi-select fusion: feed several same-slot sacrifices into one target, one
     roll each, stopping early if the target reaches the forge cap (remaining picks

@@ -94,8 +94,9 @@ def _finish(fin: dict | None) -> dict | None:
         return None
     return {"status": fin["status"], "loot": fin["loot"], "room": fin["room"], "share": fin["share"],
             "relic": _relic(fin["relic"]) if fin.get("relic") else None,
-            "difficulty": fin.get("difficulty", "normal"), "unlocked": fin.get("unlocked"),
-            "badge": fin["badge"][1] if fin.get("badge") else None,
+            "difficulty": fin.get("difficulty", "normal"),
+            "unlocked": _txt(fin["unlocked"]) if fin.get("unlocked") else None,
+            "badge": _txt(fin["badge"][1]) if fin.get("badge") else None,
             "endless": bool(fin.get("endless")), "floor": fin.get("floor"), "week_best": fin.get("week_best"),
             "rank": fin.get("rank"), "new_record": bool(fin.get("new_record"))}
 

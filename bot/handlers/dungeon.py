@@ -214,13 +214,17 @@ def _finish_render(fin: dict, v: dict) -> tuple[str, InlineKeyboardMarkup]:
     if loot.get("cores"):
         lines.append(f"🌑 هسته‌ی سایه: <code>+{loot['cores']}</code>")
     if fin.get("unlocked"):
-        lines += [_DIV, f"🔓 <b>سختی «{fin['unlocked']}» باز شد!</b>"]
+        lines += [_DIV, f"🔓 <b>سختی «{html.escape(str(fin['unlocked']))}» باز شد!</b>"]
     if fin.get("badge"):
-        lines += [_DIV, f"{fin['badge'][0]} <b>نشان جدید: {fin['badge'][1]}</b>\n<i>از این به بعد کنار اسم آزمایشگاهت دیده می‌شه.</i>"]
+        b_icon = fin['badge'][0]
+        b_title = html.escape(str(fin['badge'][1]))
+        lines += [_DIV, f"{b_icon} <b>نشان جدید: {b_title}</b>\n<i>از این به بعد کنار اسم آزمایشگاهت دیده می‌شه.</i>"]
     if fin.get("relic"):
         r = fin["relic"]
-        lines += [_DIV, f"🏺 <b>اثر باستانی: {r['label']}</b>",
-                  f"<i>{r['desc']}</i>",
+        r_lbl = html.escape(str(r['label']))
+        r_desc = html.escape(str(r['desc']))
+        lines += [_DIV, f"🏺 <b>اثر باستانی: {r_lbl}</b>",
+                  f"<i>{r_desc}</i>",
                   "⏳ " + ("۳ روز به زمانش اضافه شد" if r["extended"] else "۳ روز فعاله")]
     rows = []
     if v["keys"] > 0:
@@ -256,14 +260,15 @@ def _act_sync(tg_user, action: str, arg):
 
 
 def _fight_note(out: dict) -> str:
+    member_name = html.escape(str(out.get('member', '')))
     if out.get("won"):
         got = out.get("got") or {}
-        return (f"✅ <b>{html.escape(out['member'])}</b> برد! (<code>{out['mine']:,}</code> در برابر <code>{out['theirs']:,}</code>)"
+        return (f"✅ <b>{member_name}</b> برد! (<code>{out['mine']:,}</code> در برابر <code>{out['theirs']:,}</code>)"
                 f" · −{out.get('hp_lost', 0)}٪ جون\n🎒 +{got.get('coins', 0):,} طلا · +{got.get('dna', 0):,} DNA · +{got.get('runes', 0)} 🔮")
     if out.get("warded"):
-        return (f"🛡 <b>{html.escape(out['member'])}</b> باخت ولی «سپر سایه» با ۲۰٪ جون سرپا نگهش داشت "
+        return (f"🛡 <b>{member_name}</b> باخت ولی «سپر سایه» با ۲۰٪ جون سرپا نگهش داشت "
                 f"(<code>{out['mine']:,}</code> در برابر <code>{out['theirs']:,}</code>).")
-    return (f"❌ <b>{html.escape(out['member'])}</b> باخت و از پا افتاد "
+    return (f"❌ <b>{member_name}</b> باخت و از پا افتاد "
             f"(<code>{out['mine']:,}</code> در برابر <code>{out['theirs']:,}</code>). یکی دیگه رو بفرست!")
 
 

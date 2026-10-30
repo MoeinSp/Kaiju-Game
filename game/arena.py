@@ -8,7 +8,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from bio_lab.models import AttackLog, Creature, User
-from bio_lab.repository import lab_display
+from bio_lab.repository import creature_name, lab_display
 from game import constants, lab
 from game.combat import resolve_battle, resolve_duel, resolve_duel_detailed
 from game.creature import GameError, base_share_for_rating, creature_power
@@ -379,7 +379,7 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
         "label": lab_display(target),
         "alliance": target.alliance.name if target.alliance_id else None,
         # the 🌑 mark tells the attacker they face a «فرم سیاه» kaiju (the Mini App strips emoji)
-        "creature_name": ((target_creature.name + (" 🌑" if target_creature.shadow_level else ""))
+        "creature_name": ((creature_name(target_creature) + (" 🌑" if target_creature.shadow_level else ""))
                           if target_creature else "موجود ناشناس"),
         "defender_creature_id": target_creature.id if target_creature else None,
         "cup": target.cup,
