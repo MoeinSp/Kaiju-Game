@@ -63,7 +63,7 @@ DUNGEON_DEFS = [
 
 
 def _idle_rates(user: User) -> tuple[float, float]:
-    lvl = lab.lab_level(user)
+    lvl = lab.reward_level(user)
     stage = user.campaign_stage
     coins_per_hour = 40 + stage * 6 + lvl * 4
     dna_per_hour = 1 + stage * 0.2 + lvl * 0.1
@@ -112,7 +112,7 @@ def today_dungeon() -> dict:
 
 
 def dungeon_reward(user: User) -> dict:
-    lvl = lab.lab_level(user)
+    lvl = lab.reward_level(user)
     stage = user.campaign_stage
     res = today_dungeon()["resource"]
     if res == "coins":

@@ -65,7 +65,15 @@ def drain_levelup_ids() -> list[int]:
 # only the absolute XP numbers dropped, and future levels come 30% sooner.
 LAB_XP_COEFFICIENT = 12.6
 LAB_XP_EXPONENT = 2.6
-LAB_MAX_LEVEL = 50
+# No level cap any more (was 50). The curve above holds up to LAB_CURVE_KNEE; past it each
+# level costs LAB_STEP_GROWTH × the one before (level 51 ≈ 17k XP, 60 ≈ 27k, 70 ≈ 43k, 80 ≈ 70k),
+# so the climb keeps getting steeper. LAB_MAX_LEVEL is only a sanity bound (admin input, loops).
+LAB_CURVE_KNEE = 50
+LAB_STEP_GROWTH = 1.05
+LAB_MAX_LEVEL = 999
+# Rewards that grow with the lab level (group drops, word rewards, idle income…) stop growing at
+# the old cap: levels past it are prestige, not inflation.
+LAB_REWARD_LEVEL_CAP = 50
 
 # What each action is worth. Ratios matter more than absolute values: a raid is
 # worth about twice a hunt because it costs the same energy but can fail, and a
@@ -90,9 +98,26 @@ LAB_XP_AWARDS = {
 LAB_XP_PER_BUILDING_LEVEL = 120
 
 
+def _curve_xp(level: int) -> int:
+    return round(LAB_XP_COEFFICIENT * max(0, level - 1) ** LAB_XP_EXPONENT)
+
+
+_KNEE_XP = _curve_xp(LAB_CURVE_KNEE)
+_KNEE_STEP = _KNEE_XP - _curve_xp(LAB_CURVE_KNEE - 1)
+
+
 def xp_for_level(level: int) -> int:
     """Total XP needed to *be* this level."""
-    return round(LAB_XP_COEFFICIENT * max(0, level - 1) ** LAB_XP_EXPONENT)
+    if level <= LAB_CURVE_KNEE:
+        return _curve_xp(level)
+    # past the knee: steps of _KNEE_STEP × g, × g², … (a geometric series)
+    g, n = LAB_STEP_GROWTH, level - LAB_CURVE_KNEE
+    return round(_KNEE_XP + _KNEE_STEP * g * (g ** n - 1) / (g - 1))
+
+
+def reward_level(user: User) -> int:
+    """The lab level that reward formulas scale with — capped, see LAB_REWARD_LEVEL_CAP."""
+    return min(lab_level(user), LAB_REWARD_LEVEL_CAP)
 
 
 def level_for_xp(xp: int) -> int:
@@ -105,7 +130,13 @@ def level_for_xp(xp: int) -> int:
     """
     if xp <= 0:
         return 1
-    level = int((int(xp) / LAB_XP_COEFFICIENT) ** (1 / LAB_XP_EXPONENT)) + 1
+    if xp >= _KNEE_XP:   # invert the geometric tail
+        import math
+
+        g = LAB_STEP_GROWTH
+        level = LAB_CURVE_KNEE + int(math.log(1 + (int(xp) - _KNEE_XP) * (g - 1) / (_KNEE_STEP * g)) / math.log(g))
+    else:
+        level = int((int(xp) / LAB_XP_COEFFICIENT) ** (1 / LAB_XP_EXPONENT)) + 1
     while level > 1 and xp_for_level(level) > xp:
         level -= 1
     while level < LAB_MAX_LEVEL and xp_for_level(level + 1) <= xp:

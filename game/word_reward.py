@@ -70,14 +70,14 @@ def _reward_scale(user: User) -> float:
     from bio_lab.repository import get_active_creature
     from game.creature import effective_stats
     from game.equipment import get_equipped_items
-    from game.lab import lab_level
+    from game.lab import reward_level
 
     c = get_active_creature(user)
     power = 0
     if c is not None:
         s = effective_stats(c, get_equipped_items(c))
         power = round(s["hp"] + s["atk"] + s["def"] + s["spd"])
-    return 1 + lab_level(user) * 0.06 + power * 0.0025
+    return 1 + reward_level(user) * 0.06 + power * 0.0025
 
 
 def _roll_prize(user: User) -> tuple[str, int, int, str | None]:

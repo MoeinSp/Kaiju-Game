@@ -97,7 +97,7 @@ def reward_for(user: User, kind: str) -> dict:
     if kind == "jackpot":
         power = _active_power(user)
         power_ratio = min(1.0, max(0, power) / 3500.0)
-        lab_lvl = lab.lab_level(user)
+        lab_lvl = lab.reward_level(user)
         min_coins = round(1200 + (7500 - 1200) * power_ratio) + lab_lvl * 100
         max_coins = round(2000 + (constants.JACKPOT_DROP_MAX_COINS - 2000) * power_ratio) + lab_lvl * 100
         min_coins = min(min_coins, constants.JACKPOT_DROP_MAX_COINS)
@@ -107,7 +107,7 @@ def reward_for(user: User, kind: str) -> dict:
         coins = min(constants.JACKPOT_DROP_MAX_COINS, random.randint(min_coins, max_coins))
         return {"coins": coins}
     cfg = DROP_KINDS[kind]
-    scale = 1 + lab.lab_level(user) * 0.06 + _active_power(user) * DROP_POWER_FACTOR
+    scale = 1 + lab.reward_level(user) * 0.06 + _active_power(user) * DROP_POWER_FACTOR
     out: dict = {}
     for res, spec in cfg["res"].items():
         if res == "energy":
