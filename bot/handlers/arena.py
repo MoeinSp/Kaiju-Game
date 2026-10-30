@@ -993,7 +993,7 @@ async def arena_revenges_callback(update: Update, context: ContextTypes.DEFAULT_
         await safe_edit_message_text(
             query,
             "⚔️ <b>انتقام‌ها</b>\n\nهیچ‌کس اخیراً بهت حمله نکرده — لیست خالیه.\n"
-            "<i>هر حمله‌ای که بهت بشه (چه ببازی چه دفاع کنی) تا 3 روز اینجا قابل انتقامه.</i>",
+            "<i>هر حمله‌ی آرنایی که دفاعت رو شکست بده تا 3 روز اینجا قابل انتقامه — از هر نفر روزی حداکثر ۲ بار.</i>",
             parse_mode="HTML", reply_markup=keyboard,
         )
         return
@@ -1036,10 +1036,13 @@ def _revenge_find_sync(tg_user, log_id: int):
     user, _ = get_or_create_user(tg_user)
     try:
         log = AttackLog.objects.select_related("attacker").get(
-            id=log_id, defender=user, revenge_taken=False, is_fake_defender=False, from_group=False
+            id=log_id, defender=user, revenge_taken=False, is_fake_defender=False, from_group=False, attacker_won=True
         )
     except AttackLog.DoesNotExist:
         raise GameError("این انتقام دیگه در دسترس نیست.")
+    from game.arena import assert_can_revenge
+
+    assert_can_revenge(user, log.attacker_id)
 
     if log.created_at < tz.now() - datetime.timedelta(days=3):
         raise GameError("مهلت 3 روزه‌ی انتقام گذشته.")

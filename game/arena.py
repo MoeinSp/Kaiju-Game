@@ -664,30 +664,61 @@ def recent_attacks_received(user: User, limit: int = 5) -> list[AttackLog]:
     )
 
 
+# Revenge (2026-10-31): only for an arena attack that BEAT your defence (a held defence cost you
+# nothing, and «feeder» accounts attacked on purpose to be revenged for cups), never for a group
+# «اتک», and at most REVENGE_DAILY_PER_ATTACKER times a day on the same player.
+REVENGE_DAILY_PER_ATTACKER = 2
+
+
+def _game_day_start() -> datetime.datetime:
+    return timezone.make_aware(datetime.datetime.combine(timezone.localdate(), datetime.time.min))
+
+
+def revenges_today(user: User, attacker_id: int) -> int:
+    return AttackLog.objects.filter(defender=user, attacker_id=attacker_id, revenged_at__gte=_game_day_start()).count()
+
+
+def assert_can_revenge(user: User, attacker_id: int) -> None:
+    if revenges_today(user, attacker_id) >= REVENGE_DAILY_PER_ATTACKER:
+        raise GameError(f"امروز {REVENGE_DAILY_PER_ATTACKER} بار از این بازیکن انتقام گرفتی؛ فردا دوباره می‌تونی.")
+
+
 def revengeable_attacks(user: User, limit: int = 10) -> list[AttackLog]:
-    """Real arena attacks on the user (won OR defended) not yet revenged and < 3 days old —
-    you can strike back at anyone who came for you, even if your defence held. A group «اتک»
-    is not one of them."""
+    """Arena attacks that beat the user's defence, not yet revenged, < 3 days old, from players
+    the user hasn't already revenged on REVENGE_DAILY_PER_ATTACKER times today."""
+    from django.db.models import Count
+
     deadline = timezone.now() - datetime.timedelta(days=3)
+    capped = list(
+        AttackLog.objects.filter(defender=user, revenged_at__gte=_game_day_start())
+        .values("attacker_id").annotate(n=Count("id")).filter(n__gte=REVENGE_DAILY_PER_ATTACKER)
+        .values_list("attacker_id", flat=True)
+    )
     return list(
         AttackLog.objects.filter(
             defender=user,
             is_fake_defender=False,
             attacker__isnull=False,
+            attacker_won=True,
             revenge_taken=False,
             from_group=False,
             created_at__gte=deadline,
         )
+        .exclude(attacker_id__in=capped)
         .select_related("attacker")
         .order_by("-created_at")[:limit]
     )
 
 
 def mark_revenge_taken(log_id: int, defender: User) -> AttackLog | None:
-    """Atomically marks an AttackLog as revenged. Returns it if still open, None if already done."""
+    """Atomically marks an AttackLog as revenged. Returns it if still open, None if already done
+    (or not revengeable). GameError once the daily cap on that attacker is reached."""
+    attacker_id = AttackLog.objects.filter(id=log_id, defender=defender).values_list("attacker_id", flat=True).first()
+    if attacker_id:
+        assert_can_revenge(defender, attacker_id)
     updated = AttackLog.objects.filter(
-        id=log_id, defender=defender, revenge_taken=False, from_group=False
-    ).update(revenge_taken=True)
+        id=log_id, defender=defender, revenge_taken=False, from_group=False, attacker_won=True
+    ).update(revenge_taken=True, revenged_at=timezone.now())
     if not updated:
         return None
     return AttackLog.objects.select_related("attacker").get(id=log_id)

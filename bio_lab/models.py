@@ -1280,6 +1280,8 @@ class AttackLog(models.Model):
     # a group «اتک» (bot/handlers/group.py): reported to the defender like a raid, but never
     # revengeable — the arena revenge paid cups for a fight that happened outside the arena
     from_group = models.BooleanField(default=False)
+    # when the defender took revenge for it — counts the daily per-attacker cap (game/arena.py)
+    revenged_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         indexes = [

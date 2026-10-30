@@ -254,7 +254,8 @@ def collect_due() -> list[tuple[int, str]]:
                     attacker_alliance=attacker_alliance,
                     loot_dna=getattr(log, "loot_dna", 0),
                 )
-                revengeable = not log.is_fake_defender and log.attacker_id
+                # only an attack that beat the defence can be revenged (game/arena.py)
+                revengeable = not log.is_fake_defender and log.attacker_id and log.attacker_won and not log.from_group
                 # 4th element = the attacker's user id, for a «🔍 جزییات حریف» button
                 # on the defense report (defrep_opp:<id>).
                 if revengeable:

@@ -574,9 +574,11 @@ def revenges(request, user):
 def _revenge_log(user, log_id: int) -> AttackLog:
     """bot: _revenge_find_sync."""
     log = (AttackLog.objects.select_related("attacker")
-           .filter(id=log_id, defender=user, revenge_taken=False, is_fake_defender=False, from_group=False).first())
+           .filter(id=log_id, defender=user, revenge_taken=False, is_fake_defender=False, from_group=False,
+                   attacker_won=True).first())
     if log is None:
         raise GameError("این انتقام دیگه در دسترس نیست.")
+    A.assert_can_revenge(user, log.attacker_id)
     if log.created_at < timezone.now() - datetime.timedelta(days=REVENGE_DAYS):
         raise GameError("مهلت 3 روزه‌ی انتقام گذشته.")
     return log

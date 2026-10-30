@@ -319,7 +319,7 @@
     render: function (root, params, ctx) {
       if (params.id) return revengeCard(root, params, ctx);
       return K.api.get("arena/revenges/").then(function (d) {
-        if (!d.items.length) { root.innerHTML = K.state("revenge", "لیست انتقام خالیه", "هر حمله‌ای که بهت بشه (چه ببازی چه دفاع کنی) تا " + d.days + " روز اینجا قابل انتقامه."); return; }
+        if (!d.items.length) { root.innerHTML = K.state("revenge", "لیست انتقام خالیه", "هر حمله‌ی آرنایی که دفاعت رو شکست بده تا " + d.days + " روز اینجا قابل انتقامه — از هر نفر روزی حداکثر ۲ بار."); return; }
         var ready = d.items.filter(function (i) { return i.shield <= 0; }), shielded = d.items.filter(function (i) { return i.shield > 0; });
         function item(i, can) {
           var lost = K.amounts({ coins: i.coins, dna: i.dna });

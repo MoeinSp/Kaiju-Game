@@ -47,12 +47,13 @@ def _lab_unlock_keyboard(features):
 
 def _defense_report_keyboard(defense: dict, *, group: bool):
     """Buttons under a defense report. The labels carry a compact summary (power, the
-    attacker's cup, coins looted). Revenge is ARENA-ONLY; group «اتک» has no revenge."""
+    attacker's cup, coins looted). Revenge is ARENA-ONLY (group «اتک» has none) and only for an
+    attack that beat the defence (game/arena.py)."""
     power = defense.get("attacker_power", 0)
     cup = defense.get("attacker_cup")
     loot = defense.get("loot", 0)
     rows = []
-    if not group and defense.get("log_id"):
+    if not group and defense.get("log_id") and defense.get("attacker_won"):
         cup_bit = f" · 🏆{cup}" if cup is not None else ""
         rows.append([btn(f"⚔️ انتقام · 💪{power}{cup_bit}", emoji_key="btn_revenge", style=DANGER,
                          callback_data=f"arena_revenge:{defense['log_id']}")])
