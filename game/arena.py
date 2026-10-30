@@ -379,8 +379,7 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
         "label": lab_display(target),
         "alliance": target.alliance.name if target.alliance_id else None,
         # the 🌑 mark tells the attacker they face a «فرم سیاه» kaiju (the Mini App strips emoji)
-        "creature_name": ((creature_name(target_creature) + (" 🌑" if target_creature.shadow_level else ""))
-                          if target_creature else "موجود ناشناس"),
+        "creature_name": creature_name(target_creature) if target_creature else "موجود ناشناس",   # carries the 🌑 itself
         "defender_creature_id": target_creature.id if target_creature else None,
         "cup": target.cup,
         "power": target_power,
