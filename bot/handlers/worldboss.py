@@ -173,8 +173,9 @@ async def worldboss_open_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🎁 باز شد!")
-    lines = ["🎁 <b>جعبه‌ها باز شد!</b>", _DIV] + [f"{worldboss._chest_line(r)}" for r in results]
-    text, keyboard = _render(data, "\n".join(lines))
+    from bot.loot_text import chests_text
+
+    text, keyboard = _render(data, chests_text(results))
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 

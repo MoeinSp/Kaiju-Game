@@ -861,14 +861,9 @@ def _mbox_result_card(user, tier: str, kind: str, result: dict) -> tuple[str, In
 
         text = _bulk_summary_text(label, result)
     else:
-        c = result["creature"]
-        free_note = "\n<i>(🎁 هدیه رایگان امروز شما)</i>" if result.get("is_free") else ""
-        text = (
-            f"{label} <b>باز شد!</b>{free_note}\n\n"
-            f"<tg-spoiler>{get_emoji('egg')} <b>{c.name}</b>\n"
-            f"{constants.element_label(c.element)} · {constants.RARITY_LABELS[result['rarity']]}</tg-spoiler>\n\n"
-            "<blockquote>از «کلکسیون» می‌تونی فعالش کنی.</blockquote>"
-        )
+        from bot.loot_text import box_reveal
+
+        text = box_reveal(label, result, free=bool(result.get("is_free")))
     rows = [
         [btn("یکی دیگه", emoji_key="btn_diamond_box", style=SHOP, callback_data=_act("mbox_pick", user.id, tier))],
         [btn("بازگشت", emoji_key="btn_back", style=BACK, callback_data=_act("mbox", user.id))],
@@ -966,23 +961,14 @@ def _bgx_open_sync(tg_user, tier, count):
 
 
 def _bgx_result_card(user, tier: str, count: int, summary: dict) -> tuple[str, InlineKeyboardMarkup]:
-    from bot.handlers.lootbox import _bulk_summary_text, _pay_line
+    from bot.handlers.lootbox import _bulk_summary_text
+    from bot.loot_text import box_reveal
 
     label = constants.BIOCRATE_TIERS[tier]["label"]
     if count == 1:
-        r = summary["single"]
-        rl = constants.RARITY_LABELS[r["rarity"]]
-        if r["kind"] == "creature":
-            c = r["creature"]
-            reveal = f"{get_emoji('egg')} <b>{c.name}</b>\n{constants.element_label(c.element)} · {rl}"
-            hint = "از «کلکسیون» می‌تونی فعالش کنی."
-        else:
-            it = r["item"]
-            reveal = f"{constants.EQUIPMENT_SLOT_LABELS[it.slot]} <b>{it.name}</b>\n{rl}"
-            hint = "از «تجهیزات» می‌تونی تجهیزش کنی."
-        text = f"{label} <b>باز شد!</b>{_pay_line(summary)}\n\n<tg-spoiler>{reveal}</tg-spoiler>\n\n<blockquote>{hint}</blockquote>"
+        text = box_reveal(label, summary["single"], pay=summary)
     else:
-        text = _bulk_summary_text(label, summary) + _pay_line(summary)
+        text = _bulk_summary_text(label, summary, pay=True)
     rows = [
         [btn("یکی دیگه", emoji_key="btn_biocrate", style=SHOP, callback_data=_act("bgx_pick", user.id, tier))],
         [btn("بازگشت", emoji_key="btn_back", style=BACK, callback_data=_act("box_genetic", user.id))],

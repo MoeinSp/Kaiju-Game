@@ -2997,21 +2997,10 @@ def _mission_box_sync(tg_user, index):
     from game.daily import claim_box
 
     user, _ = get_or_create_user(tg_user)
+    from bot.loot_text import chest_card
+
     c = claim_box(user, index)
-    lines = [
-        f"{c['emoji']} <b>{c['name']} باز شد!</b>",
-        f"{get_emoji('coin')} طلا: <code>+{c['coins']:,}</code>",
-        f"{get_emoji('dna')} DNA: <code>+{c['dna']:,}</code>",
-    ]
-    if c["diamonds"]:
-        lines.append(f"{get_emoji('diamond')} الماس: <code>+{c['diamonds']}</code>")
-    rarity = constants.RARITY_LABELS.get(c["rarity"], c["rarity"])
-    if c["creature"] is not None:
-        lines.append(f"{get_emoji('creature')} هیولای جدید: <b>{c['creature'].name}</b> [{rarity}] "
-                     f"({constants.element_label(c['creature'].element)})")
-    elif c["item"] is not None:
-        lines.append(f"{get_emoji('gear')} تجهیزات جدید: <b>{c['item'].name}</b> [{rarity}]")
-    return "\n".join(lines), mission_status(user)
+    return chest_card(c), mission_status(user)
 
 
 async def mission_box_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -245,11 +245,11 @@ async def backpack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def _open_sync(tg_user, source):
+    from bot.loot_text import chests_text
     from game import reward_chests
-    from game.worldboss import _chest_line
 
     user, _ = get_or_create_user(tg_user)
-    return [_chest_line(r) for r in reward_chests.open_all(user, source)]
+    return chests_text(reward_chests.open_all(user, source))
 
 
 async def open_chests(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -257,12 +257,12 @@ async def open_chests(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     today the boxes inside a bought pack."""
     q = update.callback_query
     try:
-        lines = await run_db(_open_sync, update.effective_user, q.data.split(":")[2])
+        text = await run_db(_open_sync, update.effective_user, q.data.split(":")[2])
     except GameError as e:
         await q.answer(str(e), show_alert=True)
         return
     await q.answer("🎁 باز شد!")
-    await send_screen(update, "🎁 <b>جعبه‌ها باز شد!</b>\n" + _DIV + "\n" + "\n".join(lines), parse_mode="HTML",
+    await send_screen(update, text, parse_mode="HTML",
                       reply_markup=InlineKeyboardMarkup([[btn("انبار", emoji_key="btn_backpack", style=PRIMARY, callback_data="bp:home")]]))
 
 

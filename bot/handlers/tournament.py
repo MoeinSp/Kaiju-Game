@@ -169,22 +169,22 @@ async def tournament_home_callback(update: Update, context: ContextTypes.DEFAULT
 
 
 def _open_sync(tg_user):
-    from game.worldboss import _chest_line
+    from bot.loot_text import chests_text
 
     user, _ = get_or_create_user(tg_user)
-    return [_chest_line(r) for r in tournament.open_prizes(user)]
+    return chests_text(tournament.open_prizes(user), "جعبه‌ی جایزه")
 
 
 async def tournament_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """«باز کردن جعبه‌ی جایزه» — from the end-of-cup message or the cup screen."""
     query = update.callback_query
     try:
-        lines = await run_db(_open_sync, update.effective_user)
+        text = await run_db(_open_sync, update.effective_user)
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🎁 باز شد!")
-    await _refresh(update, "🎁 <b>جعبه‌ی جایزه باز شد!</b>\n" + "\n".join(lines))
+    await _refresh(update, text)
 
 
 def _join_sync(tg_user):

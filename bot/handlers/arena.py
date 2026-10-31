@@ -1601,42 +1601,15 @@ async def arena_chest_open_callback(update: Update, context: ContextTypes.DEFAUL
     await query.answer("🎉 جعبه باز شد!")
     tier = res["tier"]
 
-    lines = [
-        f"{get_emoji('celebrate', '💝')} <b>جعبه باز شد!</b>",
-        f"{get_emoji(f'chest_{tier}', res['emoji'])} <b>{res['name']} (جایگاه <code>{res['slot']}</code>)</b>",
-        _ARENA_DIV,
-        f"{get_emoji('coin')} طلا: <code>+{res['coins']:,}</code>",
-        f"{get_emoji('dna')} DNA: <code>+{res['dna']:,}</code>",
-    ]
-    if res.get("diamonds"):
-        lines.append(f"{get_emoji('diamond')} الماس: <code>+{res['diamonds']:,}</code>")
+    from bot.loot_text import chest_card
 
-    creature = res.get("creature")
-    item = res.get("item")
-    rarity_label = constants.RARITY_LABELS.get(res["rarity"], res["rarity"])
-
-    if creature:
-        lines += [
-            "",
-            f"{get_emoji('creature', '🦖')} <b>موجود جدید از جعبه آزاد شد:</b>",
-            f"✨ <b>{creature.name}</b> [<b>{rarity_label}</b>]",
-        ]
-    elif item:
-        lines += [
-            "",
-            f"{get_emoji('gear')} <b>تجهیزات جدید دریافت شد:</b>",
-            f"📦 <b>{item.name}</b> [<b>{rarity_label}</b>]",
-        ]
-
+    footer = ""
     if res.get("next_started"):
         next_c = res["next_started"]
         next_cfg = ARENA_CHEST_TIERS.get(next_c.chest_type, {})
-        lines += [
-            "",
-            f"📋 <i>جعبه در صف «{next_cfg.get('name', '')}» (جایگاه <code>{next_c.slot}</code>) خودکار شروع به باز شدن کرد!</i>",
-        ]
-
-    lines.append(_ARENA_DIV)
+        footer = (f"⏳ جعبه‌ی بعدی خودکار شروع شد: {get_emoji(f'chest_{next_c.chest_type}', next_cfg.get('emoji', '🎁'))} "
+                  f"{next_cfg.get('name', '')} (جایگاه <code>{next_c.slot}</code>)")
+    lines = [chest_card(res, sub=f"جایگاه <code>{res['slot']}</code>", footer=footer)]
 
     photo = get_arena_chest_image_path(tier, "open")
     kb = InlineKeyboardMarkup([

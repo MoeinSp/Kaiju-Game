@@ -23,68 +23,11 @@ from game.media import (
 )
 
 
-def _rarity_dot(rarity: str) -> str:
-    return constants.RARITY_LABELS[rarity].split()[0]
+def _bulk_summary_text(header: str, summary: dict, pay: bool = False) -> str:
+    """A ×10 / ×11 batch (bot.loot_text.boxes_text) — kept as the name the group cards import."""
+    from bot.loot_text import boxes_text
 
-
-def _bulk_summary_text(header: str, summary: dict) -> str:
-    """Full reveal for a bulk (×11) open in the itemised format: headline the best
-    drop, then creatures and equipment in separate numbered lists, then a rarity
-    tally that notes whether each rarity was creatures or gear."""
-    order = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
-    div = "━━━━━━━━━━━━━━━━━━━━"
-
-    best = summary["best"]
-    if best["kind"] == "creature":
-        best_line = f"{_rarity_dot(best['rarity'])} <b>{best['creature'].name}</b> ({constants.RARITY_LABELS[best['rarity']]})"
-    else:
-        it = best["item"]
-        best_line = (f"{_rarity_dot(best['rarity'])} {constants.EQUIPMENT_SLOT_LABELS.get(it.slot, '🎒')} "
-                     f"<b>{it.name}</b> (<code>+{it.level}</code>) — {constants.RARITY_LABELS[best['rarity']]}")
-
-    _gift = summary["opened"] - summary["paid"]
-    gift_info = (f"<blockquote>پرداخت: <code>{summary['paid']}</code> باکس\nهدیه رایگان: <code>+{_gift}</code> باکس</blockquote>" if _gift > 0
-                 else f"<blockquote>تعداد: <code>{summary['opened']}</code> باکس</blockquote>")
-    lines = [
-        f"🎁 <b>نتایج گشایش <code>{summary['opened']}</code> {header}</b>",
-        gift_info,
-        "",
-        f"{get_emoji('trophy')} <b>ارزشمندترین دریافت:</b>",
-        f"<blockquote>{best_line}</blockquote>",
-    ]
-
-    creatures = sorted(summary["creatures"], key=lambda r: -order.get(r["rarity"], 0))
-    items = sorted(summary["items"], key=lambda r: -order.get(r["rarity"], 0))
-
-    if creatures:
-        lines += ["", div, "", f"{get_emoji('hatch')} <b>هیولاهای دریافتی (اضافه شده به کلکسیون):</b>"]
-        for i, r in enumerate(creatures, 1):
-            c = r["creature"]
-            lines.append(f"{i}. {_rarity_dot(r['rarity'])} <b>{c.name}</b> ({constants.RARITY_LABELS[r['rarity']]})")
-
-    if items:
-        lines += ["", div, "", f"{get_emoji('atk')} <b>تجهیزات دریافتی (اضافه شده به تجهیزات):</b>"]
-        for i, r in enumerate(items, 1):
-            it = r["item"]
-            slot = constants.EQUIPMENT_SLOT_LABELS.get(it.slot, "🎒")
-            lines.append(f"{i}. {_rarity_dot(r['rarity'])} {slot} <b>{it.name}</b> (<code>+{it.level}</code>) — {constants.RARITY_LABELS[r['rarity']]}")
-
-    # rarity tally, annotated with what kind each rarity's drops were
-    lines += ["", div, "", f"{get_emoji('stats')} <b>خلاصه به تفکیک نایابی:</b>"]
-    for rarity in reversed(constants.RARITY_ORDER):
-        n = summary["by_rarity"].get(rarity, 0)
-        if not n:
-            continue
-        n_c = sum(1 for r in summary["creatures"] if r["rarity"] == rarity)
-        n_i = sum(1 for r in summary["items"] if r["rarity"] == rarity)
-        if n_c and n_i:
-            kind = f"<code>{n_i}</code> تجهیزات · <code>{n_c}</code> هیولا"
-        elif n_i:
-            kind = "تجهیزات"
-        else:
-            kind = "هیولا"
-        lines.append(f"• {constants.RARITY_LABELS[rarity]}: <code>{n}</code> ({kind})")
-    return "\n".join(lines)
+    return boxes_text(header, summary, pay=pay)
 
 
 def _biocrate_buy_sync(tg_user, tier):
@@ -207,20 +150,6 @@ async def biocrate_pick_callback(update: Update, context: ContextTypes.DEFAULT_T
     )
 
 
-def _pay_line(summary: dict) -> str:
-    """One line describing how a batch was paid: N via tickets, M via gold+DNA."""
-    parts = []
-    if summary.get("from_tickets"):
-        parts.append(f"🎟 <code>{summary['from_tickets']}</code> با بلیط")
-    if summary.get("paid_boxes"):
-        parts.append(f"<code>{summary['paid_boxes']}</code> با هزینه (<code>{summary['gold_spent']:,}</code> طلا + <code>{summary['dna_spent']:,}</code> DNA)")
-    lines = []
-    if parts:
-        lines.append(" • ".join(parts))
-    lines.append(f"🎟 بلیط باقیمانده: <code>{summary.get('tickets_left', 0)}</code>")
-    return "\n<blockquote>" + "\n".join(lines) + "</blockquote>"
-
-
 async def biocrate_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     _, tier, count = query.data.split(":")
@@ -239,36 +168,16 @@ async def biocrate_open_callback(update: Update, context: ContextTypes.DEFAULT_T
     tickets_left = summary.get("tickets_left", 0)
     keyboard = _biocrate_detail_keyboard(tier, tickets_left)
     if count == 1:
+        from bot.loot_text import box_reveal
+
         result = summary["single"]
-        rarity_label = constants.RARITY_LABELS[result["rarity"]]
-        if result["kind"] == "creature":
-            c = result["creature"]
-            reveal = (
-                f"{get_emoji('egg')} <b>{c.name}</b>\n"
-                f"عنصر: {constants.element_label(c.element)}\n"
-                f"رده: {rarity_label}"
-            )
-            hint = f"از «{get_emoji('collection')} کلکسیون» می‌توانید آن را فعال کنید."
-            photo = get_creature_image_path(c)
-        else:
-            it = result["item"]
-            reveal = (
-                f"{constants.EQUIPMENT_SLOT_LABELS[it.slot]} <b>{it.name}</b>\n"
-                f"رده: {rarity_label}"
-            )
-            hint = "از «🎒 تجهیزات» می‌توانید آن را تجهیز کنید."
-            photo = get_equipment_image_path(it)
+        photo = (get_creature_image_path(result["creature"]) if result["kind"] == "creature"
+                 else get_equipment_image_path(result["item"]))
         await query.answer("🎟 باز شد!" if summary.get("from_tickets") else "📦 باز شد!")
-        text = (
-            f"{label} <b>باز شد!</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"<tg-spoiler>{reveal}</tg-spoiler>\n\n"
-            f"<blockquote>{hint}</blockquote>"
-            f"{_pay_line(summary)}"
-        )
+        text = box_reveal(label, result, pay=summary)
     else:
         await query.answer("🎉 باز شد!")
-        text = _bulk_summary_text(label, summary) + _pay_line(summary)
+        text = _bulk_summary_text(label, summary, pay=True)
         photo = composite_lootbox_batch_image(summary["rolls"], label)
     await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
@@ -446,7 +355,6 @@ async def _do_diamond_box_buy(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     creature = result["creature"]
-    rarity_label = constants.RARITY_LABELS[result["rarity"]]
     is_free = result.get("is_free", is_free)
     if is_free:
         await query.answer("🎁 باکس رایگان امروز باز شد!")
@@ -458,20 +366,12 @@ async def _do_diamond_box_buy(update: Update, context: ContextTypes.DEFAULT_TYPE
             [back_btn("menu:diamond_box")],
         ]
     )
+    from bot.loot_text import box_reveal
+
     photo = get_creature_image_path(creature)
-    free_tag = f"\n<i>({get_emoji('gift')} هدیه رایگان امروز شما)</i>" if is_free else ""
-    lines = [
-        f"{constants.DIAMOND_BOX_TIERS[tier]['label']} <b>باز شد!</b>{free_tag}",
-        "━━━━━━━━━━━━━━━━━━━━",
-        f"<tg-spoiler>{get_emoji('egg')} <b>{creature.name}</b>\n"
-        f"عنصر: {constants.element_label(creature.element)}\n"
-        f"رده: {rarity_label}</tg-spoiler>",
-        "",
-        f"<blockquote>از «{get_emoji('collection')} کلکسیون» می‌توانید آن را فعال کنید.</blockquote>",
-    ]
     await send_screen(
         update,
-        "\n".join(lines),
+        box_reveal(constants.DIAMOND_BOX_TIERS[tier]["label"], result, free=is_free),
         photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,

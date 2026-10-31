@@ -361,8 +361,10 @@ def _buy_sync(tg_user, key):
     if got.get("item") is not None:
         note += f"\n⚔️ {html.escape(got['item'].name)}"
     if got.get("chest"):
+        from bot.loot_text import loot_lines
+
         c = got["chest"]
-        note += f"\n💰 +{c.get('coins', 0):,} طلا · 🧬 +{c.get('dna', 0):,} DNA"
+        note += "\n" + "\n".join(loot_lines(c.get("coins", 0), c.get("dna", 0), c.get("diamonds", 0)))
     return note, D.view(user)
 
 

@@ -217,23 +217,22 @@ def _chest_rows(data: dict) -> list:
 
 
 def _war_open_sync(tg_user):
-    from game.worldboss import _chest_line
+    from bot.loot_text import chests_text
 
     user, _ = get_or_create_user(tg_user)
-    return [_chest_line(r) for r in alliance.open_war_chests(user)]
+    return chests_text(alliance.open_war_chests(user), "جعبه‌ی جنگ اتحاد")
 
 
 async def war_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """«باز کردن جعبه‌های جنگ» — from the war-result message, the war panel or «انبار»."""
     query = update.callback_query
     try:
-        lines = await run_db(_war_open_sync, update.effective_user)
+        text = await run_db(_war_open_sync, update.effective_user)
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🎁 باز شد!")
-    await send_screen(update, "🎁 <b>جعبه‌های جنگ اتحاد باز شد!</b>\n━━━━━━━━━━━━━━━━━━━━\n" + "\n".join(lines),
-                      parse_mode="HTML",
+    await send_screen(update, text, parse_mode="HTML",
                       reply_markup=InlineKeyboardMarkup([[back_btn("ally_war1d", "جنگ یک‌روزه")]]))
 
 
