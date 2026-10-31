@@ -1245,6 +1245,13 @@ def _group_attack_power(attacker, a_creature) -> int:
     return round(_creature_power(a_creature) * serums.peek(attacker, "warrior"))
 
 
+def _warrior_moment(attacker):
+    """The «سرم جنگاور» toggle state for the «اتک» card (None: nothing to offer)."""
+    from game import serums
+
+    return serums.moment(attacker, "warrior")
+
+
 def _pvp_preview_sync(attacker_tg, target_tg):
     """Read-only power comparison before a reply-attack is confirmed."""
     if target_tg.id == attacker_tg.id or target_tg.is_bot:
@@ -1269,6 +1276,7 @@ def _pvp_preview_sync(attacker_tg, target_tg):
         a_creature.name, t_creature.name, sync_energy(attacker),
         group_shield_remaining_seconds(attacker),
         get_max_energy(attacker),
+        _warrior_moment(attacker),
     )
 
 
@@ -1284,7 +1292,7 @@ def _fmt_shield_hm(seconds: int) -> str:
 
 def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, t_power, t_elem,
                        t_shield_secs=0, a_cname="—", t_cname="—", a_energy=0, a_shield_secs=0,
-                       a_max_energy=constants.MAX_ENERGY):
+                       a_max_energy=constants.MAX_ENERGY, serum=None):
     from bot.handlers.private import element_advantage_line
 
     # target is group-shielded → say it LOUDLY at the very top so the attacker
@@ -1320,15 +1328,21 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
     ]
     if adv:
         lines.append(adv)
+    from bot.handlers.serums import moment_btn, moment_lines
+
+    if serum:
+        lines += [""] + moment_lines(serum)
     lines += [
         _RULE,
         f"{get_emoji('energy')} هزینه حمله: <code>{constants.RAID_ATTACK_ENERGY_COST}</code> انرژی "
         f"(داری <code>{a_energy}</code>/<code>{a_max_energy}</code>)",
     ]
     # attack → swap / details → cancel (the exit is always the last row, alone)
+    sbtn = moment_btn(serum, f"gsrm:{attacker_id}:{target_id}")
     keyboard = InlineKeyboardMarkup([
         [btn("حمله", emoji_key="btn_attack", style=CONFIRM,
              callback_data=f"gatk:{attacker_id}:{target_id}")],
+        *([[sbtn]] if sbtn else []),
         [btn("تعویض موجود", emoji_key="btn_recheck", style=NAV, callback_data=f"gatk_swap:{attacker_id}:{target_id}"),
          btn("جزئیات حریف", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}")],
         [btn("انصراف", emoji_key="btn_cancel", style=DANGER,
@@ -1420,6 +1434,7 @@ def _pvp_preview_by_ids_sync(attacker_id, target_id):
         a_creature.name, t_creature.name, sync_energy(attacker),
         group_shield_remaining_seconds(attacker),
         get_max_energy(attacker),
+        _warrior_moment(attacker),
     )
 
 
@@ -1471,6 +1486,35 @@ async def gatk_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
+    text, keyboard = _pvp_prompt_render(int(attacker_id), int(target_id), *data)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+def _gatk_serum_sync(attacker_id, target_id):
+    from game import serums
+
+    attacker = User.objects.filter(id=attacker_id).first()
+    if attacker is None:
+        raise GameError("یکی از طرف‌ها دیگه پیدا نشد.")
+    m = serums.toggle(attacker, "warrior")
+    return m, _pvp_preview_by_ids_sync(attacker_id, target_id)
+
+
+async def gatk_serum_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«استفاده از سرم جنگاور» under a group attack prompt — attacker-only."""
+    from bot.handlers.serums import moment_toast
+
+    query = update.callback_query
+    _, attacker_id, target_id = query.data.split(":")
+    if update.effective_user.id != int(attacker_id):
+        await query.answer("این دکمه مال تو نیست 🙂", show_alert=True)
+        return
+    try:
+        m, data = await run_db(_gatk_serum_sync, int(attacker_id), int(target_id))
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    await query.answer(moment_toast(m, "warrior"))
     text, keyboard = _pvp_prompt_render(int(attacker_id), int(target_id), *data)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
@@ -2329,6 +2373,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(pvp_summary_callback, pattern=r"^gatk_sum:\d+$"))
     application.add_handler(CallbackQueryHandler(gatk_opp_callback, pattern=r"^gatk_opp:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(gatk_back_callback, pattern=r"^gatk_back:\d+:\d+$"))
+    application.add_handler(CallbackQueryHandler(gatk_serum_callback, pattern=r"^gsrm:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(gatk_swap_callback, pattern=r"^gatk_swap:\d+:\d+$"))
     application.add_handler(CallbackQueryHandler(gatk_swap_pick_callback, pattern=r"^gatk_swap_pick:\d+:\d+:\d+$"))
 

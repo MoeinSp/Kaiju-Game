@@ -2,9 +2,9 @@
 
 The building («serum_lab», built like any other) brews one serum at a time from a queue, with
 DNA paid when the serum is queued. Finished serums wait on a shelf whose size grows with the
-building. A serum is then USED: repair acts at once; rage, tracker, warrior, shell and
-giant-slayer are «armed» and spent by the next arena attack / hunt / group «اتک» / defence /
-boss hit.
+building. A serum is then USED: repair acts at once; shell is armed in the lab for the next
+defence; rage, tracker, warrior and giant-slayer are chosen on their own action screen (the
+arena attack / hunt card / group «اتک» / boss hit — see MOMENT) and spent by that action.
 
 Each serum also has its own level, 1 to 5, raised inside the lab (gold + DNA + time, one at
 a time, never above the building's level). The level sets the size of its effect.
@@ -33,21 +33,27 @@ MAX_LEVEL = 5
 
 # key → label, short line, the lab level that unlocks it, effect per serum level (1..5)
 KINDS: dict[str, dict] = {
-    "rage": {"label": "خشم", "where": "حمله‌ی بعدی آرنا", "unlock": 1, "fx": [10, 12, 14, 17, 20],
-             "text": "+{v}٪ قدرت در حمله‌ی بعدی آرنا"},
-    "tracker": {"label": "ردیاب", "where": "شکار بعدی", "unlock": 1, "fx": [1.5, 1.75, 2.0, 2.25, 2.5],
-                "text": "غنیمت شکار بعدی ×{v}"},
-    "warrior": {"label": "جنگاور", "where": "اتک گروهی بعدی", "unlock": 2, "fx": [10, 12, 14, 17, 20],
-                "text": "+{v}٪ قدرت در اتک گروهی بعدی"},
+    "rage": {"label": "خشم", "where": "حمله‌ی آرنا", "unlock": 1, "fx": [10, 12, 14, 17, 20],
+             "text": "+{v}٪ قدرت در یک حمله‌ی آرنا"},
+    "tracker": {"label": "ردیاب", "where": "شکار", "unlock": 1, "fx": [1.5, 1.75, 2.0, 2.25, 2.5],
+                "text": "غنیمت یک شکارِ برده ×{v}"},
+    "warrior": {"label": "جنگاور", "where": "اتک گروهی", "unlock": 2, "fx": [10, 12, 14, 17, 20],
+                "text": "+{v}٪ قدرت در یک اتک گروهی"},
     "shell": {"label": "پوسته", "where": f"دفاع بعدی آرنا (تا {SHELL_HOURS} ساعت)", "unlock": 3, "fx": [10, 12, 14, 17, 20],
               "text": "+{v}٪ قدرت مدافعت در حمله‌ی بعدی آرنا که بهت می‌شه"},
     "heal": {"label": "ترمیم", "where": "سیاه‌چال", "unlock": 3, "fx": [30, 35, 40, 45, 50],
              "text": "+{v}٪ جون به یکی از اعضای تیم سیاه‌چال"},
-    "slayer": {"label": "غول‌کش", "where": "ضربه‌ی بعدی به غول", "unlock": 4, "fx": [15, 18, 22, 26, 30],
-               "text": "+{v}٪ آسیب در ضربه‌ی بعدی به غول سرگردان"},
+    "slayer": {"label": "غول‌کش", "where": "ضربه به غول", "unlock": 4, "fx": [15, 18, 22, 26, 30],
+               "text": "+{v}٪ آسیب در یک ضربه به غول سرگردان"},
 }
 ORDER = ["rage", "tracker", "warrior", "shell", "heal", "slayer"]
 ARMED = ("rage", "tracker", "warrior", "shell", "slayer")     # wait for their moment; heal acts at once
+# Picked on the action's own screen (owner's rule, 2026-10-31): a serum is never spent unless the
+# player chose it for THIS attack / hunt / hit. The toggle there arms it (off the shelf) and a
+# second tap puts it back; the lab no longer arms these. Shell (a defence) is still armed in the
+# lab and heal is used inside the dungeon.
+MOMENT = {"rage": "صفحه‌ی حمله‌ی آرنا", "tracker": "کارت شکار", "warrior": "پیش‌نمایش اتک گروه",
+          "slayer": "صفحه‌ی غول سرگردان"}
 
 # by building level: shelf size and minutes per serum
 CAPACITY = {1: 3, 2: 3, 3: 4, 4: 4, 5: 5}   # 3 places, +1 at levels 3 and 5
@@ -176,7 +182,7 @@ def state(user: User) -> dict:
             "next_effect": effect_text(k, klvl + 1) if klvl < MAX_LEVEL else "",
             "all": [effect_text(k, lv) for lv in range(1, MAX_LEVEL + 1)],
             "stock": int((row.stock or {}).get(k, 0)), "queued": row.queue.count(k),
-            "armed": k in (row.armed or {}),
+            "armed": k in (row.armed or {}), "moment": MOMENT.get(k, ""),
             "upgrade": {"gold": nxt[0], "dna": nxt[1], "hours": nxt[2], "capped": klvl + 1 > level} if nxt else None,
         })
     shell = (row.armed or {}).get("shell")
@@ -223,6 +229,53 @@ def take(user: User, kind: str) -> float:
     if a.get("until") and a["until"] <= timezone.now().timestamp():
         return 1.0
     return _mult(kind, a.get("lvl", 1))
+
+
+def moment(user: User, kind: str) -> dict | None:
+    """What the action screen's serum toggle shows: None when there is nothing to offer (no lab,
+    locked, none on the shelf and none chosen). Read-only, like stock_of()."""
+    if kind not in MOMENT:
+        return None
+    try:
+        row = SerumLab.objects.filter(user_id=user.id).first()
+        if row is None:
+            return None
+        level = lab_level(user)
+        _advance(row, level, timezone.now())
+    except Exception:  # noqa: BLE001 — a battle card must never fail over a serum
+        return None
+    armed = (row.armed or {}).get(kind)
+    stock = int((row.stock or {}).get(kind, 0))
+    if level < KINDS[kind]["unlock"] or (not armed and stock <= 0):
+        return None
+    klvl = int(armed.get("lvl", 1)) if armed else int((row.levels or {}).get(kind, 1))
+    return {"kind": kind, "label": KINDS[kind]["label"], "on": bool(armed), "stock": stock,
+            "level": klvl, "effect": effect_text(kind, klvl), "pct": round((_mult(kind, klvl) - 1) * 100)}
+
+
+def unarm(user: User, kind: str) -> None:
+    """Put a chosen serum back on the shelf (it was never spent)."""
+    with transaction.atomic():
+        row = _row(user, lock=True)
+        if kind not in (row.armed or {}):
+            return
+        row.armed = {k: v for k, v in row.armed.items() if k != kind}
+        row.stock = {**(row.stock or {}), kind: int((row.stock or {}).get(kind, 0)) + 1}
+        row.save(update_fields=["armed", "stock"])
+
+
+def toggle(user: User, kind: str) -> dict | None:
+    """The action screen's serum button: choose it for this attack, or put it back."""
+    if kind not in MOMENT:
+        raise GameError("این سرم اینجا انتخاب نمی‌شه.")
+    with transaction.atomic():
+        row = _row(user, lock=True)
+        on = kind in (row.armed or {})
+    if on:
+        unarm(user, kind)
+    else:
+        use(user, kind, _moment=True)
+    return moment(user, kind)
 
 
 # ── acting ────────────────────────────────────────────────────────────────────
@@ -278,13 +331,16 @@ def cancel_last(user: User) -> dict:
     return {"kind": kind, "refund": refund, "state": state(user)}
 
 
-def use(user: User, kind: str, member_id: int | None = None) -> dict:
-    """Use a serum from the shelf. Repair acts now; the rest wait for their moment."""
+def use(user: User, kind: str, member_id: int | None = None, _moment: bool = False) -> dict:
+    """Use a serum from the shelf. Repair acts now; shell waits for the next defence. The MOMENT
+    kinds are only chosen from their action screen (toggle())."""
     from bio_lab.repository import lock_row
 
     if kind not in KINDS:
         raise GameError("این سرم وجود نداره.")
     label = KINDS[kind]["label"]
+    if kind in MOMENT and not _moment:
+        raise GameError(f"«{label}» رو موقع استفاده انتخاب کن: توی {MOMENT[kind]} دکمه‌ی سرم رو بزن.")
     with transaction.atomic():
         user = lock_row(user) or User.objects.select_for_update().get(id=user.id)
         row, level = _fresh(user)
@@ -303,7 +359,7 @@ def use(user: User, kind: str, member_id: int | None = None) -> dict:
         else:
             until = (timezone.now() + datetime.timedelta(hours=SHELL_HOURS)).timestamp() if kind == "shell" else None
             row.armed = {**(row.armed or {}), kind: {"lvl": klvl, "until": until}}
-            note = "فعال شد: " + KINDS[kind]["where"]
+            note = ("انتخاب شد برای " if _moment else "فعال شد: ") + KINDS[kind]["where"]
         row.stock = {**row.stock, kind: int(row.stock.get(kind, 0)) - 1}
         row.used_day, row.used_count = today, used + 1
         if not row.queue:   # room on the shelf again: a paused queue would restart here anyway

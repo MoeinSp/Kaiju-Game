@@ -416,6 +416,9 @@ def panel_state(user: User) -> dict:
             "seconds_left": max(0, int((boss.expires_at - timezone.now()).total_seconds())),
             "advantage": bool(creature and constants.is_strong_against(creature.element, boss.element)),
         })
+        from game import serums
+
+        data["serum"] = serums.moment(user, "slayer")   # «سرم غول‌کش»: only if the player picks it
     from game import reward_chests
 
     data["unopened"] = reward_chests.unopened(user, "worldboss").count()

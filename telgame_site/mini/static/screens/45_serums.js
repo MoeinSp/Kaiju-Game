@@ -44,6 +44,7 @@
           }
           if (st.upgrading) html += '<div class="callout good mt">' + K.ic("up") + "<div>در حال ارتقای «" + K.esc(st.upgrading.label) + '» · <span class="timer" data-left="' + st.upgrading.left + '"></span></div></div>';
           html += '<div class="h2">' + K.ic("flask") + 'سرم‌ها</div><div class="sr-grid">' + st.kinds.map(card).join("") + "</div>" +
+            '<div class="callout mt">' + K.ic("info") + "<div>سرم‌ها خودبه‌خود خرج نمی‌شن: خشم، ردیاب و غول‌کش رو همون لحظه توی صفحه‌ی حمله‌ی آرنا، شکار یا غول انتخاب می‌کنی (جنگاور توی پیش‌نمایش اتک گروه). پوسته رو همین‌جا برای دفاع فعال می‌کنی.</div></div>" +
             '<p class="note">هزینه‌ی ساخت هر سرم: ' + dna(st.brew_cost) + " · سرم‌ها رو اینجا ارتقا می‌دی؛ سطح هر سرم از سطح ساختمون بالاتر نمی‌ره.</p>" +
             '<button class="panel sr-notify" data-act="notify">' + K.ic("bell") + '<span class="grow">خبرم کن وقتی سرم‌ها آماده شد<small>حداکثر روزی ۲ پیام توی ربات</small></span>' +
             K.tag(st.notify ? "روشن" : "خاموش", st.notify ? "var(--good)" : "var(--muted)") + "</button>";
@@ -57,7 +58,9 @@
             (k.stock ? '<span class="sr-cnt num">×' + K.n(k.stock) + "</span>" : "") + "</button>" +
             "<b>" + K.esc(k.label) + "</b><small>" + K.esc(k.effect) + "</small>" +
             '<div class="sr-btns"><button class="btn sm" data-act="brew" data-key="' + k.key + '">' + K.ic("plus") + "ساخت</button>" +
-            '<button class="btn sm primary" data-act="use" data-key="' + k.key + '"' + (k.stock ? "" : " disabled") + ">مصرف</button></div></div>";
+            (k.moment && k.armed ? '<button class="btn sm" data-act="unarm" data-key="' + k.key + '">' + K.ic("close") + "برداشتن</button>"
+              : k.moment ? '<button class="btn sm" data-act="where" data-key="' + k.key + '"' + (k.stock ? "" : " disabled") + ">استفاده</button>"
+              : '<button class="btn sm primary" data-act="use" data-key="' + k.key + '"' + (k.stock ? "" : " disabled") + ">مصرف</button>") + "</div></div>";
         }
         function info(key) {
           var k = st.kinds.filter(function (x) { return x.key === key; })[0]; if (!k) return;
@@ -92,6 +95,16 @@
             busy = false; st = r.state; draw(); K.toast("«" + r.label + "» · " + r.note, "ok"); if (K.sfx) K.sfx("levelup");
           }, function () { busy = false; });
         });
+        K.on(root, "where", function (el) {
+          var k = st.kinds.filter(function (x) { return x.key === el.dataset.key; })[0];
+          if (k) K.toast("«" + k.label + "» رو موقع استفاده انتخاب کن: توی " + k.moment + " دکمه‌ی سرم رو بزن.");
+        });
+        K.on(root, "unarm", function (el) {
+          if (busy) return; busy = true;
+          K.api.post("serums/unarm/", { kind: el.dataset.key }, el).then(function (r) {
+            busy = false; st = r.state; draw(); K.toast("برگشت توی قفسه.", "ok");
+          }, function () { busy = false; });
+        });
         K.on(root, "notify", function (el) {
           if (busy) return; busy = true;
           K.api.post("serums/notify/", { on: !st.notify }, el).then(function (r) {
@@ -106,6 +119,25 @@
       });
     }
   });
+
+  /* «سر بزنگاه»: the serum toggle on an action screen (arena attack, hunt card, boss). A serum is
+     never spent unless the player picks it here; a second tap puts it back on the shelf. */
+  K.serumRow = function (m) {
+    if (!m) return "";
+    return '<button class="panel sr-moment' + (m.on ? " on" : "") + '" data-act="serum" data-kind="' + m.kind + '">' +
+      '<img src="' + K.asset(m.img) + '" alt=""><span class="grow"><b>' + (m.on ? "سرم " + K.esc(m.label) + " انتخاب شد" : "استفاده از سرم " + K.esc(m.label)) + "</b>" +
+      "<small>" + K.esc(m.effect) + " · " + (m.on ? "دوباره بزن تا برگرده توی قفسه" : K.n(m.stock) + " عدد داری · فقط اگه انتخابش کنی خرج می‌شه") + "</small></span>" +
+      '<span class="sr-sw' + (m.on ? " on" : "") + '"><i></i></span></button>';
+  };
+  /* Toggle it; resolves with the fresh {serum} (callers redraw their card). */
+  K.serumToggle = function (el) {
+    var kind = el.dataset.kind;
+    return K.api.post("serums/toggle/", { kind: kind }, el).then(function (r) {
+      K.invalidate("serums/"); K.haptic(r.serum && r.serum.on ? "ok" : "");
+      K.toast(r.serum && r.serum.on ? "سرم «" + r.serum.label + "» انتخاب شد." : "سرم برگشت توی قفسه.", "ok");
+      return r;
+    });
+  };
 
   K.screen("bp_home", {
     title: "انبار", tab: "base",

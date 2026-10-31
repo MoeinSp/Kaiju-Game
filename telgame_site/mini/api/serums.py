@@ -13,7 +13,30 @@ def _state(user) -> dict:
         k["img"] = f"img/serum_{k['key']}.jpg"
         k["effect"], k["next_effect"], k["where"] = clean(k["effect"]), clean(k["next_effect"]), clean(k["where"])
         k["all"] = [clean(x) for x in k["all"]]
+        k["moment"] = clean(k["moment"])
     return st
+
+
+def moment(user, kind: str) -> dict | None:
+    """The «سر بزنگاه» toggle of an action screen (arena / hunt / boss) — K.serumToggle draws it."""
+    m = SR.moment(user, kind)
+    if m:
+        m["effect"], m["img"] = clean(m["effect"]), f"img/serum_{kind}.jpg"
+    return m
+
+
+@endpoint("POST")
+def toggle(request, user, data):
+    """Choose a serum for this attack / hunt / hit, or put it back on the shelf."""
+    kind = need_str(data, "kind", choices=list(SR.MOMENT))
+    SR.toggle(user, kind)
+    return {"serum": moment(user, kind)}
+
+
+@endpoint("POST")
+def unarm(request, user, data):
+    SR.unarm(user, need_str(data, "kind", choices=list(SR.MOMENT)))
+    return {"state": _state(user)}
 
 
 @endpoint()
@@ -100,6 +123,8 @@ routes = [
     ("brew/", brew),
     ("cancel/", cancel),
     ("use/", use),
+    ("toggle/", toggle),
+    ("unarm/", unarm),
     ("upgrade/", upgrade),
     ("notify/", notify),
     ("backpack/", backpack),

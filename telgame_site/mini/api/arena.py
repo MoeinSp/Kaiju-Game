@@ -75,6 +75,12 @@ def _gate(user, action: str) -> None:
         raise GameError(f"این بخش از سطح {req} «تالار مِهر» باز می‌شه (الان سطح {level}). اول تالار مِهرت رو ارتقا بده.")
 
 
+def _serum_moment(user, kind):
+    from telgame_site.mini.api.serums import moment
+
+    return moment(user, kind)
+
+
 def _with_rage(user, my: dict) -> dict:
     """«سرم خشم» armed: the card and its verdict count it (attack() spends it on the fight)."""
     from game import serums
@@ -235,6 +241,7 @@ def _card(user, pending: dict, seen: list[int], note: str = "", creature=None, f
         "energy_cost": constants.ARENA_ATTACK_ENERGY_COST,
         "energy": sync_energy(user), "max_energy": get_max_energy(user),
         "shield": A.shield_remaining_seconds(user), "shield_cost_hours": constants.SHIELD_ATTACK_COST_HOURS,
+        "serum": _serum_moment(user, "rage"),   # «سرم خشم»: spent only if picked on this card
     }
 
 
@@ -616,6 +623,7 @@ def revenge_card(request, user):
         "energy_cost": constants.ARENA_ATTACK_ENERGY_COST,
         "energy": sync_energy(user), "max_energy": get_max_energy(user),
         "shield": A.shield_remaining_seconds(user), "shield_cost_hours": constants.SHIELD_ATTACK_COST_HOURS,
+        "serum": _serum_moment(user, "rage"),   # «سرم خشم»: spent only if picked on this card
     }
 
 

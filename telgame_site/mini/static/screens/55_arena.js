@@ -243,7 +243,7 @@
       (c.win ? '<div class="callout good mt">' + K.ic("check") + "<div><b>با این هیولا می‌بری!</b></div></div>"
              : '<div class="callout warn mt">' + K.ic("warn") + "<div><b>این حریف از هیولات قوی‌تره.</b> «تعویض هیولا» یا «حریف بعدی» رو بزن.</div></div>") +
       '<div class="panel pad mt"><div class="flex between"><span class="muted">' + K.ic("gift") + " جایزه‌ی برد</span><span>" + (K.amounts(c.loot) || K.n(0)) + "</span></div>" + swing(c.cup_win, c.cup_loss) + "</div>" +
-      shieldNote(c) +
+      shieldNote(c) + K.serumRow(c.serum) +
       '<div class="mt">' + attackBtn("attack", "حمله", c) + "</div>" +
       '<div class="btns mt"><button class="btn" data-act="next">' + K.ic("refresh") + 'حریف بعدی</button><button class="btn" data-act="swap">' + K.ic("swap") + "تعویض هیولا</button></div>" +
       '<button class="btn ghost block mt" data-act="details">' + K.ic("search") + "جزئیات حریف</button>";
@@ -279,6 +279,11 @@
         }).catch(function () {});
       });
       K.on(root, "next", function (el) { if (!busy) hold(find(el)).catch(function () {}); });
+      K.on(root, "serum", function (el) {      // «سرم خشم»: picked for this attack, or put back
+        if (!held || busy) return;
+        hold(K.serumToggle(el).then(function () { return K.api.post("arena/card/", { token: held.token, seen: seen }); }))
+          .then(function (c) { if (ctx.alive()) { var y = window.scrollY; show(c); window.scrollTo(0, y); } }).catch(function () {});
+      });
       K.on(root, "details", function (el) { if (held) detailsSheet({ token: held.token }, el); });
       K.on(root, "log", function () { showDetail(last && last.detail); });
       K.on(root, "home", function () { K.back(); });
@@ -347,7 +352,7 @@
         '<div class="panel pad mt">' + (taken ? '<div class="flex between"><span class="muted">' + K.ic("revenge") + " ازت برده بود</span><span>" + taken + "</span></div>" : "") +
         '<div class="sm muted" style="margin-top:' + (taken ? 6 : 0) + 'px">اگه ببری ۱۰٪ طلا و DNA الانش رو می‌گیری.</div>' + swing(c.cup_win, c.cup_loss) + "</div>" +
         (c.opp_shield > 0 ? '<div class="callout warn mt">' + K.ic("shield") + "<div>این بازیکن الان سپر داره (" + K.esc(K.dur(c.opp_shield)) + "). تا تموم نشه نمی‌شه بهش حمله کرد.</div></div>" : "") +
-        shieldNote(c) +
+        shieldNote(c) + (c.opp_shield > 0 ? "" : K.serumRow(c.serum)) +
         '<div class="mt">' + (c.opp_shield > 0 ? '<button class="btn lg block" disabled>' + K.ic("shield") + "سپر داره</button>" : attackBtn("revenge", "شروع انتقام", c)) + "</div>" +
         '<button class="btn ghost block mt" data-act="details">' + K.ic("search") + "جزئیات حریف</button>";
       K.on(root, "details", function (el) { detailsSheet({ attacker_id: o.id }, el); });
@@ -355,6 +360,10 @@
       K.on(root, "back", function () { K.back(); });
       K.on(root, "to-chests", function () { K.go("ar_chests"); });
       var busy = false;
+      K.on(root, "serum", function (el) {      // «سرم خشم» for this revenge
+        if (busy) return; busy = true;
+        K.serumToggle(el).then(function () { busy = false; ctx.reload(); }, function () { busy = false; });
+      });
       K.on(root, "revenge", function (el) {
         if (busy) return; busy = true;
         fight("arena/revenge/", { log_id: c.log_id }, el).then(function (r) {

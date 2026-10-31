@@ -28,6 +28,34 @@ def _photo(level: int) -> Path:
     return p if p.exists() else base / "bld_serum_lab.jpg"
 
 
+# ── the «سر بزنگاه» toggle on an action screen (arena attack, hunt card, group «اتک», boss) ──
+def moment_lines(m: dict | None) -> list[str]:
+    """The serum part of an action card (empty when there is nothing to offer)."""
+    if not m:
+        return []
+    icon = _ICON[m["kind"]]
+    if m["on"]:
+        return [f"{icon} <b>سرم {m['label']} انتخاب شد</b> (سطح {m['level']})",
+                f"<i>{m['effect']} · اگه نخوای، با دکمه‌ی سرم برش گردون توی قفسه.</i>"]
+    return [f"{icon} سرم {m['label']} داری: <code>{m['stock']}</code> عدد (سطح {m['level']})",
+            f"<i>{m['effect']} · فقط اگه خودت انتخابش کنی خرج می‌شه.</i>"]
+
+
+def moment_btn(m: dict | None, callback_data: str):
+    """The toggle button for that serum, or None."""
+    if not m:
+        return None
+    if m["on"]:
+        return btn(f"سرم {m['label']} انتخاب شده · برداشتن", emoji_key="btn_serum_use", style=NAV, callback_data=callback_data)
+    return btn(f"استفاده از سرم {m['label']} · {m['stock']} عدد", emoji_key="btn_serum_use", style=CONFIRM, callback_data=callback_data)
+
+
+def moment_toast(m: dict | None, kind: str) -> str:
+    if m and m["on"]:
+        return f"سرم {m['label']} برای این کار انتخاب شد."
+    return f"سرم {SR.KINDS[kind]['label']} برگشت توی قفسه."
+
+
 # ── the lab ─────────────────────────────────────────────────────────────────────
 def _lab_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     if not st["level"]:
@@ -49,7 +77,7 @@ def _lab_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
         lines.append(f"⏫ ارتقای «{st['upgrading']['label']}»: {_left(st['upgrading']['left'])} مونده")
     armed = [k for k in st["kinds"] if k["armed"]]
     if armed:
-        lines += [_DIV] + [f"{_ICON[k['key']]} فعال: <b>{k['label']}</b> · {k['where']}" for k in armed]
+        lines += [_DIV] + [f"{_ICON[k['key']]} {'انتخاب شده' if k['moment'] else 'فعال'}: <b>{k['label']}</b> · {k['where']}" for k in armed]
     lines.append(_DIV)
     for k in st["kinds"]:
         if not k["unlocked"]:
@@ -57,13 +85,18 @@ def _lab_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
             continue
         lines.append(f"{_ICON[k['key']]} <b>{k['label']}</b> · سطح {k['level']} · موجود <code>{k['stock']}</code>")
         lines.append(f"     {k['effect']}")
+        if k["moment"]:
+            lines.append(f"     <i>انتخاب در {k['moment']}</i>")
+    lines += [_DIV, "<i>سرم‌ها خودبه‌خود خرج نمی‌شن: خشم، ردیاب، جنگاور و غول‌کش رو همون لحظه توی صفحه‌ی حمله، شکار یا غول انتخاب می‌کنی.</i>"]
     if note:
         lines += [_DIV, note]
     rows = []
     for k in st["kinds"]:
         if k["unlocked"]:
             row = [btn(f"ساخت {k['label']}", emoji_key="btn_serum_brew", style=BUILD, callback_data=f"sr:b:{k['key']}")]
-            if k["stock"]:
+            if k["moment"] and k["armed"]:
+                row.append(btn(f"برداشتن {k['label']}", emoji_key="btn_cancel", style=NAV, callback_data=f"sr:c:{k['key']}"))
+            elif k["stock"] and not k["moment"]:
                 row.append(btn(f"مصرف {k['label']}", emoji_key="btn_serum_use", style=CONFIRM, callback_data=f"sr:u:{k['key']}"))
             rows.append(row)
     tail = [btn("ارتقای سرم‌ها", emoji_key="btn_serum_up", style=PRIMARY, callback_data="sr:up"),
@@ -113,6 +146,9 @@ def _lab_sync(tg_user, action: str, kind: str | None):
         elif action == "u":
             r = SR.use(user, kind)
             note = f"✅ «{r['label']}» · {r['note']}"
+        elif action == "c":
+            SR.unarm(user, kind)
+            note = f"↩️ «{SR.KINDS[kind]['label']}» برگشت توی قفسه."
         elif action == "x":
             r = SR.cancel_last(user)
             note = f"↩️ آخرین سرم صف لغو شد · <code>{r['refund']:,}</code> DNA برگشت"
@@ -135,7 +171,7 @@ async def serum_lab(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     kind = parts[2] if len(parts) > 2 and parts[2] in SR.KINDS else None
     if q and q.data.startswith("sr:"):   # «menu:serums» was answered by the menu router
         await q.answer()
-    st, note = await run_db(_lab_sync, update.effective_user, action if action in ("b", "u", "x", "ug", "n") else "", kind)
+    st, note = await run_db(_lab_sync, update.effective_user, action if action in ("b", "u", "c", "x", "ug", "n") else "", kind)
     if action in ("up", "ug"):
         text, kb = _up_render(st, note)
     else:

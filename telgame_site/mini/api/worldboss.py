@@ -119,10 +119,13 @@ def _state(user: User) -> dict:
     from game import research
     from game.creature import creature_power
     from game.equipment import get_equipped_items
+    from game import serums
     from game.media import get_feature_image_path
+    from telgame_site.mini.api.serums import moment
 
     data = worldboss.panel_state(user)
     out = _live(user, data)
+    out["serum"] = moment(user, "slayer") if data["boss"] is not None and data.get("hits_left", 0) > 0 else None
     out["rules"] = _rules()
     out["art"] = asset_img(get_feature_image_path("worldboss"))
     out["me"] = None
@@ -138,7 +141,8 @@ def _state(user: User) -> dict:
             # what ONE hit deals and pays: its power, with the element bonus when it has it
             # (exact — the boss has no random swing)
             power = creature_power(creature, gear)
-            about = round(power * (constants.ELEMENT_ADVANTAGE_POWER_FACTOR if data["advantage"] else 1.0))
+            about = round(power * (constants.ELEMENT_ADVANTAGE_POWER_FACTOR if data["advantage"] else 1.0)
+                          * serums.peek(user, "slayer"))   # «سرم غول‌کش» when picked
             coins, dna = worldboss.hit_reward(about)
             out["per_hit"] = {"damage": about, "coins": coins, "dna": dna}
     return out

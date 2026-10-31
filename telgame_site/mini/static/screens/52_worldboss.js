@@ -96,7 +96,7 @@
         } else {
           html += '<div class="callout warn mt">' + K.ic("warn") + "<span>اول یه هیولای فعال انتخاب کن.</span></div>";
         }
-        html += "</div>" +
+        html += "</div>" + (me ? K.serumRow(S.serum) : "") +
           '<button class="btn danger lg block mt" id="wb-hit" data-act="hit"></button><div id="wb-last"></div>' +
           '<div class="h2">' + K.ic("podium") + 'بیشترین آسیب</div><div id="wb-top"></div>';
         return html + rules(S.rules);
@@ -199,6 +199,12 @@
           busy = false;
           if (err && err.status === 400 && err.code !== "energy") poll();
         });
+      });
+      K.on(root, "serum", function (el) {      // «سرم غول‌کش»: picked for the next hit, or put back
+        if (busy) return; busy = true;
+        K.serumToggle(el).then(function () { return K.api.get("worldboss/"); }).then(function (d) {
+          busy = false; var keepArt = S.art; S = d; S.art = S.art || keepArt; var y = window.scrollY; draw(); window.scrollTo(0, y);
+        }, function () { busy = false; });
       });
       K.on(root, "swap", function () {
         if (busy) return;

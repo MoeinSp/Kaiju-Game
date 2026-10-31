@@ -68,8 +68,15 @@ def _render(data: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
             lines.append("🏅 <b>بیشترین آسیب:</b>")
             for r in data["top"]:
                 lines.append(f"{r['rank']}. {r['name']} — <code>{r['damage']:,}</code>")
+        from bot.handlers.serums import moment_btn, moment_lines
+
+        if data.get("serum") and data["hits_left"] > 0:
+            lines += [""] + moment_lines(data["serum"])
         if data["hits_left"] > 0 and data["has_creature"]:
             rows.append([btn("ضربه بزن", emoji_key="btn_attack", style=BATTLE, callback_data="wboss:hit")])
+            sbtn = moment_btn(data.get("serum"), "wboss:srm")
+            if sbtn:
+                rows.append([sbtn])
     if data.get("unopened"):
         lines += ["", f"🎁 <b>{data['unopened']}</b> جعبه‌ی جایزه‌ی باز نشده داری!"]
         rows.append([btn(f"باز کردن جعبه‌ها ({data['unopened']})", emoji_key="btn_chest_open", style=BATTLE,
@@ -125,6 +132,29 @@ async def worldboss_hit_callback(update: Update, context: ContextTypes.DEFAULT_T
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
+def _serum_sync(tg_user):
+    from game import serums
+
+    user, _ = get_or_create_user(tg_user)
+    m = serums.toggle(user, "slayer")
+    return m, worldboss.panel_state(user)
+
+
+async def worldboss_serum_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«استفاده از سرم غول‌کش»: choose it for the next hit, or put it back."""
+    from bot.handlers.serums import moment_toast
+
+    query = update.callback_query
+    try:
+        m, data = await run_db(_serum_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    await query.answer(moment_toast(m, "slayer"))
+    text, keyboard = _render(data)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
 def _open_sync(tg_user, ref):
     from game import reward_chests
 
@@ -153,3 +183,4 @@ def register(application) -> None:
     application.add_handler(CommandHandler("boss", worldboss_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(worldboss_home_callback, pattern=r"^wboss:home$"))
     application.add_handler(CallbackQueryHandler(worldboss_hit_callback, pattern=r"^wboss:hit$"))
+    application.add_handler(CallbackQueryHandler(worldboss_serum_callback, pattern=r"^wboss:srm$"))

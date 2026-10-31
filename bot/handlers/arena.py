@@ -215,8 +215,16 @@ def _find_sync(tg_user, exclude_ids=None):
     from game.energy import sync_energy
 
     cname = creature.name if creature is not None else "—"
+    _with_serum(user)
     return (user, opponent, attack_power(user), loot, my_element,
             dna_win, cname, sync_energy(user))
+
+
+def _with_serum(user) -> None:
+    """Attach the «سرم خشم» toggle state for _render_opponent (it runs off the DB thread)."""
+    from game import serums
+
+    user._serum_rage = serums.moment(user, "rage")
 
 
 async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, note: str = "") -> None:
@@ -349,7 +357,35 @@ def _swap_rerender_sync(tg_user, creature_id, pending):
         "loot_gold": pending["loot_gold"], "loot_dna": pending["loot_dna"],
     }
     loot = pending["loot_gold"]
+    _with_serum(user)
     return user, opponent, my_power, loot, creature.element, dna_win, creature.name, sync_energy(user)
+
+
+def _serum_toggle_sync(tg_user):
+    from game import serums
+
+    user, _ = get_or_create_user(tg_user)
+    return serums.toggle(user, "rage")
+
+
+async def arena_serum_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«استفاده از سرم خشم» on the opponent screen: choose it for this attack, or put it back."""
+    from bot.handlers.serums import moment_toast
+
+    query = update.callback_query
+    pending = context.user_data.get(PENDING_OPPONENT_KEY)
+    if pending is None:
+        await query.answer("این حریف دیگه در دسترس نیست.", show_alert=True)
+        return
+    try:
+        m = await run_db(_serum_toggle_sync, update.effective_user)
+        args = await run_db(_swap_rerender_sync, update.effective_user, None, pending)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    await query.answer(moment_toast(m, "rage"))
+    text, keyboard = _render_opponent(*args)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def arena_swap_pick_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -443,6 +479,11 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
     else:
         verdict = "❌ <b>این حریف از موجودت قوی‌تره</b>\n<i>«تعویض» یا «حریف بعدی» رو بزن.</i>"
     lines.append(verdict)
+    from bot.handlers.serums import moment_btn, moment_lines
+
+    serum = getattr(user, "_serum_rage", None)
+    if serum:
+        lines += [""] + moment_lines(serum)
     lines += [
         dividers.line(),
         f"{get_emoji('gift')} <b>جایزه برد</b>",
@@ -453,17 +494,19 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
         f"{trophy} کاپ در صورت باخت: <code>{loss_cup}</code>",
         f"{get_emoji('energy')} انرژی شما: <code>{energy}</code>/<code>{max_en}</code>",
     ]
-    keyboard = InlineKeyboardMarkup(
+    rows = [[btn(f"حمله · {cost} انرژی", emoji_key="btn_attack", style=BATTLE, callback_data=f"arena_attack:{_opp_ref(opponent)}")]]
+    sbtn = moment_btn(serum, "arena_srm")
+    if sbtn:
+        rows.append([sbtn])
+    rows += [
         [
-            [btn(f"حمله · {cost} انرژی", emoji_key="btn_attack", style=BATTLE, callback_data=f"arena_attack:{_opp_ref(opponent)}")],
-            [
-                btn("جزئیات", emoji_key="btn_atk_details", style=NAV, callback_data="arena_opp_details"),
-                btn("تعویض", emoji_key="btn_swap", style=NAV, callback_data="arena_swap"),
-                btn("حریف بعدی", emoji_key="btn_recheck", style=NAV, callback_data="arena_find"),   # rightmost: the one pressed most
-            ],
-            [back_btn("menu:arena", "بازگشت به آرنا")],
-        ]
-    )
+            btn("جزئیات", emoji_key="btn_atk_details", style=NAV, callback_data="arena_opp_details"),
+            btn("تعویض", emoji_key="btn_swap", style=NAV, callback_data="arena_swap"),
+            btn("حریف بعدی", emoji_key="btn_recheck", style=NAV, callback_data="arena_find"),   # rightmost: the one pressed most
+        ],
+        [back_btn("menu:arena", "بازگشت به آرنا")],
+    ]
+    keyboard = InlineKeyboardMarkup(rows)
     return "\n".join(lines), keyboard
 
 
@@ -622,6 +665,7 @@ def _opponent_reshow_sync(tg_user, pending):
     from game.energy import sync_energy
 
     cname = creature.name if creature is not None else "—"
+    _with_serum(user)
     return (user, attack_power(user), pending["loot_gold"], my_element, pending["loot_dna"],
             cname, sync_energy(user))
 
@@ -1054,21 +1098,39 @@ def _revenge_find_sync(tg_user, log_id: int):
     mine = Creature.objects.filter(owner=user, is_active=True).first()
     opponent_power = pick_defender(log.attacker, mine, active_power(user))[1] if log.attacker else 0
     attacker_name = log.attacker_label or lab_display(log.attacker)
+    _with_serum(user)
     return user, log, my_power, opponent_power, attacker_name
 
 
+def _revenge_serum_sync(tg_user, log_id: int):
+    from game import serums
+
+    user, _ = get_or_create_user(tg_user)
+    m = serums.toggle(user, "rage")
+    return m, _revenge_find_sync(tg_user, log_id)
+
+
 async def arena_revenge_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """The revenge screen; «arena_rsrm:<id>» first toggles «سرم خشم» for this revenge."""
+    from bot.handlers.serums import moment_btn, moment_lines, moment_toast
+
     query = update.callback_query
-    await query.answer()
     log_id = int(query.data.split(":")[1])
+    toggling = query.data.startswith("arena_rsrm:")
 
     try:
-        user, log, my_power, opp_power, attacker_name = await run_db(
-            _revenge_find_sync, update.effective_user, log_id
-        )
+        if toggling:
+            m, (user, log, my_power, opp_power, attacker_name) = await run_db(
+                _revenge_serum_sync, update.effective_user, log_id
+            )
+        else:
+            user, log, my_power, opp_power, attacker_name = await run_db(
+                _revenge_find_sync, update.effective_user, log_id
+            )
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
         return
+    await query.answer(moment_toast(m, "rage") if toggling else None)
 
     lines = [
         f"{get_emoji('battle')} <b>انتقام از {attacker_name}</b>",
@@ -1083,8 +1145,12 @@ async def arena_revenge_callback(update: Update, context: ContextTypes.DEFAULT_T
     if getattr(log, "loot_dna", 0):
         lines.append(f"{get_emoji('dna')} DNA: <code>{log.loot_dna:,}</code>")
     lines.append("</blockquote>")
+    serum = getattr(user, "_serum_rage", None)
+    lines += moment_lines(serum)
+    sbtn = moment_btn(serum, f"arena_rsrm:{log_id}")
     keyboard = InlineKeyboardMarkup([
         [btn("شروع انتقام", emoji_key="btn_revenge", style=DANGER, callback_data=f"arena_revenge_atk:{log_id}")],
+        *([[sbtn]] if sbtn else []),
         [back_btn("arena_revenges", "بازگشت به انتقام‌ها")],
     ])
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
@@ -1689,6 +1755,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(arena_swap_callback, pattern=r"^arena_swap$"))
     application.add_handler(CallbackQueryHandler(arena_swap_pick_callback, pattern=r"^arena_swap_pick:\d+$"))
     application.add_handler(CallbackQueryHandler(arena_swap_back_callback, pattern=r"^arena_swap_back$"))
+    application.add_handler(CallbackQueryHandler(arena_serum_callback, pattern=r"^arena_srm$"))
     application.add_handler(CallbackQueryHandler(arena_detail_callback, pattern=r"^arena_detail$"))
     application.add_handler(CallbackQueryHandler(arena_top_callback, pattern=r"^arena_top$"))
     application.add_handler(
@@ -1698,7 +1765,7 @@ def register(application) -> None:
         CallbackQueryHandler(arena_revenges_callback, pattern=r"^arena_revenges$")
     )
     application.add_handler(
-        CallbackQueryHandler(arena_revenge_callback, pattern=r"^arena_revenge:\d+$")
+        CallbackQueryHandler(arena_revenge_callback, pattern=r"^arena_(revenge|rsrm):\d+$")
     )
     application.add_handler(
         CallbackQueryHandler(arena_revenge_attack_callback, pattern=r"^arena_revenge_atk:\d+$")

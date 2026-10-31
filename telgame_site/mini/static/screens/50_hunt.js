@@ -160,6 +160,7 @@
           HU.side(t, { role: "حریف وحشی · " + K.esc(K.elLabel(t.element)), cls: "foe hu-in", fallback: S.art }) + "</div>" +
           '<div class="hu-adv">' + adv.html + "</div></div>" +
           '<div class="panel hu-prize"><span class="muted">' + K.ic("gift") + " جایزه‌ی برد</span><span class=\"hu-prize-v\">" + (K.amounts(t.reward) || "—") + "</span></div>" +
+          K.serumRow(t.serum) +
           '<button class="btn danger lg block" data-act="attack">' + K.ic("swords") + "حمله" + costChip("bolt", S.energy_cost, "", true) + "</button>" +
           '<div class="btns mt"><button class="btn" data-act="scout">' + K.ic("refresh") + "حریف بعدی" + costChip("coin", S.scout_cost, "t-coin") + "</button>" +
           '<button class="btn" data-act="swap">' + K.ic("swap") + "تعویض هیولا</button></div>" +
@@ -265,6 +266,11 @@
             take(d); K.invalidate("profile/creatures/"); draw(true); K.haptic("ok"); K.toast("هیولات عوض شد.", "ok");
           });
         }).catch(function () {});
+      });
+      K.on(root, "serum", function (el) {      // «سرم ردیاب»: picked for this hunt, or put back (the prize redraws)
+        if (lock || !token) return;
+        guard(K.serumToggle(el).then(function () { return K.api.get("hunt/?t=" + encodeURIComponent(token)); }))
+          .then(function (d) { d.stale = false; take(d); draw(true); }).catch(function () {});
       });
       K.on(root, "auto", function () { K.go("hu_auto"); });
       K.on(root, "energy", function () { K.go("sh_energy"); });

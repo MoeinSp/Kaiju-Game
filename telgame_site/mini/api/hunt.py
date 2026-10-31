@@ -198,7 +198,14 @@ def _target_out(creature, power: int, target: dict) -> dict:
         "name": target["name"], "element": target["element"], "rarity": "common", "power": target["power"],
         "img": species_img(target["name"], target["element"], "common", 1, 1),
         "reward": {"coins": coins, "dna": dna},
+        "serum": _serum_moment(creature.owner),   # «سرم ردیاب»: spent only if picked here
     }
+
+
+def _serum_moment(user):
+    from telgame_site.mini.api.serums import moment
+
+    return moment(user, "tracker")
 
 
 def _encounter_out(enc_type: str) -> dict:

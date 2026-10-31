@@ -3048,6 +3048,7 @@ def _hunt_scout_sync(tg_user, charge=False):
         user.coins -= cost
     target = scout_one(user, creature)
     target["tracker"] = _serums_peek(user, "tracker")   # read here: the card is built off the DB thread
+    target["serum"] = _serum_moment(user, "tracker")
     return creature, my_power, user.cup, target, sync_energy(user), cost
 
 
@@ -3055,6 +3056,12 @@ def _serums_peek(user, kind: str) -> float:
     from game import serums
 
     return serums.peek(user, kind)
+
+
+def _serum_moment(user, kind: str):
+    from game import serums
+
+    return serums.moment(user, kind)
 
 
 def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> str:
@@ -3090,6 +3097,12 @@ def _hunt_scout_text(creature, my_power, cup, target, energy, scout_price) -> st
         f"🎯 عنصر حریف: {constants.element_label(target['element'])}",
         f"⚔️ قدرت حریف: <code>{target['power']:,}</code>",
         adv or "➖ بدون مزیت عنصری",
+    ]
+    if target.get("serum"):
+        from bot.handlers.serums import moment_lines
+
+        lines += [""] + moment_lines(target["serum"])
+    lines += [
         _CARD_DIV,
         f"🎁 جایزه برد: {get_emoji('coin')} <code>+{coin_reward:,}</code> · {get_emoji('dna')} <code>+{dna_reward:,}</code>",
         f"{get_emoji('energy')} هزینه حمله: <code>{constants.HUNT_ENERGY_COST}</code> انرژی (داری <code>{energy}</code>)",
@@ -3125,10 +3138,14 @@ def _hunt_scout_keyboard(target, scout_price=0) -> InlineKeyboardMarkup:
         rows.append([back_btn("menu:hub_battle", "بازگشت به نبرد")])
         return InlineKeyboardMarkup(rows)
 
-    # same shape as the arena opponent card: attack → next / swap → extra → back
+    # same shape as the arena opponent card: attack → (serum) → next / swap → extra → back
+    from bot.handlers.serums import moment_btn
+
+    sbtn = moment_btn(target.get("serum"), f"hunt_srm:{target['tier']}:{target['seed']}")
     return InlineKeyboardMarkup(
         [
             [btn("حمله", emoji_key="btn_attack", style=BATTLE, callback_data=f"hunt_go:{target['tier']}:{target['seed']}")],
+            *([[sbtn]] if sbtn else []),
             [
                 btn("حریف بعدی", emoji_key="btn_scout_next", style=NAV, callback_data="hunt_next"),
                 btn("تعویض موجود", emoji_key="btn_swap", style=NAV, callback_data=f"hunt_swap:{target['tier']}:{target['seed']}"),
@@ -3253,6 +3270,7 @@ def _hunt_swap_pick_sync(tg_user, tier, seed, creature_id):
     my_power = _creature_power(creature, get_equipped_items(creature))
     target = rebuild_target(user, tier, int(seed))
     target["tracker"] = _serums_peek(user, "tracker")   # read here: the card is built off the DB thread
+    target["serum"] = _serum_moment(user, "tracker")
     return creature, my_power, user.cup, target, sync_energy(user), scout_cost(creature, power=my_power)
 
 
@@ -3267,6 +3285,36 @@ async def hunt_swap_pick_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("موجودت عوض شد." if int(cid) else "")
+    await safe_edit_message_text(
+        query,
+        _hunt_scout_text(creature, my_power, cup, target, energy, cost),
+        parse_mode="HTML",
+        reply_markup=_hunt_scout_keyboard(target, cost),
+    )
+
+
+def _hunt_serum_sync(tg_user, tier, seed):
+    from game import serums
+
+    user, _ = get_or_create_user(tg_user)
+    m = serums.toggle(user, "tracker")
+    return m, _hunt_swap_pick_sync(tg_user, tier, seed, 0)
+
+
+async def hunt_serum_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«استفاده از سرم ردیاب» on the hunt card: choose it for this hunt, or put it back."""
+    from bot.handlers.serums import moment_toast
+
+    query = update.callback_query
+    _, tier, seed = query.data.split(":")
+    try:
+        m, (creature, my_power, cup, target, energy, cost) = await run_db(
+            _hunt_serum_sync, update.effective_user, tier, seed
+        )
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    await query.answer(moment_toast(m, "tracker"))
     await safe_edit_message_text(
         query,
         _hunt_scout_text(creature, my_power, cup, target, energy, cost),
@@ -6123,6 +6171,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(hunt_next_callback, pattern=r"^hunt_next$"))
     application.add_handler(CallbackQueryHandler(hunt_swap_callback, pattern=r"^hunt_swap:"))
     application.add_handler(CallbackQueryHandler(hunt_swap_pick_callback, pattern=r"^hunt_swap_pick:"))
+    application.add_handler(CallbackQueryHandler(hunt_serum_callback, pattern=r"^hunt_srm:"))
     application.add_handler(CallbackQueryHandler(collection_pick_callback, pattern=r"^coll_pick:"))
     application.add_handler(CallbackQueryHandler(collection_page_callback, pattern=r"^(coll_page:|coll_back$)"))
     application.add_handler(CallbackQueryHandler(collection_select_callback, pattern=r"^coll_select:"))
