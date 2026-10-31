@@ -227,6 +227,7 @@ class AllianceInvite(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="alliance_invites")
     inviter = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     via_link = models.BooleanField(default=False)
+    via_group = models.BooleanField(default=False)   # «دعوت» as a reply in a group (its own cooldown)
     status = models.CharField(max_length=10, default=PENDING)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
@@ -234,6 +235,17 @@ class AllianceInvite(models.Model):
     class Meta:
         indexes = [models.Index(fields=["user", "status"], name="allyinvite_user_status_idx"),
                    models.Index(fields=["alliance", "status"], name="allyinvite_ally_status_idx")]
+
+
+class AllianceInviteBlock(models.Model):
+    """«بلاک»: `user` gets no more alliance invites from `blocked` (the button under an invite)."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="invite_blocks")
+    blocked = models.ForeignKey(User, on_delete=models.CASCADE, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "blocked"], name="uq_invite_block")]
 
 
 class AllianceBonusLog(models.Model):

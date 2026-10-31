@@ -305,6 +305,7 @@ NOTIFY_CATEGORIES = {
     "attacks": ("⚔️ حمله‌ها", "وقتی به آزمایشگاهت حمله می‌شه"),
     "events": ("🎪 رویدادها", "غول سرگردان، جام، جشنواره و رویداد هفته"),
     "reminders": ("🎁 یادآوری‌ها", "باکس رایگان، جایزه‌ی روزانه و باکس مأموریت"),
+    "invites": ("✉️ دعوت اتحاد", "پیام دعوت به اتحاد (دعوت‌ها توی صندوق نامه می‌مونن)"),
 }
 _MARKER_CATEGORY = {
     "timer": "timers", "arena": "timers", "arena_chest_ready": "timers", "serum_ready": "timers",

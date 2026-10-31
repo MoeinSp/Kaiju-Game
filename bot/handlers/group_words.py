@@ -1584,6 +1584,13 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             await group_handlers.transfer_equip_cmd(update, context, code)
             return
 
+    # «دعوت» as a reply: a leader / deputy invites that player to their alliance
+    if norm in ("دعوت", "دعوت اتحاد") and message.reply_to_message is not None:
+        from bot.handlers.alliance_recruit import group_invite
+
+        await group_invite(update, context)
+        return
+
     action = keywords.match(message.text)
     if action is None:
         return  # ordinary conversation — stay quiet

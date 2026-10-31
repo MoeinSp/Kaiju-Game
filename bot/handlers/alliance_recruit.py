@@ -11,6 +11,7 @@ from telegram import InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
 from telegram.ext import CallbackQueryHandler, ContextTypes
 
+from bio_lab.models import AllianceInvite
 from bio_lab.repository import get_or_create_user
 from bot.buttons import CONFIRM, DANGER, NAV, PRIMARY, back_btn, btn
 from bot.utils import alert_text, run_db, safe_edit_message_text
@@ -29,6 +30,15 @@ SIZE_FA = {"": "همه", "small": "کوچیک", "medium": "متوسط", "large":
 
 def _e(s) -> str:
     return html.escape(str(s or ""))
+
+
+def _rows(buttons) -> list:
+    """[[(label, callback_data)…]…] of game.alliance_recruit (invite_buttons, outbox DMs) → keyboard rows."""
+    def style(cb):
+        if cb.startswith(("ainv_ok", "ally_approve")):
+            return CONFIRM
+        return DANGER if cb.startswith(("ainv_no", "ainv_blk", "ally_reject")) else NAV
+    return [[btn(lbl, style=style(cb), callback_data=cb) for lbl, cb in row] for row in buttons or []]
 
 
 def _when(dt) -> str:
@@ -136,7 +146,7 @@ async def browse_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 # ══════════════════════════ «صندوق نامه» ══════════════════════════
 def _inbox_sync(tg_user) -> dict:
     user, _ = get_or_create_user(tg_user)
-    return {"mails": R.inbox(user, 12), "blocked": user.block_alliance_invites}
+    return {"mails": R.inbox(user, 12), "blocked": user.block_alliance_invites, "blocks": R.blocked_count(user)}
 
 
 def inbox_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
@@ -152,6 +162,8 @@ def inbox_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
                          callback_data=f"mail:{m.id}")])
     rows.append([btn("دعوت اتحاد: " + ("بسته 🚫" if v["blocked"] else "باز ✅"), emoji_key="btn_settings", style=NAV,
                      callback_data="inbox_block")])
+    if v.get("blocks"):
+        rows.append([btn(f"رفع بلاک دعوت‌ها ({v['blocks']})", emoji_key="btn_settings", style=NAV, callback_data="inbox_unblock")])
     rows.append([back_btn("menu:me", "منوی اصلی")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -177,6 +189,11 @@ def _mail_sync(tg_user, mail_id: int):
     if m is None:
         raise GameError("این نامه پیدا نشد.")
     R.mark_read(user, m.id)
+    m.invite_rows = []
+    if m.kind == "ally_invite" and not m.done:
+        inv = AllianceInvite.objects.select_related("inviter").filter(id=m.data.get("invite"), user=user).first()
+        if inv is not None:
+            m.invite_rows = R.invite_buttons(inv)
     return m
 
 
@@ -191,8 +208,7 @@ async def mail_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lines = [f"{get_emoji('mail')} <b>{_e(m.title)}</b>", f"<i>{_when(m.created_at)}</i>", _DIV, _e(R.mail_body(m))]
     rows = []
     if not m.done and m.kind == "ally_invite":
-        rows.append([btn("قبول دعوت", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"ainv_ok:{m.data.get('invite')}"),
-                     btn("رد", emoji_key="btn_cancel", style=DANGER, callback_data=f"ainv_no:{m.data.get('invite')}")])
+        rows += _rows(m.invite_rows)
     elif not m.done and m.kind == "ally_request":
         rows.append([btn("تأیید", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"ally_approve:{m.data.get('request')}"),
                      btn("رد", emoji_key="btn_cancel", style=DANGER, callback_data=f"ally_reject:{m.data.get('request')}")])
@@ -202,22 +218,26 @@ async def mail_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
 
 
-def _block_sync(tg_user) -> dict:
+def _block_sync(tg_user, unblock: bool = False) -> dict:
     user, _ = get_or_create_user(tg_user)
-    R.set_invite_block(user, not user.block_alliance_invites)
+    if unblock:
+        R.clear_blocks(user)
+    else:
+        R.set_invite_block(user, not user.block_alliance_invites)
     return _inbox_sync(tg_user)
 
 
 async def inbox_block(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    v = await run_db(_block_sync, update.effective_user)
-    await query.answer("دیگه دعوت اتحاد نمی‌گیری." if v["blocked"] else "دعوت‌های اتحاد دوباره باز شد.")
+    unblock = query.data == "inbox_unblock"
+    v = await run_db(_block_sync, update.effective_user, unblock)
+    await query.answer("بلاک‌ها برداشته شد." if unblock else "دیگه دعوت اتحاد نمی‌گیری." if v["blocked"] else "دعوت‌های اتحاد دوباره باز شد.")
     text, kb = inbox_render(v)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
 
 
 # ══════════════════════════ answering an invite ══════════════════════════
-def switch_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
+def switch_render(v: dict, in_group: bool = False) -> tuple[str, InlineKeyboardMarkup]:
     """A member of another alliance tapped «قبول دعوت»: leave the old one and join, in one tap."""
     text = (f"{get_emoji('ally_invite')} <b>دعوت به اتحاد «{_e(v['target'])}»</b>\n\n"
             f"⚠️ الان عضو اتحاد <b>«{_e(v['current'])}»</b> هستی.\n"
@@ -226,8 +246,8 @@ def switch_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
     return text, InlineKeyboardMarkup([
         [btn(f"خروج از «{str(v['current'])[:18]}» و پیوستن", emoji_key="btn_confirm", style=CONFIRM,
              callback_data=f"ainv_sw:{v['invite']}")],
-        [btn("رد دعوت", emoji_key="btn_cancel", style=DANGER, callback_data=f"ainv_no:{v['invite']}"),
-         back_btn("inbox", "صندوق نامه")]])
+        [btn("رد دعوت", emoji_key="btn_cancel", style=DANGER, callback_data=f"ainv_no:{v['invite']}")]
+        + ([] if in_group else [back_btn("inbox", "صندوق نامه")])])
 
 
 def _accept_sync(tg_user, invite_id: int, switch: bool = False) -> dict:
@@ -245,10 +265,30 @@ def _accept_sync(tg_user, invite_id: int, switch: bool = False) -> dict:
             "bonus": bonus.coins if bonus and (timezone.now() - bonus.created_at).seconds < 60 else 0}
 
 
+def _is_mine(tg_id: int, invite_id: int) -> bool:
+    return AllianceInvite.objects.filter(id=invite_id, user_id=tg_id).exists()
+
+
 async def invite_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     kind, raw = query.data.split(":")
+    in_group = query.message is not None and query.message.chat.type != "private"
+    if in_group and not await run_db(_is_mine, update.effective_user.id, int(raw)):
+        await query.answer("این دعوت مال تو نیست.", show_alert=True)
+        return
+    if kind == "ainv_mute":
+        await run_db(lambda: R.mute_invites(get_or_create_user(update.effective_user)[0]))
+        await query.answer("اعلان دعوت‌ها خاموش شد. دعوت‌ها هنوز توی صندوق نامه میان؛ "
+                           "از «پروفایل ← اعلان‌ها» دوباره روشنش کن.", show_alert=True)
+        return
     try:
+        if kind == "ainv_blk":
+            who = await run_db(lambda: R.block_inviter(get_or_create_user(update.effective_user)[0], int(raw)))
+            await query.answer()
+            await safe_edit_message_text(
+                query, f"🚫 <b>{_e(who)}</b> بلاک شد؛ دیگه ازش دعوت اتحاد نمی‌گیری.", parse_mode="HTML",
+                reply_markup=None if in_group else InlineKeyboardMarkup([[back_btn("inbox", "صندوق نامه")]]))
+            return
         if kind in ("ainv_ok", "ainv_sw"):
             out = await run_db(_accept_sync, update.effective_user, int(raw), kind == "ainv_sw")
         else:
@@ -259,7 +299,7 @@ async def invite_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     await query.answer()
     if out and "switch" in out:
-        text, kb = switch_render(out["switch"])
+        text, kb = switch_render(out["switch"], in_group)
         await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
         return
     if out is None:
@@ -270,6 +310,9 @@ async def invite_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             text = f"👋 از «{_e(out['old'])}» خارج شدی.\n" + text
         if out["bonus"]:
             text += f"\n🎁 پاداش رشد: <code>+{out['bonus']:,}</code> طلا (نصفش هم به خزانه‌ی اتحاد رفت)."
+    if in_group:
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=None)
+        return
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup([
         [btn("اتحاد من", emoji_key="btn_alliance", style=PRIMARY, callback_data="menu:alliance_info")],
         [back_btn("inbox", "صندوق نامه")]]))
@@ -404,10 +447,41 @@ async def start_link(update: Update, context: ContextTypes.DEFAULT_TYPE, code: s
     return True
 
 
+# ══════════════════════════ «دعوت» as a reply in a group ══════════════════════════
+def _group_invite_sync(tg_user, target_id: int):
+    from bio_lab.models import User
+
+    actor, _ = get_or_create_user(tg_user)
+    target = User.objects.filter(id=target_id).first()
+    if target is None or not target.lab_name:
+        raise GameError("این بازیکن هنوز بازی رو شروع نکرده.")
+    inv = R.invite_user(actor, target, via_group=True)
+    return inv, actor, target, inv.alliance.name, R.invite_buttons(inv)
+
+
+async def group_invite(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Leader / deputy replies «دعوت» to a player in a group → an alliance invite (inbox + DM),
+    answerable right under the group message by that player only."""
+    from bio_lab.repository import mention
+
+    message = update.effective_message
+    target = message.reply_to_message.from_user if message.reply_to_message else None
+    if target is None or target.is_bot or target.id == update.effective_user.id:
+        return
+    try:
+        inv, actor, user, name, buttons = await run_db(_group_invite_sync, update.effective_user, target.id)
+    except GameError as exc:
+        await message.reply_text(alert_text(exc, 3500))
+        return
+    await message.reply_text(
+        f"{get_emoji('ally_invite')} {mention(user)}، {mention(actor)} تو رو به اتحاد <b>«{_e(name)}»</b> دعوت کرد.\n"
+        "<i>همین‌جا جواب بده، یا توی صندوق نامه‌ت.</i>",
+        parse_mode="HTML", reply_markup=InlineKeyboardMarkup(_rows(buttons)))
+
+
 # ══════════════════════════ DM of a letter (outbox kind "dm") ══════════════════════════
 async def send_mail_dm(context: ContextTypes.DEFAULT_TYPE, payload: dict) -> None:
-    rows = [[btn(lbl, style=CONFIRM if cb.startswith(("ainv_ok", "ally_approve")) else DANGER if cb.startswith(("ainv_no", "ally_reject")) else NAV,
-                 callback_data=cb) for lbl, cb in row] for row in payload.get("buttons") or []]
+    rows = _rows(payload.get("buttons"))
     rows.append([btn("صندوق نامه", emoji_key="btn_inbox", style=NAV, callback_data="inbox")])
     text = f"{get_emoji('inbox')} <b>{_e(payload.get('title'))}</b>\n\n{_e(payload.get('body'))}"
     try:
@@ -421,7 +495,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(browse_open, pattern=r"^(ally_join|ab:.*)$"))
     application.add_handler(CallbackQueryHandler(inbox_open, pattern=r"^inbox$"))
     application.add_handler(CallbackQueryHandler(mail_open, pattern=r"^mail:\d+$"))
-    application.add_handler(CallbackQueryHandler(inbox_block, pattern=r"^inbox_block$"))
-    application.add_handler(CallbackQueryHandler(invite_answer, pattern=r"^ainv_(ok|no|sw):\d+$"))
+    application.add_handler(CallbackQueryHandler(inbox_block, pattern=r"^inbox_(un)?block$"))
+    application.add_handler(CallbackQueryHandler(invite_answer, pattern=r"^ainv_(ok|no|sw|blk|mute):\d+$"))
     application.add_handler(CallbackQueryHandler(manage_open, pattern=r"^(arec|arec_tog|arec_link|ainv_x:\d+)$"))
     application.add_handler(CallbackQueryHandler(ask_text, pattern=r"^(ainv_new|arec_note)$"))

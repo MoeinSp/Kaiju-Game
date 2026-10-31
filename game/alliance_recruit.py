@@ -28,7 +28,7 @@ from django.db import transaction
 from django.db.models import Count, F, Q, Sum
 from django.utils import timezone
 
-from bio_lab.models import (Alliance, AllianceBonusLog, AllianceInvite, AllianceJoinRequest, Creature,
+from bio_lab.models import (Alliance, AllianceBonusLog, AllianceInvite, AllianceInviteBlock, AllianceJoinRequest, Creature,
                             DailyActionLog, Mail, User)
 from game.creature import GameError
 
@@ -42,6 +42,7 @@ NOTE_MAX = 120
 INVITE_TTL = datetime.timedelta(hours=72)
 INVITE_MAX_PENDING = 10         # open invites an alliance may have at once (the link doesn't count)
 INVITE_DAILY = 20
+GROUP_INVITE_GAP = datetime.timedelta(minutes=5)   # one «دعوت» from a group per alliance per 5 min
 
 # «پاداش رشد» — owner's call: generous, by lab level, and not for fake accounts
 BONUS_BASE, BONUS_PER_LEVEL = 10_000, 1_500     # lab 10 → 25k, lab 30 → 55k, lab 50 → 85k
@@ -237,15 +238,19 @@ def find_player(query: str) -> User | None:
             or User.objects.filter(username__iexact=q).first())
 
 
-@transaction.atomic
 def invite(actor: User, query: str) -> AllianceInvite:
+    target = find_player(query)
+    if target is None or not target.lab_name:
+        raise GameError("همچین بازیکنی پیدا نشد. یوزرنیم (با @)، اسم آزمایشگاه یا آیدی عددیش رو بفرست.")
+    return invite_user(actor, target)
+
+
+@transaction.atomic
+def invite_user(actor: User, target: User, via_group: bool = False) -> AllianceInvite:
     from game.alliance import _assert_has_room
 
     alliance = _managed(actor)
     alliance = Alliance.objects.select_for_update().get(id=alliance.id)
-    target = find_player(query)
-    if target is None or not target.lab_name:
-        raise GameError("همچین بازیکنی پیدا نشد. یوزرنیم (با @)، اسم آزمایشگاه یا آیدی عددیش رو بفرست.")
     if target.id == actor.id:
         raise GameError("خودت رو نمی‌تونی دعوت کنی!")
     if target.alliance_id == alliance.id:
@@ -256,16 +261,28 @@ def invite(actor: User, query: str) -> AllianceInvite:
         raise GameError("این بازیکن مسدوده.")
     if target.block_alliance_invites:
         raise GameError("این بازیکن دعوت اتحاد رو بسته.")
+    if AllianceInviteBlock.objects.filter(user=target, blocked=actor).exists():
+        raise GameError("این بازیکن دعوت‌های تو رو بلاک کرده.")
     _assert_has_room(alliance)
     now = timezone.now()
     open_q = AllianceInvite.objects.filter(alliance=alliance, status=AllianceInvite.PENDING, expires_at__gt=now)
     if open_q.filter(user=target).exists():
         raise GameError("این بازیکن رو قبلاً دعوت کردی؛ منتظر جوابشه.")
+    day0 = timezone.localtime(now).replace(hour=0, minute=0, second=0, microsecond=0)
+    if AllianceInvite.objects.filter(alliance=alliance, user=target, via_link=False, created_at__gte=day0).exists():
+        raise GameError("این بازیکن رو امروز یه بار دعوت کردی؛ فردا دوباره.")
+    if via_group:
+        last = (AllianceInvite.objects.filter(alliance=alliance, via_group=True, created_at__gt=now - GROUP_INVITE_GAP)
+                .order_by("-created_at").values_list("created_at", flat=True).first())
+        if last is not None:
+            mins = max(1, -(-int((last + GROUP_INVITE_GAP - now).total_seconds()) // 60))
+            raise GameError(f"یکم صبر کن؛ {mins} دقیقه‌ی دیگه می‌تونی دوباره از گروه دعوت کنی.")
     if open_q.filter(via_link=False).count() >= INVITE_MAX_PENDING:
         raise GameError(f"اتحادت {INVITE_MAX_PENDING} دعوت بی‌جواب داره؛ صبر کن یا چندتاش رو لغو کن.")
     if _sent_today(alliance) >= INVITE_DAILY:
         raise GameError(f"امروز {INVITE_DAILY} دعوت فرستادی؛ فردا دوباره.")
-    inv = AllianceInvite.objects.create(alliance=alliance, user=target, inviter=actor, expires_at=now + INVITE_TTL)
+    inv = AllianceInvite.objects.create(alliance=alliance, user=target, inviter=actor, via_group=via_group,
+                                        expires_at=now + INVITE_TTL)
     _invite_mail(inv)
     return inv
 
@@ -290,9 +307,49 @@ def _invite_mail(inv: AllianceInvite, dm: bool = True) -> None:
     a = inv.alliance
     who = f" از طرف {inv.inviter.lab_name or inv.inviter.first_name}" if inv.inviter and not inv.via_link else ""
     body = f"اتحاد «{a.name}»{who} دعوتت کرده. با قبول کردن، همین الان عضو می‌شی."
+    u = inv.user
+    if dm and (not u.notifications_on or "invites" in (u.notify_off or "").split(",")):
+        dm = False   # «دعوت اتحاد» notifications are off: the letter still lands in the inbox
     send_mail(inv.user_id, "ally_invite", f"دعوت به اتحاد «{a.name}»", body,
-              {"invite": inv.id, "alliance": a.id}, dm=dm,
-              buttons=[[("قبول دعوت", f"ainv_ok:{inv.id}"), ("رد", f"ainv_no:{inv.id}")]])
+              {"invite": inv.id, "alliance": a.id}, dm=dm, buttons=invite_buttons(inv))
+
+
+def invite_buttons(inv: AllianceInvite) -> list:
+    """[[(label, callback_data)…]…] under an invite: answer it, block the inviter, mute invite DMs."""
+    rows = [[("قبول دعوت", f"ainv_ok:{inv.id}"), ("رد", f"ainv_no:{inv.id}")]]
+    if inv.inviter_id and not inv.via_link:
+        who = (inv.inviter.lab_name or inv.inviter.first_name or str(inv.inviter_id))[:16]
+        rows.append([(f"بلاک {who}", f"ainv_blk:{inv.id}")])
+    rows.append([("خاموش کردن اعلان دعوت‌ها", f"ainv_mute:{inv.id}")])
+    return rows
+
+
+@transaction.atomic
+def block_inviter(user: User, invite_id: int) -> str:
+    """«بلاک»: no more invites from this invite's sender; the invite itself is declined."""
+    inv = AllianceInvite.objects.select_related("inviter").filter(id=invite_id, user=user).first()
+    if inv is None or inv.inviter_id is None or inv.via_link:
+        raise GameError("این دعوت فرستنده‌ای نداره که بلاکش کنی.")
+    AllianceInviteBlock.objects.get_or_create(user=user, blocked_id=inv.inviter_id)
+    if inv.status == AllianceInvite.PENDING:
+        inv.status = AllianceInvite.DECLINED
+        inv.save(update_fields=["status"])
+        _close_invite_mails([inv.id])
+    return inv.inviter.lab_name or inv.inviter.first_name or str(inv.inviter_id)
+
+
+def mute_invites(user: User) -> None:
+    off = {c for c in (user.notify_off or "").split(",") if c}
+    off.add("invites")
+    User.objects.filter(id=user.id).update(notify_off=",".join(sorted(off)))
+
+
+def blocked_count(user: User) -> int:
+    return AllianceInviteBlock.objects.filter(user=user).count()
+
+
+def clear_blocks(user: User) -> int:
+    return AllianceInviteBlock.objects.filter(user=user).delete()[0]
 
 
 def mail_body(m: Mail) -> str:
