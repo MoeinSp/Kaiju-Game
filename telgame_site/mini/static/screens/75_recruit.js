@@ -113,7 +113,13 @@
         if (d.unread) K.api.post("recruit/inbox/read/", {}).then(function () { K.badges.inbox = 0; }).catch(function () {});
         function after(msg) { return function () { K.haptic("ok"); if (msg) K.toast(msg, "ok"); K.invalidate("social/alliance/"); ctx.reload(); }; }
         K.on(root, "mok", function (el) {
-          K.api.post("recruit/invite/accept/", { id: +el.dataset.ref }, el).then(function (r) { after("عضو اتحاد «" + r.name + "» شدی!" + bonusNote(r.bonus))(); }).catch(function () {});
+          function go(sw) {
+            K.api.post("recruit/invite/accept/", { id: +el.dataset.ref, switch: sw }, el).then(function (r) { after("عضو اتحاد «" + r.name + "» شدی!" + bonusNote(r.bonus))(); }).catch(function () {});
+          }
+          if (!d.ally) return go(false);
+          K.confirm({ title: "خروج از «" + d.ally + "»؟", danger: true, icon: "warn", ok: "خروج و پیوستن", cancel: "بی‌خیال",
+            html: "<p>الان عضو اتحاد «" + K.esc(d.ally) + "» هستی. برای قبول این دعوت، از اتحاد فعلیت خارج می‌شی.</p>" +
+              (d.leave_note ? '<p class="sm muted">' + K.esc(d.leave_note) + "</p>" : "") }).then(function (yes) { if (yes) go(true); });
         });
         K.on(root, "mno", function (el) { K.api.post("recruit/invite/decline/", { id: +el.dataset.ref }, el).then(after("دعوت رد شد.")).catch(function () {}); });
         K.on(root, "rqok", function (el) { K.api.post("recruit/manage/approve/", { id: +el.dataset.ref }, el).then(after("عضو جدید اضافه شد.")).catch(function () {}); });

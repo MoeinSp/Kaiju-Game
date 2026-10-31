@@ -3709,21 +3709,11 @@ def _alliance_leave_sync(tg_user):
 
 
 def _leave_preview_sync(tg_user) -> str:
-    """What leaving will do, for the confirm screen (mirrors game.alliance.leave_alliance)."""
+    """What leaving will do, for the confirm screen (game.alliance.leave_note)."""
+    from game.alliance import leave_note
+
     user, _ = get_or_create_user(tg_user)
-    alliance = Alliance.objects.filter(id=user.alliance_id).first() if user.alliance_id else None
-    if alliance is None:
-        return "توی هیچ اتحادی نیستی."
-    others = User.objects.filter(alliance_id=alliance.id).exclude(id=user.id).count()
-    if others == 0:
-        return (
-            "تو آخرین عضوی: با خروجت <b>اتحاد و خزانه‌ش "
-            f"(<code>{alliance.treasury_gold:,}</code> طلا) برای همیشه حذف می‌شه</b>."
-        )
-    if alliance.leader_id == user.id:
-        heir = "قائم‌مقام" if alliance.deputy_id and alliance.deputy_id != user.id else "یکی از اعضا"
-        return f"تو رهبری: با خروجت <b>رهبری به {heir} می‌رسه</b> و طلایی که به خزانه دادی برنمی‌گرده."
-    return "طلایی که به خزانه واریز کردی برنمی‌گرده."
+    return leave_note(user)
 
 
 async def alliance_leave(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

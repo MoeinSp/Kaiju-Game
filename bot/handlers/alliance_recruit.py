@@ -188,7 +188,7 @@ async def mail_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
-    lines = [f"{get_emoji('mail')} <b>{_e(m.title)}</b>", f"<i>{_when(m.created_at)}</i>", _DIV, _e(m.body)]
+    lines = [f"{get_emoji('mail')} <b>{_e(m.title)}</b>", f"<i>{_when(m.created_at)}</i>", _DIV, _e(R.mail_body(m))]
     rows = []
     if not m.done and m.kind == "ally_invite":
         rows.append([btn("قبول دعوت", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"ainv_ok:{m.data.get('invite')}"),
@@ -217,21 +217,40 @@ async def inbox_block(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 # ══════════════════════════ answering an invite ══════════════════════════
-def _accept_sync(tg_user, invite_id: int) -> dict:
-    from bio_lab.models import AllianceBonusLog
+def switch_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
+    """A member of another alliance tapped «قبول دعوت»: leave the old one and join, in one tap."""
+    text = (f"{get_emoji('ally_invite')} <b>دعوت به اتحاد «{_e(v['target'])}»</b>\n\n"
+            f"⚠️ الان عضو اتحاد <b>«{_e(v['current'])}»</b> هستی.\n"
+            f"برای پیوستن به «{_e(v['target'])}» باید از اتحاد فعلیت خارج شی.\n"
+            f"<blockquote>{v['note']}</blockquote>")
+    return text, InlineKeyboardMarkup([
+        [btn(f"خروج از «{str(v['current'])[:18]}» و پیوستن", emoji_key="btn_confirm", style=CONFIRM,
+             callback_data=f"ainv_sw:{v['invite']}")],
+        [btn("رد دعوت", emoji_key="btn_cancel", style=DANGER, callback_data=f"ainv_no:{v['invite']}"),
+         back_btn("inbox", "صندوق نامه")]])
+
+
+def _accept_sync(tg_user, invite_id: int, switch: bool = False) -> dict:
+    from bio_lab.models import Alliance, AllianceBonusLog
 
     user, _ = get_or_create_user(tg_user)
-    alliance = R.accept_invite(user, invite_id)
+    if not switch:
+        v = R.switch_view(user, invite_id)
+        if v is not None:
+            return {"switch": v}
+    old = Alliance.objects.filter(id=user.alliance_id).values_list("name", flat=True).first() if user.alliance_id else None
+    alliance = R.accept_invite(user, invite_id, switch=switch)
     bonus = AllianceBonusLog.objects.filter(user=user, alliance=alliance).order_by("-id").first()
-    return {"name": alliance.name, "bonus": bonus.coins if bonus and (timezone.now() - bonus.created_at).seconds < 60 else 0}
+    return {"name": alliance.name, "old": old,
+            "bonus": bonus.coins if bonus and (timezone.now() - bonus.created_at).seconds < 60 else 0}
 
 
 async def invite_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     kind, raw = query.data.split(":")
     try:
-        if kind == "ainv_ok":
-            out = await run_db(_accept_sync, update.effective_user, int(raw))
+        if kind in ("ainv_ok", "ainv_sw"):
+            out = await run_db(_accept_sync, update.effective_user, int(raw), kind == "ainv_sw")
         else:
             await run_db(lambda: R.decline_invite(get_or_create_user(update.effective_user)[0], int(raw)))
             out = None
@@ -239,10 +258,16 @@ async def invite_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
+    if out and "switch" in out:
+        text, kb = switch_render(out["switch"])
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+        return
     if out is None:
         text = "دعوت رد شد."
     else:
         text = f"✅ <b>عضو اتحاد «{_e(out['name'])}» شدی!</b>"
+        if out["old"]:
+            text = f"👋 از «{_e(out['old'])}» خارج شدی.\n" + text
         if out["bonus"]:
             text += f"\n🎁 پاداش رشد: <code>+{out['bonus']:,}</code> طلا (نصفش هم به خزانه‌ی اتحاد رفت)."
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup([
@@ -355,24 +380,24 @@ def _link_sync(tg_user, code: str):
     user, _ = get_or_create_user(tg_user)
     inv = R.use_link(user, code)
     started = bool(user.lab_name)
-    return inv, started, inv.alliance, user.alliance_id
+    return inv, started, inv.alliance, R.switch_view(user, inv.id) if started else None
 
 
 async def start_link(update: Update, context: ContextTypes.DEFAULT_TYPE, code: str) -> bool:
     """Handles `/start ally_<code>`. True = answered; False = a brand-new player: the invite
     waits in their inbox and the normal /start (onboarding) goes on."""
     try:
-        inv, started, alliance, current = await run_db(_link_sync, update.effective_user, code)
+        inv, started, alliance, switch = await run_db(_link_sync, update.effective_user, code)
     except GameError as exc:
         await update.effective_message.reply_text(alert_text(exc, 3500))
         return True
     if not started:
         return False
-    text = f"{get_emoji('ally_invite')} <b>دعوت به اتحاد «{_e(alliance.name)}»</b>\n\nبا قبول کردن، همین الان عضو می‌شی (بدون تأیید رهبر)."
-    if alliance.recruit_note:
-        text += f"\n<i>«{_e(alliance.recruit_note)}»</i>"
-    if current:
-        text += "\n\n⚠️ تو الان عضو یه اتحادی؛ برای قبول این دعوت اول باید ازش خارج شی."
+    if switch is not None:
+        text, kb = switch_render(switch)
+        await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=kb)
+        return True
+    text = f"{get_emoji('ally_invite')} <b>دعوت به اتحاد «{_e(alliance.name)}»</b>\n\nبا قبول کردن، همین الان عضو می‌شی."
     await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup([
         [btn("قبول دعوت", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"ainv_ok:{inv.id}"),
          btn("رد", emoji_key="btn_cancel", style=DANGER, callback_data=f"ainv_no:{inv.id}")]]))
@@ -397,6 +422,6 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(inbox_open, pattern=r"^inbox$"))
     application.add_handler(CallbackQueryHandler(mail_open, pattern=r"^mail:\d+$"))
     application.add_handler(CallbackQueryHandler(inbox_block, pattern=r"^inbox_block$"))
-    application.add_handler(CallbackQueryHandler(invite_answer, pattern=r"^ainv_(ok|no):\d+$"))
+    application.add_handler(CallbackQueryHandler(invite_answer, pattern=r"^ainv_(ok|no|sw):\d+$"))
     application.add_handler(CallbackQueryHandler(manage_open, pattern=r"^(arec|arec_tog|arec_link|ainv_x:\d+)$"))
     application.add_handler(CallbackQueryHandler(ask_text, pattern=r"^(ainv_new|arec_note)$"))

@@ -16,10 +16,11 @@ POST recruit/manage/note/ {note} · recruiting/ {on} · link/ · invite/ {query}
 from __future__ import annotations
 
 import html
+import re
 
 from django.utils import timezone
 
-from bio_lab.models import AllianceBonusLog, Mail, User
+from bio_lab.models import Alliance, AllianceBonusLog, Mail, User
 from game import alliance as A, alliance_recruit as R, outbox
 from game.creature import GameError
 from telgame_site.mini.core import clean, endpoint, need_int, need_str
@@ -92,7 +93,7 @@ def _req_id(user, alliance) -> int:
 
 # ── «صندوق نامه» ──────────────────────────────────────────────────────────────
 def _mail(m: Mail) -> dict:
-    return {"id": m.id, "kind": m.kind, "title": _txt(m.title), "body": _txt(m.body),
+    return {"id": m.id, "kind": m.kind, "title": _txt(m.title), "body": _txt(R.mail_body(m)),
             "at": int(m.created_at.timestamp()), "read": m.read_at is not None, "done": m.done,
             "action": ACTIONS.get(m.kind) if not m.done else None,
             "ref": m.data.get("invite") or m.data.get("request")}
@@ -101,8 +102,11 @@ def _mail(m: Mail) -> dict:
 @endpoint()
 def inbox(request, user):
     mails = R.inbox(user, 40)
+    al = Alliance.objects.filter(id=user.alliance_id).first() if user.alliance_id else None
     return {"mails": [_mail(m) for m in mails], "blocked": user.block_alliance_invites,
-            "unread": sum(1 for m in mails if m.read_at is None)}
+            "unread": sum(1 for m in mails if m.read_at is None),
+            "ally": _txt(al.name) if al else None,
+            "leave_note": clean(html.unescape(re.sub(r"<[^>]+>", "", A.leave_note(user)))) if al else None}
 
 
 @endpoint("POST")
@@ -119,7 +123,7 @@ def inbox_block(request, user, data):
 @endpoint("POST")
 def invite_accept(request, user, data):
     since = timezone.now()
-    al = R.accept_invite(user, need_int(data, "id", 1))
+    al = R.accept_invite(user, need_int(data, "id", 1), switch=bool(data.get("switch")))
     return {"name": _txt(al.name), "bonus": _bonus_since(user, al.id, since)}
 
 

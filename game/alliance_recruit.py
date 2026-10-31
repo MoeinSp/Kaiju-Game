@@ -289,11 +289,16 @@ def use_link(user: User, code: str) -> AllianceInvite | None:
 def _invite_mail(inv: AllianceInvite, dm: bool = True) -> None:
     a = inv.alliance
     who = f" از طرف {inv.inviter.lab_name or inv.inviter.first_name}" if inv.inviter and not inv.via_link else ""
-    body = (f"اتحاد «{a.name}»{who} دعوتت کرده. با قبول کردن، همین الان عضو می‌شی."
-            + (f"\nآگهی اتحاد: {a.recruit_note}" if a.recruit_note else ""))
+    body = f"اتحاد «{a.name}»{who} دعوتت کرده. با قبول کردن، همین الان عضو می‌شی."
     send_mail(inv.user_id, "ally_invite", f"دعوت به اتحاد «{a.name}»", body,
               {"invite": inv.id, "alliance": a.id}, dm=dm,
               buttons=[[("قبول دعوت", f"ainv_ok:{inv.id}"), ("رد", f"ainv_no:{inv.id}")]])
+
+
+def mail_body(m: Mail) -> str:
+    """What a letter shows: invites sent before 2026-10-31 also carried the alliance's ad (one read
+    «۲۴ ساعت حمله …» and looked like a deadline), which is dropped."""
+    return m.body.split("\nآگهی اتحاد:")[0] if m.kind == "ally_invite" else m.body
 
 
 def pending_invites(user: User) -> list[AllianceInvite]:
@@ -308,8 +313,10 @@ def _close_invite_mails(invite_ids: list[int]) -> None:
 
 
 @transaction.atomic
-def accept_invite(user: User, invite_id: int) -> Alliance:
-    from game.alliance import _assert_has_room, _join_stamp
+def accept_invite(user: User, invite_id: int, switch: bool = False) -> Alliance:
+    """switch=True: a member of another alliance leaves it first (same transaction), so
+    «خروج از اتحاد قبلی و پیوستن» is one tap and never leaves them alliance-less on an error."""
+    from game.alliance import _assert_has_room, _join_stamp, leave_alliance
 
     user = User.objects.select_for_update().get(id=user.id)
     inv = AllianceInvite.objects.select_for_update().select_related("alliance").filter(id=invite_id, user=user).first()
@@ -320,10 +327,14 @@ def accept_invite(user: User, invite_id: int) -> Alliance:
         inv.save(update_fields=["status"])
         _close_invite_mails([inv.id])
         raise GameError("مهلت این دعوت تموم شده.")
-    if user.alliance_id is not None:
+    if user.alliance_id == inv.alliance_id:
+        raise GameError("تو همین الان عضو این اتحادی.")
+    if user.alliance_id is not None and not switch:
         raise GameError("تو الان توی یه اتحادی — اول ازش خارج شو، بعد دعوت رو قبول کن.")
     alliance = Alliance.objects.select_for_update().get(id=inv.alliance_id)
-    _assert_has_room(alliance)
+    _assert_has_room(alliance)   # before leaving: a full alliance must not cost them the old one
+    if user.alliance_id is not None:
+        leave_alliance(user)
     inv.status = AllianceInvite.ACCEPTED
     inv.save(update_fields=["status"])
     _close_invite_mails([inv.id])
@@ -332,6 +343,20 @@ def accept_invite(user: User, invite_id: int) -> Alliance:
     for mid in {alliance.leader_id, alliance.deputy_id, inv.inviter_id} - {None}:
         send_mail(mid, "ally_note", f"{who} به اتحاد پیوست", f"«{who}» دعوت اتحاد «{alliance.name}» رو قبول کرد.", dm=False)
     return alliance
+
+
+def switch_view(user: User, invite_id: int) -> dict | None:
+    """The «خروج و پیوستن» screen of a pending invite; None when the player has no alliance."""
+    from game.alliance import leave_note
+
+    inv = (AllianceInvite.objects.select_related("alliance")
+           .filter(id=invite_id, user=user, status=AllianceInvite.PENDING, expires_at__gt=timezone.now()).first())
+    if inv is None:
+        raise GameError("این دعوت دیگه معتبر نیست.")
+    current = Alliance.objects.filter(id=user.alliance_id).first() if user.alliance_id else None
+    if current is None:
+        return None
+    return {"invite": inv.id, "target": inv.alliance.name, "current": current.name, "note": leave_note(user)}
 
 
 @transaction.atomic
