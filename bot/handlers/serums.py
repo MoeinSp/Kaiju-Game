@@ -17,9 +17,19 @@ from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import serums as SR
 from game.blackmarket import format_time_remaining as _left
 from game.creature import GameError
+from game.emoji import get_emoji
 
 _DIV = "──────────"
-_ICON = {"rage": "🔥", "tracker": "🎯", "warrior": "⚔️", "shell": "🛡", "heal": "💖", "slayer": "🐉"}
+
+
+class _Icons:
+    """«سرم خشم» … icons: the panel keys serum_<kind> («🆕 بخش‌های جدید»), read at render time."""
+
+    def __getitem__(self, kind: str) -> str:
+        return get_emoji(f"serum_{kind}")
+
+
+_ICON = _Icons()
 
 
 def _photo(level: int) -> Path:
@@ -60,13 +70,13 @@ def moment_toast(m: dict | None, kind: str) -> str:
 def _lab_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     if not st["level"]:
         text = "\n".join([
-            "🧪 <b>آزمایشگاه سرم</b>", _DIV,
+            f"{get_emoji('serum_lab')} <b>آزمایشگاه سرم</b>", _DIV,
             "🔒 هنوز ساخته نشده.",
             "از سطح ۲ تالار مِهر توی «ساختمان‌ها» می‌سازیش.", _DIV,
             "<i>سرم‌ها مثل اسپل‌ها هستن: می‌سازی، صبر می‌کنی و سر بزنگاه مصرف می‌کنی.</i>",
         ])
         return text, InlineKeyboardMarkup([[btn("ساختمان‌ها", emoji_key="btn_buildings", style=PRIMARY, callback_data="menu:buildings")]])
-    lines = [f"🧪 <b>آزمایشگاه سرم · سطح {st['level']}</b>", _DIV,
+    lines = [f"{get_emoji('serum_lab')} <b>آزمایشگاه سرم · سطح {st['level']}</b>", _DIV,
              f"🧴 قفسه: <code>{st['stock_total']}/{st['capacity']}</code>",
              f"⏱ هر سرم: <code>{st['brew_minutes']}</code> دقیقه",
              f"🧬 هزینه‌ی هر سرم: <code>{st['brew_cost']:,}</code> DNA"]
@@ -201,7 +211,7 @@ def _bp_sync(tg_user):
 
 
 def _bp_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
-    lines = ["🎒 <b>انبار</b>", _DIV, "<i>جعبه‌های جایزه‌ی باز نشده، کارت‌های سرعت و سرم‌هات.</i>", _DIV]
+    lines = [f"{get_emoji('backpack')} <b>انبار</b>", _DIV, "<i>جعبه‌های جایزه‌ی باز نشده، کارت‌های سرعت و سرم‌هات.</i>", _DIV]
     rows = []
     if not (v["boss"] or v["cup"] or v["war"] or v["offer"]):
         lines.append("📦 جعبه‌ی جایزه‌ی باز نشده: <i>نداری</i>")
@@ -218,7 +228,7 @@ def _bp_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
         lines.append(f"🎁 جعبه‌های بسته‌ی خریدنی: <code>{v['offer']}</code>")
         rows.append([btn("باز کردن جعبه‌های بسته", emoji_key="btn_chest_open", style=CONFIRM, callback_data="rc:open:offer")])
     lines.append("⏱ کارت سرعت: " + ("، ".join(f"{m} دقیقه ×{n}" for m, n in v["cards"]) if v["cards"] else "<i>نداری</i>"))
-    lines.append("🧪 سرم‌ها: " + ("، ".join(f"{label} ×{n}" for _k, label, n in v["serums"]) if v["serums"] else "<i>نداری</i>"))
+    lines.append(f"{get_emoji('serum_lab')} سرم‌ها: " + ("، ".join(f"{label} ×{n}" for _k, label, n in v["serums"]) if v["serums"] else "<i>نداری</i>"))
     rows.append([btn("آزمایشگاه سرم", emoji_key="btn_serums", style=PRIMARY, callback_data="sr:home"),
                  btn("جعبه‌های آرنا", emoji_key="btn_chests", style=PRIMARY, callback_data="arena_chests")])
     rows.append([back_btn("menu:buildings", "ساختمان‌ها")])

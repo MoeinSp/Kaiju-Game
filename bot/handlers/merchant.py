@@ -13,6 +13,7 @@ from telegram.ext import CallbackQueryHandler, ContextTypes
 from bio_lab.repository import get_or_create_user
 from bot.buttons import CONFIRM, DANGER, NAV, PRIMARY, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
+from game.emoji import get_emoji
 from game import merchant as M
 from game.blackmarket import format_time_remaining as _left
 from game.creature import GameError
@@ -39,11 +40,11 @@ def _order_lines(o: dict, title: str) -> list[str]:
 
 def _render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     if not st["unlocked"]:
-        text = "\n".join(["📜 <b>تابلوی سفارش تاجر</b>", _DIV,
+        text = "\n".join([f"{get_emoji('merchant')} <b>تابلوی سفارش تاجر</b>", _DIV,
                           f"🔒 از سطح {st['unlock_hall']} تالار مِهر باز می‌شه.", _DIV,
                           "<i>تاجرها سرم، هیولا و تجهیزات اضافه‌ات رو می‌خرن و طلا و XP می‌دن.</i>"])
         return text, InlineKeyboardMarkup([[back_btn("menu:hub_base", "پایگاه")]])
-    lines = ["📜 <b>تابلوی سفارش تاجر</b>", _DIV,
+    lines = [f"{get_emoji('merchant')} <b>تابلوی سفارش تاجر</b>", _DIV,
              f"📦 تحویل امروز: <code>{st['done_today']}/{st['daily']}</code>",
              f"💎 الماس امروز: <code>{st['diamonds_today']}/{st['diamond_cap']}</code>"]
     if note:

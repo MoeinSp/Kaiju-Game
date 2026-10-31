@@ -16,6 +16,7 @@ from bot.buttons import CONFIRM, DANGER, NAV, PRIMARY, back_btn, btn
 from bot.utils import alert_text, run_db, safe_edit_message_text
 from game import alliance_recruit as R
 from game.creature import GameError
+from game.emoji import get_emoji
 
 _DIV = "━━━━━━━━━━━━━━━━━━━━"
 AWAITING_KEY = "awaiting_player_input"   # bot/handlers/private.py AWAITING_PLAYER_KEY
@@ -139,7 +140,7 @@ def _inbox_sync(tg_user) -> dict:
 
 
 def inbox_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
-    lines = ["📬 <b>صندوق نامه</b>", _DIV]
+    lines = [f"{get_emoji('inbox')} <b>صندوق نامه</b>", _DIV]
     rows = []
     if not v["mails"]:
         lines.append("<i>هنوز نامه‌ای نداری. دعوت‌های اتحاد، جواب درخواست‌ها و پاداش‌ها اینجا میان.</i>")
@@ -187,7 +188,7 @@ async def mail_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
-    lines = [f"📩 <b>{_e(m.title)}</b>", f"<i>{_when(m.created_at)}</i>", _DIV, _e(m.body)]
+    lines = [f"{get_emoji('mail')} <b>{_e(m.title)}</b>", f"<i>{_when(m.created_at)}</i>", _DIV, _e(m.body)]
     rows = []
     if not m.done and m.kind == "ally_invite":
         rows.append([btn("قبول دعوت", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"ainv_ok:{m.data.get('invite')}"),
@@ -259,12 +260,12 @@ def manage_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
     from config import BOT_USERNAME
 
     link = f"https://t.me/{BOT_USERNAME}?start=ally_{v['code']}" if BOT_USERNAME else f"/start ally_{v['code']}"
-    lines = [f"📣 <b>جذب و دعوت · {_e(v['alliance'].name)}</b>", _DIV,
+    lines = [f"{get_emoji('ally_recruit')} <b>جذب و دعوت · {_e(v['alliance'].name)}</b>", _DIV,
              f"👥 اعضا: <code>{v['members']}/{v['capacity']}</code>",
-             f"📣 دنبال عضو: <b>{'روشن' if v['recruiting'] else 'خاموش'}</b> <i>(روشن باشه، توی پیشنهادها بالاتر میای)</i>",
+             f"{get_emoji('ally_recruit')} دنبال عضو: <b>{'روشن' if v['recruiting'] else 'خاموش'}</b> <i>(روشن باشه، توی پیشنهادها بالاتر میای)</i>",
              f"✏️ آگهی: <i>{_e(v['note']) or '— هنوز ننوشتی'}</i>", "",
-             f"🔗 <b>لینک دعوت</b> (هر کی بازش کنه، بدون تأیید عضو می‌شه):\n<code>{_e(link)}</code>", "",
-             f"✉️ دعوت‌های امروز: <code>{v['sent_today']}/{R.INVITE_DAILY}</code> · منتظر جواب: <code>{len(v['invites'])}</code>"]
+             f"{get_emoji('ally_link')} <b>لینک دعوت</b> (هر کی بازش کنه، بدون تأیید عضو می‌شه):\n<code>{_e(link)}</code>", "",
+             f"{get_emoji('ally_invite')} دعوت‌های امروز: <code>{v['sent_today']}/{R.INVITE_DAILY}</code> · منتظر جواب: <code>{len(v['invites'])}</code>"]
     rows = [[btn("دعوت بازیکن", emoji_key="btn_ally_invite", style=PRIMARY, callback_data="ainv_new")],
             [btn("آگهی جذب", emoji_key="btn_ally_recruit", style=NAV, callback_data="arec_note"),
              btn("دنبال عضو: " + ("روشن" if v["recruiting"] else "خاموش"), emoji_key="btn_ally_recruit",
@@ -296,7 +297,7 @@ async def manage_open(update: Update, context: ContextTypes.DEFAULT_TYPE, note: 
                 R.invite_code(R._managed(user), renew=True)
                 return _manage_sync(update.effective_user)
             v = await run_db(renew)
-            note = "🔗 لینک جدید ساخته شد؛ لینک قبلی دیگه کار نمی‌کنه."
+            note = f"{get_emoji('ally_link')} لینک جدید ساخته شد؛ لینک قبلی دیگه کار نمی‌کنه."
         elif data.startswith("ainv_x:"):
             def cancel():
                 R.cancel_invite(get_or_create_user(update.effective_user)[0], int(data.split(":")[1]))
@@ -320,7 +321,7 @@ async def ask_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if query.data == "ainv_new":
         context.user_data[AWAITING_KEY] = {"action": "ally_invite"}
-        text = ("✉️ <b>کی رو دعوت کنیم؟</b>\n\nیوزرنیمش (با @)، اسم آزمایشگاهش یا آیدی عددیش رو بفرست.\n"
+        text = (f"{get_emoji('ally_invite')} <b>کی رو دعوت کنیم؟</b>\n\nیوزرنیمش (با @)، اسم آزمایشگاهش یا آیدی عددیش رو بفرست.\n"
                 "<i>با قبول دعوت، بدون تأیید و بدون شرط حداقل قدرت عضو می‌شه.</i>")
     else:
         context.user_data[AWAITING_KEY] = {"action": "ally_note"}
@@ -367,7 +368,7 @@ async def start_link(update: Update, context: ContextTypes.DEFAULT_TYPE, code: s
         return True
     if not started:
         return False
-    text = f"✉️ <b>دعوت به اتحاد «{_e(alliance.name)}»</b>\n\nبا قبول کردن، همین الان عضو می‌شی (بدون تأیید رهبر)."
+    text = f"{get_emoji('ally_invite')} <b>دعوت به اتحاد «{_e(alliance.name)}»</b>\n\nبا قبول کردن، همین الان عضو می‌شی (بدون تأیید رهبر)."
     if alliance.recruit_note:
         text += f"\n<i>«{_e(alliance.recruit_note)}»</i>"
     if current:
@@ -383,7 +384,7 @@ async def send_mail_dm(context: ContextTypes.DEFAULT_TYPE, payload: dict) -> Non
     rows = [[btn(lbl, style=CONFIRM if cb.startswith(("ainv_ok", "ally_approve")) else DANGER if cb.startswith(("ainv_no", "ally_reject")) else NAV,
                  callback_data=cb) for lbl, cb in row] for row in payload.get("buttons") or []]
     rows.append([btn("صندوق نامه", emoji_key="btn_inbox", style=NAV, callback_data="inbox")])
-    text = f"📬 <b>{_e(payload.get('title'))}</b>\n\n{_e(payload.get('body'))}"
+    text = f"{get_emoji('inbox')} <b>{_e(payload.get('title'))}</b>\n\n{_e(payload.get('body'))}"
     try:
         await context.bot.send_message(chat_id=payload["user_id"], text=text, parse_mode="HTML",
                                        reply_markup=InlineKeyboardMarkup(rows))

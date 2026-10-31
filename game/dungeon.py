@@ -27,6 +27,7 @@ from bio_lab.models import Creature, DungeonProfile, DungeonRun, Team, User
 from bio_lab.repository import lock_row
 from game import constants
 from game.creature import GameError, creature_power
+from game.emoji import get_emoji
 
 UNLOCK_STAGE = 50          # campaign stages to clear first
 ROOMS = 7                  # rooms before the boss (the boss is room ROOMS + 1)
@@ -883,9 +884,9 @@ def settle_due_week() -> list[tuple[int, str]]:
                 prof.save(update_fields=["black_runes", "shadow_cores"])
                 results.append({"rank": rank, "user_id": row.user_id, "floor": row.best_floor, "runes": runes, "cores": cores})
                 dms.append((row.user_id,
-                            f"🌀 <b>جدول هفتگی سیاه‌چال بی‌انتها</b>\n━━━━━━━━━━━━━━━━━━━━\n"
+                            f"{get_emoji('endless')} <b>جدول هفتگی سیاه‌چال بی‌انتها</b>\n━━━━━━━━━━━━━━━━━━━━\n"
                             f"رتبه‌ی <b>{rank}</b> شدی با رسیدن به طبقه‌ی <code>{row.best_floor}</code>!\n"
-                            f"🔮 <code>+{runes}</code> رون سیاه · 🌑 <code>+{cores}</code> هسته‌ی سایه"))
+                            f"{get_emoji('black_rune')} <code>+{runes}</code> رون سیاه · {get_emoji('shadow_core')} <code>+{cores}</code> هسته‌ی سایه"))
             EndlessWeek.objects.create(week=last_week, results=results)
     except IntegrityError:   # another process settled it a moment ago
         return []

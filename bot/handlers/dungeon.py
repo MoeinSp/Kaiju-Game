@@ -14,6 +14,7 @@ from bot.buttons import BATTLE, CONFIRM, DANGER, NAV, PRIMARY, SHOP, back_btn, b
 from bot.utils import alert_text, run_db, safe_edit_message_text, send_screen
 from game import constants, dungeon as D, relics
 from game.creature import GameError
+from game.emoji import get_emoji as _E   # «🆕 بخش‌های جدید» keys, set from the admin panel
 
 _DIV = "━━━━━━━━━━━━━━━━━━━━"
 
@@ -46,24 +47,24 @@ def _home_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
         done = min(v["stage"], v["unlock_stage"])
         filled = round(10 * done / v["unlock_stage"])
         text = "\n".join([
-            "🕳 <b>سیاه‌چال</b>",
+            f"{_E('dungeon_pit')} <b>سیاه‌چال</b>",
             _DIV,
             f"🔒 بعد از فتح هر <b>{v['unlock_stage']}</b> مرحله‌ی دانجن باز می‌شه.",
             f"{'▰' * filled}{'▱' * (10 - filled)} <code>{done}</code>/<code>{v['unlock_stage']}</code>",
             _DIV,
-            "<i>یه سیاه‌چال پر از نبرد و در مرموز، با باس آخر، رون‌های سیاه و آثار باستانی 🏺</i>",
+            f"<i>یه سیاه‌چال پر از نبرد و در مرموز، با باس آخر، رون‌های سیاه و آثار باستانی</i> {_E('relic')}",
         ])
         return text, InlineKeyboardMarkup([[back_btn("menu:campaign", "بازگشت به دانجن")]])
     lines = [
-        "🕳 <b>سیاه‌چال</b>",
+        f"{_E('dungeon_pit')} <b>سیاه‌چال</b>",
         _DIV,
-        f"🗝 کلید: <code>{v['keys']}</code>  <i>(هر روز ۲ کلید رایگان)</i>",
-        f"🔮 رون سیاه: <code>{v['black_runes']}</code>",
-        f"🌑 هسته‌ی سایه: <code>{v['shadow_cores']}</code>",
+        f"{_E('dungeon_key')} کلید: <code>{v['keys']}</code>  <i>(هر روز ۲ کلید رایگان)</i>",
+        f"{_E('black_rune')} رون سیاه: <code>{v['black_runes']}</code>",
+        f"{_E('shadow_core')} هسته‌ی سایه: <code>{v['shadow_cores']}</code>",
         f"🏆 ورود موفق: <code>{v['clears']}</code> از <code>{v['runs']}</code>",
-        f"🏺 آثار فعال: <code>{v['relics']}</code>",
+        f"{_E('relic')} آثار فعال: <code>{v['relics']}</code>",
         _DIV,
-        f"🌀 <b>عنصر هفته: {_el(v['week_el'])}</b> — بیشتر دشمن‌ها این عنصرن",
+        f"{_E('endless')} <b>عنصر هفته: {_el(v['week_el'])}</b> — بیشتر دشمن‌ها این عنصرن",
         "✨ برکت هفته: هیولاهای " + "، ".join(_el(e) for e in v["week_favoured"]) + f" <code>+{round(D.WEEK_BOOST * 100)}%</code> قدرت",
     ]
     rows = []
@@ -115,7 +116,7 @@ def _run_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
         return _home_render(v)
     st = run["state"]
     tier = D._diff(st.get("difficulty"))["label"]
-    lines = [f"🕳 <b>سیاه‌چال · {tier}</b> · {_where(st, html_=True)}", _DIV]
+    lines = [f"{_E('dungeon_pit')} <b>سیاه‌چال · {tier}</b> · {_where(st, html_=True)}", _DIV]
     if note:
         lines += [note, _DIV]
     for m in run["members"]:
@@ -127,11 +128,11 @@ def _run_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     active = [D.rune_label(r) for r in dict.fromkeys(st["runes"])]
     ready = [D.rune_label(k) for k in ("first_strike", "ward") if st.get(k)]
     if active or ready:
-        lines.append("🔮 <b>رون‌های فعال:</b>")
+        lines.append(f"{_E('black_rune')} <b>رون‌های فعال:</b>")
         lines += [f"  ▫️ <b>{label}</b>: <i>{desc}</i>" for label, desc in active]
         lines += [f"  ⚡ <b>{label}</b> آماده‌ست: <i>{desc}</i>" for label, desc in ready]
     loot = st["loot"]
-    lines.append(f"🎒 غنیمت: 💰 <code>{loot['coins']:,}</code> · 🧬 <code>{loot['dna']:,}</code> · 🔮 <code>{loot['runes']}</code>")
+    lines.append(f"{_E('dg_loot')} غنیمت: 💰 <code>{loot['coins']:,}</code> · 🧬 <code>{loot['dna']:,}</code> · {_E('black_rune')} <code>{loot['runes']}</code>")
     if st.get("log"):
         lines += [_DIV] + [f"<i>{html.escape(x)}</i>" for x in st["log"][-2:]]
     lines.append(_DIV)
@@ -139,11 +140,11 @@ def _run_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     rows = []
     phase = st["phase"]
     if phase == "doors":
-        lines.append("🚪 <b>کدوم در رو باز می‌کنی؟</b>")
+        lines.append(f"{_E('dg_door')} <b>کدوم در رو باز می‌کنی؟</b>")
         if all(d in D.COMBAT_DOORS for d in st["doors"]):
             lines.append("<i>اینجا راهی جز نبرد نیست — بعد از هر اتاق آروم، اتاق بعدی نبرده.</i>")
         if "mystery" in st["doors"]:
-            lines.append("<i>❓ پشت در مرموز: گنج، تله یا کمین.</i>")
+            lines.append(f"{_E('dg_mystery')} <i>پشت در مرموز: گنج، تله یا کمین.</i>")
         rows.append([btn(f"{D.DOORS[d][0]} {D.DOORS[d][1]}", style=PRIMARY, callback_data=f"dg:d:{i}")
                      for i, d in enumerate(st["doors"])])
     elif phase == "fight":
@@ -162,7 +163,7 @@ def _run_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
         if st.get("ward"):
             lines.append("<i>«سپر سایه» آماده‌ست: اگه ببازی، هیولات با ۲۰٪ جون سرپا می‌مونه.</i>")
     elif phase == "rune":
-        lines.append("🔮 <b>یه رون انتخاب کن</b> (رون‌ها تا آخر همین ورود می‌مونن؛ هر کدوم یه بار):")
+        lines.append(f"{_E('black_rune')} <b>یه رون انتخاب کن</b> (رون‌ها تا آخر همین ورود می‌مونن؛ هر کدوم یه بار):")
         for i, r in enumerate(st["rune_offer"]):
             label, desc = D.rune_label(r)
             lines.append(f"▫️ <b>{label}</b>: {desc}")
@@ -195,10 +196,10 @@ def _finish_render(fin: dict, v: dict) -> tuple[str, InlineKeyboardMarkup]:
     head = {
         "won": "🏆 <b>باس سیاه‌چال رو شکست دادی!</b>",
         "lost": "💀 <b>تیمت از پا افتاد…</b>",
-        "quit": "🚪 <b>از سیاه‌چال بیرون اومدی.</b>",
+        "quit": f"{_E('dg_door')} <b>از سیاه‌چال بیرون اومدی.</b>",
     }[fin["status"]]
     if fin.get("endless"):
-        head = ("🌀 <b>سفرت توی بی‌انتها تموم شد</b>" if fin["status"] == "lost" else "🚪 <b>از بی‌انتها بیرون اومدی.</b>")
+        head = (f"{_E('endless')} <b>سفرت توی بی‌انتها تموم شد</b>" if fin["status"] == "lost" else f"{_E('dg_door')} <b>از بی‌انتها بیرون اومدی.</b>")
     lines = [head, _DIV]
     if fin.get("endless"):
         lines += [f"🏁 رسیدی به طبقه‌ی <b>{fin['floor']}</b>"
@@ -209,10 +210,10 @@ def _finish_render(fin: dict, v: dict) -> tuple[str, InlineKeyboardMarkup]:
     lines += [
         f"💰 طلا: <code>+{loot['coins']:,}</code>",
         f"🧬 DNA: <code>+{loot['dna']:,}</code>",
-        f"🔮 رون سیاه: <code>+{loot['runes']}</code>",
+        f"{_E('black_rune')} رون سیاه: <code>+{loot['runes']}</code>",
     ]
     if loot.get("cores"):
-        lines.append(f"🌑 هسته‌ی سایه: <code>+{loot['cores']}</code>")
+        lines.append(f"{_E('shadow_core')} هسته‌ی سایه: <code>+{loot['cores']}</code>")
     if fin.get("unlocked"):
         lines += [_DIV, f"🔓 <b>سختی «{html.escape(str(fin['unlocked']))}» باز شد!</b>"]
     if fin.get("badge"):
@@ -223,7 +224,7 @@ def _finish_render(fin: dict, v: dict) -> tuple[str, InlineKeyboardMarkup]:
         r = fin["relic"]
         r_lbl = html.escape(str(r['label']))
         r_desc = html.escape(str(r['desc']))
-        lines += [_DIV, f"🏺 <b>اثر باستانی: {r_lbl}</b>",
+        lines += [_DIV, f"{_E('relic')} <b>اثر باستانی: {r_lbl}</b>",
                   f"<i>{r_desc}</i>",
                   "⏳ " + ("۳ روز به زمانش اضافه شد" if r["extended"] else "۳ روز فعاله")]
     rows = []
@@ -264,7 +265,7 @@ def _fight_note(out: dict) -> str:
     if out.get("won"):
         got = out.get("got") or {}
         return (f"✅ <b>{member_name}</b> برد! (<code>{out['mine']:,}</code> در برابر <code>{out['theirs']:,}</code>)"
-                f" · −{out.get('hp_lost', 0)}٪ جون\n🎒 +{got.get('coins', 0):,} طلا · +{got.get('dna', 0):,} DNA · +{got.get('runes', 0)} 🔮")
+                f" · −{out.get('hp_lost', 0)}٪ جون\n{_E('dg_loot')} +{got.get('coins', 0):,} طلا · +{got.get('dna', 0):,} DNA · +{got.get('runes', 0)} {_E('black_rune')}")
     if out.get("warded"):
         return (f"🛡 <b>{member_name}</b> باخت ولی «سپر سایه» با ۲۰٪ جون سرپا نگهش داشت "
                 f"(<code>{out['mine']:,}</code> در برابر <code>{out['theirs']:,}</code>).")
@@ -285,7 +286,7 @@ async def dungeon_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await query.answer()
         await safe_edit_message_text(
             query,
-            "🚪 <b>از سیاه‌چال بیرون بیای؟</b>\n\nنصف غنیمتی که تا الان جمع کردی بهت می‌رسه و کلیدت برنمی‌گرده.",
+            f"{_E('dg_door')} <b>از سیاه‌چال بیرون بیای؟</b>\n\nنصف غنیمتی که تا الان جمع کردی بهت می‌رسه و کلیدت برنمی‌گرده.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
                 btn("بیرون بیا", emoji_key="btn_confirm", style=DANGER, callback_data="dg:quitok"),
@@ -322,21 +323,21 @@ async def dungeon_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await send_screen(update, text, parse_mode="HTML", reply_markup=kb)
         return
     if action == "door" and isinstance(out, dict) and out.get("mystery"):
-        note = {"treasure": "❓ پشت در مرموز <b>گنج</b> بود!", "trap": "❓ پشت در مرموز <b>تله</b> بود!",
-                "ambush": "❓ پشت در مرموز <b>کمین</b> بود — آماده‌ی نبرد شو!"}[out["mystery"]]
+        note = _E("dg_mystery") + " " + {"treasure": "پشت در مرموز <b>گنج</b> بود!", "trap": "پشت در مرموز <b>تله</b> بود!",
+                                         "ambush": "پشت در مرموز <b>کمین</b> بود — آماده‌ی نبرد شو!"}[out["mystery"]]
     elif action == "fight":
         note = _fight_note(out)
     elif action == "rune":
-        note = f"🔮 «{D.rune_label(out['rune'])[0]}» گرفتی."
+        note = f"{_E('black_rune')} «{D.rune_label(out['rune'])[0]}» گرفتی."
     elif action == "heal":
-        note = f"💖 سرم ترمیم · {html.escape(out['note'])}"
+        note = f"{_E('serum_heal')} سرم ترمیم · {html.escape(out['note'])}"
     text, kb = _run_render(v, note)
     await send_screen(update, text, parse_mode="HTML", reply_markup=kb)
 
 
 # ══════════════════════════ shop & relics ══════════════════════════
 def _shop_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
-    lines = ["🔮 <b>فروشگاه سیاه‌چال</b>", _DIV, f"🔮 رون سیاه: <code>{v['black_runes']}</code>"]
+    lines = [f"{_E('black_rune')} <b>فروشگاه سیاه‌چال</b>", _DIV, f"{_E('black_rune')} رون سیاه: <code>{v['black_runes']}</code>"]
     if note:
         lines += [_DIV, note]
     rows = []
@@ -356,7 +357,7 @@ def _buy_sync(tg_user, key):
     got = D.shop_buy(user, key)
     note = f"✅ «{got['label']}» خریدی."
     if got.get("relic"):
-        note += f"\n🏺 {got['relic']['label']}: <i>{got['relic']['desc']}</i>"
+        note += f"\n{_E('relic')} {got['relic']['label']}: <i>{got['relic']['desc']}</i>"
     if got.get("item") is not None:
         note += f"\n⚔️ {html.escape(got['item'].name)}"
     if got.get("chest"):
@@ -391,7 +392,7 @@ async def dungeon_relics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     query = update.callback_query
     rows = await run_db(_relics_sync, update.effective_user)
     await query.answer()
-    lines = ["🏺 <b>آثار باستانی</b>", _DIV,
+    lines = [f"{_E('relic')} <b>آثار باستانی</b>", _DIV,
              f"<i>از باس سیاه‌چال میان و {relics.RELIC_DAYS} روز فعالن؛ اگه دوباره بگیریش "
              f"{relics.RELIC_DAYS} روز اضافه می‌شه (تا {relics.RELIC_MAX_DAYS} روز).</i>", _DIV]
     for r in rows:
@@ -422,7 +423,7 @@ def _shadow_render(v: dict, focus: int | None = None) -> tuple[str, InlineKeyboa
     from game import shadow
 
     lines = ["🌑 <b>فرم سیاه</b>", _DIV,
-             f"🌑 هسته‌ی سایه: <code>{v['cores']}</code> · 💰 طلا: <code>{v['coins']:,}</code>",
+             f"{_E('shadow_core')} هسته‌ی سایه: <code>{v['cores']}</code> · 💰 طلا: <code>{v['coins']:,}</code>",
              f"<i>هیولای اساطیری ۵ ستاره‌ای که قدرتش به سقف ({constants.MAX_KAIJU_POWER:,}) رسیده، با هسته‌ی سایه "
              f"تا {constants.SHADOW_MAX_LEVEL} سطح فرم سیاه می‌گیره: هر سطح +{constants.SHADOW_POWER_PER_LEVEL} قدرت "
              f"و سقفش هم همون‌قدر بالا می‌ره. هسته از باس سخت و کابوس سیاه‌چال یا فروشگاهش میاد.</i>", _DIV]
@@ -443,7 +444,7 @@ def _shadow_render(v: dict, focus: int | None = None) -> tuple[str, InlineKeyboa
             lines.append(f"   <i>{html.escape(r['why'])}</i>")
         else:
             nxt = r["next"]
-            lines.append(f"   سطح بعد: 🌑 <code>{nxt['cores']}</code> هسته · 💰 <code>{nxt['coins']:,}</code> طلا")
+            lines.append(f"   سطح بعد: {_E('shadow_core')} <code>{nxt['cores']}</code> هسته · 💰 <code>{nxt['coins']:,}</code> طلا")
             if focus == c.id:
                 rows.append([btn(f"تأیید: {c.name} ← {shadow.LEVEL_NAMES[r['level'] + 1]}", emoji_key="btn_confirm",
                                  style=CONFIRM, callback_data=f"dg:shok:{c.id}")])
@@ -490,7 +491,7 @@ async def dungeon_board(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     b = await run_db(_board_sync, update.effective_user)
     await query.answer()
     days, rem = divmod(b["left"], 86400)
-    lines = ["🌀 <b>جدول هفتگی سیاه‌چال بی‌انتها</b>", _DIV,
+    lines = [f"{_E('endless')} <b>جدول هفتگی سیاه‌چال بی‌انتها</b>", _DIV,
              f"⏳ <code>{days}</code> روز و <code>{rem // 3600}</code> ساعت تا پایان هفته", _DIV]
     medals = ("🥇", "🥈", "🥉")
     if not b["rows"]:
@@ -501,8 +502,8 @@ async def dungeon_board(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     lines.append(f"📍 تو: طبقه‌ی <code>{b['mine']['floor']}</code> · رتبه‌ی <code>{b['mine']['rank']}</code>" if b["mine"]
                  else "📍 تو هنوز این هفته طبقه‌ای ثبت نکردی.")
     lines += [_DIV, "🎁 <b>جایزه‌ی آخر هفته:</b>",
-              "🥇 ۳۰۰ 🔮 + ۵ 🌑 · 🥈 ۲۰۰ 🔮 + ۴ 🌑 · 🥉 ۱۵۰ 🔮 + ۳ 🌑",
-              "۴ تا ۱۰: ۸۰ 🔮 + ۱ 🌑"]
+              f"🥇 ۳۰۰ {_E('black_rune')} + ۵ {_E('shadow_core')} · 🥈 ۲۰۰ {_E('black_rune')} + ۴ {_E('shadow_core')} · 🥉 ۱۵۰ {_E('black_rune')} + ۳ {_E('shadow_core')}",
+              f"۴ تا ۱۰: ۸۰ {_E('black_rune')} + ۱ {_E('shadow_core')}"]
     if b.get("last_top"):
         lines += [_DIV, f"🏁 <b>برنده‌های هفته‌ی قبل ({b['last']['week']}):</b>"]
         lines += [f"{medals[rank - 1]} {name} — طبقه‌ی <code>{floor}</code>" for rank, name, floor in b["last_top"]]

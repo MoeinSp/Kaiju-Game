@@ -268,7 +268,40 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "bullet_blue": ("نشانگر آبی", "🔹", "ui"),
     "alarm": ("زنگ و یادآور", "⏰", "ui"),
     "fast_forward": ("جلو زدن زمان", "⏩", "ui"),
+    # «🆕 بخش‌های جدید» (2026-10-31): the dungeon, black form, serums, merchant, backpack,
+    # mail and alliance recruiting. All but shadow_form are EXPLICIT_KEYS (see below).
+    "shadow_form": ("فرم سیاه (علامت کنار اسم هیولا)", "🌑", "new"),
+    "dungeon_pit": ("سیاه‌چال", "🕳", "new"),
+    "shadow_core": ("هسته‌ی سایه", "🌑", "new"),
+    "black_rune": ("رون سیاه", "🔮", "new"),
+    "dungeon_key": ("کلید سیاه‌چال", "🗝", "new"),
+    "relic": ("آثار باستانی", "🏺", "new"),
+    "endless": ("سیاه‌چال بی‌انتها", "🌀", "new"),
+    "dg_door": ("در سیاه‌چال", "🚪", "new"),
+    "dg_mystery": ("در مرموز", "❓", "new"),
+    "dg_loot": ("غنیمت سیاه‌چال", "🎒", "new"),
+    "serum_lab": ("آزمایشگاه سرم", "🧪", "new"),
+    "serum_rage": ("سرم خشم", "🔥", "new"),
+    "serum_tracker": ("سرم ردیاب", "🎯", "new"),
+    "serum_warrior": ("سرم جنگاور", "⚔️", "new"),
+    "serum_shell": ("سرم پوسته", "🛡", "new"),
+    "serum_heal": ("سرم ترمیم", "💖", "new"),
+    "serum_slayer": ("سرم غول‌کش", "🐉", "new"),
+    "merchant": ("تابلوی سفارش تاجر", "📜", "new"),
+    "backpack": ("انبار", "🎒", "new"),
+    "inbox": ("صندوق نامه", "📬", "new"),
+    "mail": ("نامه", "📩", "new"),
+    "ally_recruit": ("جذب و آگهی اتحاد", "📣", "new"),
+    "ally_invite": ("دعوت به اتحاد", "✉️", "new"),
+    "ally_link": ("لینک دعوت اتحاد", "🔗", "new"),
 }
+
+# Keys used only through get_emoji(): their default glyph is shared with an older key (🔮 is
+# also crystal / magical chest, 🔥 is fire …), so they must NOT claim the literal glyph —
+# setting «رون سیاه» would otherwise repaint every 🔮 in the bot. shadow_form is the one new
+# key that does own its literal: the 🌑 after a black-form kaiju's name is plain text (it also
+# shows in button labels), so it can only be themed through the glyph.
+EXPLICIT_KEYS = frozenset(k for k, (_l, _e, cat) in EMOJI_DEFS.items() if cat == "new" and k != "shadow_form")
 
 CATEGORY_LABELS: dict[str, str] = {
     "resources": "💰 منابع",
@@ -280,6 +313,7 @@ CATEGORY_LABELS: dict[str, str] = {
     "social": "🤝 اجتماعی",
     "progress": "🏆 پیشرفت",
     "ui": "🖥 رابط کاربری",
+    "new": "🆕 بخش‌های جدید",
 }
 
 # back-compat flat views used by owner.py's key pickers and help text
@@ -826,6 +860,8 @@ def _key_glyphs(key: str, placeholder: str) -> set[str]:
     emoji and the placeholder the owner chose (normalized, skipping fixed glyphs).
     Protects canonical glyphs so an arbitrary placeholder from a custom emoji pack
     (e.g. coin pack using 🧬) never hijacks another key's canonical glyph."""
+    if key in EXPLICIT_KEYS:
+        return set()   # only ever shown through get_emoji(key)
     out = set()
     if key in CANONICAL_KEY_GLYPHS:
         for cg in CANONICAL_KEY_GLYPHS[key]:
