@@ -200,7 +200,12 @@ def _install_premium_glyph_hook(application: Application) -> None:
     from telegram.constants import ParseMode
     from telegram.ext import ExtBot
 
+    from game.dividers import emojify
     from game.emoji import premiumize_html
+
+    def theme(html: str) -> str:
+        # Premium emoji first, then the «6-2» divider (it counts the emoji already there)
+        return emojify(premiumize_html(html))
 
     if getattr(ExtBot, "_premium_glyph_hooked", False):
         return
@@ -209,7 +214,7 @@ def _install_premium_glyph_hook(application: Application) -> None:
         async def wrapped(self, *args, **kwargs):
             try:
                 if kwargs.get("parse_mode") in ("HTML", ParseMode.HTML) and isinstance(kwargs.get("text"), str):
-                    kwargs["text"] = premiumize_html(kwargs["text"])
+                    kwargs["text"] = theme(kwargs["text"])
             except Exception:  # noqa: BLE001 — theming must never block a send
                 pass
             return await orig(self, *args, **kwargs)
@@ -219,7 +224,7 @@ def _install_premium_glyph_hook(application: Application) -> None:
         async def wrapped(self, *args, **kwargs):
             try:
                 if kwargs.get("parse_mode") in ("HTML", ParseMode.HTML) and isinstance(kwargs.get("caption"), str):
-                    kwargs["caption"] = premiumize_html(kwargs["caption"])
+                    kwargs["caption"] = theme(kwargs["caption"])
             except Exception:  # noqa: BLE001 — theming must never block a send
                 pass
             return await orig(self, *args, **kwargs)
@@ -231,7 +236,7 @@ def _install_premium_glyph_hook(application: Application) -> None:
                 media = kwargs.get("media")
                 if media is not None and getattr(media, "parse_mode", None) in ("HTML", ParseMode.HTML):
                     if isinstance(getattr(media, "caption", None), str):
-                        media.caption = premiumize_html(media.caption)
+                        media.caption = theme(media.caption)
             except Exception:  # noqa: BLE001 — theming must never block a send
                 pass
             return await orig(self, *args, **kwargs)
