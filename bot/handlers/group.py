@@ -25,7 +25,7 @@ from bio_lab.repository import (
     mention,
     touch_membership,
 )
-from bot.buttons import BATTLE, BUILD, CONFIRM, DANGER, NAV, PRIMARY, back_btn, btn
+from bot.buttons import BATTLE, BUILD, CONFIRM, DANGER, NAV, PRIMARY, back_btn, btn, details_btn
 from bot.handlers.group_words import group_footer_keyboard
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from game import constants
@@ -1307,7 +1307,7 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
             f"💀 قدرت حریف: <code>{t_power:,}</code>",
         ])
         keyboard = InlineKeyboardMarkup([
-            [btn("جزئیات حریف", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}")],
+            [details_btn(f"gatk_opp:{attacker_id}:{target_id}")],
             [btn("انصراف", emoji_key="btn_cancel", style=DANGER, callback_data=f"gatk_cancel:{attacker_id}")],
         ])
         return text, keyboard
@@ -1344,7 +1344,7 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
              callback_data=f"gatk:{attacker_id}:{target_id}")],
         *([[sbtn]] if sbtn else []),
         [btn("تعویض موجود", emoji_key="btn_recheck", style=NAV, callback_data=f"gatk_swap:{attacker_id}:{target_id}"),
-         btn("جزئیات حریف", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_opp:{attacker_id}:{target_id}")],
+         details_btn(f"gatk_opp:{attacker_id}:{target_id}")],
         [btn("انصراف", emoji_key="btn_cancel", style=DANGER,
              callback_data=f"gatk_cancel:{attacker_id}")],
     ])
@@ -1847,7 +1847,7 @@ async def _pvp_attack_execute(update, context, query, attacker_id: int, target_i
 def _pvp_result_keyboard(owner_id: int) -> InlineKeyboardMarkup:
     # keep it uncluttered — a single «fight details» button, no PM shortcut
     return InlineKeyboardMarkup([
-        [btn("جزئیات نبرد", emoji_key="btn_atk_details", style=NAV, callback_data=f"gatk_detail:{owner_id}")],
+        [details_btn(f"gatk_detail:{owner_id}", "جزئیات نبرد")],
     ])
 
 

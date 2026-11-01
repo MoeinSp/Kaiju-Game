@@ -7,7 +7,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, fil
 from bot.utils import alert_text
 from bio_lab.models import AttackLog
 from bio_lab.repository import creature_name, get_or_create_user, lab_display, lock_row, mention
-from bot.buttons import BATTLE, CONFIRM, DANGER, NAV, PRIMARY, SHOP, back_btn, btn
+from bot.buttons import BATTLE, CONFIRM, DANGER, NAV, PRIMARY, SHOP, back_btn, btn, details_btn, revenge_btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants, dividers
 import datetime
@@ -500,7 +500,7 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
         rows.append([sbtn])
     rows += [
         [
-            btn("جزئیات", emoji_key="btn_atk_details", style=NAV, callback_data="arena_opp_details"),
+            details_btn("arena_opp_details", "جزئیات"),
             btn("تعویض", emoji_key="btn_swap", style=NAV, callback_data="arena_swap"),
             btn("حریف بعدی", emoji_key="btn_recheck", style=NAV, callback_data="arena_find"),   # rightmost: the one pressed most
         ],
@@ -949,7 +949,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     # the loop action first («حریف بعدی»), then the look-ups, then back
     buttons = [[btn("حریف بعدی", emoji_key="btn_attack", style=BATTLE, callback_data="arena_find")]]
-    info_row = [btn("جزئیات حمله", emoji_key="btn_atk_details", style=NAV, callback_data="arena_detail")]
+    info_row = [details_btn("arena_detail", "جزئیات حمله")]
     if result.get("awarded_chest"):
         info_row.append(btn("جعبه‌ها", emoji_key="btn_chests", style=SHOP, callback_data="arena_chests"))
     buttons.append(info_row)
@@ -1058,9 +1058,9 @@ async def arena_revenges_callback(update: Update, context: ContextTypes.DEFAULT_
             f"{tag}<b>{it['name']}</b> · {get_emoji('power')} <code>{it['power']:,}</code>\n"
             f"  {res}{loot} · ⏳ <code>{it['hrs_left']}</code> ساعت مهلت"
         )
-        row = [btn(f"انتقام{suffix}", emoji_key="btn_revenge", style=DANGER, callback_data=f"arena_revenge:{it['log_id']}")]
+        row = [revenge_btn(f"arena_revenge:{it['log_id']}", f"انتقام{suffix}")]
         if it["attacker_id"]:
-            row.append(btn(f"جزئیات{suffix}", emoji_key="btn_atk_details", style=NAV, callback_data=f"defrep_opp:{it['attacker_id']}"))
+            row.append(details_btn(f"defrep_opp:{it['attacker_id']}", f"جزئیات{suffix}"))
         rows.append(row)
     if shielded:
         lines.append("\n🛡 <b>سپر دارند</b> <i>(تا تمام نشود نمی‌شود انتقام گرفت):</i>")
@@ -1149,7 +1149,7 @@ async def arena_revenge_callback(update: Update, context: ContextTypes.DEFAULT_T
     lines += moment_lines(serum)
     sbtn = moment_btn(serum, f"arena_rsrm:{log_id}")
     keyboard = InlineKeyboardMarkup([
-        [btn("شروع انتقام", emoji_key="btn_revenge", style=DANGER, callback_data=f"arena_revenge_atk:{log_id}")],
+        [revenge_btn(f"arena_revenge_atk:{log_id}", "شروع انتقام")],
         *([[sbtn]] if sbtn else []),
         [back_btn("arena_revenges", "بازگشت به انتقام‌ها")],
     ])

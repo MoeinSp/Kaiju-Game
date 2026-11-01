@@ -226,6 +226,17 @@ ADMIN = "admin"  # owner-only panel buttons
 SUCCESS = CONFIRM
 
 
+def revenge_btn(callback_data: str, label: str = "انتقام") -> InlineKeyboardButton:
+    """«انتقام» — one look wherever a revenge starts (defense DMs, the revenge list and screen):
+    red, the «btn_revenge» Premium icon, and a short label (no numbers in the caption)."""
+    return btn(label, emoji_key="btn_revenge", style=DANGER, callback_data=callback_data)
+
+
+def details_btn(callback_data: str, label: str = "جزئیات حریف") -> InlineKeyboardButton:
+    """«جزئیات حریف» / «جزئیات نبرد» — the look-up button under arena and group attacks and defense DMs."""
+    return btn(label, emoji_key="btn_atk_details", style=NAV, callback_data=callback_data)
+
+
 _TG_EMOJI_HTML = re.compile(r"<tg-emoji\b[^>]*>(.*?)</tg-emoji>", re.DOTALL)
 _LEADING_TG_EMOJI = re.compile(r'^\s*<tg-emoji emoji-id="(\d+)">.*?</tg-emoji>\s*', re.DOTALL)
 _ANY_HTML = re.compile(r"<[^>]+>")

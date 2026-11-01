@@ -12,7 +12,7 @@ from telegram import InlineKeyboardMarkup, Update
 from telegram.error import Forbidden, TelegramError
 from telegram.ext import ContextTypes, TypeHandler
 
-from bot.buttons import DANGER, NAV, btn
+from bot.buttons import NAV, btn, details_btn, revenge_btn
 from bot.utils import get_cached_file_id, invalidate_cached_file_id, run_db, store_cached_file_id
 from game.media import get_notify_image_path
 from game.notifications import collect_due, collect_immediate_levelups
@@ -24,7 +24,7 @@ SEND_DELAY_SECONDS = 0.05  # ~20 msg/s, well under Telegram's flood limit
 def _defense_details_button(attacker_id):
     if not attacker_id:
         return None
-    return InlineKeyboardMarkup([[btn("جزییات حریف", emoji_key="btn_atk_details", style=NAV, callback_data=f"defrep_opp:{attacker_id}")]])
+    return InlineKeyboardMarkup([[details_btn(f"defrep_opp:{attacker_id}")]])
 
 
 def _arena_button():
@@ -46,27 +46,21 @@ def _lab_unlock_keyboard(features):
 
 
 def _defense_report_keyboard(defense: dict, *, group: bool):
-    """Buttons under a defense report. The labels carry a compact summary (power, the
-    attacker's cup, coins looted). Revenge is ARENA-ONLY (group «اتک» has none) and only for an
-    attack that beat the defence (game/arena.py)."""
-    power = defense.get("attacker_power", 0)
-    cup = defense.get("attacker_cup")
-    loot = defense.get("loot", 0)
+    """Buttons under a defense report, one per row: «انتقام» (ARENA-ONLY — group «اتک» has none —
+    and only for an attack that beat the defence, game/arena.py) and «جزئیات حریف». The numbers
+    are in the report itself, not on the buttons."""
     rows = []
     if not group and defense.get("log_id") and defense.get("attacker_won"):
-        cup_bit = f" · 🏆{cup}" if cup is not None else ""
-        rows.append([btn(f"⚔️ انتقام · 💪{power}{cup_bit}", emoji_key="btn_revenge", style=DANGER,
-                         callback_data=f"arena_revenge:{defense['log_id']}")])
-    details_label = f"🔍 جزییات حریف · 💪{power}" + (f" · 💰{loot}" if loot else "")
-    rows.append([btn(details_label, style=NAV, callback_data=f"defrep_opp:{defense['attacker_id']}")])
+        rows.append([revenge_btn(f"arena_revenge:{defense['log_id']}")])
+    rows.append([details_btn(f"defrep_opp:{defense['attacker_id']}")])
     return InlineKeyboardMarkup(rows)
 
 
 async def send_defense_report_now(context, defense: dict, *, group: bool = False) -> None:
     """Send the 'you were attacked' DM the INSTANT a raid resolves (no waiting for the
     5-minute catch-up job). Shows the attacker's full creature card (HP/ATK/…) inline,
-    plus inline buttons: «انتقام» (ARENA only) and «جزییات حریف», whose captions carry a
-    quick summary (power / cup / loot). No-ops if the defender has DMs off / blocked."""
+    plus inline buttons: «انتقام» (ARENA only) and «جزئیات حریف». No-ops if the defender has
+    DMs off / blocked."""
     if defense is None or not defense.get("notifications_on", True):
         return
     from bot.handlers.arena import _user_details_sync, opponent_details_text
