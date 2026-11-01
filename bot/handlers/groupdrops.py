@@ -90,6 +90,25 @@ async def _delete_drop_message(context: ContextTypes.DEFAULT_TYPE) -> None:
     await run_db(groupdrops.delete_row, data["drop_id"])
 
 
+async def _remove_lapsed(context: ContextTypes.DEFAULT_TYPE, e: dict) -> None:
+    """A drop nobody took is removed from the group as soon as it lapses (owner, 2026-11-01) —
+    no «time's up» note. Without delete rights the button is just taken off the message."""
+    try:
+        await context.bot.delete_message(chat_id=e["group_id"], message_id=e["message_id"])
+    except TelegramError:
+        try:
+            await context.bot.edit_message_reply_markup(chat_id=e["group_id"], message_id=e["message_id"], reply_markup=None)
+        except TelegramError:
+            pass
+    await run_db(groupdrops.delete_row, e["id"])
+
+
+async def _lapse_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    e = await run_db(groupdrops.expire_one, context.job.data)
+    if e is not None:
+        await _remove_lapsed(context, e)
+
+
 async def drops_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     # spawn new drops
     for d in await run_db(groupdrops.due_spawns):
@@ -119,31 +138,15 @@ async def drops_job(context: ContextTypes.DEFAULT_TYPE) -> None:
                 msg = await context.bot.send_message(chat_id=d["group_id"], text=text, parse_mode="HTML", reply_markup=keyboard)
             if msg:
                 await run_db(groupdrops.set_message_id, d["id"], msg.message_id)
+                if context.job_queue is not None:   # removed the moment it lapses (the sweep below is the fallback)
+                    context.job_queue.run_once(_lapse_job, groupdrops.EXPIRE_MINUTES * 60 + 2, data=d["id"])
         except TelegramError:
             await run_db(_delete_drop, d["id"])  # bot not in the group anymore, etc.
         await asyncio.sleep(SEND_DELAY)
 
-    # edit any that lapsed unclaimed, then schedule their message for deletion a
-    # minute later so the "time's up" note doesn't linger and clutter the group
+    # fallback for drops whose exact-time job a restart lost
     for e in await run_db(groupdrops.expire_due):
-        try:
-            try:
-                await context.bot.edit_message_caption(
-                    chat_id=e["group_id"], message_id=e["message_id"],
-                    caption="⌛ <b>زمان این جایزه تموم شد</b> — کسی به‌موقع نزد.", parse_mode="HTML"
-                )
-            except Exception:
-                await context.bot.edit_message_text(
-                    chat_id=e["group_id"], message_id=e["message_id"],
-                    text="⌛ <b>زمان این جایزه تموم شد</b> — کسی به‌موقع نزد.", parse_mode="HTML",
-                )
-        except TelegramError:
-            pass
-        if context.job_queue is not None:
-            context.job_queue.run_once(
-                _delete_drop_message, groupdrops.DELETE_AFTER_EXPIRE_SECONDS,
-                data={"group_id": e["group_id"], "message_id": e["message_id"], "drop_id": e["id"]},
-            )
+        await _remove_lapsed(context, e)
         await asyncio.sleep(SEND_DELAY)
 
     # fallback sweep: rows whose scheduled cleanup was lost to a restart (messages stay)

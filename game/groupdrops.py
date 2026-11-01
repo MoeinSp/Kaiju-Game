@@ -295,6 +295,17 @@ def claim(drop_id: int, tg_user) -> dict:
             "drop_id": drop.id, "group_id": drop.group_id, "message_id": drop.message_id}
 
 
+def expire_one(drop_id: int) -> dict | None:
+    """The exact-time job of one drop: like expire_due, for this drop only (None if it was won)."""
+    rows = GroupDrop.objects.filter(id=drop_id, claimed_by__isnull=True, expired_notified=False,
+                                    expires_at__lte=timezone.now(), message_id__isnull=False)
+    d = rows.first()
+    if d is None:
+        return None
+    rows.update(expired_notified=True)
+    return {"id": d.id, "group_id": d.group_id, "message_id": d.message_id, "kind": d.kind}
+
+
 def expire_due() -> list[dict]:
     """Open drops that just lapsed, so the sender can edit their message once.
     Returns [{id, group_id, message_id, kind}] and marks them notified."""
