@@ -37,10 +37,12 @@
           if (queued) {
             html += '<div class="h2">' + K.ic("hourglass") + 'در حال ساخت</div><div class="panel pad sr-queue">' + st.queue.map(function (key, i) {
               var k = st.kinds.filter(function (x) { return x.key === key; })[0];
-              return '<span class="sr-q' + (i === 0 ? " now" : "") + '"><img src="' + K.asset(k.img) + '" alt="">' +
-                (i === 0 && st.next_in != null ? '<span class="timer" data-left="' + st.next_in + '"></span>' : "") + "</span>";
-            }).join("") + (queued > (st.next_in != null ? 1 : 0) ? '<button class="btn sm ghost" data-act="cancel">' + K.ic("close") + "لغو آخری</button>" : "") +
-              (shelf >= cap ? '<p class="note">قفسه پره؛ ساخت تا مصرف یه سرم صبر می‌کنه.</p>' : "") + "</div>";
+              return '<button class="sr-q' + (i === 0 ? " now" : "") + '" data-act="qdel" data-i="' + i + '" data-key="' + key + '"><img src="' + K.asset(k.img) + '" alt="">' +
+                (i === 0 && st.next_in != null ? '<span class="timer" data-left="' + st.next_in + '"></span>' : "") + "</button>";
+            }).join("") +
+              (st.finish ? '<button class="btn sm primary" data-act="finish">' + K.ic("bolt") + "تموم کردن با " + K.n(st.finish.cost) + " الماس</button>" : "") +
+              '<p class="note">برای لغو هر سرم روش بزن؛ DNA‌ش کامل برمی‌گرده.</p>' +
+              (shelf >= cap ? '<p class="note">قفسه پره؛ ساخت تا مصرف یا دور ریختن یه سرم صبر می‌کنه.</p>' : "") + "</div>";
           }
           if (st.upgrading) html += '<div class="callout good mt">' + K.ic("up") + "<div>در حال ارتقای «" + K.esc(st.upgrading.label) + '» · <span class="timer" data-left="' + st.upgrading.left + '"></span></div></div>';
           html += '<div class="h2">' + K.ic("flask") + 'سرم‌ها</div><div class="sr-grid">' + st.kinds.map(card).join("") + "</div>" +
@@ -60,7 +62,8 @@
             '<div class="sr-btns"><button class="btn sm" data-act="brew" data-key="' + k.key + '">' + K.ic("plus") + "ساخت</button>" +
             (k.moment && k.armed ? '<button class="btn sm" data-act="unarm" data-key="' + k.key + '">' + K.ic("close") + "برداشتن</button>"
               : k.moment ? '<button class="btn sm" data-act="where" data-key="' + k.key + '"' + (k.stock ? "" : " disabled") + ">استفاده</button>"
-              : '<button class="btn sm primary" data-act="use" data-key="' + k.key + '"' + (k.stock ? "" : " disabled") + ">مصرف</button>") + "</div></div>";
+              : '<button class="btn sm primary" data-act="use" data-key="' + k.key + '"' + (k.stock ? "" : " disabled") + ">مصرف</button>") +
+            (k.stock ? '<button class="btn sm ghost" data-act="discard" data-key="' + k.key + '">' + K.ic("close") + "دور ریختن</button>" : "") + "</div></div>";
         }
         function info(key) {
           var k = st.kinds.filter(function (x) { return x.key === key; })[0]; if (!k) return;
@@ -110,6 +113,36 @@
           K.api.post("serums/notify/", { on: !st.notify }, el).then(function (r) {
             busy = false; st = r.state; draw(); K.toast(st.notify ? "وقتی سرم‌ها آماده شد خبرت می‌کنم" : "اعلان خاموش شد", "ok");
           }, function () { busy = false; });
+        });
+        K.on(root, "qdel", function (el) {
+          var k = st.kinds.filter(function (x) { return x.key === el.dataset.key; })[0];
+          K.confirm({ title: "لغو سرم «" + k.label + "»؟", icon: "close", ok: "لغو کن", cancel: "نه",
+            html: "<p>از صف ساخت حذف می‌شه و DNA‌ش کامل برمی‌گرده.</p>" }).then(function (yes) {
+            if (!yes || busy) return; busy = true;
+            K.api.post("serums/remove/", { index: +el.dataset.i, kind: el.dataset.key }, el).then(function (r) {
+              busy = false; st = r.state; draw(); K.toast("لغو شد · " + pn(r.refund) + " DNA برگشت", "ok");
+            }, function () { busy = false; });
+          });
+        });
+        K.on(root, "discard", function (el) {
+          var k = st.kinds.filter(function (x) { return x.key === el.dataset.key; })[0];
+          K.confirm({ title: "یه «" + k.label + "» دور ریخته بشه؟", danger: true, icon: "close", ok: "دور بریز", cancel: "نه",
+            html: "<p>DNA‌ی ساختش برنمی‌گرده؛ فقط یه جا روی قفسه باز می‌شه.</p>" }).then(function (yes) {
+            if (!yes || busy) return; busy = true;
+            K.api.post("serums/discard/", { kind: el.dataset.key }, el).then(function (r) {
+              busy = false; st = r.state; draw(); K.toast("دور ریخته شد.", "ok");
+            }, function () { busy = false; });
+          });
+        });
+        K.on(root, "finish", function (el) {
+          var f = st.finish; if (!f) return;
+          K.confirm({ title: "تموم کردن ساخت با الماس", icon: "bolt", ok: K.n(f.cost) + " الماس", cancel: "نه",
+            html: "<p>" + K.n(f.count) + " سرم همین الان آماده می‌شه و می‌ره روی قفسه.</p>" }).then(function (yes) {
+            if (!yes || busy) return; busy = true;
+            K.api.post("serums/finish/", { price: f.cost }, el).then(function (r) {
+              busy = false; st = r.state; draw(); K.haptic("ok"); K.toast(K.n(r.count) + " سرم آماده شد · " + K.n(r.cost) + " الماس", "ok");
+            }, function () { busy = false; });
+          });
         });
         K.on(root, "cancel", function (el) {
           if (busy) return; busy = true;

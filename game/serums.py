@@ -12,8 +12,9 @@ a time, never above the building's level). The level sets the size of its effect
 Rules that keep it fair: brewing has no daily cap — the shelf size and the brewing time are the
 limit; the heal serum is capped per dungeon run (dungeon.HEALS_PER_RUN). There is no energy
 serum: a hunt costs 1 energy, so an uncapped +energy serum paid its own DNA back and made gold
-without end (it was removed). Nothing is ever lost — a full shelf only pauses the brewing; no
-serum touches diamonds.
+without end (it was removed). A full shelf only pauses the brewing. The brewing clock can be
+skipped for diamonds (finish_with_diamonds, twice a building's rate), but never the shelf size.
+Any queued serum can be cancelled for its DNA back; a shelf serum can be thrown away (no refund).
 """
 
 from __future__ import annotations
@@ -58,6 +59,8 @@ MOMENT = {"rage": "صفحه‌ی حمله‌ی آرنا", "tracker": "کارت �
 # by building level: shelf size and minutes per serum
 CAPACITY = {1: 3, 2: 3, 3: 4, 4: 4, 5: 5}   # 3 places, +1 at levels 3 and 5
 BREW_MINUTES = {1: 30, 2: 30, 3: 25, 4: 20, 5: 15}
+# brewing is the lab's only clock, so rushing it costs twice a building upgrade's diamond rate
+FINISH_MULT = 2
 # raising a serum TO level n: (gold, dna, hours)
 UPGRADE = {2: (20_000, 400, 2), 3: (60_000, 1_000, 6), 4: (150_000, 2_000, 12), 5: (300_000, 4_000, 24)}
 
@@ -158,6 +161,26 @@ def _fresh(user: User, lock: bool = True) -> tuple[SerumLab, int]:
     return row, level
 
 
+def _finish_plan(row: SerumLab, level: int, now: datetime.datetime) -> tuple[int, int]:
+    """(serums a diamond finish would land now, seconds of brewing it skips) — only as many as
+    the shelf has room for; a paused queue's first serum counts as not started."""
+    if level <= 0 or not row.queue:
+        return 0, 0
+    lvl = min(level, MAX_LEVEL)
+    step = BREW_MINUTES[lvl] * 60
+    n = min(len(row.queue), max(0, CAPACITY[lvl] - sum((row.stock or {}).values())))
+    if not n:
+        return 0, 0
+    first = step - (now - row.brew_started_at).total_seconds() if row.brew_started_at else step
+    return n, int(max(0, first) + step * (n - 1))
+
+
+def finish_cost(seconds: int) -> int:
+    from game import constants
+
+    return constants.diamond_finish_cost(seconds) * FINISH_MULT
+
+
 # ── reading ───────────────────────────────────────────────────────────────────
 def state(user: User) -> dict:
     """Everything the lab screen shows (bot and Mini App)."""
@@ -171,6 +194,7 @@ def state(user: User) -> dict:
     if row.queue and row.brew_started_at and lvl:
         next_in = max(0, int((row.brew_started_at + datetime.timedelta(seconds=step) - now).total_seconds()))
     used = row.used_count if row.used_day == _today() else 0
+    fin_n, fin_secs = _finish_plan(row, level, now)
     kinds = []
     for k in ORDER:
         meta = KINDS[k]
@@ -189,6 +213,7 @@ def state(user: User) -> dict:
     return {
         "level": level, "capacity": cap, "brew_minutes": step // 60, "brew_cost": brew_cost(user) if level else 0,
         "stock_total": sum((row.stock or {}).values()), "queue": list(row.queue), "next_in": next_in,
+        "finish": {"count": fin_n, "left": fin_secs, "cost": finish_cost(fin_secs)} if fin_n else None,
         "used": used, "kinds": kinds,
         "upgrading": {"kind": row.upgrade_kind, "label": KINDS[row.upgrade_kind]["label"],
                       "left": max(0, int((row.upgrade_ends_at - now).total_seconds()))} if row.upgrade_kind else None,
@@ -329,6 +354,80 @@ def cancel_last(user: User) -> dict:
         user.dna_fragments += refund
         user.save(update_fields=["dna_fragments"])
     return {"kind": kind, "refund": refund, "state": state(user)}
+
+
+def finish_with_diamonds(user: User, max_cost: int | None = None) -> dict:
+    """Land the queued serums now for diamonds (as many as the shelf holds), priced from the
+    brewing time left. `max_cost` is the price the player saw: if it went up meanwhile (a place
+    freed up, so more serums would land) nothing is charged."""
+    from bio_lab.repository import lock_row
+
+    with transaction.atomic():
+        user = lock_row(user) or User.objects.select_for_update().get(id=user.id)
+        row, level = _fresh(user)
+        if not row.queue:
+            raise GameError("سرمی در حال ساخت نیست.")
+        now = timezone.now()
+        n, secs = _finish_plan(row, level, now)
+        if not n:
+            raise GameError("قفسه پره؛ اول یه سرم مصرف کن یا دور بریز.")
+        cost = finish_cost(secs)
+        if max_cost is not None and cost > max_cost:
+            raise GameError(f"قیمت عوض شد: الان {cost} الماس. دوباره بزن.")
+        if user.diamonds < cost:
+            raise GameError(f"الماس کافی نداری: {cost} الماس لازمه (الان {user.diamonds} داری).")
+        user.diamonds -= cost
+        user.save(update_fields=["diamonds"])
+        stock = dict(row.stock or {})
+        for kind in row.queue[:n]:
+            stock[kind] = stock.get(kind, 0) + 1
+        row.stock, row.queue, row.paid = stock, list(row.queue[n:]), list((row.paid or [])[n:])
+        full = sum(stock.values()) >= CAPACITY[min(level, MAX_LEVEL)]
+        row.brew_started_at = now if row.queue and not full else None
+        row.save()
+    return {"count": n, "cost": cost, "state": state(user)}
+
+
+def remove_queued(user: User, index: int, kind: str) -> dict:
+    """Cancel any serum in the brewing queue (the one brewing too) and refund the DNA paid for
+    it. `kind` must match what is at `index`, so a queue that moved on since the screen was drawn
+    never cancels the wrong serum."""
+    from bio_lab.repository import lock_row
+
+    with transaction.atomic():
+        user = lock_row(user) or User.objects.select_for_update().get(id=user.id)
+        row, level = _fresh(user)
+        queue = list(row.queue)
+        if not 0 <= index < len(queue) or queue[index] != kind:
+            raise GameError("صف ساخت عوض شده (شاید همین الان آماده شد). دوباره نگاه کن.")
+        paid = list(row.paid or [])
+        refund = paid.pop(index) if index < len(paid) else brew_cost(user)
+        queue.pop(index)
+        if not queue:
+            row.brew_started_at = None
+        elif index == 0 and row.brew_started_at is not None:   # the next one starts brewing now
+            row.brew_started_at = timezone.now()
+        row.queue, row.paid = queue, paid
+        row.save()
+        user.dna_fragments += refund
+        user.save(update_fields=["dna_fragments"])
+    return {"kind": kind, "label": KINDS[kind]["label"], "refund": refund, "state": state(user)}
+
+
+def discard(user: User, kind: str) -> dict:
+    """Throw one serum off the shelf to make room (its DNA is not refunded)."""
+    if kind not in KINDS:
+        raise GameError("این سرم وجود نداره.")
+    with transaction.atomic():
+        row, _ = _fresh(user)
+        have = int((row.stock or {}).get(kind, 0))
+        if have <= 0:
+            raise GameError(f"سرم «{KINDS[kind]['label']}» روی قفسه نداری.")
+        row.stock = {**row.stock, kind: have - 1}
+        if row.queue and row.brew_started_at is None:   # a paused queue starts again now there is room
+            row.brew_started_at = timezone.now()
+        row.save()
+    return {"kind": kind, "label": KINDS[kind]["label"], "state": state(user)}
 
 
 def use(user: User, kind: str, member_id: int | None = None, _moment: bool = False) -> dict:

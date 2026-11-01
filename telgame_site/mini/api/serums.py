@@ -58,6 +58,27 @@ def cancel(request, user, data):
 
 
 @endpoint("POST")
+def remove(request, user, data):
+    """Cancel any queued serum (DNA back); `kind` guards against a queue that moved on."""
+    r = SR.remove_queued(user, need_int(data, "index", 0, 50), need_str(data, "kind", choices=SR.ORDER))
+    return {"refund": r["refund"], "state": _state(user)}
+
+
+@endpoint("POST")
+def discard(request, user, data):
+    """Throw one shelf serum away (no refund) to free a place."""
+    r = SR.discard(user, need_str(data, "kind", choices=SR.ORDER))
+    return {"label": clean(r["label"]), "state": _state(user)}
+
+
+@endpoint("POST")
+def finish(request, user, data):
+    """Land the queue now for diamonds; `price` is what the player was shown (never charged more)."""
+    r = SR.finish_with_diamonds(user, max_cost=need_int(data, "price", 0, 100_000))
+    return {"count": r["count"], "cost": r["cost"], "state": _state(user)}
+
+
+@endpoint("POST")
 def use(request, user, data):
     member = data.get("member")
     r = SR.use(user, need_str(data, "kind", choices=SR.ORDER), int(member) if str(member or "").isdigit() else None)
@@ -122,6 +143,9 @@ routes = [
     ("", home),
     ("brew/", brew),
     ("cancel/", cancel),
+    ("remove/", remove),
+    ("discard/", discard),
+    ("finish/", finish),
     ("use/", use),
     ("toggle/", toggle),
     ("unarm/", unarm),
