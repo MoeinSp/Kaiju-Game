@@ -5,8 +5,10 @@ lapsed ones, and settles the first-tap-wins claim.
 """
 
 import asyncio
+import datetime
 import os
 
+from django.utils import timezone
 from telegram import InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
 from telegram.ext import CallbackQueryHandler, ContextTypes
@@ -153,6 +155,12 @@ async def drops_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     await run_db(groupdrops.delete_due)
 
 
+def _free_at(seconds_left: int) -> str:
+    """Clock time (game timezone, Persian digits) a cooldown ends — «۱۴:۳۵»."""
+    t = timezone.localtime(timezone.now() + datetime.timedelta(seconds=int(seconds_left) + 59))
+    return f"{t:%H:%M}".translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+
+
 async def drop_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     drop_id = int(query.data.split(":")[1])
@@ -187,20 +195,11 @@ async def drop_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     elif status == "taken":
         await query.answer(f"⛔ دیر رسیدی! «{result['winner']}» زودتر زد.", show_alert=True)
     elif status == "cooldown":
-        m, s = divmod(result["seconds_left"], 60)
-        await query.answer(
-            f"⏳ به‌تازگی یه جایزه گرفتی — {m}:{s:02d} دیگه صبر کن (تا نشه توی چند گروه همزمان جمعش کرد).",
-            show_alert=True,
-        )
+        await query.answer(f"⏳ به‌تازگی یه جایزه گرفتی!\n\n🕐 جایزه‌ی بعدی از ساعت {_free_at(result['seconds_left'])} آزاد می‌شه.",
+                           show_alert=True)
     elif status == "vein_cooldown":
-        total_min = result["seconds_left"] // 60
-        h, m = divmod(total_min, 60)
-        wait_txt = f"{h} ساعت و {m} دقیقه" if h else f"{m} دقیقه"
-        await query.answer(
-            f"💎 رگه‌ی الماس کول‌داون داره — {wait_txt} دیگه می‌تونی یکی دیگه برداری "
-            "(تا نشه الماس رو بیش از حد از چند گروه جمع کرد).",
-            show_alert=True,
-        )
+        await query.answer(f"💎 به‌تازگی یه رگه‌ی الماس گرفتی!\n\n🕐 رگه‌ی بعدی از ساعت {_free_at(result['seconds_left'])} آزاد می‌شه.",
+                           show_alert=True)
     elif status == "vein_limit":
         await query.answer(
             f"💎 سقف امروزت برای رگه‌ی الماس پر شده (روزی {result['cap']} تا). فردا دوباره.",
