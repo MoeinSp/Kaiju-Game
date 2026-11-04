@@ -128,6 +128,22 @@ def get_guaranteed_rarity(chest_type: str, cup: int) -> str:
         return "common"
 
 
+def rarity_range(chest_type: str, cup: int) -> str:
+    """«حداقل حماسی · تا اساطیری» — the floor this chest has at `cup` and the best it can give,
+    so «تضمینی» is never read as «only that rarity» (players thought a magical chest was a sure
+    legendary; it is legendary-or-better only from 3,500 cups)."""
+    from game import constants
+
+    cfg = ARENA_CHEST_TIERS[chest_type]
+    floor = get_guaranteed_rarity(chest_type, cup)
+    best = max((r for r, w in cfg["rarity_weights"].items() if w > 0), key=constants.RARITY_ORDER.index)
+    best = max(best, floor, key=constants.RARITY_ORDER.index)
+    label = constants.RARITY_LABELS
+    if best == floor:
+        return f"حداقل {label[floor]}"
+    return f"حداقل {label[floor]} · تا {label[best]}"
+
+
 MEGA_MYTHIC_CHANCE_MIN = 0.30  # lowest league (برنز I)
 MEGA_MYTHIC_CHANCE_MAX = 0.70  # highest league (قهرمان)
 

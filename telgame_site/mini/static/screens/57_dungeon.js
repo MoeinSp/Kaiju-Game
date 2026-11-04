@@ -287,7 +287,7 @@
           s.items.map(function (it) {
             var out = it.left === 0, can = !out && s.black_runes >= it.price;
             var cap = out ? '<small class="muted">امروز خریدی؛ فردا دوباره</small>' : it.left != null ? '<small class="muted">روزی ۱ بار</small>' : "";
-            return '<button class="panel dg-rune' + (can ? "" : " dim") + '" data-buy="' + it.key + '"' + (out ? " disabled" : "") + "><b>" + K.esc(it.label) + "</b>" + cap + runes(it.price) + "</button>";
+            return '<button class="panel dg-rune' + (can ? "" : " dim") + '" data-buy="' + it.key + '"' + (out ? " disabled" : "") + "><b>" + K.esc(it.label) + "</b>" + (it.odds ? '<small class="muted">' + K.esc(it.odds) + " · همون لحظه باز می‌شه</small>" : "") + cap + runes(it.price) + "</button>";
           }).join("") + "</div>";
       }
       function wire() {

@@ -1,4 +1,4 @@
-"""«تیم دفاع» — pick up to three creatures that defend you in the arena (game/defense.py).
+"""«تیم دفاع» — pick up to three creatures that defend you in the arena and against a group «اتک» (game/defense.py).
 
 Same toggle picker as «تیم من» (bot/handlers/team.py): tap a creature to add it, tap again to
 remove. A creature may be in both teams. When someone attacks you, the bot picks the member
@@ -40,7 +40,7 @@ def _panel_sync(tg_user):
 def _render(view: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
     from bot.handlers.private import creature_picker_frame
 
-    lines = [f"🛡 <b>تیم دفاع</b>  (دفاع در آرنا)", _DIV]
+    lines = [f"🛡 <b>تیم دفاع</b>  (دفاع در آرنا و اتک گروه)", _DIV]
     if view["members"]:
         for c, power in view["members"]:
             lines.append(f"• <b>{c.name}</b> [{constants.element_label(c.element)}] · 💪 <code>{power:,}</code>")
@@ -48,7 +48,7 @@ def _render(view: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKe
         lines.append("<i>تیم دفاعت خالیه؛ فعلاً هیولای فعالت ازت دفاع می‌کنه.</i>")
     lines += [
         _DIV,
-        "🧠 وقتی کسی بهت حمله کنه، ربات از بین این‌ها <b>بهترین جواب</b> به هیولای مهاجم رو "
+        "🧠 وقتی کسی توی آرنا یا با «اتک» توی گروه بهت حمله کنه، ربات از بین این‌ها <b>بهترین جواب</b> به هیولای مهاجم رو "
         "خودکار انتخاب می‌کنه (با حساب برتری عنصری).",
         "💡 <i>هیولاهای قوی با عنصرهای مختلف بذار تا جلوی هر مهاجمی یکی برتری داشته باشه. "
         "یه هیولا می‌تونه هم توی تیم عادی باشه هم توی تیم دفاع. هیولایی که توی معدن، مأموریت یا غاره دفاع نمی‌کنه.</i>",

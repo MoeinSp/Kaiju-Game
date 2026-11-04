@@ -23,6 +23,7 @@ from game.arena_chests import (
     speedup_with_diamonds,
     speedup_diamond_cost,
     seconds_until_ready,
+    rarity_range,
 )
 from game.subscription import is_subscription_active
 from game.media import get_arena_chest_image_path
@@ -1454,7 +1455,8 @@ async def arena_chest_detail_callback(update: Update, context: ContextTypes.DEFA
     if chest.chest_type == "mega" and chest.cup_at_drop >= 3500:
         c_line = f"{get_emoji('hunt')} هیولا: <b>تضمینی قطعی ۱۰۰٪ {rarity_label}</b>"
     else:
-        c_line = f"{get_emoji('hunt')} شانس هیولا: <code>{int(cfg['creature_chance'] * 100)}%</code> (حداقل تضمینی: <b>{rarity_label}</b>)"
+        c_line = (f"{get_emoji('hunt')} شانس هیولا: <code>{int(cfg['creature_chance'] * 100)}%</code> · نایابی: "
+                  f"<b>{rarity_range(chest.chest_type, chest.cup_at_drop)}</b>")
     lines += [
         c_line,
         _ARENA_DIV,
@@ -1651,9 +1653,11 @@ async def arena_chest_rewards_callback(update: Update, context: ContextTypes.DEF
         min_info = ("▫️ کاپ <code>0</code>+: حداقل حماسی\n▫️ کاپ <code>1,500</code>+: حداقل افسانه‌ای\n"
                     "▫️ شانس اساطیری: از <code>۳۰٪</code> در پایین‌ترین لیگ تا <code>۷۰٪</code> در بالاترین لیگ")
     elif tier == "magical":
-        min_info = "▫️ کاپ <code>0</code>+: حداقل کمیاب\n▫️ کاپ <code>1,500</code>+: حداقل حماسی\n▫️ کاپ <code>3,500</code>+: حداقل افسانه‌ای"
+        min_info = ("▫️ کاپ <code>0</code>+: حداقل کمیاب\n▫️ کاپ <code>1,500</code>+: حداقل حماسی\n▫️ کاپ <code>3,500</code>+: حداقل افسانه‌ای\n"
+                    "▫️ توی هر کاپی شانس افسانه‌ای و اساطیری هم هست")
     elif tier == "golden":
-        min_info = "▫️ کاپ <code>0</code>+: حداقل معمولی\n▫️ کاپ <code>1,500</code>+: حداقل کمیاب\n▫️ کاپ <code>3,500</code>+: حداقل حماسی"
+        min_info = ("▫️ کاپ <code>0</code>+: حداقل معمولی\n▫️ کاپ <code>1,500</code>+: حداقل کمیاب\n▫️ کاپ <code>3,500</code>+: حداقل حماسی\n"
+                    "▫️ شانس کم افسانه‌ای هم هست")
     else:  # silver
         min_info = "▫️ کاپ <code>0</code>+: حداقل معمولی\n▫️ کاپ <code>3,500</code>+: حداقل کمیاب"
 
@@ -1664,7 +1668,7 @@ async def arena_chest_rewards_callback(update: Update, context: ContextTypes.DEF
         f"⏱ زمان بازگشایی پایه: <code>{cfg['unlock_hours']}</code> ساعت",
         f"🎁 محتوا: <code>{int(cfg['creature_chance'] * 100)}%</code> یک هیولا، "
         + ("همیشه هیولا" if cfg['creature_chance'] >= 1 else "در غیر این صورت ۱ تجهیزات"),
-        f"🎯 <b>نایابی تضمینی هیولا/تجهیزات:</b>\n{min_info}",
+        f"🎯 <b>حداقل نایابی هیولا/تجهیزات</b> <i>(بالاترش هم ممکنه)</i>:\n{min_info}",
     ]
     if cfg["key"] in ("magical", "mega"):
         lines.append(f"{get_emoji('diamond')} الماس: <b>دارد (بونس ویژه)</b>")

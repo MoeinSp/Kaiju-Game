@@ -348,7 +348,8 @@ MISSION_DEFS = {
                "gold_u": 1.0, "dna_u": 0.5, "capsule": ("small", 3), "points": 10},
     "collect_3": {"action": "collect", "target": 3, "label": "جمع‌آوری از ساختمان‌ها (۳ بار)",
                   "gold_u": 1.0, "dna_u": 1.0, "points": 10},
-    "dispatch_1": {"action": "dispatch", "target": 1, "label": "فرستادن یک مأموریت اعزامی",
+    # counts a mission that CAME BACK (dispatch._pay), not a send: send + «لغو» used to tick it
+    "dispatch_1": {"action": "dispatch_done", "target": 1, "label": "تموم کردن یک مأموریت اعزامی",
                    "gold_u": 1.5, "dna_u": 1.0, "speedup": 5, "points": 10},
     "wheel_1": {"action": "wheel_spin", "target": 1, "label": "چرخوندن گردونه‌ی شانس",
                 "gold_u": 0.5, "dna_u": 0.0, "points": 5},

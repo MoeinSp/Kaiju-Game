@@ -1092,24 +1092,29 @@ def _fusion_card(user, pairs, built, cap) -> tuple[str, InlineKeyboardMarkup]:
     return "\n".join(lines), InlineKeyboardMarkup([[_pm_button("انجام ترکیب (پیوی)")]])
 
 
-def _breeding_card(user, job, seconds_left, built, egg_count=0) -> tuple[str, InlineKeyboardMarkup]:
-    div = "━━━━━━━━━━━━━━━━━━━━"
+def _breeding_card(user, jobs, built, egg_count=0, max_jobs=1) -> tuple[str, InlineKeyboardMarkup]:
+    """`jobs` = [(job, seconds_left), …] — every pair in the cave (a gold subscription holds two)."""
     lines = [f"🕳 <b>غار هیولا</b>"]
     if not built:
         lines.append("\n🔒 اول باید 🔮 تالار ادغام رو توی پیوی بسازی تا غار باز شه.")
     else:
-        if job is None:
+        lines.append(f"✨ ظرفیت غار: <code>{len(jobs)}</code> / <code>{max_jobs}</code> جفت")
+        if not jobs:
             lines.append(
                 "\n<blockquote>یه جفت بفرست توی غار تا جفت‌گیری کنن و یه <b>تخم</b> بذارن. "
                 "والدین بعد از تخم‌گذاری آزاد می‌شن. چی توی تخمه؟ تا سر باز نکنه معلوم نیست.</blockquote>"
             )
-        elif seconds_left <= 0:
-            lines.append(f"\n💞 <b>جفت‌گیری تموم شد!</b>\n▫️ <b>{job.parent_a.name}</b> + <b>{job.parent_b.name}</b>")
-            lines.append("توی پیوی تخم رو بردار و والدها رو آزاد کن.")
-        else:
-            hours, rem = divmod(seconds_left, 3600)
-            lines.append(f"\n💞 یه جفت توی غارن:\n▫️ <b>{job.parent_a.name}</b> + <b>{job.parent_b.name}</b>")
-            lines.append(f"⏳ زمان باقی‌مانده: <code>{hours}</code> ساعت و <code>{rem // 60}</code> دقیقه")
+        for idx, (job, left) in enumerate(jobs, 1):
+            num = f" #{idx}" if max_jobs > 1 or len(jobs) > 1 else ""
+            if left <= 0:
+                lines.append(f"\n💞 <b>جفت{num}: جفت‌گیری تموم شد!</b>\n▫️ <b>{job.parent_a.name}</b> + <b>{job.parent_b.name}</b>")
+                lines.append("توی پیوی تخم رو بردار و والدها رو آزاد کن.")
+            else:
+                hours, rem = divmod(left, 3600)
+                lines.append(f"\n💞 جفت{num} توی غار:\n▫️ <b>{job.parent_a.name}</b> + <b>{job.parent_b.name}</b>")
+                lines.append(f"⏳ زمان باقی‌مانده: <code>{hours}</code> ساعت و <code>{rem // 60}</code> دقیقه")
+        if jobs and len(jobs) < max_jobs:
+            lines.append(f"\n➕ جا برای <code>{max_jobs - len(jobs)}</code> جفت دیگه هست (از پیوی بفرست).")
         if egg_count:
             lines.append(f"\n{get_emoji('egg')} <code>{egg_count}</code> تخم در حال رشد داری.")
     return "\n".join(lines), InlineKeyboardMarkup([[_pm_button("مدیریت غار (پیوی)")]])
@@ -1309,10 +1314,9 @@ def _card_sync(tg_user, chat, action):
         from game import breeding as breeding_mod
         from game.buildings import is_built
 
-        job = breeding_mod.active_job(user)
         data["built"] = is_built(user, breeding_mod.BREEDING_BUILDING)
-        data["job"] = job
-        data["seconds_left"] = breeding_mod.seconds_left(job) if job else 0
+        data["jobs"] = [(j, breeding_mod.seconds_left(j)) for j in breeding_mod.active_jobs(user)]
+        data["max_jobs"] = breeding_mod.max_cave_jobs(user)
         data["egg_count"] = len(breeding_mod.active_eggs(user))
     elif action == "leaderboard":
         from bot.handlers.group import _creature_power, group_member_creatures
@@ -1326,9 +1330,10 @@ def _card_sync(tg_user, chat, action):
             # aren't in the process cache) so the ranking power INCLUDES lab effects —
             # without this, foreign owners' research was silently dropped on a cold miss.
             research.attach_research_multi(members)
-            # spare candidates: the caller drops anyone who has left (group.drop_departed)
-            data["ranked"] = sorted(members, key=_creature_power, reverse=True)[:30]
-            data["powers"] = {c.id: _creature_power(c) for c in data["ranked"]}
+            # everyone, strongest first: the caller drops anyone who has left (group.drop_departed)
+            powers = {c.id: _creature_power(c) for c in members}
+            data["ranked"] = sorted(members, key=lambda c: powers[c.id], reverse=True)
+            data["powers"] = powers
     return data
 
 
@@ -1361,9 +1366,8 @@ def _render(action: str, data: dict, page: int = 0) -> tuple[str, InlineKeyboard
     if action == "fusion":
         return _fusion_card(user, data.get("pairs", []), data.get("built", False), data.get("cap", 1))
     if action == "breeding":
-        return _breeding_card(
-            user, data.get("job"), data.get("seconds_left", 0), data.get("built", False), data.get("egg_count", 0)
-        )
+        return _breeding_card(user, data.get("jobs", []), data.get("built", False), data.get("egg_count", 0),
+                              data.get("max_jobs", 1))
     if action == "start":
         return _start_card(user.id)
     if action == "leaderboard":

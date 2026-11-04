@@ -323,7 +323,9 @@ def expire_due() -> list[dict]:
 # a lapsed/unclaimed one goes quickly (its "time's up" note is noise); a WON one
 # lingers longer since "X won Y" is a nice moment.
 DELETE_AFTER_EXPIRE_SECONDS = 60
-DELETE_AFTER_WIN_SECONDS = 600  # 10 minutes
+# a won drop's «X برد» message is deleted from the group an hour after the win (owner, 2026-11-04:
+# prizes and boxes must not pile up in the chat)
+DELETE_AFTER_WIN_SECONDS = 3600
 
 
 def delete_row(drop_id: int) -> None:
@@ -332,7 +334,7 @@ def delete_row(drop_id: int) -> None:
 
 def delete_due() -> list[dict]:
     """Fallback sweep (survives a bot restart): drops whose message is due for
-    removal — unclaimed ones a minute after they lapsed, won ones ten minutes
+    removal — unclaimed ones a minute after they lapsed, won ones an hour
     after the win. Returns their messages to delete and removes the rows. Precise
     timing is normally handled by scheduled jobs; this catches any a restart lost."""
     from django.db.models import Q

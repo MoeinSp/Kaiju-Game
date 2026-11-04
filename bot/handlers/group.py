@@ -1022,6 +1022,17 @@ def _raid_precheck_sync(chat, tg_user):
     return alliance.name, boss.name, boss.level
 
 
+def _raid_element_note(creature, boss) -> str:
+    """« · 🔥 آتش برتری داره (+45٪)» when the attacker's element beats the boss's. A raid never
+    punishes a weak matchup (game/raid.py floors it at neutral), so that case just says so."""
+    mult = constants.element_multiplier(creature.element, boss.element)
+    if mult > 1:
+        return f" · {constants.element_label(creature.element)} برتری داره (<code>+{round((mult - 1) * 100)}٪</code>)"
+    if mult < 1:
+        return " · <i>عنصرت ضعیف‌تره ولی توی رید جریمه نداره</i>"
+    return ""
+
+
 def _raid_attack_view(creature, boss, dmg, defeated, completed_missions, reward_lines,
                       speedup_won, energy_left, dna_gain, coin_gain, attacks_left) -> str:
     from bot.handlers.private import pct_bar as _pct_bar
@@ -1041,6 +1052,7 @@ def _raid_attack_view(creature, boss, dmg, defeated, completed_missions, reward_
         f"💥 آسیب وارده: <code>{dmg:,}</code> DMG",
         "<blockquote>"
         f"{boss_e} باس: <b>{boss.name}</b> (سطح <code>{boss.level}</code>)\n"
+        f"🔮 عنصر باس: <b>{constants.element_label(boss.element)}</b>{_raid_element_note(creature, boss)}\n"
         f"{hp_e} سلامت: {_pct_bar(hp, boss.max_hp)} (<code>{hp:,}</code>/<code>{boss.max_hp:,}</code> HP)"
         "</blockquote>",
         f"🎁 پاداش: {coin_e} <code>+{coin_gain:,}</code> · {dna_e} <code>+{dna_gain:,}</code>",
@@ -1924,10 +1936,18 @@ _present_cache: dict[tuple[int, int], tuple[float, bool]] = {}
 LEADERBOARD_SIZE = 10
 
 
-async def drop_departed(bot, chat, creatures: list, keep: int = LEADERBOARD_SIZE) -> list:
+# live getChatMember look-ups one table render may make (cached answers are free); the rest of
+# the candidates are trusted as present until a later render or the sweep checks them
+MAX_LIVE_CHECKS = 40
+
+
+async def drop_departed(bot, chat, creatures: list, keep: int = LEADERBOARD_SIZE,
+                        max_checks: int = MAX_LIVE_CHECKS) -> list:
     """The first `keep` creatures whose owner is still in `chat`. Players who left before the
     bot recorded it (or before leave-tracking existed) are found with a live getChatMember on
-    the candidates only, recorded as left, and skipped — so the group table shows members."""
+    the candidates only, recorded as left, and skipped — so the group table shows members.
+    `creatures` is the WHOLE ranked list: a group whose top players mostly left (seen: 27 of
+    the top 30) still fills its table from the ones below."""
     import time
 
     from telegram.error import BadRequest, TelegramError
@@ -1942,7 +1962,10 @@ async def drop_departed(bot, chat, creatures: list, keep: int = LEADERBOARD_SIZE
         hit = _present_cache.get(key)
         if hit and now - hit[0] < _PRESENT_TTL:
             present = hit[1]
+        elif max_checks <= 0:
+            present = True              # out of look-ups for this render: show, check next time
         else:
+            max_checks -= 1
             try:
                 status = (await bot.get_chat_member(chat.id, c.owner_id)).status
                 present = status not in ("left", "kicked")
@@ -1958,6 +1981,38 @@ async def drop_departed(bot, chat, creatures: list, keep: int = LEADERBOARD_SIZE
     return out
 
 
+def _sweep_targets_sync() -> list[tuple[int, str, list]]:
+    """For the departed-members sweep: every group with players, its creatures strongest first."""
+    from django.db.models import Count
+
+    from bio_lab.models import Group
+
+    from bio_lab.models import GroupMembership
+
+    ids = (GroupMembership.objects.filter(left_at__isnull=True).values("group_id")
+           .annotate(n=Count("id")).filter(n__gte=2).values_list("group_id", flat=True))
+    out = []
+    for g in Group.objects.filter(id__in=list(ids)):
+        members = group_member_creatures(g)
+        out.append((g.id, g.title or "", sorted(members, key=_creature_power, reverse=True)))
+    return out
+
+
+async def departed_sweep_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Every few hours: walk each group's table and record who has left (drop_departed marks
+    them), so a table is already clean when someone opens it — players who left long ago,
+    before leave-tracking existed, no longer sit in it."""
+    import logging
+    import types
+
+    for gid, title, creatures in await run_db(_sweep_targets_sync):
+        try:
+            await drop_departed(context.bot, types.SimpleNamespace(id=gid, title=title), creatures)
+        except Exception:  # noqa: BLE001 — one bad group must not stop the sweep
+            logging.getLogger(__name__).exception("departed sweep failed for group %s", gid)
+        await asyncio.sleep(1)
+
+
 def _leaderboard_sync(chat, tg_user):
     from game import research
 
@@ -1966,11 +2021,11 @@ def _leaderboard_sync(chat, tg_user):
     touch_membership(group, user)
     members = group_member_creatures(group)
     research.attach_research_multi(members)  # include lab effects for every owner (see leaderboard fix)
-    # a few spare candidates: drop_departed() may skip some who have left the group
-    ranked = sorted(members, key=_creature_power, reverse=True)[:LEADERBOARD_SIZE * 3]
+    # everyone, strongest first: drop_departed() skips those who have left the group
     # pair each with its (gear-inclusive) power now, in sync context, so the async
     # render never has to touch the DB again
-    return [(c, _creature_power(c)) for c in ranked]
+    powered = [(c, _creature_power(c)) for c in members]
+    return sorted(powered, key=lambda cp: cp[1], reverse=True)
 
 
 async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2387,3 +2442,4 @@ def register(application) -> None:
         # catch-up: the payout is idempotent per group/user per day, so running it once
         # shortly after every start only pays what the 18:00 run missed (bot was down)
         job_queue.run_once(_guardian_payout_catchup_job, when=90, name="guardian_payout_catchup")
+        job_queue.run_repeating(departed_sweep_job, interval=6 * 3600, first=600, name="group_departed_sweep")

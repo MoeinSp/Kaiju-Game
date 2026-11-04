@@ -86,9 +86,13 @@ def _delete_drop(drop_id: int) -> None:
 
 
 async def _delete_drop_message(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Scheduled after a drop lapses / is won: drop the row. The group MESSAGE stays —
-    the owner asked (2026-10-16) that nothing in a group is ever auto-deleted."""
+    """An hour after a drop is won: delete its «X برد» message from the group, then the row
+    (owner, 2026-11-04 — this replaces the 2026-10-16 «never auto-delete in groups» rule for drops)."""
     data = context.job.data
+    try:
+        await context.bot.delete_message(chat_id=data["group_id"], message_id=data["message_id"])
+    except TelegramError:
+        pass   # no delete right / already gone: nothing else to tidy
     await run_db(groupdrops.delete_row, data["drop_id"])
 
 
@@ -151,8 +155,13 @@ async def drops_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         await _remove_lapsed(context, e)
         await asyncio.sleep(SEND_DELAY)
 
-    # fallback sweep: rows whose scheduled cleanup was lost to a restart (messages stay)
-    await run_db(groupdrops.delete_due)
+    # fallback sweep: won drops whose scheduled delete a restart lost
+    for e in await run_db(groupdrops.delete_due):
+        try:
+            await context.bot.delete_message(chat_id=e["group_id"], message_id=e["message_id"])
+        except TelegramError:
+            pass
+        await asyncio.sleep(SEND_DELAY)
 
 
 def _free_at(seconds_left: int) -> str:
@@ -186,7 +195,7 @@ async def drop_claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 win_text,
                 parse_mode="HTML",
             )
-        # keep the "X won Y" moment up for a while, then tidy it away
+        # keep the "X won Y" moment up for an hour, then delete it from the group
         if context.job_queue is not None and result.get("message_id"):
             context.job_queue.run_once(
                 _delete_drop_message, groupdrops.DELETE_AFTER_WIN_SECONDS,

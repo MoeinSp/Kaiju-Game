@@ -107,7 +107,7 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_campaign": ("دانجن", "🗺", "features"),
     "btn_team": ("تیم من", "🛡", "features"),
     "btn_attack_team": ("تیم حمله (آرنا)", "⚔️", "features"),
-    "btn_defense_team": ("تیم دفاع (آرنا)", "🛡", "features"),
+    "btn_defense_team": ("تیم دفاع (آرنا و گروه)", "🛡", "features"),
     "btn_dungeon": ("سیاه‌چال", "🕳", "features"),
     "btn_dungeon_shop": ("فروشگاه سیاه‌چال", "🔮", "features"),
     "btn_relics": ("آثار باستانی", "🏺", "features"),

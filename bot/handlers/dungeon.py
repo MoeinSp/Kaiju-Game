@@ -340,6 +340,10 @@ def _shop_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     lines = [f"{_E('black_rune')} <b>فروشگاه سیاه‌چال</b>", _DIV, f"{_E('black_rune')} رون سیاه: <code>{v['black_runes']}</code>"]
     if note:
         lines += [_DIV, note]
+    odds = [f"{_E('chest_magical' if i['key'] == 'magical_chest' else 'chest_mega')} {i['label']}: <b>{i['odds']}</b>"
+            for i in v["shop"] if i.get("odds")]
+    if odds:
+        lines += [_DIV, *odds, "<i>جعبه‌ها همون لحظه‌ی خرید باز می‌شن؛ حداقلش به کاپ فعلیت بستگی داره.</i>"]
     rows = []
     for item in v["shop"]:
         if item["left"] == 0:
@@ -360,11 +364,10 @@ def _buy_sync(tg_user, key):
         note += f"\n{_E('relic')} {got['relic']['label']}: <i>{got['relic']['desc']}</i>"
     if got.get("item") is not None:
         note += f"\n⚔️ {html.escape(got['item'].name)}"
-    if got.get("chest"):
-        from bot.loot_text import loot_lines
+    if got.get("chest"):   # opened on the spot: show all of it — the creature / gear too, not just the gold
+        from bot.loot_text import chest_card
 
-        c = got["chest"]
-        note += "\n" + "\n".join(loot_lines(c.get("coins", 0), c.get("dna", 0), c.get("diamonds", 0)))
+        note = f"✅ «{got['label']}» خریدی و همون لحظه باز شد:\n\n" + chest_card(got["chest"])
     return note, D.view(user)
 
 

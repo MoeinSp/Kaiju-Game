@@ -156,6 +156,10 @@ SHOP = {
 }
 
 
+# shop key -> arena chest tier; bought chests open at once (grant_chest_contents), nothing waits in a slot
+SHOP_CHESTS = {"magical_chest": "magical", "mega_chest": "mega"}
+
+
 class EmptyTeamError(GameError):
     """The attack team is empty: the bot and the Mini App answer it with the team picker
     instead of a dead-end message (code "team" in the Mini App API)."""
@@ -744,7 +748,7 @@ def shop_buy(user: User, key: str) -> dict:
     elif key in ("magical_chest", "mega_chest"):
         from game.arena_chests import grant_chest_contents
 
-        out["chest"] = grant_chest_contents(user, "magical" if key == "magical_chest" else "mega", user.cup, source="dungeon")
+        out["chest"] = grant_chest_contents(user, SHOP_CHESTS[key], user.cup, source="dungeon")
     elif key == "legendary_gear":
         from game.equipment import roll_equipment
 
@@ -772,10 +776,15 @@ def shop_bought_today(prof: DungeonProfile) -> dict:
 
 
 def shop_items(prof: DungeonProfile) -> list[dict]:
-    """The shop with what is left of each daily cap (None = no cap) — bot and Mini App."""
+    """The shop with what is left of each daily cap (None = no cap) — bot and Mini App. A chest
+    carries «odds»: its floor at the player's cup and the best it can give."""
+    from game.arena_chests import rarity_range
+
     bought = shop_bought_today(prof)
+    cup = prof.user.cup
     return [{"key": k, "label": v["label"], "price": v["price"],
-             "left": (v["daily"] - bought.get(k, 0)) if v.get("daily") else None} for k, v in SHOP.items()]
+             "left": (v["daily"] - bought.get(k, 0)) if v.get("daily") else None,
+             "odds": rarity_range(SHOP_CHESTS[k], cup) if k in SHOP_CHESTS else ""} for k, v in SHOP.items()]
 
 
 # ══════════════════════════ read-only view ══════════════════════════
