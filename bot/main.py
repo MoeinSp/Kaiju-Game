@@ -331,6 +331,9 @@ def main() -> None:
     group.register(application)
     energy.register(application)  # «شارژ انرژی با الماس» button flow (PV + group)
     group_words.register(application)  # owns THE group text handler
+    from bot.handlers import group_panels
+
+    group_panels.register(application)   # locks the group panels opened by its words to their sender
     battle.register(application)
     misc.register(application)
     owner.register(application)

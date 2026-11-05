@@ -495,6 +495,11 @@ async def dungeon_board(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     query = update.callback_query
     b = await run_db(_board_sync, update.effective_user)
     await query.answer()
+    text, kb = _board_render(b)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+
+
+def _board_render(b: dict) -> tuple[str, InlineKeyboardMarkup]:
     days, rem = divmod(b["left"], 86400)
     lines = [f"{_E('endless')} <b>جدول هفتگی سیاه‌چال بی‌انتها</b>", _DIV,
              f"⏳ <code>{days}</code> روز و <code>{rem // 3600}</code> ساعت تا پایان هفته", _DIV]
@@ -512,8 +517,7 @@ async def dungeon_board(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if b.get("last_top"):
         lines += [_DIV, f"🏁 <b>برنده‌های هفته‌ی قبل ({b['last']['week']}):</b>"]
         lines += [f"{medals[rank - 1]} {name} — طبقه‌ی <code>{floor}</code>" for rank, name, floor in b["last_top"]]
-    await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML",
-                                 reply_markup=InlineKeyboardMarkup([[back_btn("dg:home", "بازگشت به سیاه‌چال")]]))
+    return "\n".join(lines), InlineKeyboardMarkup([[back_btn("dg:home", "بازگشت به سیاه‌چال")]])
 
 
 async def dungeon_week_job(context: ContextTypes.DEFAULT_TYPE) -> None:

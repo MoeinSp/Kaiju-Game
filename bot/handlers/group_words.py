@@ -349,7 +349,35 @@ _CMD_CATS: dict[str, dict] = {
         ("لقب", "لقب‌هات"),
         ("اشتراک", "اشتراک ویژه"),
     ]},
+    "base": {"btn": "پایگاه", "emoji": "building", "title": "پایگاه و پیشرفت", "items": [
+        ("امروز", "پاداش‌های امروز"),
+        ("دریافت همه", "همه‌ی پاداش‌های آماده با یه پیام"),
+        ("برداشت", "برداشت از همه‌ی ساختمون‌ها"),
+        ("ارتقا ساختمان", "ساختمون‌ها و ارتقاشون"),
+        ("پژوهش", "آزمایشگاه پژوهش · «پژوهش آتش» = شروع مستقیم"),
+        ("آهنگری", "ارتقای تجهیزات"),
+        ("سرم", "آزمایشگاه سرم"),
+        ("ساخت سرم غول ۲", "ساخت مستقیم (اسم سرم + تعداد)"),
+        ("تکمیل سرم", "تموم کردن همه با الماس"),
+        ("حذف سرم", "لغو یا دور ریختن سرم"),
+        ("تاجر", "سفارش‌های تاجر"),
+        ("اعزامی", "مأموریت‌های اعزامی · «برداشت اعزامی»"),
+        ("انرژی", "انرژیت و پر کردنش"),
+    ]},
+    "dg": {"btn": "سیاه‌چال", "emoji": "dungeon_pit", "title": "سیاه‌چال و رویدادها", "items": [
+        ("سیاه‌چال", "پنل سیاه‌چال"),
+        ("سیاه‌چال کابوس", "ورود مستقیم (معمولی / سخت / کابوس / بی‌انتها)"),
+        ("ادامه سیاه‌چال", "برگشت به ورودی که بازه"),
+        ("جدول بی‌انتها", "جدول هفتگی بی‌انتها"),
+        ("فرم سیاه", "هسته‌ها و هیولاهای آماده‌ی فرم سیاه"),
+        ("دانجن", "مرحله‌های دانجن"),
+        ("جعبه‌ها", "جعبه‌های آرنا · «باز کردن جعبه» = باز کردن آماده‌ها"),
+        ("غول سرگردان", "غول جهانی · «ضربه غول» = زدنش"),
+        ("جام", "جام آخر هفته · «ثبت نام جام»"),
+        ("جشنواره", "جشنواره‌ی ماهانه"),
+    ]},
     "rank": {"btn": "گروه", "emoji": "trophy", "title": "جایگاه در گروه", "items": [
+        ("هیولاش", "ریپلای روی یه بازیکن = دیدن هیولاش"),
         ("جدول", "برترین‌های گروه"),
         ("محافظ", "محافظ فعلی گروه"),
         ("تسخیر", "چالش بده و محافظ شو"),
@@ -364,11 +392,12 @@ _CMD_CATS: dict[str, dict] = {
     ]},
     "ally": {"btn": "اتحاد", "emoji": "alliance", "title": "اتحاد", "body": None},  # built dynamically
 }
-_CMD_MENU_ORDER = ("start", "fight", "grow", "econ", "rank", "ally", "xfer")
+_CMD_MENU_ORDER = ("start", "fight", "grow", "econ", "base", "dg", "rank", "ally", "xfer")
 # per-category button-registry emoji key (Premium, themeable), distinct per category
 _CMD_BTN = {
     "start": "btn_report", "fight": "btn_attack", "grow": "btn_upgrade",
     "econ": "btn_biocrate", "rank": "btn_rank", "ally": "btn_alliance", "xfer": "btn_deposit",
+    "base": "btn_buildings", "dg": "btn_dungeon",
 }
 
 
@@ -1534,6 +1563,13 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     serum_word = serum_handlers.parse_word(norm)
     if serum_word is not None:
         await serum_handlers.group_word(update, context, *serum_word)
+        return
+    # «سیاه‌چال کابوس», «دریافت همه», «برداشت», «پژوهش آتش», «ضربه غول», «هیولاش» … (bot/handlers/group_panels.py)
+    from bot.handlers import group_panels
+
+    panel_word = group_panels.parse(norm)
+    if panel_word is not None:
+        await group_panels.handle(update, context, *panel_word)
         return
 
     # «انتقال روشن» / «انتقال خاموش» — toggle whether OTHERS can transfer TO you
