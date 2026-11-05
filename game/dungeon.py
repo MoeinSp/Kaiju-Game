@@ -40,11 +40,15 @@ HP_POWER_FLOOR = 0.6       # a kaiju at 1 HP fights at 60% of its power, full HP
 # this a player could wait between rooms, brew, and enter every fight at full HP
 HEALS_PER_RUN = 2
 # difficulty tiers: enemy power ×, gold/DNA ×, black runes ×, relic chance on a win, shadow cores
-# dropped by the boss (min, max), and the tier that must be cleared first (best_difficulty)
+# dropped by the boss (min, max) and the chance it drops them at all, and the tier that must be
+# cleared first (best_difficulty).
+# Cores (2026-11-05): top players raised a full black form in ~2 weeks (nightmare 2-3 + endless ~2
+# a key) against a 3-4 week design — now one core a key at most: nightmare's boss always, hard's
+# only sometimes (every tier below nightmare must pay less than it), the endless one at floor 30.
 DIFFICULTIES = {
-    "normal": {"label": "معمولی", "power": 1.0, "loot": 1.0, "runes": 1, "relic": 0.25, "cores": (0, 0), "need": 0},
-    "hard": {"label": "سخت", "power": 1.4, "loot": 1.6, "runes": 2, "relic": 0.45, "cores": (1, 1), "need": 1},
-    "nightmare": {"label": "کابوس", "power": 2.3, "loot": 2.5, "runes": 3, "relic": 0.70, "cores": (2, 3), "need": 2},
+    "normal": {"label": "معمولی", "power": 1.0, "loot": 1.0, "runes": 1, "relic": 0.25, "cores": (0, 0), "core_chance": 0.0, "need": 0},
+    "hard": {"label": "سخت", "power": 1.4, "loot": 1.6, "runes": 2, "relic": 0.45, "cores": (1, 1), "core_chance": 0.30, "need": 1},
+    "nightmare": {"label": "کابوس", "power": 2.3, "loot": 2.5, "runes": 3, "relic": 0.70, "cores": (1, 1), "core_chance": 1.0, "need": 2},
 }
 _DIFF_RANK = {k: i + 1 for i, k in enumerate(DIFFICULTIES)}   # cleared normal → 1, hard → 2, nightmare → 3
 _DIFF_BADGE = {"normal": "explorer", "hard": "hard", "nightmare": "nightmare"}
@@ -56,16 +60,16 @@ _DIFF_BADGE = {"normal": "explorer", "hard": "hard", "nightmare": "nightmare"}
 ENDLESS = "endless"
 # loot ×0.2: a deep endless run is ~50 floors, so per-floor pay must be a fraction of a normal
 # room's or it would out-earn nightmare (simulated: ×1.0 paid a maxed team ~430k gold a key)
-ENDLESS_DIFF = {"label": "بی‌انتها", "power": 1.0, "loot": 0.2, "runes": 1, "relic": 0.0, "cores": (0, 0), "need": 2}
+ENDLESS_DIFF = {"label": "بی‌انتها", "power": 1.0, "loot": 0.2, "runes": 1, "relic": 0.0, "cores": (0, 0), "core_chance": 0.0, "need": 2}
 ENDLESS_BOSS_EVERY = 10
 # compound growth (was +7% of the base per floor, linear): a team of 8k-power kaiju reached floor 40
 # with stacked runes and could have gone on — now the floor that stops a team depends on its power
 # (fresh stage-50 team ≈ 12-15, 8k kaiju ≈ 25, maxed ≈ 35-40)
 ENDLESS_BASE = 2500
 ENDLESS_GROWTH = 1.06
-ENDLESS_BOSS_RELIC = 0.30
-ENDLESS_CORE_FROM = 20      # a shadow core on boss floors 20, 30, 40, … (every ENDLESS_CORE_EVERY from here)
-ENDLESS_CORE_EVERY = 10
+# was 0.30 a boss: a floor-40 run found ~1.2 relics, more than a nightmare win's 0.70
+ENDLESS_BOSS_RELIC = 0.15
+ENDLESS_CORE_FLOOR = 30     # the one shadow core of an endless run: floor 30's boss (was every boss from 20)
 ENDLESS_REWARDS = ((1, 300, 5), (2, 200, 4), (3, 150, 3)) + tuple((r, 80, 1) for r in range(4, 11))  # rank, runes, cores
 
 # «عنصر هفته»: every week the dungeon leans to one element — most enemies have it, and kaiju
@@ -554,7 +558,7 @@ def fight(user: User, creature_id: int) -> dict:
         room = state["room"]
         if enemy["kind"] == "boss" and state.get("endless"):
             got = _loot_add(state, 3000 + 300 * room, 120 + 10 * room, 4)
-            if room >= ENDLESS_CORE_FROM and (room - ENDLESS_CORE_FROM) % ENDLESS_CORE_EVERY == 0:
+            if room == ENDLESS_CORE_FLOOR:
                 state["loot"]["cores"] = state["loot"].get("cores", 0) + 1
                 got["cores"] = 1
             if random.random() < ENDLESS_BOSS_RELIC:
@@ -685,7 +689,7 @@ def _finish(user: User, run: DungeonRun, status: str) -> dict:
     badge = None
     if status == DungeonRun.WON:
         loot["runes"] += random.randint(1, 3) * diff["runes"]
-        loot["cores"] = random.randint(*diff["cores"])
+        loot["cores"] = random.randint(*diff["cores"]) if random.random() < diff.get("core_chance", 1.0) else 0
         if random.random() < diff["relic"]:
             relic = relics.grant(user)
         from game import shadow

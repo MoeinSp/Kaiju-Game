@@ -431,7 +431,7 @@ def _shadow_render(v: dict, focus: int | None = None) -> tuple[str, InlineKeyboa
              f"{_E('shadow_core')} هسته‌ی سایه: <code>{v['cores']}</code> · 💰 طلا: <code>{v['coins']:,}</code>",
              f"<i>هیولای اساطیری ۵ ستاره‌ای که قدرتش به سقف ({constants.MAX_KAIJU_POWER:,}) رسیده، با هسته‌ی سایه "
              f"تا {constants.SHADOW_MAX_LEVEL} سطح فرم سیاه می‌گیره: هر سطح +{constants.SHADOW_POWER_PER_LEVEL} قدرت "
-             f"و سقفش هم همون‌قدر بالا می‌ره. هسته از باس سخت و کابوس سیاه‌چال یا فروشگاهش میاد.</i>", _DIV]
+             f"و سقفش هم همون‌قدر بالا می‌ره. هسته از باس کابوس (حتماً)، باس سخت (گاهی)، طبقه‌ی ۳۰ بی‌انتها، جدول هفتگی یا فروشگاه سیاه‌چال میاد.</i>", _DIV]
     if v.get("done"):
         d = v["done"]
         lines += [f"✨ <b>{html.escape(d['creature'].name)} به {shadow.LEVEL_NAMES[d['level']]} رسید!</b>"
