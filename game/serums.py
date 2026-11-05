@@ -1,7 +1,7 @@
 """«آزمایشگاه سرم» — brew-wait-use, like the spells of Clash of Clans.
 
-The building («serum_lab», built like any other) brews one serum at a time from a queue, with
-DNA paid when the serum is queued. Finished serums wait on a shelf whose size grows with the
+The building («serum_lab», built like any other) brews every queued serum side by side (each
+on its own clock, 2026-11-05 — it used to be one at a time), with DNA paid when it is queued. Finished serums wait on a shelf whose size grows with the
 building. A serum is then USED: repair acts at once; shell is armed in the lab for the next
 defence; rage, tracker, warrior and giant-slayer are chosen on their own action screen (the
 arena attack / hunt card / group «اتک» / boss hit — see MOMENT) and spent by that action.
@@ -12,8 +12,8 @@ a time, never above the building's level). The level sets the size of its effect
 Rules that keep it fair: brewing has no daily cap — the shelf size and the brewing time are the
 limit; the heal serum is capped per dungeon run (dungeon.HEALS_PER_RUN). There is no energy
 serum: a hunt costs 1 energy, so an uncapped +energy serum paid its own DNA back and made gold
-without end (it was removed). A full shelf only pauses the brewing. The brewing clock can be
-skipped for diamonds (finish_with_diamonds, twice a building's rate), but never the shelf size.
+without end (it was removed). Shelf + brewing never exceed the shelf size. The brewing can be
+skipped for diamonds (finish_with_diamonds, FINISH_PER_SERUM a serum), but never the shelf size.
 Any queued serum can be cancelled for its DNA back; a shelf serum can be thrown away (no refund).
 """
 
@@ -59,8 +59,8 @@ MOMENT = {"rage": "صفحه‌ی حمله‌ی آرنا", "tracker": "کارت �
 # by building level: shelf size and minutes per serum
 CAPACITY = {1: 3, 2: 3, 3: 4, 4: 4, 5: 5}   # 3 places, +1 at levels 3 and 5
 BREW_MINUTES = {1: 30, 2: 30, 3: 25, 4: 20, 5: 15}
-# brewing is the lab's only clock, so rushing it costs twice a building upgrade's diamond rate
-FINISH_MULT = 2
+# diamonds to finish one serum that has its whole brewing time left (less as its clock runs, min 1)
+FINISH_PER_SERUM = 4
 # raising a serum TO level n: (gold, dna, hours)
 UPGRADE = {2: (20_000, 400, 2), 3: (60_000, 1_000, 6), 4: (150_000, 2_000, 12), 5: (300_000, 4_000, 24)}
 
@@ -122,35 +122,73 @@ def _advance(row: SerumLab, level: int, now: datetime.datetime) -> bool:
         row.levels = {**(row.levels or {}), row.upgrade_kind: int((row.levels or {}).get(row.upgrade_kind, 1)) + 1}
         row.upgrade_kind, row.upgrade_ends_at = "", None
         changed = True
+    if row.queue and len(row.starts or []) != len(row.queue):
+        row.starts = _starts(row, now)
+        changed = True
     if level > 0 and row.queue:
-        step = datetime.timedelta(minutes=BREW_MINUTES[min(level, MAX_LEVEL)])
+        step = _step(level)
         cap = CAPACITY[min(level, MAX_LEVEL)]
         stock = dict(row.stock or {})
-        queue = list(row.queue)
-        started = row.brew_started_at or now
+        queue, starts = list(row.queue), list(row.starts)
         paid = list(row.paid or [])
-        while queue and sum(stock.values()) < cap and started + step <= now:
-            kind = queue.pop(0)
-            if paid:
-                paid.pop(0)
-            stock[kind] = stock.get(kind, 0) + 1
-            started = started + step
-        # a full shelf pauses the brewing: the clock restarts once there is room again
-        if queue and sum(stock.values()) >= cap:
-            started = None
-        # None = paused (full shelf): use() restarts the clock when it frees a place
-        new_start = started if queue else None
-        if stock != (row.stock or {}) or queue != row.queue or new_start != row.brew_started_at:
-            row.stock, row.queue, row.brew_started_at, row.paid = stock, queue, new_start, paid
+        paid += [0] * (len(queue) - len(paid))
+        keep_q, keep_s, keep_p = [], [], []
+        for kind, start, cost in zip(queue, starts, paid):
+            if start + step <= now.timestamp() and sum(stock.values()) < cap:
+                stock[kind] = stock.get(kind, 0) + 1
+            else:   # still brewing (or done, waiting for a place — only after a hand-over refill)
+                keep_q.append(kind); keep_s.append(start); keep_p.append(cost)
+        if keep_q != queue:
+            row.stock, row.queue, row.starts, row.paid = stock, keep_q, keep_s, keep_p
             changed = True
-    elif not row.queue and row.brew_started_at:
-        row.brew_started_at = None
+    if _sync_head(row):
         changed = True
     shell = (row.armed or {}).get("shell")
     if shell and shell.get("until") and shell["until"] <= now.timestamp():
         row.armed = {k: v for k, v in row.armed.items() if k != "shell"}
         changed = True
     return changed
+
+
+def _step(level: int) -> int:
+    return BREW_MINUTES[max(1, min(level, MAX_LEVEL))] * 60
+
+
+def _starts(row: SerumLab, now: datetime.datetime) -> list[float]:
+    """Each queued serum's start. Rows from the one-at-a-time days had only the head's start:
+    the head keeps it, the serums that were waiting behind it start now."""
+    have = list(row.starts or [])[: len(row.queue)]
+    head = row.brew_started_at.timestamp() if row.brew_started_at else now.timestamp()
+    fill = [head] if not have else []
+    return (have + fill + [now.timestamp()] * len(row.queue))[: len(row.queue)]
+
+
+def _sync_head(row: SerumLab) -> bool:
+    """brew_started_at mirrors the earliest start (kept for older readers); True when it moved."""
+    head = (datetime.datetime.fromtimestamp(min(row.starts), tz=datetime.timezone.utc)
+            if row.queue and row.starts else None)
+    if head != row.brew_started_at:
+        row.brew_started_at = head
+        return True
+    return False
+
+
+def _lefts(row: SerumLab, level: int, now: datetime.datetime) -> list[int]:
+    """Seconds of brewing left for each queued serum, in queue order (0 = done, waiting for room)."""
+    step = _step(level)
+    return [max(0, int(s + step - now.timestamp())) for s in (row.starts or [])[: len(row.queue)]]
+
+
+def _drop(row: SerumLab, index: int) -> int:
+    """Take queued serum `index` out (with its start and price); returns the DNA paid for it."""
+    queue, starts, paid = list(row.queue), list(row.starts or []), list(row.paid or [])
+    queue.pop(index)
+    if index < len(starts):
+        starts.pop(index)
+    refund = paid.pop(index) if index < len(paid) else 0
+    row.queue, row.starts, row.paid = queue, starts, paid
+    _sync_head(row)
+    return refund
 
 
 def _fresh(user: User, lock: bool = True) -> tuple[SerumLab, int]:
@@ -161,24 +199,26 @@ def _fresh(user: User, lock: bool = True) -> tuple[SerumLab, int]:
     return row, level
 
 
-def _finish_plan(row: SerumLab, level: int, now: datetime.datetime) -> tuple[int, int]:
-    """(serums a diamond finish would land now, seconds of brewing it skips) — only as many as
-    the shelf has room for; a paused queue's first serum counts as not started."""
+def _finish_plan(row: SerumLab, level: int, now: datetime.datetime) -> tuple[list[int], int, int]:
+    """(queue indexes a diamond finish lands now, the longest wait it skips, its price): every
+    brewing serum at once — as many as the shelf has room for, soonest-done first."""
     if level <= 0 or not row.queue:
-        return 0, 0
-    lvl = min(level, MAX_LEVEL)
-    step = BREW_MINUTES[lvl] * 60
-    n = min(len(row.queue), max(0, CAPACITY[lvl] - sum((row.stock or {}).values())))
-    if not n:
-        return 0, 0
-    first = step - (now - row.brew_started_at).total_seconds() if row.brew_started_at else step
-    return n, int(max(0, first) + step * (n - 1))
+        return [], 0, 0
+    room = max(0, CAPACITY[min(level, MAX_LEVEL)] - sum((row.stock or {}).values()))
+    lefts = _lefts(row, level, now)
+    idx = sorted(range(len(lefts)), key=lambda i: lefts[i])[:room]
+    if not idx:
+        return [], 0, 0
+    return idx, max(lefts[i] for i in idx), sum(finish_cost(lefts[i], level) for i in idx)
 
 
-def finish_cost(seconds: int) -> int:
-    from game import constants
+def finish_cost(seconds_left: int, level: int) -> int:
+    """One serum's price: FINISH_PER_SERUM for a whole brewing time, less as its clock runs."""
+    import math
 
-    return constants.diamond_finish_cost(seconds) * FINISH_MULT
+    if seconds_left <= 0:
+        return 0
+    return max(1, math.ceil(FINISH_PER_SERUM * seconds_left / _step(level)))
 
 
 # ── reading ───────────────────────────────────────────────────────────────────
@@ -190,11 +230,10 @@ def state(user: User) -> dict:
     lvl = max(1, min(level, MAX_LEVEL)) if level else 0
     cap = CAPACITY.get(lvl, 0)
     step = BREW_MINUTES.get(lvl, 30) * 60
-    next_in = None
-    if row.queue and row.brew_started_at and lvl:
-        next_in = max(0, int((row.brew_started_at + datetime.timedelta(seconds=step) - now).total_seconds()))
+    lefts = _lefts(row, level, now) if lvl else []
+    next_in = min(lefts) if lefts else None
     used = row.used_count if row.used_day == _today() else 0
-    fin_n, fin_secs = _finish_plan(row, level, now)
+    fin_idx, fin_secs, fin_cost = _finish_plan(row, level, now)
     kinds = []
     for k in ORDER:
         meta = KINDS[k]
@@ -213,7 +252,9 @@ def state(user: User) -> dict:
     return {
         "level": level, "capacity": cap, "brew_minutes": step // 60, "brew_cost": brew_cost(user) if level else 0,
         "stock_total": sum((row.stock or {}).values()), "queue": list(row.queue), "next_in": next_in,
-        "finish": {"count": fin_n, "left": fin_secs, "cost": finish_cost(fin_secs)} if fin_n else None,
+        "queue_left": lefts, "all_in": max(lefts) if lefts else None,
+        "finish": {"count": len(fin_idx), "left": fin_secs, "cost": fin_cost,
+                   "per_serum": FINISH_PER_SERUM} if fin_idx and fin_cost else None,
         "used": used, "kinds": kinds,
         "upgrading": {"kind": row.upgrade_kind, "label": KINDS[row.upgrade_kind]["label"],
                       "left": max(0, int((row.upgrade_ends_at - now).total_seconds()))} if row.upgrade_kind else None,
@@ -327,10 +368,10 @@ def brew(user: User, kind: str, count: int = 1) -> dict:
             raise GameError(f"DNA کافی نداری: برای {count} سرم {cost:,} DNA لازمه.")
         user.dna_fragments -= cost
         user.save(update_fields=["dna_fragments"])
-        if not row.queue:
-            row.brew_started_at = timezone.now()
         row.queue = list(row.queue) + [kind] * count
+        row.starts = list(row.starts or []) + [timezone.now().timestamp()] * count   # brews side by side
         row.paid = list(row.paid or []) + [cost // count] * count   # refunds give back what was paid
+        _sync_head(row)
         row.ping_armed = True
         row.save()
     return {"queued": count, "cost": cost, "state": state(user)}
@@ -343,13 +384,10 @@ def cancel_last(user: User) -> dict:
     with transaction.atomic():
         user = lock_row(user) or User.objects.select_for_update().get(id=user.id)
         row, level = _fresh(user)
-        if len(row.queue) <= (1 if row.brew_started_at else 0):
-            raise GameError("سرمی توی صف نیست که بشه لغوش کرد (اونی که در حال ساخته رو نمی‌شه لغو کرد).")
+        if not row.queue:
+            raise GameError("سرمی توی صف نیست که بشه لغوش کرد.")
         kind = row.queue[-1]
-        row.queue = list(row.queue[:-1])
-        paid = list(row.paid or [])
-        refund = paid.pop() if len(paid) > len(row.queue) else brew_cost(user)
-        row.paid = paid[: len(row.queue)]
+        refund = _drop(row, len(row.queue) - 1) or brew_cost(user)
         row.save()
         user.dna_fragments += refund
         user.save(update_fields=["dna_fragments"])
@@ -368,10 +406,9 @@ def finish_with_diamonds(user: User, max_cost: int | None = None) -> dict:
         if not row.queue:
             raise GameError("سرمی در حال ساخت نیست.")
         now = timezone.now()
-        n, secs = _finish_plan(row, level, now)
-        if not n:
+        idx, _secs, cost = _finish_plan(row, level, now)
+        if not idx:
             raise GameError("قفسه پره؛ اول یه سرم مصرف کن یا دور بریز.")
-        cost = finish_cost(secs)
         if max_cost is not None and cost > max_cost:
             raise GameError(f"قیمت عوض شد: الان {cost} الماس. دوباره بزن.")
         if user.diamonds < cost:
@@ -379,13 +416,13 @@ def finish_with_diamonds(user: User, max_cost: int | None = None) -> dict:
         user.diamonds -= cost
         user.save(update_fields=["diamonds"])
         stock = dict(row.stock or {})
-        for kind in row.queue[:n]:
+        for i in sorted(idx, reverse=True):
+            kind = row.queue[i]
+            _drop(row, i)
             stock[kind] = stock.get(kind, 0) + 1
-        row.stock, row.queue, row.paid = stock, list(row.queue[n:]), list((row.paid or [])[n:])
-        full = sum(stock.values()) >= CAPACITY[min(level, MAX_LEVEL)]
-        row.brew_started_at = now if row.queue and not full else None
+        row.stock = stock
         row.save()
-    return {"count": n, "cost": cost, "state": state(user)}
+    return {"count": len(idx), "cost": cost, "state": state(user)}
 
 
 def remove_queued(user: User, index: int, kind: str) -> dict:
@@ -400,22 +437,15 @@ def remove_queued(user: User, index: int, kind: str) -> dict:
         queue = list(row.queue)
         if not 0 <= index < len(queue) or queue[index] != kind:
             raise GameError("صف ساخت عوض شده (شاید همین الان آماده شد). دوباره نگاه کن.")
-        paid = list(row.paid or [])
-        refund = paid.pop(index) if index < len(paid) else brew_cost(user)
-        queue.pop(index)
-        if not queue:
-            row.brew_started_at = None
-        elif index == 0 and row.brew_started_at is not None:   # the next one starts brewing now
-            row.brew_started_at = timezone.now()
-        row.queue, row.paid = queue, paid
+        refund = _drop(row, index) or brew_cost(user)
         row.save()
         user.dna_fragments += refund
         user.save(update_fields=["dna_fragments"])
     return {"kind": kind, "label": KINDS[kind]["label"], "refund": refund, "state": state(user)}
 
 
-def discard(user: User, kind: str) -> dict:
-    """Throw one serum off the shelf to make room (its DNA is not refunded)."""
+def discard(user: User, kind: str, count: int = 1) -> dict:
+    """Throw `count` serums of a kind off the shelf to make room (their DNA is not refunded)."""
     if kind not in KINDS:
         raise GameError("این سرم وجود نداره.")
     with transaction.atomic():
@@ -423,11 +453,51 @@ def discard(user: User, kind: str) -> dict:
         have = int((row.stock or {}).get(kind, 0))
         if have <= 0:
             raise GameError(f"سرم «{KINDS[kind]['label']}» روی قفسه نداری.")
-        row.stock = {**row.stock, kind: have - 1}
-        if row.queue and row.brew_started_at is None:   # a paused queue starts again now there is room
-            row.brew_started_at = timezone.now()
+        n = max(1, min(int(count), have))
+        row.stock = {**row.stock, kind: have - n}
         row.save()
-    return {"kind": kind, "label": KINDS[kind]["label"], "state": state(user)}
+    return {"kind": kind, "label": KINDS[kind]["label"], "count": n, "state": state(user)}
+
+
+def remove_kind(user: User, kind: str, count: int) -> dict:
+    """Cancel `count` queued serums of a kind — the last-started first — with their DNA back."""
+    from bio_lab.repository import lock_row
+
+    if kind not in KINDS:
+        raise GameError("این سرم وجود نداره.")
+    with transaction.atomic():
+        user = lock_row(user) or User.objects.select_for_update().get(id=user.id)
+        row, _ = _fresh(user)
+        where = [i for i, q in enumerate(row.queue) if q == kind]
+        if not where:
+            raise GameError(f"«{KINDS[kind]['label']}» توی صف ساخت نیست (شاید همین الان آماده شد).")
+        n = max(1, min(int(count), len(where)))
+        refund = sum(_drop(row, i) or brew_cost(user) for i in sorted(where, reverse=True)[:n])
+        row.save()
+        user.dna_fragments += refund
+        user.save(update_fields=["dna_fragments"])
+    return {"kind": kind, "label": KINDS[kind]["label"], "count": n, "refund": refund, "state": state(user)}
+
+
+def clear_all(user: User) -> dict:
+    """«حذف همه»: cancel the whole queue (DNA back) and empty the shelf (no refund). Armed
+    serums are not on the shelf and stay armed."""
+    from bio_lab.repository import lock_row
+
+    with transaction.atomic():
+        user = lock_row(user) or User.objects.select_for_update().get(id=user.id)
+        row, _ = _fresh(user)
+        queued, shelf = len(row.queue), sum((row.stock or {}).values())
+        if not queued and not shelf:
+            raise GameError("نه سرمی توی صف داری نه روی قفسه.")
+        refund = 0
+        for i in range(len(row.queue) - 1, -1, -1):
+            refund += _drop(row, i) or brew_cost(user)
+        row.stock = {}
+        row.save()
+        user.dna_fragments += refund
+        user.save(update_fields=["dna_fragments"])
+    return {"queued": queued, "shelf": shelf, "refund": refund, "state": state(user)}
 
 
 def use(user: User, kind: str, member_id: int | None = None, _moment: bool = False) -> dict:
@@ -461,10 +531,6 @@ def use(user: User, kind: str, member_id: int | None = None, _moment: bool = Fal
             note = ("انتخاب شد برای " if _moment else "فعال شد: ") + KINDS[kind]["where"]
         row.stock = {**row.stock, kind: int(row.stock.get(kind, 0)) - 1}
         row.used_day, row.used_count = today, used + 1
-        if not row.queue:   # room on the shelf again: a paused queue would restart here anyway
-            row.brew_started_at = None
-        elif row.brew_started_at is None:
-            row.brew_started_at = timezone.now()
         row.save()
     return {"kind": kind, "label": label, "note": note, "state": state(user)}
 
@@ -485,8 +551,9 @@ def due_pings(now=None) -> list[tuple[int, str, str, None]]:
     today = _today()
     out = []
     for row in SerumLab.objects.select_for_update().filter(notify=True, ping_armed=True).select_related("user"):
-        _advance(row, lab_level(row.user), now)
-        if row.queue and row.brew_started_at is not None:   # still brewing
+        level = lab_level(row.user)
+        _advance(row, level, now)
+        if any(_lefts(row, level, now)):   # still brewing
             row.save()
             continue
         row.ping_armed = False
@@ -520,8 +587,6 @@ def hand_over(user: User, kind: str, count: int) -> None:
     if have < count:
         raise GameError(f"سرم «{KINDS[kind]['label']}» کافی نداری ({have} از {count}).")
     row.stock = {**row.stock, kind: have - count}
-    if row.queue and row.brew_started_at is None:   # a paused queue starts again now there is room
-        row.brew_started_at = timezone.now()
     row.save()
 
 def upgrade(user: User, kind: str) -> dict:

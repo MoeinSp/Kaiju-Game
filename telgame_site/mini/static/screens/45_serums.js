@@ -35,14 +35,17 @@
           }).join("") + "</div>";
           // the brewing queue
           if (queued) {
-            html += '<div class="h2">' + K.ic("hourglass") + 'در حال ساخت</div><div class="panel pad sr-queue">' + st.queue.map(function (key, i) {
+            var lefts = st.queue_left || [];
+            html += '<div class="h2">' + K.ic("hourglass") + 'در حال ساخت (همه با هم)</div><div class="panel pad sr-queue">' + st.queue.map(function (key, i) {
               var k = st.kinds.filter(function (x) { return x.key === key; })[0];
-              return '<button class="sr-q' + (i === 0 ? " now" : "") + '" data-act="qdel" data-i="' + i + '" data-key="' + key + '"><img src="' + K.asset(k.img) + '" alt="">' +
-                (i === 0 && st.next_in != null ? '<span class="timer" data-left="' + st.next_in + '"></span>' : "") + "</button>";
+              return '<button class="sr-q now" data-act="qdel" data-i="' + i + '" data-key="' + key + '"><img src="' + K.asset(k.img) + '" alt="">' +
+                (lefts[i] ? '<span class="timer" data-left="' + lefts[i] + '"></span>' : "") + "</button>";
             }).join("") +
-              (st.finish ? '<button class="btn sm primary" data-act="finish">' + K.ic("bolt") + "تموم کردن با " + K.n(st.finish.cost) + " الماس</button>" : "") +
-              '<p class="note">برای لغو هر سرم روش بزن؛ DNA‌ش کامل برمی‌گرده.</p>' +
-              (shelf >= cap ? '<p class="note">قفسه پره؛ ساخت تا مصرف یا دور ریختن یه سرم صبر می‌کنه.</p>' : "") + "</div>";
+              (st.finish ? '<button class="btn sm primary" data-act="finish">' + K.ic("bolt") + "تموم کردن همه (" + K.n(st.finish.count) + ") با " + K.n(st.finish.cost) + " الماس</button>" : "") +
+              '<p class="note">برای لغو هر سرم روش بزن؛ DNA‌ش کامل برمی‌گرده.</p></div>';
+          }
+          if (queued + shelf > 1) {
+            html += '<button class="btn sm ghost block mt" data-act="clear">' + K.ic("close") + "حذف همه‌ی سرم‌ها</button>";
           }
           if (st.upgrading) html += '<div class="callout good mt">' + K.ic("up") + "<div>در حال ارتقای «" + K.esc(st.upgrading.label) + '» · <span class="timer" data-left="' + st.upgrading.left + '"></span></div></div>';
           html += '<div class="h2">' + K.ic("flask") + 'سرم‌ها</div><div class="sr-grid">' + st.kinds.map(card).join("") + "</div>" +
@@ -124,8 +127,36 @@
             }, function () { busy = false; });
           });
         });
+        K.on(root, "clear", function (el) {
+          K.confirm({ title: "حذف همه‌ی سرم‌ها؟", danger: true, icon: "close", ok: "همه رو حذف کن", cancel: "نه",
+            html: "<p>سرم‌های در حال ساخت لغو می‌شن و DNA‌شون برمی‌گرده؛ سرم‌های روی قفسه دور ریخته می‌شن (بدون برگشت DNA).</p>" }).then(function (yes) {
+            if (!yes || busy) return; busy = true;
+            K.api.post("serums/clear/", {}, el).then(function (r) {
+              busy = false; st = r.state; draw(); K.toast("همه حذف شد" + (r.refund ? " · " + pn(r.refund) + " DNA برگشت" : ""), "ok");
+            }, function () { busy = false; });
+          });
+        });
+        function howMany(k, have, onGo) {
+          var n = 1;
+          var box = K.sheet('<div class="grab"></div><div class="pad sr-info"><img src="' + K.asset(k.img) + '" alt=""><div class="ttl" style="font-size:20px">دور ریختن «' + K.esc(k.label) + '»</div>' +
+            '<p class="lead">روی قفسه: ' + K.n(have) + " · DNA برنمی‌گرده</p>" +
+            '<div class="row center" style="gap:12px;margin:12px 0"><button class="btn" data-step="-1">−</button><b class="num" data-n style="font-size:22px">1</b><button class="btn" data-step="1">+</button></div>' +
+            '<button class="btn danger block" data-go="n">دور ریختن <span data-n>1</span> تا</button>' +
+            '<button class="btn ghost block mt" data-go="all">همه (' + K.n(have) + ")</button></div>");
+          box.addEventListener("click", function (ev) {
+            var s = ev.target.closest("[data-step]"), g = ev.target.closest("[data-go]");
+            if (s) { n = Math.max(1, Math.min(have, n + Number(s.dataset.step))); box.querySelectorAll("[data-n]").forEach(function (x) { x.textContent = n; }); }
+            if (g) { K.closeSheet(); onGo(g.dataset.go === "all" ? have : n); }
+          });
+        }
         K.on(root, "discard", function (el) {
           var k = st.kinds.filter(function (x) { return x.key === el.dataset.key; })[0];
+          if (k.stock > 1) return howMany(k, k.stock, function (n) {
+            if (busy) return; busy = true;
+            K.api.post("serums/discard/", { kind: k.key, count: n }, el).then(function (r) {
+              busy = false; st = r.state; draw(); K.toast(pn(r.count) + " تا دور ریخته شد.", "ok");
+            }, function () { busy = false; });
+          });
           K.confirm({ title: "یه «" + k.label + "» دور ریخته بشه؟", danger: true, icon: "close", ok: "دور بریز", cancel: "نه",
             html: "<p>DNA‌ی ساختش برنمی‌گرده؛ فقط یه جا روی قفسه باز می‌شه.</p>" }).then(function (yes) {
             if (!yes || busy) return; busy = true;
@@ -137,7 +168,7 @@
         K.on(root, "finish", function (el) {
           var f = st.finish; if (!f) return;
           K.confirm({ title: "تموم کردن ساخت با الماس", icon: "bolt", ok: K.n(f.cost) + " الماس", cancel: "نه",
-            html: "<p>" + K.n(f.count) + " سرم همین الان آماده می‌شه و می‌ره روی قفسه.</p>" }).then(function (yes) {
+            html: "<p>هر " + K.n(f.count) + " سرم با هم همین الان آماده می‌شن و می‌رن روی قفسه.</p>" }).then(function (yes) {
             if (!yes || busy) return; busy = true;
             K.api.post("serums/finish/", { price: f.cost }, el).then(function (r) {
               busy = false; st = r.state; draw(); K.haptic("ok"); K.toast(K.n(r.count) + " سرم آماده شد · " + K.n(r.cost) + " الماس", "ok");

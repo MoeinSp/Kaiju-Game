@@ -125,7 +125,14 @@ def state(user: User, full: bool = True) -> dict:
         "tournament_open": tournament.registration_open() and tournament.my_entry(user) is None,
         "festival": festival.theme() if festival.active_key() else None,
         "rule": events.rule_line(),
+        "serum_lab": _serum_lab_built(user),   # «آزمایشگاه سرم» beside «شهر» on the main menu
     }
+
+
+def _serum_lab_built(user: User) -> bool:
+    from game import serums
+
+    return serums.lab_level(user) > 0
 
 
 def collectable_count(st: dict) -> int:

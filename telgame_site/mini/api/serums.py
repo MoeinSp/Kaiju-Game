@@ -67,8 +67,22 @@ def remove(request, user, data):
 @endpoint("POST")
 def discard(request, user, data):
     """Throw one shelf serum away (no refund) to free a place."""
-    r = SR.discard(user, need_str(data, "kind", choices=SR.ORDER))
-    return {"label": clean(r["label"]), "state": _state(user)}
+    r = SR.discard(user, need_str(data, "kind", choices=SR.ORDER), need_int(data, "count", 1, 50) if data.get("count") else 1)
+    return {"label": clean(r["label"]), "count": r["count"], "state": _state(user)}
+
+
+@endpoint("POST")
+def remove_kind(request, user, data):
+    """Cancel `count` queued serums of a kind (DNA back)."""
+    r = SR.remove_kind(user, need_str(data, "kind", choices=SR.ORDER), need_int(data, "count", 1, 50))
+    return {"count": r["count"], "refund": r["refund"], "state": _state(user)}
+
+
+@endpoint("POST")
+def clear(request, user, data):
+    """«حذف همه»: the whole queue (DNA back) and the shelf (no refund)."""
+    r = SR.clear_all(user)
+    return {"queued": r["queued"], "shelf": r["shelf"], "refund": r["refund"], "state": _state(user)}
 
 
 @endpoint("POST")
@@ -145,6 +159,8 @@ routes = [
     ("cancel/", cancel),
     ("remove/", remove),
     ("discard/", discard),
+    ("remove_kind/", remove_kind),
+    ("clear/", clear),
     ("finish/", finish),
     ("use/", use),
     ("toggle/", toggle),

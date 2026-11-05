@@ -1239,7 +1239,7 @@ def _category_keyboard(cat_key: str, locked=frozenset()) -> tuple[str, InlineKey
 
 
 def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=frozenset(), research_built=False,
-                      today_state: dict | None = None) -> InlineKeyboardMarkup:
+                      today_state: dict | None = None, serum_lab: bool = False) -> InlineKeyboardMarkup:
     """Clean 5-Hub navigation with Live Story Quest CTA banner. `today_state`
     (game.today.state) adds the count on «امروز» and a row for whatever is LIVE right now
     (world boss / tournament registration / festival) — those only show while they matter."""
@@ -1279,10 +1279,11 @@ def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=
         btn("پایگاه", emoji_key="btn_hub_base", style=CONFIRM, callback_data="menu:hub_base"),
         btn("فروشگاه", emoji_key="btn_hub_shop", style=SHOP, callback_data="menu:hub_shop"),
     ])
-    # Row 3: City
-    rows.append([
-        btn("شهر", emoji_key="btn_hub_city", style=PRIMARY, callback_data="menu:hub_city"),
-    ])
+    # Row 3: City — with «آزمایشگاه سرم» beside it once the player has built one (nothing otherwise)
+    row3 = [btn("شهر", emoji_key="btn_hub_city", style=PRIMARY, callback_data="menu:hub_city")]
+    if serum_lab or (today_state and today_state.get("serum_lab")):
+        row3.append(btn("آزمایشگاه سرم", emoji_key="btn_serums", style=CONFIRM, callback_data="sr:home"))
+    rows.append(row3)
     # the Mini App, alone on its own row (public since 2026-10-15, out of beta 2026-10-16).
     # Only ever in private chats — Telegram refuses web_app buttons in groups, and this
     # keyboard is only sent in private.
@@ -5370,24 +5371,26 @@ async def lab_rename_cancel_callback(update: Update, context: ContextTypes.DEFAU
     )
 
 
-def main_menu_keyboard(quest: dict | None = None, is_owner: bool = False, hall_level: int | None = None, research_built: bool = False) -> InlineKeyboardMarkup:
+def main_menu_keyboard(quest: dict | None = None, is_owner: bool = False, hall_level: int | None = None, research_built: bool = False,
+                       serum_lab: bool = False) -> InlineKeyboardMarkup:
     """The /menu command's keyboard — clean 4-hub layout with live story quest banner."""
-    return creature_keyboard(quest, is_owner, _locked_actions_for(hall_level), research_built)
+    return creature_keyboard(quest, is_owner, _locked_actions_for(hall_level), research_built, serum_lab=serum_lab)
 
 
 def _menu_lab_line_sync(tg_user):
-    """Returns (user, lab-level line, main-hall level, research-built, quest)."""
+    """Returns (user, lab-level line, main-hall level, research-built, quest, serum lab built)."""
     from game.buildings import main_hall_level
-    from game import research, story
+    from game import research, serums, story
 
     user, _ = get_or_create_user(tg_user)
     quest = story.get_active_quest(user)
-    return user, lab_level_line(user), main_hall_level(user), research.is_unlocked(user), quest
+    return (user, lab_level_line(user), main_hall_level(user), research.is_unlocked(user), quest,
+            serums.lab_level(user) > 0)
 
 
 async def _show_main_menu(update) -> None:
     """Main menu with the lab level + story quest banner + 4 main hubs."""
-    user, lab_line, hall_level, research_built, quest = await run_db(_menu_lab_line_sync, update.effective_user)
+    user, lab_line, hall_level, research_built, quest, serum_lab = await run_db(_menu_lab_line_sync, update.effective_user)
     is_admin = _is_admin_user(update.effective_user.id if update.effective_user else None)
     quest_txt = story_quest_card_text(quest)
     quest_block = f"<blockquote>{quest_txt.strip()}</blockquote>\n\n" if quest_txt.strip() else ""
@@ -5401,7 +5404,8 @@ async def _show_main_menu(update) -> None:
         update,
         text,
         parse_mode="HTML",
-        reply_markup=main_menu_keyboard(quest=quest, is_owner=is_admin, hall_level=hall_level, research_built=research_built),
+        reply_markup=main_menu_keyboard(quest=quest, is_owner=is_admin, hall_level=hall_level, research_built=research_built,
+                                        serum_lab=serum_lab),
     )
 
 

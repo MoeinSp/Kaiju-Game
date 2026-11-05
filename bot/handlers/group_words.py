@@ -1528,6 +1528,14 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     # «انتقال …» family: gold, kaiju/creature, or equipment — all reply-based
     norm = keywords.normalize(message.text)
 
+    # «سرم» / «ساخت سرم غول ۲» / «تکمیل سرم» / «حذف سرم» — the sender's serum lab, right here
+    from bot.handlers import serums as serum_handlers
+
+    serum_word = serum_handlers.parse_word(norm)
+    if serum_word is not None:
+        await serum_handlers.group_word(update, context, *serum_word)
+        return
+
     # «انتقال روشن» / «انتقال خاموش» — toggle whether OTHERS can transfer TO you
     if norm in ("انتقال روشن", "انتقال روشن کن", "انتقال on"):
         await group_handlers.toggle_transfers(update, context, True)

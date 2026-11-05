@@ -2,9 +2,10 @@
 waiting to be opened, speed-up cards, serums).
 
 Callbacks: «sr:» for the lab (home, b:<kind> brew, u:<kind> use, c:<kind> put a chosen serum
-back, n notify, up upgrades, ug:<kind> start an upgrade, d the «حذف سرم» screen, dq:<i>:<kind>
-cancel a queued serum, ds:<kind> / dy:<kind> ask / throw a shelf serum away, f / fy:<price> ask /
-finish the brewing with diamonds), «bp:home» for the backpack.
+back, n notify, up upgrades, ug:<kind> start an upgrade, d the «حذف سرم» screen, dk:<q|s>:<kind>:<n>
+the how-many picker for a queued / shelf kind, dx:<q|s>:<kind>:<n> remove n of them, da / dax ask /
+remove everything, f / fy:<price> ask / finish all the brewing with diamonds; dq / ds / dy are the
+older one-by-one buttons, still answered for messages sent before), «bp:home» for the backpack.
 """
 
 from pathlib import Path
@@ -69,17 +70,25 @@ def moment_toast(m: dict | None, kind: str) -> str:
 
 
 # ── the lab ─────────────────────────────────────────────────────────────────────
+def _counts(kinds_in_order: list[str]) -> list[tuple[str, int]]:
+    """[(kind, how many)] in first-seen order."""
+    out: dict[str, int] = {}
+    for k in kinds_in_order:
+        out[k] = out.get(k, 0) + 1
+    return list(out.items())
+
+
 def _queue_lines(st: dict) -> list[str]:
     if not st["queue"]:
-        return ["⚗️ صف ساخت: <i>خالی</i>"]
+        return ["⚗️ در حال ساخت: <i>هیچی</i>"]
     labels = {k["key"]: k["label"] for k in st["kinds"]}
-    out = [f"⚗️ صف ساخت <code>{len(st['queue'])}</code>: " + " ← ".join(labels[q] for q in st["queue"])]
-    if st["next_in"] is None:
-        out.append("      ⏸ <i>قفسه پره؛ با مصرف یا حذف یه سرم ادامه پیدا می‌کنه.</i>")
-    else:
-        all_in = st["next_in"] + (len(st["queue"]) - 1) * st["brew_minutes"] * 60
-        tail = f" · همه تا {_left(all_in)}" if len(st["queue"]) > 1 else ""
-        out.append(f"      ⏳ بعدی تا {_left(st['next_in'])}{tail}")
+    parts = [f"{_ICON[k]} {labels[k]}" + (f" ×{n}" if n > 1 else "") for k, n in _counts(st["queue"])]
+    out = [f"⚗️ در حال ساخت <code>{len(st['queue'])}</code> (همه با هم): " + "  ·  ".join(parts)]
+    if st["all_in"] is not None and st["all_in"] > 0:
+        first = f"اولی تا {_left(st['next_in'])} · " if len(st["queue"]) > 1 and st["next_in"] != st["all_in"] else ""
+        out.append(f"      ⏳ {first}همه تا {_left(st['all_in'])}")
+    elif st["queue"]:
+        out.append("      ⏸ <i>آماده‌ست ولی قفسه جا نداره؛ یه سرم مصرف کن یا دور بریز.</i>")
     return out
 
 
@@ -130,41 +139,93 @@ def _lab_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
             acts.append(btn(f"مصرف {k['label']}", emoji_key="btn_serum_use", style=CONFIRM, callback_data=f"sr:u:{k['key']}"))
     rows = [brew[i:i + 2] for i in range(0, len(brew), 2)] + [acts[i:i + 2] for i in range(0, len(acts), 2)]
     if st.get("finish"):
-        rows.append([btn(f"تموم کردن ساخت با الماس · {st['finish']['cost']} الماس", emoji_key="btn_instant", style=SHOP, callback_data="sr:f")])
+        f = st["finish"]
+        rows.append([btn(f"تموم کردن همه با الماس · {f['count']} سرم · {f['cost']} الماس", emoji_key="btn_instant", style=SHOP, callback_data="sr:f")])
     manage = [btn("ارتقای سرم‌ها", emoji_key="btn_serum_up", style=PRIMARY, callback_data="sr:up")]
     if st["queue"] or st["stock_total"]:
         manage.append(btn("حذف سرم", emoji_key="btn_delete", style=NAV, callback_data="sr:d"))
     rows.append(manage)
     rows.append([btn("اعلان آماده‌شدن: " + ("روشن" if st.get("notify") else "خاموش"), emoji_key="btn_notify", style=NAV, callback_data="sr:n")])
-    rows.append([btn("انبار", emoji_key="btn_backpack", style=SHOP, callback_data="bp:home"), back_btn("menu:buildings", "ساختمان‌ها")])
+    if not st.get("group"):
+        rows.append([btn("انبار", emoji_key="btn_backpack", style=SHOP, callback_data="bp:home"), back_btn("menu:buildings", "ساختمان‌ها")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 def _del_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
-    """«حذف سرم»: cancel any queued serum (its DNA back) or throw a shelf serum away (no refund)."""
+    """«حذف سرم»: pick a kind in the queue (cancel, DNA back) or on the shelf (thrown away, no
+    refund) — the next screen asks how many — or «حذف همه»."""
     labels = {k["key"]: k["label"] for k in st["kinds"]}
     lines = [f"{get_emoji('delete')} <b>حذف سرم</b>", _DIV]
     if note:
         lines += [note, _DIV]
     rows = []
-    if st["queue"]:
-        lines.append("⚗️ <b>صف ساخت</b> · <i>لغو هر کدوم، DNA‌ش کامل برمی‌گرده</i>")
-        for i, q in enumerate(st["queue"]):
-            brewing = " · در حال ساخت" if i == 0 and st["next_in"] is not None else ""
-            lines.append(f"   {i + 1}. {_ICON[q]} {labels[q]}{brewing}")
-            rows.append([btn(f"لغو {i + 1} · {labels[q]}", emoji_key="btn_cancel", style=NAV, callback_data=f"sr:dq:{i}:{q}")])
+    queued = _counts(st["queue"])
+    if queued:
+        lines.append("⚗️ <b>در حال ساخت</b> · <i>لغو کنی DNA‌ش کامل برمی‌گرده</i>")
+        for k, n in queued:
+            lines.append(f"   {_ICON[k]} {labels[k]} ×{n}")
+            rows.append([btn(f"لغو {labels[k]} (×{n})", emoji_key="btn_cancel", style=NAV, callback_data=f"sr:dk:q:{k}:1")])
     shelf = [k for k in st["kinds"] if k["stock"]]
     if shelf:
-        if st["queue"]:
+        if queued:
             lines.append("")
         lines.append("📦 <b>روی قفسه</b> · <i>دور ریختن جا باز می‌کنه ولی DNA برنمی‌گرده</i>")
         for k in shelf:
             lines.append(f"   {_ICON[k['key']]} {k['label']} ×{k['stock']}")
-            rows.append([btn(f"دور ریختن یه {k['label']}", emoji_key="btn_delete", style=DANGER, callback_data=f"sr:ds:{k['key']}")])
-    if not st["queue"] and not shelf:
-        lines.append("<i>نه سرمی توی صف داری نه روی قفسه.</i>")
+            rows.append([btn(f"دور ریختن {k['label']} (×{k['stock']})", emoji_key="btn_delete", style=DANGER, callback_data=f"sr:dk:s:{k['key']}:1")])
+    if not queued and not shelf:
+        lines.append("<i>نه سرمی در حال ساخت داری نه روی قفسه.</i>")
+    elif len(st["queue"]) + st["stock_total"] > 1:
+        rows.append([btn("حذف همه", emoji_key="btn_delete", style=DANGER, callback_data="sr:da")])
     rows.append([back_btn("sr:home", "آزمایشگاه سرم")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _have(st: dict, where: str, kind: str) -> int:
+    if where == "q":
+        return st["queue"].count(kind)
+    return next((k["stock"] for k in st["kinds"] if k["key"] == kind), 0)
+
+
+def _pick_render(st: dict, where: str, kind: str, n: int) -> tuple[str, InlineKeyboardMarkup]:
+    """How many to remove: «−  n  +», «حذف n تا» and «حذف همه»."""
+    label = SR.KINDS[kind]["label"]
+    have = _have(st, where, kind)
+    if not have:
+        return _del_render(st, f"⚠️ «{label}» دیگه {'توی صف' if where == 'q' else 'روی قفسه'} نیست.")
+    n = max(1, min(n, have))
+    verb = "لغو" if where == "q" else "دور ریختن"
+    lines = [f"{get_emoji('delete')} <b>{verb} {_ICON[kind]} {label}</b>", _DIV,
+             f"{'در حال ساخت' if where == 'q' else 'روی قفسه'}: <code>{have}</code> عدد",
+             f"انتخاب شده: <b>{n}</b> عدد",
+             "<i>DNA‌ی سرم‌های لغو شده کامل برمی‌گرده.</i>" if where == "q"
+             else "<i>دور ریختن جا باز می‌کنه ولی DNA برنمی‌گرده.</i>"]
+    rows = []
+    if have > 1:
+        rows.append([
+            btn("➖", style=NAV, callback_data=f"sr:dk:{where}:{kind}:{max(1, n - 1)}"),
+            btn(f"{n} از {have}", style=NAV, callback_data=f"sr:dk:{where}:{kind}:{n}"),
+            btn("➕", style=NAV, callback_data=f"sr:dk:{where}:{kind}:{min(have, n + 1)}"),
+        ])
+    style = NAV if where == "q" else DANGER
+    act = [btn(f"{verb} {n} تا" if have > 1 else verb, emoji_key="btn_confirm", style=style, callback_data=f"sr:dx:{where}:{kind}:{n}")]
+    if have > 1 and n < have:
+        act.append(btn(f"همه ({have})", emoji_key="btn_delete", style=style, callback_data=f"sr:dx:{where}:{kind}:{have}"))
+    rows.append(act)
+    rows.append([back_btn("sr:d", "حذف سرم")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _all_ask(st: dict) -> tuple[str, InlineKeyboardMarkup]:
+    if not st["queue"] and not st["stock_total"]:
+        return _del_render(st)
+    body = []
+    if st["queue"]:
+        body.append(f"⚗️ <code>{len(st['queue'])}</code> سرم در حال ساخت لغو می‌شه و DNA‌ش برمی‌گرده.")
+    if st["stock_total"]:
+        body.append(f"📦 <code>{st['stock_total']}</code> سرم روی قفسه دور ریخته می‌شه (بدون برگشت DNA).")
+    body.append("<i>سرمی که برای کاری انتخاب کردی (📌) سر جاش می‌مونه.</i>")
+    return _ask_render("🗑 <b>حذف همه‌ی سرم‌ها</b>", body, "بله، همه رو حذف کن", "sr:dax", "sr:d")
 
 
 def _ask_render(title: str, body: list[str], yes_label: str, yes_cb: str, no_cb: str) -> tuple[str, InlineKeyboardMarkup]:
@@ -188,11 +249,12 @@ def _finish_ask(st: dict) -> tuple[str, InlineKeyboardMarkup]:
     f = st.get("finish")
     if not f:
         return _lab_render(st, "⚠️ چیزی نیست که با الماس تموم بشه (صف خالیه یا قفسه پره).")
-    body = [f"⚗️ <code>{f['count']}</code> سرم همین الان آماده می‌شه، به‌جای {_left(f['left'])} صبر.",
-            f"{get_emoji('diamond')} هزینه: <code>{f['cost']}</code> الماس · داری: <code>{st.get('diamonds', 0):,}</code>"]
+    body = [f"⚗️ هر <code>{f['count']}</code> سرم با هم همین الان آماده می‌شن، به‌جای {_left(f['left'])} صبر.",
+            f"{get_emoji('diamond')} هزینه: <code>{f['cost']}</code> الماس (هر سرم حداکثر {f['per_serum']}، کمتر وقتی ساختش جلو رفته)"
+            f" · داری: <code>{st.get('diamonds', 0):,}</code>"]
     if f["count"] < len(st["queue"]):
         body.append("<i>بقیه‌ی صف جا روی قفسه نداره و منتظر می‌مونه.</i>")
-    return _ask_render("⚡ <b>تموم کردن ساخت با الماس</b>", body, f"بله، {f['cost']} الماس", f"sr:fy:{f['cost']}", "sr:home")
+    return _ask_render("⚡ <b>تموم کردن همه با الماس</b>", body, f"بله، {f['cost']} الماس", f"sr:fy:{f['cost']}", "sr:home")
 
 
 def _up_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
@@ -228,8 +290,9 @@ def _lab_sync(tg_user, action: str, kind: str | None, arg: int | None = None):
     note = ""
     try:
         if action == "b":
-            r = SR.brew(user, kind)
-            note = f"⚗️ «{SR.KINDS[kind]['label']}» رفت توی صف ساخت · <code>{r['cost']:,}</code> DNA"
+            r = SR.brew(user, kind, arg or 1)
+            many = f"<code>{r['queued']}</code> تا " if r["queued"] > 1 else ""
+            note = f"⚗️ {many}«{SR.KINDS[kind]['label']}» رفت توی ساخت · <code>{r['cost']:,}</code> DNA"
         elif action == "u":
             r = SR.use(user, kind)
             note = f"✅ «{r['label']}» · {r['note']}"
@@ -252,6 +315,22 @@ def _lab_sync(tg_user, action: str, kind: str | None, arg: int | None = None):
         elif action == "dy":
             r = SR.discard(user, kind)
             note = f"🗑 یه «{r['label']}» دور ریخته شد."
+        elif action == "dx":   # arg = (where, n)
+            where, n = arg
+            if where == "q":
+                r = SR.remove_kind(user, kind, n)
+                note = f"↩️ <code>{r['count']}</code> «{r['label']}» از صف ساخت لغو شد · <code>{r['refund']:,}</code> DNA برگشت"
+            else:
+                r = SR.discard(user, kind, n)
+                note = f"🗑 <code>{r['count']}</code> «{r['label']}» دور ریخته شد."
+        elif action == "dax":
+            r = SR.clear_all(user)
+            bits = []
+            if r["queued"]:
+                bits.append(f"{r['queued']} سرم از صف لغو شد · <code>{r['refund']:,}</code> DNA برگشت")
+            if r["shelf"]:
+                bits.append(f"{r['shelf']} سرم از قفسه دور ریخته شد")
+            note = "🗑 " + " · ".join(bits)
         elif action == "fy":
             r = SR.finish_with_diamonds(user, max_cost=arg)
             note = f"⚡ <code>{r['count']}</code> سرم آماده شد و رفت روی قفسه · <code>{r['cost']}</code> الماس"
@@ -263,8 +342,19 @@ def _lab_sync(tg_user, action: str, kind: str | None, arg: int | None = None):
     return st, note
 
 
+def _in_group(update: Update) -> bool:
+    chat = update.effective_chat
+    return chat is not None and chat.type in ("group", "supergroup")
+
+
 async def serum_lab(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
+    if q is not None and _in_group(update):
+        from bot.gates import is_card_owner
+
+        if not is_card_owner(update):   # a group panel belongs to whoever typed «سرم»
+            await q.answer("این پنل مال یه بازیکن دیگه‌ست — خودت «سرم» رو بفرست.", show_alert=True)
+            return
     parts = (q.data if q and q.data.startswith("sr:") else "sr:home").split(":")
     action = parts[1] if len(parts) > 1 else "home"
     arg = None
@@ -272,15 +362,22 @@ async def serum_lab(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         arg, parts = int(parts[2]), [*parts[:2], parts[3]]
     elif action == "fy":     # sr:fy:<price seen>
         arg = int(parts[2])
+    elif action in ("dk", "dx"):   # sr:dk:<q|s>:<kind>:<n>
+        arg, parts = (parts[2], int(parts[4])), [*parts[:2], parts[3]]
     kind = parts[2] if len(parts) > 2 and parts[2] in SR.KINDS else None
     if q and q.data.startswith("sr:"):   # «menu:serums» was answered by the menu router
         await q.answer()
-    act = action if action in ("b", "u", "c", "x", "ug", "n", "dq", "dy", "fy") else ""
+    act = action if action in ("b", "u", "c", "x", "ug", "n", "dq", "dy", "dx", "dax", "fy") else ""
     st, note = await run_db(_lab_sync, update.effective_user, act, kind, arg)
+    st["group"] = _in_group(update)
     if action in ("up", "ug"):
         text, kb = _up_render(st, note)
-    elif action in ("d", "dq", "dy"):
+    elif action in ("d", "dq", "dy", "dx", "dax"):
         text, kb = _del_render(st, note)
+    elif action == "dk" and kind:
+        text, kb = _pick_render(st, arg[0], kind, arg[1])
+    elif action == "da":
+        text, kb = _all_ask(st)
     elif action == "ds" and kind:
         text, kb = _discard_ask(st, kind)
     elif action == "f":
@@ -291,6 +388,65 @@ async def serum_lab(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await safe_edit_message_text(q, text, parse_mode="HTML", reply_markup=kb)
     else:
         await send_screen(update, text, photo=_photo(st["level"]), parse_mode="HTML", reply_markup=kb)
+
+
+# ── group words: «سرم», «ساخت سرم غول ۲», «تکمیل سرم» ──────────────────────────
+# names a player may type for each serum (compared without spaces / half-spaces)
+_NAMES = {
+    "rage": ("خشم", "سرمخشم"), "tracker": ("ردیاب", "ردیابی"), "warrior": ("جنگاور", "جنگجو"),
+    "shell": ("پوسته", "سپر", "دفاع"), "heal": ("ترمیم", "درمان", "جون"), "slayer": ("غولکش", "غول", "باس"),
+}
+_KIND_OF = {name: kind for kind, names in _NAMES.items() for name in names}
+_OPEN = {"سرم", "سرمها", "سرم ها", "آزمایشگاه سرم", "ازمایشگاه سرم", "ساخت سرم", "پنل سرم", "آزمایشگاهسرم"}
+_FINISH = {"تکمیل سرم", "تموم کردن سرم", "تمام کردن سرم", "سرم الماس", "تکمیل سرمها", "تکمیل سرم ها"}
+_DELETE = {"حذف سرم", "حذف سرمها", "حذف سرم ها", "پاک کردن سرم"}
+
+
+def parse_word(norm: str) -> tuple[str, str | None, int] | None:
+    """A group message → (action, kind, count): «سرم» opens the lab, «ساخت سرم غول ۳» / «سرم
+    خشم» brew, «تکمیل سرم» finishes with diamonds, «حذف سرم» opens the delete screen. `norm` is
+    keywords.normalize()d (ASCII digits, half-spaces as spaces). None = not a serum word."""
+    if norm in _OPEN:
+        return "home", None, 0
+    if norm in _FINISH:
+        return "f", None, 0
+    if norm in _DELETE:
+        return "d", None, 0
+    for head in ("ساخت سرم ", "بساز سرم ", "سرم "):
+        if norm.startswith(head):
+            rest = norm[len(head):].split()
+            count = 1
+            if rest and rest[-1].isdigit():
+                count = max(1, min(int(rest.pop()), 8))
+            kind = _KIND_OF.get("".join(rest))
+            if kind:
+                return "b", kind, count
+            return ("unknown", None, 0) if head == "ساخت سرم " else None
+    return None
+
+
+async def group_word(update: Update, context: ContextTypes.DEFAULT_TYPE, action: str, kind: str | None, count: int) -> None:
+    """Answer a serum word in a group with the sender's own lab panel (locked to them)."""
+    from bot.gates import remember_card_owner
+
+    message = update.effective_message
+    if action == "unknown":
+        names = "، ".join(f"«{SR.KINDS[k]['label']}»" for k in SR.ORDER)
+        await message.reply_text(f"🧪 کدوم سرم؟ اسم‌ها: {names}\nمثال: <code>ساخت سرم غول</code> یا <code>سرم خشم ۲</code>",
+                                 parse_mode="HTML")
+        return
+    st, note = await run_db(_lab_sync, update.effective_user, "b" if action == "b" else "", kind, count if action == "b" else None)
+    st["group"] = True
+    if action == "f":
+        text, kb = _finish_ask(st)
+    elif action == "d":
+        text, kb = _del_render(st)
+    else:
+        text, kb = _lab_render(st, note)
+    sent = await send_screen(update, text, photo=_photo(st["level"]) if action in ("home", "b") else None,
+                             parse_mode="HTML", reply_markup=kb)
+    if sent is not None and getattr(sent, "message_id", None):
+        remember_card_owner(message.chat_id, sent.message_id, update.effective_user.id)
 
 
 # ── the backpack ────────────────────────────────────────────────────────────────
@@ -368,6 +524,6 @@ async def open_chests(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 def register(application) -> None:
-    application.add_handler(CallbackQueryHandler(serum_lab, pattern=r"^sr:(home|up|x|n|d|f|[buc]:[a-z]+|ug:[a-z]+|d[sy]:[a-z]+|dq:\d+:[a-z]+|fy:\d+)$"))
+    application.add_handler(CallbackQueryHandler(serum_lab, pattern=r"^sr:(home|up|x|n|d|f|da|dax|[buc]:[a-z]+|ug:[a-z]+|d[sy]:[a-z]+|dq:\d+:[a-z]+|d[kx]:[qs]:[a-z]+:\d+|fy:\d+)$"))
     application.add_handler(CallbackQueryHandler(backpack, pattern=r"^bp:home$"))
     application.add_handler(CallbackQueryHandler(open_chests, pattern=r"^rc:open:offer$"))

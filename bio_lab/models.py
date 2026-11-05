@@ -669,7 +669,8 @@ class SerumLab(models.Model):
     levels = models.JSONField(default=dict)           # {kind: 1..5}; a missing kind is level 1
     queue = models.JSONField(default=list)            # kinds waiting to be brewed, in order
     paid = models.JSONField(default=list)             # DNA paid for each queued serum (refunds), same order
-    brew_started_at = models.DateTimeField(null=True, blank=True)   # when the head of the queue started
+    brew_started_at = models.DateTimeField(null=True, blank=True)   # earliest start of what is brewing (legacy head)
+    starts = models.JSONField(default=list)           # unix start of each queued serum (they brew side by side)
     upgrade_kind = models.CharField(max_length=16, blank=True, default="")
     upgrade_ends_at = models.DateTimeField(null=True, blank=True)
     armed = models.JSONField(default=dict)            # {kind: {"lvl": n, "until": unix | None}}
