@@ -161,16 +161,26 @@ def _mini_render(st: dict, note: str = "", just: tuple[str, int] | None = None) 
         when = f" · آماده تا {_left(st['all_in'])}" if st["all_in"] else ""
         lines.append(f"⏳ در حال ساخت: {'، '.join(parts)}{when}")
     lines.append(f"🧴 قفسه <code>{st['stock_total']}/{st['capacity']}</code>")
+    # the same look as the yes / no of the diamond confirm: the action CONFIRM, «لغو» NAV
     row = []
+    if st.get("finish"):
+        row.append(btn(f"تموم کردن با {st['finish']['cost']} الماس", emoji_key="btn_confirm", style=CONFIRM, callback_data="sr:f"))
     if st["queue"]:
         if just and st["queue"].count(just[0]) >= 1:
             n = min(just[1], st["queue"].count(just[0]))
             row.append(btn("لغو", emoji_key="btn_cancel", style=NAV, callback_data=f"sr:xk:{just[0]}:{n}"))
         else:
             row.append(btn("لغو همه", emoji_key="btn_cancel", style=NAV, callback_data="sr:xq"))
-    if st.get("finish"):
-        row.append(btn(f"تموم کردن · {st['finish']['cost']} الماس", emoji_key="btn_instant", style=SHOP, callback_data="sr:f"))
-    return "\n".join(lines), InlineKeyboardMarkup([row] if row else [])
+    rows = [row] if row else []
+    # a full shelf: the ways to make room right under the message
+    if st["capacity"] and st["stock_total"] + len(st["queue"]) >= st["capacity"]:
+        shelf = [k for k in st["kinds"] if k["stock"]]
+        dels = [btn(f"حذف {k['label']} (×{k['stock']})", emoji_key="btn_delete", style=DANGER,
+                    callback_data=f"sr:dk:s:{k['key']}:1") for k in shelf]
+        rows += [dels[i:i + 2] for i in range(0, len(dels), 2)]
+        if st["stock_total"] + len(st["queue"]) > 1:
+            rows.append([btn("حذف همه", emoji_key="btn_delete", style=DANGER, callback_data="sr:da")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 def _del_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
@@ -234,7 +244,7 @@ def _pick_render(st: dict, where: str, kind: str, n: int) -> tuple[str, InlineKe
     if have > 1 and n < have:
         act.append(btn(f"همه ({have})", emoji_key="btn_delete", style=style, callback_data=f"sr:dx:{where}:{kind}:{have}"))
     rows.append(act)
-    rows.append([back_btn("sr:d", "حذف سرم")])
+    rows.append([back_btn("sr:mini", "برگشت") if st.get("group") else back_btn("sr:d", "حذف سرم")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -247,7 +257,7 @@ def _all_ask(st: dict) -> tuple[str, InlineKeyboardMarkup]:
     if st["stock_total"]:
         body.append(f"📦 <code>{st['stock_total']}</code> سرم روی قفسه دور ریخته می‌شه (بدون برگشت DNA).")
     body.append("<i>سرمی که برای کاری انتخاب کردی (📌) سر جاش می‌مونه.</i>")
-    return _ask_render("🗑 <b>حذف همه‌ی سرم‌ها</b>", body, "بله، همه رو حذف کن", "sr:dax", "sr:d")
+    return _ask_render("🗑 <b>حذف همه‌ی سرم‌ها</b>", body, "بله، همه رو حذف کن", "sr:dax", "sr:mini" if st.get("group") else "sr:d")
 
 
 def _ask_render(title: str, body: list[str], yes_label: str, yes_cb: str, no_cb: str) -> tuple[str, InlineKeyboardMarkup]:
@@ -408,7 +418,7 @@ async def serum_lab(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     act = action if action in ("b", "u", "c", "x", "ug", "n", "dq", "dy", "dx", "dax", "fy", "xk", "xq") else ""
     st, note = await run_db(_lab_sync, update.effective_user, act, kind, arg)
     st["group"] = _in_group(update)
-    if action in ("mini", "xk", "xq") or (st["group"] and action == "fy"):
+    if action in ("mini", "xk", "xq") or (st["group"] and action in ("fy", "dx", "dax")):
         text, kb = _mini_render(st, note)
     elif action in ("up", "ug"):
         text, kb = _up_render(st, note)

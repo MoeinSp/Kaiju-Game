@@ -361,7 +361,10 @@ def brew(user: User, kind: str, count: int = 1) -> dict:
             raise GameError(f"سرم «{KINDS[kind]['label']}» از سطح {KINDS[kind]['unlock']} آزمایشگاه سرم باز می‌شه.")
         room = CAPACITY[min(level, MAX_LEVEL)] - sum((row.stock or {}).values()) - len(row.queue)
         if room <= 0:
-            raise GameError("قفسه و صف ساخت پره. اول یه سرم مصرف کن یا ساختمون رو ارتقا بده.")
+            cap = CAPACITY[min(level, MAX_LEVEL)]
+            more = "" if level >= MAX_LEVEL else " یا آزمایشگاه سرم رو ارتقا بده تا جاش بیشتر شه"
+            brewing = "، با سرم‌های در حال ساخت" if row.queue else ""
+            raise GameError(f"قفسه پره ({cap} از {cap}{brewing}). یه سرم مصرف کن یا حذفش کن{more}.")
         count = min(count, room)
         cost = brew_cost(user) * count
         if user.dna_fragments < cost:

@@ -15,6 +15,8 @@ plain keyword table — none of these phrases is a keyword there.
 
 from __future__ import annotations
 
+import re
+
 from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import ApplicationHandlerStop, ContextTypes, TypeHandler
 
@@ -355,14 +357,69 @@ async def _campaign(update, context, _arg):
     await campaign_panel(update, context)
 
 
-def _peek_sync(target_id: int, chat):
+_ANON_ADMIN_ID = 1087968824   # @GroupAnonymousBot — an anonymous admin's messages come from it
+_SCOPED_ID = re.compile(r"^(?:grp|grpa):[a-z_]+:(\d+)(?::|$)|^enr:ask:(\d+)$")
+
+
+def _owner_of_bot_message(chat_id: int, rep) -> int | None:
+    """Whose card a message of the bot is: the owners recorded when it was sent, else the user
+    id the card's own buttons carry (`grp:creature:<id>`, `enr:ask:<id>`, …)."""
+    from bot.gates import _CARD_OWNERS
+
+    key = (chat_id, rep.message_id)
+    if key in _PANELS or key in _CARD_OWNERS:
+        return _PANELS.get(key) or _CARD_OWNERS.get(key)
+    markup = getattr(rep, "reply_markup", None)
+    for row in getattr(markup, "inline_keyboard", None) or ():
+        for b in row:
+            m = _SCOPED_ID.search(getattr(b, "callback_data", None) or "")
+            if m:
+                return int(m.group(1) or m.group(2))
+    for ent in (getattr(rep, "entities", None) or ()) + (getattr(rep, "caption_entities", None) or ()):
+        if ent.type == "text_mention" and ent.user is not None and not ent.user.is_bot:
+            return ent.user.id
+    return None
+
+
+def _peek_target(message, bot):
+    """→ (user id | None, @username | None, why-not text | None) for «هیولاش»: a reply to a
+    player, a reply to one of the bot's cards (its owner), or «هیولاش @someone»."""
+    for ent in message.entities or ():
+        if ent.type == "text_mention" and ent.user is not None and not ent.user.is_bot:
+            return ent.user.id, None, None
+        if ent.type == "mention":
+            name = message.text[ent.offset + 1:ent.offset + ent.length]
+            if name.lower() != (bot.username or "").lower():
+                return None, name, None
+    rep = message.reply_to_message
+    if rep is None or getattr(rep, "forum_topic_created", None) is not None:
+        return None, None, "👀 روی پیام یه بازیکن ریپلای کن و بنویس «هیولاش» (یا «هیولاش @آیدی»)."
+    if getattr(rep, "sender_chat", None) is not None or getattr(rep.from_user, "id", None) == _ANON_ADMIN_ID:
+        return None, None, "این پیام به اسم گروه/کانال فرستاده شده؛ نمی‌شه فهمید مال کدوم بازیکنه."
+    sender = rep.from_user
+    if sender is None:
+        return None, None, "👀 روی پیام یه بازیکن ریپلای کن و بنویس «هیولاش»."
+    if sender.id == bot.id:
+        owner = _owner_of_bot_message(message.chat_id, rep)
+        if owner is None:
+            return None, None, "این پیام ربات مال بازیکن خاصی نیست — روی پیام خود بازیکن ریپلای کن."
+        return owner, None, None
+    if sender.is_bot:
+        return None, None, "ربات‌ها هیولا ندارن 🙂 روی پیام یه بازیکن ریپلای کن."
+    return sender.id, None, None
+
+
+def _peek_sync(target_id: int | None, chat, username: str | None = None):
     """The data of group_words' «هیولا» card for ANOTHER player — read without
     get_or_create_user, which would rewrite their name from a made-up Telegram user."""
     from bio_lab.models import User
     from bio_lab.repository import get_active_creature, get_or_create_group
     from game.equipment import get_equipped_items, slot_loadout
 
-    user = User.objects.filter(id=target_id).first()
+    if target_id is not None:
+        user = User.objects.filter(id=target_id).first()
+    else:
+        user = User.objects.filter(username__iexact=username).order_by("-id").first()
     if user is None:
         return None
     creature = get_active_creature(user)
@@ -378,12 +435,15 @@ async def _peek(update, context, _arg):
     from bot.handlers import group_words as GW
 
     message = update.effective_message
-    target = getattr(getattr(message, "reply_to_message", None), "from_user", None)
-    if target is None or target.is_bot:
-        return await message.reply_text("👀 روی پیام یه بازیکن ریپلای کن و بنویس «هیولاش».")
-    data = await run_db(_peek_sync, target.id, message.chat)
-    if data is None or not data.get("creature"):
-        return await message.reply_text("این بازیکن هنوز هیولایی توی بازی نداره.")
+    target_id, username, why = _peek_target(message, context.bot)
+    if why:
+        return await message.reply_text(why)
+    data = await run_db(_peek_sync, target_id, message.chat, username)
+    if data is None:
+        who = f"@{username}" if username else "این بازیکن"
+        return await message.reply_text(f"{who} هنوز توی بازی نیست.")
+    if not data.get("creature"):
+        return await message.reply_text("این بازیکن هنوز هیولای فعالی نداره.")
     text, _kb = GW._render("creature", data)
     from game.media import get_creature_image_path
 
