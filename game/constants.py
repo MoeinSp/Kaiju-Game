@@ -175,8 +175,12 @@ def base_power_cap(element=None) -> int:
 
 
 def power_cap(creature) -> int:
-    """This creature's power ceiling: its element's base cap, raised by its black-form level."""
-    return (base_power_cap(getattr(creature, "element", None))
+    """This creature's power ceiling: its element's base cap, raised by its black-form level.
+    The crystal/plasma ceiling is a PLAYER's reward only: the unsaved, ownerless stand-ins the game
+    fights with (arena bots, Mugen guardians, hunt targets, campaign / idle-dungeon enemies) keep
+    MAX_KAIJU_POWER even when they roll crystal or plasma, so no opponent got harder."""
+    element = getattr(creature, "element", None) if getattr(creature, "owner_id", None) else None
+    return (base_power_cap(element)
             + SHADOW_POWER_PER_LEVEL * max(0, int(getattr(creature, "shadow_level", 0) or 0)))
 
 
