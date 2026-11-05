@@ -145,10 +145,32 @@ def _lab_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     if st["queue"] or st["stock_total"]:
         manage.append(btn("حذف سرم", emoji_key="btn_delete", style=NAV, callback_data="sr:d"))
     rows.append(manage)
-    rows.append([btn("اعلان آماده‌شدن: " + ("روشن" if st.get("notify") else "خاموش"), emoji_key="btn_notify", style=NAV, callback_data="sr:n")])
     if not st.get("group"):
+        rows.append([btn("اعلان آماده‌شدن: " + ("روشن" if st.get("notify") else "خاموش"), emoji_key="btn_notify", style=NAV, callback_data="sr:n")])
         rows.append([btn("انبار", emoji_key="btn_backpack", style=SHOP, callback_data="bp:home"), back_btn("menu:buildings", "ساختمان‌ها")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _mini_render(st: dict, note: str = "", just: tuple[str, int] | None = None) -> tuple[str, InlineKeyboardMarkup]:
+    """The small group answer to «سرم غول ۲»: what happened, one status line, and only «لغو» and
+    «تموم کردن با الماس». `just` = (kind, n) brewed by this word — «لغو» takes back only those."""
+    lines = [note] if note else []
+    labels = {k["key"]: k["label"] for k in st["kinds"]}
+    if st["queue"]:
+        parts = [f"{labels[k]}" + (f" ×{n}" if n > 1 else "") for k, n in _counts(st["queue"])]
+        when = f" · آماده تا {_left(st['all_in'])}" if st["all_in"] else ""
+        lines.append(f"⏳ در حال ساخت: {'، '.join(parts)}{when}")
+    lines.append(f"🧴 قفسه <code>{st['stock_total']}/{st['capacity']}</code>")
+    row = []
+    if st["queue"]:
+        if just and st["queue"].count(just[0]) >= 1:
+            n = min(just[1], st["queue"].count(just[0]))
+            row.append(btn("لغو", emoji_key="btn_cancel", style=NAV, callback_data=f"sr:xk:{just[0]}:{n}"))
+        else:
+            row.append(btn("لغو همه", emoji_key="btn_cancel", style=NAV, callback_data="sr:xq"))
+    if st.get("finish"):
+        row.append(btn(f"تموم کردن · {st['finish']['cost']} الماس", emoji_key="btn_instant", style=SHOP, callback_data="sr:f"))
+    return "\n".join(lines), InlineKeyboardMarkup([row] if row else [])
 
 
 def _del_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
@@ -248,13 +270,15 @@ def _discard_ask(st: dict, kind: str) -> tuple[str, InlineKeyboardMarkup]:
 def _finish_ask(st: dict) -> tuple[str, InlineKeyboardMarkup]:
     f = st.get("finish")
     if not f:
-        return _lab_render(st, "⚠️ چیزی نیست که با الماس تموم بشه (صف خالیه یا قفسه پره).")
+        msg = "⚠️ چیزی نیست که با الماس تموم بشه (صف خالیه یا قفسه پره)."
+        return _mini_render(st, msg) if st.get("group") else _lab_render(st, msg)
     body = [f"⚗️ هر <code>{f['count']}</code> سرم با هم همین الان آماده می‌شن، به‌جای {_left(f['left'])} صبر.",
             f"{get_emoji('diamond')} هزینه: <code>{f['cost']}</code> الماس (هر سرم حداکثر {f['per_serum']}، کمتر وقتی ساختش جلو رفته)"
             f" · داری: <code>{st.get('diamonds', 0):,}</code>"]
     if f["count"] < len(st["queue"]):
         body.append("<i>بقیه‌ی صف جا روی قفسه نداره و منتظر می‌مونه.</i>")
-    return _ask_render("⚡ <b>تموم کردن همه با الماس</b>", body, f"بله، {f['cost']} الماس", f"sr:fy:{f['cost']}", "sr:home")
+    return _ask_render("⚡ <b>تموم کردن همه با الماس</b>", body, f"بله، {f['cost']} الماس", f"sr:fy:{f['cost']}",
+                       "sr:mini" if st.get("group") else "sr:home")
 
 
 def _up_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
@@ -288,11 +312,22 @@ def _up_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
 def _lab_sync(tg_user, action: str, kind: str | None, arg: int | None = None):
     user, _ = get_or_create_user(tg_user)
     note = ""
+    brewed = 0
     try:
         if action == "b":
             r = SR.brew(user, kind, arg or 1)
+            brewed = r["queued"]
             many = f"<code>{r['queued']}</code> تا " if r["queued"] > 1 else ""
             note = f"⚗️ {many}«{SR.KINDS[kind]['label']}» رفت توی ساخت · <code>{r['cost']:,}</code> DNA"
+        elif action == "xk":   # arg = n — take back the serums a group word just queued
+            r = SR.remove_kind(user, kind, arg)
+            note = f"↩️ <code>{r['count']}</code> «{r['label']}» لغو شد · <code>{r['refund']:,}</code> DNA برگشت"
+        elif action == "xq":   # the whole queue, DNA back
+            refund = n_all = 0
+            for k in dict.fromkeys(SR.state(user)["queue"]):
+                r = SR.remove_kind(user, k, 50)
+                refund += r["refund"]; n_all += r["count"]
+            note = f"↩️ <code>{n_all}</code> سرم لغو شد · <code>{refund:,}</code> DNA برگشت" if n_all else "صفی برای لغو نبود."
         elif action == "u":
             r = SR.use(user, kind)
             note = f"✅ «{r['label']}» · {r['note']}"
@@ -339,6 +374,7 @@ def _lab_sync(tg_user, action: str, kind: str | None, arg: int | None = None):
     user.refresh_from_db(fields=["diamonds"])
     st = SR.state(user)
     st["diamonds"] = user.diamonds
+    st["brewed"] = brewed
     return st, note
 
 
@@ -364,13 +400,17 @@ async def serum_lab(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         arg = int(parts[2])
     elif action in ("dk", "dx"):   # sr:dk:<q|s>:<kind>:<n>
         arg, parts = (parts[2], int(parts[4])), [*parts[:2], parts[3]]
+    elif action == "xk":           # sr:xk:<kind>:<n>
+        arg = int(parts[3])
     kind = parts[2] if len(parts) > 2 and parts[2] in SR.KINDS else None
     if q and q.data.startswith("sr:"):   # «menu:serums» was answered by the menu router
         await q.answer()
-    act = action if action in ("b", "u", "c", "x", "ug", "n", "dq", "dy", "dx", "dax", "fy") else ""
+    act = action if action in ("b", "u", "c", "x", "ug", "n", "dq", "dy", "dx", "dax", "fy", "xk", "xq") else ""
     st, note = await run_db(_lab_sync, update.effective_user, act, kind, arg)
     st["group"] = _in_group(update)
-    if action in ("up", "ug"):
+    if action in ("mini", "xk", "xq") or (st["group"] and action == "fy"):
+        text, kb = _mini_render(st, note)
+    elif action in ("up", "ug"):
         text, kb = _up_render(st, note)
     elif action in ("d", "dq", "dy", "dx", "dax"):
         text, kb = _del_render(st, note)
@@ -441,9 +481,11 @@ async def group_word(update: Update, context: ContextTypes.DEFAULT_TYPE, action:
         text, kb = _finish_ask(st)
     elif action == "d":
         text, kb = _del_render(st)
+    elif action == "b":
+        text, kb = _mini_render(st, note, just=(kind, st["brewed"]) if st["brewed"] else None)
     else:
         text, kb = _lab_render(st, note)
-    sent = await send_screen(update, text, photo=_photo(st["level"]) if action in ("home", "b") else None,
+    sent = await send_screen(update, text, photo=_photo(st["level"]) if action == "home" else None,
                              parse_mode="HTML", reply_markup=kb)
     if sent is not None and getattr(sent, "message_id", None):
         remember_card_owner(message.chat_id, sent.message_id, update.effective_user.id)
@@ -524,6 +566,6 @@ async def open_chests(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 def register(application) -> None:
-    application.add_handler(CallbackQueryHandler(serum_lab, pattern=r"^sr:(home|up|x|n|d|f|da|dax|[buc]:[a-z]+|ug:[a-z]+|d[sy]:[a-z]+|dq:\d+:[a-z]+|d[kx]:[qs]:[a-z]+:\d+|fy:\d+)$"))
+    application.add_handler(CallbackQueryHandler(serum_lab, pattern=r"^sr:(home|up|x|n|d|f|da|dax|mini|xq|xk:[a-z]+:\d+|[buc]:[a-z]+|ug:[a-z]+|d[sy]:[a-z]+|dq:\d+:[a-z]+|d[kx]:[qs]:[a-z]+:\d+|fy:\d+)$"))
     application.add_handler(CallbackQueryHandler(backpack, pattern=r"^bp:home$"))
     application.add_handler(CallbackQueryHandler(open_chests, pattern=r"^rc:open:offer$"))
