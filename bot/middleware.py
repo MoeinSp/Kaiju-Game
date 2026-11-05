@@ -147,7 +147,8 @@ def _join_gate_keyboard(missing_channels) -> InlineKeyboardMarkup:
         url = ch.invite_link or (f"https://t.me/{ch.username}" if ch.username else None)
         if url is None:
             continue
-        label = f"🔵 عضویت در {ch.title or ('@' + ch.username if ch.username else 'کانال')}"
+        name = ch.title or ("@" + ch.username if ch.username else "کانال")
+        label = f"🔵 استارت {name}" if ch.kind == "bot" else f"🔵 عضویت در {name}"
         rows.append([btn(label, emoji_key="btn_join", style=PRIMARY, url=url)])
     rows.append([btn("بررسی مجدد عضویت", emoji_key="btn_recheck", style=CONFIRM, callback_data=FORCE_JOIN_CHECK_CALLBACK)])
     return InlineKeyboardMarkup(rows)
@@ -166,21 +167,23 @@ def _reward_summary(channel) -> str:
 
 
 def _join_gate_text(missing_channels) -> str:
-    has_group = any(getattr(ch, "kind", "channel") == "group" for ch in missing_channels)
-    where = "کانال‌ها و گروه‌ها" if has_group else "کانال‌ها"
-    lines = [
-        f"📡 <b>نیازمند عضویت در {where}</b>",
-        f"برای استفاده از ربات و دریافت پاداش، ابتدا باید در تمام {where}ی زیر عضو شوید:",
-        "",
-    ]
+    kinds = {getattr(ch, "kind", "channel") for ch in missing_channels}
+    if kinds == {"bot"}:
+        head, body = "🤖 <b>نیازمند استارت ربات</b>", "برای استفاده از ربات و دریافت پاداش، اول ربات‌های زیر رو استارت کن:"
+    else:
+        where = "کانال‌ها و گروه‌ها" if "group" in kinds else "کانال‌ها"
+        tail = " (و ربات‌ها رو استارت کنید)" if "bot" in kinds else ""
+        head, body = f"📡 <b>نیازمند عضویت در {where}</b>", f"برای استفاده از ربات و دریافت پاداش، ابتدا باید در تمام {where}ی زیر عضو شوید{tail}:"
+    lines = [head, body, ""]
     for ch in missing_channels:
         name = ch.title or (f"@{ch.username}" if ch.username else "کانال")
-        icon = "👥" if getattr(ch, "kind", "channel") == "group" else "📢"
-        lines.append(f"• {icon} <b>{name}</b>")
+        kind = getattr(ch, "kind", "channel")
+        icon = {"group": "👥", "bot": "🤖"}.get(kind, "📢")
+        lines.append(f"• {icon} <b>{name}</b>" + (" · <i>استارت کن</i>" if kind == "bot" else ""))
         for amount, emo in ((ch.reward_coins, "coin"), (ch.reward_dna, "dna"), (ch.reward_diamonds, "diamond")):
             if amount:
                 lines.append(f"   ◦ {get_emoji(emo)} <code>{amount:,}</code>")
-    lines += ["", "📌 پس از عضویت در تمامی موارد، روی دکمه «بررسی مجدد عضویت» کلیک کنید."]
+    lines += ["", "📌 پس از عضویت (و استارت ربات‌ها) روی دکمه «بررسی مجدد عضویت» کلیک کنید."]
     return "\n".join(lines)
 
 
@@ -230,6 +233,12 @@ async def enforce_force_join(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     missing = []
     for ch in channels:
+        if ch.kind == "bot":   # «استارت اجباری ربات»: that bot's own API answers
+            from game.force_join import bot_started
+
+            if await bot_started(ch, user.id) is False:
+                missing.append(ch)
+            continue
         try:
             member = await context.bot.get_chat_member(ch.chat_id, user.id)
         except TelegramError:

@@ -3018,11 +3018,16 @@ def _parse_chat_identifier(raw: str):
 
 
 def _fj_icon(channel) -> str:
-    return "👥" if getattr(channel, "kind", "channel") == "group" else "📡"
+    return {"group": "👥", "bot": "🤖"}.get(getattr(channel, "kind", "channel"), "📡")
 
 
 def _fj_kind_label(channel) -> str:
-    return "گروه" if getattr(channel, "kind", "channel") == "group" else "کانال"
+    return {"group": "گروه", "bot": "ربات"}.get(getattr(channel, "kind", "channel"), "کانال")
+
+
+def _mask_key(key: str | None) -> str:
+    key = key or ""
+    return f"{key[:4]}…{key[-4:]}" if len(key) > 10 else "****"
 
 
 def _channel_card(channel) -> str:
@@ -3037,6 +3042,14 @@ def _channel_card(channel) -> str:
     reward = f"🎁 {' + '.join(reward_parts)}" if reward_parts else f"{get_emoji('gift')} بدون جایزه"
     handle = f"@{channel.username}" if channel.username else str(channel.chat_id)
     link_line = f"🔗 لینک: {channel.invite_link}" if channel.invite_link else "🔗 لینک: <i>تنظیم نشده</i>"
+    if getattr(channel, "kind", "channel") == "bot":
+        return (
+            f"🤖 <b>{channel.title or handle}</b> (ربات · {handle})\n"
+            f"{limit}\n{reward}\n{link_line}\n"
+            f"🌐 API: <code>{channel.api_url}</code>\n🔑 کلید: <code>{_mask_key(channel.api_key)}</code>\n\n"
+            "<i>بازیکن تا اون ربات رو استارت نکنه (و بلاکش نکرده باشه) نمی‌تونه بازی کنه. اگه API جواب نده، "
+            "کسی پشت در نمی‌مونه. با «🔗 لینک عضویت» می‌تونی لینک استارت با کد دعوت بذاری.</i>"
+        )
     return (
         f"{_fj_icon(channel)} <b>{channel.title or handle}</b> ({_fj_kind_label(channel)} · {handle})\n"
         f"{limit}\n{reward}\n{link_line}\n\n"
@@ -3083,6 +3096,7 @@ async def force_join_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 [btn(f"{_fj_icon(ch)} {ch.title or handle}", style=LIST, callback_data=f"fj_manage:{ch.id}")]
             )
     rows.append([btn("افزودن گروه/کانال جدید", emoji_key="btn_confirm", style=CONFIRM, callback_data="fj_add")])
+    rows.append([btn("افزودن ربات (استارت اجباری با API)", emoji_key="btn_confirm", style=CONFIRM, callback_data="fj_addbot")])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
     kb = InlineKeyboardMarkup(rows)
     if update.callback_query:
@@ -3106,6 +3120,25 @@ async def force_join_add_callback(update: Update, context: ContextTypes.DEFAULT_
         "<code>@username</code> یا لینکِ <code>t.me/...</code> رو بفرست.\n\n"
         "<i>بات باید عضو/ادمینِ اون گروه یا کانال باشه تا بتونه عضویت رو چک کنه. "
         "برای گروهِ خصوصی، بعد از افزودن «🔗 لینک عضویت» رو هم ست کن.</i>",
+        parse_mode="HTML",
+    )
+
+
+async def force_join_add_bot_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    context.user_data[AWAITING_FORCE_JOIN_KEY] = {"action": "add_bot"}
+    await query.answer()
+    await safe_edit_message_text(query,
+        "🤖 <b>افزودن ربات به جوین اجباری</b>\n\n"
+        "بازیکن تا اون ربات رو استارت نکنه نمی‌تونه بازی کنه؛ ربات از API خودِ اون ربات می‌پرسه.\n\n"
+        "این سه تا رو توی <b>یه پیام، هر کدوم یه خط</b> بفرست:\n"
+        "1️⃣ یوزرنیم ربات: <code>@SomeBot</code>\n"
+        "2️⃣ آدرس API: <code>https://example.com/api/v1/users/started</code>\n"
+        "3️⃣ کلید API\n\n"
+        "<i>قبل از ذخیره یه بار API رو با آی‌دی خودت تست می‌کنم. بعد از فرستادن، پیامت رو پاک کن تا کلید توی چت نمونه.</i>",
         parse_mode="HTML",
     )
 
@@ -3281,6 +3314,45 @@ async def capture_force_join_reply(update: Update, context: ContextTypes.DEFAULT
             f"{get_emoji('confirm')} {_fj_kind_label(channel)} اضافه شد!\n\n" + _channel_card(channel),
             parse_mode="HTML",
             reply_markup=_channel_manage_keyboard(channel.id),
+        )
+        return
+
+    if action == "add_bot":
+        import re
+
+        from game.force_join import add_bot, test_bot_api
+
+        lines = [ln.strip() for ln in (message.text or "").splitlines() if ln.strip()]
+        username = next((m.group(1) for ln in lines
+                         if (m := re.fullmatch(r"(?:https?://)?(?:t\.me/|@)([A-Za-z0-9_]{4,}[Bb][Oo][Tt])/?", ln))), None)
+        api_url = next((ln for ln in lines if re.fullmatch(r"https?://\S+", ln) and "t.me/" not in ln), None)
+        api_key = next((ln for ln in lines if re.fullmatch(r"[A-Za-z0-9_\-]{16,}", ln)), None)
+        if not (username and api_url and api_key):
+            context.user_data[AWAITING_FORCE_JOIN_KEY] = awaiting
+            missing = [n for n, v in (("یوزرنیم ربات (@...bot)", username), ("آدرس API (https://...)", api_url),
+                                       ("کلید API", api_key)) if not v]
+            await message.reply_text(f"{get_emoji('warning')} اینا رو پیدا نکردم: " + "، ".join(missing)
+                                     + "\nهر سه تا رو توی یه پیام، هر کدوم یه خط بفرست.")
+            return
+        err = await test_bot_api(api_url, api_key, update.effective_user.id)
+        if err:
+            context.user_data[AWAITING_FORCE_JOIN_KEY] = awaiting
+            await message.reply_text(f"{get_emoji('warning')} API جواب درست نداد: {html.escape(str(err))}\n"
+                                     "آدرس و کلید رو چک کن و دوباره بفرست.", parse_mode="HTML")
+            return
+        title = f"@{username}"
+        try:
+            title = (await context.bot.get_chat(f"@{username}")).first_name or title
+        except Exception:  # noqa: BLE001 — the name is cosmetic; «@username» will do
+            pass
+        channel = await run_db(add_bot, username, title, api_url, api_key)
+        try:   # the key should not sit in the chat
+            await message.delete()
+        except TelegramError:
+            pass
+        await message.reply_text(
+            f"{get_emoji('confirm')} ربات اضافه شد و API تست شد!\n\n" + _channel_card(channel),
+            parse_mode="HTML", reply_markup=_channel_manage_keyboard(channel.id),
         )
         return
 
@@ -6329,6 +6401,7 @@ def register(application) -> None:
         CallbackQueryHandler(set_emoji_key_callback, pattern=f"^{EMOJI_KEY_CALLBACK_PREFIX}")
     )
     application.add_handler(CallbackQueryHandler(force_join_add_callback, pattern=r"^fj_add$"))
+    application.add_handler(CallbackQueryHandler(force_join_add_bot_callback, pattern=r"^fj_addbot$"))
     application.add_handler(CallbackQueryHandler(force_join_manage_callback, pattern=r"^fj_manage:"))
     application.add_handler(CallbackQueryHandler(force_join_duration_callback, pattern=r"^fj_dur:"))
     application.add_handler(CallbackQueryHandler(force_join_duration_quick_callback, pattern=r"^fj_durq:"))

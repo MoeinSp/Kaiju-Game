@@ -1442,8 +1442,8 @@ class RequiredChannel(models.Model):
     bot.middleware.enforce_force_join). Added by forwarding a message from the
     channel — chat_id/username/title come straight from that forward, never typed."""
 
-    chat_id = models.BigIntegerField(unique=True)  # telegram channel/group id
-    kind = models.CharField(max_length=16, default="channel")  # "channel" or "group"
+    chat_id = models.BigIntegerField(unique=True)  # telegram channel/group id (a «bot» row: a stable synthetic id)
+    kind = models.CharField(max_length=16, default="channel")  # "channel", "group" or "bot"
     username = models.CharField(max_length=64, null=True, blank=True)  # without '@'
     title = models.CharField(max_length=128, null=True, blank=True)
     invite_link = models.CharField(max_length=256, null=True, blank=True)
@@ -1452,6 +1452,10 @@ class RequiredChannel(models.Model):
     reward_diamonds = models.IntegerField(default=0)
     expires_at = models.DateTimeField(null=True, blank=True)  # null = permanent
     created_at = models.DateTimeField(auto_now_add=True)
+    # kind «bot»: «has this player started that other bot?» comes from ITS api (game/force_join.py
+    # bot_started) — GET <api_url>?user_id=<id> with the X-API-Key header, set in the owner panel
+    api_url = models.CharField(max_length=256, null=True, blank=True)
+    api_key = models.CharField(max_length=128, null=True, blank=True)
 
     def __str__(self) -> str:
         return self.title or (f"@{self.username}" if self.username else str(self.chat_id))
