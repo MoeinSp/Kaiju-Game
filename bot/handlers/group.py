@@ -1,9 +1,11 @@
 import html
+import re
 import asyncio
 import datetime
 import os
 import secrets
 import time
+import types
 
 from django.db import transaction
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -1072,6 +1074,9 @@ def _raid_attack_view(creature, boss, dmg, defeated, completed_missions, reward_
 
 
 async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # «اتک @آیدی» / «اتک 123456» — a PvP challenge aimed by id (target must be in this group)
+    if await attack_by_handle(update, context):
+        return
     # replying to another player's message turns «اتک» into a PvP challenge instead
     # of a hit on the raid boss.
     reply = update.message.reply_to_message
@@ -1396,6 +1401,65 @@ def _left_block_text(name: str, left_at) -> str:
         f"⛔️ به کسی که بیش از <b>{group_presence.LEFT_GRACE_HOURS} ساعت</b> از گروه رفته نمی‌شه اتک داد.",
         "<i>💡 اگه دوباره به گروه برگرده، باز هم می‌تونی بهش حمله کنی.</i>",
     ])
+
+
+_ATTACK_ID = re.compile(r"^اتک\s+@?(\d{4,15})$")
+
+
+def _attack_target_of(message, bot) -> tuple[int | None, str | None] | None:
+    """«اتک @username» / «اتک 123456789» (and a text-mention «اتک علی») → (user id, @name);
+    None when the message isn't an aimed «اتک»."""
+    from game import keywords
+
+    text = (message.text or "").strip()
+    if not text:
+        return None
+    first = text.split()[0]
+    if keywords.normalize(first) != "اتک":
+        return None
+    for ent in message.entities or ():
+        if ent.type == "text_mention" and ent.user is not None:
+            return ent.user.id, None
+        if ent.type == "mention" and ent.offset > 0:
+            name = message.parse_entity(ent).lstrip("@")
+            if name.lower() != (bot.username or "").lower():
+                return None, name
+    m = _ATTACK_ID.match(keywords.normalize(text))   # normalize() folds Persian digits too
+    if m is not None:
+        return int(m.group(1)), None
+    return None
+
+
+def _attack_target_sync(target_id, username):
+    q = User.objects.filter(id=target_id) if target_id is not None else User.objects.filter(username__iexact=username)
+    u = q.order_by("-id").first()
+    if u is None:
+        return None
+    return u.id, (u.first_name or u.username or "بازیکن")
+
+
+async def attack_by_handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """«اتک @آیدی» / «اتک آیدی‌عددی»: the reply-attack aimed by id. The target has to be in
+    THIS group right now — an id must not reach players of other groups."""
+    message = update.effective_message
+    aim = _attack_target_of(message, context.bot)
+    if aim is None:
+        return False
+    target_id, username = aim
+    found = await run_db(_attack_target_sync, target_id, username)
+    if found is None:
+        who = f"@{html.escape(username)}" if username else f"<code>{target_id}</code>"
+        await message.reply_text(f"🔍 بازیکن {who} توی بازی پیدا نشد.", parse_mode="HTML")
+        return True
+    tid, name = found
+    if tid == update.effective_user.id:
+        await message.reply_text("🙅 نمی‌تونی به خودت حمله کنی!")
+        return True
+    if await _live_left(context.bot, update.effective_chat.id, tid) is not False:
+        await message.reply_text("🚪 این بازیکن عضو این گروه نیست — فقط به بازیکن‌های همین گروه می‌شه اتک داد.")
+        return True
+    await _pvp_attack_prompt(update, context, types.SimpleNamespace(id=tid, is_bot=False, full_name=name))
+    return True
 
 
 async def _pvp_attack_prompt(update, context, target_tg) -> None:

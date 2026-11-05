@@ -319,7 +319,7 @@ _CMD_CATS: dict[str, dict] = {
     "fight": {"btn": "نبرد", "emoji": "battle", "title": "نبرد", "items": [
         ("شکار", "شکار وحشی (+ شکار خودکار)"),
         ("احضار", "احضار باسِ رید اتحاد"),
-        ("اتک", "زدنِ باس؛ یا ریپلای روی بازیکن = حمله بهش"),
+        ("اتک", "زدنِ باس؛ ریپلای روی بازیکن یا «اتک @آیدی» / «اتک آیدی‌عددی» = حمله بهش"),
         ("کاروان", "اعزام ۲ تا ۴ نفره — روزی یک‌بار"),
         ("برج", "برج موگن"),
         ("تیم", "تیم نبرد"),
@@ -377,7 +377,7 @@ _CMD_CATS: dict[str, dict] = {
         ("جشنواره", "جشنواره‌ی ماهانه"),
     ]},
     "rank": {"btn": "گروه", "emoji": "trophy", "title": "جایگاه در گروه", "items": [
-        ("هیولاش", "ریپلای روی یه بازیکن (یا کارتش) · «هیولاش @آیدی» هم می‌شه"),
+        ("هیولاش", "ریپلای روی یه بازیکن (یا کارتش) · «هیولاش @آیدی» یا «هیولاش آیدی‌عددی» هم می‌شه"),
         ("جدول", "برترین‌های گروه"),
         ("محافظ", "محافظ فعلی گروه"),
         ("تسخیر", "چالش بده و محافظ شو"),
@@ -1623,6 +1623,10 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         from bot.handlers.alliance_recruit import group_invite
 
         await group_invite(update, context)
+        return
+
+    # «اتک @آیدی» / «اتک 123456» (the plain word with an id after it isn't a keyword)
+    if await group_handlers.attack_by_handle(update, context):
         return
 
     action = keywords.match(message.text)

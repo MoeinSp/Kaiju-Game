@@ -96,6 +96,9 @@ def parse(norm: str) -> tuple[str, str | None] | None:
     key = norm.replace(" ", "")
     if key in WORDS:
         return WORDS[key], None
+    m = re.match(r"^(\S+)\s+(\d{4,15})$", norm)
+    if m and WORDS.get(m.group(1)) == "peek":
+        return "peek", m.group(2)
     for head in ("سیاهچال", "ورود"):
         if key.startswith(head) and key[len(head):] in {k.replace(" ", "") for k in _DIFF}:
             return "dungeon_start", _DIFF.get(key[len(head):], "endless")
@@ -388,7 +391,7 @@ def _peek_target(message, bot):
         if ent.type == "text_mention" and ent.user is not None and not ent.user.is_bot:
             return ent.user.id, None, None
         if ent.type == "mention":
-            name = message.text[ent.offset + 1:ent.offset + ent.length]
+            name = message.parse_entity(ent).lstrip("@")
             if name.lower() != (bot.username or "").lower():
                 return None, name, None
     rep = message.reply_to_message
@@ -435,7 +438,10 @@ async def _peek(update, context, _arg):
     from bot.handlers import group_words as GW
 
     message = update.effective_message
-    target_id, username, why = _peek_target(message, context.bot)
+    if _arg:   # «هیولاش 123456789»
+        target_id, username, why = int(_arg), None, None
+    else:
+        target_id, username, why = _peek_target(message, context.bot)
     if why:
         return await message.reply_text(why)
     data = await run_db(_peek_sync, target_id, message.chat, username)
