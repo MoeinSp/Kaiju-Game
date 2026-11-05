@@ -157,9 +157,27 @@ SHADOW_MAX_LEVEL = 5
 SHADOW_POWER_PER_LEVEL = 200
 
 
+# 🔮 crystal / ⚛️ plasma (2026-11-05): the transfer-proof elements — harder to max (research ×2,
+# no trading), so their body parts reach higher (see part_upgrade_cap) and their ceiling sits above
+# the rest. A fully-maxed mythic 5★ with 180-level parts measured 13,341 on prod; rounded down like
+# MAX_KAIJU_POWER so it is reachable a little before every last level.
+PREMIUM_ELEMENTS = ("crystal", "plasma")
+PREMIUM_MAX_POWER = 13000
+
+
+def is_premium_element(element) -> bool:
+    return element in PREMIUM_ELEMENTS
+
+
+def base_power_cap(element=None) -> int:
+    """The ceiling before the black form: PREMIUM_MAX_POWER for crystal/plasma, else MAX_KAIJU_POWER."""
+    return PREMIUM_MAX_POWER if is_premium_element(element) else MAX_KAIJU_POWER
+
+
 def power_cap(creature) -> int:
-    """This creature's power ceiling: MAX_KAIJU_POWER, raised by its black-form level."""
-    return MAX_KAIJU_POWER + SHADOW_POWER_PER_LEVEL * max(0, int(getattr(creature, "shadow_level", 0) or 0))
+    """This creature's power ceiling: its element's base cap, raised by its black-form level."""
+    return (base_power_cap(getattr(creature, "element", None))
+            + SHADOW_POWER_PER_LEVEL * max(0, int(getattr(creature, "shadow_level", 0) or 0)))
 
 
 def shadow_bonus(creature) -> int:
@@ -516,11 +534,25 @@ PART_UPGRADE_BASE_BY_RARITY = {
     "common": 20, "rare": 30, "epic": 40, "legendary": 50, "mythic": 60,
 }
 PART_UPGRADE_MAX = 140  # mythic 5★: 60 + 4×20
+# 🔮/⚛️ crystal & plasma: +20 on the 1★ floor and +25 a star → mythic 1★ 80, mythic 5★ 180
+PREMIUM_PART_FIRST_BONUS = 20
+PREMIUM_PART_CAP_PER_STAR = 25
+PREMIUM_PART_UPGRADE_MAX = 180  # mythic 5★: 60 + 20 + 4×25
 
 
-def part_upgrade_cap(rarity: str, star_level: int) -> int:
+def part_cap_per_star(element=None) -> int:
+    return PREMIUM_PART_CAP_PER_STAR if element in PREMIUM_ELEMENTS else PART_UPGRADE_CAP_PER_STAR
+
+
+def part_upgrade_max(element=None) -> int:
+    return PREMIUM_PART_UPGRADE_MAX if element in PREMIUM_ELEMENTS else PART_UPGRADE_MAX
+
+
+def part_upgrade_cap(rarity: str, star_level: int, element=None) -> int:
     base = PART_UPGRADE_BASE_BY_RARITY.get(rarity, 20)
-    return base + (max(1, star_level) - 1) * PART_UPGRADE_CAP_PER_STAR
+    if element in PREMIUM_ELEMENTS:
+        base += PREMIUM_PART_FIRST_BONUS
+    return base + (max(1, star_level) - 1) * part_cap_per_star(element)
 
 
 # A silent per-rarity discount on body-part upgrades: lower rarities pay less (they're

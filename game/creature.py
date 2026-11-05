@@ -107,7 +107,7 @@ def creature_power(creature: Creature, equipped_items: list | None = None) -> in
     """Canonical strength score for any creature — the single source of truth every
     display, leaderboard and matchmaker delegates to, so a power number always
     means the same thing and always predicts combat. Clamped to the creature's ceiling —
-    MAX_KAIJU_POWER, raised only by its «فرم سیاه» level, which also adds its power bonus
+    MAX_KAIJU_POWER (PREMIUM_MAX_POWER for crystal/plasma), raised only by its «فرم سیاه» level, which also adds its power bonus
     (constants.power_cap / shadow_bonus)."""
     rating = combat_rating(effective_stats(creature, equipped_items)) + constants.shadow_bonus(creature)
     return min(constants.power_cap(creature), rating)
@@ -505,18 +505,18 @@ def upgrade_part(user: User, creature: Creature, part: str, count: int = 1) -> t
     lock_row(creature)
     count = max(1, count)
     current_level = getattr(creature, f"{part}_lvl")
-    cap = constants.part_upgrade_cap(creature.rarity, creature.star_level)
+    cap = constants.part_upgrade_cap(creature.rarity, creature.star_level, creature.element)
     if current_level >= cap:
         # plain text (no HTML): these surface in a Telegram alert popup, which shows
         # tags literally rather than rendering them.
         if creature.rarity == "mythic" and creature.star_level >= 5:
             raise GameError(
-                f"⛔ این عضو به سقف نهایی {constants.PART_UPGRADE_MAX} رسیده — بالاتر از این نمی‌ره."
+                f"⛔ این عضو به سقف نهایی {constants.part_upgrade_max(creature.element)} رسیده — بالاتر از این نمی‌ره."
             )
         # keep this SHORT — it surfaces in a Telegram callback alert, capped at 200 chars
         raise GameError(
             f"⛔ سقف ارتقای این عضو برای این هیولا ({creature.star_level}⭐) عددِ {cap} است. "
-            f"با فیوژن ستاره رو بالا ببر (هر ستاره +{constants.PART_UPGRADE_CAP_PER_STAR}، تا {constants.PART_UPGRADE_MAX} در اساطیریِ ۵⭐)."
+            f"با فیوژن ستاره رو بالا ببر (هر ستاره +{constants.part_cap_per_star(creature.element)}، تا {constants.part_upgrade_max(creature.element)} در اساطیریِ ۵⭐)."
         )
     # never overshoot the cap in a bulk (×5/×10) buy
     count = min(count, cap - current_level)

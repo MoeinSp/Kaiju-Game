@@ -161,7 +161,7 @@ def _parts(user: User, creature, gear: list) -> list[dict]:
     from game.creature import combat_rating, effective_stats, part_bulk_cost
 
     steps = _bot()._UPG_STEPS
-    cap = constants.part_upgrade_cap(creature.rarity, creature.star_level)
+    cap = constants.part_upgrade_cap(creature.rarity, creature.star_level, creature.element)
     before = effective_stats(creature, gear)
     rating = combat_rating(before)
     rows = []
@@ -199,11 +199,11 @@ def _panel(user: User, creature, gear: list) -> dict:
         "creature": _creature_block(user, creature, gear),
         "steps": list(_bot()._UPG_STEPS),
         "parts": _parts(user, creature, gear),
-        "part_cap": constants.part_upgrade_cap(creature.rarity, star),
+        "part_cap": constants.part_upgrade_cap(creature.rarity, star, creature.element),
         # what one more star (fusion) would raise the ceilings to — None at the last star
         "next_star": {
             "star": star + 1,
-            "part_cap": constants.part_upgrade_cap(creature.rarity, star + 1),
+            "part_cap": constants.part_upgrade_cap(creature.rarity, star + 1, creature.element),
             "max_level": constants.creature_max_level(creature.rarity, star + 1),
         } if can_star else None,
         "capsules": _capsules(user),

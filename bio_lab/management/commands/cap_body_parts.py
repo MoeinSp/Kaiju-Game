@@ -51,7 +51,7 @@ class Command(BaseCommand):
         affected: dict[int, list[str]] = {}
 
         for creature in Creature.objects.all().iterator():
-            cap = constants.part_upgrade_cap(creature.star_level)
+            cap = constants.part_upgrade_cap(creature.rarity, creature.star_level, creature.element)
             changed_fields = []
             notes = []
             for part in _PARTS:

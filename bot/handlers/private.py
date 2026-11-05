@@ -497,7 +497,7 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
         "🧬 <b>ارتقای اعضای بدن:</b>",
     ]
 
-    cap = constants.part_upgrade_cap(creature.rarity, creature.star_level)
+    cap = constants.part_upgrade_cap(creature.rarity, creature.star_level, creature.element)
     for part, cfg in constants.BODY_PARTS.items():
         level = getattr(creature, f"{part}_lvl")
         label = cfg["label"].split()[0]
