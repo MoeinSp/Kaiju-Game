@@ -131,12 +131,34 @@ def build_confirm(oid: int, pack: dict, coins: int, dna: int) -> tuple[str, Inli
 
 
 # ── entry point ──────────────────────────────────────────────────────────────
+def direction_of(text: str | None) -> str | None:
+    """«تبدیل DNA به طلا» / «فروش DNA» → buy_gold; «طلا به دی ان ای» / «خرید DNA» → buy_dna;
+    a bare «صرافی» / «تبدیل» / «مبادله» → None (the 'buy which?' screen)."""
+    from game.keywords import normalize
+
+    t = normalize(text or "")
+    for d in ("دی ان ای", "دیانای", "dna"):
+        t = t.replace(d, "DNA")
+    if "DNA به طلا" in t or t.startswith(("فروش DNA", "خرید طلا")):
+        return "buy_gold"   # pay DNA, get gold
+    if "طلا به DNA" in t or t.startswith(("خرید DNA", "فروش طلا")):
+        return "buy_dna"    # pay gold, get DNA
+    return None
+
+
 async def exchange_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """PV command / menu button / group «مبادله» word → the 'buy which?' screen."""
+    """PV command / menu button / group «مبادله» / «صرافی» / «تبدیل» word → the 'buy which?'
+    screen; a word that names the direction («DNA به طلا») goes straight to its amounts."""
     if not exchange.ENABLED:
         await send_screen(update, _DISABLED_MSG, parse_mode="HTML")
         return
     coins, dna = await run_db(_bal_sync, update.effective_user)
+    msg = update.message if update.callback_query is None else None
+    direction = direction_of(getattr(msg, "text", None))
+    if direction:
+        text, keyboard = _amount_render(update.effective_user.id, direction, coins, dna, _is_group(update))
+        await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
+        return
     text, keyboard = _home_render(update.effective_user.id, coins, dna, _is_group(update))
     from game.media import get_feature_image_path
     photo = get_feature_image_path("exchange")
