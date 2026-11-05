@@ -96,9 +96,9 @@ def parse(norm: str) -> tuple[str, str | None] | None:
     key = norm.replace(" ", "")
     if key in WORDS:
         return WORDS[key], None
-    m = re.match(r"^(\S+)\s+(\d{4,15})$", norm)
-    if m and WORDS.get(m.group(1)) == "peek":
-        return "peek", m.group(2)
+    m = re.match(r"^(\S+)\s+(\d{4,15})$", norm) or re.match(r"^(\d{4,15})\s+(\S+)$", norm)
+    if m and "peek" in (WORDS.get(m.group(1)), WORDS.get(m.group(2))):
+        return "peek", None   # «هیولاش 123456» / «123456 هیولاش» — _peek reads the id
     for head in ("سیاهچال", "ورود"):
         if key.startswith(head) and key[len(head):] in {k.replace(" ", "") for k in _DIFF}:
             return "dungeon_start", _DIFF.get(key[len(head):], "endless")
@@ -384,16 +384,49 @@ def _owner_of_bot_message(chat_id: int, rep) -> int | None:
     return None
 
 
+_FA_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+
+
+def aim_of(message, bot, is_word) -> tuple[int | None, str | None] | None:
+    """A word aimed at a player, in either order: «<word> <target>» or «<target> <word>»;
+    target = @username, a numeric id (@ optional, Persian digits ok) or a text-mention.
+    → (user id, None) / (None, username), or None when the text isn't word + target."""
+    toks = (message.text or "").split()
+    if len(toks) < 2:
+        return None
+    if is_word(toks[0]):
+        rest = toks[1:]
+    elif is_word(toks[-1]):
+        rest = toks[:-1]
+    else:
+        return None
+    for ent in message.entities or ():
+        if ent.type == "text_mention" and ent.user is not None and not ent.user.is_bot:
+            return ent.user.id, None
+    if len(rest) != 1:
+        return None
+    tok = rest[0].translate(_FA_DIGITS).strip("()«»\"'.,!؟?")
+    m = re.fullmatch(r"@?(\d{4,15})", tok)
+    if m:
+        return int(m.group(1)), None
+    m = re.fullmatch(r"@([A-Za-z]\w{3,31})", tok)
+    if m and m.group(1).lower() != (bot.username or "").lower():
+        return None, m.group(1)
+    return None
+
+
+def _is_peek_word(tok: str) -> bool:
+    from game.keywords import normalize
+
+    return WORDS.get(normalize(tok).replace(" ", "")) == "peek"
+
+
 def _peek_target(message, bot):
     """→ (user id | None, @username | None, why-not text | None) for «هیولاش»: a reply to a
     player, a reply to one of the bot's cards (its owner), or «هیولاش @someone»."""
-    for ent in message.entities or ():
-        if ent.type == "text_mention" and ent.user is not None and not ent.user.is_bot:
-            return ent.user.id, None, None
-        if ent.type == "mention":
-            name = message.parse_entity(ent).lstrip("@")
-            if name.lower() != (bot.username or "").lower():
-                return None, name, None
+    aim = aim_of(message, bot, _is_peek_word)
+    if aim is not None:
+        return aim[0], aim[1], None
     rep = message.reply_to_message
     if rep is None or getattr(rep, "forum_topic_created", None) is not None:
         return None, None, "👀 روی پیام یه بازیکن ریپلای کن و بنویس «هیولاش» (یا «هیولاش @آیدی»)."
@@ -438,10 +471,7 @@ async def _peek(update, context, _arg):
     from bot.handlers import group_words as GW
 
     message = update.effective_message
-    if _arg:   # «هیولاش 123456789»
-        target_id, username, why = int(_arg), None, None
-    else:
-        target_id, username, why = _peek_target(message, context.bot)
+    target_id, username, why = _peek_target(message, context.bot)
     if why:
         return await message.reply_text(why)
     data = await run_db(_peek_sync, target_id, message.chat, username)

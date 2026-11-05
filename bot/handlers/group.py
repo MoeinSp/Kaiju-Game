@@ -1,5 +1,4 @@
 import html
-import re
 import asyncio
 import datetime
 import os
@@ -1403,31 +1402,13 @@ def _left_block_text(name: str, left_at) -> str:
     ])
 
 
-_ATTACK_ID = re.compile(r"^اتک\s+@?(\d{4,15})$")
-
-
 def _attack_target_of(message, bot) -> tuple[int | None, str | None] | None:
-    """«اتک @username» / «اتک 123456789» (and a text-mention «اتک علی») → (user id, @name);
-    None when the message isn't an aimed «اتک»."""
+    """«اتک @username» / «اتک 123456789» / «@username اتک» / «123456789 اتک» (and a text-mention)
+    → (user id, None) / (None, username); None when the message isn't an aimed «اتک»."""
+    from bot.handlers.group_panels import aim_of
     from game import keywords
 
-    text = (message.text or "").strip()
-    if not text:
-        return None
-    first = text.split()[0]
-    if keywords.normalize(first) != "اتک":
-        return None
-    for ent in message.entities or ():
-        if ent.type == "text_mention" and ent.user is not None:
-            return ent.user.id, None
-        if ent.type == "mention" and ent.offset > 0:
-            name = message.parse_entity(ent).lstrip("@")
-            if name.lower() != (bot.username or "").lower():
-                return None, name
-    m = _ATTACK_ID.match(keywords.normalize(text))   # normalize() folds Persian digits too
-    if m is not None:
-        return int(m.group(1)), None
-    return None
+    return aim_of(message, bot, lambda tok: keywords.normalize(tok) == "اتک")
 
 
 def _attack_target_sync(target_id, username):
