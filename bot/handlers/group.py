@@ -1445,9 +1445,21 @@ def _attack_target_sync(target_id, username):
     return u.id, (u.first_name or u.username or "بازیکن")
 
 
+# (attacker id, target id) → when an «اتک @آیدی» card was opened. Owner's call (2026-11-06): an
+# attack aimed by id reaches the player even if they aren't in this group, so the card and its
+# fight skip the «left the group» gate. Kept 30 min; a restart forgets it (the gate applies again).
+_AIMED: dict[tuple[int, int], float] = {}
+_AIMED_TTL = 1800.0
+
+
+def _is_aimed(attacker_id: int, target_id: int) -> bool:
+    t = _AIMED.get((attacker_id, target_id))
+    return t is not None and time.monotonic() - t < _AIMED_TTL
+
+
 async def attack_by_handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """«اتک @آیدی» / «اتک آیدی‌عددی»: the reply-attack aimed by id. The target has to be in
-    THIS group right now — an id must not reach players of other groups."""
+    """«اتک @آیدی» / «اتک آیدی‌عددی»: the reply-attack aimed by id — the target doesn't have to
+    be a member of this group (owner's call, 2026-11-06)."""
     message = update.effective_message
     aim = _attack_target_of(message, context.bot)
     if aim is None:
@@ -1462,19 +1474,19 @@ async def attack_by_handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if tid == update.effective_user.id:
         await message.reply_text("🙅 نمی‌تونی به خودت حمله کنی!")
         return True
-    if await _live_left(context.bot, update.effective_chat.id, tid) is not False:
-        await message.reply_text("🚪 این بازیکن عضو این گروه نیست — فقط به بازیکن‌های همین گروه می‌شه اتک داد.")
-        return True
-    await _pvp_attack_prompt(update, context, types.SimpleNamespace(id=tid, is_bot=False, full_name=name))
+    _AIMED[(update.effective_user.id, tid)] = time.monotonic()
+    while len(_AIMED) > 5000:
+        _AIMED.pop(next(iter(_AIMED)))
+    await _pvp_attack_prompt(update, context, types.SimpleNamespace(id=tid, is_bot=False, full_name=name), aimed=True)
     return True
 
 
-async def _pvp_attack_prompt(update, context, target_tg) -> None:
+async def _pvp_attack_prompt(update, context, target_tg, aimed: bool = False) -> None:
     from game import group_presence
 
     chat = update.effective_chat
     left_at = None
-    if not target_tg.is_bot and target_tg.id != update.effective_user.id:
+    if not aimed and not target_tg.is_bot and target_tg.id != update.effective_user.id:
         live = await _live_left(context.bot, chat.id, target_tg.id)
         left_at, t_name = await run_db(_left_gate_sync, chat, target_tg.id, live)
         if group_presence.is_gone(left_at):
@@ -1692,8 +1704,8 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         raise GameError("این بازیکن دیگه پیدا نشد.")
     from game import group_presence
 
-    left_at = group_presence.observe(group.id, group.title, target.id, None)
-    if group_presence.is_gone(left_at):
+    left_at = None if _is_aimed(attacker.id, target.id) else group_presence.observe(group.id, group.title, target.id, None)
+    if left_at is not None and group_presence.is_gone(left_at):
         raise GameError(f"🚪 این بازیکن {group_presence.ago_text(left_at)} پیش از این گروه رفته؛ "
                         f"به کسی که بیش از {group_presence.LEFT_GRACE_HOURS} ساعت از گروه رفته نمی‌شه اتک داد.")
     a_creature = get_active_creature(attacker)
