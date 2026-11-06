@@ -56,6 +56,7 @@ from game.season import (
 logger = logging.getLogger(__name__)
 
 PENDING_OPPONENT_KEY = "arena_pending_opponent"
+ARENA_TEAM_SIZE = 2   # «تعویض» in the arena / group «اتک» offers 2 of the team (the dungeon & co. keep 3)
 
 
 def _fmt_hm(seconds: int) -> str:
@@ -282,7 +283,7 @@ def _team_choices_sync(tg_user):
 
     user, _ = get_or_create_user(tg_user)
     out = []
-    for c in team_choices(user):
+    for c in team_choices(user, limit=ARENA_TEAM_SIZE):
         # a creature that's mining/breeding can't be made active — flag it so the
         # player doesn't tap it for nothing (creature_status returns None when free)
         busy = (not c.is_active) and creature_status(user, c) is not None
@@ -343,9 +344,9 @@ def _swap_rerender_sync(tg_user, creature_id, pending):
         pending["loot_gold"], pending["loot_dna"] = loot, dna_from_pending
     dna_win = pending["loot_dna"]
 
-    # the opponent is fixed when it is found (a top-ladder bot counters the creature you
-    # had active THEN); swapping your fighter never changes it — that is the whole point
-    # of «تعویض»: pick the creature with the element advantage over THIS opponent
+    # a bot opponent is fixed when it is found; a REAL one answers with its «تیم دفاع»: the
+    # best defender against the creature you have now (game/defense.py), told when it changes
+    defense_note = repick_defender(user, creature, my_power, pending)
     opp_elem = pending.get("element")
     opp_cname = pending.get("creature_name", "؟")
 
@@ -356,10 +357,33 @@ def _swap_rerender_sync(tg_user, creature_id, pending):
         "power": pending["power"], "element": opp_elem,
         "loot_pool": pending["loot_pool"],
         "loot_gold": pending["loot_gold"], "loot_dna": pending["loot_dna"],
+        "defense_note": defense_note,
     }
     loot = pending["loot_gold"]
     _with_serum(user)
     return user, opponent, my_power, loot, creature.element, dna_win, creature.name, sync_energy(user)
+
+
+def repick_defender(user, creature, my_power: int, pending: dict) -> str:
+    """Re-pick a real opponent's defender for the creature `user` fights with now and update
+    the card (`pending`) in place. Returns the «مدافع عوض شد» note, or "" when it stayed."""
+    if pending.get("is_fake") or not pending.get("user_id"):
+        return ""
+    from bio_lab.models import User as UserModel
+    from game.defense import pick_defender, swap_note
+
+    target = UserModel.objects.filter(id=pending["user_id"]).first()
+    if target is None:
+        return ""
+    tc, tc_power = pick_defender(target, creature, my_power)
+    if tc is None:
+        return ""
+    old_id, old_name = pending.get("defender_creature_id"), pending.get("creature_name") or "مدافع قبلی"
+    pending.update({"defender_creature_id": tc.id, "creature_name": creature_name(tc),
+                    "power": tc_power, "element": tc.element})
+    if old_id and old_id != tc.id:
+        return swap_note(old_name, pending["creature_name"], tc.element)
+    return ""
 
 
 def _serum_toggle_sync(tg_user):
@@ -461,6 +485,7 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
     lines = [
         f"{get_emoji('battle')} <b>آرنا · حریف پیدا شد</b>",
         dividers.line(),
+        *([opponent["defense_note"], ""] if opponent.get("defense_note") else []),
         # ONE fact per line (owner's rule for this card): never «power · cup» or the whole loot on one line
         f"🦅 موجود شما: <b>{cname}</b>{my_elem_tag}",
         f"💪 قدرت شما: <code>{my_power:,}</code>",
@@ -913,6 +938,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     elem_tag = f" [{elem_lbl}]" if elem_lbl else ""
     # win and loss share one frame: title → opponent → HP bars → what changed
     head = [
+        *([result["defense_note"], ""] if result.get("defense_note") else []),
         f"👤 حریف: <b>{result['opponent_label']}</b>{opp_alliance}",
         f"{get_emoji('opponent_creature', '👹')} موجود حریف: <b>{def_name}</b>{elem_tag}",
         f"<blockquote>{hp_line_a}\n{hp_line_b}</blockquote>",

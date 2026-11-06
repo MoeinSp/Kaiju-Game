@@ -201,10 +201,26 @@ def _seen(data: dict) -> list[int]:
     return out
 
 
-def _refit(user, pending: dict, creature) -> None:
-    """Bind the card to the fighter. The opponent itself (element, name, power, cup, loot)
-    is fixed when it is found and never changes on a swap — same as the bot."""
+def _refit(user, pending: dict, creature) -> str:
+    """Bind the card to the fighter. A bot opponent is fixed when it is found; a real one
+    answers with the best member of its «تیم دفاع» against this fighter (bot:
+    repick_defender). Returns the plain «مدافع عوض شد» note, or ""."""
     pending["c"] = creature.id
+    if pending.get("is_fake") or not pending.get("user_id"):
+        return ""
+    from game.defense import pick_defender, swap_note
+
+    target = User.objects.filter(id=pending["user_id"]).first()
+    if target is None:
+        return ""
+    tc, tc_power = pick_defender(target, creature, _with_rage(user, _my(user, creature))["power"])
+    if tc is None:
+        return ""
+    old_id, old_name = pending.get("d"), _txt(pending.get("creature_name") or "مدافع قبلی")
+    pending.update({"d": tc.id, "creature_name": A.creature_name(tc), "power": tc_power, "element": tc.element})
+    if old_id and old_id != tc.id:
+        return swap_note(old_name, _txt(pending["creature_name"]), tc.element, plain=True)
+    return ""
 
 
 def _card(user, pending: dict, seen: list[int], note: str = "", creature=None, foe=None) -> dict:
@@ -339,14 +355,16 @@ def card(request, user, data):
     if pending is None or pending["n"] != _last_attack_id(user):
         return _find(user, seen, NOTE_STALE)
     creature = active_creature(user)
-    _refit(user, pending, creature)
-    return _card(user, pending, seen, creature=creature)
+    note = _refit(user, pending, creature)
+    return _card(user, pending, seen, note, creature=creature)
 
 
 @endpoint()
 def team(request, user):
     """Who can fight instead (bot: _team_choices_sync — the configured team, else the strongest few)."""
-    rows = creature_list(user, team_choices(user))
+    from bot.handlers.arena import ARENA_TEAM_SIZE
+
+    rows = creature_list(user, team_choices(user, limit=ARENA_TEAM_SIZE))
     for row in rows:
         row["busy"] = bool(row["busy"] and not row["active"])
     return {"creatures": rows}
@@ -365,8 +383,8 @@ def swap(request, user, data):
     if pending is None or pending["n"] != _last_attack_id(user):
         return _find(user, seen, NOTE_STALE)
     creature = active_creature(user)
-    _refit(user, pending, creature)
-    return _card(user, pending, seen, creature=creature)
+    note = _refit(user, pending, creature)
+    return _card(user, pending, seen, note, creature=creature)
 
 
 def _creature_details(creature) -> dict:

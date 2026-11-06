@@ -1,4 +1,4 @@
-"""«تیم دفاع» — up to three creatures that defend a player in the arena.
+"""«تیم دفاع» — up to two creatures that defend a player in the arena and in group «اتک».
 
 When someone attacks (a search, a held card, a revenge), `pick_defender` chooses, among the
 defense team, the creature that does best against the ATTACKER's creature under the game's
@@ -8,10 +8,10 @@ element-advantaged side, a tie goes to the attacker):
   1. one that WINS, if any — the one with the widest margin;
   2. otherwise the one that loses by the least.
 
-The pick is made when the opponent is found, against the creature the attacker had active
-then, and is carried with the card (``defender_creature_id``): the attacker's «تعویض» does
-not re-pick, so swapping to counter the shown defender stays meaningful — same rule as the
-bots' element.
+The pick is re-made every time the attacker's creature changes («تعویض»), and once more at the
+fight itself: the defender is ALWAYS the team's best answer to the creature that really
+attacks (owner's rule, 2026-11-06). When the pick changes, the attacker is told why
+(`swap_note`) — the new face is another member of the same defense team.
 
 A creature busy elsewhere (mine, mission, cave) doesn't defend. A creature may be in both the
 normal Team and the defense team. No defense team (or every member busy) → the active
@@ -24,7 +24,7 @@ from bio_lab.models import Creature, DefenseTeam, User
 from game import constants
 from game.creature import GameError, creature_power
 
-MAX_SLOTS = 3
+MAX_SLOTS = 2   # was 3 until 2026-11-06; older teams keep their two strongest (member_ids)
 
 
 def _slots(team: DefenseTeam) -> list[int]:
@@ -38,12 +38,32 @@ def member_ids(user: User) -> list[int]:
     if team is None:
         return []
     ids = _slots(team)
-    owned = set(Creature.objects.filter(owner=user, id__in=ids).values_list("id", flat=True))
+    owned = {c.id: c for c in Creature.objects.filter(owner=user, id__in=ids)}
     valid = [cid for cid in ids if cid in owned]
+    if len(valid) > MAX_SLOTS:   # a team picked under the old cap of 3: keep its strongest two
+        strongest = set(sorted(valid, key=lambda cid: power_of(user, owned[cid]), reverse=True)[:MAX_SLOTS])
+        valid = [cid for cid in valid if cid in strongest]
     if valid != ids:
         team.slot1_id, team.slot2_id, team.slot3_id = (valid + [None, None, None])[:3]
         team.save(update_fields=["slot1", "slot2", "slot3", "updated_at"])
     return valid
+
+
+def swap_note(old_name: str, new_name: str, new_element: str | None, plain: bool = False) -> str:
+    """What the attacker reads when the defender changes under their eyes (a swap of theirs made
+    another member of the target's defense team the better answer). `plain`: the Mini App —
+    no HTML, no emoji."""
+    if plain:   # the bare word: no Premium emoji tag in the Mini App
+        elem = constants.ELEMENT_WORDS.get(new_element, "") if new_element else ""
+    else:
+        elem = constants.element_label(new_element) if new_element else ""
+    elem_tag = f" ({elem})" if elem else ""
+    if plain:
+        return (f"مدافع حریف عوض شد: «{new_name}»{elem_tag} هم عضو تیم دفاع همین حریفه و در برابر هیولای تو "
+                f"بهتر دفاع می‌کنه، برای همین جای «{old_name}» اومد. ربات همیشه بهترین مدافع تیم دفاع رو می‌فرسته.")
+    return (f"🛡 <b>مدافع حریف عوض شد!</b>\n<blockquote>«{new_name}»{elem_tag} هم عضو <b>تیم دفاع</b> همین حریفه "
+            f"و در برابر هیولای تو بهتر دفاع می‌کنه، برای همین جای «{old_name}» اومد وسط.\n"
+            f"<i>ربات همیشه بهترین مدافع تیم دفاع رو در برابر هیولای مهاجم می‌فرسته.</i></blockquote>")
 
 
 def toggle(user: User, creature_id: int) -> list[int]:

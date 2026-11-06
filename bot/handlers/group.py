@@ -1244,6 +1244,29 @@ async def raid_leaderboard_callback(update: Update, context: ContextTypes.DEFAUL
 
 # ── PvP: reply-to-attack another player ───────────────────────────────────────
 
+# (attacker id, target id) → (defender creature id, its shown name): the defender the last «اتک»
+# card showed, so a re-pick (after «تعویض موجود», or at the fight) can say it changed. A restart
+# forgets it — the card is just re-picked silently then.
+_SHOWN_DEFENDER: dict[tuple[int, int], tuple[int, str]] = {}
+
+
+def _defender_note(attacker_id: int, target_id: int, t_creature, remember: bool = True) -> str:
+    """The «مدافع حریف عوض شد» note when the defender differs from the one last shown."""
+    from game.defense import swap_note
+
+    key = (attacker_id, target_id)
+    shown = _SHOWN_DEFENDER.get(key)
+    if remember:
+        _SHOWN_DEFENDER[key] = (t_creature.id, creature_name(t_creature))
+        while len(_SHOWN_DEFENDER) > 5000:
+            _SHOWN_DEFENDER.pop(next(iter(_SHOWN_DEFENDER)))
+    else:
+        _SHOWN_DEFENDER.pop(key, None)
+    if shown and shown[0] != t_creature.id:
+        return swap_note(shown[1], creature_name(t_creature), t_creature.element)
+    return ""
+
+
 def _group_defender(target, a_creature):
     """Who defends `target` against `a_creature` in a group «اتک»: their «تیم دفاع» (the best
     answer to this attacker, game/defense.py — the arena's rule), else their active creature.
@@ -1285,6 +1308,8 @@ def _pvp_preview_sync(attacker_tg, target_tg):
     from game.arena import group_shield_remaining_seconds
     from game.energy import get_max_energy, sync_energy
 
+    _SHOWN_DEFENDER.pop((attacker.id, target.id), None)   # a new card: its first look, no «عوض شد»
+    _defender_note(attacker.id, target.id, t_creature)
     return (
         lab_mention(attacker), _group_attack_power(attacker, a_creature), a_creature.element,
         lab_mention(target), _creature_power(t_creature), t_creature.element,
@@ -1308,7 +1333,7 @@ def _fmt_shield_hm(seconds: int) -> str:
 
 def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, t_power, t_elem,
                        t_shield_secs=0, a_cname="—", t_cname="—", a_energy=0, a_shield_secs=0,
-                       a_max_energy=constants.MAX_ENERGY, serum=None):
+                       a_max_energy=constants.MAX_ENERGY, serum=None, defense_note=""):
     from bot.handlers.private import element_advantage_line
 
     # target is group-shielded → say it LOUDLY at the very top so the attacker
@@ -1336,6 +1361,7 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
     lines = [
         "⚔️ <b>پیش‌نمایش نبرد تن‌به‌تن</b>",
         _RULE,
+        *([defense_note, ""] if defense_note else []),
         f"🦅 موجود شما: <b>{a_cname}</b>{a_tag}",
         f"💪 قدرت شما: <code>{a_power:,}</code>",
         f"👤 حریف: <b>{t_name}</b>",
@@ -1492,6 +1518,7 @@ def _pvp_preview_by_ids_sync(attacker_id, target_id):
         group_shield_remaining_seconds(attacker),
         get_max_energy(attacker),
         _warrior_moment(attacker),
+        _defender_note(attacker.id, target.id, t_creature),
     )
 
 
@@ -1583,8 +1610,10 @@ def _gatk_team_choices_sync(attacker_id):
     attacker = User.objects.filter(id=attacker_id).first()
     if attacker is None:
         raise GameError("پیدا نشدی.")
+    from bot.handlers.arena import ARENA_TEAM_SIZE
+
     out = []
-    for c in team_choices(attacker):
+    for c in team_choices(attacker, limit=ARENA_TEAM_SIZE):
         busy = (not c.is_active) and creature_status(attacker, c) is not None
         out.append((c.id, c.name, c.element, _creature_power(c), c.is_active, busy))
     return out
@@ -1671,6 +1700,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     t_creature = _group_defender(target, a_creature) if a_creature else None   # «تیم دفاع» defends here too
     if a_creature is None or t_creature is None:
         raise GameError("یکی از دو طرف موجود فعال نداره.")
+    defense_note = _defender_note(attacker.id, target.id, t_creature, remember=False)
 
     from game.arena import group_shield_remaining_seconds, is_group_shielded
 
@@ -1768,6 +1798,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     apply_group_shield(target)
     return {
         "log_text": log_text,
+        "defense_note": defense_note,   # the defender changed since the card (_defender_note)
         "detail_log": detail_log,
         "battle_a": battle["a"],
         "battle_b": battle["b"],
@@ -1887,6 +1918,8 @@ async def _pvp_attack_execute(update, context, query, attacker_id: int, target_i
     _target = result.get("target_name", "")
     # no rule under the title: the report draws the message's two «6-2» divider lines
     header = ["⚔️ <b>خلاصه نبرد</b>"]
+    if result.get("defense_note"):
+        header += [result["defense_note"], ""]
     if _target:
         header.append(f"👤 حریف: <b>{_target}</b>" + (f" <i>(🤝 {_tally})</i>" if _tally else ""))
     text = battle_report(

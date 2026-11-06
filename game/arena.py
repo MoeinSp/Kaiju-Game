@@ -412,6 +412,7 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
     if attacker_creature is None:
         raise GameError("اول یه موجود فعال انتخاب کن.")
 
+    defense_note = ""
     if opponent["is_fake"]:
         # bot defenders have no Creature row, so build an unsaved stand-in scaled to
         # the rolled power (never saved — same trick as hunt.py's wild creatures)
@@ -428,15 +429,20 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
             raise OpponentUnavailableError("🤝 این بازیکن هم‌اتحادی شماست! امکان حمله به اعضای اتحاد خودت وجود نداره.")
         from game.defense import pick_defender
 
-        # «تیم دفاع»: the defender the card showed if it can still fight, else the best
-        # answer to the attacker's creature (game/defense.py)
+        # «تیم دفاع»: always the team's best answer to the creature that really attacks
+        # (game/defense.py) — even when the card showed another member
         defender_creature, _ = pick_defender(
             defender_user, attacker_creature,
             creature_power(attacker_creature, get_equipped_items(attacker_creature)),
-            prefer_id=opponent.get("defender_creature_id"),
         )
         if defender_creature is None:
             raise OpponentUnavailableError("این حریف دیگه موجود فعالی نداره.")
+        shown_id = opponent.get("defender_creature_id")
+        if shown_id and shown_id != defender_creature.id:
+            from game.defense import swap_note
+
+            defense_note = swap_note(opponent.get("creature_name") or "مدافع قبلی", creature_name(defender_creature),
+                                     defender_creature.element)
         if is_shielded(defender_user):
             raise OpponentUnavailableError("این حریف الان سپر محافظ داره، یکی دیگه رو امتحان کن.")
 
@@ -610,6 +616,7 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
         "attacker_element": sa["element"],
         "defender_element": sb["element"],
         "opponent_label": opponent["label"],
+        "defense_note": defense_note,   # the defender changed since the card (game/defense.swap_note)
         "opponent_alliance": (defender_user.alliance.name if (defender_user and defender_user.alliance_id) else None),
         "new_cup": attacker.cup,
         "new_coins": attacker.coins,

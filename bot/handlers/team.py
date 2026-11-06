@@ -78,7 +78,7 @@ def _render(view: dict, filt: str = "all", page: int = 0, is_group: bool = False
         nav_cb=lambda f, p: f"team_page:{f}:{p}",
     )
     page_note = f"  <i>(صفحه {page + 1}/{total_pages})</i>" if total_pages > 1 else ""
-    lines.append(f"\n<i>با تب‌های بالا بر اساس نایابی جدا کن. روی هیولا بزن تا اضافه/حذف شه (حداکثر ۳).</i>{page_note}")
+    lines.append(f"\n<i>با تب‌های بالا بر اساس نایابی جدا کن. روی هیولا بزن تا اضافه/حذف شه (حداکثر ۳).\n«تعویض» توی آرنا و «اتک» گروه دو تای اولِ این تیم رو نشون می‌ده؛ دانجن، سیاه‌چال، برج و شکار هر ۳ تا.</i>{page_note}")
 
     rows = list(tab_rows)
     for c in chunk:
