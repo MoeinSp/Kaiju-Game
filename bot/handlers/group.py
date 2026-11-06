@@ -1414,16 +1414,26 @@ def _left_gate_sync(chat, target_id: int, live_left):
     return left_at, (lab_mention(target) if target else None)
 
 
-def _left_block_text(name: str, left_at) -> str:
+_VIA_LINE = {
+    "reply": "🎯 روش: ریپلای روی پیامش",
+    "username": "🎯 روش: «اتک @{handle}»",
+    "id": "🎯 روش: «اتک {handle}» (آیدی عددی)",
+}
+
+
+def _left_block_text(name: str, left_at, via: str = "reply", handle: str | None = None) -> str:
+    """«this player left the group» — the same rule for a reply, an @username and a numeric id."""
     from game import group_presence
 
     return "\n".join([
         "🚪 <b>این بازیکن دیگه عضو گروه نیست</b>",
         _RULE,
         f"👤 بازیکن: <b>{name}</b>",
+        _VIA_LINE.get(via, _VIA_LINE["reply"]).format(handle=html.escape(handle or "")),
         f"🕰 خروج از گروه: <code>{group_presence.ago_text(left_at)}</code> پیش",
         _RULE,
-        f"⛔️ به کسی که بیش از <b>{group_presence.LEFT_GRACE_HOURS} ساعت</b> از گروه رفته نمی‌شه اتک داد.",
+        f"⛔️ به کسی که بیش از <b>{group_presence.LEFT_GRACE_HOURS} ساعت</b> از گروه رفته، توی این گروه "
+        "<b>با هیچ روشی</b> نمی‌شه اتک داد — نه با ریپلای، نه با @آیدی، نه با آیدی عددی.",
         "<i>💡 اگه دوباره به گروه برگرده، باز هم می‌تونی بهش حمله کنی.</i>",
     ])
 
@@ -1445,21 +1455,10 @@ def _attack_target_sync(target_id, username):
     return u.id, (u.first_name or u.username or "بازیکن")
 
 
-# (attacker id, target id) → when an «اتک @آیدی» card was opened. Owner's call (2026-11-06): an
-# attack aimed by id reaches the player even if they aren't in this group, so the card and its
-# fight skip the «left the group» gate. Kept 30 min; a restart forgets it (the gate applies again).
-_AIMED: dict[tuple[int, int], float] = {}
-_AIMED_TTL = 1800.0
-
-
-def _is_aimed(attacker_id: int, target_id: int) -> bool:
-    t = _AIMED.get((attacker_id, target_id))
-    return t is not None and time.monotonic() - t < _AIMED_TTL
-
-
 async def attack_by_handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """«اتک @آیدی» / «اتک آیدی‌عددی»: the reply-attack aimed by id — the target doesn't have to
-    be a member of this group (owner's call, 2026-11-06)."""
+    """«اتک @آیدی» / «اتک آیدی‌عددی»: the reply-attack aimed by id. The «left the group» rule is
+    the same for all three ways (owner's call, 2026-11-06): someone who left this group more
+    than LEFT_GRACE_HOURS ago can't be attacked here — by reply, @username or numeric id."""
     message = update.effective_message
     aim = _attack_target_of(message, context.bot)
     if aim is None:
@@ -1474,24 +1473,22 @@ async def attack_by_handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if tid == update.effective_user.id:
         await message.reply_text("🙅 نمی‌تونی به خودت حمله کنی!")
         return True
-    _AIMED[(update.effective_user.id, tid)] = time.monotonic()
-    while len(_AIMED) > 5000:
-        _AIMED.pop(next(iter(_AIMED)))
-    await _pvp_attack_prompt(update, context, types.SimpleNamespace(id=tid, is_bot=False, full_name=name), aimed=True)
+    await _pvp_attack_prompt(update, context, types.SimpleNamespace(id=tid, is_bot=False, full_name=name),
+                             via=("username" if username else "id"), handle=(username or str(tid)))
     return True
 
 
-async def _pvp_attack_prompt(update, context, target_tg, aimed: bool = False) -> None:
+async def _pvp_attack_prompt(update, context, target_tg, via: str = "reply", handle: str | None = None) -> None:
     from game import group_presence
 
     chat = update.effective_chat
     left_at = None
-    if not aimed and not target_tg.is_bot and target_tg.id != update.effective_user.id:
+    if not target_tg.is_bot and target_tg.id != update.effective_user.id:
         live = await _live_left(context.bot, chat.id, target_tg.id)
         left_at, t_name = await run_db(_left_gate_sync, chat, target_tg.id, live)
         if group_presence.is_gone(left_at):
             await update.message.reply_text(
-                _left_block_text(t_name or html.escape(target_tg.full_name), left_at), parse_mode="HTML")
+                _left_block_text(t_name or html.escape(target_tg.full_name), left_at, via, handle), parse_mode="HTML")
             return
     try:
         data = await run_db(_pvp_preview_sync, update.effective_user, target_tg)
@@ -1704,8 +1701,8 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         raise GameError("این بازیکن دیگه پیدا نشد.")
     from game import group_presence
 
-    left_at = None if _is_aimed(attacker.id, target.id) else group_presence.observe(group.id, group.title, target.id, None)
-    if left_at is not None and group_presence.is_gone(left_at):
+    left_at = group_presence.observe(group.id, group.title, target.id, None)
+    if group_presence.is_gone(left_at):
         raise GameError(f"🚪 این بازیکن {group_presence.ago_text(left_at)} پیش از این گروه رفته؛ "
                         f"به کسی که بیش از {group_presence.LEFT_GRACE_HOURS} ساعت از گروه رفته نمی‌شه اتک داد.")
     a_creature = get_active_creature(attacker)
