@@ -1407,11 +1407,20 @@ async def _live_left(bot, chat_id: int, user_id: int) -> bool | None:
 
 
 def _left_gate_sync(chat, target_id: int, live_left):
+    """→ (left_at, name, never). `never`: not in the group now AND no record of ever being in it —
+    such a player can't be attacked here by any way (a reply, @username or a numeric id). A
+    confirmed member gets their membership recorded, so the fight's own check finds it."""
+    from bio_lab.models import GroupMembership
     from game import group_presence
 
-    left_at = group_presence.observe(chat.id, chat.title, target_id, live_left)
     target = User.objects.filter(id=target_id).first()
-    return left_at, (lab_mention(target) if target else None)
+    name = lab_mention(target) if target else None
+    if live_left is False and target is not None:
+        GroupMembership.objects.get_or_create(group=get_or_create_group(chat), user=target)
+    elif not GroupMembership.objects.filter(group_id=chat.id, user_id=target_id).exists():
+        return None, name, True   # never seen in this group: don't start a «just left» clock for them
+    left_at = group_presence.observe(chat.id, chat.title, target_id, live_left)
+    return left_at, name, False
 
 
 _VIA_LINE = {
@@ -1419,6 +1428,20 @@ _VIA_LINE = {
     "username": "🎯 روش: «اتک @{handle}»",
     "id": "🎯 روش: «اتک {handle}» (آیدی عددی)",
 }
+
+
+def _never_member_text(name: str, via: str = "reply", handle: str | None = None) -> str:
+    """«this player isn't (and never was) in this group» — same rule for all three ways."""
+    return "\n".join([
+        "🚫 <b>این بازیکن عضو این گروه نیست</b>",
+        _RULE,
+        f"👤 بازیکن: <b>{name}</b>",
+        _VIA_LINE.get(via, _VIA_LINE["reply"]).format(handle=html.escape(handle or "")),
+        _RULE,
+        "⛔️ فقط به بازیکن‌های <b>همین گروه</b> می‌شه اتک داد (یا کسی که کمتر از ۲۴ ساعته رفته) — "
+        "به کسی که عضو این گروه نبوده با <b>هیچ روشی</b> نمی‌شه حمله کرد.",
+        "<i>💡 اگه عضو گروه بشه، می‌تونی بهش حمله کنی.</i>",
+    ])
 
 
 def _left_block_text(name: str, left_at, via: str = "reply", handle: str | None = None) -> str:
@@ -1485,7 +1508,11 @@ async def _pvp_attack_prompt(update, context, target_tg, via: str = "reply", han
     left_at = None
     if not target_tg.is_bot and target_tg.id != update.effective_user.id:
         live = await _live_left(context.bot, chat.id, target_tg.id)
-        left_at, t_name = await run_db(_left_gate_sync, chat, target_tg.id, live)
+        left_at, t_name, never = await run_db(_left_gate_sync, chat, target_tg.id, live)
+        if never:
+            await update.message.reply_text(
+                _never_member_text(t_name or html.escape(target_tg.full_name), via, handle), parse_mode="HTML")
+            return
         if group_presence.is_gone(left_at):
             await update.message.reply_text(
                 _left_block_text(t_name or html.escape(target_tg.full_name), left_at, via, handle), parse_mode="HTML")
@@ -1701,6 +1728,10 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         raise GameError("این بازیکن دیگه پیدا نشد.")
     from game import group_presence
 
+    from bio_lab.models import GroupMembership
+
+    if not GroupMembership.objects.filter(group=group, user=target).exists():
+        raise GameError("🚫 این بازیکن عضو این گروه نیست — فقط به بازیکن‌های همین گروه می‌شه اتک داد.")
     left_at = group_presence.observe(group.id, group.title, target.id, None)
     if group_presence.is_gone(left_at):
         raise GameError(f"🚪 این بازیکن {group_presence.ago_text(left_at)} پیش از این گروه رفته؛ "
