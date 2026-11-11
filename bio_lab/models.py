@@ -85,8 +85,16 @@ class User(models.Model):
     # invite link brought this player in (set once, at their first /start);
     # referral_bonus_paid marks that both sides have collected the reward earned
     # when this player crossed the referral milestone.
-    referred_by = models.BigIntegerField(null=True, blank=True)
+    referred_by = models.BigIntegerField(null=True, blank=True, db_index=True)
     referral_bonus_paid = models.BooleanField(default=False)
+    # 2026-11 invite system: when the link bound them (None = an invite from before it, which
+    # keeps the old lab-level-3 rule), when the invite became valid (weekly top list), how many
+    # separate days they have played (the anti-fake gate), and the referrer's top tier claimed.
+    referred_at = models.DateTimeField(null=True, blank=True)
+    referral_paid_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    active_days = models.IntegerField(default=0)
+    last_active_day = models.CharField(max_length=10, blank=True, default="")
+    referral_tier = models.IntegerField(default=0)
 
     # highest PvE campaign stage cleared (game/campaign.py); 0 = none yet
     campaign_stage = models.IntegerField(default=0)
@@ -885,6 +893,14 @@ class AnnouncementMark(models.Model):
     key, e.g. `fest_start:1405-07`, so each goes out exactly once."""
 
     key = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class ReferralWeekPrize(models.Model):
+    """One row per ISO week whose «top inviters» prize was paid — the unique week makes the
+    payout happen once even if two processes run the job (game/referral.py)."""
+    week = models.CharField(max_length=10, unique=True)
+    winners = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
 
 

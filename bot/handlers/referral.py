@@ -25,10 +25,16 @@ def _panel_sync(tg_user):
 
 def _friend_status(f: dict, milestone: int) -> str:
     if f["paid"]:
-        return f"{get_emoji('confirm')} جایزه گرفته شد"
+        return f"{get_emoji('confirm')} معتبر — جایزه گرفته شد"
+    if f.get("banned"):
+        return "🚫 مسدود — حساب نمی‌شه"
     if f["reached"]:
         return "🎉 آماده‌ی دریافت جایزه!"
-    return f"⛔ شرایط ناقص — سطح {f['level']}/{milestone}"
+    need_level = f.get("need_level", milestone)
+    parts = [f"سطح {min(f['level'], need_level)}/{need_level}"]
+    if f.get("need_days"):
+        parts.append(f"روز {min(f['days'], f['need_days'])}/{f['need_days']}")
+    return "⏳ " + " · ".join(parts)
 
 
 def _render(st: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
@@ -40,18 +46,44 @@ def _render(st: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyb
 
     lines = [
         f"{get_emoji('gift')} <b>دعوت دوستان</b>",
-        "<blockquote>لینکت رو برای دوستات بفرست. وقتی یکی با لینک تو بیاد و به "
-        f"<b>سطح آزمایشگاه {st['milestone_level']}</b> برسه، <b>هردوتون</b> جایزه می‌گیرین:\n"
-        f"• تو: <b>{st['referrer_reward']:,}</b> 💎   • دوستت: <b>{st['friend_reward']:,}</b> 💎</blockquote>",
+        "<blockquote>لینکت رو برای دوستات بفرست. دعوت وقتی <b>معتبر</b> می‌شه که دوستت:\n"
+        f"• به <b>سطح آزمایشگاه {st['milestone_level']}</b> برسه، و\n"
+        f"• <b>{st['min_days']} روز جدا</b> بازی کنه.\n"
+        "اون‌وقت <b>هردوتون</b> جایزه می‌گیرین:\n"
+        f"• تو: <b>{st['referrer_reward_text']}</b>\n"
+        f"• دوستت: <b>{st['friend_reward_text']}</b>\n"
+        f"💰 تا <b>{st['commission_days']} روز</b>، <b>{st['commission']}٪</b> هر خرید دوستت هم الماس برای تو.</blockquote>",
         "",
-        f"👥 کل: <b>{st['total']:,}</b>   ✅ موفق: <b>{len(successful):,}</b>   "
-        f"🎉 آماده: <b>{len(ready):,}</b>   ⛔ شرایط ناقص: <b>{len(incomplete):,}</b>",
+        f"👥 کل: <b>{st['total']:,}</b>   ✅ معتبر: <b>{len(successful):,}</b>   "
+        f"🎉 آماده: <b>{len(ready):,}</b>   ⏳ در راه: <b>{len(incomplete):,}</b>",
     ]
+    if filt == "all" and page == 0:
+        lines.append("")
+        lines.append("🏅 <b>جایزه‌های پله‌ای</b>")
+        for need, text, done in st["tiers"]:
+            lines.append(f"{'✅' if done else '▫️'} {need} دعوت معتبر ← {text}")
+        nxt = st.get("next_tier")
+        if nxt:
+            left = nxt[0] - len(successful)
+            lines.append(f"<i>🎯 فقط <b>{left}</b> دعوت معتبر دیگه تا پله‌ی بعدی!</i>")
+        p1, p2, p3 = st["week_prizes"]
+        lines.append("")
+        lines.append(f"🏆 <b>برترین دعوت‌کننده‌های این هفته</b>")
+        lines.append(f"<i>جایزه‌ی آخر هفته: 🥇 {p1:,} · 🥈 {p2:,} · 🥉 {p3:,} 💎 (حداقل {st['week_min']} دعوت معتبر)</i>")
+        if st["week_top"]:
+            for i, row in enumerate(st["week_top"], 1):
+                me = " ← تو" if row["me"] else ""
+                lines.append(f"{i}. {row['name']} — <b>{row['n']}</b>{me}")
+        else:
+            lines.append("<i>این هفته هنوز کسی دعوت معتبر نداره — نفر اول تو باش!</i>")
+        lines.append("")
+        lines.append("🛡 <i>حساب فیک حساب نمی‌شه: فقط بازیکنی که واقعاً چند روز بازی کنه معتبره، "
+                     "حساب‌های مسدود حذف می‌شن و روزی حداکثر ۱۰ دعوت تأیید می‌شه.</i>")
 
     if not friends:
         lines.append("\n<i>هنوز کسی رو دعوت نکردی. لینکت رو بفرست!</i>")
     else:
-        titles = {"all": "همه", "success": "موفق‌ها", "incomplete": "شرایط ناقص", "ready": "آماده‌ی جایزه"}
+        titles = {"all": "همه", "success": "معتبرها", "incomplete": "در راه", "ready": "آماده‌ی جایزه"}
         total_pages = max(1, (len(shown) + _REF_PAGE - 1) // _REF_PAGE)
         page = max(0, min(page, total_pages - 1))
         chunk = shown[page * _REF_PAGE : (page + 1) * _REF_PAGE]
@@ -67,13 +99,13 @@ def _render(st: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyb
     lines.append("\n🔗 <b>لینک دعوت تو:</b>")
     lines.append(f"<code>{st['link']}</code>")
 
-    rows = []
+    rows = [[btn("فرستادن لینک برای دوستان", emoji_key="btn_referral", style=CONFIRM, url=st["share_url"])]]
     if friends:
         # filter "menu" — tap to switch which list you're looking at
         rows.append([
             btn(("• " if filt == "all" else "") + "همه", style=NAV, callback_data="ref_view:all:0"),
-            btn(("• " if filt == "success" else "") + "✅ موفق", style=NAV, callback_data="ref_view:success:0"),
-            btn(("• " if filt == "incomplete" else "") + "⏳ ناقص", style=NAV, callback_data="ref_view:incomplete:0"),
+            btn(("• " if filt == "success" else "") + "✅ معتبر", style=NAV, callback_data="ref_view:success:0"),
+            btn(("• " if filt == "incomplete" else "") + "⏳ در راه", style=NAV, callback_data="ref_view:incomplete:0"),
         ])
         total_pages = max(1, (len(shown) + _REF_PAGE - 1) // _REF_PAGE)
         nav = []
@@ -127,9 +159,10 @@ async def referral_claim_callback(update: Update, context: ContextTypes.DEFAULT_
     text, keyboard = _render(st)
     from game.media import get_feature_image_path
     photo = get_feature_image_path("referral")
+    extra = "".join(line + "\n" for line in result.get("tier_lines", []))
     await send_screen(
         update,
-        f"🎉 <b>{result['diamonds']} 💎 از {result['claimed']} دعوت موفق گرفتی!</b>\n━━━━━━━━━━\n" + text,
+        f"🎉 <b>{result['diamonds']} 💎 از {result['claimed']} دعوت معتبر گرفتی!</b>\n" + extra + "━━━━━━━━━━\n" + text,
         photo=photo,
         parse_mode="HTML",
         reply_markup=keyboard,

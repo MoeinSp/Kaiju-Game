@@ -315,6 +315,15 @@ def approve(req_id: int) -> dict:
     from game.ledger import record_gain
 
     record_gain(user, "purchase", coins=req.coins, dna=req.dna, diamonds=req.diamonds)
+    try:
+        from game import referral
+
+        with transaction.atomic():   # a savepoint: a commission hiccup never undoes the purchase
+            referral.on_purchase_approved(user, int(req.price_toman or 0))
+    except Exception:  # noqa: BLE001
+        import logging
+
+        logging.getLogger(__name__).exception("referral commission failed for request %s", req.id)
     return {
         "user_id": user.id,
         "coins": req.coins,

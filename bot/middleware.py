@@ -108,11 +108,38 @@ def _cached_active_channels(force_refresh: bool = False) -> list:
     return channels
 
 
+_ACTIVE_SEEN: set[int] = set()
+_ACTIVE_DAY = [""]
+
+
+def _mark_active_day(user_id: int) -> None:
+    """Count the separate days a player plays (User.active_days) — the invite system's
+    anti-fake gate. One UPDATE per player per day; the in-memory set skips the rest."""
+    from django.db.models import F
+
+    from game.daily import today_str
+
+    today = today_str()
+    if _ACTIVE_DAY[0] != today:
+        _ACTIVE_SEEN.clear()
+        _ACTIVE_DAY[0] = today
+    if user_id in _ACTIVE_SEEN:
+        return
+    counted = User.objects.filter(id=user_id).exclude(last_active_day=today).update(
+        last_active_day=today, active_days=F("active_days") + 1)
+    if counted or User.objects.filter(id=user_id, last_active_day=today).exists():
+        _ACTIVE_SEEN.add(user_id)   # no row yet (a brand-new player) → try again on the next update
+
+
 def _is_banned_sync(user_id: int) -> bool:
     now = time.monotonic()
     cached = _BAN_CACHE.get(user_id)
     if cached is not None and now < cached[1]:
         return cached[0]
+    try:
+        _mark_active_day(user_id)
+    except Exception:  # noqa: BLE001 — day counting must never block an update
+        pass
     banned = User.objects.filter(id=user_id, is_banned=True).exists()
     if len(_BAN_CACHE) >= 20_000:   # bounded: drop the oldest quarter (a miss just re-checks)
         for key in list(_BAN_CACHE)[:5_000]:
