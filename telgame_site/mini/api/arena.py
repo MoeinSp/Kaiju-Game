@@ -169,7 +169,7 @@ def home(request, user):
         })
     return {
         "cup": user.cup, "power": power, "week": season.current_week(),
-        "season_left": season.seconds_until_next_week(),
+        "season_left": season.seconds_until_season_end(),
         "league": _league(lg), "next_league": _league(nxt) if nxt else None,
         "overcap": user.cup > A.deserved_cup(power),
         "shield": A.shield_remaining_seconds(user), "shield_cost_hours": constants.SHIELD_ATTACK_COST_HOURS,
@@ -710,7 +710,7 @@ def season_view(request, user):
              for row in season.standings(10)]
     week, results = season.last_season_results(10)
     return {
-        "week": season.current_week(), "left": season.seconds_until_next_week(), "table": table,
+        "week": season.current_week(), "left": season.seconds_until_season_end(), "table": table,
         "last_week": week,
         "last": [{"rank": r.rank, "name": _lab_name(r.user), "cup_before": r.cup_before, "cup_after": r.cup_after,
                   "me": r.user_id == user.id} for r in results],
@@ -864,7 +864,7 @@ def league_view(request, user):
         prev = max_rank
     return {
         "cup": user.cup, "division": _division(mine), "next": _division(league.next_division(user.cup)),
-        "left": season.seconds_until_next_week(), "week": season.current_week(),
+        "left": season.seconds_until_season_end(), "week": season.current_week(),
         "reward": _reward(league.season_reward(user.cup)),
         "rank": rank, "rank_reward": _reward(league.rank_reward(rank)) if user.cup > 0 else None,
         "rank_limit": prev,

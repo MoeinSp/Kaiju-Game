@@ -27,7 +27,7 @@ def _panel_sync(tg_user):
         "cup": user.cup,
         "division": league.division_for(user.cup),
         "next": league.next_division(user.cup),
-        "seconds_left": season.seconds_until_next_week(),
+        "seconds_left": season.seconds_until_season_end(),
         "standings": season.standings(limit=10),
         "reward": league.season_reward(user.cup),
         "user_id": user.id,
@@ -39,7 +39,7 @@ def _panel_sync(tg_user):
 def _league_table_text(my_key: str | None) -> str:
     """All 16 leagues with their end-of-week reward (kept short: this is shown as a
     photo caption, which Telegram caps at ~1,000 characters)."""
-    lines = ["🏅 <b>پاداش آخر هفته‌ی هر لیگ</b>", _DIV]
+    lines = ["🏅 <b>پاداش آخر فصل هر لیگ</b> <i>(هر دو هفته)</i>", _DIV]
     for div in league.DIVISIONS:
         here = " 📍" if div["key"] == my_key else ""
         lines.append(f"{div['emoji']} {div['title']} ({div['min_cup']:,}+): {_reward_fmt(league.DIVISION_REWARD[div['key']])}{here}")
@@ -47,7 +47,7 @@ def _league_table_text(my_key: str | None) -> str:
 
 
 def _rank_table_text() -> str:
-    lines = ["🎖 <b>جایزه‌ی رتبه‌ی آخر هفته</b>", _DIV,
+    lines = ["🎖 <b>جایزه‌ی رتبه‌ی آخر فصل</b>", _DIV,
              "<i>علاوه بر پاداش لیگ، به ۵۰ نفر اول جدول کاپ داده می‌شه:</i>", ""]
     prev = 0
     for max_rank, reward in league.RANK_REWARDS:
@@ -99,7 +99,7 @@ async def league_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             f"📍 رتبه‌ی فعلی تو: <b>{view['rank']:,}</b>"
             + (f" │ 🎖 جایزه‌ی رتبه: {_reward_fmt(bonus)}" if bonus else " │ 🎖 جایزه‌ی رتبه از ۵۰ نفر اول شروع می‌شه")
         )
-    lines.append("<i>آخر هفته هم پاداش لیگت رو می‌گیری، هم (اگه بین ۵۰ نفر اول باشی) جایزه‌ی رتبه.</i>")
+    lines.append("<i>آخر فصل (هر دو هفته) هم پاداش لیگت رو می‌گیری، هم (اگه بین ۵۰ نفر اول باشی) جایزه‌ی رتبه.</i>")
 
     lines.append(f"\n{_DIV}")
     lines.append("📊 <b>صدرنشین‌های فصل:</b>")

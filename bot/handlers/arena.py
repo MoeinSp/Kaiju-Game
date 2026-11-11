@@ -49,7 +49,7 @@ from game.season import (
     current_week,
     last_season_results,
     reset_floor,
-    seconds_until_next_week,
+    seconds_until_season_end,
     standings,
 )
 
@@ -73,6 +73,9 @@ ARENA_DETAIL_KEY = "arena_last_detail"
 def _format_remaining(seconds: int) -> str:
     hours, rem = divmod(max(0, seconds), 3600)
     minutes = rem // 60
+    if hours >= 24:   # the cup season is two weeks long — «276 ساعت» reads badly
+        days, hours = divmod(hours, 24)
+        return f"{days} روز و {hours} ساعت"
     if hours:
         return f"{hours} ساعت و {minutes} دقیقه"
     return f"{minutes} دقیقه"
@@ -103,7 +106,7 @@ def _arena_home_sync(tg_user):
         shield_remaining_seconds(user),
         _attacks_summary(user),
         current_week(),
-        seconds_until_next_week(),
+        seconds_until_season_end(),
         revengeable_attacks(user),
         chests,
     )
@@ -170,7 +173,7 @@ def _arena_home_keyboard(has_revenges: bool, chest_count: int = 0, ready_chests:
         ],
         [
             btn(chest_btn_text, emoji_key=chest_emoji, style=SHOP if ready_chests > 0 else NAV, callback_data="arena_chests"),
-            btn("جدول هفته", emoji_key="btn_rank", style=SHOP if ready_chests > 0 else NAV, callback_data="arena_top"),
+            btn("جدول فصل", emoji_key="btn_rank", style=SHOP if ready_chests > 0 else NAV, callback_data="arena_top"),
         ],
     ]
     if has_revenges:
@@ -1285,7 +1288,7 @@ def _top_sync():
     return [
         {**row, "reset_to": reset_floor(row["rank"], row["cup"])}
         for row in standings(10)
-    ], current_week(), seconds_until_next_week()
+    ], current_week(), seconds_until_season_end()
 
 
 async def arena_top_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1319,11 +1322,11 @@ async def arena_last_season_callback(update: Update, context: ContextTypes.DEFAU
     query = update.callback_query
     week, results = await run_db(_last_season_sync)
     await query.answer()
-    keyboard = InlineKeyboardMarkup([[back_btn("arena_top", "بازگشت به جدول هفته")]])
+    keyboard = InlineKeyboardMarkup([[back_btn("arena_top", "بازگشت به جدول فصل")]])
     if not results:
         await safe_edit_message_text(
             query,
-            "🗓 هنوز هیچ فصلی تموم نشده — اولین ریست آخر همین هفته‌ست.",
+            "🗓 هنوز هیچ فصلی تموم نشده — اولین ریست آخر همین فصله (هر دو هفته یک بار).",
             reply_markup=keyboard,
         )
         return

@@ -21,7 +21,7 @@
 
   K.hub("battle", { id: "arena", title: "آرنا", sub: "غارت، کاپ و لیگ", icon: "swords", color: "var(--bad)", go: "ar_home", order: 2 });
   K.hub("battle", { id: "chests", title: "جعبه‌ها", sub: "جایزه‌ی بردهای آرنا", icon: "chest", color: "var(--gold)", go: "ar_chests", order: 3, badge: function () { return HU.hubStatus().ready_chests || 0; } });
-  K.hub("more", { id: "league", title: "لیگ", sub: "پاداش آخر هفته و جایزه‌ی رتبه", icon: "medal", color: "var(--cup)", go: "ar_league", hall: 3, order: 58 });
+  K.hub("more", { id: "league", title: "لیگ", sub: "پاداش آخر فصل و جایزه‌ی رتبه", icon: "medal", color: "var(--cup)", go: "ar_league", hall: 3, order: 58 });
 
   // ───────────────────────── small builders ─────────────────────────
   function tier(key) { return String(key || "bronze").split("_")[0]; }
@@ -150,9 +150,9 @@
           return '<div class="' + (r.me ? "me" : "") + '"><span class="rk num">' + r.rank + '</span><span class="nm">' + K.esc(r.name) + '</span><span class="cp">' + K.n(r.cup_before) + ' <span class="faint">' + K.ic("chevron") + "</span> " + K.n(r.cup_after) + "</span></div>";
         });
         return '<div class="grab"></div><div class="pad"><div class="ttl" style="font-size:18px">' + (tab === "now" ? "جدول فصل " : "نتایج فصل ") + '<span class="num">' + K.esc(tab === "now" ? d.week : (d.last_week || "")) + "</span></div>" +
-          '<div class="seg mt"><button data-tab="now" class="' + (tab === "now" ? "on" : "") + '">جدول هفته</button><button data-tab="last" class="' + (tab === "last" ? "on" : "") + '">فصل قبل</button></div>' +
+          '<div class="seg mt"><button data-tab="now" class="' + (tab === "now" ? "on" : "") + '">جدول فصل</button><button data-tab="last" class="' + (tab === "last" ? "on" : "") + '">فصل قبل</button></div>' +
           (tab === "now" ? '<p class="lead">' + K.esc(K.dur(d.left)) + " تا ریست کاپ‌ها</p>" : "") +
-          (rows.length ? '<div class="panel ar-table">' + rows.join("") + "</div>" : K.state("trophy", tab === "now" ? "هنوز کسی کاپ نگرفته" : "هنوز فصلی تموم نشده", tab === "now" ? "اولین نفر باش!" : "اولین ریست آخر همین هفته‌ست.")) + "</div>";
+          (rows.length ? '<div class="panel ar-table">' + rows.join("") + "</div>" : K.state("trophy", tab === "now" ? "هنوز کسی کاپ نگرفته" : "هنوز فصلی تموم نشده", tab === "now" ? "اولین نفر باش!" : "اولین ریست آخر همین فصله.")) + "</div>";
       }
       function open() {
         var box = K.sheet(body());
@@ -214,8 +214,8 @@
           '<button data-act="chests" style="color:var(--gold)"><span class="ic">' + K.ic("chest") + '</span><span class="t">جعبه‌ها <span class="num muted">(' + ch.count + "/" + ch.max + ")</span><small>" + chestSub + '</small></span><span class="chev">' + K.ic("chevron") + "</span></button>" +
           '<button data-act="revenges" style="color:var(--bad)"><span class="ic">' + K.ic("revenge") + '</span><span class="t">انتقام‌ها<small>' + (d.revenges ? K.n(d.revenges) + " انتقام در انتظار · مهلت " + K.n(3) + " روزه" : "کسی اخیراً بهت حمله نکرده") + "</small></span>" + (d.revenges ? '<span class="ar-cnt num">' + d.revenges + "</span>" : "") + '<span class="chev">' + K.ic("chevron") + "</span></button>" +
           '<button data-act="defense" style="color:var(--good)"><span class="ic">' + K.ic("shield") + '</span><span class="t">تیم دفاع<small>تا ' + K.n(3) + " هیولا؛ بهترینش خودکار جلوی مهاجم می‌ایسته</small></span><span class=\"chev\">" + K.ic("chevron") + "</span></button>" +
-          '<button data-act="season" style="color:var(--accent)"><span class="ic">' + K.ic("podium") + '</span><span class="t">جدول هفته و فصل قبل<small>ده نفر اول و کاپ بعد از ریست</small></span><span class="chev">' + K.ic("chevron") + "</span></button>" +
-          '<button data-act="league" style="color:var(--cup)"><span class="ic">' + K.ic("medal") + '</span><span class="t">لیگ<small>پاداش آخر هفته و جایزه‌ی رتبه</small></span><span class="chev">' + K.ic("chevron") + "</span></button></div>" +
+          '<button data-act="season" style="color:var(--accent)"><span class="ic">' + K.ic("podium") + '</span><span class="t">جدول فصل و فصل قبل<small>ده نفر اول و کاپ بعد از ریست</small></span><span class="chev">' + K.ic("chevron") + "</span></button>" +
+          '<button data-act="league" style="color:var(--cup)"><span class="ic">' + K.ic("medal") + '</span><span class="t">لیگ<small>پاداش آخر فصل و جایزه‌ی رتبه</small></span><span class="chev">' + K.ic("chevron") + "</span></button></div>" +
           '<div class="h2">' + K.ic("shield") + "آخرین حمله‌ها به تو</div>" +
           (d.history.length ? '<div class="panel list">' + d.history.map(function (h) {
             var lost = K.amounts({ coins: h.coins, dna: h.dna });
@@ -517,7 +517,7 @@
           if (leagueTab === "top") return d.standings.length ? '<div class="panel ar-table">' + d.standings.map(function (r) {
             return '<div class="' + (r.me ? "me" : "") + '"><span class="rk num">' + r.rank + "</span>" + medal(r.league) + '<span class="nm">' + K.esc(r.name) + '</span><span class="cp">' + K.ic("trophy") + K.n(r.cup) + "</span></div>";
           }).join("") + "</div>" : K.state("trophy", "هنوز کسی کاپ نگرفته", "");
-          return '<p class="lead">آخر هفته پاداش لیگی که توش تموم کنی رو می‌گیری.</p><div class="panel ar-guide">' + d.divisions.map(function (v) {
+          return '<p class="lead">آخر هر فصل (هر دو هفته) پاداش لیگی که توش تموم کنی رو می‌گیری.</p><div class="panel ar-guide">' + d.divisions.map(function (v) {
             return '<div class="' + (v.mine ? "me" : "") + '">' + medal(v.key) + '<span class="grow"><b>' + K.esc(v.title) + '</b><small class="muted"> کاپ ' + K.n(v.min_cup) + "+" + (v.mine ? " · اینجایی" : "") + '</small></span><span class="sm">' + K.amounts(v.reward, " ") + "</span></div>";
           }).join("") + "</div>";
         }
@@ -526,7 +526,7 @@
           root.innerHTML = '<div class="banner"' + (d.img ? ' style="background-image:url(\'' + d.img + "')\"" : "") + '><div class="grow"><div class="ttl">لیگ رتبه‌بندی</div><div class="sm" style="color:#c5cee2">پایان فصل: <span class="timer" data-until="' + until + '" data-fmt="long" data-done="تموم شد"></span></div></div></div>' +
             '<div class="panel pad mt ar-league"><div class="flex">' + medal(dv.key, "big") + '<div class="grow"><div class="b" style="font-size:16px">' + K.esc(dv.title) + '</div><div class="sm t-cup">' + K.ic("trophy") + " " + K.n(d.cup) + ' کاپ</div></div></div>' +
             (nx ? '<div class="mt">' + K.bar((d.cup - dv.min_cup) / Math.max(1, nx.min_cup - dv.min_cup), "gold") + '<div class="xs muted" style="margin-top:5px">تا «' + K.esc(nx.title) + "»: " + K.n(nx.min_cup - d.cup) + " کاپ دیگه</div></div>" : '<div class="xs t-gold mt">توی بالاترین سطح لیگی!</div>') + "</div>" +
-            '<div class="panel list mt"><div style="color:var(--gold)"><span class="ic">' + K.ic("gift") + '</span><span class="t">پاداش آخر هفته‌ی لیگت</span><span class="v">' + K.amounts(d.reward, " ") + "</span></div>" +
+            '<div class="panel list mt"><div style="color:var(--gold)"><span class="ic">' + K.ic("gift") + '</span><span class="t">پاداش آخر فصل لیگت</span><span class="v">' + K.amounts(d.reward, " ") + "</span></div>" +
             (d.cup > 0 ? '<div style="color:var(--accent)"><span class="ic">' + K.ic("podium") + '</span><span class="t">رتبه‌ی فعلی تو: ' + K.n(d.rank) + "<small>" + (d.rank_reward ? "جایزه‌ی این رتبه" : "جایزه‌ی رتبه از " + K.n(d.rank_limit) + " نفر اول شروع می‌شه") + '</small></span><span class="v">' + (d.rank_reward ? K.amounts(d.rank_reward, " ") : "") + "</span></div>" : "") + "</div>" +
             '<div class="seg mt">' + [["divs", "جوایز لیگ‌ها"], ["ranks", "جوایز رتبه"], ["top", "صدرنشین‌ها"]].map(function (t) { return '<button data-tab="' + t[0] + '" class="' + (leagueTab === t[0] ? "on" : "") + '">' + t[1] + "</button>"; }).join("") + "</div>" + list();
           if (tick) tick(); else tick = HU.live(root);

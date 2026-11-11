@@ -1,15 +1,22 @@
-"""Weekly cup seasons.
+"""Cup seasons — two weeks long (owner, 2026-11-11; they were weekly before).
 
-The arena ladder resets every week so late joiners aren't permanently locked out
+The arena ladder resets every season so late joiners aren't permanently locked out
 of the top of the table, but a reset that dumped everyone back to zero would
-throw away a whole week of work. Instead each player is reset to a *floor*
+throw away a whole season of work. Instead each player is reset to a *floor*
 derived from where they finished: the higher you placed, the higher you restart.
 
 Settlement is lazy, like everything else here (see game/energy.py, game/buildings.py):
 there's no cron. `close_due_season()` runs on any arena/leaderboard read, notices
-that the stored "last closed week" is behind the current one, and settles once.
+that the stored "last closed season" is behind the current one, and settles once.
 `SeasonState` makes that idempotent even if two requests race.
+
+Two clocks live here. The cup season (season_key: 14 days from a Monday) resets cups and
+pays the league division + rank rewards. The ISO week (week_key) is still the clock of
+everything else weekly — the alliance league and raid ranking settled in the same close,
+the dungeon element, group league, invite top list, weekend cup…
 """
+
+import datetime
 
 from django.db import transaction
 from django.utils import timezone
@@ -27,13 +34,29 @@ def week_key(when=None) -> str:
     return f"{iso.year}-W{iso.week:02d}"
 
 
+SEASON_DAYS = 14
+SEASON_ANCHOR = datetime.date(2026, 11, 9)   # a Monday — seasons start on it ± k·14 days
+
+
+def season_start(when=None) -> datetime.date:
+    """First day (a Monday, game timezone) of the cup season `when` falls in."""
+    day = (timezone.localtime(when) if when is not None else timezone.localtime()).date()
+    return SEASON_ANCHOR + datetime.timedelta(days=((day - SEASON_ANCHOR).days // SEASON_DAYS) * SEASON_DAYS)
+
+
+def season_key(when=None) -> str:
+    """The cup season's label: its start date, e.g. "2026-11-09" (fits SeasonResult.week_key)."""
+    return season_start(when).isoformat()
+
+
 def _state() -> SeasonState:
     state, _ = SeasonState.objects.get_or_create(id=1)
     return state
 
 
 def current_week() -> str:
-    return week_key()
+    """The current CUP SEASON's key (the name is kept for the callers: arena, league, mini app)."""
+    return season_key()
 
 
 def reset_floor(rank: int, cup: int) -> int:
@@ -53,32 +76,40 @@ def reset_floor(rank: int, cup: int) -> int:
 
 
 def standings(limit: int = 10) -> list[dict]:
-    """Current week's table, best first."""
+    """Current season's table, best first."""
     users = list(User.objects.filter(is_banned=False).order_by("-cup", "id")[:limit])
     return [{"rank": i, "user": u, "cup": u.cup} for i, u in enumerate(users, start=1)]
 
 
-@transaction.atomic
 def close_due_season() -> str | None:
-    """Settles the previous week if it hasn't been settled yet. Returns the week
-    key that was closed, or None when there was nothing to do."""
-    now_week = current_week()
-    if _state().last_closed_week == now_week:
+    """Settles the weekly part (alliance league, raid) when the ISO week turned over, and
+    the cup season when the two-week season did. Returns the cup season key that was
+    closed, or None."""
+    st = _state()
+    if st.last_closed_week == week_key() and st.last_closed_season == season_key():
         return None  # the common case: no lock needed
-    # lock the state row: only ONE request may settle the week (two at once used to
+    _close_week()
+    return _close_cups()
+
+
+@transaction.atomic
+def _close_cups() -> str | None:
+    now_season = season_key()
+    # lock the state row: only ONE request may settle the season (two at once used to
     # reset cups and pay the division rewards twice)
     state = SeasonState.objects.select_for_update().get(id=1)
-    if state.last_closed_week == now_week:
+    if state.last_closed_season == now_season:
         return None
-    if state.last_closed_week is None:
-        # first ever run — just adopt the current week without wiping anyone's cup
-        state.last_closed_week = now_week
-        state.save(update_fields=["last_closed_week"])
+    if state.last_closed_season is None:
+        # first run of the two-week season — adopt the current one without wiping anyone's
+        # cup (the last weekly reset already happened at the start of it)
+        state.last_closed_season = now_season
+        state.save(update_fields=["last_closed_season"])
         return None
 
     from game import league
 
-    closing = state.last_closed_week
+    closing = state.last_closed_season
     ranked = list(User.objects.filter(is_banned=False, cup__gt=0).order_by("-cup", "id"))
     for rank, user in enumerate(ranked, start=1):
         # league division reward for how they FINISHED (their end-of-season cup),
@@ -93,6 +124,22 @@ def close_due_season() -> str | None:
         )
         user.cup = new_cup
         user.save(update_fields=["cup"])
+    state.last_closed_season = now_season
+    state.save(update_fields=["last_closed_season"])
+    return closing
+
+
+@transaction.atomic
+def _close_week() -> None:
+    """The weekly settlements that used to share the (then weekly) cup close."""
+    now_week = week_key()
+    state = SeasonState.objects.select_for_update().get(id=1)
+    if state.last_closed_week == now_week:
+        return
+    if state.last_closed_week is None:
+        state.last_closed_week = now_week
+        state.save(update_fields=["last_closed_week"])
+        return
 
     # weekly alliance-league reward: top-10 alliances by power pay their members.
     # Inside the same week-guarded block, so it settles exactly once per week.
@@ -115,7 +162,6 @@ def close_due_season() -> str | None:
 
     state.last_closed_week = now_week
     state.save(update_fields=["last_closed_week"])
-    return closing
 
 
 def settle_daily_treasury() -> list[tuple[int, str]]:
@@ -140,7 +186,9 @@ def settle_daily_treasury() -> list[tuple[int, str]]:
 
 
 def last_season_results(limit: int = 10) -> tuple[str | None, list[SeasonResult]]:
-    latest = SeasonResult.objects.order_by("-week_key").first()
+    # newest by time, not by key: the old weekly keys ("2026-W45") sort above the
+    # two-week season keys ("2026-11-09")
+    latest = SeasonResult.objects.order_by("-created_at", "-id").first()
     if latest is None:
         return None, []
     # select_related is load-bearing, not an optimisation: the caller renders
@@ -153,10 +201,17 @@ def last_season_results(limit: int = 10) -> tuple[str | None, list[SeasonResult]
     )
 
 
-def seconds_until_next_week() -> int:
-    """Time left in the current season, for the countdown on the arena screen."""
-    import datetime
+def seconds_until_season_end() -> int:
+    """Time left in the current cup season, for the countdowns on the arena screens."""
+    now = timezone.localtime()
+    start = season_start(now)
+    end = timezone.make_aware(datetime.datetime.combine(start + datetime.timedelta(days=SEASON_DAYS), datetime.time.min),
+                              timezone.get_current_timezone())
+    return max(0, int((end - now).total_seconds()))
 
+
+def seconds_until_next_week() -> int:
+    """Time left in the current ISO week (dungeon element etc. — NOT the cup season)."""
     now = timezone.localtime()
     days_ahead = 7 - now.isoweekday()  # isoweekday: Mon=1 .. Sun=7
     next_monday = (now + datetime.timedelta(days=days_ahead + 1)).replace(
