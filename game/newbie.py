@@ -2,7 +2,7 @@
 
 On 2026-11-11, 88% of all players had never passed lab level 5: most stopped in the first
 days. The calendar gives a reason to come back on day 2, 3 … 7, growing gifts and a
-guaranteed epic kaiju on day 7. Days don't have to be consecutive (a missed day doesn't
+a guaranteed legendary kaiju on day 3 and a mythic one on day 7. Days don't have to be consecutive (a missed day doesn't
 reset anything) — only one gift per game day (game.daily.today_str).
 
 Who gets it: every player created after this shipped (User.newbie_eligible is set at
@@ -27,11 +27,11 @@ from game.creature import GameError
 DAYS = [
     {"coins": 20_000, "dna": 1_000, "diamonds": 10, "cards": [(30, 2)]},
     {"coins": 30_000, "dna": 1_500, "diamonds": 15, "cards": [(30, 1)]},
-    {"coins": 40_000, "dna": 2_000, "diamonds": 20, "cards": [(60, 1)]},
+    {"coins": 40_000, "dna": 2_000, "diamonds": 20, "cards": [(60, 1)], "creature": "legendary"},
     {"coins": 50_000, "dna": 2_500, "diamonds": 25, "cards": [(30, 2)]},
     {"coins": 60_000, "dna": 3_000, "diamonds": 30, "cards": [(60, 1)]},
     {"coins": 80_000, "dna": 4_000, "diamonds": 40, "cards": [(60, 2)]},
-    {"coins": 100_000, "dna": 5_000, "diamonds": 60, "creature": "epic"},
+    {"coins": 100_000, "dna": 5_000, "diamonds": 60, "creature": "mythic"},
 ]
 TOTAL_DAYS = len(DAYS)
 
@@ -130,8 +130,15 @@ def collect_reminders() -> list[tuple]:
     ids = []
     for uid, done in rows:
         day = done + 1
-        big = "creature" in DAYS[done]
-        head = "🦖 <b>امروز روز آخره — کایجوی حماسی‌ت منتظرته!</b>" if big else f"🎁 <b>هدیه‌ی روز {day} تقویم تازه‌وارد منتظرته!</b>"
+        kaiju = DAYS[done].get("creature")
+        if kaiju:
+            from game import constants
+
+            name = constants.RARITY_LABELS.get(kaiju, kaiju).split(" ", 1)[-1]   # «🔴 اساطیری» → «اساطیری»
+            when = "امروز روز آخره" if day == TOTAL_DAYS else f"هدیه‌ی روز {day}"
+            head = f"🦖 <b>{when} — یه کایجوی {name} منتظرته!</b>"
+        else:
+            head = f"🎁 <b>هدیه‌ی روز {day} تقویم تازه‌وارد منتظرته!</b>"
         out.append((uid, f"{head}\n{reward_text(DAYS[done])}\n<i>یه سر بزن و بگیرش — هر روز یه هدیه‌ی بزرگ‌تر.</i>", "newbie"))
         ids.append(uid)
     if ids:
