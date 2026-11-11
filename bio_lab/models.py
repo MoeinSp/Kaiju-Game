@@ -887,6 +887,21 @@ class ActionHour(models.Model):
         constraints = [models.UniqueConstraint(fields=["day", "hour", "action"], name="uq_action_hour")]
 
 
+class StatSnapshot(models.Model):
+    """The game's totals at the end of one day (game/admin_stats.snapshot_today, hourly
+    job; the day's last write wins) — what lets «آمار کلی» show how the economy and the
+    player base moved over time, which live sums alone can't."""
+
+    day = models.CharField(max_length=10, unique=True)   # "YYYY-MM-DD", game timezone
+    users = models.IntegerField(default=0)
+    creatures = models.IntegerField(default=0)
+    coins = models.BigIntegerField(default=0)
+    dna = models.BigIntegerField(default=0)
+    diamonds = models.BigIntegerField(default=0)
+    data = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class ButtonClick(models.Model):
     """Presses per day of one button key (`menu:hunt`, `dsp:offer`, …) — game/metrics.py."""
 

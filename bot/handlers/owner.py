@@ -63,7 +63,7 @@ from game.moderation import (
     set_lab_level,
     user_info,
 )
-from game.report import dashboard_stats, progress_report
+from game.report import dashboard_stats
 
 logger = logging.getLogger(__name__)
 
@@ -1465,39 +1465,9 @@ async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def report_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not _is_admin(update):
-        return
-    data = await run_db(progress_report)
+    from bot.handlers import admin_stats
 
-    lines = [
-        f"{get_emoji('stats')} <b>گزارش پیشرفت</b>\n",
-        f"{get_emoji('users')} کاربران: {data['users']}   {get_emoji('creature')} موجودات: {data['creatures']}"
-        f"   {get_emoji('alliance')} اتحادها: {data['alliances']}\n",
-        f"{get_emoji('coin')} <b>برترین بازیکن‌ها (طلا):</b>",
-    ]
-    for p in data["top_players"]:
-        lines.append(f"• {p['name']} — {p['coins']} طلا")
-
-    lines.append(f"\n{get_emoji('creature')} <b>قوی‌ترین موجودات (سطح):</b>")
-    for c in data["top_creatures"]:
-        lines.append(f"• {c['name']} (Lv{c['level']}) — {c['owner']}")
-
-    lines.append("")
-    if data["suspicious"]:
-        lines.append(
-            f"{get_emoji('warning')} <b>فعالیت مشکوک امروز</b> "
-            "(بیشتر از سقف نظری ممکن با انرژی عادی — یعنی یا باگه یا اکسپلویت):"
-        )
-        for s in data["suspicious"]:
-            lines.append(f"• {s['name']} — {s['action']}: {s['count']} بار (سقف نظری: {s['limit']})")
-    else:
-        lines.append(f"{get_emoji('confirm')} هیچ فعالیت مشکوکی امروز پیدا نشد.")
-
-    kb = InlineKeyboardMarkup([[back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")]])
-    if update.callback_query:
-        await safe_edit_message_text(update.callback_query, "\n".join(lines), parse_mode="HTML", reply_markup=kb)
-    else:
-        await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=kb)
+    await admin_stats.report_cmd(update, context)
 
 
 # ── purchase (sales) report ───────────────────────────────────────────────────
@@ -3899,9 +3869,11 @@ _TREND = {"up": "📈 پیشرفت", "down": "📉 پسرفت", "flat": "➖ ت�
 
 
 def _stats_day_sync(day):
-    from game import metrics
+    from game import admin_stats, metrics
 
-    return metrics.day_report(day), global_stats()
+    report = metrics.day_report(day)
+    report["extras"] = admin_stats.day_extras(day)
+    return report, global_stats()
 
 
 def _parse_stats_day(raw: str):
@@ -3971,7 +3943,19 @@ def _stats_day_text(r: dict, g: dict) -> str:
         lines.append(f"⏰ شلوغ‌ترین ساعت: <b>{r['peak'][0]}:00</b> ({r['peak'][1]:,} بازیکن)")
     if ac is not None:
         sign = "+" if ac["diff"] > 0 else ""
-        lines.append(f"{_TREND[ac['trend']]}: <b>{sign}{ac['diff']:,}</b> بازیکن (<b>{sign}{ac['pct']:.0f}٪</b>)")
+        lines.append(f"{_TREND[ac['trend']]} نسبت به {'دیروز تا همین ساعت' if r['is_today'] else 'روز قبل'}: "
+                     f"<b>{sign}{ac['diff']:,}</b> بازیکن (<b>{sign}{ac['pct']:.0f}٪</b>)")
+    ex = r.get("extras")
+    if ex:
+        from bot.handlers.admin_stats import delta
+
+        lines.append(f"📊 میانگین فعال ۷ روزِ تا این روز: <b>{ex['avg7']:,.0f}</b> · ۷ روز قبلش {ex['avg_prev7']:,.0f}  "
+                     f"<b>{delta(ex['avg7'], ex['avg_prev7']) or '—'}</b>")
+        if ex["d1"] is not None:
+            lines.append(f"↩️ تازه‌واردهای روز قبلش که این روز برگشتن: <b>{ex['d1']:.0f}٪</b> ({ex['d1_back']:,} از {ex['d1_new']:,})")
+        lines += ["", _STAT_DIV, "💰 <b>فروش</b>",
+                  f"🧾 <b>{ex['sales']['toman']:,}</b> تومان · {ex['sales']['n']} خرید · {ex['sales']['buyers']} خریدار"
+                  + (f"  ·  ⏳ {ex['pending']} رسید منتظر" if ex["pending"] else "")]
 
     # ── activities ──
     if r["actions"]:
@@ -4002,21 +3986,10 @@ def _stats_day_text(r: dict, g: dict) -> str:
 
 
 def _stats_day_keyboard(day) -> InlineKeyboardMarkup:
-    import datetime
+    """The dashboard tabs (bot/handlers/admin_stats.py) with the day navigation."""
+    from bot.handlers.admin_stats import keyboard
 
-    from django.utils import timezone
-
-    today = timezone.localdate()
-    one = datetime.timedelta(days=1)
-    nav = [btn("روز قبل", emoji_key="btn_prev", style=ADMIN, callback_data=f"adm_stats:{(day - one).isoformat()}")]
-    if day < today:
-        nav.append(btn("روز بعد", emoji_key="btn_next", style=ADMIN, callback_data=f"adm_stats:{(day + one).isoformat()}"))
-    rows = [nav, [btn("۷ روز قبل", style=ADMIN, callback_data=f"adm_stats:{(day - 7 * one).isoformat()}")]]
-    if day != today:
-        rows[1].append(btn("امروز", style=ADMIN, callback_data=f"adm_stats:{today.isoformat()}"))
-    rows.append([btn("بروزرسانی", emoji_key="btn_recheck", style=ADMIN, callback_data=f"adm_stats:{day.isoformat()}")])
-    rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
-    return InlineKeyboardMarkup(rows)
+    return keyboard("day", day)
 
 
 async def global_stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -6387,6 +6360,9 @@ def register(application) -> None:
     )
     application.add_handler(CallbackQueryHandler(admin_menu_callback, pattern=r"^admin_menu:"))
     application.add_handler(CallbackQueryHandler(global_stats_cmd, pattern=r"^adm_stats:\d{4}-\d{2}-\d{2}$"))
+    from bot.handlers import admin_stats as _admin_stats
+
+    _admin_stats.register(application)
     application.add_handler(CommandHandler("stats", global_stats_cmd, filters.ChatType.PRIVATE))
     application.add_handler(
         CallbackQueryHandler(set_emoji_category_callback, pattern=f"^{EMOJI_CAT_CALLBACK_PREFIX}")

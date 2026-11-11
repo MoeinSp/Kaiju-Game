@@ -606,6 +606,16 @@ async def metrics_flush_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         logging.getLogger(__name__).exception("metrics flush failed")
 
 
+async def stats_snapshot_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Hourly: today's game totals for «آمار کلی» (game/admin_stats.snapshot_today)."""
+    from game import admin_stats
+
+    try:
+        await run_db(admin_stats.snapshot_today)
+    except Exception:  # noqa: BLE001 — statistics must never break the bot
+        logging.getLogger(__name__).exception("stats snapshot failed")
+
+
 async def metrics_prune_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     from game import metrics
 
@@ -635,5 +645,6 @@ def register(application) -> None:
     job_queue.run_repeating(metrics_flush_job, interval=60, first=45)
     job_queue.run_repeating(outbox_job, interval=OUTBOX_INTERVAL_SECONDS, first=20)
     job_queue.run_repeating(metrics_prune_job, interval=86400, first=3600)
+    job_queue.run_repeating(stats_snapshot_job, interval=3600, first=300)
     job_queue.run_repeating(autobackup_job, interval=AUTOBACKUP_CHECK_SECONDS, first=120)
     job_queue.run_repeating(cache_prune_job, interval=CACHE_PRUNE_SECONDS, first=90)
