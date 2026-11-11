@@ -125,8 +125,16 @@ def state(user: User, full: bool = True) -> dict:
         "tournament_open": tournament.registration_open() and tournament.my_entry(user) is None,
         "festival": festival.theme() if festival.active_key() else None,
         "rule": events.rule_line(),
-        "serum_lab": _serum_lab_built(user),   # «آزمایشگاه سرم» beside «شهر» on the main menu
+        "serum_lab": _serum_lab_built(user),
+        "newbie": _newbie_day(user),   # «تقویم تازه‌وارد»: the day whose gift is waiting today, else None   # «آزمایشگاه سرم» beside «شهر» on the main menu
     }
+
+
+def _newbie_day(user: User) -> int | None:
+    from game import newbie
+
+    st = newbie.state(user)
+    return st["next_day"] if st["can_claim"] else None
 
 
 def _serum_lab_built(user: User) -> bool:
@@ -143,7 +151,7 @@ def collectable_count(st: dict) -> int:
 
 def waiting_count(st: dict) -> int:
     """The number on the menu button: everything collectable plus what is live right now."""
-    return collectable_count(st) + int(bool(st["boss"])) + int(st["tournament_open"])
+    return collectable_count(st) + int(bool(st["boss"])) + int(st["tournament_open"]) + int(bool(st.get("newbie")))
 
 
 def _loot_roll(contents: dict) -> dict | None:

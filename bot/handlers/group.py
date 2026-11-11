@@ -1810,6 +1810,10 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     record_action(attacker, "duel_win" if attacker_won else "duel_loss")
     completed_missions = check_missions(winner_user, "duel_win") if attacker_won else []
     speedup_won = maybe_award_speedup_card(winner_user) if attacker_won else None
+    if attacker_won:   # «لیگ گروه‌ها» / «جنگ گروه‌ها» points (game/group_war.py)
+        from game import group_war
+
+        group_war.on_pvp_win(group.id)
 
     DuelLog.objects.create(
         group_id=group.id, challenger_id=attacker.id, opponent_id=target.id,

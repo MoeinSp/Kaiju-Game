@@ -510,4 +510,20 @@ def stats(user: User) -> dict:
         "commission_days": COMMISSION_DAYS,
         "daily_cap": DAILY_ACTIVE_CAP,
         "friends": friends,
+        "group_steps": _group_steps(),
+        "my_groups": _my_groups(user.id),
     }
+
+
+def _group_steps() -> list[tuple[int, str]]:
+    from game import group_growth
+
+    return [(need, reward_text(r)) for need, r in group_growth.ADD_STEPS]
+
+
+def _my_groups(user_id: int) -> list[dict]:
+    import html
+
+    from game import group_growth
+
+    return [{**g, "title": html.escape(g["title"])} for g in group_growth.adder_progress(user_id)]

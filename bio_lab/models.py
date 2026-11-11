@@ -95,6 +95,13 @@ class User(models.Model):
     active_days = models.IntegerField(default=0)
     last_active_day = models.CharField(max_length=10, blank=True, default="")
     referral_step = models.IntegerField(default=0)   # growth steps of THIS invited player already paid
+    # «تقویم تازه‌وارد» (game/newbie.py): gifts taken (0-7), the day of the last one and of the last reminder
+    newbie_eligible = models.BooleanField(default=False)
+    newbie_day = models.IntegerField(default=0)
+    newbie_last = models.CharField(max_length=10, blank=True, default="")
+    newbie_remind_day = models.CharField(max_length=10, blank=True, default="")
+    # «پاداش اتحاد» in the alliance's home group (game/group_growth.py): the day it was last taken
+    ally_base_day = models.CharField(max_length=10, blank=True, default="")
 
     # highest PvE campaign stage cleared (game/campaign.py); 0 = none yet
     campaign_stage = models.IntegerField(default=0)
@@ -221,6 +228,9 @@ class Alliance(models.Model):
     recruit_note = models.CharField(max_length=120, blank=True, default="")
     recruiting = models.BooleanField(default=False)
     invite_code = models.CharField(max_length=16, blank=True, default="")
+    # «پایگاه اتحاد» — the Telegram group this alliance lives in (game/group_growth.py)
+    home_group = models.OneToOneField("Group", null=True, blank=True, on_delete=models.SET_NULL,
+                                      related_name="home_alliance")
 
     def __str__(self) -> str:
         return self.name
@@ -904,6 +914,93 @@ class ReferralWeekPrize(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
+class GroupBoss(models.Model):
+    """«باس گروه» — a boss that appears in one group; anyone there hits it with the button
+    under its message (game/group_boss.py)."""
+    ACTIVE, DEAD, ESCAPED = "active", "dead", "escaped"
+    group = models.ForeignKey("Group", on_delete=models.CASCADE, related_name="bosses")
+    name = models.CharField(max_length=64)
+    element = models.CharField(max_length=16)
+    max_hp = models.BigIntegerField()
+    hp = models.BigIntegerField()
+    status = models.CharField(max_length=10, default=ACTIVE, db_index=True)
+    message_id = models.BigIntegerField(null=True, blank=True)
+    last_hitter = models.BigIntegerField(null=True, blank=True)
+    spawned_at = models.DateTimeField(auto_now_add=True)
+    ends_at = models.DateTimeField()
+    settled = models.BooleanField(default=False)
+
+
+class GroupBossHit(models.Model):
+    boss = models.ForeignKey("GroupBoss", on_delete=models.CASCADE, related_name="hits")
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    damage = models.BigIntegerField(default=0)
+    hits = models.IntegerField(default=0)
+    first_hit_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["boss", "user"], name="uq_groupboss_user")]
+
+
+class GroupWeekScore(models.Model):
+    """«لیگ گروه‌ها» — a group's points in one ISO week (game/group_war.py)."""
+    group = models.ForeignKey("Group", on_delete=models.CASCADE, related_name="week_scores")
+    week = models.CharField(max_length=10)
+    points = models.BigIntegerField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["group", "week"], name="uq_group_week")]
+        indexes = [models.Index(fields=["week", "-points"], name="groupweek_rank_idx")]
+
+
+class GroupWeekPrize(models.Model):
+    week = models.CharField(max_length=10, unique=True)
+    winners = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class GroupWar(models.Model):
+    """«جنگ گروه‌ها» — one group challenges another for 24 hours (game/group_war.py)."""
+    PENDING, ACTIVE, SETTLED, EXPIRED = "pending", "active", "settled", "expired"
+    code = models.CharField(max_length=8, unique=True)
+    group_a = models.ForeignKey("Group", on_delete=models.CASCADE, related_name="wars_started")
+    group_b = models.ForeignKey("Group", null=True, blank=True, on_delete=models.CASCADE, related_name="wars_accepted")
+    created_by = models.BigIntegerField()
+    status = models.CharField(max_length=10, default=PENDING, db_index=True)
+    score_a = models.BigIntegerField(default=0)
+    score_b = models.BigIntegerField(default=0)
+    winner = models.ForeignKey("Group", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+    starts_at = models.DateTimeField(null=True, blank=True)
+    ends_at = models.DateTimeField(null=True, blank=True)
+
+
+class FriendChallenge(models.Model):
+    """«چالش رفیق» — a share link to fight the sharer's kaiju with a guest kaiju (game/challenge.py)."""
+    code = models.CharField(max_length=12, unique=True)
+    challenger = models.ForeignKey(User, on_delete=models.CASCADE, related_name="challenges")
+    creature_name = models.CharField(max_length=64)
+    element = models.CharField(max_length=16)
+    power = models.BigIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+
+class ChallengeRun(models.Model):
+    challenge = models.ForeignKey("FriendChallenge", on_delete=models.CASCADE, related_name="runs")
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    round = models.IntegerField(default=0)
+    my_hp = models.IntegerField(default=100)
+    foe_hp = models.IntegerField(default=100)
+    log = models.JSONField(default=list)
+    finished = models.BooleanField(default=False)
+    won = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["challenge", "user"], name="uq_challenge_user")]
+
+
 class BotOutbox(models.Model):
     """A message the web process (Mini App) queued for the bot process to send
     (game/outbox.py) — e.g. «someone outbid you». Deleted as soon as the bot takes it."""
@@ -1153,6 +1250,13 @@ class Group(models.Model):
     # ~24h and the energy capsule once per ~12h (game/groupdrops.due_spawns)
     next_vein_at = models.DateTimeField(null=True, blank=True)
     next_capsule_at = models.DateTimeField(null=True, blank=True)
+    # who added the bot here (the FIRST adder only) and the «real players» steps they were paid
+    # for (game/group_growth.py)
+    added_by = models.BigIntegerField(null=True, blank=True, db_index=True)
+    added_at = models.DateTimeField(null=True, blank=True)
+    adder_step = models.IntegerField(default=0)
+    # «باس گروه» (game/group_boss.py): when the next one may appear here
+    boss_next_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:

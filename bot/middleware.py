@@ -76,6 +76,11 @@ async def capture_referral(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     ref = parse_payload(parts[1].strip())
     if ref is not None:
         context.user_data["pending_referrer"] = ref
+    from game.challenge import parse_payload as parse_duel
+
+    duel = parse_duel(parts[1].strip())
+    if duel is not None:
+        context.user_data["pending_duel"] = duel
 
 
 def _create_user_and_bind_referral(tg_user, referrer_id):

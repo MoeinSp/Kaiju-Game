@@ -72,6 +72,15 @@ async def on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             pass
         return
 
+    adder = result.from_user
+    if adder is not None and not adder.is_bot:
+        from bot.utils import run_db
+        from game import group_growth
+
+        try:
+            await run_db(group_growth.record_adder, chat_id, result.chat.title, adder.id)
+        except Exception:  # noqa: BLE001 — never block the welcome
+            pass
     await context.bot.send_message(chat_id=chat_id, text=_build_welcome_text(), parse_mode="HTML")
     # The welcome text tells the group to type words at the bot. If privacy mode
     # is on those words never reach it, so say so immediately instead of letting

@@ -1118,6 +1118,12 @@ SECTION_HALL_REQ = {
 }
 
 
+async def _challenge_panel(update, context):
+    from bot.handlers.growth import challenge_panel
+
+    await challenge_panel(update, context)
+
+
 def _locked_actions_for(hall_level) -> frozenset:
     """The menu actions the player can't open yet at this main-hall level."""
     if hall_level is None:
@@ -1134,6 +1140,7 @@ _HUBS = {
     ]),
     "hub_battle_more": ("⚔️ <b>نبرد — بیشتر</b>", [
         [("کاروان", "expedition", "b", "btn_expedition"), ("جنگ اتحاد", "alliance_war", "b", "btn_war")],
+        [("چالش رفیق", "challenge", "b", "btn_referral")],
     ]),
     "hub_creature": ("🦖 <b>هیولا</b>", [
         [("ارتقا", "upgrade", "p", "btn_upgrade"), ("تجهیزات", "inventory", "n", "btn_inventory")],
@@ -1239,7 +1246,8 @@ def _category_keyboard(cat_key: str, locked=frozenset()) -> tuple[str, InlineKey
 
 
 def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=frozenset(), research_built=False,
-                      today_state: dict | None = None, serum_lab: bool = False) -> InlineKeyboardMarkup:
+                      today_state: dict | None = None, serum_lab: bool = False,
+                      newbie_day: int | None = None) -> InlineKeyboardMarkup:
     """Clean 5-Hub navigation with Live Story Quest CTA banner. `today_state`
     (game.today.state) adds the count on «امروز» and a row for whatever is LIVE right now
     (world boss / tournament registration / festival) — those only show while they matter."""
@@ -1255,6 +1263,9 @@ def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=
 
     from game import today as _today
 
+    newbie_day = newbie_day or (today_state or {}).get("newbie")
+    if newbie_day:   # «تقویم تازه‌وارد» — today's gift is waiting (game/newbie.py)
+        rows.append([btn(f"🎁 هدیه‌ی روز {newbie_day} از ۷", emoji_key="btn_confirm", style=CONFIRM, callback_data="nb:open")])
     waiting = _today.waiting_count(today_state) if today_state else 0
     rows.append([btn(f"پاداش امروز ({waiting})" if waiting else "پاداش امروز", emoji_key="btn_today", style=CONFIRM,
                      callback_data="menu:today")])
@@ -1456,6 +1467,12 @@ async def transfer_notify_on_cmd(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args and context.user_data.get("pending_duel"):
+        # a challenge link whose first /start the force-join gate stopped (bot/middleware.py)
+        from bot.handlers.growth import challenge_intro
+
+        if await challenge_intro(update, context, context.user_data.pop("pending_duel")):
+            return
     if context.args:
         arg = context.args[0]
         if arg == "sub_silver":
@@ -1470,6 +1487,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             from bot.handlers.subscription import subscription_panel
             await subscription_panel(update, context)
             return
+        elif arg.startswith("duel_"):   # a friend's challenge link (game/challenge.py) — also an invite
+            from bot.handlers.growth import challenge_intro
+            from game import challenge as _challenge
+
+            code = _challenge.parse_payload(arg)
+            context.user_data.pop("pending_duel", None)
+            if code and await challenge_intro(update, context, code):
+                return
         elif arg.startswith("ally_"):   # an alliance's invite link (bot/handlers/alliance_recruit.py)
             from bot.handlers.alliance_recruit import start_link
 
@@ -5372,9 +5397,10 @@ async def lab_rename_cancel_callback(update: Update, context: ContextTypes.DEFAU
 
 
 def main_menu_keyboard(quest: dict | None = None, is_owner: bool = False, hall_level: int | None = None, research_built: bool = False,
-                       serum_lab: bool = False) -> InlineKeyboardMarkup:
+                       serum_lab: bool = False, newbie_day: int | None = None) -> InlineKeyboardMarkup:
     """The /menu command's keyboard — clean 4-hub layout with live story quest banner."""
-    return creature_keyboard(quest, is_owner, _locked_actions_for(hall_level), research_built, serum_lab=serum_lab)
+    return creature_keyboard(quest, is_owner, _locked_actions_for(hall_level), research_built, serum_lab=serum_lab,
+                             newbie_day=newbie_day)
 
 
 def _menu_lab_line_sync(tg_user):
@@ -5382,8 +5408,12 @@ def _menu_lab_line_sync(tg_user):
     from game.buildings import main_hall_level
     from game import research, serums, story
 
+    from game import newbie
+
     user, _ = get_or_create_user(tg_user)
     quest = story.get_active_quest(user)
+    nb = newbie.state(user)
+    user._newbie_day = nb["next_day"] if nb["can_claim"] else None
     return (user, lab_level_line(user), main_hall_level(user), research.is_unlocked(user), quest,
             serums.lab_level(user) > 0)
 
@@ -5405,7 +5435,7 @@ async def _show_main_menu(update) -> None:
         text,
         parse_mode="HTML",
         reply_markup=main_menu_keyboard(quest=quest, is_owner=is_admin, hall_level=hall_level, research_built=research_built,
-                                        serum_lab=serum_lab),
+                                        serum_lab=serum_lab, newbie_day=getattr(user, "_newbie_day", None)),
     )
 
 
@@ -5642,6 +5672,7 @@ _MENU_ACTIONS = {
     "battlepass": battlepass_panel,
     "codex": codex_panel,
     "referral": referral_panel,
+    "challenge": _challenge_panel,
     "team": team_panel,
     "campaign": campaign_panel,
     "events": events_panel,

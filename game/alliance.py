@@ -1334,6 +1334,15 @@ def settle_due_wars() -> list[tuple]:
 
             personal = _grant_war_rewards(war, winner)
 
+        try:
+            from game import group_growth
+
+            summary = (f"⚔️ <b>نتیجه‌ی جنگ اتحادها</b>\n«{a.name}» <b>{war.score_a}</b> — <b>{war.score_b}</b> «{b.name}»\n"
+                       + (f"🏆 برنده: «{winner.name}»" if winner is not None else "🤝 مساوی شد!"))
+            for al in (a, b):
+                group_growth.post_war_result(al.id, summary)
+        except Exception:  # noqa: BLE001 — a group post must never stop the settlement
+            pass
         for al in (a, b):
             is_win = (winner is not None and al.id == winner.id)
             if winner is None:

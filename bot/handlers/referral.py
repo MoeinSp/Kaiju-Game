@@ -67,6 +67,14 @@ def _render_rules(st: dict) -> tuple[str, InlineKeyboardMarkup]:
             lines.append(f"{i}. {row['name']} — <b>{row['n']}</b>{me}")
     else:
         lines.append("<i>این هفته هنوز کسی نیست — نفر اول تو باش!</i>")
+    lines += ["", "➕ <b>ربات رو به یه گروه شلوغ اضافه کن</b>",
+              "<i>اولین کسی که ربات رو به یه گروه اضافه می‌کنه، با رشد گروه جایزه می‌گیره. بازیکن واقعی: توی اون "
+              "گروه بازی کرده، سطح ۵+ و حداقل ۳ روز جدا بازی کرده.</i>"]
+    for need, text in st["group_steps"]:
+        lines.append(f"• {need} بازیکن واقعی ← {text}")
+    for g in st["my_groups"][:5]:
+        nxt = f" · بعدی: {g['next']}" if g["next"] else " · ✅ همه گرفته شد"
+        lines.append(f"   👥 {g['title']} — {g['real']} بازیکن واقعی{nxt}")
     lines += [
         "",
         f"💰 <b>پورسانت:</b> تا {st['commission_days']} روز، {st['commission']}٪ هر خرید دوستت به‌صورت الماس به تو می‌رسه.",
@@ -120,8 +128,14 @@ def _render(st: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyb
 
     lines.append(f"\n🔗 <code>{st['link']}</code>")
 
+    from telegram import InlineKeyboardButton
+
+    from bot.handlers.growth import add_group_url
+
     rows = [
         [btn("فرستادن لینک برای دوستان", emoji_key="btn_referral", style=CONFIRM, url=st["share_url"])],
+        [btn("🥊 چالش رفیق", style=NAV, callback_data="ch:new"),
+         InlineKeyboardButton("➕ ربات توی گروهت", url=add_group_url())],
         [btn("🏅 جایزه‌ها و قوانین", style=NAV, callback_data="ref_view:rules:0")],
     ]
     if friends:

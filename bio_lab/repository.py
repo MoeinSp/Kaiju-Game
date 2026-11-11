@@ -6,7 +6,8 @@ from bio_lab.models import Creature, Group, GroupMembership, User
 
 def get_or_create_user(tg_user) -> tuple[User, bool]:
     user, created = User.objects.get_or_create(
-        id=tg_user.id, defaults={"username": tg_user.username, "first_name": tg_user.first_name}
+        id=tg_user.id, defaults={"username": tg_user.username, "first_name": tg_user.first_name,
+                                 "newbie_eligible": True}   # «تقویم تازه‌وارد» for every new player (game/newbie.py)
     )
     if not created and (user.username != tg_user.username or user.first_name != tg_user.first_name):
         user.username = tg_user.username

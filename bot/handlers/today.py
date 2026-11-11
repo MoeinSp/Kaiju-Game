@@ -34,6 +34,9 @@ def _render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     rows = []
 
     # ── live, time-limited things first ──
+    if st.get("newbie"):
+        lines.append(f"🎁 <b>هدیه‌ی روز {st['newbie']} تقویم تازه‌وارد</b> منتظرته!")
+        rows.append([btn(f"تقویم تازه‌وارد — روز {st['newbie']}", emoji_key="btn_today", style=CONFIRM, callback_data="nb:open")])
     if st["boss"]:  # only while a boss is here AND the player still has a hit
         lines.append(f"👹 <b>غول سرگردان اینجاست!</b> <code>{st['boss']['hits_left']}</code> ضربه داری.")
         rows.append([btn("ضربه به غول", emoji_key="btn_worldboss", style=BATTLE, callback_data="tdy:worldboss")])

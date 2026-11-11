@@ -289,6 +289,12 @@ def main() -> None:
     battlepass.register(application)
     codex.register(application)
     referral.register(application)
+    from bot.handlers import newbie as newbie_handlers
+
+    newbie_handlers.register(application)   # «تقویم تازه‌وارد» (nb:…)
+    from bot.handlers import growth as growth_handlers
+
+    growth_handlers.register(application)   # group boss / group war / alliance base / friend challenge
     team.register(application)
     from bot.handlers import alliance_recruit as alliance_recruit_handlers
 
