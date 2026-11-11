@@ -7,6 +7,7 @@ rune / merchant), so any tap that arrives late just redraws the current state.
 import html
 
 from telegram import InlineKeyboardMarkup, Update
+from telegram.error import TelegramError
 from telegram.ext import CallbackQueryHandler, ContextTypes
 
 from bio_lab.repository import get_or_create_user
@@ -95,13 +96,16 @@ def _home_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
         btn("فروشگاه", emoji_key="btn_dungeon_shop", style=SHOP, callback_data="dg:shop"),
         btn("آثار باستانی", emoji_key="btn_relics", style=SHOP, callback_data="dg:relics"),
     ])
-    rows.append([back_btn("menu:campaign", "بازگشت به دانجن")])
+    rows.append([back_btn("menu:hub_battle", "بازگشت به نبرد")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 async def dungeon_home(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.callback_query:
-        await update.callback_query.answer()
+        try:
+            await update.callback_query.answer()
+        except TelegramError:
+            pass   # already answered (opened through the «سیاه‌چال» menu button)
     from game.media import get_feature_image_path
 
     v = await run_db(_home_sync, update.effective_user)

@@ -1118,6 +1118,13 @@ SECTION_HALL_REQ = {
 }
 
 
+async def _dungeon_panel(update, context):
+    """«سیاه‌چال» straight from the battle hub once it's open (_DUNGEON_SPEC)."""
+    from bot.handlers.dungeon import dungeon_home
+
+    await dungeon_home(update, context)
+
+
 async def _challenge_panel(update, context):
     from bot.handlers.growth import challenge_panel
 
@@ -1211,25 +1218,58 @@ def story_quest_card_text(quest: dict | None) -> str:
     )
 
 
-def _hub_keyboard(hub_key: str, locked=frozenset(), hide_locked: bool = False) -> tuple[str, InlineKeyboardMarkup]:
-    """A hub's buttons (at most 8 — the rarely-used ones sit behind «بیشتر»). With
-    `hide_locked` (a newcomer whose main hall is still level 1) the sections that haven't
-    unlocked are left out instead of shown with a lock, so a new player sees a short menu
+def _hub_specs(key: str) -> list:
+    return [spec for row in _HUBS.get(key, ("", []))[1] for spec in row]
+
+
+# once «سیاه‌چال» is open (all campaign stages cleared) the «دانجن» button becomes it — the
+# campaign screen has nothing left but the way in (owner, 2026-11-11)
+_DUNGEON_SPEC = ("سیاه‌چال", "dungeon", "b", "btn_dungeon")
+
+
+def _hub_keyboard(hub_key: str, locked=frozenset(), hide_locked: bool = False,
+                  dungeon: bool = False) -> tuple[str, InlineKeyboardMarkup]:
+    """A hub's buttons (at most 8 — the rarely-used ones sit behind «بیشتر»).
+
+    Sections that haven't unlocked yet («تالار مِهر» level) leave the hub's own page and
+    wait, with a lock, at the bottom of its «بیشتر» page; the moment they unlock they're
+    back in their own place (owner, 2026-11-11). Hubs without a «بیشتر» page get one only
+    while they have something locked. With `hide_locked` (a newcomer whose main hall is
+    still level 1) locked sections aren't shown at all, so a new player sees a short menu
     of things that work; the title says how many more are waiting."""
     if not hub_key.startswith("hub_") and f"hub_{hub_key}" in _HUBS:
         hub_key = f"hub_{hub_key}"
-    title, rows_def = _HUBS.get(hub_key, _CATEGORIES.get(hub_key, ("📋 <b>منوی بازی</b>", [])))
+    parent = hub_key[:-5] if hub_key.endswith("_more") and hub_key[:-5] in _HUBS else None
+    if parent is not None:
+        p_title = _HUBS[parent][0]
+        title = _HUBS[hub_key][0] if hub_key in _HUBS else p_title.replace("</b>", " — بیشتر</b>", 1)
+        own = _hub_specs(hub_key)
+        moved = [s for s in _hub_specs(parent) if s[1] in locked]
+        # what works first, everything locked (its own and the parent's) at the bottom
+        specs = [s for s in own if s[1] not in locked] + [s for s in own if s[1] in locked] + moved
+    else:
+        title, rows_def = _HUBS.get(hub_key, _CATEGORIES.get(hub_key, ("📋 <b>منوی بازی</b>", [])))
+        specs = [spec for row in rows_def for spec in row]
+        moved = [s for s in specs if s[1] in locked] if hub_key in _HUBS else []
+        if moved:
+            specs = [s for s in specs if s[1] not in locked]
+    if dungeon:
+        specs = [_DUNGEON_SPEC if s[1] == "campaign" else s for s in specs]
     more_key = f"{hub_key}_more"
-    specs = [spec for row in rows_def for spec in row]
     hidden = 0
     if hide_locked:
-        more_specs = [s for row in _HUBS.get(more_key, ("", []))[1] for s in row]
-        hidden = sum(1 for s in specs + more_specs if s[1] in locked)
+        hidden = sum(1 for s in specs + (_hub_specs(more_key) if parent is None else []) if s[1] in locked)
+        if parent is None:
+            hidden += len(moved)
         specs = [s for s in specs if s[1] not in locked]
     rows = [[_mkbtn(s, locked) for s in specs[i:i + 2]] for i in range(0, len(specs), 2)]
-    has_more = more_key in _HUBS and (
-        not hide_locked or any(s[1] not in locked for row in _HUBS[more_key][1] for s in row)
-    )
+    if parent is None:
+        more_open = [s for s in _hub_specs(more_key) if s[1] not in locked]
+        has_more = (bool(more_open) if hide_locked else (more_key in _HUBS or bool(moved)))
+    else:
+        has_more = False
+        if not hide_locked and any(s[1] in locked for s in specs):
+            title += "\n🔒 <i>بخش‌های قفل پایین صفحه‌ان؛ با ارتقای «تالار مِهر» باز می‌شن و برمی‌گردن سر جای خودشون.</i>"
     if has_more:
         rows.append([btn("بیشتر", emoji_key="btn_next", style=NAV, callback_data=f"menu:{more_key}")])
     if hub_key.endswith("_more"):
@@ -5675,6 +5715,7 @@ _MENU_ACTIONS = {
     "challenge": _challenge_panel,
     "team": team_panel,
     "campaign": campaign_panel,
+    "dungeon": _dungeon_panel,
     "events": events_panel,
     "banner": banner_panel,
     "idle": idle_panel,
@@ -5833,7 +5874,8 @@ async def route_private_keyword(update: Update, context: ContextTypes.DEFAULT_TY
 
     if menu_action.startswith("hub_"):
         hall_level = await run_db(_hall_level_sync, update.effective_user)
-        title, keyboard = _hub_keyboard(menu_action, _locked_actions_for(hall_level))
+        title, keyboard = _hub_keyboard(menu_action, _locked_actions_for(hall_level),
+                                        dungeon=await run_db(_dungeon_open_sync, update.effective_user))
         from game.media import get_feature_image_path
         photo_path = get_feature_image_path(menu_action)
         await send_screen(
@@ -5866,6 +5908,13 @@ def _hall_level_sync(tg_user) -> int:
 
     user, _ = get_or_create_user(tg_user)
     return main_hall_level(user)
+
+
+def _dungeon_open_sync(tg_user) -> bool:
+    from game import dungeon
+
+    user, _ = get_or_create_user(tg_user)
+    return dungeon.unlocked(user)
 
 
 def _hall_gate_sync(tg_user) -> tuple[int, str | None]:
@@ -5937,7 +5986,8 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await query.answer()
     if action.startswith("hub_") or action.startswith("cat_"):
         hub_key = action[4:] if action.startswith("cat_") else action
-        title, keyboard = _hub_keyboard(hub_key, _locked_actions_for(hall_level), hide_locked=hall_level <= 1)
+        title, keyboard = _hub_keyboard(hub_key, _locked_actions_for(hall_level), hide_locked=hall_level <= 1,
+                                        dungeon=await run_db(_dungeon_open_sync, update.effective_user))
         from game.media import get_feature_image_path
         photo_path = get_feature_image_path(hub_key[:-5] if hub_key.endswith("_more") else hub_key)
         await send_screen(update, title, photo=photo_path, parse_mode="HTML", reply_markup=keyboard)
