@@ -210,7 +210,9 @@ def _take_encounter_credit(user: User) -> bool:
 # resolve_encounter_action() pops it, so a card pays exactly once — without this, every
 # repeated/forged «henc:» tap paid the reward again (no energy, no limit). In-memory on
 # purpose (single bot process): a restart just expires the open card.
-_PENDING_ENCOUNTERS: dict[int, str] = {}
+from game.bounded import BoundedDict  # noqa: E402
+
+_PENDING_ENCOUNTERS: dict[int, str] = BoundedDict(50_000)
 _ENCOUNTER_ACTIONS = {
     "chest": ("open", "leave"), "thief": ("fight", "leave"),
     "fork": ("crystal", "volcano"), "spring": ("drink", "leave"),

@@ -114,6 +114,9 @@ def _is_banned_sync(user_id: int) -> bool:
     if cached is not None and now < cached[1]:
         return cached[0]
     banned = User.objects.filter(id=user_id, is_banned=True).exists()
+    if len(_BAN_CACHE) >= 20_000:   # bounded: drop the oldest quarter (a miss just re-checks)
+        for key in list(_BAN_CACHE)[:5_000]:
+            _BAN_CACHE.pop(key, None)
     _BAN_CACHE[user_id] = (banned, now + 60.0)
     return banned
 

@@ -45,8 +45,32 @@ def _load(user_id: int) -> dict[str, datetime.datetime]:
 
     now = timezone.now()
     held = dict(UserRelic.objects.filter(user_id=user_id, expires_at__gt=now).values_list("key", "expires_at"))
+    if len(_CACHE) >= 20_000:   # bounded: drop the oldest quarter (a miss just re-reads)
+        for key in list(_CACHE)[:5_000]:
+            _CACHE.pop(key, None)
     _CACHE[user_id] = (time.monotonic() + CACHE_SECONDS, held)
     return held
+
+
+def prewarm(user_ids) -> None:
+    """Fill the cache for many players with one query per 2000 ids (players holding nothing
+    get an empty entry) — for scans that would otherwise read relics player by player."""
+    from bio_lab.models import UserRelic
+
+    ids = list(user_ids)
+    now = timezone.now()
+    until = time.monotonic() + CACHE_SECONDS
+    held: dict[int, dict[str, datetime.datetime]] = {uid: {} for uid in ids}
+    for i in range(0, len(ids), 2000):
+        rows = UserRelic.objects.filter(user_id__in=ids[i:i + 2000], expires_at__gt=now)
+        for uid, key, expires_at in rows.values_list("user_id", "key", "expires_at"):
+            held[uid][key] = expires_at
+    overflow = len(_CACHE) + len(held) - 20_000
+    if overflow > 0:
+        for key in list(_CACHE)[:overflow]:
+            _CACHE.pop(key, None)
+    for uid, keys in held.items():
+        _CACHE[uid] = (until, keys)
 
 
 def active(user) -> dict[str, datetime.datetime]:

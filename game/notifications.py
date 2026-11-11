@@ -27,6 +27,7 @@ players who were active in the last few days.
 from __future__ import annotations
 
 import datetime
+import types
 
 from django.db import transaction
 from django.utils import timezone
@@ -266,7 +267,17 @@ def collect_due() -> list[tuple[int, str]]:
             log.save(update_fields=["defender_notified"])
 
         # ── energy full (once per drain/refill cycle) ─────────────────────────
-        for user in User.objects.filter(notifications_on=True):
+        # Light rows instead of full User objects, relics for everyone in one query, and a
+        # write / full load only for a player whose state really changed (2026-11-11: the
+        # old per-player loop took 75s+ of a 2-core box for ~8k players every 5 minutes).
+        from game import relics
+        from game.lab import level_for_xp
+
+        rows = [types.SimpleNamespace(**r) for r in User.objects.filter(notifications_on=True).values(
+            "id", "energy", "energy_updated_at", "energy_full_notified",
+            "subscription_tier", "subscription_until", "lab_xp", "lab_level_notified")]
+        relics.prewarm(r.id for r in rows)
+        for user in rows:
             current, _ = _synced_energy_and_anchor(user)
             max_en = get_max_energy(user)
             if current >= max_en and not user.energy_full_notified:
@@ -280,15 +291,17 @@ def collect_due() -> list[tuple[int, str]]:
                 )
                 # 3rd element "arena" tells notify_job to hang an «آرنا» button under it
                 out.append((user.id, energy_text, "arena"))
-                user.energy_full_notified = True
-                user.save(update_fields=["energy_full_notified"])
+                User.objects.filter(id=user.id).update(energy_full_notified=True)
             elif current < max_en and user.energy_full_notified:
-                user.energy_full_notified = False
-                user.save(update_fields=["energy_full_notified"])
+                User.objects.filter(id=user.id).update(energy_full_notified=False)
 
             # ── lab level-up (congratulate + show what opened up) ──────────────
+            seen = user.lab_level_notified or 0
+            if seen and level_for_xp(user.lab_xp) <= seen:
+                continue   # nothing new — skip loading the full player
             try:
-                item = _lab_levelup_item(user)
+                full = User.objects.filter(id=user.id).first()
+                item = _lab_levelup_item(full) if full is not None else None
                 if item is not None:
                     out.append(item)
             except Exception:  # noqa: BLE001 — a level-up hiccup must not drop the whole batch

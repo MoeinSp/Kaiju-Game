@@ -58,7 +58,9 @@ RESEARCH_KEYS = list(RESEARCH_DEFS)
 # It lets effective_stats (which must never hit the DB) apply combat buffs anywhere the
 # owner has been "warmed" this process-lifetime, so the bonus is consistent across every
 # battle path without wiring each one. A cold miss simply yields no bonus (graceful).
-_LEVELS_CACHE: dict[int, dict[str, int]] = {}
+from game.bounded import BoundedDict  # noqa: E402
+
+_LEVELS_CACHE: dict[int, dict[str, int]] = BoundedDict(50_000)
 
 
 # ── levels / caps ────────────────────────────────────────────────────────────
