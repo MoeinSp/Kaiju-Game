@@ -88,13 +88,12 @@ class User(models.Model):
     referred_by = models.BigIntegerField(null=True, blank=True, db_index=True)
     referral_bonus_paid = models.BooleanField(default=False)
     # 2026-11 invite system: when the link bound them (None = an invite from before it, which
-    # keeps the old lab-level-3 rule), when the invite became valid (weekly top list), how many
-    # separate days they have played (the anti-fake gate), and the referrer's top tier claimed.
+    # keeps the old lab-level-3 rule), when they reached level 5 (daily cap + weekly top list), and
+    # how many separate days they have played (the anti-fake gate).
     referred_at = models.DateTimeField(null=True, blank=True)
     referral_paid_at = models.DateTimeField(null=True, blank=True, db_index=True)
     active_days = models.IntegerField(default=0)
     last_active_day = models.CharField(max_length=10, blank=True, default="")
-    referral_tier = models.IntegerField(default=0)
     referral_step = models.IntegerField(default=0)   # growth steps of THIS invited player already paid
 
     # highest PvE campaign stage cleared (game/campaign.py); 0 = none yet
