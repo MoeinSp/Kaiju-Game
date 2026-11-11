@@ -37,6 +37,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="user", name="last_active_day", field=models.CharField(blank=True, default="", max_length=10),
         ),
+        migrations.AddField(model_name="user", name="referral_step", field=models.IntegerField(default=0)),
         migrations.AddField(model_name="user", name="referral_tier", field=models.IntegerField(default=0)),
         migrations.CreateModel(
             name="ReferralWeekPrize",

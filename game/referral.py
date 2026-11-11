@@ -10,9 +10,12 @@ The reward payout is processed by the same periodic job as push notifications
 (game/notifications.collect_due calls collect_rewards here), so it also gets to
 DM both players "your friend joined — you both earned diamonds".
 
-2026-11 upgrade: a stronger gate (lab level 5 + 3 separate days played, max 10 valid
-invites a day), bigger per-invite rewards, tier rewards for 1/3/5/10/25/50 valid invites,
-a 10% purchase commission for 60 days, and a weekly «top inviters» prize.
+2026-11 upgrade: the friend's GROWTH pays — a reward at lab level 3, 5, 10, 15, 20, 25 and
+30, each also needing a number of separate days played (a fake account would have to be
+played for weeks to pay much; deleting it later gains nothing, the steps were earned by
+real play). Level 5 + 3 days makes the invite «valid» (max 10 a day per referrer), which
+counts toward the 1/3/5/10/25/50 tier rewards and the weekly «top inviters» prize. Plus a
+10% purchase commission for 60 days.
 """
 
 from __future__ import annotations
@@ -24,9 +27,26 @@ from bio_lab.models import User
 from bio_lab.repository import lock_row
 from game import lab
 
-MILESTONE_LEVEL = 5  # the friend must reach this lab level for the reward to unlock
-REFERRER_REWARD = {"diamonds": 60, "speedup": 30}
-FRIEND_REWARD = {"diamonds": 40, "speedup": 30}
+# Growth steps of an invited friend: (lab level, separate days played, referrer's reward,
+# friend's reward, referrer also gets a relic, friend also gets a relic). Rewards grow with
+# the step, so most of the value sits where only real players get (on 2026-11-11 only ~12%
+# of all players ever passed level 5, and <1% reached 30).
+STEPS = [
+    (3, 2, {"diamonds": 15}, {"diamonds": 15}, False, False),
+    (5, 3, {"diamonds": 50, "speedup": 30}, {"diamonds": 40, "speedup": 30}, False, False),
+    (10, 4, {"diamonds": 80}, {"diamonds": 40}, False, False),
+    (15, 5, {"diamonds": 120, "speedup": 60}, {"diamonds": 50}, False, False),
+    (20, 7, {"diamonds": 180}, {"diamonds": 60}, True, False),
+    (25, 9, {"diamonds": 250}, {"diamonds": 80}, False, False),
+    (30, 12, {"diamonds": 400}, {"diamonds": 120}, True, True),
+]
+VALID_STEP = 1   # reaching STEPS[1] (level 5 + 3 days) makes the invite «valid»
+MILESTONE_LEVEL = STEPS[VALID_STEP][0]
+REFERRER_REWARD = STEPS[VALID_STEP][2]
+FRIEND_REWARD = STEPS[VALID_STEP][3]
+# invites bound before the steps existed keep their old one-time payout
+LEGACY_REFERRER_REWARD = {"diamonds": 50}
+LEGACY_FRIEND_REWARD = {"diamonds": 30}
 
 
 def link_for(user_id: int) -> str:
@@ -81,45 +101,115 @@ def _grant(user: User, reward: dict) -> None:
 
 @transaction.atomic
 def _settle_one(friend: User) -> User | None:
-    """Atomically claim and pay one milestone-reached referral. Returns the referrer
-    if THIS call did the payout, or None if it was already paid (race-safe: the
-    guarded UPDATE ensures the notification job and a manual claim can't double-pay)."""
+    """Pay every growth step this friend has newly reached — race-safe: the guarded UPDATE on
+    referral_step means the notification job and a manual claim can't pay a step twice.
+    Returns the referrer (with ._paid_steps / ._tier_lines set) if THIS call paid something,
+    else None. The «valid invite» step obeys the referrer's daily cap (it waits, not lost)."""
     from game.ledger import record_gain
 
-    if friend.referred_by and _valid_today(friend.referred_by) >= DAILY_VALID_CAP:
-        return None   # the referrer's daily cap is full — this one waits for tomorrow
-    claimed = User.objects.filter(id=friend.id, referral_bonus_paid=False).update(
-        referral_bonus_paid=True, referral_paid_at=timezone.now()
-    )
+    if friend.referred_at is None:
+        return _settle_legacy(friend)
+    friend = User.objects.filter(id=friend.id).first()
+    if friend is None or friend.is_banned:
+        return None
+    due = due_steps(friend)
+    if not due:
+        return None
+    if friend.referral_step <= VALID_STEP < due[-1] + 1 and friend.referred_by \
+            and _valid_today(friend.referred_by) >= DAILY_VALID_CAP:
+        due = [i for i in due if i < VALID_STEP]   # the valid step must wait for tomorrow
+        if not due:
+            return None
+    new_step = due[-1] + 1
+    fields = {"referral_step": new_step}
+    validates = friend.referral_step <= VALID_STEP < new_step
+    if validates:
+        fields.update(referral_bonus_paid=True, referral_paid_at=timezone.now())
+    claimed = User.objects.filter(id=friend.id, referral_step=friend.referral_step).update(**fields)
     if not claimed:
         return None
     referrer = User.objects.select_for_update().filter(id=friend.referred_by).first()
     lock_row(friend)
-    _grant(friend, FRIEND_REWARD)
-    record_gain(friend, "referral", diamonds=FRIEND_REWARD.get("diamonds", 0))
-    if referrer is not None and not referrer.is_banned:
-        _grant(referrer, REFERRER_REWARD)
-        record_gain(referrer, "referral", diamonds=REFERRER_REWARD.get("diamonds", 0))
-        referrer._tier_lines = _pay_tiers(referrer)
+    from game import relics
+
+    for i in due:
+        level, _days, ref_r, fr_r, ref_relic, fr_relic = STEPS[i]
+        _grant(friend, fr_r)
+        record_gain(friend, "referral", diamonds=fr_r.get("diamonds", 0))
+        if fr_relic:
+            try:
+                relics.grant(friend)
+            except Exception:  # noqa: BLE001
+                pass
+        if referrer is not None and not referrer.is_banned:
+            _grant(referrer, ref_r)
+            record_gain(referrer, "referral", diamonds=ref_r.get("diamonds", 0))
+            if ref_relic:
+                try:
+                    relics.grant(referrer)
+                except Exception:  # noqa: BLE001
+                    pass
+    if referrer is None:
+        return None
+    referrer._paid_steps = due
+    referrer._validated = validates
+    referrer._tier_lines = _pay_tiers(referrer) if validates and not referrer.is_banned else []
+    friend._paid_steps = due
+    referrer._friend = friend
     return referrer
 
 
+def _settle_legacy(friend: User) -> User | None:
+    """An invite from before the growth steps: the old one-time payout at lab level 3."""
+    from game.ledger import record_gain
+
+    if friend.referral_bonus_paid or not is_valid(friend):
+        return None
+    claimed = User.objects.filter(id=friend.id, referral_bonus_paid=False).update(
+        referral_bonus_paid=True, referral_paid_at=timezone.now())
+    if not claimed:
+        return None
+    referrer = User.objects.select_for_update().filter(id=friend.referred_by).first()
+    lock_row(friend)
+    _grant(friend, LEGACY_FRIEND_REWARD)
+    record_gain(friend, "referral", diamonds=LEGACY_FRIEND_REWARD["diamonds"])
+    if referrer is None:
+        return None
+    if not referrer.is_banned:
+        _grant(referrer, LEGACY_REFERRER_REWARD)
+        record_gain(referrer, "referral", diamonds=LEGACY_REFERRER_REWARD["diamonds"])
+        referrer._tier_lines = _pay_tiers(referrer)
+    referrer._paid_steps = None
+    referrer._validated = True
+    referrer._friend = friend
+    return referrer
+
+
+def _pending_friends(**extra):
+    from django.db.models import Q
+
+    return User.objects.filter(
+        Q(referral_bonus_paid=False) | Q(referred_at__isnull=False, referral_step__lt=len(STEPS)),
+        referred_by__isnull=False, is_banned=False, **extra)
+
+
 def collect_rewards() -> list[tuple[int, str]]:
-    """Pay out every referral whose friend just crossed the milestone, and return
-    (user_id, text) DMs for both sides. Called from the notification collector."""
+    """Pay every growth step an invited friend just reached, and return (user_id, text) DMs
+    for both sides. Called from the notification collector."""
     out: list[tuple[int, str]] = []
-    friends = User.objects.filter(referred_by__isnull=False, referral_bonus_paid=False, is_banned=False)
-    for friend in friends:
-        if not is_valid(friend):
+    for friend in _pending_friends():
+        if friend.referred_at is None and not is_valid(friend):
+            continue
+        if friend.referred_at is not None and not due_steps(friend):
             continue
         referrer = _settle_one(friend)
         if referrer is None:
             continue  # already paid by a concurrent claim, or the referrer's daily cap is full
-        if friend.notifications_on:
-            out.append((friend.id, f"🎁 <b>پاداش دعوت!</b> چون با لینک دعوت اومدی و پای بازی موندی، "
-                                   f"{reward_text(FRIEND_REWARD)} گرفتی."))
+        f = referrer._friend
+        if f.notifications_on:
+            out.append((f.id, _friend_paid_text(f, referrer._paid_steps)))
         if referrer.notifications_on and not referrer.is_banned:
-            out.append((referrer.id, _referrer_paid_text(referrer, friend)))
+            out.append((referrer.id, _referrer_paid_text(referrer, f)))
     try:
         out.extend(pay_week_prizes())
     except Exception:  # noqa: BLE001 — a prize hiccup must not drop the invite payouts
@@ -127,36 +217,69 @@ def collect_rewards() -> list[tuple[int, str]]:
     return out
 
 
+def _sum_rewards(steps, side: int) -> tuple[dict, bool]:
+    total: dict = {}
+    relic = False
+    for i in steps:
+        r = STEPS[i][2 if side == 0 else 3]
+        for k, v in r.items():
+            total[k] = max(total.get(k, 0), v) if k == "speedup" else total.get(k, 0) + v
+        relic = relic or STEPS[i][4 if side == 0 else 5]
+    return total, relic
+
+
+def _friend_paid_text(friend: User, steps) -> str:
+    if steps is None:
+        return f"🎁 <b>پاداش دعوت!</b> چون با لینک دعوت اومدی و پای بازی موندی، {reward_text(LEGACY_FRIEND_REWARD)} گرفتی."
+    reward, relic = _sum_rewards(steps, 1)
+    level = STEPS[steps[-1]][0]
+    lines = [f"🎁 <b>جایزه‌ی رشد!</b> به <b>سطح {level}</b> رسیدی و چون با لینک دعوت اومدی، "
+             f"{reward_text(reward, relic)} گرفتی."]
+    nxt = next_step(steps[-1] + 1)
+    if nxt:
+        lines.append(f"<i>🎯 جایزه‌ی بعدی توی سطح {nxt[0]}: {reward_text(nxt[3], nxt[5])}</i>")
+    return "\n".join(lines)
+
+
 def _referrer_paid_text(referrer: User, friend: User) -> str:
     from bio_lab.repository import lab_display
 
-    count = valid_count(referrer.id)
-    lines = [
-        f"🎉 <b>دعوتت معتبر شد!</b> {lab_display(friend)} به بازی چسبید.",
-        f"🎁 جایزه‌ات: {reward_text(REFERRER_REWARD)}",
-        f"👥 دعوت‌های معتبرت: <b>{count}</b>",
-    ]
-    lines += getattr(referrer, "_tier_lines", [])
-    nxt = next_tier(count)
-    if nxt:
-        lines.append(f"<i>🎯 پله‌ی بعدی: {nxt[0]} دعوت ← {reward_text(nxt[1], nxt[2])}</i>")
+    steps = referrer._paid_steps
+    if steps is None:
+        lines = [f"🎉 <b>دعوتت معتبر شد!</b> {lab_display(friend)} به بازی چسبید.",
+                 f"🎁 جایزه‌ات: {reward_text(LEGACY_REFERRER_REWARD)}"]
+    else:
+        reward, relic = _sum_rewards(steps, 0)
+        level = STEPS[steps[-1]][0]
+        head = (f"🎉 <b>دعوتت معتبر شد!</b> {lab_display(friend)} به سطح {level} رسید."
+                if referrer._validated else
+                f"📈 <b>دوستت داره رشد می‌کنه!</b> {lab_display(friend)} به <b>سطح {level}</b> رسید.")
+        lines = [head, f"🎁 جایزه‌ات: {reward_text(reward, relic)}"]
+        nxt = next_step(steps[-1] + 1)
+        if nxt:
+            lines.append(f"<i>🎯 وقتی به سطح {nxt[0]} برسه: {reward_text(nxt[2], nxt[4])}</i>")
+    if referrer._validated:
+        lines.append(f"👥 دعوت‌های معتبرت: <b>{valid_count(referrer.id)}</b>")
+        lines += getattr(referrer, "_tier_lines", [])
+        nt = next_tier(valid_count(referrer.id))
+        if nt:
+            lines.append(f"<i>🏅 پله‌ی بعدی دعوت: {nt[0]} دعوت معتبر ← {reward_text(nt[1], nt[2])}</i>")
     return "\n".join(lines)
 
 
 def claim_ready(user: User) -> dict:
-    """Let a referrer collect, on demand, every one of THEIR invitees who has already
-    reached the milestone but isn't paid yet. Returns how many and how much."""
-    paid = 0
-    friends = list(User.objects.filter(referred_by=user.id, referral_bonus_paid=False, is_banned=False))
+    """Let a referrer collect, on demand, every growth step their friends have reached but
+    that isn't paid yet. Returns how many friends paid out, the diamonds and tier lines."""
+    paid = diamonds = 0
     tier_lines: list[str] = []
-    for friend in friends:
-        if not is_valid(friend):
-            continue
+    for friend in list(_pending_friends(referred_by=user.id)):
+        before = User.objects.filter(id=user.id).values_list("diamonds", flat=True).first() or 0
         ref = _settle_one(friend)
         if ref is not None:
             paid += 1
+            diamonds += (User.objects.filter(id=user.id).values_list("diamonds", flat=True).first() or 0) - before
             tier_lines += getattr(ref, "_tier_lines", [])
-    return {"claimed": paid, "diamonds": paid * REFERRER_REWARD["diamonds"], "tier_lines": tier_lines}
+    return {"claimed": paid, "diamonds": diamonds, "tier_lines": tier_lines}
 
 
 def stats(user: User) -> dict:
@@ -164,23 +287,33 @@ def stats(user: User) -> dict:
     per-friend breakdown and how many rewards are ready to claim right now."""
     from bio_lab.repository import lab_display
 
-    referred = list(User.objects.filter(referred_by=user.id).order_by("referral_bonus_paid", "id"))
+    referred = list(User.objects.filter(referred_by=user.id).order_by("referral_bonus_paid", "-lab_xp", "id"))
     friends = []
     claimable = 0
     for f in referred:
         lvl = lab.lab_level(f)
-        reached = is_valid(f)
-        if reached and not f.referral_bonus_paid:
+        if f.referred_at is None:
+            ready = is_valid(f) and not f.referral_bonus_paid
+            nxt = None if f.referral_bonus_paid else (LEGACY_MILESTONE_LEVEL, 0)
+            step, total = (1 if f.referral_bonus_paid else 0), 1
+        else:
+            ready = bool(due_steps(f))
+            ns = next_step(f.referral_step)
+            nxt = (ns[0], ns[1]) if ns else None
+            step, total = f.referral_step, len(STEPS)
+        if ready and not f.is_banned:
             claimable += 1
         friends.append({
             "name": lab_display(f),
             "level": lvl,
-            "need_level": _milestone_for(f),
             "days": f.active_days or 0,
-            "need_days": _days_needed(f),
+            "next_level": nxt[0] if nxt else None,
+            "next_days": nxt[1] if nxt else None,
+            "step": step, "steps": total,
             "banned": bool(f.is_banned),
             "paid": f.referral_bonus_paid,
-            "reached": reached,
+            "done": nxt is None,
+            "reached": ready,
         })
     successful = sum(1 for x in friends if x["paid"])
     top = []
@@ -190,15 +323,15 @@ def stats(user: User) -> dict:
     return {
         "link": link_for(user.id),
         "total": len(referred),
-        "successful": sum(1 for x in friends if x["paid"]),
+        "successful": successful,
         "pending": sum(1 for x in friends if not x["paid"]),
         "claimable": claimable,
         "milestone_level": MILESTONE_LEVEL,
         "min_days": MIN_ACTIVE_DAYS,
-        "referrer_reward": REFERRER_REWARD["diamonds"],
-        "friend_reward": FRIEND_REWARD["diamonds"],
-        "referrer_reward_text": reward_text(REFERRER_REWARD),
-        "friend_reward_text": reward_text(FRIEND_REWARD),
+        "steps": [(lvl, d, reward_text(r, rr), reward_text(f, fr)) for lvl, d, r, f, rr, fr in STEPS],
+        "steps_total": reward_text(*_sum_rewards(range(len(STEPS)), 0)),
+        "referrer_reward_text": reward_text(STEPS[VALID_STEP][2]),
+        "friend_reward_text": reward_text(STEPS[VALID_STEP][3]),
         "next_tier": next_tier(successful),
         "tiers": [(need, reward_text(r, rel), successful >= need) for need, r, rel in TIERS],
         "week_top": top,
@@ -206,6 +339,7 @@ def stats(user: User) -> dict:
         "week_min": WEEK_MIN_VALID,
         "commission": COMMISSION_PERCENT,
         "commission_days": COMMISSION_DAYS,
+        "daily_cap": DAILY_VALID_CAP,
         "share_url": share_url(user.id),
         "friends": friends,
     }
@@ -220,7 +354,7 @@ def stats(user: User) -> dict:
 # owner approved by hand, so a fake account can't produce it at all.
 # Invites bound before this system (referred_at is None) keep their old rule (level 3).
 LEGACY_MILESTONE_LEVEL = 3
-MIN_ACTIVE_DAYS = 3
+MIN_ACTIVE_DAYS = STEPS[VALID_STEP][1]
 DAILY_VALID_CAP = 10
 
 # (valid invites needed, reward, also a random relic?)
@@ -249,10 +383,28 @@ def _days_needed(friend: User) -> int:
 
 
 def is_valid(friend: User) -> bool:
-    """Has this invited friend proved to be a real player?"""
+    """Has this invited friend proved to be a real player (the «valid invite» bar)?"""
     if getattr(friend, "is_banned", False):
         return False
     return lab.lab_level(friend) >= _milestone_for(friend) and (friend.active_days or 0) >= _days_needed(friend)
+
+
+def due_steps(friend: User) -> list[int]:
+    """Indexes of the growth steps this (non-legacy) friend has reached but isn't paid for."""
+    if friend.referred_at is None or getattr(friend, "is_banned", False):
+        return []
+    level, days = lab.lab_level(friend), friend.active_days or 0
+    due = []
+    for i in range(friend.referral_step or 0, len(STEPS)):
+        if level >= STEPS[i][0] and days >= STEPS[i][1]:
+            due.append(i)
+        else:
+            break
+    return due
+
+
+def next_step(index: int):
+    return STEPS[index] if index < len(STEPS) else None
 
 
 def _valid_today(referrer_id: int) -> int:
@@ -336,8 +488,9 @@ def notify_joined(new_user: User, referrer_id: int) -> None:
         "📨 <b>یه نفر با لینک دعوتت وارد بازی شد!</b>",
         f"👤 {lab_display(new_user)}",
         "──────────────",
-        f"وقتی به <b>سطح آزمایشگاه {MILESTONE_LEVEL}</b> برسه و <b>{MIN_ACTIVE_DAYS} روز جدا</b> بازی کنه، "
-        f"دعوتش معتبر می‌شه و هردوتون جایزه می‌گیرین: تو {reward_text(REFERRER_REWARD)}، اون {reward_text(FRIEND_REWARD)}.",
+        f"هر بار که رشد کنه جایزه می‌گیری — از <b>سطح {STEPS[0][0]}</b> تا <b>سطح {STEPS[-1][0]}</b>، "
+        f"روی هم تا <b>{reward_text(*_sum_rewards(range(len(STEPS)), 0))}</b>.",
+        f"اولین جایزه وقتی به <b>سطح {STEPS[0][0]}</b> برسه و <b>{STEPS[0][1]} روز جدا</b> بازی کنه.",
         "<i>💡 کمکش کن زودتر قوی شه — هر خریدی هم تا ۶۰ روز بکنه، ۱۰٪ش الماس به تو می‌رسه.</i>",
     ])})
 

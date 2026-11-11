@@ -95,6 +95,7 @@ class User(models.Model):
     active_days = models.IntegerField(default=0)
     last_active_day = models.CharField(max_length=10, blank=True, default="")
     referral_tier = models.IntegerField(default=0)
+    referral_step = models.IntegerField(default=0)   # growth steps of THIS invited player already paid
 
     # highest PvE campaign stage cleared (game/campaign.py); 0 = none yet
     campaign_stage = models.IntegerField(default=0)
