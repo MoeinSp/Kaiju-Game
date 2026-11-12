@@ -295,6 +295,18 @@ async def war1d_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
+async def send_war1d_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """`/start allywar` (the button under «جنگ اتحاد» in a group) — the same one-day war
+    panel as the ally_war1d callback, sent as a new message."""
+    data = await run_db(_war1d_sync, update.effective_user)
+    msg = update.effective_message
+    if not data["in_alliance"]:
+        await msg.reply_text("توی هیچ اتحادی نیستی.")
+        return
+    text, keyboard = _war1d_render(data)
+    await msg.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+
+
 def _war_start_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
     alliance.start_war(user)

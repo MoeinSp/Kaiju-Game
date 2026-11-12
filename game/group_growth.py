@@ -6,11 +6,11 @@
    level 5+, has played on 3+ separate days and isn't banned — the same anti-fake bar as
    the invite system. Checked by the 5-minute notification job (collect_adder_rewards).
 
-2. «پایگاه اتحاد» — an alliance can make a Telegram group its home (Alliance.home_group). The
-   leader or deputy links it with «ثبت اتحاد» and must be an admin of that group. There:
-   «اتحاد گروه» shows the alliance with a join button, and every alliance member who is in
-   the group takes «پاداش اتحاد» once a day — bigger the more of the alliance is in the
-   group, so members pull each other in. Alliance-war results are posted there too.
+2. «پایگاه اتحاد» — an alliance and its Telegram group are one (Alliance.home_group). Anyone
+   in an alliance registers the group with «ثبت پایگاه» (or removes it with «حذف پایگاه»);
+   a group admin's «قفل پایگاه» limits both to the admins. The alliance's raid boss is only
+   fought there, «اتحاد گروه» shows the alliance with a join button, and alliance-war results
+   are posted there too.
 """
 
 from __future__ import annotations
@@ -30,9 +30,6 @@ ADD_STEPS = [
     (100, {"diamonds": 300, "coins": 2_000_000, "dna": 100_000, "cards": [(60, 3)], "relics": 2}),
 ]
 
-BASE_GOLD, BASE_GOLD_PER_MEMBER = 10_000, 2_000
-BASE_DNA, BASE_DNA_PER_MEMBER = 500, 100
-BASE_MEMBER_CAP = 25
 
 
 def _real_xp() -> int:
@@ -130,41 +127,51 @@ def collect_adder_rewards() -> list[tuple]:
 
 
 # ── alliance home group ───────────────────────────────────────────────────────
+# The alliance and its group are one (owner, 2026-11-13): the alliance's raid boss is only
+# fought in its home group and war results are posted there. Anyone in an alliance may
+# register or remove the base; once a group admin types «قفل پایگاه», only the admins may.
+_LOCKED_MSG = ("🔒 پایگاه این گروه قفله: فقط ادمین‌های گروه می‌تونن ثبت یا حذفش کنن.\n"
+               "<i>ادمین‌ها با «باز کردن پایگاه» قفل رو برمی‌دارن.</i>")
+
+
 def link_home(user: User, group: Group, sender_is_group_admin: bool) -> Alliance:
     if user.alliance_id is None:
         raise GameError("اول باید عضو یه اتحاد باشی.")
+    if group.base_locked and not sender_is_group_admin:
+        raise GameError(_LOCKED_MSG)
     alliance = Alliance.objects.select_related("home_group").get(id=user.alliance_id)
-    if user.id not in (alliance.leader_id, alliance.deputy_id):
-        raise GameError("فقط رهبر یا معاون اتحاد می‌تونه گروه رو پایگاه اتحاد کنه.")
-    if not sender_is_group_admin:
-        raise GameError("باید ادمین همین گروه باشی تا بتونی اینجا رو پایگاه اتحادت کنی.")
     other = Alliance.objects.filter(home_group=group).exclude(id=alliance.id).first()
     if other is not None:
-        raise GameError(f"این گروه پایگاه اتحاد «{other.name}»ـه.")
+        raise GameError(f"این گروه پایگاه اتحاد «{other.name}»ـه. اول باید «حذف پایگاه» بزنید.")
     alliance.home_group = group
     alliance.save(update_fields=["home_group"])
     return alliance
 
 
-def unlink_home(user: User, group: Group) -> Alliance:
+def unlink_home(user: User, group: Group, sender_is_group_admin: bool = False) -> Alliance:
     alliance = Alliance.objects.filter(home_group=group).first()
     if alliance is None:
         raise GameError("این گروه پایگاه هیچ اتحادی نیست.")
-    if user.id not in (alliance.leader_id, alliance.deputy_id):
-        raise GameError("فقط رهبر یا معاون همون اتحاد می‌تونه پایگاه رو حذف کنه.")
+    if group.base_locked and not sender_is_group_admin:
+        raise GameError(_LOCKED_MSG)
     alliance.home_group = None
     alliance.save(update_fields=["home_group"])
     return alliance
 
 
+def set_base_lock(group: Group, sender_is_group_admin: bool, locked: bool) -> None:
+    if not sender_is_group_admin:
+        raise GameError("فقط ادمین‌های گروه می‌تونن پایگاه رو قفل یا باز کنن.")
+    Group.objects.filter(id=group.id).update(base_locked=locked)
+
+
+def home_alliance(group_id: int) -> Alliance | None:
+    return Alliance.objects.filter(home_group_id=group_id).first()
+
+
 def present_members(alliance: Alliance, group_id: int) -> int:
     return GroupMembership.objects.filter(group_id=group_id, left_at__isnull=True,
                                           user__alliance_id=alliance.id).count()
-
-
-def base_reward_for(present: int) -> dict:
-    n = min(present, BASE_MEMBER_CAP)
-    return {"coins": BASE_GOLD + BASE_GOLD_PER_MEMBER * n, "dna": BASE_DNA + BASE_DNA_PER_MEMBER * n}
 
 
 def home_card(group: Group) -> dict | None:
@@ -174,37 +181,14 @@ def home_card(group: Group) -> dict | None:
     alliance = Alliance.objects.filter(home_group=group).select_related("leader").first()
     if alliance is None:
         return None
-    present = present_members(alliance, group.id)
     return {
         "name": alliance.name,
         "members": alliance.members.count(),
-        "present": present,
+        "present": present_members(alliance, group.id),
         "leader": alliance.leader,
+        "locked": group.base_locked,
         "join_url": f"https://t.me/{BOT_USERNAME}?start=ally_{alliance_recruit.invite_code(alliance)}",
-        "reward": base_reward_for(present),
     }
-
-
-@transaction.atomic
-def claim_base(user: User, group: Group) -> dict:
-    from bio_lab.repository import lock_row
-    from game.referral import _give
-
-    alliance = Alliance.objects.filter(home_group=group).first()
-    if alliance is None:
-        raise GameError("این گروه پایگاه هیچ اتحادی نیست. رهبر اتحاد با «ثبت اتحاد» اینجا رو پایگاه می‌کنه.")
-    if user.alliance_id != alliance.id:
-        raise GameError(f"این پایگاه اتحاد «{alliance.name}»ـه — فقط اعضاش پاداش می‌گیرن. با «اتحاد گروه» می‌تونی عضو شی.")
-    lock_row(user)
-    user.refresh_from_db()
-    if user.ally_base_day == _today():
-        raise GameError("پاداش امروز پایگاه رو گرفتی — فردا دوباره بیا! 🏰")
-    GroupMembership.objects.get_or_create(group=group, user=user)
-    present = present_members(alliance, group.id)
-    reward = base_reward_for(present)
-    User.objects.filter(id=user.id).update(ally_base_day=_today())
-    _give(user, reward)
-    return {"alliance": alliance.name, "present": present, "reward": reward}
 
 
 def post_war_result(alliance_id: int, text: str) -> None:

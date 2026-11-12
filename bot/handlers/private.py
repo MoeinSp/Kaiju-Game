@@ -1543,6 +1543,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             context.user_data.pop("pending_duel", None)
             if code and await challenge_intro(update, context, code):
                 return
+        elif arg == "allywar":   # «شرکت در جنگ» under «جنگ اتحاد» in an alliance's home group
+            from bot.handlers.alliancewar import send_war1d_panel
+
+            await send_war1d_panel(update, context)
+            return
         elif arg.startswith("ally_"):   # an alliance's invite link (bot/handlers/alliance_recruit.py)
             from bot.handlers.alliance_recruit import start_link
 

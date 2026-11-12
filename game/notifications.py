@@ -315,17 +315,6 @@ def collect_due() -> list[tuple[int, str]]:
         except Exception:  # noqa: BLE001 — a reminder hiccup must not drop the batch
             pass
 
-        # ── «جنگ گروه‌ها» (24h wars) and «لیگ گروه‌ها» (Monday prize) ────────────
-        try:
-            from game import group_war
-
-            with transaction.atomic():
-                out.extend(group_war.settle_due())
-            with transaction.atomic():
-                out.extend(group_war.pay_week_prizes())
-        except Exception:  # noqa: BLE001
-            pass
-
         # ── «افزودن ربات به گروه»: the adder's real-player steps ──────────────
         try:
             from game import group_growth

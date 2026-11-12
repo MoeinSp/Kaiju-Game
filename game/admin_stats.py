@@ -288,11 +288,8 @@ def growth(n: int = 14) -> dict:
     nb = m.User.objects.filter(newbie_eligible=True).aggregate(
         eligible=Count("id"), d1=Count("id", filter=Q(newbie_day__gte=1)), d3=Count("id", filter=Q(newbie_day__gte=3)),
         d7=Count("id", filter=Q(newbie_day__gte=7)))
-    bosses = m.GroupBoss.objects.filter(spawned_at__gte=since7).aggregate(
-        n=Count("id"), dead=Count("id", filter=Q(status="dead")), escaped=Count("id", filter=Q(status="escaped")))
-    boss_players = m.GroupBossHit.objects.filter(first_hit_at__gte=since7).values("user_id").distinct().count()
-    wars = m.GroupWar.objects.filter(created_at__gte=since7).aggregate(
-        n=Count("id"), played=Count("id", filter=Q(status__in=("active", "settled"))))
+    wars = m.AllianceWar.objects.filter(started_at__gte=since7).aggregate(
+        n=Count("id"), home=Count("id", filter=Q(alliance_a__home_group__isnull=False)))
     duels = {
         "links": m.FriendChallenge.objects.filter(created_at__gte=since7).count(),
         "runs": m.ChallengeRun.objects.filter(created_at__gte=since7).count(),
@@ -300,7 +297,7 @@ def growth(n: int = 14) -> dict:
         "newcomers": m.ChallengeRun.objects.filter(created_at__gte=since7, user__created_at__gte=since7).count(),
     }
     return {"rows": rows, "referral": referral, "groups": groups, "alliances": alliances,
-            "newbie": nb, "bosses": {**bosses, "players": boss_players}, "wars": wars, "duels": duels}
+            "newbie": nb, "wars": wars, "duels": duels}
 
 
 # ── extras for the single-day page (owner._stats_day_text) ───────────────────

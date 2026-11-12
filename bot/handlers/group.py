@@ -929,6 +929,22 @@ _NO_ALLIANCE_MSG = (
 )
 
 
+def _home_block(group, alliance) -> str | None:
+    """The alliance and its group are one (owner, 2026-11-13): the raid boss is fought only
+    in the alliance's home group. None = this is it; else the message to show."""
+    if alliance.home_group_id == group.id:
+        return None
+    if alliance.home_group_id is None:
+        return ("🏰 <b>اتحادت هنوز گروه نداره</b>\n\n"
+                "باس رید فقط توی گروه خود اتحاد زده می‌شه.\n"
+                "یکی از اعضا توی گروه اتحاد بنویسه «ثبت پایگاه».")
+    from bio_lab.models import Group
+
+    title = Group.objects.filter(id=alliance.home_group_id).values_list("title", flat=True).first()
+    return (f"🏰 باس رید اتحاد «{html.escape(alliance.name)}» فقط توی گروه خود اتحاد"
+            f" («{html.escape(title or 'گروه اتحاد')}») زده می‌شه.")
+
+
 def _raid_spawn_sync(chat, spawner_tg):
     group = get_or_create_group(chat)
     spawner_user, _ = get_or_create_user(spawner_tg)
@@ -936,6 +952,9 @@ def _raid_spawn_sync(chat, spawner_tg):
     if spawner_user.alliance_id is None:
         raise RaidError(_NO_ALLIANCE_MSG)
     alliance = Alliance.objects.get(id=spawner_user.alliance_id)
+    block = _home_block(group, alliance)
+    if block:
+        raise RaidError(block)
     boss = spawn_boss(alliance, group)
     return boss, alliance.name
 
@@ -967,6 +986,9 @@ def _attack_sync(chat, tg_user):
     touch_membership(group, user)
     if user.alliance_id is None:
         raise GameError(_NO_ALLIANCE_MSG)
+    block = _home_block(group, Alliance.objects.get(id=user.alliance_id))
+    if block:
+        raise GameError(block)
     boss = get_active_boss(user.alliance_id)
     if boss is None:
         raise GameError("😴 الان باس رید فعالی برای اتحادت نیست. یکی از اعضا «احضار» بزنه تا باس بیاد، بعد «اتک».")
@@ -1017,6 +1039,9 @@ def _raid_precheck_sync(chat, tg_user):
     if user.alliance_id is None:
         raise GameError(_NO_ALLIANCE_MSG)
     alliance = Alliance.objects.get(id=user.alliance_id)
+    block = _home_block(group, alliance)
+    if block:
+        raise GameError(block)
     boss = get_active_boss(user.alliance_id)
     if boss is None:
         raise GameError("😴 الان باس رید فعالی برای اتحادت نیست. یکی از اعضا «احضار» بزنه، بعد «اتک».")

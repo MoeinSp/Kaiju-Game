@@ -197,7 +197,7 @@ def money_text(m: dict) -> str:
 
 
 def growth_text(g: dict) -> str:
-    rf, gr, al, nb, bo, wa, du = g["referral"], g["groups"], g["alliances"], g["newbie"], g["bosses"], g["wars"], g["duels"]
+    rf, gr, al, nb, wa, du = g["referral"], g["groups"], g["alliances"], g["newbie"], g["wars"], g["duels"]
     rows = g["rows"]
     vmax = max((r["invited"] + r["organic"] for r in rows), default=0)
     lines = [
@@ -218,8 +218,7 @@ def growth_text(g: dict) -> str:
         f"اتحادها: <b>{al['total']:,}</b> ({al['members']:,} عضو) · با پایگاه گروه: <b>{al['home']:,}</b>",
         "", DIV, "🎯 <b>قابلیت‌های رشد</b> <i>(۷ روز اخیر)</i>",
         f"🎁 تقویم تازه‌وارد: {nb['eligible']:,} واجد شرایط · روز ۱: <b>{nb['d1']:,}</b> · روز ۳: <b>{nb['d3']:,}</b> · هر ۷ روز: <b>{nb['d7']:,}</b>",
-        f"👹 باس گروهی: {bo['n'] or 0} بار اومد · <b>{bo['dead'] or 0}</b> کشته · {bo['escaped'] or 0} فرار · {bo['players']:,} نفر زدن",
-        f"⚔️ جنگ گروه‌ها: {wa['n'] or 0} چالش · <b>{wa['played'] or 0}</b> جنگ واقعی",
+        f"⚔️ جنگ اتحاد: <b>{wa['n'] or 0}</b> جنگ · {wa['home'] or 0} از اتحادهای پایگاه‌دار",
         f"🥊 چالش رفیق: {du['links']:,} لینک · <b>{du['runs']:,}</b> مبارزه · {du['newcomers']:,} تازه‌وارد · {du['won']:,} برد رفیق",
     ]
     return "\n".join(lines)

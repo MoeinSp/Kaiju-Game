@@ -1,54 +1,51 @@
 """Group & social growth features — the Telegram side.
 
-* group words: «ثبت اتحاد» / «حذف پایگاه» / «اتحاد گروه» / «پاداش اتحاد» (game/group_growth.py),
-  «باس» (game/group_boss.py), «لیگ گروه‌ها» / «جنگ گروه» / «چالش گروه» / «قبول چالش 1234»
-  (game/group_war.py), «افزودن ربات» (the add-to-group link)
-* the group-boss job: posts new bosses, settles dead / escaped ones (every BOSS_TICK seconds)
-* buttons: gb:hit:<boss> (group boss), ch:new / ch:go:<code> / ch:mv:<run>:<move> (friend challenge)
+* group words (game/group_growth.py): «ثبت پایگاه» / «حذف پایگاه» (any alliance member, unless
+  a group admin typed «قفل پایگاه» — «باز کردن پایگاه» undoes it), «اتحاد گروه» (the card
+  with a join button), «افزودن ربات» (the add-to-group link)
+* «لیگ گروه‌ها» — the weekly table of group PvP wins (game/group_war.py, no prizes)
+* «جنگ اتحاد» / «جنگ گروه» / «چالش گروه» — the group war IS the alliance war: in an
+  alliance's home group it shows that war, and the leader/deputy starts one from there
+* buttons: ch:new / ch:go:<code> / ch:mv:<run>:<move> (friend challenge)
 """
 
 from __future__ import annotations
 
 import html
 import logging
-import re
-import time
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
 from telegram.ext import CallbackQueryHandler, ContextTypes
 
 from bio_lab.repository import get_or_create_group, get_or_create_user
-from bot.buttons import BATTLE, CONFIRM, NAV, back_btn, btn
+from bot.buttons import BATTLE, CONFIRM, back_btn, btn
 from bot.utils import alert_text, run_db, send_screen
-from game import challenge, constants, group_boss, group_growth, group_war
+from game import challenge, constants, group_growth, group_war
 from game.creature import GameError
 
 log = logging.getLogger(__name__)
-BOSS_TICK = 120
 
 # whole message, spaces dropped (keywords.normalize first) → action
 WORDS = {
     **{w: "ally_link" for w in ("ثبتاتحاد", "ثبتپایگاه", "ثبتپایگاهاتحاد")},
     **{w: "ally_unlink" for w in ("حذفپایگاه", "حذفپایگاهاتحاد")},
+    **{w: "base_lock" for w in ("قفلپایگاه", "قفلپایگاهاتحاد")},
+    **{w: "base_unlock" for w in ("بازکردنپایگاه", "بازکردنقفلپایگاه", "آزادکردنپایگاه", "قفلپایگاهبرداشتهبشه")},
     **{w: "ally_card" for w in ("اتحادگروه", "پایگاهاتحاد", "اتحاداینجا")},
-    **{w: "ally_claim" for w in ("پاداشاتحاد", "پاداشپایگاه")},
-    **{w: "boss" for w in ("باس", "باسگروه", "غولگروه")},
     **{w: "league" for w in ("لیگگروه", "لیگگروهها", "جدولگروهها", "رتبهگروه")},
-    **{w: "war" for w in ("جنگگروه", "جنگگروهها", "وضعیتجنگ")},
-    **{w: "war_challenge" for w in ("چالشگروه", "چالشگروهی")},
+    # the group war is the alliance war now (owner, 2026-11-13): in an alliance's home group
+    # these show it, and «چالش گروه» from the leader/deputy starts one
+    **{w: "war" for w in ("جنگگروه", "جنگگروهها", "وضعیتجنگ", "جنگاتحاد")},
+    **{w: "war_challenge" for w in ("چالشگروه", "چالشگروهی", "شروعجنگ")},
     **{w: "add_bot" for w in ("افزودنربات", "اضافهکردنربات", "رباتتوگروهت")},
 }
-_ACCEPT = re.compile(r"^قبول\s*چالش\s*(\d{4})$")
 
 
 def parse(norm: str) -> tuple[str, str | None] | None:
     key = norm.replace(" ", "")
     if key in WORDS:
         return WORDS[key], None
-    m = _ACCEPT.match(norm)
-    if m:
-        return "war_accept", m.group(1)
     return None
 
 
@@ -76,68 +73,63 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE, action: str
     try:
         if action == "ally_link":
             admin = await _is_admin(context.bot, chat.id, tg.id)
-            al = await run_db(_ally_link_sync, chat, tg, admin)
-            await msg.reply_text(
-                f"🏰 <b>اینجا پایگاه اتحاد «{_e(al.name)}» شد!</b>\n"
-                "• اعضای اتحاد که توی این گروه‌ان، هر روز با «پاداش اتحاد» جایزه می‌گیرن — هرچی بیشتر از اتحاد اینجا باشن، بیشتر.\n"
-                "• نتیجه‌ی جنگ‌های اتحاد همینجا اعلام می‌شه.\n"
-                "• بقیه با «اتحاد گروه» دکمه‌ی پیوستن رو می‌بینن.", parse_mode="HTML")
+            al, locked = await run_db(_ally_link_sync, chat, tg, admin)
+            lines = [
+                f"🏰 <b>اینجا پایگاه اتحاد «{_e(al.name)}» شد!</b>",
+                "━━━━━━━━━━",
+                "🐲 باس رید اتحاد فقط همینجا زده می‌شه",
+                "⚔️ جنگ اتحاد با «جنگ اتحاد» دیده می‌شه",
+                "      و نتیجه‌اش همینجا اعلام می‌شه",
+                "🤝 بقیه با «اتحاد گروه» عضو می‌شن",
+            ]
+            if not locked:
+                lines += ["━━━━━━━━━━",
+                          "🔒 <i>ادمین‌های گروه با «قفل پایگاه» می‌تونن ثبت و حذف پایگاه رو فقط برای خودشون نگه دارن.</i>"]
+            await msg.reply_text("\n".join(lines), parse_mode="HTML")
         elif action == "ally_unlink":
-            al = await run_db(_ally_unlink_sync, chat, tg)
+            admin = await _is_admin(context.bot, chat.id, tg.id)
+            al = await run_db(_ally_unlink_sync, chat, tg, admin)
             await msg.reply_text(f"🏚 این گروه دیگه پایگاه اتحاد «{_e(al.name)}» نیست.")
+        elif action in ("base_lock", "base_unlock"):
+            admin = await _is_admin(context.bot, chat.id, tg.id)
+            await run_db(_base_lock_sync, chat, admin, action == "base_lock")
+            if action == "base_lock":
+                await msg.reply_text(
+                    "🔒 <b>پایگاه قفل شد</b>\n"
+                    "از این به بعد فقط ادمین‌های گروه می‌تونن «ثبت پایگاه» و «حذف پایگاه» بزنن.\n"
+                    "<i>برای برداشتن قفل: «باز کردن پایگاه»</i>", parse_mode="HTML")
+            else:
+                await msg.reply_text(
+                    "🔓 <b>قفل پایگاه برداشته شد</b>\n"
+                    "هر عضو یه اتحاد می‌تونه «ثبت پایگاه» یا «حذف پایگاه» بزنه.", parse_mode="HTML")
         elif action == "ally_card":
             card = await run_db(_ally_card_sync, chat)
             if card is None:
                 await msg.reply_text(
                     "🏰 این گروه هنوز پایگاه هیچ اتحادی نیست.\n"
-                    "<i>رهبر یا معاون یه اتحاد (که ادمین این گروه هم باشه) با «ثبت اتحاد» اینجا رو پایگاه می‌کنه.</i>",
+                    "<i>هر عضو یه اتحاد با «ثبت پایگاه» اینجا رو گروه اتحادش می‌کنه.</i>",
                     parse_mode="HTML")
                 return
-            from game.referral import reward_text
-
             await msg.reply_text(
                 f"🏰 <b>پایگاه اتحاد «{_e(card['name'])}»</b>\n"
                 f"👥 اعضا: <b>{card['members']}</b> · توی این گروه: <b>{card['present']}</b>\n"
-                f"🎁 «پاداش اتحاد» امروز برای هر عضو: {reward_text(card['reward'])}\n"
-                "<i>هرچی اعضای بیشتری از اتحاد توی گروه باشن، پاداش بیشتره.</i>",
+                "🐲 باس رید این اتحاد فقط همینجا زده می‌شه"
+                + ("\n🔒 ثبت و حذف پایگاه: فقط ادمین‌ها" if card["locked"] else ""),
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🤝 پیوستن به اتحاد", url=card["join_url"])]]))
-        elif action == "ally_claim":
-            res = await run_db(_ally_claim_sync, chat, tg)
-            from game.referral import reward_text
-
-            await msg.reply_text(
-                f"🏰 <b>پاداش پایگاه «{_e(res['alliance'])}»</b>: {reward_text(res['reward'])}\n"
-                f"<i>{res['present']} نفر از اتحاد توی این گروه‌ان — رفیقای اتحادت رو بیار تا فردا بیشتر بگیری!</i>",
-                parse_mode="HTML")
-        elif action == "boss":
-            await _boss_word(update, context)
         elif action == "league":
             text = await run_db(_league_text_sync, chat)
             await msg.reply_text(text, parse_mode="HTML")
-        elif action == "war":
-            text = await run_db(_war_status_sync, chat)
-            await msg.reply_text(text, parse_mode="HTML")
-        elif action == "war_challenge":
-            admin = await _is_admin(context.bot, chat.id, tg.id)
-            war = await run_db(_war_challenge_sync, chat, tg, admin)
-            await msg.reply_text(
-                f"⚔️ <b>چالش جنگ گروه‌ها ساخته شد!</b>\n"
-                f"کد: <code>{war.code}</code>\n"
-                f"این پیام رو برای ادمین یه گروه دیگه بفرست تا توی گروهش بنویسه:\n<code>قبول چالش {war.code}</code>\n"
-                f"<i>کد تا {group_war.CHALLENGE_TTL_MIN} دقیقه اعتبار داره. جنگ {group_war.WAR_HOURS} ساعت طول می‌کشه؛ "
-                "امتیاز از کشتن باس گروه و بردن اتک‌ها توی گروه میاد.</i>", parse_mode="HTML")
-        elif action == "war_accept":
-            admin = await _is_admin(context.bot, chat.id, tg.id)
-            war = await run_db(_war_accept_sync, chat, tg, admin, arg)
-            start = (f"⚔️ <b>جنگ گروه‌ها شروع شد!</b>\n«{_e(war.group_a.title)}» 🆚 «{_e(war.group_b.title)}»\n"
-                     f"⏳ {group_war.WAR_HOURS} ساعت — امتیاز: کشتن باس گروه و آسیب بهش، و هر برد اتک توی گروه.\n"
-                     "<i>وضعیت جنگ: «جنگ گروه»</i>")
-            await msg.reply_text(start, parse_mode="HTML")
-            try:
-                await context.bot.send_message(war.group_a_id, start, parse_mode="HTML")
-            except TelegramError:
-                pass
+        elif action in ("war", "war_challenge"):
+            text, kb, started = await run_db(_ally_war_sync, chat, tg, action == "war_challenge")
+            await msg.reply_text(text, parse_mode="HTML", reply_markup=kb)
+            if started is not None:   # tell the other alliance's home group too
+                foe_home, foe_text = started
+                if foe_home:
+                    try:
+                        await context.bot.send_message(foe_home, foe_text, parse_mode="HTML")
+                    except TelegramError:
+                        pass
         elif action == "add_bot":
             await msg.reply_text(
                 "➕ <b>ربات رو به یه گروه شلوغ اضافه کن و جایزه بگیر!</b>\n"
@@ -146,7 +138,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE, action: str
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("➕ افزودن به گروه", url=add_group_url())]]))
     except GameError as exc:
-        await msg.reply_text(alert_text(exc, 900))
+        await msg.reply_text(alert_text(exc, 900), parse_mode="HTML")
 
 
 def _reward_text(r):
@@ -157,196 +149,87 @@ def _reward_text(r):
 
 def _ally_link_sync(chat, tg, admin):
     user, _ = get_or_create_user(tg)
-    return group_growth.link_home(user, get_or_create_group(chat), admin)
+    group = get_or_create_group(chat)
+    return group_growth.link_home(user, group, admin), group.base_locked
 
 
-def _ally_unlink_sync(chat, tg):
+def _ally_unlink_sync(chat, tg, admin):
     user, _ = get_or_create_user(tg)
-    return group_growth.unlink_home(user, get_or_create_group(chat))
+    return group_growth.unlink_home(user, get_or_create_group(chat), admin)
+
+
+def _base_lock_sync(chat, admin, locked):
+    group_growth.set_base_lock(get_or_create_group(chat), admin, locked)
 
 
 def _ally_card_sync(chat):
     return group_growth.home_card(get_or_create_group(chat))
 
 
-def _ally_claim_sync(chat, tg):
-    user, _ = get_or_create_user(tg)
-    return group_growth.claim_base(user, get_or_create_group(chat))
-
-
 def _league_text_sync(chat):
     rank, pts = group_war.group_rank(chat.id)
     top = group_war.league_top(10)
-    lines = ["🏆 <b>لیگ گروه‌های این هفته</b>"]
+    lines = ["🏆 <b>لیگ گروه‌های این هفته</b>", "━━━━━━━━━━"]
     if not top:
-        lines.append("<i>این هفته هنوز هیچ گروهی امتیاز نگرفته — باس گروه رو بکشید و اتک بدید!</i>")
+        lines.append("<i>این هفته هنوز هیچ گروهی امتیاز نگرفته — توی گروه اتک بدید!</i>")
     for i, r in enumerate(top, 1):
-        me = " ← <b>ما</b>" if r["group_id"] == chat.id else ""
-        lines.append(f"{i}. {_e(r['title'])} — <b>{r['points']:,}</b>{me}")
-    lines.append(f"\n📍 این گروه: {'رتبه ' + str(rank) + ' با ' + format(pts, ',') + ' امتیاز' if rank else 'هنوز امتیازی نداره'}")
-    p = group_war.WEEK_PRIZES
-    lines.append(f"<i>دوشنبه، سه گروه اول: هر بازیکن فعال 🥇 {_reward_text(p[0])} · 🥈 {_reward_text(p[1])} · 🥉 {_reward_text(p[2])}</i>")
-    lines.append(f"<i>امتیاز: کشتن باس گروه +{group_boss.KILL_POINTS} (و آسیب بهش)، هر برد اتک توی گروه +{group_war.PVP_WIN_POINTS}</i>")
+        me = " 📍" if r["group_id"] == chat.id else ""
+        lines.append(f"{i}. {_e(r['title'])} · <b>{r['points']:,}</b>{me}")
+    lines += ["━━━━━━━━━━",
+              f"📍 این گروه: {'رتبه ' + str(rank) + ' · ' + format(pts, ',') + ' امتیاز' if rank else 'هنوز امتیازی نداره'}",
+              f"<i>هر برد اتک توی گروه {group_war.PVP_WIN_POINTS} امتیاز</i>"]
     return "\n".join(lines)
 
 
-def _war_status_sync(chat):
-    war = group_war.active_war(chat.id)
+def _ally_war_sync(chat, tg, start: bool):
+    """«جنگ اتحاد» / «چالش گروه» in a group — the group war is the alliance war now: in an
+    alliance's home group it shows that alliance's one-day war, and the leader or deputy
+    starts one with «چالش گروه». Returns (text, keyboard, started) where started is
+    (foe_home_group_id, announcement) when a war was just started."""
+    from config import BOT_USERNAME
+    from game import alliance as A
+
+    group = get_or_create_group(chat)
+    al = group_growth.home_alliance(group.id)
+    open_btn = InlineKeyboardMarkup([[InlineKeyboardButton(
+        "⚔️ شرکت در جنگ (پیوی)", url=f"https://t.me/{BOT_USERNAME}?start=allywar")]])
+    if al is None:
+        return ("⚔️ این گروه پایگاه هیچ اتحادی نیست.\n"
+                "<i>جنگ‌ها بین اتحادهاست: هر عضو یه اتحاد با «ثبت پایگاه» اینجا رو گروه اتحادش می‌کنه.</i>",
+                None, None)
+    started = None
+    if start:
+        user, _ = get_or_create_user(tg)
+        if user.alliance_id != al.id or user.id not in (al.leader_id, al.deputy_id):
+            raise GameError("فقط رهبر یا معاون همین اتحاد می‌تونه جنگ رو شروع کنه.")
+        war = A.start_war(user)
+        foe = war.alliance_b
+        started = (foe.home_group_id,
+                   f"⚔️ <b>جنگ اتحاد شروع شد!</b>\nاتحاد «{_e(al.name)}» به اتحاد شما «{_e(foe.name)}» حمله کرد.\n"
+                   f"⏳ {A.WAR_DURATION_HOURS} ساعت · همه با «شرکت در جنگ» امتیاز بسازید!")
+    war = A.active_war_for(al.id)
     if war is None:
-        return ("⚔️ این گروه الان توی جنگ نیست.\n"
-                "<i>یه ادمین با «چالش گروه» کد می‌گیره و ادمین یه گروه دیگه با «قبول چالش کد» جنگ رو شروع می‌کنه.</i>")
-    return group_war.war_text(war, chat.id)
-
-
-def _war_challenge_sync(chat, tg, admin):
-    user, _ = get_or_create_user(tg)
-    return group_war.create_challenge(get_or_create_group(chat), user, admin)
-
-
-def _war_accept_sync(chat, tg, admin, code):
-    user, _ = get_or_create_user(tg)
-    return group_war.accept(code, get_or_create_group(chat), user, admin)
-
-
-# ── group boss ────────────────────────────────────────────────────────────────
-def _bar(hp: int, max_hp: int) -> str:
-    filled = round(10 * hp / max_hp) if max_hp else 0
-    return "■" * filled + "□" * (10 - filled)
-
-
-def boss_text(b, top: list[dict], fighters: int) -> str:
+        return (f"⚔️ <b>جنگ اتحاد «{_e(al.name)}»</b>\n"
+                "الان توی جنگ نیستید.\n"
+                f"<i>رهبر یا معاون با «چالش گروه» یه حریف هم‌قدرت پیدا می‌کنه و {A.WAR_DURATION_HOURS} ساعت می‌جنگید.</i>",
+                None, None)
+    mine_a = war.alliance_a_id == al.id
+    me, foe = (war.alliance_a, war.alliance_b) if mine_a else (war.alliance_b, war.alliance_a)
+    my_score, foe_score = (war.score_a, war.score_b) if mine_a else (war.score_b, war.score_a)
     from django.utils import timezone
 
-    pct = round(100 * b.hp / b.max_hp) if b.max_hp else 0
-    left = max(0, int((b.ends_at - timezone.now()).total_seconds() // 60))
-    lines = [
-        f"👹 <b>باس گروه: {_e(b.name)}</b> · {constants.element_label(b.element)}",
+    left = max(0, int((war.ends_at - timezone.now()).total_seconds()))
+    lead = "🟢 جلوییم" if my_score > foe_score else ("🔴 عقبیم" if my_score < foe_score else "🟡 مساوی")
+    text = "\n".join([
+        ("⚔️ <b>جنگ اتحاد شروع شد!</b>" if started else "⚔️ <b>جنگ اتحاد در جریانه</b>"),
+        f"«{_e(me.name)}» ⚔️ «{_e(foe.name)}»",
         "━━━━━━━━━━",
-        f"❤️ <code>{_bar(b.hp, b.max_hp)}</code> {pct}%",
-        f"      <code>{b.hp:,}/{b.max_hp:,}</code>",
-        f"⏳ <b>{left} دقیقه</b> تا فرار",
-        f"⚔️ هر نفر {group_boss.HITS} ضربه‌ی رایگان",
-        "      عنصر قوی‌تر 20% بیشتر می‌زنه",
+        f"📊 ما: <b>{my_score:,}</b> · حریف: <b>{foe_score:,}</b>",
+        f"{lead} · ⏳ {left // 3600} ساعت و {left % 3600 // 60} دقیقه مونده",
         "━━━━━━━━━━",
-    ]
-    medals = ("🥇", "🥈", "🥉")
-    for i, r in enumerate(top[:3]):
-        lines.append(f"{medals[i]} {r['name']} · {r['damage']:,}")
-    lines.append(f"👥 {fighters} نفر جنگیدن")
-    lines.append("<i>بکشیدش تا همه جایزه بگیرن؛ سه نفر اول و ضربه‌ی آخر الماس هم دارن.</i>")
-    return "\n".join(lines)
-
-
-def _boss_kb(boss_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([[btn("ضربه بزن", emoji_key="btn_worldboss", style=BATTLE, callback_data=f"gb:hit:{boss_id}")]])
-
-
-def _boss_view_sync(boss_id: int):
-    from bio_lab.models import GroupBoss
-
-    b = GroupBoss.objects.get(id=boss_id)
-    return b, group_boss.leaderboard(boss_id, 3), group_boss.fighters(boss_id)
-
-
-async def _boss_word(update, context):
-    b = await run_db(group_boss.current, update.effective_chat.id)
-    if b is None:
-        await update.effective_message.reply_text(
-            "👹 الان باسی توی این گروه نیست.\n<i>هر چند ساعت یه باس توی گروه‌هایی که حداقل "
-            f"{group_boss.MIN_ACTIVE} بازیکن فعال دارن ظاهر می‌شه. همه با هم بزنیدش!</i>", parse_mode="HTML")
-        return
-    b, top, n = await run_db(_boss_view_sync, b.id)
-    await update.effective_message.reply_text(boss_text(b, top, n), parse_mode="HTML", reply_markup=_boss_kb(b.id))
-
-
-_LAST_EDIT: dict[int, float] = {}
-
-
-def _result_text(res: dict) -> str:
-    b = res["boss"]
-    head = (f"🏆 <b>باس «{_e(b.name)}» شکست خورد!</b>" if res["killed"]
-            else f"🏃 <b>باس «{_e(b.name)}» فرار کرد…</b>")
-    lines = [head, f"👥 {res['fighters']} نفر جنگیدن — آسیب: <code>{res['dealt']:,}</code> / <code>{b.max_hp:,}</code>"]
-    medals = "🥇🥈🥉"
-    for i, r in enumerate(res["top"]):
-        dia = res["rewards"].get(r["user_id"], {}).get("diamonds")
-        lines.append(f"{medals[i]} {r['name']} — {r['damage']:,}" + (f" (+{dia} 💎)" if dia else ""))
-    last = next((uid for uid, r in res["rewards"].items() if r.get("last_hit")), None)
-    if last is not None:
-        lines.append(f"🎯 آخرین ضربه: +{group_boss.LAST_HIT_DIAMONDS} 💎")
-    lines.append("🎁 همه‌ی مبارزها به نسبت آسیبشون طلا و DNA گرفتن." if res["killed"]
-                 else f"🎁 مبارزها {int(group_boss.ESCAPE_SHARE * 100)}٪ جایزه‌ی کامل رو گرفتن. دفعه‌ی بعد با نفرات بیشتر!")
-    if res["points"]:
-        lines.append(f"🏆 +{res['points']:,} امتیاز لیگ گروه‌ها برای این گروه («لیگ گروه‌ها»)")
-    return "\n".join(lines)
-
-
-async def _settle_and_post(bot, boss_id: int) -> None:
-    res = await run_db(group_boss.settle, boss_id)
-    if res is None:
-        return
-    b = res["boss"]
-    try:
-        if b.message_id:
-            await bot.edit_message_text(chat_id=b.group_id, message_id=b.message_id, parse_mode="HTML",
-                                        text=boss_text(b, res["top"], res["fighters"]) + "\n\n<b>— تموم شد —</b>")
-    except TelegramError:
-        pass
-    try:
-        await bot.send_message(b.group_id, _result_text(res), parse_mode="HTML",
-                               reply_to_message_id=b.message_id or None)
-    except TelegramError:
-        try:
-            await bot.send_message(b.group_id, _result_text(res), parse_mode="HTML")
-        except TelegramError:
-            pass
-
-
-async def boss_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    bot = context.bot
-    try:
-        for b in await run_db(group_boss.due_spawns):
-            try:
-                m = await bot.send_message(b.group_id, boss_text(b, [], 0), parse_mode="HTML", reply_markup=_boss_kb(b.id))
-                await run_db(group_boss.set_message, b.id, m.message_id)
-            except TelegramError:
-                await run_db(group_boss.drop, b.id)
-        for bid in await run_db(group_boss.due_settlements):
-            await _settle_and_post(bot, bid)
-    except Exception:  # noqa: BLE001 — a bad tick must not kill the job
-        log.exception("group boss job failed")
-
-
-def _hit_sync(tg, chat, boss_id):
-    user, _ = get_or_create_user(tg)
-    get_or_create_group(chat)
-    res = group_boss.hit(user, boss_id)
-    return res, group_boss.leaderboard(boss_id, 3), group_boss.fighters(boss_id)
-
-
-async def boss_hit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    boss_id = int(query.data.split(":")[2])
-    try:
-        res, top, n = await run_db(_hit_sync, update.effective_user, update.effective_chat, boss_id)
-    except GameError as exc:
-        await query.answer(alert_text(exc), show_alert=True)
-        return
-    adv = " ⚡ برتری عنصری!" if res["advantage"] else ""
-    await query.answer(f"💥 {res['damage']:,} آسیب!{adv} — {res['hits_left']} ضربه‌ی دیگه داری")
-    b = res["boss"]
-    if res["killed"]:
-        await _settle_and_post(context.bot, b.id)
-        return
-    now = time.monotonic()
-    if now - _LAST_EDIT.get(b.id, 0) >= 2.5:   # Telegram limits edits; the next hit refreshes it anyway
-        _LAST_EDIT[b.id] = now
-        while len(_LAST_EDIT) > 2000:
-            _LAST_EDIT.pop(next(iter(_LAST_EDIT)))
-        try:
-            await query.edit_message_text(boss_text(b, top, n), parse_mode="HTML", reply_markup=_boss_kb(b.id))
-        except TelegramError:
-            pass
+        "<i>هر عضو یه بار با «شرکت در جنگ» قدرتش رو اضافه می‌کنه و جایزه می‌گیره.</i>",
+    ])
+    return text, open_btn, started
 
 
 # ── friend challenge ──────────────────────────────────────────────────────────
@@ -487,9 +370,6 @@ async def challenge_move(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 def register(application) -> None:
-    application.add_handler(CallbackQueryHandler(boss_hit, pattern=r"^gb:hit:\d+$"))
     application.add_handler(CallbackQueryHandler(challenge_panel, pattern=r"^ch:new$"))
     application.add_handler(CallbackQueryHandler(challenge_go, pattern=r"^ch:go:[0-9a-f]{4,12}$"))
     application.add_handler(CallbackQueryHandler(challenge_move, pattern=r"^ch:mv:\d+:(heavy|guard|element)$"))
-    if application.job_queue is not None:
-        application.job_queue.run_repeating(boss_job, interval=BOSS_TICK, first=60, name="group_boss")

@@ -1272,6 +1272,9 @@ class Group(models.Model):
     adder_step = models.IntegerField(default=0)
     # «باس گروه» (game/group_boss.py): when the next one may appear here
     boss_next_at = models.DateTimeField(null=True, blank=True)
+    # «قفل پایگاه»: while on, only the group's admins may «ثبت پایگاه» / «حذف پایگاه» here
+    # (off = anyone in an alliance may; owner, 2026-11-13)
+    base_locked = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:

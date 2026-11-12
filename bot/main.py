@@ -344,7 +344,7 @@ def main() -> None:
     newbie_handlers.register(application)   # «تقویم تازه‌وارد» (nb:…)
     from bot.handlers import growth as growth_handlers
 
-    growth_handlers.register(application)   # group boss / group war / alliance base / friend challenge
+    growth_handlers.register(application)   # alliance base / group league / friend challenge
     team.register(application)
     from bot.handlers import alliance_recruit as alliance_recruit_handlers
 

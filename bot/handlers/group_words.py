@@ -1565,7 +1565,7 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if serum_word is not None:
         await serum_handlers.group_word(update, context, *serum_word)
         return
-    # «باس», «ثبت اتحاد», «پاداش اتحاد», «لیگ گروه‌ها», «چالش گروه», «قبول چالش 1234» … (bot/handlers/growth.py)
+    # «ثبت پایگاه», «قفل پایگاه», «اتحاد گروه», «لیگ گروه‌ها», «جنگ اتحاد», «چالش گروه» (bot/handlers/growth.py)
     from bot.handlers import growth
 
     growth_word = growth.parse(norm)
