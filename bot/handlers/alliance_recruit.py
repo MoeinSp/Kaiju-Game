@@ -163,7 +163,7 @@ def inbox_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
     rows.append([btn("دعوت اتحاد: " + ("بسته 🚫" if v["blocked"] else "باز ✅"), emoji_key="btn_settings", style=NAV,
                      callback_data="inbox_block")])
     if v.get("blocks"):
-        rows.append([btn(f"رفع بلاک دعوت‌ها ({v['blocks']})", emoji_key="btn_settings", style=NAV, callback_data="inbox_unblock")])
+        rows.append([btn(f"رفع بلاک ({v['blocks']})", emoji_key="btn_settings", style=NAV, callback_data="inbox_unblock")])
     rows.append([back_btn("menu:me", "منوی اصلی")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -244,7 +244,7 @@ def switch_render(v: dict, in_group: bool = False) -> tuple[str, InlineKeyboardM
             f"برای پیوستن به «{_e(v['target'])}» باید از اتحاد فعلیت خارج شی.\n"
             f"<blockquote>{v['note']}</blockquote>")
     return text, InlineKeyboardMarkup([
-        [btn(f"خروج از «{str(v['current'])[:18]}» و پیوستن", emoji_key="btn_confirm", style=CONFIRM,
+        [btn("خروج و پیوستن", emoji_key="btn_confirm", style=CONFIRM,
              callback_data=f"ainv_sw:{v['invite']}")],
         [btn("رد دعوت", emoji_key="btn_cancel", style=DANGER, callback_data=f"ainv_no:{v['invite']}")]
         + ([] if in_group else [back_btn("inbox", "صندوق نامه")])])
@@ -338,13 +338,13 @@ def manage_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
             [btn("آگهی جذب", emoji_key="btn_ally_recruit", style=NAV, callback_data="arec_note"),
              btn("دنبال عضو: " + ("روشن" if v["recruiting"] else "خاموش"), emoji_key="btn_ally_recruit",
                  style=CONFIRM if v["recruiting"] else NAV, callback_data="arec_tog")],
-            [btn("لینک جدید (قبلی باطل می‌شه)", emoji_key="btn_ally_link", style=NAV, callback_data="arec_link")]]
+            [btn("لینک جدید", emoji_key="btn_ally_link", style=NAV, callback_data="arec_link")]]
     for inv in v["invites"][:8]:
         who = inv["user"].lab_name or inv["user"].first_name or inv["user"].id
         lines.append(f"  ▫️ {_e(who)} <i>(تا {_when(inv['expires_at'])})</i>")
         rows.append([btn(f"لغو دعوت {str(who)[:20]}", emoji_key="btn_cancel", style=DANGER, callback_data=f"ainv_x:{inv['id']}")])
     if v["requests"]:
-        rows.append([btn(f"درخواست‌های عضویت ({len(v['requests'])})", emoji_key="btn_members", style=PRIMARY, callback_data="ally_requests")])
+        rows.append([btn(f"درخواست‌ها ({len(v['requests'])})", emoji_key="btn_members", style=PRIMARY, callback_data="ally_requests")])
     rows.append([back_btn("ally_settings", "بازگشت به تنظیمات")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 

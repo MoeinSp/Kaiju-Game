@@ -352,7 +352,7 @@ def _decorate(item) -> dict:
         from bot.buttons import BATTLE, CONFIRM
 
         reply_markup = InlineKeyboardMarkup([
-            [btn("باز کردن جعبه‌ی جایزه", emoji_key="btn_chest_open", style=CONFIRM, callback_data="tour:open")],
+            [btn("باز کردن جعبه", emoji_key="btn_chest_open", style=CONFIRM, callback_data="tour:open")],
             [btn("جام آخر هفته", emoji_key="btn_tournament", style=BATTLE, callback_data="menu:tournament")],
         ])
     elif marker == "tournament":
@@ -399,9 +399,9 @@ def _decorate(item) -> dict:
         rows = []
         unclaimed = payload or ["bronze", "silver"]
         if "bronze" in unclaimed:
-            rows.append([btn("باز کردن باکس نایاب (رایگان)", emoji_key="btn_diamond_box", style=SHOP, callback_data="dbox_pick:bronze")])
+            rows.append([btn("باکس نایاب رایگان", emoji_key="btn_diamond_box", style=SHOP, callback_data="dbox_pick:bronze")])
         if "silver" in unclaimed:
-            rows.append([btn("باز کردن باکس حماسی (رایگان)", emoji_key="btn_diamond_box", style=SHOP, callback_data="dbox_pick:silver")])
+            rows.append([btn("باکس حماسی رایگان", emoji_key="btn_diamond_box", style=SHOP, callback_data="dbox_pick:silver")])
         rows.append([btn("منوی اصلی", style=NAV, callback_data="menu:me")])
         reply_markup = InlineKeyboardMarkup(rows)
         photo_path = get_feature_image_path("diamond_box")
@@ -413,7 +413,7 @@ def _decorate(item) -> dict:
             from bot.buttons import CONFIRM
 
             reply_markup = InlineKeyboardMarkup(
-                [[btn("باز کردن جعبه‌های جنگ", emoji_key="btn_chest_open", style=CONFIRM, callback_data="ally_war_open")]]
+                [[btn("جعبه‌های جنگ", emoji_key="btn_chest_open", style=CONFIRM, callback_data="ally_war_open")]]
             )
         if payload:  # won
             photo_path = get_notify_image_path("war_win")

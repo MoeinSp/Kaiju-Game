@@ -38,7 +38,7 @@ def _render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     live = []
     if st.get("newbie"):
         live.append(f"🎁 هدیه‌ی روز {st['newbie']} تقویم منتظرته")
-        rows.append([btn(f"تقویم تازه‌وارد · روز {st['newbie']}", emoji_key="btn_today", style=CONFIRM, callback_data="nb:open")])
+        rows.append([btn(f"تقویم · روز {st['newbie']}", emoji_key="btn_today", style=CONFIRM, callback_data="nb:open")])
     if st["boss"]:  # only while a boss is here AND the player still has a hit
         live.append(f"👹 <b>غول سرگردان اینجاست!</b> {st['boss']['hits_left']} ضربه داری")
         rows.append([btn("ضربه به غول", emoji_key="btn_worldboss", style=BATTLE, callback_data="tdy:worldboss")])

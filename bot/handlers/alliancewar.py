@@ -44,13 +44,15 @@ def _perks_render(info: dict) -> tuple[str, InlineKeyboardMarkup]:
             f"\n{b['emoji']} <b>{b['title']}</b> — سطح <b>{b['level']}</b>/{b_max}{cap}\n"
             f"   <i>{b['desc']}: {b['effect']}</i>"
         )
+        if not b["maxed"]:   # what the next level gives lives in the text, so the button stays short
+            lines.append(f"   ⬆️ بعدی: {b['next_effect']} · {b['cost']:,} طلا")
         if info["is_manager"] and not b["maxed"]:
             rows.append([btn(
-                f"{b['emoji']} ارتقای {b['title']} → {b['next_effect']} ({b['cost']:,} طلا)",
+                f"{b['emoji']} ارتقای {b['title']} · {b['cost']:,}",
                 style=BUILD, callback_data=f"ally_perk_buy:{b['key']}",
             )])
     if info["vault_income"] > 0:
-        rows.append([btn(f"جمع‌آوری درآمد خزانه ({info['vault_income']} طلا/روز)", emoji_key="btn_vault", style=BUILD, callback_data="ally_vault_collect")])
+        rows.append([btn(f"درآمد خزانه · {info['vault_income']:,}", emoji_key="btn_vault", style=BUILD, callback_data="ally_vault_collect")])
     if not info["is_manager"]:
         lines.append("\n<i>فقط رهبر یا قائم‌مقام اتحاد می‌تونه ساختمون ارتقا بده.</i>")
     rows.append([back_btn("menu:alliance_info")])
@@ -212,7 +214,7 @@ def _chests(outcome: str) -> str:
 def _chest_rows(data: dict) -> list:
     if not data.get("chests"):
         return []
-    return [[btn(f"باز کردن جعبه‌های جنگ ({data['chests']})", emoji_key="btn_chest_open", style=CONFIRM,
+    return [[btn(f"جعبه‌های جنگ ({data['chests']})", emoji_key="btn_chest_open", style=CONFIRM,
                  callback_data="ally_war_open")]]
 
 
@@ -249,7 +251,7 @@ def _war1d_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
         ]
         rows = _chest_rows(data)
         if data["is_leader"]:
-            rows.append([btn("پیدا کردن حریف و شروع جنگ", emoji_key="btn_search", style=BATTLE, callback_data="ally_war_start")])
+            rows.append([btn("پیدا کردن حریف", emoji_key="btn_search", style=BATTLE, callback_data="ally_war_start")])
         else:
             lines.append("\n<i>فقط رهبر یا قائم‌مقام اتحاد می‌تونه جنگ رو شروع کنه.</i>")
         rows.append([back_btn("menu:alliance_war", "بازگشت به جنگ اتحاد")])
@@ -277,7 +279,7 @@ def _war1d_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
         lines.append(f"\n✅ تو شرکت کردی و <b>{view['my_contribution']:,}</b> امتیاز اضافه کردی. بقیه‌ی اعضا رو هم خبر کن!")
     else:
         lines.append("\n<i>هنوز شرکت نکردی — قدرتتو اضافه کن و پاداش بگیر!</i>")
-        rows.append([btn("شرکت در جنگ (قدرتمو اضافه کن)", emoji_key="btn_war", style=BATTLE, callback_data="ally_war_rally")])
+        rows.append([btn("شرکت در جنگ", emoji_key="btn_war", style=BATTLE, callback_data="ally_war_rally")])
     rows.append([back_btn("menu:alliance_war", "بازگشت به جنگ اتحاد")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 

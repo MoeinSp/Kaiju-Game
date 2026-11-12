@@ -294,7 +294,7 @@ def _item_detail_keyboard(item: Equipment, dupe_count: int) -> InlineKeyboardMar
     else:
         rows.append([btn("تجهیز روی موجود", emoji_key="btn_attack", style=BUILD, callback_data=f"inv_equip:{item.id}")])
     if item.level < constants.EQUIPMENT_MAX_LEVEL and dupe_count > 0:
-        rows.append([btn("ارتقا با نمونه مشابه", emoji_key="btn_upgrade", style=BUILD, callback_data=f"inv_upgrade:{item.id}")])
+        rows.append([btn("ارتقا با مشابه", emoji_key="btn_upgrade", style=BUILD, callback_data=f"inv_upgrade:{item.id}")])
     rows.append([back_btn("menu:inventory", "بازگشت به کوله‌پشتی")])
     return InlineKeyboardMarkup(rows)
 

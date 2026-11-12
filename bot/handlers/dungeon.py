@@ -161,7 +161,7 @@ def _run_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
         for m in run["members"]:
             if m["hp"] > 0:
                 mark = "✅" if m.get("wins") else "❌"
-                rows.append([btn(f"{mark} {m['name']} · {m['vs']:,} در برابر {m['enemy_vs']:,}",
+                rows.append([btn(f"{mark} {m['name']} · {m['vs']:,}",
                                  style=CONFIRM if m.get("wins") else NAV, callback_data=f"dg:f:{m['id']}")])
         if st.get("first_strike"):
             lines.append("<i>«ضربه‌ی اول» فعاله: +۳۰٪ قدرت توی این نبرد.</i>")
@@ -181,7 +181,7 @@ def _run_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
             rows.append([btn(f"{label} · {int(o['price']):,} طلا", style=SHOP, callback_data=f"dg:m:{i}")])
         rows.append([btn("رد شدن", style=NAV, callback_data="dg:m:x")])
     if v.get("heal_serums") and any(0 < m["hp"] < 100 for m in run["members"]):
-        rows.append([btn(f"سرم ترمیم · {v['heal_serums']} عدد", emoji_key="btn_serum_use", style=CONFIRM, callback_data="dg:h")])
+        rows.append([btn(f"سرم ترمیم · {v['heal_serums']}", emoji_key="btn_serum_use", style=CONFIRM, callback_data="dg:h")])
     rows.append([btn("ترک سیاه‌چال", emoji_key="btn_cancel", style=DANGER, callback_data="dg:quit")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -234,7 +234,7 @@ def _finish_render(fin: dict, v: dict) -> tuple[str, InlineKeyboardMarkup]:
                   "⏳ " + ("۳ روز به زمانش اضافه شد" if r["extended"] else "۳ روز فعاله")]
     rows = []
     if v["keys"] > 0:
-        rows.append([btn(f"ورود دوباره · {v['keys']} کلید", emoji_key="btn_dungeon", style=BATTLE,
+        rows.append([btn(f"دوباره · {v['keys']} کلید", emoji_key="btn_dungeon", style=BATTLE,
                          callback_data=f"dg:start:{fin.get('difficulty', 'normal')}")])
     rows.append([btn("سیاه‌چال", emoji_key="btn_dungeon", style=NAV, callback_data="dg:home")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)

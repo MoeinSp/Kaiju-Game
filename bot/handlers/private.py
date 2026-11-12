@@ -569,7 +569,7 @@ def upgrade_panel_keyboard(creature_id: int, is_active: bool = True, step: int =
         # setting the default from here saves a trip through the collection screen,
         # which is where this used to be the only option
         rows.append(
-            [btn("انتخاب به عنوان فعال", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"upg_default:{creature_id}")]
+            [btn("فعالش کن", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"upg_default:{creature_id}")]
         )
     rows.append([back_btn("upg_back", "لیست هیولاها")])
     return InlineKeyboardMarkup(rows)
@@ -687,7 +687,7 @@ def _upgrade_render(user, ranked, filt: str, page: int) -> tuple[str, InlineKeyb
         tag = "🟢" if creature.is_active else "🧬"
         rarity = constants.RARITY_LABELS[creature.rarity].split()[0]
         rows.append([btn(
-            f"{tag} {creature_name(creature)} ({rarity} - Lv.{creature.level} - {creature.star_level}★)",
+            f"{tag} {creature_name(creature)} · {creature.level} · {creature.star_level}★",
             style=LIST, callback_data=f"upg_pick:{creature.id}",
         )])
     nav = []
@@ -1320,7 +1320,7 @@ def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=
     if today_state:
         live = []
         if today_state["boss"] and today_state["boss"]["hits_left"]:
-            live.append(btn("غول سرگردان اینجاست", emoji_key="btn_worldboss", style=DANGER, callback_data="menu:worldboss"))
+            live.append(btn("غول سرگردان", emoji_key="btn_worldboss", style=DANGER, callback_data="menu:worldboss"))
         if today_state["tournament_open"]:
             live.append(btn("ثبت‌نام جام", emoji_key="btn_tournament", style=DANGER, callback_data="menu:tournament"))
         if today_state["festival"]:
@@ -1582,7 +1582,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"<i>اسم آزمایشگاهت فعلاً «{lab_display(user)}»ـه؛ هر وقت خواستی از «شهر ← پروفایل» رایگان عوضش کن.</i>"
         )
         keyboard = InlineKeyboardMarkup([
-            [btn("شکستن اولین تخم کایجو", emoji_key="btn_hatch", style=CONFIRM, callback_data="onboarding:hatch")]
+            [btn("شکستن اولین تخم", emoji_key="btn_hatch", style=CONFIRM, callback_data="onboarding:hatch")]
         ])
         await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
         return
@@ -1973,7 +1973,7 @@ def _collection_render(ranked, filt: str = "all", page: int = 0) -> tuple[str, I
         circle = _RARITY_CIRCLES.get(c.rarity, "⚪️")
         rows.append([btn(f"{circle} {creature_name(c)} ({rarity_short})", style=LIST, callback_data=f"coll_pick:{c.id}")])
         if c.is_active:
-            rows.append([btn(f"{c.star_level} ستاره • سطح {c.level} (فعال)", emoji_key="btn_star", style=CONFIRM, callback_data=f"coll_pick:{c.id}")])
+            rows.append([btn(f"{c.star_level}★ · سطح {c.level} · فعال", emoji_key="btn_star", style=CONFIRM, callback_data=f"coll_pick:{c.id}")])
         else:
             rows.append([
                 btn(f"{c.star_level} ستاره • سطح {c.level}", emoji_key="btn_star", style=NAV, callback_data=f"coll_pick:{c.id}"),
@@ -2109,7 +2109,7 @@ def collection_creature_detail_text(creature, equipped_items: list | None = None
 def _creature_detail_keyboard(creature_id: int, is_active: bool) -> InlineKeyboardMarkup:
     rows = []
     if not is_active:
-        rows.append([btn("انتخاب به عنوان فعال", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"coll_select:{creature_id}")])
+        rows.append([btn("فعالش کن", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"coll_select:{creature_id}")])
     rows.append([btn("ورود به فیوژن", emoji_key="btn_fusion", style=PRIMARY, callback_data=f"fus_a:{creature_id}")])
     rows.append([btn("بلعیدن هیولا", emoji_key="btn_devour", style=BUILD, callback_data=f"devour_start:{creature_id}")])
     rows.append([btn("تغییر نام", emoji_key="btn_edit", style=NAV, callback_data=f"kaiju_rename:{creature_id}:c")])
@@ -2333,7 +2333,7 @@ def _devour_list_render(target, scored, selected: set[int], page: int = 0, xp_to
         rarity_short = constants.RARITY_LABELS[c.rarity].split()[0]
         rows.append([
             btn(f"{mark} {c.name} ({rarity_short})", style=LIST, callback_data=f"devour_tog:{target.id}:{c.id}"),
-            btn(f"{c.star_level} | سطح {c.level} (+{xp:,} XP)", emoji_key="btn_star", style=NAV, callback_data=f"devour_tog:{target.id}:{c.id}"),
+            btn(f"{c.star_level}★ · {xp:,} تجربه", emoji_key="btn_star", style=NAV, callback_data=f"devour_tog:{target.id}:{c.id}"),
         ])
     if total_pages > 1:
         nav = []
@@ -2495,7 +2495,7 @@ async def devour_multi_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await safe_edit_message_text(
         query, "\n".join(lines), parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
-            [btn(f"بله، {len(chosen)} هیولا بلعیده بشه", emoji_key="btn_devour", style=DANGER,
+            [btn(f"بله، {len(chosen)} تا رو ببلعه", emoji_key="btn_devour", style=DANGER,
                  callback_data=f"devour_ok:{target_id}")],
             [btn("نه، برگرد", emoji_key="btn_cancel", style=NAV, callback_data=f"devour_page:{target_id}:0")],
         ]),
@@ -2637,7 +2637,7 @@ async def fusion_pick_a_callback(update: Update, context: ContextTypes.DEFAULT_T
     for c, busy in candidates:
         if busy:
             rows.append([btn(
-                f"⛔ {creature_name(c)} ({c.star_level}★ - Lv.{c.level}) - مشغول",
+                f"⛔ {creature_name(c)} · مشغول",
                 style=NAV, callback_data=f"fus_busy:{c.id}",
             )])
         else:
@@ -2769,9 +2769,9 @@ async def upgrade_fusion_gate_callback(update: Update, context: ContextTypes.DEF
 
     rows = []
     if ready:
-        rows.append([btn("انتخاب جفت و ترکیب", emoji_key="btn_fusion", style=CONFIRM, callback_data=f"fus_a:{cid}")])
+        rows.append([btn("انتخاب جفت", emoji_key="btn_fusion", style=CONFIRM, callback_data=f"fus_a:{cid}")])
     if not g["lab_built"] or not cap_ok:
-        rows.append([btn("رفتن به ساختمون‌ها", emoji_key="btn_buildings", style=PRIMARY, callback_data="menu:buildings")])
+        rows.append([btn("ساختمون‌ها", emoji_key="btn_buildings", style=PRIMARY, callback_data="menu:buildings")])
     rows.append([back_btn(f"upg_pick:{cid}", "بازگشت به ارتقا")])
     await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML",
                                  reply_markup=InlineKeyboardMarkup(rows))
@@ -2792,7 +2792,7 @@ async def fusion_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not lab_built:
         lines.append("\n🔒 اول باید 🔮 <b>تالار ادغام</b> رو از «🏗 ساختمون‌ها» بسازی.")
         rows = [
-            [btn("رفتن به ساختمون‌ها", emoji_key="btn_buildings", style=PRIMARY, callback_data="menu:buildings")],
+            [btn("ساختمون‌ها", emoji_key="btn_buildings", style=PRIMARY, callback_data="menu:buildings")],
             [back_btn("menu:hub_creature", "بازگشت به هیولا")],
         ]
         await send_screen(update, 
@@ -3547,7 +3547,7 @@ async def _autohunt_no_energy(query, energy: int, max_energy: int = 50) -> None:
             f"<i>💡 با اشتراک نقره‌ای ۳۰ روزه، سقف انرژیت دو برابر می‌شه و سریع‌تر شارژ می‌شی!</i>"
         )
         row1 = [btn("شارژ فوری انرژی", emoji_key="btn_charge", style=SHOP, callback_data=f"enr:ask:{query.from_user.id}")]
-        row2 = [btn("خرید اشتراک نقره‌ای", emoji_key="btn_vip", style=SHOP, callback_data="sub_pick:silver:hunt")]
+        row2 = [btn("اشتراک نقره‌ای", emoji_key="btn_vip", style=SHOP, callback_data="sub_pick:silver:hunt")]
         row3 = [btn("بازگشت به شکار", emoji_key="btn_hunt", style=NAV, callback_data="menu:hunt")]
         markup = InlineKeyboardMarkup([row1, row2, row3])
 
@@ -3863,7 +3863,7 @@ def _alliance_action_keyboard(in_alliance: bool) -> InlineKeyboardMarkup:
         rows = [
             [btn("ساخت اتحاد", emoji_key="btn_alliance", style=BUILD, callback_data="ally_create")],
             [btn("پیوستن به اتحاد", emoji_key="btn_alliance", style=PRIMARY, callback_data="ally_join")],
-            [btn("صندوق نامه (دعوت‌ها)", emoji_key="btn_inbox", style=NAV, callback_data="inbox")],
+            [btn("صندوق نامه", emoji_key="btn_inbox", style=NAV, callback_data="inbox")],
             [btn("برترین اتحادها", emoji_key="btn_rank", style=NAV, callback_data="ally_top")],
         ]
     rows.append([back_btn("menu:hub_city", "بازگشت به شهر")])
@@ -4020,9 +4020,9 @@ def _members_render(data: dict, page: int = 0) -> tuple[str, InlineKeyboardMarku
             f"برای مدیریت، آیدیِ عضو رو بده.</blockquote>"
         )
         pend = data.get("pending", 0)
-        rows.append([btn(f"درخواست‌های عضویت ({pend})", emoji_key="btn_requests", style=CONFIRM, callback_data="ally_requests")])
+        rows.append([btn(f"درخواست‌ها ({pend})", emoji_key="btn_requests", style=CONFIRM, callback_data="ally_requests")])
         rows.append([btn("تنظیمات عضوگیری", emoji_key="btn_settings", style=NAV, callback_data="ally_settings")])
-        rows.append([btn("اخراج عضو با آیدی", emoji_key="btn_kick", style=DANGER, callback_data="ally_kick")])
+        rows.append([btn("اخراج عضو", emoji_key="btn_kick", style=DANGER, callback_data="ally_kick")])
     if role == "leader":
         rows.append([btn("تعیین قائم‌مقام", emoji_key="btn_deputy", style=PRIMARY, callback_data="ally_deputy")])
         if data["has_deputy"]:
@@ -4168,7 +4168,7 @@ def _settings_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
     rows = [
         [btn(toggle_label, emoji_key="btn_settings", style=CONFIRM, callback_data="ally_toggle_auto")],
         [btn("حداقل قدرت ورود", emoji_key="btn_filter", style=NAV, callback_data="ally_set_minpow")],
-        [btn("جذب و دعوت (آگهی، دعوت، لینک)", emoji_key="btn_ally_recruit", style=PRIMARY, callback_data="arec")],
+        [btn("جذب و دعوت", emoji_key="btn_ally_recruit", style=PRIMARY, callback_data="arec")],
         [back_btn("ally_members", "بازگشت به اعضا")],
     ]
     return text, InlineKeyboardMarkup(rows)
@@ -4362,7 +4362,7 @@ def _alliance_browse_render(data: dict, search_results=None, search_query: str =
         else:
             lines = [f"🔍 هیچ اتحادی با «{search_query}» پیدا نشد."]
         rows.append([btn("جستجوی مجدد", emoji_key="btn_search", style=NAV, callback_data="ally_search")])
-        rows.append([btn("مشاهده همه اتحادها", emoji_key="btn_list", style=NAV, callback_data="ally_browse:0")])
+        rows.append([btn("همه‌ی اتحادها", emoji_key="btn_list", style=NAV, callback_data="ally_browse:0")])
         rows.append([back_btn("menu:alliance_info", "بازگشت")])
         return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -4766,7 +4766,7 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
                 "با شکستن تخم، اولین کایجوی خودت رو متولد کن و ماجراجویی رو آغاز کن! 👇</blockquote>"
             )
             keyboard = InlineKeyboardMarkup([
-                [btn("شکستن اولین تخم کایجو", emoji_key="btn_hatch", style=CONFIRM, callback_data="onboarding:hatch")]
+                [btn("شکستن اولین تخم", emoji_key="btn_hatch", style=CONFIRM, callback_data="onboarding:hatch")]
             ])
             await message.reply_text(text_msg, parse_mode="HTML", reply_markup=keyboard)
             return
@@ -5301,7 +5301,7 @@ def _profile_text_and_keyboard(user, stats) -> tuple[str, InlineKeyboardMarkup]:
     ]
     rows = [
         [btn("لقب‌ها", emoji_key="btn_titles", style=NAV, callback_data="menu:titles")],
-        [btn("تغییر نام آزمایشگاه", emoji_key="btn_edit", style=SHOP, callback_data="lab_rename")],
+        [btn("تغییر نام", emoji_key="btn_edit", style=SHOP, callback_data="lab_rename")],
         [btn(notif_label, emoji_key="btn_settings", style=NAV, callback_data="notif:menu")],
         [btn("راهنمای بازی", emoji_key="btn_report", style=NAV, callback_data="guide:home")],
         [back_btn("menu:me", "بازگشت به منوی اصلی")],
@@ -5524,7 +5524,7 @@ async def expedition_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     group_link = botconfig.get_group_link()
     if group_link is not None:
         url, title = group_link
-        rows.append([btn(f"رفتن به گروه برای اعزام ({title})", emoji_key="btn_exp_launch", style=PRIMARY, url=url)])
+        rows.append([btn(f"اعزام در گروه ({title})", emoji_key="btn_exp_launch", style=PRIMARY, url=url)])
     rows.append([back_btn("menu:hub_battle", "بازگشت")])
     from game.media import get_feature_image_path
     photo = get_feature_image_path("expedition")
@@ -5540,7 +5540,7 @@ async def alliance_war_panel(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"{get_emoji('alliance')} برای شرکت در جنگ اتحاد، ابتدا باید عضو یک اتحاد شوید.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([
-                [btn("پیوستن یا ساخت اتحاد", emoji_key="btn_alliance", style=PRIMARY, callback_data="menu:alliance_info")],
+                [btn("پیوستن/ساخت اتحاد", emoji_key="btn_alliance", style=PRIMARY, callback_data="menu:alliance_info")],
                 [back_btn("menu:hub_battle", "بازگشت")],
             ]),
         )
@@ -5554,9 +5554,9 @@ async def alliance_war_panel(update: Update, context: ContextTypes.DEFAULT_TYPE)
         "<blockquote>یکی از حالت‌های نبرد اتحاد را انتخاب کنید:</blockquote>",
     ]
     rows = [
-        [btn("جنگ یک‌روزه اتحاد", emoji_key="btn_war", style=BATTLE, callback_data="ally_war1d")],
-        [btn("لیگ و جنگ هفتگی اتحاد", emoji_key="btn_war", style=BATTLE, callback_data="ally_war")],
-        [btn("ساختمان‌ها و پرک‌های اتحاد", emoji_key="btn_buildings", style=BUILD, callback_data="ally_perks")],
+        [btn("جنگ اتحاد", emoji_key="btn_war", style=BATTLE, callback_data="ally_war1d")],
+        [btn("لیگ اتحادها", emoji_key="btn_war", style=BATTLE, callback_data="ally_war")],
+        [btn("ساختمان‌های اتحاد", emoji_key="btn_buildings", style=BUILD, callback_data="ally_perks")],
         [back_btn("menu:hub_battle", "بازگشت")],
     ]
     from game.media import get_feature_image_path
@@ -5667,7 +5667,7 @@ async def vault_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     for v in vault_info:
         r_emoji = get_emoji("coin") if v["resource"] == "coins" else get_emoji("dna")
         rows.append([btn(f"{r_emoji} {v['label']} (+{v['amount']:,})", emoji_key="btn_vault", style=CONFIRM, callback_data=f"bld_pick:{v['id']}")])
-    rows.append([btn("مبادله طلا و DNA (صرافی)", emoji_key="btn_exchange", style=SHOP, callback_data="menu:exchange")])
+    rows.append([btn("صرافی", emoji_key="btn_exchange", style=SHOP, callback_data="menu:exchange")])
     rows.append([back_btn("menu:hub_base", "بازگشت")])
     from game.media import get_feature_image_path
     photo = get_feature_image_path("vault") or get_feature_image_path("buildings")
@@ -6037,7 +6037,7 @@ async def onboarding_hatch_callback(update: Update, context: ContextTypes.DEFAUL
         f"یک هیولای وحشی ضعیف در جنگل تاریک شناسایی شده است! برای اولین نبرد آماده‌ای؟ 👇</blockquote>"
     )
     keyboard = InlineKeyboardMarkup([
-        [btn("اولین شکار در جنگل تاریک", emoji_key="btn_hunt", style=DANGER, callback_data="onboarding:hunt")]
+        [btn("اولین شکار", emoji_key="btn_hunt", style=DANGER, callback_data="onboarding:hunt")]
     ])
     await send_screen(update, text, photo=photo_path, parse_mode="HTML", reply_markup=keyboard)
 

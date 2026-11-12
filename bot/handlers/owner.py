@@ -278,7 +278,7 @@ async def set_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_T
                 if current else "ایموجی فعلی: <b>تنظیم نشده</b>")
     cat = CATEGORY_OF.get(key)
     rows = [
-        [btn("پاک کردن (برگشت به پیش‌فرض)", emoji_key="btn_delete", style=DANGER,
+        [btn("برگشت به پیش‌فرض", emoji_key="btn_delete", style=DANGER,
              callback_data=f"{EMOJI_CLEAR_PREFIX}{key}")],
     ]
     if cat is not None:
@@ -411,16 +411,16 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 btn("آمار کلی", emoji_key="btn_stats", style=ADMIN, callback_data="admin_menu:global_stats"),
                 btn("گزارش پیشرفت", emoji_key="btn_report", style=ADMIN, callback_data="admin_menu:report"),
             ],
-            [btn("گزارش خرید (روزانه)", emoji_key="btn_report", style=ADMIN, callback_data="admin_menu:buy_report")],
+            [btn("گزارش خرید", emoji_key="btn_report", style=ADMIN, callback_data="admin_menu:buy_report")],
             [
                 btn("لیست کاربران", emoji_key="btn_members", style=ADMIN, callback_data="admin_menu:users"),
                 btn("جستجوی کاربر", emoji_key="btn_profile", style=ADMIN, callback_data="admin_menu:user_manage"),
             ],
-            [btn("چیت‌یاب (جایزه‌گیرهای مشکوک)", emoji_key="btn_cancel", style=DANGER, callback_data="admin_menu:cheat")],
-            [btn("مدیریت فروشگاه (آیتم/پک)", emoji_key="btn_shop", style=ADMIN, callback_data="admin_menu:itemshop")],
+            [btn("چیت‌یاب", emoji_key="btn_cancel", style=DANGER, callback_data="admin_menu:cheat")],
+            [btn("مدیریت فروشگاه", emoji_key="btn_shop", style=ADMIN, callback_data="admin_menu:itemshop")],
             [
                 btn("شاپ روزانه", emoji_key="btn_shop", style=ADMIN, callback_data="admin_menu:dailyshop"),
-                btn("بازار سیاه و مزایده‌ها", emoji_key="btn_blackmarket", style=ADMIN, callback_data="admin_menu:blackmarket"),
+                btn("بازار سیاه", emoji_key="btn_blackmarket", style=ADMIN, callback_data="admin_menu:blackmarket"),
             ],
             [
                 btn("هدیه به همه", emoji_key="btn_gift", style=ADMIN, callback_data="admin_menu:gift_all"),
@@ -429,7 +429,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             [btn("شارژ همگانی خودکار", emoji_key="btn_gift", style=ADMIN, callback_data="admin_menu:autogift")],
             [btn("خطاهای مینی‌اپ", emoji_key="btn_report", style=ADMIN, callback_data="admin_menu:app_errors")],
             [btn("تخفیف اشتراک", emoji_key="btn_vip", style=ADMIN, callback_data="admin_menu:sub_discount")],
-            [btn("ریست «استارت ربات» (API)", emoji_key="btn_reset", style=ADMIN, callback_data="admin_menu:gate_reset")],
+            [btn("ریست استارت ربات", emoji_key="btn_reset", style=ADMIN, callback_data="admin_menu:gate_reset")],
             [btn("حذف موجود", emoji_key="btn_delete", style=DANGER, callback_data="admin_menu:del_creature_start")],
             [
                 btn(f"ایموجی متن‌ها ({txt_set}/{txt_tot})", emoji_key="btn_settings", style=ADMIN, callback_data="admin_menu:set_emoji_start"),
@@ -445,7 +445,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 btn("گروه بازی", emoji_key="btn_chat", style=ADMIN, callback_data="admin_menu:group_link"),
                 btn("لینک خرید درون‌بازی", emoji_key="btn_shop", style=ADMIN, callback_data="admin_menu:buy_link"),
             ],
-            [btn("پنل تحت وب (رنگ دکمه‌ها، لودآوت، پشتیبان‌گیری)", emoji_key="btn_settings", style=PRIMARY, url=ADMIN_PANEL_URL)],
+            [btn("پنل تحت وب", emoji_key="btn_settings", style=PRIMARY, url=ADMIN_PANEL_URL)],
             [back_btn("menu:me", "بازگشت به منوی اصلی")],
         ]
     )
@@ -528,7 +528,7 @@ def _autobackup_panel_markup(hours: int, dest_id) -> tuple[str, InlineKeyboardMa
     labels = {0: "🚫 خاموش", 6: "6 ساعت", 12: "12 ساعت", 24: "24 ساعت", 48: "48 ساعت"}
     rows = [[btn((f"{get_emoji('confirm')} " if h == hours else "") + labels[h], style=(CONFIRM if h == hours else ADMIN),
                  callback_data=f"autobk_set:{h}")] for h in _BACKUP_INTERVAL_CHOICES]
-    rows.append([btn("⏱ بازه‌ی دلخواه (ساعت)", style=ADMIN, callback_data="autobk_custom")])
+    rows.append([btn("⏱ بازه‌ی دلخواه", style=ADMIN, callback_data="autobk_custom")])
     rows.append([
         btn("📍 مقصد: همینجا", style=ADMIN, callback_data="autobk_dest_here"),
         btn("📍 مقصد دلخواه", style=ADMIN, callback_data="autobk_dest_set"),
@@ -681,7 +681,7 @@ async def itemshop_manage_panel(update: Update, context: ContextTypes.DEFAULT_TY
     items = await run_db(_itemshop_list_sync)
     lines = [f"{get_emoji('shop_item')} <b>مدیریت فروشگاه آیتم‌ها</b>"]
     rows = [
-        [btn("➕ ساخت آیتم/پک (با دکمه)", style=CONFIRM, callback_data="ish:new")],
+        [btn("➕ ساخت آیتم/پک", style=CONFIRM, callback_data="ish:new")],
         [btn("✍️ افزودن با متن", style=NAV, callback_data="sitem_add")],
     ]
     if not items:
@@ -798,7 +798,7 @@ def _ish_home_markup(draft: dict):
         back_target = "admin_menu:dailyshop"
     else:
         back_target = "admin_menu:itemshop"
-    rows.append([btn(f"{get_emoji('delete')} پاک‌کردن پیش‌نویس", style=DANGER, callback_data="ish:discard"),
+    rows.append([btn(f"{get_emoji('delete')} پاک کردن پیش‌نویس", style=DANGER, callback_data="ish:discard"),
                  back_btn(back_target, "بازگشت")])
     return text, InlineKeyboardMarkup(rows)
 
@@ -884,8 +884,8 @@ async def _ish_ask_name(query, context, pending: dict) -> None:
     # (names are Persian and can't be safely packed into callback_data directly)
     context.user_data["ish_name_options"] = options
     rows = [[btn(f"🏷 {nm}", style=ADMIN, callback_data=f"ish:pname:{i}")] for i, nm in enumerate(options)]
-    rows.append([btn(f"{get_emoji('edit')} اسم کاملاً دلخواه بده", style=NAV, callback_data="ish:name")])
-    rows.append([btn("🎲 بدون اسم (تصادفی)", style=CONFIRM, callback_data="ish:noname")])
+    rows.append([btn(f"{get_emoji('edit')} اسم دلخواه", style=NAV, callback_data="ish:name")])
+    rows.append([btn("🎲 اسم تصادفی", style=CONFIRM, callback_data="ish:noname")])
     await safe_edit_message_text(
         query,
         "🏷 <b>اسم رو انتخاب کن</b>\n\nیکی از اسم‌های موجود رو بزن، یا اسم دلخواه بده، "
@@ -956,7 +956,7 @@ async def itemshop_builder_callback(update: Update, context: ContextTypes.DEFAUL
              btn(f"{get_emoji('coin')} قیمت طلا", style=ADMIN, callback_data="ish:pc")],
         ]
         if draft.get("target") is None:   # the daily shop and gifts take no real money
-            rows.append([btn("💵 قیمت تومانی (پولی)", style=ADMIN, callback_data="ish:pt")])
+            rows.append([btn("💵 قیمت تومانی", style=ADMIN, callback_data="ish:pt")])
         if draft["price_coins"] or draft["price_diamonds"] or draft.get("price_toman"):
             rows.append([btn("🧹 پاک‌کردن قیمت", style=DANGER, callback_data="ish:pclr")])
         rows.append([btn("↩️ بازگشت", style=NAV, callback_data="ish:home")])
@@ -1741,7 +1741,7 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
                 btn(f"{get_emoji('dna')} گزارش DNA", emoji_key="btn_report", style=NAV, callback_data=f"admin_reslog:{target_id}:dna"),
                 btn(f"{get_emoji('diamond')} گزارش الماس", emoji_key="btn_report", style=NAV, callback_data=f"admin_reslog:{target_id}:diamonds"),
             ],
-            [btn("🦖 مدیریت موجودات (کلکسیون)", emoji_key="btn_creature", style=PRIMARY, callback_data=f"admin_clist:{target_id}:all:0")],
+            [btn("🦖 مدیریت موجودات", emoji_key="btn_creature", style=PRIMARY, callback_data=f"admin_clist:{target_id}:all:0")],
             [
                 btn(f"{get_emoji('coin')} اعطای طلا", style=CONFIRM, callback_data=f"admin_grant:{target_id}:coins"),
                 btn(f"{get_emoji('dna')} اعطای DNA", style=CONFIRM, callback_data=f"admin_grant:{target_id}:dna"),
@@ -1752,20 +1752,20 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
                 btn(f"{get_emoji('dna')} کسر DNA", style=DANGER, callback_data=f"admin_deduct:{target_id}:dna"),
                 btn(f"{get_emoji('diamond')} کسر الماس", style=DANGER, callback_data=f"admin_deduct:{target_id}:diamonds"),
             ],
-            [btn(f"{get_emoji('energy')} شارژ کامل (طلا+DNA+الماس)", emoji_key="btn_charge", style=CONFIRM, callback_data=f"admin_charge:{target_id}")],
+            [btn(f"{get_emoji('energy')} شارژ کامل منابع", emoji_key="btn_charge", style=CONFIRM, callback_data=f"admin_charge:{target_id}")],
             [
                 btn(f"{get_emoji('star')} مدیریت اشتراک", emoji_key="btn_sub_mgr", style=PRIMARY, callback_data=f"adm_sub_mgr:{target_id}"),
                 btn(f"{get_emoji('gift')} اهدای جعبه آرنا", emoji_key="btn_chest_grant", style=PRIMARY, callback_data=f"adm_chest_grant:{target_id}"),
             ],
-            [btn(f"{get_emoji('gift')} دادن آیتم/کایجو/تجهیز به این کاربر", style=CONFIRM, callback_data=f"admin_give_item:{target_id}")],
-            [btn("🦖 اعطای کایجوی دلخواه (سطح/ستاره/تعداد)", style=CONFIRM, callback_data=f"admin_givek:{target_id}")],
-            [btn(f"{get_emoji('status_premium')} اعطای کایجوی مکس (همه‌چی بیشینه)", style=CONFIRM, callback_data=f"admin_givekmax:{target_id}")],
-            [btn(f"{get_emoji('atk')} اعطای تجهیزات دلخواه (سطح دلخواه)", style=CONFIRM, callback_data=f"admin_givee:{target_id}")],
+            [btn(f"{get_emoji('gift')} دادن آیتم به کاربر", style=CONFIRM, callback_data=f"admin_give_item:{target_id}")],
+            [btn("🦖 کایجوی دلخواه", style=CONFIRM, callback_data=f"admin_givek:{target_id}")],
+            [btn(f"{get_emoji('status_premium')} کایجوی مکس", style=CONFIRM, callback_data=f"admin_givekmax:{target_id}")],
+            [btn(f"{get_emoji('atk')} تجهیزات دلخواه", style=CONFIRM, callback_data=f"admin_givee:{target_id}")],
             [
-                btn("🔬 تنظیم سطح آزمایشگاه", emoji_key="btn_lab", style=CONFIRM, callback_data=f"admin_lablevel:{target_id}"),
+                btn("🔬 سطح آزمایشگاه", emoji_key="btn_lab", style=CONFIRM, callback_data=f"admin_lablevel:{target_id}"),
                 btn(f"{get_emoji('trophy')} تنظیم کاپ", style=CONFIRM, callback_data=f"admin_setcup:{target_id}"),
             ],
-            [btn(f"{get_emoji('building')} مکس‌کردن ساختمان‌ها", style=CONFIRM, callback_data=f"admin_maxbld:{target_id}")],
+            [btn(f"{get_emoji('building')} مکس ساختمان‌ها", style=CONFIRM, callback_data=f"admin_maxbld:{target_id}")],
             [
                 btn(f"{get_emoji('stats')} لاگ پیشرفت", emoji_key="btn_report", style=ADMIN, callback_data=f"admin_plog:{target_id}"),
                 btn("✉️ پیام", style=ADMIN, callback_data=f"admin_dm:{target_id}"),
@@ -2387,11 +2387,11 @@ def _render_creature_view(data: dict, target_id: str | int, rarity: str, page: i
     keyboard = InlineKeyboardMarkup(
         [
             [
-                btn("📉 ضعیف کردن (سطح ۱)", style=DANGER, callback_data=f"admin_cweaken:{target_id}:{c.id}:{rarity}:{page}"),
+                btn("📉 برگشت به سطح ۱", style=DANGER, callback_data=f"admin_cweaken:{target_id}:{c.id}:{rarity}:{page}"),
                 btn(f"{get_emoji('delete')} حذف موجود", style=DANGER, callback_data=f"admin_cdel:{target_id}:{c.id}:{rarity}:{page}"),
             ],
             [
-                btn(f"{get_emoji('refresh')} انتقال به کاربر دیگر", style=CONFIRM, callback_data=f"admin_cxfer:{target_id}:{c.id}:{rarity}:{page}"),
+                btn(f"{get_emoji('refresh')} انتقال به کاربر", style=CONFIRM, callback_data=f"admin_cxfer:{target_id}:{c.id}:{rarity}:{page}"),
             ],
             [
                 back_btn(f"admin_clist:{target_id}:{rarity}:{page}", "بازگشت به لیست موجودات"),
@@ -2501,7 +2501,7 @@ async def admin_cdel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
     keyboard = InlineKeyboardMarkup(
         [
-            [btn("🛑 بله، برای همیشه حذف کن", style=DANGER, callback_data=f"admin_cdel_do:{target_id}:{cid}:{rarity}:{page}")],
+            [btn("🛑 بله، حذف دائمی", style=DANGER, callback_data=f"admin_cdel_do:{target_id}:{cid}:{rarity}:{page}")],
             [back_btn(f"admin_cview:{target_id}:{cid}:{rarity}:{page}", "انصراف و بازگشت")],
         ]
     )
@@ -2616,8 +2616,8 @@ def _render_sub_mgr_text(user: User, info: dict) -> str:
 def _render_sub_mgr_keyboard(target_id: int, info: dict) -> InlineKeyboardMarkup:
     rows = [
         [
-            btn("فعال‌سازی نقره‌ای (۳۰ روز)", emoji_key="btn_sub_silver", style=PRIMARY, callback_data=f"adm_sub_set:{target_id}:silver:30"),
-            btn("فعال‌سازی طلایی (۳۰ روز)", emoji_key="btn_sub_gold", style=CONFIRM, callback_data=f"adm_sub_set:{target_id}:gold:30"),
+            btn("نقره‌ای ۳۰ روزه", emoji_key="btn_sub_silver", style=PRIMARY, callback_data=f"adm_sub_set:{target_id}:silver:30"),
+            btn("طلایی ۳۰ روزه", emoji_key="btn_sub_gold", style=CONFIRM, callback_data=f"adm_sub_set:{target_id}:gold:30"),
         ],
         [
             btn("➕ تمدید ۳۰ روز", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"adm_sub_ext:{target_id}:30"),
@@ -3065,8 +3065,8 @@ async def force_join_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             rows.append(
                 [btn(f"{_fj_icon(ch)} {ch.title or handle}", style=LIST, callback_data=f"fj_manage:{ch.id}")]
             )
-    rows.append([btn("افزودن گروه/کانال جدید", emoji_key="btn_confirm", style=CONFIRM, callback_data="fj_add")])
-    rows.append([btn("افزودن ربات (استارت اجباری با API)", emoji_key="btn_confirm", style=CONFIRM, callback_data="fj_addbot")])
+    rows.append([btn("افزودن گروه/کانال", emoji_key="btn_confirm", style=CONFIRM, callback_data="fj_add")])
+    rows.append([btn("افزودن ربات (API)", emoji_key="btn_confirm", style=CONFIRM, callback_data="fj_addbot")])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
     kb = InlineKeyboardMarkup(rows)
     if update.callback_query:
@@ -3528,7 +3528,7 @@ async def btn_emoji_key_callback(update: Update, context: ContextTypes.DEFAULT_T
                 if current else "ایموجی فعلی: <b>تنظیم نشده</b>")
     cat = BUTTON_CATEGORY_OF.get(key)
     rows = [
-        [btn("پاک کردن (برگشت به پیش‌فرض)", emoji_key="btn_delete", style=DANGER,
+        [btn("برگشت به پیش‌فرض", emoji_key="btn_delete", style=DANGER,
              callback_data=f"{BTN_EMOJI_CLEAR_PREFIX}{key}")],
     ]
     if cat is not None:
@@ -3715,7 +3715,7 @@ def _autogift_view() -> tuple[str, InlineKeyboardMarkup]:
     kb = InlineKeyboardMarkup([
         [btn("خاموش کن" if cfg.enabled else "روشن کن", style=DANGER if cfg.enabled else ADMIN,
              callback_data="admin_menu:autogift_toggle")],
-        [btn("تنظیم مقدار و فاصله", emoji_key="btn_settings", style=ADMIN, callback_data="admin_menu:autogift_set")],
+        [btn("مقدار و فاصله", emoji_key="btn_settings", style=ADMIN, callback_data="admin_menu:autogift_set")],
         [back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")],
     ])
     return "\n".join(lines), kb
@@ -3770,7 +3770,7 @@ async def gate_reset_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         "<i>به هیچ داده‌ای از بازی (هیولا، طلا، سطح و …) دست نمی‌خوره و برگشت‌پذیر نیست.</i>",
     ])
     kb = InlineKeyboardMarkup([
-        [btn("بله، همه رو ریست کن", emoji_key="btn_reset", style=DANGER, callback_data="admin_menu:gate_reset_do")],
+        [btn("بله، ریست همه", emoji_key="btn_reset", style=DANGER, callback_data="admin_menu:gate_reset_do")],
         [back_btn("menu:admin", "بازگشت")],
     ])
     await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=kb)
@@ -4057,7 +4057,7 @@ def _group_link_sync() -> tuple[str, str]:
 
 
 def _group_link_panel_keyboard(has_link: bool) -> InlineKeyboardMarkup:
-    rows = [[btn(f"{get_emoji('edit')} تنظیم/تغییر لینک گروه", style=PRIMARY, callback_data="admin_menu:group_link_set")]]
+    rows = [[btn(f"{get_emoji('edit')} لینک گروه", style=PRIMARY, callback_data="admin_menu:group_link_set")]]
     if has_link:
         rows.append([btn(f"{get_emoji('delete')} حذف دکمه‌ی گروه", style=DANGER, callback_data="admin_menu:group_link_clear")])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
@@ -4124,15 +4124,15 @@ def _buy_cfg_sync() -> dict:
 
 def _buy_link_panel_keyboard(has_link: bool) -> InlineKeyboardMarkup:
     rows = [
-        [btn(f"{get_emoji('gift')} مدیریت پک‌ها (تخفیف/قیمت)", style=CONFIRM, callback_data="admin_menu:packs")],
-        [btn("💵 تنظیم قیمت‌ها (خرید درون‌ربات)", style=PRIMARY, callback_data="admin_menu:buy_prices_set")],
+        [btn(f"{get_emoji('gift')} مدیریت پک‌ها", style=CONFIRM, callback_data="admin_menu:packs")],
+        [btn("💵 تنظیم قیمت‌ها", style=PRIMARY, callback_data="admin_menu:buy_prices_set")],
         [btn("💳 تنظیم کارت پرداخت", style=PRIMARY, callback_data="admin_menu:buy_card_set")],
         [btn("🎚 تنظیم حداقل خرید", style=PRIMARY, callback_data="admin_menu:buy_min_set")],
         [btn(f"{get_emoji('broadcast')} کانال گزارش خرید", style=ADMIN, callback_data="admin_menu:buy_channel_set")],
-        [btn("🔗 تنظیم/تغییر لینک خرید بیرونی", style=NAV, callback_data="admin_menu:buy_link_set")],
+        [btn("🔗 لینک خرید بیرونی", style=NAV, callback_data="admin_menu:buy_link_set")],
     ]
     if has_link:
-        rows.append([btn(f"{get_emoji('delete')} حذف لینک خرید بیرونی", style=DANGER, callback_data="admin_menu:buy_link_clear")])
+        rows.append([btn(f"{get_emoji('delete')} حذف لینک خرید", style=DANGER, callback_data="admin_menu:buy_link_clear")])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
     return InlineKeyboardMarkup(rows)
 
@@ -4851,12 +4851,12 @@ def _dshop_home_render(days, energy_cost) -> tuple[str, InlineKeyboardMarkup]:
         "",
         f"⚡ <b>هزینه شارژ کامل انرژی:</b> {energy_cost} 💎",
     ]
-    rows = [[btn(f"⚡ تغییر هزینه شارژ انرژی ({energy_cost} 💎)", style=PRIMARY, callback_data="dshop:energy")]]
+    rows = [[btn(f"⚡ هزینه‌ی شارژ ({energy_cost} 💎)", style=PRIMARY, callback_data="dshop:energy")]]
     for d in days:
         tag = f"{get_emoji('confirm')} تنظیم‌شده" if d["configured"] else f"{get_emoji('sub_silver')}️ پیش‌فرض (چرخشی)"
         rows.append([btn(f"🗓 {d['label']} — {tag}", style=ADMIN, callback_data=f"dshop:day:{d['offset']}")])
-    rows.append([btn("➕ افزودن آیتم جدید (کایجو/تجهیز/…)", style=CONFIRM, callback_data="dshop:additem")])
-    rows.append([btn(f"{get_emoji('delete')} حذف دائمی آیتم از کاتالوگ", style=DANGER, callback_data="dshop:dellist")])
+    rows.append([btn("➕ افزودن آیتم جدید", style=CONFIRM, callback_data="dshop:additem")])
+    rows.append([btn(f"{get_emoji('delete')} حذف دائمی آیتم", style=DANGER, callback_data="dshop:dellist")])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -4911,7 +4911,7 @@ def _dshop_day_render(draft: dict) -> tuple[str, InlineKeyboardMarkup]:
             btn(f"{get_emoji('poison')}" if s["active"] else "🔴", style=(CONFIRM if s["active"] else DANGER),
                 callback_data=f"dshop:tog:{s['key']}"),
         ])
-    rows.append([btn("📋 کپی این روز به روز دیگر", style=SHOP, callback_data="dshop:copymenu")])
+    rows.append([btn("📋 کپی به روز دیگه", style=SHOP, callback_data="dshop:copymenu")])
     rows.append([
         btn(f"{get_emoji('confirm')} تأیید و ذخیره", style=CONFIRM, callback_data="dshop:save"),
         btn(f"{get_emoji('cancel')} لغو", style=DANGER, callback_data="dshop:cancel"),
@@ -5228,7 +5228,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_kb = InlineKeyboardMarkup(
             [
                 [btn("🔙 بازگشت به کلکسیون کاربر قبلی", emoji_key="btn_back", callback_data=f"admin_clist:{old_owner.id}:{rarity}:{page}")],
-                [btn(f"👤 مشاهده کاربر مقصد ({new_owner.id})", callback_data=f"admin_userback:{new_owner.id}")],
+                [btn(f"👤 کاربر مقصد ({new_owner.id})", callback_data=f"admin_userback:{new_owner.id}")],
             ]
         )
         await message.reply_text(
@@ -5973,13 +5973,13 @@ async def blackmarket_manage_panel(
             row.append(btn(f"🗑 حذف #{a.id}", style=DANGER, callback_data=f"bm_adm_del_conf:{a.id}"))
             rows.append(row)
             
-    rows.append([btn("➕ ایجاد مزایده از قالب‌های آماده و متنوع", style=CONFIRM, callback_data="admin_menu:bm_presets")])
+    rows.append([btn("➕ مزایده‌ی آماده", style=CONFIRM, callback_data="admin_menu:bm_presets")])
     if only_active:
         # explicit key: the word «قبلی» made this one infer as the «صفحه قبلی» button
-        rows.append([btn("📜 مشاهده تاریخچه مزایده‌های قبلی", emoji_key="btn_list", style=NAV, callback_data="bm_adm_view:history")])
+        rows.append([btn("📜 تاریخچه‌ی مزایده‌ها", emoji_key="btn_list", style=NAV, callback_data="bm_adm_view:history")])
     else:
         rows.append([btn("🟢 بازگشت به مزایده‌های فعال", style=NAV, callback_data="bm_adm_view:active")])
-    rows.append([btn("⚡ تسویه فوری سررسیدها", style=PRIMARY, callback_data="bm_adm_settle")])
+    rows.append([btn("⚡ تسویه‌ی فوری", style=PRIMARY, callback_data="bm_adm_settle")])
     rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
     
     text = "\n".join(lines)
@@ -6004,14 +6004,14 @@ async def blackmarket_presets_panel(
         rows = [
             [btn("💎 محموله‌های الماس", style=PRIMARY, callback_data="bm_adm_cat:dia"),
              btn("🪙 بسته‌های طلا", style=PRIMARY, callback_data="bm_adm_cat:gold")],
-            [btn("🦖 کایجوی اختصاصی (۱ تا ۵⭐)", style=PRIMARY, callback_data="bm_adm_cat:creature"),
+            [btn("🦖 کایجوی اختصاصی", style=PRIMARY, callback_data="bm_adm_cat:creature"),
              btn("🥚 تخم کایجو", style=PRIMARY, callback_data="bm_adm_cat:egg")],
             [btn("🎫 بلیط باکس ژنتیکی", style=PRIMARY, callback_data="bm_adm_cat:tickets"),
              btn("🧬 قطعات DNA", style=PRIMARY, callback_data="bm_adm_cat:dna")],
             [btn("🎒 تجهیزات و سلاح‌ها", style=PRIMARY, callback_data="bm_adm_cat:equip"),
-             btn("⚡ کارت‌های افزایش سرعت", style=PRIMARY, callback_data="bm_adm_cat:speedup")],
-            [btn("👑 اشتراک‌های VIP ۳۰ روزه", style=PRIMARY, callback_data="bm_adm_cat:vip"),
-             btn("🏗 کارگر دوم (Builder)", style=PRIMARY, callback_data="bm_adm_cat:builder")],
+             btn("⚡ کارت‌های سرعت", style=PRIMARY, callback_data="bm_adm_cat:speedup")],
+            [btn("👑 اشتراک‌های VIP", style=PRIMARY, callback_data="bm_adm_cat:vip"),
+             btn("🏗 کارگر دوم", style=PRIMARY, callback_data="bm_adm_cat:builder")],
             [back_btn("admin_menu:blackmarket", "بازگشت به مدیریت بازار سیاه")],
         ]
     else:
@@ -6023,69 +6023,69 @@ async def blackmarket_presets_panel(
         rows = []
         if cat == "dia":
             rows = [
-                [btn("💎 ۵۰۰ الماس (شروع ۲۵ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dia_500")],
-                [btn("💎 ۱,۰۰۰ الماس (شروع ۵۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dia_1000")],
-                [btn("💎 ۲,۵۰۰ الماس (شروع ۱۰۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dia_2500")],
-                [btn("💎 ۵,۰۰۰ الماس (شروع ۲۰۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dia_5000")],
-                [btn("💎 ۱۰,۰۰۰ الماس (شروع ۴۰۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dia_10000")],
+                [btn("💎 ۵۰۰ الماس · ۲۵ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:dia_500")],
+                [btn("💎 ۱,۰۰۰ الماس · ۵۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:dia_1000")],
+                [btn("💎 ۲,۵۰۰ الماس · ۱۰۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:dia_2500")],
+                [btn("💎 ۵,۰۰۰ الماس · ۲۰۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:dia_5000")],
+                [btn("💎 ۱۰,۰۰۰ الماس · ۴۰۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:dia_10000")],
             ]
         elif cat == "gold":
             rows = [
-                [btn("🪙 ۲۵۰,۰۰۰ طلا (شروع ۲۵ الماس)", style=PRIMARY, callback_data="bm_adm_add:gold_250k")],
-                [btn("🪙 ۵۰۰,۰۰۰ طلا (شروع ۵۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:gold_500k")],
-                [btn("🪙 ۱,۰۰۰,۰۰۰ طلا (شروع ۱۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:gold_1m")],
-                [btn("🪙 ۵,۰۰۰,۰۰۰ طلا (شروع ۴۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:gold_5m")],
-                [btn("🪙 ۱۰,۰۰۰,۰۰۰ طلا (شروع ۷۵۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:gold_10m")],
+                [btn("🪙 ۲۵۰,۰۰۰ طلا · ۲۵ الماس", style=PRIMARY, callback_data="bm_adm_add:gold_250k")],
+                [btn("🪙 ۵۰۰,۰۰۰ طلا · ۵۰ الماس", style=PRIMARY, callback_data="bm_adm_add:gold_500k")],
+                [btn("🪙 ۱,۰۰۰,۰۰۰ طلا · ۱۰۰ الماس", style=PRIMARY, callback_data="bm_adm_add:gold_1m")],
+                [btn("🪙 ۵,۰۰۰,۰۰۰ طلا · ۴۰۰ الماس", style=PRIMARY, callback_data="bm_adm_add:gold_5m")],
+                [btn("🪙 ۱۰,۰۰۰,۰۰۰ طلا · ۷۵۰ الماس", style=PRIMARY, callback_data="bm_adm_add:gold_10m")],
             ]
         elif cat == "creature":
             rows = [
-                [btn("⭐ کایجوی نایاب ۱ ستاره (شروع ۵۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:cre_1s")],
-                [btn("⭐⭐ کایجوی حماسی ۲ ستاره (شروع ۱۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:cre_2s")],
-                [btn("⭐⭐⭐ کایجوی افسانه‌ای ۳ ستاره (شروع ۲۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:cre_3s")],
-                [btn("👑 ⭐⭐⭐⭐ کایجوی افسانه‌ای ۴ ستاره VIP (شروع ۳۵۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:cre_4s")],
-                [btn("👑 ⭐⭐⭐⭐⭐ کایجوی اساطیری ۵ ستاره VIP (شروع ۶۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:cre_5s")],
+                [btn("نایاب ۱★ · ۵۰ الماس", style=PRIMARY, callback_data="bm_adm_add:cre_1s")],
+                [btn("حماسی ۲★ · ۱۰۰ الماس", style=PRIMARY, callback_data="bm_adm_add:cre_2s")],
+                [btn("افسانه‌ای ۳★ · ۲۰۰ الماس", style=PRIMARY, callback_data="bm_adm_add:cre_3s")],
+                [btn("افسانه‌ای ۴★ VIP · ۳۵۰ الماس", style=PRIMARY, callback_data="bm_adm_add:cre_4s")],
+                [btn("اساطیری ۵★ VIP · ۶۰۰ الماس", style=PRIMARY, callback_data="bm_adm_add:cre_5s")],
             ]
         elif cat == "egg":
             rows = [
-                [btn("🥚 تخم کایجوی نایاب (شروع ۳۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:egg_rare")],
-                [btn("🥚 تخم کایجوی حماسی (شروع ۷۵ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:egg_epic")],
-                [btn("🥚 تخم کایجوی افسانه‌ای (شروع ۱۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:egg_leg")],
-                [btn("👑 🥚 تخم کایجوی اساطیری VIP (شروع ۳۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:egg_mythic")],
+                [btn("🥚 تخم نایاب · ۳۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:egg_rare")],
+                [btn("🥚 تخم حماسی · ۷۵ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:egg_epic")],
+                [btn("🥚 تخم افسانه‌ای · ۱۰۰ الماس", style=PRIMARY, callback_data="bm_adm_add:egg_leg")],
+                [btn("👑 🥚 تخم اساطیری VIP · ۳۰۰ الماس", style=PRIMARY, callback_data="bm_adm_add:egg_mythic")],
             ]
         elif cat == "tickets":
             rows = [
-                [btn("🎫 ۱۰ عدد بلیط باکس (شروع ۲۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:tic_10")],
-                [btn("🎫 ۲۵ عدد بلیط باکس (شروع ۵۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:tic_25")],
-                [btn("🎫 ۵۰ عدد بلیط باکس (شروع ۹۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:tic_50")],
-                [btn("🎫 ۱۰۰ عدد بلیط باکس (شروع ۱۶۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:tic_100")],
+                [btn("🎫 ۱۰ بلیط باکس · ۲۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:tic_10")],
+                [btn("🎫 ۲۵ بلیط باکس · ۵۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:tic_25")],
+                [btn("🎫 ۵۰ بلیط باکس · ۹۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:tic_50")],
+                [btn("🎫 ۱۰۰ بلیط باکس · ۱۶۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:tic_100")],
             ]
         elif cat == "dna":
             rows = [
-                [btn("🧬 ۱,۰۰۰ قطعه DNA (شروع ۲۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dna_1k")],
-                [btn("🧬 ۵,۰۰۰ قطعه DNA (شروع ۸۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dna_5k")],
-                [btn("🧬 ۱۰,۰۰۰ قطعه DNA (شروع ۱۵۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dna_10k")],
-                [btn("🧬 ۲۵,۰۰۰ قطعه DNA (شروع ۳۰۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:dna_25k")],
+                [btn("🧬 ۱,۰۰۰ DNA · ۲۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:dna_1k")],
+                [btn("🧬 ۵,۰۰۰ DNA · ۸۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:dna_5k")],
+                [btn("🧬 ۱۰,۰۰۰ DNA · ۱۵۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:dna_10k")],
+                [btn("🧬 ۲۵,۰۰۰ DNA · ۳۰۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:dna_25k")],
             ]
         elif cat == "equip":
             rows = [
-                [btn("⚔️ سلاح حماسی Lv5 (شروع ۵۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:eq_epic_weap")],
-                [btn("🛡 زره افسانه‌ای Lv5 (شروع ۱۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:eq_leg_armor")],
-                [btn("💍 زیورآلات اساطیری Lv10 (شروع ۲۵۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:eq_myth_acc")],
+                [btn("⚔️ سلاح حماسی سطح ۵ · ۵۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:eq_epic_weap")],
+                [btn("🛡 زره افسانه‌ای سطح ۵ · ۱۰۰ الماس", style=PRIMARY, callback_data="bm_adm_add:eq_leg_armor")],
+                [btn("💍 زیور اساطیری سطح ۱۰ · ۲۵۰ الماس", style=PRIMARY, callback_data="bm_adm_add:eq_myth_acc")],
             ]
         elif cat == "speedup":
             rows = [
-                [btn("⚡ ۵۰ عدد کارت سرعت ۶۰ دقیقه (شروع ۳۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:spd_50")],
-                [btn("⚡ ۱۰۰ عدد کارت سرعت ۶۰ دقیقه (شروع ۶۰ هزار طلا)", style=PRIMARY, callback_data="bm_adm_add:spd_100")],
-                [btn("⚡ ۵۰ عدد کارت سرعت ۱۸۰ دقیقه (شروع ۱۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:spd_180m")],
+                [btn("⚡ ۵۰ کارت ۶۰ دقیقه · ۳۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:spd_50")],
+                [btn("⚡ ۱۰۰ کارت ۶۰ دقیقه · ۶۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:spd_100")],
+                [btn("⚡ ۵۰ کارت ۱۸۰ دقیقه · ۱۰۰ الماس", style=PRIMARY, callback_data="bm_adm_add:spd_180m")],
             ]
         elif cat == "vip":
             rows = [
-                [btn("🥈 اشتراک ویژه نقره‌ای ۳۰ روزه (شروع ۲۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:vip_silver")],
-                [btn("👑 اشتراک ویژه طلایی ۳۰ روزه (شروع ۵۰۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:vip_gold")],
+                [btn("🥈 اشتراک نقره‌ای · ۲۰۰ الماس", style=PRIMARY, callback_data="bm_adm_add:vip_silver")],
+                [btn("👑 اشتراک طلایی · ۵۰۰ الماس", style=PRIMARY, callback_data="bm_adm_add:vip_gold")],
             ]
         elif cat == "builder":
             rows = [
-                [btn("🏗 استخدام کارگر دوم دائمی (شروع ۱۵۰ الماس)", style=PRIMARY, callback_data="bm_adm_add:builder_slot")],
+                [btn("🏗 کارگر دوم دائمی · ۱۵۰ الماس", style=PRIMARY, callback_data="bm_adm_add:builder_slot")],
             ]
         rows.append([back_btn("admin_menu:bm_presets", "↩️ بازگشت به دسته‌ها")])
 
@@ -6136,7 +6136,7 @@ async def blackmarket_admin_action_callback(update: Update, context: ContextType
             "آیا از حذف این مزایده اطمینان کامل دارید؟"
         )
         c_rows = [
-            [btn("✅ بله، حذف مزایده و عودت وجه", style=DANGER, callback_data=f"bm_adm_del_do:{auc.id}")],
+            [btn("✅ بله، حذف و عودت", style=DANGER, callback_data=f"bm_adm_del_do:{auc.id}")],
             [back_btn("admin_menu:blackmarket", "❌ انصراف و بازگشت")],
         ]
         await query.answer()

@@ -378,7 +378,7 @@ async def challenge_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         f"🔗 <code>{challenge.link_for(ch.code)}</code>"
     )
     kb = InlineKeyboardMarkup([
-        [btn("فرستادن چالش برای رفیق", emoji_key="btn_referral", style=CONFIRM, url=challenge.share_url(ch.code, ch.creature_name))],
+        [btn("فرستادن چالش", emoji_key="btn_referral", style=CONFIRM, url=challenge.share_url(ch.code, ch.creature_name))],
         [back_btn("menu:hub_battle", "بازگشت به نبرد")],
     ])
     await send_screen(update, text, photo=None, parse_mode="HTML", reply_markup=kb)

@@ -86,7 +86,7 @@ def _render_rules(st: dict) -> tuple[str, InlineKeyboardMarkup]:
         f"• هر روز حداکثر <b>{st['daily_cap']}</b> دوستت جایزه‌ی سطح {st['active_level']} رو می‌دن (بقیه فردا، از بین نمی‌رن).",
     ]
     rows = [
-        [btn("فرستادن لینک برای دوستان", emoji_key="btn_referral", style=CONFIRM, url=st["share_url"])],
+        [btn("فرستادن لینک دعوت", emoji_key="btn_referral", style=CONFIRM, url=st["share_url"])],
         [back_btn("ref_view:all:0", "بازگشت به دعوت")],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
@@ -135,7 +135,7 @@ def _render(st: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyb
     from bot.handlers.growth import add_group_url
 
     rows = [
-        [btn("فرستادن لینک برای دوستان", emoji_key="btn_referral", style=CONFIRM, url=st["share_url"])],
+        [btn("فرستادن لینک دعوت", emoji_key="btn_referral", style=CONFIRM, url=st["share_url"])],
         [btn("🥊 چالش رفیق", style=NAV, callback_data="ch:new"),
          InlineKeyboardButton("➕ ربات توی گروهت", url=add_group_url())],
         [btn("🏅 جایزه‌ها و قوانین", style=NAV, callback_data="ref_view:rules:0")],
@@ -156,7 +156,7 @@ def _render(st: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyb
             rows.append(nav)
     if st["claimable"] > 0:
         rows.append([btn(
-            f"🎉 دریافت جایزه ({st['claimable']} دوست آماده)",
+            f"🎉 دریافت جایزه · {st['claimable']}",
             emoji_key="btn_confirm", style=CONFIRM, callback_data="ref_claim",
         )])
     rows.append([back_btn("menu:hub_city", "بازگشت به شهر")])

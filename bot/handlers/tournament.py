@@ -110,7 +110,7 @@ def _render(d: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     lines += _PRIZE_LINES
     if d.get("unopened"):
         lines += [_DIV, f"🎁 <b>{d['unopened']} جعبه‌ی جایزه‌ی جام</b> منتظر باز شدنه!"]
-        rows.insert(0, [btn("باز کردن جعبه‌ی جایزه", emoji_key="btn_chest_open", style=CONFIRM, callback_data="tour:open")])
+        rows.insert(0, [btn("باز کردن جعبه", emoji_key="btn_chest_open", style=CONFIRM, callback_data="tour:open")])
     rows.append([btn("راهنمای جام", emoji_key="btn_report", style=NAV, callback_data="tour:help"),
                  btn("بروزرسانی", emoji_key="btn_recheck", style=NAV, callback_data="tour:home")])
     rows.append([back_btn("menu:hub_battle", "بازگشت به نبرد")])

@@ -303,7 +303,7 @@ async def dispatch_view_callback(update: Update, context: ContextTypes.DEFAULT_T
     if m["ready"]:
         rows.append([btn("دریافت جایزه", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"dsp:collect:{m['id']}")])
     else:
-        rows.append([btn("برگردوندن (بدون جایزه)", emoji_key="btn_cancel", style=DANGER,
+        rows.append([btn("برگردوندن", emoji_key="btn_cancel", style=DANGER,
                          callback_data=f"dsp:cancel:{m['id']}")])
     rows.append([back_btn("dsp:home", "بازگشت")])
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))

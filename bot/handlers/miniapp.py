@@ -99,7 +99,7 @@ async def apptest_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     keyboard = InlineKeyboardMarkup([
         [btn("باز کردن تست", emoji_key="btn_confirm", style=CONFIRM, web_app=WebAppInfo(url=url))],
         # phase 1 of the real app (read-only: profile, collection, equipment, leaderboard)
-        [btn("مینی‌اپ بازی (آزمایشی)", emoji_key="btn_collection", style=NAV, web_app=WebAppInfo(url=f"{origin}/app/"))],
+        [btn("مینی‌اپ (آزمایشی)", emoji_key="btn_collection", style=NAV, web_app=WebAppInfo(url=f"{origin}/app/"))],
         [btn("باز نشد", emoji_key="btn_cancel", style=DANGER, callback_data="apptest:fail")],
     ])
     await update.effective_message.reply_text(

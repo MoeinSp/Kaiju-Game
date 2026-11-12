@@ -192,7 +192,7 @@ def _collection_card(user, creatures, page: int = 0) -> tuple[str, InlineKeyboar
             btn("بعدی", emoji_key="btn_next", style=NAV, callback_data=_scoped_pg("collection", user.id, page + 1)),
         ],
         # row 2: activate a creature (premium icon)
-        [btn("انتخاب هیولای فعال", emoji_key="btn_creature", style=NAV, callback_data=_scoped("select", user.id))],
+        [btn("هیولای فعال", emoji_key="btn_creature", style=NAV, callback_data=_scoped("select", user.id))],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -644,7 +644,7 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
             )
             rows.append([
                 btn(
-                    f"شارژ کامل ({cost} الماس)",
+                    f"شارژ · {cost} الماس",
                     emoji_key="btn_charge",
                     style=PRIMARY,
                     callback_data=f"enr:ask:{user.id}:ghunt",
@@ -663,7 +663,7 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
             )
             rows.append([
                 btn(
-                    f"شارژ کامل ({cost} الماس)",
+                    f"شارژ · {cost} الماس",
                     emoji_key="btn_charge",
                     style=PRIMARY,
                     callback_data=f"enr:ask:{user.id}:ghunt",
@@ -671,7 +671,7 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
             ])
             rows.append([
                 btn(
-                    "خرید اشتراک نقره‌ای",
+                    "اشتراک نقره‌ای",
                     emoji_key="btn_sub_silver",
                     style=SHOP,
                     url=f"https://t.me/{BOT_USERNAME}?start=sub_silver",
@@ -721,7 +721,7 @@ def _hunt_card(user, target, energy) -> tuple[str, InlineKeyboardMarkup]:
         ],
         # no confirm step in the group: one tap spends ALL energy, so the label says so
         # (the exact amount is on the cost line above)
-        [btn("شکار خودکار (همه انرژی)", emoji_key="btn_autohunt", style=BATTLE,
+        [btn("شکار خودکار", emoji_key="btn_autohunt", style=BATTLE,
              callback_data=_act("autohunt", user.id))],
     ]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
@@ -2348,11 +2348,11 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
         cost = botconfig.get_energy_refill_cost()
         kb_rows = []
         kb_rows.append([
-            btn(f"شارژ کامل ({cost} الماس)", emoji_key="btn_charge", style=PRIMARY, callback_data=f"enr:ask:{owner_id}:ghunt")
+            btn(f"شارژ · {cost} الماس", emoji_key="btn_charge", style=PRIMARY, callback_data=f"enr:ask:{owner_id}:ghunt")
         ])
         if not sub_info["is_active"]:
             kb_rows.append([
-                btn("خرید اشتراک نقره‌ای", emoji_key="btn_sub_silver", style=SHOP, url=f"https://t.me/{BOT_USERNAME}?start=sub_silver"),
+                btn("اشتراک نقره‌ای", emoji_key="btn_sub_silver", style=SHOP, url=f"https://t.me/{BOT_USERNAME}?start=sub_silver"),
             ])
         await safe_edit_message_text(
             query,

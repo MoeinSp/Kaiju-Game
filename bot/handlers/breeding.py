@@ -186,7 +186,7 @@ def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
             f"🔒 اول باید <b>{hall}</b> رو از «🏗 ساختمون‌ها» بسازی تا غار باز شه."
         )
         rows = [
-            [btn("رفتن به ساختمون‌ها", emoji_key="btn_buildings", style=PRIMARY, callback_data="menu:buildings")],
+            [btn("ساختمون‌ها", emoji_key="btn_buildings", style=PRIMARY, callback_data="menu:buildings")],
             [back_btn("menu:hub_creature", "بازگشت به هیولا")],
         ]
         return text, InlineKeyboardMarkup(rows)
@@ -217,7 +217,7 @@ def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
         if len(jobs) < max_jobs:
             lines.append(f"✨ ظرفیت غار: <code>{len(jobs)}</code> / <code>{max_jobs}</code>")
             if view["free_count"] >= 2:
-                rows.append([btn(f"جفت بعدی رو بفرست غار ({len(jobs) + 1}/{max_jobs})", emoji_key="btn_breeding", style=CONFIRM, callback_data="brd_new")])
+                rows.append([btn(f"جفت بعدی ({len(jobs) + 1}/{max_jobs})", emoji_key="btn_breeding", style=CONFIRM, callback_data="brd_new")])
             else:
                 lines.append("<i>برای فرستادن جفت بعدی حداقل ۲ هیولای آزاد لازم داری.</i>")
     else:
@@ -240,7 +240,7 @@ def _panel_render(view: dict) -> tuple[str, InlineKeyboardMarkup]:
             else:
                 lines.append(f"🥚 تخم <code>#{i}</code> — ⏱ <code>{_format_remaining(e['seconds_left'])}</code>")
                 rows.append(
-                    [btn(f"فوری‌کن تخم #{i} ({e['finish_price']} الماس)", emoji_key="btn_instant", style=PRIMARY, callback_data=f"brd_egg_finish_ask:{e['id']}")]
+                    [btn(f"فوری {i} · {e['finish_price']} الماس", emoji_key="btn_instant", style=PRIMARY, callback_data=f"brd_egg_finish_ask:{e['id']}")]
                 )
         lines.append("\n<i>چی توی تخم‌هاست؟ تا سر باز نکنن هیچ‌کس نمی‌دونه.</i>")
 

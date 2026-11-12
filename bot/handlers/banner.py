@@ -58,7 +58,7 @@ async def banner_pull_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     await query.answer()
     keyboard = InlineKeyboardMarkup([
-        [btn(f"تأیید و کشیدن بنر ({st['cost']} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="banner_pull_do")],
+        [btn(f"کشیدن بنر ({st['cost']} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="banner_pull_do")],
         [back_btn("menu:banner", "❌ انصراف")],
     ])
     from game.media import get_feature_image_path

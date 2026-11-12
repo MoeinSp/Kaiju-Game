@@ -313,7 +313,7 @@ def _diamond_box_detail_keyboard(tier: str, is_free: bool = False) -> InlineKeyb
         [
             [
                 btn(open_label, emoji_key="btn_confirm", style=CONFIRM, callback_data=f"dbox_buy:{tier}"),
-                btn("خرید بسته‌ای (۱۰+۱)", emoji_key="btn_diamond_box", style=SHOP, callback_data=f"dbox_bulk:{tier}"),
+                btn("بسته‌ی 10+1", emoji_key="btn_diamond_box", style=SHOP, callback_data=f"dbox_bulk:{tier}"),
             ],
             [back_btn("menu:diamond_box", "بازگشت به لیست")],
         ]

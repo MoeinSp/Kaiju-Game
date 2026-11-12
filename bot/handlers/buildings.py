@@ -366,7 +366,7 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
         rows.append(
             [
                 btn(
-                    f"مدیریت کارگران ({len(workers)}/{slots})",
+                    f"کارگران ({len(workers)}/{slots})",
                     emoji_key="btn_workers",
                     style=PRIMARY,
                     callback_data=f"bld_workers:{building.id}",

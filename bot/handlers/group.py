@@ -86,7 +86,7 @@ async def _reply_error(message, exc, owner_id: int) -> None:
             )
             cost = botconfig.get_energy_refill_cost()
             from bot.buttons import PRIMARY, btn
-            row1 = [btn(f"شارژ کامل ({cost} الماس)", emoji_key="btn_charge", style=PRIMARY, callback_data=f"enr:ask:{owner_id}:ghunt")]
+            row1 = [btn(f"شارژ · {cost} الماس", emoji_key="btn_charge", style=PRIMARY, callback_data=f"enr:ask:{owner_id}:ghunt")]
             markup = InlineKeyboardMarkup([row1])
         else:
             caption = (

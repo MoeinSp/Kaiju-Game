@@ -1422,7 +1422,7 @@ def _render_chests_keyboard(chests: list) -> InlineKeyboardMarkup:
                 label = f"جایگاه {slot}: {name} ({st})"
                 rows.append([btn(label, emoji_key=emoji_key, style=NAV, callback_data=f"arena_chest_detail:{c.id}")])
 
-    rows.append([btn("راهنمای جوایز لیگ‌ها", emoji_key="btn_chest_rewards", style=NAV, callback_data="arena_chest_rewards:silver")])
+    rows.append([btn("جوایز لیگ‌ها", emoji_key="btn_chest_rewards", style=NAV, callback_data="arena_chest_rewards:silver")])
     rows.append([back_btn("menu:arena", "بازگشت به آرنا")])
     return InlineKeyboardMarkup(rows)
 
@@ -1499,11 +1499,11 @@ async def arena_chest_detail_callback(update: Update, context: ContextTypes.DEFA
         rem = seconds_until_ready(chest)
         lines.append(f"وضعیت: ⏳ در حال باز شدن (<code>{_format_remaining(rem)}</code> باقی‌مانده)")
         lines.append(f"<blockquote>⚡ <b>هزینه بازگشایی فوری:</b> <code>{cost}</code> الماس {get_emoji('diamond')}</blockquote>")
-        rows.append([btn("بازگشایی فوری با الماس", emoji_key="btn_chest_speedup", style=SHOP, callback_data=f"arena_chest_speedup:{chest.id}")])
+        rows.append([btn("بازگشایی فوری", emoji_key="btn_chest_speedup", style=SHOP, callback_data=f"arena_chest_speedup:{chest.id}")])
     elif chest.status == "queued":
         lines.append("وضعیت: 📋 <b>در صف بازگشایی</b> (بعد از اتمام جعبه فعلی خودکار باز می‌شود)")
         lines.append(f"<blockquote>⚡ <b>هزینه بازگشایی فوری:</b> <code>{cost}</code> الماس {get_emoji('diamond')}</blockquote>")
-        rows.append([btn("بازگشایی فوری با الماس", emoji_key="btn_chest_speedup", style=SHOP, callback_data=f"arena_chest_speedup:{chest.id}")])
+        rows.append([btn("بازگشایی فوری", emoji_key="btn_chest_speedup", style=SHOP, callback_data=f"arena_chest_speedup:{chest.id}")])
     else:  # locked
         lines.append(f"وضعیت: {get_emoji('lock')} <b>قفل</b> (نیازمند <code>{cfg['unlock_hours']}</code> ساعت زمان)")
         lines.append(f"<blockquote>⚡ <b>هزینه بازگشایی فوری:</b> <code>{cost}</code> الماس {get_emoji('diamond')}</blockquote>")
@@ -1514,7 +1514,7 @@ async def arena_chest_detail_callback(update: Update, context: ContextTypes.DEFA
                 rows.append([btn("در صف گذاشتن", emoji_key="btn_chest_queue", style=PRIMARY, callback_data=f"arena_chest_queue:{chest.id}")])
             else:
                 lines.append("<i>⚠️ جعبه دیگری در حال باز شدن است.</i>")
-        rows.append([btn("بازگشایی فوری با الماس", emoji_key="btn_chest_speedup", style=SHOP, callback_data=f"arena_chest_speedup:{chest.id}")])
+        rows.append([btn("بازگشایی فوری", emoji_key="btn_chest_speedup", style=SHOP, callback_data=f"arena_chest_speedup:{chest.id}")])
 
     rows.append([back_btn("arena_chests", "بازگشت به جعبه‌ها")])
 

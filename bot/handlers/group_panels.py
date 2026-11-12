@@ -346,7 +346,7 @@ async def _energy(update, context, _arg):
     rows = []
     if now < cap:
         lines.append(f"⏳ یه واحد دیگه تا {format_time_remaining(nxt)}")
-        rows.append([btn("پر کردن انرژی با الماس", emoji_key="btn_charge", style=CONFIRM,
+        rows.append([btn("شارژ با الماس", emoji_key="btn_charge", style=CONFIRM,
                          callback_data=f"enr:ask:{update.effective_user.id}")])
     else:
         lines.append("✅ انرژیت پره — برو شکار!")

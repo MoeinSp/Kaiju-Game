@@ -61,7 +61,7 @@ def _home_render(oid: int, coins: int, dna: int, in_group: bool) -> tuple[str, I
     rows = [
         [btn("خرید طلا", emoji_key="btn_gold_shop", style=BUILD, callback_data=f"exch:pick:buy_gold:{oid}")],
         [btn("خرید DNA", emoji_key="btn_exchange", style=SHOP, callback_data=f"exch:pick:buy_dna:{oid}")],
-        [btn("مبادله تجهیزات با بلیط", emoji_key="btn_ticket_exchange", style=NAV,
+        [btn("تجهیزات ← بلیط", emoji_key="btn_ticket_exchange", style=NAV,
              callback_data=f"exch:tickets:{oid}")],
         _leave_row(in_group),
     ]

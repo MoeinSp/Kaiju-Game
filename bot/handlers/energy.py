@@ -20,7 +20,7 @@ def energy_refill_button(owner_id: int) -> InlineKeyboardButton:
     from game import botconfig
 
     return btn(
-        f"شارژ کامل انرژی ({botconfig.get_energy_refill_cost()} 💎)",
+        f"شارژ کامل ({botconfig.get_energy_refill_cost()} 💎)",
         emoji_key="btn_charge",
         callback_data=f"enr:ask:{owner_id}",
     )
@@ -33,12 +33,12 @@ def energy_refill_markup(owner_id: int, is_group: bool = False, origin: str | No
 
     cost = botconfig.get_energy_refill_cost()
     cb_ask = f"enr:ask:{owner_id}:{origin}" if origin else f"enr:ask:{owner_id}"
-    row1 = [btn(f"شارژ کامل با {cost} الماس", emoji_key="btn_charge", style=PRIMARY, callback_data=cb_ask)]
+    row1 = [btn(f"شارژ · {cost} الماس", emoji_key="btn_charge", style=PRIMARY, callback_data=cb_ask)]
     if is_group:
-        row2 = [btn("خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)", emoji_key="btn_sub_silver", style=SHOP, url=f"https://t.me/{BOT_USERNAME}?start=sub_silver")]
+        row2 = [btn("اشتراک نقره‌ای", emoji_key="btn_sub_silver", style=SHOP, url=f"https://t.me/{BOT_USERNAME}?start=sub_silver")]
     else:
         cb = f"sub_pick:silver:{origin}" if origin else "sub_pick:silver"
-        row2 = [btn("خرید اشتراک نقره‌ای (۱۰۰ هزار تومان)", emoji_key="btn_sub_silver", style=SHOP, callback_data=cb)]
+        row2 = [btn("اشتراک نقره‌ای", emoji_key="btn_sub_silver", style=SHOP, callback_data=cb)]
     return InlineKeyboardMarkup([row1, row2])
 
 
@@ -93,7 +93,7 @@ async def show_energy_error(query, exc, owner_id: int | None = None, origin: str
                 f"(<b>{info['days_left']} روز و {info['hours_left']} ساعت</b> باقی‌مانده).\n\n"
                 f"<i>💡 سقف انرژی شما ۶۰ است. می‌توانید با الماس آن را فوراً شارژ کامل کنید:</i>"
             )
-            rows = [[btn(f"شارژ کامل با {cost} الماس", emoji_key="btn_charge", style=PRIMARY, callback_data=cb_ask)]]
+            rows = [[btn(f"شارژ · {cost} الماس", emoji_key="btn_charge", style=PRIMARY, callback_data=cb_ask)]]
             if origin == "hunt":
                 rows.append([btn("بازگشت به شکار", emoji_key="btn_hunt", style=NAV, callback_data="hunt_next")])
             elif origin == "arena":
@@ -222,7 +222,7 @@ async def energy_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         from config import BOT_USERNAME
 
         keyboard = InlineKeyboardMarkup([[
-            btn("ادامه توی پیوی ربات", emoji_key="btn_back", style=BACK, url=f"https://t.me/{BOT_USERNAME}?start=play"),
+            btn("ادامه در پیوی", emoji_key="btn_back", style=BACK, url=f"https://t.me/{BOT_USERNAME}?start=play"),
         ]])
     await safe_edit_message_text(
         query,

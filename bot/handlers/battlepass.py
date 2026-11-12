@@ -158,7 +158,7 @@ async def pass_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await query.answer()
     back_target = "menu:battlepass" if not is_group else "close"
     keyboard = InlineKeyboardMarkup([
-        [btn(f"✅ تأیید و خرید پاس ویژه ({cost} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="pass_buy_do")],
+        [btn(f"✅ خرید پاس ویژه ({cost} 💎)", emoji_key="btn_confirm", style=CONFIRM, callback_data="pass_buy_do")],
         [back_btn(back_target, "انصراف")],
     ])
     from game.media import get_feature_image_path

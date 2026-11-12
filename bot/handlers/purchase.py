@@ -80,7 +80,7 @@ def _amount_screen(context, is_sub: bool = True) -> tuple[str, InlineKeyboardMar
     if minimum > 0:
         lines.append(f"<i>حداقل خرید: {minimum:,} تومان</i>")
     if total > 0 and total >= minimum:
-        rows.append([btn("ثبت و مشاهده کارت", emoji_key="btn_confirm", style=PRIMARY, callback_data="buy_submit")])
+        rows.append([btn("کارت بانکی", emoji_key="btn_confirm", style=PRIMARY, callback_data="buy_submit")])
     elif total > 0 and minimum > 0:
         lines.append(f"⚠️ <b>برای ثبت خرید حداقل {minimum:,} تومان لازمه</b> — کمی بیشتر انتخاب کن.")
     if total > 0:

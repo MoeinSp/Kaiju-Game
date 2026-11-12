@@ -59,7 +59,7 @@ def _render_bm_text(user: User, auctions: list[BlackMarketAuction]) -> str:
 def _render_bm_keyboard(auctions: list[BlackMarketAuction], is_group: bool = False, unopened: int = 0) -> InlineKeyboardMarkup:
     rows = []
     if unopened and not is_group:
-        rows.append([btn(f"باز کردن جعبه‌ها ({unopened})", emoji_key="btn_chest_open", style=CONFIRM, callback_data="bm:open")])
+        rows.append([btn(f"جعبه‌ها ({unopened})", emoji_key="btn_chest_open", style=CONFIRM, callback_data="bm:open")])
     for a in auctions:
         curr = "طلا" if a.bid_currency == "coins" else "الماس"
         step = blackmarket.get_min_bid_increment(a.current_bid, a.bid_currency)

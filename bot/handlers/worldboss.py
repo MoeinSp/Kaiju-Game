@@ -79,7 +79,7 @@ def _render(data: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
                 rows.append([sbtn])
     if data.get("unopened"):
         lines += ["", f"🎁 <b>{data['unopened']}</b> جعبه‌ی جایزه‌ی باز نشده داری!"]
-        rows.append([btn(f"باز کردن جعبه‌ها ({data['unopened']})", emoji_key="btn_chest_open", style=BATTLE,
+        rows.append([btn(f"جعبه‌ها ({data['unopened']})", emoji_key="btn_chest_open", style=BATTLE,
                          callback_data="wboss:open:all")])
     rows.append([btn("بروزرسانی", emoji_key="btn_recheck", style=NAV, callback_data="wboss:home")])
     rows.append([back_btn("menu:hub_battle", "بازگشت به نبرد")])

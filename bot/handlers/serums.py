@@ -59,8 +59,8 @@ def moment_btn(m: dict | None, callback_data: str):
     if not m:
         return None
     if m["on"]:
-        return btn(f"سرم {m['label']} انتخاب شده · برداشتن", emoji_key="btn_serum_use", style=NAV, callback_data=callback_data)
-    return btn(f"استفاده از سرم {m['label']} · {m['stock']} عدد", emoji_key="btn_serum_use", style=CONFIRM, callback_data=callback_data)
+        return btn(f"برداشتن سرم {m['label']}", emoji_key="btn_serum_use", style=NAV, callback_data=callback_data)
+    return btn(f"سرم {m['label']} · {m['stock']}", emoji_key="btn_serum_use", style=CONFIRM, callback_data=callback_data)
 
 
 def moment_toast(m: dict | None, kind: str) -> str:
@@ -140,7 +140,7 @@ def _lab_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     rows = [brew[i:i + 2] for i in range(0, len(brew), 2)] + [acts[i:i + 2] for i in range(0, len(acts), 2)]
     if st.get("finish"):
         f = st["finish"]
-        rows.append([btn(f"تموم کردن همه با الماس · {f['count']} سرم · {f['cost']} الماس", emoji_key="btn_instant", style=SHOP, callback_data="sr:f")])
+        rows.append([btn(f"همه · {f['cost']} الماس", emoji_key="btn_instant", style=SHOP, callback_data="sr:f")])
     manage = [btn("ارتقای سرم‌ها", emoji_key="btn_serum_up", style=PRIMARY, callback_data="sr:up")]
     if st["queue"] or st["stock_total"]:
         manage.append(btn("حذف سرم", emoji_key="btn_delete", style=NAV, callback_data="sr:d"))
@@ -164,7 +164,7 @@ def _mini_render(st: dict, note: str = "", just: tuple[str, int] | None = None) 
     # the same look as the yes / no of the diamond confirm: the action CONFIRM, «لغو» NAV
     row = []
     if st.get("finish"):
-        row.append(btn(f"تموم کردن با {st['finish']['cost']} الماس", emoji_key="btn_confirm", style=CONFIRM, callback_data="sr:f"))
+        row.append(btn(f"تموم کن · {st['finish']['cost']} الماس", emoji_key="btn_confirm", style=CONFIRM, callback_data="sr:f"))
     if st["queue"]:
         if just and st["queue"].count(just[0]) >= 1:
             n = min(just[1], st["queue"].count(just[0]))
@@ -312,7 +312,7 @@ def _up_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
         else:
             lines.append(f"     💰 {up['gold']:,} طلا · 🧬 {up['dna']:,} DNA · ⏱ {up['hours']} ساعت")
             if not st["upgrading"]:
-                rows.append([btn(f"ارتقای {k['label']} به سطح {k['level'] + 1}", emoji_key="btn_serum_up", style=BUILD, callback_data=f"sr:ug:{k['key']}")])
+                rows.append([btn(f"ارتقای {k['label']} · {k['level'] + 1}", emoji_key="btn_serum_up", style=BUILD, callback_data=f"sr:ug:{k['key']}")])
     if note:
         lines += [_DIV, note]
     rows.append([back_btn("sr:home", "آزمایشگاه سرم")])
@@ -526,16 +526,16 @@ def _bp_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
         lines.append("📦 جعبه‌ی جایزه‌ی باز نشده: <i>نداری</i>")
     if v["boss"]:
         lines.append(f"🐉 جعبه‌های غول: <code>{v['boss']}</code>")
-        rows.append([btn("باز کردن جعبه‌های غول", emoji_key="btn_chest_open", style=CONFIRM, callback_data="wboss:open:all")])
+        rows.append([btn("جعبه‌های غول", emoji_key="btn_chest_open", style=CONFIRM, callback_data="wboss:open:all")])
     if v["cup"]:
         lines.append(f"🏟 جعبه‌های جام: <code>{v['cup']}</code>")
-        rows.append([btn("باز کردن جعبه‌های جام", emoji_key="btn_chest_open", style=CONFIRM, callback_data="tour:open")])
+        rows.append([btn("جعبه‌های جام", emoji_key="btn_chest_open", style=CONFIRM, callback_data="tour:open")])
     if v["war"]:
         lines.append(f"⚔️ جعبه‌های جنگ اتحاد: <code>{v['war']}</code>")
-        rows.append([btn("باز کردن جعبه‌های جنگ", emoji_key="btn_chest_open", style=CONFIRM, callback_data="ally_war_open")])
+        rows.append([btn("جعبه‌های جنگ", emoji_key="btn_chest_open", style=CONFIRM, callback_data="ally_war_open")])
     if v["offer"]:
         lines.append(f"🎁 جعبه‌های بسته‌ی خریدنی: <code>{v['offer']}</code>")
-        rows.append([btn("باز کردن جعبه‌های بسته", emoji_key="btn_chest_open", style=CONFIRM, callback_data="rc:open:offer")])
+        rows.append([btn("باز کردن جعبه‌ها", emoji_key="btn_chest_open", style=CONFIRM, callback_data="rc:open:offer")])
     lines.append("⏱ کارت سرعت: " + ("، ".join(f"{m} دقیقه ×{n}" for m, n in v["cards"]) if v["cards"] else "<i>نداری</i>"))
     lines.append(f"{get_emoji('serum_lab')} سرم‌ها: " + ("، ".join(f"{label} ×{n}" for _k, label, n in v["serums"]) if v["serums"] else "<i>نداری</i>"))
     rows.append([btn("آزمایشگاه سرم", emoji_key="btn_serums", style=PRIMARY, callback_data="sr:home"),
