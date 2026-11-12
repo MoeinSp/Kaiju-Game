@@ -189,64 +189,114 @@ async def _post_init(application: Application) -> None:
 
 
 def _install_premium_glyph_hook(application: Application) -> None:
-    """Make EVERY outgoing HTML message run through premiumize_html — literal emojis
-    hardcoded in message strings become the owner's Premium <tg-emoji> automatically,
-    without editing hundreds of f-strings. All reply_text/edit_message_text shortcuts
-    funnel through Bot.send_message / Bot.edit_message_text with text passed as a
-    keyword, so patching those two covers the whole bot.
+    """Make EVERY outgoing message run through one theme:
+
+    1. premiumize_html — literal emojis become the owner's Premium <tg-emoji>
+    2. dividers.emojify — plain rules become the «6-2» line (max two per message)
+    3. game.ui.polish — the owner's text rules (English digits, «30/30» fill values,
+       Latin names/signed numbers isolated, RLM on left-to-right-starting lines,
+       symmetric spacing round the dividers)
+
+    Texts, captions (photo/animation/video/document/media edits), inline button labels and
+    callback toasts/alerts all pass through it. If Telegram rejects the polished version
+    (an entity it won't nest, a caption pushed over its limit), the send is retried once
+    with the old themed text, so polishing can never block a message.
 
     Patched on the ExtBot CLASS (not the instance): PTB's Bot.__setattr__ forbids
     setting attributes on a bot instance, but class-level assignment is fine."""
+    from telegram import InlineKeyboardMarkup
     from telegram.constants import ParseMode
+    from telegram.error import BadRequest
+    from telegram._utils.defaultvalue import DefaultValue
     from telegram.ext import ExtBot
 
+    from game import ui
     from game.dividers import emojify
     from game.emoji import premiumize_html
-
-    def theme(html: str) -> str:
-        # Premium emoji first, then the «6-2» divider (it counts the emoji already there)
-        return emojify(premiumize_html(html))
 
     if getattr(ExtBot, "_premium_glyph_hooked", False):
         return
 
-    def _wrap_text(orig):
+    def base(html: str) -> str:
+        # Premium emoji first, then the «6-2» divider (it counts the emoji already there)
+        return emojify(premiumize_html(html))
+
+    def polished(html: str, limit: int) -> str:
+        out = ui.polish(html)
+        if ui.visible_len(out) > limit >= ui.visible_len(html):
+            out = ui.spacing(ui.polish_plain(html))   # the isolates pushed it over the limit
+        return out
+
+    def _is_html(mode) -> bool:
+        return mode in ("HTML", ParseMode.HTML)
+
+    def _markup(markup):
+        if not isinstance(markup, InlineKeyboardMarkup):
+            return markup
+        changed = False
+        data = markup.to_dict()
+        for row in data.get("inline_keyboard", []):
+            for b in row:
+                new = ui.polish_label(b.get("text"))
+                if new != b.get("text"):
+                    b["text"] = new
+                    changed = True
+        return InlineKeyboardMarkup.de_json(data, None) if changed else markup
+
+    def _retryable(exc: Exception) -> bool:
+        msg = str(exc).lower()
+        return any(k in msg for k in ("entit", "too long", "parse", "can't find end"))
+
+    def _wrap(orig, field: str | None, limit: int):
+        async def wrapped(self, *args, **kwargs):
+            fallback = None
+            try:
+                if kwargs.get("reply_markup") is not None:
+                    kwargs["reply_markup"] = _markup(kwargs["reply_markup"])
+                if field == "media":
+                    media = kwargs.get("media")
+                    if (media is not None and isinstance(getattr(media, "caption", None), str)
+                            and _is_html(getattr(media, "parse_mode", None))):
+                        with media._unfrozen():   # PTB objects are frozen after init
+                            media.caption = polished(base(media.caption), limit)
+                elif field and isinstance(kwargs.get(field), str):
+                    raw = kwargs[field]
+                    if _is_html(kwargs.get("parse_mode")):
+                        themed = base(raw)
+                        kwargs[field] = polished(themed, limit)
+                        if kwargs[field] != themed:
+                            fallback = themed
+                    elif kwargs.get("parse_mode") is None or isinstance(kwargs.get("parse_mode"), DefaultValue):
+                        kwargs[field] = ui.polish_plain(raw)
+            except Exception:  # noqa: BLE001 — theming must never block a send
+                pass
+            try:
+                return await orig(self, *args, **kwargs)
+            except BadRequest as exc:
+                if fallback is None or not _retryable(exc):
+                    raise
+                kwargs[field] = fallback
+                return await orig(self, *args, **kwargs)
+        return wrapped
+
+    def _wrap_answer(orig):
         async def wrapped(self, *args, **kwargs):
             try:
-                if kwargs.get("parse_mode") in ("HTML", ParseMode.HTML) and isinstance(kwargs.get("text"), str):
-                    kwargs["text"] = theme(kwargs["text"])
-            except Exception:  # noqa: BLE001 — theming must never block a send
+                if isinstance(kwargs.get("text"), str):
+                    kwargs["text"] = ui.polish_plain(kwargs["text"])
+            except Exception:  # noqa: BLE001
                 pass
             return await orig(self, *args, **kwargs)
         return wrapped
 
-    def _wrap_caption(orig):
-        async def wrapped(self, *args, **kwargs):
-            try:
-                if kwargs.get("parse_mode") in ("HTML", ParseMode.HTML) and isinstance(kwargs.get("caption"), str):
-                    kwargs["caption"] = theme(kwargs["caption"])
-            except Exception:  # noqa: BLE001 — theming must never block a send
-                pass
-            return await orig(self, *args, **kwargs)
-        return wrapped
-
-    def _wrap_media(orig):
-        async def wrapped(self, *args, **kwargs):
-            try:
-                media = kwargs.get("media")
-                if media is not None and getattr(media, "parse_mode", None) in ("HTML", ParseMode.HTML):
-                    if isinstance(getattr(media, "caption", None), str):
-                        media.caption = theme(media.caption)
-            except Exception:  # noqa: BLE001 — theming must never block a send
-                pass
-            return await orig(self, *args, **kwargs)
-        return wrapped
-
-    ExtBot.send_message = _wrap_text(ExtBot.send_message)
-    ExtBot.edit_message_text = _wrap_text(ExtBot.edit_message_text)
-    ExtBot.send_photo = _wrap_caption(ExtBot.send_photo)
-    ExtBot.edit_message_caption = _wrap_caption(ExtBot.edit_message_caption)
-    ExtBot.edit_message_media = _wrap_media(ExtBot.edit_message_media)
+    ExtBot.send_message = _wrap(ExtBot.send_message, "text", 4096)
+    ExtBot.edit_message_text = _wrap(ExtBot.edit_message_text, "text", 4096)
+    for name in ("send_photo", "send_animation", "send_video", "send_document", "send_audio",
+                 "send_voice", "edit_message_caption"):
+        setattr(ExtBot, name, _wrap(getattr(ExtBot, name), "caption", 1024))
+    ExtBot.edit_message_media = _wrap(ExtBot.edit_message_media, "media", 1024)
+    ExtBot.edit_message_reply_markup = _wrap(ExtBot.edit_message_reply_markup, None, 0)
+    ExtBot.answer_callback_query = _wrap_answer(ExtBot.answer_callback_query)
     ExtBot._premium_glyph_hooked = True
 
 

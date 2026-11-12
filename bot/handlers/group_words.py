@@ -20,7 +20,7 @@ from telegram.ext import (CallbackQueryHandler, CommandHandler, ContextTypes,
                           MessageHandler, filters)
 
 from bot.utils import alert_text
-from bio_lab.repository import creature_name, display_name, get_active_creature, get_or_create_group, get_or_create_user, lab_display, lab_mention, mention
+from bio_lab.repository import creature_name, display_name, get_active_creature, get_or_create_group, get_or_create_user, lab_display, lab_mention, lab_titled, mention
 from bot.buttons import BACK, BATTLE, BUILD, CONFIRM, NAV, PRIMARY, SHOP, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from config import BOT_USERNAME
@@ -237,7 +237,7 @@ def _profile_card(user, creature_count, energy) -> tuple[str, InlineKeyboardMark
     progress = lab_progress(user)
     div = "━━━━━━━━━━━━━━━━━━━━"
     lines = [
-        f"{get_emoji('profile')} <b>آزمایشگاه {lab_display(user)}</b>",
+        f"{get_emoji('profile')} <b>{lab_titled(user)}</b>",
         f"🔬 سطح: <code>{progress['level']}</code> {lab_bar(user)}",
         div,
         f"{get_emoji('trophy')} کاپ: <code>{user.cup:,}</code>",
@@ -747,8 +747,8 @@ def _arena_card(user, opponent, loot, shielded_for, data=None) -> tuple[str, Inl
     adv = element_advantage_line(my_element, opp_element)
     win_cup = _arena.cup_delta(user, opponent["cup"], True, my_power)
     loss_cup = _arena.cup_delta(user, opponent["cup"], False, my_power)
-    my_tag = f" [{constants.element_label(my_element)}]" if my_element else ""
-    opp_tag = f" [{constants.element_label(opp_element)}]" if opp_element else ""
+    my_tag = f" · {constants.element_label(my_element)}" if my_element else ""
+    opp_tag = f" · {constants.element_label(opp_element)}" if opp_element else ""
     div = "━━━━━━━━━━━━━━━━━━━━"
     trophy = get_emoji("trophy")
     # mirrors the DM arena opponent card: you → opponent → element → reward → cost

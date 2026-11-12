@@ -45,21 +45,47 @@ def _today() -> str:
     return today_str()
 
 
-def reward_text(reward: dict) -> str:
+def _kaiju(rarity: str, bold: bool = False) -> str:
     from game import constants
 
-    parts = []
+    label = constants.RARITY_LABELS.get(rarity, rarity)
+    icon, _, word = label.partition(" ")
+    name = f"کایجوی {word or label}"
+    return f"{icon} <b>{name}</b>" if bold else f"{icon} {name}"
+
+
+def reward_parts(reward: dict) -> tuple[list[str], list[str]]:
+    """(resources, extras): «💎 20» «🪙 40 هزار» «🧬 2 هزار» / «⏩ 1 کارت سرعت 60 دقیقه»."""
+    from game import ui
+
+    res = []
     if reward.get("diamonds"):
-        parts.append(f"{reward['diamonds']:,} 💎")
+        res.append(f"💎 {ui.short(reward['diamonds'], 10_000)}")
     if reward.get("coins"):
-        parts.append(f"{reward['coins']:,} 🪙")
+        res.append(f"🪙 {ui.short(reward['coins'], 10_000)}")
     if reward.get("dna"):
-        parts.append(f"{reward['dna']:,} 🧬")
-    for minutes, count in reward.get("cards", []):
-        parts.append(f"{count} کارت سرعت {minutes} دقیقه‌ای ⏩")
+        res.append(f"🧬 {ui.short(reward['dna'], 1_000)}")
+    extras = [f"⏩ {count} کارت سرعت {minutes} دقیقه" for minutes, count in reward.get("cards", [])]
+    return res, extras
+
+
+def reward_text(reward: dict) -> str:
+    """The whole gift on one « · » line (reminders, the claim note)."""
+    res, extras = reward_parts(reward)
+    head = [_kaiju(reward["creature"])] if reward.get("creature") else []
+    return " · ".join(head + res + extras)
+
+
+def reward_lines(reward: dict) -> list[str]:
+    """The gift as at most three short lines for the calendar (mobile width)."""
+    res, extras = reward_parts(reward)
+    out = []
     if reward.get("creature"):
-        parts.append(f"یه کایجوی {constants.RARITY_LABELS.get(reward['creature'], reward['creature'])} تضمینی 🦖")
-    return " + ".join(parts)
+        out.append(_kaiju(reward["creature"], bold=True))
+    out.append(" · ".join(res))
+    if extras:
+        out.append(" · ".join(extras))
+    return out
 
 
 def state(user: User) -> dict:
@@ -73,7 +99,8 @@ def state(user: User) -> dict:
         "can_claim": eligible and not claimed_today,
         "claimed_today": claimed_today,
         "next_day": done + 1 if done < TOTAL_DAYS else None,
-        "days": [{"day": i + 1, "reward": reward_text(r), "taken": i < done, "big": "creature" in r}
+        "days": [{"day": i + 1, "reward": reward_text(r), "lines": reward_lines(r), "taken": i < done,
+                  "big": "creature" in r}
                  for i, r in enumerate(DAYS)],
     }
 

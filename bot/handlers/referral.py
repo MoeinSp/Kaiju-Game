@@ -103,30 +103,32 @@ def _render(st: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyb
 
     lines = [
         f"{get_emoji('gift')} <b>دعوت دوستان</b>",
-        f"<blockquote>هر بار دوستت <b>رشد کنه</b> (از سطح {st['steps'][0][0]} تا {st['steps'][-1][0]})، "
-        f"<b>هردوتون</b> جایزه می‌گیرین. از هر دوست برای تو روی هم:\n<b>{st['steps_total']}</b>\n"
-        f"💰 به‌علاوه‌ی <b>{st['commission']}٪</b> خریدهاش تا {st['commission_days']} روز.</blockquote>",
-        f"👥 کل: <b>{st['total']:,}</b> · ✅ در حال رشد: <b>{len(started):,}</b> · "
-        f"🎉 آماده: <b>{len(ready):,}</b> · ⏳ هنوز نه: <b>{len(waiting):,}</b>",
+        "<blockquote>دوستت هر بار رشد کنه، <b>هر دوتون</b> جایزه می‌گیرین."
+        f"\nاز هر دوست برای تو (سطح {st['steps'][0][0]} تا {st['steps'][-1][0]}):\n"
+        + "\n".join(st["steps_total_lines"])
+        + f"\n💰 به‌علاوه‌ی {st['commission']}% خریدهاش تا {st['commission_days']} روز</blockquote>",
+        "━━━━━━━━━━",
+        f"👥 دعوتی‌ها: <b>{st['total']:,}</b>",
+        f"✅ در حال رشد {len(started):,} · 🎉 آماده {len(ready):,} · ⏳ هنوز {len(waiting):,}",
     ]
 
     if not friends:
-        lines.append("\n<i>هنوز کسی رو دعوت نکردی. لینکت رو بفرست!</i>")
+        lines.append("<i>هنوز کسی رو دعوت نکردی؛ لینکت رو بفرست!</i>")
     else:
         titles = {"all": "همه", "started": "در حال رشد", "waiting": "هنوز جایزه نداده", "ready": "آماده‌ی جایزه"}
         total_pages = max(1, (len(shown) + _REF_PAGE - 1) // _REF_PAGE)
         page = max(0, min(page, total_pages - 1))
         chunk = shown[page * _REF_PAGE: (page + 1) * _REF_PAGE]
-        head = f"\n<b>📋 {titles.get(filt, 'همه')}</b> ({len(shown)})"
+        head = f"\n<b>📋 {titles.get(filt, 'همه')}</b> · {len(shown)}"
         if total_pages > 1:
-            head += f"  <i>صفحه {page + 1}/{total_pages}</i>"
+            head += f" · <i>صفحه {page + 1}/{total_pages}</i>"
         lines.append(head)
         if not chunk:
             lines.append("<i>موردی نیست.</i>")
         for f in chunk:
             lines.append(f"• {f['name']} — {_friend_status(f)}")
 
-    lines.append(f"\n🔗 <code>{st['link']}</code>")
+    lines += ["━━━━━━━━━━", "🔗 لینک دعوت تو:", f"<code>{st['link']}</code>"]
 
     from telegram import InlineKeyboardButton
 

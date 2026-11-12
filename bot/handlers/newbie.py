@@ -23,27 +23,31 @@ def render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
         lines += [note, "━━━━━━━━━━"]
     lines += [
         "🎁 <b>تقویم تازه‌وارد</b>",
-        "<blockquote>هر روز که بیای یه هدیه می‌گیری — ۷ روز، هر روز بزرگ‌تر، "
-        "<b>روز ۳ یه کایجوی افسانه‌ای و روز ۷ یه کایجوی اساطیری تضمینی!</b>\n<i>لازم نیست پشت‌سرهم باشه؛ فقط روزی یکی.</i></blockquote>",
+        "<i>7 روز، هر روز یه هدیه‌ی بزرگ‌تر · لازم نیست پشت‌سرهم باشه</i>",
+        "━━━━━━━━━━",
     ]
+    pad = "      "
     for d in st["days"]:
+        body = d["lines"]
         if d["taken"]:
-            mark = "✅"
+            lines.append(f"✅ روز {d['day']} · گرفتی")
         elif st["can_claim"] and d["day"] == st["next_day"]:
-            mark = "🎁"
+            lines.append(f"🎁 <b>روز {d['day']} · امروز</b>")
+            lines += [pad + x for x in body]
+        elif d["big"]:   # the kaiju days: the kaiju on the first line, the rest under it
+            lines.append(f"🔒 <b>روز {d['day']}</b> · {body[0]}")
+            lines += [pad + x for x in body[1:]]
         else:
-            mark = "🔒"
-        today = "  ← <b>امروز</b>" if st["can_claim"] and d["day"] == st["next_day"] else ""
-        star = " 🌟" if d["big"] else ""
-        lines.append(f"{mark} <b>روز {d['day']}</b>{star}: {d['reward']}{today}")
+            lines.append(f"🔒 روز {d['day']} · {body[0]}")
+            lines += [pad + x for x in body[1:]]
     rows = []
     if st["can_claim"]:
         rows.append([btn(f"گرفتن هدیه‌ی روز {st['next_day']}", emoji_key="btn_confirm", style=CONFIRM,
                          callback_data="nb:claim")])
     elif st["eligible"]:
-        lines.append(f"\n⏳ <i>هدیه‌ی امروز رو گرفتی — فردا برگرد برای هدیه‌ی روز {st['next_day']}.</i>")
+        lines += ["━━━━━━━━━━", f"⏳ <i>هدیه‌ی امروز رو گرفتی؛ فردا هدیه‌ی روز {st['next_day']}.</i>"]
     else:
-        lines.append("\n🏁 <i>همه‌ی هدیه‌های تقویم تازه‌وارد رو گرفتی. خوش اومدی فرمانده!</i>")
+        lines += ["━━━━━━━━━━", "🏁 <i>همه‌ی هدیه‌های تقویم رو گرفتی. خوش اومدی فرمانده!</i>"]
     rows.append([back_btn("menu:me", "منوی اصلی")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
@@ -78,11 +82,12 @@ async def newbie_claim(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await query.answer(err, show_alert=True)
         return
     await query.answer(f"🎁 هدیه‌ی روز {res['day']} گرفته شد!")
-    note = [f"🎉 <b>هدیه‌ی روز {res['day']} مال تو شد:</b>", res["reward"]]
+    note = [f"🎉 <b>هدیه‌ی روز {res['day']} مال تو شد</b>", *newbie.reward_lines(newbie.DAYS[res["day"] - 1])]
     if res.get("creature_label"):
-        note.append(f"🦖 کایجوی جدیدت: <b>{res['creature_label']}</b> — از «هیولا ← کلکسیون» فعالش کن!")
+        note += [f"🦖 کایجوی جدیدت: <b>{res['creature_label']}</b>",
+                 "<i>از «هیولا ← کلکسیون» فعالش کن!</i>"]
     if res["next"]:
-        note.append(f"<i>🗓 فردا: {res['next']}</i>")
+        note += ["", "🗓 <i>فردا:</i>"] + ["      " + x for x in newbie.reward_lines(newbie.DAYS[res["day"]])]
     text, kb = render(st, "\n".join(note))
     await send_screen(update, text, photo=None, parse_mode="HTML", reply_markup=kb)
 

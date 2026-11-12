@@ -63,7 +63,7 @@ def _render(user, st: dict, is_group: bool = False) -> tuple[str, InlineKeyboard
     title_suffix = f" ({month_name} {jy})" if month_name else ""
 
     lines = [
-        f"🎟 <b>پاس ماهانه | Monthly Pass{title_suffix}</b>",
+        f"🎟 <b>پاس ماهانه{title_suffix}</b>",
         "",
         f"🎖 <b>مسیر فعال:</b> {track}",
         f"📊 <b>سطح فعلی:</b> {st['tier']}/{st['max_tier']}",

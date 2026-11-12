@@ -1354,8 +1354,8 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
         return text, keyboard
 
     adv = element_advantage_line(a_elem, t_elem)
-    a_tag = f" [{constants.element_label(a_elem)}]" if a_elem else ""
-    t_tag = f" [{constants.element_label(t_elem)}]" if t_elem else ""
+    a_tag = f" · {constants.element_label(a_elem)}" if a_elem else ""
+    t_tag = f" · {constants.element_label(t_elem)}" if t_elem else ""
 
     # same order as the hunt/arena cards: you → opponent → element → cost
     lines = [
@@ -2200,7 +2200,7 @@ async def guardian(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"{get_emoji('guardian')} <b>جایگاه محافظ گروه</b>",
             _RULE,
             f"👑 مالک عنوان: <b>{owner_name}</b>",
-            f"🦅 موجود نگهبان: <b>{top.name}</b> [{constants.RARITY_LABELS[top.rarity]}] {stars}",
+            f"🦅 موجود نگهبان: <b>{top.name}</b> · {constants.RARITY_LABELS[top.rarity]} {stars}",
             f"🔮 عنصر: <b>{constants.element_label(top.element)}</b>",
             f"🎖 سطح: <code>{top.level}</code>",
             f"💪 قدرت کل: <code>{top_power:,}</code>",
@@ -2264,8 +2264,8 @@ def _guardian_report_text(report: dict, won: bool) -> str:
     return "\n".join([
         "⚔️ <b>گزارش نبرد تسخیر جایگاه محافظ</b>",
         _RULE,
-        f"🗡 مهاجم: <b>{a['name']}</b> [{constants.element_label(a['element'])}]",
-        f"🛡 مدافع: <b>{b['name']}</b> [{constants.element_label(b['element'])}]",
+        f"🗡 مهاجم: <b>{a['name']}</b> · {constants.element_label(a['element'])}",
+        f"🛡 مدافع: <b>{b['name']}</b> · {constants.element_label(b['element'])}",
         f"⚖️ وضعیت عنصرها: <i>{elem_status}</i>",
         _RULE,
         "<blockquote>"
@@ -2274,7 +2274,7 @@ def _guardian_report_text(report: dict, won: bool) -> str:
         f"{hp_line(b)}"
         "</blockquote>",
         _RULE,
-        f"{get_emoji('trophy')} پیروز میدان: <b>{report['winner'].name}</b> (در <code>{report['rounds']}</code> راند)",
+        f"{get_emoji('trophy')} پیروز میدان: <b>{report['winner'].name}</b> · در {report['rounds']} راند",
         result_line,
         _RULE,
         f"🔁 <b>چرخه برتری عناصر:</b>\n<i>{_element_cycle_line()}</i>",

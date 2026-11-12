@@ -220,15 +220,20 @@ def boss_text(b, top: list[dict], fighters: int) -> str:
     pct = round(100 * b.hp / b.max_hp) if b.max_hp else 0
     left = max(0, int((b.ends_at - timezone.now()).total_seconds() // 60))
     lines = [
-        f"👹 <b>باس گروه: {_e(b.name)}</b> — عنصر {constants.ELEMENT_WORDS.get(b.element, b.element)}",
-        f"❤️ [{_bar(b.hp, b.max_hp)}] {pct}% — <code>{b.hp:,}</code> / <code>{b.max_hp:,}</code>",
-        f"⏳ تا <b>{left}</b> دقیقه دیگه فرار می‌کنه",
-        f"⚔️ هر نفر <b>{group_boss.HITS}</b> ضربه‌ی رایگان — عنصر قوی‌تر ۲۰٪ بیشتر می‌زنه!",
+        f"👹 <b>باس گروه: {_e(b.name)}</b> · {constants.element_label(b.element)}",
+        "━━━━━━━━━━",
+        f"❤️ <code>{_bar(b.hp, b.max_hp)}</code> {pct}%",
+        f"      <code>{b.hp:,}/{b.max_hp:,}</code>",
+        f"⏳ <b>{left} دقیقه</b> تا فرار",
+        f"⚔️ هر نفر {group_boss.HITS} ضربه‌ی رایگان",
+        "      عنصر قوی‌تر 20% بیشتر می‌زنه",
+        "━━━━━━━━━━",
     ]
-    if top:
-        lines.append("🏅 " + " · ".join(f"{r['name']} {r['damage']:,}" for r in top[:3]))
-    lines.append(f"👥 {fighters} نفر تا الان جنگیدن")
-    lines.append("<i>بکشیدش تا همه جایزه بگیرن؛ سه نفر اول و آخرین ضربه الماس هم می‌گیرن.</i>")
+    medals = ("🥇", "🥈", "🥉")
+    for i, r in enumerate(top[:3]):
+        lines.append(f"{medals[i]} {r['name']} · {r['damage']:,}")
+    lines.append(f"👥 {fighters} نفر جنگیدن")
+    lines.append("<i>بکشیدش تا همه جایزه بگیرن؛ سه نفر اول و ضربه‌ی آخر الماس هم دارن.</i>")
     return "\n".join(lines)
 
 
@@ -416,12 +421,12 @@ def _go_sync(tg, code):
 
 
 def _round_text(v: dict, last: dict | None = None) -> str:
-    lines = [f"🥊 <b>چالش — راند {min(v['round'] + 1, v['rounds'])} از {v['rounds']}</b>"]
+    lines = [f"🥊 <b>چالش · راند {min(v['round'] + 1, v['rounds'])}/{v['rounds']}</b>"]
     if last:
         me, foe = challenge.MOVES[last["me"]], challenge.MOVES[last["foe"]]
         res = {"W": "✅ این راند رو بردی!", "L": "❌ این راند رو باختی!", "T": "⚖️ مساوی!"}[last["result"]]
-        lines.append(f"تو: {me[0]} {me[1]} — حریف: {foe[0]} {foe[1]}\n{res}")
-    lines.append(f"🦖 مهمان تو: ❤️ <b>{v['my_hp']}</b>   👹 «{_e(v['foe_name'])}»: ❤️ <b>{v['foe_hp']}</b>")
+        lines += [f"تو: {me[0]} {me[1]}", f"حریف: {foe[0]} {foe[1]}", res]
+    lines += [f"🦖 مهمان تو: ❤️ <b>{v['my_hp']}</b>", f"👹 «{_e(v['foe_name'])}»: ❤️ <b>{v['foe_hp']}</b>"]
     if v["hint"] and not v["finished"]:
         lines.append(f"\n{v['hint']}\n<b>حرکتت رو انتخاب کن:</b>")
     return "\n".join(lines)

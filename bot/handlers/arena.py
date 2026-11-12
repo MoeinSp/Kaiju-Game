@@ -119,7 +119,7 @@ def _arena_home_text(user, power, shield_secs, summary, week, season_secs, reven
     trophy = get_emoji("trophy")
     sections = [[
         f"{trophy} <b>آرنا</b>",
-        f"⏳ <b>{_format_remaining(season_secs)}</b> تا ریست کاپ‌ها",
+        f"<i>ریست کاپ‌ها: {_format_remaining(season_secs)} دیگه</i>",
     ]]
     lg = constants.league_for_cup(user.cup)
     nx = constants.next_league(user.cup)
@@ -139,15 +139,15 @@ def _arena_home_text(user, power, shield_secs, summary, week, season_secs, reven
     if ready:
         guard.append(f"{get_emoji('gift')} <code>{ready}</code> جعبه آماده‌ی باز کردن")
     elif len(chests) >= 4:
-        guard.append(f"{get_emoji('chest_arena')} جعبه‌ها پره (<code>{len(chests)}</code>/4)")
+        guard.append(f"{get_emoji('chest_arena')} جعبه‌ها پره · <code>{len(chests)}/4</code>")
     if guard:
         sections.append(guard)
 
     news = []
     if summary.get("lost"):
-        news.append(f"📉 ۲۴ ساعت اخیر: <code>{summary['lost']}</code> بار غارت شدی")
-        news.append(f"💸 از دست رفته: {get_emoji('coin')} <code>{summary['gold']:,}</code> · "
-                    f"{get_emoji('dna')} <code>{summary['dna']:,}</code>")
+        news.append(f"📉 24 ساعت اخیر: <b>{summary['lost']}</b> بار غارت شدی")
+        news.append(f"💸 از دست رفته: {get_emoji('coin')} {summary['gold']:,} · "
+                    f"{get_emoji('dna')} {summary['dna']:,}")
     if summary.get("held"):
         news.append(f"{get_emoji('def')} دفاع موفق: <code>{summary['held']}</code> بار")
     if revenges:
@@ -474,8 +474,8 @@ def _render_opponent(user, opponent, my_power, loot, my_element, dna_win,
         energy = sync_energy(user)
     max_en = get_max_energy(user)
     opp_element = opponent.get("element")
-    my_elem_tag = f" [{constants.element_label(my_element)}]" if my_element else ""
-    opp_elem_tag = f" [{constants.element_label(opp_element)}]" if opp_element else ""
+    my_elem_tag = f" · {constants.element_label(my_element)}" if my_element else ""
+    opp_elem_tag = f" · {constants.element_label(opp_element)}" if opp_element else ""
     adv = element_advantage_line(my_element, opp_element)
     win_cup = cup_delta(user, opponent["cup"], True, my_power)
     loss_cup = cup_delta(user, opponent["cup"], False, my_power)
@@ -650,7 +650,7 @@ def opponent_details_text(d: dict, *, show_header: bool = True) -> str:
         lines.append(f"🏭 <b>{d['label']}</b>")
         lines.append(f"{get_emoji('alliance')} اتحاد: <b>{d['alliance']}</b>" if d.get("alliance") else "🚫 بدون اتحاد")
         lines.append("")
-    lines.append(f"{get_emoji('creature')} <b>{d['name']}</b> ({constants.element_label(d['element'])})")
+    lines.append(f"{get_emoji('creature')} <b>{d['name']}</b> · {constants.element_label(d['element'])}")
     if d.get("breed") and d["breed"] != d["name"]:
         lines.append(f"🧬 نژاد: <b>{d['breed']}</b>")
     lines += [

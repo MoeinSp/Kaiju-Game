@@ -67,6 +67,15 @@ def lab_display(user: User) -> str:
     return f"{base}{badge}"
 
 
+def lab_titled(user: User) -> str:
+    """«آزمایشگاه X» for headings — without doubling the word when the player's lab name
+    already starts with it («آزمایشگاه آزمایشگاه معین» on the profile, 2026-11-12)."""
+    name = (user.lab_name or "").strip()
+    if not name or name.startswith(("آزمایشگاه", "ازمایشگاه", "لابراتوار")) or name.lower().startswith("lab"):
+        return lab_display(user)
+    return f"آزمایشگاه {lab_display(user)}"
+
+
 def lab_mention(user: User) -> str:
     """lab_display() as a clickable Telegram mention (tg://user link): the visible label is
     the lab's name, tapping it opens the player's profile. For group cards, where the lab

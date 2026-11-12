@@ -36,30 +36,26 @@ def _render_mugen_text(view: dict) -> str:
     elem_label = constants.element_label(st["guardian_element"])
 
     lines = [
-        f"{get_emoji('mugen')} <b>برج موگن (無限の塔) — طبقه <code>{st['floor']}</code></b>",
-        "<i>سیاه‌چال بی‌پایان و نبردهای مرگبار با نگهبانان باستانی</i>\n",
+        f"{get_emoji('mugen')} <b>برج موگن · طبقه {st['floor']}</b>",
+        "<i>نبردهای مرگبار با نگهبانان باستانی</i>",
         "━━━━━━━━━━━━━━━━━━━━",
-        f"{get_emoji('hunt')} <b>نگهبان این طبقه:</b> {st['guardian_name']}",
-        f"🏷 نایابی: <b>{constants.RARITY_LABELS.get(st['guardian_rarity'], st['guardian_rarity'])}</b>",
-        f"🔮 عنصر: <b>{elem_label}</b>",
-        f"{get_emoji('power')} قدرت نگهبان: <code>{st['guardian_power']:,}</code>",
-        "━━━━━━━━━━━━━━━━━━━━",
-        f"🦖 موجود فعال شما: <b>{c_name}</b>",
+        f"{get_emoji('hunt')} نگهبان این طبقه: <b>{st['guardian_name']}</b>",
+        f"{constants.RARITY_LABELS.get(st['guardian_rarity'], st['guardian_rarity'])} · {elem_label}",
+        f"{get_emoji('power')} قدرت نگهبان: <b>{st['guardian_power']:,}</b>",
+        f"🦖 موجود فعال تو: <b>{c_name}</b>",
         "",
-        "<blockquote>",
-        f"{get_emoji('gift')} <b>پاداش فتح این طبقه:</b>\n",
-        f"{get_emoji('coin')} طلا: <code>+{rew['coins']:,}</code>\n",
-        f"{get_emoji('dna')} DNA: <code>+{rew['dna']:,}</code>",
+        f"{get_emoji('gift')} <b>پاداش فتح این طبقه</b>",
+        f"{get_emoji('coin')} طلا: <b>{rew['coins']:,}</b>",
+        f"{get_emoji('dna')} DNA: <b>{rew['dna']:,}</b>",
     ]
     if rew.get("diamonds"):
-        lines.append(f"{get_emoji('diamond')} الماس: <code>+{rew['diamonds']:,}</code>")
+        lines.append(f"{get_emoji('diamond')} الماس: <b>{rew['diamonds']:,}</b>")
     if rew.get("tickets"):
-        lines.append(f"🎫 بلیط: <code>+{rew['tickets']:,}</code>")
-
+        lines.append(f"🎫 بلیط: <b>{rew['tickets']:,}</b>")
     lines += [
-        f"\n\n{get_emoji('energy')} <b>هزینه ورود:</b> <code>{mugen_tower.MUGEN_ENERGY_COST:,}</code> انرژی\n",
-        f"{get_emoji('energy')} <b>انرژی فعلی:</b> <code>{view['energy']:,}</code>",
-        "</blockquote>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"{get_emoji('energy')} هزینه‌ی ورود: <b>{mugen_tower.MUGEN_ENERGY_COST:,}</b> انرژی",
+        f"{get_emoji('energy')} انرژی فعلی: <b>{view['energy']:,}</b>",
     ]
     return "\n".join(lines)
 
@@ -220,7 +216,7 @@ async def mugen_lb_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
 
     lb = await run_db(_get_lb)
-    lines = [f"{get_emoji('trophy')} <b>برترین فاتحان برج موگن (無限の塔)</b>", "━━━━━━━━━━━━━━━━━━━━"]
+    lines = [f"{get_emoji('trophy')} <b>برترین فاتحان برج موگن</b>", "━━━━━━━━━━━━━━━━━━━━"]
     if not lb:
         lines.append("<i>هنوز کسی طبقات اول رو فتح نکرده است!</i>")
     else:

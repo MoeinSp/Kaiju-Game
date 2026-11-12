@@ -66,15 +66,17 @@ def _rank_badge(rank: int) -> str:
 
 
 def _reward_fmt(reward: dict) -> str:
-    """«2,000 طلا + 50💎» — the compact reward style used in the league layout."""
+    """«🪙 12 هزار · 💎 28 · 🧬 400» — icon before each amount (mobile layout, 2026-11-12)."""
+    from game import ui
+
     parts = []
     if reward.get("coins"):
-        parts.append(f"{reward['coins']:,} طلا")
+        parts.append(f"🪙 {ui.short(reward['coins'], 10_000)}")
     if reward.get("diamonds"):
-        parts.append(f"{reward['diamonds']}💎")
+        parts.append(f"💎 {reward['diamonds']:,}")
     if reward.get("dna"):
-        parts.append(f"{reward['dna']} DNA")
-    return " + ".join(parts) or "—"
+        parts.append(f"🧬 {reward['dna']:,}")
+    return " · ".join(parts) or "—"
 
 
 async def league_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -83,29 +85,28 @@ async def league_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     lines = [
         "🏆 <b>لیگ رتبه‌بندی</b>",
         _DIV,
-        f"{d['emoji']} سطح لیگ تو: <b>{d['title']}</b> │ 🏆 {view['cup']} کاپ",
-        f"🎁 پاداش فصل: {_reward_fmt(view['reward'])} │ ⏳ پایان فصل: {_fmt_left(view['seconds_left'])}",
+        f"{d['emoji']} لیگ تو: <b>{d['title']}</b> · {view['cup']:,} کاپ",
     ]
     nxt = view["next"]
     if nxt:
         need = nxt["min_cup"] - view["cup"]
-        lines.append(f"🎯 تا {nxt['emoji']} {nxt['title']}: <b>{need}</b> کاپ دیگر")
+        lines.append(f"🎯 {need:,} کاپ تا {nxt['emoji']} {nxt['title']}")
     else:
         lines.append("👑 <b>توی بالاترین سطح لیگی!</b>")
+    if view["cup"] > 0:
+        lines.append(f"📍 رتبه‌ی تو: <b>{view['rank']:,}</b>")
 
+    lines += ["", f"🎁 <b>جایزه‌ی آخر فصل</b> · {_fmt_left(view['seconds_left'])} دیگه",
+              f"{d['emoji']} لیگ: {_reward_fmt(view['reward'])}"]
     if view["cup"] > 0:
         bonus = view["rank_reward"]
-        lines.append(
-            f"📍 رتبه‌ی فعلی تو: <b>{view['rank']:,}</b>"
-            + (f" │ 🎖 جایزه‌ی رتبه: {_reward_fmt(bonus)}" if bonus else " │ 🎖 جایزه‌ی رتبه از ۵۰ نفر اول شروع می‌شه")
-        )
-    lines.append("<i>آخر فصل (هر دو هفته) هم پاداش لیگت رو می‌گیری، هم (اگه بین ۵۰ نفر اول باشی) جایزه‌ی رتبه.</i>")
+        lines.append(f"🎖 رتبه: {_reward_fmt(bonus)}" if bonus else "🎖 رتبه: از 50 نفر اول شروع می‌شه")
 
-    lines.append(f"\n{_DIV}")
-    lines.append("📊 <b>صدرنشین‌های فصل:</b>")
+    lines += [_DIV, "📊 <b>صدرنشین‌های فصل</b>"]
     for row in view["standings"]:
         mine = " 📍" if row["user"].id == view["user_id"] else ""
-        lines.append(f"{_rank_badge(row['rank'])} {lab_display(row['user'])} │ 🏆 {row['cup']}{mine}")
+        lines.append(f"{_rank_badge(row['rank'])} {lab_display(row['user'])} · {row['cup']:,}{mine}")
+    lines.append("<i>بین 50 نفر اول باشی، جایزه‌ی رتبه هم می‌گیری.</i>")
 
     from game.media import get_feature_image_path
     photo = get_feature_image_path("league")

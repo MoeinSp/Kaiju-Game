@@ -307,7 +307,7 @@ def shop_state(user: User) -> dict:
     for item_key in SHOP_ORDER:
         emoji, title, cost, limit = SHOP[item_key]
         if item_key == "grand":
-            title = f"{title} ({constants.element_label(theme(key)['element'])})"
+            title = f"{title} · {constants.element_label(theme(key)['element'])}"
         items.append({"key": item_key, "emoji": emoji, "title": title, "cost": cost,
                       "left": max(0, limit - bought.get(item_key, 0)),
                       "vip": item_key in VIP_ONLY, "locked": item_key in VIP_ONLY and not vip})
@@ -361,7 +361,7 @@ def _grant(user: User, item_key: str, key: str) -> str:
             rarity=rarity, is_active=False, **canon,
         )
         return (f"هیولای {constants.RARITY_LABELS[rarity]} «{creature.name}» "
-                f"({constants.element_label(element)})")
+                f" · {constants.element_label(element)}")
     raise GameError("این آیتم وجود نداره.")
 
 

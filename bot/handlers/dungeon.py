@@ -59,14 +59,16 @@ def _home_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
     lines = [
         f"{_E('dungeon_pit')} <b>سیاه‌چال</b>",
         _DIV,
-        f"{_E('dungeon_key')} کلید: <code>{v['keys']}</code>  <i>(هر روز ۲ کلید رایگان)</i>",
-        f"{_E('black_rune')} رون سیاه: <code>{v['black_runes']}</code>",
-        f"{_E('shadow_core')} هسته‌ی سایه: <code>{v['shadow_cores']}</code>",
-        f"🏆 ورود موفق: <code>{v['clears']}</code> از <code>{v['runs']}</code>",
-        f"{_E('relic')} آثار فعال: <code>{v['relics']}</code>",
-        _DIV,
-        f"{_E('endless')} <b>عنصر هفته: {_el(v['week_el'])}</b> — بیشتر دشمن‌ها این عنصرن",
-        "✨ برکت هفته: هیولاهای " + "، ".join(_el(e) for e in v["week_favoured"]) + f" <code>+{round(D.WEEK_BOOST * 100)}%</code> قدرت",
+        f"{_E('dungeon_key')} کلید: <b>{v['keys']}</b> · روزی 2 تا رایگان",
+        f"{_E('black_rune')} رون سیاه: <b>{v['black_runes']:,}</b>",
+        f"{_E('shadow_core')} هسته‌ی سایه: <b>{v['shadow_cores']:,}</b>",
+        f"🏆 ورود موفق: <code>{v['clears']}/{v['runs']}</code>",
+        f"{_E('relic')} آثار فعال: {v['relics']}",
+        "",
+        f"{_E('endless')} عنصر هفته: <b>{_el(v['week_el'])}</b>",
+        "      بیشتر دشمن‌ها این عنصرن",
+        "✨ برکت هفته: " + " و ".join(_el(e) for e in v["week_favoured"]),
+        f"      {round(D.WEEK_BOOST * 100)}% قدرت بیشتر",
     ]
     rows = []
     if v["run"]:
@@ -74,9 +76,8 @@ def _home_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
         lines += [_DIV, f"⚠️ یه ورود نیمه‌کاره داری — <b>{_where(st)}</b>"]
         rows.append([btn("ادامه‌ی ورود", emoji_key="btn_dungeon", style=BATTLE, callback_data="dg:run")])
     else:
-        lines += [_DIV, "<i>با تیم حمله‌ات وارد شو: ۷ اتاق، سر هر اتاق چند در، و آخرش باس. "
-                        "جون هیولاها تا آخر ورود می‌مونه، پس با فکر در انتخاب کن!</i>"]
-        lines.append("<i>هر ورود ۱ کلید.</i>")
+        lines += [_DIV, "<i>با تیم حمله‌ات وارد شو: 7 اتاق، سر هر اتاق چند در، آخرش باس.</i>",
+                  "<i>جون هیولاها تا آخر ورود می‌مونه · هر ورود 1 کلید</i>"]
         entries = []
         for d in v["difficulties"]:
             if d["open"]:
@@ -127,7 +128,7 @@ def _run_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
         if m["hp"] <= 0:
             lines.append(f"💀 <s>{html.escape(m['name'])}</s> <i>از پا افتاده</i>")
         else:
-            lines.append(f"🟢 <b>{html.escape(m['name'])}</b> [{_el(m['element'])}] {_bar(m['hp'])} "
+            lines.append(f"🟢 <b>{html.escape(m['name'])}</b> · {_el(m['element'])} {_bar(m['hp'])} "
                          f"<code>{m['hp']}%</code> · 💪 <code>{m['now_power']:,}</code>")
     active = [D.rune_label(r) for r in dict.fromkeys(st["runes"])]
     ready = [D.rune_label(k) for k in ("first_strike", "ward") if st.get(k)]
@@ -154,7 +155,7 @@ def _run_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     elif phase == "fight":
         e = st["enemy"]
         kind = {"elite": " 💀 <b>نخبه</b>", "boss": " 👑 <b>باس</b>"}.get(e["kind"], "")
-        lines += [f"👹 دشمن: <b>{html.escape(e['name'])}</b> [{_el(e['element'])}]{kind}",
+        lines += [f"👹 دشمن: <b>{html.escape(e['name'])}</b> · {_el(e['element'])}{kind}",
                   f"💪 قدرت دشمن: <code>{e['power']:,}</code>",
                   "", "⚔️ <b>کی بجنگه؟</b>"]
         for m in run["members"]:

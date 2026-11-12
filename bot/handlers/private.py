@@ -17,6 +17,7 @@ from bio_lab.repository import (
     get_active_creature,
     get_or_create_user,
     lab_display,
+    lab_titled,
     lock_row,
     lab_name_taken,
 )
@@ -124,10 +125,10 @@ def lab_level_line(user) -> str:
     "how far along is this player", independent of any single creature."""
     progress = lab_progress(user)
     if progress["is_max"]:
-        return f"🔬 سطح آزمایشگاه: <code>{progress['level']}</code> (بیشینه) {lab_bar(user)}"
+        return f"🔬 سطح آزمایشگاه: <b>{progress['level']}</b> · بیشینه\n{lab_bar(user)}"
     return (
-        f"🔬 سطح آزمایشگاه: <code>{progress['level']}</code> {lab_bar(user)} "
-        f"<code>{progress['into']:,}/{progress['span']:,}</code>"
+        f"🔬 سطح آزمایشگاه: <b>{progress['level']}</b>\n"
+        f"{lab_bar(user)} <code>{progress['into']:,}/{progress['span']:,}</code>"
     )
 
 
@@ -138,14 +139,14 @@ def wallet_line(user, energy: int | None = None) -> str:
 
     max_energy = get_max_energy(user)
     if energy >= max_energy:
-        energy_note = "<i>(کامل ✅)</i>"
+        energy_note = "پر"
     else:
-        energy_note = f"<i>(⏳ تا انرژی بعدی ~<code>{minutes_until_next_point(user)}</code> دقیقه)</i>"
+        energy_note = f"<i>⏳ {minutes_until_next_point(user)} دقیقه تا بعدی</i>"
     return (
-        f"{get_emoji('coin')} طلا: <code>{user.coins:,}</code>\n"
-        f"{get_emoji('dna')} دی‌ان‌ای: <code>{user.dna_fragments:,}</code>\n"
-        f"{get_emoji('diamond')} الماس: <code>{user.diamonds:,}</code>\n"
-        f"{get_emoji('energy')} انرژی: <code>{energy}/{max_energy}</code> {energy_note}"
+        f"{get_emoji('coin')} طلا: <b>{user.coins:,}</b>\n"
+        f"{get_emoji('dna')} DNA: <b>{user.dna_fragments:,}</b>\n"
+        f"{get_emoji('diamond')} الماس: <b>{user.diamonds:,}</b>\n"
+        f"{get_emoji('energy')} انرژی: <code>{energy}/{max_energy}</code> · {energy_note}"
     )
 
 
@@ -155,7 +156,7 @@ def pct_bar(current: int, total: int, width: int = 10) -> str:
     total = max(int(total), 1)
     pct = max(0, min(100, round(current / total * 100)))
     filled = min(width, max(0, round(width * max(current, 0) / total)))
-    return f"[{'■' * filled}{'□' * (width - filled)}] {pct}%"
+    return f"{'■' * filled}{'□' * (width - filled)} {pct}%"
 
 
 _CARD_DIV = "━━━━━━━━━━━━━━━━━━━━"
@@ -291,31 +292,38 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
     group_status = _fmt_shield_remaining(group_secs) if group_secs > 0 else "غیرفعال"
 
     if compact:
+        # the photo caption of /start and /me (owner-approved layout, 2026-11-12): the lab's
+        # name is already in the greeting above, so the card starts with its numbers
+        lab_line = (f"{get_emoji('lab')} سطح <b>{lp['level']}</b> · بیشینه" if lp["is_max"]
+                    else f"{get_emoji('lab')} سطح <b>{lp['level']}</b> · <code>{lp['into']}/{lp['span']}</code>")
+        if arena_secs <= 0 and group_secs <= 0:
+            shields = ["🛡 سپر آرنا و گروه: خاموش"]
+        else:
+            shields = [f"🛡 سپر آرنا: {arena_status}", f"👥 سپر گروه: {group_status}"]
         lines = [
-            f"🏰 <b>{lab_display(user)}</b>",
-            lab_badge,
-            f"{get_emoji('coin')} طلا: <code>{user.coins:,}</code>",
-            f"{get_emoji('dna')} دی‌ان‌ای: <code>{user.dna_fragments:,}</code>",
-            f"{get_emoji('diamond')} الماس: <code>{user.diamonds:,}</code>",
-            f"{get_emoji('energy')} انرژی: <code>{energy}/{max_energy}</code>",
-            f"🛡 سپر آرنا: <i>{arena_status}</i>",
-            f"👥 سپر گروه: <i>{group_status}</i>",
-            "",
             _CARD_DIV,
-            "",
-            f"{get_emoji('creature')} <b>{creature_name(creature)}</b> <code>#{creature.id}</code>",
+            lab_line,
+            f"{get_emoji('coin')} <b>{user.coins:,}</b> طلا",
+            f"{get_emoji('diamond')} <b>{user.diamonds:,}</b> الماس",
+            f"{get_emoji('dna')} <b>{user.dna_fragments:,}</b> DNA",
+            f"{get_emoji('energy')} انرژی <code>{energy}/{max_energy}</code>",
+            *shields,
+            _CARD_DIV,
+            f"{get_emoji('creature')} <b>{creature_name(creature)}</b> · شماره‌ی {creature.id}",
         ]
         if creature_has_nickname(creature):
             lines.append(f"🧬 نژاد: <b>{creature.name}</b>")
-        lines += [
-            f"🏷 نایابی: <b>{constants.RARITY_LABELS[creature.rarity]}</b> {stars}",
-            f"🔮 عنصر: <b>{constants.element_label(creature.element)}</b>",
-            f"🎖 سطح: <code>{creature.level}/{max_level}</code>" + (" <i>(بیشینه ✅)</i>" if is_maxed else f" ({pct_bar(creature.xp, xp_needed, 6)})"),
-            f"💪 قدرت کل: <code>{power:,}</code>",
-        ]
+        level = (f"🎖 سطح {creature.level} · بیشینه ✅" if is_maxed
+                 else f"🎖 سطح <code>{creature.level}/{max_level}</code> · {pct_bar(creature.xp, xp_needed, 6)}")
+        power_line = f"💪 قدرت <b>{power:,}</b>"
         if creature.shadow_level:
-            lines.append(f"🌑 فرم سیاه: <b>سایه {creature.shadow_level}</b> "
-                         f"(+<code>{creature.shadow_level * constants.SHADOW_POWER_PER_LEVEL}</code> قدرت)")
+            power_line += (f" · سایه {creature.shadow_level}\n"
+                           f"      {creature.shadow_level * constants.SHADOW_POWER_PER_LEVEL:,} قدرت از فرم سیاه")
+        lines += [
+            f"{constants.RARITY_LABELS[creature.rarity]} {stars} · {constants.element_label(creature.element)}",
+            level,
+            power_line,
+        ]
         return "\n".join(lines)
 
     if energy >= max_energy:
@@ -1213,7 +1221,7 @@ def story_quest_card_text(quest: dict | None) -> str:
     progress = f" <code>{quest['cur']}/{quest['target']}</code>" if quest["target"] > 1 else ""
     done = " ✅" if quest["is_done"] else ""
     return (
-        f"🎯 <b>قدم بعدی ({quest['step_num']}/{quest['total_steps']}):</b> {quest['title']}{progress}{done}\n"
+        f"🎯 <b>قدم بعدی</b> <code>{quest['step_num']}/{quest['total_steps']}</code>: {quest['title']}{progress}{done}\n"
         f"🎁 {quest['reward_text']}\n"
     )
 
@@ -1582,17 +1590,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lines = []
     if is_new:
         lines.append(
-            f"{get_emoji('egg')} <b>آزمایشگاه «{lab_display(user)}» فعال شد!</b>\n"
+            f"{get_emoji('egg')} <b>«{lab_titled(user)}» فعال شد!</b>\n"
             "یه موجود تازه از کپسول زیستی بیرون اومد — بهش خوش‌آمد بگو 👇\n"
         )
     else:
-        lines.append(f"👋 <b>به آزمایشگاه «{lab_display(user)}» خوش برگشتی!</b>\n")
+        lines.append(f"👋 <b>خوش برگشتی، {lab_display(user)}</b>\n")
 
     if login_bonus:
-        streak_line = f"🔥 <b><code>{login_bonus['streak']}</code> روز پشت‌سرهم</b> اومدی!\n"
-        streak_line += f"{get_emoji('coin')} طلا: <code>+{login_bonus['coins']:,}</code>\n"
+        streak_line = f"🔥 <b>{login_bonus['streak']} روز پشت‌سرهم</b> اومدی!\n"
+        streak_line += f"{get_emoji('coin')} <b>{login_bonus['coins']:,}</b> طلا جایزه\n"
         if login_bonus.get("dna"):
-            streak_line += f"{get_emoji('dna')} دی‌ان‌ای: <code>+{login_bonus['dna']:,}</code>\n"
+            streak_line += f"{get_emoji('dna')} <b>{login_bonus['dna']:,}</b> DNA جایزه\n"
         lines.append(f"<blockquote>{streak_line.strip()}</blockquote>\n")
 
     if getattr(user, "_story_note", ""):
@@ -1677,7 +1685,7 @@ async def me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     quest_block = f"<blockquote>{quest_txt.strip()}</blockquote>\n\n" if quest_txt.strip() else ""
     note = getattr(user, "_story_note", "")
     note_block = f"{note}\n\n" if note else ""
-    text = f"👋 <b>آزمایشگاه «{lab_display(user)}»</b>\n\n{note_block}{quest_block}" + card_txt
+    text = f"👋 <b>{lab_titled(user)}</b>\n\n{note_block}{quest_block}" + card_txt
     await send_screen(update,
         text,
         photo=photo_path,
@@ -2992,11 +3000,10 @@ def _missions_render(status: dict, tab: str = "d", note: str = "") -> tuple[str,
     if note:
         lines = [note, ""] + lines
     target = next_box["need"] if next_box else boxes[-1]["need"]
-    lines.append(
-        f"⭐ امتیاز این هفته: <code>{points}</code> — [{constants.render_bar(min(points, target), target, width=10)}] "
-        + (f"تا باکس {_BOX_LABEL[next_box['tier']]}: <code>{next_box['need'] - points}</code> امتیاز"
-           if next_box else "همه‌ی باکس‌ها باز شدن 🎉")
-    )
+    lines.append(f"⭐ امتیاز این هفته: <b>{points:,}</b>")
+    lines.append(f"      <code>{constants.render_bar(min(points, target), target, width=10)}</code>")
+    lines.append(f"🎯 {next_box['need'] - points:,} امتیاز تا باکس {_BOX_LABEL[next_box['tier']]}"
+                 if next_box else "🎉 همه‌ی باکس‌ها باز شدن")
     if ready:
         lines.append(f"🎁 <b>{len(ready)} باکس آماده‌ی باز شدنه!</b>")
     lines += [div, ""]
@@ -4754,7 +4761,7 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
 
         if not user.onboarding_completed and creature is None:
             text_msg = (
-                f"🧪 <b>آزمایشگاه «{lab_display(user)}» با موفقیت تأسیس شد!</b>\n\n"
+                f"🧪 <b>«{lab_titled(user)}» با موفقیت تأسیس شد!</b>\n\n"
                 "<blockquote>فرمانده گرامی، یک کپسول زیستی حاوی تخم هیولای اولیه کشف شده است.\n"
                 "با شکستن تخم، اولین کایجوی خودت رو متولد کن و ماجراجویی رو آغاز کن! 👇</blockquote>"
             )
@@ -4768,7 +4775,7 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         quest_txt = story_quest_card_text(quest)
         quest_block = f"<blockquote>{quest_txt.strip()}</blockquote>\n\n" if quest_txt.strip() else ""
         await message.reply_text(
-            f"👋 <b>آزمایشگاه «{lab_display(user)}» فعال شد!</b>\n\n"
+            f"👋 <b>«{lab_titled(user)}» فعال شد!</b>\n\n"
             f"{quest_block}"
             + creature_card_text(user, creature, equipped_items),
             parse_mode="HTML",
@@ -5271,26 +5278,26 @@ def _profile_sync(tg_user):
 def _profile_text_and_keyboard(user, stats) -> tuple[str, InlineKeyboardMarkup]:
     rename_cost = constants.lab_rename_cost(user.lab_renames)
     notif_label = "اعلان‌ها: فعال" if user.notifications_on else "اعلان‌ها: خاموش"
+    from game import ui
+
     lines = [
-        f"{get_emoji('profile')} <b>آزمایشگاه {lab_display(user)}</b>{stats.get('title_label', '')}",
+        f"{get_emoji('profile')} <b>{lab_titled(user)}</b>{stats.get('title_label', '')}",
+        f"<i>عضو از {ui.jdate(timezone.localtime(user.created_at))}"
+        f" · {user.login_streak} روز پشت‌سرهم</i>",
         "━━━━━━━━━━━━━━━━━━━━",
-        f"<blockquote>{lab_level_line(user)}</blockquote>",
+        lab_level_line(user),
+        f"{get_emoji('creature')} موجودات ساخته‌شده: <b>{stats['creatures_owned']:,}</b>",
         "",
-        f"📅 عضو از: <code>{timezone.localtime(user.created_at).strftime('%Y-%m-%d')}</code>",
-        f"🔥 ورود پشت‌سرهم: <code>{user.login_streak}</code> روز",
-        f"{get_emoji('creature')} موجودات ساخته‌شده: <code>{stats['creatures_owned']:,}</code>",
+        "📊 <b>نبردها</b>",
+        f"{get_emoji('battle')} نبرد گروهی برده: <b>{stats['duel_wins']:,}</b>",
+        f"{get_emoji('hunt')} شکار: <b>{stats['total_hunts']:,}</b>",
+        f"{get_emoji('raid_boss')} دمیج رید باس‌ها: <b>{stats['total_raid_damage']:,}</b>",
         "",
-        "━━━━━━━━━━━━━━━━━━━━",
-        "📊 <b>آمار نبردها:</b>",
-        f"{get_emoji('battle')} نبردهای گروهی برده: <code>{stats['duel_wins']:,}</code>",
-        f"{get_emoji('hunt')} شکارهای انجام‌شده: <code>{stats['total_hunts']:,}</code>",
-        f"{get_emoji('raid_boss')} کل دمیج رید باس‌ها: <code>{stats['total_raid_damage']:,}</code>",
-        "",
-        "━━━━━━━━━━━━━━━━━━━━",
+        "💰 <b>دارایی</b>",
         wallet_line(user),
-        "",
-        "<blockquote>✏️ تغییر نام آزمایشگاه: "
-        + ("<b>رایگان</b> (بار اول)" if rename_cost == 0 else f"<code>{rename_cost}</code> الماس") + "</blockquote>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "✏️ <i>تغییر نام آزمایشگاه: "
+        + ("بار اول رایگانه</i>" if rename_cost == 0 else f"{rename_cost} الماس</i>"),
     ]
     rows = [
         [btn("لقب‌ها", emoji_key="btn_titles", style=NAV, callback_data="menu:titles")],

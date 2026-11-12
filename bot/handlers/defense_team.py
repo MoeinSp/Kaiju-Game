@@ -43,7 +43,7 @@ def _render(view: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKe
     lines = [f"🛡 <b>تیم دفاع</b>  (دفاع در آرنا و اتک گروه)", _DIV]
     if view["members"]:
         for c, power in view["members"]:
-            lines.append(f"• <b>{c.name}</b> [{constants.element_label(c.element)}] · 💪 <code>{power:,}</code>")
+            lines.append(f"• <b>{c.name}</b> · {constants.element_label(c.element)} · 💪 <code>{power:,}</code>")
     else:
         lines.append("<i>تیم دفاعت خالیه؛ فعلاً هیولای فعالت ازت دفاع می‌کنه.</i>")
     lines += [

@@ -93,19 +93,28 @@ def parse_payload(payload: str | None) -> int | None:
 
 
 # ── rewards ───────────────────────────────────────────────────────────────────
-def reward_text(reward: dict) -> str:
-    parts = []
+def reward_lines(reward: dict) -> list[str]:
+    """[«💎 350 · 🪙 2 میلیون · 🧬 100 هزار», «⏩ 2 کارت 30 دقیقه · 🏺 2 اثر باستانی»] — short
+    lines for a phone; every amount after its icon, nothing dropped."""
+    from game import ui
+
+    res, extras = [], []
     if reward.get("diamonds"):
-        parts.append(f"{reward['diamonds']:,} 💎")
+        res.append(f"💎 {ui.short(reward['diamonds'], 10_000)}")
     if reward.get("coins"):
-        parts.append(f"{reward['coins']:,} 🪙")
+        res.append(f"🪙 {ui.short(reward['coins'], 10_000)}")
     if reward.get("dna"):
-        parts.append(f"{reward['dna']:,} 🧬")
-    for minutes, count in reward.get("cards", []):
-        parts.append(f"{count} کارت سرعت {minutes} دقیقه‌ای ⏩")
+        res.append(f"🧬 {ui.short(reward['dna'], 10_000)}")
+    cards = [f"{count} کارت {minutes} دقیقه" for minutes, count in reward.get("cards", [])]
+    if cards:
+        extras.append("⏩ " + " · ".join(cards))
     if reward.get("relics"):
-        parts.append(f"{reward['relics']} اثر باستانی 🏺")
-    return " + ".join(parts)
+        extras.append(f"🏺 {reward['relics']} اثر باستانی")
+    return [x for x in (" · ".join(res), " · ".join(extras)) if x]
+
+
+def reward_text(reward: dict) -> str:
+    return " · ".join(reward_lines(reward))
 
 
 def sum_rewards(steps, side: int) -> dict:
@@ -501,6 +510,7 @@ def stats(user: User) -> dict:
         "claimable": claimable,
         "steps": [(lvl, d, reward_text(r), reward_text(f)) for lvl, d, r, f in STEPS],
         "steps_total": reward_text(sum_rewards(range(len(STEPS)), 0)),
+        "steps_total_lines": reward_lines(sum_rewards(range(len(STEPS)), 0)),
         "friend_total": reward_text(sum_rewards(range(len(STEPS)), 1)),
         "active_level": STEPS[ACTIVE_STEP][0],
         "week_top": top,

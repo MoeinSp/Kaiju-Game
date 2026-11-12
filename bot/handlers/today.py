@@ -23,8 +23,8 @@ def _state_sync(tg_user):
 
 
 def _amounts(totals: dict) -> str:
-    parts = [f"{get_emoji(_RES[k][0])} <code>+{v:,}</code>" for k, v in totals.items() if v and k in _RES]
-    return " ┃ ".join(parts)
+    parts = [f"{get_emoji(_RES[k][0])} <b>{v:,}</b>" for k, v in totals.items() if v and k in _RES]
+    return " · ".join(parts)
 
 
 def _render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
@@ -33,57 +33,58 @@ def _render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
         lines = [note, ""] + lines
     rows = []
 
-    # ── live, time-limited things first ──
+    # owner-approved order (2026-11-12): what the player came for («آماده‌ی دریافت») first,
+    # the live, time-limited things under it, then today's to-dos after the second divider
+    live = []
     if st.get("newbie"):
-        lines.append(f"🎁 <b>هدیه‌ی روز {st['newbie']} تقویم تازه‌وارد</b> منتظرته!")
-        rows.append([btn(f"تقویم تازه‌وارد — روز {st['newbie']}", emoji_key="btn_today", style=CONFIRM, callback_data="nb:open")])
+        live.append(f"🎁 هدیه‌ی روز {st['newbie']} تقویم منتظرته")
+        rows.append([btn(f"تقویم تازه‌وارد · روز {st['newbie']}", emoji_key="btn_today", style=CONFIRM, callback_data="nb:open")])
     if st["boss"]:  # only while a boss is here AND the player still has a hit
-        lines.append(f"👹 <b>غول سرگردان اینجاست!</b> <code>{st['boss']['hits_left']}</code> ضربه داری.")
+        live.append(f"👹 <b>غول سرگردان اینجاست!</b> {st['boss']['hits_left']} ضربه داری")
         rows.append([btn("ضربه به غول", emoji_key="btn_worldboss", style=BATTLE, callback_data="tdy:worldboss")])
     if st["tournament_open"]:
-        lines.append("🏟 ثبت‌نام <b>جام آخر هفته</b> بازه (رایگان).")
+        live.append("🏟 ثبت‌نام جام آخر هفته بازه · رایگان")
         rows.append([btn("ثبت‌نام در جام", emoji_key="btn_tournament", style=BATTLE, callback_data="tdy:tournament")])
     if st["festival"]:
-        lines.append(f"{st['festival']['emoji']} جشنواره‌ی «{st['festival']['title']}» در جریانه.")
+        live.append(f"{st['festival']['emoji']} جشنواره‌ی «{st['festival']['title']}»")
     if st["rule"]:
-        lines.append(st["rule"])
-    if len(lines) > 2 + (2 if note else 0):
-        lines.append("")
+        live.append(st["rule"])
 
     # ── ready to take ──
-    ready = [f"{label}: <code>+{amount:,}</code>" for label, amount, _resource in st["pending"]]
+    ready = [f"{label}: <b>{amount:,}</b>" for label, amount, _resource in st["pending"]]
     if st["dispatch_ready"]:
-        ready.append(f"🧭 <code>{st['dispatch_ready']}</code> هیولا از مأموریت برگشته")
+        ready.append(f"🧭 {st['dispatch_ready']} هیولا از مأموریت برگشته")
     if st["event_daily"]:
         ready.append("🎁 جایزه‌ی روزانه‌ی رویداد")
     if st["story_ready"]:
         ready.append("🎯 پاداش مأموریت داستانی")
     if st["wheel"]:
-        ready.append("🎡 گردونه‌ی رایگان امروز")
+        ready.append("🎡 گردونه‌ی رایگان")
     if st["free_boxes"]:
-        ready.append(f"📦 <code>{len(st['free_boxes'])}</code> باکس رایگان")
+        ready.append(f"📦 {len(st['free_boxes'])} باکس رایگان")
     if st["chests_ready"]:
-        ready.append(f"🎁 <code>{st['chests_ready']}</code> جعبه‌ی آرنا")
+        ready.append(f"🎁 {st['chests_ready']} جعبه‌ی آرنا")
     if st["boxes_ready"]:
-        ready.append(f"🎯 <code>{st['boxes_ready']}</code> باکس مأموریت")
+        ready.append(f"🎯 {st['boxes_ready']} باکس مأموریت")
     if ready:
-        lines += ["✅ <b>آماده‌ی دریافت:</b>"] + ready
+        lines += ["✅ <b>آماده‌ی دریافت</b>"] + ready
         rows.append([btn(f"دریافت همه ({today.collectable_count(st)})", emoji_key="btn_confirm", style=CONFIRM,
                          callback_data="today:all")])
     else:
         lines.append("<i>چیزی برای جمع کردن نمونده.</i>")
+    if live:
+        lines += ["", "🔥 <b>همین الان</b>"] + live
 
     # things still worth doing today — each disappears once there's nothing left of it:
     # the missions when all of today's are done, dispatch when nothing can be sent
     missions_left = st["missions_total"] - st["missions_done"]
-    lines.append("")
+    lines.append(_DIV)
     if missions_left > 0:
-        lines.append(
-            f"🎯 مأموریت‌های امروز: <code>{st['missions_done']}/{st['missions_total']}</code>"
-            + (f" · تا باکس بعدی <code>{max(0, st['next_box']['need'] - st['points'])}</code> امتیاز" if st["next_box"] else "")
-        )
+        lines.append(f"🎯 مأموریت‌ها: <code>{st['missions_done']}/{st['missions_total']}</code>")
+        if st["next_box"]:
+            lines.append(f"      {max(0, st['next_box']['need'] - st['points'])} امتیاز تا باکس بعدی")
     if st["can_dispatch"]:
-        lines.append("🧭 می‌تونی یه هیولا بفرستی مأموریت.")
+        lines.append("🧭 یه هیولا آماده‌ی اعزامه")
     lines.append(f"{get_emoji('energy')} انرژی: <code>{st['energy']}/{st['max_energy']}</code>")
     quick = [btn("شکار", emoji_key="btn_hunt", style=BATTLE, callback_data="tdy:hunt"),
              btn("آرنا", emoji_key="btn_arena", style=BATTLE, callback_data="tdy:arena")]

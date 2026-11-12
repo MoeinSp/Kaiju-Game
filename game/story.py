@@ -227,22 +227,23 @@ for _i, _q_ in enumerate(STORY_QUESTS):
 
 
 def format_reward_text(reward: dict[str, Any]) -> str:
+    """«🎁 1,000 طلا · 3 موش 🐭» — icon before each amount, no glued «+», « · » between."""
     parts = []
     if reward.get("coins"):
-        parts.append(f"<code>+{reward['coins']:,}</code> طلا {get_emoji('coin')}")
+        parts.append(f"{get_emoji('coin')} {reward['coins']:,} طلا")
     if reward.get("dna"):
-        parts.append(f"<code>+{reward['dna']:,}</code> دی‌ان‌ای {get_emoji('dna')}")
+        parts.append(f"{get_emoji('dna')} {reward['dna']:,} DNA")
     if reward.get("diamonds"):
-        parts.append(f"<code>+{reward['diamonds']:,}</code> الماس {get_emoji('diamond')}")
+        parts.append(f"{get_emoji('diamond')} {reward['diamonds']:,} الماس")
     if reward.get("speedup"):
-        parts.append(f"<code>{reward['speedup']}</code> دقیقه سرعت ⏱")
+        parts.append(f"⏱ {reward['speedup']} دقیقه سرعت")
     if reward.get("biocrate_tickets"):
-        parts.append(f"<code>{reward['biocrate_tickets']}×</code> بلیط 🎟")
+        parts.append(f"🎟 {reward['biocrate_tickets']} بلیط")
     if reward.get("food"):
         tier, count = reward["food"]
         cfg = constants.XP_CAPSULES.get(tier, {})
-        parts.append(f"<code>{count}×</code> {cfg.get('label', 'غذا')} {cfg.get('emoji', '🍖')}")
-    return " | ".join(parts)
+        parts.append(f"{cfg.get('emoji', '🍖')} {count} {cfg.get('label', 'غذا')}")
+    return " · ".join(parts)
 
 
 def active_cta_action(user: User) -> str | None:

@@ -40,7 +40,7 @@ def _panel_sync(tg_user):
 
 
 def _who(c: dict) -> str:
-    return f"{c['name']} [{constants.element_label(c['element'])}] · قدرت <code>{c['power']:,}</code>"
+    return f"{c['name']} · {constants.element_label(c['element'])} · قدرت <code>{c['power']:,}</code>"
 
 
 _PRIZE_LINES = [
@@ -72,7 +72,7 @@ def _render(d: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
             else:
                 f = d["foe"]
                 lines.append(f"🆚 حریف: <b>{f['name']}</b>")
-                lines.append(f"👹 هیولای فعلی‌ش: {f['creature']} [{constants.element_label(f['element'])}] · قدرت <code>{f['power']:,}</code>")
+                lines.append(f"👹 هیولای فعلی‌ش: {f['creature']} · {constants.element_label(f['element'])} · قدرت <code>{f['power']:,}</code>")
                 lines.append("<i>💡 هیولایی بفرست که بر عنصر حریف برتری داره (+۲۰٪ قدرت). اون هم تا شروع دور می‌تونه عوض کنه.</i>")
             rows.append([btn("عوض‌کردن هیولا", emoji_key="btn_swap", style=BATTLE, callback_data="tour:pick:0")])
         elif d["alive"]:
