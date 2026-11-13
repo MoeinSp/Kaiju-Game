@@ -12,6 +12,8 @@ from telegram.error import TelegramError
 from telegram.ext import CallbackQueryHandler, ChatMemberHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
 from bot.utils import alert_text
+from django.utils import timezone
+
 from bio_lab.models import Alliance, Creature, DuelLog, User
 from bio_lab.repository import (
     creature_name,
@@ -1291,6 +1293,24 @@ def _warrior_moment(attacker):
     return serums.moment(attacker, "warrior")
 
 
+# «اتک» on one player: at most this many a day per attacker (owner, 2026-11-13). Group
+# loot is 10% of the target's gold with no cap, so an alliance mate "attacked" over and
+# over moved 34.8M gold in 4 days — around the daily gold-transfer cap. Counted across
+# ALL groups (the day is the game's day), and checked again under the row lock.
+PVP_DAILY_PER_TARGET = 3
+
+
+def _pvp_today_count(attacker_id: int, target_id: int) -> int:
+    start = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
+    return DuelLog.objects.filter(challenger_id=attacker_id, opponent_id=target_id, created_at__gte=start).count()
+
+
+def _check_pvp_daily(attacker_id: int, target_id: int) -> None:
+    if _pvp_today_count(attacker_id, target_id) >= PVP_DAILY_PER_TARGET:
+        raise GameError(f"🛑 امروز <b>{PVP_DAILY_PER_TARGET}</b> بار به این بازیکن اتک زدی — "
+                        f"به هر نفر روزی فقط {PVP_DAILY_PER_TARGET} بار می‌شه. فردا دوباره!")
+
+
 def _pvp_preview_sync(attacker_tg, target_tg):
     """Read-only power comparison before a reply-attack is confirmed."""
     if target_tg.id == attacker_tg.id or target_tg.is_bot:
@@ -1299,6 +1319,7 @@ def _pvp_preview_sync(attacker_tg, target_tg):
     target = User.objects.filter(id=target_tg.id).first()
     if target is None:
         raise GameError("این بازیکن هنوز بازی رو شروع نکرده — نمی‌شه بهش حمله کرد.")
+    _check_pvp_daily(attacker.id, target.id)
     a_creature = get_active_creature(attacker)
     t_creature = _group_defender(target, a_creature) if a_creature else None
     if a_creature is None:
@@ -1728,6 +1749,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     target = User.objects.select_for_update().filter(id=target_id).first()
     if target is None:
         raise GameError("این بازیکن دیگه پیدا نشد.")
+    _check_pvp_daily(attacker.id, target.id)   # under the attacker's row lock: no double-tap race
     from game import group_presence
 
     from bio_lab.models import GroupMembership
