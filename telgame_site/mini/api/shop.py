@@ -422,7 +422,7 @@ def exchange_preview(request, user):
 @endpoint("POST")
 def exchange_do(request, user, data):
     ex = _exchange_open(user)
-    result = ex.exchange(user, need_str(data, "direction", ex.DIRECTIONS), need_int(data, "dna", 1))
+    result = ex.exchange(user, need_str(data, "direction", ex.DIRECTIONS), need_int(data, "dna", 1), via="mini")
     return {"direction": result["direction"], "dna": result["dna"], "gold": result["gold"],
             "exchange": _exchange_payload(_fresh(user), ex)}
 

@@ -10,14 +10,32 @@ number of DNA (the atomic unit), so the math is exact and never rounds. Preset
 sizes plus a free-form custom amount are both supported. The swap is a single
 atomic, row-locked, balance-checked update — funds are re-checked at the instant of
 confirmation, so a stale or spammed button can never over-convert.
+
+Every committed swap is recorded twice, so a «صرافی زدم چیزی نداد» report can be checked:
+* the gain ledger (source "exchange"): DNA gained = buy_dna, gold gained = buy_gold. The
+  spent side follows from the fixed rates (gold spent = DNA × BUY, DNA spent = gold / SELL);
+* one «EXCHANGE» line in the container log (bot or web) with the time, player, direction,
+  amounts, balances before and after, and where it came from (bot / mini).
 """
 
 from __future__ import annotations
+
+import logging
 
 from django.db import transaction
 
 from bio_lab.models import User
 from game.creature import GameError
+
+# Its own handler: the web container has no Django LOGGING config, so INFO lines on the
+# root logger would be dropped there. propagate=False keeps the bot from printing it twice.
+log = logging.getLogger("kaiju.exchange")
+if not log.handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    log.addHandler(_h)
+    log.setLevel(logging.INFO)
+    log.propagate = False
 
 ENABLED = True
 
@@ -65,13 +83,30 @@ def describe(direction: str, dna: int) -> dict:
     return {"direction": direction, "dna": dna, "gold": gold}
 
 
+def _record(u: User, via: str, pack: dict, before: tuple[int, int]) -> None:
+    """Runs only after the swap committed. Never lets a logging problem reach the player."""
+    from game.ledger import record_gain
+
+    buy_dna = pack["direction"] == "buy_dna"
+    record_gain(u, "exchange", coins=0 if buy_dna else pack["gold"], dna=pack["dna"] if buy_dna else 0)
+    try:
+        log.info(
+            "EXCHANGE user=%s via=%s dir=%s dna=%s gold=%s coins=%s->%s dna_bal=%s->%s",
+            u.id, via, pack["direction"], pack["dna"], pack["gold"],
+            before[0], u.coins, before[1], u.dna_fragments,
+        )
+    except Exception:  # noqa: BLE001 — diagnostic only
+        pass
+
+
 @transaction.atomic
-def exchange(user: User, direction: str, dna: int) -> dict:
+def exchange(user: User, direction: str, dna: int, via: str = "bot") -> dict:
     """Perform one exchange atomically: lock the user row, RE-check the balance under
     the lock, then move both currencies in a single save. Returns
-    {direction, dna, gold, new_coins, new_dna}."""
+    {direction, dna, gold, new_coins, new_dna}. `via` ("bot" / "mini") only goes to the log."""
     pack = describe(direction, dna)  # validates
     u = User.objects.select_for_update().get(id=user.id)
+    before = (u.coins, u.dna_fragments)
     dna, gold = pack["dna"], pack["gold"]
 
     if direction == "buy_dna":  # pay gold, get DNA
@@ -86,4 +121,5 @@ def exchange(user: User, direction: str, dna: int) -> dict:
         u.coins += gold
 
     u.save(update_fields=["coins", "dna_fragments"])
+    transaction.on_commit(lambda: _record(u, via, pack, before))
     return {**pack, "new_coins": u.coins, "new_dna": u.dna_fragments}
