@@ -44,8 +44,24 @@ GUARDIAN_SUFFIXES = [
 MUGEN_ENERGY_COST = 3  # was 5 when the bar was 50 (5 × 30/50)
 
 
-TOWER_TOP_FLOOR = 100
+TOWER_TOP_FLOOR = 100   # the LAST floor: clearing it finishes the tower (no floor 101+)
 CURVE_KNEE = 60   # up to here the original curve; above it a straight climb to the top
+
+
+def tower_done(floor: int | None) -> bool:
+    """True once floor 100 is cleared. `mugen_tower_floor` is the NEXT floor to fight, so a
+    finished climber sits at 101 (two players climbed past 100 before the cap — their rows
+    may still say 571/431, and they count as finished too)."""
+    return (floor or 1) > TOWER_TOP_FLOOR
+
+
+def shown_floor(floor: int | None) -> int:
+    """The floor a screen/leaderboard shows: never above the top (a finished climber is 100)."""
+    return min(floor or 1, TOWER_TOP_FLOOR)
+
+
+def cleared_floors(floor: int | None) -> int:
+    return min(max(0, (floor or 1) - 1), TOWER_TOP_FLOOR)
 
 
 def _curve(floor: int) -> int:
@@ -126,7 +142,10 @@ def floor_guardian(floor: int) -> Creature:
 
 
 def floor_rewards(floor: int) -> dict:
-    """Reward calculation for clearing floor N (Boss vs Regular Floor balance)."""
+    """Reward calculation for clearing floor N (Boss vs Regular Floor balance). Never above the
+    top floor's: the guardian stops growing at 100, so the prize must too (before the cap,
+    floor 570 paid 63M gold + 50 tickets for the same 13,800-power guardian as floor 100)."""
+    floor = max(1, min(floor, TOWER_TOP_FLOOR))
     is_boss = (floor % 10 == 0)
 
     if is_boss:
@@ -172,27 +191,41 @@ def floor_rewards(floor: int) -> dict:
 
 def get_mugen_status(user: User) -> dict:
     """Summary of user's Mugen tower status, next floor boss, and leaderboard."""
-    floor = getattr(user, "mugen_tower_floor", 1) or 1
+    raw = getattr(user, "mugen_tower_floor", 1) or 1
+    floor = shown_floor(raw)
     guardian = floor_guardian(floor)
     power = floor_guardian_power(floor)
     rewards = floor_rewards(floor)
 
-    # Top 10 climbers
-    leaderboard = (
-        User.objects.filter(mugen_tower_floor__gt=1)
-        .order_by("-mugen_tower_floor")[:10]
-        .values("id", "username", "first_name", "lab_name", "mugen_tower_floor")
-    )
-
     return {
         "floor": floor,
+        "done": tower_done(raw),
         "guardian_name": guardian.name,
         "guardian_element": guardian.element,
         "guardian_power": power,
         "guardian_rarity": guardian.rarity,
         "rewards": rewards,
-        "leaderboard": list(leaderboard),
+        "leaderboard": top_climbers(10),
     }
+
+
+def top_climbers(limit: int) -> list[dict]:
+    """Best climbers, `mugen_tower_floor` capped at 101 (finished) so the two who climbed past
+    100 before the cap don't outrank everyone else who finishes. Ties by id. Each row's
+    `mugen_tower_floor` is the SHOWN floor (<= 100) and `done` marks a finished climber."""
+    from django.db.models import Value
+    from django.db.models.functions import Least
+
+    rows = list(
+        User.objects.filter(mugen_tower_floor__gt=1)
+        .annotate(_capped=Least("mugen_tower_floor", Value(TOWER_TOP_FLOOR + 1)))
+        .order_by("-_capped", "id")[:limit]
+        .values("id", "username", "first_name", "lab_name", "mugen_tower_floor")
+    )
+    for r in rows:
+        r["done"] = tower_done(r["mugen_tower_floor"])
+        r["mugen_tower_floor"] = shown_floor(r["mugen_tower_floor"])
+    return rows
 
 
 @transaction.atomic
@@ -208,6 +241,9 @@ def fight_mugen_floor(user: User, player_creature: Creature) -> dict:
     from game import research
 
     floor = getattr(user, "mugen_tower_floor", 1) or 1
+    if tower_done(floor):
+        from game.creature import GameError
+        raise GameError(f"برج موگن رو تا طبقه‌ی {TOWER_TOP_FLOOR} کامل فتح کردی — این آخرین طبقه‌ست.")
     spend_energy(user, MUGEN_ENERGY_COST, "برج موگن")
 
     research.attach_research(user, player_creature)

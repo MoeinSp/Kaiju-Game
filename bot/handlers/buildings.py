@@ -177,7 +177,7 @@ def _detail_view(user, building: Building) -> dict:
         "bonus": worker_bonus(building),
         # per-worker influence (queries gear) — resolve HERE in sync, never in the async
         # text builder (SynchronousOnlyOperation crash otherwise)
-        "worker_influence": {c.id: creature_mine_influence(c, building) for c in workers},
+        "worker_influence": _influence_map(workers, building),
         "unlocked": is_unlocked(user, building.building_type),
         # rate/storage query the DB (worker_bonus) — resolve them HERE in sync context,
         # never inside the async text builder (that was the "mines won't open" crash)
@@ -703,8 +703,12 @@ def _speedup_all_sync(tg_user, building_id, minutes):
 def _influence_map(creatures, building) -> dict:
     """{creature_id: mine_influence} precomputed in SYNC context — the workers screens
     render in async handlers where a per-creature gear query would crash. Building-aware
-    so the diamond collector's scaled-down influence shows correctly."""
-    return {c.id: creature_mine_influence(c, building) for c in creatures}
+    so the diamond collector's scaled-down influence shows correctly. One gear query for
+    the whole list (the free-worker list is the player's whole roster — 13k for one)."""
+    from game.equipment import equipped_items_map
+
+    gear = equipped_items_map(creatures)
+    return {c.id: creature_mine_influence(c, building, gear.get(c.pk, [])) for c in creatures}
 
 
 def _workers_sync(tg_user, building_id):

@@ -1538,6 +1538,49 @@ def _schedule_cleanup(context, chat_id: int, message_ids, action: str) -> None:
     return
 
 
+# ── anti-macro ───────────────────────────────────────────────────────────────
+# 2026-11-13: two players macro-sent «اتک» 176 times in one minute; every message got a
+# reply, Telegram flood-limited the bot and everyone's replies stalled. A human doesn't
+# send more than _BURST_MAX short (command-like) messages in _BURST_WINDOW seconds — past
+# that the sender is ignored for _MUTE_SECONDS (told once), so a macro gains nothing.
+_BURST_WINDOW = 6.0
+_BURST_MAX = 5
+_BURST_WORDS = 4          # only short messages count: game words, not people chatting
+_MUTE_SECONDS = 20.0
+_WARN_EVERY = 600.0
+_RECENT: dict[int, list[float]] = {}
+_MUTED_UNTIL: dict[int, float] = {}
+_WARNED_AT: dict[int, float] = {}
+
+
+def _macro_check(user_id: int) -> str:
+    """'ok' | 'warn' (just muted — say so once) | 'drop' (ignore silently)."""
+    import time
+
+    now = time.monotonic()
+    if _MUTED_UNTIL.get(user_id, 0.0) > now:
+        return "drop"
+    times = [t for t in _RECENT.get(user_id, ()) if now - t < _BURST_WINDOW]
+    times.append(now)
+    _RECENT.pop(user_id, None)
+    _RECENT[user_id] = times          # re-insert: the dict stays oldest-sender-first
+    if len(_RECENT) > 20_000:         # bounded: forget the oldest senders
+        for key in list(_RECENT)[:5_000]:
+            _RECENT.pop(key, None)
+        for key in [k for k, v in _MUTED_UNTIL.items() if v <= now]:
+            _MUTED_UNTIL.pop(key, None)
+        for key in [k for k, v in _WARNED_AT.items() if now - v >= _WARN_EVERY]:
+            _WARNED_AT.pop(key, None)
+    if len(times) <= _BURST_MAX:
+        return "ok"
+    _MUTED_UNTIL[user_id] = now + _MUTE_SECONDS
+    _RECENT[user_id] = []
+    if now - _WARNED_AT.get(user_id, -1e9) >= _WARN_EVERY:
+        _WARNED_AT[user_id] = now
+        return "warn"
+    return "drop"
+
+
 async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     if message is None or not message.text or update.edited_message is not None:
@@ -1545,6 +1588,18 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     first = message.text.split()[0] if message.text.split() else ""
     if first.startswith("/") and "@" in first:
         if first.split("@", 1)[1].lower() != (context.bot.username or "").lower():
+            return
+    sender = update.effective_user
+    if sender is not None and len(message.text.split()) <= _BURST_WORDS:
+        verdict = _macro_check(sender.id)
+        if verdict != "ok":
+            if verdict == "warn":
+                try:
+                    await message.reply_text(
+                        f"🤖 خیلی سریع پیام می‌فرستی — <b>{int(_MUTE_SECONDS)}</b> ثانیه جواب نمی‌دم.\n"
+                        "<i>ماکرو و اسکریپت جایزه‌ی اضافه نمی‌گیرن.</i>", parse_mode="HTML")
+                except TelegramError:
+                    pass
             return
     # a reply to the bot's prompt feeds a pending text flow (alliance name, search…)
     if await _maybe_capture_group_reply(update, context):
