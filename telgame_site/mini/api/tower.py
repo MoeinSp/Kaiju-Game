@@ -40,10 +40,7 @@ def _rewards(floor: int) -> dict:
 
 
 def _leaderboard(user: User) -> list[dict]:
-    rows = (
-        User.objects.filter(mugen_tower_floor__gt=1).order_by("-mugen_tower_floor")[:LEADERBOARD_SIZE]
-        .values("id", "username", "first_name", "lab_name", "mugen_tower_floor")
-    )
+    rows = mugen_tower.top_climbers(LEADERBOARD_SIZE)
     return [
         {"rank": rank, "floor": row["mugen_tower_floor"], "me": row["id"] == user.id,
          "name": plain_name(row["lab_name"] or row["first_name"] or row["username"] or f"Player {row['id']}")}
@@ -57,11 +54,14 @@ def _state(user: User) -> dict:
 
     # the floor is a column of the player's row. (mugen_tower.get_mugen_status() would also run
     # a top-10 query that this screen throws away — the list below is the bot's top 15.)
-    floor = user.mugen_tower_floor or 1
+    raw = user.mugen_tower_floor or 1
+    floor = mugen_tower.shown_floor(raw)
+    done = mugen_tower.tower_done(raw)
     creature, gear, _power = fighter(user)
-    milestone = floor if floor % 10 == 0 else (floor // 10 + 1) * 10
+    milestone = floor if (done or floor % 10 == 0) else (floor // 10 + 1) * 10
     out = {
-        "floor": floor, "cleared": floor - 1,
+        "floor": floor, "cleared": mugen_tower.cleared_floors(raw), "done": done,
+        "top_floor": mugen_tower.TOWER_TOP_FLOOR,
         "guardian": _guardian(floor), "rewards": _rewards(floor),
         "milestone": None,
         "me": creature_dict(creature, gear),
@@ -111,7 +111,7 @@ def swap(request, user, data):
 @endpoint()
 def leaderboard(request, user):
     """«برترین فاتحان» on its own (not gated in the bot either)."""
-    return {"leaderboard": _leaderboard(user), "floor": user.mugen_tower_floor or 1}
+    return {"leaderboard": _leaderboard(user), "floor": mugen_tower.shown_floor(user.mugen_tower_floor)}
 
 
 routes = [

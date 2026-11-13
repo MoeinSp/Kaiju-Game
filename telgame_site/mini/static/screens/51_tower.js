@@ -24,11 +24,25 @@
         }
         return h + "</div>";
       }
+      function board() {
+        var html = '<div class="h2">' + K.ic("podium") + "برترین فاتحان</div>";
+        return html + (S.leaderboard.length ? '<div class="panel tw-lb">' + S.leaderboard.map(function (r) {
+          return '<div class="' + (r.me ? "me" : "") + '"><span class="rk' + (r.rank <= 3 ? " top" + r.rank : "") + '">' + r.rank + '</span><span class="nm">' + K.esc(r.name) + (r.me ? ' <span class="muted xs">(تو)</span>' : "") + "</span>" +
+            '<span class="fl">' + K.ic("tower") + "طبقه " + K.n(r.floor) + "</span></div>";
+        }).join("") + "</div>" : '<div class="panel pad center muted">هنوز کسی طبقه‌های اول رو فتح نکرده. اولین نفر باش!</div>');
+      }
+      function banner() {
+        return '<div class="banner tw-banner" style="background-image:url(\'' + K.esc(S.art || "") + '\')"><div class="grow"><div class="sm" style="color:#c5cee2">برج ' + K.n(S.top_floor || 100) + " طبقه · هر طبقه یه نگهبان</div>" +
+          '<div class="ttl">' + (S.done ? "فتح کامل" : "طبقه‌ی " + K.n(S.floor)) + "</div></div>" +
+          '<div class="pow"><b>' + K.n(S.cleared) + "</b><small>طبقه‌ی فتح‌شده</small></div></div>";
+      }
       function view() {
+        if (S.done) {        // floor 100 cleared: the tower ends there
+          return banner() + '<div class="callout good mt">' + K.ic("check") + "<span><b>همه‌ی " + K.n(S.top_floor || 100) +
+            " طبقه رو فتح کردی!</b><br>این آخرین طبقه‌ی برجه و اسمت توی برترین فاتحان ثبت شده.</span></div>" + board();
+        }
         var g = S.guardian, me = S.me, adv = K.advantage(me.element, g.element), m = S.milestone;
-        var html = '<div class="banner tw-banner" style="background-image:url(\'' + K.esc(S.art || "") + '\')"><div class="grow"><div class="sm" style="color:#c5cee2">برج بی‌پایان · هر طبقه یه نگهبان</div>' +
-          '<div class="ttl">طبقه‌ی ' + K.n(S.floor) + "</div></div>" +
-          '<div class="pow"><b>' + K.n(S.cleared) + "</b><small>طبقه‌ی فتح‌شده</small></div></div>" + steps() + note +
+        var html = banner() + steps() + note +
           '<div class="panel tw-arena ' + g.rarity + (g.boss ? " boss" : "") + '">' +
           '<div class="tw-head">' + (g.boss ? '<span class="tag" style="color:var(--mythic)">' + K.ic("skull") + "غول طبقه</span>" : '<span class="tag plain">' + K.ic("tower") + "نگهبان طبقه</span>") + K.rarTag(g.rarity) + "</div>" +
           '<div class="versus">' + HU.side(me, { role: "هیولای تو · " + K.esc(K.elLabel(me.element)), act: "swap" }) + '<div class="vs">VS</div>' +
@@ -47,12 +61,7 @@
             '<div class="sm muted">طبقه‌ی ' + K.n(m.guardian.floor) + ' · <span class="e-' + m.guardian.element + '">' + K.esc(K.elLabel(m.guardian.element)) + '</span> · <span class="t-accent">' + K.ic("power") + " " + K.n(m.guardian.power) + "</span></div>" +
             '<div class="tw-mile-v">' + prize(m.rewards) + "</div></div></div>";
         }
-        html += '<div class="h2">' + K.ic("podium") + "برترین فاتحان</div>";
-        html += S.leaderboard.length ? '<div class="panel tw-lb">' + S.leaderboard.map(function (r) {
-          return '<div class="' + (r.me ? "me" : "") + '"><span class="rk' + (r.rank <= 3 ? " top" + r.rank : "") + '">' + r.rank + '</span><span class="nm">' + K.esc(r.name) + (r.me ? ' <span class="muted xs">(تو)</span>' : "") + "</span>" +
-            '<span class="fl">' + K.ic("tower") + "طبقه " + K.n(r.floor) + "</span></div>";
-        }).join("") + "</div>" : '<div class="panel pad center muted">هنوز کسی طبقه‌های اول رو فتح نکرده. اولین نفر باش!</div>';
-        return html;
+        return html + board();
       }
       function draw(keep) { root.innerHTML = view(); if (!keep) window.scrollTo(0, 0); }
 
@@ -66,7 +75,7 @@
           if (r.won) {
             note = "";
             draw();
-            K.result({ won: true, title: "طبقه‌ی " + r.floor + " فتح شد!", sub: r.guardian.name + " شکست خورد. طبقه‌ی " + r.next_floor + " باز شد." + (r.levels ? " هیولات رسید به سطح " + r.level + "!" : ""),
+            K.result({ won: true, title: "طبقه‌ی " + r.floor + " فتح شد!", sub: r.guardian.name + " شکست خورد. " + (d.done ? "برج رو کامل فتح کردی!" : "طبقه‌ی " + r.next_floor + " باز شد.") + (r.levels ? " هیولات رسید به سطح " + r.level + "!" : ""),
               coins: r.rewards.coins, dna: r.rewards.dna, diamonds: r.rewards.diamonds, xp: r.rewards.xp,
               extra: r.rewards.tickets ? [K.ic("ticket") + '<span class="num">+' + r.rewards.tickets + "</span> بلیط"] : [], button: "ادامه‌ی صعود", levelup: !!r.levels });
           } else {

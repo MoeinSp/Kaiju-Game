@@ -32,6 +32,14 @@ def _render_mugen_text(view: dict) -> str:
     c = view["creature"]
     rew = st["rewards"]
 
+    if st.get("done"):
+        return "\n".join([
+            f"{get_emoji('mugen')} <b>برج موگن (無限の塔) — فتح کامل</b>",
+            "━━━━━━━━━━━━━━━━━━━━",
+            f"<blockquote>{get_emoji('celebrate')} همه‌ی <code>{mugen_tower.TOWER_TOP_FLOOR}</code> طبقه رو فتح کردی!\n"
+            "این آخرین طبقه‌ی برجه — اسمت توی «برترین فاتحان» ثبت شده.</blockquote>",
+        ])
+
     c_name = c.name if c else "بدون موجود فعال"
     elem_label = constants.element_label(st["guardian_element"])
 
@@ -65,13 +73,16 @@ def _render_mugen_text(view: dict) -> str:
 
 
 def _render_mugen_keyboard(view: dict, is_group: bool = False) -> InlineKeyboardMarkup:
-    rows = [
-        [btn("نبرد با نگهبان", emoji_key="btn_attack", style=BATTLE, callback_data="mugen:fight")],
-        [
-            btn("انتخاب کایجو", emoji_key="btn_swap", style=NAV, callback_data="mugen:swap"),
-            btn("برترین فاتحان", emoji_key="btn_rank", style=NAV, callback_data="mugen:lb"),
-        ],
-    ]
+    if view["status"].get("done"):
+        rows = [[btn("برترین فاتحان", emoji_key="btn_rank", style=NAV, callback_data="mugen:lb")]]
+    else:
+        rows = [
+            [btn("نبرد با نگهبان", emoji_key="btn_attack", style=BATTLE, callback_data="mugen:fight")],
+            [
+                btn("انتخاب کایجو", emoji_key="btn_swap", style=NAV, callback_data="mugen:swap"),
+                btn("برترین فاتحان", emoji_key="btn_rank", style=NAV, callback_data="mugen:lb"),
+            ],
+        ]
     if not is_group:
         rows.append([back_btn("menu:hub_battle", "بازگشت به نبرد")])
     return InlineKeyboardMarkup(rows)
@@ -192,7 +203,8 @@ async def mugen_fight_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             f"<blockquote>{get_emoji('gift')} <b>غنائم دریافتی:</b>\n"
             + "\n".join(rew_lines)
             + "</blockquote>\n\n"
-            f"🔓 <b>طبقه <code>{res['next_floor']}</code> باز شد!</b>"
+            + ("🏆 <b>برج موگن رو کامل فتح کردی!</b>" if mugen_tower.tower_done(res["next_floor"])
+               else f"🔓 <b>طبقه <code>{res['next_floor']}</code> باز شد!</b>")
         )
     else:
         text = (
@@ -213,11 +225,7 @@ async def mugen_lb_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await query.answer()
 
     def _get_lb():
-        return list(
-            User.objects.filter(mugen_tower_floor__gt=1)
-            .order_by("-mugen_tower_floor")[:15]
-            .values("id", "username", "first_name", "lab_name", "mugen_tower_floor")
-        )
+        return mugen_tower.top_climbers(15)
 
     lb = await run_db(_get_lb)
     lines = [f"{get_emoji('trophy')} <b>برترین فاتحان برج موگن (無限の塔)</b>", "━━━━━━━━━━━━━━━━━━━━"]
@@ -228,7 +236,8 @@ async def mugen_lb_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         for idx, u in enumerate(lb, start=1):
             name = html.escape(u["lab_name"] or u["first_name"] or u["username"] or f"Player {u['id']}")
             badge = medals[idx - 1] if idx <= 3 else f"{idx}."
-            lines.append(f"{badge} <b>{name}</b>\n  {get_emoji('mugen')} طبقه: <code>{u['mugen_tower_floor']}</code>")
+            done = " (فتح کامل)" if u.get("done") else ""
+            lines.append(f"{badge} <b>{name}</b>\n  {get_emoji('mugen')} طبقه: <code>{u['mugen_tower_floor']}</code>{done}")
 
     kb = InlineKeyboardMarkup([
         [back_btn("mugen:panel", "بازگشت به برج")],

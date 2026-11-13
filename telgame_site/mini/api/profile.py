@@ -49,7 +49,7 @@ def me(request, user):
         "hall_level": main_hall_level(user),
         "creatures": counts["creatures"],
         "equipment": counts["equipment"],
-        "tower_floor": max(0, (user.mugen_tower_floor or 1) - 1),
+        "tower_floor": min(max(0, (user.mugen_tower_floor or 1) - 1), 100),  # tower ends at 100
         "streak": user.login_streak,
         "subscription": sub.get("tier_name") if sub.get("is_active") else None,
         "active": creature_dict(active) if active else None,
