@@ -1137,14 +1137,17 @@ def war_creature_pick(user: User) -> dict:
     from bio_lab.models import BreedingJob, Creature
     from game import research
     from game.creature import creature_power
-    from game.equipment import get_equipped_items
+    from game.equipment import equipped_items_map
 
     creatures = list(Creature.objects.filter(owner=user))
     if not creatures:
         return {"chosen": None, "chosen_power": 0, "strongest": None,
                 "strongest_power": 0, "strongest_in_cave": False}
     research.attach_research(user, creatures)  # include lab buffs in the power ranking
-    powers = {c.id: creature_power(c, get_equipped_items(c)) for c in creatures}
+    # ONE gear query for the whole roster: a gear query per kaiju (13.7k for one player)
+    # pinned the bot at 100% CPU on every «شرکت در جنگ» (2026-11-13)
+    gear = equipped_items_map(creatures)
+    powers = {c.id: creature_power(c, gear.get(c.pk, [])) for c in creatures}
     creatures.sort(key=lambda c: powers[c.id], reverse=True)
     cave_ids: set[int] = set()
     for j in BreedingJob.objects.filter(owner=user):

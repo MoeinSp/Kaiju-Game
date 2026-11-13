@@ -118,9 +118,12 @@ def team_choices(user: User, limit: int = 3) -> list[Creature]:
             return picked[:limit]
     # no team set → the strongest few by base-stat sum (cheap proxy; the caller shows
     # the exact power on each button)
-    creatures = list(Creature.objects.filter(owner=user))
-    creatures.sort(key=lambda c: c.base_hp + c.base_atk + c.base_def + c.base_spd, reverse=True)
-    return creatures[:limit]
+    from django.db.models import F
+
+    # sorted in the DB: one player has 13.7k kaiju, loading them all for 3 was wasteful
+    return list(Creature.objects.filter(owner=user)
+                .annotate(_base=F("base_hp") + F("base_atk") + F("base_def") + F("base_spd"))
+                .order_by("-_base", "id")[:limit])
 
 
 def touch_membership(group: Group, user: User) -> None:
