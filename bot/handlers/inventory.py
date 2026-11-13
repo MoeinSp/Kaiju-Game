@@ -8,12 +8,11 @@ from bio_lab.repository import get_active_creature, get_or_create_user
 from bot.buttons import BUILD, CONFIRM, DANGER, LIST, NAV, SHOP, back_btn, back_only_keyboard, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import constants
-from game.blacksmith import forge, forge_preview, forgeable_items
+from game.blacksmith import forge, forge_preview
 from game.creature import GameError
 from game.emoji import get_emoji
 from game.equipment import (
     equip_item,
-    list_inventory,
     same_slot_candidates,
     unequip_item,
     upgrade_item,
@@ -56,13 +55,43 @@ PAGE_SIZE = 10
 _RARITY_RANK = {r: i for i, r in enumerate(constants.RARITY_ORDER)}
 
 
+def _slot_counts(qs) -> dict:
+    """{slot: n} counted in the DB."""
+    from django.db.models import Count
+
+    counts = {slot: 0 for slot in constants.EQUIPMENT_SLOTS}
+    for slot, n in qs.order_by().values("slot").annotate(n=Count("id")).values_list("slot", "n"):
+        counts[slot] = n
+    return counts
+
+
+def _gear_page(qs, filt: str, page) -> tuple[dict, list, int, int]:
+    """({rarity: n}, one page of items best-first, page, total_pages) — all in the DB.
+    These screens used to load the player's whole bag; one player has 76k pieces and
+    every open pinned the bot at 100% CPU (2026-11-13)."""
+    from django.db.models import Case, Count, IntegerField, Value, When
+
+    counts = dict(qs.order_by().values("rarity").annotate(n=Count("id")).values_list("rarity", "n"))
+    n = sum(counts.values()) if filt == "all" else counts.get(filt, 0)
+    total_pages = max(1, (n + PAGE_SIZE - 1) // PAGE_SIZE)
+    page = max(0, min(int(page), total_pages - 1))
+    shown = qs if filt == "all" else qs.filter(rarity=filt)
+    rank = Case(*[When(rarity=r, then=Value(i)) for r, i in _RARITY_RANK.items()],
+                default=Value(0), output_field=IntegerField())
+    chunk = list(shown.annotate(_rk=rank).order_by("-_rk", "-level", "id")
+                 [page * PAGE_SIZE:(page + 1) * PAGE_SIZE])
+    return counts, chunk, page, total_pages
+
+
+def _forgeable_qs(user):
+    from game.blacksmith import equipment_cap
+
+    return Equipment.objects.filter(owner=user, level__lt=equipment_cap(user))
+
+
 def _inv_home_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
-    items = list_inventory(user)
-    counts = {slot: 0 for slot in constants.EQUIPMENT_SLOTS}
-    for i in items:
-        counts[i.slot] = counts.get(i.slot, 0) + 1
-    return counts
+    return _slot_counts(Equipment.objects.filter(owner=user))
 
 
 def _inv_home_render(counts: dict, is_group: bool = False) -> tuple[str, InlineKeyboardMarkup]:
@@ -178,21 +207,15 @@ async def recycle_do_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
-def _inv_cat_sync(tg_user, slot):
+def _inv_cat_sync(tg_user, slot, filt, page):
     user, _ = get_or_create_user(tg_user)
-    items = [i for i in list_inventory(user) if i.slot == slot]
-    # rarity (desc) then level (desc), so the best gear is on top
-    items.sort(key=lambda i: (_RARITY_RANK.get(i.rarity, 0), i.level), reverse=True)
-    return items
+    return _gear_page(Equipment.objects.filter(owner=user, slot=slot), filt, page)
 
 
-def _rarity_tab_rows(slot, items, filt):
+def _rarity_tab_rows(slot, counts, filt):
     """Rarity filter tabs for one equipment slot — only rarities the player owns here,
     plus «همه», exactly like the collection picker so gear is split by نایابی."""
-    counts = {}
-    for i in items:
-        counts[i.rarity] = counts.get(i.rarity, 0) + 1
-    tabs = [btn(("• " if filt == "all" else "") + f"همه ({len(items)})",
+    tabs = [btn(("• " if filt == "all" else "") + f"همه ({sum(counts.values())})",
                 style=NAV, callback_data=f"inv_cat:{slot}:all:0")]
     for r in reversed(constants.RARITY_ORDER):
         if counts.get(r):
@@ -202,28 +225,21 @@ def _rarity_tab_rows(slot, items, filt):
     return [tabs[i:i + 3] for i in range(0, len(tabs), 3)]
 
 
-def _inv_cat_render(slot, items: list[Equipment], filt: str, page: int) -> tuple[str, InlineKeyboardMarkup]:
+def _inv_cat_render(slot, counts: dict, chunk: list[Equipment], filt: str, page: int,
+                    total_pages: int) -> tuple[str, InlineKeyboardMarkup]:
     label = constants.EQUIPMENT_SLOT_LABELS[slot]
     lines = [f"{get_emoji('diamond_box')} <b>{label}</b>\n━━━━━━━━━━━━━━━━━━━━"]
-    if not items:
+    if not counts:
         lines.append("<i>هیچ تجهیزاتی در این جایگاه نداری.</i>")
         return "\n".join(lines), InlineKeyboardMarkup(
             [[back_btn("menu:inventory", "بازگشت به دسته‌ها")]]
         )
 
-    # filter by rarity if requested
-    visible = [i for i in items if filt == "all" or i.rarity == filt]
-
-    # paginate the visible subset
-    total_pages = max(1, (len(visible) + PAGE_SIZE - 1) // PAGE_SIZE)
-    page = max(0, min(page, total_pages - 1))
-    chunk = visible[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
-
     for item in chunk:
         lines.append(_item_line(item))
         lines.append("")
 
-    tab_rows = _rarity_tab_rows(slot, items, filt)
+    tab_rows = _rarity_tab_rows(slot, counts, filt)
     pick_rows = [
         [btn(f"{item.name} +{item.level}", style=NAV, callback_data=f"inv_pick:{item.id}")]
         for item in chunk
@@ -268,9 +284,9 @@ async def inventory_cat_callback(update: Update, context: ContextTypes.DEFAULT_T
     else:
         _, slot, page = parts
         filt = "all"
-    items = await run_db(_inv_cat_sync, update.effective_user, slot)
+    counts, chunk, page, total_pages = await run_db(_inv_cat_sync, update.effective_user, slot, filt, int(page))
     await query.answer()
-    text, keyboard = _inv_cat_render(slot, items, filt, int(page))
+    text, keyboard = _inv_cat_render(slot, counts, chunk, filt, page, total_pages)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -471,11 +487,7 @@ async def upgrade_item_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 def _forge_home_sync(tg_user):
     user, _ = get_or_create_user(tg_user)
-    items = forgeable_items(user)
-    counts = {slot: 0 for slot in constants.EQUIPMENT_SLOTS}
-    for i in items:
-        counts[i.slot] = counts.get(i.slot, 0) + 1
-    return user, counts
+    return user, _slot_counts(_forgeable_qs(user))
 
 
 def _forge_home_render(user, counts: dict) -> tuple[str, InlineKeyboardMarkup]:
@@ -503,24 +515,21 @@ def _forge_home_render(user, counts: dict) -> tuple[str, InlineKeyboardMarkup]:
     return text, InlineKeyboardMarkup(rows)
 
 
-def _forge_cat_sync(tg_user, slot):
+def _forge_cat_sync(tg_user, slot, filt, page):
     user, _ = get_or_create_user(tg_user)
-    items = [i for i in forgeable_items(user) if i.slot == slot]
-    return user, items
+    return (user, *_gear_page(_forgeable_qs(user).filter(slot=slot), filt, page))
 
 
-def _forge_cat_render(user, slot, items, filt: str, page: int) -> tuple[str, InlineKeyboardMarkup]:
+def _forge_cat_render(user, slot, counts: dict, chunk: list, filt: str, page: int,
+                      total_pages: int) -> tuple[str, InlineKeyboardMarkup]:
     label = constants.EQUIPMENT_SLOT_LABELS[slot]
-    if not items:
+    if not counts:
         return (
             f"⚒ <b>آهنگری — {label}</b>\n\nهیچ موردی برای ارتقا توی این دسته نداری.",
             InlineKeyboardMarkup([[back_btn("menu:blacksmith", "بازگشت به آهنگری")]]),
         )
     # rarity tabs (only what the player owns in this slot) + «همه», like the collection
-    counts = {}
-    for i in items:
-        counts[i.rarity] = counts.get(i.rarity, 0) + 1
-    tabs = [btn(("• " if filt == "all" else "") + f"همه ({len(items)})",
+    tabs = [btn(("• " if filt == "all" else "") + f"همه ({sum(counts.values())})",
                 style=NAV, callback_data=f"forge_cat:{slot}:all:0")]
     for r in reversed(constants.RARITY_ORDER):
         if counts.get(r):
@@ -528,10 +537,6 @@ def _forge_cat_render(user, slot, items, filt: str, page: int) -> tuple[str, Inl
             tabs.append(btn(f"{mark}{constants.RARITY_LABELS[r].split()[-1]} ({counts[r]})", emoji_key=f"btn_rarity_{r}",
                             style=NAV, callback_data=f"forge_cat:{slot}:{r}:0"))
     rows = [tabs[i:i + 3] for i in range(0, len(tabs), 3)]
-    shown = items if filt == "all" else [i for i in items if i.rarity == filt]
-    total_pages = max(1, (len(shown) + PAGE_SIZE - 1) // PAGE_SIZE)
-    page = max(0, min(page, total_pages - 1))
-    chunk = shown[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
     for i in chunk:
         rows.append([btn(
             f"{constants.RARITY_LABELS[i.rarity]} {i.name} +{i.level}",
@@ -567,9 +572,9 @@ async def forge_cat_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     else:  # old form from a stale keyboard: forge_cat:<slot>:<page>
         _, slot, page = parts
         filt = "all"
-    user, items = await run_db(_forge_cat_sync, update.effective_user, slot)
+    user, counts, chunk, page, total_pages = await run_db(_forge_cat_sync, update.effective_user, slot, filt, int(page))
     await query.answer()
-    text, keyboard = _forge_cat_render(user, slot, items, filt, int(page))
+    text, keyboard = _forge_cat_render(user, slot, counts, chunk, filt, page, total_pages)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 

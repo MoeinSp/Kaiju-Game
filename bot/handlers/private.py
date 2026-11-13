@@ -817,6 +817,22 @@ async def equip_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 _EQUIP_SLOT_PAGE = 8
 
 
+def _equip_slot_sync(tg_user, creature_id, slot, filt, page):
+    """The slot row (counts only) plus ONE page of fitting gear, paged in the DB."""
+    from game.equipment import slot_candidates
+
+    user, creature, slots = _equip_panel_sync(tg_user, creature_id)
+    row = next((r for r in slots if r["slot"] == slot), None)
+    if row is None:
+        return user, creature, None, [], 0, 1
+    rarity = None if filt == "all" else filt
+    n = len(row["candidates"]) if rarity is None else row["rarity_counts"].get(rarity, 0)
+    total_pages = max(1, (n + _EQUIP_SLOT_PAGE - 1) // _EQUIP_SLOT_PAGE)
+    page = max(0, min(page, total_pages - 1))
+    chunk = slot_candidates(user, creature, slot, rarity, page * _EQUIP_SLOT_PAGE, _EQUIP_SLOT_PAGE)
+    return user, creature, row, chunk, page, total_pages
+
+
 async def equip_slot_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """The candidates for one slot — split by rarity with tabs and paginated (like the
     blacksmith) — plus a way to strip whatever's in it."""
@@ -828,11 +844,11 @@ async def equip_slot_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     filt = parts[3] if len(parts) >= 5 else "all"
     page = int(parts[4]) if len(parts) >= 5 else 0
     try:
-        user, creature, slots = await run_db(_equip_panel_sync, update.effective_user, creature_id)
+        user, creature, row, chunk, page, total_pages = await run_db(
+            _equip_slot_sync, update.effective_user, creature_id, slot, filt, page)
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
         return
-    row = next((r for r in slots if r["slot"] == slot), None)
     if row is None:
         await query.answer("این جایگاه وجود نداره.", show_alert=True)
         return
@@ -850,9 +866,7 @@ async def equip_slot_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     rows = []
     if candidates:
         # rarity tabs (only rarities present among the candidates) + «همه»
-        counts = {}
-        for it in candidates:
-            counts[it.rarity] = counts.get(it.rarity, 0) + 1
+        counts = row["rarity_counts"]
         tabs = [btn(("• " if filt == "all" else "") + f"همه ({len(candidates)})",
                     style=NAV, callback_data=f"upg_slot:{creature_id}:{slot}:all:0")]
         for r in reversed(constants.RARITY_ORDER):
@@ -862,10 +876,6 @@ async def equip_slot_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                                 style=NAV, callback_data=f"upg_slot:{creature_id}:{slot}:{r}:0"))
         rows += [tabs[i:i + 3] for i in range(0, len(tabs), 3)]
 
-        shown = candidates if filt == "all" else [it for it in candidates if it.rarity == filt]
-        total_pages = max(1, (len(shown) + _EQUIP_SLOT_PAGE - 1) // _EQUIP_SLOT_PAGE)
-        page = max(0, min(page, total_pages - 1))
-        chunk = shown[page * _EQUIP_SLOT_PAGE : (page + 1) * _EQUIP_SLOT_PAGE]
         lines.append("نایابی رو انتخاب کن، بعد آیتم رو بذار توش:")
         for item in chunk:
             worn = f" (روی {item.equipped_on.name})" if item.equipped_on_id else ""

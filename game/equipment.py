@@ -1,6 +1,7 @@
 import random
 
 from django.db import transaction
+from django.db.models import Count
 
 from bio_lab.models import Creature, Equipment, User
 from bio_lab.repository import lock_row
@@ -104,33 +105,71 @@ def slot_loadout(user: User, creature: Creature) -> list[dict]:
     slot (that's `item`), but does include gear equipped on a *different*
     creature — equip_item moves it, which is usually what a player means when
     they pick it, and hiding it would look like the item had vanished.
+
+    `candidates` is only a COUNT (len()/bool() work, iterating doesn't): the items
+    themselves used to be loaded here on every upgrade / equipment tap, and a player
+    with 76k pieces of gear pinned the bot at 100% CPU (2026-11-13). The one screen
+    that lists them pages through the DB with slot_candidates(). `rarity_counts` is
+    {rarity: n} for that screen's tabs.
     """
     if creature.pk is None:
         return []
 
     equipped = {i.slot: i for i in Equipment.objects.filter(equipped_on=creature)}
-    pool: dict[str, list[Equipment]] = {}
-    for item in (
+    counts: dict[str, dict[str, int]] = {}
+    for slot, rarity, n in (
         Equipment.objects.filter(owner=user)
         .exclude(equipped_on=creature)
-        .select_related("equipped_on")
-        .order_by("slot", "-level")
+        .order_by()
+        .values("slot", "rarity")
+        .annotate(n=Count("id"))
+        .values_list("slot", "rarity", "n")
     ):
-        pool.setdefault(item.slot, []).append(item)
+        counts.setdefault(slot, {})[rarity] = n
 
     rows = []
     for slot in constants.EQUIPMENT_SLOTS:
         item = equipped.get(slot)
+        by_rarity = counts.get(slot, {})
         rows.append(
             {
                 "slot": slot,
                 "label": constants.EQUIPMENT_SLOT_LABELS[slot],
                 "item": item,
                 "is_empty": item is None,
-                "candidates": pool.get(slot, []),
+                "candidates": SpareCount(sum(by_rarity.values())),
+                "rarity_counts": by_rarity,
             }
         )
     return rows
+
+
+class SpareCount:
+    """How many spare pieces fit a slot, without loading them — len() and bool() only."""
+
+    __slots__ = ("n",)
+
+    def __init__(self, n: int):
+        self.n = int(n)
+
+    def __len__(self) -> int:
+        return self.n
+
+    def __bool__(self) -> bool:
+        return self.n > 0
+
+    def __repr__(self) -> str:
+        return f"SpareCount({self.n})"
+
+
+def slot_candidates(user: User, creature: Creature, slot: str, rarity: str | None = None,
+                    offset: int = 0, limit: int = 8) -> list[Equipment]:
+    """One page of the gear that fits `slot` (best level first) — straight from the DB,
+    so a huge bag costs the same as a small one."""
+    qs = Equipment.objects.filter(owner=user, slot=slot).exclude(equipped_on=creature)
+    if rarity:
+        qs = qs.filter(rarity=rarity)
+    return list(qs.select_related("equipped_on").order_by("-level", "id")[offset:offset + limit])
 
 
 def equipment_bonus(item: Equipment) -> dict[str, float]:
