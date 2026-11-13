@@ -10,7 +10,7 @@ import os
 
 from django.utils import timezone
 from telegram import InlineKeyboardMarkup, Update
-from telegram.error import TelegramError
+from telegram.error import BadRequest, TelegramError
 from telegram.ext import CallbackQueryHandler, ContextTypes
 
 from bio_lab.models import GroupDrop
@@ -130,9 +130,13 @@ async def drops_job(context: ContextTypes.DEFAULT_TYPE) -> None:
                         msg = await context.bot.send_photo(
                             chat_id=d["group_id"], photo=cached_fid, caption=text, parse_mode="HTML", reply_markup=keyboard
                         )
-                    except Exception:
-                        invalidate_cached_file_id(photo_path)
+                    except BadRequest as exc:
+                        if "file" not in str(exc).lower():
+                            raise   # chat gone etc. — not the picture's fault
+                        invalidate_cached_file_id(photo_path)   # the file_id was refused: re-upload
                         msg = None
+                    # flood / timeout go to the TelegramError handler below untouched —
+                    # dropping a good file_id and re-uploading only made a flood worse
                 if msg is None:
                     with open(photo_path, "rb") as f:
                         msg = await context.bot.send_photo(
