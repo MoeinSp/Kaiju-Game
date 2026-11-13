@@ -53,10 +53,12 @@ async def run_db(func, *args, **kwargs):
     return await sync_to_async(_run_db_sync, thread_sensitive=False)(func, args, kwargs)
 
 
+import atexit
 import json
 import logging
 import os
 import re
+import threading
 from pathlib import Path
 from telegram import InputMediaPhoto
 
@@ -137,8 +139,21 @@ def _to_rel_asset_key(path: str) -> str:
 # effect. This second layer lives on the mounted backups volume, so it survives deploys.
 # Each entry also remembers the file's size: if the artwork at that path is regenerated,
 # the size no longer matches and the stale file_id is ignored instead of showing old art.
+#
+# Production stall 2026-11-13: the file had grown to 42k entries / 6MB (one-off loot-box
+# composites never reused) and EVERY store/invalidate re-read and re-wrote all of it on the
+# event loop — the bot sat at 100% CPU and replied minutes late. Now: the file is read once,
+# writes are batched on a background timer (at most every _RUNTIME_SAVE_EVERY seconds),
+# one-off pictures aren't remembered, and the map is an LRU capped at _RUNTIME_MAX.
 _RUNTIME_IDS: dict[str, list] = {}
+_RUNTIME_OTHER: dict = {}          # other bots' sections of the shared file, written back as-is
 _RUNTIME_LOADED = False
+_RUNTIME_MAX = 8000
+_RUNTIME_SAVE_EVERY = 30.0
+_RUNTIME_LOCK = threading.Lock()
+_RUNTIME_TIMER: threading.Timer | None = None
+# composites made for one moment (a loot-box opening): their file_id is never asked for again
+_RUNTIME_SKIP = ("cache/loot_batch_",)
 
 
 def _runtime_cache_file() -> Path | None:
@@ -149,8 +164,15 @@ def _runtime_cache_file() -> Path | None:
     return d / "telegram_file_ids_runtime.json" if d.is_dir() else None
 
 
+def _trim_runtime_locked() -> None:
+    overflow = len(_RUNTIME_IDS) - _RUNTIME_MAX
+    if overflow > 0:
+        for key in list(_RUNTIME_IDS)[:overflow]:   # oldest first (insertion order = LRU order)
+            _RUNTIME_IDS.pop(key, None)
+
+
 def _load_runtime_ids() -> None:
-    global _RUNTIME_IDS, _RUNTIME_LOADED
+    global _RUNTIME_IDS, _RUNTIME_OTHER, _RUNTIME_LOADED
     if _RUNTIME_LOADED:
         return
     _RUNTIME_LOADED = True
@@ -160,35 +182,64 @@ def _load_runtime_ids() -> None:
     try:
         with open(f, "r", encoding="utf-8") as fh:
             data = json.load(fh)
-        mine = data.get(_get_cache_token_prefix()) if isinstance(data, dict) else None
+        if not isinstance(data, dict):
+            return
+        prefix = _get_cache_token_prefix()
+        mine = data.pop(prefix, None)
+        _RUNTIME_OTHER = data
         if isinstance(mine, dict):
-            _RUNTIME_IDS = {k: v for k, v in mine.items() if isinstance(v, list) and len(v) == 2}
+            kept = {k: v for k, v in mine.items()
+                    if isinstance(v, list) and len(v) == 2 and not k.startswith(_RUNTIME_SKIP)}
+            with _RUNTIME_LOCK:
+                _RUNTIME_IDS = kept
+                _trim_runtime_locked()
+            if len(_RUNTIME_IDS) != len(mine):
+                _save_runtime_ids()   # write the slimmed file once
     except Exception as e:  # noqa: BLE001 — a corrupt cache must never break sending
         logger.warning("Failed to load runtime file_id cache: %s", e)
         _RUNTIME_IDS = {}
 
 
-def _save_runtime_ids() -> None:
+def _flush_runtime_ids() -> None:
+    """Write the runtime cache now (timer thread / exit). Never on the event loop."""
+    global _RUNTIME_TIMER
     f = _runtime_cache_file()
+    with _RUNTIME_LOCK:
+        _RUNTIME_TIMER = None
+        snapshot = dict(_RUNTIME_IDS)
     if f is None:
         return
     try:
-        data = {}
-        if f.exists():
-            try:
-                with open(f, "r", encoding="utf-8") as fh:
-                    raw = json.load(fh)
-                if isinstance(raw, dict):
-                    data = raw
-            except Exception:  # noqa: BLE001
-                data = {}
-        data[_get_cache_token_prefix()] = _RUNTIME_IDS
+        data = dict(_RUNTIME_OTHER)
+        data[_get_cache_token_prefix()] = snapshot
         tmp = f.with_suffix(".tmp")
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(data, fh, ensure_ascii=False)
         os.replace(tmp, f)  # atomic: a crash mid-write can't leave a half file
     except Exception as e:  # noqa: BLE001
         logger.warning("Failed to save runtime file_id cache: %s", e)
+
+
+def _save_runtime_ids() -> None:
+    """Schedule a write; many stores within the window cost one write."""
+    global _RUNTIME_TIMER
+    if _runtime_cache_file() is None:
+        return
+    with _RUNTIME_LOCK:
+        if _RUNTIME_TIMER is not None:
+            return
+        _RUNTIME_TIMER = threading.Timer(_RUNTIME_SAVE_EVERY, _flush_runtime_ids)
+        _RUNTIME_TIMER.daemon = True
+        _RUNTIME_TIMER.start()
+
+
+def _flush_runtime_at_exit() -> None:
+    if _RUNTIME_TIMER is not None:
+        _RUNTIME_TIMER.cancel()
+        _flush_runtime_ids()
+
+
+atexit.register(_flush_runtime_at_exit)
 
 
 def _file_sig(path: str) -> int:
@@ -204,6 +255,9 @@ def get_cached_file_id(path: str) -> str | None:
     key = _to_rel_asset_key(path)
     entry = _RUNTIME_IDS.get(key)
     if entry is not None:
+        with _RUNTIME_LOCK:   # LRU: a used picture moves to the young end
+            if _RUNTIME_IDS.pop(key, None) is not None:
+                _RUNTIME_IDS[key] = entry
         # a size mismatch means the picture at this path was replaced — re-upload it
         # (and don't fall back to the bundled id either, which would be just as stale)
         return entry[0] if entry[1] == _file_sig(path) else None
@@ -217,9 +271,14 @@ def store_cached_file_id(path: str, file_id: str) -> None:
     _load_runtime_ids()
     key = _to_rel_asset_key(path)
     if _runtime_cache_file() is not None:
+        if key.startswith(_RUNTIME_SKIP):
+            return
         entry = [file_id, _file_sig(path)]
         if _RUNTIME_IDS.get(key) != entry:
-            _RUNTIME_IDS[key] = entry
+            with _RUNTIME_LOCK:
+                _RUNTIME_IDS.pop(key, None)
+                _RUNTIME_IDS[key] = entry
+                _trim_runtime_locked()
             _save_runtime_ids()
         return
     # no persistent volume (local dev) → the original in-image cache
@@ -233,7 +292,8 @@ def invalidate_cached_file_id(path: str) -> None:
     _load_runtime_ids()
     key = _to_rel_asset_key(path)
     if key in _RUNTIME_IDS:
-        del _RUNTIME_IDS[key]
+        with _RUNTIME_LOCK:
+            _RUNTIME_IDS.pop(key, None)
         _save_runtime_ids()
     if key in _FILE_ID_CACHE:
         del _FILE_ID_CACHE[key]

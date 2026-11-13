@@ -1252,12 +1252,13 @@ def _card_sync(tg_user, chat, action):
 
         data["creatures"] = list_creatures(user)
     elif action == "select":
-        from bot.handlers.group import _creature_power
+        from bot.handlers.group import creature_powers
         from game.creature import list_creatures
 
-        creatures = sorted(list_creatures(user), key=_creature_power, reverse=True)
-        data["creatures"] = creatures
-        data["powers"] = {c.id: _creature_power(c) for c in creatures}
+        creatures = list(list_creatures(user))
+        powers = creature_powers(creatures)   # one query, not two per kaiju
+        data["creatures"] = sorted(creatures, key=lambda c: powers[c.id], reverse=True)
+        data["powers"] = powers
     elif action == "lab":
         from bio_lab.models import Creature
 
@@ -1349,7 +1350,7 @@ def _card_sync(tg_user, chat, action):
         data["max_jobs"] = breeding_mod.max_cave_jobs(user)
         data["egg_count"] = len(breeding_mod.active_eggs(user))
     elif action == "leaderboard":
-        from bot.handlers.group import _creature_power, group_member_creatures
+        from bot.handlers.group import creature_powers, group_member_creatures
         from game import research
 
         if group is None:
@@ -1361,7 +1362,7 @@ def _card_sync(tg_user, chat, action):
             # without this, foreign owners' research was silently dropped on a cold miss.
             research.attach_research_multi(members)
             # everyone, strongest first: the caller drops anyone who has left (group.drop_departed)
-            powers = {c.id: _creature_power(c) for c in members}
+            powers = creature_powers(members)
             data["ranked"] = sorted(members, key=lambda c: powers[c.id], reverse=True)
             data["powers"] = powers
     return data

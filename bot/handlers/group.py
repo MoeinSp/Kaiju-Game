@@ -1674,9 +1674,11 @@ def _gatk_team_choices_sync(attacker_id):
     from bot.handlers.arena import ARENA_TEAM_SIZE
 
     out = []
-    for c in team_choices(attacker, limit=ARENA_TEAM_SIZE):
+    team = list(team_choices(attacker, limit=ARENA_TEAM_SIZE))
+    powers = creature_powers(team)
+    for c in team:
         busy = (not c.is_active) and creature_status(attacker, c) is not None
-        out.append((c.id, c.name, c.element, _creature_power(c), c.is_active, busy))
+        out.append((c.id, c.name, c.element, powers[c.id], c.is_active, busy))
     return out
 
 
@@ -2077,6 +2079,17 @@ def _creature_power(c: Creature) -> int:
     return creature_power(c, get_equipped_items(c))
 
 
+def creature_powers(creatures) -> dict[int, int]:
+    """_creature_power() for MANY creatures with ONE equipment query → {creature_id: power}.
+    Group tables and pickers called _creature_power per kaiju — a query each, hundreds
+    per render — which kept the DB threads busy under load (2026-11-13 stall)."""
+    from game.creature import creature_power
+    from game.equipment import equipped_items_map
+
+    gear = equipped_items_map(creatures)
+    return {c.id: creature_power(c, gear.get(c.pk, [])) for c in creatures}
+
+
 # «is this player still in the group?» answers from getChatMember, per (chat, user), for a while
 _PRESENT_TTL = 3 * 3600
 _present_cache: dict[tuple[int, int], tuple[float, bool]] = {}
@@ -2141,7 +2154,8 @@ def _sweep_targets_sync() -> list[tuple[int, str, list]]:
     out = []
     for g in Group.objects.filter(id__in=list(ids)):
         members = group_member_creatures(g)
-        out.append((g.id, g.title or "", sorted(members, key=_creature_power, reverse=True)))
+        powers = creature_powers(members)
+        out.append((g.id, g.title or "", sorted(members, key=lambda c: powers[c.id], reverse=True)))
     return out
 
 
@@ -2171,7 +2185,8 @@ def _leaderboard_sync(chat, tg_user):
     # everyone, strongest first: drop_departed() skips those who have left the group
     # pair each with its (gear-inclusive) power now, in sync context, so the async
     # render never has to touch the DB again
-    powered = [(c, _creature_power(c)) for c in members]
+    powers = creature_powers(members)
+    powered = [(c, powers[c.id]) for c in members]
     return sorted(powered, key=lambda cp: cp[1], reverse=True)
 
 
