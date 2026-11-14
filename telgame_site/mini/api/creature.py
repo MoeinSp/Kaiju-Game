@@ -342,23 +342,46 @@ def rename(request, user, data):
 
 
 # ── equipment on a creature (bot: equip_panel_* / equip_slot_callback) ────────
-def _rank_slot(creature, others: list, candidates: list) -> list[tuple[int, Equipment]]:
-    """[(the creature's power wearing it, piece)] — best for THIS creature first, spare
-    pieces before ones another creature wears. `creature_power` only reads a piece through
-    `equipment_bonus`, so pieces with an identical bonus share one calculation (a big bag
-    has ~2,000 pieces but only a few hundred distinct bonuses)."""
-    from game.creature import creature_power
-    from game.equipment import equipment_bonus
+def _slot_page(creature, others: list, slot: str, rarity: str, skip: int) -> tuple[list, int]:
+    """([(the creature's power wearing it, piece)], how many pieces fit) — ONE page, best
+    for THIS creature first, spare pieces before ones another creature wears.
 
-    memo: dict = {}
-    ranked = []
-    for cand in candidates:
-        key = tuple(sorted(equipment_bonus(cand).items()))
-        if key not in memo:
-            memo[key] = creature_power(creature, others + [cand])
-        ranked.append((memo[key], cand))
-    ranked.sort(key=lambda t: (-t[0], t[1].equipped_on_id is not None, t[1].id))
-    return ranked
+    Never loads the whole bag (slot_loadout only COUNTS since the 2026-11-13 huge-bag fix;
+    a player has 76k pieces). A piece's effect is fixed by (slot, rarity, level), so the DB
+    groups the slot's pieces by (rarity, level) — a few dozen rows — the power is worked out
+    once per group on an unsaved piece, the groups are sorted by it, and only the pieces of
+    the groups this page touches are read."""
+    from django.db.models import Count, F, Q
+
+    from game.creature import creature_power
+
+    qs = Equipment.objects.filter(owner_id=creature.owner_id, slot=slot).exclude(equipped_on=creature)
+    if rarity:
+        qs = qs.filter(rarity=rarity)
+    # groups that give the same power share a bucket, so ties order exactly like before:
+    # spare pieces first, then by id
+    buckets: dict[int, list] = {}
+    for r, lvl, n in qs.order_by().values("rarity", "level").annotate(n=Count("id")).values_list("rarity", "level", "n"):
+        power = creature_power(creature, others + [Equipment(slot=slot, rarity=r, level=lvl)])
+        buckets.setdefault(power, []).append((r, lvl, n))
+    total = sum(n for groups in buckets.values() for _r, _l, n in groups)
+
+    page, pos, end = [], 0, skip + GEAR_PAGE
+    for power in sorted(buckets, reverse=True):
+        if pos >= end:
+            break
+        groups = buckets[power]
+        n = sum(g[2] for g in groups)
+        lo, hi = max(skip - pos, 0), min(end - pos, n)
+        if lo < hi:
+            match = Q()
+            for r, lvl, _n in groups:
+                match |= Q(rarity=r, level=lvl)
+            rows = (qs.filter(match).select_related("equipped_on")
+                    .order_by(F("equipped_on").asc(nulls_first=True), "id")[lo:hi])
+            page += [(power, piece) for piece in rows]
+        pos += n
+    return page, total
 
 
 def _slot_block(creature, worn: list, row: dict, skip: int = 0, rarity: str = "") -> dict:
@@ -370,18 +393,14 @@ def _slot_block(creature, worn: list, row: dict, skip: int = 0, rarity: str = ""
     if row["item"] is not None:
         item = _item_dict(row["item"])
         item["power_without"] = creature_power(creature, others)  # the creature's power if it's taken off
-    counts: dict = {}
-    for cand in row["candidates"]:
-        counts[cand.rarity] = counts.get(cand.rarity, 0) + 1
-    pool = [c for c in row["candidates"] if not rarity or c.rarity == rarity]
-    page = _rank_slot(creature, others, pool)[skip:skip + GEAR_PAGE]
+    page, total = _slot_page(creature, others, row["slot"], rarity, skip)
     candidates = []
     for power_after, cand in page:
         d = _item_dict(cand)
         d["power_after"] = power_after  # the creature's power wearing it
         candidates.append(d)
     return {"slot": row["slot"], "item": item, "candidates": candidates, "skip": skip, "rarity": rarity,
-            "total": len(pool), "all": len(row["candidates"]), "counts": counts}
+            "total": total, "all": len(row["candidates"]), "counts": dict(row["rarity_counts"])}
 
 
 def _gear_view(user: User, creature) -> dict:
