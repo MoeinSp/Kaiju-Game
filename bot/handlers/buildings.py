@@ -404,8 +404,8 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
     if building.building_type == "fusion_lab" and building.level > 0:
         rows.append([btn("تالار ادغام", emoji_key="btn_fusion", style=PRIMARY, callback_data="menu:fusion")])
     if building.building_type == "serum_lab" and building.level > 0:
-        rows.append([btn("آزمایشگاه سرم", emoji_key="btn_serums", style=PRIMARY, callback_data="sr:home"),
-                     btn("انبار", emoji_key="btn_backpack", style=SHOP, callback_data="bp:home")])
+        rows.append([btn("آزمایشگاه سرم", emoji_key="btn_serums", style=PRIMARY, callback_data="sr:home:b"),
+                     btn("انبار", emoji_key="btn_backpack", style=SHOP, callback_data="bp:home:b")])
     rows.append([back_btn("menu:buildings")])
     return InlineKeyboardMarkup(rows)
 

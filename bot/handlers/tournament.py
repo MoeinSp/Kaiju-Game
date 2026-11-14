@@ -184,6 +184,15 @@ async def tournament_open_callback(update: Update, context: ContextTypes.DEFAULT
         await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🎁 باز شد!")
+    if query.data.endswith(":bp"):   # «جعبه‌های جام» in «انبار» → back to «انبار»
+        from telegram import InlineKeyboardMarkup
+
+        from bot.buttons import back_btn
+        from bot.utils import send_screen
+
+        await send_screen(update, text, parse_mode="HTML",
+                          reply_markup=InlineKeyboardMarkup([[back_btn("bp:home", "انبار")]]))
+        return
     await _refresh(update, text)
 
 
@@ -280,7 +289,7 @@ def register(application) -> None:
     application.add_handler(CommandHandler("tournament", tournament_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(tournament_home_callback, pattern=r"^tour:home$"))
     application.add_handler(CallbackQueryHandler(tournament_help_callback, pattern=r"^tour:help$"))
-    application.add_handler(CallbackQueryHandler(tournament_open_callback, pattern=r"^tour:open$"))
+    application.add_handler(CallbackQueryHandler(tournament_open_callback, pattern=r"^tour:open(?::bp)?$"))
     application.add_handler(CallbackQueryHandler(tournament_join_callback, pattern=r"^tour:join$"))
     application.add_handler(CallbackQueryHandler(tournament_leave_callback, pattern=r"^tour:leave$"))
     application.add_handler(CallbackQueryHandler(tournament_pick_callback, pattern=r"^tour:pick:\d+$"))

@@ -383,7 +383,7 @@ def _decorate(item) -> dict:
         )
     elif marker == "serum_ready":
         from bot.buttons import CONFIRM
-        reply_markup = InlineKeyboardMarkup([[btn("آزمایشگاه سرم", emoji_key="btn_serums", style=CONFIRM, callback_data="sr:home")]])
+        reply_markup = InlineKeyboardMarkup([[btn("آزمایشگاه سرم", emoji_key="btn_serums", style=CONFIRM, callback_data="sr:home:m")]])
     elif marker == "arena_chest_ready":
         chest_id, tier = payload if isinstance(payload, (tuple, list)) else (payload, "silver")
         from bot.buttons import CONFIRM

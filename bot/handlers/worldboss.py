@@ -167,6 +167,7 @@ async def worldboss_open_callback(update: Update, context: ContextTypes.DEFAULT_
     """«باز کردن جعبه‌ها» — from the end-of-fight message or the boss screen."""
     query = update.callback_query
     ref = query.data.split(":")[2]
+    from_backpack = query.data.endswith(":bp")   # «جعبه‌های غول» in «انبار» → back to «انبار»
     try:
         results, data = await run_db(_open_sync, update.effective_user, ref)
     except GameError as exc:
@@ -175,12 +176,20 @@ async def worldboss_open_callback(update: Update, context: ContextTypes.DEFAULT_
     await query.answer("🎁 باز شد!")
     from bot.loot_text import chests_text
 
+    if from_backpack:
+        from telegram import InlineKeyboardMarkup
+
+        from bot.buttons import back_btn
+
+        await safe_edit_message_text(query, chests_text(results), parse_mode="HTML",
+                                     reply_markup=InlineKeyboardMarkup([[back_btn("bp:home", "انبار")]]))
+        return
     text, keyboard = _render(data, chests_text(results))
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def register(application) -> None:
-    application.add_handler(CallbackQueryHandler(worldboss_open_callback, pattern=r"^wboss:open:(all|\d+)$"))
+    application.add_handler(CallbackQueryHandler(worldboss_open_callback, pattern=r"^wboss:open:(all|\d+)(?::bp)?$"))
     application.add_handler(CommandHandler("boss", worldboss_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(worldboss_home_callback, pattern=r"^wboss:home$"))
     application.add_handler(CallbackQueryHandler(worldboss_hit_callback, pattern=r"^wboss:hit$"))

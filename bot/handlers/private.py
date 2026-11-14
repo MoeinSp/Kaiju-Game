@@ -1351,7 +1351,7 @@ def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=
     # Row 3: City — with «آزمایشگاه سرم» beside it once the player has built one (nothing otherwise)
     row3 = [btn("شهر", emoji_key="btn_hub_city", style=PRIMARY, callback_data="menu:hub_city")]
     if serum_lab or (today_state and today_state.get("serum_lab")):
-        row3.append(btn("آزمایشگاه سرم", emoji_key="btn_serums", style=CONFIRM, callback_data="sr:home"))
+        row3.append(btn("آزمایشگاه سرم", emoji_key="btn_serums", style=CONFIRM, callback_data="sr:home:m"))
     rows.append(row3)
     # the Mini App, alone on its own row (public since 2026-10-15, out of beta 2026-10-16).
     # Only ever in private chats — Telegram refuses web_app buttons in groups, and this

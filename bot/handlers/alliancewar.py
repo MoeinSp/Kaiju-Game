@@ -234,8 +234,8 @@ async def war_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer("🎁 باز شد!")
-    await send_screen(update, text, parse_mode="HTML",
-                      reply_markup=InlineKeyboardMarkup([[back_btn("ally_war1d", "جنگ یک‌روزه")]]))
+    back = back_btn("bp:home", "انبار") if query.data.endswith(":bp") else back_btn("ally_war1d", "جنگ یک‌روزه")
+    await send_screen(update, text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup([[back]]))
 
 
 def _war1d_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
@@ -437,4 +437,4 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(own(war_start_confirm_callback), pattern=r"^ally_war_go$"))
     application.add_handler(CallbackQueryHandler(own(war_rally_callback), pattern=r"^ally_war_rally$"))
     application.add_handler(CallbackQueryHandler(own(war_rally_go_callback), pattern=r"^ally_war_rally_go$"))
-    application.add_handler(CallbackQueryHandler(own(war_open_callback), pattern=r"^ally_war_open$"))
+    application.add_handler(CallbackQueryHandler(own(war_open_callback), pattern=r"^ally_war_open(?::bp)?$"))

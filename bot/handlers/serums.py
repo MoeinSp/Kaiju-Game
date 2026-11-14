@@ -15,7 +15,9 @@ from telegram import InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, ContextTypes
 
 from bio_lab.repository import get_or_create_user
+from bot import nav
 from bot.buttons import BUILD, CONFIRM, DANGER, NAV, PRIMARY, SHOP, back_btn, btn
+from bot.nav import ORIGINS
 from bot.utils import run_db, safe_edit_message_text, send_screen
 from game import serums as SR
 from game.blackmarket import format_time_remaining as _left
@@ -147,7 +149,14 @@ def _lab_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     rows.append(manage)
     if not st.get("group"):
         rows.append([btn("اعلان آماده‌شدن: " + ("روشن" if st.get("notify") else "خاموش"), emoji_key="btn_notify", style=NAV, callback_data="sr:n")])
-        rows.append([btn("انبار", emoji_key="btn_backpack", style=SHOP, callback_data="bp:home"), back_btn("menu:buildings", "ساختمان‌ها")])
+        # back to wherever the lab was opened from (bot/nav.py); opened from «انبار», the
+        # back button IS the way to the backpack, so no second «انبار» button
+        back_cb, back_label = st.get("back") or ORIGINS["hub"]
+        if back_cb == "bp:home":
+            rows.append([back_btn("bp:home", "انبار")])
+        else:
+            rows.append([btn("انبار", emoji_key="btn_backpack", style=SHOP, callback_data="bp:home:sr"),
+                         back_btn(back_cb, back_label)])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -413,11 +422,14 @@ async def serum_lab(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     elif action == "xk":           # sr:xk:<kind>:<n>
         arg = int(parts[3])
     kind = parts[2] if len(parts) > 2 and parts[2] in SR.KINDS else None
+    if not _in_group(update):   # «sr:home:<origin>» / «menu:serums» / a typed word → where «بازگشت» goes
+        nav.remember(context, "serums", nav.origin_of(q.data if q else None, "sr:home", "serums"))
     if q and q.data.startswith("sr:"):   # «menu:serums» was answered by the menu router
         await q.answer()
     act = action if action in ("b", "u", "c", "x", "ug", "n", "dq", "dy", "dx", "dax", "fy", "xk", "xq") else ""
     st, note = await run_db(_lab_sync, update.effective_user, act, kind, arg)
     st["group"] = _in_group(update)
+    st["back"] = nav.back_of(context, "serums", "hub")
     if action in ("mini", "xk", "xq") or (st["group"] and action in ("fy", "dx", "dax")):
         text, kb = _mini_render(st, note)
     elif action in ("up", "ug"):
@@ -520,27 +532,32 @@ def _bp_sync(tg_user):
 
 
 def _bp_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
+    """Every box button carries «:bp», so the box screen comes back here, not to its own section."""
     lines = [f"{get_emoji('backpack')} <b>انبار</b>", _DIV, "<i>جعبه‌های جایزه‌ی باز نشده، کارت‌های سرعت و سرم‌هات.</i>", _DIV]
     rows = []
     if not (v["boss"] or v["cup"] or v["war"] or v["offer"]):
         lines.append("📦 جعبه‌ی جایزه‌ی باز نشده: <i>نداری</i>")
     if v["boss"]:
         lines.append(f"🐉 جعبه‌های غول: <code>{v['boss']}</code>")
-        rows.append([btn("جعبه‌های غول", emoji_key="btn_chest_open", style=CONFIRM, callback_data="wboss:open:all")])
+        rows.append([btn("جعبه‌های غول", emoji_key="btn_chest_open", style=CONFIRM, callback_data="wboss:open:all:bp")])
     if v["cup"]:
         lines.append(f"🏟 جعبه‌های جام: <code>{v['cup']}</code>")
-        rows.append([btn("جعبه‌های جام", emoji_key="btn_chest_open", style=CONFIRM, callback_data="tour:open")])
+        rows.append([btn("جعبه‌های جام", emoji_key="btn_chest_open", style=CONFIRM, callback_data="tour:open:bp")])
     if v["war"]:
         lines.append(f"⚔️ جعبه‌های جنگ اتحاد: <code>{v['war']}</code>")
-        rows.append([btn("جعبه‌های جنگ", emoji_key="btn_chest_open", style=CONFIRM, callback_data="ally_war_open")])
+        rows.append([btn("جعبه‌های جنگ", emoji_key="btn_chest_open", style=CONFIRM, callback_data="ally_war_open:bp")])
     if v["offer"]:
         lines.append(f"🎁 جعبه‌های بسته‌ی خریدنی: <code>{v['offer']}</code>")
         rows.append([btn("باز کردن جعبه‌ها", emoji_key="btn_chest_open", style=CONFIRM, callback_data="rc:open:offer")])
     lines.append("⏱ کارت سرعت: " + ("، ".join(f"{m} دقیقه ×{n}" for m, n in v["cards"]) if v["cards"] else "<i>نداری</i>"))
     lines.append(f"{get_emoji('serum_lab')} سرم‌ها: " + ("، ".join(f"{label} ×{n}" for _k, label, n in v["serums"]) if v["serums"] else "<i>نداری</i>"))
-    rows.append([btn("آزمایشگاه سرم", emoji_key="btn_serums", style=PRIMARY, callback_data="sr:home"),
-                 btn("جعبه‌های آرنا", emoji_key="btn_chests", style=PRIMARY, callback_data="arena_chests")])
-    rows.append([back_btn("menu:buildings", "ساختمان‌ها")])
+    back_cb, back_label = v.get("back") or ORIGINS["hub"]
+    arena = btn("جعبه‌های آرنا", emoji_key="btn_chests", style=PRIMARY, callback_data="arena_chests:bp")
+    if back_cb == "sr:home":   # opened from the serum lab: «بازگشت» already goes there
+        rows.append([arena])
+    else:
+        rows.append([btn("آزمایشگاه سرم", emoji_key="btn_serums", style=PRIMARY, callback_data="sr:home:bp"), arena])
+    rows.append([back_btn(back_cb, back_label)])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -548,7 +565,9 @@ async def backpack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     q = update.callback_query
     if q and q.data.startswith("bp:"):
         await q.answer()
+    nav.remember(context, "backpack", nav.origin_of(q.data if q else None, "bp:home", "backpack"))
     v = await run_db(_bp_sync, update.effective_user)
+    v["back"] = nav.back_of(context, "backpack", "hub")
     text, kb = _bp_render(v)
     await send_screen(update, text, parse_mode="HTML", reply_markup=kb)
 
@@ -576,6 +595,6 @@ async def open_chests(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 def register(application) -> None:
-    application.add_handler(CallbackQueryHandler(serum_lab, pattern=r"^sr:(home|up|x|n|d|f|da|dax|mini|xq|xk:[a-z]+:\d+|[buc]:[a-z]+|ug:[a-z]+|d[sy]:[a-z]+|dq:\d+:[a-z]+|d[kx]:[qs]:[a-z]+:\d+|fy:\d+)$"))
-    application.add_handler(CallbackQueryHandler(backpack, pattern=r"^bp:home$"))
+    application.add_handler(CallbackQueryHandler(serum_lab, pattern=r"^sr:(home(?::[a-z]+)?|up|x|n|d|f|da|dax|mini|xq|xk:[a-z]+:\d+|[buc]:[a-z]+|ug:[a-z]+|d[sy]:[a-z]+|dq:\d+:[a-z]+|d[kx]:[qs]:[a-z]+:\d+|fy:\d+)$"))
+    application.add_handler(CallbackQueryHandler(backpack, pattern=r"^bp:home(?::[a-z]+)?$"))
     application.add_handler(CallbackQueryHandler(open_chests, pattern=r"^rc:open:offer$"))

@@ -172,7 +172,7 @@ def _arena_home_keyboard(has_revenges: bool, chest_count: int = 0, ready_chests:
             btn("تیم دفاع", emoji_key="btn_defense_team", style=PRIMARY, callback_data="dteam:open"),
         ],
         [
-            btn(chest_btn_text, emoji_key=chest_emoji, style=SHOP if ready_chests > 0 else NAV, callback_data="arena_chests"),
+            btn(chest_btn_text, emoji_key=chest_emoji, style=SHOP if ready_chests > 0 else NAV, callback_data="arena_chests:ar"),
             btn("جدول فصل", emoji_key="btn_rank", style=SHOP if ready_chests > 0 else NAV, callback_data="arena_top"),
         ],
     ]
@@ -981,7 +981,7 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
     buttons = [[btn("حریف بعدی", emoji_key="btn_attack", style=BATTLE, callback_data="arena_find")]]
     info_row = [details_btn("arena_detail", "جزئیات حمله")]
     if result.get("awarded_chest"):
-        info_row.append(btn("جعبه‌ها", emoji_key="btn_chests", style=SHOP, callback_data="arena_chests"))
+        info_row.append(btn("جعبه‌ها", emoji_key="btn_chests", style=SHOP, callback_data="arena_chests:ar"))
     buttons.append(info_row)
     buttons.append([back_btn("menu:arena", "بازگشت به آرنا")])
     keyboard = InlineKeyboardMarkup(buttons)
@@ -1399,7 +1399,7 @@ def _render_chests_text(user, chests: list, has_sub: bool) -> str:
     return "\n".join(lines)
 
 
-def _render_chests_keyboard(chests: list) -> InlineKeyboardMarkup:
+def _render_chests_keyboard(chests: list, back: tuple[str, str] = ("menu:arena", "آرنا")) -> InlineKeyboardMarkup:
     rows = []
     slots_map = {c.slot: c for c in chests}
     for slot in range(1, 5):
@@ -1423,14 +1423,22 @@ def _render_chests_keyboard(chests: list) -> InlineKeyboardMarkup:
                 rows.append([btn(label, emoji_key=emoji_key, style=NAV, callback_data=f"arena_chest_detail:{c.id}")])
 
     rows.append([btn("جوایز لیگ‌ها", emoji_key="btn_chest_rewards", style=NAV, callback_data="arena_chest_rewards:silver")])
-    rows.append([back_btn("menu:arena", "بازگشت به آرنا")])
+    rows.append([back_btn(back[0], f"بازگشت به {back[1]}")])
     return InlineKeyboardMarkup(rows)
 
 
 async def arena_chests_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from bot import nav
+
+    chat = update.effective_chat
+    if chat is None or chat.type == "private":
+        # «arena_chests:ar» (arena) / «arena_chests:bp» («انبار») / «menu:arena_chests» («نبرد»);
+        # the plain «arena_chests» from the chest screens keeps the last one (bot/nav.py)
+        q = update.callback_query
+        nav.remember(context, "arena_chests", nav.origin_of(q.data if q else None, "arena_chests", "arena_chests", "bt"))
     user, chests, has_sub = await run_db(_chests_panel_sync, update.effective_user)
     text = _render_chests_text(user, chests, has_sub)
-    keyboard = _render_chests_keyboard(chests)
+    keyboard = _render_chests_keyboard(chests, nav.back_of(context, "arena_chests", "ar"))
 
     from game.media import get_feature_image_path
     photo = get_feature_image_path("arena_chests")
@@ -1620,6 +1628,13 @@ def _chest_open_sync(tg_user, chest_id: int):
     return open_chest(user, chest_id)
 
 
+def _chests_back(context) -> tuple[str, str]:
+    from bot import nav
+
+    cb, label = nav.back_of(context, "arena_chests", "ar")
+    return cb, f"بازگشت به {label}"
+
+
 async def arena_chest_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     chest_id = int(query.data.split(":")[1])
@@ -1646,7 +1661,7 @@ async def arena_chest_open_callback(update: Update, context: ContextTypes.DEFAUL
     kb = InlineKeyboardMarkup([
         [
             btn("جعبه‌های آرنا", emoji_key="btn_chests", style=SHOP, callback_data="arena_chests"),
-            back_btn("menu:arena", "بازگشت به آرنا"),
+            back_btn(*_chests_back(context)),
         ],
     ])
     await send_screen(update, "\n".join(lines), photo=photo, parse_mode="HTML", reply_markup=kb)
@@ -1746,7 +1761,7 @@ async def arena_chest_rewards_callback(update: Update, context: ContextTypes.DEF
 
 def register(application) -> None:
     application.add_handler(CommandHandler("arena", arena_panel, filters.ChatType.PRIVATE))
-    application.add_handler(CallbackQueryHandler(arena_chests_panel, pattern=r"^arena_chests$"))
+    application.add_handler(CallbackQueryHandler(arena_chests_panel, pattern=r"^arena_chests(?::[a-z]+)?$"))
     application.add_handler(CallbackQueryHandler(arena_chest_detail_callback, pattern=r"^arena_chest_detail:\d+$"))
     application.add_handler(CallbackQueryHandler(arena_chest_start_callback, pattern=r"^arena_chest_start:\d+$"))
     application.add_handler(CallbackQueryHandler(arena_chest_queue_callback, pattern=r"^arena_chest_queue:\d+$"))
