@@ -32,7 +32,7 @@ from django.db.models import Max
 from django.utils import timezone
 
 from bio_lab.models import ArenaChest, AttackLog, Creature, User
-from bio_lab.repository import lab_display, lock_row, team_choices
+from bio_lab.repository import lab_display, lock_row
 from game import arena as A
 from game import arena_chests as AC
 from game import constants, league, season
@@ -361,10 +361,10 @@ def card(request, user, data):
 
 @endpoint()
 def team(request, user):
-    """Who can fight instead (bot: _team_choices_sync — the configured team, else the strongest few)."""
-    from bot.handlers.arena import ARENA_TEAM_SIZE
+    """Who can fight instead (bot: _team_choices_sync — the team's two strongest)."""
+    from game.defense import attack_team
 
-    rows = creature_list(user, team_choices(user, limit=ARENA_TEAM_SIZE))
+    rows = creature_list(user, attack_team(user))   # the team's two strongest
     for row in rows:
         row["busy"] = bool(row["busy"] and not row["active"])
     return {"creatures": rows}
@@ -380,7 +380,7 @@ def swap(request, user, data):
     with transaction.atomic():
         from game.defense import check_attack_pick
 
-        check_attack_pick(user, creature_id)     # only the attack team's first two
+        check_attack_pick(user, creature_id)     # only the attack team's strongest two
         set_active_creature(user, creature_id)  # GameError if it isn't yours or is busy
     seen = _seen(data)
     if pending is None or pending["n"] != _last_attack_id(user):

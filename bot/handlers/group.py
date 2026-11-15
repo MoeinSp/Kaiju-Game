@@ -1346,7 +1346,7 @@ def _pvp_preview_sync(attacker_tg, target_tg):
     if target is None:
         raise GameError("این بازیکن هنوز بازی رو شروع نکرده — نمی‌شه بهش حمله کرد.")
     _check_pvp_daily(attacker.id, target.id)
-    a_creature = ensure_attack_fighter(attacker)   # only the attack team's first two (game/defense.py)
+    a_creature = ensure_attack_fighter(attacker)   # only the attack team's strongest two (game/defense.py)
     t_creature = _group_defender(target, a_creature) if a_creature else None
     if a_creature is None:
         raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
@@ -1687,16 +1687,14 @@ async def gatk_serum_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 def _gatk_team_choices_sync(attacker_id):
-    from bio_lab.repository import team_choices
+    from game.defense import attack_team
     from game.workers import creature_status
 
     attacker = User.objects.filter(id=attacker_id).first()
     if attacker is None:
         raise GameError("پیدا نشدی.")
-    from bot.handlers.arena import ARENA_TEAM_SIZE
-
     out = []
-    team = list(team_choices(attacker, limit=ARENA_TEAM_SIZE))
+    team = attack_team(attacker)   # the team's two strongest — the ones allowed to fight
     powers = creature_powers(team)
     for c in team:
         busy = (not c.is_active) and creature_status(attacker, c) is not None
@@ -1740,7 +1738,7 @@ def _gatk_swap_pick_sync(attacker_id, target_id, creature_id):
     if attacker is None:
         raise GameError("پیدا نشدی.")
     if creature_id:
-        check_attack_pick(attacker, creature_id)    # only the attack team's first two
+        check_attack_pick(attacker, creature_id)    # only the attack team's strongest two
         set_active_creature(attacker, creature_id)  # may raise if the creature is busy
     return _pvp_preview_by_ids_sync(attacker_id, target_id)
 

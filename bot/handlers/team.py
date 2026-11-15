@@ -42,12 +42,17 @@ def _panel_sync(tg_user):
         key=lambda c: (rank.get(c.rarity, 0), c.star_level, c.base_hp + c.base_atk + c.base_def + c.base_spd),
         reverse=True,
     )
-    members = [c for c in creatures if c.id in member_ids]
+    by_id = {c.id: c for c in creatures}
+    members = [by_id[cid] for cid in member_ids if cid in by_id]   # slot order (it listed DB order)
+    from game.defense import attack_team
+
+    arena_ids = {c.id for c in attack_team(user)} if members else set()   # the two that fight in the arena
     power = team_power(members) if members else 0
     same_element = len(members) == 3 and len({c.element for c in members}) == 1
     return {
         "member_ids": member_ids,
         "members": members,
+        "arena_ids": arena_ids,
         "ranked": ranked,  # full list — the renderer paginates
         "power": power,
         "synergy": same_element,
@@ -63,9 +68,11 @@ def _render(view: dict, filt: str = "all", page: int = 0, is_group: bool = False
         "━━━━━━━━━━━━━━━━━━━━"
     ]
     if view["members"]:
+        arena_ids = view.get("arena_ids", set())
         for c in view["members"]:
             stars = get_emoji("star") * c.star_level
-            lines.append(f"  {constants.RARITY_LABELS[c.rarity]} <b>{c.name}</b> {stars} · Lv{c.level}")
+            arena = f" · {get_emoji('atk')} آرنا" if c.id in arena_ids and len(view["members"]) > 2 else ""
+            lines.append(f"  {constants.RARITY_LABELS[c.rarity]} <b>{c.name}</b> {stars} · Lv{c.level}{arena}")
         lines.append(f"\n💪 قدرت تیم: <b>{view['power']:,}</b>")
         if view["synergy"]:
             lines.append("✨ <b>هم‌افزایی عنصری فعاله!</b> (+۱۰٪ حمله چون هر ۳ هم‌عنصر هستن)")
@@ -78,7 +85,7 @@ def _render(view: dict, filt: str = "all", page: int = 0, is_group: bool = False
         nav_cb=lambda f, p: f"team_page:{f}:{p}",
     )
     page_note = f"  <i>(صفحه {page + 1}/{total_pages})</i>" if total_pages > 1 else ""
-    lines.append(f"\n<i>با تب‌های بالا بر اساس نایابی جدا کن. روی هیولا بزن تا اضافه/حذف شه (حداکثر ۳).\nتوی آرنا و «اتک» گروه فقط دو تای اولِ این تیم می‌جنگن؛ دانجن، سیاه‌چال، برج و شکار هر ۳ تا.</i>{page_note}")
+    lines.append(f"\n<i>با تب‌های بالا بر اساس نایابی جدا کن. روی هیولا بزن تا اضافه/حذف شه (حداکثر ۳).\nتوی آرنا و «اتک» گروه فقط دو تای قوی‌ترِ این تیم می‌جنگن (علامت آرنا)؛ دانجن، سیاه‌چال، برج و شکار هر ۳ تا.</i>{page_note}")
 
     rows = list(tab_rows)
     for c in chunk:

@@ -56,7 +56,7 @@ from game.season import (
 logger = logging.getLogger(__name__)
 
 PENDING_OPPONENT_KEY = "arena_pending_opponent"
-# «تعویض» in the arena / group «اتک» offers the attack team's first two (the dungeon & co. keep 3);
+# «تعویض» in the arena / group «اتک» offers the attack team's strongest two (the dungeon & co. keep 3);
 # game/defense.ensure_attack_fighter stops an active creature outside them from fighting
 from game.defense import ATTACK_SLOTS as ARENA_TEAM_SIZE  # noqa: E402
 
@@ -283,12 +283,13 @@ async def arena_find_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 def _team_choices_sync(tg_user):
-    from bio_lab.repository import team_choices
     from game.workers import creature_status
 
     user, _ = get_or_create_user(tg_user)
     out = []
-    for c in team_choices(user, limit=ARENA_TEAM_SIZE):
+    from game.defense import attack_team
+
+    for c in attack_team(user):   # the team's two strongest — the ones allowed to fight here
         # a creature that's mining/breeding can't be made active — flag it so the
         # player doesn't tap it for nothing (creature_status returns None when free)
         busy = (not c.is_active) and creature_status(user, c) is not None
@@ -337,7 +338,7 @@ def _swap_rerender_sync(tg_user, creature_id, pending):
     if creature_id is not None:
         from game.defense import check_attack_pick
 
-        check_attack_pick(user, creature_id)     # only the attack team's first two
+        check_attack_pick(user, creature_id)     # only the attack team's strongest two
         set_active_creature(user, creature_id)  # may raise GameError if the creature is busy
     creature = Creature.objects.filter(owner=user, is_active=True).first()
     if creature is None:

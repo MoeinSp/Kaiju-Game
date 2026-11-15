@@ -320,7 +320,7 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
 
     from game.defense import ensure_attack_fighter
 
-    ensure_attack_fighter(attacker)   # only the attack team's first two fight here (game/defense.py)
+    ensure_attack_fighter(attacker)   # only the attack team's strongest two fight here (game/defense.py)
     if active_power(attacker) <= 0:
         raise GameError("اول یه موجود فعال انتخاب کن.")
 
