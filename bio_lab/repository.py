@@ -88,7 +88,11 @@ def lab_mention(user: User) -> str:
 
 
 def get_or_create_group(chat) -> Group:
-    group, _ = Group.objects.get_or_create(id=chat.id, defaults={"title": chat.title})
+    title = (getattr(chat, "title", None) or "")[:128] or None
+    group, created = Group.objects.get_or_create(id=chat.id, defaults={"title": title})
+    if not created and title and group.title != title:   # the group was renamed since we saved it
+        group.title = title
+        Group.objects.filter(id=group.id).update(title=title)
     return group
 
 

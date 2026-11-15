@@ -96,6 +96,7 @@ def _create_user_and_bind_referral(tg_user, referrer_id):
 
 
 import asyncio
+import logging
 import time
 
 _BAN_CACHE: dict[int, tuple[bool, float]] = {}
@@ -363,8 +364,43 @@ async def react_to_user_message(update: Update, context: ContextTypes.DEFAULT_TY
         asyncio.create_task(_safe_set_reaction(msg))
 
 
+# chat id → the title we last saw/saved. Group.title was only written when the group was
+# first seen, so a renamed group kept its old name in the league table, the raid-boss
+# «home group» line and the alliance card (player report, 2026-11-15).
+_GROUP_TITLES: dict[int, str] = {}
+
+
+def _save_group_title_sync(chat_id: int, title: str) -> None:
+    from bio_lab.models import Group
+
+    Group.objects.filter(id=chat_id).exclude(title=title).update(title=title)
+
+
+async def track_group_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Runs first (group=-4) on every update; costs nothing until a group's title differs from
+    the one in memory, then saves it once in the background (only for groups already known)."""
+    chat = update.effective_chat
+    if chat is None or chat.type not in ("group", "supergroup") or not chat.title:
+        return
+    title = chat.title[:128]
+    if _GROUP_TITLES.get(chat.id) == title:
+        return
+    _GROUP_TITLES[chat.id] = title
+
+    async def _save():
+        try:
+            from bot.utils import run_db
+
+            await run_db(_save_group_title_sync, chat.id, title)
+        except Exception:  # noqa: BLE001 — a display name must never break an update
+            logging.getLogger(__name__).exception("saving the title of group %s failed", chat.id)
+
+    asyncio.create_task(_save())
+
+
 def register(application) -> None:
     # the ❤ reaction on every private message was turned off 2026-10-16 (owner's request)
+    application.add_handler(TypeHandler(Update, track_group_title), group=-4)
     application.add_handler(TypeHandler(Update, capture_referral), group=-3)
     application.add_handler(TypeHandler(Update, enforce_ban), group=-2)
     application.add_handler(TypeHandler(Update, enforce_force_join), group=-1)

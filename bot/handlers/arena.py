@@ -56,7 +56,10 @@ from game.season import (
 logger = logging.getLogger(__name__)
 
 PENDING_OPPONENT_KEY = "arena_pending_opponent"
-ARENA_TEAM_SIZE = 2   # «تعویض» in the arena / group «اتک» offers 2 of the team (the dungeon & co. keep 3)
+# «تعویض» in the arena / group «اتک» offers the whole attack team (3). It was 2 from 2026-11-06
+# to 2026-11-15, but the fight uses the ACTIVE creature, which any player could set from the
+# collection anyway, so the cap only cost taps (player report). The DEFENSE team stays 2.
+ARENA_TEAM_SIZE = 3
 
 
 def _fmt_hm(seconds: int) -> str:
