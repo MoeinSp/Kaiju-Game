@@ -461,6 +461,9 @@ def _peek_sync(target_id: int | None, chat, username: str | None = None):
     creature = get_active_creature(user)
     data = {"user": user, "group": get_or_create_group(chat) if chat is not None else None, "creature": creature}
     if creature is not None:
+        from game import research
+
+        research.attach_research(user, creature)   # «هیولاش» shows the power WITH their lab's buffs
         data["equipped"] = get_equipped_items(creature)
         data["slots"] = slot_loadout(user, creature)
     return data

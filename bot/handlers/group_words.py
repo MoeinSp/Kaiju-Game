@@ -1241,6 +1241,13 @@ def _card_sync(tg_user, chat, action):
     user, _ = get_or_create_user(tg_user)
     group = get_or_create_group(chat) if chat is not None else None
     creature = get_active_creature(user)
+    if creature is not None:
+        from game import research
+
+        # the renderers run on the event loop and read the research only from the creature
+        # (or a process cache that may be cold) — without this «هیولا» showed the power
+        # WITHOUT the lab's buffs
+        research.attach_research(user, creature)
     data = {"user": user, "group": group, "creature": creature}
 
     if action in ("creature", "equipment"):

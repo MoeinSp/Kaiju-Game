@@ -2107,9 +2107,14 @@ def creature_powers(creatures) -> dict[int, int]:
     """_creature_power() for MANY creatures with ONE equipment query → {creature_id: power}.
     Group tables and pickers called _creature_power per kaiju — a query each, hundreds
     per render — which kept the DB threads busy under load (2026-11-13 stall)."""
+    from game import research
     from game.creature import creature_power
     from game.equipment import equipped_items_map
 
+    creatures = list(creatures)
+    # with the owners' research (pickers / swap lists showed the power without it); creatures a
+    # caller already stamped are left alone, so a leaderboard doesn't pay for it twice
+    research.attach_research_multi([c for c in creatures if getattr(c, "_research", None) is None])
     gear = equipped_items_map(creatures)
     return {c.id: creature_power(c, gear.get(c.pk, [])) for c in creatures}
 
