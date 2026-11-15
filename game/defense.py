@@ -26,6 +26,45 @@ from game.creature import GameError, creature_power
 
 MAX_SLOTS = 2   # was 3 until 2026-11-06; older teams keep their two strongest (member_ids)
 
+# The arena and group «اتک» fight with the first ATTACK_SLOTS of the «تیم حمله» only (the
+# dungeon, black dungeon, tower and hunt use all 3). The fighter is the ACTIVE creature, and
+# any creature could be made active from the collection, which walked round the cap
+# (owner, 2026-11-15: «همون 2 باشه، روش دور زدنشو ببند»). So: a swap may only pick one of
+# these two, and before a fight an active creature outside them is replaced by the first free one.
+ATTACK_SLOTS = 2
+
+
+def attack_team(user: User) -> list[Creature]:
+    """The creatures allowed to fight in the arena / group «اتک»."""
+    from bio_lab.repository import team_choices
+
+    return list(team_choices(user, limit=ATTACK_SLOTS))
+
+
+def check_attack_pick(user: User, creature_id: int) -> None:
+    """A «تعویض» pick must be one of the two (a hand-made callback could name any creature)."""
+    if creature_id not in {c.id for c in attack_team(user)}:
+        raise GameError(f"توی آرنا و اتک گروه فقط {ATTACK_SLOTS} هیولای اول «تیم حمله» می‌جنگن؛ "
+                        "این هیولا رو اول توی تیم حمله بذار.")
+
+
+def ensure_attack_fighter(user: User) -> Creature | None:
+    """The creature that fights an arena / group «اتک» battle: the active one when it is one of
+    the attack team's first two; otherwise the first free one of them is made active (what a
+    «تعویض» would do). Raises GameError when both are busy (mine / breeding cave)."""
+    from game.creature import set_active_creature
+    from game.workers import creature_status
+
+    allowed = attack_team(user)
+    active = Creature.objects.filter(owner=user, is_active=True).first()
+    if not allowed or (active is not None and active.id in {c.id for c in allowed}):
+        return active
+    for c in allowed:
+        if creature_status(user, c) is None:
+            return set_active_creature(user, c.id)
+    raise GameError(f"هر {ATTACK_SLOTS} هیولای اول «تیم حمله»ت مشغولن (معدن یا غار)؛ "
+                    "یکی رو آزاد کن یا تیم حمله‌ت رو عوض کن.")
+
 
 def _slots(team: DefenseTeam) -> list[int]:
     return [cid for cid in (team.slot1_id, team.slot2_id, team.slot3_id) if cid is not None]

@@ -318,6 +318,9 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
     The pool is built by one filtered query walking outward from the attacker's cup."""
     from django.db.models import Exists, OuterRef, Q
 
+    from game.defense import ensure_attack_fighter
+
+    ensure_attack_fighter(attacker)   # only the attack team's first two fight here (game/defense.py)
     if active_power(attacker) <= 0:
         raise GameError("اول یه موجود فعال انتخاب کن.")
 
@@ -408,6 +411,9 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
     """Resolves one arena raid. Attacking always drops the attacker's own shield —
     you can't camp behind protection while farming other people."""
     attacker = User.objects.select_for_update().get(id=attacker.id)
+    from game.defense import ensure_attack_fighter
+
+    ensure_attack_fighter(attacker)   # an active creature set from the collection since the card can't fight
     attacker_creature = Creature.objects.filter(owner=attacker, is_active=True).first()
     if attacker_creature is None:
         raise GameError("اول یه موجود فعال انتخاب کن.")

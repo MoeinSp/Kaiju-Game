@@ -56,10 +56,9 @@ from game.season import (
 logger = logging.getLogger(__name__)
 
 PENDING_OPPONENT_KEY = "arena_pending_opponent"
-# «تعویض» in the arena / group «اتک» offers the whole attack team (3). It was 2 from 2026-11-06
-# to 2026-11-15, but the fight uses the ACTIVE creature, which any player could set from the
-# collection anyway, so the cap only cost taps (player report). The DEFENSE team stays 2.
-ARENA_TEAM_SIZE = 3
+# «تعویض» in the arena / group «اتک» offers the attack team's first two (the dungeon & co. keep 3);
+# game/defense.ensure_attack_fighter stops an active creature outside them from fighting
+from game.defense import ATTACK_SLOTS as ARENA_TEAM_SIZE  # noqa: E402
 
 
 def _fmt_hm(seconds: int) -> str:
@@ -336,6 +335,9 @@ def _swap_rerender_sync(tg_user, creature_id, pending):
 
     user, _ = get_or_create_user(tg_user)
     if creature_id is not None:
+        from game.defense import check_attack_pick
+
+        check_attack_pick(user, creature_id)     # only the attack team's first two
         set_active_creature(user, creature_id)  # may raise GameError if the creature is busy
     creature = Creature.objects.filter(owner=user, is_active=True).first()
     if creature is None:

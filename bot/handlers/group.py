@@ -36,6 +36,7 @@ from game.buildings import building_level, maybe_award_speedup_card
 from game.combat import battle_report, resolve_battle, resolve_duel_detailed
 from game.creature import CreatureBusyError, GameError, add_xp
 from game.daily import check_missions, consume_daily, record_action
+from game.defense import check_attack_pick, ensure_attack_fighter
 from game.emoji import get_emoji
 from game.energy import spend_energy
 from game.guardian import challenge_guardian, ensure_guardian, get_guardian
@@ -1345,7 +1346,7 @@ def _pvp_preview_sync(attacker_tg, target_tg):
     if target is None:
         raise GameError("این بازیکن هنوز بازی رو شروع نکرده — نمی‌شه بهش حمله کرد.")
     _check_pvp_daily(attacker.id, target.id)
-    a_creature = get_active_creature(attacker)
+    a_creature = ensure_attack_fighter(attacker)   # only the attack team's first two (game/defense.py)
     t_creature = _group_defender(target, a_creature) if a_creature else None
     if a_creature is None:
         raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
@@ -1585,7 +1586,7 @@ def _pvp_preview_by_ids_sync(attacker_id, target_id):
     target = User.objects.filter(id=target_id).first()
     if attacker is None or target is None:
         raise GameError("یکی از طرف‌ها دیگه پیدا نشد.")
-    a_creature = get_active_creature(attacker)
+    a_creature = ensure_attack_fighter(attacker)
     t_creature = _group_defender(target, a_creature) if a_creature else None
     if a_creature is None or t_creature is None:
         raise GameError("یکی از دو طرف موجود فعال نداره.")
@@ -1739,6 +1740,7 @@ def _gatk_swap_pick_sync(attacker_id, target_id, creature_id):
     if attacker is None:
         raise GameError("پیدا نشدی.")
     if creature_id:
+        check_attack_pick(attacker, creature_id)    # only the attack team's first two
         set_active_creature(attacker, creature_id)  # may raise if the creature is busy
     return _pvp_preview_by_ids_sync(attacker_id, target_id)
 
@@ -1785,7 +1787,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     if group_presence.is_gone(left_at):
         raise GameError(f"🚪 این بازیکن {group_presence.ago_text(left_at)} پیش از این گروه رفته؛ "
                         f"به کسی که بیش از {group_presence.LEFT_GRACE_HOURS} ساعت از گروه رفته نمی‌شه اتک داد.")
-    a_creature = get_active_creature(attacker)
+    a_creature = ensure_attack_fighter(attacker)   # the swap list's cap can't be walked round via the collection
     t_creature = _group_defender(target, a_creature) if a_creature else None   # «تیم دفاع» defends here too
     if a_creature is None or t_creature is None:
         raise GameError("یکی از دو طرف موجود فعال نداره.")

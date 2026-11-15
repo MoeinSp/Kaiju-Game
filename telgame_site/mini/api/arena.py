@@ -378,6 +378,9 @@ def swap(request, user, data):
     pending = _pending_or_none(user, data)
     creature_id = need_int(data, "creature_id", 1)
     with transaction.atomic():
+        from game.defense import check_attack_pick
+
+        check_attack_pick(user, creature_id)     # only the attack team's first two
         set_active_creature(user, creature_id)  # GameError if it isn't yours or is busy
     seen = _seen(data)
     if pending is None or pending["n"] != _last_attack_id(user):
