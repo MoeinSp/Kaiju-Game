@@ -492,7 +492,7 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
         f"🦅 <b>{creature_name(creature)}</b> <code>#{creature.id}</code>",
         f"🏷 <b>{constants.RARITY_LABELS[creature.rarity]}</b> {stars}",
         f"🎖 سطح: <code>{creature.level}/{max_level}</code>",
-        f"⚡️ نرخ ارتقا: <code>{step}×</code>",
+        f"⚡️ هر بار زدن: <code>+{step}</code> سطح <i>(×1 / ×5 / ×10)</i>",
         "",
         _power_caption_line(creature, equipped_items),
         f"❤️ سلامت: <code>{stats['hp']:,}</code>",
@@ -502,13 +502,13 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
         f"☠️ زهر: <code>{stats['poison']:,}</code>",
         "",
         _CARD_DIV,
-        "🧬 <b>ارتقای اعضای بدن:</b>",
+        "🧬 <b>ارتقای اعضای بدن</b> <i>(سطح · هزینه · قدرت)</i>",
     ]
 
     cap = constants.part_upgrade_cap(creature.rarity, creature.star_level, creature.element)
     for part, cfg in constants.BODY_PARTS.items():
         level = getattr(creature, f"{part}_lvl")
-        label = cfg["label"].split()[0]
+        label = f"{cfg['label'].split()[0]} {_PART_WORDS[part]}"   # «🦋 بال», not a bare emoji
         if level >= cap:
             lines.append(f"{label}: <code>{level}/{cap}</code> 🔒 <i>(سقف {creature.star_level}★)</i>")
             continue
@@ -530,48 +530,65 @@ def upgrade_panel_text(user, creature, equipped_items: list | None = None, slots
 
 def _fusion_button_label(star_level: int) -> str:
     """Label the fusion button with the ACTUAL next star this creature would reach
-    (1★ → «ارتقا به 2★», …), or a maxed note at 5★, so the button always tells the
+    (1★ → «فیوژن به 2 ستاره», …), or a maxed note at 5★, so the button always tells the
     truth about what fusing does for this specific creature."""
     if star_level >= constants.STAR_MAX:
-        return "فیوژن (سقف ۵★)"
-    return f"ورود به فیوژن ({star_level + 1}★)"
+        return "فیوژن (سقف 5 ستاره)"
+    return f"فیوژن به {star_level + 1} ستاره"   # a trailing ★ is stripped by btn() as an emoji
 
 
-def upgrade_panel_keyboard(creature_id: int, is_active: bool = True, step: int = 1, star_level: int = 1) -> InlineKeyboardMarkup:
+# the four body parts as the panel and its buttons name them (BODY_PARTS labels carry the stat too)
+_PART_WORDS = {"wings": "بال", "armor": "زره", "fangs": "نیش", "poison": "زهر"}
+_PART_KEYS = {"wings": "btn_wings", "armor": "btn_armor", "fangs": "btn_fangs", "poison": "btn_poison"}
+
+
+def part_upgrade_rows(creature, step: int, cb) -> list[list[InlineKeyboardButton]]:
+    """The four body-part buttons in two rows, each showing its level/cap and what one tap
+    buys («بال 12/60 · +5»), or «سقف» once maxed. `cb(part)` gives the callback data —
+    shared by the DM upgrade panel and the group «ارتقا» card. `creature` may be None
+    (an old caller): then the buttons fall back to the plain «بال ×5» form."""
+    cap = (constants.part_upgrade_cap(creature.rarity, creature.star_level, creature.element)
+           if creature is not None else None)
+
+    def one(part):
+        word = _PART_WORDS[part]
+        if creature is None:
+            label = word + (f" ×{step}" if step > 1 else "")
+        else:
+            lvl = getattr(creature, f"{part}_lvl")
+            label = f"{word} {lvl}/{cap} · سقف" if lvl >= cap else f"{word} {lvl}/{cap} · +{min(step, cap - lvl)}"
+        return btn(label, emoji_key=_PART_KEYS[part], style=BUILD, callback_data=cb(part))
+
+    return [[one("wings"), one("armor")], [one("fangs"), one("poison")]]
+
+
+def upgrade_panel_keyboard(creature_id: int, is_active: bool = True, step: int = 1, star_level: int = 1,
+                           creature=None) -> InlineKeyboardMarkup:
     """Every action carries the creature id, so upgrading a non-active creature
-    doesn't silently swap which creature is active for hunting/arena."""
-    sfx = f" ×{step}" if step > 1 else ""
+    doesn't silently swap which creature is active for hunting/arena. Rows of two share
+    one colour; the selected ×1/×5/×10 step is the green one."""
     # ×1/×5/×10 selector: how many levels each part tap buys (paid in one go)
     step_row = [
         btn(("• " if s == step else "") + f"×{s}", style=(CONFIRM if s == step else NAV),
             callback_data=f"upg_step:{creature_id}:{s}")
         for s in _UPG_STEPS
     ]
-    rows = [
-        [
-            btn("تغذیه", emoji_key="btn_feed", style=BUILD, callback_data=f"feedcap:home:{creature_id}"),
-        ],
-        step_row,
-        [
-            btn(f"بال{sfx}", emoji_key="btn_wings", style=BUILD, callback_data=f"lab:up_wings:{creature_id}"),
-            btn(f"زره{sfx}", emoji_key="btn_armor", style=BUILD, callback_data=f"lab:up_armor:{creature_id}"),
-        ],
-        [
-            btn(f"نیش{sfx}", emoji_key="btn_fangs", style=BUILD, callback_data=f"lab:up_fangs:{creature_id}"),
-            btn(f"زهر{sfx}", emoji_key="btn_poison", style=BUILD, callback_data=f"lab:up_poison:{creature_id}"),
-        ],
-        [btn("تجهیزات", emoji_key="btn_inventory", style=PRIMARY, callback_data=f"upg_eq:{creature_id}")],
-        [btn("بلعیدن هیولا", emoji_key="btn_devour", style=BUILD, callback_data=f"devour_start:{creature_id}")],
-        [btn("تغییر نام", emoji_key="btn_edit", style=NAV, callback_data=f"kaiju_rename:{creature_id}:u")],
-        [btn(_fusion_button_label(star_level), emoji_key="btn_fusion", style=PRIMARY, callback_data=f"upg_fusion:{creature_id}")],
-    ]
+    first = [btn("تغذیه", emoji_key="btn_feed", style=BUILD, callback_data=f"feedcap:home:{creature_id}")]
     if not is_active:
-        # setting the default from here saves a trip through the collection screen,
-        # which is where this used to be the only option
-        rows.append(
-            [btn("فعالش کن", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"upg_default:{creature_id}")]
-        )
-    rows.append([back_btn("upg_back", "لیست هیولاها")])
+        # setting the default from here saves a trip through the collection screen
+        first.append(btn("فعالش کن", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"upg_default:{creature_id}"))
+    rows = [
+        first,
+        step_row,
+        *part_upgrade_rows(creature, step, lambda part: f"lab:up_{part}:{creature_id}"),
+        [
+            btn("تجهیزات", emoji_key="btn_inventory", style=PRIMARY, callback_data=f"upg_eq:{creature_id}"),
+            btn("تغییر نام", emoji_key="btn_edit", style=NAV, callback_data=f"kaiju_rename:{creature_id}:u"),
+        ],
+        [btn(_fusion_button_label(star_level), emoji_key="btn_fusion", style=PRIMARY, callback_data=f"upg_fusion:{creature_id}")],
+        [btn("بلعیدن هیولا", emoji_key="btn_devour", style=BUILD, callback_data=f"devour_start:{creature_id}")],
+        [back_btn("upg_back", "لیست هیولاها")],
+    ]
     return InlineKeyboardMarkup(rows)
 
 
@@ -610,7 +627,8 @@ def equip_panel_keyboard(creature_id: int, slots: list[dict]) -> InlineKeyboardM
         else:
             label = f"{row['label']} — {row['item'].name} +{row['item'].level}"
             style = LIST
-        rows.append([btn(label, style=style, callback_data=f"upg_slot:{creature_id}:{row['slot']}")])
+        key = None if row["is_empty"] else f"btn_rarity_{row['item'].rarity}"   # the worn item's rarity colour
+        rows.append([btn(label, emoji_key=key, style=style, callback_data=f"upg_slot:{creature_id}:{row['slot']}")])
     rows.append([back_btn(f"upg_pick:{creature_id}", "بازگشت به ارتقا")])
     return InlineKeyboardMarkup(rows)
 
@@ -662,6 +680,16 @@ def _upgrade_list_sync(tg_user):
 UPGRADE_PAGE_SIZE = 8
 
 
+def _upg_row_label(creature, power: int) -> str:
+    """«زبرجد · 2★ · سطح 40 · 12.4K» (power last) — the rarity is the button's icon. Long
+    nicknames are cut so the row stays readable on a phone."""
+    name = creature_name(creature)
+    if len(name) > 12:
+        name = name[:11] + "…"
+    p = f"{power / 1_000_000:.1f}M" if power >= 1_000_000 else (f"{power / 1000:.1f}K" if power >= 1000 else str(power))
+    return f"{name} · {creature.star_level}★ · سطح {creature.level} · {p}"
+
+
 def _upgrade_render(user, ranked, filt: str, page: int) -> tuple[str, InlineKeyboardMarkup]:
     """One page of the strongest-first creature picker, split by rarity with tabs
     (like the collection) and paginated. `ranked` is [(creature, power)] desc."""
@@ -669,13 +697,14 @@ def _upgrade_render(user, ranked, filt: str, page: int) -> tuple[str, InlineKeyb
     counts = {}
     for c, _p in ranked:
         counts[c.rarity] = counts.get(c.rarity, 0) + 1
+    # the open tab is the green one (and keeps its «•» for clients without button colours)
     tabs = [btn(("• " if filt == "all" else "") + f"همه ({len(ranked)})",
-                style=NAV, callback_data="upg_page:all:0")]
+                style=(CONFIRM if filt == "all" else NAV), callback_data="upg_page:all:0")]
     for r in reversed(constants.RARITY_ORDER):
         if counts.get(r):
             mark = "• " if filt == r else ""
             tabs.append(btn(f"{mark}{constants.RARITY_LABELS[r].split()[-1]} ({counts[r]})", emoji_key=f"btn_rarity_{r}",
-                            style=NAV, callback_data=f"upg_page:{r}:0"))
+                            style=(CONFIRM if filt == r else NAV), callback_data=f"upg_page:{r}:0"))
     rows = [tabs[i:i + 3] for i in range(0, len(tabs), 3)]
 
     shown = ranked if filt == "all" else [(c, p) for c, p in ranked if c.rarity == filt]
@@ -684,11 +713,11 @@ def _upgrade_render(user, ranked, filt: str, page: int) -> tuple[str, InlineKeyb
     chunk = shown[page * UPGRADE_PAGE_SIZE : (page + 1) * UPGRADE_PAGE_SIZE]
 
     for creature, power in chunk:
-        tag = "🟢" if creature.is_active else "🧬"
-        rarity = constants.RARITY_LABELS[creature.rarity].split()[0]
+        # the icon is the rarity colour (it used to be 🟢 for the active kaiju — the same
+        # green circle as a rarity — and 🧬 for the rest, so nothing showed the rarity)
         rows.append([btn(
-            f"{tag} {creature_name(creature)} · {creature.level} · {creature.star_level}★",
-            style=LIST, callback_data=f"upg_pick:{creature.id}",
+            _upg_row_label(creature, power), emoji_key=f"btn_rarity_{creature.rarity}",
+            style=(CONFIRM if creature.is_active else LIST), callback_data=f"upg_pick:{creature.id}",
         )])
     nav = []
     if page > 0:
@@ -703,7 +732,11 @@ def _upgrade_render(user, ranked, filt: str, page: int) -> tuple[str, InlineKeyb
     rarity_note = "" if filt == "all" else f" — <b>{constants.RARITY_LABELS[filt]}</b>"
     text = (
         f"🔧 <b>ارتقا و پرورش</b>{rarity_note}{page_note}\n\n"
-        f"نایابی رو انتخاب کن، بعد هیولا رو بزن:\n\n{wallet_line(user)}"
+        "هیولایی که می‌خوای قوی‌ترش کنی رو بزن.\n"
+        "<blockquote>⚪ معمولی · 🔵 نایاب · 🟣 حماسی · 🟡 افسانه‌ای · 🔴 اساطیری\n"
+        "دکمه‌ی سبز = هیولای فعالت · قوی‌ترین‌ها اول\n"
+        "تب‌های بالا فقط یه نایابی رو نشون می‌دن.</blockquote>\n\n"
+        f"{wallet_line(user)}"
     )
     return text, InlineKeyboardMarkup(rows)
 
@@ -783,7 +816,7 @@ async def upgrade_pick_callback(update: Update, context: ContextTypes.DEFAULT_TY
         upgrade_panel_text(user, creature, equipped_items, slots, step=step),
         photo=photo,
         parse_mode="HTML",
-        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=step, star_level=creature.star_level),
+        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=step, star_level=creature.star_level, creature=creature),
     )
 
 
@@ -876,12 +909,14 @@ async def equip_slot_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                                 style=NAV, callback_data=f"upg_slot:{creature_id}:{slot}:{r}:0"))
         rows += [tabs[i:i + 3] for i in range(0, len(tabs), 3)]
 
-        lines.append("نایابی رو انتخاب کن، بعد آیتم رو بذار توش:")
+        lines.append("یه آیتم رو بزن تا روی این هیولا بره.")
+        lines.append("<blockquote>آیکون رنگی = نایابی آیتم · سطح بالاترها اول\n"
+                     "«روی …» یعنی الان تن یه هیولای دیگه‌ست و ازش درمیاد.</blockquote>")
         for item in chunk:
-            worn = f" (روی {item.equipped_on.name})" if item.equipped_on_id else ""
+            worn = f" · روی {item.equipped_on.name}" if item.equipped_on_id else ""
             rows.append([btn(
-                f"{item.name} +{item.level} ({constants.RARITY_LABELS[item.rarity]}){worn}",
-                style=CONFIRM, callback_data=f"upg_equip:{creature_id}:{item.id}",
+                f"{item.name} +{item.level}{worn}", emoji_key=f"btn_rarity_{item.rarity}",
+                style=(LIST if item.equipped_on_id else CONFIRM), callback_data=f"upg_equip:{creature_id}:{item.id}",
             )])
         nav = []
         if page > 0:
@@ -971,7 +1006,7 @@ async def upgrade_set_default_callback(update: Update, context: ContextTypes.DEF
         upgrade_panel_text(user, creature, equipped_items, slots, step=step),
         photo=photo,
         parse_mode="HTML",
-        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=step, star_level=creature.star_level),
+        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=step, star_level=creature.star_level, creature=creature),
     )
 
 
@@ -1767,7 +1802,7 @@ async def upgrade_step_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await safe_edit_message_text(query,
         upgrade_panel_text(user, creature, equipped_items, slots, step=context.user_data["upg_step"]),
         parse_mode="HTML",
-        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=context.user_data["upg_step"], star_level=creature.star_level),
+        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=context.user_data["upg_step"], star_level=creature.star_level, creature=creature),
     )
 
 
@@ -1815,7 +1850,7 @@ async def lab_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     await safe_edit_message_text(query,
         note + "\n\n" + upgrade_panel_text(user, creature, equipped_items, slots, step=step),
         parse_mode="HTML",
-        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=step, star_level=creature.star_level),
+        reply_markup=upgrade_panel_keyboard(creature.id, creature.is_active, step=step, star_level=creature.star_level, creature=creature),
     )
 
 

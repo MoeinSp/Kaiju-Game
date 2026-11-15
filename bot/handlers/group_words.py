@@ -534,7 +534,6 @@ def _upgrade_card(user, creature, energy, step: int = 1) -> tuple[str, InlineKey
 
     max_energy = get_max_energy(user)
     step = step if step in _GRP_UPG_STEPS else 1
-    sfx = f" ×{step}" if step > 1 else ""
     cap = constants.part_upgrade_cap(creature.rarity, creature.star_level, creature.element)
     max_level = constants.creature_max_level(creature.rarity, creature.star_level)
     div = "━━━━━━━━━━━━━━━━━━━━"
@@ -567,17 +566,12 @@ def _upgrade_card(user, creature, energy, step: int = 1) -> tuple[str, InlineKey
             callback_data=_act("upgstep", user.id, str(s)))
         for s in _GRP_UPG_STEPS
     ]
+    from bot.handlers.private import part_upgrade_rows   # same «بال 12/60 · +5» buttons as the DM panel
+
     rows = [
         [btn("تغذیه", emoji_key="btn_feed", style=BUILD, callback_data=_act("feedcap", user.id))],
         step_row,
-        [
-            btn(f"بال{sfx}", emoji_key="btn_wings", style=BUILD, callback_data=_act("up_wings", user.id, str(step))),
-            btn(f"زره{sfx}", emoji_key="btn_armor", style=BUILD, callback_data=_act("up_armor", user.id, str(step))),
-        ],
-        [
-            btn(f"نیش{sfx}", emoji_key="btn_fangs", style=BUILD, callback_data=_act("up_fangs", user.id, str(step))),
-            btn(f"زهر{sfx}", emoji_key="btn_poison", style=BUILD, callback_data=_act("up_poison", user.id, str(step))),
-        ],
+        *part_upgrade_rows(creature, step, lambda part: _act(f"up_{part}", user.id, str(step))),
         [btn("هیولا", emoji_key="btn_creature", style=NAV, callback_data=_scoped("creature", user.id))],
         [_pm_button("ترکیب و ارتقا (پیوی)")],
     ]
