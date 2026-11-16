@@ -587,6 +587,9 @@ def resolve_encounter_action(user: User, player_creature: Creature, enc_type: st
             sync_energy(user)
             user.energy = min(get_max_energy(user), user.energy + energy_gain)
             user.save(update_fields=["energy", "energy_updated_at"])
+            from game.daily import record_action
+
+            record_action(user, "energy_spring")   # read by game/report.find_suspicious_activity
             msg = f"✨ <b>نوشیدن از چشمه حیات:</b> جان و روان کایجوت تازه شد! <b>+{energy_gain} انرژی فوری</b> و <b>+{xp_gain} XP</b> دریافت کردی!"
         else:
             msg = "🏃 از کنار چشمه آرام گذشتی."

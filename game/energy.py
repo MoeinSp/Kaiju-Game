@@ -126,5 +126,8 @@ def refill_energy(user: User) -> dict:
         user.energy = max_en
         user.energy_updated_at = timezone.now()
         user.save(update_fields=["diamonds", "energy", "energy_updated_at"])
+        from game.daily import record_action
+
+        record_action(user, "energy_refill")   # read by game/report.find_suspicious_activity
     return {"cost": cost, "energy": user.energy}
 

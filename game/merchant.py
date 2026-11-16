@@ -445,10 +445,14 @@ def _grant_extra(user: User, row: MerchantBoard, extra: dict) -> str:
         res = grant_chest_contents(user, tier, user.cup, source="merchant")
         row.diamonds_today += res.get("diamonds", 0)
         bits = [f"{res['coins']:,} طلا", f"{res['dna']:,} DNA"]
+        def rarity_word(r):   # «⚪ معمولی» → «معمولی»: the emoji would sit mid-sentence
+            return constants.RARITY_LABELS.get(r, r).split()[-1]
+
         if res.get("creature"):
-            bits.append(f"هیولای {res['creature'].name}")
+            c = res["creature"]
+            bits.append(f"هیولای {c.name} ({rarity_word(c.rarity)}، {c.star_level} ستاره)")
         if res.get("item"):
-            bits.append(res["item"].name)
+            bits.append(f"{res['item'].name} ({rarity_word(res['item'].rarity)})")
         if res.get("diamonds"):
             bits.append(f"{res['diamonds']} الماس")
         return f"{CHEST_FA.get(tier, 'جعبه')}: " + "، ".join(bits)

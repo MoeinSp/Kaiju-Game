@@ -229,15 +229,17 @@ def top_text(data: dict) -> str:
 
     lines = [f"🏅 <b>برترین‌ها و موارد مشکوک</b>", "", DIV, f"{get_emoji('coin')} <b>پولدارترین‌ها (طلا)</b>"]
     for i, p in enumerate(data["top_players"], 1):
-        lines.append(f"{i}. {html.escape(p['name'])} — <b>{p['coins']:,}</b>")
+        lines.append(f"{i}. {p['name']} — <b>{p['coins']:,}</b>")   # display_name(): already HTML-safe
     lines += ["", f"{get_emoji('creature')} <b>قوی‌ترین موجودات (سطح)</b>"]
     for i, c in enumerate(data["top_creatures"], 1):
-        lines.append(f"{i}. {html.escape(c['name'])} (Lv{c['level']}) — {html.escape(c['owner'])}")
+        lines.append(f"{i}. {html.escape(c['name'])} (سطح {c['level']}) — {c['owner']}")
     lines += ["", DIV]
     if data["suspicious"]:
-        lines.append(f"{get_emoji('warning')} <b>فعالیت مشکوک امروز</b> <i>(بیشتر از سقف ممکن با انرژی عادی — باگ یا اکسپلویت)</i>")
+        lines.append(f"{get_emoji('warning')} <b>فعالیت مشکوک امروز</b>")
+        lines.append("<i>بیشتر از انرژی‌ای که خودش می‌تونست داشته باشه (اشتراک، شارژ الماسی، کپسول و چشمه حساب شده)</i>")
         for s in data["suspicious"]:
-            lines.append(f"• {html.escape(s['name'])} — {s['action']}: {s['count']} بار (سقف: {s['limit']})")
+            refills = f" · {s['refills']} شارژ" if s.get("refills") else ""
+            lines.append(f"• {s['name']} — {s.get('label', s['action'])}: <b>{s['count']}</b> بار (سقف: {s['limit']}{refills})")
     else:
         lines.append(f"{get_emoji('confirm')} هیچ فعالیت مشکوکی امروز پیدا نشد.")
     return "\n".join(lines)

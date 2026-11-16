@@ -20,20 +20,47 @@ def _theoretical_max_daily_actions(energy_cost: int) -> int:
     return (constants.MAX_ENERGY + ticks_per_day) // max(energy_cost, 1)
 
 
+ACTION_LABELS = {"feed": "تغذیه", "raid_attack": "حمله", "hunt": "شکار"}
+SPRING_ENERGY = 12   # game/hunt.py «چشمه‌ی حیات»
+
+
+def _energy_budget(user: User, day: str) -> tuple[int, int]:
+    """(energy this player could have had today, full refills used): their own pool and regen
+    speed, plus every diamond refill / group energy capsule (each a full pool) and spring."""
+    from game.energy import get_energy_regen_interval_seconds, get_max_energy
+
+    counts = dict(DailyActionLog.objects.filter(user_id=user.id, day=day,
+                                                action__in=("energy_refill", "energy_capsule", "energy_spring"))
+                  .values_list("action", "count"))
+    pool = get_max_energy(user)
+    ticks = int(86400 // max(1.0, get_energy_regen_interval_seconds(user)))
+    refills = counts.get("energy_refill", 0) + counts.get("energy_capsule", 0)
+    return pool * (1 + refills) + ticks + SPRING_ENERGY * counts.get("energy_spring", 0), refills
+
+
 def find_suspicious_activity(day: str | None = None) -> list[dict]:
     day = day or today_str()
     flagged = []
     for action, cost in ENERGY_GATED_ACTIONS.items():
-        limit = _theoretical_max_daily_actions(cost)
-        for log in DailyActionLog.objects.filter(action=action, day=day, count__gt=limit):
+        # the free player's ceiling is only a pre-filter; each candidate is checked against their own
+        floor_limit = _theoretical_max_daily_actions(cost)
+        for log in DailyActionLog.objects.filter(action=action, day=day, count__gt=floor_limit):
             user = User.objects.filter(id=log.user_id).first()
+            if user is None:
+                continue
+            budget, refills = _energy_budget(user, day)
+            limit = budget // max(cost, 1)
+            if log.count <= limit:
+                continue
             flagged.append(
                 {
-                    "name": display_name(user) if user else str(log.user_id),
+                    "name": display_name(user),   # already HTML-safe (and carries the VIP badge)
                     "user_id": log.user_id,
                     "action": action,
+                    "label": ACTION_LABELS.get(action, action),
                     "count": log.count,
                     "limit": limit,
+                    "refills": refills,
                 }
             )
     return flagged
