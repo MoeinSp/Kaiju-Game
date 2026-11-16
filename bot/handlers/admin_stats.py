@@ -206,7 +206,7 @@ def growth_text(g: dict) -> str:
         f"دعوت‌شده‌های ۳۰ روز: {rf['joined30']:,} · به سطح ۵ رسیدن (جایزه داد): <b>{rf['grown30']:,}</b> ({pct(S._pct(rf['grown30'], rf['joined30']))})",
     ]
     if rf["top"]:
-        lines.append("🏅 دعوت‌کننده‌های برتر ۷ روز: " + " · ".join(f"{html.escape(n)} ({c})" for n, c in rf["top"]))
+        lines.append("🏅 دعوت‌کننده‌های برتر ۷ روز: " + " · ".join(f"{n} ({c})" for n, c in rf["top"])   # display_name(): already HTML-safe)
     lines += ["", "📅 <b>جدیدها روزبه‌روز</b> <i>(خودشون + با دعوت)</i>"]
     for r in reversed(rows[-10:]):
         lines.append(f"<code>{bar(r['invited'] + r['organic'], vmax)}</code> {jdate(r['day'])}: "
