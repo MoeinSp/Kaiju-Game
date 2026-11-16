@@ -34,6 +34,7 @@ ROOMS = 7                  # rooms before the boss (the boss is room ROOMS + 1)
 DAILY_KEYS = 2
 KEY_CAP = 4                # the daily refill stops here (bought keys may go above)
 KEY_HARD_CAP = 10
+RESTART_GAP = 3            # seconds after a run ends before the next may start (stray fast taps)
 LOSS_PAYOUT = 0.5          # share of the banked loot kept after a defeat / quitting
 HP_POWER_FLOOR = 0.6       # a kaiju at 1 HP fights at 60% of its power, full HP at 100%
 # «سرم ترمیم» per run: runs have no time limit and serums brew without a daily cap, so without
@@ -447,6 +448,11 @@ def start(user: User, difficulty: str = "normal") -> DungeonRun:
                         f"(الان مرحله‌ی {user.campaign_stage}).")
     if active_run(user) is not None:
         raise GameError("یه ورود نیمه‌کاره داری؛ اول اون رو تموم کن.")
+    last_end = (DungeonRun.objects.filter(user=user).exclude(finished_at=None)
+                .order_by("-id").values_list("finished_at", flat=True).first())
+    if last_end is not None and (timezone.now() - last_end).total_seconds() < RESTART_GAP:
+        # a tap meant for the last fight must not open (and pay a key for) the next run
+        raise GameError("ورودت تازه تموم شد؛ یه لحظه صبر کن و بعد دوباره وارد شو.")
     from game import attack_team
 
     team = Team.objects.filter(owner=user).first()

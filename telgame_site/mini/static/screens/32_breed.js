@@ -286,9 +286,10 @@
           }
 
           if (d.eggs.length) {
-            html += '<div class="h2">' + K.ic("egg") + "تخم‌های در حال رشد (" + K.n(d.eggs.length) + ')</div><div class="panel br-eggs">' + d.eggs.map(function (e, i) {
-              return '<div class="br-egg' + (e.ready ? " ready" : "") + '"><span class="br-eggic">' + K.ic(e.ready ? "hatch" : "egg") + '</span><span class="grow"><b>تخم <span class="num">#' + (i + 1) + "</span></b>" +
-                (e.ready ? '<span class="sm t-good" style="display:block">آماده‌ی سر باز کردنه!</span>' : '<span class="sm" style="display:block"><span class="timer" data-left="' + (e.left + 1) + '"></span></span>' + bar(e.left, e.total, "gold")) + "</span>" +
+            // the count is a badge: «(3)» in an RTL heading came out as «( 3 )»
+            html += '<div class="h2">' + K.ic("egg") + 'تخم‌های در حال رشد<span class="br-count num">' + K.n(d.eggs.length) + '</span></div><div class="panel br-eggs">' + d.eggs.map(function (e, i) {
+              return '<div class="br-egg' + (e.ready ? " ready" : "") + '"><span class="br-eggic">' + K.ic(e.ready ? "hatch" : "egg") + '</span><div class="br-eggmid"><b>تخم <span class="num">' + K.n(i + 1) + "</span></b>" +
+                (e.ready ? '<span class="sm t-good">آماده‌ی سر باز کردنه!</span>' : '<span class="sm"><span class="timer" data-left="' + (e.left + 1) + '"></span></span>' + bar(e.left, e.total, "gold")) + "</div>" +
                 (e.ready ? '<button class="btn good sm" data-act="hatch" data-id="' + e.id + '">' + K.ic("hatch") + "سر باز کن</button>"
                   : '<button class="btn sm" data-act="egg-rush" data-id="' + e.id + '" data-price="' + e.finish_price + '">' + K.ic("bolt") + 'فوری<span class="cost t-diamond">' + K.ic("diamond") + K.n(e.finish_price) + "</span></button>") + "</div>";
             }).join("") + '</div><p class="note">چی توی تخم‌هاست؟ تا سر باز نکنن هیچ‌کس نمی‌دونه.</p>';

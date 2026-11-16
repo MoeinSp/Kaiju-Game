@@ -266,7 +266,11 @@
           .then(function (yes) { if (yes) act("quit/", {}, null); });
       });
       K.on(root, "again", function (el) {
-        start(el.dataset.tier || "normal", el, function (d) { if (ctx.alive()) show(d); else K.go("dg_run"); });
+        // one more tap: the button sits where the fight buttons were, so a fast tap used to spend a key
+        K.confirm({ title: "ورود دوباره", icon: "swords", ok: "ورود", html: "<p>یه کلید خرج می‌شه.</p>" }).then(function (yes) {
+          if (!yes) return;
+          start(el.dataset.tier || "normal", el, function (d) { if (ctx.alive()) show(d); else K.go("dg_run"); });
+        });
       });
       K.on(root, "home", function () { K.back(); });
       return K.api.get("dungeon/").then(function (d) { show(d); });
@@ -366,7 +370,8 @@
     K.api.get("dungeon/endless/").then(function (b) {
       var rows = b.rows.length ? '<div class="panel list">' + b.rows.map(function (r) {
         return '<div class="' + (r.me ? "me" : "") + '"><span class="ic num">' + K.n(r.rank) + '</span><span class="t">' + K.esc(r.name) + '</span><span class="v">طبقه‌ی ' + K.n(r.floor) + "</span></div>";
-      }).join("") + "</div>" : '<div class="panel pad center muted">هنوز کسی این هفته وارد بی‌انتها نشده — اولین نفر باش!</div>';
+      }).join("") + "</div>" + '<p class="sm muted" style="margin:6px 2px 0">رتبه به ترتیب طبقه‌ست؛ اگه طبقه برابر باشه، اونی که زودتر رسیده بالاتره.</p>'
+        : '<div class="panel pad center muted">هنوز کسی این هفته وارد بی‌انتها نشده — اولین نفر باش!</div>';
       var rew = b.rewards.slice(0, 3).map(function (x) { return "رتبه " + K.n(x.rank) + ": " + K.n(x.runes) + " رون و " + K.n(x.cores) + " هسته"; }).join(" · ") +
         " · ۴ تا ۱۰: " + K.n(b.rewards[3].runes) + " رون و " + K.n(b.rewards[3].cores) + " هسته";
       var box = K.sheet('<div class="grab"></div><div class="pad"><div class="ttl" style="font-size:18px">جدول هفتگی بی‌انتها</div>' +

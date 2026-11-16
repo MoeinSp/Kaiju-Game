@@ -426,7 +426,10 @@ def _grant_extra(user: User, row: MerchantBoard, extra: dict) -> str:
     if t == "key":
         from game import dungeon
 
-        prof = dungeon.profile(user)
+        from bio_lab.models import DungeonProfile
+
+        # locked: an unlocked copy saved back could undo a key spent (or bought) a moment ago
+        prof = DungeonProfile.objects.select_for_update().get(pk=dungeon.profile(user).pk)
         if prof.keys < dungeon.KEY_HARD_CAP:
             prof.keys += 1
             prof.save(update_fields=["keys"])

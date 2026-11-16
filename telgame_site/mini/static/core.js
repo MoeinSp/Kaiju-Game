@@ -635,6 +635,12 @@ window.K = (function () {
       return new Promise(function (resolve) {
         var done = false, ex = opts.exclude || [];
         var list = d.creatures.filter(function (c) { return ex.indexOf(c.id) < 0 && (!opts.filter || opts.filter(c)); });
+        // the ones that can be picked first; the dimmed (busy / active …) ones after them, order kept
+        if (opts.disabled) {
+          var ok = [], off = [];
+          list.forEach(function (c) { (opts.disabled(c) ? off : ok).push(c); });
+          list = ok.concat(off);
+        }
         var html = '<div class="grab"></div><div class="pad"><div class="ttl" style="font-size:18px">' + K.esc(opts.title || "یه هیولا انتخاب کن") + "</div>" + (opts.sub ? '<p class="lead" style="margin:4px 0 12px">' + K.esc(opts.sub) + "</p>" : '<div style="height:10px"></div>');
         // K.grid: a big collection is drawn 60 at a time instead of thousands of tiles at once
         html += list.length ? K.grid(list, function (c) { var why = opts.disabled ? opts.disabled(c) : ""; var note = opts.note ? opts.note(c) : ""; return K.creatureTile(c, { attrs: why ? 'data-why="' + K.esc(why) + '"' : 'data-pick="' + c.id + '"', dim: !!why, flag: note || undefined }); }, 60)

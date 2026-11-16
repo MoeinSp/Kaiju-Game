@@ -1597,8 +1597,8 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             if verdict == "warn":
                 try:
                     await message.reply_text(
-                        f"🤖 خیلی سریع پیام می‌فرستی — <b>{int(_MUTE_SECONDS)}</b> ثانیه جواب نمی‌دم.\n"
-                        "<i>ماکرو و اسکریپت جایزه‌ی اضافه نمی‌گیرن.</i>", parse_mode="HTML")
+                        f"😅 یواش‌تر رفیق، خیلی تند رفتی!\n"
+                        f"<b>{int(_MUTE_SECONDS)}</b> ثانیه یه نفس بکش، بعد دوباره بزن.", parse_mode="HTML")
                 except TelegramError:
                     pass
             return

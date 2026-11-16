@@ -232,11 +232,13 @@ def _finish_render(fin: dict, v: dict) -> tuple[str, InlineKeyboardMarkup]:
         lines += [_DIV, f"{_E('relic')} <b>اثر باستانی: {r_lbl}</b>",
                   f"<i>{r_desc}</i>",
                   "⏳ " + ("۳ روز به زمانش اضافه شد" if r["extended"] else "۳ روز فعاله")]
-    rows = []
+    # «سیاه‌چال» comes first and «دوباره» only asks: the again-button sat exactly where the fight
+    # button had been, so tapping fast through a run started the next one and spent a key
+    # without the player noticing («کلیدم ۴ بود دوتا هس», 2026-11-16)
+    rows = [[btn("سیاه‌چال", emoji_key="btn_dungeon", style=NAV, callback_data="dg:home")]]
     if v["keys"] > 0:
         rows.append([btn(f"دوباره · {v['keys']} کلید", emoji_key="btn_dungeon", style=BATTLE,
-                         callback_data=f"dg:start:{fin.get('difficulty', 'normal')}")])
-    rows.append([btn("سیاه‌چال", emoji_key="btn_dungeon", style=NAV, callback_data="dg:home")])
+                         callback_data=f"dg:again:{fin.get('difficulty', 'normal')}")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -287,6 +289,20 @@ async def dungeon_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         "d": ("door", None), "f": ("fight", None), "r": ("rune", None), "m": ("merchant", None),
         "quitok": ("quit", None), "h": ("heal", None),
     }.get(cmd, (None, None))
+    if cmd == "again":   # «دوباره» from the end screen: one more tap, so a key is never spent by accident
+        tier = parts[2] if len(parts) > 2 else "normal"
+        label = D.ENDLESS_DIFF["label"] if tier == D.ENDLESS else D.DIFFICULTIES.get(tier, D.DIFFICULTIES["normal"])["label"]
+        await query.answer()
+        await send_screen(
+            update,
+            f"{_E('dungeon_key')} <b>دوباره وارد «{html.escape(label)}» بشی؟</b>\n\nیه کلید خرج می‌شه.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [btn("آره، ورود", emoji_key="btn_confirm", style=BATTLE, callback_data=f"dg:start:{tier}")],
+                [btn("نه، سیاه‌چال", emoji_key="btn_dungeon", style=NAV, callback_data="dg:home")],
+            ]),
+        )
+        return
     if cmd == "quit":
         await query.answer()
         await safe_edit_message_text(
@@ -513,6 +529,8 @@ def _board_render(b: dict) -> tuple[str, InlineKeyboardMarkup]:
         lines.append("<i>هنوز کسی این هفته وارد بی‌انتها نشده — اولین نفر باش!</i>")
     for r in b["rows"]:
         lines.append(f"{medals[r['rank'] - 1] if r['rank'] <= 3 else str(r['rank']) + '.'} {r['name']} — طبقه‌ی <code>{r['floor']}</code>")
+    if b["rows"]:   # ties on a floor are common (the boss floors are walls): say how they're broken
+        lines.append("<i>رتبه به ترتیب طبقه‌ست؛ اگه طبقه برابر باشه، اونی که زودتر رسیده بالاتره.</i>")
     lines.append(_DIV)
     lines.append(f"📍 تو: طبقه‌ی <code>{b['mine']['floor']}</code> · رتبه‌ی <code>{b['mine']['rank']}</code>" if b["mine"]
                  else "📍 تو هنوز این هفته طبقه‌ای ثبت نکردی.")
@@ -553,5 +571,5 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(dungeon_home, pattern=r"^dg:home$"))
     application.add_handler(CallbackQueryHandler(dungeon_shop, pattern=r"^dg:(shop|buy:[a-z_]+)$"))
     application.add_handler(CallbackQueryHandler(dungeon_relics, pattern=r"^dg:relics$"))
-    application.add_handler(CallbackQueryHandler(dungeon_callback, pattern=r"^dg:(run|start(:[a-z]+)?|quit|quitok|h|d:\d+|f:\d+|r:\d+|m:(\d+|x))$"))
+    application.add_handler(CallbackQueryHandler(dungeon_callback, pattern=r"^dg:(run|start(:[a-z]+)?|again(:[a-z]+)?|quit|quitok|h|d:\d+|f:\d+|r:\d+|m:(\d+|x))$"))
     application.add_handler(CallbackQueryHandler(shadow_screen, pattern=r"^dg:(sh|sha:\d+|shok:\d+)$"))

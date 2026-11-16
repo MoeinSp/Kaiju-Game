@@ -263,6 +263,8 @@ button.busy, [data-act].busy { pointer-events: none; }   /* anything tappable th
 .sheet .art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, var(--bg-2)); }
 .sheet .x { position: absolute; top: 12px; inset-inline-start: 12px; z-index: 3; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; background: rgba(8,11,18,.72); border: 1px solid var(--line); }
 .sheet .x svg { width: 18px; height: 18px; }
+/* a sheet's title starts where the close button sits (inline-start): keep it clear of it */
+.sheet-in > .pad > .ttl:first-child { padding-inline-start: 46px; min-height: 36px; display: flex; align-items: center; }
 .sheet .pad { padding: 0 16px; position: relative; z-index: 1; }
 .sheet .art + .pad { margin-top: -30px; }
 .sheet .grab { width: 42px; height: 4px; border-radius: 999px; background: var(--line-2); margin: 10px auto 14px; }

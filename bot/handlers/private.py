@@ -392,14 +392,16 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
 
 
 def _fine_bar(current: int, total: int, width: int = 10) -> str:
-    """A smooth block bar using eighth-blocks for the partial cell, e.g. «█████████▊»."""
+    """A block bar of whole cells only, e.g. «██████░░░░». The eighth-blocks it used for the
+    partial cell («▏», or a space at 0) are narrower than «█»/«░» on phones, so the bar
+    came out with a gap in the middle (owner, 2026-11-16)."""
     frac = 0.0 if total <= 0 else max(0.0, min(1.0, current / total))
-    filled = frac * width
-    full = int(filled)
-    eighths = " ▏▎▍▌▋▊▉█"
-    partial = eighths[round((filled - full) * 8)] if full < width else ""
-    bar = ("█" * full + partial)
-    return bar + "░" * (width - len(bar))
+    full = round(frac * width)
+    if 0 < current and full == 0:
+        full = 1                      # something is there: never draw an empty bar
+    if current < total and full == width:
+        full = width - 1              # not full yet: never draw a full bar
+    return "█" * full + "░" * (width - full)
 
 
 def balance_text(user, kaiju_count: int = 0) -> str:
@@ -4578,8 +4580,10 @@ async def alliance_heist_list_callback(update: Update, context: ContextTypes.DEF
 
 
 def _heist_by_id_sync(tg_user, target_alliance_id):
+    from game.defense import ensure_attack_fighter
+
     user, _ = get_or_create_user(tg_user)
-    creature = get_active_creature(user)
+    creature = ensure_attack_fighter(user)   # PvP: only the attack team's strongest two (game/defense.py)
     if creature is None:
         raise GameError("اول یه موجود فعال انتخاب کن.")
     try:
@@ -5148,8 +5152,10 @@ async def alliance_deposit(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 
 def _heist_sync(tg_user, target_name):
+    from game.defense import ensure_attack_fighter
+
     user, _ = get_or_create_user(tg_user)
-    creature = get_active_creature(user)
+    creature = ensure_attack_fighter(user)   # PvP: only the attack team's strongest two (game/defense.py)
     if creature is None:
         raise GameError("اول /start رو بزن تا موجودت رو بگیری.")
     target = Alliance.objects.filter(name__iexact=target_name.strip()).first()

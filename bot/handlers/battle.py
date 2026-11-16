@@ -44,7 +44,11 @@ def _battle_cmd_sync(chat, challenger_tg, opponent_tg):
     touch_membership(group, challenger_user)
     touch_membership(group, opponent_user)
 
-    challenger_creature = get_active_creature(challenger_user)
+    from game.defense import ensure_attack_fighter
+
+    # PvP: only the attack team's strongest two fight (game/defense.py) — a kaiju made
+    # active from the collection for a moment can't. The opponent is fixed at «قبول».
+    challenger_creature = ensure_attack_fighter(challenger_user)
     opponent_creature = get_active_creature(opponent_user)
     if challenger_creature is None:
         raise GameError("اول باید توی پیوی بات /start بزنی تا موجودت رو بگیری.")
@@ -128,10 +132,16 @@ def _battle_accept_sync(battle_id, acceptor_id):
         raise GameError("این پیشنهاد دیگه معتبر نیست.")
     if acceptor_id != battle.player_b_id:
         raise GameError("فقط طرف مقابل می‌تونه قبول کنه.")
+    from game.defense import ensure_attack_fighter
+
+    mine = ensure_attack_fighter(battle.player_b)   # the acceptor fights with an attack-team kaiju too
+    if mine is not None and mine.id != battle.creature_b_id:
+        battle.creature_b = mine
+        battle.hp_b = effective_stats(mine)["hp"]
 
     battle.turn = pick_first_turn(battle.creature_a, battle.creature_b)
     battle.status = "active"
-    battle.save(update_fields=["turn", "status"])
+    battle.save(update_fields=["turn", "status", "creature_b", "hp_b"])
     return attach_player_names(battle)
 
 
