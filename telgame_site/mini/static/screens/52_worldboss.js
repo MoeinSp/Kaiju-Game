@@ -170,8 +170,8 @@
         K.api.post("worldboss/open/", {}, el).then(function (d) {
           var o = d.opened; S = d; draw();
           K.reward({ title: Number(o.count).toLocaleString("en-US") + " جعبه باز شد!", icon: "chest", coins: o.coins, dna: o.dna, diamonds: o.diamonds,
-                     creatures: o.creatures, text: o.lines.join(" · "), button: "عالیه" });
-        });
+                     creatures: o.creatures, text: (o.lines || []).join(" · "), button: "عالیه" });
+        }).catch(function () { ctx.reload(); });
       });
       K.on(root, "hit", function (el) {
         if (busy) return; busy = true;

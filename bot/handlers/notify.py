@@ -345,7 +345,7 @@ def _decorate(item) -> dict:
         from bot.buttons import BATTLE, CONFIRM
 
         reply_markup = InlineKeyboardMarkup([
-            [btn("باز کردن جعبه‌ها", emoji_key="btn_chest_open", style=CONFIRM, callback_data=f"wboss:open:{payload}")],
+            [btn("باز کردن جعبه‌ها", emoji_key="btn_chest_open", style=CONFIRM, callback_data="wboss:open:all")],
             [btn("غول سرگردان", emoji_key="btn_worldboss", style=BATTLE, callback_data="menu:worldboss")],
         ])
     elif marker == "tournament_prize":

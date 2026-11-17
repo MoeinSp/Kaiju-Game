@@ -163,6 +163,19 @@ def _open_sync(tg_user, ref):
     return results, worldboss.panel_state(user)
 
 
+async def _refresh_after_open(update: Update, context: ContextTypes.DEFAULT_TYPE, from_backpack: bool) -> None:
+    """Redraw the screen that offered the boxes, from the database, so a stale «N باز نشده» goes away."""
+    query = update.callback_query
+    if from_backpack:
+        from bot.handlers.serums import backpack
+
+        await backpack(update, context)
+        return
+    data = await run_db(_panel_sync, update.effective_user)
+    text, keyboard = _render(data)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
 async def worldboss_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """«باز کردن جعبه‌ها» — from the end-of-fight message or the boss screen."""
     query = update.callback_query
@@ -172,6 +185,10 @@ async def worldboss_open_callback(update: Update, context: ContextTypes.DEFAULT_
         results, data = await run_db(_open_sync, update.effective_user, ref)
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
+        # The caption is a snapshot. Opening the same boxes from the mini app (or an older
+        # message) leaves this one saying «۲ جعبه باز نشده» — and a second tap only raised
+        # the error, so the lie stayed on screen. Re-read and redraw.
+        await _refresh_after_open(update, context, from_backpack)
         return
     await query.answer("🎁 باز شد!")
     from bot.loot_text import chests_text

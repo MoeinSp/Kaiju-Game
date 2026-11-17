@@ -1,6 +1,6 @@
-/* Alliance (read-mostly: info, deposit, leave), the alliance rankings, the guide and the
-   settings. Data: /app/api/social/… (game.alliance / game.raid / game.guide). Creating,
-   joining and managing an alliance, its buildings, heists and wars stay in the bot. */
+/* Alliance (info, deposit, leave, joining the one-day war), the alliance rankings, the
+   guide and the settings. Data: /app/api/social/… (game.alliance / game.raid / game.guide).
+   Creating and managing an alliance, its buildings, heists and starting a war stay in the bot. */
 (function (K) {
   "use strict";
 
@@ -25,7 +25,7 @@
     try { if (K.tg && K.tg.openTelegramLink) { K.tg.openTelegramLink(url); return; } } catch (e) {}
     window.open(url, "_blank");
   }
-  var BOT_NOTE = "ساخت اتحاد، اخراج و قائم‌مقام، ارتقای ساختمان‌ها، شبیخون، رید و جنگ از داخل ربات انجام می‌شه.";
+  var BOT_NOTE = "ساخت اتحاد، اخراج و قائم‌مقام، ارتقای ساختمان‌ها، شبیخون، رید و شروع جنگ از داخل ربات انجام می‌شه. شرکت در جنگ یک‌روزه همین‌جاست.";
 
   // ───────────────────────── alliance ─────────────────────────
   var ROLE = { leader: ["رهبر", "crown", "var(--gold)"], deputy: ["قائم‌مقام", "shieldcheck", "var(--accent)"], member: ["عضو", "user", "var(--muted)"] };
@@ -57,7 +57,8 @@
         '<span class="so-vs">VS</span><div><div class="b cut">' + K.esc(w.foe_name) + '</div><div class="so-score t-bad">' + K.n(w.foe_score) + '</div><small class="muted">' + K.n(w.foe_participants) + " نفر</small></div></div>" +
         '<div style="margin:12px 0 8px">' + K.bar(w.my_score / total, "", "thick") + "</div>" +
         '<div class="flex between sm"><span>' + (w.ended ? '<span class="muted">جنگ تموم شده؛ نتیجه به‌زودی اعلام می‌شه</span>' : '<span class="timer" data-fmt="long" data-left="' + Number(w.seconds_left) + '" data-done="تموم شد"></span>') + "</span>" +
-        (w.rallied ? '<span class="t-good b">' + K.ic("check") + " سهم تو: " + K.n(w.my_contribution) + "</span>" : '<span class="muted">هنوز توی این جنگ شرکت نکردی</span>') + "</div></div>";
+        (w.rallied ? '<span class="t-good b">' + K.ic("check") + " سهم تو: " + K.n(w.my_contribution) + "</span>" : '<span class="muted">هنوز توی این جنگ شرکت نکردی</span>') + "</div></div>" +
+        (!w.ended && !w.rallied && !a.joined_today ? '<button class="btn danger lg block mt" data-act="rally">' + K.ic("swords") + "شرکت در جنگ</button>" : "");
       if (w.contributors.length) {
         h += '<div class="panel list mt">' + w.contributors.map(function (c, i) {
           return '<div class="' + (c.me ? "so-me" : "") + '"><span class="so-rk num">' + (i + 1) + '</span><span class="t cut">' + K.esc(c.name) + '</span><span class="v t-accent">' + K.ic("power") + " " + K.n(c.power) + "</span></div>";
@@ -171,6 +172,21 @@
         K.on(root, "deposit", function () { depositSheet(d, function () { if (ctx.alive()) stats(); }); });
         K.on(root, "ranks", function () { K.go("so_ranks"); });
         K.on(root, "leave", function (el) { leaveFlow(d, ctx, el); });
+        K.on(root, "rally", function (el) {
+          K.api.post("social/alliance/war/preview/", {}, el).then(function (p) {
+            var html = p.cave
+              ? "<p>قوی‌ترین هیولات «<b>" + K.esc(p.strongest_name) + "</b>» (قدرت " + K.n(p.strongest_power) + ") الان توی غار هیولاست و نمی‌تونه بجنگه.</p><p>الان با «<b>" + K.esc(p.name) + "</b>» شرکت می‌کنی — قدرت " + K.n(p.power) + ".</p>"
+              : "<p>با قوی‌ترین هیولات شرکت می‌کنی: «<b>" + K.esc(p.name) + "</b>» — قدرت " + K.n(p.power) + ".</p>";
+            K.confirm({ title: "شرکت در جنگ یک‌روزه", icon: "swords", ok: "تأیید و شرکت", cancel: "بی‌خیال", html: html }).then(function (yes) {
+              if (!yes) return;
+              K.api.post("social/alliance/war/rally/", {}).then(function (r) {
+                K.haptic("ok");
+                K.toast("شرکت کردی. +" + K.n(r.contribution) + " امتیاز با «" + r.creature_name + "»", "ok");
+                ctx.reload();
+              });
+            });
+          });
+        });
         K.on(root, "war-open", function (el) {
           K.api.post("social/alliance/war/open/", {}, el).then(function (o) {
             a.war_chests = o.unopened; if (ctx.alive()) draw();

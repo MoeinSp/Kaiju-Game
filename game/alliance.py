@@ -1162,6 +1162,40 @@ def war_creature_pick(user: User) -> dict:
     }
 
 
+def rally_preview(user: User) -> dict:
+    """What «شرکت در جنگ» would add, without writing. Same refusals as rally_war, so the
+    confirm step can name the kaiju (and warn when the strongest is stuck in the cave)."""
+    if user.alliance_id is None:
+        raise GameError("عضو هیچ اتحادی نیستی.")
+    from game.raid import _joined_alliance_today
+
+    if _joined_alliance_today(user):
+        raise GameError(
+            "چون به‌تازگی به این اتحاد پیوستی، هنوز نمی‌تونی توی جنگ شرکت کنی. از فردا می‌تونی قدرتت رو به جنگ اضافه کنی."
+        )
+    war = active_war_for(user.alliance_id)
+    if war is None:
+        raise GameError("اتحادت الان توی هیچ جنگی نیست.")
+    if war.ends_at <= timezone.now():
+        raise GameError("این جنگ تموم شده، منتظر اعلام نتیجه باش.")
+    from bio_lab.models import AllianceWarHit
+
+    if AllianceWarHit.objects.filter(war=war, user=user).exists():
+        raise GameError("تو قبلاً توی این جنگ شرکت کردی.")
+    pick = war_creature_pick(user)
+    if pick["chosen"] is None or pick["chosen_power"] <= 0:
+        raise GameError("هیچ کایجوی قابل‌استفاده‌ای نداری (شاید همه توی غارن). اول یه کایجو آزاد کن.")
+    from bio_lab.repository import creature_name
+
+    return {
+        "name": creature_name(pick["chosen"], mark=False),
+        "power": pick["chosen_power"],
+        "cave": pick["strongest_in_cave"],
+        "strongest_name": creature_name(pick["strongest"], mark=False) if pick["strongest"] else "",
+        "strongest_power": pick["strongest_power"],
+    }
+
+
 @transaction.atomic
 def rally_war(user: User) -> dict:
     """A member rallies once per war, adding the power of their strongest USABLE kaiju

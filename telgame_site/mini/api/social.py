@@ -140,6 +140,27 @@ def alliance_deposit(request, user, data):
 
 
 @endpoint("POST")
+def alliance_war_preview(request, user, data):
+    """«شرکت در جنگ» confirm step — the kaiju rally_war would use (bot: war_rally_callback)."""
+    from game import alliance as alliance_mod
+
+    return alliance_mod.rally_preview(user)
+
+
+@endpoint("POST")
+def alliance_war_rally(request, user, data):
+    """Join the one-day war with the strongest usable kaiju (bot: war_rally_go_callback)."""
+    from game import alliance as alliance_mod
+
+    result = alliance_mod.rally_war(user)
+    return {
+        "contribution": result["contribution"],
+        "creature_name": _text(result["creature_name"]),
+        "creature_power": result["creature_power"],
+    }
+
+
+@endpoint("POST")
 def alliance_war_open(request, user, data):
     """«باز کردن جعبه‌های جنگ» — one-day war reward chests (bot: alliancewar.war_open_callback)."""
     from game import alliance as alliance_mod, worldboss
@@ -422,6 +443,8 @@ routes = [
     ("alliance/", alliance_panel),
     ("alliance/deposit/", alliance_deposit),
     ("alliance/leave/", alliance_leave),
+    ("alliance/war/preview/", alliance_war_preview),
+    ("alliance/war/rally/", alliance_war_rally),
     ("alliance/war/open/", alliance_war_open),
     ("ranks/", ranks),
     ("guide/", guide_panel),
