@@ -1232,7 +1232,7 @@ _HUBS = {
     "hub_city_more": ("🌐 <b>شهر — بیشتر</b>", [
         [("دستاوردها", "achievements", "s", "btn_achievements"), ("راهنما", "guide", "n", "btn_report")],
         [("کازینو", "casino", "s", "btn_casino"), ("بنر", "banner", "s", "btn_banner")],
-        [("دعوت", "referral", "s", "btn_referral"), ("دانشنامه", "codex", "n", "btn_codex")],
+        [("دعوت رفیق", "referral", "s", "btn_referral"), ("دانشنامه", "codex", "n", "btn_codex")],
         [("رتبه اتحادها", "rank", "n", "btn_league"), ("لیگ اتحادها", "alliance_league", "n", "btn_league")],
         [("رتبه رید", "raid_rank", "n", "btn_raid_rank")],
     ]),
@@ -1390,6 +1390,7 @@ def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=
     if serum_lab or (today_state and today_state.get("serum_lab")):
         row3.append(btn("آزمایشگاه سرم", emoji_key="btn_serums", style=CONFIRM, callback_data="sr:home:m"))
     rows.append(row3)
+    rows.append([btn("دعوت رفیق", emoji_key="btn_referral", style=CONFIRM, callback_data="menu:referral")])
     # the Mini App, alone on its own row (public since 2026-10-15, out of beta 2026-10-16).
     # Only ever in private chats — Telegram refuses web_app buttons in groups, and this
     # keyboard is only sent in private.

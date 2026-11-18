@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 
 import django
 
@@ -186,6 +187,72 @@ async def _post_init(application: Application) -> None:
     await _configure_commands(application)
     await _configure_menu_button(application)
     await _warn_if_group_privacy_on(application)
+
+
+# How often to ask Telegram whether the webhook is still alive, how many failed
+# checks in a row justify one re-register, and how long to wait before trying again.
+# One attempt per ten minutes: a restart loop (a new process every 30s) is what
+# stacked hung API calls and stopped Telegram answering at all.
+_WEBHOOK_HEAL_SECONDS = 180
+_WEBHOOK_HEAL_FAILS = 2
+_WEBHOOK_HEAL_COOLDOWN = 600
+
+
+def _webhook_public_url() -> str:
+    return f"{WEBHOOK_URL.rstrip('/')}/{WEBHOOK_SECRET}"
+
+
+async def _reregister_webhook(bot, reason: str) -> None:
+    """Put the same webhook back. Pending updates stay queued — dropping them would
+    throw away whatever players sent while the link was down."""
+    await bot.set_webhook(
+        url=_webhook_public_url(),
+        secret_token=WEBHOOK_SECRET,
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=False,
+        connect_timeout=10,
+        read_timeout=15,
+        write_timeout=15,
+        pool_timeout=10,
+    )
+    logging.warning("webhook re-registered (%s)", reason)
+
+
+async def _heal_webhook(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """If Telegram has stopped delivering updates, register the webhook once more.
+
+    Runs inside the already-started process. A failed check never exits the bot,
+    so Docker does not restart it and open another hung call on top of this one.
+    """
+    state = context.bot_data.setdefault("webhook_heal", {"fails": 0, "last_reset": 0.0})
+    now = time.monotonic()
+    if state["last_reset"] and now - state["last_reset"] < _WEBHOOK_HEAL_COOLDOWN:
+        return
+    try:
+        info = await context.bot.get_webhook_info(connect_timeout=10, read_timeout=10, pool_timeout=10)
+    except Exception as exc:  # noqa: BLE001 — the check must not take the bot down
+        state["fails"] += 1
+        logging.warning("webhook check failed (%s in a row): %s", state["fails"], exc)
+        if state["fails"] < _WEBHOOK_HEAL_FAILS:
+            return
+        reason = f"{state['fails']} failed checks"
+    else:
+        state["fails"] = 0
+        pending = info.pending_update_count or 0
+        err_at = info.last_error_date
+        err_age = (time.time() - err_at.timestamp()) if err_at is not None else None
+        if not info.url:
+            reason = "webhook url was empty"
+        elif pending >= 30 and err_age is not None and err_age < _WEBHOOK_HEAL_COOLDOWN:
+            reason = f"{pending} updates stuck ({info.last_error_message})"
+        else:
+            return
+    try:
+        await _reregister_webhook(context.bot, reason)
+    except Exception as exc:  # noqa: BLE001
+        logging.warning("webhook re-register failed: %s", exc)
+    state["fails"] = 0
+    state["last_reset"] = time.monotonic()
 
 
 def _install_premium_glyph_hook(application: Application) -> None:
@@ -407,6 +474,10 @@ def main() -> None:
 
     if application.job_queue:
         application.job_queue.run_repeating(theme_cache_sync_job, interval=120, first=10)
+        if WEBHOOK_URL:
+            application.job_queue.run_repeating(
+                _heal_webhook, interval=_WEBHOOK_HEAL_SECONDS, first=_WEBHOOK_HEAL_SECONDS,
+            )
 
     application.add_error_handler(_global_error_handler)
     application.post_init = _post_init
@@ -430,9 +501,13 @@ def main() -> None:
             port=WEBHOOK_PORT,
             url_path=url_path,
             secret_token=WEBHOOK_SECRET,
-            webhook_url=f"{WEBHOOK_URL.rstrip('/')}/{url_path}",
+            webhook_url=_webhook_public_url(),
             drop_pending_updates=True,
             allowed_updates=Update.ALL_TYPES,
+            # Polling already retries forever. Webhook's default is zero retries:
+            # the first timeout exits, Docker starts a new process, and the hung
+            # calls stack until Telegram stops answering this bot at all.
+            bootstrap_retries=-1,
         )
         return
 

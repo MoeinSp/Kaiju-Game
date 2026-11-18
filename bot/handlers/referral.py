@@ -1,10 +1,11 @@
 """«دعوت دوستان» — the referral screen: your invite link, how each invited friend is
-growing, and a button to collect any rewards that are ready.
+growing, and a button to collect any rewards that are ready. The summed pitch sits on this
+screen; «راهنما» is the level-by-level page (how each step is paid).
 
 Rewards also pay out automatically via the notification job once an invited friend
 reaches a growth step (game/referral.py), but the button lets a referrer claim on demand
 and see exactly where each invite stands. The reward tables live on their own text page
-(«جایزه‌ها و قوانین»): a photo caption only holds ~1000 characters.
+(«راهنما»): a photo caption only holds ~1000 characters.
 """
 
 from telegram import InlineKeyboardMarkup, Update
@@ -42,12 +43,16 @@ def _friend_status(f: dict) -> str:
 
 
 def _render_rules(st: dict) -> tuple[str, InlineKeyboardMarkup]:
-    """«جایزه‌ها و قوانین» — every reward table on one text page."""
+    """«راهنما» — how each growth step is paid, on its own text page (too long for a photo caption)."""
     lines = [
-        f"{get_emoji('gift')} <b>جایزه‌ها و قوانین دعوت</b>",
+        f"{get_emoji('gift')} <b>راهنمای جایزه‌ی دعوت</b>",
         "",
-        "📈 <b>جایزه‌ی رشد دوستت</b>",
-        "<i>هر پله وقتی باز می‌شه که دوستت به اون سطح برسه و اون‌قدر روزِ جدا بازی کرده باشه.</i>",
+        "جایزه <b>خودکار</b> واریز می‌شه؛ لازم نیست هر روز این صفحه رو باز کنی.",
+        "هر پله دو شرط داره: دوستت به اون <b>سطح آزمایشگاه</b> برسه، و به تعدادِ نوشته‌شده <b>روزِ جدا</b> بازی کرده باشه (هر روز تقویم یک‌بار حساب می‌شه).",
+        "همان لحظه سهم <b>تو</b> و سهم <b>دوستت</b> با هم می‌شینه روی حساب‌ها، و به هر دو پیام می‌رسه.",
+        "اگه پیام رو ندیدی، دکمه‌ی «دریافت جایزه» توی صفحه‌ی دعوت همون پله‌های آماده رو یکجا می‌ده.",
+        "",
+        "📈 <b>پله‌به‌پله</b>",
     ]
     for lvl, days, ref_text, fr_text in st["steps"]:
         lines.append(f"\n• <b>سطح {lvl}</b> + {days} روز\n   👤 تو: {ref_text}\n   🤝 دوستت: {fr_text}")
@@ -102,11 +107,14 @@ def _render(st: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyb
     shown = {"all": friends, "started": started, "waiting": waiting, "ready": ready}.get(filt, friends)
 
     lines = [
-        f"{get_emoji('gift')} <b>دعوت دوستان</b>",
-        "<blockquote>دوستت هر بار رشد کنه، <b>هر دوتون</b> جایزه می‌گیرین."
-        f"\nاز هر دوست برای تو (سطح {st['steps'][0][0]} تا {st['steps'][-1][0]}):\n"
-        + "\n".join(st["steps_total_lines"])
-        + f"\n💰 به‌علاوه‌ی {st['commission']}% خریدهاش تا {st['commission_days']} روز</blockquote>",
+        f"{get_emoji('gift')} <b>دعوت رفیق</b>",
+        "یه دوست بیاری و تا آخر بمونه، <b>جفت‌تون</b> جایزه می‌گیرین.",
+        "",
+        f"<b>از هر دوست، فقط برای تو</b> (سطح {st['steps'][0][0]} تا {st['steps'][-1][0]}):",
+        *st["steps_total_lines"],
+        "<i>سه تا دوست = سه برابر همین.</i>",
+        f"🤝 <b>دوستت جداگانه می‌گیره:</b> {st['friend_total']}",
+        f"💰 تا {st['commission_days']} روز، {st['commission']}٪ هر خریدش به‌صورت الماس میاد تو جیبت.",
         "━━━━━━━━━━",
         f"👥 دعوتی‌ها: <b>{st['total']:,}</b>",
         f"✅ در حال رشد {len(started):,} · 🎉 آماده {len(ready):,} · ⏳ هنوز {len(waiting):,}",
@@ -138,7 +146,7 @@ def _render(st: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyb
         [btn("فرستادن لینک دعوت", emoji_key="btn_referral", style=CONFIRM, url=st["share_url"])],
         [btn("🥊 چالش رفیق", style=NAV, callback_data="ch:new"),
          InlineKeyboardButton("➕ ربات توی گروهت", url=add_group_url())],
-        [btn("🏅 جایزه‌ها و قوانین", style=NAV, callback_data="ref_view:rules:0")],
+        [btn("راهنما", emoji_key="btn_report", style=NAV, callback_data="ref_view:rules:0")],
     ]
     if friends:
         rows.append([
@@ -159,7 +167,7 @@ def _render(st: dict, filt: str = "all", page: int = 0) -> tuple[str, InlineKeyb
             f"🎉 دریافت جایزه · {st['claimable']}",
             emoji_key="btn_confirm", style=CONFIRM, callback_data="ref_claim",
         )])
-    rows.append([back_btn("menu:hub_city", "بازگشت به شهر")])
+    rows.append([back_btn("menu:me", "منوی اصلی")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 

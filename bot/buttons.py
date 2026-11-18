@@ -71,7 +71,7 @@ _INFER_KEYWORDS: list[tuple[tuple[str, ...], str]] = [
     (("بتلپاس", "بتل‌پاس", "پاس فصلی", "پاس ماهانه"), "btn_battlepass"),
     (("رویداد",), "btn_events"),
     (("لیگ",), "btn_league"),
-    (("دعوت", "زیرمجموعه"), "btn_referral"),
+    (("دعوت رفیق", "دعوت", "زیرمجموعه"), "btn_referral"),
     (("دانشنامه",), "btn_codex"),
     (("القاب", "عناوین", "لقب"), "btn_titles"),
     (("گردونه",), "btn_wheel"),
