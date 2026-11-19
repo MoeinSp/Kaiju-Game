@@ -3,12 +3,10 @@
 Outgoing gold (a withdrawal, or a transfer to someone else) shares one daily
 budget: 20% of the hall's capacity. Incoming gold from another player lands in
 the bank. An account younger than a week can receive at most 30,000 a day.
-Gold that left the bank in the last 24 hours is not lootable in a group attack.
+Gold that has been withdrawn is ordinary free gold and a group attack can loot it.
 """
 
 from __future__ import annotations
-
-import datetime
 
 from django.utils import timezone
 
@@ -58,36 +56,15 @@ def receive_room(user, level: int) -> int:
     return room
 
 
-def _note_out(user, amount: int) -> None:
-    now = timezone.now()
-    window = datetime.timedelta(hours=constants.BANK_LOOT_PROTECT_HOURS)
-    if user.bank_out_at and now - user.bank_out_at < window:
-        user.bank_out_amount = int(user.bank_out_amount or 0) + amount
-    else:
-        user.bank_out_amount = amount
-        user.bank_out_at = now
-
-
-def recent_bank_gold(user) -> int:
-    """Gold that moved from the bank into the wallet during the last 24 hours."""
-    if not user.bank_out_at or not user.bank_out_amount:
-        return 0
-    window = datetime.timedelta(hours=constants.BANK_LOOT_PROTECT_HOURS)
-    if timezone.now() - user.bank_out_at >= window:
-        return 0
-    return min(int(user.bank_out_amount), int(user.coins or 0))
-
-
 def lootable_gold(user) -> int:
-    return max(0, int(user.coins or 0) - recent_bank_gold(user))
+    """Free-wallet gold. A withdrawal from the bank is the same gold and can be looted."""
+    return max(0, int(user.coins or 0))
 
 
 def apply_group_loot(user, gold: int) -> None:
-    """Remove looted gold. The caller already left the last 24h of bank withdrawals out of `gold`."""
+    """Remove looted gold from the free wallet."""
     gold = max(0, int(gold))
     user.coins = max(0, int(user.coins or 0) - gold)
-    if user.bank_out_amount:
-        user.bank_out_amount = min(int(user.bank_out_amount), int(user.coins))
 
 
 def deposit(user, amount: int, *, level: int) -> None:
@@ -141,9 +118,8 @@ def withdraw_to_wallet(user, level: int) -> int:
         raise GameError("سقف برداشت امروز تمام شده. فردا دوباره می‌توانی برداشت کنی.")
     user.bank_gold -= amount
     user.coins = int(user.coins or 0) + amount
-    _note_out(user, amount)
     _add(user, "bank_withdrawn", amount)
-    user.save(update_fields=["bank_gold", "coins", "bank_out_amount", "bank_out_at"])
+    user.save(update_fields=["bank_gold", "coins"])
     return amount
 
 

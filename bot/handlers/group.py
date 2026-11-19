@@ -1827,7 +1827,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
 
         apply_group_loot(target, loot)
         target.dna_fragments -= dna_win
-        target_fields = ["coins", "bank_out_amount", "dna_fragments"]
+        target_fields = ["coins", "dna_fragments"]
 
         attacker.coins += loot
         attacker.dna_fragments += dna_win

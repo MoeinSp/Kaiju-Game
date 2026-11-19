@@ -18,7 +18,7 @@ class User(models.Model):
     # unearned_coins is unused; it stayed from a split that was removed.
     bank_gold = models.IntegerField(default=0)
     unearned_coins = models.IntegerField(default=0)
-    # Gold moved bank → wallet in the current 24h window. Group «اتک» cannot loot it.
+    # Unused. Kept so the live database does not need another migration.
     bank_out_amount = models.IntegerField(default=0)
     bank_out_at = models.DateTimeField(null=True, blank=True)
     dna_fragments = models.IntegerField(default=100)
