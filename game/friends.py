@@ -424,11 +424,12 @@ def _names(who: str, them: str, body: str) -> str:
 
 def play(sender: User, target: User | None, word: str, other_id: int) -> dict:
     """The group reply. `quiet` means say nothing. `ask` means offer the two buttons."""
-    gate = _cooldown(sender.id, other_id)
-    if gate == "wait":
-        return {"text": "یه کم صبر کن، بعد دوباره تف یا تشویق کن.", "ask": False, "wait": True, "quiet": False}
-    if gate == "quiet":
-        return {"text": "", "ask": False, "wait": False, "quiet": True}
+    if word != "لیس":
+        gate = _cooldown(sender.id, other_id)
+        if gate == "wait":
+            return {"text": "یه کم صبر کن و دوباره بزن.", "ask": False, "wait": True, "quiet": False}
+        if gate == "quiet":
+            return {"text": "", "ask": False, "wait": False, "quiet": True}
     if target is None:
         return {"text": "این بازیکن هنوز بازی را شروع نکرده.", "ask": False, "wait": False, "quiet": False}
     who = lab_mention(sender)
@@ -437,10 +438,10 @@ def play(sender: User, target: User | None, word: str, other_id: int) -> dict:
         return spit_request(sender, target)
     if word == "لیس":
         if not are_friends(sender.id, target.id):
-            text = "👅 <b>لیس</b>\n\n" + _names(
-                who, them,
-                "هنوز دوست نیستید و لیس جایزه ندارد.\n"
-                "برای دوستی باید تف کنی. دکمه‌ی زیر را بزن تا همین پیام بشود درخواست دوستی.",
+            text = (
+                "👅 <b>لیس</b>\n\n"
+                "شما دوست نیستید و نمی‌توانید به هم لیس بزنید.\n\n"
+                f"برای دوست شدن، با دکمه‌ی زیر به {them} تف کن."
             )
             return {"text": text, "ask": False, "spit": True, "wait": False, "quiet": False}
         try:

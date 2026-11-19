@@ -196,7 +196,7 @@ async def group_word(update: Update, context: ContextTypes.DEFAULT_TYPE, word: s
     markup = None
     if result.get("spit"):
         markup = InlineKeyboardMarkup([[
-            btn("تف", emoji_key="btn_friends", style=PRIMARY, callback_data=f"fr:lickspit:{user.id}:{target_id}"),
+            btn("تف برای دوستی", emoji_key="btn_friends", style=PRIMARY, callback_data=f"fr:lickspit:{user.id}:{target_id}"),
         ]])
     elif result["ask"]:
         lo, hi = friends.pair_ids(user.id, target_id)

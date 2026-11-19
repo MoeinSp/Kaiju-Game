@@ -97,6 +97,8 @@ def main():
         a.refresh_from_db()
         assert b.diamonds == 12 and a.diamonds == 10 and a.coins == 1000
         DailyActionLog.objects.filter(user_id=A, action=friends.LICK_GIVE).update(count=15)
+        again = friends.play(a, b, "لیس", B)
+        assert again["wait"] is False and "صبر کن" not in again["text"]
         friends.reset_cooldowns()
         capped = friends.play(a, b, "لیس", B)
         assert capped["ask"] is False and "۱۵" in capped["text"]
