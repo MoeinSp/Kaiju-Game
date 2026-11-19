@@ -186,9 +186,10 @@ def _detail_view(user, building: Building) -> dict:
         "bank": None,
     }
     if building.building_type == "trade_hall" and building.level > 0:
-        from game.bank import snapshot
+        from game.bank import snapshot, take_interest_notice
 
         view["bank"] = snapshot(user, building.level)
+        view["bank"]["notice"], view["bank"]["notice_days"] = take_interest_notice(user)
     return view
 
 
@@ -301,8 +302,13 @@ def _building_detail_text(view: dict) -> str:
         )
         if bank["young"]:
             lines.append(f"🆕 سقف دریافت بانک تا یک هفته: <code>{bank['receive_left']:,}</code> طلای مانده‌ی امروز")
+        from game.bank import interest_notice_text
+
+        notice = interest_notice_text(bank.get("notice") or 0, bank.get("notice_days") or 0)
+        if notice:
+            lines.append(f"<blockquote>💰 {notice}</blockquote>")
         lines.append(
-            f"🌙 هر شب ساعت ۲۴، <b>{constants.BANK_INTEREST_PERCENT}٪</b> موجودی همین لحظه‌ی بانک به طلای آزاد اضافه می‌شود."
+            f"روزانه <b>{constants.BANK_INTEREST_PERCENT}٪</b> از مبلغ بانک به عنوان سود به موجودی شما اضافه می‌شود."
         )
     if btype == "blacksmith" and building.level > 0:
         lines.append(f"🔨 سقفِ فعلیِ سطحِ تجهیزات: <code>+{building.level * constants.EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL}</code>")
@@ -986,10 +992,14 @@ async def building_buy_builder_callback(update: Update, context: ContextTypes.DE
 def _bank_state_sync(tg_user):
     from game.bank import snapshot
 
+    from game.bank import take_interest_notice
+
     user, _ = get_or_create_user(tg_user)
     building = Building.objects.filter(owner=user, building_type="trade_hall").first()
     level = building.level if building is not None else 0
     info = snapshot(user, level) if level else None
+    if info is not None:
+        info["notice"], info["notice_days"] = take_interest_notice(user)
     return level, info
 
 
@@ -1005,34 +1015,113 @@ def _bank_text(level, info) -> str:
         f"طلای آزاد: <code>{info['wallet']:,}</code>",
         f"برداشت امروز: <code>{info['left']:,}</code> از <code>{info['daily']:,}</code> مانده",
         "",
-        f"هر شب ساعت ۲۴، <b>{constants.BANK_INTEREST_PERCENT}٪</b> طلای داخل بانک به موجودی آزاد اضافه می‌شود.",
-        "واریز از طلای آزاد است و سقف روزانه‌ی حساب تازه را کم نمی‌کند.",
     ]
+    from game.bank import interest_notice_text
+
+    notice = interest_notice_text(info.get("notice") or 0, info.get("notice_days") or 0)
+    if notice:
+        lines.append(f"<blockquote>💰 {notice}</blockquote>")
+    lines.append(
+        f"روزانه <b>{constants.BANK_INTEREST_PERCENT}٪</b> از مبلغ بانک به عنوان سود به موجودی شما اضافه می‌شود."
+    )
+    lines.append("واریز از طلای آزاد است و سقف روزانه‌ی حساب تازه را کم نمی‌کند.")
     if info["young"]:
         lines.append(f"🆕 دریافت از دیگران تا یک هفته: <code>{info['receive_left']:,}</code> مانده‌ی امروز")
     return "\n".join(lines)
 
 
-def _bank_keyboard(level) -> InlineKeyboardMarkup:
+def _bank_keyboard(level, owner_id: int | None = None, in_group: bool = False) -> InlineKeyboardMarkup:
+    tail = f":{owner_id}" if owner_id else ""
     rows = []
     if level:
         rows.append([
-            btn("واریز", emoji_key="btn_deposit", style=CONFIRM, callback_data="bank_move:in"),
-            btn("برداشت", emoji_key="btn_collect", style=PRIMARY, callback_data="bank_move:out"),
+            btn("واریز", emoji_key="btn_deposit", style=CONFIRM, callback_data=f"bank_move:in{tail}"),
+            btn("برداشت", emoji_key="btn_collect", style=PRIMARY, callback_data=f"bank_move:out{tail}"),
         ])
         rows.append([
-            btn("واریز حداکثر", emoji_key="btn_deposit", style=CONFIRM, callback_data="bank_max:in"),
-            btn("برداشت حداکثر", emoji_key="btn_collect", style=PRIMARY, callback_data="bank_max:out"),
+            btn("واریز حداکثر", emoji_key="btn_deposit", style=CONFIRM, callback_data=f"bank_max:in{tail}"),
+            btn("برداشت حداکثر", emoji_key="btn_collect", style=PRIMARY, callback_data=f"bank_max:out{tail}"),
         ])
-    else:
+    elif not in_group:
         rows.append([btn("ساختمان‌ها", emoji_key="btn_buildings", style=BUILD, callback_data="menu:buildings")])
-    rows.append([back_btn("menu:hub_base", "پایگاه")])
+    if not in_group:
+        rows.append([back_btn("menu:hub_base", "پایگاه")])
     return InlineKeyboardMarkup(rows)
+
+
+def _in_group(update) -> bool:
+    chat = update.effective_chat
+    return chat is not None and chat.type in ("group", "supergroup")
 
 
 async def bank_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     level, info = await run_db(_bank_state_sync, update.effective_user)
-    await send_screen(update, _bank_text(level, info), parse_mode="HTML", reply_markup=_bank_keyboard(level))
+    user = update.effective_user
+    grouped = _in_group(update)
+    await send_screen(
+        update,
+        _bank_text(level, info),
+        parse_mode="HTML",
+        reply_markup=_bank_keyboard(level, user.id if user else None, grouped),
+    )
+
+
+def parse_group_bank(norm: str):
+    """Group text → ("panel", None) or ("in"|"out", amount|"max"|None). None means not a bank word.
+
+    Bare «برداشت» stays the mine collect word. Bank withdraw always says بانک.
+    """
+    import re
+
+    if norm in ("بانک", "بانک طلا"):
+        return "panel", None
+    if "خزانه" in norm:
+        return None
+    deposit = re.fullmatch(r"واریز(?:\s+به)?(?:\s+بانک)?(?:\s+(.+))?", norm)
+    withdraw = re.fullmatch(r"برداشت(?:\s+از)?\s+بانک(?:\s+(.+))?", norm)
+    match = deposit or withdraw
+    if match is None:
+        return None
+    direction = "in" if deposit else "out"
+    raw = (match.group(1) or "").strip()
+    if not raw:
+        return direction, None
+    if raw in ("همه", "حداکثر", "کل"):
+        return direction, "max"
+    amount = _parse_gold(raw)
+    if amount is None or amount <= 0:
+        return None
+    return direction, amount
+
+
+async def group_bank(update, context, kind: str, amount) -> None:
+    from bot.handlers.group_panels import _remember
+
+    message = update.effective_message
+    user = update.effective_user
+    _remember(message.chat_id, message.message_id, user.id)
+    if kind == "panel" or amount is None:
+        if kind in ("in", "out"):
+            context.user_data["awaiting_player_input"] = {"action": "bank_in" if kind == "in" else "bank_out"}
+            verb = "واریز به بانک" if kind == "in" else "برداشت از بانک"
+            await message.reply_text(f"💰 مقدار طلا برای {verb} را روی همین پیام ریپلای کن. مثلاً ۵۰۰۰۰")
+            return
+        await bank_panel(update, context)
+        return
+    if amount == "max":
+        try:
+            moved = await run_db(_max_sync, user, kind)
+        except GameError as exc:
+            await message.reply_text(f"⚠️ {exc}")
+            return
+    else:
+        try:
+            moved = await run_db(_move_sync, user, kind, amount)
+        except GameError as exc:
+            await message.reply_text(f"⚠️ {exc}")
+            return
+    verb = "واریز شد" if kind == "in" else "به موجودی آزاد آمد"
+    await message.reply_text(f"✅ <code>{moved:,}</code> طلا {verb}.", parse_mode="HTML")
 
 
 def _parse_gold(text: str) -> int | None:
@@ -1094,18 +1183,32 @@ async def apply_bank_text(update, context, action: str, text: str) -> None:
     await bank_panel(update, context)
 
 
+def _own_bank_tap(query) -> bool:
+    parts = query.data.split(":")
+    if len(parts) < 3:
+        return True
+    return query.from_user is not None and str(query.from_user.id) == parts[2]
+
+
 async def bank_move_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    if not _own_bank_tap(query):
+        await query.answer("این پنل مال تو نیست — خودت «بانک» را بفرست.", show_alert=True)
+        return
     direction = query.data.split(":")[1]
     action = "bank_in" if direction == "in" else "bank_out"
     context.user_data["awaiting_player_input"] = {"action": action}
     await query.answer()
     verb = "واریز به بانک" if direction == "in" else "برداشت به موجودی آزاد"
-    await query.message.reply_text(f"💰 مقدار طلا برای {verb} را بفرست. مثلاً ۵۰۰۰۰")
+    hint = "روی همین پیام ریپلای کن و عدد را بفرست." if _in_group(update) else "عدد را بفرست."
+    await query.message.reply_text(f"💰 مقدار طلا برای {verb}. {hint} مثلاً ۵۰۰۰۰")
 
 
 async def bank_max_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    if not _own_bank_tap(query):
+        await query.answer("این پنل مال تو نیست — خودت «بانک» را بفرست.", show_alert=True)
+        return
     direction = query.data.split(":")[1]
     try:
         moved = await run_db(_max_sync, update.effective_user, direction)

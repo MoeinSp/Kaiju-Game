@@ -1637,6 +1637,18 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await group_panels.handle(update, context, *panel_word)
         return
 
+    from bot.handlers.buildings import group_bank, parse_group_bank
+    from bot.handlers.exchange import exchange_all_panel, parse_group_all
+
+    bank_word = parse_group_bank(norm)
+    if bank_word is not None:
+        await group_bank(update, context, *bank_word)
+        return
+    all_direction = parse_group_all(norm)
+    if all_direction is not None:
+        await exchange_all_panel(update, context, all_direction)
+        return
+
     # «انتقال روشن» / «انتقال خاموش» — toggle whether OTHERS can transfer TO you
     if norm in ("انتقال روشن", "انتقال روشن کن", "انتقال on"):
         await group_handlers.toggle_transfers(update, context, True)
@@ -1728,6 +1740,12 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
         await private_handlers.missions(update, context)
         _schedule_cleanup(context, message.chat_id, [message.message_id], action)
+        return
+
+    if action == "bank":
+        from bot.handlers.buildings import group_bank
+
+        await group_bank(update, context, "panel", None)
         return
 
     if action == "exchange":

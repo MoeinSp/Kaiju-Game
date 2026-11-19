@@ -171,6 +171,9 @@
     }
     if (b.state === "locked") return '<span class="bs-dim">' + K.ic("lock") + "از سطح " + K.n(b.unlock_hall) + " تالار مِهر باز می‌شه</span>";
     if (b.level === 0) return '<span class="bs-dim">' + K.ic("hammer") + "هنوز ساخته نشده</span>";
+    if (b.type === "trade_hall" && b.bank) {
+      return '<span class="t-gold">' + K.ic("coin") + '</span><span><b>' + K.n(b.bank.gold) + '</b> در بانک</span>';
+    }
     if (b.produces) {
       var r = RES[b.resource];
       return '<span class="' + r.cls + '">' + K.ic(r.icon) + "</span><span><b>" + num(b.rate) + '</b> در ساعت</span><span class="faint">·</span><span class="bs-dim">' + K.ic("bs_worker") + '<span class="num">' + b.workers + "/" + b.slots + "</span></span>";
@@ -185,6 +188,10 @@
   }
   /* ONE action per card — the most useful thing to do with this building right now */
   function cardAction(b) {
+    if (b.type === "trade_hall" && b.level > 0 && b.bank) {
+      return '<button class="btn sm good" data-act="bank-in" data-id="' + b.id + '">' + K.ic("coin") + "واریز</button>" +
+        '<button class="btn sm" data-act="bank-out" data-id="' + b.id + '">' + K.ic("coin") + "برداشت</button>";
+    }
     if (b.produces && b.level > 0 && b.pending > 0) {
       return '<button class="btn sm good" data-act="collect" data-id="' + b.id + '">' + K.ic(RES[b.resource].icon) + "برداشت " + '<span class="num">+' + fmt(b.pending) + "</span></button>";
     }
@@ -253,6 +260,8 @@
             var b = byId[+el.dataset.id]; if (!b || !b.upgrade) return;
             speedSheet(b, { cards: d.cards, left: Math.max(1, b.upgrade.left - Math.round((Date.now() - drawnAt) / 1000)) }, io);
           },
+          "bank-in": function (el) { var b = byId[+el.dataset.id]; if (b && b.bank) bankSheet("in", b, io); },
+          "bank-out": function (el) { var b = byId[+el.dataset.id]; if (b && b.bank) bankSheet("out", b, io); },
           "collect-all": function (el) {
             send("base/collect_all/", {}, el, io).then(function (r) {
               return K.reward({ icon: "bs_silo", title: "برداشت شد!", coins: r.got.coins, dna: r.got.dna, diamonds: r.got.diamonds, button: "خوبه" }).then(function () { return showMissions(r.missions); });
@@ -290,11 +299,14 @@
   }
   function bankBlock(k) {
     var h = '<div class="panel pad mt"><div class="flex between"><span class="muted">موجودی بانک</span><b class="num">' + K.n(k.gold) + ' <span class="muted">/ ' + K.n(k.cap) + "</span></b></div>" +
-      '<div class="sm muted mt">طلای آزاد: ' + K.n(k.wallet || 0) + " · برداشت امروز: " + K.n(k.left) + " از " + K.n(k.daily) + " مانده</div>" +
-      '<div class="sm mt">هر شب ساعت ۲۴، ۲٪ موجودی بانک به طلای آزاد اضافه می‌شود.</div>';
+      '<div class="sm muted mt">طلای آزاد: ' + K.n(k.wallet || 0) + " · برداشت امروز: " + K.n(k.left) + " از " + K.n(k.daily) + " مانده</div>";
+    if (k.notice > 0) h += '<div class="callout good mt">' + K.ic("coin") + (k.notice_days > 1
+      ? "طی " + K.n(k.notice_days) + " روز، <b>" + K.n(k.notice) + "</b> طلا به موجودی شما اضافه شد."
+      : "<b>" + K.n(k.notice) + "</b> طلا به موجودی شما اضافه شد.") + "</div>";
+    h += '<div class="sm mt">روزانه ۲٪ از مبلغ بانک به عنوان سود به موجودی شما اضافه می‌شود.</div>';
     if (k.young) h += '<div class="sm t-warn mt">تا یک‌هفتگی، سقف دریافت از دیگران امروز ' + K.n(k.receive_left) + " طلا مانده. واریز خودت از این سقف کم نمی‌شود.</div>";
-    h += '<div class="row mt"><button class="btn good" data-act="bank-in">' + K.ic("coin") + "واریز</button>" +
-      '<button class="btn" data-act="bank-out">' + K.ic("coin") + "برداشت</button></div>";
+    h += '<button class="btn good block mt" data-act="bank-in">' + K.ic("coin") + "واریز به بانک</button>" +
+      '<button class="btn block mt" data-act="bank-out">' + K.ic("coin") + "برداشت به موجودی</button>";
     return h + "</div>";
   }
   function bankSheet(dir, bld, io) {

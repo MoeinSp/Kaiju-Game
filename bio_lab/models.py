@@ -23,6 +23,9 @@ class User(models.Model):
     bank_out_at = models.DateTimeField(null=True, blank=True)
     # Tehran date this account already received the nightly 2% bank interest.
     bank_interest_on = models.DateField(null=True, blank=True)
+    # Interest already paid into the free wallet, not yet shown on the bank screen.
+    bank_interest_notice = models.IntegerField(default=0)
+    bank_interest_notice_days = models.IntegerField(default=0)
     dna_fragments = models.IntegerField(default=100)
     diamonds = models.IntegerField(default=100)  # premium currency: diamond collector, daily wheel, diamond boxes
     biocrate_tickets = models.IntegerField(default=0)  # earned by exchanging gear; opens genetic boxes free

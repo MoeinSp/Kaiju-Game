@@ -61,6 +61,8 @@ def _home_render(oid: int, coins: int, dna: int, in_group: bool) -> tuple[str, I
     rows = [
         [btn("خرید طلا", emoji_key="btn_gold_shop", style=BUILD, callback_data=f"exch:pick:buy_gold:{oid}")],
         [btn("خرید DNA", emoji_key="btn_exchange", style=SHOP, callback_data=f"exch:pick:buy_dna:{oid}")],
+        [btn("همهٔ طلا به DNA", emoji_key="btn_exchange", style=SHOP, callback_data=f"exch:all:buy_dna:{oid}")],
+        [btn("همهٔ DNA به طلا", emoji_key="btn_gold_shop", style=BUILD, callback_data=f"exch:all:buy_gold:{oid}")],
         [btn("تجهیزات ← بلیط", emoji_key="btn_ticket_exchange", style=NAV,
              callback_data=f"exch:tickets:{oid}")],
         _leave_row(in_group),
@@ -104,6 +106,7 @@ def _amount_render(oid: int, direction: str, coins: int, dna: int, in_group: boo
         for amt in exchange.PRESET_DNA:
             label = f"دریافت {amt:,} DNA"
             rows.append([btn(label, emoji_key="btn_exchange", style=SHOP, callback_data=f"exch:amt:{direction}:{amt}:{oid}")])
+    rows.append([btn("تبدیل همه", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"exch:all:{direction}:{oid}")])
     rows.append([btn("عدد دلخواه", emoji_key="btn_custom_amt", style=NAV, callback_data=f"exch:custom:{direction}:{oid}")])
     rows.append([back_btn(f"exch:home:{oid}")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
@@ -144,6 +147,38 @@ def direction_of(text: str | None) -> str | None:
     if "طلا به DNA" in t or t.startswith(("خرید DNA", "فروش طلا")):
         return "buy_dna"    # pay gold, get DNA
     return None
+
+
+def parse_group_all(norm: str) -> str | None:
+    """«تبدیل همه طلا» / «تبدیل همه DNA» → the exchange direction, or None."""
+    gold = {
+        "تبدیل همه طلا", "همه طلا به dna", "همه طلا به دی ان ای", "همه طلا به دیانای",
+        "تبدیل همه طلا به dna", "تبدیل همه طلا به دی ان ای",
+    }
+    dna = {
+        "تبدیل همه dna", "تبدیل همه دی ان ای", "تبدیل همه دیانای",
+        "همه dna به طلا", "همه دی ان ای به طلا", "همه دیانای به طلا",
+    }
+    if norm in gold:
+        return "buy_dna"
+    if norm in dna:
+        return "buy_gold"
+    return None
+
+
+async def exchange_all_panel(update: Update, context: ContextTypes.DEFAULT_TYPE, direction: str) -> None:
+    """Confirm converting as much as one exchange allows. The tap still does the swap."""
+    if not exchange.ENABLED:
+        await send_screen(update, _DISABLED_MSG, parse_mode="HTML")
+        return
+    coins, dna = await run_db(_bal_sync, update.effective_user)
+    try:
+        pack = exchange.describe(direction, exchange.all_dna(coins, dna, direction))
+    except GameError as exc:
+        await update.effective_message.reply_text(f"⚠️ {exc}")
+        return
+    text, keyboard = build_confirm(update.effective_user.id, pack, coins, dna)
+    await send_screen(update, text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def exchange_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -200,6 +235,18 @@ async def exchange_nav_callback(update: Update, context: ContextTypes.DEFAULT_TY
             return
         await query.answer()
         text, kb = _amount_render(int(oid), direction, coins, dna, _is_group(update))
+        await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+        return
+
+    if step == "all":
+        direction = parts[2]
+        try:
+            pack = exchange.describe(direction, exchange.all_dna(coins, dna, direction))
+        except GameError as exc:
+            await query.answer(alert_text(exc), show_alert=True)
+            return
+        await query.answer()
+        text, kb = build_confirm(int(oid), pack, coins, dna)
         await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
         return
 

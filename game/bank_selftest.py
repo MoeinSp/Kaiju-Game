@@ -85,6 +85,8 @@ def check_wallet_and_bank():
     seller.refresh_from_db()
     assert seller.bank_gold == 500_000
     assert seller.coins == 110_000
+    assert seller.bank_interest_notice == 10_000
+    assert seller.bank_interest_notice_days == 1
     assert settle_interest(seller) == 0
     moved = withdraw_to_wallet(seller, 5)
     seller.refresh_from_db()
@@ -125,6 +127,16 @@ def check_young_and_loot():
     assert young.bank_gold == 30_000
     assert young.coins == 600
     assert settle_interest(young) == 0
+    young.bank_interest_on = None
+    young.save(update_fields=["bank_interest_on"])
+    assert settle_interest(young) == 600
+    young.refresh_from_db()
+    assert young.bank_interest_notice == 1_200
+    assert young.bank_interest_notice_days == 2
+    from game.bank import interest_notice_text, take_interest_notice
+    assert "۲" in interest_notice_text(1_200, 2) or "2" in interest_notice_text(1200, 2)
+    assert take_interest_notice(young) == (1_200, 2)
+    assert take_interest_notice(young) == (0, 0)
     young.coins = 50_000
     young.save(update_fields=["coins"])
     deposit_from_wallet(young, 5, 20_000)

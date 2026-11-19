@@ -61,6 +61,21 @@ def sell_gold_gain(dna: int) -> int:
     return int(dna) * GOLD_PER_DNA_SELL
 
 
+def all_dna(coins: int, dna: int, direction: str) -> int:
+    """Every whole unit the player can convert right now, capped at one exchange."""
+    if direction == "buy_dna":
+        amount = int(coins) // GOLD_PER_DNA_BUY
+        if amount <= 0:
+            raise GameError(f"حداقل {GOLD_PER_DNA_BUY:,} طلا برای ۱ DNA لازم است.")
+    elif direction == "buy_gold":
+        amount = int(dna)
+        if amount <= 0:
+            raise GameError("DNA برای تبدیل نداری.")
+    else:
+        raise GameError("جهت مبادله نامعتبره.")
+    return min(amount, MAX_EXCHANGE_DNA)
+
+
 def dna_for_gold(gold: int) -> int:
     """How many DNA you must sell to RECEIVE about `gold` gold (buy_gold direction).
     Rounds to the nearest whole DNA — the atomic unit — so the received gold may differ

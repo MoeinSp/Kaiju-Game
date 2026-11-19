@@ -517,6 +517,8 @@
         var dir = tabs.exDir, buyDna = dir === "buy_dna";
         if (!amount[dir]) amount[dir] = buyDna ? d.presets.buy_dna[0].dna : d.presets.buy_gold[0].gold;
         var presets = buyDna ? d.presets.buy_dna.map(function (p) { return [p.dna, K.n(p.dna) + " DNA"]; }) : d.presets.buy_gold.map(function (p) { return [p.gold, K.n(p.gold) + " طلا"]; });
+        var allAmt = buyDna ? Math.min(Math.floor((d.coins || 0) / d.rate_buy), d.max_dna) : Math.min(d.dna || 0, d.max_dna) * d.rate_sell;
+        if (allAmt > 0) presets.push([allAmt, "همه"]);
         body().innerHTML = banner(d.img, "صرافی طلا و DNA", "رفت و برگشتش ضرر داره؛ فقط وقتی لازمه تبدیل کن") +
           seg([["buy_dna", "خرید DNA", "dna"], ["buy_gold", "خرید طلا", "coin"]], dir, "dir") +
           '<div class="callout mb">' + K.ic("info") + "<div>" + (buyDna ? "برای هر ۱ DNA، " + K.n(d.rate_buy) + " طلا می‌دی." : "برای هر ۱ DNA که بدی، " + K.n(d.rate_sell) + " طلا می‌گیری.") + "</div></div>" +

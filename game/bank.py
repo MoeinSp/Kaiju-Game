@@ -92,15 +92,17 @@ def settle_interest(user) -> int:
         user.bank_interest_on = fresh.bank_interest_on
         return 0
     payout = int(row["bank_gold"] or 0) * constants.BANK_INTEREST_PERCENT // 100
-    updated = (
-        User.objects.filter(pk=user.pk)
-        .exclude(bank_interest_on=today)
-        .update(coins=F("coins") + payout, bank_interest_on=today)
-    )
+    changes = {"coins": F("coins") + payout, "bank_interest_on": today}
+    if payout > 0:
+        changes["bank_interest_notice"] = F("bank_interest_notice") + payout
+        changes["bank_interest_notice_days"] = F("bank_interest_notice_days") + 1
+    updated = User.objects.filter(pk=user.pk).exclude(bank_interest_on=today).update(**changes)
     fresh = User.objects.get(pk=user.pk)
     user.coins = fresh.coins
     user.bank_gold = fresh.bank_gold
     user.bank_interest_on = fresh.bank_interest_on
+    user.bank_interest_notice = fresh.bank_interest_notice
+    user.bank_interest_notice_days = fresh.bank_interest_notice_days
     return payout if updated else 0
 
 
@@ -197,6 +199,28 @@ def withdraw_to_wallet(user, level: int) -> int:
     return withdraw_amount(user, level, amount)
 
 
+def interest_notice_text(gold: int, days: int) -> str:
+    """The line shown the next time the player opens the bank. Empty when nothing is waiting."""
+    gold, days = int(gold or 0), int(days or 0)
+    if gold <= 0:
+        return ""
+    if days > 1:
+        return f"طی <b>{days}</b> روز، <b>{gold:,}</b> طلا به موجودی شما اضافه شد."
+    return f"<b>{gold:,}</b> طلا به موجودی شما اضافه شد."
+
+
+def take_interest_notice(user) -> tuple[int, int]:
+    """Read and clear the unseen interest receipt. One open of the bank consumes it."""
+    gold = int(getattr(user, "bank_interest_notice", 0) or 0)
+    days = int(getattr(user, "bank_interest_notice_days", 0) or 0)
+    if gold <= 0 and days <= 0:
+        return 0, 0
+    User.objects.filter(pk=user.pk).update(bank_interest_notice=0, bank_interest_notice_days=0)
+    user.bank_interest_notice = 0
+    user.bank_interest_notice_days = 0
+    return gold, days
+
+
 def snapshot(user, level: int) -> dict:
     cap = capacity(level)
     daily = daily_budget(level)
@@ -211,6 +235,8 @@ def snapshot(user, level: int) -> dict:
         "wallet": int(user.coins or 0),
         "young": young,
         "receive_left": max(0, constants.BANK_NEW_ACCOUNT_RECEIVE_CAP - received) if young else None,
+        "notice": int(getattr(user, "bank_interest_notice", 0) or 0),
+        "notice_days": int(getattr(user, "bank_interest_notice_days", 0) or 0),
     }
 
 

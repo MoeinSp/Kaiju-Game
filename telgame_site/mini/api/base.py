@@ -101,6 +101,10 @@ def _building_dict(user: User, b: Building, upgrade, sh: dict) -> dict:
         "desc": clean(constants.BUILDING_DESCRIPTIONS[btype]),
         "produces": False, "upgrade": None, "next": None,
     }
+    if btype == "trade_hall" and b.level > 0:
+        from game.bank import snapshot
+
+        out["bank"] = snapshot(user, b.level)
     if upgrade is not None:
         out["upgrade"] = {
             "target": upgrade.target_level, "left": _left(upgrade.finishes_at),
@@ -274,9 +278,10 @@ def _detail(user: User, building: Building) -> dict:
         extras.append("سقف ستاره‌ی هیولاها = سطح «تالار ادغام» (که خودش از سطح این تالار بالاتر نمی‌ره).")
         d["unlocks"] = {"level": building.level + 1, "items": _HALL_UNLOCKS.get(building.level + 1, [])}
     if btype == "trade_hall" and building.level > 0:
-        from game.bank import snapshot
+        from game.bank import snapshot, take_interest_notice
 
         d["bank"] = snapshot(user, building.level)
+        d["bank"]["notice"], d["bank"]["notice_days"] = take_interest_notice(user)
     d["extras"] = [e for e in extras if e]
 
     out = {"building": d, "builders": _builders(user, busy), "cards": _cards(user),

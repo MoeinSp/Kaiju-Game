@@ -5964,7 +5964,7 @@ _KEYWORD_TO_MENU = {
     "reward": "hub_city", "alliance": "alliance_info", "leaderboard": "rank",
     "box": "biocrate", "mine": "buildings", "wheel": "wheel",
     "select": "collection", "help": "guide", "start": "guide",
-    "casino": "casino", "exchange": "exchange", "balance": "balance",
+    "casino": "casino", "exchange": "exchange", "bank": "bank", "balance": "balance",
     "vip": "subscription", "subscription": "subscription", "chests": "arena_chests",
     "blackmarket": "blackmarket", "mugen": "mugen_tower", "tower": "mugen_tower",
     "blacksmith": "blacksmith", "forge": "blacksmith", "buy": "buy_open", "purchase": "buy_open",
