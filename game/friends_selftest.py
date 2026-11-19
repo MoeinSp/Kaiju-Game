@@ -112,6 +112,9 @@ def main():
         friends.reset_cooldowns()
         licked = friends.play(a, b, "لیس", B)
         assert licked["ask"] is False and "۲ الماس" in licked["text"] and "جایزه گرفت" in licked["text"]
+        listing = friends.licks_received_text(B)
+        assert "الف" in listing and "۱ از ۱۵" in listing
+        assert "هنوز امروز کسی" in friends.licks_received_text(A)
         assert "یک‌طرفه" not in licked["text"]
         b.refresh_from_db()
         a.refresh_from_db()

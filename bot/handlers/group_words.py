@@ -1657,6 +1657,12 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await toggle_invites(update, context, norm in _spit_on)
         return
 
+    if norm in ("لیسام", "لیس هام"):
+        from bot.handlers.friends import lick_list
+
+        await lick_list(update, context)
+        return
+
     from game.friends import WORDS as _FRIEND_WORDS
 
     friend_word = _FRIEND_WORDS.get(norm)

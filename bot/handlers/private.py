@@ -6071,6 +6071,12 @@ async def route_private_keyword(update: Update, context: ContextTypes.DEFAULT_TY
         await toggle_invites(update, context, norm_text in ("تف روشن", "تف روشن کن", "باز کردن تف", "بازکردن تف"))
         return True
 
+    if norm_text in ("لیسام", "لیس هام"):
+        from bot.handlers.friends import lick_list
+
+        await lick_list(update, context)
+        return True
+
     if norm_text in ("تف", "تف کردن", "لیس", "لیسیدن"):
         await message.reply_text(
             "این کلمه‌ها توی گروهن. روی پیام یه بازیکن ریپلای کن و همان کلمه را بفرست.",

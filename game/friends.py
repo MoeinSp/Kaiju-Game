@@ -363,10 +363,24 @@ def give_lick(giver: User, receiver: User) -> tuple[str, int]:
     if FriendMark.objects.filter(kind=LICK_KIND, actor_id=giver.id, day=day).count() >= LICK_CAP:
         raise GameError("امروز ۱۵ نفر را لیس زدی. فردا دوباره.")
     if FriendMark.objects.filter(kind=LICK_KIND, target_id=receiver.id, day=day).count() >= LICK_CAP:
-        raise GameError("این بازیکن امروز از ۱۵ نفر لیس گرفته. فردا دوباره.")
+        raise GameError("امروز این یکی حسابی لیس خورده. حسابی خیس شده و کثیفه. فردا دوباره بیا تا خشک شه.")
     FriendMark.objects.create(kind=LICK_KIND, actor_id=giver.id, target_id=receiver.id, day=day)
     step = FriendMark.objects.filter(kind=LICK_KIND, target_id=receiver.id, day=day).count()
     return _pay_lick(receiver, step), step
+
+
+def licks_received_text(user_id: int) -> str:
+    """Who licked this player today. Names stay on their own lines."""
+    rows = (
+        FriendMark.objects.filter(kind=LICK_KIND, target_id=user_id, day=today_str())
+        .select_related("actor")
+        .order_by("created_at", "id")
+    )
+    names = [lab_mention(row.actor) for row in rows]
+    head = f"👅 <b>لیس‌های امروز</b>\n{_fa(len(names))} از {_fa(LICK_CAP)}"
+    if not names:
+        return head + "\n\nهنوز امروز کسی لیس نزده."
+    return head + "\n\n" + "\n".join(names)
 
 
 def set_invites(user: User, enabled: bool) -> bool:

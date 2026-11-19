@@ -205,6 +205,16 @@ async def toggle_invites(update: Update, context: ContextTypes.DEFAULT_TYPE, ena
     await message.reply_text(text, parse_mode="HTML")
 
 
+async def lick_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«لیسام» — who licked this player today. No reply target."""
+    message = update.effective_message
+    user = update.effective_user
+    if message is None or user is None or user.is_bot or user.id == _ANON:
+        return
+    text = await run_db(friends.licks_received_text, user.id)
+    await message.reply_text(text, parse_mode="HTML")
+
+
 async def group_word(update: Update, context: ContextTypes.DEFAULT_TYPE, word: str) -> None:
     message = update.effective_message
     user = update.effective_user
