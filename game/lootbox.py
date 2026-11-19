@@ -64,17 +64,18 @@ def _biocrate_cfg(tier: str) -> dict:
 
 def _charge_biocrate(user: User, cfg: dict, times: int) -> None:
     gold, dna = cfg["gold"] * times, cfg["dna"] * times
-    if user.coins < gold:
-        raise InsufficientGoldError(
-            f"طلا کافی نداری! این خرید <b>{gold:,}</b> طلا می‌خواد (الان {user.coins:,} داری).",
-            need=gold, have=user.coins,
-        )
     if user.dna_fragments < dna:
         raise GameError(
             f"{dna} DNA لازمه (الان {user.dna_fragments} داری). "
             "DNA از شکار، دخمه، آزمایشگاه DNA و پاداش آفلاین به‌دست می‌آد."
         )
-    user.coins -= gold
+    from game.wallet import spend_wallet
+
+    if not spend_wallet(user, gold):
+        raise InsufficientGoldError(
+            f"این جعبه <b>{gold:,}</b> طلا می‌خواهد (الان {int(user.coins or 0):,} داری).",
+            need=gold, have=int(user.coins or 0),
+        )
     user.dna_fragments -= dna
     user.save(update_fields=["coins", "dna_fragments"])
 
@@ -111,16 +112,17 @@ def open_biocrate_batch(user: User, tier: str, count: int) -> dict:
     from_tickets = min(user.biocrate_tickets, count)
     paid = count - from_tickets
     gold, dna = cfg["gold"] * paid, cfg["dna"] * paid
-    if user.coins < gold:
-        raise InsufficientGoldError(
-            f"طلا کافی نداری! این باز کردن <b>{gold:,}</b> طلا می‌خواد (الان {user.coins:,} داری)"
-            + (f" — {from_tickets} تا با بلیط رایگانه." if from_tickets else "") + ".",
-            need=gold, have=user.coins,
-        )
     if user.dna_fragments < dna:
         raise GameError(f"{dna} DNA لازمه (الان {user.dna_fragments} داری).")
+    from game.wallet import spend_wallet
+
+    if not spend_wallet(user, gold):
+        raise InsufficientGoldError(
+            f"این باز کردن <b>{gold:,}</b> طلا می‌خواهد (الان {int(user.coins or 0):,} داری)"
+            + (f" — {from_tickets} تا با بلیط رایگانه." if from_tickets else "") + ".",
+            need=gold, have=int(user.coins or 0),
+        )
     user.biocrate_tickets -= from_tickets
-    user.coins -= gold
     user.dna_fragments -= dna
     user.save(update_fields=["biocrate_tickets", "coins", "dna_fragments"])
     rolls = [_biocrate_roll_once(user, cfg, tier) for _ in range(count)]

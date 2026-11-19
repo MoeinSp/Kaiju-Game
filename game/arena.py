@@ -123,7 +123,7 @@ def shield_status_lines(user: User) -> list[str]:
 
 
 def apply_group_shield(user: User) -> None:
-    """Give `user` a fresh 4h group shield — separate from the arena shield."""
+    """Give `user` a fresh group shield — separate from the arena shield."""
     user.group_shield_until = timezone.now() + datetime.timedelta(hours=constants.GROUP_SHIELD_HOURS)
     user.save(update_fields=["group_shield_until"])
 
@@ -148,7 +148,7 @@ def _refuse_shield_in_debt(user: User) -> None:
         raise GameError(
             "⛔️ خرید سپر برات قفله!\n\n"
             f"موجودی الماست منفیه ({user.diamonds:,} 💎). تا وقتی این بدهی صاف نشه نمی‌تونی سپر بخری؛ "
-            "فقط سپر خودکاری که بعد از هر حمله بهت می‌رسه فعال می‌شه."
+            "فقط سپر خودکاری که بعد از غارت‌شدن بهت می‌رسه فعال می‌شه."
         )
 
 
@@ -474,7 +474,7 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
 
     attacker_power = creature_power(attacker_creature, get_equipped_items(attacker_creature))
     # in a group, this fight is cup-neutral (award_cup=False): no cup change, and the
-    # arena shield is left untouched — group aggression uses its own 4h group shield.
+    # arena shield is left untouched — group aggression uses its own group shield.
     delta = cup_delta(attacker, opponent["cup"], won, attacker_power) if award_cup else 0
 
     # Only the ATTACKER loots, and only on a WIN: a winning attacker takes gold (and a
@@ -576,10 +576,13 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
     if defender_user is not None:
         defender_fields = ["coins", "dna_fragments", "plundered_alert_gold", "plundered_alert_dna"]
         if award_cup:
-            # a freshly-raided defender gets arena protection so they can't be farmed
-            defender_user.shield_until = timezone.now() + datetime.timedelta(hours=constants.ARENA_SHIELD_HOURS)
             defender_user.cup = max(0, defender_user.cup + (-delta if won else abs(delta)))
-            defender_fields += ["cup", "shield_until"]
+            defender_fields += ["cup"]
+            # A lost defense gets the full grace. A successful one gets half, so the
+            # winner is not queued for another raid in the same minute.
+            shield_hours = constants.ARENA_SHIELD_HOURS if won else constants.ARENA_SHIELD_HOURS // 2
+            defender_user.shield_until = timezone.now() + datetime.timedelta(hours=shield_hours)
+            defender_fields.append("shield_until")
         defender_user.save(update_fields=defender_fields)
         _release_opponent(defender_user.id)
 

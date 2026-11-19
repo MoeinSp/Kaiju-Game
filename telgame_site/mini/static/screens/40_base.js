@@ -288,6 +288,13 @@
       '<button class="btn ' + (poor || !nx.lab_ok ? "bs-off" : "primary") + ' block lg" data-act="upgrade">' + K.ic(build ? "hammer" : "up") + (build ? "شروع ساخت" : "شروع ارتقا") + '<span class="cost">' + K.ic("coin") + K.short(nx.cost) + "</span></button></div>";
     return h + "</div>";
   }
+  function bankBlock(k) {
+    var h = '<div class="panel pad mt"><div class="flex between"><span class="muted">موجودی بانک</span><b class="num">' + K.n(k.gold) + ' <span class="muted">/ ' + K.n(k.cap) + "</span></b></div>" +
+      '<div class="sm muted mt">برداشت امروز: ' + K.n(k.left) + " از " + K.n(k.daily) + " مانده</div>";
+    if (k.young) h += '<div class="sm t-warn mt">تا یک‌هفتگی، سقف دریافت بانک امروز ' + K.n(k.receive_left) + " طلا مانده.</div>";
+    if (k.gold > 0 && k.left > 0) h += '<button class="btn good block mt" data-act="bank">' + K.ic("coin") + "برداشت به موجودی</button>";
+    return h + "</div>";
+  }
   function producerBlock(b, d) {
     var r = RES[b.resource], ratio = b.store_cap > 0 ? b.pending / b.store_cap : 0, full = ratio >= 1;
     var h = '<div class="panel pad bs-silo"><div class="flex between"><span class="muted">مخزن</span><span class="b">' + K.n(b.pending) + ' <span class="muted">/ ' + K.n(b.store_cap) + "</span></span></div>" +
@@ -342,6 +349,7 @@
             '<div class="meta">' + tags + '</div><p class="bs-desc">' + K.esc(b.desc) + "</p></div>";
 
           if (b.produces && b.level > 0) html += '<div class="mt">' + producerBlock(b, d) + "</div>";
+          if (b.bank) html += bankBlock(b.bank);
 
           html += '<div class="h2">' + K.ic("hammer") + (b.level === 0 ? "ساخت" : "ارتقا") + '<span class="more">' + buildersLine(bl) + "</span></div>" + upgradeBlock(b, bl);
 
@@ -365,6 +373,11 @@
 
         acts(root, {
           collect: function (el) { doCollect(b.id, el, io); },
+          bank: function (el) {
+            send("base/withdraw/", { id: b.id }, el, io).then(function (r) {
+              K.haptic("ok"); K.toast(K.n(r.moved) + " طلا به موجودی آزاد آمد.", "ok");
+            }, function () { if (ctx.alive()) refresh(); });
+          },
           upgrade: function (el) { askUpgrade(b, el, io); },
           builder: function (el) { buyBuilder(bl.second_cost, el, io, b.id); },
           section: function () { if (link) K.go(link.go, link.params); },

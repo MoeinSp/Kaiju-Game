@@ -302,7 +302,8 @@ NOTIFY_CATEGORIES = {
     "invites": ("✉️ دعوت اتحاد", "پیام دعوت به اتحاد (دعوت‌ها توی صندوق نامه می‌مونن)"),
 }
 _MARKER_CATEGORY = {
-    "timer": "timers", "arena": "timers", "arena_chest_ready": "timers", "serum_ready": "timers",
+    "timer": "timers", "cave": "timers", "buildings": "timers", "dispatch": "timers",
+    "arena": "timers", "arena_chest_ready": "timers", "serum_ready": "timers",
     "worldboss": "events", "tournament": "events", "tournament_prize": "events", "festival": "events", "events": "events",
     "free_box_reminder": "reminders", "missions": "reminders", "nudge": "reminders", "gift": "reminders",
     "newbie": "reminders",
@@ -377,7 +378,25 @@ def _decorate(item) -> dict:
         reply_markup = InlineKeyboardMarkup(
             [[btn("تقویم تازه‌وارد", emoji_key="btn_confirm", style=CONFIRM, callback_data="nb:open")]]
         )
-    elif marker in ("timer", "nudge", "gift"):
+    elif marker == "cave":
+        from bot.buttons import PRIMARY
+
+        reply_markup = InlineKeyboardMarkup(
+            [[btn("غار", emoji_key="btn_breeding", style=PRIMARY, callback_data="menu:breeding")]]
+        )
+    elif marker == "buildings":
+        from bot.buttons import PRIMARY
+
+        reply_markup = InlineKeyboardMarkup(
+            [[btn("ساختمان‌ها", emoji_key="btn_buildings", style=PRIMARY, callback_data="menu:buildings")]]
+        )
+    elif marker == "dispatch":
+        from bot.buttons import PRIMARY
+
+        reply_markup = InlineKeyboardMarkup(
+            [[btn("اعزام", emoji_key="btn_dispatch", style=PRIMARY, callback_data="menu:dispatch")]]
+        )
+    elif marker in ("nudge", "gift"):
         reply_markup = InlineKeyboardMarkup(
             [[btn("امروز", emoji_key="btn_today", style=NAV, callback_data="menu:today")]]
         )

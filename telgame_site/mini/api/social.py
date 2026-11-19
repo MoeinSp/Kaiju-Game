@@ -26,6 +26,18 @@ _INVISIBLE_CHARS = dict.fromkeys(
 )
 
 
+def _flag_img(al: Alliance):
+    spec = al.flag if isinstance(al.flag, dict) and al.flag.get("style") else None
+    if not spec:
+        return None
+    from game.alliance_flag import normalize, render_flag
+
+    try:
+        return asset_img(render_flag(normalize(spec, al.name)))
+    except OSError:
+        return None
+
+
 def _text(value) -> str:
     """Game text (HTML-escaped names with a VIP badge, labels with emoji) → plain text."""
     return html.unescape(clean(value))
@@ -106,6 +118,9 @@ def _alliance_dict(user, al: Alliance) -> dict:
                     for m in alliance_raid_members(al.id, 10)],
         },
         "joined_today": _joined_alliance_today(user),
+        "flag": al.flag or None,
+        "flag_img": _flag_img(al),
+        "can_edit_flag": alliance_mod._is_manager(user, al),
         # what leaving does (same cases as the bot's confirm screen)
         "leave": {
             "last_member": others <= 0,
@@ -121,13 +136,47 @@ def alliance_panel(request, user):
     from game import alliance as alliance_mod
 
     al = Alliance.objects.filter(id=user.alliance_id).first() if user.alliance_id else None
+    from game.alliance_flag import catalog
+
     return {
         "banner": _feature_img("alliance"),
         "alliance": _alliance_dict(user, al) if al is not None else None,
+        "flag_options": catalog(),
         "create_cost": alliance_mod.ALLIANCE_CREATE_COST,
         "bot": BOT_USERNAME or None,
         "coins": user.coins,
     }
+
+
+def _flag_body(data, name: str) -> dict:
+    from game.alliance_flag import CLOTHS, EMBLEMS, METALS, PATTERNS, STYLES, normalize
+
+    return normalize({
+        "style": need_str(data, "style", STYLES),
+        "cloth": need_str(data, "cloth", CLOTHS),
+        "metal": need_str(data, "metal", METALS),
+        "emblem": need_str(data, "emblem", EMBLEMS),
+        "pattern": need_str(data, "pattern", PATTERNS),
+    }, name)
+
+
+@endpoint("POST")
+def alliance_flag_preview(request, user, data):
+    from game.alliance_flag import catalog, render_flag
+
+    al = Alliance.objects.filter(id=user.alliance_id).first() if user.alliance_id else None
+    if al is None:
+        raise GameError("اول باید عضو یه اتحاد باشی.")
+    spec = _flag_body(data, al.name)
+    return {"flag": spec, "img": asset_img(render_flag(spec)), "options": catalog()}
+
+
+@endpoint("POST")
+def alliance_flag_save(request, user, data):
+    from game.alliance_flag import set_flag
+
+    al = set_flag(user, _flag_body(data, ""))
+    return {"flag": al.flag, "img": _flag_img(al)}
 
 
 @endpoint("POST")
@@ -209,6 +258,7 @@ def ranks(request, user):
         for i, r in enumerate(alliance_mod.top_alliances(10), start=1):
             out["rows"].append({
                 "rank": i, "name": r["alliance"].name, "value": r["power"], "members": r["member_count"],
+                "flag": _flag_img(r["alliance"]),
                 "me": r["alliance"].id == mine,
                 "reward": _grant_dict(alliance_mod.ALLIANCE_LEAGUE_REWARD_BY_RANK.get(i)) if league_open else None,
             })
@@ -441,6 +491,8 @@ def settings_rename(request, user, data):
 
 routes = [
     ("alliance/", alliance_panel),
+    ("alliance/flag/preview/", alliance_flag_preview),
+    ("alliance/flag/", alliance_flag_save),
     ("alliance/deposit/", alliance_deposit),
     ("alliance/leave/", alliance_leave),
     ("alliance/war/preview/", alliance_war_preview),

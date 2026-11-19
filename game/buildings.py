@@ -444,7 +444,14 @@ def start_upgrade(user: User, building: Building) -> BuildingUpgrade:
             f"طلا کافی نداری! {verb} <b>{cost:,}</b> طلا می‌خواد (الان {user.coins:,} داری).",
             need=cost, have=user.coins,
         )
-    user.coins -= cost
+    from game.wallet import spend_wallet
+
+    if not spend_wallet(user, cost):
+        verb = "ساخت" if building.level == 0 else "ارتقا"
+        raise InsufficientGoldError(
+            f"طلا کافی نداری! {verb} <b>{cost:,}</b> طلا می‌خواد (الان {user.coins:,} داری).",
+            need=cost, have=user.coins,
+        )
     user.save(update_fields=["coins"])
 
     finishes_at = timezone.now() + datetime.timedelta(seconds=upgrade_seconds(building))

@@ -191,3 +191,37 @@ def _pick_defender(owner: User, attacker_creature: Creature | None, attacker_pow
         return (eb > ea, eb - ea, p)
 
     return max(powered, key=score)
+
+
+def group_fight_defender(owner: User, attacker_creature: Creature | None, attacker_power: int | None) -> Creature | None:
+    """Group «اتک» defender. A defense team weaker than 80% of the account's two strongest
+    creatures does not fight: the better of those two does, and nobody is unassigned."""
+    creatures = list(Creature.objects.filter(owner=owner))
+    if not creatures:
+        return None
+    powers = {c.id: power_of(owner, c) for c in creatures}
+    ranked = sorted(creatures, key=lambda c: powers[c.id], reverse=True)
+    top = ranked[:2]
+    top_sum = sum(powers[c.id] for c in top)
+    ids = member_ids(owner)
+    by_id = {c.id: c for c in creatures}
+    if ids:
+        team = [by_id[i] for i in ids if i in by_id]
+    else:
+        team = [c for c in creatures if c.is_active][:1]
+    team_sum = sum(powers[c.id] for c in team)
+    if top_sum <= 0 or team_sum * 5 >= top_sum * 4:
+        creature, _power = pick_defender(owner, attacker_creature, attacker_power)
+        return creature
+    if attacker_creature is None or len(top) == 1:
+        return max(top, key=lambda c: powers[c.id])
+    if attacker_power is None:
+        attacker_power = powers.get(attacker_creature.id) or power_of(attacker_creature.owner, attacker_creature)
+    a_elem = attacker_creature.element
+
+    def score(c):
+        p = powers[c.id]
+        ea, eb = constants.effective_duel_powers(attacker_power, a_elem, p, c.element)
+        return (eb > ea, eb - ea, p)
+
+    return max(top, key=score)

@@ -148,7 +148,9 @@ def player(request) -> User | None:
     if data and isinstance(data.get("user"), dict):
         user_id = data["user"].get("id")
     elif settings.DEBUG and request.GET.get("dev_user", "").isdigit():
-        user_id = int(request.GET["dev_user"])  # developer machine only
+        host = request.get_host().split(":")[0]
+        if host in {"127.0.0.1", "localhost"}:  # never on a public tunnel
+            user_id = int(request.GET["dev_user"])
     if not user_id:
         return None
     # `_started` (does the player own a creature?) rides on the same query: the wrapper used

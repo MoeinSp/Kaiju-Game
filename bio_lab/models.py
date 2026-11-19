@@ -13,6 +13,14 @@ class User(models.Model):
     lab_renames = models.IntegerField(default=0)  # how many paid renames so far — drives the escalating cost
     # welcome package — keep in sync with game.constants.STARTING_*
     coins = models.IntegerField(default=5000)
+    # Gold sitting in the trade-hall bank. Transfers and kaiju/gear sales land here.
+    # A withdrawal is added to `coins` and is the same gold as hunt or mine income.
+    # unearned_coins is unused; it stayed from a split that was removed.
+    bank_gold = models.IntegerField(default=0)
+    unearned_coins = models.IntegerField(default=0)
+    # Gold moved bank → wallet in the current 24h window. Group «اتک» cannot loot it.
+    bank_out_amount = models.IntegerField(default=0)
+    bank_out_at = models.DateTimeField(null=True, blank=True)
     dna_fragments = models.IntegerField(default=100)
     diamonds = models.IntegerField(default=100)  # premium currency: diamond collector, daily wheel, diamond boxes
     biocrate_tickets = models.IntegerField(default=0)  # earned by exchanging gear; opens genetic boxes free
@@ -209,6 +217,8 @@ class Alliance(models.Model):
     vault_level = models.IntegerField(default=0)         # خزانه — passive daily treasury income
     vault_collected_at = models.DateTimeField(null=True, blank=True)  # last vault income collection
     hall_level = models.IntegerField(default=0)          # تالار — +5 member capacity per level (base 10, max 30)
+    # Custom flag built from a template (game/alliance_flag.py). Empty = no flag yet.
+    flag = models.JSONField(default=dict, blank=True)
 
     # weekly alliance war: members' activity adds war points; the top alliance's
     # treasury wins a bonus at week's end. war_week scopes points to the current

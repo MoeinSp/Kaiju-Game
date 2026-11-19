@@ -5,6 +5,7 @@ plus a «باز نشد» button for the case we can't observe ourselves: the pag
 `/apptest stats` (admins) summarises what came back.
 """
 
+import os
 from urllib.parse import urlsplit
 
 from telegram import InlineKeyboardMarkup, Update, WebAppInfo
@@ -16,9 +17,20 @@ from config import ADMIN_PANEL_URL, WEBHOOK_URL
 
 
 def base_url() -> str:
-    """https origin the web container is served from (same host as the webhook/panel)."""
-    for candidate in (WEBHOOK_URL, ADMIN_PANEL_URL):
-        parts = urlsplit(candidate or "")
+    """https origin the Mini App button opens.
+
+    Production uses the webhook or panel host. A laptop has neither as https, so a
+    developer tunnel written to `.mini_app_url` (or MINI_APP_URL) is used instead.
+    Telegram refuses an http web_app button, which is why localhost alone cannot be one.
+    """
+    from pathlib import Path
+
+    local = ""
+    path = Path(__file__).resolve().parents[2] / ".mini_app_url"
+    if path.is_file():
+        local = path.read_text(encoding="utf-8").strip()
+    for candidate in (os.environ.get("MINI_APP_URL", ""), local, WEBHOOK_URL, ADMIN_PANEL_URL):
+        parts = urlsplit((candidate or "").strip())
         if parts.scheme == "https" and parts.netloc:
             return f"https://{parts.netloc}"
     return ""

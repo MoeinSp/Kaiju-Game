@@ -3844,10 +3844,15 @@ async def alliance_leave(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 def _alliance_info_sync(tg_user):
+    from game.alliance_flag import flag_file
+
     user, _ = get_or_create_user(tg_user)
     if user.alliance_id is None:
         return None
-    return alliance_info(user.alliance)
+    info = alliance_info(user.alliance)
+    path = flag_file(user.alliance)
+    info["flag_path"] = str(path) if path else None
+    return info
 
 
 def _ally_raidtable_sync(tg_user):
@@ -4003,7 +4008,7 @@ async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     info = await run_db(_alliance_info_sync, update.effective_user)
 
     from game.media import get_feature_image_path
-    photo = get_feature_image_path("alliance")
+    photo = (info or {}).get("flag_path") or get_feature_image_path("alliance")
     if info is None:
         await send_screen(update,
             f"{get_emoji('alliance')} توی هیچ اتحادی نیستی.",
@@ -4502,18 +4507,13 @@ async def alliance_deposit_callback(update: Update, context: ContextTypes.DEFAUL
 
 async def alliance_top_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    ranked = await run_db(_alliance_top_sync)
+    ranked, photo = await run_db(_alliance_board_sync)
     await query.answer()
     keyboard = InlineKeyboardMarkup([[back_btn("menu:alliance_info")]])
     if not ranked:
         await safe_edit_message_text(query, "هنوز هیچ اتحادی ساخته نشده.", reply_markup=keyboard)
         return
-    medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
-    lines = [f"{get_emoji('trophy')} <b>برترین اتحادها</b>", "━━━━━━━━━━━━━━━━━━━━"]
-    for i, r in enumerate(ranked, start=1):
-        rank = medals[i - 1] if i <= 3 else f"<code>{i}.</code>"
-        lines.append(f"{rank} <b>{r['alliance'].name}</b>\n   💪 قدرت: <code>{r['power']:,}</code>\n   👥 اعضا: <code>{r['member_count']}</code>")
-    await safe_edit_message_text(query, "\n".join(lines), parse_mode="HTML", reply_markup=keyboard)
+    await send_screen(query, _alliance_top_text(ranked), photo=photo, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def alliance_leave_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -5069,19 +5069,35 @@ def _alliance_top_sync():
     return top_alliances(10)
 
 
+def _alliance_top_text(ranked) -> str:
+    medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
+    lines = [f"{get_emoji('trophy')} <b>برترین اتحادها</b>", "━━━━━━━━━━━━━━━━━━━━"]
+    for i, r in enumerate(ranked, start=1):
+        rank = medals[i - 1] if i <= 3 else f"<code>{i}.</code>"
+        lines.append(
+            f"{rank} <b>{r['alliance'].name}</b>\n"
+            f"   💪 قدرت: <code>{r['power']:,}</code>\n"
+            f"   👥 اعضا: <code>{r['member_count']}</code>"
+        )
+    return "\n".join(lines)
+
+
+def _alliance_board_sync():
+    from game.alliance_flag import render_board
+
+    ranked = top_alliances(10)
+    photo = render_board(ranked) if ranked else None
+    return ranked, photo
+
+
 async def alliance_top(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    ranked = await run_db(_alliance_top_sync)
+    ranked, photo = await run_db(_alliance_board_sync)
     if not ranked:
         await update.effective_message.reply_text(
             "هنوز هیچ اتحادی ساخته نشده. با /alliance_create اولیش رو بساز!"
         )
         return
-    medals = [get_emoji("medal_gold"), get_emoji("medal_silver"), get_emoji("medal_bronze")]
-    lines = [f"{get_emoji('trophy')} <b>برترین اتحادها</b>", "━━━━━━━━━━━━━━━━━━━━"]
-    for i, r in enumerate(ranked, start=1):
-        rank = medals[i - 1] if i <= 3 else f"<code>{i}.</code>"
-        lines.append(f"{rank} <b>{r['alliance'].name}</b>\n   💪 قدرت: <code>{r['power']:,}</code>\n   👥 اعضا: <code>{r['member_count']}</code>")
-    await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
+    await send_screen(update, _alliance_top_text(ranked), photo=photo, parse_mode="HTML")
 
 
 async def alliance_league_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -178,14 +178,14 @@ def collect_due() -> list[tuple[int, str]]:
         # ── eggs ready to hatch ───────────────────────────────────────────────
         for egg in Egg.objects.filter(notified=False, finishes_at__lte=now).select_related("owner"):
             if egg.owner.notifications_on:
-                out.append((egg.owner_id, "🐣 <b>یه تخم توی غار هیولا سر باز کرد!</b> برو ببین چی ازش دراومد.", "timer"))
+                out.append((egg.owner_id, "🐣 <b>یه تخم توی غار هیولا سر باز کرد!</b> برو ببین چی ازش دراومد.", "cave"))
             egg.notified = True
             egg.save(update_fields=["notified"])
 
         # ── cave mating finished (go lay the egg) ─────────────────────────────
         for job in BreedingJob.objects.filter(notified=False, finishes_at__lte=now).select_related("owner"):
             if job.owner.notifications_on:
-                out.append((job.owner_id, "💞 <b>جفت‌گیری توی غار تموم شد!</b> برو تخم رو بردار تا والدها آزاد شن.", "timer"))
+                out.append((job.owner_id, "💞 <b>جفت‌گیری توی غار تموم شد!</b> برو تخم رو بردار تا والدها آزاد شن.", "cave"))
             job.notified = True
             job.save(update_fields=["notified"])
 
@@ -230,7 +230,7 @@ def collect_due() -> list[tuple[int, str]]:
         ):
             if up.owner.notifications_on:
                 label = constants.BUILDING_LABELS.get(up.building.building_type, "ساختمونت")
-                out.append((up.owner_id, f"🏗 <b>ارتقای {label} تموم شد!</b> برو جمعش کن و بعدی رو بساز.", "timer"))
+                out.append((up.owner_id, f"🏗 <b>ارتقای {label} تموم شد!</b> برو جمعش کن و بعدی رو بساز.", "buildings"))
             up.notified = True
             up.save(update_fields=["notified"])
 

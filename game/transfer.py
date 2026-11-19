@@ -121,24 +121,22 @@ def _check_transfers_enabled(receiver: User) -> None:
 
 
 def _check_trade_hall_built(user: User, who: str) -> None:
-    """Both sides need «تالار تجارت» built (level ≥ 1) before ANY trade — it's the
-    dedicated trading building (game.constants)."""
+    """Both sides need the bank (building type trade_hall, level ≥ 1) before any trade."""
     if building_level(user, "trade_hall") < 1:
         raise GameError(
-            f"{who} باید اول «🤝 تالار تجارت» رو بسازه تا بشه انتقال داد یا گرفت "
-            "(از بخش «ساختمون‌ها» توی پیوی ربات)."
+            f"{who} باید اول «🏦 بانک طلا» را بسازد تا بشود انتقال داد یا گرفت "
+            "(از بخش «ساختمان‌ها»)."
         )
 
 
 def _check_creature_trade_gate(sender: User, receiver: User, star_level: int) -> None:
-    """An N★ creature can only change hands when BOTH sides have «تالار تجارت» at
-    level ≥ N — so trading a high-star creature needs a mature trade hall on both ends."""
+    """An N★ creature changes hands only when BOTH banks are at level ≥ N."""
     for u, who in ((sender, "فرستنده"), (receiver, "گیرنده")):
         th = building_level(u, "trade_hall")
         if th < star_level:
             raise GameError(
-                f"برای انتقال هیولای {star_level}⭐ باید «🤝 تالار تجارت» {who} حداقل سطح "
-                f"{star_level} باشه (الان {th}). اول تالار تجارت رو ارتقا بدین."
+                f"برای انتقال هیولای {star_level}⭐ باید «🏦 بانک طلا» {who} حداقل سطح "
+                f"{star_level} باشد (الان {th}). اول بانک را ارتقا بدهید."
             )
 
 
@@ -316,12 +314,18 @@ def transfer_creature(sender: User, receiver: User, creature_id: int, price: int
     status = creature_status(sender, creature)
     if status is not None:
         raise GameError(f"«{creature.name}» الان مشغوله ({status}) — اول آزادش کن.")
-    max_price = constants.creature_transfer_max_price(creature.rarity, creature.star_level)
-    if price > max_price:
+    bounds = constants.creature_transfer_price_bounds(creature.rarity, creature.star_level)
+    if bounds is None:
+        cap = constants.CREATURE_TRANSFER_MAX_STAR.get(creature.rarity, 5)
         raise GameError(
-            f"سقف قیمت این هیولا {max_price:,} طلاست "
-            f"({constants.RARITY_LABELS.get(creature.rarity, creature.rarity)}، {creature.star_level}⭐). "
-            "قیمت کمتری تعیین کن."
+            f"هیولای {constants.RARITY_LABELS.get(creature.rarity, creature.rarity)} "
+            f"بالاتر از {cap}⭐ قابل انتقال نیست. ستاره‌ی بالاتر فقط با ادغام هیولاهای خودت ساخته می‌شود."
+        )
+    floor, ceiling = bounds
+    if price < floor or price > ceiling:
+        raise GameError(
+            f"قیمت این هیولا از {floor:,} تا {ceiling:,} طلاست "
+            f"({constants.RARITY_LABELS.get(creature.rarity, creature.rarity)}، {creature.star_level}⭐)."
         )
 
     _check_creature_trade_gate(sender, receiver, creature.star_level)
@@ -344,17 +348,16 @@ def transfer_creature(sender: User, receiver: User, creature_id: int, price: int
     cost = constants.creature_transfer_cost(creature.star_level, creature.rarity)
     if receiver.diamonds < cost:
         raise TransferFundsError(cost, receiver.diamonds, "creature")
-    if price > 0 and receiver.coins < price:
-        raise GameError(f"گیرنده {price:,} طلا برای این قیمت لازم داره ولی {receiver.coins:,} داره.")
+    from game.bank import pay_seller_from_earned
+    from game.buildings import building_level as _hall_level
+
+    pay_seller_from_earned(receiver, sender, price, seller_level=_hall_level(sender, "trade_hall"))
 
     # strip the creature clean: return every worn item to the SENDER's armory so the
     # creature transfers naked and leaves no equipped-gear trace on the sender.
     Equipment.objects.filter(equipped_on=creature).update(equipped_on=None)
 
     receiver.diamonds -= cost
-    if price > 0:
-        receiver.coins -= price
-        sender.coins += price
     # A transferred creature is reset to a fresh statline for the new owner: level → 1,
     # every body-part upgrade cleared, base stats reset for its rarity — only the STAR
     # survives. Both parties are warned of this before they confirm (see bot handlers).
@@ -370,7 +373,7 @@ def transfer_creature(sender: User, receiver: User, creature_id: int, price: int
     receiver_cd = constants.transfer_receiver_cooldown_hours(creature.rarity, creature.star_level)
     _set_cooldown([sender], "kaiju_transfer_ready_at", sender_cd)
     _set_cooldown([receiver], "kaiju_transfer_ready_at", receiver_cd)
-    sender.save(update_fields=["kaiju_transfer_ready_at", "coins"])
+    sender.save(update_fields=["kaiju_transfer_ready_at", "bank_gold"])
     receiver.save(update_fields=["diamonds", "coins", "kaiju_transfer_ready_at"])
     return {"creature": creature, "cost": cost, "price": price, "sender_cd": sender_cd, "receiver_cd": receiver_cd}
 
@@ -416,13 +419,13 @@ def transfer_equipment(sender: User, receiver: User, equip_id: int, price: int =
     cost = constants.equip_transfer_cost(item.rarity, item.level)
     if receiver.diamonds < cost:
         raise TransferFundsError(cost, receiver.diamonds, "equip")
-    if price > 0 and receiver.coins < price:
-        raise GameError(f"گیرنده {price:,} طلا برای این قیمت لازم داره ولی {receiver.coins:,} داره.")
+    from game.bank import pay_seller_from_earned
+    from game.buildings import building_level as _hall_level
+
+    if price > 0:
+        pay_seller_from_earned(receiver, sender, price, seller_level=_hall_level(sender, "trade_hall"))
 
     receiver.diamonds -= cost
-    if price > 0:
-        receiver.coins -= price
-        sender.coins += price
     item.owner = receiver
     item.equipped_on = None  # can't stay equipped on the sender's creature
     item.save(update_fields=["owner", "equipped_on"])
@@ -432,6 +435,6 @@ def transfer_equipment(sender: User, receiver: User, equip_id: int, price: int =
     receiver_cd = constants.transfer_receiver_cooldown_hours(item.rarity)
     _set_cooldown([sender], "equip_transfer_ready_at", sender_cd)
     _set_cooldown([receiver], "equip_transfer_ready_at", receiver_cd)
-    sender.save(update_fields=["equip_transfer_ready_at", "coins"])
+    sender.save(update_fields=["equip_transfer_ready_at", "bank_gold"])
     receiver.save(update_fields=["diamonds", "coins", "equip_transfer_ready_at"])
     return {"item": item, "cost": cost, "price": price, "sender_cd": sender_cd, "receiver_cd": receiver_cd}

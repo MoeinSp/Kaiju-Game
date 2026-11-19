@@ -134,47 +134,21 @@ def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
         if receiver is None:
             raise GameError("این بازیکن هنوز بازی رو شروع نکرده.")
         from game.transfer import _check_account_maturity_gate, check_no_diamond_debt
+        from game.bank import deposit, take_for_transfer
 
         check_no_diamond_debt(sender, receiver)
         _check_account_maturity_gate(sender)
-        # «تالار تجارت» gate: transfer is bounded by the SMALLER of their two per-level gold caps,
-        # and the receiver cannot receive more than their Trade Hall gold cap per day in total.
-        s_cap = constants.trade_hall_gold_cap(building_level(sender, "trade_hall"))
-        r_cap = constants.trade_hall_gold_cap(building_level(receiver, "trade_hall"))
-        cap = min(s_cap, r_cap)
-        if amount > cap:
-            raise GameError(
-                f"سقف انتقال طلا در هر تراکنش {cap:,} طلاست (بر اساس سطح تالار تجارت دو طرف). "
-                "برای انتقال بیشتر، تالار تجارت را ارتقا دهید."
-            )
-
-        from game.daily import get_daily_count, record_action_bulk
-
-        received_today = get_daily_count(receiver, "gold_transfer_received")
-        remaining_daily = max(0, r_cap - received_today)
-        if remaining_daily <= 0:
-            raise GameError(
-                f"گیرنده امروز به سقف مجاز دریافت روزانه طلا ({r_cap:,} طلا) رسیده است و نمی‌تواند طلای بیشتری دریافت کند."
-            )
-        if amount > remaining_daily:
-            raise GameError(
-                f"گیرنده امروز {received_today:,} طلا دریافت کرده و حداکثر می‌تواند {remaining_daily:,} طلای دیگر دریافت کند "
-                f"(سقف روزانه تالار تجارت او {r_cap:,} طلاست)."
-            )
-
         if not getattr(receiver, "transfers_enabled", True):
             raise GameError("🔒 این کاربر دریافت انتقال رو خاموش کرده — نمی‌تونی بهش طلا بدی.")
-        if sender.coins < amount:
-            raise GameError(f"طلا کافی نداری! فقط {sender.coins:,} طلا داری.")
-        # 10% transfer fee, floored (rounded in the user's favour → smaller fee, more
-        # reaches the receiver). The sender pays `amount`; the receiver gets `amount-fee`.
+        s_level = building_level(sender, "trade_hall")
+        r_level = building_level(receiver, "trade_hall")
+        # 10% fee stays. The sender's bank pays `amount`; the receiver's bank gets the rest.
         fee = amount // 10
         net = amount - fee
-        sender.coins -= amount
-        receiver.coins += net
-        sender.save(update_fields=["coins"])
-        receiver.save(update_fields=["coins"])
-        record_action_bulk(receiver, "gold_transfer_received", amount)
+        take_for_transfer(sender, amount, level=s_level)
+        deposit(receiver, net, level=r_level)
+        sender.save(update_fields=["bank_gold"])
+        receiver.save(update_fields=["bank_gold"])
         from game.ledger import record_gain
         record_gain(receiver, "transfer", coins=net)
     return sender, receiver, amount, fee, net
@@ -336,10 +310,10 @@ async def gold_transfer(update: Update, context: ContextTypes.DEFAULT_TYPE, amou
         f"{_RULE}\n"
         f"{coin} مبلغ ارسالی: <code>{amount:,}</code> طلا\n"
         f"📉 کارمزد (۱۰٪): <code>{fee:,}</code> طلا\n"
-        f"📥 دریافتی خالص: <code>{net:,}</code> طلا",
+        f"📥 به بانک گیرنده نشست: <code>{net:,}</code> طلا",
         parse_mode="HTML",
     )
-    await _dm_transfer_received(context, receiver, sender, f"{coin} <code>{net:,}</code> طلا")
+    await _dm_transfer_received(context, receiver, sender, f"{coin} <code>{net:,}</code> طلا به بانکت نشست")
 
 
 async def _reply_transfer_error(message, exc) -> None:
@@ -439,10 +413,12 @@ def _item_active_offer(kind: str, item_id: int) -> dict | None:
     return None
 
 
-def _seller_step_keyboard(token: str) -> InlineKeyboardMarkup:
+def _seller_step_keyboard(token: str, kind: str = "e") -> InlineKeyboardMarkup:
+    row = [btn("تعیین قیمت", emoji_key="btn_charge", style=PRIMARY, callback_data=f"xfo:setp:{token}")]
+    if kind != "c":
+        row.append(btn("ارسال رایگان", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"xfo:free:{token}"))
     return InlineKeyboardMarkup([
-        [btn("تعیین قیمت", emoji_key="btn_charge", style=PRIMARY, callback_data=f"xfo:setp:{token}"),
-         btn("ارسال رایگان", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"xfo:free:{token}")],
+        row,
         [btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data=f"xfo:cancel:{token}")],
     ])
 
@@ -479,9 +455,10 @@ async def _begin_offer(message, kind: str, sender, receiver, item_id: int, desc:
         f"{cd_line}"
         f"{reset_line}"
         f"{_RULE}\n"
-        f"<b>{lab_mention(sender)}</b>، قیمت (به طلا) را تعیین کن یا رایگان بفرست 👇\n"
-        "<i><code>5</code> دقیقه اعتبار دارد.</i>",
-        parse_mode="HTML", reply_markup=_seller_step_keyboard(token),
+        f"<b>{lab_mention(sender)}</b>، "
+        + ("قیمت طلا را داخل بازه‌ی این هیولا بنویس 👇\n" if kind == "c" else "قیمت (به طلا) را تعیین کن یا رایگان بفرست 👇\n")
+        + "<i><code>5</code> دقیقه اعتبار دارد.</i>",
+        parse_mode="HTML", reply_markup=_seller_step_keyboard(token, kind),
     )
 
 
@@ -498,7 +475,7 @@ async def transfer_creature_cmd(update: Update, context: ContextTypes.DEFAULT_TY
             "<i>کد هیولا رو از «کلکسیون» توی پیوی ربات می‌بینی. اول قیمت می‌ذاری، بعد گیرنده قیمت و "
             "کارمزد الماس رو می‌بینه و تأیید می‌کنه. فرستنده کول‌داون نداره؛ گیرنده بسته به نایابی ۲ تا ۱۲ ساعت صبر می‌کنه.</i>\n"
             f"{_CREATURE_RESET_NOTE}\n"
-            "<i>🤝 انتقال به «تالار تجارت» نیاز داره؛ برای هیولای N⭐ باید هر دو طرف تالار تجارت سطح N داشته باشن.</i>\n\n"
+            "<i>🏦 انتقال به «بانک طلا» نیاز داره؛ برای هیولای N⭐ باید بانک هر دو طرف حداقل سطح N باشه. هیولا قیمت کف دارد و رایگان منتقل نمی‌شود.</i>\n\n"
             + transfer.creature_prices_text(),
             parse_mode="HTML",
         )
@@ -644,7 +621,7 @@ async def transfer_equip_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE,
         await update.message.reply_text(
             "🎒 برای انتقال تجهیزات، روی پیام گیرنده <b>ریپلای</b> کن و بنویس «انتقال تجهیزات [کد]».\n"
             "<i>کد تجهیزات رو از «تجهیزات» توی پیوی ربات می‌بینی. اول قیمت می‌ذاری، بعد گیرنده قیمت و "
-            "کارمزد الماس رو می‌بینه و تأیید می‌کنه. فرستنده کول‌داون نداره؛ گیرنده بسته به نایابی ۲ تا ۱۲ ساعت صبر می‌کنه.</i>\n\n"
+            "کارمزد الماس رو می‌بینه و تأیید می‌کنه. هر دو طرف باید «بانک طلا» را ساخته باشند. فرستنده کول‌داون ندارد؛ گیرنده بسته به نایابی ۲ تا ۱۲ ساعت صبر می‌کند.</i>\n\n"
             + transfer.equip_prices_text(),
             parse_mode="HTML",
         )
@@ -741,7 +718,9 @@ async def _present_offer_to_receiver(update, token: str, via_query=None) -> None
 
 def _creature_price_cap_sync(creature_id):
     c = Creature.objects.filter(id=creature_id).only("rarity", "star_level").first()
-    return constants.creature_transfer_max_price(c.rarity, c.star_level) if c else None
+    if c is None:
+        return None
+    return constants.creature_transfer_price_bounds(c.rarity, c.star_level)
 
 
 async def maybe_capture_transfer_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -780,12 +759,15 @@ async def maybe_capture_transfer_price(update: Update, context: ContextTypes.DEF
             parse_mode="HTML",
         )
         return True
-    if offer.get("kind") == "c" and price > 0:
-        cap = await run_db(_creature_price_cap_sync, offer["item_id"])
-        if cap is not None and price > cap:
+    if offer.get("kind") == "c":
+        bounds = await run_db(_creature_price_cap_sync, offer["item_id"])
+        if bounds is None:
+            await message.reply_text("❌ این هیولا با این ستاره قابل انتقال نیست.", parse_mode="HTML")
+            return True
+        floor, cap = bounds
+        if price < floor or price > cap:
             await message.reply_text(
-                f"❌ سقف قیمت این هیولا <code>{cap:,}</code> طلاست.\n"
-                f"لطفاً عددی تا سقف <code>{cap:,}</code> بفرست — یا «لغو».",
+                f"❌ قیمت این هیولا از <code>{floor:,}</code> تا <code>{cap:,}</code> طلاست.",
                 parse_mode="HTML",
             )
             return True
@@ -832,6 +814,9 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
             await safe_edit_message_text(query, "❌ انتقال لغو شد.", parse_mode="HTML")
             return
         if verb == "free":
+            if offer.get("kind") == "c":
+                await query.answer("هیولا قیمت کف دارد و رایگان منتقل نمی‌شود.", show_alert=True)
+                return
             offer["price"] = 0
             await query.answer()
             await _present_offer_to_receiver(update, token, via_query=query)
@@ -1296,12 +1281,13 @@ def _defender_note(attacker_id: int, target_id: int, t_creature, remember: bool 
 
 
 def _group_defender(target, a_creature):
-    """Who defends `target` against `a_creature` in a group «اتک»: their «تیم دفاع» (the best
-    answer to this attacker, game/defense.py — the arena's rule), else their active creature.
-    The same pick on the preview card, the details view and the fight, so the card is right."""
-    from game.defense import pick_defender
+    """Who defends in a group «اتک». A sandbagged defense team is ignored and the fight
+    uses one of the account's two strongest, without pulling them off a mine or a mission."""
+    from game.defense import group_fight_defender
 
-    creature, _power = pick_defender(target, a_creature, _creature_power(a_creature) if a_creature else None)
+    creature = group_fight_defender(
+        target, a_creature, _creature_power(a_creature) if a_creature else None,
+    )
     return creature or get_active_creature(target)
 
 
@@ -1834,12 +1820,14 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     dna_win = 0
     target_fields = []
     if attacker_won:
-        loot = max(0, target.coins // 10)
-        dna_win = max(0, target.dna_fragments // 10)
+        from game.bank import apply_group_loot, lootable_gold
 
-        target.coins -= loot
+        loot = min(lootable_gold(target) // 10, constants.GROUP_ATTACK_LOOT_CAP)
+        dna_win = min(max(0, target.dna_fragments // 10), constants.GROUP_ATTACK_DNA_CAP)
+
+        apply_group_loot(target, loot)
         target.dna_fragments -= dna_win
-        target_fields = ["coins", "dna_fragments"]
+        target_fields = ["coins", "bank_out_amount", "dna_fragments"]
 
         attacker.coins += loot
         attacker.dna_fragments += dna_win
@@ -1869,7 +1857,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         winner_id=winner_user.id, wager_gold=loot, log_text=log_text,
     )
     # log it as a real attack too, so the target gets a report (from_group: no arena revenge
-    # for it), and give the target a 4h group shield so they can't be farmed in the group
+    # for it). A group shield only follows a lost defense.
     from bio_lab.models import AttackLog
     from bio_lab.repository import lab_display
     from game.arena import apply_group_shield
@@ -1888,7 +1876,8 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
         defender_notified=True,  # DM'd instantly from the callback below
         from_group=True,
     )
-    apply_group_shield(target)
+    if attacker_won:
+        apply_group_shield(target)
     return {
         "log_text": log_text,
         "defense_note": defense_note,   # the defender changed since the card (_defender_note)

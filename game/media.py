@@ -470,7 +470,7 @@ BUILDING_TITLES = {
     "dna_lab": ("GENESIS BIOLAB", "🧬 آزمایشگاه DNA", 5),
     "blacksmith": ("KAVEH ARMORY", "⚒ آهنگری", 5),
     "fusion_lab": ("ASTRAL CRUCIBLE", "🔮 تالار ادغام", 5),
-    "trade_hall": ("SILK ROAD EXCHANGE", "🤝 تالار تجارت", 5),
+    "trade_hall": ("GOLDEN VAULT", "🏦 بانک طلا", 5),
     "research_lab": ("JAMSHID ARCHIVES", "🔬 آزمایشگاه", 5),
     "dispatch_hq": ("EXPEDITION OUTPOST", "🧭 پایگاه اعزام", 5),
     "serum_lab": ("SERUM FOUNDRY", "🧪 آزمایشگاه سرم", 5),

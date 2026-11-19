@@ -338,7 +338,8 @@ HUNT_ENERGY_COST = 1
 # a group «اتک» on a player loots this share of the loser's gold (capped), instead
 # of a flat reward
 GROUP_ATTACK_LOOT_PERCENT = 0.10
-GROUP_ATTACK_LOOT_CAP = 500
+GROUP_ATTACK_LOOT_CAP = 5_000  # gold taken from one group «اتک», on top of the 10% wallet slice
+GROUP_ATTACK_DNA_CAP = 500
 
 # consecutive daily /start streak — resets if a day is missed, capped so late-game
 # players don't snowball into absurd payouts
@@ -765,22 +766,35 @@ CREATURE_TRANSFER_RARITY_MULT = {
 EQUIP_TRANSFER_COST = {
     "common": 5, "rare": 12, "epic": 23, "legendary": 43, "mythic": 83,
 }
-# Maximum gold price the seller can ask for when transferring an equipment piece
+# Maximum gold price the seller can ask for when transferring an equipment piece.
 EQUIP_TRANSFER_MAX_GOLD_PRICE = 100_000
-# Selling a creature for gold moves gold between two accounts, so the price is capped —
-# without a cap, «selling» a worthless 1★ common for millions bypassed every limit of
-# the gold transfer (per-transfer cap, daily cap, fee). Cap = rarity base × star.
-CREATURE_TRANSFER_MAX_GOLD_PRICE_BY_RARITY = {
-    "common": 100_000, "rare": 200_000, "epic": 500_000, "legendary": 1_000_000, "mythic": 2_000_000,
+# Creature gold price is a band. A 1★ ceiling is UNIT; each extra star doubles it.
+# The floor is half the ceiling. Stars above MAX_STAR cannot be transferred.
+CREATURE_TRANSFER_UNIT_GOLD = {
+    "common": 62_500, "rare": 125_000, "epic": 312_500, "legendary": 625_000, "mythic": 1_250_000,
+}
+CREATURE_TRANSFER_MAX_STAR = {
+    "common": 5, "rare": 5, "epic": 5, "legendary": 4, "mythic": 3,
 }
 # toward the sender's «100 arena wins» gate, at most this many wins against the SAME
 # real player count — repeatedly beating one cooperating alt no longer unlocks transfers
 TRANSFER_GATE_MAX_WINS_PER_OPPONENT = 3
 
 
+def creature_transfer_price_bounds(rarity: str, star_level: int) -> tuple[int, int] | None:
+    """(floor, ceiling) gold for a creature sale, or None when that star cannot be transferred."""
+    star = int(star_level or 1)
+    cap = CREATURE_TRANSFER_MAX_STAR.get(rarity, 5)
+    unit = CREATURE_TRANSFER_UNIT_GOLD.get(rarity)
+    if unit is None or star < 1 or star > cap:
+        return None
+    ceiling = unit * (2 ** (star - 1))
+    return ceiling // 2, ceiling
+
+
 def creature_transfer_max_price(rarity: str, star_level: int) -> int:
-    base = CREATURE_TRANSFER_MAX_GOLD_PRICE_BY_RARITY.get(rarity, 100_000)
-    return base * max(1, int(star_level or 1))
+    bounds = creature_transfer_price_bounds(rarity, star_level)
+    return bounds[1] if bounds else 0
 # receiver prerequisites by the creature's star: (main_hall level, fusion_lab level).
 # main_hall is the whole game's bottleneck (weeks to max), so this is the real
 # anti-fake-account gate — you can't receive a 5★ without a mature base.
@@ -872,7 +886,7 @@ BUILDING_LABELS = {
     "dna_lab": "🧬 آزمایشگاه DNA",
     "blacksmith": "⚒ آهنگری",
     "fusion_lab": "🔮 تالار ادغام",
-    "trade_hall": "🤝 تالار تجارت",
+    "trade_hall": "🏦 بانک طلا",
     "research_lab": "🔬 آزمایشگاه",
     "dispatch_hq": "🧭 پایگاه اعزام",
     "serum_lab": "🧪 آزمایشگاه سرم",
@@ -884,7 +898,7 @@ BUILDING_DESCRIPTIONS = {
     "dna_lab": "این ساختمون به‌مرور برات DNA تولید می‌کنه که خرجِ پرورش و ادغام می‌شه.",
     "blacksmith": "برای ارتقای تجهیزات لازمه؛ هر سطحش سقفِ سطحِ تجهیزات رو ۵ تا بالاتر می‌بره.",
     "fusion_lab": "اینجا هیولاهای تکراری رو یکی می‌کنی تا ستاره‌شون بره بالا.",
-    "trade_hall": "برای انتقال طلا، هیولا و تجهیزات به این ساختمون نیاز داری.",
+    "trade_hall": "بانک طلا. انتقال و پول فروش هیولا و تجهیزات اینجاست.",
     "research_lab": "قلبِ پژوهش‌های پیشرفته. اینجا روی عناصر و توانایی‌ها تحقیق می‌کنی و به همه‌ی هیولاهات بونوس دائمی می‌دی.",
     "dispatch_hq": "مرکز فرماندهی مأموریت‌های اعزامی. بدونِ این هم می‌تونی هیولا بفرستی، ولی با یه جایگاه و فهرستِ کوتاه.",
     "serum_lab": "با DNA سرم می‌سازه: خشم برای آرنا، ردیاب برای شکار، جنگاور برای اتک گروهی، پوسته برای دفاع، ترمیم برای سیاه‌چال و غول‌کش برای غول سرگردان.",
@@ -897,14 +911,14 @@ BUILDING_UPGRADE_BENEFIT = {
     "dna_lab": "تولید و ظرفیت ذخیره‌ی DNA بیشتر می‌شه.",
     "blacksmith": "سقفِ سطحِ تجهیزات بالاتر می‌ره (هر سطح +۵).",
     "fusion_lab": "سقفِ ستاره‌ی هیولاهات بالاتر می‌ره.",
-    "trade_hall": "افزایش سقف انتقال و دریافت طلا.",
+    "trade_hall": "گنجایش بانک و سقف برداشت روزانه بالاتر می‌رود.",
     "research_lab": "سقفِ سطحِ پژوهش‌ها بالاتر می‌ره (لِوِلِ ساختمون = بیشترین لِوِلی که هر پژوهش می‌تونه بره).",
     "dispatch_hq": "جایگاهِ اعزام و تعدادِ مأموریتِ روزانه بیشتر می‌شه و جایزه‌ی مأموریت‌ها بالا می‌ره.",
     "serum_lab": "قفسه‌ی سرم بزرگ‌تر و ساخت سریع‌تر می‌شه، سرم‌های تازه باز می‌شن و سقفِ سطحِ هر سرم بالاتر می‌ره.",
 }
 # Optional extra rule bullet (already carries its own leading icon), shown after the benefit.
 BUILDING_RULE_NOTE = {
-    "trade_hall": "⭐ قانون انتقال هیولا: سطح تالار هر دو نفر باید حداقل به‌اندازه‌ی تعداد ستاره‌های هیولا باشه (مثلاً واسه هیولای ۳ ستاره، تالار هر دو طرف باید سطح ۳ یا بالاتر باشه).",
+    "trade_hall": "⭐ قانون انتقال هیولا: سطح بانک هر دو نفر باید حداقل به‌اندازه‌ی تعداد ستاره‌های هیولا باشه (مثلاً برای هیولای ۳ ستاره، بانک هر دو طرف باید سطح ۳ یا بالاتر باشه).",
     "fusion_lab": "💡 نکته: برای داشتن هیولای با ستاره‌ی بالاتر، اول باید لِوِلِ این ساختمون رو ببری بالا (مثلاً هیولای ۴ ستاره، ساختمون سطح ۴ می‌خواد).",
     "serum_lab": "🧪 نکته: سطحِ هر سرم نمی‌تونه از سطحِ این ساختمون جلو بزنه؛ سرم‌ها رو توی خودِ آزمایشگاه یکی‌یکی ارتقا می‌دی.",
     "research_lab": "🔬 نکته: لِوِلِ هر پژوهش نمی‌تونه از لِوِلِ این ساختمون جلو بزنه (ساختمون سطح ۳ ⟵ پژوهش تا سطح ۳). برای «آزمایشگاه» باید تالار مِهر سطح ۵ باشه.",
@@ -933,7 +947,7 @@ BUILDING_UNLOCK_HALL_LEVEL = {
     "gold_collector": 1,      # درآمد پایه از ابتدا
     "dna_lab": 2,             # آزمایشگاه DNA
     "fusion_lab": 2,          # تالار ادغام و افزایش ستاره
-    "trade_hall": 2,          # تالار تجارت
+    "trade_hall": 2,          # بانک طلا — همان ساختمان قبلی، فقط اسم نمایشی عوض شده
     "blacksmith": 3,          # آهنگری و ارتقای تجهیزات
     "diamond_collector": 3,   # معدن جمع‌کننده الماس
     "research_lab": 5,        # آزمایشگاه تحقیقات ژنتیک
@@ -987,24 +1001,25 @@ BUILDING_UPGRADE_GOLD = {1: 250, 2: 1500, 3: 8000, 4: 80000, 5: 250000}
 # whose minutes are unchanged. Only the 0→1 step reads this value.
 BUILDING_CONSTRUCT_SECONDS = 5
 
-# ── Trade hall (تالار تجارت): the gate for ALL player-to-player trading ──────────
-# Must be BUILT (level ≥ 1) before a player can send OR receive gold / creatures /
-# equipment. Its level raises the per-transfer GOLD cap — a transfer is bounded by
-# the SMALLER of the two sides' caps, so both parties benefit from levelling it. It
-# also gates creature transfers by star: moving an N★ creature needs BOTH sides at
-# trade-hall level ≥ N. Like every building it can't exceed the main hall's level.
-TRADE_HALL_GOLD_CAP = {
-    0: 50_000,
-    1: 150_000,
-    2: 300_000,
-    3: 500_000,
-    4: 1_000_000,
-    5: 1_500_000,
-}
+# ── Trade hall is the bank ───────────────────────────────────────────────────────
+# Level 0 is not built: no transfers. Capacity is 1M per level, up to 5M.
+# A player can move 20% of capacity out per day (wallet withdraw + outgoing transfer).
+# Creature trades still need both halls at least at the creature's star.
+BANK_CAPACITY = {0: 0, 1: 1_000_000, 2: 2_000_000, 3: 3_000_000, 4: 4_000_000, 5: 5_000_000}
+BANK_WITHDRAW_PERCENT = 20
+BANK_NEW_ACCOUNT_DAYS = 7
+BANK_NEW_ACCOUNT_RECEIVE_CAP = 30_000
+BANK_LOOT_PROTECT_HOURS = 24
 
 
 def trade_hall_gold_cap(level: int) -> int:
-    return TRADE_HALL_GOLD_CAP.get(max(0, min(int(level or 0), BUILDING_MAX_LEVEL)), TRADE_HALL_GOLD_CAP[0])
+    """Bank capacity for a trade-hall level. Level 0 holds nothing."""
+    level = max(0, min(int(level or 0), BUILDING_MAX_LEVEL))
+    return BANK_CAPACITY.get(level, 0)
+
+
+def bank_daily_withdraw(level: int) -> int:
+    return trade_hall_gold_cap(level) * BANK_WITHDRAW_PERCENT // 100
 
 
 # ── 🔬 آزمایشگاه (research lab) tracks ───────────────────────────────────────────
@@ -1469,7 +1484,7 @@ FORGE_MAX_FAIL_CHANCE = 0.45
 ARENA_LOOT_PERCENT = 0.10
 ARENA_LOOT_MIN = 50  # guaranteed base loot for winning a raid even if defender is broke
 ARENA_SHIELD_HOURS = 8
-GROUP_SHIELD_HOURS = 4  # separate anti-farm grace after being hit by a group «اتک»
+GROUP_SHIELD_HOURS = 8  # separate anti-farm grace after a lost group «اتک»
 
 # Purchasable arena shields (diamonds). Unlike the free 8h grace after being raided,
 # these are bought up-front for long stretches of protection. Each attack YOU launch
@@ -1477,19 +1492,31 @@ GROUP_SHIELD_HOURS = 4  # separate anti-farm grace after being hit by a group «
 # so a week-long shield survives ~21 raids before you're exposed again.
 SHIELD_ATTACK_COST_HOURS = 8
 SHIELD_SHOP_TIERS = {
-    "8h":  {"hours": 8,   "diamonds": 40,  "label": "🛡 سپر ۸ ساعته"},
-    "24h": {"hours": 24,  "diamonds": 100, "label": "🛡 سپر ۲۴ ساعته"},
-    "3d":  {"hours": 72,  "diamonds": 240, "label": "🛡 سپر ۳ روزه"},
-    "7d":  {"hours": 168, "diamonds": 480, "label": "🛡 سپر یک‌هفته‌ای"},
+    "8h":  {"hours": 8,   "diamonds": 80,  "label": "🛡 سپر ۸ ساعته"},
+    "24h": {"hours": 24,  "diamonds": 150, "label": "🛡 سپر ۲۴ ساعته"},
+    "3d":  {"hours": 72,  "diamonds": 350, "label": "🛡 سپر ۳ روزه"},
+    "7d":  {"hours": 168, "diamonds": 500, "label": "🛡 سپر یک‌هفته‌ای"},
 }
-# A separate, cheaper shield against group «اتک» (uses group_shield_until). Group
-# aggression is lower-stakes than arena raiding, so protection costs less.
-GROUP_SHIELD_SHOP_TIERS = {
-    "8h":  {"hours": 8,   "diamonds": 20,  "label": "🛡 سپر گروه ۸ ساعته"},
-    "24h": {"hours": 24,  "diamonds": 48,  "label": "🛡 سپر گروه ۲۴ ساعته"},
-    "3d":  {"hours": 72,  "diamonds": 120, "label": "🛡 سپر گروه ۳ روزه"},
-    "7d":  {"hours": 168, "diamonds": 220, "label": "🛡 سپر گروه یک‌هفته‌ای"},
-}
+
+
+def group_shield_diamonds(arena_diamonds: int) -> int:
+    """Same tier as the arena shield, 25% cheaper. Half a diamond rounds up."""
+    return (int(arena_diamonds) * 75 + 50) // 100
+
+
+def _group_shield_tiers() -> dict:
+    tiers = {}
+    for key, cfg in SHIELD_SHOP_TIERS.items():
+        tiers[key] = {
+            "hours": cfg["hours"],
+            "diamonds": group_shield_diamonds(cfg["diamonds"]),
+            "label": cfg["label"].replace("سپر ", "سپر گروه ", 1),
+        }
+    return tiers
+
+
+# Group shop is the arena table with group_shield_diamonds() — one duration list.
+GROUP_SHIELD_SHOP_TIERS = _group_shield_tiers()
 ARENA_ATTACK_ENERGY_COST = 1
 
 # Loot is capped against the ATTACKER's own progression stage, not the defender's

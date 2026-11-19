@@ -30,7 +30,7 @@ _RES = {"coins": "coins", "dna_fragments": "dna", "diamonds": "diamonds"}
 # What the next main-hall level opens — the bullet list of the bot's main-hall card
 # (bot/handlers/buildings.py keeps it inside a function, so it can't be imported).
 _HALL_UNLOCKS = {
-    2: ["تالار ادغام و غار هیولا", "ساخت آزمایشگاه DNA و تالار تجارت", "دسترسی به پاس ماهانه و صرافی طلا/DNA",
+    2: ["تالار ادغام و غار هیولا", "ساخت آزمایشگاه DNA و بانک طلا", "دسترسی به پاس ماهانه و صرافی طلا/DNA",
         "افزایش سقف ترکیب به ۲ ستاره"],
     3: ["ساخت و بازگشایی آهنگری تجهیزات", "چیدمان تیم ۳ نفره مبارزات", "ساخت معدن جمع‌کننده الماس",
         "ورود به لیگ رتبه‌بندی و رویدادها", "فروشگاه سپر و مبادله تجهیزات", "افزایش سقف ترکیب به ۳ ستاره"],
@@ -214,6 +214,21 @@ def plunder_seen(request, user, data):
     return {"ok": True}
 
 
+@endpoint("POST")
+def withdraw(request, user, data):
+    """Move today's remaining bank budget into the free wallet. It is ordinary gold there."""
+    from game.bank import withdraw_to_wallet
+
+    b = _own_building(user, need_int(data, "id"))
+    if b.building_type != "trade_hall" or b.level < 1:
+        raise GameError("بانک پیدا نشد.")
+    with transaction.atomic():
+        lock_row(user)
+        locked = User.objects.select_for_update().get(id=user.id)
+        moved = withdraw_to_wallet(locked, b.level)
+    return {"moved": moved, **_view(user, data, b)}
+
+
 # ── buildings: detail ─────────────────────────────────────────────────────────
 def _detail(user: User, building: Building) -> dict:
     """Mirror of the bot's _detail_view."""
@@ -237,6 +252,10 @@ def _detail(user: User, building: Building) -> dict:
     if btype == constants.MAIN_BUILDING and building.level > 0:
         extras.append("سقف ستاره‌ی هیولاها = سطح «تالار ادغام» (که خودش از سطح این تالار بالاتر نمی‌ره).")
         d["unlocks"] = {"level": building.level + 1, "items": _HALL_UNLOCKS.get(building.level + 1, [])}
+    if btype == "trade_hall" and building.level > 0:
+        from game.bank import snapshot
+
+        d["bank"] = snapshot(user, building.level)
     d["extras"] = [e for e in extras if e]
 
     out = {"building": d, "builders": _builders(user, busy), "cards": _cards(user),
@@ -468,6 +487,7 @@ routes = [
     ("", buildings),
     ("building/", building),
     ("plunder_seen/", plunder_seen),
+    ("withdraw/", withdraw),
     ("collect/", collect),
     ("collect_all/", collect_all),
     ("upgrade/", upgrade),

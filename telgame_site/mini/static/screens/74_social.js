@@ -134,11 +134,16 @@
           return K.recruit.browse(root, ctx, banner(d.banner, "پیدا کردن اتحاد", '<span class="sm" style="color:#c5cee2">توی هیچ اتحادی نیستی</span>'));
         }
         var role = ROLE[a.role] || ROLE.member;
+        var flagCard = a.flag_img
+          ? '<div class="panel pad flex mt" style="gap:12px;align-items:center"><img src="' + K.esc(a.flag_img) + '" alt="" style="width:72px;height:108px;object-fit:cover;border-radius:8px"><div class="grow"><div class="b">پرچم اتحاد</div><div class="sm muted">' + K.esc(a.name) + "</div></div></div>"
+          : "";
         root.innerHTML = banner(d.banner, "اتحاد " + a.name, K.tag(role[0], role[2], role[1]) + (a.leader ? '<span class="sm" style="color:#c5cee2">رهبر: ' + K.esc(a.leader) + "</span>" : "")) +
+          flagCard +
           '<div class="tiles mt" id="so-astats"></div>' +
           (a.deputy ? '<p class="note" style="margin-top:8px">قائم‌مقام: ' + K.esc(a.deputy) + "</p>" : "") +
           (a.joined_today ? '<div class="callout warn mt">' + K.ic("clock") + "<div>تازه عضو شدی؛ تا نیمه‌شب امشب نمی‌تونی توی رید و جنگ اتحاد شرکت کنی.</div></div>" : "") +
           '<div class="btns mt mb"><button class="btn gold" data-act="deposit">' + K.ic("bank") + 'واریز به خزانه</button><button class="btn" data-act="ranks">' + K.ic("podium") + "جدول اتحادها</button></div>" +
+          (a.can_edit_flag ? '<button class="btn block mb" data-act="flag">' + K.ic("flag") + (a.flag_img ? "عوض کردن پرچم" : "ساختن پرچم") + "</button>" : "") +
           (a.role === "leader" || a.role === "deputy" ? '<button class="btn primary block mb" data-act="recruit">' + K.ic("users") + "جذب و دعوت (آگهی، دعوت، لینک)</button>" : "") +
           '<div id="so-aseg"></div><div id="so-abody"></div>' +
           '<div class="callout mt">' + K.ic("info") + "<div>" + BOT_NOTE + "</div></div>" +
@@ -171,6 +176,7 @@
         K.on(root, "recruit", function () { K.go("so_recruit"); });
         K.on(root, "deposit", function () { depositSheet(d, function () { if (ctx.alive()) stats(); }); });
         K.on(root, "ranks", function () { K.go("so_ranks"); });
+        K.on(root, "flag", function () { K.go("so_flag"); });
         K.on(root, "leave", function (el) { leaveFlow(d, ctx, el); });
         K.on(root, "rally", function (el) {
           K.api.post("social/alliance/war/preview/", {}, el).then(function (p) {
@@ -193,6 +199,62 @@
             K.reward({ title: Number(o.count).toLocaleString("en-US") + " جعبه باز شد!", icon: "chest", coins: o.coins, dna: o.dna, diamonds: o.diamonds,
                        creatures: o.creatures, text: o.lines.join(" · "), button: "عالیه" });
           }).catch(function () {});
+        });
+      });
+    }
+  });
+
+  // ───────────────────────── flag builder ─────────────────────────
+  K.screen("so_flag", {
+    title: "پرچم اتحاد", tab: "more",
+    render: function (root, params, ctx) {
+      return K.api.get("social/alliance/").then(function (d) {
+        var a = d.alliance, opt = d.flag_options;
+        if (!a || !a.can_edit_flag || !opt) { K.toast("فقط رهبر و قائم‌مقام پرچم را می‌سازند.", "err"); K.back(); return; }
+        var spec = { style: "hall", cloth: "purple", metal: "gold", emblem: "dragon", pattern: "rays" };
+        if (a.flag) Object.keys(spec).forEach(function (k) { if (a.flag[k]) spec[k] = a.flag[k]; });
+        var timer = 0;
+        function chips(key, items, color) {
+          return '<div class="btns mb">' + items.map(function (it) {
+            var mark = color ? '<i style="display:inline-block;width:12px;height:12px;border-radius:50%;background:' + it.color + ';vertical-align:middle;margin-left:6px"></i>' : "";
+            return '<button type="button" class="btn sm' + (spec[key] === it.id ? " primary" : "") + '" data-pick="' + key + '" data-id="' + it.id + '">' + mark + K.esc(it.label) + "</button>";
+          }).join("") + "</div>";
+        }
+        function paint() {
+          root.innerHTML =
+            '<div class="panel pad" style="text-align:center"><img id="so-flag-img" alt="" style="width:180px;height:270px;object-fit:cover;border-radius:12px;background:#12141c"></div>' +
+            '<p class="note">دو قالب. هر بخش را جدا انتخاب کن؛ عکس دلخواه قبول نمی‌شود.</p>' +
+            '<div class="b mb">قالب</div>' + chips("style", opt.styles) +
+            '<div class="b mb">رنگ پارچه</div>' + chips("cloth", opt.cloths, true) +
+            '<div class="b mb">رنگ فلز</div>' + chips("metal", opt.metals, true) +
+            '<div class="b mb">نشان</div>' + chips("emblem", opt.emblems) +
+            '<div class="b mb">نقش زمینه</div>' + chips("pattern", opt.patterns) +
+            '<p class="note mb">روی پرچم فقط اسم اتحاد نوشته می‌شود: ' + K.esc(a.name) + "</p>" +
+            '<button class="btn gold block" data-act="save">' + K.ic("check") + "ذخیره پرچم</button>";
+          preview();
+        }
+        function preview() {
+          K.api.post("social/alliance/flag/preview/", spec).then(function (r) {
+            if (!ctx.alive()) return;
+            var img = root.querySelector("#so-flag-img");
+            if (img && r.img) img.src = r.img;
+          }, function () {});
+        }
+        paint();
+        root.addEventListener("click", function (ev) {
+          var b = ev.target.closest("[data-pick]"); if (!b) return;
+          spec[b.dataset.pick] = b.dataset.id;
+          K.haptic();
+          Array.prototype.forEach.call(root.querySelectorAll('[data-pick="' + b.dataset.pick + '"]'), function (x) {
+            x.classList.toggle("primary", x === b);
+          });
+          clearTimeout(timer); timer = setTimeout(preview, 180);
+        });
+        K.on(root, "save", function (el) {
+          K.api.post("social/alliance/flag/", spec, el).then(function () {
+            K.toast("پرچم ذخیره شد.");
+            if (ctx.alive()) K.back();
+          }, function (err) { K.toast(err.message, "err"); });
         });
       });
     }
@@ -230,7 +292,9 @@
           if (d.board === "treasury" && d.my_rank) html += '<div class="panel pad glow mb flex between"><span>رتبه‌ی اتحاد تو</span><span class="b">' + K.n(d.my_rank) + '<span class="faint sm"> از ' + Number(d.total) + "</span></span></div>";
           html += d.rows.length ? '<div class="panel so-board">' + d.rows.map(function (r) {
             var rw = r.reward ? K.amounts(r.reward) : "";
-            return '<div class="' + (r.me ? "so-me" : "") + '"><span class="so-rk r' + r.rank + ' num">' + r.rank + '</span><div class="grow"><div class="b cut">' + K.esc(r.name) + (r.me ? ' <span class="faint sm">(اتحاد تو)</span>' : "") + "</div>" +
+            return '<div class="' + (r.me ? "so-me" : "") + '"><span class="so-rk r' + r.rank + ' num">' + r.rank + "</span>" +
+              (r.flag ? '<img src="' + K.esc(r.flag) + '" alt="" style="width:36px;height:54px;object-fit:cover;border-radius:4px">' : "") +
+              '<div class="grow"><div class="b cut">' + K.esc(r.name) + (r.me ? ' <span class="faint sm">(اتحاد تو)</span>' : "") + "</div>" +
               '<div class="sm muted">' + (r.members != null ? K.ic("users") + " " + K.n(r.members) + " عضو" : "") + "</div>" + (rw ? '<div class="sm so-rw">' + K.ic("gift") + " " + rw + "</div>" : "") + "</div>" +
               '<span class="so-val ' + meta[3] + '"><b>' + (d.board === "raid" || d.board === "war" ? K.n(r.value) : K.short(r.value)) + "</b><small>" + meta[2] + "</small></span></div>";
           }).join("") + "</div>" : '<div class="panel">' + K.state("podium", "هنوز خالیه", d.board === "war" ? "این هفته هنوز هیچ اتحادی امتیاز جنگ نگرفته." : "هنوز اتحادی توی این جدول نیست.") + "</div>";

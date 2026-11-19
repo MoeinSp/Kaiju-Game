@@ -3,6 +3,7 @@ venv/
 __pycache__/
 *.pyc
 .env
+.mini_app_url
 # Deployment-local compose overrides (host ports, proxy wiring) — never committed
 docker-compose.override.yml
 *.db

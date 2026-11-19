@@ -111,7 +111,10 @@ def shell(request):
     css = ["core.css"] + sorted(p.relative_to(STATIC_DIR).as_posix() for p in (STATIC_DIR / "screens").glob("*.css"))
     js = ["core.js"] + sorted(p.relative_to(STATIC_DIR).as_posix() for p in (STATIC_DIR / "screens").glob("*.js")) + ["boot.js"]
     html = (MINI_DIR / "shell.html").read_text(encoding="utf-8")
-    if settings.DEBUG and "bundle" not in request.GET:   # separate files are easier to debug locally
+    host = request.get_host().split(":")[0]
+    # Separate files only on the machine itself. A phone opening the dev tunnel
+    # drops halfway through ~30 scripts and the page never starts.
+    if settings.DEBUG and host in {"127.0.0.1", "localhost"} and "bundle" not in request.GET:
         css_html = "\n".join(f'<link rel="stylesheet" href="{_versioned(c)}">' for c in css)
         js_html = "\n".join(f'<script src="{_versioned(j)}"></script>' for j in js)
     else:                                                 # production: two requests instead of ~35

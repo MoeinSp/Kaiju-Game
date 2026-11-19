@@ -3,7 +3,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes, filters
 
 from bot.utils import alert_text
-from bio_lab.models import Building, Creature
+from bio_lab.models import Building, Creature, User
 from bio_lab.repository import get_or_create_user
 from bot.buttons import BUILD, CONFIRM, DANGER, LIST, NAV, PRIMARY, SHOP, back_btn, back_only_keyboard, btn
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text, send_screen
@@ -165,7 +165,7 @@ def _detail_view(user, building: Building) -> dict:
     is_producer = produces(building.building_type) and building.level > 0
     active_upgrade(user)  # finish any due upgrades before we count/inspect
     workers = assigned_creatures(building)
-    return {
+    view = {
         "building": building,
         "upgrade": upgrade_for_building(user, building),
         "busy_count": active_upgrade_count(user),
@@ -183,7 +183,13 @@ def _detail_view(user, building: Building) -> dict:
         # never inside the async text builder (that was the "mines won't open" crash)
         "rate": production_rate(building) if is_producer else 0.0,
         "store_cap": storage_cap(building) if is_producer else 0,
+        "bank": None,
     }
+    if building.building_type == "trade_hall" and building.level > 0:
+        from game.bank import snapshot
+
+        view["bank"] = snapshot(user, building.level)
+    return view
 
 
 def _pbar(current, total, width: int = 10) -> str:
@@ -287,6 +293,14 @@ def _building_detail_text(view: dict) -> str:
         from game import dispatch
 
         lines.append("<blockquote>" + dispatch.hq_perks_text(building.level) + "</blockquote>")
+    bank = view.get("bank")
+    if bank:
+        lines.append(
+            f"🏦 موجودی بانک: <code>{bank['gold']:,}</code> / <code>{bank['cap']:,}</code>\n"
+            f"📤 برداشت امروز: <code>{bank['left']:,}</code> از <code>{bank['daily']:,}</code> مانده\n"
+        )
+        if bank["young"]:
+            lines.append(f"🆕 سقف دریافت بانک تا یک هفته: <code>{bank['receive_left']:,}</code> طلای مانده‌ی امروز")
     if btype == "blacksmith" and building.level > 0:
         lines.append(f"🔨 سقفِ فعلیِ سطحِ تجهیزات: <code>+{building.level * constants.EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL}</code>")
     if btype == constants.MAIN_BUILDING and building.level > 0:
@@ -296,7 +310,7 @@ def _building_detail_text(view: dict) -> str:
             _UNLOCKS_BY_HALL = {
                 2: [
                     f"{get_emoji('chest_magical')} تالار ادغام و غار هیولا",
-                    f"{get_emoji('dna')} ساخت آزمایشگاه DNA و تالار تجارت",
+                    f"{get_emoji('dna')} ساخت آزمایشگاه DNA و بانک طلا",
                     f"{get_emoji('ticket')} دسترسی به پاس ماهانه و صرافی طلا/DNA",
                     f"{get_emoji('star')} افزایش سقف ترکیب به ۲ ستاره",
                 ],
@@ -395,6 +409,9 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
     elif building.level < min(cap, constants.BUILDING_MAX_LEVEL):
         label = "شروع ساخت" if building.level == 0 else "شروع ارتقا"
         rows.append([btn(label, emoji_key="btn_build", style=BUILD, callback_data=f"bld_upgrade:{building.id}")])
+    bank = view.get("bank")
+    if bank and bank["gold"] > 0 and bank["left"] > 0:
+        rows.append([btn("برداشت به موجودی", emoji_key="btn_collect", style=CONFIRM, callback_data=f"bld_bank:{building.id}")])
     if building.building_type == "dispatch_hq":
         rows.append([btn("مأموریت‌های اعزامی", emoji_key="btn_dispatch", style=PRIMARY, callback_data="menu:dispatch")])
     if building.building_type == "research_lab" and building.level > 0:
@@ -440,6 +457,41 @@ def _collect_sync(tg_user, building_id):
     record_action(user, "collect")
     completed_missions = check_missions(user, "collect")
     return _detail_view(user, building), amount, resource, completed_missions
+
+
+def _bank_withdraw_sync(tg_user, building_id):
+    from django.db import transaction
+
+    from game.bank import withdraw_to_wallet
+
+    user, _ = get_or_create_user(tg_user)
+    with transaction.atomic():
+        user = User.objects.select_for_update().get(id=user.id)
+        building = Building.objects.filter(id=building_id, owner=user, building_type="trade_hall").first()
+        if building is None or building.level < 1:
+            raise GameError("بانک پیدا نشد.")
+        moved = withdraw_to_wallet(user, building.level)
+    return _detail_view(user, building), moved
+
+
+async def building_bank_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    building_id = int(query.data.split(":")[1])
+    try:
+        view, moved = await run_db(_bank_withdraw_sync, update.effective_user, building_id)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    await query.answer(f"{moved:,} طلا به موجودی آزاد آمد. برای خرید هیولا قابل استفاده نیست.")
+    from game.media import get_building_image_path
+    photo_path = get_building_image_path(view["building"].building_type, view["building"].level)
+    await send_screen(
+        update,
+        _building_detail_text(view),
+        photo=photo_path,
+        parse_mode="HTML",
+        reply_markup=_building_detail_keyboard(view),
+    )
 
 
 async def building_collect_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -930,6 +982,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(building_buy_builder_callback, pattern=r"^bld_buy_builder_do$"))
     application.add_handler(CallbackQueryHandler(building_pick_callback, pattern=r"^bld_pick:"))
     application.add_handler(CallbackQueryHandler(building_collect_callback, pattern=r"^bld_collect:"))
+    application.add_handler(CallbackQueryHandler(building_bank_callback, pattern=r"^bld_bank:"))
     application.add_handler(CallbackQueryHandler(building_upgrade_callback, pattern=r"^bld_upgrade:"))
     application.add_handler(CallbackQueryHandler(building_finish_ask_callback, pattern=r"^bld_finish_ask:"))
     application.add_handler(CallbackQueryHandler(building_finish_callback, pattern=r"^bld_finish:"))
