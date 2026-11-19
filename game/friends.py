@@ -431,8 +431,7 @@ def play(sender: User, target: User | None, word: str, other_id: int) -> dict:
             who, them,
             "به نشانه‌ی دوستی لیسید.\n"
             f"{them} جایزه گرفت: {prize}\n"
-            f"<i>جایزه یک‌طرفه است و به کسی که لیس زده نمی‌رسد. "
-            f"امروز {_fa(step)} از {_fa(LICK_CAP)} لیسِ دریافتی.</i>",
+            f"<i>امروز {_fa(step)} از {_fa(LICK_CAP)} لیسِ دریافتی.</i>",
         )
         return {"text": text, "ask": False, "wait": False, "quiet": False}
     return {"text": "", "ask": False, "wait": False, "quiet": True}

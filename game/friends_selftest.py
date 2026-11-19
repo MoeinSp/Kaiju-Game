@@ -93,7 +93,7 @@ def main():
         friends.reset_cooldowns()
         licked = friends.play(a, b, "لیس", B)
         assert licked["ask"] is False and "۲ الماس" in licked["text"] and "جایزه گرفت" in licked["text"]
-        assert "یک‌طرفه" in licked["text"]
+        assert "یک‌طرفه" not in licked["text"]
         b.refresh_from_db()
         a.refresh_from_db()
         assert b.diamonds == 12 and a.diamonds == 10 and a.coins == 1000
