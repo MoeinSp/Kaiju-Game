@@ -122,15 +122,18 @@ def _decline_blocks(row: FriendLink | None) -> bool:
 
 @transaction.atomic
 def ask(sender_id: int, receiver_id: int) -> str:
-    """'asked', 'already', 'friends', 'full', or 'blocked'. Does not count a pending row as a friend."""
+    """'asked', 'already', 'friends', 'full', 'blocked', or 'closed'. A pending row is not a friend."""
     if friend_count(sender_id) >= MAX_FRIENDS:
         return "full"
+    invites = User.objects.filter(id=receiver_id).values_list("friend_invites", flat=True).first()
     lo, hi = pair_ids(sender_id, receiver_id)
     row = FriendLink.objects.select_for_update().filter(user_lo_id=lo, user_hi_id=hi).first()
     if row is not None and row.status == FriendLink.FRIENDS:
         return "friends"
     if row is not None and row.status == FriendLink.PENDING:
         return "already"
+    if invites is False:
+        return "closed"
     if _decline_blocks(row):
         return "blocked"
     if row is None:
@@ -364,6 +367,12 @@ def give_lick(giver: User, receiver: User) -> tuple[str, int]:
     return _pay_lick(receiver, step), step
 
 
+def set_invites(user: User, enabled: bool) -> bool:
+    user.friend_invites = enabled
+    user.save(update_fields=["friend_invites"])
+    return enabled
+
+
 def spit_request(sender: User, target: User) -> dict:
     """The تف card. Creates the request; the other person still has to accept."""
     result = ask(sender.id, target.id)
@@ -373,6 +382,7 @@ def spit_request(sender: User, target: User) -> dict:
         "friends": "از قبل دوست هستید. درخواست تازه‌ای نرفت.",
         "full": "لیست دوست‌ها پر است و درخواست ثبت نشد.",
         "blocked": "این درخواست فعلاً بسته است.",
+        "closed": "این بازیکن دریافت تف را بسته است.",
     }.get(result, "")
     text = "🤝 <b>تف</b>\n\n" + _names(
         lab_mention(sender), lab_mention(target),
@@ -407,6 +417,13 @@ def play(sender: User, target: User | None, word: str, other_id: int) -> dict:
         return spit_request(sender, target)
     if word == "لیس":
         if not are_friends(sender.id, target.id):
+            if not getattr(target, "friend_invites", True):
+                text = (
+                    "👅 <b>لیس</b>\n\n"
+                    "شما دوست نیستید و نمی‌توانید به هم لیس بزنید.\n\n"
+                    f"{them} دریافت تف را بسته است."
+                )
+                return {"text": text, "ask": False, "wait": False, "quiet": False}
             text = (
                 "👅 <b>لیس</b>\n\n"
                 "شما دوست نیستید و نمی‌توانید به هم لیس بزنید.\n\n"

@@ -85,6 +85,8 @@ class User(models.Model):
     #   in the DM with /off and /on).
     transfers_enabled = models.BooleanField(default=True)
     transfer_notify = models.BooleanField(default=True)
+    # «تف خاموش» / «تف روشن» — when False, nobody can send this player a friend request.
+    friend_invites = models.BooleanField(default=True)
     # comma-separated notification categories the player switched OFF (see
     # bot.handlers.notify.NOTIFY_CATEGORIES: timers, attacks, events, reminders)
     notify_off = models.CharField(max_length=64, default="", blank=True)

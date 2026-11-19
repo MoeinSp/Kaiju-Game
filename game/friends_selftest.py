@@ -43,6 +43,12 @@ def main():
     try:
         a = _user(A, "الف", day=today_str())
         b = _user(B, "ب", day=(datetime.date.fromisoformat(today_str()) - datetime.timedelta(days=1)).isoformat())
+        b.friend_invites = False
+        b.save(update_fields=["friend_invites"])
+        assert friends.ask(A, B) == "closed"
+        assert friends.link_of(A, B) is None
+        b.friend_invites = True
+        b.save(update_fields=["friend_invites"])
         assert friends.seen_label(a.last_active_day) == "امروز"
         assert friends.seen_label(b.last_active_day) == "دیروز"
         assert friends.ask(A, B) == "asked"

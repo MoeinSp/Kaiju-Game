@@ -6065,6 +6065,12 @@ async def route_private_keyword(update: Update, context: ContextTypes.DEFAULT_TY
         await hide_keyboard_cmd(update, context)
         return True
 
+    if norm_text in ("تف روشن", "تف روشن کن", "تف خاموش", "تف خاموش کن"):
+        from bot.handlers.friends import toggle_invites
+
+        await toggle_invites(update, context, norm_text.startswith("تف روشن"))
+        return True
+
     if norm_text in ("تف", "تف کردن", "لیس", "لیسیدن"):
         await message.reply_text(
             "این کلمه‌ها توی گروهن. روی پیام یه بازیکن ریپلای کن و همان کلمه را بفرست.",

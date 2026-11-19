@@ -1649,6 +1649,17 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await exchange_all_panel(update, context, all_direction)
         return
 
+    if norm in ("تف روشن", "تف روشن کن"):
+        from bot.handlers.friends import toggle_invites
+
+        await toggle_invites(update, context, True)
+        return
+    if norm in ("تف خاموش", "تف خاموش کن"):
+        from bot.handlers.friends import toggle_invites
+
+        await toggle_invites(update, context, False)
+        return
+
     from game.friends import WORDS as _FRIEND_WORDS
 
     friend_word = _FRIEND_WORDS.get(norm)

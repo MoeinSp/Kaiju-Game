@@ -174,6 +174,28 @@ def _aim(message, bot) -> tuple[int | None, str | None]:
     return sender.id, None
 
 
+def _set_invites_sync(tg_user, enable: bool) -> bool:
+    user, _created = get_or_create_user(tg_user)
+    return friends.set_invites(user, enable)
+
+
+async def toggle_invites(update: Update, context: ContextTypes.DEFAULT_TYPE, enable: bool) -> None:
+    """«تف خاموش» / «تف روشن» — stop or allow incoming friend requests."""
+    message = update.effective_message
+    if message is None or update.effective_user is None:
+        return
+    await run_db(_set_invites_sync, update.effective_user, enable)
+    if enable:
+        text = "✅ <b>دریافت تف روشن شد.</b>\nدوباره می‌توانند برایت درخواست دوستی بفرستند."
+    else:
+        text = (
+            "🔒 <b>دریافت تف خاموش شد.</b>\n"
+            "دیگر کسی نمی‌تواند با تف برایت درخواست دوستی بفرستد.\n"
+            "برای باز کردن، «تف روشن» را بفرست."
+        )
+    await message.reply_text(text, parse_mode="HTML")
+
+
 async def group_word(update: Update, context: ContextTypes.DEFAULT_TYPE, word: str) -> None:
     message = update.effective_message
     user = update.effective_user
