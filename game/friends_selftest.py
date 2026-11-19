@@ -47,6 +47,8 @@ def main():
         b.save(update_fields=["friend_invites"])
         assert friends.ask(A, B) == "closed"
         assert friends.link_of(A, B) is None
+        bounced = friends.spit_request(a, b)
+        assert bounced["ask"] is False and "تفت برگشت" in bounced["text"] and "🔒" in bounced["text"]
         b.friend_invites = True
         b.save(update_fields=["friend_invites"])
         assert friends.ask(A, B) == "asked"
@@ -144,6 +146,8 @@ def main():
         assert friends.ask(A, B) == "asked"
         friends.decline(B, A)
         assert friends.ask(A, B) == "blocked"
+        bounced = friends.spit_request(a, b)
+        assert bounced["ask"] is False and "رد کرده" in bounced["text"] and "بسته است" not in bounced["text"]
         FriendLink.objects.filter(user_lo_id=A, user_hi_id=B).update(
             updated_at=timezone.now() - datetime.timedelta(hours=25),
         )

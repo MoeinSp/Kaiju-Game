@@ -381,17 +381,44 @@ def set_invites(user: User, enabled: bool) -> bool:
     return enabled
 
 
+def _bounced(sender: User, target: User) -> dict:
+    """Spit came back: this player closed incoming requests. The lock glyph is the premium one."""
+    return {
+        "text": "🔒 <b>تف</b>\n\n" + _names(
+            lab_mention(sender), lab_mention(target),
+            "تفت برگشت. این بازیکن دریافت تف را بسته است.",
+        ),
+        "ask": False, "wait": False, "quiet": False,
+    }
+
+
+def _rejected_wait(sender_id: int, receiver_id: int) -> str:
+    """Why a new spit did not open a request after «بی‌خیال», and roughly how long is left."""
+    lo, hi = pair_ids(sender_id, receiver_id)
+    row = FriendLink.objects.filter(user_lo_id=lo, user_hi_id=hi).first()
+    hours = DECLINE_HOURS
+    if row is not None and row.status == FriendLink.DECLINED:
+        left = row.updated_at + datetime.timedelta(hours=DECLINE_HOURS) - timezone.now()
+        hours = max(1, -(-int(left.total_seconds()) // 3600))
+    return (
+        "تفت نرفت.\n"
+        f"این بازیکن درخواست قبلی را رد کرده. حدود {_fa(hours)} ساعت دیگر می‌توانی دوباره تف کنی."
+    )
+
+
 def spit_request(sender: User, target: User) -> dict:
     """The تف card. Creates the request; the other person still has to accept."""
     if not getattr(target, "friend_invites", True):
-        return {
-            "text": f"🔒 {lab_mention(target)} دریافت تف را بسته است.",
-            "ask": False, "wait": False, "quiet": False,
-        }
+        return _bounced(sender, target)
     result = ask(sender.id, target.id)
     if result == "closed":
+        return _bounced(sender, target)
+    if result == "blocked":
         return {
-            "text": f"🔒 {lab_mention(target)} دریافت تف را بسته است.",
+            "text": "🤝 <b>تف</b>\n\n" + _names(
+                lab_mention(sender), lab_mention(target),
+                _rejected_wait(sender.id, target.id),
+            ),
             "ask": False, "wait": False, "quiet": False,
         }
     extra = {
@@ -399,7 +426,6 @@ def spit_request(sender: User, target: User) -> dict:
         "already": "درخواست قبلی هنوز باز است.",
         "friends": "از قبل دوست هستید. درخواست تازه‌ای نرفت.",
         "full": "لیست دوست‌ها پر است و درخواست ثبت نشد.",
-        "blocked": "این درخواست فعلاً بسته است.",
         "closed": "این بازیکن دریافت تف را بسته است.",
     }.get(result, "")
     text = "🤝 <b>تف</b>\n\n" + _names(

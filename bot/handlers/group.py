@@ -28,7 +28,7 @@ from bio_lab.repository import (
     mention,
     touch_membership,
 )
-from bot.buttons import BATTLE, BUILD, CONFIRM, DANGER, NAV, PRIMARY, back_btn, btn, details_btn
+from bot.buttons import BATTLE, BUILD, CONFIRM, DANGER, NAV, PRIMARY, SHOP, back_btn, btn, details_btn
 from bot.handlers.group_words import group_footer_keyboard
 from bot.utils import mission_reward_text, run_db, safe_edit_message_text
 from game import constants
@@ -413,6 +413,17 @@ def _item_active_offer(kind: str, item_id: int) -> dict | None:
     return None
 
 
+def _price_choice_keyboard(token: str, floor: int, cap: int) -> InlineKeyboardMarkup:
+    """Min sits on the right, max on the left, custom price on the next row."""
+    return InlineKeyboardMarkup([
+        [
+            btn(f"حداکثر {cap:,}", emoji_key="btn_gold_shop", style=SHOP, callback_data=f"xfo:pmax:{token}"),
+            btn(f"حداقل {floor:,}", emoji_key="btn_deposit", style=CONFIRM, callback_data=f"xfo:pmin:{token}"),
+        ],
+        [btn("قیمت دلخواه", emoji_key="btn_custom_amt", style=PRIMARY, callback_data=f"xfo:pcustom:{token}")],
+    ])
+
+
 def _seller_step_keyboard(token: str, kind: str = "e") -> InlineKeyboardMarkup:
     row = [btn("تعیین قیمت", emoji_key="btn_charge", style=PRIMARY, callback_data=f"xfo:setp:{token}")]
     if kind != "c":
@@ -778,8 +789,70 @@ async def maybe_capture_transfer_price(update: Update, context: ContextTypes.DEF
     return True
 
 
+async def _creature_bounds(offer: dict) -> tuple[int, int] | None:
+    if offer.get("kind") != "c":
+        return None
+    return await run_db(_creature_price_cap_sync, offer["item_id"])
+
+
+def _creature_price_text(offer: dict, floor: int, cap: int, *, typing: bool) -> str:
+    tail = (
+        "عدد را بفرست — یا «لغو»."
+        if typing else
+        "حداقل، حداکثر، یا یک قیمت داخل همین بازه."
+    )
+    return (
+        f"{offer['desc']}\n\n"
+        f"💰 قیمت از <code>{floor:,}</code> تا <code>{cap:,}</code> طلاست.\n"
+        f"{tail}\n"
+        f"<i>5 دقیقه اعتبار.</i>"
+    )
+
+
+async def _show_creature_price_choices(query, offer: dict, token: str) -> None:
+    bounds = await _creature_bounds(offer)
+    if bounds is None:
+        await query.answer("این هیولا با این ستاره قابل انتقال نیست.", show_alert=True)
+        return
+    floor, cap = bounds
+    await query.answer()
+    await safe_edit_message_text(
+        query, _creature_price_text(offer, floor, cap, typing=False),
+        parse_mode="HTML", reply_markup=_price_choice_keyboard(token, floor, cap),
+    )
+
+
+async def _ask_custom_price(query, context, token: str, offer: dict) -> None:
+    bounds = await _creature_bounds(offer)
+    if bounds is None:
+        await query.answer("این هیولا با این ستاره قابل انتقال نیست.", show_alert=True)
+        return
+    floor, cap = bounds
+    context.user_data["xfer_price_token"] = token
+    await query.answer()
+    await safe_edit_message_text(
+        query, _creature_price_text(offer, floor, cap, typing=True),
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[
+            btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data=f"xfo:cancel:{token}"),
+        ]]),
+    )
+
+
+async def _apply_bound_price(query, context, token: str, offer: dict, use_floor: bool) -> None:
+    bounds = await _creature_bounds(offer)
+    if bounds is None:
+        await query.answer("این هیولا با این ستاره قابل انتقال نیست.", show_alert=True)
+        return
+    floor, cap = bounds
+    context.user_data.pop("xfer_price_token", None)
+    offer["price"] = floor if use_floor else cap
+    await query.answer()
+    await _present_offer_to_receiver(query, token, via_query=query)
+
+
 async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """All buttons of the trade handshake (xfo:…). Seller-only steps: setp/free/cancel.
+    """All buttons of the trade handshake (xfo:…). Seller-only steps: setp/pmin/pmax/pcustom/free/cancel.
     Receiver-only steps: acc/rej. Anyone: prices guide."""
     query = update.callback_query
     parts = query.data.split(":")
@@ -803,9 +876,15 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
         return
 
     # ── seller-only steps ────────────────────────────────────────────────────
-    if verb in ("setp", "free", "cancel"):
+    if verb in ("setp", "pmin", "pmax", "pcustom", "free", "cancel"):
         if update.effective_user.id != offer["sender_id"]:
             await query.answer("فقط فرستنده می‌تونه اینجا تصمیم بگیره.", show_alert=True)
+            return
+        if verb in ("pmin", "pmax"):
+            await _apply_bound_price(query, context, token, offer, verb == "pmin")
+            return
+        if verb == "pcustom":
+            await _ask_custom_price(query, context, token, offer)
             return
         if verb == "cancel":
             _PENDING_OFFERS.pop(token, None)
@@ -821,14 +900,17 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
             await query.answer()
             await _present_offer_to_receiver(update, token, via_query=query)
             return
-        # setp → ask the seller to type a number; captured in maybe_capture_transfer_price
+        # setp → creature sales pick min, max, or a typed price. Equipment still types a number.
+        if offer.get("kind") == "c":
+            await _show_creature_price_choices(query, offer, token)
+            return
         context.user_data["xfer_price_token"] = token
         await query.answer()
-        limit_hint = f" (حداکثر <code>{constants.EQUIP_TRANSFER_MAX_GOLD_PRICE:,}</code>)" if offer.get("kind") == "e" else ""
         await safe_edit_message_text(
             query,
             f"{offer['desc']}\n\n💰 <b>{offer['sender_name']}</b>، قیمت رو به طلا بفرست "
-            f"(فقط یه عدد{limit_hint}، مثلا <code>5000</code>) — یا «لغو».\n<i>5 دقیقه اعتبار.</i>",
+            f"(حداکثر <code>{constants.EQUIP_TRANSFER_MAX_GOLD_PRICE:,}</code>، مثلا <code>5000</code>) — یا «لغو».\n"
+            f"<i>5 دقیقه اعتبار.</i>",
             parse_mode="HTML",
         )
         return
