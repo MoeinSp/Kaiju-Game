@@ -292,6 +292,11 @@ def spar(a: User, b: User) -> str:
     )
 
 
+def _names(who: str, them: str, body: str) -> str:
+    """Names sit on their own lines, so a Latin lab name does not break the Persian sentence."""
+    return f"از: {who}\nبه: {them}\n\n{body}"
+
+
 def play(sender: User, target: User | None, word: str, other_id: int) -> dict:
     """The group reply. `quiet` means say nothing. `ask` means offer the two buttons."""
     gate = _cooldown(sender.id, other_id)
@@ -305,28 +310,34 @@ def play(sender: User, target: User | None, word: str, other_id: int) -> dict:
     them = lab_mention(target)
     if word == "تف":
         result = ask(sender.id, target.id)
-        text = f"{who} به نشانه‌ی علاقه‌ی هیولاها به {them} تف کرد."
-        if result == "asked":
-            text += " و درخواست دوستی دارد."
-        elif result == "already":
-            text += " درخواست قبلی‌ات هنوز باز است."
+        extra = {
+            "asked": "درخواست دوستی فرستاده شد. فقط خودِ طرف می‌تواند قبول کند.",
+            "already": "درخواست قبلی هنوز باز است.",
+            "friends": "از قبل دوست هستید. درخواست تازه‌ای نرفت.",
+            "full": "لیست دوست‌ها پر است و درخواست ثبت نشد.",
+            "blocked": "این درخواست فعلاً بسته است.",
+        }.get(result, "")
+        text = "🤝 <b>تف</b>\n\n" + _names(
+            who, them, "به نشانه‌ی علاقه‌ی هیولاها تف کرد." + (f"\n<i>{extra}</i>" if extra else ""),
+        )
         return {"text": text, "ask": result == "asked", "wait": False, "quiet": False}
     if word == "تشویق":
-        text = f"{who} {them} را تشویق کرد."
+        extra = ""
         if are_friends(sender.id, target.id) and cheer(sender.id, target.id):
-            text += "\n<i>برای کارت امروزش حساب شد.</i>"
+            extra = "\n<i>برای کارت امروزش حساب شد.</i>"
+        text = "👏 <b>تشویق</b>\n\n" + _names(who, them, f"تشویق کرد.{extra}")
         return {"text": text, "ask": False, "wait": False, "quiet": False}
     if word == "غرش":
         creature = get_active_creature(sender)
         if creature is None:
             return {"text": "برای غرش باید یه هیولای فعال داشته باشی.", "ask": False, "wait": False, "quiet": False}
         return {
-            "text": f"هیولای {creature_name(creature)} به سمت {them} غرید.",
+            "text": "📣 <b>غرش</b>\n\n" + _names(who, them, f"هیولای {creature_name(creature)} غرید."),
             "ask": False, "wait": False, "quiet": False,
         }
     if word == "طعنه":
         return {
-            "text": f"{who} به {them}: {_taunt(sender, target)}",
+            "text": "😏 <b>طعنه</b>\n\n" + _names(who, them, _taunt(sender, target)),
             "ask": False, "wait": False, "quiet": False,
         }
     return {"text": "", "ask": False, "wait": False, "quiet": True}

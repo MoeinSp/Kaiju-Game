@@ -64,6 +64,8 @@ def main():
         coins = (a.coins, b.coins)
         poked = friends.play(a, b, "تف", B)
         assert poked["ask"] is False and "درخواست دوستی" not in poked["text"]
+        assert "از:" in poked["text"] and "به:" in poked["text"]
+        assert "تف کرد. و" not in poked["text"]
         a.refresh_from_db()
         b.refresh_from_db()
         assert (a.coins, b.coins) == coins

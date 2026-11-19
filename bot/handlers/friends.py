@@ -117,17 +117,34 @@ def _drop_sync(viewer: int, friend_id: int) -> None:
 
 
 def _decide_sync(uid: int, lo: int, hi: int, accept_it: bool) -> str:
+    from bio_lab.repository import lab_mention
+
     row = friends.link_of(lo, hi)
     if row is None or row.status != "pending":
         raise GameError("درخواست دوستی‌ای باز نیست.")
     if uid == row.asked_by_id or uid not in (lo, hi):
         raise GameError("این درخواست مال تو نیست.")
     other = hi if uid == lo else lo
+    asker = User.objects.filter(id=row.asked_by_id).first()
+    receiver = User.objects.filter(id=uid).first()
+    if asker is None or receiver is None:
+        raise GameError("این بازیکن دیگر در بازی نیست.")
     if accept_it:
         friends.accept(uid, other)
-        return "دوست شدید."
+        return (
+            "🤝 <b>دوست شدید</b>\n\n"
+            f"از: {lab_mention(asker)}\n"
+            f"به: {lab_mention(receiver)}\n\n"
+            "درخواست قبول شد."
+        )
     friends.decline(uid, other)
-    return "رد شد. تا ۲۴ ساعت درخواست تازه‌ای از همین نفر نمی‌آید."
+    return (
+        "🚫 <b>رد شد</b>\n\n"
+        f"از: {lab_mention(asker)}\n"
+        f"به: {lab_mention(receiver)}\n\n"
+        "درخواست پذیرفته نشد.\n"
+        "<i>تا ۲۴ ساعت از همین نفر درخواست تازه نمی‌آید.</i>"
+    )
 
 
 def _play_sync(sender, target_id: int, word: str) -> dict:
@@ -196,8 +213,8 @@ async def on_tap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if kind in ("yes", "no") and len(parts) == 4:
             lo, hi = int(parts[2]), int(parts[3])
             note = await run_db(_decide_sync, user.id, lo, hi, kind == "yes")
-            await query.answer(note, show_alert=True)
-            await query.edit_message_reply_markup(reply_markup=None)
+            await query.answer()
+            await query.edit_message_text(note, parse_mode="HTML")
             return
         if len(parts) < 3:
             await query.answer()
