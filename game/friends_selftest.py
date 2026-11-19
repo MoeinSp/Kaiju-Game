@@ -120,7 +120,7 @@ def main():
         a.refresh_from_db()
         assert b.diamonds == 12 and a.diamonds == 10 and a.coins == 1000
         again = friends.play(a, b, "لیس", B)
-        assert again["wait"] is False and "قبلاً" in again["text"] and "صبر کن" not in again["text"]
+        assert again["wait"] is False and "یبار لیسش زدی" in again["text"] and "صبر کن" not in again["text"]
         b.refresh_from_db()
         assert b.diamonds == 12
         original_jackpot = friends._jackpot_kind

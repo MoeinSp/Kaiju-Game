@@ -359,11 +359,19 @@ def give_lick(giver: User, receiver: User) -> tuple[str, int]:
     if FriendMark.objects.filter(
         kind=LICK_KIND, actor_id=giver.id, target_id=receiver.id, day=day,
     ).exists():
-        raise GameError("امروز قبلاً به این دوست لیس زدی. جایزه‌اش با لیسِ ۱۵ نفر متفاوت پر می‌شود.")
+        raise GameError(
+            "👅💧 یبار لیسش زدی. چند بار دیگه می‌خوای بزنی؟\n"
+            "همین الانم خیسش کردی."
+        )
     if FriendMark.objects.filter(kind=LICK_KIND, actor_id=giver.id, day=day).count() >= LICK_CAP:
-        raise GameError("امروز ۱۵ نفر را لیس زدی. فردا دوباره.")
+        raise GameError(
+            "👅💧 برای ۱۵ نفر لیس زدی. زبونت خشک شد!\n"
+            "برو فردا بیا تا دوباره لیسش بزنی."
+        )
     if FriendMark.objects.filter(kind=LICK_KIND, target_id=receiver.id, day=day).count() >= LICK_CAP:
-        raise GameError("امروز این یکی حسابی لیس خورده. حسابی خیس شده و کثیفه. فردا دوباره بیا تا خشک شه.")
+        raise GameError(
+            "👅💧 امروز این یکی حسابی لیس خورده. حسابی خیس شده و کثیفه. فردا دوباره بیا تا خشک شه."
+        )
     FriendMark.objects.create(kind=LICK_KIND, actor_id=giver.id, target_id=receiver.id, day=day)
     step = FriendMark.objects.filter(kind=LICK_KIND, target_id=receiver.id, day=day).count()
     return _pay_lick(receiver, step), step
