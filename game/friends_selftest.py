@@ -49,6 +49,17 @@ def main():
         assert friends.link_of(A, B) is None
         b.friend_invites = True
         b.save(update_fields=["friend_invites"])
+        assert friends.ask(A, B) == "asked"
+        friends.set_invites(b, False)
+        assert friends.link_of(A, B) is None
+        assert friends.ask(A, B) == "closed"
+        try:
+            friends.accept(B, A)
+            raise AssertionError("a closed player must not accept a spit")
+        except GameError:
+            pass
+        friends.set_invites(b, True)
+        FriendLink.objects.filter(user_lo_id=min(A, B), user_hi_id=max(A, B)).delete()
         assert friends.seen_label(a.last_active_day) == "امروز"
         assert friends.seen_label(b.last_active_day) == "دیروز"
         assert friends.ask(A, B) == "asked"

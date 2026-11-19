@@ -24,9 +24,11 @@ def _rows(buttons: list) -> InlineKeyboardMarkup | None:
     return InlineKeyboardMarkup(buttons) if buttons else None
 
 
-def _home_sync(user_id: int) -> tuple[str, list[User]]:
+def _home_sync(user_id: int) -> tuple[str, list[User], bool]:
     pals = friends.friends_of(user_id)
+    invites = User.objects.filter(id=user_id).values_list("friend_invites", flat=True).first()
     lines = [f"🤝 <b>دوستان</b> <code>{len(pals)}/{friends.MAX_FRIENDS}</code>"]
+    lines.append("دریافت تف باز است." if invites is not False else "دریافت تف بسته است.")
     for mark in friends.unseen_pings(user_id):
         lines.append(f"{lab_plain(mark.actor)} گفت بیا بازی.")
     friends.see_pings(user_id)
@@ -36,10 +38,10 @@ def _home_sync(user_id: int) -> tuple[str, list[User]]:
         f"لیس بین دوست‌هاست. هر دوست را روزی یک بار. جایزه با {friends.LICK_CAP} نفر متفاوت پر می‌شود."
     )
     lines.append("<i>آخرین بازی فقط برای خودتان است. طلا و سپر اینجا نیست.</i>")
-    return "\n".join(lines), pals
+    return "\n".join(lines), pals, invites is not False
 
 
-def _keyboard(viewer: int, pals: list[User], *, private: bool) -> InlineKeyboardMarkup | None:
+def _keyboard(viewer: int, pals: list[User], *, private: bool, invites: bool) -> InlineKeyboardMarkup | None:
     rows: list[list] = []
     row: list = []
     for pal in pals:
@@ -52,6 +54,10 @@ def _keyboard(viewer: int, pals: list[User], *, private: bool) -> InlineKeyboard
             row = []
     if row:
         rows.append(row)
+    if invites:
+        rows.append([btn("بستن تف", emoji_key="btn_cancel", style=DANGER, callback_data=f"fr:inv:{viewer}:0")])
+    else:
+        rows.append([btn("باز کردن تف", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"fr:inv:{viewer}:1")])
     if private:
         rows.append([back_btn("menu:hub_city_more")])
     if not rows:
@@ -83,8 +89,11 @@ async def friends_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if user is None:
         return
     private = update.effective_chat is not None and update.effective_chat.type == "private"
-    text, pals = await run_db(_home_sync, user.id)
-    await send_screen(update, text, parse_mode="HTML", reply_markup=_keyboard(user.id, pals, private=private))
+    text, pals, invites = await run_db(_home_sync, user.id)
+    await send_screen(
+        update, text, parse_mode="HTML",
+        reply_markup=_keyboard(user.id, pals, private=private, invites=invites),
+    )
 
 
 def _card_sync(viewer: int, friend_id: int) -> str:
@@ -248,6 +257,15 @@ async def on_tap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     parts = query.data.split(":")
     kind = parts[1] if len(parts) > 1 else ""
     try:
+        if kind == "inv" and len(parts) == 4:
+            viewer = int(parts[2])
+            if user.id != viewer:
+                await query.answer("این دکمه مال تو نیست.", show_alert=True)
+                return
+            await run_db(_set_invites_sync, user, parts[3] == "1")
+            await query.answer("دریافت تف باز شد." if parts[3] == "1" else "دریافت تف بسته شد.", show_alert=True)
+            await friends_panel(update, context)
+            return
         if kind == "lickspit" and len(parts) == 4:
             sender_id, target_id = int(parts[2]), int(parts[3])
             if user.id != sender_id:

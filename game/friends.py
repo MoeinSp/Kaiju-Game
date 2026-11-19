@@ -130,10 +130,10 @@ def ask(sender_id: int, receiver_id: int) -> str:
     row = FriendLink.objects.select_for_update().filter(user_lo_id=lo, user_hi_id=hi).first()
     if row is not None and row.status == FriendLink.FRIENDS:
         return "friends"
-    if row is not None and row.status == FriendLink.PENDING:
-        return "already"
     if invites is False:
         return "closed"
+    if row is not None and row.status == FriendLink.PENDING:
+        return "already"
     if _decline_blocks(row):
         return "blocked"
     if row is None:
@@ -153,6 +153,8 @@ def accept(receiver_id: int, other_id: int) -> None:
     row = FriendLink.objects.select_for_update().filter(user_lo_id=lo, user_hi_id=hi).first()
     if row is None or row.status != FriendLink.PENDING or row.asked_by_id == receiver_id:
         raise GameError("درخواست دوستی‌ای باز نیست.")
+    if not User.objects.filter(id=receiver_id).values_list("friend_invites", flat=True).first():
+        raise GameError("دریافت تف را بسته‌ای.")
     if friend_count(receiver_id) >= MAX_FRIENDS:
         raise GameError(f"لیست دوستات پر است. سقف {MAX_FRIENDS} نفر است.")
     if friend_count(other_id) >= MAX_FRIENDS:
@@ -368,14 +370,30 @@ def give_lick(giver: User, receiver: User) -> tuple[str, int]:
 
 
 def set_invites(user: User, enabled: bool) -> bool:
+    """Close or open incoming تف. Closing also drops requests that are still waiting."""
     user.friend_invites = enabled
     user.save(update_fields=["friend_invites"])
+    if not enabled:
+        # Delete, don't decline: a decline would block the same person for a day after reopening.
+        FriendLink.objects.filter(status=FriendLink.PENDING).filter(
+            Q(user_lo=user) | Q(user_hi=user),
+        ).exclude(asked_by_id=user.id).delete()
     return enabled
 
 
 def spit_request(sender: User, target: User) -> dict:
     """The تف card. Creates the request; the other person still has to accept."""
+    if not getattr(target, "friend_invites", True):
+        return {
+            "text": f"🔒 {lab_mention(target)} دریافت تف را بسته است.",
+            "ask": False, "wait": False, "quiet": False,
+        }
     result = ask(sender.id, target.id)
+    if result == "closed":
+        return {
+            "text": f"🔒 {lab_mention(target)} دریافت تف را بسته است.",
+            "ask": False, "wait": False, "quiet": False,
+        }
     extra = {
         "asked": "درخواست دوستی فرستاده شد. فقط خودِ طرف می‌تواند قبول کند.",
         "already": "درخواست قبلی هنوز باز است.",
