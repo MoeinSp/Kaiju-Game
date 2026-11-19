@@ -414,13 +414,14 @@ def _item_active_offer(kind: str, item_id: int) -> dict | None:
 
 
 def _price_choice_keyboard(token: str, floor: int, cap: int) -> InlineKeyboardMarkup:
-    """Min sits on the right, max on the left, custom price on the next row."""
+    """Three rows: max then min (min on the right), custom price, cancel."""
     return InlineKeyboardMarkup([
         [
             btn(f"حداکثر {cap:,}", emoji_key="btn_gold_shop", style=SHOP, callback_data=f"xfo:pmax:{token}"),
             btn(f"حداقل {floor:,}", emoji_key="btn_deposit", style=CONFIRM, callback_data=f"xfo:pmin:{token}"),
         ],
         [btn("قیمت دلخواه", emoji_key="btn_custom_amt", style=PRIMARY, callback_data=f"xfo:pcustom:{token}")],
+        [btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data=f"xfo:cancel:{token}")],
     ])
 
 
@@ -450,9 +451,22 @@ async def _begin_offer(message, kind: str, sender, receiver, item_id: int, desc:
     if _item_active_offer(kind, item_id) is not None:
         await message.reply_text("⏳ این مورد همین الان توی یه پیشنهاد انتقالِ بازه.")
         return
+    price_line = "قیمت (به طلا) را تعیین کن یا رایگان بفرست 👇\n"
+    markup = None
+    if kind == "c":
+        bounds = await run_db(_creature_price_cap_sync, item_id)
+        if bounds is None:
+            await message.reply_text("❌ این هیولا با این ستاره قابل انتقال نیست.", parse_mode="HTML")
+            return
+        floor, cap = bounds
+        price_line = f"قیمت از <code>{floor:,}</code> تا <code>{cap:,}</code> طلاست. یکی را بزن 👇\n"
     token = _new_offer(kind, sender.id, receiver.id, item_id=item_id, fee=fee, desc=desc,
                        sender_name=lab_mention(sender), receiver_name=lab_mention(receiver),
                        sender_cd=sender_cd, receiver_cd=receiver_cd)
+    if kind == "c":
+        markup = _price_choice_keyboard(token, floor, cap)
+    else:
+        markup = _seller_step_keyboard(token, kind)
     reset_line = f"{_CREATURE_RESET_NOTE}\n" if kind == "c" else ""
     cd_line = (("⏳ کول‌داون فرستنده: ندارد\n" if not sender_cd else f"⏳ کول‌داون فرستنده: <code>{sender_cd}</code> ساعت\n")
                + f"⏳ کول‌داون گیرنده: <code>{receiver_cd}</code> ساعت\n")
@@ -467,9 +481,9 @@ async def _begin_offer(message, kind: str, sender, receiver, item_id: int, desc:
         f"{reset_line}"
         f"{_RULE}\n"
         f"<b>{lab_mention(sender)}</b>، "
-        + ("قیمت طلا را داخل بازه‌ی این هیولا بنویس 👇\n" if kind == "c" else "قیمت (به طلا) را تعیین کن یا رایگان بفرست 👇\n")
+        + price_line
         + "<i><code>5</code> دقیقه اعتبار دارد.</i>",
-        parse_mode="HTML", reply_markup=_seller_step_keyboard(token, kind),
+        parse_mode="HTML", reply_markup=markup,
     )
 
 
