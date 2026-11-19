@@ -54,7 +54,7 @@ PATTERNS = {
     "scales": "فلس",
 }
 
-_RENDER = "6"
+_RENDER = "7"
 _NAME_MAX = 32
 
 
@@ -208,15 +208,10 @@ def _draw(spec: dict) -> Image.Image:
     plate = _tint(_knock(_fit(_part("flag_nameplate.jpg"), (plate_w, plate_h))), metal_hi, gamma=0.9, sheen=0.2)
     plate_x, plate_y = 60, (980 if style == "hall" else 1020)
     canvas.alpha_composite(plate, (plate_x, plate_y))
-    draw = ImageDraw.Draw(canvas)
-    # The nameplate file is a plaque sitting on its own reflection. The open
-    # band is the upper dark slot, between the two gold rails and inside the
-    # side spikes. Centering on the whole bitmap drops the name onto the rail.
-    _motto(
-        draw, spec["motto"],
-        (plate_x + 210, plate_y + int(plate_h * 0.33), plate_x + plate_w - 210, plate_y + int(plate_h * 0.53)),
-        (236, 226, 206), 40,
-    )
+    # The open writing band is the dark gap of the plaque, not the middle of
+    # the whole file (the lower half is only the reflection).
+    cx, cy, slot_w, slot_h = _name_slot(canvas, (plate_x, plate_y, plate_x + plate_w, plate_y + plate_h))
+    _motto(canvas, spec["motto"], (cx, cy), (236, 226, 206), 44, slot_w, slot_h)
     return canvas.convert("RGB")
 
 
@@ -310,28 +305,39 @@ def _emblem(draw, kind, cx, cy, r, color):
         draw.ellipse([cx - 8, cy - 8, cx + 10, cy + 10], fill=color)
 
 
-def _motto(draw, text, box, fill, font_size=42):
-    """Center the ink of the name in the slot, for Persian and Latin alike.
+def _name_slot(canvas: Image.Image, plate):
+    """Center of the dark plaque. The file's midpoint is the reflection line,
+    so the name sits a little above it, on the plate's own center line."""
+    del canvas
+    x0, y0, x1, y1 = plate
+    width, height = x1 - x0, y1 - y0
+    return x0 + width // 2, y0 + int(height * 0.47), int(width * 0.62), int(height * 0.12)
 
-    Width-only centering leaves the left side-bearing on the wrong side of the
-    box, and Persian letters sit lower in the em square than Latin ones. The
-    anchor is the middle of the painted glyphs, then the size shrinks until
-    the whole name stays inside the slot.
-    """
-    shaped = shape_persian_text(text)
+
+def _motto(canvas, text, center, fill, font_size, max_w, max_h):
+    """Paste the name so the painted glyphs, not the font's side bearing, sit
+    on the middle of the plaque. Persian and Latin use the same measurement."""
+    shaped = shape_persian_text(text) or text
     if shaped == text and any("\u0600" <= ch <= "\u06FF" for ch in text):
         shaped = text[::-1]
-    x0, y0, x1, y1 = box
-    max_w, max_h = (x1 - x0), (y1 - y0)
     size = font_size
-    font = _load_ui_font(size, bold=True, persian=True)
-    while size > 14:
+    ink = None
+    while size >= 14:
         font = _load_ui_font(size, bold=True, persian=True)
-        bbox = draw.textbbox((0, 0), shaped, font=font)
-        if bbox[2] - bbox[0] <= max_w and bbox[3] - bbox[1] <= max_h:
+        scratch = Image.new("RGBA", (max(max_w + 80, 200), max(max_h + 80, 80)), (0, 0, 0, 0))
+        ImageDraw.Draw(scratch).text((8, 8), shaped, font=font, fill=fill + (255,))
+        bbox = scratch.getbbox()
+        if bbox is None:
+            return
+        width, height = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        ink = scratch.crop(bbox)
+        if width <= max_w and height <= max_h:
             break
         size -= 2
-    draw.text(((x0 + x1) / 2, (y0 + y1) / 2), shaped, font=font, fill=fill, anchor="mm")
+    if ink is None:
+        return
+    cx, cy = center
+    canvas.alpha_composite(ink, (int(cx - ink.width / 2), int(cy - ink.height / 2)))
 
 
 def _hall(draw, image, spec, hi, lo, metal, metal_lo):
@@ -352,7 +358,6 @@ def _hall(draw, image, spec, hi, lo, metal, metal_lo):
     draw.ellipse([cx - 108, cy - 108, cx + 108, cy + 108], fill=lo, outline=metal, width=10)
     _emblem(draw, spec["emblem"], cx, cy, 62, metal)
     draw.rounded_rectangle([120, 560, 520, 640], radius=12, fill=metal_lo, outline=metal, width=4)
-    _motto(draw, spec["motto"], (120, 560, 520, 640), (24, 16, 12) if spec["metal"] != "iron" else (236, 232, 220))
     for x in range(110, 530, 18):
         draw.line([(x, 760), (x + 8, 820)], fill=metal, width=3)
 
@@ -377,7 +382,6 @@ def _sea(draw, image, spec, hi, lo, metal, metal_lo):
                    (cx + int(math.cos(ang) * 140), cy + int(math.sin(ang) * 140))], fill=metal, width=8)
     _emblem(draw, spec["emblem"], cx, cy, 48, metal)
     draw.rounded_rectangle([130, 700, 510, 800], radius=10, fill=metal_lo, outline=metal, width=4)
-    _motto(draw, spec["motto"], (130, 700, 510, 800), (24, 16, 12) if spec["metal"] != "iron" else (236, 232, 220), 40)
     draw.polygon([(150, 820), (170, 860), (130, 860)], fill=metal)
     draw.polygon([(490, 820), (470, 860), (510, 860)], fill=metal)
 

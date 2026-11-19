@@ -215,7 +215,7 @@
         if (a.flag) Object.keys(spec).forEach(function (k) { if (a.flag[k]) spec[k] = a.flag[k]; });
         var timer = 0;
         function chips(key, items, color) {
-          return '<div class="btns mb">' + items.map(function (it) {
+          return '<div class="flag-scroll mb">' + items.map(function (it) {
             var mark = color ? '<i style="display:inline-block;width:12px;height:12px;border-radius:50%;background:' + it.color + ';vertical-align:middle;margin-left:6px"></i>' : "";
             return '<button type="button" class="btn sm' + (spec[key] === it.id ? " primary" : "") + '" data-pick="' + key + '" data-id="' + it.id + '">' + mark + K.esc(it.label) + "</button>";
           }).join("") + "</div>";

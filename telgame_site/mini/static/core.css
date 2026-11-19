@@ -121,6 +121,9 @@ h2 svg, .h2 svg { color: var(--accent); }
 .tag.plain { color: #b9c4dc; }
 .stars { display: inline-flex; gap: 1px; color: #3a4357; } .stars svg { width: 13px; height: 13px; } .stars .on { color: var(--gold); filter: drop-shadow(0 0 3px rgba(255,200,87,.5)); }
 .row { display: flex; gap: 7px; overflow-x: auto; padding: 1px 1px 9px; scrollbar-width: none; } .row::-webkit-scrollbar { display: none; }
+.flag-scroll { display: flex; gap: 8px; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; touch-action: pan-x; scrollbar-width: none; padding: 2px 2px 8px; }
+.flag-scroll::-webkit-scrollbar { display: none; }
+.flag-scroll > .btn { flex: 0 0 auto; }
 .chip { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 13px; border-radius: 999px; font-size: 13px; white-space: nowrap; color: var(--muted); background: var(--surface); border: 1px solid var(--line); transition: all .15s; }
 .chip svg { width: 15px; height: 15px; }
 .chip.on { color: #06131a; font-weight: 700; background: linear-gradient(135deg, var(--accent), #7fe6ff); border-color: transparent; box-shadow: 0 4px 16px rgba(58,214,255,.28); }

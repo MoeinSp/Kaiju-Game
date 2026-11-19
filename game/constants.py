@@ -338,8 +338,8 @@ HUNT_ENERGY_COST = 1
 # a group «اتک» on a player loots this share of the loser's gold (capped), instead
 # of a flat reward
 GROUP_ATTACK_LOOT_PERCENT = 0.10
-GROUP_ATTACK_LOOT_CAP = 5_000  # gold taken from one group «اتک», on top of the 10% wallet slice
-GROUP_ATTACK_DNA_CAP = 500
+GROUP_ATTACK_LOOT_CAP = 100_000  # gold taken from one group «اتک», on top of the 10% wallet slice
+GROUP_ATTACK_DNA_CAP = 5_000
 
 # consecutive daily /start streak — resets if a day is missed, capped so late-game
 # players don't snowball into absurd payouts

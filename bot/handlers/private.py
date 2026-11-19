@@ -3852,6 +3852,8 @@ def _alliance_info_sync(tg_user):
     info = alliance_info(user.alliance)
     path = flag_file(user.alliance)
     info["flag_path"] = str(path) if path else None
+    from game.alliance import _is_manager
+    info["can_edit_flag"] = _is_manager(user, user.alliance)
     return info
 
 
@@ -3902,11 +3904,15 @@ async def ally_raidtable_callback(update: Update, context: ContextTypes.DEFAULT_
                                  reply_markup=back_only_keyboard("menu:alliance_info", "بازگشت به اتحاد"))
 
 
-def _alliance_action_keyboard(in_alliance: bool) -> InlineKeyboardMarkup:
+def _alliance_action_keyboard(in_alliance: bool, can_edit_flag: bool = False) -> InlineKeyboardMarkup:
     if in_alliance:
         rows = [
             [btn("اعضا و مدیریت", emoji_key="btn_members", style=NAV, callback_data="ally_members")],
             [btn("واریز به خزانه", emoji_key="btn_deposit", style=BUILD, callback_data="ally_deposit")],
+        ]
+        if can_edit_flag:
+            rows.append([btn("پرچم اتحاد", emoji_key="btn_alliance", style=BUILD, callback_data="ally_flag")])
+        rows += [
             [btn("ساختمان‌های اتحاد", emoji_key="btn_buildings", style=PRIMARY, callback_data="ally_perks")],
             [btn("جدول رید اتحاد", emoji_key="btn_raid_table", style=NAV, callback_data="ally_raidtable")],
             [
@@ -4018,7 +4024,107 @@ async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
         return
     await send_screen(update,
-        _alliance_info_text(info), photo=photo, parse_mode="HTML", reply_markup=_alliance_action_keyboard(in_alliance=True)
+        _alliance_info_text(info), photo=photo, parse_mode="HTML",
+        reply_markup=_alliance_action_keyboard(in_alliance=True, can_edit_flag=bool(info.get("can_edit_flag"))),
+    )
+
+
+# ── alliance flag (leader/deputy). Same choices as the mini app. ──────────────
+_FLAG_FIELDS = (
+    ("style", "styles", "قالب"),
+    ("cloth", "cloths", "رنگ پارچه"),
+    ("metal", "metals", "رنگ فلز"),
+    ("emblem", "emblems", "نشان"),
+    ("pattern", "patterns", "نقش زمینه"),
+)
+
+
+def _flag_state_sync(tg_user, key=None, value=None):
+    from game.alliance_flag import catalog, flag_file, set_flag
+
+    user, _ = get_or_create_user(tg_user)
+    if user.alliance_id is None:
+        return None
+    if key is not None:
+        raw = dict(user.alliance.flag) if isinstance(user.alliance.flag, dict) else {}
+        raw[key] = value
+        set_flag(user, raw)
+        user.alliance.refresh_from_db()
+    path = flag_file(user.alliance)
+    spec = user.alliance.flag if isinstance(user.alliance.flag, dict) else {}
+    return {
+        "name": user.alliance.name,
+        "spec": spec,
+        "options": catalog(),
+        "path": str(path) if path else None,
+    }
+
+
+def _flag_choice_label(options, field_key, list_key, selected):
+    for item in options[list_key]:
+        if item["id"] == selected:
+            return item["label"]
+    return "—"
+
+
+def _flag_keyboard(spec, options, picking=None) -> InlineKeyboardMarkup:
+    if picking:
+        _field, list_key, title = next(row for row in _FLAG_FIELDS if row[0] == picking)
+        buttons = [
+            btn(
+                item["label"],
+                style=PRIMARY if spec.get(picking) == item["id"] else NAV,
+                callback_data=f"ally_flag:set:{picking}:{item['id']}",
+            )
+            for item in options[list_key]
+        ]
+        rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+        rows.append([back_btn("ally_flag", "بازگشت به پرچم")])
+        return InlineKeyboardMarkup(rows)
+    rows = []
+    for field, list_key, title in _FLAG_FIELDS:
+        label = _flag_choice_label(options, field, list_key, spec.get(field))
+        rows.append([btn(f"{title}: {label}", style=NAV, callback_data=f"ally_flag:pick:{field}")])
+    rows.append([back_btn("menu:alliance_info", "بازگشت به اتحاد")])
+    return InlineKeyboardMarkup(rows)
+
+
+def _flag_text(name, spec, options, picking=None) -> str:
+    if picking:
+        title = next(row[2] for row in _FLAG_FIELDS if row[0] == picking)
+        return f"🚩 <b>{title}</b>\nیکی را انتخاب کن. روی پرچم اسم «{html.escape(name)}» نوشته می‌شود."
+    lines = [f"🚩 <b>پرچم {html.escape(name)}</b>", "روی پرچم فقط اسم اتحاد نوشته می‌شود."]
+    for field, list_key, title in _FLAG_FIELDS:
+        lines.append(f"• {title}: {_flag_choice_label(options, field, list_key, spec.get(field))}")
+    return "\n".join(lines)
+
+
+async def alliance_flag_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    parts = (query.data or "").split(":")
+    key = value = picking = None
+    if len(parts) == 4 and parts[1] == "set":
+        key, value = parts[2], parts[3]
+    elif len(parts) == 3 and parts[1] == "pick":
+        picking = parts[2]
+    try:
+        data = await run_db(_flag_state_sync, update.effective_user, key, value)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    await query.answer()
+    if data is None:
+        await safe_edit_message_text(query, "عضو هیچ اتحادی نیستی.",
+                                     reply_markup=back_only_keyboard("menu:alliance_info", "بازگشت"))
+        return
+    if picking not in {row[0] for row in _FLAG_FIELDS}:
+        picking = None
+    await send_screen(
+        update,
+        _flag_text(data["name"], data["spec"], data["options"], picking),
+        photo=data["path"],
+        parse_mode="HTML",
+        reply_markup=_flag_keyboard(data["spec"], data["options"], picking),
     )
 
 
@@ -6343,6 +6449,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(alliance_deposit_callback, pattern=r"^ally_deposit$"))
     application.add_handler(CallbackQueryHandler(alliance_top_callback, pattern=r"^ally_top$"))
     application.add_handler(CallbackQueryHandler(ally_raidtable_callback, pattern=r"^ally_raidtable$"))
+    application.add_handler(CallbackQueryHandler(alliance_flag_callback, pattern=r"^ally_flag(?::|$)"))
     application.add_handler(CallbackQueryHandler(alliance_members_callback, pattern=r"^ally_members(:\d+)?$"))
     application.add_handler(CallbackQueryHandler(alliance_requests_callback, pattern=r"^ally_requests$"))
     application.add_handler(CallbackQueryHandler(alliance_approve_callback, pattern=r"^ally_approve:\d+$"))
