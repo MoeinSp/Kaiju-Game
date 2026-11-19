@@ -92,7 +92,8 @@ def main():
 
         friends.reset_cooldowns()
         licked = friends.play(a, b, "لیس", B)
-        assert licked["ask"] is False and "۲ الماس" in licked["text"]
+        assert licked["ask"] is False and "۲ الماس" in licked["text"] and "جایزه گرفت" in licked["text"]
+        assert "یک‌طرفه" in licked["text"]
         b.refresh_from_db()
         a.refresh_from_db()
         assert b.diamonds == 12 and a.diamonds == 10 and a.coins == 1000
@@ -161,11 +162,11 @@ def main():
         assert friends.link_of(A, c.id) is None
 
         friends.reset_cooldowns()
-        first = friends.play(a, c, "طعنه", c.id)
+        first = friends.play(a, c, "تف", c.id)
         assert first["quiet"] is False and "طلا" not in first["text"]
-        second = friends.play(a, c, "طعنه", c.id)
+        second = friends.play(a, c, "تف", c.id)
         assert second["wait"] is True
-        third = friends.play(a, c, "طعنه", c.id)
+        third = friends.play(a, c, "تف", c.id)
         assert third["quiet"] is True
 
         print("friends selftest ok")

@@ -6065,7 +6065,7 @@ async def route_private_keyword(update: Update, context: ContextTypes.DEFAULT_TY
         await hide_keyboard_cmd(update, context)
         return True
 
-    if norm_text in ("تف", "تف کردن", "لیس", "لیسیدن", "تشویق", "غرش", "طعنه"):
+    if norm_text in ("تف", "تف کردن", "لیس", "لیسیدن"):
         await message.reply_text(
             "این کلمه‌ها توی گروهن. روی پیام یه بازیکن ریپلای کن و همان کلمه را بفرست.",
         )

@@ -1,7 +1,7 @@
-"""Friends, and the four group words that poke them.
+"""Friends, plus «تف» to ask and «لیس» between friends.
 
-«تف» can ask. It never becomes a friendship until the other person taps
-«دوست شویم». Nothing here moves gold, energy, cups, or creatures.
+«تف» never becomes a friendship until the other person taps «دوست شویم».
+A lick pays only the person who was licked.
 """
 
 from __future__ import annotations
@@ -34,9 +34,6 @@ WORDS = {
     "تف کردن": "تف",
     "لیس": "لیس",
     "لیسیدن": "لیس",
-    "تشویق": "تشویق",
-    "غرش": "غرش",
-    "طعنه": "طعنه",
 }
 
 _actor_at: dict[int, float] = {}
@@ -265,24 +262,6 @@ def card(viewer_id: int, friend: User) -> str:
     return "\n".join(lines)
 
 
-def _taunt(sender: User, target: User) -> str:
-    creature = get_active_creature(target)
-    hall = main_hall_level(target)
-    shielded = bool(
-        (target.shield_until and target.shield_until > timezone.now())
-        or (target.group_shield_until and target.group_shield_until > timezone.now())
-    )
-    options = [
-        f"تالار مِهر سطح {hall} برای غرش زیاد است.",
-        "هیولاهات توی غار که نباشن، حرف حساب می‌شه.",
-    ]
-    if creature is not None:
-        options.append(f"{creature_name(creature)} با {creature.star_level} ستاره هنوز جا برای غار دارد.")
-    if shielded:
-        options.append("پشت سپر حرف زدن هنر نیست.")
-    return random.choice(options)
-
-
 def spar(a: User, b: User) -> str:
     """A friendly fight. No cup, no gold, no energy — the caller must not pay any."""
     if not are_friends(a.id, b.id):
@@ -450,26 +429,10 @@ def play(sender: User, target: User | None, word: str, other_id: int) -> dict:
             return {"text": str(exc), "ask": False, "wait": False, "quiet": False}
         text = "👅 <b>لیس</b>\n\n" + _names(
             who, them,
-            f"به نشانه‌ی دوستی لیسید.\nجایزه: {prize}\n<i>امروز {_fa(step)} از {_fa(LICK_CAP)}</i>",
+            "به نشانه‌ی دوستی لیسید.\n"
+            f"{them} جایزه گرفت: {prize}\n"
+            f"<i>جایزه یک‌طرفه است و به کسی که لیس زده نمی‌رسد. "
+            f"امروز {_fa(step)} از {_fa(LICK_CAP)} لیسِ دریافتی.</i>",
         )
         return {"text": text, "ask": False, "wait": False, "quiet": False}
-    if word == "تشویق":
-        extra = ""
-        if are_friends(sender.id, target.id) and cheer(sender.id, target.id):
-            extra = "\n<i>برای کارت امروزش حساب شد.</i>"
-        text = "👏 <b>تشویق</b>\n\n" + _names(who, them, f"تشویق کرد.{extra}")
-        return {"text": text, "ask": False, "wait": False, "quiet": False}
-    if word == "غرش":
-        creature = get_active_creature(sender)
-        if creature is None:
-            return {"text": "برای غرش باید یه هیولای فعال داشته باشی.", "ask": False, "wait": False, "quiet": False}
-        return {
-            "text": "📣 <b>غرش</b>\n\n" + _names(who, them, f"هیولای {creature_name(creature)} غرید."),
-            "ask": False, "wait": False, "quiet": False,
-        }
-    if word == "طعنه":
-        return {
-            "text": "😏 <b>طعنه</b>\n\n" + _names(who, them, _taunt(sender, target)),
-            "ask": False, "wait": False, "quiet": False,
-        }
     return {"text": "", "ask": False, "wait": False, "quiet": True}

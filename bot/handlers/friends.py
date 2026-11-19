@@ -1,7 +1,7 @@
 """Friends: a private list, and four group words that only work as a reply.
 
-«تف» asks. The other person has to tap «دوست شویم». «تشویق»، «غرش» and «طعنه»
-never move gold, energy, cups, or creatures. Buttons that decide a request
+«تف» asks. The other person has to tap «دوست شویم». «لیس» pays only the
+person who was licked. Buttons that decide a request
 carry both ids and only the person who was asked can tap them.
 """
 
@@ -27,9 +27,6 @@ def _rows(buttons: list) -> InlineKeyboardMarkup | None:
 def _home_sync(user_id: int) -> tuple[str, list[User]]:
     pals = friends.friends_of(user_id)
     lines = [f"🤝 <b>دوستان</b> <code>{len(pals)}/{friends.MAX_FRIENDS}</code>"]
-    cheered = friends.cheers_today(user_id)
-    if cheered:
-        lines.append(f"امروز <b>{cheered}</b> دوست تشویقت کردن.")
     for mark in friends.unseen_pings(user_id):
         lines.append(f"{lab_plain(mark.actor)} گفت بیا بازی.")
     friends.see_pings(user_id)
@@ -159,7 +156,7 @@ def _aim(message, bot) -> tuple[int | None, str | None]:
 
     rep = message.reply_to_message
     if rep is None or getattr(rep, "forum_topic_created", None) is not None:
-        return None, "روی پیام یه بازیکن ریپلای کن و «تف»، «لیس»، «تشویق»، «غرش» یا «طعنه» را بفرست."
+        return None, "روی پیام یه بازیکن ریپلای کن و «تف» یا «لیس» را بفرست."
     if getattr(rep, "sender_chat", None) is not None or getattr(rep.from_user, "id", None) == _ANON:
         return None, "این پیام به اسم گروه است؛ معلوم نیست مال کدام بازیکن است."
     sender = rep.from_user
