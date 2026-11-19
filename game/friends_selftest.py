@@ -16,14 +16,14 @@ django.setup()
 
 from django.utils import timezone  # noqa: E402
 
-from bio_lab.models import Creature, FriendLink, User  # noqa: E402
+from bio_lab.models import Creature, DailyActionLog, DungeonProfile, FriendLink, SpeedupCard, User  # noqa: E402
 from game import friends  # noqa: E402
 from game.creature import GameError  # noqa: E402
 from game.daily import today_str  # noqa: E402
 
 A = 9200000001
 B = 9200000002
-EXTRA = list(range(9200000100, 9200000120))
+EXTRA = list(range(9200000100, 9200000150))
 
 
 def _wipe():
@@ -90,6 +90,42 @@ def main():
         except GameError:
             pass
 
+        friends.reset_cooldowns()
+        licked = friends.play(a, b, "لیس", B)
+        assert licked["ask"] is False and "۲ الماس" in licked["text"]
+        b.refresh_from_db()
+        a.refresh_from_db()
+        assert b.diamonds == 12 and a.diamonds == 10 and a.coins == 1000
+        DailyActionLog.objects.filter(user_id=A, action=friends.LICK_GIVE).update(count=15)
+        friends.reset_cooldowns()
+        capped = friends.play(a, b, "لیس", B)
+        assert capped["ask"] is False and "۱۵" in capped["text"]
+        b.refresh_from_db()
+        assert b.diamonds == 12
+        DailyActionLog.objects.filter(user_id=A, action=friends.LICK_GIVE).update(count=0)
+        DailyActionLog.objects.filter(user_id=B, action=friends.LICK_TAKE).update(count=14)
+        original_jackpot = friends._jackpot_kind
+        friends._jackpot_kind = lambda: "gems"
+        try:
+            friends.reset_cooldowns()
+            last = friends.play(a, b, "لیس", B)
+            assert "۲۰ الماس" in last["text"]
+            b.refresh_from_db()
+            assert b.diamonds == 32
+            from django.db import transaction
+            with transaction.atomic():
+                assert "۳۰ دقیقه‌ای" in friends._pay_lick(b, 12)
+            assert SpeedupCard.objects.get(owner=b, minutes=30).count == 2
+            friends._jackpot_kind = lambda: "key"
+            with transaction.atomic():
+                key_text = friends._pay_lick(b, 15)
+            assert "کلید سیاه‌چال" in key_text
+            b.refresh_from_db()
+            assert b.coins == 101_000
+            assert DungeonProfile.objects.get(user=b).keys == 1
+        finally:
+            friends._jackpot_kind = original_jackpot
+
         friends.remove(A, B)
         assert not friends.are_friends(A, B)
         assert friends.ask(A, B) == "asked"
@@ -104,11 +140,17 @@ def main():
             friends.remove(A, B)
         else:
             FriendLink.objects.filter(user_lo_id=min(A, B), user_hi_id=max(A, B)).delete()
+        friends.reset_cooldowns()
+        stranger = friends.play(a, b, "لیس", B)
+        assert stranger["ask"] is True and "هنوز دوست نیستید" in stranger["text"]
+        b.refresh_from_db()
+        assert b.diamonds == 32 and b.coins == 101_000
+        FriendLink.objects.filter(user_lo_id=min(A, B), user_hi_id=max(A, B)).delete()
         others = [_user(uid, f"د{uid % 100}") for uid in EXTRA]
         for other in others:
             assert friends.ask(A, other.id) == "asked"
             friends.accept(other.id, A)
-        assert friends.friend_count(A) == 20
+        assert friends.friend_count(A) == 50
         c = b
         assert friends.ask(A, c.id) == "full"
         assert friends.link_of(A, c.id) is None

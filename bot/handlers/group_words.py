@@ -1649,10 +1649,13 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await exchange_all_panel(update, context, all_direction)
         return
 
-    if norm in ("تف", "تشویق", "غرش", "طعنه"):
+    from game.friends import WORDS as _FRIEND_WORDS
+
+    friend_word = _FRIEND_WORDS.get(norm)
+    if friend_word is not None:
         from bot.handlers.friends import group_word
 
-        await group_word(update, context, norm)
+        await group_word(update, context, friend_word)
         return
 
     # «انتقال روشن» / «انتقال خاموش» — toggle whether OTHERS can transfer TO you

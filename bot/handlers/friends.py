@@ -35,6 +35,7 @@ def _home_sync(user_id: int) -> tuple[str, list[User]]:
     friends.see_pings(user_id)
     if not pals:
         lines.append("توی گروه روی پیام یکی ریپلای کن و بنویس «تف». تا «دوست شویم» را نزند، دوست نمی‌شوید.")
+    lines.append(f"لیس بین دوست‌هاست: روزی {friends.LICK_CAP} بار می‌دهی و {friends.LICK_CAP} بار می‌گیری.")
     lines.append("<i>آخرین بازی فقط برای خودتان است. طلا و سپر اینجا نیست.</i>")
     return "\n".join(lines), pals
 
@@ -158,7 +159,7 @@ def _aim(message, bot) -> tuple[int | None, str | None]:
 
     rep = message.reply_to_message
     if rep is None or getattr(rep, "forum_topic_created", None) is not None:
-        return None, "روی پیام یه بازیکن ریپلای کن و «تف»، «تشویق»، «غرش» یا «طعنه» را بفرست."
+        return None, "روی پیام یه بازیکن ریپلای کن و «تف»، «لیس»، «تشویق»، «غرش» یا «طعنه» را بفرست."
     if getattr(rep, "sender_chat", None) is not None or getattr(rep.from_user, "id", None) == _ANON:
         return None, "این پیام به اسم گروه است؛ معلوم نیست مال کدام بازیکن است."
     sender = rep.from_user

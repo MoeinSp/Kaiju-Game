@@ -20,13 +20,24 @@ from game.buildings import main_hall_level
 from game.creature import GameError
 from game.daily import today_str
 
-MAX_FRIENDS = 20
+MAX_FRIENDS = 50
 DECLINE_HOURS = 24
 SELF_GAP = 50
 PAIR_GAP = 180
 PING_DAYS = 7
+LICK_CAP = 15
+LICK_GIVE = "lick_give"
+LICK_TAKE = "lick_take"
 
-WORDS = ("تف", "تشویق", "غرش", "طعنه")
+WORDS = {
+    "تف": "تف",
+    "تف کردن": "تف",
+    "لیس": "لیس",
+    "لیسیدن": "لیس",
+    "تشویق": "تشویق",
+    "غرش": "غرش",
+    "طعنه": "طعنه",
+}
 
 _actor_at: dict[int, float] = {}
 _pair_at: dict[tuple[int, int], float] = {}
@@ -292,6 +303,98 @@ def spar(a: User, b: User) -> str:
     )
 
 
+def _lock_daily(user: User, action: str):
+    from bio_lab.models import DailyActionLog
+
+    DailyActionLog.objects.get_or_create(user=user, action=action, day=today_str(), defaults={"count": 0})
+    return DailyActionLog.objects.select_for_update().get(user=user, action=action, day=today_str())
+
+
+def _fa(n: int) -> str:
+    return str(n).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
+
+
+def _jackpot_kind() -> str:
+    return random.choice(("full", "gems", "key"))
+
+
+def _pay_lick(receiver: User, step: int) -> str:
+    """The prize for the Nth lick this person received today. 5×2 gems, 5×2 energy, 4×two 30-minute cards, then one jackpot."""
+    receiver = User.objects.select_for_update().get(id=receiver.id)
+    if step <= 5:
+        receiver.diamonds += 2
+        receiver.save(update_fields=["diamonds"])
+        return "۲ الماس"
+    if step <= 10:
+        from game.energy import get_max_energy, sync_energy
+
+        sync_energy(receiver)
+        gain = min(2, max(0, get_max_energy(receiver) - receiver.energy))
+        if gain:
+            receiver.energy += gain
+            if receiver.energy >= get_max_energy(receiver):
+                receiver.energy_updated_at = timezone.now()
+            receiver.save(update_fields=["energy", "energy_updated_at"])
+        return f"{gain} انرژی" if gain else "انرژی، ولی نوار انرژی پر بود"
+    if step <= 14:
+        from game.buildings import grant_speedup_card
+
+        grant_speedup_card(receiver, 30, count=2)
+        return "۲ کارت سرعت ۳۰ دقیقه‌ای"
+    kind = _jackpot_kind()
+    if kind == "full":
+        from game.energy import get_max_energy, sync_energy
+
+        sync_energy(receiver)
+        receiver.energy = get_max_energy(receiver)
+        receiver.energy_updated_at = timezone.now()
+        receiver.save(update_fields=["energy", "energy_updated_at"])
+        return "انرژی پر شد"
+    if kind == "gems":
+        receiver.diamonds += 20
+        receiver.save(update_fields=["diamonds"])
+        return "۲۰ الماس"
+    from bio_lab.models import DungeonProfile
+    from game.dungeon import KEY_HARD_CAP
+
+    prof = DungeonProfile.objects.select_for_update().filter(user=receiver).first()
+    if prof is None:
+        DungeonProfile.objects.create(user=receiver)
+        prof = DungeonProfile.objects.select_for_update().get(user=receiver)
+    key_line = "۱ کلید سیاه‌چال"
+    if prof.keys >= KEY_HARD_CAP:
+        key_line = "کلید سیاه‌چال به سقف رسیده بود"
+    else:
+        prof.keys += 1
+        prof.save(update_fields=["keys"])
+    receiver.coins += 100_000
+    receiver.save(update_fields=["coins"])
+    return f"{key_line} و ۱۰۰٬۰۰۰ طلا"
+
+
+@transaction.atomic
+def give_lick(giver: User, receiver: User) -> tuple[str, int]:
+    """One friendly lick. Both sides are capped at 15 a day. Returns (prize text, received-today)."""
+    if not are_friends(giver.id, receiver.id):
+        raise GameError("لیس فقط بین دوست‌هاست.")
+    slots = []
+    for user, action in sorted(
+        ((giver, LICK_GIVE), (receiver, LICK_TAKE)), key=lambda pair: pair[0].id,
+    ):
+        slots.append((action, _lock_daily(user, action)))
+    by_action = dict(slots)
+    if by_action[LICK_GIVE].count >= LICK_CAP:
+        raise GameError("امروز ۱۵ بار لیس دادی. فردا دوباره.")
+    if by_action[LICK_TAKE].count >= LICK_CAP:
+        raise GameError("این بازیکن امروز ۱۵ بار لیس گرفته. فردا دوباره.")
+    by_action[LICK_GIVE].count += 1
+    by_action[LICK_TAKE].count += 1
+    by_action[LICK_GIVE].save(update_fields=["count"])
+    by_action[LICK_TAKE].save(update_fields=["count"])
+    step = by_action[LICK_TAKE].count
+    return _pay_lick(receiver, step), step
+
+
 def _names(who: str, them: str, body: str) -> str:
     """Names sit on their own lines, so a Latin lab name does not break the Persian sentence."""
     return f"از: {who}\nبه: {them}\n\n{body}"
@@ -321,6 +424,26 @@ def play(sender: User, target: User | None, word: str, other_id: int) -> dict:
             who, them, "به نشانه‌ی علاقه‌ی هیولاها تف کرد." + (f"\n<i>{extra}</i>" if extra else ""),
         )
         return {"text": text, "ask": result == "asked", "wait": False, "quiet": False}
+    if word == "لیس":
+        if not are_friends(sender.id, target.id):
+            result = ask(sender.id, target.id)
+            note = {
+                "asked": "هنوز دوست نیستید، پس لیسی ثبت نشد.\nبه نشانه‌ی دوستی درخواست فرستاده شد. اگر قبول کند، لیس بین شما باز می‌شود.",
+                "already": "هنوز دوست نیستید و لیس جایزه ندارد.\nدرخواست دوستی قبلی هنوز باز است. اگر قبول کند، بعدش می‌توانید لیس بدهید.",
+                "full": "هنوز دوست نیستید. لیست دوست‌ها هم پر است و درخواست ثبت نشد.",
+                "blocked": "هنوز دوست نیستید و این درخواست فعلاً بسته است.",
+            }.get(result, "هنوز دوست نیستید. به نشانه‌ی دوستی به او تف کن تا درخواستت را قبول کند.")
+            text = "👅 <b>لیس</b>\n\n" + _names(who, them, note)
+            return {"text": text, "ask": result in ("asked", "already"), "wait": False, "quiet": False}
+        try:
+            prize, step = give_lick(sender, target)
+        except GameError as exc:
+            return {"text": str(exc), "ask": False, "wait": False, "quiet": False}
+        text = "👅 <b>لیس</b>\n\n" + _names(
+            who, them,
+            f"به نشانه‌ی دوستی لیسید.\nجایزه: {prize}\n<i>امروز {_fa(step)} از {_fa(LICK_CAP)}</i>",
+        )
+        return {"text": text, "ask": False, "wait": False, "quiet": False}
     if word == "تشویق":
         extra = ""
         if are_friends(sender.id, target.id) and cheer(sender.id, target.id):
