@@ -26,8 +26,7 @@ SELF_GAP = 50
 PAIR_GAP = 180
 PING_DAYS = 7
 LICK_CAP = 15
-LICK_GIVE = "lick_give"
-LICK_TAKE = "lick_take"
+LICK_KIND = "lick"
 
 WORDS = {
     "تف": "تف",
@@ -282,13 +281,6 @@ def spar(a: User, b: User) -> str:
     )
 
 
-def _lock_daily(user: User, action: str):
-    from bio_lab.models import DailyActionLog
-
-    DailyActionLog.objects.get_or_create(user=user, action=action, day=today_str(), defaults={"count": 0})
-    return DailyActionLog.objects.select_for_update().get(user=user, action=action, day=today_str())
-
-
 def _fa(n: int) -> str:
     return str(n).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
 
@@ -353,24 +345,22 @@ def _pay_lick(receiver: User, step: int) -> str:
 
 @transaction.atomic
 def give_lick(giver: User, receiver: User) -> tuple[str, int]:
-    """One friendly lick. Both sides are capped at 15 a day. Returns (prize text, received-today)."""
+    """One lick per pair per day. Fifteen different people fill one player's prizes."""
     if not are_friends(giver.id, receiver.id):
         raise GameError("لیس فقط بین دوست‌هاست.")
-    slots = []
-    for user, action in sorted(
-        ((giver, LICK_GIVE), (receiver, LICK_TAKE)), key=lambda pair: pair[0].id,
-    ):
-        slots.append((action, _lock_daily(user, action)))
-    by_action = dict(slots)
-    if by_action[LICK_GIVE].count >= LICK_CAP:
-        raise GameError("امروز ۱۵ بار لیس دادی. فردا دوباره.")
-    if by_action[LICK_TAKE].count >= LICK_CAP:
-        raise GameError("این بازیکن امروز ۱۵ بار لیس گرفته. فردا دوباره.")
-    by_action[LICK_GIVE].count += 1
-    by_action[LICK_TAKE].count += 1
-    by_action[LICK_GIVE].save(update_fields=["count"])
-    by_action[LICK_TAKE].save(update_fields=["count"])
-    step = by_action[LICK_TAKE].count
+    for uid in sorted((giver.id, receiver.id)):
+        User.objects.select_for_update().get(id=uid)
+    day = today_str()
+    if FriendMark.objects.filter(
+        kind=LICK_KIND, actor_id=giver.id, target_id=receiver.id, day=day,
+    ).exists():
+        raise GameError("امروز قبلاً به این دوست لیس زدی. جایزه‌اش با لیسِ ۱۵ نفر متفاوت پر می‌شود.")
+    if FriendMark.objects.filter(kind=LICK_KIND, actor_id=giver.id, day=day).count() >= LICK_CAP:
+        raise GameError("امروز ۱۵ نفر را لیس زدی. فردا دوباره.")
+    if FriendMark.objects.filter(kind=LICK_KIND, target_id=receiver.id, day=day).count() >= LICK_CAP:
+        raise GameError("این بازیکن امروز از ۱۵ نفر لیس گرفته. فردا دوباره.")
+    FriendMark.objects.create(kind=LICK_KIND, actor_id=giver.id, target_id=receiver.id, day=day)
+    step = FriendMark.objects.filter(kind=LICK_KIND, target_id=receiver.id, day=day).count()
     return _pay_lick(receiver, step), step
 
 

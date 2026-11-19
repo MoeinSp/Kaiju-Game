@@ -32,7 +32,9 @@ def _home_sync(user_id: int) -> tuple[str, list[User]]:
     friends.see_pings(user_id)
     if not pals:
         lines.append("توی گروه روی پیام یکی ریپلای کن و بنویس «تف». تا «دوست شویم» را نزند، دوست نمی‌شوید.")
-    lines.append(f"لیس بین دوست‌هاست: روزی {friends.LICK_CAP} بار می‌دهی و {friends.LICK_CAP} بار می‌گیری.")
+    lines.append(
+        f"لیس بین دوست‌هاست. هر دوست را روزی یک بار. جایزه با {friends.LICK_CAP} نفر متفاوت پر می‌شود."
+    )
     lines.append("<i>آخرین بازی فقط برای خودتان است. طلا و سپر اینجا نیست.</i>")
     return "\n".join(lines), pals
 

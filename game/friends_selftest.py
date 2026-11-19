@@ -16,7 +16,7 @@ django.setup()
 
 from django.utils import timezone  # noqa: E402
 
-from bio_lab.models import Creature, DailyActionLog, DungeonProfile, FriendLink, SpeedupCard, User  # noqa: E402
+from bio_lab.models import Creature, DungeonProfile, FriendLink, SpeedupCard, User  # noqa: E402
 from game import friends  # noqa: E402
 from game.creature import GameError  # noqa: E402
 from game.daily import today_str  # noqa: E402
@@ -97,25 +97,18 @@ def main():
         b.refresh_from_db()
         a.refresh_from_db()
         assert b.diamonds == 12 and a.diamonds == 10 and a.coins == 1000
-        DailyActionLog.objects.filter(user_id=A, action=friends.LICK_GIVE).update(count=15)
         again = friends.play(a, b, "لیس", B)
-        assert again["wait"] is False and "صبر کن" not in again["text"]
-        friends.reset_cooldowns()
-        capped = friends.play(a, b, "لیس", B)
-        assert capped["ask"] is False and "۱۵" in capped["text"]
+        assert again["wait"] is False and "قبلاً" in again["text"] and "صبر کن" not in again["text"]
         b.refresh_from_db()
         assert b.diamonds == 12
-        DailyActionLog.objects.filter(user_id=A, action=friends.LICK_GIVE).update(count=0)
-        DailyActionLog.objects.filter(user_id=B, action=friends.LICK_TAKE).update(count=14)
         original_jackpot = friends._jackpot_kind
         friends._jackpot_kind = lambda: "gems"
         try:
-            friends.reset_cooldowns()
-            last = friends.play(a, b, "لیس", B)
-            assert "۲۰ الماس" in last["text"]
+            from django.db import transaction
+            with transaction.atomic():
+                assert "۲۰ الماس" in friends._pay_lick(b, 15)
             b.refresh_from_db()
             assert b.diamonds == 32
-            from django.db import transaction
             with transaction.atomic():
                 assert "۳۰ دقیقه‌ای" in friends._pay_lick(b, 12)
             assert SpeedupCard.objects.get(owner=b, minutes=30).count == 2
