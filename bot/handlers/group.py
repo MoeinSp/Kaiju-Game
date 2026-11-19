@@ -695,6 +695,27 @@ _CREATURE_RESET_NOTE = (
 )
 
 
+def _transfer_done_text(
+    *, kind: str, item_lines: str, receiver_name: str, price: int, cost: int, s_cd, r_cd,
+) -> str:
+    """Short card: what moved, who received it, then gold, fee, and cooldown."""
+    head = "✅ <b>انتقال هیولا</b>" if kind == "c" else "✅ <b>انتقال تجهیزات</b>"
+    pay = f"<code>{price:,}</code> طلا به فروشنده" if price else "رایگان، بدون پرداخت طلا"
+    reset = "\n♻️ لِوِل و ارتقاهای بدنی ریست شد. ستاره‌ها ماند.\n" if kind == "c" else ""
+    sender = f"⏳ کول‌داون فرستنده: <code>{s_cd}</code> ساعت\n" if s_cd else ""
+    return (
+        f"{head}\n\n"
+        f"{item_lines}\n\n"
+        f"گیرنده:\n"
+        f"{receiver_name}\n"
+        f"{reset}\n"
+        f"{get_emoji('coin')} پرداخت: {pay}\n\n"
+        f"{get_emoji('diamond')} کارمزد انتقال: <code>{cost}</code> الماس\n\n"
+        f"{sender}"
+        f"⏳ کول‌داون گیرنده: <code>{r_cd}</code> ساعت"
+    )
+
+
 def _offer_receiver_text(offer: dict) -> str:
     price = offer["price"]
     price_line = (
@@ -972,28 +993,28 @@ async def transfer_offer_callback(update: Update, context: ContextTypes.DEFAULT_
         _PENDING_OFFERS.pop(token, None)
         s_cd = result.get("sender_cd", offer.get("sender_cd", 24))
         r_cd = result.get("receiver_cd", offer.get("receiver_cd", 24))
-        cd_text = ("⏳ کول‌داون فرستنده: ندارد" if not s_cd else f"⏳ کول‌داون فرستنده: <code>{s_cd}</code> ساعت") + f"\n⏳ کول‌داون گیرنده: <code>{r_cd}</code> ساعت"
         if offer["kind"] == "c":
             c = result["creature"]
-            body = (f"🦖 هیولای <b>{creature_name(c)}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level} "
-                    f"به <b>{lab_mention(receiver)}</b> منتقل شد! ✅\n"
-                    f"<i>♻️ لِوِل و ارتقاهای بدنی ریست شد؛ فقط ستاره‌ها باقی ماندند.</i>")
+            item_lines = (
+                f"🦖 <b>{creature_name(c)}</b> {constants.RARITY_LABELS[c.rarity]} {'⭐' * c.star_level}"
+            )
         else:
             it = result["item"]
-            body = (f"🎒 تجهیزاتِ <b>{it.name} +{it.level}</b> {constants.RARITY_LABELS[it.rarity]} "
-                    f"به <b>{lab_mention(receiver)}</b> منتقل شد! ✅")
-        price_line = (
-            f"\n{get_emoji('coin')} پرداخت: <code>{result['price']:,}</code> طلا به فروشنده"
-            if result.get("price") else ""
-        )
+            item_lines = (
+                f"🎒 <b>{html.escape(it.name)} +{it.level}</b> {constants.RARITY_LABELS[it.rarity]}"
+            )
         await query.answer("✅ انجام شد!")
         await safe_edit_message_text(
             query,
-            f"{body}\n"
-            f"{_RULE}"
-            f"{price_line}\n"
-            f"{get_emoji('diamond')} کارمزد: <code>{result['cost']}</code> الماس پرداخت شد.\n"
-            f"{cd_text}",
+            _transfer_done_text(
+                kind=offer["kind"],
+                item_lines=item_lines,
+                receiver_name=lab_mention(receiver),
+                price=int(result.get("price") or 0),
+                cost=int(result.get("cost") or 0),
+                s_cd=s_cd,
+                r_cd=r_cd,
+            ),
             parse_mode="HTML",
         )
         if offer["kind"] == "c":
