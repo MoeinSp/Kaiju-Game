@@ -143,6 +143,15 @@ def check_young_and_loot():
     young.refresh_from_db()
     assert young.bank_gold == 50_000
     assert young.coins == 30_000
+    # gold left in the removed split, and a stale in-memory zero, still deposit
+    young.unearned_coins = 4_000
+    young.save(update_fields=["unearned_coins"])
+    young.coins = 0
+    deposit_from_wallet(young, 5, 2_000)
+    young.refresh_from_db()
+    assert young.unearned_coins == 0
+    assert young.coins == 32_000
+    assert young.bank_gold == 52_000
     veteran = _user(BUYER, days_old=20, coins=80_000, bank=0)
     assert lootable_gold(veteran) == 80_000
     apply_group_loot(veteran, 5_000)

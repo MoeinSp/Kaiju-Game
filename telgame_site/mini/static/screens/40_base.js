@@ -172,7 +172,8 @@
     if (b.state === "locked") return '<span class="bs-dim">' + K.ic("lock") + "از سطح " + K.n(b.unlock_hall) + " تالار مِهر باز می‌شه</span>";
     if (b.level === 0) return '<span class="bs-dim">' + K.ic("hammer") + "هنوز ساخته نشده</span>";
     if (b.type === "trade_hall" && b.bank) {
-      return '<span class="t-gold">' + K.ic("coin") + '</span><span><b>' + K.n(b.bank.gold) + '</b> در بانک</span>';
+      var bk = b.bank;
+      return '<span class="t-gold">' + K.ic("coin") + '</span><span><b>' + K.n(bk.gold) + '</b> در بانک</span><span class="faint">·</span><span class="bs-dim">واریز ' + K.n(bk.deposit_left || 0) + " · برداشت " + K.n(bk.withdraw_now || 0) + "</span>";
     }
     if (b.produces) {
       var r = RES[b.resource];
@@ -303,16 +304,24 @@
     if (k.notice > 0) h += '<div class="callout good mt">' + K.ic("coin") + (k.notice_days > 1
       ? "طی " + K.n(k.notice_days) + " روز، <b>" + K.n(k.notice) + "</b> طلا به موجودی شما اضافه شد."
       : "<b>" + K.n(k.notice) + "</b> طلا به موجودی شما اضافه شد.") + "</div>";
+    var room = Math.max(0, (k.cap || 0) - (k.gold || 0));
+    var inMax = k.deposit_left != null ? k.deposit_left : Math.min(k.wallet || 0, room);
+    var outMax = k.withdraw_now != null ? k.withdraw_now : Math.min(k.gold || 0, k.left || 0);
+    h += '<div class="sm mt">قابل واریز: <b>' + K.n(inMax) + "</b> · قابل برداشت: <b>" + K.n(outMax) + "</b></div>";
     h += '<div class="sm mt">روزانه ۲٪ از مبلغ بانک به عنوان سود به موجودی شما اضافه می‌شود.</div>';
     if (k.young) h += '<div class="sm t-warn mt">تا یک‌هفتگی، سقف دریافت از دیگران امروز ' + K.n(k.receive_left) + " طلا مانده. واریز خودت از این سقف کم نمی‌شود.</div>";
-    h += '<button class="btn good block mt" data-act="bank-in">' + K.ic("coin") + "واریز به بانک</button>" +
-      '<button class="btn block mt" data-act="bank-out">' + K.ic("coin") + "برداشت به موجودی</button>";
+    h += '<div class="btns mt"><button class="btn good" data-act="bank-in">' + K.ic("coin") + "واریز</button>" +
+      '<button class="btn" data-act="bank-out">' + K.ic("coin") + "برداشت</button></div>" +
+      '<div class="btns mt"><button class="btn good" data-act="bank-in-max"' + (inMax > 0 ? "" : " disabled") + ">" + K.ic("coin") + "حداکثر واریز " + K.n(inMax) + "</button>" +
+      '<button class="btn" data-act="bank-out-max"' + (outMax > 0 ? "" : " disabled") + ">" + K.ic("coin") + "حداکثر برداشت " + K.n(outMax) + "</button></div>";
     return h + "</div>";
   }
   function bankSheet(dir, bld, io) {
     var k = bld.bank, inbound = dir === "in";
     var room = Math.max(0, k.cap - k.gold);
-    var max = inbound ? Math.min(k.wallet || 0, room) : Math.min(k.gold, k.left);
+    var max = inbound
+      ? (k.deposit_left != null ? k.deposit_left : Math.min(k.wallet || 0, room))
+      : (k.withdraw_now != null ? k.withdraw_now : Math.min(k.gold, k.left));
     var title = inbound ? "واریز به بانک" : "برداشت به موجودی";
     var box = K.sheet('<div class="grab"></div><div class="pad"><div class="ttl" style="font-size:18px">' + title + "</div>" +
       '<p class="lead" style="margin:4px 0 12px">طلای آزاد: ' + K.n(k.wallet || 0) + " · بانک: " + K.n(k.gold) + "</p>" +
@@ -320,7 +329,13 @@
       (max > 0 ? '<div class="row" style="margin-top:10px"><button class="chip" data-q="' + max + '">حداکثر ' + K.n(max) + "</button></div>" : "") +
       '<button class="btn gold block" id="bk-go" style="margin-top:14px">' + title + "</button></div>");
     var input = box.querySelector("#bk-amount");
-    function value() { return parseInt(String(input.value).replace(/[^\d]/g, ""), 10) || 0; }
+    function value() {
+      var s = String(input.value)
+        .replace(/[۰-۹]/g, function (d) { return String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)); })
+        .replace(/[٠-٩]/g, function (d) { return String("٠١٢٣٤٥٦٧٨٩".indexOf(d)); })
+        .replace(/[^\d]/g, "");
+      return parseInt(s, 10) || 0;
+    }
     input.oninput = function () { var v = value(); input.value = v ? v.toLocaleString("en-US") : ""; };
     box.addEventListener("click", function (ev) {
       var q = ev.target.closest("[data-q]");
@@ -335,6 +350,19 @@
         K.toast(K.n(r.moved) + (inbound ? " طلا به بانک نشست." : " طلا آزاد شد."), "ok");
       }, function () { if (io.alive()) io.refresh(); });
     };
+  }
+  function bankMax(dir, bld, el, io) {
+    if (!bld || !bld.bank) return;
+    var k = bld.bank, inbound = dir === "in";
+    var room = Math.max(0, (k.cap || 0) - (k.gold || 0));
+    var amount = inbound
+      ? (k.deposit_left != null ? k.deposit_left : Math.min(k.wallet || 0, room))
+      : (k.withdraw_now != null ? k.withdraw_now : Math.min(k.gold || 0, k.left || 0));
+    if (amount <= 0) { K.toast(inbound ? "طلای آزادی برای واریز نیست." : "چیزی برای برداشت نمانده.", "err"); return; }
+    send(inbound ? "base/deposit/" : "base/withdraw/", { id: bld.id, amount: amount }, el, io).then(function (r) {
+      K.haptic("ok");
+      K.toast(K.n(r.moved) + (inbound ? " طلا به بانک نشست." : " طلا آزاد شد."), "ok");
+    }, function () { if (io.alive()) io.refresh(); });
   }
   function producerBlock(b, d) {
     var r = RES[b.resource], ratio = b.store_cap > 0 ? b.pending / b.store_cap : 0, full = ratio >= 1;
@@ -416,6 +444,8 @@
           collect: function (el) { doCollect(b.id, el, io); },
           "bank-in": function () { if (b.bank) bankSheet("in", b, io); },
           "bank-out": function () { if (b.bank) bankSheet("out", b, io); },
+          "bank-in-max": function (el) { bankMax("in", b, el, io); },
+          "bank-out-max": function (el) { bankMax("out", b, el, io); },
           upgrade: function (el) { askUpgrade(b, el, io); },
           builder: function (el) { buyBuilder(bl.second_cost, el, io, b.id); },
           section: function () { if (link) K.go(link.go, link.params); },

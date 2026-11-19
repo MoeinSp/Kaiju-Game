@@ -179,6 +179,7 @@ def _detail_view(user, building: Building) -> dict:
         # text builder (SynchronousOnlyOperation crash otherwise)
         "worker_influence": _influence_map(workers, building),
         "unlocked": is_unlocked(user, building.building_type),
+        "owner_id": user.id,
         # rate/storage query the DB (worker_bonus) — resolve them HERE in sync context,
         # never inside the async text builder (that was the "mines won't open" crash)
         "rate": production_rate(building) if is_producer else 0.0,
@@ -298,7 +299,9 @@ def _building_detail_text(view: dict) -> str:
     if bank:
         lines.append(
             f"🏦 موجودی بانک: <code>{bank['gold']:,}</code> / <code>{bank['cap']:,}</code>\n"
-            f"📤 برداشت امروز: <code>{bank['left']:,}</code> از <code>{bank['daily']:,}</code> مانده\n"
+            f"طلای آزاد: <code>{bank['wallet']:,}</code>\n"
+            f"قابل واریز: <code>{bank['deposit_left']:,}</code>\n"
+            f"قابل برداشت: <code>{bank['withdraw_now']:,}</code> از سقف امروز <code>{bank['left']:,}</code>\n"
         )
         if bank["young"]:
             lines.append(f"🆕 سقف دریافت بانک تا یک هفته: <code>{bank['receive_left']:,}</code> طلای مانده‌ی امروز")
@@ -420,10 +423,7 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
         rows.append([btn(label, emoji_key="btn_build", style=BUILD, callback_data=f"bld_upgrade:{building.id}")])
     bank = view.get("bank")
     if bank:
-        rows.append([
-            btn("واریز", emoji_key="btn_deposit", style=CONFIRM, callback_data="bank_move:in"),
-            btn("برداشت", emoji_key="btn_collect", style=PRIMARY, callback_data="bank_move:out"),
-        ])
+        rows.extend(_bank_button_rows(bank, view.get("owner_id")))
         rows.append([btn("صفحه بانک", emoji_key="btn_buildings", style=NAV, callback_data="menu:bank")])
     if building.building_type == "dispatch_hq":
         rows.append([btn("مأموریت‌های اعزامی", emoji_key="btn_dispatch", style=PRIMARY, callback_data="menu:dispatch")])
@@ -495,7 +495,7 @@ async def building_bank_callback(update: Update, context: ContextTypes.DEFAULT_T
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
         return
-    await query.answer(f"{moved:,} طلا به موجودی آزاد آمد. برای خرید هیولا قابل استفاده نیست.")
+    await query.answer(f"{moved:,} طلا به موجودی آزاد آمد.")
     from game.media import get_building_image_path
     photo_path = get_building_image_path(view["building"].building_type, view["building"].level)
     await send_screen(
@@ -1013,7 +1013,8 @@ def _bank_text(level, info) -> str:
         "🏦 <b>بانک طلا</b>",
         f"موجودی بانک: <code>{info['gold']:,}</code> / <code>{info['cap']:,}</code>",
         f"طلای آزاد: <code>{info['wallet']:,}</code>",
-        f"برداشت امروز: <code>{info['left']:,}</code> از <code>{info['daily']:,}</code> مانده",
+        f"قابل واریز: <code>{info['deposit_left']:,}</code>",
+        f"قابل برداشت: <code>{info['withdraw_now']:,}</code> از سقف امروز <code>{info['left']:,}</code>",
         "",
     ]
     from game.bank import interest_notice_text
@@ -1030,18 +1031,35 @@ def _bank_text(level, info) -> str:
     return "\n".join(lines)
 
 
-def _bank_keyboard(level, owner_id: int | None = None, in_group: bool = False) -> InlineKeyboardMarkup:
+def _bank_button_rows(info: dict, owner_id: int | None) -> list:
+    """Deposit and withdraw, plus one tap for the most that fits right now."""
     tail = f":{owner_id}" if owner_id else ""
-    rows = []
-    if level:
-        rows.append([
+    return [
+        [
             btn("واریز", emoji_key="btn_deposit", style=CONFIRM, callback_data=f"bank_move:in{tail}"),
             btn("برداشت", emoji_key="btn_collect", style=PRIMARY, callback_data=f"bank_move:out{tail}"),
-        ])
-        rows.append([
-            btn("واریز حداکثر", emoji_key="btn_deposit", style=CONFIRM, callback_data=f"bank_max:in{tail}"),
-            btn("برداشت حداکثر", emoji_key="btn_collect", style=PRIMARY, callback_data=f"bank_max:out{tail}"),
-        ])
+        ],
+        [
+            btn(
+                f"حداکثر واریز {info['deposit_left']:,}",
+                emoji_key="btn_deposit",
+                style=CONFIRM,
+                callback_data=f"bank_max:in{tail}",
+            ),
+            btn(
+                f"حداکثر برداشت {info['withdraw_now']:,}",
+                emoji_key="btn_collect",
+                style=BUILD,
+                callback_data=f"bank_max:out{tail}",
+            ),
+        ],
+    ]
+
+
+def _bank_keyboard(level, info, owner_id: int | None = None, in_group: bool = False) -> InlineKeyboardMarkup:
+    rows = []
+    if level and info:
+        rows.extend(_bank_button_rows(info, owner_id))
     elif not in_group:
         rows.append([btn("ساختمان‌ها", emoji_key="btn_buildings", style=BUILD, callback_data="menu:buildings")])
     if not in_group:
@@ -1054,15 +1072,22 @@ def _in_group(update) -> bool:
     return chat is not None and chat.type in ("group", "supergroup")
 
 
-async def bank_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def bank_panel(update: Update, context: ContextTypes.DEFAULT_TYPE, note: str | None = None) -> None:
     level, info = await run_db(_bank_state_sync, update.effective_user)
     user = update.effective_user
     grouped = _in_group(update)
-    await send_screen(
+    text = _bank_text(level, info)
+    if note:
+        text += "\n\n" + note
+    from game.media import get_building_image_path
+
+    photo = get_building_image_path("trade_hall", level or 1)
+    return await send_screen(
         update,
-        _bank_text(level, info),
+        text,
+        photo=photo,
         parse_mode="HTML",
-        reply_markup=_bank_keyboard(level, user.id if user else None, grouped),
+        reply_markup=_bank_keyboard(level, info, user.id if user else None, grouped),
     )
 
 
@@ -1099,12 +1124,14 @@ async def group_bank(update, context, kind: str, amount) -> None:
 
     message = update.effective_message
     user = update.effective_user
+    if user is not None and user.id == 1087968824:
+        await message.reply_text("این پیام با ادمین ناشناس آمده و طلای خودت را نمی‌بیند. ناشناس بودن را خاموش کن.")
+        return
     _remember(message.chat_id, message.message_id, user.id)
     if kind == "panel" or amount is None:
         if kind in ("in", "out"):
             context.user_data["awaiting_player_input"] = {"action": "bank_in" if kind == "in" else "bank_out"}
-            verb = "واریز به بانک" if kind == "in" else "برداشت از بانک"
-            await message.reply_text(f"💰 مقدار طلا برای {verb} را روی همین پیام ریپلای کن. مثلاً ۵۰۰۰۰")
+            await bank_panel(update, context, note="عدد را روی همین پیام ریپلای کن، یا حداکثر را بزن. مثلاً ۵۰۰۰۰")
             return
         await bank_panel(update, context)
         return
@@ -1125,11 +1152,24 @@ async def group_bank(update, context, kind: str, amount) -> None:
 
 
 def _parse_gold(text: str) -> int | None:
+    import re
+
     raw = (text or "").strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789"))
-    raw = raw.replace(",", "").replace("٬", "").replace(" ", "")
+    raw = raw.replace(",", "").replace("٬", "").replace("،", "").replace(" ", "").replace("_", "")
+    mult = 1
+    if raw.endswith("میلیون"):
+        raw, mult = raw[:-6], 1_000_000
+    elif raw.endswith("هزار"):
+        raw, mult = raw[:-4], 1_000
+    elif raw.endswith("m"):
+        raw, mult = raw[:-1], 1_000_000
+    elif raw.endswith("k"):
+        raw, mult = raw[:-1], 1_000
+    if re.fullmatch(r"\d{1,3}(\.\d{3})+", raw):
+        raw = raw.replace(".", "")
     if not raw.isdigit():
         return None
-    return int(raw)
+    return int(raw) * mult
 
 
 def _move_sync(tg_user, direction: str, amount: int) -> int:
@@ -1150,9 +1190,10 @@ def _move_sync(tg_user, direction: str, amount: int) -> int:
 
 
 def _max_sync(tg_user, direction: str) -> int:
-    from game.bank import capacity, withdraw_room
+    from game.bank import capacity, sync_wallet, withdraw_room
 
     user, _ = get_or_create_user(tg_user)
+    sync_wallet(user)
     building = Building.objects.filter(owner=user, building_type="trade_hall").first()
     level = building.level if building is not None else 0
     if direction == "in":
@@ -1195,13 +1236,15 @@ async def bank_move_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not _own_bank_tap(query):
         await query.answer("این پنل مال تو نیست — خودت «بانک» را بفرست.", show_alert=True)
         return
+    if query.from_user is not None and query.from_user.id == 1087968824:
+        await query.answer("ادمین ناشناس طلای خودش را ندارد. ناشناس بودن را خاموش کن.", show_alert=True)
+        return
     direction = query.data.split(":")[1]
     action = "bank_in" if direction == "in" else "bank_out"
     context.user_data["awaiting_player_input"] = {"action": action}
     await query.answer()
-    verb = "واریز به بانک" if direction == "in" else "برداشت به موجودی آزاد"
-    hint = "روی همین پیام ریپلای کن و عدد را بفرست." if _in_group(update) else "عدد را بفرست."
-    await query.message.reply_text(f"💰 مقدار طلا برای {verb}. {hint} مثلاً ۵۰۰۰۰")
+    hint = "عدد را روی همین پیام ریپلای کن، یا حداکثر را بزن." if _in_group(update) else "عدد را بفرست، یا حداکثر را بزن."
+    await bank_panel(update, context, note=hint)
 
 
 async def bank_max_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -57,6 +57,30 @@ def receive_room(user, level: int) -> int:
     return room
 
 
+def sync_wallet(user) -> None:
+    """Reload free gold and bank gold from the database.
+
+    A handler can be holding a user row from before this tap. Gold left in
+    `unearned_coins` (the split that was removed) is still the player's, so it
+    is folded into the free wallet the moment the bank looks.
+    """
+    from django.db.models import F
+
+    row = User.objects.filter(pk=user.pk).values("coins", "bank_gold", "unearned_coins").first()
+    if row is None:
+        return
+    extra = int(row["unearned_coins"] or 0)
+    if extra > 0:
+        User.objects.filter(pk=user.pk, unearned_coins=extra).update(
+            coins=F("coins") + extra,
+            unearned_coins=0,
+        )
+        row = User.objects.filter(pk=user.pk).values("coins", "bank_gold").first() or row
+    user.coins = int(row["coins"] or 0)
+    user.bank_gold = int(row["bank_gold"] or 0)
+    user.unearned_coins = 0
+
+
 def lootable_gold(user) -> int:
     """Free-wallet gold. A withdrawal from the bank is the same gold and can be looted."""
     return max(0, int(user.coins or 0))
@@ -163,6 +187,7 @@ def withdraw_amount(user, level: int, amount: int) -> int:
     amount = int(amount)
     if amount <= 0:
         raise GameError("مقدار باید بیشتر از صفر باشد.")
+    sync_wallet(user)
     take_for_transfer(user, amount, level=level)
     user.coins = int(user.coins or 0) + amount
     user.save(update_fields=["bank_gold", "coins"])
@@ -174,14 +199,22 @@ def deposit_from_wallet(user, level: int, amount: int) -> int:
     amount = int(amount)
     if amount <= 0:
         raise GameError("مقدار باید بیشتر از صفر باشد.")
+    sync_wallet(user)
     cap = capacity(level)
     if cap <= 0:
         raise GameError("بانک ساخته نشده. از ساختمان‌ها «بانک طلا» را بساز.")
     room = cap - int(user.bank_gold or 0)
     if amount > room:
         raise GameError(f"بانک فقط {max(0, room):,} طلا جا دارد.")
-    if int(user.coins or 0) < amount:
-        raise GameError(f"طلای آزاد {int(user.coins or 0):,} است.")
+    have = int(user.coins or 0)
+    if have < amount:
+        where = f"طلای آزادت الان {have:,} است."
+        if int(user.bank_gold or 0) > 0:
+            where += f" داخل بانک {int(user.bank_gold):,} طلاست و برای خرج‌کردن باید برداشت شود."
+        pending = _pending_mine_gold(user)
+        if pending > 0:
+            where += f" {pending:,} طلا هنوز توی معدن است و تا برداشت نشود آزاد نیست."
+        raise GameError(where)
     user.coins -= amount
     user.bank_gold = int(user.bank_gold or 0) + amount
     user.save(update_fields=["coins", "bank_gold"])
@@ -221,18 +254,36 @@ def take_interest_notice(user) -> tuple[int, int]:
     return gold, days
 
 
+def _pending_mine_gold(user) -> int:
+    from bio_lab.models import Building
+    from game.buildings import pending_amount
+
+    total = 0
+    for building in Building.objects.filter(owner_id=user.pk, building_type="gold_collector", level__gt=0):
+        total += pending_amount(building)
+    return total
+
+
 def snapshot(user, level: int) -> dict:
+    if int(getattr(user, "unearned_coins", 0) or 0) > 0:
+        sync_wallet(user)
     cap = capacity(level)
     daily = daily_budget(level)
     used = _used(user, "bank_withdrawn") if cap else 0
     young = is_young(user)
     received = _used(user, "bank_received") if young else 0
+    gold = int(user.bank_gold or 0)
+    wallet = int(user.coins or 0)
+    left = max(0, daily - used)
+    room = max(0, cap - gold) if cap else 0
     return {
-        "gold": int(user.bank_gold or 0),
+        "gold": gold,
         "cap": cap,
         "daily": daily,
-        "left": max(0, daily - used),
-        "wallet": int(user.coins or 0),
+        "left": left,
+        "wallet": wallet,
+        "deposit_left": min(wallet, room) if cap else 0,
+        "withdraw_now": min(gold, left) if cap else 0,
         "young": young,
         "receive_left": max(0, constants.BANK_NEW_ACCOUNT_RECEIVE_CAP - received) if young else None,
         "notice": int(getattr(user, "bank_interest_notice", 0) or 0),

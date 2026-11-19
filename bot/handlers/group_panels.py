@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 
 from telegram import InlineKeyboardMarkup, Update
-from telegram.ext import ApplicationHandlerStop, ContextTypes, TypeHandler
+from telegram.ext import ApplicationHandlerStop, CallbackQueryHandler, ContextTypes, TypeHandler
 
 from bio_lab.repository import get_or_create_user
 from bot.buttons import CONFIRM, PRIMARY, btn
@@ -211,12 +211,47 @@ def _collect_sync(tg_user):
 _RES_LABEL = {"coins": "طلا", "dna_fragments": "DNA", "diamonds": "الماس"}
 
 
-async def _collect(update, context, _arg):
-    lines, total = await run_db(_collect_sync, update.effective_user)
+def _collect_keyboard(user_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        btn("برداشت", emoji_key="btn_collect", style=CONFIRM, callback_data=f"grp_collect:{user_id}"),
+    ]])
+
+
+def _collect_message(lines, total) -> str:
     if not lines:
-        return await update.effective_message.reply_text("🏗 فعلاً ساختمونی چیزی برای برداشت نداره (هر چند دقیقه یه بار پر می‌شه).")
-    head = "🏗 <b>برداشت از ساختمون‌ها</b> · " + " · ".join(f"<code>+{v:,}</code> {_RES_LABEL.get(k, k)}" for k, v in total.items())
-    return await update.effective_message.reply_text("\n".join([head, *lines]), parse_mode="HTML")
+        return "🏗 فعلاً ساختمونی چیزی برای برداشت نداره (هر چند دقیقه یه بار پر می‌شه)."
+    head = "🏗 <b>برداشت از ساختمون‌ها</b> · " + " · ".join(
+        f"<code>+{v:,}</code> {_RES_LABEL.get(k, k)}" for k, v in total.items()
+    )
+    return "\n".join([head, *lines])
+
+
+async def _collect(update, context, _arg):
+    user = update.effective_user
+    lines, total = await run_db(_collect_sync, user)
+    return await update.effective_message.reply_text(
+        _collect_message(lines, total),
+        parse_mode="HTML",
+        reply_markup=_collect_keyboard(user.id),
+    )
+
+
+async def collect_again(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    parts = (query.data or "").split(":")
+    if query.from_user is None or len(parts) < 2 or str(query.from_user.id) != parts[1]:
+        await query.answer("این دکمه مال تو نیست — خودت «برداشت» را بفرست.", show_alert=True)
+        return
+    lines, total = await run_db(_collect_sync, query.from_user)
+    if not lines:
+        await query.answer("چیزی برای برداشت نیست.", show_alert=True)
+        return
+    await query.answer("برداشت شد.")
+    await query.edit_message_text(
+        _collect_message(lines, total),
+        parse_mode="HTML",
+        reply_markup=_collect_keyboard(query.from_user.id),
+    )
 
 
 async def _buildings(update, context, _arg):
@@ -504,3 +539,4 @@ _ACTIONS = {
 def register(application) -> None:
     # before every other handler group (the middlewares are -3..-1): a refused tap stops there
     application.add_handler(TypeHandler(Update, guard), group=-4)
+    application.add_handler(CallbackQueryHandler(collect_again, pattern=r"^grp_collect:"))
