@@ -1031,6 +1031,36 @@ class ChallengeRun(models.Model):
         constraints = [models.UniqueConstraint(fields=["challenge", "user"], name="uq_challenge_user")]
 
 
+class FriendLink(models.Model):
+    """One row per pair. Pending does not count toward the 20-friend cap."""
+
+    PENDING, FRIENDS, DECLINED = "pending", "friends", "declined"
+    user_lo = models.ForeignKey(User, on_delete=models.CASCADE, related_name="friend_lo")
+    user_hi = models.ForeignKey(User, on_delete=models.CASCADE, related_name="friend_hi")
+    status = models.CharField(max_length=12, default=PENDING, db_index=True)
+    asked_by_id = models.BigIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user_lo", "user_hi"], name="uq_friend_pair")]
+
+
+class FriendMark(models.Model):
+    """One row per (kind, actor, target, day): a visit, a cheer, a spar, or a ping."""
+
+    VISIT, CHEER, SPAR, PING = "visit", "cheer", "spar", "ping"
+    kind = models.CharField(max_length=8)
+    actor = models.ForeignKey(User, on_delete=models.CASCADE, related_name="friend_marks_out")
+    target = models.ForeignKey(User, on_delete=models.CASCADE, related_name="friend_marks_in")
+    day = models.CharField(max_length=10)
+    seen = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["kind", "actor", "target", "day"], name="uq_friend_mark")]
+
+
 class BotOutbox(models.Model):
     """A message the web process (Mini App) queued for the bot process to send
     (game/outbox.py) — e.g. «someone outbid you». Deleted as soon as the bot takes it."""

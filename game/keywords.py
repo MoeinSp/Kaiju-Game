@@ -492,6 +492,17 @@ KEYWORD_DEFS: dict[str, tuple[str, str, str, tuple[str, ...]]] = {
             "۵⃣ توی پیوی ساختمون بساز — بلندمدت‌ترین بخش بازیه.",
         ),
     ),
+    "friends": (
+        "دوستان",
+        "creature",
+        "لیست دوستان",
+        (
+            "توی گروه روی پیام یه بازیکن ریپلای کن و بنویس «تف». درخواست می‌آید و تا دکمه‌ی «دوست شویم» را نزند دوست نمی‌شوید.",
+            "«تشویق»، «غرش» و «طعنه» هم فقط با ریپلای‌اند. طلا، انرژی و کاپ جابه‌جا نمی‌کنند.",
+            "سقف ۲۰ دوست است. حذف از پیوی هر دو طرف را پاک می‌کند و توی گروه اعلام نمی‌شود.",
+            "آخرین بازی فقط دوست‌ها می‌بینند: امروز، دیروز، یا چند روز پیش.",
+        ),
+    ),
     "help": (
         "راهنما",
         "book",
@@ -537,7 +548,7 @@ KEYWORD_SECTIONS: tuple[tuple[str, str, str, str, tuple[str, ...]], ...] = (
         "crown",
         "جایگاه در گروه و افتخارات",
         "رقابت با بقیه‌ی اعضای گروه و پیشرفت شخصی.",
-        ("leaderboard", "guardian", "guardian_challenge", "guardian_claim", "guardian_resign", "alliance", "achievements", "battlepass", "titles", "subscription"),
+        ("leaderboard", "guardian", "guardian_challenge", "guardian_claim", "guardian_resign", "alliance", "friends", "achievements", "battlepass", "titles", "subscription"),
     ),
 )
 

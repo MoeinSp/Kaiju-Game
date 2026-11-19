@@ -1649,6 +1649,12 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await exchange_all_panel(update, context, all_direction)
         return
 
+    if norm in ("تف", "تشویق", "غرش", "طعنه"):
+        from bot.handlers.friends import group_word
+
+        await group_word(update, context, norm)
+        return
+
     # «انتقال روشن» / «انتقال خاموش» — toggle whether OTHERS can transfer TO you
     if norm in ("انتقال روشن", "انتقال روشن کن", "انتقال on"):
         await group_handlers.toggle_transfers(update, context, True)
@@ -1746,6 +1752,10 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         from bot.handlers.buildings import group_bank
 
         await group_bank(update, context, "panel", None)
+        return
+
+    if action == "friends":
+        await message.reply_text("لیست دوستان توی پیوی است. آنجا بنویس «دوستان».")
         return
 
     if action == "exchange":

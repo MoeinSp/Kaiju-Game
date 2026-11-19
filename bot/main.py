@@ -457,6 +457,9 @@ def main() -> None:
     from bot.handlers import group_panels
 
     group_panels.register(application)   # locks the group panels opened by its words to their sender
+    from bot.handlers import friends as friends_handlers
+
+    friends_handlers.register(application)
     battle.register(application)
     misc.register(application)
     owner.register(application)

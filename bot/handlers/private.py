@@ -1236,7 +1236,8 @@ _HUBS = {
     "hub_city_more": ("🌐 <b>شهر — بیشتر</b>", [
         [("دستاوردها", "achievements", "s", "btn_achievements"), ("راهنما", "guide", "n", "btn_report")],
         [("کازینو", "casino", "s", "btn_casino"), ("بنر", "banner", "s", "btn_banner")],
-        [("دعوت رفیق", "referral", "s", "btn_referral"), ("دانشنامه", "codex", "n", "btn_codex")],
+        [("دعوت رفیق", "referral", "s", "btn_referral"), ("دوستان", "friends", "n", "btn_friends")],
+        [("دانشنامه", "codex", "n", "btn_codex")],
         [("رتبه اتحادها", "rank", "n", "btn_league"), ("لیگ اتحادها", "alliance_league", "n", "btn_league")],
         [("رتبه رید", "raid_rank", "n", "btn_raid_rank")],
     ]),
@@ -5888,6 +5889,12 @@ async def inbox_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await inbox_open(update, context)
 
 
+async def _friends_open(update, context):
+    from bot.handlers.friends import friends_panel
+
+    await friends_panel(update, context)
+
+
 _MENU_ACTIONS = {
     "me": me,
     "inbox": inbox_panel,
@@ -5909,6 +5916,7 @@ _MENU_ACTIONS = {
     "battlepass": battlepass_panel,
     "codex": codex_panel,
     "referral": referral_panel,
+    "friends": _friends_open,
     "challenge": _challenge_panel,
     "team": team_panel,
     "campaign": campaign_panel,
@@ -5971,6 +5979,7 @@ _KEYWORD_TO_MENU = {
     "expedition": "expedition", "caravan": "expedition", "war": "alliance_war",
     "workers": "workers", "vault": "vault",
     "serum": "serums", "backpack": "backpack", "merchant": "merchant", "orders": "merchant",
+    "friends": "friends",
 }
 
 
@@ -6054,6 +6063,13 @@ async def route_private_keyword(update: Update, context: ContextTypes.DEFAULT_TY
 
     if menu_action == "hide_keyboard":
         await hide_keyboard_cmd(update, context)
+        return True
+
+    if norm_text in ("تف", "تشویق", "غرش", "طعنه"):
+        await message.reply_text(
+            "این کلمه‌ها توی گروهن. روی پیام یه بازیکن ریپلای کن و همان کلمه را بفرست.",
+        )
+        await _friends_open(update, context)
         return True
 
     if not menu_action:

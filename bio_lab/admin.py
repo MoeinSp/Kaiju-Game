@@ -16,6 +16,8 @@ from bio_lab.models import (
     Equipment,
     Group,
     GroupEventLog,
+    FriendLink,
+    FriendMark,
     GroupExpedition,
     GroupMembership,
     InteractiveBattle,
@@ -226,6 +228,18 @@ class BlackMarketAuctionAdmin(admin.ModelAdmin):
     search_fields = ("title", "highest_bidder_name", "highest_bidder__username")
     ordering = ("-ends_at",)
     date_hierarchy = "ends_at"
+
+
+@admin.register(FriendLink)
+class FriendLinkAdmin(admin.ModelAdmin):
+    list_display = ("id", "user_lo", "user_hi", "status", "asked_by_id", "updated_at")
+    list_filter = ("status",)
+
+
+@admin.register(FriendMark)
+class FriendMarkAdmin(admin.ModelAdmin):
+    list_display = ("id", "kind", "actor", "target", "day", "seen")
+    list_filter = ("kind", "day")
 
 
 @admin.register(GroupExpedition)
