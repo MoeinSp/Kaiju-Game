@@ -301,6 +301,9 @@ def _building_detail_text(view: dict) -> str:
         )
         if bank["young"]:
             lines.append(f"🆕 سقف دریافت بانک تا یک هفته: <code>{bank['receive_left']:,}</code> طلای مانده‌ی امروز")
+        lines.append(
+            f"🌙 هر شب ساعت ۲۴، <b>{constants.BANK_INTEREST_PERCENT}٪</b> موجودی همین لحظه‌ی بانک به طلای آزاد اضافه می‌شود."
+        )
     if btype == "blacksmith" and building.level > 0:
         lines.append(f"🔨 سقفِ فعلیِ سطحِ تجهیزات: <code>+{building.level * constants.EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL}</code>")
     if btype == constants.MAIN_BUILDING and building.level > 0:
@@ -410,8 +413,12 @@ def _building_detail_keyboard(view: dict) -> InlineKeyboardMarkup:
         label = "شروع ساخت" if building.level == 0 else "شروع ارتقا"
         rows.append([btn(label, emoji_key="btn_build", style=BUILD, callback_data=f"bld_upgrade:{building.id}")])
     bank = view.get("bank")
-    if bank and bank["gold"] > 0 and bank["left"] > 0:
-        rows.append([btn("برداشت به موجودی", emoji_key="btn_collect", style=CONFIRM, callback_data=f"bld_bank:{building.id}")])
+    if bank:
+        rows.append([
+            btn("واریز", emoji_key="btn_deposit", style=CONFIRM, callback_data="bank_move:in"),
+            btn("برداشت", emoji_key="btn_collect", style=PRIMARY, callback_data="bank_move:out"),
+        ])
+        rows.append([btn("صفحه بانک", emoji_key="btn_buildings", style=NAV, callback_data="menu:bank")])
     if building.building_type == "dispatch_hq":
         rows.append([btn("مأموریت‌های اعزامی", emoji_key="btn_dispatch", style=PRIMARY, callback_data="menu:dispatch")])
     if building.building_type == "research_lab" and building.level > 0:
@@ -976,6 +983,146 @@ async def building_buy_builder_callback(update: Update, context: ContextTypes.DE
     )
 
 
+def _bank_state_sync(tg_user):
+    from game.bank import snapshot
+
+    user, _ = get_or_create_user(tg_user)
+    building = Building.objects.filter(owner=user, building_type="trade_hall").first()
+    level = building.level if building is not None else 0
+    info = snapshot(user, level) if level else None
+    return level, info
+
+
+def _bank_text(level, info) -> str:
+    if not level:
+        return (
+            "🏦 <b>بانک طلا</b>\n\n"
+            "هنوز ساخته نشده. از «ساختمان‌ها» بسازش؛ با تالار مِهر سطح ۲ باز می‌شود."
+        )
+    lines = [
+        "🏦 <b>بانک طلا</b>",
+        f"موجودی بانک: <code>{info['gold']:,}</code> / <code>{info['cap']:,}</code>",
+        f"طلای آزاد: <code>{info['wallet']:,}</code>",
+        f"برداشت امروز: <code>{info['left']:,}</code> از <code>{info['daily']:,}</code> مانده",
+        "",
+        f"هر شب ساعت ۲۴، <b>{constants.BANK_INTEREST_PERCENT}٪</b> طلای داخل بانک به موجودی آزاد اضافه می‌شود.",
+        "واریز از طلای آزاد است و سقف روزانه‌ی حساب تازه را کم نمی‌کند.",
+    ]
+    if info["young"]:
+        lines.append(f"🆕 دریافت از دیگران تا یک هفته: <code>{info['receive_left']:,}</code> مانده‌ی امروز")
+    return "\n".join(lines)
+
+
+def _bank_keyboard(level) -> InlineKeyboardMarkup:
+    rows = []
+    if level:
+        rows.append([
+            btn("واریز", emoji_key="btn_deposit", style=CONFIRM, callback_data="bank_move:in"),
+            btn("برداشت", emoji_key="btn_collect", style=PRIMARY, callback_data="bank_move:out"),
+        ])
+        rows.append([
+            btn("واریز حداکثر", emoji_key="btn_deposit", style=CONFIRM, callback_data="bank_max:in"),
+            btn("برداشت حداکثر", emoji_key="btn_collect", style=PRIMARY, callback_data="bank_max:out"),
+        ])
+    else:
+        rows.append([btn("ساختمان‌ها", emoji_key="btn_buildings", style=BUILD, callback_data="menu:buildings")])
+    rows.append([back_btn("menu:hub_base", "پایگاه")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def bank_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    level, info = await run_db(_bank_state_sync, update.effective_user)
+    await send_screen(update, _bank_text(level, info), parse_mode="HTML", reply_markup=_bank_keyboard(level))
+
+
+def _parse_gold(text: str) -> int | None:
+    raw = (text or "").strip().translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789"))
+    raw = raw.replace(",", "").replace("٬", "").replace(" ", "")
+    if not raw.isdigit():
+        return None
+    return int(raw)
+
+
+def _move_sync(tg_user, direction: str, amount: int) -> int:
+    from django.db import transaction
+
+    from game.bank import deposit_from_wallet, withdraw_amount
+
+    user, _ = get_or_create_user(tg_user)
+    with transaction.atomic():
+        user = User.objects.select_for_update().get(id=user.id)
+        building = Building.objects.filter(owner=user, building_type="trade_hall").first()
+        level = building.level if building is not None else 0
+        if level < 1:
+            raise GameError("بانک ساخته نشده. از ساختمان‌ها «بانک طلا» را بساز.")
+        if direction == "in":
+            return deposit_from_wallet(user, level, amount)
+        return withdraw_amount(user, level, amount)
+
+
+def _max_sync(tg_user, direction: str) -> int:
+    from game.bank import capacity, withdraw_room
+
+    user, _ = get_or_create_user(tg_user)
+    building = Building.objects.filter(owner=user, building_type="trade_hall").first()
+    level = building.level if building is not None else 0
+    if direction == "in":
+        room = capacity(level) - int(user.bank_gold or 0)
+        amount = min(room, int(user.coins or 0))
+    else:
+        amount = min(int(user.bank_gold or 0), withdraw_room(user, level))
+    if amount <= 0:
+        raise GameError("چیزی برای این کار نمانده.")
+    return _move_sync(tg_user, direction, amount)
+
+
+async def apply_bank_text(update, context, action: str, text: str) -> None:
+    message = update.effective_message
+    amount = _parse_gold(text)
+    if amount is None or amount <= 0:
+        context.user_data["awaiting_player_input"] = {"action": action}
+        await message.reply_text("⚠️ فقط یه عدد بفرست. مثلاً ۵۰۰۰۰")
+        return
+    direction = "in" if action == "bank_in" else "out"
+    try:
+        moved = await run_db(_move_sync, update.effective_user, direction, amount)
+    except GameError as exc:
+        await message.reply_text(f"⚠️ {exc}")
+        return
+    verb = "واریز شد" if direction == "in" else "به موجودی آزاد آمد"
+    await message.reply_text(f"✅ <code>{moved:,}</code> طلا {verb}.", parse_mode="HTML")
+    await bank_panel(update, context)
+
+
+async def bank_move_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    direction = query.data.split(":")[1]
+    action = "bank_in" if direction == "in" else "bank_out"
+    context.user_data["awaiting_player_input"] = {"action": action}
+    await query.answer()
+    verb = "واریز به بانک" if direction == "in" else "برداشت به موجودی آزاد"
+    await query.message.reply_text(f"💰 مقدار طلا برای {verb} را بفرست. مثلاً ۵۰۰۰۰")
+
+
+async def bank_max_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    direction = query.data.split(":")[1]
+    try:
+        moved = await run_db(_max_sync, update.effective_user, direction)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    verb = "واریز شد" if direction == "in" else "برداشت شد"
+    await query.answer(f"{moved:,} طلا {verb}.", show_alert=True)
+    await bank_panel(update, context)
+
+
+async def _bank_interest_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    from game.bank import pay_all_interest
+
+    await run_db(pay_all_interest)
+
+
 def register(application) -> None:
     application.add_handler(CommandHandler("buildings", buildings_panel, filters.ChatType.PRIVATE))
     application.add_handler(CallbackQueryHandler(building_buy_builder_prompt, pattern=r"^bld_buy_builder$"))
@@ -983,6 +1130,18 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(building_pick_callback, pattern=r"^bld_pick:"))
     application.add_handler(CallbackQueryHandler(building_collect_callback, pattern=r"^bld_collect:"))
     application.add_handler(CallbackQueryHandler(building_bank_callback, pattern=r"^bld_bank:"))
+    application.add_handler(CallbackQueryHandler(bank_move_callback, pattern=r"^bank_move:"))
+    application.add_handler(CallbackQueryHandler(bank_max_callback, pattern=r"^bank_max:"))
+    if application.job_queue:
+        import datetime
+        from zoneinfo import ZoneInfo
+
+        application.job_queue.run_daily(
+            _bank_interest_job,
+            time=datetime.time(0, 0, tzinfo=ZoneInfo("Asia/Tehran")),
+            name="bank_interest",
+            job_kwargs={"misfire_grace_time": 15 * 60},
+        )
     application.add_handler(CallbackQueryHandler(building_upgrade_callback, pattern=r"^bld_upgrade:"))
     application.add_handler(CallbackQueryHandler(building_finish_ask_callback, pattern=r"^bld_finish_ask:"))
     application.add_handler(CallbackQueryHandler(building_finish_callback, pattern=r"^bld_finish:"))

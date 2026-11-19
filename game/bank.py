@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from django.utils import timezone
 
+from bio_lab.models import User
 from game import constants
 from game.creature import GameError
 
@@ -67,6 +68,53 @@ def apply_group_loot(user, gold: int) -> None:
     user.coins = max(0, int(user.coins or 0) - gold)
 
 
+def settle_interest(user) -> int:
+    """Pay 2% of the bank into the free wallet, once per Tehran day.
+
+    The midnight job is the only caller. The balance is whatever is in the bank
+    at that moment, and a second call the same day pays nothing.
+    """
+    from django.db.models import F
+
+    today = timezone.localdate()
+    if getattr(user, "bank_interest_on", None) == today:
+        return 0
+    row = (
+        User.objects.filter(pk=user.pk)
+        .exclude(bank_interest_on=today)
+        .values("bank_gold")
+        .first()
+    )
+    if row is None:
+        fresh = User.objects.get(pk=user.pk)
+        user.coins = fresh.coins
+        user.bank_gold = fresh.bank_gold
+        user.bank_interest_on = fresh.bank_interest_on
+        return 0
+    payout = int(row["bank_gold"] or 0) * constants.BANK_INTEREST_PERCENT // 100
+    updated = (
+        User.objects.filter(pk=user.pk)
+        .exclude(bank_interest_on=today)
+        .update(coins=F("coins") + payout, bank_interest_on=today)
+    )
+    fresh = User.objects.get(pk=user.pk)
+    user.coins = fresh.coins
+    user.bank_gold = fresh.bank_gold
+    user.bank_interest_on = fresh.bank_interest_on
+    return payout if updated else 0
+
+
+def pay_all_interest() -> int:
+    """Midnight pass: every bank is stamped for today, and gold on hand earns 2%."""
+    today = timezone.localdate()
+    paid = 0
+    ids = User.objects.filter(bank_gold__gt=0).exclude(bank_interest_on=today).values_list("id", flat=True)
+    for uid in ids.iterator(chunk_size=200):
+        paid += settle_interest(User.objects.get(pk=uid))
+    User.objects.filter(bank_gold__lte=0).exclude(bank_interest_on=today).update(bank_interest_on=today)
+    return paid
+
+
 def deposit(user, amount: int, *, level: int) -> None:
     """Put `amount` into the bank. The caller saves `user`."""
     amount = int(amount)
@@ -108,6 +156,36 @@ def take_for_transfer(user, amount: int, *, level: int) -> None:
     _add(user, "bank_withdrawn", amount)
 
 
+def withdraw_amount(user, level: int, amount: int) -> int:
+    """Move `amount` from the bank into the free wallet, inside today's budget."""
+    amount = int(amount)
+    if amount <= 0:
+        raise GameError("مقدار باید بیشتر از صفر باشد.")
+    take_for_transfer(user, amount, level=level)
+    user.coins = int(user.coins or 0) + amount
+    user.save(update_fields=["bank_gold", "coins"])
+    return amount
+
+
+def deposit_from_wallet(user, level: int, amount: int) -> int:
+    """Move free-wallet gold into this player's own bank. No receive cap: it is already theirs."""
+    amount = int(amount)
+    if amount <= 0:
+        raise GameError("مقدار باید بیشتر از صفر باشد.")
+    cap = capacity(level)
+    if cap <= 0:
+        raise GameError("بانک ساخته نشده. از ساختمان‌ها «بانک طلا» را بساز.")
+    room = cap - int(user.bank_gold or 0)
+    if amount > room:
+        raise GameError(f"بانک فقط {max(0, room):,} طلا جا دارد.")
+    if int(user.coins or 0) < amount:
+        raise GameError(f"طلای آزاد {int(user.coins or 0):,} است.")
+    user.coins -= amount
+    user.bank_gold = int(user.bank_gold or 0) + amount
+    user.save(update_fields=["coins", "bank_gold"])
+    return amount
+
+
 def withdraw_to_wallet(user, level: int) -> int:
     """Move today's remaining budget, or whatever is in the bank, into the free wallet."""
     room = withdraw_room(user, level)
@@ -116,11 +194,7 @@ def withdraw_to_wallet(user, level: int) -> int:
         if int(user.bank_gold or 0) <= 0:
             raise GameError("بانک خالی است.")
         raise GameError("سقف برداشت امروز تمام شده. فردا دوباره می‌توانی برداشت کنی.")
-    user.bank_gold -= amount
-    user.coins = int(user.coins or 0) + amount
-    _add(user, "bank_withdrawn", amount)
-    user.save(update_fields=["bank_gold", "coins"])
-    return amount
+    return withdraw_amount(user, level, amount)
 
 
 def snapshot(user, level: int) -> dict:

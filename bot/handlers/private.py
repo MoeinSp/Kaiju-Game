@@ -45,7 +45,7 @@ from bot.handlers.titles import titles_panel
 from bot.handlers.referral import referral_panel
 from bot.handlers.team import team_panel
 from bot.handlers.breeding import breeding_panel
-from bot.handlers.buildings import buildings_panel
+from bot.handlers.buildings import bank_panel, buildings_panel
 from bot.handlers.inventory import blacksmith_panel, inventory_cmd
 from bot.handlers.lootbox import biocrate_cmd, diamond_box_panel
 from bot.handlers.owner import admin_cmd
@@ -1145,6 +1145,7 @@ SECTION_HALL_REQ = {
     "dispatch": 2,
     "serums": 2,
     "merchant": 2,
+    "bank": 2,
     "battlepass": 2,
     "exchange": 2,
 
@@ -1211,10 +1212,13 @@ _HUBS = {
         [("تیم", "team", "n", "btn_team")],
     ]),
     "hub_base": ("🏰 <b>پایگاه</b>", [
-        [("ساختمان‌ها", "buildings", "bu", "btn_buildings"), ("پژوهش", "research", "bu", "btn_research")],
-        [("خزانه", "vault", "bu", "btn_vault"), ("صرافی", "exchange", "s", "btn_exchange")],
-        [("بازیافت", "equip_exchange", "s", "btn_ticket_exchange"), ("آزمایشگاه سرم", "serums", "bu", "btn_serums")],
-        [("انبار", "backpack", "n", "btn_backpack"), ("سفارش تاجر", "merchant", "s", "btn_merchant")],
+        [("ساختمان‌ها", "buildings", "bu", "btn_buildings"), ("بانک طلا", "bank", "c", "btn_deposit")],
+        [("پژوهش", "research", "bu", "btn_research"), ("خزانه", "vault", "bu", "btn_vault")],
+        [("صرافی", "exchange", "s", "btn_exchange"), ("بازیافت", "equip_exchange", "s", "btn_ticket_exchange")],
+        [("آزمایشگاه سرم", "serums", "bu", "btn_serums"), ("انبار", "backpack", "n", "btn_backpack")],
+    ]),
+    "hub_base_more": ("🏰 <b>پایگاه — بیشتر</b>", [
+        [("سفارش تاجر", "merchant", "s", "btn_merchant")],
     ]),
     "hub_shop": ("🛒 <b>فروشگاه</b>", [
         [("فروشگاه", "shop", "s", "btn_shop"), ("بازار سیاه", "blackmarket", "s", "btn_blackmarket")],
@@ -4876,6 +4880,12 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
         await _buy_custom(update, context, awaiting)
         return
 
+    if action in ("bank_in", "bank_out"):
+        from bot.handlers.buildings import apply_bank_text
+
+        await apply_bank_text(update, context, action, text)
+        return
+
     if action == "shop_buy_qty":
         from bot.handlers.shop import handle_custom_qty_buy
 
@@ -5893,6 +5903,7 @@ _MENU_ACTIONS = {
     "fusion": fusion_panel,
     "breeding": breeding_panel,
     "buildings": buildings_panel,
+    "bank": bank_panel,
     "research": research_panel,
     "achievements": achievements_panel,
     "battlepass": battlepass_panel,

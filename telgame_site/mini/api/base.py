@@ -214,18 +214,39 @@ def plunder_seen(request, user, data):
     return {"ok": True}
 
 
-@endpoint("POST")
-def withdraw(request, user, data):
-    """Move today's remaining bank budget into the free wallet. It is ordinary gold there."""
-    from game.bank import withdraw_to_wallet
-
+def _bank(user, data) -> Building:
     b = _own_building(user, need_int(data, "id"))
     if b.building_type != "trade_hall" or b.level < 1:
         raise GameError("بانک پیدا نشد.")
+    return b
+
+
+@endpoint("POST")
+def withdraw(request, user, data):
+    """Move bank gold into the free wallet. `amount` withdraws that much; without it, today's remainder."""
+    from game.bank import withdraw_amount, withdraw_to_wallet
+
+    b = _bank(user, data)
     with transaction.atomic():
         lock_row(user)
         locked = User.objects.select_for_update().get(id=user.id)
-        moved = withdraw_to_wallet(locked, b.level)
+        if data.get("amount") is None:
+            moved = withdraw_to_wallet(locked, b.level)
+        else:
+            moved = withdraw_amount(locked, b.level, need_int(data, "amount"))
+    return {"moved": moved, **_view(user, data, b)}
+
+
+@endpoint("POST")
+def bank_deposit(request, user, data):
+    """Move free-wallet gold into this player's bank. It does not use the young-account receive cap."""
+    from game.bank import deposit_from_wallet
+
+    b = _bank(user, data)
+    with transaction.atomic():
+        lock_row(user)
+        locked = User.objects.select_for_update().get(id=user.id)
+        moved = deposit_from_wallet(locked, b.level, need_int(data, "amount"))
     return {"moved": moved, **_view(user, data, b)}
 
 
@@ -488,6 +509,7 @@ routes = [
     ("building/", building),
     ("plunder_seen/", plunder_seen),
     ("withdraw/", withdraw),
+    ("deposit/", bank_deposit),
     ("collect/", collect),
     ("collect_all/", collect_all),
     ("upgrade/", upgrade),

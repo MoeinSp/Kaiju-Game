@@ -21,7 +21,9 @@ from game import constants  # noqa: E402
 from game.bank import (  # noqa: E402
     apply_group_loot,
     deposit,
+    deposit_from_wallet,
     lootable_gold,
+    settle_interest,
     snapshot,
     withdraw_to_wallet,
 )
@@ -79,13 +81,19 @@ def check_prices():
 def check_wallet_and_bank():
     seller = _user(SENDER, days_old=10, coins=100_000, bank=500_000)
     _hall(seller, 5)
+    assert settle_interest(seller) == 10_000
+    seller.refresh_from_db()
+    assert seller.bank_gold == 500_000
+    assert seller.coins == 110_000
+    assert settle_interest(seller) == 0
     moved = withdraw_to_wallet(seller, 5)
     seller.refresh_from_db()
     assert moved == 500_000
     assert seller.bank_gold == 0
-    assert seller.coins == 600_000
-    assert lootable_gold(seller) == 600_000
-    assert spend_wallet(seller, 600_000)
+    # 2% of the 500,000 that was in the bank at settle, then the withdrawal.
+    assert seller.coins == 610_000
+    assert lootable_gold(seller) == 610_000
+    assert spend_wallet(seller, 610_000)
     assert seller.coins == 0
     assert not spend_wallet(seller, 1)
     shot = snapshot(seller, 5)
@@ -108,7 +116,21 @@ def check_young_and_loot():
     except GameError:
         pass
     deposit(young, 30_000, level=5)
+    young.save(update_fields=["bank_gold"])
     assert young.bank_gold == 30_000
+    young.bank_interest_on = None
+    young.save(update_fields=["bank_interest_on"])
+    assert settle_interest(young) == 600
+    young.refresh_from_db()
+    assert young.bank_gold == 30_000
+    assert young.coins == 600
+    assert settle_interest(young) == 0
+    young.coins = 50_000
+    young.save(update_fields=["coins"])
+    deposit_from_wallet(young, 5, 20_000)
+    young.refresh_from_db()
+    assert young.bank_gold == 50_000
+    assert young.coins == 30_000
     veteran = _user(BUYER, days_old=20, coins=80_000, bank=0)
     assert lootable_gold(veteran) == 80_000
     apply_group_loot(veteran, 5_000)

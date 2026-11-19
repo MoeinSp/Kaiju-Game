@@ -21,6 +21,8 @@ class User(models.Model):
     # Unused. Kept so the live database does not need another migration.
     bank_out_amount = models.IntegerField(default=0)
     bank_out_at = models.DateTimeField(null=True, blank=True)
+    # Tehran date this account already received the nightly 2% bank interest.
+    bank_interest_on = models.DateField(null=True, blank=True)
     dna_fragments = models.IntegerField(default=100)
     diamonds = models.IntegerField(default=100)  # premium currency: diamond collector, daily wheel, diamond boxes
     biocrate_tickets = models.IntegerField(default=0)  # earned by exchanging gear; opens genetic boxes free
