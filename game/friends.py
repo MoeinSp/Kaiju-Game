@@ -395,6 +395,28 @@ def give_lick(giver: User, receiver: User) -> tuple[str, int]:
     return _pay_lick(receiver, step), step
 
 
+def spit_request(sender: User, target: User) -> dict:
+    """The تف card. Creates the request; the other person still has to accept."""
+    result = ask(sender.id, target.id)
+    extra = {
+        "asked": "درخواست دوستی فرستاده شد. فقط خودِ طرف می‌تواند قبول کند.",
+        "already": "درخواست قبلی هنوز باز است.",
+        "friends": "از قبل دوست هستید. درخواست تازه‌ای نرفت.",
+        "full": "لیست دوست‌ها پر است و درخواست ثبت نشد.",
+        "blocked": "این درخواست فعلاً بسته است.",
+    }.get(result, "")
+    text = "🤝 <b>تف</b>\n\n" + _names(
+        lab_mention(sender), lab_mention(target),
+        "به نشانه‌ی علاقه‌ی هیولاها تف کرد." + (f"\n<i>{extra}</i>" if extra else ""),
+    )
+    return {
+        "text": text,
+        "ask": result in ("asked", "already"),
+        "wait": False,
+        "quiet": False,
+    }
+
+
 def _names(who: str, them: str, body: str) -> str:
     """Names sit on their own lines, so a Latin lab name does not break the Persian sentence."""
     return f"از: {who}\nبه: {them}\n\n{body}"
@@ -412,29 +434,15 @@ def play(sender: User, target: User | None, word: str, other_id: int) -> dict:
     who = lab_mention(sender)
     them = lab_mention(target)
     if word == "تف":
-        result = ask(sender.id, target.id)
-        extra = {
-            "asked": "درخواست دوستی فرستاده شد. فقط خودِ طرف می‌تواند قبول کند.",
-            "already": "درخواست قبلی هنوز باز است.",
-            "friends": "از قبل دوست هستید. درخواست تازه‌ای نرفت.",
-            "full": "لیست دوست‌ها پر است و درخواست ثبت نشد.",
-            "blocked": "این درخواست فعلاً بسته است.",
-        }.get(result, "")
-        text = "🤝 <b>تف</b>\n\n" + _names(
-            who, them, "به نشانه‌ی علاقه‌ی هیولاها تف کرد." + (f"\n<i>{extra}</i>" if extra else ""),
-        )
-        return {"text": text, "ask": result == "asked", "wait": False, "quiet": False}
+        return spit_request(sender, target)
     if word == "لیس":
         if not are_friends(sender.id, target.id):
-            result = ask(sender.id, target.id)
-            note = {
-                "asked": "هنوز دوست نیستید، پس لیسی ثبت نشد.\nبه نشانه‌ی دوستی درخواست فرستاده شد. اگر قبول کند، لیس بین شما باز می‌شود.",
-                "already": "هنوز دوست نیستید و لیس جایزه ندارد.\nدرخواست دوستی قبلی هنوز باز است. اگر قبول کند، بعدش می‌توانید لیس بدهید.",
-                "full": "هنوز دوست نیستید. لیست دوست‌ها هم پر است و درخواست ثبت نشد.",
-                "blocked": "هنوز دوست نیستید و این درخواست فعلاً بسته است.",
-            }.get(result, "هنوز دوست نیستید. به نشانه‌ی دوستی به او تف کن تا درخواستت را قبول کند.")
-            text = "👅 <b>لیس</b>\n\n" + _names(who, them, note)
-            return {"text": text, "ask": result in ("asked", "already"), "wait": False, "quiet": False}
+            text = "👅 <b>لیس</b>\n\n" + _names(
+                who, them,
+                "هنوز دوست نیستید و لیس جایزه ندارد.\n"
+                "برای دوستی باید تف کنی. دکمه‌ی زیر را بزن تا همین پیام بشود درخواست دوستی.",
+            )
+            return {"text": text, "ask": False, "spit": True, "wait": False, "quiet": False}
         try:
             prize, step = give_lick(sender, target)
         except GameError as exc:

@@ -194,13 +194,29 @@ async def group_word(update: Update, context: ContextTypes.DEFAULT_TYPE, word: s
     if result["quiet"]:
         return
     markup = None
-    if result["ask"]:
-        lo, hi = friends.pair_ids(user.id, target_id)
+    if result.get("spit"):
         markup = InlineKeyboardMarkup([[
-            btn("دوست شویم", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"fr:yes:{lo}:{hi}"),
-            btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER, callback_data=f"fr:no:{lo}:{hi}"),
+            btn("تف", emoji_key="btn_friends", style=PRIMARY, callback_data=f"fr:lickspit:{user.id}:{target_id}"),
         ]])
+    elif result["ask"]:
+        lo, hi = friends.pair_ids(user.id, target_id)
+        markup = _request_keyboard(lo, hi)
     await message.reply_text(result["text"], parse_mode="HTML", reply_markup=markup)
+
+
+def _request_keyboard(lo: int, hi: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        btn("دوست شویم", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"fr:yes:{lo}:{hi}"),
+        btn("بی‌خیال", emoji_key="btn_cancel", style=DANGER, callback_data=f"fr:no:{lo}:{hi}"),
+    ]])
+
+
+def _spit_button_sync(sender_id: int, target_id: int) -> dict:
+    sender = User.objects.filter(id=sender_id).first()
+    target = User.objects.filter(id=target_id).first()
+    if sender is None or target is None:
+        raise GameError("این بازیکن دیگر در بازی نیست.")
+    return friends.spit_request(sender, target)
 
 
 async def on_tap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -211,6 +227,17 @@ async def on_tap(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     parts = query.data.split(":")
     kind = parts[1] if len(parts) > 1 else ""
     try:
+        if kind == "lickspit" and len(parts) == 4:
+            sender_id, target_id = int(parts[2]), int(parts[3])
+            if user.id != sender_id:
+                await query.answer("این دکمه مال تو نیست.", show_alert=True)
+                return
+            result = await run_db(_spit_button_sync, sender_id, target_id)
+            lo, hi = friends.pair_ids(sender_id, target_id)
+            markup = _request_keyboard(lo, hi) if result["ask"] else None
+            await query.answer()
+            await query.edit_message_text(result["text"], parse_mode="HTML", reply_markup=markup)
+            return
         if kind in ("yes", "no") and len(parts) == 4:
             lo, hi = int(parts[2]), int(parts[3])
             note = await run_db(_decide_sync, user.id, lo, hi, kind == "yes")

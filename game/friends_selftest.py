@@ -142,9 +142,12 @@ def main():
             FriendLink.objects.filter(user_lo_id=min(A, B), user_hi_id=max(A, B)).delete()
         friends.reset_cooldowns()
         stranger = friends.play(a, b, "لیس", B)
-        assert stranger["ask"] is True and "هنوز دوست نیستید" in stranger["text"]
+        assert stranger["ask"] is False and stranger["spit"] is True and "تف" in stranger["text"]
+        assert friends.link_of(A, B) is None
         b.refresh_from_db()
         assert b.diamonds == 32 and b.coins == 101_000
+        turned = friends.spit_request(a, b)
+        assert turned["ask"] is True and "درخواست دوستی" in turned["text"]
         FriendLink.objects.filter(user_lo_id=min(A, B), user_hi_id=max(A, B)).delete()
         others = [_user(uid, f"د{uid % 100}") for uid in EXTRA]
         for other in others:
