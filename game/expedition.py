@@ -2,6 +2,7 @@
 
 Players initiate or join team expeditions (2-4 members) in groups with «اعزام».
 1 global daily limit per player across all groups.
+Each group can launch 3 caravans per Tehran day.
 """
 
 from __future__ import annotations
@@ -15,6 +16,8 @@ from bio_lab.models import GroupExpedition, User
 from bio_lab.repository import display_name
 from game.creature import GameError
 from game.emoji import get_emoji
+
+GROUP_EXPEDITIONS_PER_DAY = 3
 
 EXPEDITION_DESTINATIONS = [
     {"name": "دره استخوان‌های اژدها", "gold": (3000, 6000), "dna": (100, 250), "diamonds": (5, 15)},
@@ -40,6 +43,14 @@ def _today_start():
     return timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
 
 
+def _group_launched_today(group_id: int) -> int:
+    return GroupExpedition.objects.filter(
+        group_id=group_id,
+        status="completed",
+        created_at__gte=_today_start(),
+    ).count()
+
+
 @transaction.atomic
 def start_expedition_recruitment(creator: User, group_id: int, group_title: str) -> GroupExpedition:
     """Start a new expedition team recruitment in group."""
@@ -48,16 +59,10 @@ def start_expedition_recruitment(creator: User, group_id: int, group_title: str)
     if not ok:
         raise GameError(msg)
 
-    today_start = _today_start()
-    group_done_today = GroupExpedition.objects.filter(
-        group_id=group_id,
-        status="completed",
-        created_at__gte=today_start,
-    ).exists()
-    if group_done_today:
+    if _group_launched_today(group_id) >= GROUP_EXPEDITIONS_PER_DAY:
         raise GameError(
             f"{get_emoji('timer')} <b>سهمیه اعزام کاروان این گروه تمام شده است!</b>\n\n"
-            f"<blockquote>👥 هر گروه روزانه فقط <code>1</code> بار می‌تواند اعزام کاروان داشته باشد.\n"
+            f"<blockquote>👥 هر گروه روزانه <code>{GROUP_EXPEDITIONS_PER_DAY}</code> کاروان می‌تواند بفرستد.\n"
             f"سهمیه این گروه فردا مجدداً فعال می‌شود.</blockquote>\n\n"
             f"💡 <i>برای اعزام‌های بیشتر و کسب غنائم، ربات را به گروه‌های دیگر خود اضافه کنید!</i>"
         )
@@ -134,14 +139,12 @@ def launch_expedition(user: User, expedition_id: int) -> dict:
     if exp.creator_id != user.id:
         raise GameError("فقط سرپرست کاروان (سازنده) می‌تواند دستور حرکت را صادر کند.")
 
-    today_start = _today_start()
-    group_done_today = GroupExpedition.objects.filter(
-        group_id=exp.group_id,
-        status="completed",
-        created_at__gte=today_start,
-    ).exists()
-    if group_done_today:
-        raise GameError("⏳ سهمیه اعزام کاروان این گروه برای امروز تمام شده است!\n(هر گروه روزی فقط یک‌بار می‌تونه کاروان بفرسته. برای اعزام‌های بیشتر، ربات رو به گروه‌های دیگه اضافه کن.)")
+    if _group_launched_today(exp.group_id) >= GROUP_EXPEDITIONS_PER_DAY:
+        raise GameError(
+            "⏳ سهمیه اعزام کاروان این گروه برای امروز تمام شده است!\n"
+            f"(هر گروه روزی {GROUP_EXPEDITIONS_PER_DAY} کاروان می‌تونه بفرسته. "
+            "برای اعزام‌های بیشتر، ربات رو به گروه‌های دیگه اضافه کن.)"
+        )
 
     members = list(exp.members.select_for_update().all())
     if len(members) < 2:

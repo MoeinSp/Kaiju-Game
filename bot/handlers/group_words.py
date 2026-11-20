@@ -2484,7 +2484,7 @@ def _render_expedition_card(exp_id: int, creator_name: str, target_name: str, me
         f"👑 <b>سرپرست کاروان:</b> <b>{creator_name}</b>\n"
         f"👥 <b>اعضای حاضر (<code>{len(member_names)}</code>/<code>4</code>):</b>\n{m_list_str}\n\n"
         f"⏳ وضعیت: <b>در حال عضوگیری...</b> (حداقل <code>2</code> نفر)\n"
-        f"⚠️ <i>سهمیه: روزی یک‌بار برای هر کاربر.</i>\n"
+        f"⚠️ <i>سهمیه: روزی یک‌بار برای هر کاربر، و ۳ کاروان برای هر گروه.</i>\n"
         f"📊 <i>جایزه بر اساس قدرت کل تیم محاسبه می‌شود.</i>"
         "</blockquote>"
     )
