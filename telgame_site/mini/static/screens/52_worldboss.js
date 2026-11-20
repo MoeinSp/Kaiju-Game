@@ -91,12 +91,11 @@
           html += '<div class="wb-me">' + K.fighter(me, '<div class="wb-tags">' + K.elTag(me.element) +
             (S.advantage ? '<span class="tag" style="color:var(--good)">' + K.ic("up") + "برتری با تو: +۲۰٪ آسیب</span>" : '<span class="tag plain">بدون برتری عنصری</span>') + "</div>") +
             '<button class="btn sm" data-act="swap">' + K.ic("swap") + "تعویض</button></div>";
-          if (p) html += '<div class="wb-per">' + K.ic("gift") + "<span>هر ضربه دقیقاً " + K.n(p.damage) + " آسیب می‌زنه و " +
-            K.amounts({ coins: p.coins, dna: p.dna }, " و ") + " می‌ده.</span></div>";
+          if (p) html += '<div class="wb-per" id="wb-per">' + perLine(p) + "</div>";
         } else {
           html += '<div class="callout warn mt">' + K.ic("warn") + "<span>اول یه هیولای فعال انتخاب کن.</span></div>";
         }
-        html += "</div>" + (me ? K.serumRow(S.serum) : "") +
+        html += '</div><div id="wb-serum">' + (me ? K.serumRow(S.serum) : "") + "</div>" +
           '<button class="btn danger lg block mt" id="wb-hit" data-act="hit"></button><div id="wb-last"></div>' +
           '<div class="h2">' + K.ic("podium") + 'بیشترین آسیب</div><div id="wb-top"></div>';
         return html + rules(S.rules);
@@ -121,6 +120,14 @@
         if (S.hits_left <= 0) { btn.disabled = true; btn.innerHTML = K.ic("check") + "هر " + K.n(S.rules.hits) + " ضربه‌ات رو زدی"; }
         else if (!S.me) { btn.disabled = true; btn.innerHTML = K.ic("lock") + "هیولای فعال نداری"; }
         else { btn.disabled = false; btn.innerHTML = K.ic("sword") + 'ضربه بزن<span class="cost">' + K.ic("bolt", "f") + K.n(cost) + "</span>"; }
+        var per = q("wb-per");
+        if (per && S.per_hit) per.innerHTML = perLine(S.per_hit);
+        var serum = q("wb-serum");
+        if (serum) serum.innerHTML = S.me ? K.serumRow(S.serum) : "";
+      }
+      function perLine(p) {
+        return K.ic("gift") + "<span>هر ضربه دقیقاً " + K.n(p.damage) + " آسیب می‌زنه و " +
+          K.amounts({ coins: p.coins, dna: p.dna }, " و ") + " می‌ده.</span>";
       }
       function tick() {
         var el = root.querySelector("#wb-left"); if (!el || !S.active) return;

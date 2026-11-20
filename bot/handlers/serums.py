@@ -50,8 +50,9 @@ def moment_lines(m: dict | None) -> list[str]:
         return []
     icon = _ICON[m["kind"]]
     if m["on"]:
+        tail = "تا آخر ضربه‌های این غول فعاله." if m.get("spent") else "اگه نخوای، با دکمه‌ی سرم برش گردون توی قفسه."
         return [f"{icon} <b>سرم {m['label']} انتخاب شد</b> (سطح {m['level']})",
-                f"<i>{m['effect']} · اگه نخوای، با دکمه‌ی سرم برش گردون توی قفسه.</i>"]
+                f"<i>{m['effect']} · {tail}</i>"]
     return [f"{icon} سرم {m['label']} داری: <code>{m['stock']}</code> عدد (سطح {m['level']})",
             f"<i>{m['effect']} · فقط اگه خودت انتخابش کنی خرج می‌شه.</i>"]
 
@@ -61,6 +62,8 @@ def moment_btn(m: dict | None, callback_data: str):
     if not m:
         return None
     if m["on"]:
+        if m.get("spent"):
+            return None
         return btn(f"برداشتن سرم {m['label']}", emoji_key="btn_serum_use", style=NAV, callback_data=callback_data)
     return btn(f"سرم {m['label']} · {m['stock']}", emoji_key="btn_serum_use", style=CONFIRM, callback_data=callback_data)
 

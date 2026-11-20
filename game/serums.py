@@ -44,8 +44,8 @@ KINDS: dict[str, dict] = {
               "text": "+{v}٪ قدرت مدافعت در حمله‌ی بعدی آرنا که بهت می‌شه"},
     "heal": {"label": "ترمیم", "where": "سیاه‌چال", "unlock": 3, "fx": [30, 35, 40, 45, 50],
              "text": "+{v}٪ جون به یکی از اعضای تیم سیاه‌چال"},
-    "slayer": {"label": "غول‌کش", "where": "ضربه به غول", "unlock": 4, "fx": [15, 18, 22, 26, 30],
-               "text": "+{v}٪ آسیب در یک ضربه به غول سرگردان"},
+    "slayer": {"label": "غول‌کش", "where": "همه‌ی ضربه‌های این غول", "unlock": 4, "fx": [15, 18, 22, 26, 30],
+               "text": "+{v}٪ آسیب هر ضربه به همین غول"},
 }
 ORDER = ["rage", "tracker", "warrior", "shell", "heal", "slayer"]
 ARMED = ("rage", "tracker", "warrior", "shell", "slayer")     # wait for their moment; heal acts at once
@@ -315,19 +315,51 @@ def moment(user: User, kind: str) -> dict | None:
     if level < KINDS[kind]["unlock"] or (not armed and stock <= 0):
         return None
     klvl = int(armed.get("lvl", 1)) if armed else int((row.levels or {}).get(kind, 1))
-    return {"kind": kind, "label": KINDS[kind]["label"], "on": bool(armed), "stock": stock,
-            "level": klvl, "effect": effect_text(kind, klvl), "pct": round((_mult(kind, klvl) - 1) * 100)}
+    return {"kind": kind, "label": KINDS[kind]["label"], "on": bool(armed), "spent": bool(armed and armed.get("spent")),
+            "stock": stock, "level": klvl, "effect": effect_text(kind, klvl),
+            "pct": round((_mult(kind, klvl) - 1) * 100)}
+
+
+def mark_spent(user: User, kind: str) -> None:
+    """The armed serum has landed. Later hits of this fight still get it, but it no longer
+    goes back on the shelf — the player already used it."""
+    row = SerumLab.objects.select_for_update().filter(user_id=user.id).first()
+    if row is None:
+        return
+    armed = dict(row.armed or {})
+    current = armed.get(kind)
+    if not current or current.get("spent"):
+        return
+    armed[kind] = {**current, "spent": True}
+    row.armed = armed
+    row.save(update_fields=["armed"])
+
+
+def consume_spent(user: User, kind: str) -> None:
+    """Drop an armed serum that already landed, without putting it back on the shelf."""
+    row = SerumLab.objects.select_for_update().filter(user_id=user.id).first()
+    if row is None:
+        return
+    current = (row.armed or {}).get(kind)
+    if not current or not current.get("spent"):
+        return
+    row.armed = {k: v for k, v in row.armed.items() if k != kind}
+    row.save(update_fields=["armed"])
 
 
 def unarm(user: User, kind: str) -> None:
-    """Put a chosen serum back on the shelf (it was never spent)."""
+    """Put a chosen serum back on the shelf. One that already landed is not refunded."""
     with transaction.atomic():
         row = _row(user, lock=True)
-        if kind not in (row.armed or {}):
+        current = (row.armed or {}).get(kind)
+        if not current:
             return
         row.armed = {k: v for k, v in row.armed.items() if k != kind}
-        row.stock = {**(row.stock or {}), kind: int((row.stock or {}).get(kind, 0)) + 1}
-        row.save(update_fields=["armed", "stock"])
+        fields = ["armed"]
+        if not current.get("spent"):
+            row.stock = {**(row.stock or {}), kind: int((row.stock or {}).get(kind, 0)) + 1}
+            fields.append("stock")
+        row.save(update_fields=fields)
 
 
 def toggle(user: User, kind: str) -> dict | None:
@@ -336,8 +368,12 @@ def toggle(user: User, kind: str) -> dict | None:
         raise GameError("این سرم اینجا انتخاب نمی‌شه.")
     with transaction.atomic():
         row = _row(user, lock=True)
-        on = kind in (row.armed or {})
+        armed = (row.armed or {}).get(kind)
+        on = armed is not None
+        spent = bool(armed and armed.get("spent"))
     if on:
+        if spent:
+            raise GameError("این سرم روی ضربه‌های همین غول فعاله و دیگه برنمی‌گرده توی قفسه.")
         unarm(user, kind)
     else:
         use(user, kind, _moment=True)

@@ -253,9 +253,15 @@ def hit(user: User) -> dict:
 
     from game import serums
 
+    # «سرم غول‌کش» stays armed for every hit of THIS boss. The screen keeps saying it is
+    # selected, so the damage has to keep using it. It leaves the shelf for good once the
+    # player's hits on this boss are done, or this hit kills the boss.
+    serum_mult = serums.peek(user, "slayer")
+    if serum_mult > 1:
+        serums.mark_spent(user, "slayer")
     raw = (power * (constants.ELEMENT_ADVANTAGE_POWER_FACTOR if advantage else 1.0)
            * relics.mult(user, "titan_fang")    # «نیش تایتان» (dungeon relic)
-           * serums.take(user, "slayer"))       # «سرم غول‌کش», spent by this hit
+           * serum_mult)
     damage = max(1, min(int(round(raw)), boss.current_hp))  # overkill doesn't count
 
     coins, dna = hit_reward(damage)
@@ -274,6 +280,8 @@ def hit(user: User) -> dict:
         boss.status = WorldBoss.DEAD
         boss.killer = user
     boss.save(update_fields=["current_hp", "status", "killer"])
+    if serum_mult > 1 and (entry.hits >= HITS_PER_PLAYER or killed):
+        serums.take(user, "slayer")
     return {
         "boss": boss, "damage": damage, "coins": coins, "dna": dna, "advantage": advantage,
         "killed": killed, "hits_left": HITS_PER_PLAYER - entry.hits, "my_damage": entry.damage,
@@ -355,6 +363,10 @@ def _settle(boss_id: int) -> list[tuple]:
         if chests:
             lines.append("\n👇 «باز کردن جعبه‌ها» رو بزن تا ببینی چی گرفتی.")
         out.append((user.id, "\n".join(lines), "worldboss_chests" if chests else "worldboss", boss.id))
+    from game import serums
+
+    for e in entries:
+        serums.consume_spent(e.user, "slayer")  # a serum used on this giant does not follow the next one
     return out
 
 
