@@ -185,10 +185,10 @@ def seed_demo_catalog() -> list[ShopItem]:
             "art": "hub_chests",
             "sort": 0,
             "contents": [
-                {"type": "coins", "amount": 1_000_000},
+                {"type": "coins", "amount": 2_000_000},
                 {"type": "chest", "tier": "mega", "count": 2},
                 {"type": "shadow_cores", "amount": 10},
-                {"type": "dna", "amount": 50_000},
+                {"type": "dna", "amount": 100_000},
                 {"type": "creature_pick", "rarity": "mythic", "count": 2},
             ],
         },
@@ -201,8 +201,8 @@ def seed_demo_catalog() -> list[ShopItem]:
             "art": "gold_5",
             "sort": 1,
             "contents": [
-                {"type": "coins", "amount": 250_000},
-                {"type": "dna", "amount": 8_000},
+                {"type": "coins", "amount": 500_000},
+                {"type": "dna", "amount": 16_000},
                 {"type": "diamonds", "amount": 80},
                 {"type": "chest", "tier": "golden", "count": 1},
             ],
@@ -218,7 +218,7 @@ def seed_demo_catalog() -> list[ShopItem]:
             "contents": [
                 {"type": "shadow_cores", "amount": 5},
                 {"type": "dungeon_keys", "amount": 10},
-                {"type": "coins", "amount": 150_000},
+                {"type": "coins", "amount": 300_000},
                 {"type": "creature_pick", "rarity": "legendary", "count": 1},
             ],
         },
@@ -233,7 +233,7 @@ def seed_demo_catalog() -> list[ShopItem]:
             "contents": [
                 {"type": "diamonds", "amount": 150},
                 {"type": "speedup", "minutes": 60, "count": 3},
-                {"type": "coins", "amount": 100_000},
+                {"type": "coins", "amount": 200_000},
             ],
         },
     ]
@@ -261,3 +261,24 @@ def seed_demo_catalog() -> list[ShopItem]:
         out.append(item)
     # deactivate any leftover demo titles we renamed away — nothing else
     return out
+
+
+def double_cadence_gold_dna() -> int:
+    """×2 every ``coins`` / ``dna`` amount on active daily+weekly paid deals.
+    Idempotent only if run once — prefer ``seed_demo_catalog`` for the known titles."""
+    n = 0
+    for item in ShopItem.objects.filter(offer_cadence__in=CADENCES, is_active=True):
+        try:
+            contents = json.loads(item.contents_json or "[]")
+        except json.JSONDecodeError:
+            continue
+        changed = False
+        for part in contents:
+            if part.get("type") in ("coins", "dna") and isinstance(part.get("amount"), (int, float)):
+                part["amount"] = int(part["amount"]) * 2
+                changed = True
+        if changed:
+            item.contents_json = json.dumps(contents, ensure_ascii=False)
+            item.save(update_fields=["contents_json"])
+            n += 1
+    return n
