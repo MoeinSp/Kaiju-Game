@@ -141,43 +141,58 @@ def pay_all_interest() -> int:
     return paid
 
 
-def deposit(user, amount: int, *, level: int) -> None:
-    """Put `amount` into the bank. The caller saves `user`."""
+def deposit(user, amount: int, *, level: int, who: str | None = None) -> None:
+    """Put `amount` into the bank. The caller saves `user`.
+
+    ``who`` names the bank owner for transfer errors («گیرنده» / «فروشنده») so the
+    sender is not told to build a bank when the other side is missing one."""
     amount = int(amount)
     if amount <= 0:
         return
     cap = capacity(level)
+    bank_name = f"بانک {who}" if who else "بانک"
     if cap <= 0:
+        if who:
+            raise GameError(
+                f"{who} هنوز «🏦 بانک طلا» نساخته؛ اول باید بانک بسازد تا بشود طلا بهش زد."
+            )
         raise GameError("بانک ساخته نشده. اول «بانک طلا» را از ساختمان‌ها بساز.")
     if int(user.bank_gold or 0) + amount > cap:
         raise GameError(
-            f"بانک ظرفیت ندارد. گنجایش {cap:,} طلاست و الان {int(user.bank_gold or 0):,} طلا داخلش است."
+            f"{bank_name} ظرفیت ندارد. گنجایش {cap:,} طلاست و الان "
+            f"{int(user.bank_gold or 0):,} طلا داخلش است."
         )
     if is_young(user):
         used = _used(user, "bank_received")
         cap_in = constants.BANK_NEW_ACCOUNT_RECEIVE_CAP
         if used + amount > cap_in:
             left = max(0, cap_in - used)
+            subject = who or "این اکانت"
             raise GameError(
-                f"اکانت زیر {constants.BANK_NEW_ACCOUNT_DAYS} روز امروز حداکثر {cap_in:,} طلا می‌تواند در بانک بنشیند. "
-                f"امروز {used:,} نشسته و {left:,} جا مانده."
+                f"{subject} زیر {constants.BANK_NEW_ACCOUNT_DAYS} روز است و امروز حداکثر "
+                f"{cap_in:,} طلا می‌تواند در بانک بنشیند. امروز {used:,} نشسته و {left:,} جا مانده."
             )
         _add(user, "bank_received", amount)
     user.bank_gold = int(user.bank_gold or 0) + amount
 
 
-def take_for_transfer(user, amount: int, *, level: int) -> None:
+def take_for_transfer(user, amount: int, *, level: int, who: str | None = None) -> None:
     """Remove `amount` from the bank and count it against today's withdraw budget."""
     amount = int(amount)
+    bank_name = f"بانک {who}" if who else "بانک"
     if capacity(level) <= 0:
+        if who:
+            raise GameError(
+                f"{who} هنوز «🏦 بانک طلا» نساخته؛ اول باید بانک بسازد تا بشود ازش طلا زد."
+            )
         raise GameError("بانک ساخته نشده. اول «بانک طلا» را از ساختمان‌ها بساز.")
     room = withdraw_room(user, level)
     if amount > room:
         raise GameError(
-            f"سقف خروج طلا از بانک امروز {daily_budget(level):,} است و {room:,} طلا از آن مانده."
+            f"سقف خروج طلا از {bank_name} امروز {daily_budget(level):,} است و {room:,} طلا از آن مانده."
         )
     if int(user.bank_gold or 0) < amount:
-        raise GameError(f"داخل بانک {int(user.bank_gold or 0):,} طلاست.")
+        raise GameError(f"داخل {bank_name} {int(user.bank_gold or 0):,} طلاست.")
     user.bank_gold -= amount
     _add(user, "bank_withdrawn", amount)
 
@@ -302,4 +317,4 @@ def pay_seller_from_earned(buyer, seller, price: int, *, seller_level: int) -> N
         raise GameError(
             f"این خرید {price:,} طلا می‌خواهد. موجودی آزادت {int(buyer.coins or 0):,} است."
         )
-    deposit(seller, price, level=seller_level)
+    deposit(seller, price, level=seller_level, who="فروشنده")

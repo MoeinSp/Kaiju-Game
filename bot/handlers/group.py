@@ -145,8 +145,9 @@ def _gold_transfer_sync(chat, sender_tg, receiver_id, amount):
         # 10% fee stays. The sender's bank pays `amount`; the receiver's bank gets the rest.
         fee = amount // 10
         net = amount - fee
-        take_for_transfer(sender, amount, level=s_level)
-        deposit(receiver, net, level=r_level)
+        # Pass who= so a missing receiver bank doesn't read as "تو بانک نساختی".
+        take_for_transfer(sender, amount, level=s_level, who="فرستنده")
+        deposit(receiver, net, level=r_level, who="گیرنده")
         sender.save(update_fields=["bank_gold"])
         receiver.save(update_fields=["bank_gold"])
         from game.ledger import record_gain
