@@ -126,5 +126,5 @@ def reward_text(reward: dict) -> str:
     if reward.get("diamonds"):
         parts.append(f"{reward['diamonds']} 💎")
     if reward.get("dna"):
-        parts.append(f"{reward['dna']} DNA")
+        parts.append(f"{reward['dna']} دی‌ان‌ای")
     return " + ".join(parts) or "—"

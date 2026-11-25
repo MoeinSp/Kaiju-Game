@@ -175,7 +175,7 @@ def _prize_name(contents: dict) -> str:
 def collect_all(user: User) -> dict:
     """Take everything that is ready. Each part runs in its own transaction, so one failing
     never undoes the others. Returns:
-      totals   – gold / DNA / diamonds gained in all of it
+      totals   – gold / دی‌ان‌ای / diamonds gained in all of it
       sections – [(title, [lines])] for the result text, in a fixed order
       rolls    – creatures/items won, for the collage image
       missions – missions completed along the way
@@ -275,7 +275,7 @@ def collect_all(user: User) -> dict:
         if contents.get("coins"):
             parts.append(f"<code>+{int(contents['coins']):,}</code> طلا")
         if contents.get("dna"):
-            parts.append(f"<code>+{int(contents['dna']):,}</code> DNA")
+            parts.append(f"<code>+{int(contents['dna']):,}</code> دی‌ان‌ای")
         if contents.get("diamonds"):
             parts.append(f"<code>+{int(contents['diamonds'])}</code> الماس")
         return (" · " + " · ".join(parts)) if parts else ""

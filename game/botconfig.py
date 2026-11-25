@@ -117,8 +117,8 @@ def packs_ready() -> bool:
 
 def store_ready() -> bool:
     """True when the in-bot store has anything to sell — either the custom-amount flow
-    or at least one pack. Drives the in-menu buy button vs. the external buy-link
-    fallback. Pure in-memory read."""
+    or at least one pack. Pure in-memory read (safe from async handlers). Daily/weekly
+    paid deals are gated separately in the buy handler via a sync DB check."""
     return inbot_purchase_ready() or packs_ready()
 
 

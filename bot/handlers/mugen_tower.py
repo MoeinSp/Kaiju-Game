@@ -54,7 +54,7 @@ def _render_mugen_text(view: dict) -> str:
         "",
         f"{get_emoji('gift')} <b>پاداش فتح این طبقه</b>",
         f"{get_emoji('coin')} طلا: <b>{rew['coins']:,}</b>",
-        f"{get_emoji('dna')} DNA: <b>{rew['dna']:,}</b>",
+        f"{get_emoji('dna')} دی‌ان‌ای: <b>{rew['dna']:,}</b>",
     ]
     if rew.get("diamonds"):
         lines.append(f"{get_emoji('diamond')} الماس: <b>{rew['diamonds']:,}</b>")
@@ -185,7 +185,7 @@ async def mugen_fight_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         rew = res["rewards"]
         rew_lines = [
             f"{get_emoji('coin')} طلا: <code>+{rew['coins']:,}</code>",
-            f"{get_emoji('dna')} DNA: <code>+{rew['dna']:,}</code>",
+            f"{get_emoji('dna')} دی‌ان‌ای: <code>+{rew['dna']:,}</code>",
         ]
         if rew["diamonds"]:
             rew_lines.append(f"{get_emoji('diamond')} الماس: <code>+{rew['diamonds']:,}</code>")

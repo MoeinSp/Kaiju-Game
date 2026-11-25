@@ -353,7 +353,7 @@
   // ───────────────────────── wheel ─────────────────────────
   /* The slices show the KINDS of prize the wheel can give (game.wheel) — the amount is rolled
      by the server for this player, and the wheel simply stops on the kind it returned. */
-  var SEGS = [["coins", "coin", "طلا", "#ffc857"], ["creature", "claw", "هیولا", "#ff6b3d"], ["dna", "dna", "DNA", "#5ee6a8"], ["speedup", "dy_fast", "کارت سرعت", "#a98bff"],
+  var SEGS = [["coins", "coin", "طلا", "#ffc857"], ["creature", "claw", "هیولا", "#ff6b3d"], ["dna", "dna", "دی‌ان‌ای", "#5ee6a8"], ["speedup", "dy_fast", "کارت سرعت", "#a98bff"],
               ["diamonds", "gem", "الماس", "#6fd3ff"], ["xp_capsule", "food", "غذا", "#ff62d0"], ["coins", "coin", "طلا", "#ffc857"], ["jackpot", "crown", "جک‌پات", "#ff4d6d"]];
   var STEP = 360 / SEGS.length;
 
@@ -394,7 +394,7 @@
         touch("wheel", d.available);
         root.innerHTML = '<div class="dy-wheel' + (d.available ? "" : " off") + '">' + bulbs() + '<span class="dy-wheel-pin"></span><button class="dy-wheel-disc" data-act="dy-spin" aria-label="بچرخون">' + wheelSvg() + "</button></div>" +
           '<div id="dy-wfoot"></div>' +
-          '<div class="callout mt">' + K.ic("info") + "<span>گردونه می‌تونه طلا، DNA، الماس، غذای هیولا، کارت سرعت، یه هیولای تصادفی یا جک‌پات بده. هر چی هیولای فعالت قوی‌تر و کاپت بیشتر باشه، جایزه‌ها بزرگ‌ترن.</span></div>";
+          '<div class="callout mt">' + K.ic("info") + "<span>گردونه می‌تونه طلا، دی‌ان‌ای، الماس، غذای هیولا، کارت سرعت، یه هیولای تصادفی یا جک‌پات بده. هر چی هیولای فعالت قوی‌تر و کاپت بیشتر باشه، جایزه‌ها بزرگ‌ترن.</span></div>";
         var wrap = root.querySelector(".dy-wheel"), disc = root.querySelector(".dy-wheel-disc"), foot = root.querySelector("#dy-wfoot");
         function drawFoot() {
           wrap.classList.toggle("off", !d.available);

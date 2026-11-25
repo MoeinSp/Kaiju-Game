@@ -1,5 +1,5 @@
 """Economy: monster boxes, the daily shop (+ special items, gem kaiju, shields, gold packs),
-the gold/DNA exchange, gear recycling, the energy refill and the read-only VIP page.
+the gold/دی‌ان‌ای exchange, gear recycling, the energy refill and the read-only VIP page.
 
 Every view is an adapter over the functions the bot's handlers call (bot/handlers/lootbox.py,
 shop.py, exchange.py, equip_exchange.py, energy.py, subscription.py)."""
@@ -374,7 +374,7 @@ def store_gold(request, user, data):
     return {"gold": bought["gold"], "diamonds": bought["diamonds"]}   # nothing on the shop screen changes
 
 
-# ── exchange (gold ↔ DNA) ─────────────────────────────────────────────────────
+# ── exchange (gold ↔ دی‌ان‌ای) ─────────────────────────────────────────────────────
 def _exchange_open(user):
     from game import exchange as ex
 
@@ -389,7 +389,7 @@ def _exchange_payload(user, ex) -> dict:
     return {
         "coins": user.coins, "dna": user.dna_fragments,
         "rate_buy": ex.GOLD_PER_DNA_BUY, "rate_sell": ex.GOLD_PER_DNA_SELL, "max_dna": ex.MAX_EXCHANGE_DNA,
-        # quick picks: DNA amounts when buying DNA, gold amounts (→ whole DNA) when buying gold
+        # quick picks: دی‌ان‌ای amounts when buying دی‌ان‌ای, gold amounts (→ whole دی‌ان‌ای) when buying gold
         "presets": {
             "buy_dna": [ex.describe("buy_dna", amt) for amt in ex.PRESET_DNA],
             "buy_gold": [ex.describe("buy_gold", ex.dna_for_gold(g)) for g in ex.PRESET_GOLD],
@@ -406,7 +406,7 @@ def exchange_panel(request, user):
 
 @endpoint()
 def exchange_preview(request, user):
-    """?direction=buy_dna|buy_gold&amount=N — N is what the player wants to RECEIVE (DNA for
+    """?direction=buy_dna|buy_gold&amount=N — N is what the player wants to RECEIVE (دی‌ان‌ای for
     buy_dna, gold for buy_gold, like the bot's «عدد دلخواه»)."""
     ex = _exchange_open(user)
     direction = need_str(request.GET, "direction", ex.DIRECTIONS)
@@ -514,7 +514,7 @@ RECEIPT_WINDOW_H = 2
 PRESETS = {
     "diamonds": [(100, "مشت الماس"), (250, "کیسه‌ی الماس"), (500, "صندوق الماس"), (1000, "ویترین الماس"), (2500, "گنجینه‌ی الماس")],
     "coins": [(500_000, "کیسه‌ی طلا"), (1_000_000, "کوزه‌ی طلا"), (2_500_000, "صندوق طلا"), (5_000_000, "گاوصندوق طلا"), (10_000_000, "کوه طلا")],
-    "dna": [(10_000, "ویال DNA"), (25_000, "سه‌ویال DNA"), (50_000, "کیف DNA"), (100_000, "راکتور DNA")],
+    "dna": [(10_000, "ویال دی‌ان‌ای"), (25_000, "سه‌ویال دی‌ان‌ای"), (50_000, "کیف دی‌ان‌ای"), (100_000, "راکتور دی‌ان‌ای")],
 }
 PRESET_ART = {"diamonds": "diamond", "coins": "gold", "dna": "dna"}
 
@@ -564,12 +564,12 @@ def _pending(user):
 
 
 def _pay_info(req) -> dict:
-    from config import BOT_USERNAME
+    from config import get_bot_username
     from game import botconfig, purchase
 
     card, holder = botconfig.get_buy_card()
     return {"id": req.id, "summary": clean(purchase.request_summary(req)), "price": req.price_toman,
-            "card": card, "holder": holder, "bot": BOT_USERNAME or None, "hours": RECEIPT_WINDOW_H}
+            "card": card, "holder": holder, "bot": get_bot_username() or None, "hours": RECEIPT_WINDOW_H}
 
 
 @endpoint()
@@ -592,13 +592,22 @@ def paid(request, user):
                 if prices[res] > 0 and price >= minimum and amount <= purchase.MAX_UNITS[res]:
                     presets.append({"res": res, "amount": amount, "name": name, "price": price,
                                     "img": f"img/{PRESET_ART[res]}_{min(i, 5 if res != 'dna' else 4)}.jpg"})
+    from game import paid_offers
+
+    deals = paid_offers.list_for_user(user)
+    for bucket in deals.values():
+        for d in bucket:
+            d["gets"] = clean(d.get("gets") or "")
+            d["title"] = clean(d["title"])
     pending = _pending(user)
+    ready = botconfig.store_ready() or (bool(botconfig.get_buy_card()[0]) and paid_offers.any_live())
     return {
-        "ready": botconfig.store_ready(), "custom": custom, "min": minimum,
+        "ready": ready, "custom": custom, "min": minimum,
         "link": {"url": link[0], "title": clean(link[1])} if link else None,
         "prices": prices, "steps": purchase.STEP, "max": purchase.MAX_UNITS,
         "packs": packs, "presets": presets, "vip": _vip_data(user),
         "offers": offers_payload(user),
+        "deals": deals,
         "pending": {"summary": clean(purchase.request_summary(pending)), "price": pending.price_toman} if pending else None,
         "banner": "img/store_banner.jpg",
     }
@@ -608,9 +617,12 @@ def paid(request, user):
 def paid_order(request, user, data):
     """Place an order (pack / ready-made package / VIP / custom amount) and get the card to pay;
     the bot also sends the card and the receipt instructions to the player's chat."""
-    from game import botconfig, outbox, purchase
+    from game import botconfig, purchase
 
     botconfig.refresh_cache()
+    card, _holder = botconfig.get_buy_card()
+    if not card:
+        raise GameError("پرداخت کارت‌به‌کارت فعلاً فعال نیست — کارت بانکی ثبت نشده.")
     kind = need_str(data, "kind", ("pack", "preset", "vip", "custom", "item"))
     if kind == "vip":
         req = purchase.create_subscription_pending(user, need_str(data, "tier"))
@@ -630,7 +642,9 @@ def paid_order(request, user, data):
         else:
             amt = {r: need_int(data, r, 0, purchase.MAX_UNITS[r]) if data.get(r) not in (None, "") else 0 for r in ("coins", "dna", "diamonds")}
             req = purchase.create_pending(user, **amt)
-    outbox.push("purchase_card", {"user_id": user.id, "req_id": req.id})
+    # Immediate DM from this web process (don't wait for the bot outbox tick),
+    # plus an outbox backup so the bot can re-send with its keyboard.
+    purchase.deliver_receipt_card(user.id, req)
     return _pay_info(req)
 
 
@@ -641,6 +655,16 @@ def paid_card(request, user):
     if req is None:
         raise GameError("سفارش بازی نداری؛ اگه رسید فرستادی، منتظر تأیید باش.")
     return _pay_info(req)
+
+
+@endpoint("POST")
+def paid_cancel(request, user, data):
+    """Cancel the open awaiting-receipt draft (before a photo was sent)."""
+    from game import purchase
+
+    if not purchase.cancel_awaiting(user):
+        raise GameError("سفارش بازی برای لغو نیست.")
+    return {"ok": True}
 
 
 routes = [
@@ -667,4 +691,5 @@ routes = [
     ("paid/", paid),                # GET  the real-money store
     ("paid/order/", paid_order),    # POST place an order → card to pay (+ the bot DMs it)
     ("paid/card/", paid_card),      # GET  the card again for the open order
+    ("paid/cancel/", paid_cancel),  # POST cancel awaiting-receipt draft
 ]

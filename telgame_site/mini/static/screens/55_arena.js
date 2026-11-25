@@ -221,7 +221,7 @@
             var lost = K.amounts({ coins: h.coins, dna: h.dna });
             return '<div style="color:' + (h.won ? "var(--bad)" : "var(--good)") + '"><span class="ic">' + K.ic(h.won ? "warn" : "shieldcheck") + '</span><span class="t">' + K.esc(h.name) + "<small>" + (h.won ? "غارتت کرد" : "دفاع کردی") + " · قدرت " + K.n(h.power) + " · " + K.esc(K.dur(Math.max(60, now - h.at))) + ' پیش</small></span><span class="v">' + (lost ? '<span class="faint">−</span> ' + lost : "") + "</span></div>";
           }).join("") + "</div>" : '<div class="panel pad muted sm center">هنوز کسی بهت حمله نکرده.</div>') +
-          '<p class="note">هر حمله ' + K.n(d.energy_cost) + " انرژی · برد = " + K.n(d.loot_percent) + "٪ طلا و DNA حریف</p>";
+          '<p class="note">هر حمله ' + K.n(d.energy_cost) + " انرژی · برد = " + K.n(d.loot_percent) + "٪ طلا و دی‌ان‌ای حریف</p>";
         K.timers(root);
         K.on(root, "find", function () { K.go("ar_opponent", { fresh: true }); });
         K.on(root, "chests", function () { K.go("ar_chests"); });
@@ -350,7 +350,7 @@
         '<div class="ar-lab">' + K.ic("user") + '<span class="cut">' + K.esc(o.label) + "</span></div>" +
         '<div class="center" style="padding:0 12px 12px">' + adv.html + "</div></div>" +
         '<div class="panel pad mt">' + (taken ? '<div class="flex between"><span class="muted">' + K.ic("revenge") + " ازت برده بود</span><span>" + taken + "</span></div>" : "") +
-        '<div class="sm muted" style="margin-top:' + (taken ? 6 : 0) + 'px">اگه ببری ۱۰٪ طلا و DNA الانش رو می‌گیری.</div>' + swing(c.cup_win, c.cup_loss) + "</div>" +
+        '<div class="sm muted" style="margin-top:' + (taken ? 6 : 0) + 'px">اگه ببری ۱۰٪ طلا و دی‌ان‌ای الانش رو می‌گیری.</div>' + swing(c.cup_win, c.cup_loss) + "</div>" +
         (c.opp_shield > 0 ? '<div class="callout warn mt">' + K.ic("shield") + "<div>این بازیکن الان سپر داره (" + K.esc(K.dur(c.opp_shield)) + "). تا تموم نشه نمی‌شه بهش حمله کرد.</div></div>" : "") +
         shieldNote(c) + (c.opp_shield > 0 ? "" : K.serumRow(c.serum)) +
         '<div class="mt">' + (c.opp_shield > 0 ? '<button class="btn lg block" disabled>' + K.ic("shield") + "سپر داره</button>" : attackBtn("revenge", "شروع انتقام", c)) + "</div>" +
@@ -384,7 +384,7 @@
   function chestLines(c) {
     return '<div class="panel kv mt"><div><span>لیگِ زمان دریافت</span><span>' + K.esc(c.league) + ' <span class="muted">(کاپ ' + K.n(c.cup) + ")</span></span></div>" +
       "<div><span>زمان بازگشایی</span><span>" + K.n(c.unlock_hours) + " ساعت</span></div>" +
-      "<div><span>طلا و DNA</span><span>" + K.amounts({ coins: c.coins, dna: c.dna }) + "</span></div>" +
+      "<div><span>طلا و دی‌ان‌ای</span><span>" + K.amounts({ coins: c.coins, dna: c.dna }) + "</span></div>" +
       (c.has_diamonds ? '<div><span>الماس</span><span class="t-diamond">' + K.ic("diamond") + " بونس ویژه</span></div>" : "") +
       "<div><span>هیولا یا تجهیزات</span><span>" + (c.creature_chance >= 1 ? "همیشه هیولا" : K.pct(c.creature_chance) + " هیولا، وگرنه تجهیزات") + "</span></div>" +
       "<div><span>حداقل نایابی</span><span>" + K.rarTag(c.min_rarity) + "</span></div>" +

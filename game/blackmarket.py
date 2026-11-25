@@ -112,7 +112,7 @@ PROGRAMME: tuple[dict, ...] = (
     )},
     {"key": "genetics", "emoji": "🧬", "title": "شب ژنتیک", "lots": (
         ("🥚 تخم کایجوی تصادفی اساطیری", "egg", {"rarity": "mythic", "minutes": 60}, "diamonds", 300),
-        ("🧬 محموله ۲۰٬۰۰۰ تایی DNA", "dna", {"amount": 20_000}, "coins", 40_000),
+        ("🧬 محموله ۲۰٬۰۰۰ تایی دی‌ان‌ای", "dna", {"amount": 20_000}, "coins", 40_000),
         ("👑 جعبه‌ی امگا", "arena_chest", {"tier": "mega", "count": 1}, "coins", 60_000),
     )},
     {"key": "armory", "emoji": "⚔️", "title": "شب جنگ‌افزار", "lots": (

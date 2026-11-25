@@ -80,11 +80,11 @@ def _active_power(user: User) -> int:
 # The diamond vein pays a flat random amount, INDEPENDENT of the claimer's power —
 # diamonds are the premium currency, so a strong player shouldn't out-mine a weak one
 # on the vein (it already has a per-hour + daily cap). Everything else DOES scale with
-# power, and strongly, so a powerful kaiju is a real edge on gold/DNA drops.
+# power, and strongly, so a powerful kaiju is a real edge on gold/دی‌ان‌ای drops.
 VEIN_DIAMONDS_MIN = 10
 VEIN_DIAMONDS_MAX = 30
 # power's weight in the (non-vein) reward multiplier — doubled so a strong player earns
-# markedly more gold/DNA from drops than a weak one.
+# markedly more gold/دی‌ان‌ای from drops than a weak one.
 DROP_POWER_FACTOR = 0.0030
 
 

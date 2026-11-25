@@ -1,7 +1,7 @@
 """«تابلوی سفارش تاجر» — a Hay Day–style order board.
 
 Three merchants wait on the board at once, each with an order of up to two things the player
-can make or spare (serums, a spare creature of some rarity, unworn gear — never raw DNA or gold,
+can make or spare (serums, a spare creature of some rarity, unworn gear — never raw دی‌ان‌ای or gold,
 the exchange already trades those; with nothing to sell, no merchant comes). Delivering
 pays gold and lab XP, sometimes an extra (a speed card, a dungeon key, a chest, legendary
 gear) and rarely a few diamonds. Delivering or turning an order down empties its slot for
@@ -49,7 +49,7 @@ GEAR_VALUE = {"common": 0.5, "rare": 1, "epic": 2, "legendary": 4, "mythic": 8}
 SERUM_VALUE = 2.5
 # The GOLD an order pays is priced per item, between what the game already pays and charges for
 # that thing, so an order beats selling but never beats buying (no buy-here-sell-there loop).
-GOLD_PER_DNA = 15                         # a serum's worth = the DNA it took to brew × this
+GOLD_PER_DNA = 15                         # a serum's worth = the دی‌ان‌ای it took to brew × this
 CREATURE_GOLD = {"common": 2000, "rare": 6000, "epic": 15000}    # a crate costs far more per creature
 GEAR_GOLD = {r: round(g * 2.5) for r, g in constants.EQUIP_RECYCLE_GOLD.items()}   # recycle pays ×1
 ASKED_RARITIES = ("common", "rare", "epic")   # nobody is asked to give up a legendary or mythic
@@ -189,7 +189,7 @@ def _board(user: User, lock: bool = False) -> MerchantBoard:
 
 
 def _valid(order: dict | None) -> bool:
-    """An order saved under older rules (DNA/gold asks, a removed serum) can't be shown or filled."""
+    """An order saved under older rules (دی‌ان‌ای/gold asks, a removed serum) can't be shown or filled."""
     from game import serums
 
     for r in (order or {}).get("reqs", []):
@@ -444,7 +444,7 @@ def _grant_extra(user: User, row: MerchantBoard, extra: dict) -> str:
             tier = "golden"   # a magical chest's diamonds count toward the daily cap
         res = grant_chest_contents(user, tier, user.cup, source="merchant")
         row.diamonds_today += res.get("diamonds", 0)
-        bits = [f"{res['coins']:,} طلا", f"{res['dna']:,} DNA"]
+        bits = [f"{res['coins']:,} طلا", f"{res['dna']:,} دی‌ان‌ای"]
         def rarity_word(r):   # «⚪ معمولی» → «معمولی»: the emoji would sit mid-sentence
             return constants.RARITY_LABELS.get(r, r).split()[-1]
 

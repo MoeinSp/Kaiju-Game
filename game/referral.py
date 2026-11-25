@@ -26,7 +26,7 @@ from game import lab
 
 # A reward: {"diamonds", "coins", "dna": int, "cards": [(minutes, count)], "relics": int}.
 # Each step: (lab level, separate days played, referrer's reward, friend's reward).
-# Owner's numbers (2026-11-11): the referrer gets 350 💎 / 2,000,000 gold / 100,000 DNA in
+# Owner's numbers (2026-11-11): the referrer gets 350 💎 / 2,000,000 gold / 100,000 دی‌ان‌ای in
 # all; the friend gets 3× their first draft in diamonds, cards and relics.
 STEPS = [
     (3, 2,

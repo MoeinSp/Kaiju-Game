@@ -11,7 +11,7 @@ Two halves:
   screens that were never rewritten:
     - Persian/Arabic digits → English (and «٬» «٫» «٪» → «,» «.» «%»)
     - «3 از 7» → <code>3/7</code> (plain «3/7» where a code entity can't nest)
-    - a number with a glued sign («-1235», «❤️+341») and every Latin run (names, DNA, VIP)
+    - a number with a glued sign («-1235», «❤️+341») and every Latin run (names, دی‌ان‌ای, VIP)
       wrapped in FSI…PDI so the bidi algorithm can't move it across the Persian text
     - a leading rank «4.» isolated (otherwise phones show «.4»)
     - a line whose first strong letter isn't Persian gets an RLM, so it stays right-to-left

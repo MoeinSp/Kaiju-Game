@@ -26,7 +26,7 @@ HUNT_TIERS = {
 }
 # reward_mult was 0.6 / 1.0 / 2.8 while a fight was a dice roll (≈96% / 67% / 34% to win).
 # Duels are deterministic now: the card says «می‌بری» or «می‌بازی», so nobody spends
-# energy on a loss — every hunt taken is a win. To keep gold/DNA/XP PER ENERGY where it
+# energy on a loss — every hunt taken is a win. To keep gold/دی‌ان‌ای/XP PER ENERGY where it
 # was, the per-win reward is re-based to roughly (old reward × old win chance):
 # 0.6×0.96≈0.6, 1.0×0.67→0.8, 2.8×0.34→1.2 (kept above the plain expectation so the
 # harder targets are still worth looking for). The HUNT_MAX_COIN cap is unchanged.
@@ -36,7 +36,7 @@ HUNT_TIERS = {
 # (a risk/reward difficulty knob).
 HUNT_COIN_PER_POWER = 0.40   # gold income doubled again (was 0.20) per owner request
 HUNT_DNA_PER_POWER = 0.012
-# a flat multiplier on ALL hunt loot (gold and DNA), applied on top of the ranges below
+# a flat multiplier on ALL hunt loot (gold and دی‌ان‌ای), applied on top of the ranges below
 # (and after the gold cap) so it lifts the preview, the payout AND the cap together.
 # Two +10% bumps per owner request → 1.10 × 1.10 = 1.21 (+21% over the base curve).
 # … × constants.ENERGY_REBASE: a bar is 30 hunts instead of 50, each pays 50/30 as much.
@@ -349,7 +349,7 @@ def resolve_auto_hunt(user: User, creature: Creature, hunts: int,
     simulation (that made a 50-hunt batch crawl). Each hunt independently wins with the
     calibrated power-ratio probability (targets have random elements → treated as neutral)
     and rolls half loot on a win (plus subscription bonus if active). Applies aggregated
-    gold/DNA/XP/lab in one shot and returns the totals. Caller handles energy + mission counting."""
+    gold/دی‌ان‌ای/XP/lab in one shot and returns the totals. Caller handles energy + mission counting."""
     from game.ledger import record_gain
     from game.subscription import get_subscription_tier
 
@@ -452,7 +452,7 @@ def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal",
     """Plays out one solo PvE encounter and applies rewards. Caller handles energy. The
     wild is sized to the player's STRONGEST kaiju (fixed by the seed), so whichever
     creature they bring fights the SAME opponent — switching to the right element is the
-    strategy, not a way to shrink the target. `loot_mult` scales the gold/DNA payout —
+    strategy, not a way to shrink the target. `loot_mult` scales the gold/دی‌ان‌ای payout —
     auto-hunt passes AUTO_HUNT_LOOT_MULT (0.5) so it earns half of a manual hunt."""
     # apply the owner's 🔬 research combat buffs to the player's kaiju for this fight
     from game import research
@@ -547,7 +547,7 @@ def resolve_encounter_action(user: User, player_creature: Creature, enc_type: st
                 diamonds = random.randint(3, 7)
                 coins = round(base_coin * random.uniform(0.8, 1.1))
                 dna = round(base_dna * random.uniform(0.7, 1.1))
-                msg = f"🎉 <b>قفل صندوقچه باستانی شکست!</b> غنائمی معادل ۱۰ شکار کامل شامل <b>{coins:,} طلا</b>، <b>{dna} DNA</b> و <b>{diamonds} الماس</b> کشف شد!"
+                msg = f"🎉 <b>قفل صندوقچه باستانی شکست!</b> غنائمی معادل ۱۰ شکار کامل شامل <b>{coins:,} طلا</b>، <b>{dna} دی‌ان‌ای</b> و <b>{diamonds} الماس</b> کشف شد!"
             else:
                 loss = max(0, min(round(base_coin * 0.25), user.coins))
                 user.coins -= loss
@@ -563,7 +563,7 @@ def resolve_encounter_action(user: User, player_creature: Creature, enc_type: st
             coins = round(base_coin * random.uniform(0.9, 1.15))
             dna = round(base_dna * random.uniform(0.8, 1.2))
             xp_gain = max(50, round(power * 0.06))
-            msg = f"⚔️ <b>کایجوی دزد شکست خورد!</b> کیسه غنائم سنگینش (معادل ۱۰ شکار) شامل <b>{coins:,} طلا</b> و <b>{dna} DNA</b> به دست تو افتاد!"
+            msg = f"⚔️ <b>کایجوی دزد شکست خورد!</b> کیسه غنائم سنگینش (معادل ۱۰ شکار) شامل <b>{coins:,} طلا</b> و <b>{dna} دی‌ان‌ای</b> به دست تو افتاد!"
         else:
             msg = "🏃 از کایجوی دزد فاصله گرفتی و گذاشتی در تاریکی فرار کنه."
             return {"success": True, "msg": msg, "coins": 0, "dna": 0, "diamonds": 0, "energy": 0}
@@ -573,7 +573,7 @@ def resolve_encounter_action(user: User, player_creature: Creature, enc_type: st
             coins = round(base_coin * random.uniform(0.7, 0.95))
             dna = round(base_dna * random.uniform(1.0, 1.5))
             diamonds = random.randint(2, 5)
-            msg = f"💎 <b>غار کریستالی:</b> در اعماق غار درخشان، <b>{coins:,} طلا</b>، <b>{dna} DNA</b> و <b>{diamonds} الماس</b> استخراج کردی!"
+            msg = f"💎 <b>غار کریستالی:</b> در اعماق غار درخشان، <b>{coins:,} طلا</b>، <b>{dna} دی‌ان‌ای</b> و <b>{diamonds} الماس</b> استخراج کردی!"
         else:
             coins = round(base_coin * random.uniform(1.0, 1.3))
             dna = round(base_dna * random.uniform(0.5, 0.8))

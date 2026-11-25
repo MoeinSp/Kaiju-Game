@@ -32,7 +32,7 @@ What `endpoint` does for you:
   * turns `GameError` into HTTP 400 `{"error": "<plain Persian text>", "code": ...}` with
     code "energy" for EnergyError and "gold" for InsufficientGoldError; everything else is a
     logged 500. So: just let game functions raise.
-  * adds `"res": {...}` (the player's CURRENT gold / DNA / diamonds / energy / cup, re-read
+  * adds `"res": {...}` (the player's CURRENT gold / دی‌ان‌ای / diamonds / energy / cup, re-read
     from the database) to every successful response, so the app's top bar is always right
     without a second request.
   * sends the JSON compact and gzip-compressed (when it is big enough and the client

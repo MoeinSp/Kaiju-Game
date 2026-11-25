@@ -1695,6 +1695,11 @@ class ShopItem(models.Model):
     offer_ends_at = models.DateTimeField(null=True, blank=True)
     offer_discount = models.PositiveSmallIntegerField(default=0)
     offer_art = models.CharField(max_length=32, blank=True, default="")
+    # rotating real-money deals in the buy store (game/paid_offers.py). Empty = classic
+    # one-off «پیشنهاد ویژه». daily/weekly items sit in a pool and a deterministic pick
+    # for the current Tehran day/week is shown; offer_period_limit caps buys per period.
+    offer_cadence = models.CharField(max_length=12, blank=True, default="")  # "" | daily | weekly
+    offer_period_limit = models.PositiveSmallIntegerField(default=1)
 
     def __str__(self) -> str:
         return f"{self.title} ({self.price_coins}c/{self.price_diamonds}d)"
@@ -1710,6 +1715,35 @@ class ShopItemPurchase(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["user", "item"], name="uq_shop_purchase")]
+
+
+class PaidOfferClaim(models.Model):
+    """Per-period buy count for a daily/weekly paid deal (Tehran day or ISO week key)."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="paid_offer_claims")
+    item = models.ForeignKey(ShopItem, on_delete=models.CASCADE, related_name="period_claims")
+    period_key = models.CharField(max_length=24)  # "d:2026-11-25" | "w:2026-W48"
+    count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "item", "period_key"], name="uq_paid_offer_claim"),
+        ]
+
+
+class CreaturePickTicket(models.Model):
+    """One unused ticket = one player-chosen creature (paid-offer «اساطیری دلخواه»).
+
+    Granted by itemshop ``creature_pick`` components; redeemed when the player picks a
+    species from ``constants.SPECIES`` (name implies element)."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="creature_pick_tickets")
+    rarity = models.CharField(max_length=16, default="mythic")
+    created_at = models.DateTimeField(auto_now_add=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+    result_creature = models.ForeignKey(
+        "Creature", null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+    )
 
 
 class BotConfig(models.Model):

@@ -21,7 +21,7 @@ def _reward_lines(reward: dict) -> list[str]:
     if reward.get("coins"):
         lines.append(f"{get_emoji('coin')} طلا: <code>+{reward['coins']:,}</code>")
     if reward.get("dna"):
-        lines.append(f"{get_emoji('dna')} DNA: <code>+{reward['dna']:,}</code>")
+        lines.append(f"{get_emoji('dna')} دی‌ان‌ای: <code>+{reward['dna']:,}</code>")
     if reward.get("diamonds"):
         lines.append(f"{get_emoji('diamond')} الماس: <code>+{reward['diamonds']:,}</code>")
     if reward.get("speedup"):

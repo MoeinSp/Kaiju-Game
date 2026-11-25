@@ -242,7 +242,7 @@ def _parse_content_line(line: str) -> dict:
     if head in _DNA_WORDS:
         n = _to_int(rest[0]) if rest else None
         if not n or n <= 0:
-            raise GameError(f"مقدار DNA توی «{line}» درست نیست.")
+            raise GameError(f"مقدار دی‌ان‌ای توی «{line}» درست نیست.")
         return {"type": "dna", "amount": n}
     if head in ("کارت", "speedup", "سرعت"):
         minutes = _to_int(rest[0]) if rest else None
@@ -277,40 +277,68 @@ def _parse_content_line(line: str) -> dict:
     )
 
 
+def _rarity_word(rarity: str) -> str:
+    """«اساطیری» from «🔴 اساطیری» — summaries shouldn't repeat the emoji+word twice."""
+    label = constants.RARITY_LABELS.get(rarity, rarity)
+    parts = label.split(maxsplit=1)
+    return parts[-1] if parts else rarity
+
+
 # ── rendering ─────────────────────────────────────────────────────────────────
 def content_summary(contents: list[dict]) -> str:
-    parts = []
+    """One line for shop cards. Identical lines collapse to ``N× …`` so two mythic
+    picks read as «۲× اساطیری دلخواه», not «هیولای اساطیری + هیولای اساطیری»."""
+    ordered: list[tuple[str, int]] = []
+    index: dict[str, int] = {}
+
+    def add(label: str, n: int = 1) -> None:
+        n = max(1, int(n or 1))
+        if label in index:
+            i = index[label]
+            ordered[i] = (label, ordered[i][1] + n)
+        else:
+            index[label] = len(ordered)
+            ordered.append((label, n))
+
     for c in contents:
         t = c["type"]
         if t == "coins":
-            parts.append(f"{c['amount']:,} طلا")
+            add(f"{c['amount']:,} طلا")
         elif t == "diamonds":
-            parts.append(f"{c['amount']} 💎")
+            add(f"{c['amount']} 💎")
         elif t == "dna":
-            parts.append(f"{c['amount']} DNA")
+            add(f"{c['amount']:,} دی‌ان‌ای")
         elif t == "energy":
-            parts.append("انرژی کامل")
+            add("انرژی کامل")
         elif t == "xp_capsule":
             cap = constants.XP_CAPSULES.get(c.get("tier"), {})
-            parts.append(f"{c.get('count', 1)}× {cap.get('emoji', '🧪')} {cap.get('label', 'کپسول اکسپی')}")
+            add(f"{cap.get('emoji', '🧪')} {cap.get('label', 'کپسول اکسپی')}", c.get("count", 1))
         elif t == "speedup":
-            parts.append(f"{c['count']}× کارت سرعت {c['minutes']}دقیقه")
+            add(f"کارت سرعت {c['minutes']}دقیقه", c["count"])
+        elif t == "creature_pick":
+            add(f"{_rarity_word(c.get('rarity') or 'mythic')} دلخواه", c.get("count", 1))
         elif t == "creature":
-            r = constants.RARITY_LABELS[c["rarity"]]
             el = f" {constants.ELEMENT_WORDS[c['element']]}" if c.get("element") else ""
             nm = f" «{c['name']}»" if c.get("name") else ""
-            parts.append(f"هیولای {r}{el}{nm}")
+            add(f"هیولای {_rarity_word(c['rarity'])}{el}{nm}")
         elif t == "equipment":
             nm = f" «{c['name']}»" if c.get("name") else ""
-            parts.append(f"{constants.EQUIPMENT_SLOT_LABELS[c['slot']]} {constants.RARITY_LABELS[c['rarity']]}{nm}")
+            add(f"{constants.EQUIPMENT_SLOT_LABELS[c['slot']]} {_rarity_word(c['rarity'])}{nm}")
         elif t in EXTRA_TYPES:
-            parts.append(extra_label(c))
-    return " + ".join(parts) or "—"
+            add(extra_label(c))
+    out = []
+    for label, n in ordered:
+        # extra_label for chests already embeds its own «N× …»
+        if n > 1 and not label[:1].isdigit():
+            out.append(f"{n}× {label}")
+        else:
+            out.append(label)
+    return " + ".join(out) or "—"
 
 
 # Contents only a real-money pack used to lack: prize boxes (opened by the player), VIP days,
-# dungeon keys and shadow cores. Granted by grant_contents like the rest.
-EXTRA_TYPES = ("chest", "vip", "dungeon_keys", "shadow_cores")
+# dungeon keys, shadow cores, and pick-your-species tickets. Granted by grant_contents.
+EXTRA_TYPES = ("chest", "vip", "dungeon_keys", "shadow_cores", "creature_pick")
 
 
 def extra_label(c: dict) -> str:
@@ -318,13 +346,20 @@ def extra_label(c: dict) -> str:
     if t == "chest":
         from game.arena_chests import ARENA_CHEST_TIERS
 
-        return f"{c.get('count', 1)}× {ARENA_CHEST_TIERS[c['tier']]['name']}"
+        tier = c["tier"]
+        # accept legacy alias used in copy («omega») → arena key «mega»
+        if tier == "omega":
+            tier = "mega"
+        return f"{c.get('count', 1)}× {ARENA_CHEST_TIERS[tier]['name']}"
     if t == "vip":
         from game.subscription import SUBSCRIPTION_TIERS
 
         return f"{SUBSCRIPTION_TIERS[c['tier']]['name']} {c['days']} روزه"
     if t == "dungeon_keys":
         return f"{c['amount']} کلید سیاه‌چال"
+    if t == "creature_pick":
+        n = max(1, int(c.get("count", 1)))
+        return f"{n}× {_rarity_word(c.get('rarity') or 'mythic')} دلخواه"
     return f"{c['amount']} هسته‌ی سایه"
 
 
@@ -406,7 +441,7 @@ def grant_contents(user: User, contents: list[dict], ref: int | None = None) -> 
         elif t == "diamonds":
             user.diamonds += c["amount"]; money_fields.add("diamonds"); notes.append(f"{c['amount']} 💎")
         elif t == "dna":
-            user.dna_fragments += c["amount"]; money_fields.add("dna_fragments"); notes.append(f"{c['amount']} DNA")
+            user.dna_fragments += c["amount"]; money_fields.add("dna_fragments"); notes.append(f"{c['amount']} دی‌ان‌ای")
         elif t == "energy":
             from django.utils import timezone
             from game.energy import get_max_energy
@@ -434,9 +469,17 @@ def grant_contents(user: User, contents: list[dict], ref: int | None = None) -> 
         elif t == "chest":
             from game import reward_chests
 
+            tier = "mega" if c.get("tier") == "omega" else c["tier"]
             for _ in range(max(1, int(c.get("count", 1)))):
-                reward_chests.give(user, c["tier"], OFFER_CHEST_SOURCE, ref)
-            notes.append(extra_label(c) + " (باز نشده)")
+                reward_chests.give(user, tier, OFFER_CHEST_SOURCE, ref)
+            notes.append(extra_label({**c, "tier": tier}) + " (باز نشده)")
+        elif t == "creature_pick":
+            from game import creature_pick
+
+            n = creature_pick.grant_tickets(
+                user, rarity=c.get("rarity") or "mythic", count=c.get("count", 1),
+            )
+            notes.append(f"{n}× {_rarity_word(c.get('rarity') or 'mythic')} دلخواه (انتخاب کن)")
         elif t == "vip":
             from game.subscription import activate_subscription
 

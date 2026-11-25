@@ -67,7 +67,7 @@ async def biocrate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "هرچه سطح باکس بالاتر باشد، شانس دریافت هیولا و نایابی آن بیشتر خواهد بود.</blockquote>",
         "",
         f"💰 موجودی طلا: <code>{coins:,}</code>",
-        f"🧬 موجودی DNA: <code>{dna:,}</code>{ticket_line}",
+        f"🧬 موجودی دی‌ان‌ای: <code>{dna:,}</code>{ticket_line}",
         "",
         "<i>یکی از باکس‌های زیر را انتخاب کنید:</i>",
     ]
@@ -98,7 +98,7 @@ def _biocrate_detail_text(tier: str) -> str:
         f"{cfg['label']}",
         "━━━━━━━━━━━━━━━━━━━━",
         f"<blockquote>💰 هزینه طلا: <code>{cfg['gold']:,}</code> {get_emoji('coin')}\n"
-        f"🧬 هزینه DNA: <code>{cfg['dna']:,}</code> {get_emoji('dna')}</blockquote>",
+        f"🧬 هزینه دی‌ان‌ای: <code>{cfg['dna']:,}</code> {get_emoji('dna')}</blockquote>",
         "",
         f"🎒 <b>تجهیزات</b> (مجموعاً <code>{(1 - cc) * 100:g}٪</code>):",
     ]
@@ -131,7 +131,7 @@ def _biocrate_ticket_note(tier: str, tickets: int) -> str:
         return ""
     return (
         f"\n\n<blockquote>🎟 موجودی بلیط: <code>{tickets:,}</code>\n"
-        "در ابتدا بلیط‌ها مصرف می‌شوند و برای باقیمانده طلا و DNA کسر خواهد شد.</blockquote>"
+        "در ابتدا بلیط‌ها مصرف می‌شوند و برای باقیمانده طلا و دی‌ان‌ای کسر خواهد شد.</blockquote>"
     )
 
 

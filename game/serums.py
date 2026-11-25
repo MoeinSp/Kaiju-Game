@@ -1,20 +1,20 @@
 """«آزمایشگاه سرم» — brew-wait-use, like the spells of Clash of Clans.
 
 The building («serum_lab», built like any other) brews every queued serum side by side (each
-on its own clock, 2026-11-05 — it used to be one at a time), with DNA paid when it is queued. Finished serums wait on a shelf whose size grows with the
+on its own clock, 2026-11-05 — it used to be one at a time), with دی‌ان‌ای paid when it is queued. Finished serums wait on a shelf whose size grows with the
 building. A serum is then USED: repair acts at once; shell is armed in the lab for the next
 defence; rage, tracker, warrior and giant-slayer are chosen on their own action screen (the
 arena attack / hunt card / group «اتک» / boss hit — see MOMENT) and spent by that action.
 
-Each serum also has its own level, 1 to 5, raised inside the lab (gold + DNA + time, one at
+Each serum also has its own level, 1 to 5, raised inside the lab (gold + دی‌ان‌ای + time, one at
 a time, never above the building's level). The level sets the size of its effect.
 
 Rules that keep it fair: brewing has no daily cap — the shelf size and the brewing time are the
 limit; the heal serum is capped per dungeon run (dungeon.HEALS_PER_RUN). There is no energy
-serum: a hunt costs 1 energy, so an uncapped +energy serum paid its own DNA back and made gold
+serum: a hunt costs 1 energy, so an uncapped +energy serum paid its own دی‌ان‌ای back and made gold
 without end (it was removed). Shelf + brewing never exceed the shelf size. The brewing can be
 skipped for diamonds (finish_with_diamonds, FINISH_PER_SERUM a serum), but never the shelf size.
-Any queued serum can be cancelled for its DNA back; a shelf serum can be thrown away (no refund).
+Any queued serum can be cancelled for its دی‌ان‌ای back; a shelf serum can be thrown away (no refund).
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ def power_basis(user: User) -> int:
 
 
 def brew_cost(user: User) -> int:
-    """DNA per serum: about two and a half hunts' worth of DNA for this player's power."""
+    """دی‌ان‌ای per serum: about two and a half hunts' worth of دی‌ان‌ای for this player's power."""
     from game.hunt import HUNT_DNA_PER_POWER, HUNT_LOOT_BONUS
 
     return max(50, round(power_basis(user) * HUNT_DNA_PER_POWER * HUNT_LOOT_BONUS * 2.5))
@@ -180,7 +180,7 @@ def _lefts(row: SerumLab, level: int, now: datetime.datetime) -> list[int]:
 
 
 def _drop(row: SerumLab, index: int) -> int:
-    """Take queued serum `index` out (with its start and price); returns the DNA paid for it."""
+    """Take queued serum `index` out (with its start and price); returns the دی‌ان‌ای paid for it."""
     queue, starts, paid = list(row.queue), list(row.starts or []), list(row.paid or [])
     queue.pop(index)
     if index < len(starts):
@@ -347,7 +347,7 @@ def toggle(user: User, kind: str) -> dict | None:
 
 # ── acting ────────────────────────────────────────────────────────────────────
 def brew(user: User, kind: str, count: int = 1) -> dict:
-    """Queue `count` serums of `kind`; the DNA is paid now (shelf + queue never exceed the shelf)."""
+    """Queue `count` serums of `kind`; the دی‌ان‌ای is paid now (shelf + queue never exceed the shelf)."""
     from bio_lab.repository import lock_row
 
     if kind not in KINDS:
@@ -369,7 +369,7 @@ def brew(user: User, kind: str, count: int = 1) -> dict:
         count = min(count, room)
         cost = brew_cost(user) * count
         if user.dna_fragments < cost:
-            raise GameError(f"DNA کافی نداری: برای {count} سرم {cost:,} DNA لازمه.")
+            raise GameError(f"دی‌ان‌ای کافی نداری: برای {count} سرم {cost:,} دی‌ان‌ای لازمه.")
         user.dna_fragments -= cost
         user.save(update_fields=["dna_fragments"])
         row.queue = list(row.queue) + [kind] * count
@@ -382,7 +382,7 @@ def brew(user: User, kind: str, count: int = 1) -> dict:
 
 
 def cancel_last(user: User) -> dict:
-    """Take the last queued (not yet brewing) serum off the queue and refund its DNA."""
+    """Take the last queued (not yet brewing) serum off the queue and refund its دی‌ان‌ای."""
     from bio_lab.repository import lock_row
 
     with transaction.atomic():
@@ -430,7 +430,7 @@ def finish_with_diamonds(user: User, max_cost: int | None = None) -> dict:
 
 
 def remove_queued(user: User, index: int, kind: str) -> dict:
-    """Cancel any serum in the brewing queue (the one brewing too) and refund the DNA paid for
+    """Cancel any serum in the brewing queue (the one brewing too) and refund the دی‌ان‌ای paid for
     it. `kind` must match what is at `index`, so a queue that moved on since the screen was drawn
     never cancels the wrong serum."""
     from bio_lab.repository import lock_row
@@ -449,7 +449,7 @@ def remove_queued(user: User, index: int, kind: str) -> dict:
 
 
 def discard(user: User, kind: str, count: int = 1) -> dict:
-    """Throw `count` serums of a kind off the shelf to make room (their DNA is not refunded)."""
+    """Throw `count` serums of a kind off the shelf to make room (their دی‌ان‌ای is not refunded)."""
     if kind not in KINDS:
         raise GameError("این سرم وجود نداره.")
     with transaction.atomic():
@@ -464,7 +464,7 @@ def discard(user: User, kind: str, count: int = 1) -> dict:
 
 
 def remove_kind(user: User, kind: str, count: int) -> dict:
-    """Cancel `count` queued serums of a kind — the last-started first — with their DNA back."""
+    """Cancel `count` queued serums of a kind — the last-started first — with their دی‌ان‌ای back."""
     from bio_lab.repository import lock_row
 
     if kind not in KINDS:
@@ -484,7 +484,7 @@ def remove_kind(user: User, kind: str, count: int) -> dict:
 
 
 def clear_all(user: User) -> dict:
-    """«حذف همه»: cancel the whole queue (DNA back) and empty the shelf (no refund). Armed
+    """«حذف همه»: cancel the whole queue (دی‌ان‌ای back) and empty the shelf (no refund). Armed
     serums are not on the shelf and stay armed."""
     from bio_lab.repository import lock_row
 
@@ -594,7 +594,7 @@ def hand_over(user: User, kind: str, count: int) -> None:
     row.save()
 
 def upgrade(user: User, kind: str) -> dict:
-    """Raise one serum a level (gold + DNA, takes real time, one at a time, never above the building)."""
+    """Raise one serum a level (gold + دی‌ان‌ای, takes real time, one at a time, never above the building)."""
     from bio_lab.repository import lock_row
 
     if kind not in KINDS:
@@ -615,7 +615,7 @@ def upgrade(user: User, kind: str) -> dict:
         if user.coins < gold:
             raise InsufficientGoldError(f"طلا کافی نداری: {gold:,} طلا لازمه.", need=gold, have=user.coins)
         if user.dna_fragments < dna:
-            raise GameError(f"DNA کافی نداری: {dna:,} DNA لازمه.")
+            raise GameError(f"دی‌ان‌ای کافی نداری: {dna:,} دی‌ان‌ای لازمه.")
         user.coins -= gold
         user.dna_fragments -= dna
         user.save(update_fields=["coins", "dna_fragments"])

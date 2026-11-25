@@ -1,10 +1,10 @@
 /* «خرید الماس و طلا» — the real-money store (api/shop.py paid/ → game/purchase.py).
-   Owner packs, ready-made packages (diamonds / gold / DNA, priced by the owner's per-unit prices),
+   Owner packs, ready-made packages (diamonds / gold / دی‌ان‌ای, priced by the owner's per-unit prices),
    VIP and a custom amount. Paying is the bot's card-to-card flow: an order shows the card here,
    the bot sends it to the chat too, and the receipt photo is sent in the bot chat for approval. */
 (function (K) {
   "use strict";
-  var RES = { diamonds: ["الماس", "diamond", "t-diamond"], coins: ["طلا", "coin", "t-coin"], dna: ["DNA", "dna", "t-dna"] };
+  var RES = { diamonds: ["الماس", "diamond", "t-diamond"], coins: ["طلا", "coin", "t-coin"], dna: ["دی‌ان‌ای", "dna", "t-dna"] };
   function toman(n) { return K.n(n) + " <small>تومان</small>"; }
   function pn(n) { return Number(n || 0).toLocaleString("en-US"); }
 
@@ -12,23 +12,29 @@
                   color: "var(--diamond)", go: "sh_buy", order: 1, art: "buy" });
 
   function openBot(bot) {
-    var url = "https://t.me/" + bot;
+    if (!bot) { K.toast("یوزرنیم ربات پیدا نشد", "bad"); return; }
+    var url = "https://t.me/" + String(bot).replace(/^@/, "");
     try { if (K.tg && K.tg.openTelegramLink) { K.tg.openTelegramLink(url); return; } } catch (e) {}
     window.open(url, "_blank");
   }
 
   /* the «pay & send the receipt» sheet for an open order */
-  function paySheet(p) {
+  function paySheet(p, onCancel) {
+    if (!p || !p.card) {
+      K.toast((p && p.error) || "کارت بانکی آماده نیست — دوباره امتحان کن", "bad");
+      return;
+    }
     var box = K.sheet('<div class="grab"></div><div class="pad st-pay">' +
       '<div class="ttl" style="font-size:20px">پرداخت و ارسال رسید</div>' +
       '<div class="panel pad st-order"><span class="muted sm">سفارش تو</span><b>' + K.esc(p.summary) + '</b><span class="st-sum">' + toman(p.price) + "</span></div>" +
       '<div class="st-step"><span class="st-no">۱</span><div class="grow">مبلغ رو به این کارت واریز کن:' +
       '<button class="st-card" data-copy="' + K.esc(p.card) + '"><span class="num">' + K.esc(p.card) + '</span><span class="st-copy">' + K.ic("doc") + "کپی</span></button>" +
       (p.holder ? '<div class="sm muted">به نام: <b>' + K.esc(p.holder) + "</b></div>" : "") + "</div></div>" +
-      '<div class="st-step"><span class="st-no">۲</span><div class="grow">عکس رسید رو توی <b>چت ربات</b> بفرست. کارت و راهنما همین الان اونجا هم برات فرستاده شد.' +
+      '<div class="st-step"><span class="st-no">۲</span><div class="grow">عکس رسید رو توی <b>چت همین ربات</b> بفرست. کارت و راهنما همین الان اونجا هم برات فرستاده شد.' +
       '<div class="sm muted">رسید رو تا ' + K.n(p.hours) + " ساعت بفرست؛ بعدش سفارش رو دوباره ثبت کن.</div></div></div>" +
       '<div class="st-step"><span class="st-no">۳</span><div class="grow">بعد از تأیید پشتیبانی، موجودی خودش به حسابت اضافه می‌شه.</div></div>' +
-      (p.bot ? '<button class="btn primary block lg mt" data-bot>' + K.ic("send") + "ارسال رسید در ربات</button>" : "") + "</div>");
+      (p.bot ? '<button class="btn primary block lg mt" data-bot>' + K.ic("send") + "ارسال رسید در ربات</button>" : "") +
+      '<button class="btn ghost block mt t-bad" data-cancel>' + K.ic("close") + "لغو سفارش</button></div>");
     box.addEventListener("click", function (ev) {
       var c = ev.target.closest("[data-copy]");
       if (c) {
@@ -36,7 +42,18 @@
         try { navigator.clipboard.writeText(c.dataset.copy).then(done, done); } catch (e) { done(); }
         return;
       }
-      if (ev.target.closest("[data-bot]")) openBot(p.bot);
+      if (ev.target.closest("[data-bot]")) { openBot(p.bot); return; }
+      if (ev.target.closest("[data-cancel]")) {
+        K.confirm({ title: "لغو سفارش؟", danger: true, ok: "آره، لغو کن", cancel: "نه",
+          text: "سفارش حذف می‌شه و باید دوباره ثبتش کنی." }).then(function (yes) {
+          if (!yes) return;
+          K.api.post("shop/paid/cancel/", {}, box).then(function () {
+            K.closeSheet();
+            K.toast("سفارش لغو شد", "ok");
+            if (onCancel) onCancel();
+          });
+        });
+      }
     });
   }
   K.paySheet = paySheet;
@@ -51,6 +68,33 @@
           '<span class="st-art"><img src="' + K.asset(img) + '" alt="" loading="lazy"></span>' +
           '<span class="st-name">' + K.esc(name) + "</span>" + amount +
           '<span class="st-price">' + toman(price) + "</span></button>";
+      }
+      function dealCard(o, kick) {
+        var sold = o.sold_out;
+        return '<button class="st-offer' + (sold ? " out" : "") + '" data-act="deal" data-id="' + o.id + '"' + (sold ? " disabled" : "") + ">" +
+          '<img src="' + K.asset(o.art) + '" alt="">' +
+          (o.discount ? '<span class="st-ribbon">-' + K.n(o.discount) + "٪</span>" : "") +
+          '<span class="st-obody"><small class="of-kick">' + K.ic("flame") + K.esc(kick) + "</small>" +
+          "<b>" + K.esc(o.title) + '</b><span class="sm muted cut">' + K.esc(o.gets || "") + "</span>" +
+          (o.ends_in != null ? '<span class="st-otime">' + K.ic("clock") + '<span class="num" data-oend="' + (Date.now() + o.ends_in * 1000) + '"></span></span>' : "") +
+          (o.left != null ? '<span class="sm muted">' + (sold ? "سقف این دوره پر شد" : "باقی‌مونده: " + K.n(o.left)) + "</span>" : "") +
+          '<span class="st-oprice">' + (o.discount ? '<s class="muted">' + K.n(o.original) + "</s> " : "") + toman(o.price) +
+          "</span></span></button>";
+      }
+      function dealsHtml() {
+        var deals = d.deals || {}, html = "";
+        var weekly = deals.weekly || [], daily = deals.daily || [];
+        if (weekly.length) {
+          html += '<div class="h2">' + K.ic("calendar") + "افر هفتگی</div>" +
+            '<div class="st-offers">' +
+            weekly.map(function (o) { return dealCard(o, "افر هفتگی"); }).join("") + "</div>";
+        }
+        if (daily.length) {
+          html += '<div class="h2">' + K.ic("flame") + "افر روزانه</div>" +
+            '<div class="st-offers">' +
+            daily.map(function (o) { return dealCard(o, "افر روزانه"); }).join("") + "</div>";
+        }
+        return html;
       }
       function offersHtml() {
         var list = d.offers || [];
@@ -125,8 +169,10 @@
         var html = '<div class="banner mb st-ban" style="background-image:url(\'' + K.asset(d.banner) + '\')"><div><div class="ttl">خرید طلا و الماس</div>' +
           '<div class="sm" style="color:#d6f6ff">افر ویژه · پک · VIP · پرداخت کارت‌به‌کارت</div></div></div>';
         if (d.pending) html += '<div class="callout gold mb">' + K.ic("hourglass") + '<div class="grow"><b>سفارش در انتظار رسید</b><div class="sm">' +
-          K.esc(d.pending.summary) + " · " + toman(d.pending.price) + '</div></div><button class="btn sm gold" data-act="pay">ارسال رسید</button></div>';
-        html += offersHtml();
+          K.esc(d.pending.summary) + " · " + toman(d.pending.price) + '</div></div><div class="col gap">' +
+          '<button class="btn sm gold" data-act="pay">ارسال رسید</button>' +
+          '<button class="btn sm ghost t-bad" data-act="cancelpay">لغو</button></div></div>';
+        html += dealsHtml() + offersHtml();
         if (!d.ready) {
           html += K.state("cart", "خرید درون‌برنامه‌ای فعلاً بسته‌ست", d.link ? "از درگاه رسمی خرید کن." : "به‌زودی راه می‌افته.",
             d.link ? '<button class="btn primary" data-act="link">' + K.esc(d.link.title || "ورود به درگاه خرید") + "</button>" : "");
@@ -143,14 +189,31 @@
         K.confirm({ title: "ثبت سفارش", text: label, ok: "ثبت و نمایش کارت", cancel: "بی‌خیال" }).then(function (yes) {
           if (!yes) { busy = false; return; }
           K.api.post("shop/paid/order/", body, el).then(function (p) {
-            busy = false; K.haptic("ok"); paySheet(p);
-            K.api.get("shop/paid/").then(function (n) { d = n; if (ctx.alive()) draw(); }).catch(function () {});
+            busy = false; K.haptic("ok");
+            function refresh() { K.api.get("shop/paid/").then(function (n) { d = n; if (ctx.alive()) draw(); }).catch(function () {}); }
+            paySheet(p, refresh); refresh();
           }, function () { busy = false; });
+        });
+      }
+      function cancelPay(el) {
+        K.confirm({ title: "لغو سفارش؟", danger: true, ok: "آره، لغو کن", cancel: "نه",
+          text: "سفارش حذف می‌شه و باید دوباره ثبتش کنی." }).then(function (yes) {
+          if (!yes) return;
+          K.api.post("shop/paid/cancel/", {}, el).then(function () {
+            K.toast("سفارش لغو شد", "ok");
+            K.api.get("shop/paid/").then(function (n) { d = n; if (ctx.alive()) draw(); });
+          });
         });
       }
       return K.api.get("shop/paid/").then(function (data) {
         d = data; draw();
         K.on(root, "tab", function (el) { tab = el.dataset.res; draw(); });
+        K.on(root, "deal", function (el) {
+          var all = [].concat((d.deals && d.deals.weekly) || [], (d.deals && d.deals.daily) || []);
+          var o = all.filter(function (x) { return String(x.id) === el.dataset.id; })[0];
+          if (!o || o.sold_out) return;
+          order({ kind: "item", id: o.id }, el, o.title + " · " + pn(o.price) + " تومان");
+        });
         K.on(root, "offer", function (el) {
           var o = (d.offers || []).filter(function (x) { return String(x.id) === el.dataset.id; })[0];
           if (!o) return;
@@ -183,7 +246,14 @@
           var parts = Object.keys(RES).filter(function (r) { return custom[r] > 0; }).map(function (r) { return pn(custom[r]) + " " + RES[r][0]; });
           order({ kind: "custom", coins: custom.coins, dna: custom.dna, diamonds: custom.diamonds }, el, parts.join(" + "));
         });
-        K.on(root, "pay", function (el) { K.api.get("shop/paid/card/").then(paySheet).catch(function () {}); });
+        K.on(root, "pay", function (el) {
+          K.api.get("shop/paid/card/").then(function (p) {
+            paySheet(p, function () {
+              K.api.get("shop/paid/").then(function (n) { d = n; if (ctx.alive()) draw(); });
+            });
+          }).catch(function () {});
+        });
+        K.on(root, "cancelpay", function (el) { cancelPay(el); });
         K.on(root, "link", function () { if (d.link) { try { K.tg.openLink(d.link.url); } catch (e) { window.open(d.link.url, "_blank"); } } });
       });
     }

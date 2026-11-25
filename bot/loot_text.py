@@ -2,7 +2,7 @@
 cup, arena slots, the weekly mission box, the dungeon shop) and boxes (genetic and monster boxes,
 in DM and in groups).
 
-Each loot on its own line (طلا / DNA / الماس); creatures and gear grouped by rarity, rarest
+Each loot on its own line (طلا / دی‌ان‌ای / الماس); creatures and gear grouped by rarity, rarest
 first, so a big batch reads at a glance. `chests_text` takes the dicts of
 game.arena_chests.grant_chest_contents / open_chest; `box_reveal` / `boxes_text` the results of
 game.lootbox.
@@ -29,12 +29,12 @@ def _rarity(r: str) -> str:
 
 
 def loot_lines(coins: int = 0, dna: int = 0, diamonds: int = 0) -> list[str]:
-    """«💰 طلا: +X» / «🧬 DNA: +X» / «💎 الماس: +X» — one line each, zero ones left out."""
+    """«💰 طلا: +X» / «🧬 دی‌ان‌ای: +X» / «💎 الماس: +X» — one line each, zero ones left out."""
     out = []
     if coins:
         out.append(f"{get_emoji('coin')} طلا: <code>+{coins:,}</code>")
     if dna:
-        out.append(f"{get_emoji('dna')} DNA: <code>+{dna:,}</code>")
+        out.append(f"{get_emoji('dna')} دی‌ان‌ای: <code>+{dna:,}</code>")
     if diamonds:
         out.append(f"{get_emoji('diamond')} الماس: <code>+{diamonds:,}</code>")
     return out
@@ -116,7 +116,7 @@ def pay_lines(summary: dict) -> list[str]:
         out.append(f"🎟 با بلیط: <code>{summary['from_tickets']}</code>")
     if summary.get("paid_boxes"):
         out.append(f"💳 با هزینه: <code>{summary['paid_boxes']}</code> "
-                   f"(<code>{summary['gold_spent']:,}</code> طلا + <code>{summary['dna_spent']:,}</code> DNA)")
+                   f"(<code>{summary['gold_spent']:,}</code> طلا + <code>{summary['dna_spent']:,}</code> دی‌ان‌ای)")
     out.append(f"🎟 بلیط باقی‌مونده: <code>{summary.get('tickets_left', 0)}</code>")
     return out
 

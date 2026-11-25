@@ -59,7 +59,7 @@ def cancel(request, user, data):
 
 @endpoint("POST")
 def remove(request, user, data):
-    """Cancel any queued serum (DNA back); `kind` guards against a queue that moved on."""
+    """Cancel any queued serum (دی‌ان‌ای back); `kind` guards against a queue that moved on."""
     r = SR.remove_queued(user, need_int(data, "index", 0, 50), need_str(data, "kind", choices=SR.ORDER))
     return {"refund": r["refund"], "state": _state(user)}
 
@@ -73,14 +73,14 @@ def discard(request, user, data):
 
 @endpoint("POST")
 def remove_kind(request, user, data):
-    """Cancel `count` queued serums of a kind (DNA back)."""
+    """Cancel `count` queued serums of a kind (دی‌ان‌ای back)."""
     r = SR.remove_kind(user, need_str(data, "kind", choices=SR.ORDER), need_int(data, "count", 1, 50))
     return {"count": r["count"], "refund": r["refund"], "state": _state(user)}
 
 
 @endpoint("POST")
 def clear(request, user, data):
-    """«حذف همه»: the whole queue (DNA back) and the shelf (no refund)."""
+    """«حذف همه»: the whole queue (دی‌ان‌ای back) and the shelf (no refund)."""
     r = SR.clear_all(user)
     return {"queued": r["queued"], "shelf": r["shelf"], "refund": r["refund"], "state": _state(user)}
 
@@ -114,17 +114,19 @@ def upgrade(request, user, data):
 # ── «انبار» ───────────────────────────────────────────────────────────────────
 def _backpack(user) -> dict:
     from bio_lab.models import SerumLab
-    from game import reward_chests
+    from game import creature_pick, reward_chests
     from game.buildings import list_speedup_cards
 
     boss = reward_chests.unopened(user, "worldboss").count()
     cup = reward_chests.unopened(user, "tournament").count()
     war = reward_chests.unopened(user, "alliance_war").count()
     offer = reward_chests.unopened(user, "offer").count()
+    picks = creature_pick.pending_count(user)
     row = SerumLab.objects.filter(user_id=user.id).first()
     stock = {k: int(v) for k, v in ((row.stock if row else {}) or {}).items() if int(v) > 0}
     return {
         "boss_chests": boss, "cup_chests": cup, "war_chests": war, "offer_chests": offer,
+        "mythic_picks": picks,
         "speedups": [{"minutes": c.minutes, "count": c.count} for c in list_speedup_cards(user)],
         "serums": [{"key": k, "label": SR.KINDS[k]["label"], "count": stock[k], "img": f"img/serum_{k}.jpg"} for k in SR.ORDER if k in stock],
     }
@@ -145,12 +147,19 @@ def backpack_open(request, user, data):
     from telgame_site.mini.core import creature_dict
 
     source = need_str(data, "source", ("offer",))
+    from game import creature_pick
+
     results = reward_chests.open_all(user, source)
-    return {"count": len(results), "unopened": reward_chests.unopened(user, source).count(),
-            "coins": sum(r["coins"] for r in results), "dna": sum(r["dna"] for r in results),
-            "diamonds": sum(r["diamonds"] for r in results),
-            "lines": [html.unescape(clean(worldboss._chest_line(r))) for r in results],
-            "creatures": [creature_dict(r["creature"]) for r in results if r.get("creature") is not None]}
+    return {
+        "count": len(results),
+        "unopened": reward_chests.unopened(user, source).count(),
+        "mythic_picks": creature_pick.pending_count(user),
+        "coins": sum(r["coins"] for r in results),
+        "dna": sum(r["dna"] for r in results),
+        "diamonds": sum(r["diamonds"] for r in results),
+        "lines": [html.unescape(clean(worldboss._chest_line(r))) for r in results],
+        "creatures": [creature_dict(r["creature"]) for r in results if r.get("creature") is not None],
+    }
 
 
 routes = [

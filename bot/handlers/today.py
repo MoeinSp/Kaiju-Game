@@ -14,7 +14,7 @@ from game import today
 from game.emoji import get_emoji
 
 _DIV = "━━━━━━━━━━━━━━━━━━━━"
-_RES = {"coins": ("coin", "طلا"), "dna_fragments": ("dna", "DNA"), "diamonds": ("diamond", "الماس")}
+_RES = {"coins": ("coin", "طلا"), "dna_fragments": ("dna", "دی‌ان‌ای"), "diamonds": ("diamond", "الماس")}
 
 
 def _state_sync(tg_user):

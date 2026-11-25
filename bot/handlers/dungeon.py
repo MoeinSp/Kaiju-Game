@@ -220,7 +220,7 @@ def _finish_render(fin: dict, v: dict) -> tuple[str, InlineKeyboardMarkup]:
         lines.append(f"<i>نصف غنیمت جمع‌شده بهت رسید (رسیدی به {'باس' if fin['room'] > D.ROOMS else 'اتاق ' + str(fin['room'])}).</i>")
     lines += [
         f"💰 طلا: <code>+{loot['coins']:,}</code>",
-        f"🧬 DNA: <code>+{loot['dna']:,}</code>",
+        f"🧬 دی‌ان‌ای: <code>+{loot['dna']:,}</code>",
         f"{_E('black_rune')} رون سیاه: <code>+{loot['runes']}</code>",
     ]
     if loot.get("cores"):
@@ -278,7 +278,7 @@ def _fight_note(out: dict) -> str:
     if out.get("won"):
         got = out.get("got") or {}
         return (f"✅ <b>{member_name}</b> برد! (<code>{out['mine']:,}</code> در برابر <code>{out['theirs']:,}</code>)"
-                f" · −{out.get('hp_lost', 0)}٪ جون\n{_E('dg_loot')} +{got.get('coins', 0):,} طلا · +{got.get('dna', 0):,} DNA · +{got.get('runes', 0)} {_E('black_rune')}")
+                f" · −{out.get('hp_lost', 0)}٪ جون\n{_E('dg_loot')} +{got.get('coins', 0):,} طلا · +{got.get('dna', 0):,} دی‌ان‌ای · +{got.get('runes', 0)} {_E('black_rune')}")
     if out.get("warded"):
         return (f"🛡 <b>{member_name}</b> باخت ولی «سپر سایه» با ۲۰٪ جون سرپا نگهش داشت "
                 f"(<code>{out['mine']:,}</code> در برابر <code>{out['theirs']:,}</code>).")

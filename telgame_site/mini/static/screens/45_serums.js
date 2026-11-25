@@ -42,7 +42,7 @@
                 (lefts[i] ? '<span class="timer" data-left="' + lefts[i] + '"></span>' : "") + "</button>";
             }).join("") +
               (st.finish ? '<button class="btn sm primary" data-act="finish">' + K.ic("bolt") + "تموم کردن همه (" + K.n(st.finish.count) + ") با " + K.n(st.finish.cost) + " الماس</button>" : "") +
-              '<p class="note">برای لغو هر سرم روش بزن؛ DNA‌ش کامل برمی‌گرده.</p></div>';
+              '<p class="note">برای لغو هر سرم روش بزن؛ دی‌ان‌ای‌ش کامل برمی‌گرده.</p></div>';
           }
           if (queued + shelf > 1) {
             html += '<button class="btn sm ghost block mt" data-act="clear">' + K.ic("close") + "حذف همه‌ی سرم‌ها</button>";
@@ -92,7 +92,7 @@
         K.on(root, "brew", function (el) {
           if (busy) return; busy = true;
           K.api.post("serums/brew/", { kind: el.dataset.key }, el).then(function (r) {
-            busy = false; st = r.state; draw(); K.toast("رفت توی صف ساخت · " + pn(r.cost) + " DNA", "ok");
+            busy = false; st = r.state; draw(); K.toast("رفت توی صف ساخت · " + pn(r.cost) + " دی‌ان‌ای", "ok");
           }, function () { busy = false; });
         });
         K.on(root, "use", function (el) {
@@ -120,26 +120,26 @@
         K.on(root, "qdel", function (el) {
           var k = st.kinds.filter(function (x) { return x.key === el.dataset.key; })[0];
           K.confirm({ title: "لغو سرم «" + k.label + "»؟", icon: "close", ok: "لغو کن", cancel: "نه",
-            html: "<p>از صف ساخت حذف می‌شه و DNA‌ش کامل برمی‌گرده.</p>" }).then(function (yes) {
+            html: "<p>از صف ساخت حذف می‌شه و دی‌ان‌ای‌ش کامل برمی‌گرده.</p>" }).then(function (yes) {
             if (!yes || busy) return; busy = true;
             K.api.post("serums/remove/", { index: +el.dataset.i, kind: el.dataset.key }, el).then(function (r) {
-              busy = false; st = r.state; draw(); K.toast("لغو شد · " + pn(r.refund) + " DNA برگشت", "ok");
+              busy = false; st = r.state; draw(); K.toast("لغو شد · " + pn(r.refund) + " دی‌ان‌ای برگشت", "ok");
             }, function () { busy = false; });
           });
         });
         K.on(root, "clear", function (el) {
           K.confirm({ title: "حذف همه‌ی سرم‌ها؟", danger: true, icon: "close", ok: "همه رو حذف کن", cancel: "نه",
-            html: "<p>سرم‌های در حال ساخت لغو می‌شن و DNA‌شون برمی‌گرده؛ سرم‌های روی قفسه دور ریخته می‌شن (بدون برگشت DNA).</p>" }).then(function (yes) {
+            html: "<p>سرم‌های در حال ساخت لغو می‌شن و دی‌ان‌ای‌شون برمی‌گرده؛ سرم‌های روی قفسه دور ریخته می‌شن (بدون برگشت دی‌ان‌ای).</p>" }).then(function (yes) {
             if (!yes || busy) return; busy = true;
             K.api.post("serums/clear/", {}, el).then(function (r) {
-              busy = false; st = r.state; draw(); K.toast("همه حذف شد" + (r.refund ? " · " + pn(r.refund) + " DNA برگشت" : ""), "ok");
+              busy = false; st = r.state; draw(); K.toast("همه حذف شد" + (r.refund ? " · " + pn(r.refund) + " دی‌ان‌ای برگشت" : ""), "ok");
             }, function () { busy = false; });
           });
         });
         function howMany(k, have, onGo) {
           var n = 1;
           var box = K.sheet('<div class="grab"></div><div class="pad sr-info"><img src="' + K.asset(k.img) + '" alt=""><div class="ttl" style="font-size:20px">دور ریختن «' + K.esc(k.label) + '»</div>' +
-            '<p class="lead">روی قفسه: ' + K.n(have) + " · DNA برنمی‌گرده</p>" +
+            '<p class="lead">روی قفسه: ' + K.n(have) + " · دی‌ان‌ای برنمی‌گرده</p>" +
             '<div class="row center" style="gap:12px;margin:12px 0"><button class="btn" data-step="-1">−</button><b class="num" data-n style="font-size:22px">1</b><button class="btn" data-step="1">+</button></div>' +
             '<button class="btn danger block" data-go="n">دور ریختن <span data-n>1</span> تا</button>' +
             '<button class="btn ghost block mt" data-go="all">همه (' + K.n(have) + ")</button></div>");
@@ -158,7 +158,7 @@
             }, function () { busy = false; });
           });
           K.confirm({ title: "یه «" + k.label + "» دور ریخته بشه؟", danger: true, icon: "close", ok: "دور بریز", cancel: "نه",
-            html: "<p>DNA‌ی ساختش برنمی‌گرده؛ فقط یه جا روی قفسه باز می‌شه.</p>" }).then(function (yes) {
+            html: "<p>دی‌ان‌ای‌ی ساختش برنمی‌گرده؛ فقط یه جا روی قفسه باز می‌شه.</p>" }).then(function (yes) {
             if (!yes || busy) return; busy = true;
             K.api.post("serums/discard/", { kind: el.dataset.key }, el).then(function (r) {
               busy = false; st = r.state; draw(); K.toast("دور ریخته شد.", "ok");
@@ -177,7 +177,7 @@
         });
         K.on(root, "cancel", function (el) {
           if (busy) return; busy = true;
-          K.api.post("serums/cancel/", {}, el).then(function (r) { busy = false; st = r.state; draw(); K.toast("لغو شد · " + pn(r.refund) + " DNA برگشت", "ok"); },
+          K.api.post("serums/cancel/", {}, el).then(function (r) { busy = false; st = r.state; draw(); K.toast("لغو شد · " + pn(r.refund) + " دی‌ان‌ای برگشت", "ok"); },
             function () { busy = false; });
         });
       });
@@ -211,10 +211,12 @@
       return K.api.get("serums/backpack/").then(function (d) {
         function draw() {
           var html = '<div class="banner sr-ban" style="background-image:url(\'' + K.asset("img/hub_backpack.jpg") + '\')"><div><div class="ttl">انبار</div>' +
-            '<div class="sm">جعبه‌های جایزه‌ی باز نشده، کارت‌های سرعت و سرم‌هات.</div></div></div>';
+            '<div class="sm">جعبه‌ها، بلیت اساطیری دلخواه، کارت سرعت و سرم — تا بازشون کنی اینجا می‌مونن.</div></div></div>';
           if (d.offer_chests) html += '<div class="h2">' + K.ic("gift") + 'جعبه‌های بسته‌ی خریدنی</div><div class="panel info"><span class="ic t-gold">' + K.ic("chest") +
             "</span><div class='grow'><b>" + K.n(d.offer_chests) + ' جعبه‌ی بازنشده</b><small class="muted">از بسته‌ای که خریدی</small></div><button class="btn sm gold" data-act="offer">باز کن</button></div>';
-          if (!d.boss_chests && !d.cup_chests && !d.war_chests && !d.offer_chests) html += '<div class="h2">' + K.ic("chest") + 'جعبه‌های جایزه</div><p class="note">جعبه‌ی جایزه‌ی باز نشده‌ای نداری.</p>';
+          if (d.mythic_picks) html += '<div class="h2">' + K.ic("spark") + 'اساطیری دلخواه</div><div class="panel info"><span class="ic t-mythic">' + K.ic("spark") +
+            "</span><div class='grow'><b>" + K.n(d.mythic_picks) + ' بلیت باقی</b><small class="muted">گونه رو خودت انتخاب کن</small></div><button class="btn sm" data-act="pick">انتخاب</button></div>';
+          if (!d.boss_chests && !d.cup_chests && !d.war_chests && !d.offer_chests && !d.mythic_picks) html += '<div class="h2">' + K.ic("chest") + 'جعبه‌های جایزه</div><p class="note">چیزی برای باز کردن نداری.</p>';
           if (d.boss_chests) html += '<div class="h2">' + K.ic("skull") + 'جعبه‌های غول</div><div class="panel info"><span class="ic t-mythic">' + K.ic("chest") +
             "</span><div class='grow'><b>" + K.n(d.boss_chests) + ' جعبه‌ی بازنشده</b><small class="muted">از نبرد با غول سرگردان</small></div><button class="btn sm gold" data-act="boss">باز کن</button></div>';
           if (d.cup_chests) html += '<div class="h2">' + K.ic("trophy") + 'جعبه‌های جام</div><button class="panel info" data-act="cup"><span class="ic t-coin">' + K.ic("chest") +
@@ -242,11 +244,17 @@
         K.on(root, "cup", function () { K.go("tr_home"); });
         K.on(root, "offer", function (el) {
           K.api.post("serums/backpack/open/", { source: "offer" }, el).then(function (o) {
-            d.offer_chests = o.unopened; draw();
-            K.reward({ title: Number(o.count).toLocaleString("en-US") + " جعبه باز شد!", icon: "chest", coins: o.coins, dna: o.dna, diamonds: o.diamonds,
-                       creatures: o.creatures, text: o.lines.join(" · "), button: "عالیه" });
+            d.offer_chests = o.unopened;
+            if (o.mythic_picks != null) d.mythic_picks = o.mythic_picks;
+            draw();
+            return K.reward({ title: Number(o.count).toLocaleString("en-US") + " جعبه باز شد!", icon: "chest", coins: o.coins, dna: o.dna, diamonds: o.diamonds,
+                       creatures: o.creatures, text: o.lines.join(" · "),
+                       button: o.mythic_picks ? "انتخاب اساطیری" : "عالیه" }).then(function () {
+              if (o.mythic_picks) K.go("cp_pick");
+            });
           }).catch(function () {});
         });
+        K.on(root, "pick", function () { K.go("cp_pick"); });
         K.on(root, "war", function (el) {
           K.api.post("social/alliance/war/open/", {}, el).then(function (o) {
             d.war_chests = o.unopened; draw();
@@ -255,6 +263,55 @@
           }).catch(function () {});
         });
         K.on(root, "lab", function () { K.go("sr_lab"); });
+      });
+    }
+  });
+
+  K.screen("cp_pick", {
+    title: "اساطیری دلخواه", tab: "base",
+    render: function (root, params, ctx) {
+      var el = params.element || "", page = Number(params.page || 0);
+      var q = "creature_pick/?page=" + page + (el ? "&element=" + encodeURIComponent(el) : "");
+      return K.api.get(q).then(function (d) {
+        if (!d.left) {
+          root.innerHTML = K.state("spark", "بلیت نداری", "اگه خریدی، از انبار چک کن.") +
+            '<div class="btns mt"><button class="btn" data-act="bp">' + K.ic("box") + "انبار</button></div>";
+          K.on(root, "bp", function () { K.go("bp_home"); });
+          return;
+        }
+        var html = '<div class="banner sr-ban" style="background-image:url(\'' + K.asset("img/hub_fusion.jpg") + '\')"><div><div class="ttl">اساطیری دلخواه</div>' +
+          '<div class="sm">' + K.n(d.left) + " بلیت باقی — گونه رو انتخاب کن</div></div></div>";
+        html += '<div class="chips">';
+        html += '<button class="chip' + (!el ? " on" : "") + '" data-act="el" data-el="">همه</button>';
+        (d.elements || []).forEach(function (e) {
+          html += '<button class="chip' + (el === e.key ? " on" : "") + '" data-act="el" data-el="' + e.key + '">' + K.esc(e.label) + "</button>";
+        });
+        html += '</div><div class="list mt">';
+        (d.items || []).forEach(function (it) {
+          html += '<button class="panel pad flex" data-act="go" data-idx="' + it.idx + '"><span class="grow"><b>' + K.esc(it.name) +
+            '</b><small class="muted">' + K.esc(it.element_label) + "</small></span>" + K.ic("chevron") + "</button>";
+        });
+        html += "</div>";
+        if (d.pages > 1) {
+          html += '<div class="btns mt">';
+          if (d.page > 0) html += '<button class="btn" data-act="pg" data-p="' + (d.page - 1) + '">‹ قبل</button>';
+          if (d.page + 1 < d.pages) html += '<button class="btn" data-act="pg" data-p="' + (d.page + 1) + '">بعد ›</button>';
+          html += "</div>";
+        }
+        html += '<div class="btns mt"><button class="btn ghost" data-act="bp">' + K.ic("box") + "انبار</button></div>";
+        root.innerHTML = html;
+        K.on(root, "el", function (btn) { K.go("cp_pick", { element: btn.dataset.el || "", page: 0 }); });
+        K.on(root, "pg", function (btn) { K.go("cp_pick", { element: el, page: Number(btn.dataset.p || 0) }); });
+        K.on(root, "bp", function () { K.go("bp_home"); });
+        K.on(root, "go", function (btn) {
+          K.api.post("creature_pick/redeem/", { idx: Number(btn.dataset.idx) }, btn).then(function (r) {
+            K.haptic("ok");
+            return K.reward({
+              title: r.name + " اضافه شد", icon: "spark", creatures: r.creature ? [r.creature] : [],
+              button: r.left ? "یکی دیگه" : "انبار",
+            }).then(function () { if (r.left) ctx.reload(); else K.go("bp_home"); });
+          }).catch(function () {});
+        });
       });
     }
   });

@@ -651,7 +651,7 @@ _ITEMSHOP_HELP = (
     "خط‌های بعد: محتوا، هرکدوم یکی:\n"
     "  • الماس 100\n"
     "  • طلا 5000\n"
-    "  • DNA 200\n"
+    "  • دی‌ان‌ای 200\n"
     "  • کارت سرعت 10\n"
     "  • کپسول زیستی 5\n"
     "  • جعبه الماس 2\n"
@@ -727,7 +727,7 @@ _ISH_PRICE_DIAMONDS = [10, 50, 100, 200, 300, 500, 800, 1000, 2000]
 _ISH_PRICE_COINS = [1000, 5000, 10000, 50000, 100000, 500000, 1000000]
 _ISH_PRICE_TOMAN = [29_000, 49_000, 79_000, 99_000, 149_000, 199_000, 299_000]
 _ISH_CTYPE_LABELS = {
-    "coins": f"{get_emoji('coin')} طلا", "diamonds": f"{get_emoji('diamond')} جم", "dna": f"{get_emoji('dna')} DNA",
+    "coins": f"{get_emoji('coin')} طلا", "diamonds": f"{get_emoji('diamond')} جم", "dna": f"{get_emoji('dna')} دی‌ان‌ای",
     "speedup": "⏱ کارت سرعت", "creature": "🐉 هیولا", "equipment": f"{get_emoji('atk')} تجهیزات",
     "chest": "📦 جعبه", "vip": "👑 اشتراک VIP", "dungeon_keys": "🗝 کلید سیاه‌چال", "shadow_cores": "🌑 هسته‌ی سایه",
 }
@@ -1556,7 +1556,7 @@ def _buy_report_text_kb(offset: int):
         if rt["coins"]:
             res_parts.append(f"🪙 {rt['coins']:,} طلا")
         if rt["dna"]:
-            res_parts.append(f"🧬 {rt['dna']:,} DNA")
+            res_parts.append(f"🧬 {rt['dna']:,} دی‌ان‌ای")
         if rt["diamonds"]:
             res_parts.append(f"💎 {rt['diamonds']:,} الماس")
         if res_parts:
@@ -1738,18 +1738,18 @@ def _user_manage_keyboard(target_id: int, is_banned: bool) -> InlineKeyboardMark
         [
             [
                 btn(f"{get_emoji('stats')} گزارش طلا", emoji_key="btn_report", style=NAV, callback_data=f"admin_reslog:{target_id}:coins"),
-                btn(f"{get_emoji('dna')} گزارش DNA", emoji_key="btn_report", style=NAV, callback_data=f"admin_reslog:{target_id}:dna"),
+                btn(f"{get_emoji('dna')} گزارش دی‌ان‌ای", emoji_key="btn_report", style=NAV, callback_data=f"admin_reslog:{target_id}:dna"),
                 btn(f"{get_emoji('diamond')} گزارش الماس", emoji_key="btn_report", style=NAV, callback_data=f"admin_reslog:{target_id}:diamonds"),
             ],
             [btn("🦖 مدیریت موجودات", emoji_key="btn_creature", style=PRIMARY, callback_data=f"admin_clist:{target_id}:all:0")],
             [
                 btn(f"{get_emoji('coin')} اعطای طلا", style=CONFIRM, callback_data=f"admin_grant:{target_id}:coins"),
-                btn(f"{get_emoji('dna')} اعطای DNA", style=CONFIRM, callback_data=f"admin_grant:{target_id}:dna"),
+                btn(f"{get_emoji('dna')} اعطای دی‌ان‌ای", style=CONFIRM, callback_data=f"admin_grant:{target_id}:dna"),
                 btn(f"{get_emoji('diamond')} اعطای الماس", style=CONFIRM, callback_data=f"admin_grant:{target_id}:diamonds"),
             ],
             [
                 btn(f"{get_emoji('coin')} کسر طلا", style=DANGER, callback_data=f"admin_deduct:{target_id}:coins"),
-                btn(f"{get_emoji('dna')} کسر DNA", style=DANGER, callback_data=f"admin_deduct:{target_id}:dna"),
+                btn(f"{get_emoji('dna')} کسر دی‌ان‌ای", style=DANGER, callback_data=f"admin_deduct:{target_id}:dna"),
                 btn(f"{get_emoji('diamond')} کسر الماس", style=DANGER, callback_data=f"admin_deduct:{target_id}:diamonds"),
             ],
             [btn(f"{get_emoji('energy')} شارژ کامل منابع", emoji_key="btn_charge", style=CONFIRM, callback_data=f"admin_charge:{target_id}")],
@@ -1805,7 +1805,7 @@ async def charge_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
     if len(context.args) != 4 or not all(_is_signed_int(a) for a in context.args[1:]):
         await update.effective_message.reply_text(
-            "استفاده: <code>/charge آیدی_یا_یوزرنیم طلا DNA الماس</code>\n"
+            "استفاده: <code>/charge آیدی_یا_یوزرنیم طلا دی‌ان‌ای الماس</code>\n"
             "مثلاً: <code>/charge @someone 1000 50 20</code> (عدد منفی هم برای کسر قبوله)",
             parse_mode="HTML",
         )
@@ -2204,7 +2204,7 @@ def _resource_log_data(target_id, field):
 _RESLOG_META = {
     "diamonds": (f"{get_emoji('diamond')}", "الماس", "الماس دریافتی"),
     "coins": (f"{get_emoji('coin')}", "طلا", "طلای دریافتی"),
-    "dna": (f"{get_emoji('dna')}", "دی‌ان‌ای", "DNA دریافتی"),
+    "dna": (f"{get_emoji('dna')}", "دی‌ان‌ای", "دی‌ان‌ای دریافتی"),
 }
 
 
@@ -2264,7 +2264,7 @@ async def resource_log_callback(update: Update, context: ContextTypes.DEFAULT_TY
     lines.append(f"📊 <b>مجموع ۷ روز اخیر:</b> <code>+{log['total']:,}</code> {icon}")
 
     c_btn = f"• {get_emoji('coin')} طلا •" if field == "coins" else f"{get_emoji('coin')} طلا"
-    dna_btn = f"• {get_emoji('dna')} DNA •" if field == "dna" else f"{get_emoji('dna')} DNA"
+    dna_btn = f"• {get_emoji('dna')} دی‌ان‌ای •" if field == "dna" else f"{get_emoji('dna')} دی‌ان‌ای"
     dia_btn = f"• {get_emoji('diamond')} الماس •" if field == "diamonds" else f"{get_emoji('diamond')} الماس"
 
     keyboard = InlineKeyboardMarkup(
@@ -3204,7 +3204,7 @@ async def force_join_reward_callback(update: Update, context: ContextTypes.DEFAU
     context.user_data[AWAITING_FORCE_JOIN_KEY] = {"action": "set_reward", "channel_id": channel_id}
     await query.answer()
     await safe_edit_message_text(query,
-        f"🎁 سه عدد بفرست با فاصله: {get_emoji('coin')} طلا، {get_emoji('dna')} DNA، {get_emoji('diamond')} الماس\n"
+        f"🎁 سه عدد بفرست با فاصله: {get_emoji('coin')} طلا، {get_emoji('dna')} دی‌ان‌ای، {get_emoji('diamond')} الماس\n"
         "(مثلاً <code>50 5 2</code> — برای بدون جایزه بنویس <code>0 0 0</code>).",
         parse_mode="HTML",
     )
@@ -3369,7 +3369,7 @@ async def capture_force_join_reply(update: Update, context: ContextTypes.DEFAULT
     if action == "set_reward":
         channel_id = awaiting["channel_id"]
         parts = (message.text or "").split()
-        # accept 2 numbers too, so the old "gold DNA" muscle memory still works
+        # accept 2 numbers too, so the old "gold دی‌ان‌ای" muscle memory still works
         if len(parts) not in (2, 3) or not all(p.isdigit() for p in parts):
             context.user_data[AWAITING_FORCE_JOIN_KEY] = awaiting
             await message.reply_text(
@@ -3701,11 +3701,11 @@ def _autogift_view() -> tuple[str, InlineKeyboardMarkup]:
     lines = [
         f"{get_emoji('gift')} <b>شارژ همگانی خودکار</b>",
         "━━━━━━━━━━━━━━━━━━━━",
-        "<blockquote>هر چند روز یک‌بار، به <b>همه‌ی کاربران</b> خودکار طلا و DNA داده می‌شه و به بازیکن‌های "
+        "<blockquote>هر چند روز یک‌بار، به <b>همه‌ی کاربران</b> خودکار طلا و دی‌ان‌ای داده می‌شه و به بازیکن‌های "
         "فعالِ ۷ روز اخیر یه پیام کوتاه می‌ره.</blockquote>",
         f"وضعیت: <b>{'روشن ✅' if cfg.enabled else 'خاموش ❌'}</b>",
         f"⏱ هر <b>{cfg.interval_days}</b> روز",
-        f"{get_emoji('coin')} طلا: <code>{cfg.coins:,}</code> · {get_emoji('dna')} DNA: <code>{cfg.dna:,}</code>"
+        f"{get_emoji('coin')} طلا: <code>{cfg.coins:,}</code> · {get_emoji('dna')} دی‌ان‌ای: <code>{cfg.dna:,}</code>"
         + (f" · {get_emoji('diamond')} الماس: <code>{cfg.diamonds:,}</code>" if cfg.diamonds else ""),
     ]
     if cfg.last_at:
@@ -3842,8 +3842,8 @@ async def autogift_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data[AWAITING_ADMIN_KEY] = {"action": "autogift_set"}
     await update.effective_message.reply_text(
         f"{get_emoji('gift')} <b>تنظیم شارژ خودکار</b>\n"
-        "با فاصله بفرست: <code>روز طلا DNA [الماس]</code>\n"
-        "مثلاً <code>4 5000 200</code> یعنی هر ۴ روز، ۵٬۰۰۰ طلا و ۲۰۰ DNA به همه.\n"
+        "با فاصله بفرست: <code>روز طلا دی‌ان‌ای [الماس]</code>\n"
+        "مثلاً <code>4 5000 200</code> یعنی هر ۴ روز، ۵٬۰۰۰ طلا و ۲۰۰ دی‌ان‌ای به همه.\n"
         "<i>اولین شارژ به اندازه‌ی همین فاصله بعد از الان انجام می‌شه.</i>",
         parse_mode="HTML",
     )
@@ -3853,7 +3853,7 @@ async def gift_all_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     context.user_data[AWAITING_ADMIN_KEY] = {"action": "gift_all"}
     await update.effective_message.reply_text(
         f"{get_emoji('gift')} <b>هدیه به همه‌ی کاربران</b>\n"
-        "سه عدد با فاصله بفرست: <code>طلا DNA الماس</code>\n"
+        "سه عدد با فاصله بفرست: <code>طلا دی‌ان‌ای الماس</code>\n"
         "مثلاً <code>1000 50 10</code> (هرکدوم رو نخواستی، صفر بذار).",
         parse_mode="HTML",
     )
@@ -4146,7 +4146,7 @@ def _buy_panel_text(cfg: dict) -> str:
         f"وضعیت خرید درون‌ربات: <b>{status}</b>",
         "",
         "💵 <b>قیمت هر واحد (تومان):</b>",
-        f"🪙 طلا: <b>{p['coins']:g}</b> · 🧬 DNA: <b>{p['dna']:g}</b> · 💎 الماس: <b>{p['diamonds']:g}</b>",
+        f"🪙 طلا: <b>{p['coins']:g}</b> · 🧬 دی‌ان‌ای: <b>{p['dna']:g}</b> · 💎 الماس: <b>{p['diamonds']:g}</b>",
         f"🎚 حداقل خرید: <b>{cfg['min']:,}</b> تومان" + ("" if cfg["min"] else " (بدون حداقل)"),
         f"💳 کارت: <code>{card_num or '—'}</code>" + (f" — {card_holder}" if card_holder else ""),
         "",
@@ -4180,8 +4180,8 @@ async def buy_prices_set_start(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data[AWAITING_ADMIN_KEY] = {"action": "set_buy_prices"}
     await update.effective_message.reply_text(
         "💵 قیمت هر <b>واحد</b> رو به تومان، سه عدد با فاصله بفرست:\n"
-        "<code>&lt;طلا&gt; &lt;DNA&gt; &lt;الماس&gt;</code>\n\n"
-        "مثال: <code>0.2 5 50</code> یعنی هر ۱ طلا ۰٫۲ تومان، هر ۱ DNA ۵ تومان، هر ۱ الماس ۵۰ تومان.\n"
+        "<code>&lt;طلا&gt; &lt;دی‌ان‌ای&gt; &lt;الماس&gt;</code>\n\n"
+        "مثال: <code>0.2 5 50</code> یعنی هر ۱ طلا ۰٫۲ تومان، هر ۱ دی‌ان‌ای ۵ تومان، هر ۱ الماس ۵۰ تومان.\n"
         "<i>عددِ ۰ یعنی اون مورد برای فروش نیست.</i>",
         parse_mode="HTML",
     )
@@ -4243,7 +4243,7 @@ async def buy_link_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 _PACK_HELP = (
     f"{get_emoji('gift')} <b>ساخت پک خرید</b>\n\n"
     "پک رو در <b>یک خط</b> بفرست، فیلدها با <code>|</code> جدا:\n"
-    "<code>عنوان | طلا | DNA | الماس | قیمت(تومان) | تخفیف٪</code>\n\n"
+    "<code>عنوان | طلا | دی‌ان‌ای | الماس | قیمت(تومان) | تخفیف٪</code>\n\n"
     "نمونه‌ها:\n"
     "<code>پک برنزی | 100000 | 0 | 50 | 90000 | 10</code>\n"
     f"<code>{get_emoji('diamond')} پک الماس | 0 | 0 | 500 | 250000 | 20</code>\n\n"
@@ -4312,7 +4312,7 @@ async def pack_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.message.reply_text(
         f"{get_emoji('edit')} <b>ویرایش پک</b>\n\nخط زیر رو کپی کن، مقدارها رو عوض کن و بفرست:\n"
         f"<code>{html.escape(template)}</code>\n\n"
-        "<i>قالب: عنوان | طلا | DNA | الماس | قیمت | تخفیف٪</i>",
+        "<i>قالب: عنوان | طلا | دی‌ان‌ای | الماس | قیمت | تخفیف٪</i>",
         parse_mode="HTML",
     )
 
@@ -4362,11 +4362,11 @@ async def pack_delete_confirm_callback(update: Update, context: ContextTypes.DEF
 
 
 def _parse_pack_line(text: str):
-    """Parse «عنوان | طلا | DNA | الماس | قیمت | تخفیف٪» → dict of kwargs.
+    """Parse «عنوان | طلا | دی‌ان‌ای | الماس | قیمت | تخفیف٪» → dict of kwargs.
     Raises GameError with a friendly message on a malformed line."""
     parts = [seg.strip() for seg in (text or "").split("|")]
     if len(parts) < 5:
-        raise GameError("قالب درست نیست. باید حداقل ۵ بخش با | باشه:\nعنوان | طلا | DNA | الماس | قیمت | (تخفیف٪)")
+        raise GameError("قالب درست نیست. باید حداقل ۵ بخش با | باشه:\nعنوان | طلا | دی‌ان‌ای | الماس | قیمت | (تخفیف٪)")
     title = parts[0]
     trans = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
 
@@ -4382,7 +4382,7 @@ def _parse_pack_line(text: str):
             "price_toman": price, "discount_percent": discount}
 
 
-_RESOURCE_LABELS = {"coins": "طلا", "dna": "DNA", "diamonds": "الماس"}
+_RESOURCE_LABELS = {"coins": "طلا", "dna": "دی‌ان‌ای", "diamonds": "الماس"}
 _RESOURCE_EMOJI_KEYS = {"coins": "coin", "dna": "dna", "diamonds": "diamond"}
 
 
@@ -4526,7 +4526,7 @@ async def admin_op_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             context.user_data[AWAITING_ADMIN_KEY] = {"action": "charge", "target_id": op["target_id"]}
             await query.answer()
             await query.message.reply_text(
-                f"{get_emoji('edit')} سه عدد جدید با فاصله بفرست: طلا DNA الماس (مثلاً <code>1000 50 20</code>).",
+                f"{get_emoji('edit')} سه عدد جدید با فاصله بفرست: طلا دی‌ان‌ای الماس (مثلاً <code>1000 50 20</code>).",
                 parse_mode="HTML",
             )
         else:
@@ -4756,7 +4756,7 @@ async def admin_charge_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
     await safe_edit_message_text(
         query,
-        f"⚡ سه عدد با فاصله بفرست: {get_emoji('coin')} طلا، {get_emoji('dna')} DNA، {get_emoji('diamond')} الماس\n"
+        f"⚡ سه عدد با فاصله بفرست: {get_emoji('coin')} طلا، {get_emoji('dna')} دی‌ان‌ای، {get_emoji('diamond')} الماس\n"
         "(مثلاً <code>1000 50 20</code> — عدد منفی هم قبوله برای کسر کردن، مثل <code>-500 0 0</code>)",
         parse_mode="HTML",
     )
@@ -5305,7 +5305,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         if len(parts) not in (3, 4) or not all(p.isdigit() for p in parts):
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
             await message.reply_text(
-                f"{get_emoji('warning')} این‌طوری بفرست: <code>روز طلا DNA [الماس]</code> — مثلاً <code>4 5000 200</code>",
+                f"{get_emoji('warning')} این‌طوری بفرست: <code>روز طلا دی‌ان‌ای [الماس]</code> — مثلاً <code>4 5000 200</code>",
                 parse_mode="HTML")
             return
         days, coins, dna = int(parts[0]), int(parts[1]), int(parts[2])
@@ -5335,7 +5335,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             return
         await message.reply_text(
             f"🎁 به <b>{affected}</b> کاربر هدیه داده شد: "
-            f"{coins} طلا + {dna} DNA + {diamonds} الماس.",
+            f"{coins} طلا + {dna} دی‌ان‌ای + {diamonds} الماس.",
             parse_mode="HTML",
         )
         return
@@ -5520,7 +5520,7 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
             coins, dna, diamonds = (float(parts[0]), float(parts[1]), float(parts[2]))
         except (ValueError, IndexError):
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text(f"{get_emoji('warning')} سه عدد با فاصله بفرست: طلا DNA الماس (مثلاً <code>0.2 5 50</code>).", parse_mode="HTML")
+            await message.reply_text(f"{get_emoji('warning')} سه عدد با فاصله بفرست: طلا دی‌ان‌ای الماس (مثلاً <code>0.2 5 50</code>).", parse_mode="HTML")
             return
         await run_db(botconfig.set_buy_prices, coins, dna, diamonds)
         await _show_buy_panel(update, f"{get_emoji('confirm')} قیمت‌ها ثبت شد.")
@@ -6007,7 +6007,7 @@ async def blackmarket_presets_panel(
             [btn("🦖 کایجوی اختصاصی", style=PRIMARY, callback_data="bm_adm_cat:creature"),
              btn("🥚 تخم کایجو", style=PRIMARY, callback_data="bm_adm_cat:egg")],
             [btn("🎫 بلیط باکس ژنتیکی", style=PRIMARY, callback_data="bm_adm_cat:tickets"),
-             btn("🧬 قطعات DNA", style=PRIMARY, callback_data="bm_adm_cat:dna")],
+             btn("🧬 قطعات دی‌ان‌ای", style=PRIMARY, callback_data="bm_adm_cat:dna")],
             [btn("🎒 تجهیزات و سلاح‌ها", style=PRIMARY, callback_data="bm_adm_cat:equip"),
              btn("⚡ کارت‌های سرعت", style=PRIMARY, callback_data="bm_adm_cat:speedup")],
             [btn("👑 اشتراک‌های VIP", style=PRIMARY, callback_data="bm_adm_cat:vip"),
@@ -6061,10 +6061,10 @@ async def blackmarket_presets_panel(
             ]
         elif cat == "dna":
             rows = [
-                [btn("🧬 ۱,۰۰۰ DNA · ۲۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:dna_1k")],
-                [btn("🧬 ۵,۰۰۰ DNA · ۸۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:dna_5k")],
-                [btn("🧬 ۱۰,۰۰۰ DNA · ۱۵۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:dna_10k")],
-                [btn("🧬 ۲۵,۰۰۰ DNA · ۳۰۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:dna_25k")],
+                [btn("🧬 ۱,۰۰۰ دی‌ان‌ای · ۲۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:dna_1k")],
+                [btn("🧬 ۵,۰۰۰ دی‌ان‌ای · ۸۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:dna_5k")],
+                [btn("🧬 ۱۰,۰۰۰ دی‌ان‌ای · ۱۵۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:dna_10k")],
+                [btn("🧬 ۲۵,۰۰۰ دی‌ان‌ای · ۳۰۰ هزار طلا", style=PRIMARY, callback_data="bm_adm_add:dna_25k")],
             ]
         elif cat == "equip":
             rows = [
@@ -6202,11 +6202,11 @@ async def blackmarket_admin_action_callback(update: Update, context: ContextType
                 "tic_25": ("🎫 بسته ۲۵ عددی بلیط باکس ژنتیکی", "tickets", {"amount": 25}, "coins", 50000),
                 "tic_50": ("🎫 بسته ۵۰ عددی بلیط باکس ژنتیکی", "tickets", {"amount": 50}, "coins", 90000),
                 "tic_100": ("🎫 بسته ۱۰۰ عددی بلیط باکس ژنتیکی", "tickets", {"amount": 100}, "coins", 160000),
-                # DNA
-                "dna_1k": ("🧬 محموله ۱,۰۰۰ قطعه DNA", "dna", {"amount": 1000}, "coins", 20000),
-                "dna_5k": ("🧬 محموله ۵,۰۰۰ قطعه DNA", "dna", {"amount": 5000}, "coins", 80000),
-                "dna_10k": ("🧬 محموله ۱۰,۰۰۰ قطعه DNA", "dna", {"amount": 10000}, "coins", 150000),
-                "dna_25k": ("🧬 محموله ۲۵,۰۰۰ قطعه DNA", "dna", {"amount": 25000}, "coins", 300000),
+                # دی‌ان‌ای
+                "dna_1k": ("🧬 محموله ۱,۰۰۰ قطعه دی‌ان‌ای", "dna", {"amount": 1000}, "coins", 20000),
+                "dna_5k": ("🧬 محموله ۵,۰۰۰ قطعه دی‌ان‌ای", "dna", {"amount": 5000}, "coins", 80000),
+                "dna_10k": ("🧬 محموله ۱۰,۰۰۰ قطعه دی‌ان‌ای", "dna", {"amount": 10000}, "coins", 150000),
+                "dna_25k": ("🧬 محموله ۲۵,۰۰۰ قطعه دی‌ان‌ای", "dna", {"amount": 25000}, "coins", 300000),
                 # Equip
                 "eq_epic_weap": ("⚔️ شمشیر حماسی باستانی +5", "equipment", {"slot": "weapon", "rarity": "epic", "level": 5, "name": "شمشیر حماسی باستانی"}, "coins", 50000),
                 "eq_leg_armor": ("🛡 زره سنگین افسانه‌ای +5", "equipment", {"slot": "armor", "rarity": "legendary", "level": 5, "name": "زره سنگین افسانه‌ای"}, "diamonds", 100),

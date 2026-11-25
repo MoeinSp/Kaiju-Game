@@ -13,7 +13,7 @@ def _power(c: Creature) -> int:
 
 
 def salary_for(creature: Creature) -> tuple[int, int]:
-    """The guardian's daily salary (coins, DNA) for a creature of this power.
+    """The guardian's daily salary (coins, دی‌ان‌ای) for a creature of this power.
 
     Scales linearly with the creature's combat power against the game's ceiling
     (ARENA_BOT_MAX_POWER, a maxed mythic 5★): a maxed guardian earns the full

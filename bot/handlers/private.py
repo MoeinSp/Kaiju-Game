@@ -144,7 +144,7 @@ def wallet_line(user, energy: int | None = None) -> str:
         energy_note = f"<i>⏳ {minutes_until_next_point(user)} دقیقه تا بعدی</i>"
     return (
         f"{get_emoji('coin')} طلا: <b>{user.coins:,}</b>\n"
-        f"{get_emoji('dna')} DNA: <b>{user.dna_fragments:,}</b>\n"
+        f"{get_emoji('dna')} دی‌ان‌ای: <b>{user.dna_fragments:,}</b>\n"
         f"{get_emoji('diamond')} الماس: <b>{user.diamonds:,}</b>\n"
         f"{get_emoji('energy')} انرژی: <code>{energy}/{max_energy}</code> · {energy_note}"
     )
@@ -305,7 +305,7 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
             lab_line,
             f"{get_emoji('coin')} <b>{user.coins:,}</b> طلا",
             f"{get_emoji('diamond')} <b>{user.diamonds:,}</b> الماس",
-            f"{get_emoji('dna')} <b>{user.dna_fragments:,}</b> DNA",
+            f"{get_emoji('dna')} <b>{user.dna_fragments:,}</b> دی‌ان‌ای",
             f"{get_emoji('energy')} انرژی <code>{energy}/{max_energy}</code>",
             *shields,
             _CARD_DIV,
@@ -1665,7 +1665,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         streak_line = f"🔥 <b>{login_bonus['streak']} روز پشت‌سرهم</b> اومدی!\n"
         streak_line += f"{get_emoji('coin')} <b>{login_bonus['coins']:,}</b> طلا جایزه\n"
         if login_bonus.get("dna"):
-            streak_line += f"{get_emoji('dna')} <b>{login_bonus['dna']:,}</b> DNA جایزه\n"
+            streak_line += f"{get_emoji('dna')} <b>{login_bonus['dna']:,}</b> دی‌ان‌ای جایزه\n"
         lines.append(f"<blockquote>{streak_line.strip()}</blockquote>\n")
 
     if getattr(user, "_story_note", ""):
@@ -3537,7 +3537,7 @@ def _autohunt_info_sync(tg_user):
 
 def _autohunt_sync(tg_user, energy_amount):
     """Run `energy_amount` auto-hunts (1 energy each) against fresh targets, each paying
-    HALF the gold/DNA of a manual hunt. Resolved INSTANTLY via statistics (no per-hunt
+    HALF the gold/دی‌ان‌ای of a manual hunt. Resolved INSTANTLY via statistics (no per-hunt
     combat sim). Locks the user row so the whole batch spends energy exactly once, and
     counts every hunt toward the daily hunt missions."""
     from game.daily import record_action_bulk

@@ -5,7 +5,7 @@
   pushed (campaign + lab level), so progressing makes even your downtime pay more.
   The cap (12h) is the "come back at least once a day" nudge.
 * **Daily dungeon** — a single free run per day with a real boss fight. Reward type
-  rotates daily (gold / DNA / XP) and scales with your progress.
+  rotates daily (gold / دی‌ان‌ای / XP) and scales with your progress.
 
 Lazy like everything else: accrual is computed from `idle_since`, and the dungeon
 is deduped by the last-run day. No cron.
@@ -42,7 +42,7 @@ DUNGEON_DEFS = [
     {
         "key": "dna",
         "emoji": "🧬",
-        "title": "دخمه‌ی DNA",
+        "title": "دخمه‌ی دی‌ان‌ای",
         "resource": "dna",
         "boss_names": ["بیوهیولا", "موتانت آزمایشگاه", "ژنتیک‌باز"],
         "boss_element": "electric",

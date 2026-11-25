@@ -17,7 +17,43 @@ ADMIN_PANEL_URL = os.environ.get("ADMIN_PANEL_URL", "http://127.0.0.1:8000/panel
 
 # Used to build the "open the bot in private" deep link on group cards. Without
 # it the group can still play, but the buttons that hand off to DMs won't work.
-BOT_USERNAME = os.environ.get("BOT_USERNAME", "KaijuLegendbot").lstrip("@")
+# Prefer BOT_USERNAME in .env; if empty we resolve it from BOT_TOKEN via getMe
+# so a local/test bot never deep-links into the production username by mistake.
+_BOT_USERNAME_ENV = os.environ.get("BOT_USERNAME", "").lstrip("@")
+_bot_username_cache: str | None = None
+
+
+def get_bot_username() -> str:
+    """Username of THIS bot (env override, else Telegram getMe for BOT_TOKEN)."""
+    global _bot_username_cache
+    if _BOT_USERNAME_ENV:
+        return _BOT_USERNAME_ENV
+    if _bot_username_cache:
+        return _bot_username_cache
+    if not BOT_TOKEN:
+        return ""
+    import json
+    import urllib.error
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/getMe", timeout=8
+        ) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        uname = ((data.get("result") or {}).get("username") or "").lstrip("@")
+        if uname:
+            _bot_username_cache = uname
+        return uname
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError, ValueError):
+        return ""
+
+
+def __getattr__(name: str):
+    # `from config import BOT_USERNAME` stays a live lookup of THIS token's bot.
+    if name == "BOT_USERNAME":
+        return get_bot_username()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # Secret for the public "has this user started the bot?" API (telgame_site/api.py),
 # handed to an advertiser to verify their referred users. Empty = the API is off.

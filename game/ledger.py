@@ -1,4 +1,4 @@
-"""Daily resource-gain ledger — records how much gold / DNA / diamonds each player
+"""Daily resource-gain ledger — records how much gold / دی‌ان‌ای / diamonds each player
 GAINED per day, per source, so the owner's player-search can surface a suspicious
 jump (e.g. a diamond balloon) at a glance.
 

@@ -39,7 +39,7 @@ EVENTS = [
     # ── «قانون هفته»: weeks that change how a part of the GAME plays (read through the
     # accessors below — hunt_loot_mult, dispatch_time_mult, cave_top_bonus, …) ──
     {"key": "element_week", "emoji": "🔮", "title": "هفته‌ی عنصر",
-     "desc": "هیولاهای عنصرِ این هفته توی شکار ۳۰٪ طلا و DNA بیشتر می‌آرن!",
+     "desc": "هیولاهای عنصرِ این هفته توی شکار ۳۰٪ طلا و دی‌ان‌ای بیشتر می‌آرن!",
      "xp_mult": 1, "pass_mult": 1, "reward_mult": 1, "rule": "hunt_element"},
     {"key": "fast_dispatch", "emoji": "🧭", "title": "هفته‌ی اعزام سریع",
      "desc": "مأموریت‌های اعزامی این هفته نصفِ زمان طول می‌کشن!",
@@ -81,7 +81,7 @@ def week_element() -> str:
 
 
 def hunt_loot_mult(element: str | None) -> float:
-    """Gold/DNA multiplier for a hunt fought by a creature of `element` this week."""
+    """Gold/دی‌ان‌ای multiplier for a hunt fought by a creature of `element` this week."""
     if current_rule() == "hunt_element" and element == week_element():
         return 1 + HUNT_ELEMENT_LOOT_BONUS
     return 1.0
@@ -156,7 +156,7 @@ def reward_text(reward: dict) -> str:
     if reward.get("coins"):
         parts.append(f"{reward['coins']} طلا")
     if reward.get("dna"):
-        parts.append(f"{reward['dna']} DNA")
+        parts.append(f"{reward['dna']} دی‌ان‌ای")
     if reward.get("diamonds"):
         parts.append(f"{reward['diamonds']} 💎")
     if reward.get("speedup"):

@@ -134,7 +134,7 @@ def preview(user: User, parent_a: Creature, parent_b: Creature) -> dict:
 def start(user: User, parent_a: Creature, parent_b: Creature) -> BreedingJob:
     """Phase 1: send two parents into the cave to mate. They're locked until the
     mating timer finishes, at which point lay_egg() frees them and lays an egg."""
-    # lock the player so a double-tapped «شروع» can't create two jobs / charge DNA
+    # lock the player so a double-tapped «شروع» can't create two jobs / charge دی‌ان‌ای
     # twice: the second call blocks here, then sees the job the first created and bounces
     user = User.objects.select_for_update().get(id=user.id)
     assert_available(user)
@@ -155,7 +155,7 @@ def start(user: User, parent_a: Creature, parent_b: Creature) -> BreedingJob:
 
     cost = dna_cost(parent_a, parent_b)
     if user.dna_fragments < cost:
-        raise GameError(f"DNA کافی نداری! این جفت‌گیری {cost:,} DNA لازم داره.")
+        raise GameError(f"دی‌ان‌ای کافی نداری! این جفت‌گیری {cost:,} دی‌ان‌ای لازم داره.")
     user.dna_fragments -= cost
     user.save(update_fields=["dna_fragments"])
 
@@ -346,7 +346,7 @@ def finish_egg_with_diamonds(user: User, egg_id: int) -> Egg:
 
 @transaction.atomic
 def cancel(user: User, job_id: int | None = None) -> BreedingJob:
-    """Abandon the mating in progress. The DNA is not refunded — otherwise a
+    """Abandon the mating in progress. The دی‌ان‌ای is not refunded — otherwise a
     player could park two creatures whenever they weren't using them and cancel
     for free. (Laid eggs can't be cancelled; they only hatch.)"""
     user = User.objects.select_for_update().get(id=user.id)

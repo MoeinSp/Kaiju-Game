@@ -13,7 +13,7 @@ the hint half the time ~77%, always ~87%. Most newcomers win — that's the poin
 sharer is told «X beat you!» with a button for a new challenge.
 
 Rewards: the friend's win pays (more for a new player); only the first DAILY_REWARDED
-challenge results a day pay. The sharer gets gold + DNA (no diamonds — fake accounts could
+challenge results a day pay. The sharer gets gold + دی‌ان‌ای (no diamonds — fake accounts could
 farm those) when a new player finishes their challenge, at most SHARER_DAILY_CAP a day.
 """
 

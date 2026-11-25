@@ -139,16 +139,32 @@ def _purchase_req_sync(req_id: int):
 
 
 async def _send_purchase_card(context: ContextTypes.DEFAULT_TYPE, payload: dict) -> None:
-    from bot.handlers.purchase import _receipt_screen
+    import logging
+
+    from bot.handlers.purchase import _AWAIT_RECEIPT_KEY, _receipt_screen
+    from game import botconfig
 
     req = await run_db(_purchase_req_sync, int(payload.get("req_id") or 0))
     if req is None or req.user_id != int(payload.get("user_id") or 0):
         return
+    await run_db(botconfig.refresh_cache)
     text, kb = _receipt_screen(req)
     try:
         await context.bot.send_message(chat_id=req.user_id, text=text, parse_mode="HTML", reply_markup=kb)
-    except TelegramError:
-        pass
+        # so the next photo is bound even if the bot restarts before the 2h DB fallback
+        context.application.user_data[req.user_id][_AWAIT_RECEIPT_KEY] = req.id
+    except TelegramError as exc:
+        logging.getLogger(__name__).warning(
+            "purchase_card DM failed user=%s req=%s: %s", req.user_id, req.id, exc,
+        )
+        # plain retry without keyboard / fancy buttons (styles can 400 on some builds)
+        try:
+            await context.bot.send_message(chat_id=req.user_id, text=text, parse_mode="HTML")
+            context.application.user_data[req.user_id][_AWAIT_RECEIPT_KEY] = req.id
+        except TelegramError as exc2:
+            logging.getLogger(__name__).warning(
+                "purchase_card plain retry failed user=%s req=%s: %s", req.user_id, req.id, exc2,
+            )
 
 
 async def outbox_job(context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -66,8 +66,8 @@ def _charge_biocrate(user: User, cfg: dict, times: int) -> None:
     gold, dna = cfg["gold"] * times, cfg["dna"] * times
     if user.dna_fragments < dna:
         raise GameError(
-            f"{dna} DNA لازمه (الان {user.dna_fragments} داری). "
-            "DNA از شکار، دخمه، آزمایشگاه DNA و پاداش آفلاین به‌دست می‌آد."
+            f"{dna} دی‌ان‌ای لازمه (الان {user.dna_fragments} داری). "
+            "دی‌ان‌ای از شکار، دخمه، آزمایشگاه دی‌ان‌ای و پاداش آفلاین به‌دست می‌آد."
         )
     from game.wallet import spend_wallet
 
@@ -90,7 +90,7 @@ def open_biocrate(user: User, tier: str = "basic") -> dict:
 
 def batch_open_cost(user: User, tier: str, count: int) -> dict:
     """How a batch of `count` opens would be paid: tickets first (1 box each), the rest
-    with the tier's gold+DNA. Read-only — used to preview the price before opening."""
+    with the tier's gold+دی‌ان‌ای. Read-only — used to preview the price before opening."""
     cfg = _biocrate_cfg(tier)
     count = max(1, int(count))
     from_tickets = min(user.biocrate_tickets, count)
@@ -104,7 +104,7 @@ def batch_open_cost(user: User, tier: str, count: int) -> dict:
 @transaction.atomic
 def open_biocrate_batch(user: User, tier: str, count: int) -> dict:
     """Open `count` genetic boxes of `tier`, spending tickets FIRST (one box each) and
-    paying the tier's gold+DNA for the remainder. Tickets come from exchanging spare
+    paying the tier's gold+دی‌ان‌ای for the remainder. Tickets come from exchanging spare
     legendary/mythic gear (game.equipment.exchange_for_tickets)."""
     cfg = _biocrate_cfg(tier)
     count = max(1, int(count))
@@ -113,7 +113,7 @@ def open_biocrate_batch(user: User, tier: str, count: int) -> dict:
     paid = count - from_tickets
     gold, dna = cfg["gold"] * paid, cfg["dna"] * paid
     if user.dna_fragments < dna:
-        raise GameError(f"{dna} DNA لازمه (الان {user.dna_fragments} داری).")
+        raise GameError(f"{dna} دی‌ان‌ای لازمه (الان {user.dna_fragments} داری).")
     from game.wallet import spend_wallet
 
     if not spend_wallet(user, gold):

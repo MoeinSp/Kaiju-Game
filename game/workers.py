@@ -66,14 +66,14 @@ def worker_bonus(building: Building) -> float:
     that climbs with the kaiju's power. The mine's total is the sum across every
     stationed kaiju, so stronger AND more kaiju both raise output. A mine with an
     explicit `worker_bonus_cap` (the diamond collector) is clamped to that ceiling —
-    gold/DNA stay uncapped."""
+    gold/دی‌ان‌ای stay uncapped."""
     from game.equipment import equipped_items_map
 
     cfg = constants.BUILDING_PRODUCTION.get(building.building_type, {})
     workers = assigned_creatures(building)
     gear = equipped_items_map(workers)  # one query for every stationed kaiju's gear
     total = sum(creature_mine_influence(c, building, gear[c.pk]) for c in workers)
-    cap = cfg.get("worker_bonus_cap")  # None for gold/DNA → no ceiling
+    cap = cfg.get("worker_bonus_cap")  # None for gold/دی‌ان‌ای → no ceiling
     return total if cap is None else min(cap, total)
 
 

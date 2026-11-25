@@ -1,4 +1,4 @@
-"""In-bot purchase flow — buy gold / DNA / diamonds with real money.
+"""In-bot purchase flow — buy gold / دی‌ان‌ای / diamonds with real money.
 
 The player picks amounts (stepper buttons), the bot quotes a Toman price from the
 owner-set per-unit prices (game.botconfig) and shows the owner's card, the player
@@ -19,7 +19,7 @@ from game.creature import GameError
 # stepper increments per tap, and a sane ceiling so a mis-tap can't request millions
 STEP = {"coins": 10_000, "dna": 1_000, "diamonds": 50}
 MAX_UNITS = {"coins": 50_000_000, "dna": 500_000, "diamonds": 1_000_000}
-RES_LABEL = {"coins": "طلا", "dna": "DNA", "diamonds": "الماس"}
+RES_LABEL = {"coins": "طلا", "dna": "دی‌ان‌ای", "diamonds": "الماس"}
 RES_EMOJI = {"coins": "🪙", "dna": "🧬", "diamonds": "💎"}
 
 
@@ -154,7 +154,7 @@ def create_pack(title, coins, dna, diamonds, price_toman, discount_percent, emoj
         raise GameError("عنوان پک نمی‌تونه خالی باشه.")
     coins, dna, diamonds = max(0, int(coins)), max(0, int(dna)), max(0, int(diamonds))
     if coins == 0 and dna == 0 and diamonds == 0:
-        raise GameError("پک باید حداقل یکی از طلا / DNA / الماس رو داشته باشه.")
+        raise GameError("پک باید حداقل یکی از طلا / دی‌ان‌ای / الماس رو داشته باشه.")
     price_toman = int(price_toman)
     if price_toman <= 0:
         raise GameError("قیمت پک باید بزرگ‌تر از صفر باشه.")
@@ -180,7 +180,7 @@ def update_pack(pack_id, title, coins, dna, diamonds, price_toman, discount_perc
         raise GameError("عنوان پک نمی‌تونه خالی باشه.")
     coins, dna, diamonds = max(0, int(coins)), max(0, int(dna)), max(0, int(diamonds))
     if coins == 0 and dna == 0 and diamonds == 0:
-        raise GameError("پک باید حداقل یکی از طلا / DNA / الماس رو داشته باشه.")
+        raise GameError("پک باید حداقل یکی از طلا / دی‌ان‌ای / الماس رو داشته باشه.")
     price_toman = int(price_toman)
     if price_toman <= 0:
         raise GameError("قیمت پک باید بزرگ‌تر از صفر باشه.")
@@ -243,7 +243,11 @@ def create_item_pending(user: User, item_id: int) -> PurchaseRequest:
     item = ShopItem.objects.filter(id=item_id, is_active=True).first()
     if item is None or not item.price_toman:
         raise GameError("این بسته دیگه در دسترس نیست.")
-    if item.is_offer and item.offer_ends_at and item.offer_ends_at <= timezone.now():
+    if getattr(item, "offer_cadence", ""):
+        from game import paid_offers
+
+        paid_offers.assert_buyable(user, item)
+    elif item.is_offer and item.offer_ends_at and item.offer_ends_at <= timezone.now():
         raise GameError("زمان این پیشنهاد ویژه تموم شده.")
     if item.max_per_user:
         bought = ShopItemPurchase.objects.filter(user=user, item=item).values_list("count", flat=True).first() or 0
@@ -266,6 +270,13 @@ def item_snapshot(req: PurchaseRequest) -> dict | None:
         return json.loads(req.item_json) if req.item_json else None
     except ValueError:
         return None
+
+
+def cancel_awaiting(user: User) -> bool:
+    """Drop the player's open «awaiting receipt» draft (Mini App / bot انصراف).
+    Returns True if something was cancelled. Pending-under-review orders are left alone."""
+    deleted, _ = PurchaseRequest.objects.filter(user=user, status="awaiting_receipt").delete()
+    return deleted > 0
 
 
 def attach_receipt(req_id: int, user_id: int, file_id: str) -> PurchaseRequest | None:
@@ -293,18 +304,30 @@ def approve(req_id: int) -> dict:
     if req.subscription_tier:
         from game.subscription import activate_subscription
         activate_subscription(user, req.subscription_tier, days=30)
-    notes, chests = [], False
+    notes, chests, picks = [], False, 0
     snap = item_snapshot(req)
     if snap:
         from bio_lab.models import ShopItemPurchase
         from game import itemshop
 
-        notes = itemshop.grant_contents(user, snap["contents"], ref=snap.get("id"))
-        chests = any(c.get("type") == "chest" for c in snap["contents"])
+        contents = snap["contents"] or []
+        notes = itemshop.grant_contents(user, contents, ref=snap.get("id"))
+        # only THIS pack — never bleed prior warehouse tickets into the confirm buttons
+        chests = any(c.get("type") == "chest" for c in contents)
+        picks = sum(
+            max(1, int(c.get("count", 1)))
+            for c in contents
+            if c.get("type") == "creature_pick"
+        )
         if req.shop_item_id:
             row, _ = ShopItemPurchase.objects.select_for_update().get_or_create(user=user, item_id=req.shop_item_id)
             row.count += 1
             row.save(update_fields=["count"])
+            item = req.shop_item
+            if item is not None and getattr(item, "offer_cadence", ""):
+                from game import paid_offers
+
+                paid_offers.record_purchase(user, item)
     user.coins += req.coins
     user.dna_fragments += req.dna
     user.diamonds += req.diamonds
@@ -324,6 +347,16 @@ def approve(req_id: int) -> dict:
         import logging
 
         logging.getLogger(__name__).exception("referral commission failed for request %s", req.id)
+    pick_label, pick_rarity = None, None
+    if picks and snap:
+        from game import creature_pick as _cpick
+
+        pick_label = _cpick.pick_button_text(user, count=picks)
+        # rarity of THIS pack's pick component (not leftover tickets of another rarity)
+        for c in snap["contents"] or []:
+            if c.get("type") == "creature_pick":
+                pick_rarity = c.get("rarity") or "mythic"
+                break
     return {
         "user_id": user.id,
         "coins": req.coins,
@@ -334,6 +367,9 @@ def approve(req_id: int) -> dict:
         "channel_chat_id": req.channel_chat_id,
         "channel_message_id": req.channel_message_id,
         "item": snap["title"] if snap else None, "notes": notes, "chests": chests,
+        "picks": picks,
+        "pick_label": pick_label,
+        "pick_rarity": pick_rarity,
         "summary": request_summary(req),
     }
 
@@ -451,3 +487,47 @@ def request_summary(req: PurchaseRequest) -> str:
         if amount:
             parts.append(f"{RES_EMOJI[res]} {amount:,} {RES_LABEL[res]}")
     return " · ".join(parts) or "—"
+
+
+def receipt_instructions_html(req: PurchaseRequest, card: str = "", holder: str = "") -> str:
+    """HTML DM body for «pay this card, then send the receipt photo here».
+    Used by the bot and by the Mini App (which has no PTB Application)."""
+    import html as _html
+
+    if not card:
+        card, holder = botconfig.get_buy_card()
+    summary = _html.escape(request_summary(req))
+    lines = [
+        "🧾 <b>پرداخت و ارسال رسید</b>",
+        "",
+        f"سفارش تو: {summary}",
+        f"💰 مبلغ: <b>{req.price_toman:,} تومان</b>",
+        "",
+        "💳 <b>مبلغ رو به این کارت واریز کن:</b>",
+        f"<code>{_html.escape(card)}</code>",
+    ]
+    if holder:
+        lines.append(f"به نام: <b>{_html.escape(holder)}</b>")
+    lines += [
+        "",
+        "📸 بعد از واریز، <b>عکس رسید</b> رو همین‌جا بفرست تا برای تأیید ارسال بشه.",
+        "<i>پس از تأیید توسط پشتیبانی، موجودی بلافاصله به حسابت اضافه می‌شه.</i>",
+    ]
+    return "\n".join(lines)
+
+
+def deliver_receipt_card(user_id: int, req: PurchaseRequest) -> bool:
+    """Send the card DM right now from the web process; also queue the bot outbox
+    as a durable backup (with keyboard). Returns True if the immediate send worked."""
+    from game import outbox, tg_notify
+
+    botconfig.refresh_cache()
+    card, holder = botconfig.get_buy_card()
+    sent = False
+    if card:
+        sent = tg_notify.send_html(int(user_id), receipt_instructions_html(req, card, holder))
+    try:
+        outbox.push("purchase_card", {"user_id": int(user_id), "req_id": int(req.id)})
+    except Exception:  # noqa: BLE001 — order already saved; player still has the Mini sheet
+        pass
+    return sent

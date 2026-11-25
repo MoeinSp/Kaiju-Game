@@ -467,7 +467,7 @@ BUILDING_TITLES = {
     "main_hall": ("TALAR-E MEHR", "🏛 تالار مِهر", 5),
     "gold_collector": ("GOLD FOUNDRY", "🏭 جمع‌کننده طلا", 5),
     "diamond_collector": ("DIAMOND SANCTUM", "💎 جمع‌کننده الماس", 5),
-    "dna_lab": ("GENESIS BIOLAB", "🧬 آزمایشگاه DNA", 5),
+    "dna_lab": ("GENESIS BIOLAB", "🧬 آزمایشگاه دی‌ان‌ای", 5),
     "blacksmith": ("KAVEH ARMORY", "⚒ آهنگری", 5),
     "fusion_lab": ("ASTRAL CRUCIBLE", "🔮 تالار ادغام", 5),
     "trade_hall": ("GOLDEN VAULT", "🏦 بانک طلا", 5),

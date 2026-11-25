@@ -46,7 +46,7 @@ from game.emoji import get_emoji
 HQ_BUILDING = "dispatch_hq"
 HQ_SLOTS = (1, 2, 2, 3, 3, 4)                 # missions running at once
 HQ_OFFERS = (3, 4, 5, 6, 6, 7)                # offers on the daily board
-HQ_REWARD_BONUS = (0.0, 0.0, 0.10, 0.20, 0.30, 0.40)  # extra gold/DNA on every mission
+HQ_REWARD_BONUS = (0.0, 0.0, 0.10, 0.20, 0.30, 0.40)  # extra gold/دی‌ان‌ای on every mission
 HQ_BONUS_CHANCE_ADD = (0.0, 0.0, 0.0, 0.0, 0.10, 0.10)  # extra chance of the surprise item
 HQ_LONG_MISSION_LEVEL = 3                     # the 24-hour mission appears from here
 HQ_SPECIAL_LEVEL = 5                          # one «ویژه» mission a day pays double
@@ -69,10 +69,10 @@ _MASTER_DURATIONS = (2, 6, 12, 2, 6, 24, 12)
 # are the ones that bring a player back several times a day. A full level-5 board is now
 # roughly 30% of a day's hunting.
 GOLD_FACTOR = {2: 1.30, 6: 3.00, 12: 4.50, 24: 6.50}
-DNA_PER_GOLD = 0.03  # same gold:DNA ratio hunts use
+DNA_PER_GOLD = 0.03  # same gold:دی‌ان‌ای ratio hunts use
 MIN_COINS = 50
 
-# what a mission is «about» → (gold share, DNA share) of the base
+# what a mission is «about» → (gold share, دی‌ان‌ای share) of the base
 _FOCUS = {
     "gold": (1.00, 0.40),
     "dna": (0.40, 1.60),
@@ -428,7 +428,7 @@ def reward_text(reward: dict, *, with_bonus: bool = True) -> str:
     if reward.get("coins"):
         parts.append(f"{get_emoji('coin')} <code>{int(reward['coins']):,}</code> طلا")
     if reward.get("dna"):
-        parts.append(f"{get_emoji('dna')} <code>{int(reward['dna']):,}</code> DNA")
+        parts.append(f"{get_emoji('dna')} <code>{int(reward['dna']):,}</code> دی‌ان‌ای")
     if reward.get("xp"):
         parts.append(f"{get_emoji('star')} <code>{int(reward['xp']):,}</code> تجربه")
     if with_bonus:

@@ -179,7 +179,7 @@ def money_text(m: dict) -> str:
     for x in reversed(s):
         lines.append(f"<code>{bar(x['toman'], vmax)}</code> {jdate(x['day'])}: <b>{money_fmt(x['toman'])}</b> ({x['n']})")
     lines += ["", DIV, "🏦 <b>اقتصاد بازی</b>" + (f" <i>(تغییر نسبت به {wa['day']})</i>" if wa else "")]
-    for key, label in (("coins", "🪙 کل طلا"), ("dna", "🧬 کل DNA"), ("diamonds", "💎 کل الماس")):
+    for key, label in (("coins", "🪙 کل طلا"), ("dna", "🧬 کل دی‌ان‌ای"), ("diamonds", "💎 کل الماس")):
         extra = ""
         if wa:
             diff = t[key] - wa[key]
@@ -190,7 +190,7 @@ def money_text(m: dict) -> str:
     a, md = m["avg"], m["median"]
     lines += ["", f"👥 <b>دارایی بازیکن‌های فعال ۷ روز</b> ({m['active7']:,} نفر) <i>— میانه · میانگین</i>",
               f"🪙 طلا: <b>{md['coins']:,}</b> · {a['coins']:,.0f}",
-              f"🧬 DNA: <b>{md['dna']:,}</b> · {a['dna']:,.0f}",
+              f"🧬 دی‌ان‌ای: <b>{md['dna']:,}</b> · {a['dna']:,.0f}",
               f"💎 الماس: <b>{md['diamonds']:,}</b> · {a['diamonds']:,.0f}",
               "<i>فاصله‌ی زیاد میانگین با میانه یعنی ثروت دست چند نفر جمع شده.</i>"]
     return "\n".join(lines)

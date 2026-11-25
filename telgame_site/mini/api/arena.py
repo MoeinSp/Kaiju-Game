@@ -284,7 +284,7 @@ def _find(user, seen: list[int], note: str = "") -> dict:
         seen = seen[-1:]
     else:
         target = opponent["user"]
-        loot = max(0, target.coins // 10)          # what attack() takes: 10% of gold and DNA
+        loot = max(0, target.coins // 10)          # what attack() takes: 10% of gold and دی‌ان‌ای
         dna = max(0, target.dna_fragments // 10)
         user_id = target.id
         seen = ([i for i in seen if i != target.id] + [target.id])[-RECENT_MAX:]

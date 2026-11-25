@@ -243,10 +243,10 @@
       sec("clock", "زمان و ظرفیت", ["جفت‌گیری: " + K.n(r.mating_hours[0]) + " تا " + K.n(r.mating_hours[1]) + " ساعت (بسته به نایابی والدین).",
         "رشد تخم: " + K.dur(r.hatch_minutes[0] * 60) + " تا " + K.dur(r.hatch_minutes[1] * 60) + ".",
         "ظرفیت: 1 جفت همزمان (با اشتراک طلایی 2 جفت)."]) +
-      '<div class="h2">' + K.ic("dna") + 'هزینه‌ی DNA</div><div class="panel kv">' + r.dna.map(function (x) {
+      '<div class="h2">' + K.ic("dna") + 'هزینه‌ی دی‌ان‌ای</div><div class="panel kv">' + r.dna.map(function (x) {
         return "<div><span>" + rar(x.a) + " + " + rar(x.b) + '</span><span class="t-dna">' + K.n(x.dna) + "</span></div>"; }).join("") + "</div>" +
       sec("gem", "فوری‌کردن", ["حدود " + K.n(r.gems_per_hour) + " الماس به ازای هر ساعتِ باقی‌مونده؛ هرچی زمان کمتری مونده باشه ارزون‌تره."]) +
-      sec("hatch", "نوزاد", ["سطح 1 و 1 ستاره به دنیا میاد و هیچ‌چیزی از تمرین والدین به ارث نمی‌بره.", "لغو جفت‌گیری DNA رو برنمی‌گردونه."]) +
+      sec("hatch", "نوزاد", ["سطح 1 و 1 ستاره به دنیا میاد و هیچ‌چیزی از تمرین والدین به ارث نمی‌بره.", "لغو جفت‌گیری دی‌ان‌ای رو برنمی‌گردونه."]) +
       '<div style="height:8px"></div></div>');
   }
 
@@ -340,9 +340,9 @@
         K.on(root, "rush", function (el) { rush(el, "breed/cave/finish/", { job: +el.dataset.id }, "فوری‌کردن جفت‌گیری", "همین الان تخم گذاشته می‌شه و والدها آزاد می‌شن."); });
         K.on(root, "egg-rush", function (el) { rush(el, "breed/cave/egg_finish/", { egg: +el.dataset.id }, "فوری‌کردن تخم", "همین الان آماده‌ی سر باز کردن می‌شه."); });
         K.on(root, "cancel", function (el) {
-          K.confirm({ title: "لغو جفت‌گیری", danger: true, ok: "آره، لغو کن", cancel: "انصراف", text: "هر دو هیولا آزاد می‌شن ولی DNAای که خرج کردی برنمی‌گرده. مطمئنی؟" }).then(function (yes) {
+          K.confirm({ title: "لغو جفت‌گیری", danger: true, ok: "آره، لغو کن", cancel: "انصراف", text: "هر دو هیولا آزاد می‌شن ولی دی‌ان‌ایای که خرج کردی برنمی‌گرده. مطمئنی؟" }).then(function (yes) {
             if (!yes) return;
-            K.api.post("breed/cave/cancel/", { job: +el.dataset.id }, el).then(function (r) { K.invalidate("profile/creatures/"); K.toast("لغو شد. DNA برنمی‌گرده."); if (ctx.alive()) apply(r); }).catch(noop);
+            K.api.post("breed/cave/cancel/", { job: +el.dataset.id }, el).then(function (r) { K.invalidate("profile/creatures/"); K.toast("لغو شد. دی‌ان‌ای برنمی‌گرده."); if (ctx.alive()) apply(r); }).catch(noop);
           });
         });
       });
@@ -376,9 +376,9 @@
           h += '<div class="br-notes">' + notes.map(function (n) { return "<p>" + n + "</p>"; }).join("") + "</div></div>";
           h += '<div class="panel kv mt"><div><span>' + K.ic("heart") + " زمان جفت‌گیری</span><span>" + K.dur(info.mating_seconds) + "</span></div>" +
             "<div><span>" + K.ic("egg") + " زمان رشد تخم</span><span>" + K.dur(info.hatch_seconds) + "</span></div>" +
-            "<div><span>" + K.ic("dna") + ' هزینه</span><span class="' + (info.enough ? "t-dna" : "t-bad") + '">' + K.n(info.dna) + " DNA</span></div>" +
-            "<div><span>موجودی تو</span><span>" + K.n(info.have_dna) + " DNA</span></div></div>";
-          if (!info.enough) h += '<div class="callout bad mt">' + K.ic("warn") + "<span>DNA کافی نداری؛ این جفت‌گیری " + K.n(info.dna) + " DNA لازم داره.</span></div>";
+            "<div><span>" + K.ic("dna") + ' هزینه</span><span class="' + (info.enough ? "t-dna" : "t-bad") + '">' + K.n(info.dna) + " دی‌ان‌ای</span></div>" +
+            "<div><span>موجودی تو</span><span>" + K.n(info.have_dna) + " دی‌ان‌ای</span></div></div>";
+          if (!info.enough) h += '<div class="callout bad mt">' + K.ic("warn") + "<span>دی‌ان‌ای کافی نداری؛ این جفت‌گیری " + K.n(info.dna) + " دی‌ان‌ای لازم داره.</span></div>";
           if (info.problem) h += '<div class="callout warn mt">' + K.ic("warn") + "<span>" + K.esc(info.problem) + "</span></div>";
           return h;
         }
@@ -419,8 +419,8 @@
         K.on(root, "go", function (el) {
           if (!info) return;
           K.confirm({ title: "بفرستمشون توی غار؟", icon: "cave", ok: "بذارش توی غار", cancel: "بی‌خیال",
-            html: "<p>«" + K.esc(params.a.name) + "» و «" + K.esc(params.b.name) + "» برای " + K.dur(info.mating_seconds) + " مشغول می‌شن. اگه لغو کنی DNA برنمی‌گرده.</p>" +
-              '<div class="items"><span class="it t-dna">' + K.ic("dna") + '<span style="color:var(--text)">' + K.n(info.dna) + " DNA</span></span></div>" }).then(function (yes) {
+            html: "<p>«" + K.esc(params.a.name) + "» و «" + K.esc(params.b.name) + "» برای " + K.dur(info.mating_seconds) + " مشغول می‌شن. اگه لغو کنی دی‌ان‌ای برنمی‌گرده.</p>" +
+              '<div class="items"><span class="it t-dna">' + K.ic("dna") + '<span style="color:var(--text)">' + K.n(info.dna) + " دی‌ان‌ای</span></span></div>" }).then(function (yes) {
             if (!yes) return;
             K.api.post("breed/cave/start/", { a: params.a.id, b: params.b.id }, el).then(function () {
               K.invalidate("profile/creatures/"); K.haptic("ok"); K.toast("رفتن توی غار!");

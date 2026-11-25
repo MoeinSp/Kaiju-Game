@@ -1,4 +1,4 @@
-"""«مبادله» — the gold ↔ DNA exchange screens.
+"""«مبادله» — the gold ↔ دی‌ان‌ای exchange screens.
 
 Flow: the opener first picks WHICH currency to buy (طلا / دیانای), then an amount —
 a quick-pick preset or a free-form custom number — then a final confirm. Works in
@@ -8,8 +8,8 @@ itself is a single atomic, balance-checked, row-locked update in game/exchange.p
 re-checked at the moment of confirmation (a stale/spammed tap can't over-convert).
 
 Directions (as the user experiences them):
-* «دیانای»  → buy_dna  (pay gold, get DNA)
-* «طلا»       → buy_gold (pay DNA, get gold)
+* «دیانای»  → buy_dna  (pay gold, get دی‌ان‌ای)
+* «طلا»       → buy_gold (pay دی‌ان‌ای, get gold)
 """
 
 from telegram import InlineKeyboardMarkup, Update
@@ -51,18 +51,18 @@ def _leave_row(in_group: bool):
 # ── screen 1: which currency to buy? ─────────────────────────────────────────
 def _home_render(oid: int, coins: int, dna: int, in_group: bool) -> tuple[str, InlineKeyboardMarkup]:
     text = (
-        f"{get_emoji('coin')} <b>مبادله‌ی طلا و DNA</b>\n"
+        f"{get_emoji('coin')} <b>مبادله‌ی طلا و دی‌ان‌ای</b>\n"
         f"<blockquote>موجودی: {get_emoji('coin')} <b>{coins:,}</b> طلا · "
-        f"{get_emoji('dna')} <b>{dna:,}</b> DNA\n"
-        f"نرخ: هر <b>{exchange.GOLD_PER_DNA_BUY}</b> طلا = ۱ DNA · "
-        f"هر ۱ DNA = <b>{exchange.GOLD_PER_DNA_SELL}</b> طلا</blockquote>\n\n"
+        f"{get_emoji('dna')} <b>{dna:,}</b> دی‌ان‌ای\n"
+        f"نرخ: هر <b>{exchange.GOLD_PER_DNA_BUY}</b> طلا = ۱ دی‌ان‌ای · "
+        f"هر ۱ دی‌ان‌ای = <b>{exchange.GOLD_PER_DNA_SELL}</b> طلا</blockquote>\n\n"
         "می‌خوای کدوم رو بخری؟"
     )
     rows = [
         [btn("خرید طلا", emoji_key="btn_gold_shop", style=BUILD, callback_data=f"exch:pick:buy_gold:{oid}")],
-        [btn("خرید DNA", emoji_key="btn_exchange", style=SHOP, callback_data=f"exch:pick:buy_dna:{oid}")],
-        [btn("همهٔ طلا به DNA", emoji_key="btn_exchange", style=SHOP, callback_data=f"exch:all:buy_dna:{oid}")],
-        [btn("همهٔ DNA به طلا", emoji_key="btn_gold_shop", style=BUILD, callback_data=f"exch:all:buy_gold:{oid}")],
+        [btn("خرید دی‌ان‌ای", emoji_key="btn_exchange", style=SHOP, callback_data=f"exch:pick:buy_dna:{oid}")],
+        [btn("همهٔ طلا به دی‌ان‌ای", emoji_key="btn_exchange", style=SHOP, callback_data=f"exch:all:buy_dna:{oid}")],
+        [btn("همهٔ دی‌ان‌ای به طلا", emoji_key="btn_gold_shop", style=BUILD, callback_data=f"exch:all:buy_gold:{oid}")],
         [btn("تجهیزات ← بلیط", emoji_key="btn_ticket_exchange", style=NAV,
              callback_data=f"exch:tickets:{oid}")],
         _leave_row(in_group),
@@ -74,29 +74,29 @@ def _home_render(oid: int, coins: int, dna: int, in_group: bool) -> tuple[str, I
 def _dir_labels(direction: str) -> tuple[str, str]:
     """(what you're buying, what you're paying-with) in Persian."""
     if direction == "buy_gold":
-        return "طلا", "DNA"
-    return "DNA", "طلا"
+        return "طلا", "دی‌ان‌ای"
+    return "دی‌ان‌ای", "طلا"
 
 
 def _amount_render(oid: int, direction: str, coins: int, dna: int, in_group: bool) -> tuple[str, InlineKeyboardMarkup]:
     buying, paying = _dir_labels(direction)
     if direction == "buy_gold":
-        rate_line = f"هر ۱ DNA که بدی → <b>{exchange.GOLD_PER_DNA_SELL}</b> طلا می‌گیری."
+        rate_line = f"هر ۱ دی‌ان‌ای که بدی → <b>{exchange.GOLD_PER_DNA_SELL}</b> طلا می‌گیری."
         prompt = "چند <b>طلا</b> می‌خوای بگیری؟"
     else:
-        rate_line = f"هر ۱ DNA → <b>{exchange.GOLD_PER_DNA_BUY}</b> طلا می‌دی."
-        prompt = "چند <b>DNA</b> می‌خوای بگیری؟"
+        rate_line = f"هر ۱ دی‌ان‌ای → <b>{exchange.GOLD_PER_DNA_BUY}</b> طلا می‌دی."
+        prompt = "چند <b>دی‌ان‌ای</b> می‌خوای بگیری؟"
     lines = [
         f"🔄 <b>خرید {buying}</b>  <i>(با دادن {paying})</i>",
         f"<blockquote>{rate_line}\n"
-        f"موجودی: {get_emoji('coin')} <b>{coins:,}</b> طلا · {get_emoji('dna')} <b>{dna:,}</b> DNA</blockquote>",
+        f"موجودی: {get_emoji('coin')} <b>{coins:,}</b> طلا · {get_emoji('dna')} <b>{dna:,}</b> دی‌ان‌ای</blockquote>",
         "",
         prompt,
     ]
     rows = []
     if direction == "buy_gold":
         # gold-denominated: the player picks how much GOLD to receive; we convert to the
-        # nearest whole DNA to sell and show the exact gold that yields.
+        # nearest whole دی‌ان‌ای to sell and show the exact gold that yields.
         for gold in exchange.PRESET_GOLD:
             need_dna = exchange.dna_for_gold(gold)
             got_gold = exchange.sell_gold_gain(need_dna)
@@ -104,7 +104,7 @@ def _amount_render(oid: int, direction: str, coins: int, dna: int, in_group: boo
             rows.append([btn(label, emoji_key="btn_gold_shop", style=BUILD, callback_data=f"exch:amt:{direction}:{need_dna}:{oid}")])
     else:
         for amt in exchange.PRESET_DNA:
-            label = f"دریافت {amt:,} DNA"
+            label = f"دریافت {amt:,} دی‌ان‌ای"
             rows.append([btn(label, emoji_key="btn_exchange", style=SHOP, callback_data=f"exch:amt:{direction}:{amt}:{oid}")])
     rows.append([btn("تبدیل همه", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"exch:all:{direction}:{oid}")])
     rows.append([btn("عدد دلخواه", emoji_key="btn_custom_amt", style=NAV, callback_data=f"exch:custom:{direction}:{oid}")])
@@ -116,15 +116,15 @@ def _amount_render(oid: int, direction: str, coins: int, dna: int, in_group: boo
 def build_confirm(oid: int, pack: dict, coins: int, dna: int) -> tuple[str, InlineKeyboardMarkup]:
     d = pack["direction"]
     if d == "buy_dna":
-        deal = (f"<b>{pack['dna']:,}</b> {get_emoji('dna')} DNA می‌گیری و "
+        deal = (f"<b>{pack['dna']:,}</b> {get_emoji('dna')} دی‌ان‌ای می‌گیری و "
                 f"<b>{pack['gold']:,}</b> {get_emoji('coin')} طلا می‌دی.")
     else:
         deal = (f"<b>{pack['gold']:,}</b> {get_emoji('coin')} طلا می‌گیری و "
-                f"<b>{pack['dna']:,}</b> {get_emoji('dna')} DNA می‌دی.")
+                f"<b>{pack['dna']:,}</b> {get_emoji('dna')} دی‌ان‌ای می‌دی.")
     text = (
         f"{get_emoji('refresh')} <b>تأیید مبادله</b>\n"
         f"<blockquote>{deal}\n\n"
-        f"موجودی فعلی: {coins:,} طلا · {dna:,} DNA</blockquote>"
+        f"موجودی فعلی: {coins:,} طلا · {dna:,} دی‌ان‌ای</blockquote>"
     )
     rows = [[
         btn("تأیید مبادله", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"exchgo:{d}:{pack['dna']}:{oid}"),
@@ -135,22 +135,22 @@ def build_confirm(oid: int, pack: dict, coins: int, dna: int) -> tuple[str, Inli
 
 # ── entry point ──────────────────────────────────────────────────────────────
 def direction_of(text: str | None) -> str | None:
-    """«تبدیل DNA به طلا» / «فروش DNA» → buy_gold; «طلا به دی ان ای» / «خرید DNA» → buy_dna;
+    """«تبدیل دی‌ان‌ای به طلا» / «فروش دی‌ان‌ای» → buy_gold; «طلا به دی ان ای» / «خرید دی‌ان‌ای» → buy_dna;
     a bare «صرافی» / «تبدیل» / «مبادله» → None (the 'buy which?' screen)."""
     from game.keywords import normalize
 
     t = normalize(text or "")
     for d in ("دی ان ای", "دیانای", "dna"):
-        t = t.replace(d, "DNA")
-    if "DNA به طلا" in t or t.startswith(("فروش DNA", "خرید طلا")):
-        return "buy_gold"   # pay DNA, get gold
-    if "طلا به DNA" in t or t.startswith(("خرید DNA", "فروش طلا")):
-        return "buy_dna"    # pay gold, get DNA
+        t = t.replace(d, "دی‌ان‌ای")
+    if "دی‌ان‌ای به طلا" in t or t.startswith(("فروش دی‌ان‌ای", "خرید طلا")):
+        return "buy_gold"   # pay دی‌ان‌ای, get gold
+    if "طلا به دی‌ان‌ای" in t or t.startswith(("خرید دی‌ان‌ای", "فروش طلا")):
+        return "buy_dna"    # pay gold, get دی‌ان‌ای
     return None
 
 
 def parse_group_all(norm: str) -> str | None:
-    """«تبدیل همه طلا» / «تبدیل همه DNA» → the exchange direction, or None."""
+    """«تبدیل همه طلا» / «تبدیل همه دی‌ان‌ای» → the exchange direction, or None."""
     gold = {
         "تبدیل همه طلا", "همه طلا به dna", "همه طلا به دی ان ای", "همه طلا به دیانای",
         "تبدیل همه طلا به dna", "تبدیل همه طلا به دی ان ای",
@@ -183,7 +183,7 @@ async def exchange_all_panel(update: Update, context: ContextTypes.DEFAULT_TYPE,
 
 async def exchange_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """PV command / menu button / group «مبادله» / «صرافی» / «تبدیل» word → the 'buy which?'
-    screen; a word that names the direction («DNA به طلا») goes straight to its amounts."""
+    screen; a word that names the direction («دی‌ان‌ای به طلا») goes straight to its amounts."""
     if not exchange.ENABLED:
         await send_screen(update, _DISABLED_MSG, parse_mode="HTML")
         return
@@ -278,7 +278,7 @@ async def exchange_nav_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer()
         buying, _paying = _dir_labels(direction)
         hint = "همینجا عدد رو بفرست." if not _is_group(update) else "روی همین پیام <b>ریپلای</b> کن و عدد رو بفرست."
-        unit_word = "طلا" if unit == "gold" else "DNA"
+        unit_word = "طلا" if unit == "gold" else "دی‌ان‌ای"
         await safe_edit_message_text(
             query,
             f"✏️ چند <b>{unit_word}</b> می‌خوای بگیری؟\n{hint}\n<i>مثلاً <code>120</code></i>",
@@ -313,9 +313,9 @@ async def exchange_do_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
         return
     if direction == "buy_dna":
-        done = f"✅ <b>{result['dna']:,} DNA گرفتی</b> ({result['gold']:,} طلا دادی)."
+        done = f"✅ <b>{result['dna']:,} دی‌ان‌ای گرفتی</b> ({result['gold']:,} طلا دادی)."
     else:
-        done = f"✅ <b>{result['gold']:,} طلا گرفتی</b> ({result['dna']:,} DNA دادی)."
+        done = f"✅ <b>{result['gold']:,} طلا گرفتی</b> ({result['dna']:,} دی‌ان‌ای دادی)."
     await query.answer("✅ انجام شد!")
     text, kb = _home_render(int(oid), result["new_coins"], result["new_dna"], _is_group(update))
     await safe_edit_message_text(query, f"{done}\n━━━━━━━━━━\n{text}", parse_mode="HTML", reply_markup=kb)
@@ -338,7 +338,7 @@ async def handle_custom_amount(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data[AWAITING_PLAYER_KEY] = awaiting  # keep waiting
         await message.reply_text(f"{get_emoji('warning')} یه عدد درست بفرست (مثلاً 120).", parse_mode="HTML")
         return
-    # for buy_gold the number is GOLD to receive → convert to the whole DNA to sell
+    # for buy_gold the number is GOLD to receive → convert to the whole دی‌ان‌ای to sell
     amount_dna = exchange.dna_for_gold(int(norm)) if unit == "gold" else int(norm)
     try:
         pack = exchange.describe(direction, amount_dna)

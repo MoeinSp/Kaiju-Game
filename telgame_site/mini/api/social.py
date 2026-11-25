@@ -142,7 +142,7 @@ def _alliance_dict(user, al: Alliance) -> dict:
 
 @endpoint()
 def alliance_panel(request, user):
-    from config import BOT_USERNAME
+    from config import get_bot_username
     from game import alliance as alliance_mod
 
     al = Alliance.objects.filter(id=user.alliance_id).first() if user.alliance_id else None
@@ -153,7 +153,7 @@ def alliance_panel(request, user):
         "alliance": _alliance_dict(user, al) if al is not None else None,
         "flag_options": catalog(),
         "create_cost": alliance_mod.ALLIANCE_CREATE_COST,
-        "bot": BOT_USERNAME or None,
+        "bot": get_bot_username() or None,
         "coins": user.coins,
     }
 

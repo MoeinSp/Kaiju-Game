@@ -12,7 +12,7 @@ How it runs (no dedicated scheduler — the 5-minute notification job calls tick
 * A hit costs 1 energy. Damage = the active creature's power (the same number every card
   shows), ×1.20 with the element advantage over the boss — the game's one element rule.
   No random swing (removed 2026-10-16): equal power always deals equal damage, and a tie
-  on the leaderboard goes to whoever hit first. Each hit pays gold + DNA on the spot.
+  on the leaderboard goes to whoever hit first. Each hit pays gold + دی‌ان‌ای on the spot.
 * When HP reaches 0 the boss is DEAD; when the window ends it ESCAPES. Either way tick()
   settles it ONCE and pays everyone who hit it by how much of its HP the SERVER dealt
   (MILESTONES: a chest at 25%, another at 50%, another at 75%; a kill adds diamonds for
@@ -284,7 +284,7 @@ def hit(user: User) -> dict:
 
 
 def _chest_line(c: dict) -> str:
-    parts = [f"{c['coins']:,} طلا", f"{c['dna']:,} DNA"]
+    parts = [f"{c['coins']:,} طلا", f"{c['dna']:,} دی‌ان‌ای"]
     if c["diamonds"]:
         parts.append(f"{c['diamonds']} الماس")
     rarity = constants.RARITY_LABELS.get(c["rarity"], c["rarity"])

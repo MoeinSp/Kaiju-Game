@@ -24,7 +24,7 @@ CACHE_SECONDS = 60
 # key → (label, short description). Effects are applied where each system lives (see VALUES).
 RELICS: dict[str, tuple[str, str]] = {
     "golden_idol": ("بت طلایی", "+۱۰٪ طلای شکار"),
-    "dna_vial": ("شیشه‌ی ژن", "+۱۰٪ DNA شکار"),
+    "dna_vial": ("شیشه‌ی ژن", "+۱۰٪ دی‌ان‌ای شکار"),
     "sand_clock": ("ساعت شنی", "جعبه‌های آرنا ۱۵٪ سریع‌تر باز می‌شن"),
     "heart_stone": ("سنگ قلب", "+۵ سقف انرژی"),
     "compass": ("قطب‌نمای کهن", "+۱ جایگاه اعزام"),

@@ -40,7 +40,7 @@ HP_POWER_FLOOR = 0.6       # a kaiju at 1 HP fights at 60% of its power, full HP
 # «سرم ترمیم» per run: runs have no time limit and serums brew without a daily cap, so without
 # this a player could wait between rooms, brew, and enter every fight at full HP
 HEALS_PER_RUN = 2
-# difficulty tiers: enemy power ×, gold/DNA ×, black runes ×, relic chance on a win, shadow cores
+# difficulty tiers: enemy power ×, gold/دی‌ان‌ای ×, black runes ×, relic chance on a win, shadow cores
 # dropped by the boss (min, max) and the chance it drops them at all, and the tier that must be
 # cleared first (best_difficulty).
 # Cores (2026-11-05): top players raised a full black form in ~2 weeks (nightmare 2-3 + endless ~2
@@ -131,7 +131,7 @@ RUNES = {
     "fury": ("خشم {el}", "+۱۲٪ قدرت هیولاهای {el}"),
     "stone_skin": ("پوست سنگی", "جونی که نبردها کم می‌کنن ۳۰٪ کمتر"),
     "vampire": ("خون‌آشام", "بعد از هر برد، ۱۵٪ جون برنده برمی‌گرده"),
-    "treasure_hunter": ("گنج‌یاب", "+۲۵٪ طلا و DNA از اینجا به بعد"),
+    "treasure_hunter": ("گنج‌یاب", "+۲۵٪ طلا و دی‌ان‌ای از اینجا به بعد"),
     "elemental_edge": ("برتری مضاعف", "برتری عنصری ×۱.۳ به‌جای ×۱.۲"),
     "momentum": ("عطش نبرد", "هر برد توی این ورود +۳٪ قدرت (تا ۱۵٪)"),
     "lucky": ("بخت بلند", "پشت در مرموز همیشه گنجه"),
@@ -141,7 +141,7 @@ RUNES = {
     # instant: take effect on the spot, nothing is kept
     "revive": ("احیا", "یکی از هیولاهای از پا افتاده با ۴۰٪ جون برمی‌گرده"),
     "rest": ("استراحت", "همین حالا +۲۵٪ جون همه‌ی هیولاهای سرپا"),
-    "spoils": ("کیسه‌ی غنیمت", "همین حالا یه کیسه طلا و DNA"),
+    "spoils": ("کیسه‌ی غنیمت", "همین حالا یه کیسه طلا و دی‌ان‌ای"),
 }
 # each kept rune comes once a run (they used to stack: 6× «خشم» = +72% power, 6× «گنج‌یاب» = +150% loot)
 KEPT_RUNES = ("resolve", "stone_skin", "vampire", "treasure_hunter", "elemental_edge", "momentum", "lucky")
@@ -529,7 +529,7 @@ def choose_door(user: User, index: int) -> dict:
         # about a plain fight's pay (it used to beat one, with no risk): the fights are the loot
         rng = _rng(state)
         got = _loot_add(state, 1500 + 250 * room, 40 + 8 * room, rng.choice((0, 1, 1, 2)))
-        _log(state, f"🎁 گنج پیدا کردی: {got['coins']:,} طلا، {got['dna']:,} DNA"
+        _log(state, f"🎁 گنج پیدا کردی: {got['coins']:,} طلا، {got['dna']:,} دی‌ان‌ای"
                     + (f"، {got['runes']} رون سیاه" if got["runes"] else ""))
         event["got"] = got
         _next_room(state)
@@ -639,7 +639,7 @@ def _apply_rune(state: dict, key: str) -> None:
     if key == "spoils":
         room = state["room"]
         got = _loot_add(state, 1500 + 200 * room, 40 + 6 * room)
-        _log(state, f"💰 کیسه‌ی غنیمت: {got['coins']:,} طلا، {got['dna']:,} DNA")
+        _log(state, f"💰 کیسه‌ی غنیمت: {got['coins']:,} طلا، {got['dna']:,} دی‌ان‌ای")
         return
     if key == "first_strike":   # one-shot: a flag until the next fight, not a kept rune
         state["first_strike"] = True

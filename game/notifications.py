@@ -48,8 +48,8 @@ def defense_report_text(attacker_name: str, attacker_power: int, attacker_won: b
                         defender_creature: str | None = None) -> str:
     """The 'you were attacked' DM body — shared by the immediate send (fired the
     instant a raid resolves) and the periodic catch-up job, so both read identically.
-    A successful attacker loots gold and DNA; either way the defender's cup swings, so both
-    the looted gold/DNA (on a loss) and the cup change are shown."""
+    A successful attacker loots gold and دی‌ان‌ای; either way the defender's cup swings, so both
+    the looted gold/دی‌ان‌ای (on a loss) and the cup change are shown."""
     power_note = f" (قدرت {attacker_power})" if attacker_power else ""
     where = ""
     if group_title is not None:  # a group «اتک» — say which group
@@ -66,7 +66,7 @@ def defense_report_text(attacker_name: str, attacker_power: int, attacker_won: b
     cup_change = int(cup_change or 0)
     if attacker_won:
         loot_line = f"\n💰 <b>{loot:,}</b> طلا غارت شد." if loot else ""
-        dna_line = f"\n🧬 <b>{loot_dna:,}</b> DNA غارت شد." if loot_dna else ""
+        dna_line = f"\n🧬 <b>{loot_dna:,}</b> دی‌ان‌ای غارت شد." if loot_dna else ""
         cup_line = f"\n🏆 <b>{abs(cup_change)}</b> کاپ از دست دادی." if cup_change else ""
         return (
             f"⚔️ <b>به آزمایشگاهت حمله شد!</b>\n"

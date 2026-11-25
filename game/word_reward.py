@@ -31,7 +31,7 @@ COOLDOWN_MAX_SECONDS = 6 * 60
 
 # (weight, kind, low, high) — `kind` names the resource so the caller can render
 # the right emoji without re-deriving it from the amount.
-# No diamonds here any more — the group «جایزه» pays gold / DNA / speed-up cards only
+# No diamonds here any more — the group «جایزه» pays gold / دی‌ان‌ای / speed-up cards only
 # (diamonds stay a deliberate, capped faucet via the رگه‌ی الماس drop). The old diamond
 # weight was folded into coins.
 PRIZES: tuple[tuple[int, str, int, int], ...] = (
@@ -48,7 +48,7 @@ FOOD_TIER_CHOICES: tuple[tuple[str, int], ...] = (("small", 72), ("medium", 24),
 
 PRIZE_LABELS = {
     "coins": "طلا",
-    "dna": "DNA",
+    "dna": "دی‌ان‌ای",
     "diamonds": "الماس",
     "speedup": "کارت سرعت",
     "jackpot": "جکپات طلا",
@@ -64,7 +64,7 @@ def seconds_left(user: User) -> int:
 
 
 def _reward_scale(user: User) -> float:
-    """Multiplier that scales the gold/DNA/jackpot reward by the player's strength —
+    """Multiplier that scales the gold/دی‌ان‌ای/jackpot reward by the player's strength —
     lab level and (heavily) their active creature's power — so «جایزه» stays worthwhile
     for strong players instead of paying the same tiny flat amount to everyone."""
     from bio_lab.repository import get_active_creature
@@ -84,7 +84,7 @@ def _roll_prize(user: User) -> tuple[str, int, int, str | None]:
     kind = random.choices([p[1] for p in PRIZES], weights=[p[0] for p in PRIZES], k=1)[0]
     low, high = next((lo, hi) for _w, k, lo, hi in PRIZES if k == kind)
     amount = random.randint(low, high) if high else 0
-    # gold / DNA / jackpot scale with the player's power; speed-up cards & food don't
+    # gold / دی‌ان‌ای / jackpot scale with the player's power; speed-up cards & food don't
     if kind in ("coins", "jackpot", "dna"):
         amount = round(amount * _reward_scale(user))
         if kind == "jackpot":

@@ -129,7 +129,7 @@ def _detail_text(key, lab_level, level, remaining, target) -> str:
         gold, dna = research.next_cost(target_level, key)
         secs = constants.research_seconds(target_level, key)
         lines.append(f"\n🔼 <b>ارتقا به سطح {target_level}</b> (اثر می‌شه {target_level * per * 100:.0f}٪):")
-        lines.append(f"{get_emoji('coin')} <b>{gold:,}</b> طلا  ┃  {get_emoji('dna')} <b>{dna:,}</b> DNA")
+        lines.append(f"{get_emoji('coin')} <b>{gold:,}</b> طلا  ┃  {get_emoji('dna')} <b>{dna:,}</b> دی‌ان‌ای")
         lines.append(f"⏳ زمان: <b>{_fmt_remaining(secs)}</b>")
     return "\n".join(lines)
 

@@ -1,19 +1,19 @@
-"""«مبادله» — a two-way gold ↔ DNA converter (DM and, scoped, in groups).
+"""«مبادله» — a two-way gold ↔ دی‌ان‌ای converter (DM and, scoped, in groups).
 
 Two directions:
-* buy_dna  — pay gold, get DNA  (GOLD_PER_DNA_BUY gold per 1 DNA)
-* buy_gold — pay DNA, get gold  (GOLD_PER_DNA_SELL gold per 1 DNA)
+* buy_dna  — pay gold, get دی‌ان‌ای  (GOLD_PER_DNA_BUY gold per 1 دی‌ان‌ای)
+* buy_gold — pay دی‌ان‌ای, get gold  (GOLD_PER_DNA_SELL gold per 1 دی‌ان‌ای)
 
-Buying DNA costs more gold per unit than selling it returns, so a full round-trip
+Buying دی‌ان‌ای costs more gold per unit than selling it returns, so a full round-trip
 loses value — it's a convenience, not an arbitrage loop. Amounts are always a whole
-number of DNA (the atomic unit), so the math is exact and never rounds. Preset
+number of دی‌ان‌ای (the atomic unit), so the math is exact and never rounds. Preset
 sizes plus a free-form custom amount are both supported. The swap is a single
 atomic, row-locked, balance-checked update — funds are re-checked at the instant of
 confirmation, so a stale or spammed button can never over-convert.
 
 Every committed swap is recorded twice, so a «صرافی زدم چیزی نداد» report can be checked:
-* the gain ledger (source "exchange"): DNA gained = buy_dna, gold gained = buy_gold. The
-  spent side follows from the fixed rates (gold spent = DNA × BUY, DNA spent = gold / SELL);
+* the gain ledger (source "exchange"): دی‌ان‌ای gained = buy_dna, gold gained = buy_gold. The
+  spent side follows from the fixed rates (gold spent = دی‌ان‌ای × BUY, دی‌ان‌ای spent = gold / SELL);
 * one «EXCHANGE» line in the container log (bot or web) with the time, player, direction,
   amounts, balances before and after, and where it came from (bot / mini).
 """
@@ -39,11 +39,11 @@ if not log.handlers:
 
 ENABLED = True
 
-# gold per 1 DNA in each direction. BUY > SELL, so a full round-trip loses gold.
-GOLD_PER_DNA_BUY = 25    # buy_dna:  spend 25 gold to gain 1 DNA
-GOLD_PER_DNA_SELL = 10   # buy_gold: gain 10 gold for 1 DNA spent
+# gold per 1 دی‌ان‌ای in each direction. BUY > SELL, so a full round-trip loses gold.
+GOLD_PER_DNA_BUY = 25    # buy_dna:  spend 25 gold to gain 1 دی‌ان‌ای
+GOLD_PER_DNA_SELL = 10   # buy_gold: gain 10 gold for 1 دی‌ان‌ای spent
 
-PRESET_DNA = [10, 50, 200]     # quick-pick sizes (in DNA) offered when BUYING DNA
+PRESET_DNA = [10, 50, 200]     # quick-pick sizes (in دی‌ان‌ای) offered when BUYING دی‌ان‌ای
 # When BUYING GOLD the player thinks in gold, so its quick-picks are gold amounts.
 PRESET_GOLD = [500, 2_500, 10_000]
 MAX_EXCHANGE_DNA = 1_000_000   # sane upper bound on a single custom exchange
@@ -52,12 +52,12 @@ DIRECTIONS = ("buy_dna", "buy_gold")
 
 
 def buy_gold_cost(dna: int) -> int:
-    """Gold you PAY to buy `dna` DNA."""
+    """Gold you PAY to buy `dna` دی‌ان‌ای."""
     return int(dna) * GOLD_PER_DNA_BUY
 
 
 def sell_gold_gain(dna: int) -> int:
-    """Gold you GET for selling `dna` DNA."""
+    """Gold you GET for selling `dna` دی‌ان‌ای."""
     return int(dna) * GOLD_PER_DNA_SELL
 
 
@@ -66,25 +66,25 @@ def all_dna(coins: int, dna: int, direction: str) -> int:
     if direction == "buy_dna":
         amount = int(coins) // GOLD_PER_DNA_BUY
         if amount <= 0:
-            raise GameError(f"حداقل {GOLD_PER_DNA_BUY:,} طلا برای ۱ DNA لازم است.")
+            raise GameError(f"حداقل {GOLD_PER_DNA_BUY:,} طلا برای ۱ دی‌ان‌ای لازم است.")
     elif direction == "buy_gold":
         amount = int(dna)
         if amount <= 0:
-            raise GameError("DNA برای تبدیل نداری.")
+            raise GameError("دی‌ان‌ای برای تبدیل نداری.")
     else:
         raise GameError("جهت مبادله نامعتبره.")
     return min(amount, MAX_EXCHANGE_DNA)
 
 
 def dna_for_gold(gold: int) -> int:
-    """How many DNA you must sell to RECEIVE about `gold` gold (buy_gold direction).
-    Rounds to the nearest whole DNA — the atomic unit — so the received gold may differ
-    slightly from the requested amount. At least 1 DNA."""
+    """How many دی‌ان‌ای you must sell to RECEIVE about `gold` gold (buy_gold direction).
+    Rounds to the nearest whole دی‌ان‌ای — the atomic unit — so the received gold may differ
+    slightly from the requested amount. At least 1 دی‌ان‌ای."""
     return max(1, round(int(gold) / GOLD_PER_DNA_SELL))
 
 
 def describe(direction: str, dna: int) -> dict:
-    """Resolve a would-be exchange of `dna` DNA in `direction` to
+    """Resolve a would-be exchange of `dna` دی‌ان‌ای in `direction` to
     {direction, dna, gold} (gold = gold paid for buy_dna / gold gained for buy_gold).
     Raises GameError on a bad direction or a non-positive/oversized amount."""
     if direction not in DIRECTIONS:
@@ -93,7 +93,7 @@ def describe(direction: str, dna: int) -> dict:
     if dna <= 0:
         raise GameError("تعداد باید بزرگ‌تر از صفر باشه.")
     if dna > MAX_EXCHANGE_DNA:
-        raise GameError(f"حداکثر {MAX_EXCHANGE_DNA:,} DNA در هر مبادله.")
+        raise GameError(f"حداکثر {MAX_EXCHANGE_DNA:,} دی‌ان‌ای در هر مبادله.")
     gold = buy_gold_cost(dna) if direction == "buy_dna" else sell_gold_gain(dna)
     return {"direction": direction, "dna": dna, "gold": gold}
 
@@ -124,14 +124,14 @@ def exchange(user: User, direction: str, dna: int, via: str = "bot") -> dict:
     before = (u.coins, u.dna_fragments)
     dna, gold = pack["dna"], pack["gold"]
 
-    if direction == "buy_dna":  # pay gold, get DNA
+    if direction == "buy_dna":  # pay gold, get دی‌ان‌ای
         if u.coins < gold:
             raise GameError(f"طلا کافی نداری! این مبادله {gold:,} طلا می‌خواد (الان {u.coins:,} داری).")
         u.coins -= gold
         u.dna_fragments += dna
-    else:  # buy_gold: pay DNA, get gold
+    else:  # buy_gold: pay دی‌ان‌ای, get gold
         if u.dna_fragments < dna:
-            raise GameError(f"DNA کافی نداری! این مبادله {dna:,} DNA می‌خواد (الان {u.dna_fragments:,} داری).")
+            raise GameError(f"دی‌ان‌ای کافی نداری! این مبادله {dna:,} دی‌ان‌ای می‌خواد (الان {u.dna_fragments:,} داری).")
         u.dna_fragments -= dna
         u.coins += gold
 

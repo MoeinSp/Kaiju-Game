@@ -478,7 +478,7 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
     delta = cup_delta(attacker, opponent["cup"], won, attacker_power) if award_cup else 0
 
     # Only the ATTACKER loots, and only on a WIN: a winning attacker takes gold (and a
-    # little DNA) from the loser; a LOSING attacker loses nothing but cup. Cup always
+    # little دی‌ان‌ای) from the loser; a LOSING attacker loses nothing but cup. Cup always
     # moves (per award_cup) — that part is separate from the gold loot.
     loot = 0
     taken_from_defender = 0
@@ -491,7 +491,7 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
     league = constants.league_for_cup(attacker.cup)
     if won:
         if defender_user is not None:
-            # REAL defender -> Exactly 10% of defender's actual current gold and DNA
+            # REAL defender -> Exactly 10% of defender's actual current gold and دی‌ان‌ای
             loot = max(0, defender_user.coins // 10)
             dna_win = max(0, defender_user.dna_fragments // 10)
 

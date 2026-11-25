@@ -1061,7 +1061,7 @@ WAR_SEED_FRACTION = 0.20
 # Personal war payouts, handed out when the war settles. Everyone who rallied earns
 # the participation reward win-or-lose; the winning side earns a big bonus on top; and
 # the single top contributor on the winning side is crowned MVP for premium diamonds.
-# Max rewards scale with combat power up to 25,000 gold and 2,000 DNA at max power (9,822).
+# Max rewards scale with combat power up to 25,000 gold and 2,000 دی‌ان‌ای at max power (9,822).
 MAX_WAR_POWER = 9822.0
 WAR_MAX_WIN_COINS = 25000
 WAR_MAX_WIN_DNA = 2000
@@ -1069,7 +1069,7 @@ WAR_MAX_BASE_COINS = 8500
 WAR_MAX_BASE_DNA = 700
 WAR_MVP_BONUS_DIAMONDS = 0  # No extra reward for MVP - normal reward only
 
-# One reward chest for every member who rallied, on top of the gold/DNA — its tier by the
+# One reward chest for every member who rallied, on top of the gold/دی‌ان‌ای — its tier by the
 # result (win magical, draw golden, loss silver). Stored unopened (source "alliance_war") — the
 # player opens them from the result message, the war panel or «انبار».
 WAR_CHESTS = {"win": ("magical", 1), "draw": ("golden", 1), "lose": ("silver", 1)}
@@ -1476,7 +1476,7 @@ def settle_due_wars() -> list[tuple]:
             for uid in User.objects.filter(alliance_id=al.id, notifications_on=True).values_list("id", flat=True):
                 pers = personal.get(uid)
                 if pers:
-                    reward_bits = [f"{pers['coins']:,} طلا", f"{pers['dna']:,} DNA"]
+                    reward_bits = [f"{pers['coins']:,} طلا", f"{pers['dna']:,} دی‌ان‌ای"]
                     if pers["diamonds"]:
                         reward_bits.append(f"{pers['diamonds']} 💎")
                     line = "\n\n🎁 <b>پاداش مشارکتت:</b> " + " + ".join(reward_bits)

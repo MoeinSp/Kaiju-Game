@@ -30,7 +30,7 @@ _RES = {"coins": "coins", "dna_fragments": "dna", "diamonds": "diamonds"}
 # What the next main-hall level opens — the bullet list of the bot's main-hall card
 # (bot/handlers/buildings.py keeps it inside a function, so it can't be imported).
 _HALL_UNLOCKS = {
-    2: ["تالار ادغام و غار هیولا", "ساخت آزمایشگاه DNA و بانک طلا", "دسترسی به پاس ماهانه و صرافی طلا/DNA",
+    2: ["تالار ادغام و غار هیولا", "ساخت آزمایشگاه دی‌ان‌ای و بانک طلا", "دسترسی به پاس ماهانه و صرافی طلا/دی‌ان‌ای",
         "افزایش سقف ترکیب به ۲ ستاره"],
     3: ["ساخت و بازگشایی آهنگری تجهیزات", "چیدمان تیم ۳ نفره مبارزات", "ساخت معدن جمع‌کننده الماس",
         "ورود به لیگ رتبه‌بندی و رویدادها", "فروشگاه سپر و مبادله تجهیزات", "افزایش سقف ترکیب به ۳ ستاره"],

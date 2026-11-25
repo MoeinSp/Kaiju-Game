@@ -11,6 +11,8 @@
 .st-oprice { margin-top: 4px; font-weight: 700; font-size: 15px; color: var(--good); }
 .st-oprice s { color: var(--muted); font-weight: 400; margin-inline-end: 6px; }
 .st-offer:active { transform: scale(.985); }
+.st-offer.out { opacity: .55; }
+.st-offer.out .st-oprice { filter: grayscale(1); }
 .st-tabs { margin-bottom: 10px; }
 .st-tabs button svg { width: 15px; height: 15px; }
 .st-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }

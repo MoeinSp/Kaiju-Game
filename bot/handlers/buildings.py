@@ -41,7 +41,7 @@ from game.buildings import (
 # English subtitle per producing building, for the "🏭 … | Gold Collector" header
 _COLLECTOR_EN = {
     "gold_collector": "Gold Collector",
-    "dna_lab": "DNA Lab",
+    "dna_lab": "دی‌ان‌ای Lab",
     "diamond_collector": "Diamond Mine",
 }
 from game.creature import GameError
@@ -49,7 +49,7 @@ from game.daily import check_missions, record_action
 from game.emoji import get_emoji
 
 _RESOURCE_EMOJI_KEY = {"coins": "coin", "diamonds": "diamond", "dna_fragments": "dna"}
-_RESOURCE_NAMES = {"coins": "طلا", "diamonds": "الماس", "dna_fragments": "DNA"}
+_RESOURCE_NAMES = {"coins": "طلا", "diamonds": "الماس", "dna_fragments": "دی‌ان‌ای"}
 
 
 def _format_remaining(seconds: float) -> str:
@@ -71,7 +71,7 @@ def _buildings_sync(tg_user):
             f"⚠️ <b>هشدار غارت معدن</b>\n"
             f"در حمله اخیر آرنا به شما، بخشی از منابع ذخیره‌شده به غارت رفت:\n"
             f"💰 طلا: <code>{user.plundered_alert_gold:,}</code>\n"
-            f"🧬 DNA: <code>{user.plundered_alert_dna:,}</code>\n\n"
+            f"🧬 دی‌ان‌ای: <code>{user.plundered_alert_dna:,}</code>\n\n"
         )
         user.plundered_alert_gold = 0
         user.plundered_alert_dna = 0
@@ -322,8 +322,8 @@ def _building_detail_text(view: dict) -> str:
             _UNLOCKS_BY_HALL = {
                 2: [
                     f"{get_emoji('chest_magical')} تالار ادغام و غار هیولا",
-                    f"{get_emoji('dna')} ساخت آزمایشگاه DNA و بانک طلا",
-                    f"{get_emoji('ticket')} دسترسی به پاس ماهانه و صرافی طلا/DNA",
+                    f"{get_emoji('dna')} ساخت آزمایشگاه دی‌ان‌ای و بانک طلا",
+                    f"{get_emoji('ticket')} دسترسی به پاس ماهانه و صرافی طلا/دی‌ان‌ای",
                     f"{get_emoji('star')} افزایش سقف ترکیب به ۲ ستاره",
                 ],
                 3: [

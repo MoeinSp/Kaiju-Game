@@ -156,7 +156,7 @@ def lab_level(user: User) -> int:
 LAB_MILESTONES: dict[int, list[tuple[str, str, str]]] = {
     2:  [("btn_hunt", "شکار خودکار", "hunt"), ("btn_wheel", "گردونه‌ی شانس", "wheel")],
     3:  [("btn_buildings", "ساختمون‌ها و معدن", "buildings"), ("btn_biocrate", "باکس ژنتیکی", "biocrate")],
-    4:  [("btn_exchange", "مبادله‌ی طلا و DNA", "exchange")],
+    4:  [("btn_exchange", "مبادله‌ی طلا و دی‌ان‌ای", "exchange")],
     5:  [("btn_fusion", "ترکیب و ⭐ ستاره", "fusion"), ("btn_arena", "آرنا و کاپ", "arena")],
     7:  [("btn_breeding", "غار هیولا (تخم‌گذاری)", "breeding")],
     9:  [("btn_forge", "آهنگری (ارتقای تجهیزات)", "blacksmith")],

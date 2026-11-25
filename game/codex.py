@@ -53,7 +53,7 @@ def _reward_text(reward: dict) -> str:
     if reward.get("coins"):
         parts.append(f"{reward['coins']} طلا")
     if reward.get("dna"):
-        parts.append(f"{reward['dna']} DNA")
+        parts.append(f"{reward['dna']} دی‌ان‌ای")
     if reward.get("diamonds"):
         parts.append(f"{reward['diamonds']} 💎")
     if reward.get("speedup"):

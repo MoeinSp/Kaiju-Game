@@ -110,7 +110,7 @@ def _lab_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     if note:   # the result of the last tap goes on top, where it is seen
         lines += [note, _DIV]
     lines.append(f"🧴 قفسه <code>{st['stock_total']}/{st['capacity']}</code> · ⏱ هر سرم <code>{st['brew_minutes']}</code> دقیقه")
-    lines.append(f"🧬 هزینه‌ی ساخت: <code>{st['brew_cost']:,}</code> DNA برای هر سرم")
+    lines.append(f"🧬 هزینه‌ی ساخت: <code>{st['brew_cost']:,}</code> دی‌ان‌ای برای هر سرم")
     shelf = [f"{_ICON[k['key']]} {k['label']} ×{k['stock']}" for k in kinds if k["stock"]]
     lines.append("📦 روی قفسه: " + ("  ·  ".join(shelf) if shelf else "<i>خالی</i>"))
     lines += _queue_lines(st)
@@ -195,7 +195,7 @@ def _mini_render(st: dict, note: str = "", just: tuple[str, int] | None = None) 
 
 
 def _del_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
-    """«حذف سرم»: pick a kind in the queue (cancel, DNA back) or on the shelf (thrown away, no
+    """«حذف سرم»: pick a kind in the queue (cancel, دی‌ان‌ای back) or on the shelf (thrown away, no
     refund) — the next screen asks how many — or «حذف همه»."""
     labels = {k["key"]: k["label"] for k in st["kinds"]}
     lines = [f"{get_emoji('delete')} <b>حذف سرم</b>", _DIV]
@@ -204,7 +204,7 @@ def _del_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     rows = []
     queued = _counts(st["queue"])
     if queued:
-        lines.append("⚗️ <b>در حال ساخت</b> · <i>لغو کنی DNA‌ش کامل برمی‌گرده</i>")
+        lines.append("⚗️ <b>در حال ساخت</b> · <i>لغو کنی دی‌ان‌ای‌ش کامل برمی‌گرده</i>")
         for k, n in queued:
             lines.append(f"   {_ICON[k]} {labels[k]} ×{n}")
             rows.append([btn(f"لغو {labels[k]} (×{n})", emoji_key="btn_cancel", style=NAV, callback_data=f"sr:dk:q:{k}:1")])
@@ -212,7 +212,7 @@ def _del_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     if shelf:
         if queued:
             lines.append("")
-        lines.append("📦 <b>روی قفسه</b> · <i>دور ریختن جا باز می‌کنه ولی DNA برنمی‌گرده</i>")
+        lines.append("📦 <b>روی قفسه</b> · <i>دور ریختن جا باز می‌کنه ولی دی‌ان‌ای برنمی‌گرده</i>")
         for k in shelf:
             lines.append(f"   {_ICON[k['key']]} {k['label']} ×{k['stock']}")
             rows.append([btn(f"دور ریختن {k['label']} (×{k['stock']})", emoji_key="btn_delete", style=DANGER, callback_data=f"sr:dk:s:{k['key']}:1")])
@@ -241,8 +241,8 @@ def _pick_render(st: dict, where: str, kind: str, n: int) -> tuple[str, InlineKe
     lines = [f"{get_emoji('delete')} <b>{verb} {_ICON[kind]} {label}</b>", _DIV,
              f"{'در حال ساخت' if where == 'q' else 'روی قفسه'}: <code>{have}</code> عدد",
              f"انتخاب شده: <b>{n}</b> عدد",
-             "<i>DNA‌ی سرم‌های لغو شده کامل برمی‌گرده.</i>" if where == "q"
-             else "<i>دور ریختن جا باز می‌کنه ولی DNA برنمی‌گرده.</i>"]
+             "<i>دی‌ان‌ای‌ی سرم‌های لغو شده کامل برمی‌گرده.</i>" if where == "q"
+             else "<i>دور ریختن جا باز می‌کنه ولی دی‌ان‌ای برنمی‌گرده.</i>"]
     rows = []
     if have > 1:
         rows.append([
@@ -264,9 +264,9 @@ def _all_ask(st: dict) -> tuple[str, InlineKeyboardMarkup]:
         return _del_render(st)
     body = []
     if st["queue"]:
-        body.append(f"⚗️ <code>{len(st['queue'])}</code> سرم در حال ساخت لغو می‌شه و DNA‌ش برمی‌گرده.")
+        body.append(f"⚗️ <code>{len(st['queue'])}</code> سرم در حال ساخت لغو می‌شه و دی‌ان‌ای‌ش برمی‌گرده.")
     if st["stock_total"]:
-        body.append(f"📦 <code>{st['stock_total']}</code> سرم روی قفسه دور ریخته می‌شه (بدون برگشت DNA).")
+        body.append(f"📦 <code>{st['stock_total']}</code> سرم روی قفسه دور ریخته می‌شه (بدون برگشت دی‌ان‌ای).")
     body.append("<i>سرمی که برای کاری انتخاب کردی (📌) سر جاش می‌مونه.</i>")
     return _ask_render("🗑 <b>حذف همه‌ی سرم‌ها</b>", body, "بله، همه رو حذف کن", "sr:dax", "sr:mini" if st.get("group") else "sr:d")
 
@@ -284,7 +284,7 @@ def _discard_ask(st: dict, kind: str) -> tuple[str, InlineKeyboardMarkup]:
         return _del_render(st, f"⚠️ سرم «{label}» روی قفسه نداری.")
     return _ask_render(f"🗑 <b>دور ریختن سرم {label}</b>",
                        [f"یه {_ICON[kind]} «{label}» از قفسه دور ریخته بشه؟ (داری: <code>{have}</code>)",
-                        "<i>DNA‌ی ساختش برنمی‌گرده؛ فقط یه جا روی قفسه باز می‌شه.</i>"],
+                        "<i>دی‌ان‌ای‌ی ساختش برنمی‌گرده؛ فقط یه جا روی قفسه باز می‌شه.</i>"],
                        "بله، دور بریز", f"sr:dy:{kind}", "sr:d")
 
 
@@ -321,7 +321,7 @@ def _up_render(st: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
         if up["capped"]:
             lines.append(f"     🔒 آزمایشگاه باید سطح {k['level'] + 1} باشه")
         else:
-            lines.append(f"     💰 {up['gold']:,} طلا · 🧬 {up['dna']:,} DNA · ⏱ {up['hours']} ساعت")
+            lines.append(f"     💰 {up['gold']:,} طلا · 🧬 {up['dna']:,} دی‌ان‌ای · ⏱ {up['hours']} ساعت")
             if not st["upgrading"]:
                 rows.append([btn(f"ارتقای {k['label']} · {k['level'] + 1}", emoji_key="btn_serum_up", style=BUILD, callback_data=f"sr:ug:{k['key']}")])
     if note:
@@ -339,16 +339,16 @@ def _lab_sync(tg_user, action: str, kind: str | None, arg: int | None = None):
             r = SR.brew(user, kind, arg or 1)
             brewed = r["queued"]
             many = f"<code>{r['queued']}</code> تا " if r["queued"] > 1 else ""
-            note = f"⚗️ {many}«{SR.KINDS[kind]['label']}» رفت توی ساخت · <code>{r['cost']:,}</code> DNA"
+            note = f"⚗️ {many}«{SR.KINDS[kind]['label']}» رفت توی ساخت · <code>{r['cost']:,}</code> دی‌ان‌ای"
         elif action == "xk":   # arg = n — take back the serums a group word just queued
             r = SR.remove_kind(user, kind, arg)
-            note = f"↩️ <code>{r['count']}</code> «{r['label']}» لغو شد · <code>{r['refund']:,}</code> DNA برگشت"
-        elif action == "xq":   # the whole queue, DNA back
+            note = f"↩️ <code>{r['count']}</code> «{r['label']}» لغو شد · <code>{r['refund']:,}</code> دی‌ان‌ای برگشت"
+        elif action == "xq":   # the whole queue, دی‌ان‌ای back
             refund = n_all = 0
             for k in dict.fromkeys(SR.state(user)["queue"]):
                 r = SR.remove_kind(user, k, 50)
                 refund += r["refund"]; n_all += r["count"]
-            note = f"↩️ <code>{n_all}</code> سرم لغو شد · <code>{refund:,}</code> DNA برگشت" if n_all else "صفی برای لغو نبود."
+            note = f"↩️ <code>{n_all}</code> سرم لغو شد · <code>{refund:,}</code> دی‌ان‌ای برگشت" if n_all else "صفی برای لغو نبود."
         elif action == "u":
             r = SR.use(user, kind)
             note = f"✅ «{r['label']}» · {r['note']}"
@@ -357,7 +357,7 @@ def _lab_sync(tg_user, action: str, kind: str | None, arg: int | None = None):
             note = f"↩️ «{SR.KINDS[kind]['label']}» برگشت توی قفسه."
         elif action == "x":
             r = SR.cancel_last(user)
-            note = f"↩️ آخرین سرم صف لغو شد · <code>{r['refund']:,}</code> DNA برگشت"
+            note = f"↩️ آخرین سرم صف لغو شد · <code>{r['refund']:,}</code> دی‌ان‌ای برگشت"
         elif action == "n":
             on = not SR.state(user)["notify"]
             SR.set_notify(user, on)
@@ -367,7 +367,7 @@ def _lab_sync(tg_user, action: str, kind: str | None, arg: int | None = None):
             note = f"⏫ ارتقای «{SR.KINDS[kind]['label']}» به سطح {r['to']} شروع شد · {r['hours']} ساعت"
         elif action == "dq":
             r = SR.remove_queued(user, arg, kind)
-            note = f"↩️ «{r['label']}» از صف ساخت حذف شد · <code>{r['refund']:,}</code> DNA برگشت"
+            note = f"↩️ «{r['label']}» از صف ساخت حذف شد · <code>{r['refund']:,}</code> دی‌ان‌ای برگشت"
         elif action == "dy":
             r = SR.discard(user, kind)
             note = f"🗑 یه «{r['label']}» دور ریخته شد."
@@ -375,7 +375,7 @@ def _lab_sync(tg_user, action: str, kind: str | None, arg: int | None = None):
             where, n = arg
             if where == "q":
                 r = SR.remove_kind(user, kind, n)
-                note = f"↩️ <code>{r['count']}</code> «{r['label']}» از صف ساخت لغو شد · <code>{r['refund']:,}</code> DNA برگشت"
+                note = f"↩️ <code>{r['count']}</code> «{r['label']}» از صف ساخت لغو شد · <code>{r['refund']:,}</code> دی‌ان‌ای برگشت"
             else:
                 r = SR.discard(user, kind, n)
                 note = f"🗑 <code>{r['count']}</code> «{r['label']}» دور ریخته شد."
@@ -383,7 +383,7 @@ def _lab_sync(tg_user, action: str, kind: str | None, arg: int | None = None):
             r = SR.clear_all(user)
             bits = []
             if r["queued"]:
-                bits.append(f"{r['queued']} سرم از صف لغو شد · <code>{r['refund']:,}</code> DNA برگشت")
+                bits.append(f"{r['queued']} سرم از صف لغو شد · <code>{r['refund']:,}</code> دی‌ان‌ای برگشت")
             if r["shelf"]:
                 bits.append(f"{r['shelf']} سرم از قفسه دور ریخته شد")
             note = "🗑 " + " · ".join(bits)
@@ -516,9 +516,38 @@ async def group_word(update: Update, context: ContextTypes.DEFAULT_TYPE, action:
 
 
 # ── the backpack ────────────────────────────────────────────────────────────────
+def loot_nav_rows(user, *, skip: set[str] | None = None, backpack: bool = True) -> list[list]:
+    """Cross-links between offer chests, creature picks, and the warehouse so opening
+    one never hides the other. ``skip`` = {"chests"|"picks"|"backpack"} for the current screen."""
+    from game import creature_pick, reward_chests
+
+    skip = skip or set()
+    rows: list[list] = []
+    offer = reward_chests.unopened(user, "offer").count()
+    picks = creature_pick.pending_count(user)
+    if offer and "chests" not in skip:
+        rows.append([btn(
+            f"باز کردن جعبه‌ها ({offer})", emoji_key="btn_chest_open", style=CONFIRM,
+            callback_data="rc:open:offer",
+        )])
+    if picks and "picks" not in skip:
+        from game import constants as _c
+
+        label = creature_pick.pick_button_text(user) or f"انتخاب هیولای دلخواه ({picks})"
+        nxt = creature_pick.next_rarity(user) or "mythic"
+        rar_key = f"btn_rarity_{nxt}" if nxt in _c.RARITY_ORDER else "btn_rarity_mythic"
+        rows.append([btn(
+            label, emoji_key=rar_key, style=PRIMARY,
+            callback_data="cpick:open",
+        )])
+    if backpack and "backpack" not in skip:
+        rows.append([btn("انبار", emoji_key="btn_backpack", style=SHOP, callback_data="bp:home")])
+    return rows
+
+
 def _bp_sync(tg_user):
     from bio_lab.models import SerumLab
-    from game import reward_chests
+    from game import creature_pick, reward_chests
     from game.buildings import list_speedup_cards
 
     user, _ = get_or_create_user(tg_user)
@@ -528,6 +557,9 @@ def _bp_sync(tg_user):
         "cup": reward_chests.unopened(user, "tournament").count(),
         "war": reward_chests.unopened(user, "alliance_war").count(),
         "offer": reward_chests.unopened(user, "offer").count(),
+        "picks": creature_pick.pending_count(user),
+        "pick_label": creature_pick.pick_button_text(user),
+        "next_rarity": creature_pick.next_rarity(user),
         "cards": [(c.minutes, c.count) for c in list_speedup_cards(user)],
         "serums": [(k, SR.KINDS[k]["label"], int((row.stock or {}).get(k, 0))) for k in SR.ORDER if row and int((row.stock or {}).get(k, 0)) > 0],
     }
@@ -535,27 +567,41 @@ def _bp_sync(tg_user):
 
 def _bp_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
     """Every box button carries «:bp», so the box screen comes back here, not to its own section."""
-    lines = [f"{get_emoji('backpack')} <b>انبار</b>", _DIV, "<i>جعبه‌های جایزه‌ی باز نشده، کارت‌های سرعت و سرم‌هات.</i>", _DIV]
+    lines = [
+        f"{get_emoji('backpack')} <b>انبار</b>", _DIV,
+        "<i>جعبه‌ها، بلیت اساطیری دلخواه، کارت سرعت و سرم — اینجا می‌مونن تا بازشون کنی.</i>", _DIV,
+    ]
     rows = []
-    if not (v["boss"] or v["cup"] or v["war"] or v["offer"]):
-        lines.append("📦 جعبه‌ی جایزه‌ی باز نشده: <i>نداری</i>")
+    if not (v["boss"] or v["cup"] or v["war"] or v["offer"] or v["picks"]):
+        lines.append("📦 چیزی برای باز کردن: <i>نداری</i>")
     if v["boss"]:
         lines.append(f"🐉 جعبه‌های غول: <code>{v['boss']}</code>")
         rows.append([btn("جعبه‌های غول", emoji_key="btn_chest_open", style=CONFIRM, callback_data="wboss:open:all:bp")])
     if v["cup"]:
         lines.append(f"🏟 جعبه‌های جام: <code>{v['cup']}</code>")
-        rows.append([btn("جعبه‌های جام", emoji_key="btn_chest_open", style=CONFIRM, callback_data="tour:open:bp")])
+        rows.append([btn("جعبه‌های جام", emoji_key="btn_chest_open", style=CONFIRM, callback_data="tr:open:bp")])
     if v["war"]:
         lines.append(f"⚔️ جعبه‌های جنگ اتحاد: <code>{v['war']}</code>")
         rows.append([btn("جعبه‌های جنگ", emoji_key="btn_chest_open", style=CONFIRM, callback_data="ally_war_open:bp")])
     if v["offer"]:
         lines.append(f"🎁 جعبه‌های بسته‌ی خریدنی: <code>{v['offer']}</code>")
         rows.append([btn("باز کردن جعبه‌ها", emoji_key="btn_chest_open", style=CONFIRM, callback_data="rc:open:offer")])
+    if v["picks"]:
+        from game import constants as _c
+
+        lines.append(f"🦕 هیولای دلخواه: <code>{v['picks']}</code> بلیت")
+        nxt = v.get("next_rarity") or "mythic"
+        rar_key = f"btn_rarity_{nxt}" if nxt in _c.RARITY_ORDER else "btn_rarity_mythic"
+        rows.append([btn(
+            v.get("pick_label") or f"انتخاب هیولای دلخواه ({v['picks']})",
+            emoji_key=rar_key, style=PRIMARY,
+            callback_data="cpick:open",
+        )])
     lines.append("⏱ کارت سرعت: " + ("، ".join(f"{m} دقیقه ×{n}" for m, n in v["cards"]) if v["cards"] else "<i>نداری</i>"))
     lines.append(f"{get_emoji('serum_lab')} سرم‌ها: " + ("، ".join(f"{label} ×{n}" for _k, label, n in v["serums"]) if v["serums"] else "<i>نداری</i>"))
     back_cb, back_label = v.get("back") or ORIGINS["hub"]
     arena = btn("جعبه‌های آرنا", emoji_key="btn_chests", style=PRIMARY, callback_data="arena_chests:bp")
-    if back_cb == "sr:home":   # opened from the serum lab: «بازگشت» already goes there
+    if back_cb == "sr:home":
         rows.append([arena])
     else:
         rows.append([btn("آزمایشگاه سرم", emoji_key="btn_serums", style=PRIMARY, callback_data="sr:home:bp"), arena])
@@ -579,21 +625,25 @@ def _open_sync(tg_user, source):
     from game import reward_chests
 
     user, _ = get_or_create_user(tg_user)
-    return chests_text(reward_chests.open_all(user, source))
+    text = chests_text(reward_chests.open_all(user, source))
+    return text, loot_nav_rows(user, skip={"chests"})
 
 
 async def open_chests(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """«باز کردن جعبه‌ها» for boxes that have no screen of their own (rc:open:<source>) —
-    today the boxes inside a bought pack."""
+    today the boxes inside a bought pack. Keeps the pick / warehouse buttons so opening
+    chests never strand a pending «اساطیری دلخواه»."""
     q = update.callback_query
     try:
-        text = await run_db(_open_sync, update.effective_user, q.data.split(":")[2])
+        text, rows = await run_db(_open_sync, update.effective_user, q.data.split(":")[2])
     except GameError as e:
         await q.answer(str(e), show_alert=True)
         return
     await q.answer("🎁 باز شد!")
-    await send_screen(update, text, parse_mode="HTML",
-                      reply_markup=InlineKeyboardMarkup([[btn("انبار", emoji_key="btn_backpack", style=PRIMARY, callback_data="bp:home")]]))
+    await send_screen(
+        update, text, parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(rows) if rows else None,
+    )
 
 
 def register(application) -> None:

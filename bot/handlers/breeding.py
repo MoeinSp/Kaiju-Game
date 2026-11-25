@@ -259,15 +259,15 @@ def _cave_guide_text() -> str:
     gem_rate = constants.DIAMOND_FINISH_PER_HOUR * constants.CAVE_FINISH_MULTIPLIER
     div = "━━━━━━━━━━━━━━━━━━━━"
     dna_lines = "\n".join([
-        f"▫️ اساطیری + اساطیری: <code>5,000</code> DNA",
-        f"▫️ اساطیری + افسانه‌ای: <code>3,000</code> DNA",
-        f"▫️ افسانه‌ای + افسانه‌ای: <code>2,000</code> DNA",
-        f"▫️ افسانه‌ای + حماسی: <code>1,400</code> DNA",
-        f"▫️ حماسی + حماسی: <code>800</code> DNA",
-        f"▫️ حماسی + کمیاب: <code>500</code> DNA",
-        f"▫️ کمیاب + کمیاب: <code>300</code> DNA",
-        f"▫️ کمیاب + عادی: <code>200</code> DNA",
-        f"▫️ عادی + عادی: <code>100</code> DNA",
+        f"▫️ اساطیری + اساطیری: <code>5,000</code> دی‌ان‌ای",
+        f"▫️ اساطیری + افسانه‌ای: <code>3,000</code> دی‌ان‌ای",
+        f"▫️ افسانه‌ای + افسانه‌ای: <code>2,000</code> دی‌ان‌ای",
+        f"▫️ افسانه‌ای + حماسی: <code>1,400</code> دی‌ان‌ای",
+        f"▫️ حماسی + حماسی: <code>800</code> دی‌ان‌ای",
+        f"▫️ حماسی + کمیاب: <code>500</code> دی‌ان‌ای",
+        f"▫️ کمیاب + کمیاب: <code>300</code> دی‌ان‌ای",
+        f"▫️ کمیاب + عادی: <code>200</code> دی‌ان‌ای",
+        f"▫️ عادی + عادی: <code>100</code> دی‌ان‌ای",
     ])
     return "\n".join([
         "📖 <b>راهنمای غار هیولا</b>",
@@ -289,7 +289,7 @@ def _cave_guide_text() -> str:
         "▫️ ظرفیت: ۱ جفت همزمان (با اشتراک طلایی ۲ جفت همزمان)\n"
         "▫️ مدت رشد تخم: <code>۱۰ دقیقه</code> تا <code>۱ ساعت</code></blockquote>",
         "",
-        "🧬 <b>هزینه DNA</b> <i>(بر اساس ترکیب نایابی والدین)</i>",
+        "🧬 <b>هزینه دی‌ان‌ای</b> <i>(بر اساس ترکیب نایابی والدین)</i>",
         f"<blockquote>{dna_lines}</blockquote>",
         "",
         "💎 <b>تسریع زمان (فوری‌سازی)</b>",
@@ -433,8 +433,8 @@ async def breeding_pick_b_callback(update: Update, context: ContextTypes.DEFAULT
         f"{odds_lines}\n\n"
         f"⏱ زمان جفت‌گیری: <code>{_format_remaining(info['mating_minutes'] * 60)}</code>\n"
         f"🥚 زمان رشد تخم: <code>{_format_remaining(info['hatch_minutes'] * 60)}</code>\n"
-        f"{get_emoji('dna')} هزینه: <code>{info['dna']:,} DNA</code>\n"
-        f"💼 موجودی شما: <code>{user.dna_fragments:,} DNA</code>\n\n"
+        f"{get_emoji('dna')} هزینه: <code>{info['dna']:,} دی‌ان‌ای</code>\n"
+        f"💼 موجودی شما: <code>{user.dna_fragments:,} دی‌ان‌ای</code>\n\n"
         f"<blockquote>{get_emoji('egg')} <i>رده‌ی تخم فقط به رده‌ی والدین بستگی داره و هیچ‌وقت ازشون بالاتر نمی‌ره.</i></blockquote>"
     )
     pair = f"{parent_a.id}:{parent_b.id}"
@@ -714,7 +714,7 @@ def _cancel_sync(tg_user, job_id=None):
 
 
 async def breeding_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """First step: ask for confirmation, since cancelling burns the DNA."""
+    """First step: ask for confirmation, since cancelling burns the دی‌ان‌ای."""
     query = update.callback_query
     parts = query.data.split(":")
     job_id = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
@@ -728,7 +728,7 @@ async def breeding_cancel_callback(update: Update, context: ContextTypes.DEFAULT
         query,
         "⚠️ <b>لغو جفت‌گیری غار</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "<blockquote>DNAای که خرج کردی <b>برنمی‌گرده</b>. آیا مطمئنی؟</blockquote>",
+        "<blockquote>دی‌ان‌ایای که خرج کردی <b>برنمی‌گرده</b>. آیا مطمئنی؟</blockquote>",
         parse_mode="HTML", reply_markup=keyboard,
     )
 
@@ -742,7 +742,7 @@ async def breeding_cancel_confirm_callback(update: Update, context: ContextTypes
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
         return
-    await query.answer("لغو شد — DNA برنمی‌گرده.")
+    await query.answer("لغو شد — دی‌ان‌ای برنمی‌گرده.")
     text, keyboard = _panel_render(view)
     photo = get_cave_image_path()
     await safe_edit_message_text(query, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)

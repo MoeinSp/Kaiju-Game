@@ -1,5 +1,5 @@
 /* Economy: monster boxes (sh_boxes), the shop (sh_shop: daily offers, packs, shields, gold),
-   the gold/DNA exchange + gear recycling (sh_exchange), the energy refill (sh_energy) and the
+   the gold/دی‌ان‌ای exchange + gear recycling (sh_exchange), the energy refill (sh_energy) and the
    read-only VIP page (sh_vip). Back end: api/shop.py. Every price, chance and preview on these
    screens comes from the server. */
 (function (K) {
@@ -81,7 +81,7 @@
   K.hub("more", { id: "boxes", title: "باکس‌ها", sub: "هیولا و تجهیزات شانسی", icon: "box", color: "var(--gold)", go: "sh_boxes", order: 10,
                   badge: function () { var h = K.dy && K.dy.last && K.dy.last(); return freeBoxes != null ? freeBoxes : (h && h.free_boxes) || 0; } });
   K.hub("more", { id: "shop", title: "فروشگاه", sub: "آفر روزانه، سپر، طلا با الماس", icon: "cart", color: "var(--good)", go: "sh_shop", order: 11 });
-  K.hub("more", { id: "exchange", title: "صرافی", sub: "طلا، DNA و بازیافت", icon: "swap", color: "var(--dna)", go: "sh_exchange", order: 13, hall: 2 });
+  K.hub("more", { id: "exchange", title: "صرافی", sub: "طلا، دی‌ان‌ای و بازیافت", icon: "swap", color: "var(--dna)", go: "sh_exchange", order: 13, hall: 2 });
   K.hub("more", { id: "energy", title: "شارژ انرژی", sub: "پر کردن انرژی با الماس", icon: "bolt", color: "var(--energy)", go: "sh_energy", order: 14 });
   K.hub("more", { id: "vip", title: "اشتراک VIP", sub: "نقره‌ای و طلایی", icon: "crown", color: "var(--legendary)", go: "sh_vip", order: 15 });
 
@@ -166,9 +166,9 @@
         freeBoxes = d.free_boxes; if (K.dy && K.dy.touch) K.dy.touch("free_boxes", d.free_boxes);
         var html = seg([["gold", "باکس ژنتیکی", "box"], ["diamond", "باکس هیولا", "gem", d.free_boxes || ""]], tabs.boxes, "tab");
         if (tabs.boxes === "gold") {
-          html += banner(d.img_gold, "باکس ژنتیکی", "تجهیزات و هیولای شانسی با طلا و DNA") +
+          html += banner(d.img_gold, "باکس ژنتیکی", "تجهیزات و هیولای شانسی با طلا و دی‌ان‌ای") +
             '<p class="lead">هرچی سطح باکس بالاتر باشه، شانس هیولا و نایابیش بیشتره.</p>' +
-            (d.tickets ? '<div class="callout good mb">' + K.ic("ticket") + "<div><b>" + K.n(d.tickets) + " بلیط داری.</b> اول بلیط‌ها مصرف می‌شن (هر بلیط یه باکس) و برای بقیه طلا و DNA کم می‌شه.</div></div>" : "");
+            (d.tickets ? '<div class="callout good mb">' + K.ic("ticket") + "<div><b>" + K.n(d.tickets) + " بلیط داری.</b> اول بلیط‌ها مصرف می‌شن (هر بلیط یه باکس) و برای بقیه طلا و دی‌ان‌ای کم می‌شه.</div></div>" : "");
           html += d.gold.map(function (t) {
             var c1 = t.cost["1"], c10 = t.cost["10"];
             function price(c) {
@@ -512,23 +512,23 @@
       if (params.tab) { tabs.ex = params.tab; params.tab = null; }
       var amount = { buy_dna: 0, buy_gold: 0 }, deal = null, seq = 0, timer = null, rec = null, picked = {}, swapping = false;
       var scr = live(root, ctx, "shop/exchange/", function (d) {
-        var html = seg([["swap", "طلا و DNA", "swap"], ["recycle", "بازیافت تجهیزات", d.recycle.locked ? "lock" : "recycle"]], tabs.ex, "tab");
+        var html = seg([["swap", "طلا و دی‌ان‌ای", "swap"], ["recycle", "بازیافت تجهیزات", d.recycle.locked ? "lock" : "recycle"]], tabs.ex, "tab");
         root.innerHTML = html + '<div id="shx-body"></div>';
         if (tabs.ex === "swap") drawSwap(d); else drawRecycle(d);
       });
       function body() { return root.querySelector("#shx-body"); }
 
-      // ── gold ↔ DNA ──
+      // ── gold ↔ دی‌ان‌ای ──
       function drawSwap(d) {
         var dir = tabs.exDir, buyDna = dir === "buy_dna";
         if (!amount[dir]) amount[dir] = buyDna ? d.presets.buy_dna[0].dna : d.presets.buy_gold[0].gold;
-        var presets = buyDna ? d.presets.buy_dna.map(function (p) { return [p.dna, K.n(p.dna) + " DNA"]; }) : d.presets.buy_gold.map(function (p) { return [p.gold, K.n(p.gold) + " طلا"]; });
+        var presets = buyDna ? d.presets.buy_dna.map(function (p) { return [p.dna, K.n(p.dna) + " دی‌ان‌ای"]; }) : d.presets.buy_gold.map(function (p) { return [p.gold, K.n(p.gold) + " طلا"]; });
         var allAmt = buyDna ? Math.min(Math.floor((d.coins || 0) / d.rate_buy), d.max_dna) : Math.min(d.dna || 0, d.max_dna) * d.rate_sell;
         if (allAmt > 0) presets.push([allAmt, "همه"]);
-        body().innerHTML = banner(d.img, "صرافی طلا و DNA", "رفت و برگشتش ضرر داره؛ فقط وقتی لازمه تبدیل کن") +
-          seg([["buy_dna", "خرید DNA", "dna"], ["buy_gold", "خرید طلا", "coin"]], dir, "dir") +
-          '<div class="callout mb">' + K.ic("info") + "<div>" + (buyDna ? "برای هر ۱ DNA، " + K.n(d.rate_buy) + " طلا می‌دی." : "برای هر ۱ DNA که بدی، " + K.n(d.rate_sell) + " طلا می‌گیری.") + "</div></div>" +
-          '<div class="panel pad"><div class="sm muted">' + (buyDna ? "چند DNA می‌خوای بگیری؟" : "چند طلا می‌خوای بگیری؟") + "</div>" +
+        body().innerHTML = banner(d.img, "صرافی طلا و دی‌ان‌ای", "رفت و برگشتش ضرر داره؛ فقط وقتی لازمه تبدیل کن") +
+          seg([["buy_dna", "خرید دی‌ان‌ای", "dna"], ["buy_gold", "خرید طلا", "coin"]], dir, "dir") +
+          '<div class="callout mb">' + K.ic("info") + "<div>" + (buyDna ? "برای هر ۱ دی‌ان‌ای، " + K.n(d.rate_buy) + " طلا می‌دی." : "برای هر ۱ دی‌ان‌ای که بدی، " + K.n(d.rate_sell) + " طلا می‌گیری.") + "</div></div>" +
+          '<div class="panel pad"><div class="sm muted">' + (buyDna ? "چند دی‌ان‌ای می‌خوای بگیری؟" : "چند طلا می‌خوای بگیری؟") + "</div>" +
           '<div class="shx-amt"><button class="iconbtn" data-step="-1" aria-label="کمتر">' + K.ic("minus") + '</button><input class="input num" id="shx-in" inputmode="numeric" autocomplete="off" value="' + amount[dir] + '">' +
           '<button class="iconbtn" data-step="1" aria-label="بیشتر">' + K.ic("plus") + "</button></div>" +
           '<div class="row" style="padding-bottom:0">' + presets.map(function (p) { return '<button class="chip" data-amt="' + p[0] + '">' + p[1] + "</button>"; }).join("") + "</div></div>" +
@@ -558,7 +558,7 @@
             var buyDna = p.direction === "buy_dna";
             box.innerHTML = '<div class="shx-deal"><div><small>می‌دی</small>' + (buyDna ? K.amounts({ coins: p.gold }) : K.amounts({ dna: p.dna })) + '</div><span class="faint">' + K.ic("chevron") + "</span>" +
               "<div><small>می‌گیری</small>" + (buyDna ? K.amounts({ dna: p.dna }) : K.amounts({ coins: p.gold })) + "</div></div>" +
-              (p.enough ? "" : '<div class="t-bad sm center" style="margin-top:8px">' + K.ic("warn") + " " + (buyDna ? "طلای کافی نداری." : "DNA کافی نداری.") + "</div>");
+              (p.enough ? "" : '<div class="t-bad sm center" style="margin-top:8px">' + K.ic("warn") + " " + (buyDna ? "طلای کافی نداری." : "دی‌ان‌ای کافی نداری.") + "</div>");
             go.disabled = !p.enough;
           }).catch(function (err) {
             if (mine !== seq || !document.body.contains(box)) return;

@@ -21,7 +21,7 @@
     <button type="button" class="blue" style="font-size: 11px; padding: 3px 8px;" onclick="applyPreset('egg_leg')">🥚 تخم افسانه‌ای</button>
     <button type="button" class="blue" style="font-size: 11px; padding: 3px 8px;" onclick="applyPreset('vip_gold')">👑 اشتراک طلایی VIP</button>
     <button type="button" class="blue" style="font-size: 11px; padding: 3px 8px;" onclick="applyPreset('tic_50')">🎫 ۵۰ بلیط باکس</button>
-    <button type="button" class="blue" style="font-size: 11px; padding: 3px 8px;" onclick="applyPreset('dna_10k')">🧬 ۱۰ هزار DNA</button>
+    <button type="button" class="blue" style="font-size: 11px; padding: 3px 8px;" onclick="applyPreset('dna_10k')">🧬 ۱۰ هزار دی‌ان‌ای</button>
     <button type="button" class="blue" style="font-size: 11px; padding: 3px 8px;" onclick="applyPreset('eq_myth')">⚔️ سلاح اسطوره‌ای +10</button>
     <button type="button" class="blue" style="font-size: 11px; padding: 3px 8px;" onclick="applyPreset('spd_100')">⚡ ۱۰۰ کارت سرعت</button>
     <button type="button" class="blue" style="font-size: 11px; padding: 3px 8px;" onclick="applyPreset('builder')">🏗 کارگر دوم</button>
@@ -45,7 +45,7 @@
           <option value="creature">🦖 کایجوی اختصاصی (Creature)</option>
           <option value="egg">🥚 تخم کایجو (Kaiju Egg)</option>
           <option value="tickets">🎫 بلیط باکس ژنتیکی (Biocrate Tickets)</option>
-          <option value="dna">🧬 قطعات DNA</option>
+          <option value="dna">🧬 قطعات دی‌ان‌ای</option>
           <option value="equipment">🎒 تجهیزات و سلاح‌ها (Equipment)</option>
           <option value="speedup">⚡ کارت سرعت (Speedup)</option>
           <option value="subscription">👑 اشتراک VIP</option>
@@ -80,7 +80,7 @@
     </div>
 
     <div id="dnaFields" class="card" style="background: var(--panel-2); margin-bottom: 12px; display: none;">
-      <label style="font-size: 13px; color: var(--muted);">مقدار قطعات DNA:</label>
+      <label style="font-size: 13px; color: var(--muted);">مقدار قطعات دی‌ان‌ای:</label>
       <input type="number" name="dna_amount" id="f_dna" value="5000" min="1" style="width: 180px;">
     </div>
 
@@ -430,7 +430,7 @@ function applyPreset(key) {
     mb.value = 90000;
     vip.checked = false;
   } else if (key === 'dna_10k') {
-    t.value = "🧬 محموله ۱۰,۰۰۰ قطعه DNA";
+    t.value = "🧬 محموله ۱۰,۰۰۰ قطعه دی‌ان‌ای";
     sel.value = "dna";
     document.getElementById("f_dna").value = 10000;
     cur.value = "coins";

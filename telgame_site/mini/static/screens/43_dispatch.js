@@ -7,7 +7,7 @@
   var D = K.dy || {};
   var DOT = ' <span class="faint">·</span> ';
   var HALL = 2;   // SECTION_HALL_REQ["dispatch"] — the server enforces it
-  var FOCUS = { gold: ["طلا", "coin", "var(--coin)"], dna: ["DNA", "dna", "var(--dna)"], mixed: ["طلا و DNA", "swap", "var(--accent)"] };
+  var FOCUS = { gold: ["طلا", "coin", "var(--coin)"], dna: ["دی‌ان‌ای", "dna", "var(--dna)"], mixed: ["طلا و دی‌ان‌ای", "swap", "var(--accent)"] };
   var TPL_ICON = { ruins: "hall", mine: "hammer", caravan: "flag", wreck: "drop", swamp: "flask", nest: "egg", fossil: "skull", patrol: "shield", crater: "spark", forest: "claw" };
 
   function num(x) { return Number(x || 0).toLocaleString("en-US"); }
@@ -164,7 +164,7 @@
           '<div><span>عنصر پیشنهادی</span><span class="e-' + o.element + '">' + K.ic(K.EL_ICON[o.element] || "atom") + " " + K.esc(K.elLabel(o.element)) + ' <span class="num">+' + d.element_bonus + "%</span></span></div>" +
           (o.min_rarity !== "common" ? '<div><span>حداقل نایابی</span><span class="c-' + o.min_rarity + '">' + K.esc(K.rarLabel(o.min_rarity)) + "</span></div>" : "") +
           '<div><span>شانس جایزه‌ی شگفتی</span><span class="t-good num">' + o.chance + "%</span></div>" +
-          (o.special ? '<div><span>مأموریت ویژه‌ی امروز</span><span class="t-gold">طلا و DNA <span class="num">×' + Number(d.special_mult) + "</span></span></div>" : "") +
+          (o.special ? '<div><span>مأموریت ویژه‌ی امروز</span><span class="t-gold">طلا و دی‌ان‌ای <span class="num">×' + Number(d.special_mult) + "</span></span></div>" : "") +
           (d.hq_bonus ? "<div><span>پایگاه اعزام سطح " + K.n(d.hq) + '</span><span class="t-good"><span class="num">+' + d.hq_bonus + "%</span> جایزه</span></div>" : "");
         var head = '<div class="panel pad dp-offer' + (o.special ? " special" : "") + '"><div class="dp-run-h"><span class="ico-box lg" style="color:' + (o.special ? "var(--gold)" : "var(--accent)") + '">' + K.ic(tplIcon(o.key)) + "</span>" +
           '<div class="grow"><b class="dy-block">' + K.esc(o.title) + '</b><span class="xs muted dy-block">' + K.esc(o.flavor) + "</span></div>" + (o.special ? specialTag(d) : "") + "</div></div>" +

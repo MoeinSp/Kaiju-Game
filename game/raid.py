@@ -96,7 +96,7 @@ def _joined_alliance_today(user: User) -> bool:
 @transaction.atomic
 def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bool, int, int]:
     """Land one hit on the raid boss. Flat 5-minute cooldown between hits and a daily
-    cap of RAID_DAILY_ATTACKS. Reward (DNA + gold) is paid PER HIT, scaled by the landed
+    cap of RAID_DAILY_ATTACKS. Reward (دی‌ان‌ای + gold) is paid PER HIT, scaled by the landed
     damage. Returns (dmg, defeated, dna_gain, coin_gain, attacks_left_today)."""
     from game.daily import get_daily_count
 
@@ -149,8 +149,8 @@ def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bo
     dmg = min(dmg, hp_before)
 
     boss.current_hp = hp_before - dmg
-    # per-hit reward, paid IMMEDIATELY (no end-of-raid pool): both DNA and gold scale with
-    # the landed damage and cap at 500 DNA + 10,000 gold for a full-power hit.
+    # per-hit reward, paid IMMEDIATELY (no end-of-raid pool): both دی‌ان‌ای and gold scale with
+    # the landed damage and cap at 500 دی‌ان‌ای + 10,000 gold for a full-power hit.
     dna_gain = constants.raid_hit_dna(dmg)
     coin_gain = constants.raid_hit_coins(dmg)
     user.dna_fragments += dna_gain
@@ -177,7 +177,7 @@ def attack_boss(user: User, creature: Creature, boss: RaidBoss) -> tuple[int, bo
 
 def _per_hit_totals(boss) -> dict[int, dict[str, int]]:
     """Reconstruct each attacker's ACTUAL earned reward on this boss by summing the
-    per-hit DNA/gold over their logged hits (rewards are paid per hit now, not pooled).
+    per-hit دی‌ان‌ای/gold over their logged hits (rewards are paid per hit now, not pooled).
     Deterministic from the recorded landed damage, so it matches what they received."""
     totals: dict[int, dict[str, int]] = {}
     for e in RaidDamageLog.objects.filter(raid_id=boss.id):
@@ -304,7 +304,7 @@ def settle_weekly_raid() -> list[tuple[int, str]]:
                     u.id,
                     f"🐲 <b>جایزه‌ی هفتگی رید اتحاد!</b>\nاتحاد <b>{entry['alliance'].name}</b> این هفته "
                     f"رتبه‌ی <b>{entry['rank']}</b> رید شد.\n"
-                    f"🎁 سهم تو: {share['diamonds']}💎 + {share['coins']:,}🪙 + {share['dna']} DNA",
+                    f"🎁 سهم تو: {share['diamonds']}💎 + {share['coins']:,}🪙 + {share['dna']} دی‌ان‌ای",
                 ))
     reset_all_raids()
     return out
@@ -312,6 +312,6 @@ def settle_weekly_raid() -> list[tuple[int, str]]:
 
 def distribute_rewards(boss: RaidBoss) -> dict[int, dict[str, int]]:
     """Called when the boss falls. Rewards are ALREADY paid per hit (see attack_boss),
-    so this grants NOTHING — it just returns each attacker's total damage and the DNA/gold
+    so this grants NOTHING — it just returns each attacker's total damage and the دی‌ان‌ای/gold
     they earned across their hits, for the final-standings summary."""
     return _per_hit_totals(boss)

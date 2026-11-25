@@ -9,7 +9,7 @@ from game.emoji import get_emoji, premiumize_html
 def mission_reward_text(m: dict) -> str:
     """One mission's payout, formatted. Lives here rather than in a handler so
     every screen that shows missions (private/group/battle) renders the same
-    thing — a mission can pay coins, DNA and a speed-up card, and it's easy to
+    thing — a mission can pay coins, دی‌ان‌ای and a speed-up card, and it's easy to
     forget one of them when each screen formats its own."""
     parts = [f"{get_emoji('coin')} {m['coins']:,}"]
     if m.get("dna"):

@@ -466,8 +466,14 @@ def main() -> None:
     welcome.register(application)
     # scoped to the lab's own callback_data prefix so it doesn't swallow battle.py's/private.py's callbacks
     application.add_handler(CallbackQueryHandler(private.lab_action_callback, pattern=r"^lab:"))
+    # TEXT + documents only — photos/image-docs belong to purchase.receipt_photo_handler.
+    # Matching ALL private messages here used to quietly share the update path with
+    # receipt photos; keeping them on separate filters makes each path intentional.
     application.add_handler(
-        MessageHandler(filters.ChatType.PRIVATE & ~filters.COMMAND, _capture_private_text_reply)
+        MessageHandler(
+            filters.ChatType.PRIVATE & ~filters.COMMAND & (filters.TEXT | filters.Document.ALL),
+            _capture_private_text_reply,
+        )
     )
 
     async def theme_cache_sync_job(context: ContextTypes.DEFAULT_TYPE) -> None:

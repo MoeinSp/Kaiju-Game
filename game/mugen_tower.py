@@ -166,7 +166,7 @@ def floor_rewards(floor: int) -> dict:
         if floor == 100:
             diamonds = 150
 
-        # Massive Gold & DNA spike for defeating milestone boss
+        # Massive Gold & دی‌ان‌ای spike for defeating milestone boss
         coins = round(20000 + (floor ** 2.7) * 2.3)
         dna = round(200 + (floor ** 2.2) * 2.1)
         xp_gain = 100 + floor * 15

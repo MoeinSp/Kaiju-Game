@@ -214,7 +214,7 @@ def _find_sync(tg_user, exclude_ids=None):
     if opponent.get("is_fake"):
         loot, dna_win = constants.arena_loot_roll(user.cup)
     else:
-        # Exactly 10% of defender's real gold & DNA
+        # Exactly 10% of defender's real gold & دی‌ان‌ای
         target_user = opponent["user"]
         loot = max(0, target_user.coins // 10)
         dna_win = max(0, target_user.dna_fragments // 10)
@@ -1179,7 +1179,7 @@ async def arena_revenge_callback(update: Update, context: ContextTypes.DEFAULT_T
     if log.loot_gold:
         lines.append(f"{get_emoji('coin')} غنیمت قابل بازپس‌گیری: <code>{log.loot_gold:,}</code>")
     if getattr(log, "loot_dna", 0):
-        lines.append(f"{get_emoji('dna')} DNA: <code>{log.loot_dna:,}</code>")
+        lines.append(f"{get_emoji('dna')} دی‌ان‌ای: <code>{log.loot_dna:,}</code>")
     lines.append("</blockquote>")
     serum = getattr(user, "_serum_rage", None)
     lines += moment_lines(serum)
@@ -1260,7 +1260,7 @@ async def arena_revenge_attack_callback(update: Update, context: ContextTypes.DE
             f"{div}\n"
             f"{get_emoji('gift')} <b>غنیمت دریافتی:</b>\n"
             f"{get_emoji('coin')} طلا: <code>+{loot_gold:,}</code>\n"
-            f"{get_emoji('dna')} DNA: <code>+{loot_dna:,}</code>\n"
+            f"{get_emoji('dna')} دی‌ان‌ای: <code>+{loot_dna:,}</code>\n"
             f"{get_emoji('trophy')} تغییر کاپ: <code>{cup_sign}</code> <i>(کاپ جدید: <code>{result['new_cup']:,}</code>)</i>\n"
             f"{div}\n"
             f"<blockquote>{result['log_text']}</blockquote>"
@@ -1491,7 +1491,7 @@ async def arena_chest_detail_callback(update: Update, context: ContextTypes.DEFA
         "",
         "<b>جوایز تخمینی این جعبه:</b>",
         f"{get_emoji('coin')} طلا: <code>~{gold_val:,}</code> (بر اساس لیگ)",
-        f"{get_emoji('dna')} DNA: <code>~{dna_val:,}</code>",
+        f"{get_emoji('dna')} دی‌ان‌ای: <code>~{dna_val:,}</code>",
     ]
     if cfg["key"] in ("magical", "mega"):
         lines.append(f"{get_emoji('diamond')} الماس: <b>دارد (بونس ویژه)</b>")
@@ -1740,7 +1740,7 @@ async def arena_chest_rewards_callback(update: Update, context: ContextTypes.DEF
         lines.append(
             f"{lg_emoji} <b>{lg['name']}</b> (کاپ <code>{min_cup:,}</code>+):\n"
             f"  {get_emoji('coin')} طلا: <code>+{gold_val:,}</code>\n"
-            f"  {get_emoji('dna')} DNA: <code>+{dna_val:,}</code>"
+            f"  {get_emoji('dna')} دی‌ان‌ای: <code>+{dna_val:,}</code>"
         )
 
     lines += [

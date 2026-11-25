@@ -149,7 +149,7 @@ def _q(chapter, title, desc, checker, reward, cta_label, cta_callback):
 # The tutorial story (rewritten 2026-10-14). ~30 small steps, each teaching ONE part of the
 # game in the order a new player meets it. Diamonds were cut from 1,790 to 500 over the
 # whole story (players were finishing it with ~1,900 diamonds — enough to buy or receive a
-# maxed mythic); the rewards are now mostly what a beginner actually needs: gold, DNA,
+# maxed mythic); the rewards are now mostly what a beginner actually needs: gold, دی‌ان‌ای,
 # food, speed-up cards and tickets. The FIRST TWO steps must stay «hatch» and «first hunt»:
 # the onboarding flow (bot/handlers/private.py) pays and skips exactly those two.
 # Players who were mid-story when this changed were moved by migration 0100.
@@ -232,7 +232,7 @@ def format_reward_text(reward: dict[str, Any]) -> str:
     if reward.get("coins"):
         parts.append(f"{get_emoji('coin')} {reward['coins']:,} طلا")
     if reward.get("dna"):
-        parts.append(f"{get_emoji('dna')} {reward['dna']:,} DNA")
+        parts.append(f"{get_emoji('dna')} {reward['dna']:,} دی‌ان‌ای")
     if reward.get("diamonds"):
         parts.append(f"{get_emoji('diamond')} {reward['diamonds']:,} الماس")
     if reward.get("speedup"):

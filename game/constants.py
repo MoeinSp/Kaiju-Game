@@ -235,14 +235,14 @@ DUEL_LOSE_XP = 5
 # A free «دوئل» now costs energy (like every other combat action) and pays a reward
 # that SCALES with the opponent you beat — flat 30 gold that ignored the fight and
 # cost nothing was the complaint. Reward keys off the loser's level, so beating a
-# stronger player is worth more, and there's a small DNA cut on top.
+# stronger player is worth more, and there's a small دی‌ان‌ای cut on top.
 DUEL_ENERGY_COST = 1
 DUEL_WIN_COINS_BASE = 20
 DUEL_WIN_COINS_PER_OPP_LEVEL = 7
 DUEL_WIN_COINS_CAP = 300
 DUEL_WIN_XP_BASE = 15
 DUEL_WIN_XP_PER_OPP_LEVEL = 3
-DUEL_WIN_DNA_PER_OPP_LEVEL = 0.5  # e.g. beating a level-10 opponent → 5 DNA
+DUEL_WIN_DNA_PER_OPP_LEVEL = 0.5  # e.g. beating a level-10 opponent → 5 دی‌ان‌ای
 
 
 def duel_win_reward(opponent_level: int) -> dict:
@@ -255,7 +255,7 @@ def duel_win_reward(opponent_level: int) -> dict:
         "dna": int(lvl * DUEL_WIN_DNA_PER_OPP_LEVEL * rebase),
     }
 
-# only GOLD is transferable between players — DNA and diamonds are not, to keep
+# only GOLD is transferable between players — دی‌ان‌ای and diamonds are not, to keep
 # the premium/genetic economies from being farmed across throwaway accounts
 GIVE_RESOURCE_ALIASES = {
     "coins": "coins",
@@ -264,7 +264,9 @@ GIVE_RESOURCE_ALIASES = {
     "سکه": "coins",
     "طلا": "coins",
 }
-GIVE_RESOURCE_LABELS = {"coins": "طلا", "dna_fragments": "DNA", "diamonds": "الماس"}
+# Player-facing name for DNA. Latin «DNA» breaks RTL Telegram/mini text runs — always use this.
+DNA_LABEL = "دی‌ان‌ای"
+GIVE_RESOURCE_LABELS = {"coins": "طلا", "dna_fragments": DNA_LABEL, "diamonds": "الماس"}
 
 MUTATION_EVENT_STAT_LABELS = {
     "base_hp": "❤️ HP",
@@ -346,7 +348,7 @@ GROUP_ATTACK_DNA_CAP = 5_000
 LOGIN_STREAK_BASE_COINS = 15
 LOGIN_STREAK_COINS_PER_DAY = 10
 LOGIN_STREAK_CAP_DAYS = 14
-LOGIN_STREAK_DNA_EVERY = 5  # bonus DNA every N-day milestone
+LOGIN_STREAK_DNA_EVERY = 5  # bonus دی‌ان‌ای every N-day milestone
 LOGIN_STREAK_DNA_BONUS = 10
 
 # key -> {action, target, label, coins, dna}
@@ -358,7 +360,7 @@ MISSION_DEFS = {
     # a group or an alliance. Rewards are in «hunt units» (game.daily.mission_unit: what
     # one won «هم‌سطح» hunt pays THIS player), so a mission is worth the same number of
     # hunts at every stage of the game instead of a flat trickle of gold:
-    #   gold_u × unit gold, dna_u × unit DNA, plus the fixed extras.
+    #   gold_u × unit gold, dna_u × unit دی‌ان‌ای, plus the fixed extras.
     "hunt_5": {"action": "hunt", "target": 3, "label": "شکار (۳ بار)",
                "gold_u": 1.5, "dna_u": 1.5, "capsule": ("small", 2), "points": 10},
     "hunt_15": {"action": "hunt", "target": 9, "label": "شکار (۹ بار)",
@@ -638,7 +640,7 @@ EQUIP_TICKET_VALUE = {"mythic": 2, "legendary": 1}
 # «بازیافت به طلا»: unequipped gear turned into gold in bulk (game/equipment.py). Base gold
 # for a +1 piece; each level above +1 adds EQUIP_RECYCLE_LEVEL_BONUS of the base, so some
 # of the forge gold comes back. Kept well under what the gear costs to get: the gear of a
-# basic genetic box (500 gold + 30 DNA) recycles for ~80 gold on average, so buying boxes
+# basic genetic box (500 gold + 30 دی‌ان‌ای) recycles for ~80 gold on average, so buying boxes
 # to recycle them can never make gold.
 EQUIP_RECYCLE_GOLD = {"common": 40, "rare": 100, "epic": 250, "legendary": 450, "mythic": 900}
 EQUIP_RECYCLE_LEVEL_BONUS = 0.5
@@ -661,8 +663,8 @@ BIOCRATE_CREATURE_RARITY_WEIGHTS = {
     "mythic": 0.3,
 }
 
-# Three Bio-Crate tiers paid with gold (+DNA). The cheapest is the original; the
-# pricier ones cost more gold AND DNA but pay for themselves with a higher chance of
+# Three Bio-Crate tiers paid with gold (+دی‌ان‌ای). The cheapest is the original; the
+# pricier ones cost more gold AND دی‌ان‌ای but pay for themselves with a higher chance of
 # a creature and a far better rarity spread — so the money is worth it.
 BIOCRATE_TIERS = {
     "basic": {
@@ -883,7 +885,7 @@ BUILDING_LABELS = {
     "main_hall": "🏛 تالار مِهر",  # the main hall; everything else is capped by its level
     "gold_collector": "🏭 جمع‌کننده طلا",
     "diamond_collector": "💎 جمع‌کننده الماس",
-    "dna_lab": "🧬 آزمایشگاه DNA",
+    "dna_lab": "🧬 آزمایشگاه دی‌ان‌ای",
     "blacksmith": "⚒ آهنگری",
     "fusion_lab": "🔮 تالار ادغام",
     "trade_hall": "🏦 بانک طلا",
@@ -895,20 +897,20 @@ BUILDING_DESCRIPTIONS = {
     "main_hall": "قلبِ آزمایشگاته و سقفِ سطحِ بقیه‌ی ساختمون‌ها رو تعیین می‌کنه.",
     "gold_collector": "این ساختمون به‌مرور برات طلا تولید می‌کنه تا ذخیره‌ت پر بشه.",
     "diamond_collector": "این ساختمون به‌مرور برات الماس تولید می‌کنه (خیلی کند، چون الماس ارز ویژه‌ست).",
-    "dna_lab": "این ساختمون به‌مرور برات DNA تولید می‌کنه که خرجِ پرورش و ادغام می‌شه.",
+    "dna_lab": "این ساختمون به‌مرور برات دی‌ان‌ای تولید می‌کنه که خرجِ پرورش و ادغام می‌شه.",
     "blacksmith": "برای ارتقای تجهیزات لازمه؛ هر سطحش سقفِ سطحِ تجهیزات رو ۵ تا بالاتر می‌بره.",
     "fusion_lab": "اینجا هیولاهای تکراری رو یکی می‌کنی تا ستاره‌شون بره بالا.",
     "trade_hall": "بانک طلا. از منوی پایگاه واریز و برداشت می‌شود. روزانه ۲٪ از مبلغ بانک به عنوان سود به موجودی شما اضافه می‌شود.",
     "research_lab": "قلبِ پژوهش‌های پیشرفته. اینجا روی عناصر و توانایی‌ها تحقیق می‌کنی و به همه‌ی هیولاهات بونوس دائمی می‌دی.",
     "dispatch_hq": "مرکز فرماندهی مأموریت‌های اعزامی. بدونِ این هم می‌تونی هیولا بفرستی، ولی با یه جایگاه و فهرستِ کوتاه.",
-    "serum_lab": "با DNA سرم می‌سازه: خشم برای آرنا، ردیاب برای شکار، جنگاور برای اتک گروهی، پوسته برای دفاع، ترمیم برای سیاه‌چال و غول‌کش برای غول سرگردان.",
+    "serum_lab": "با دی‌ان‌ای سرم می‌سازه: خشم برای آرنا، ردیاب برای شکار، جنگاور برای اتک گروهی، پوسته برای دفاع، ترمیم برای سیاه‌چال و غول‌کش برای غول سرگردان.",
 }
 # One-line "why upgrade this" — shown as the «📈 مزیت ارتقا» bullet on each building card.
 BUILDING_UPGRADE_BENEFIT = {
     "main_hall": "سقفِ سطحِ همه‌ی ساختمون‌ها و سقفِ ستاره بالاتر می‌ره.",
     "gold_collector": "تولید و ظرفیت ذخیره‌ی طلا بیشتر می‌شه.",
     "diamond_collector": "تولید و ظرفیت ذخیره‌ی الماس بیشتر می‌شه.",
-    "dna_lab": "تولید و ظرفیت ذخیره‌ی DNA بیشتر می‌شه.",
+    "dna_lab": "تولید و ظرفیت ذخیره‌ی دی‌ان‌ای بیشتر می‌شه.",
     "blacksmith": "سقفِ سطحِ تجهیزات بالاتر می‌ره (هر سطح +۵).",
     "fusion_lab": "سقفِ ستاره‌ی هیولاهات بالاتر می‌ره.",
     "trade_hall": "گنجایش بانک و سقف برداشت روزانه بالاتر می‌رود.",
@@ -940,12 +942,12 @@ BUILDING_LEVEL_LAB_REQ = {1: 0, 2: 3, 3: 7, 4: 12, 5: 18}
 # One unlock per hall level, so raising the hall ALWAYS reveals a new building —
 # there's never a "dead" level that only lifts a ceiling. The order follows the
 # natural power curve: income first, then the resource the mid-game spends
-# (DNA), then the two upgrade workshops, and finally the fusion hall — the
+# (دی‌ان‌ای), then the two upgrade workshops, and finally the fusion hall — the
 # creature-combination building that grants prestige stars — as the reward for
 # fully maxing the main hall.
 BUILDING_UNLOCK_HALL_LEVEL = {
     "gold_collector": 1,      # درآمد پایه از ابتدا
-    "dna_lab": 2,             # آزمایشگاه DNA
+    "dna_lab": 2,             # آزمایشگاه دی‌ان‌ای
     "fusion_lab": 2,          # تالار ادغام و افزایش ستاره
     "trade_hall": 2,          # بانک طلا — همان ساختمان قبلی، فقط اسم نمایشی عوض شده
     "blacksmith": 3,          # آهنگری و ارتقای تجهیزات
@@ -1023,7 +1025,7 @@ def bank_daily_withdraw(level: int) -> int:
 
 
 # ── 🔬 آزمایشگاه (research lab) tracks ───────────────────────────────────────────
-# Research is the endgame gold+DNA sink: costs are deliberately high, each level takes
+# Research is the endgame gold+دی‌ان‌ای sink: costs are deliberately high, each level takes
 # 12h × level of REAL time (L1=12h … L5=60h), and — unlike buildings — a research job can
 # only be rushed with diamonds (speed-up cards are refused). Every track tops out at
 # level 5 and can never exceed the research-lab building's own level.
@@ -1057,7 +1059,7 @@ MAX_BUILDER_SLOTS = 2
 # (main hall, blacksmith, fusion lab) are pure gates — they unlock things instead
 # of producing resources.
 BUILDING_PRODUCTION = {
-    # gold + DNA collectors were far too stingy — bumped ~4× (rate and storage), and
+    # gold + دی‌ان‌ای collectors were far too stingy — bumped ~4× (rate and storage), and
     # their stationed-kaiju bonus is amplified via `worker_mult`. The diamond collector
     # is deliberately left as-is (rate, cap AND worker_mult=1.0) — it's balanced.
     "gold_collector": {"rate_per_hour": 80.0, "cap_base": 800, "resource": "coins", "worker_mult": 1.8},
@@ -1080,7 +1082,7 @@ EQUIPMENT_LEVELS_PER_BLACKSMITH_LEVEL = 5
 # creature and then putting it to work compounds — which is the point.
 # The cap stops a full late-game roster from turning idle income into the whole
 # economy; hunting and raiding have to stay worth doing.
-WORKER_BONUS_PER_CREATURE_LEVEL = 0.06  # base per-level bonus; gold/DNA amplify it via worker_mult
+WORKER_BONUS_PER_CREATURE_LEVEL = 0.06  # base per-level bonus; gold/دی‌ان‌ای amplify it via worker_mult
 WORKER_BONUS_CAP = 7.2  # up to +720% output from stationed creatures (raised so rarity has room to matter)
 # a stationed worker's contribution is multiplied by its rarity — a mythic worker is
 # worth several commons of the same level, so rarer monsters are better miners
@@ -1181,9 +1183,9 @@ def egg_hatch_minutes(rarity_a: str, rarity_b: str) -> int:
 #   • both parents SAME rarity R  → 60% R, 40% one tier below R.
 #   • parents of DIFFERENT rarity → mostly the LOWER rarity; the chance of the HIGHER
 #     one shrinks with the GAP between them (1 tier apart 25% … 4 tiers apart 6%).
-# The gap scaling is the balance: mating time and DNA cost fall fast when one parent is
+# The gap scaling is the balance: mating time and دی‌ان‌ای cost fall fast when one parent is
 # junk, so with a flat 25% a mythic + a COMMON was the best mythic factory in the game
-# (≈40h / 4,800 DNA per mythic vs ≈60h / 8,300 DNA for mythic + mythic, and it needed
+# (≈40h / 4,800 دی‌ان‌ای per mythic vs ≈60h / 8,300 دی‌ان‌ای for mythic + mythic, and it needed
 # only ONE mythic). Expected cost per top-rarity egg now always favours a matching pair.
 CAVE_SAME_RARITY_TOP_CHANCE = 0.60   # P(keep the shared rarity) when both parents match (60% same, 40% one tier below)
 CAVE_MIXED_RARITY_TOP_CHANCE = 0.25  # (legacy name) the 1-tier-gap chance
@@ -1233,7 +1235,7 @@ EGG_HATCH_DIAMOND_COST = {
     "mythic": 800,
 }
 
-# DNA cost for pairing by exact rarity combination (higher, lower)
+# دی‌ان‌ای cost for pairing by exact rarity combination (higher, lower)
 BREEDING_DNA_COST_BY_PAIR = {
     ("mythic", "mythic"): 5_000,
     ("mythic", "legendary"): 3_000,
@@ -1267,7 +1269,7 @@ BREEDING_DNA_COST = {
 
 
 def cave_dna_cost(rarity_a: str, rarity_b: str) -> int:
-    """DNA cost to breed two creatures in the Monster Cave. Scales by both parents' rarities."""
+    """دی‌ان‌ای cost to breed two creatures in the Monster Cave. Scales by both parents' rarities."""
     idx_a = RARITY_ORDER.index(rarity_a)
     idx_b = RARITY_ORDER.index(rarity_b)
     hi = rarity_a if idx_a >= idx_b else rarity_b
@@ -1385,7 +1387,7 @@ CASINO_TIERS = {
             {"kind": "coins", "amount": 100, "weight": 30, "label": "۱۰۰ طلا"},
             {"kind": "coins", "amount": 220, "weight": 20, "label": "۲۲۰ طلا"},
             {"kind": "coins", "amount": 400, "weight": 9, "label": "۴۰۰ طلا"},
-            {"kind": "dna", "amount": 5, "weight": 5, "label": "۵ DNA"},
+            {"kind": "dna", "amount": 5, "weight": 5, "label": "۵ دی‌ان‌ای"},
             {"kind": "coins", "amount": 900, "weight": 1, "label": "🎉 جک‌پات ۹۰۰ طلا"},
         ],
     },
@@ -1397,7 +1399,7 @@ CASINO_TIERS = {
             {"kind": "coins", "amount": 400, "weight": 30, "label": "۴۰۰ طلا"},
             {"kind": "coins", "amount": 850, "weight": 20, "label": "۸۵۰ طلا"},
             {"kind": "coins", "amount": 1600, "weight": 9, "label": "۱۶۰۰ طلا"},
-            {"kind": "dna", "amount": 18, "weight": 7, "label": "۱۸ DNA"},
+            {"kind": "dna", "amount": 18, "weight": 7, "label": "۱۸ دی‌ان‌ای"},
             {"kind": "coins", "amount": 4000, "weight": 2, "label": "🎉 جک‌پات ۴۰۰۰ طلا"},
         ],
     },
@@ -1410,7 +1412,7 @@ CASINO_TIERS = {
             {"kind": "diamonds", "amount": 14, "weight": 22, "label": "۱۴ الماس"},
             {"kind": "diamonds", "amount": 25, "weight": 14, "label": "۲۵ الماس"},
             {"kind": "coins", "amount": 3000, "weight": 8, "label": "۳۰۰۰ طلا"},
-            {"kind": "dna", "amount": 45, "weight": 4, "label": "۴۵ DNA"},
+            {"kind": "dna", "amount": 45, "weight": 4, "label": "۴۵ دی‌ان‌ای"},
             {"kind": "diamonds", "amount": 90, "weight": 2, "label": "🎉 جک‌پات ۹۰ الماس"},
         ],
     },
@@ -1419,8 +1421,8 @@ CASINO_TIER_ORDER = ["free", "bronze", "silver", "gold"]
 WHEEL_PRIZES = [
     {"key": "coins_small", "kind": "coins", "amount": 50, "weight": 28, "label": "۵۰ طلا"},
     {"key": "coins_medium", "kind": "coins", "amount": 150, "weight": 14, "label": "۱۵۰ طلا"},
-    {"key": "dna_small", "kind": "dna", "amount": 3, "weight": 20, "label": "۳ DNA"},
-    {"key": "dna_medium", "kind": "dna", "amount": 8, "weight": 8, "label": "۸ DNA"},
+    {"key": "dna_small", "kind": "dna", "amount": 3, "weight": 20, "label": "۳ دی‌ان‌ای"},
+    {"key": "dna_medium", "kind": "dna", "amount": 8, "weight": 8, "label": "۸ دی‌ان‌ای"},
     {"key": "diamonds_small", "kind": "diamonds", "amount": 2, "weight": 14, "label": "۲ الماس"},
     {"key": "speedup_5", "kind": "speedup", "amount": 5, "weight": 3, "label": "کارت سرعت ۵ دقیقه"},
     {"key": "speedup_15", "kind": "speedup", "amount": 15, "weight": 1, "label": "کارت سرعت ۱۵ دقیقه"},
@@ -1543,16 +1545,16 @@ ARENA_CUP_LOSS_MIN = 6    # smallest loss
 ARENA_CUP_LOSS_MAX = 30   # biggest loss
 ARENA_CUP_GAP_DIVISOR = 10  # 1 cup per this many points of rating gap
 
-# Arena/PvP wins now also pay a little DNA, scaled by the attacker's level.
+# Arena/PvP wins now also pay a little دی‌ان‌ای, scaled by the attacker's level.
 ARENA_WIN_DNA_BASE = 2
 ARENA_WIN_DNA_PER_LEVEL = 0.2
 GROUP_ATTACK_WIN_DNA = 3   # winning a group «اتک» on a player
 RAID_HIT_DNA = 1           # legacy flat drip (kept for back-compat); see raid_hit_dna()
-# Per-hit raid reward — paid IMMEDIATELY on every hit (no end-of-raid pool). Both DNA
+# Per-hit raid reward — paid IMMEDIATELY on every hit (no end-of-raid pool). Both دی‌ان‌ای
 # and gold scale with the damage that ACTUALLY LANDED (overkill on a low-HP boss doesn't
 # count — see attack_boss), and both hit their cap at RAID_REWARD_MAX_DAMAGE landed
 # damage. Calibrated so a full-max mythic + max research landing its top hit on a strong
-# boss earns the cap (500 DNA + 10,000 gold); a weak boss (HP-capped landed damage) or a
+# boss earns the cap (500 دی‌ان‌ای + 10,000 gold); a weak boss (HP-capped landed damage) or a
 # weak kaiju earns proportionally less — which is what pushes players toward strong bosses.
 # landed damage that maxes the per-hit reward. Calibrated from live data: a full-max
 # kaiju's strong hit lands ~800–1180, so 750 lets a maxed strike reliably reach the cap
@@ -1673,7 +1675,7 @@ def arena_fake_loot(cup: int) -> int:
 
 # ── Arena win loot (cup-scaled, rolled fresh per attack) ─────────────────────
 # Gold scales linearly with the player's cup: cup 0 pays 500–1000, cup 4000+ pays
-# 5000–15000. Every attack rolls a fresh random amount inside that band, and the DNA
+# 5000–15000. Every attack rolls a fresh random amount inside that band, and the دی‌ان‌ای
 # reward is roughly a twentieth of the gold (with a little jitter so it isn't a
 # tell-tale exact ratio). Applies to both real-player and bot arena wins.
 ARENA_LOOT_CUP_REF = 4000

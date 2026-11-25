@@ -14,7 +14,7 @@
     function li(icon, color, html) { return '<div><span class="ic" style="color:' + color + '">' + K.ic(icon) + '</span><span class="t">' + html + "</span></div>"; }
     return '<div class="h2">' + K.ic("info") + 'قانون و جایزه‌ها</div><div class="panel list wb-rules">' +
       li("clock", "var(--accent)", "روزی دو بار (بین ساعت " + win + ") یه غول برای کل سرور پیدا می‌شه و " + K.n(r.minutes) + " دقیقه می‌مونه.") +
-      li("sword", "var(--fire)", "هر نفر " + K.n(r.hits) + " ضربه داره. هر ضربه " + K.n(r.energy_cost) + " انرژی می‌خواد و همون لحظه طلا و DNA می‌ده.") +
+      li("sword", "var(--fire)", "هر نفر " + K.n(r.hits) + " ضربه داره. هر ضربه " + K.n(r.energy_cost) + " انرژی می‌خواد و همون لحظه طلا و دی‌ان‌ای می‌ده.") +
       li("up", "var(--good)", "عنصر هیولات به عنصر غول برتری داشته باشه: +" + K.n(r.advantage_pct) + "٪ آسیب.") +
       li("chest", "var(--gold)", "آخرِ هر غول، همه‌ی کسایی که ضربه زدن بر اساس جونی که کل سرور زده جعبه می‌گیرن: " +
         (r.milestones || []).map(function (m) { return K.n(m.pct) + "٪ ← «" + K.esc(m.chest) + "»"; }).join("، ") + ". هر پله جعبه‌ی خودش رو اضافه می‌کنه.") +
@@ -70,7 +70,7 @@
           h += '<div class="wb-stats"><div><small>آسیب تو</small><b class="num">' + Number(l.my_damage).toLocaleString("en-US") + '</b></div><div><small>رتبه‌ی تو</small><b class="num">' + Number(l.my_rank || 0) + "</b></div></div>" +
             '<div class="wb-last-note">' + K.ic(dead ? "gift" : "check") + "<span>" +
             (dead ? (l.killer ? "ضربه‌ی آخر مال تو بود. " : "") + (l.settled ? "جایزه‌ی پایانی به حسابت اومده." : "جایزه‌ی پایانی تا چند دقیقه‌ی دیگه می‌رسه.")
-                  : (l.settled ? "جایزه‌ی پایانی (بر اساس جونی که سرور زد) به حسابت اومده." : "طلا و DNA هر ضربه‌ات همون لحظه اومد؛ جایزه‌ی پایانی تا چند دقیقه‌ی دیگه می‌رسه.")) + "</span></div>";
+                  : (l.settled ? "جایزه‌ی پایانی (بر اساس جونی که سرور زد) به حسابت اومده." : "طلا و دی‌ان‌ای هر ضربه‌ات همون لحظه اومد؛ جایزه‌ی پایانی تا چند دقیقه‌ی دیگه می‌رسه.")) + "</span></div>";
         } else {
           h += '<div class="wb-last-note muted">' + K.ic("info") + "<span>توی این نبرد ضربه‌ای نزدی. غول بعدی رو از دست نده.</span></div>";
         }

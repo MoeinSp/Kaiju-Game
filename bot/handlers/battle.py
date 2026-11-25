@@ -239,7 +239,7 @@ def _battle_action_sync(battle_id, actor_tg_id, action):
             f"<blockquote>{get_emoji('trophy')} <b>پاداش پیروزی {winner_creature.name}:</b>\n"
             f"{get_emoji('coin')} طلا: <code>+{reward['coins']:,}</code>\n"
             f"{get_emoji('star')} تجربه: <code>+{reward['xp']:,}</code> XP"
-            + (f"\n{get_emoji('dna')} DNA: <code>+{reward['dna']:,}</code>" if reward["dna"] else "")
+            + (f"\n{get_emoji('dna')} دی‌ان‌ای: <code>+{reward['dna']:,}</code>" if reward["dna"] else "")
             + (f"\n{get_emoji('celebrate')} <b>رسید به سطح <code>{winner_creature.level}</code>!</b>" if winner_levels else "")
             + "</blockquote>"
         )

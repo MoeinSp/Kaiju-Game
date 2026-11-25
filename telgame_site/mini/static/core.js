@@ -7,7 +7,7 @@
        K.addIcons({ myicon: '<path d="..."/>' });            // optional, 24×24 stroke icons
 
        K.hub("battle", {                                       // a tile in a hub menu
-         id: "hunt", title: "شکار", sub: "طلا و DNA", icon: "target", color: "var(--fire)",
+         id: "hunt", title: "شکار", sub: "طلا و دی‌ان‌ای", icon: "target", color: "var(--fire)",
          go: "hunt", order: 10,
          badge: function (me) { return 0; }                    // optional number/"live" on the tile
        });
@@ -382,7 +382,7 @@ window.K = (function () {
   hudIn.addEventListener("click", function (ev) { var b = ev.target.closest("[data-go]"); if (b && K.hasScreen(b.dataset.go)) { K.haptic(); K.go(b.dataset.go); } });
   K.res = null;
   var resShown = "", energyTimer = null;
-  var RES_TITLE = { coins: "طلا", dna: "DNA", diamonds: "الماس", energy: "انرژی", cup: "کاپ" };
+  var RES_TITLE = { coins: "طلا", dna: "دی‌ان‌ای", diamonds: "الماس", energy: "انرژی", cup: "کاپ" };
   /* the bottom tabs: solid one-piece glyphs filled with the tab's colour (grey, cyan when open).
      The monster's eyes and mouth and the castle's door are holes (evenodd), so they read on any fill. */
   var TAB_SOLID = {

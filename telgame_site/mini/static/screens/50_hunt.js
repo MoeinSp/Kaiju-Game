@@ -143,7 +143,7 @@
       function idleView() {
         var me = S.me;
         return '<div class="banner hu-banner" style="background-image:url(\'' + K.esc(S.art || "") + '\')"><div><div class="ttl">شکار</div>' +
-          '<div class="sm" style="color:#c5cee2">یه حریف وحشی پیدا کن، بزنش و طلا و DNA ببر</div></div></div>' +
+          '<div class="sm" style="color:#c5cee2">یه حریف وحشی پیدا کن، بزنش و طلا و دی‌ان‌ای ببر</div></div></div>' +
           '<div class="panel pad mt hu-mine">' + K.fighter(me, '<div class="hu-tags">' + K.elTag(me.element) + "</div>") +
           '<button class="btn sm" data-act="swap">' + K.ic("swap") + "تعویض</button></div>" +
           '<button class="btn primary lg block mt" data-act="scout">' + K.ic("search") + "پیدا کردن حریف" + costChip("coin", S.scout_cost) + "</button>" +
@@ -304,7 +304,7 @@
           '<button class="chip" data-act="amt" data-v="' + D.half + '">نصف (' + D.half + ")</button>" +
           '<span class="stepper"><button data-act="step" data-d="-1" aria-label="کمتر">' + K.ic("minus") + '</button><b class="num" id="hu-amt2"></b><button data-act="step" data-d="1" aria-label="بیشتر">' + K.ic("plus") + "</button></span></div>" +
           '<div class="muted xs center" style="margin-top:8px">الان ' + K.n(D.energy) + " از " + K.n(D.max_energy) + " انرژی داری · هر شکار " + K.n(per) + " انرژی</div></div>" +
-          '<div class="callout warn mt">' + K.ic("warn") + "<span>شکار خودکار حدود <b>" + K.n(D.loot_pct) + "٪</b> لوت شکار دستی رو می‌ده (طلا و DNA کمتر). XP کامل می‌مونه. دست‌کم <b>" + K.n(D.win_floor_pct) + "٪</b> نبردها برد حساب می‌شن.</span></div>" +
+          '<div class="callout warn mt">' + K.ic("warn") + "<span>شکار خودکار حدود <b>" + K.n(D.loot_pct) + "٪</b> لوت شکار دستی رو می‌ده (طلا و دی‌ان‌ای کمتر). XP کامل می‌مونه. دست‌کم <b>" + K.n(D.win_floor_pct) + "٪</b> نبردها برد حساب می‌شن.</span></div>" +
           '<button class="btn primary lg block mt" data-act="run">' + K.ic("autohunt") + 'شروع شکار خودکار<span class="cost">' + K.ic("bolt", "f") + '<span class="num" id="hu-amt3"></span></span></button>';
       }
       function sync() {
@@ -324,8 +324,8 @@
         if (r.lab_up) html += '<div class="callout good mt">' + K.ic("flask") + "<span>سطح آزمایشگاهت بالا رفت!</span></div>";
         if (r.sub_bonus_pct) {
           html += '<div class="h2">' + K.ic("crown") + "با احتساب " + K.n(r.sub_bonus_pct) + "٪ سود اشتراک " + K.esc(r.sub_name || "ویژه") + '</div><div class="panel kv">' +
-            kv("طلای پایه", K.n(r.base_coins)) + kv("DNA پایه", K.n(r.base_dna)) +
-            kv("سود طلا", '<span class="t-coin">+' + K.n(r.bonus_coins) + "</span>") + kv("سود DNA", '<span class="t-dna">+' + K.n(r.bonus_dna) + "</span>") + "</div>";
+            kv("طلای پایه", K.n(r.base_coins)) + kv("دی‌ان‌ای پایه", K.n(r.base_dna)) +
+            kv("سود طلا", '<span class="t-coin">+' + K.n(r.bonus_coins) + "</span>") + kv("سود دی‌ان‌ای", '<span class="t-dna">+' + K.n(r.bonus_dna) + "</span>") + "</div>";
         } else {
           html += '<div class="callout mt">' + K.ic("crown") + "<span>با اشتراک نقره‌ای ۲۵٪ و اشتراک طلایی ۵۰٪ لوت بیشتر از شکار خودکار می‌گیری.</span>" +
             (K.hasScreen("sh_vip") ? '<button class="btn sm hu-cbtn" data-act="vip">اشتراک</button>' : "") + "</div>";
@@ -367,5 +367,5 @@
     }
   });
 
-  K.hub("battle", { id: "hunt", title: "شکار", sub: "حریف وحشی، طلا و DNA", icon: "target", color: "var(--fire)", go: "hu_hunt", order: 1, wide: true });
+  K.hub("battle", { id: "hunt", title: "شکار", sub: "حریف وحشی، طلا و دی‌ان‌ای", icon: "target", color: "var(--fire)", go: "hu_hunt", order: 1, wide: true });
 })(window.K);

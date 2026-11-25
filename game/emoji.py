@@ -14,7 +14,7 @@ _GLYPH_PREFIX = "g:"  # EmojiOverride.key prefix for a per-GLYPH (not per-semant
 EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     # resources
     "coin": ("طلا", "💰", "resources"),
-    "dna": ("DNA", "🧬", "resources"),
+    "dna": ("دی‌ان‌ای", "🧬", "resources"),
     "diamond": ("الماس", "💎", "resources"),
     "energy": ("انرژی", "⚡", "resources"),
     "bank": ("خزانه و بانک", "🏦", "resources"),

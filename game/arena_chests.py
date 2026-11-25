@@ -204,7 +204,7 @@ def roll_chest_tier() -> str:
 
 
 def league_multiplier(cup: int) -> float:
-    """Multiplier for gold and DNA based on player's cup league (1.0x at Bronze to ~3.25x at Champion)."""
+    """Multiplier for gold and دی‌ان‌ای based on player's cup league (1.0x at Bronze to ~3.25x at Champion)."""
     lg = constants.league_for_cup(cup)
     try:
         idx = constants.LEAGUES.index(lg)
@@ -447,7 +447,7 @@ def open_chest(user: User, chest_id: int) -> dict:
 
 def grant_chest_contents(user: User, chest_type: str, cup: int, source: str = "arena_chest") -> dict:
     """Roll and GRANT what a chest of `chest_type` holds for a player at `cup` — gold and
-    DNA scaled by league, a creature OR an item at the tier's guaranteed rarity, and the
+    دی‌ان‌ای scaled by league, a creature OR an item at the tier's guaranteed rarity, and the
     diamond bonus of the top tiers. `user` must already be locked by the caller. Shared by
     arena chests (open_chest) and the weekly mission box track (game.daily.claim_box)."""
     cfg = ARENA_CHEST_TIERS.get(chest_type, ARENA_CHEST_TIERS["silver"])

@@ -63,7 +63,7 @@ def _build_prize_pool(user: User, scale: float, power: int, cup: int) -> list[di
     coins_med = max(3500, round(4500 * scale))
     coins_large = max(8000, round(11000 * scale))
 
-    # 2. DNA prizes (scaled)
+    # 2. دی‌ان‌ای prizes (scaled)
     dna_small = max(15, round(18 * scale * 0.75))
     dna_med = max(35, round(45 * scale * 0.75))
     dna_large = max(80, round(100 * scale * 0.75))
@@ -95,10 +95,10 @@ def _build_prize_pool(user: User, scale: float, power: int, cup: int) -> list[di
         {"kind": "coins", "amount": coins_med, "weight": 14, "label": f"{coins_med:,} طلا"},
         {"kind": "coins", "amount": coins_large, "weight": 7, "label": f"{coins_large:,} طلا (بسته بزرگ)"},
 
-        # DNA
-        {"kind": "dna", "amount": dna_small, "weight": 16, "label": f"{dna_small:,} DNA"},
-        {"kind": "dna", "amount": dna_med, "weight": 10, "label": f"{dna_med:,} DNA"},
-        {"kind": "dna", "amount": dna_large, "weight": 5, "label": f"{dna_large:,} DNA (ویال پیشرفته)"},
+        # دی‌ان‌ای
+        {"kind": "dna", "amount": dna_small, "weight": 16, "label": f"{dna_small:,} دی‌ان‌ای"},
+        {"kind": "dna", "amount": dna_med, "weight": 10, "label": f"{dna_med:,} دی‌ان‌ای"},
+        {"kind": "dna", "amount": dna_large, "weight": 5, "label": f"{dna_large:,} دی‌ان‌ای (ویال پیشرفته)"},
 
         # Diamonds
         {"kind": "diamonds", "amount": dia_small, "weight": 9, "label": f"{dia_small} الماس"},
@@ -125,7 +125,7 @@ def _build_prize_pool(user: User, scale: float, power: int, cup: int) -> list[di
             "capsule_tier": capsule_tier,
             "capsule_count": 5,
             "weight": 1,
-            "label": f"🎉 جک‌پات افسانه‌ای: {jackpot_coins:,} طلا + {jackpot_dna:,} DNA + {jackpot_dia} الماس + کارت ۳۰ دقیقه!",
+            "label": f"🎉 جک‌پات افسانه‌ای: {jackpot_coins:,} طلا + {jackpot_dna:,} دی‌ان‌ای + {jackpot_dia} الماس + کارت ۳۰ دقیقه!",
         },
     ]
     return prizes

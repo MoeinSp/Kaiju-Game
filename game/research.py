@@ -2,7 +2,7 @@
 
 A research-lab BUILDING (game.constants "research_lab", unlocks at main-hall 5) gates a
 set of research TRACKS. Each track climbs 1→5 (never above the building's level), grants
-a permanent bonus, and is slow + expensive: gold + DNA, 24h + 12h per level of real time,
+a permanent bonus, and is slow + expensive: gold + دی‌ان‌ای, 24h + 12h per level of real time,
 and — unlike a building upgrade — can be finished early ONLY with diamonds (speed-up
 cards are refused here).
 
@@ -177,7 +177,7 @@ def start_research(user: User, key: str) -> ResearchUpgrade:
             need=gold, have=user.coins,
         )
     if user.dna_fragments < dna:
-        raise GameError(f"DNA کافی نداری! این پژوهش <b>{dna:,}</b> DNA می‌خواد (الان {user.dna_fragments:,} داری).")
+        raise GameError(f"دی‌ان‌ای کافی نداری! این پژوهش <b>{dna:,}</b> دی‌ان‌ای می‌خواد (الان {user.dna_fragments:,} داری).")
     user.coins -= gold
     user.dna_fragments -= dna
     user.save(update_fields=["coins", "dna_fragments"])

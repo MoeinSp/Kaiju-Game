@@ -1127,7 +1127,7 @@ def _attack_sync(chat, tg_user):
                 f"{_raid_rank_label(i)} <b>{name}</b>\n"
                 f"💥 آسیب: <code>{r['damage']:,}</code> (<code>{pct}%</code>)\n"
                 f"{get_emoji('coin')} طلا: <code>+{r['coins']:,}</code>\n"
-                f"{get_emoji('dna')} پاداش DNA: <code>+{r['dna']:,}</code>"
+                f"{get_emoji('dna')} پاداش دی‌ان‌ای: <code>+{r['dna']:,}</code>"
             )
         speedup_won = maybe_award_speedup_card(user)  # bonus chance for whoever lands the killing blow
 
@@ -1288,7 +1288,7 @@ def _raid_rank_label(i: int) -> str:
 
 def _raid_leaderboard_text(lb: dict) -> str:
     """The «📊 جدول رید» board — boss HP + total damage, then each attacker with their
-    damage share and DNA reward."""
+    damage share and دی‌ان‌ای reward."""
     pct = round(100 * max(lb["hp"], 0) / max(1, lb["max_hp"]))
     lines = [
         f"📊 <b>جدول رید: {lb['boss_name']}</b> (سطح <code>{lb['boss_level']}</code>)",
@@ -1305,7 +1305,7 @@ def _raid_leaderboard_text(lb: dict) -> str:
                 f"{_raid_rank_label(i)} <b>{r.get('mention') or r['name']}</b>\n"
                 f"💥 آسیب: <code>{r['damage']:,}</code> (<code>{r['share_pct']}%</code>)\n"
                 f"{get_emoji('coin')} طلا: <code>+{r['coins']:,}</code>\n"
-                f"{get_emoji('dna')} پاداش DNA: <code>+{r['dna']:,}</code>"
+                f"{get_emoji('dna')} پاداش دی‌ان‌ای: <code>+{r['dna']:,}</code>"
             )
     return "\n".join(lines)
 
@@ -1919,7 +1919,7 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
     defender_cup_change = 0
 
     # Only the ATTACKER loots, and only on a WIN: they take 10% of the target's gold
-    # (+ a little DNA). A LOSING attacker loses nothing at all — the defender never
+    # (+ a little دی‌ان‌ای). A LOSING attacker loses nothing at all — the defender never
     # loots the attacker.
     # launching an attack burns 8h off the ATTACKER's own group shield (if they have
     # one) — same rule as the arena. The «حمله» button IS the confirmation.
@@ -2105,7 +2105,7 @@ async def _pvp_attack_execute(update, context, query, attacker_id: int, target_i
         new_coins_note = f" <i>(موجودی: <code>{result['new_coins']:,}</code>)</i>" if result.get("new_coins") is not None else ""
         reward_block = (
             f"{get_emoji('coin')} طلا: <code>+{result['loot']:,}</code>{new_coins_note}\n"
-            f"{get_emoji('dna')} DNA: <code>+{result.get('dna', 0):,}</code>\n"
+            f"{get_emoji('dna')} دی‌ان‌ای: <code>+{result.get('dna', 0):,}</code>\n"
             f"✨ تجربه: <code>+{constants.DUEL_WIN_XP}</code> XP"
         )
     else:
@@ -2379,7 +2379,7 @@ async def guardian(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"💪 قدرت کل: <code>{top_power:,}</code>",
             _RULE,
             f"{get_emoji('battle')} <b>چالش جایگاه:</b> برای تصاحب عنوان، کلمه «تسخیر» را بفرستید.",
-            f"{get_emoji('gift')} <b>حقوق روزانه:</b> واریز خودکار روزانه در ساعت ۱۸:۰۰ (تا <code>100,000</code> طلا و <code>4,000</code> DNA بر اساس قدرت).",
+            f"{get_emoji('gift')} <b>حقوق روزانه:</b> واریز خودکار روزانه در ساعت ۱۸:۰۰ (تا <code>100,000</code> طلا و <code>4,000</code> دی‌ان‌ای بر اساس قدرت).",
             f"🚪 <b>کناره‌گیری:</b> با «استعفا» جایگاه را به نفر بعدی واگذار کنید.",
         ]),
         parse_mode="HTML",
@@ -2536,7 +2536,7 @@ async def guardian_claim(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         f"<blockquote>{role_note}\n"
         f"🦅 <b>هیولای نگهبان:</b> <b>{guardian_name}</b> (سطح <code>{level}</code>)\n"
         f"{get_emoji('coin')} حقوق تخمینی امروز: <code>{coins:,}</code> طلا\n"
-        f"{get_emoji('dna')} پاداش تخمینی DNA: <code>+{dna:,}</code>\n\n"
+        f"{get_emoji('dna')} پاداش تخمینی دی‌ان‌ای: <code>+{dna:,}</code>\n\n"
         f"⚔️ <i>اگر می‌خواهید حقوق ساعت ۱۸ به شما برسد، با ارسال کلمه «<b>تسخیر</b>» محافظ فعلی را شکست دهید!</i></blockquote>"
     )
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=add_group_kb)
@@ -2581,7 +2581,7 @@ async def guardian_daily_payout_job(context: ContextTypes.DEFAULT_TYPE) -> None:
                 f"<blockquote>👑 <b>محافظ شایسته:</b> <b>{user_name}</b>\n"
                 f"🦅 <b>هیولای نگهبان:</b> <b>{c_name}</b>\n"
                 f"{get_emoji('coin')} حقوق واریز شده: <code>+{coins:,}</code> طلا\n"
-                f"{get_emoji('dna')} پاداش DNA: <code>+{dna:,}</code>\n\n"
+                f"{get_emoji('dna')} پاداش دی‌ان‌ای: <code>+{dna:,}</code>\n\n"
                 f"✨ <i>پاداش نگهبانی هر روز ساعت ۱۸:۰۰ به صورت خودکار واریز می‌شود. با ارسال «تسخیر» برای فردا آماده شوید!</i></blockquote>"
             )
         else:

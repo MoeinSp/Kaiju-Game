@@ -1,6 +1,6 @@
 """«شارژ همگانی خودکار» — the admin's recurring gift to every player.
 
-The admin sets an interval in days and an amount of gold / DNA (/ diamonds) in the panel;
+The admin sets an interval in days and an amount of gold / دی‌ان‌ای (/ diamonds) in the panel;
 tick() (called from the 5-minute notification job) pays everyone when the interval has
 passed, exactly once per period, and returns a short DM for the recently-active players.
 
@@ -86,7 +86,7 @@ def tick() -> list[tuple]:
     if cfg.coins:
         parts.append(f"{get_emoji('coin')} <code>+{cfg.coins:,}</code> طلا")
     if cfg.dna:
-        parts.append(f"{get_emoji('dna')} <code>+{cfg.dna:,}</code> DNA")
+        parts.append(f"{get_emoji('dna')} <code>+{cfg.dna:,}</code> دی‌ان‌ای")
     if cfg.diamonds:
         parts.append(f"{get_emoji('diamond')} <code>+{cfg.diamonds:,}</code> الماس")
     text = "🎁 <b>شارژ همگانی!</b>\n" + " ┃ ".join(parts) + "\n<i>به حسابت اضافه شد.</i>"

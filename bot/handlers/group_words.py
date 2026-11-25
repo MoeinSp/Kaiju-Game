@@ -333,13 +333,13 @@ _CMD_CATS: dict[str, dict] = {
         ("غار", "تخم‌گذاری و هیولای تازه"),
     ]},
     "econ": {"btn": "اقتصاد", "emoji": "coin", "title": "اقتصاد و جایزه", "items": [
-        ("معدن", "جمع‌آوری طلا/DNA/الماس"),
+        ("معدن", "جمع‌آوری طلا/دی‌ان‌ای/الماس"),
         ("باکس", "باکس ژنتیکی و باکس هیولا"),
         ("گردونه", "گردونه‌ی روزانه (رایگان)"),
         ("جایزه", "جایزه‌ی هر ۵ دقیقه («کایجو» هم)"),
         ("ماموریت", "مأموریت‌های روزانه"),
-        ("صرافی", "طلا↔DNA و تجهیزات↔بلیط (یا «مبادله» / «تبدیل»)"),
-        ("تبدیل DNA به طلا", "مستقیم سراغ مقدار · «تبدیل طلا به DNA» برعکسش"),
+        ("صرافی", "طلا↔دی‌ان‌ای و تجهیزات↔بلیط (یا «مبادله» / «تبدیل»)"),
+        ("تبدیل دی‌ان‌ای به طلا", "مستقیم سراغ مقدار · «تبدیل طلا به دی‌ان‌ای» برعکسش"),
         ("موجودی", "دارایی‌هات"),
         ("فروشگاه", "فروشگاه روزانه"),
         ("بازار", "بازار سیاه و مزایده"),
@@ -791,8 +791,8 @@ def _mine_card(user, mine: dict) -> tuple[str, InlineKeyboardMarkup]:
     if alert_gold > 0 or alert_dna > 0:
         alert_txt = (
             f"⚠️ <b>هشدار غارت معدن:</b>\n"
-            f"در حمله اخیر در آرنا، بخشی از طلا و DNA ذخیره‌شده شما شامل "
-            f"<b><code>{alert_gold:,}</code></b> طلا و <b><code>{alert_dna:,}</code></b> DNA به غارت رفت!\n{div}\n"
+            f"در حمله اخیر در آرنا، بخشی از طلا و دی‌ان‌ای ذخیره‌شده شما شامل "
+            f"<b><code>{alert_gold:,}</code></b> طلا و <b><code>{alert_dna:,}</code></b> دی‌ان‌ای به غارت رفت!\n{div}\n"
         )
 
     lines = [
@@ -800,7 +800,7 @@ def _mine_card(user, mine: dict) -> tuple[str, InlineKeyboardMarkup]:
         div,
         f"💎 جمع‌کننده الماس: {_lvl(d)}",
         f"🏭 جمع‌کننده طلا: {_lvl(g)}",
-        f"🧬 آزمایشگاه DNA: {_lvl(n)}",
+        f"🧬 آزمایشگاه دی‌ان‌ای: {_lvl(n)}",
         div,
         "📦 <b>آماده‌ی جمع‌آوری:</b>",
         "",
@@ -824,7 +824,7 @@ def _box_card(user) -> tuple[str, InlineKeyboardMarkup]:
     """The box chooser: both kinds open right here in the group (scoped to the summoner)."""
     text = (
         f"{get_emoji('diamond')} <b>باکس‌ها</b>\n\n"
-        "<blockquote>🧬 <b>باکس ژنتیکی</b>: با طلا/DNA باز می‌شه، شانسی هیولا یا تجهیزات می‌ده.\n"
+        "<blockquote>🧬 <b>باکس ژنتیکی</b>: با طلا/دی‌ان‌ای باز می‌شه، شانسی هیولا یا تجهیزات می‌ده.\n"
         "👹 <b>باکس هیولا</b>: با الماس، همیشه هیولا می‌ده و شانس درجه‌ی بالا بیشتره.</blockquote>\n"
         "کدوم رو می‌خوای؟"
     )
@@ -1010,7 +1010,7 @@ def _wheel_card(user, spun_today) -> tuple[str, InlineKeyboardMarkup]:
     text = (
         f"{get_emoji('wheel')} <b>گردونه‌ی شانس روزانه</b>\n\n"
         "<blockquote>🎁 روزی یک‌بار رایگان با جوایز ارزشمند متناسب با سطح قدرت:\n"
-        "💰 طلا، 🧬 DNA، 💎 الماس، 🧪 غذای هیولا، ⏱ کارت سرعت یا 🐾 هیولای جدید!</blockquote>"
+        "💰 طلا، 🧬 دی‌ان‌ای، 💎 الماس، 🧪 غذای هیولا، ⏱ کارت سرعت یا 🐾 هیولای جدید!</blockquote>"
     )
     rows = [[btn("گردونه شانس", emoji_key="btn_wheel", style=SHOP, callback_data=_act("wheel_spin", user.id))]]
     rows.append([_pm_button()])
@@ -1776,7 +1776,7 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     if action == "exchange":
-        # gold↔DNA exchange, scoped to the sender (buttons carry their id). It's an
+        # gold↔دی‌ان‌ای exchange, scoped to the sender (buttons carry their id). It's an
         # interactive multi-step panel, so it's not auto-cleaned like a plain card.
         from bot.handlers.exchange import exchange_panel
 
@@ -2183,9 +2183,9 @@ def _action_note(payload: dict) -> str:
                 div,
                 f"👑 <b>با احتساب <code>{pct}٪</code> سود {sub_title}:</b>",
                 f"🔹 لوت پایه طلا: <code>{base_c:,}</code>",
-                f"🔹 لوت پایه DNA: <code>{base_d:,}</code>",
+                f"🔹 لوت پایه دی‌ان‌ای: <code>{base_d:,}</code>",
                 f"🎁 سود اشتراک طلا: <code>+{bonus_c:,}</code>",
-                f"🎁 سود اشتراک DNA: <code>+{bonus_d:,}</code>",
+                f"🎁 سود اشتراک دی‌ان‌ای: <code>+{bonus_d:,}</code>",
             ])
         else:
             note_lines.extend([

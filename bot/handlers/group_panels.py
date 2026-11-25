@@ -208,7 +208,7 @@ def _collect_sync(tg_user):
     return lines, total
 
 
-_RES_LABEL = {"coins": "طلا", "dna_fragments": "DNA", "diamonds": "الماس"}
+_RES_LABEL = {"coins": "طلا", "dna_fragments": "دی‌ان‌ای", "diamonds": "الماس"}
 
 
 def _collect_keyboard(user_id: int) -> InlineKeyboardMarkup:

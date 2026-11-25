@@ -20,7 +20,7 @@ from game.emoji import get_emoji
 
 _DIV = "━━━━━━━━━━━━━━━━━━━━"
 PICK_PAGE_SIZE = 6
-_FOCUS_LABEL = {"gold": "طلا", "dna": "DNA", "mixed": "طلا و DNA"}
+_FOCUS_LABEL = {"gold": "طلا", "dna": "دی‌ان‌ای", "mixed": "طلا و دی‌ان‌ای"}
 
 
 def _fmt_left(seconds: int) -> str:
@@ -168,7 +168,7 @@ async def dispatch_offer_callback(update: Update, context: ContextTypes.DEFAULT_
         lines.append(f"📌 حداقل نایابی: {constants.RARITY_LABELS[offer['min_rarity']]}")
     lines.append(f"🍀 شانس جایزه‌ی شگفتی: <code>{int(dispatch.bonus_chance(offer['hours'], offer['hq_level']) * 100)}٪</code>")
     if offer.get("special"):
-        lines.append("✨ <b>مأموریت ویژه‌ی امروز: طلا و DNA دو برابر.</b>")
+        lines.append("✨ <b>مأموریت ویژه‌ی امروز: طلا و دی‌ان‌ای دو برابر.</b>")
     if dispatch.HQ_REWARD_BONUS[offer["hq_level"]]:
         lines.append(f"🏗 پایگاه اعزام سطح {offer['hq_level']}: +{int(dispatch.HQ_REWARD_BONUS[offer['hq_level']] * 100)}٪ جایزه (حساب شده)")
     rows = []
