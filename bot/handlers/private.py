@@ -1395,9 +1395,8 @@ def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=
         btn("پایگاه", emoji_key="btn_hub_base", style=CONFIRM, callback_data="menu:hub_base"),
         btn("فروشگاه", emoji_key="btn_hub_shop", style=SHOP, callback_data="menu:hub_shop"),
     ])
-    # Dedicated real-money store — alone so it reads as its own section, not a shop sub-item
-    rows.append([btn("💎 خرید طلا و الماس", emoji_key="btn_buy", style=SHOP, callback_data="menu:buy_open")])
     # Row 3: City — with «آزمایشگاه سرم» beside it once the player has built one (nothing otherwise)
+    # «خرید طلا و الماس» lives only under فروشگاه (hub_shop), not on the home card.
     row3 = [btn("شهر", emoji_key="btn_hub_city", style=PRIMARY, callback_data="menu:hub_city")]
     if serum_lab or (today_state and today_state.get("serum_lab")):
         row3.append(btn("آزمایشگاه سرم", emoji_key="btn_serums", style=CONFIRM, callback_data="sr:home:m"))
