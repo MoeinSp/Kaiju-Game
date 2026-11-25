@@ -47,6 +47,9 @@ class User(models.Model):
 
     cup = models.IntegerField(default=0)  # arena rating; drives PvP matchmaking
     shield_until = models.DateTimeField(null=True, blank=True)  # anti-farm grace after being raided (arena)
+    # Last arena find/attack. Anchors the post-shield activity guard (game/arena.py):
+    # for up to 30 min after shield_until, recent activity keeps you unmatchable.
+    last_arena_active_at = models.DateTimeField(null=True, blank=True)
     group_shield_until = models.DateTimeField(null=True, blank=True)  # separate 4h grace after a group «اتک»
 
     # «جایزه»/«کایجو» word-reward cooldown — GLOBAL per player (not per-group), so

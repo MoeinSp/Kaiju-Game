@@ -265,8 +265,7 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
     """The main dashboard shown on /start and /me: base + resources, the active
     creature's identity/level/XP, its combat stats, the full gear loadout, and any
     active defensive shields — each in its own clearly divided block."""
-    from game.arena import (group_shield_remaining_seconds, shield_remaining_seconds,
-                            _fmt_shield_remaining)
+    from game.arena import shield_status_lines
     from game.energy import get_max_energy, minutes_until_next_point
     from game.equipment import equipment_power
 
@@ -286,20 +285,13 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
     else:
         lab_badge = f"{get_emoji('lab')} سطح آزمایشگاه: <code>{lp['level']}</code> (<code>{lp['into']}/{lp['span']}</code>)"
 
-    arena_secs = shield_remaining_seconds(user)
-    group_secs = group_shield_remaining_seconds(user)
-    arena_status = _fmt_shield_remaining(arena_secs) if arena_secs > 0 else "غیرفعال"
-    group_status = _fmt_shield_remaining(group_secs) if group_secs > 0 else "غیرفعال"
+    shields = shield_status_lines(user)
 
     if compact:
         # the photo caption of /start and /me (owner-approved layout, 2026-11-12): the lab's
         # name is already in the greeting above, so the card starts with its numbers
         lab_line = (f"{get_emoji('lab')} سطح <b>{lp['level']}</b> · بیشینه" if lp["is_max"]
                     else f"{get_emoji('lab')} سطح <b>{lp['level']}</b> · <code>{lp['into']}/{lp['span']}</code>")
-        if arena_secs <= 0 and group_secs <= 0:
-            shields = ["🛡 سپر آرنا و گروه: خاموش"]
-        else:
-            shields = [f"🛡 سپر آرنا: {arena_status}", f"👥 سپر گروه: {group_status}"]
         lines = [
             _CARD_DIV,
             lab_line,
@@ -384,9 +376,8 @@ def creature_card_text(user, creature, equipped_items: list | None = None, *, co
 
     lines += [
         "", _CARD_DIV, "",
-        "🛡 <b>پوشش سپرهای دفاعی:</b>",
-        f"🏟 آرنا: <i>{arena_status}</i>",
-        f"👥 گروهی: <i>{group_status}</i>",
+        "🛡 <b>حفاظت‌های دفاعی:</b>",
+        *shields,
     ]
     return "\n".join(lines)
 
@@ -1225,7 +1216,7 @@ _HUBS = {
         [("خرید طلا و الماس", "buy_open", "s", "btn_buy")],
         [("فروشگاه", "shop", "s", "btn_shop"), ("بازار سیاه", "blackmarket", "s", "btn_blackmarket")],
         [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("باکس الماسی", "diamond_box", "s", "btn_diamond_box")],
-        [("سپر", "shield_shop", "s", "btn_shield"), ("اشتراک VIP", "subscription", "s", "btn_vip")],
+        [("حفاظ", "shield_shop", "s", "btn_shield"), ("اشتراک VIP", "subscription", "s", "btn_vip")],
     ]),
     "hub_city": ("🌐 <b>شهر</b>", [
         [("مأموریت‌ها", "missions", "s", "btn_missions"), ("گردونه", "wheel", "s", "btn_wheel")],

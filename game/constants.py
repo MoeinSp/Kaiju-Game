@@ -1485,19 +1485,35 @@ FORGE_MAX_FAIL_CHANCE = 0.45
 # game, so raiding has to be a grind you work at rather than a faucet.
 ARENA_LOOT_PERCENT = 0.10
 ARENA_LOOT_MIN = 50  # guaranteed base loot for winning a raid even if defender is broke
-ARENA_SHIELD_HOURS = 8
-GROUP_SHIELD_HOURS = 8  # separate anti-farm grace after a lost group «اتک»
+ARENA_SHIELD_HOURS = 12  # free main shield after a lost arena defense
+GROUP_SHIELD_HOURS = 12  # separate anti-farm grace after a lost group «اتک»
+# Group has no activity-guard: one «اتک» burns the whole free 12h group shield.
+GROUP_SHIELD_ATTACK_COST_HOURS = 12
 
-# Purchasable arena shields (diamonds). Unlike the free 8h grace after being raided,
+# Distinct names so players stop treating the two timers as one "سپر".
+ARENA_SHIELD_LABEL = "حفاظ آرنا"
+GROUP_SHIELD_LABEL = "حفاظ گروه"
+ARENA_SHIELD_EMOJI = "🛡"
+GROUP_SHIELD_EMOJI = "🧱"
+
+# After the main arena shield ends: up to ARENA_GUARD_MAX_MINUTES of "activity
+# guard" (Clash-style). Only active while the player had arena activity in the
+# last ARENA_GUARD_ACTIVITY_SECONDS; past the 30-min ceiling they are fully
+# matchable even if still tapping buttons.
+ARENA_GUARD_MAX_MINUTES = 30
+ARENA_GUARD_ACTIVITY_SECONDS = 5 * 60
+
+# Purchasable arena shields (diamonds). Unlike the free grace after being raided,
 # these are bought up-front for long stretches of protection. Each attack YOU launch
-# spends SHIELD_ATTACK_COST_HOURS off your shield instead of dropping it entirely —
-# so a week-long shield survives ~21 raids before you're exposed again.
-SHIELD_ATTACK_COST_HOURS = 8
+# spends SHIELD_ATTACK_COST_HOURS off your MAIN shield (not the activity guard) —
+# so a week-long shield survives many raids before you're exposed again.
+SHIELD_ATTACK_COST_HOURS = 3
+# Labels filled after _shield_duration_word is defined (see below).
 SHIELD_SHOP_TIERS = {
-    "8h":  {"hours": 8,   "diamonds": 80,  "label": "🛡 سپر ۸ ساعته"},
-    "24h": {"hours": 24,  "diamonds": 150, "label": "🛡 سپر ۲۴ ساعته"},
-    "3d":  {"hours": 72,  "diamonds": 350, "label": "🛡 سپر ۳ روزه"},
-    "7d":  {"hours": 168, "diamonds": 500, "label": "🛡 سپر یک‌هفته‌ای"},
+    "8h":  {"hours": 8,   "diamonds": 80},
+    "24h": {"hours": 24,  "diamonds": 150},
+    "3d":  {"hours": 72,  "diamonds": 350},
+    "7d":  {"hours": 168, "diamonds": 500},
 }
 
 
@@ -1506,16 +1522,31 @@ def group_shield_diamonds(arena_diamonds: int) -> int:
     return (int(arena_diamonds) * 75 + 50) // 100
 
 
+def _shield_duration_word(hours: int) -> str:
+    if hours == 8:
+        return "۸ ساعته"
+    if hours == 24:
+        return "۲۴ ساعته"
+    if hours == 72:
+        return "۳ روزه"
+    if hours == 168:
+        return "یک‌هفته‌ای"
+    return f"{hours} ساعته"
+
+
 def _group_shield_tiers() -> dict:
     tiers = {}
     for key, cfg in SHIELD_SHOP_TIERS.items():
         tiers[key] = {
             "hours": cfg["hours"],
             "diamonds": group_shield_diamonds(cfg["diamonds"]),
-            "label": cfg["label"].replace("سپر ", "سپر گروه ", 1),
+            "label": f"{GROUP_SHIELD_EMOJI} {GROUP_SHIELD_LABEL} {_shield_duration_word(cfg['hours'])}",
         }
     return tiers
 
+
+for _k, _cfg in SHIELD_SHOP_TIERS.items():
+    _cfg["label"] = f"{ARENA_SHIELD_EMOJI} {ARENA_SHIELD_LABEL} {_shield_duration_word(_cfg['hours'])}"
 
 # Group shop is the arena table with group_shield_diamonds() — one duration list.
 GROUP_SHIELD_SHOP_TIERS = _group_shield_tiers()

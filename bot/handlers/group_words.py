@@ -765,7 +765,11 @@ def _arena_card(user, opponent, loot, shielded_for, data=None) -> tuple[str, Inl
         f"(داری <code>{energy}</code>/<code>{max_energy}</code>)",
     ]
     if shielded_for:
-        lines.append(f"🛡 <i>سپر آرنا داری (<code>{shielded_for // 3600}</code> ساعت) — با حمله می‌پره.</i>")
+        lines.append(
+            f"{constants.ARENA_SHIELD_EMOJI} <i>{constants.ARENA_SHIELD_LABEL} داری "
+            f"(<code>{shielded_for // 3600}</code> ساعت) — هر حمله "
+            f"{constants.SHIELD_ATTACK_COST_HOURS} ساعت ازش کم می‌کنه.</i>"
+        )
     rows = [
         [
             btn("حمله", emoji_key="btn_attack", style=BATTLE, callback_data=_act("arena_go", user.id)),

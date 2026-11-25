@@ -74,8 +74,13 @@ def check_prices():
     assert constants.group_shield_diamonds(150) == 113
     assert constants.SHIELD_SHOP_TIERS["8h"]["diamonds"] == 80
     assert constants.GROUP_SHIELD_SHOP_TIERS["7d"]["diamonds"] == 375
-    assert constants.ARENA_SHIELD_HOURS // 2 == 4
-    assert constants.GROUP_SHIELD_HOURS == 8
+    assert constants.ARENA_SHIELD_HOURS == 12
+    assert constants.ARENA_SHIELD_HOURS // 2 == 6
+    assert constants.SHIELD_ATTACK_COST_HOURS == 3
+    assert constants.ARENA_GUARD_MAX_MINUTES == 30
+    assert constants.ARENA_GUARD_ACTIVITY_SECONDS == 300
+    assert constants.GROUP_SHIELD_HOURS == 12
+    assert constants.GROUP_SHIELD_ATTACK_COST_HOURS == 12
 
 
 def check_wallet_and_bank():

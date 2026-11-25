@@ -145,7 +145,7 @@ BUTTON_EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "btn_cat_shop": ("دسته‌ی فروشگاه", "🛒", "features"),
     "btn_cat_social": ("دسته‌ی اجتماعی", "👥", "features"),
     # newest sections
-    "btn_shield": ("خرید سپر", "🛡", "features"),
+    "btn_shield": ("خرید حفاظ", "🛡", "features"),
     "btn_casino": ("کازینو", "🎰", "features"),
     "btn_items": ("آیتم‌های ویژه", "🛍", "features"),
     "btn_skill": ("مهارت در نبرد", "✨", "action"),

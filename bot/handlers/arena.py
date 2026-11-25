@@ -832,13 +832,15 @@ async def arena_attack_callback(update: Update, context: ContextTypes.DEFAULT_TY
             keyboard = InlineKeyboardMarkup([
                 [
                     btn("تأیید حمله", emoji_key="btn_confirm", style=BATTLE, callback_data=confirm_cb),
-                    btn("حفظ سپر", emoji_key="btn_cancel", style=NAV, callback_data="arena_opp_back"),
+                    btn(f"حفظ {constants.ARENA_SHIELD_LABEL}", emoji_key="btn_cancel", style=NAV, callback_data="arena_opp_back"),
                 ]
             ])
             await safe_edit_message_text(
                 query,
-                f"⚠️ <b>الان سپر محافظ داری</b> ({_fmt_hm(shield_secs)} مونده).\n"
-                f"اگه حمله کنی <b>{constants.SHIELD_ATTACK_COST_HOURS} ساعت</b> از سپرت کم می‌شه "
+                f"⚠️ <b>الان {constants.ARENA_SHIELD_LABEL} داری</b> ({_fmt_hm(shield_secs)} مونده).\n"
+                f"اگه حمله کنی <b>{constants.SHIELD_ATTACK_COST_HOURS} ساعت</b> از "
+                f"<b>{constants.ARENA_SHIELD_LABEL}</b> کم می‌شه "
+                f"(به {constants.GROUP_SHIELD_LABEL} کاری نداره) "
                 "و ممکنه دوباره غارت بشی.\nبازم حمله می‌کنی؟",
                 parse_mode="HTML", reply_markup=keyboard,
             )

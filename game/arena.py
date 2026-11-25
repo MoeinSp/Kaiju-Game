@@ -81,6 +81,7 @@ def deserved_cup(power: int) -> int:
 
 
 def is_shielded(user: User) -> bool:
+    """True only while the MAIN arena shield is still running (not the activity guard)."""
     return user.shield_until is not None and user.shield_until > timezone.now()
 
 
@@ -88,6 +89,53 @@ def shield_remaining_seconds(user: User) -> int:
     if not is_shielded(user):
         return 0
     return int((user.shield_until - timezone.now()).total_seconds())
+
+
+def _guard_window_end(user: User):
+    """Moment the post-shield activity guard ceiling expires, or None if no anchor."""
+    if user.shield_until is None:
+        return None
+    return user.shield_until + datetime.timedelta(minutes=constants.ARENA_GUARD_MAX_MINUTES)
+
+
+def is_arena_guarded(user: User) -> bool:
+    """Clash-style short protection after the main shield ends: only while the player
+    had arena activity in the last ARENA_GUARD_ACTIVITY_SECONDS, and only until
+    ARENA_GUARD_MAX_MINUTES past shield_until. Past that ceiling they are fully
+    matchable even if still active."""
+    now = timezone.now()
+    if user.shield_until is None or user.shield_until > now:
+        return False
+    guard_end = _guard_window_end(user)
+    if guard_end is None or now > guard_end:
+        return False
+    active_at = getattr(user, "last_arena_active_at", None)
+    if active_at is None:
+        return False
+    return active_at >= now - datetime.timedelta(seconds=constants.ARENA_GUARD_ACTIVITY_SECONDS)
+
+
+def arena_guard_remaining_seconds(user: User) -> int:
+    if not is_arena_guarded(user):
+        return 0
+    now = timezone.now()
+    guard_end = _guard_window_end(user)
+    activity_end = user.last_arena_active_at + datetime.timedelta(
+        seconds=constants.ARENA_GUARD_ACTIVITY_SECONDS
+    )
+    return max(0, int((min(guard_end, activity_end) - now).total_seconds()))
+
+
+def is_arena_protected(user: User) -> bool:
+    """Unmatchable / unraidable in arena: main shield OR active activity guard."""
+    return is_shielded(user) or is_arena_guarded(user)
+
+
+def touch_arena_activity(user: User, *, save: bool = False) -> None:
+    """Stamp arena find/attack so the post-shield activity guard can stay alive."""
+    user.last_arena_active_at = timezone.now()
+    if save:
+        user.save(update_fields=["last_arena_active_at"])
 
 
 def is_group_shielded(user: User) -> bool:
@@ -108,18 +156,34 @@ def _fmt_shield_remaining(seconds: int) -> str:
     return f"{minutes} دقیقه"
 
 
-def shield_status_lines(user: User) -> list[str]:
-    """Human-readable countdown for whichever of the two shields (arena / group)
-    the player currently has, so their remaining protection is visible on their
-    profile — in the DM and in the group alike. Empty list when unshielded."""
-    lines = []
+def arena_shield_status_text(user: User, *, html: bool = True) -> str:
+    """One short status for the arena shield (main or activity guard or off)."""
     arena_secs = shield_remaining_seconds(user)
     if arena_secs > 0:
-        lines.append(f"🛡 سپر آرنا: <b>{_fmt_shield_remaining(arena_secs)}</b> باقی‌مونده")
+        left = _fmt_shield_remaining(arena_secs)
+        return f"<b>{left}</b> باقی‌مونده" if html else left
+    guard_secs = arena_guard_remaining_seconds(user)
+    if guard_secs > 0:
+        left = _fmt_shield_remaining(guard_secs)
+        note = f"موقت {left}"
+        return f"<b>{note}</b>" if html else note
+    return "خاموش"
+
+
+def group_shield_status_text(user: User, *, html: bool = True) -> str:
     group_secs = group_shield_remaining_seconds(user)
     if group_secs > 0:
-        lines.append(f"🛡 سپر گروه: <b>{_fmt_shield_remaining(group_secs)}</b> باقی‌مونده")
-    return lines
+        left = _fmt_shield_remaining(group_secs)
+        return f"<b>{left}</b> باقی‌مونده" if html else left
+    return "خاموش"
+
+
+def shield_status_lines(user: User) -> list[str]:
+    """Always both timers — never just one — so arena/group stop looking like one shield."""
+    return [
+        f"{constants.ARENA_SHIELD_EMOJI} {constants.ARENA_SHIELD_LABEL}: {arena_shield_status_text(user)}",
+        f"{constants.GROUP_SHIELD_EMOJI} {constants.GROUP_SHIELD_LABEL}: {group_shield_status_text(user)}",
+    ]
 
 
 def apply_group_shield(user: User) -> None:
@@ -129,13 +193,16 @@ def apply_group_shield(user: User) -> None:
 
 
 def spend_group_shield_on_attack(user: User) -> int:
-    """Called when `user` launches a group «اتک»: burns SHIELD_ATTACK_COST_HOURS off
-    their GROUP shield. Returns the seconds left after the deduction (0 if unshielded).
+    """Called when `user` launches a group «اتک»: burns GROUP_SHIELD_ATTACK_COST_HOURS
+    off their GROUP shield (no activity guard — free 12h is cleared by one attack).
+    Returns the seconds left after the deduction (0 if unshielded).
     The caller must include 'group_shield_until' in its own save()."""
     if not is_group_shielded(user):
         user.group_shield_until = None
         return 0
-    new_until = user.group_shield_until - datetime.timedelta(hours=constants.SHIELD_ATTACK_COST_HOURS)
+    new_until = user.group_shield_until - datetime.timedelta(
+        hours=constants.GROUP_SHIELD_ATTACK_COST_HOURS
+    )
     now = timezone.now()
     user.group_shield_until = new_until if new_until > now else None
     return max(0, int((user.group_shield_until - now).total_seconds())) if user.group_shield_until else 0
@@ -146,9 +213,9 @@ def _refuse_shield_in_debt(user: User) -> None:
     only the natural shield a player gets after being raided."""
     if user.diamonds < 0:
         raise GameError(
-            "⛔️ خرید سپر برات قفله!\n\n"
-            f"موجودی الماست منفیه ({user.diamonds:,} 💎). تا وقتی این بدهی صاف نشه نمی‌تونی سپر بخری؛ "
-            "فقط سپر خودکاری که بعد از غارت‌شدن بهت می‌رسه فعال می‌شه."
+            f"⛔️ خرید {constants.ARENA_SHIELD_LABEL} / {constants.GROUP_SHIELD_LABEL} برات قفله!\n\n"
+            f"موجودی الماست منفیه ({user.diamonds:,} 💎). تا وقتی این بدهی صاف نشه نمی‌تونی حفاظ بخری؛ "
+            "فقط حفاظ خودکاری که بعد از غارت‌شدن بهت می‌رسه فعال می‌شه."
         )
 
 
@@ -192,16 +259,22 @@ def buy_group_shield(user: User, tier: str) -> dict:
 
 def spend_shield_on_attack(user: User) -> int:
     """Called when `user` launches an attack: burns SHIELD_ATTACK_COST_HOURS off their
-    arena shield (instead of the old all-or-nothing drop). Returns the seconds left
-    after the deduction. No-op / 0 when they weren't shielded. The caller is
-    responsible for including 'shield_until' in its own save()."""
+    MAIN arena shield. Returns the seconds left on the main shield after the
+    deduction. No-op / 0 when they weren't main-shielded (activity guard is not
+    spent — attacking during it only refreshes last_arena_active_at via the caller).
+
+    When the burn ends the main shield, `shield_until` is set to *now* (not None)
+    so the 30-minute activity-guard window still has an anchor. The caller must
+    include 'shield_until' in its own save() when this changes anything."""
     if not is_shielded(user):
-        user.shield_until = None
         return 0
     reduced = user.shield_until - datetime.timedelta(hours=constants.SHIELD_ATTACK_COST_HOURS)
     now = timezone.now()
-    user.shield_until = reduced if reduced > now else None
-    return max(0, int((user.shield_until - now).total_seconds())) if user.shield_until else 0
+    # Keep a past-or-equal timestamp so is_arena_guarded can see the window start.
+    user.shield_until = reduced if reduced > now else now
+    if user.shield_until > now:
+        return int((user.shield_until - now).total_seconds())
+    return 0
 
 
 def cup_delta(attacker: User, defender_cup: int, won: bool, attacker_power: int) -> int:
@@ -324,6 +397,8 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
     if active_power(attacker) <= 0:
         raise GameError("اول یه موجود فعال انتخاب کن.")
 
+    touch_arena_activity(attacker, save=True)
+
     now = timezone.now()
     band = constants.ARENA_MATCH_CUP_BAND
     exclude_set = set(exclude_ids or [])
@@ -335,12 +410,19 @@ def find_opponent(attacker: User, exclude_ids=None) -> dict:
     # The eligible pool, expressed as ONE filtered query instead of the old three-step
     # version (pull every active owner id in the game into Python → send them all back as
     # an 11k-element IN list → filter the band in Python), which cost ~300ms per search.
-    # Every rule is unchanged: a real, un-banned, un-shielded player who has an active
-    # creature, isn't an alliance-mate, sits inside the hard cup band, and respects rookie
-    # protection (>=2000 never meets <1000 and vice versa).
+    # Unmatchable = main shield still running, OR inside the 30-min post-shield window
+    # with arena activity in the last 5 minutes (activity guard).
+    activity_cut = now - datetime.timedelta(seconds=constants.ARENA_GUARD_ACTIVITY_SECONDS)
+    guard_floor = now - datetime.timedelta(minutes=constants.ARENA_GUARD_MAX_MINUTES)
     pool_qs = (
         User.objects.filter(is_banned=False)
         .filter(Q(shield_until__isnull=True) | Q(shield_until__lte=now))
+        .exclude(
+            shield_until__isnull=False,
+            shield_until__gt=guard_floor,
+            shield_until__lte=now,
+            last_arena_active_at__gt=activity_cut,
+        )
         .filter(cup__gte=attacker.cup - band, cup__lte=attacker.cup + band)
         .filter(Exists(Creature.objects.filter(owner_id=OuterRef("pk"), is_active=True)))
         .exclude(id__in=skip_ids)
@@ -395,7 +477,7 @@ def expected_loot(opponent: dict, attacker_level: int = 1) -> int:
     """Gold from one raid.
 
     * REAL opponent → exactly <b>10%</b> of their gold (floored at ARENA_LOOT_MIN).
-      Farming the same rich player is already prevented by the 8h post-raid shield +
+      Farming the same rich player is already prevented by the post-raid shield +
       the ±500 cup matchmaking, so no per-hit cap is applied.
     * BOT opponent → a cup-scaled amount (grows with the raider's cup), the reward
       for climbing when no real target is in range.
@@ -449,12 +531,15 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
 
             defense_note = swap_note(opponent.get("creature_name") or "مدافع قبلی", creature_name(defender_creature),
                                      defender_creature.element)
-        if is_shielded(defender_user):
-            raise OpponentUnavailableError("این حریف الان سپر محافظ داره، یکی دیگه رو امتحان کن.")
+        if is_arena_protected(defender_user):
+            raise OpponentUnavailableError(
+                f"این حریف الان {constants.ARENA_SHIELD_LABEL} داره، یکی دیگه رو امتحان کن."
+            )
 
     # «سرم خشم» (attacker) and «سرم پوسته» (a real defender) are spent by this fight
     from game import serums
 
+    touch_arena_activity(attacker)  # saved with attacker_fields below
     rage = serums.take(attacker, "rage")
     shell = serums.take(defender_user, "shell") if defender_user is not None else 1.0
     power_a = round(creature_power(attacker_creature, get_equipped_items(attacker_creature)) * rage) if rage > 1 else None
@@ -551,7 +636,7 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
             attacker.coins += league_coins
             attacker.dna_fragments += league_dna
 
-    attacker_fields = ["coins", "dna_fragments"]
+    attacker_fields = ["coins", "dna_fragments", "last_arena_active_at"]
     if award_cup:
         attacker.cup = max(0, attacker.cup + delta)
         spend_shield_on_attack(attacker)

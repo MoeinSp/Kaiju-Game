@@ -243,7 +243,11 @@ async def admin_remove_shield(update: Update, context: ContextTypes.DEFAULT_TYPE
     except GameError as exc:
         await update.message.reply_text(alert_text(exc, 3500))
         return
-    await update.message.reply_text(f"🛡❌ سپرِ <b>{name}</b> (آرنا و گروه) حذف شد.", parse_mode="HTML")
+    await update.message.reply_text(
+        f"{constants.ARENA_SHIELD_EMOJI}❌ حفاظتِ <b>{name}</b> "
+        f"({constants.ARENA_SHIELD_LABEL} و {constants.GROUP_SHIELD_LABEL}) حذف شد.",
+        parse_mode="HTML",
+    )
 
 
 async def _dm_transfer_received(context, receiver, sender, what: str) -> None:
@@ -1490,10 +1494,10 @@ def _pvp_prompt_render(attacker_id, target_id, a_name, a_power, a_elem, t_name, 
     # doesn't waste a tap, and drop the attack button (the attack would be blocked).
     if t_shield_secs and t_shield_secs > 0:
         text = "\n".join([
-            "🛡 <b>حمله ممکن نیست — حریف سپر دارد</b>",
+            f"{constants.GROUP_SHIELD_EMOJI} <b>حمله ممکن نیست — حریف {constants.GROUP_SHIELD_LABEL} دارد</b>",
             _RULE,
             f"👤 حریف: <b>{t_name}</b>",
-            f"⏳ سپر گروهی: <code>{_fmt_shield_hm(t_shield_secs)}</code> باقی‌مانده",
+            f"⏳ {constants.GROUP_SHIELD_LABEL}: <code>{_fmt_shield_hm(t_shield_secs)}</code> باقی‌مانده",
             f"💪 قدرت شما: <code>{a_power:,}</code>",
             f"💀 قدرت حریف: <code>{t_power:,}</code>",
         ])
@@ -1898,7 +1902,10 @@ def _pvp_attack_sync(chat, attacker_tg, target_id):
 
     if is_group_shielded(target):
         secs = group_shield_remaining_seconds(target)
-        raise GameError(f"این بازیکن الان محافظ گروهی داره ({secs // 3600} ساعت و {(secs % 3600) // 60} دقیقه دیگه می‌پره).")
+        raise GameError(
+            f"این بازیکن الان {constants.GROUP_SHIELD_LABEL} داره "
+            f"({secs // 3600} ساعت و {(secs % 3600) // 60} دقیقه دیگه می‌پره)."
+        )
 
     spend_energy(attacker, constants.RAID_ATTACK_ENERGY_COST, "حمله")
 
@@ -2061,11 +2068,13 @@ async def pvp_attack_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.answer()
         await safe_edit_message_text(
             query,
-            f"🛡 <b>توجه: سپر گروهی فعال است</b>\n"
+            f"{constants.GROUP_SHIELD_EMOJI} <b>توجه: {constants.GROUP_SHIELD_LABEL} فعال است</b>\n"
             f"{_RULE}\n"
             f"<blockquote>"
-            f"مدت زمان باقیمانده سپر: <code>{_fmt_shield_hm(shield_secs)}</code>\n"
-            f"با این حمله <code>{constants.SHIELD_ATTACK_COST_HOURS}</code> ساعت از سپرتان کسر می‌شود."
+            f"مدت باقی‌ماندهٔ {constants.GROUP_SHIELD_LABEL}: <code>{_fmt_shield_hm(shield_secs)}</code>\n"
+            f"با این حمله <code>{constants.GROUP_SHIELD_ATTACK_COST_HOURS}</code> ساعت از "
+            f"<b>{constants.GROUP_SHIELD_LABEL}</b> کسر می‌شود "
+            f"(به {constants.ARENA_SHIELD_LABEL} کاری ندارد)."
             f"</blockquote>\n\n"
             "آیا مایل به ادامه حمله هستید؟",
             parse_mode="HTML",
@@ -2399,7 +2408,7 @@ def _guardian_challenge_sync(chat, tg_user):
     # («تو خودت همین الان محافظ گروهی!»)
     guardian = ensure_guardian(group, group_member_creatures(group))
     if guardian is not None and guardian.owner_id == user.id:
-        raise GameError("تو خودت همین الان محافظ گروهی!")
+        raise GameError(f"تو خودت همین الان {constants.GROUP_SHIELD_LABEL} داری!")
     spend_energy(user, constants.GUARDIAN_CHALLENGE_ENERGY_COST, "چالش نگهبان")
     user.save(update_fields=["energy", "energy_updated_at"])
     won, report = challenge_guardian(group, user, creature)

@@ -424,21 +424,29 @@ def _fmt_hours(seconds: int) -> str:
 
 def _shield_render(diamonds: int, shield_secs: int) -> tuple[str, InlineKeyboardMarkup]:
     sh = get_emoji("shield")
-    status = f"⏱ مدت باقیمانده: <code>{_fmt_hours(shield_secs)}</code>" if shield_secs > 0 else f"{get_emoji('sub_silver')}️ <i>در حال حاضر سپر فعال ندارید</i>"
+    al = constants.ARENA_SHIELD_LABEL
+    status = (
+        f"⏱ مدت باقیمانده: <code>{_fmt_hours(shield_secs)}</code>"
+        if shield_secs > 0
+        else f"{get_emoji('sub_silver')}️ <i>الان {al} فعال نیست</i>"
+    )
     lines = [
-        f"{sh} <b>خرید سپر محافظ آرنا</b>",
+        f"{sh} <b>خرید {al}</b>",
         "━━━━━━━━━━━━━━━━━━━━",
         f"📌 وضعیت فعلی:\n{status}",
         f"💎 موجودی الماس: <code>{diamonds:,} الماس</code>",
         "━━━━━━━━━━━━━━━━━━━━",
-        f"<blockquote>تا وقتی سپر داری کسی نمی‌تونه در آرنا بهت حمله کنه.\n"
-        f"هر حمله‌ای که <b>خودت</b> بزنی <code>{constants.SHIELD_ATTACK_COST_HOURS} ساعت</code> از سپرت کم می‌کنه.\n"
+        f"<blockquote>تا وقتی <b>{al}</b> داری کسی نمی‌تونه در آرنا بهت حمله کنه.\n"
+        f"هر حملهٔ آرنای خودت <code>{constants.SHIELD_ATTACK_COST_HOURS} ساعت</code> از {al} کم می‌کنه.\n"
+        f"بعد از تموم شدنش، تا <code>{constants.ARENA_GUARD_MAX_MINUTES} دقیقه</code> "
+        f"اگه توی آرنا فعال باشی (۵ دقیقهٔ اخیر) حفاظ موقت داری.\n"
+        f"این از <b>{constants.GROUP_SHIELD_LABEL}</b> کاملاً جداست.\n"
         "خریدها روی هم جمع می‌شوند.</blockquote>",
     ]
     rows = []
     for tier, cfg in constants.SHIELD_SHOP_TIERS.items():
         rows.append([btn(
-            f"سپر {cfg['hours']} ساعته",
+            f"{al} {constants._shield_duration_word(cfg['hours'])}",
             emoji_key="btn_shield",
             style=SHOP, callback_data=f"shield_buy:{tier}",
         )])
@@ -450,17 +458,18 @@ async def shield_shop_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     """The «خرید سپر» entry — first choose which shield to buy (arena vs group)."""
     sh = get_emoji("shield")
     text = (
-        f"{sh} <b>خرید سپر محافظ</b>\n"
+        f"{sh} <b>خرید حفاظت</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        f"<blockquote>{get_emoji('def')} <b>سپر آرنا:</b> جلوگیری از غارت منابع در آرنا\n"
-        f"{get_emoji('def')} <b>سپر گروه:</b> جلوگیری از حمله در گروه‌ها</blockquote>\n"
+        f"<blockquote>{constants.ARENA_SHIELD_EMOJI} <b>{constants.ARENA_SHIELD_LABEL}:</b> جلوی غارت آرنا\n"
+        f"{constants.GROUP_SHIELD_EMOJI} <b>{constants.GROUP_SHIELD_LABEL}:</b> جلوی «اتک» گروهی\n"
+        "اینا دو تا حفاظ جدا هستن؛ یکی جاشون یکی دیگه رو نمی‌گیره.</blockquote>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "کدام سپر را می‌خواهید؟"
+        "کدام را می‌خواهید؟"
     )
     rows = InlineKeyboardMarkup([
         [
-            btn("سپر آرنا", emoji_key="btn_shield", style=SHOP, callback_data="shield_arena"),
-            btn("سپر گروه", emoji_key="btn_shield", style=SHOP, callback_data="gshield_shop"),
+            btn(constants.ARENA_SHIELD_LABEL, emoji_key="btn_shield", style=SHOP, callback_data="shield_arena"),
+            btn(constants.GROUP_SHIELD_LABEL, emoji_key="btn_shield", style=SHOP, callback_data="gshield_shop"),
         ],
         [back_btn("menu:hub_shop", "بازگشت به فروشگاه")],
     ])
@@ -489,14 +498,14 @@ async def shield_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     tier = query.data.split(":")[1]
     cfg = constants.SHIELD_SHOP_TIERS.get(tier)
     if not cfg:
-        await query.answer("این سپر پیدا نشد.", show_alert=True)
+        await query.answer(f"این {constants.ARENA_SHIELD_LABEL} پیدا نشد.", show_alert=True)
         return
     diamonds, _ = await run_db(_shield_state_sync, update.effective_user)
     await query.answer()
     lines = [
-        f"{get_emoji('def')} <b>تأیید خرید سپر آرنا</b>",
+        f"{get_emoji('def')} <b>تأیید خرید {constants.ARENA_SHIELD_LABEL}</b>",
         "━━━━━━━━━━━━━━━━━━━━",
-        f"<blockquote>نوع سپر: <b>{cfg['label']}</b>\n"
+        f"<blockquote>نوع: <b>{cfg['label']}</b>\n"
         f"مدت زمان: <code>{cfg['hours']} ساعت</code>\n"
         f"هزینه: <code>{cfg['diamonds']} الماس</code>\n"
         f"موجودی الماس شما: <code>{diamonds:,} الماس</code></blockquote>",
@@ -520,11 +529,11 @@ async def shield_do_buy_callback(update: Update, context: ContextTypes.DEFAULT_T
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
         return
-    await query.answer("🛡 سپر فعال شد!")
+    await query.answer(f"{constants.ARENA_SHIELD_EMOJI} {constants.ARENA_SHIELD_LABEL} فعال شد!")
     text, keyboard = _shield_render(diamonds, shield_secs)
     await safe_edit_message_text(
         query,
-        f"✅ <b>سپر خریداری شد!</b> الان <code>{_fmt_hours(shield_secs)}</code> محافظت داری.\n\n━━━━━━━━━━━━━━━━━━━━\n" + text,
+        f"✅ <b>{constants.ARENA_SHIELD_LABEL} خریداری شد!</b> الان <code>{_fmt_hours(shield_secs)}</code> محافظت آرنا داری.\n\n━━━━━━━━━━━━━━━━━━━━\n" + text,
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -743,19 +752,26 @@ def _gshield_state_sync(tg_user):
 
 
 def _gshield_render(diamonds: int, shield_secs: int) -> tuple[str, InlineKeyboardMarkup]:
-    status = f"⏱ زمان باقیمانده: <code>{_fmt_hours(shield_secs)}</code>" if shield_secs > 0 else f"{get_emoji('sub_silver')}️ <i>در حال حاضر سپر گروه فعال ندارید</i>"
+    gl = constants.GROUP_SHIELD_LABEL
+    status = (
+        f"⏱ زمان باقیمانده: <code>{_fmt_hours(shield_secs)}</code>"
+        if shield_secs > 0
+        else f"{get_emoji('sub_silver')}️ <i>الان {gl} فعال نیست</i>"
+    )
     lines = [
-        f"{get_emoji('def')} <b>خرید سپر گروه</b>",
+        f"{get_emoji('def')} <b>خرید {gl}</b>",
         "━━━━━━━━━━━━━━━━━━━━",
         f"{status}",
         f"💎 موجودی الماس: <code>{diamonds:,} الماس</code>",
         "━━━━━━━━━━━━━━━━━━━━",
-        "<blockquote>تا وقتی سپر گروه داری، کسی نمی‌تونه توی گروه با «اتک» بهت حمله کنه.\n"
-        "این سپر از سپر آرنا جداست و ارزون‌تره.</blockquote>",
+        f"<blockquote>تا وقتی <b>{gl}</b> داری، کسی نمی‌تونه توی گروه با «اتک» بهت حمله کنه.\n"
+        f"هر «اتک» خودت <code>{constants.GROUP_SHIELD_ATTACK_COST_HOURS} ساعت</code> از {gl} کم می‌کنه "
+        f"(حفاظ رایگان ۱۲ ساعته با یک حمله تمام می‌شه).\n"
+        f"این از <b>{constants.ARENA_SHIELD_LABEL}</b> کاملاً جداست و ارزون‌تره.</blockquote>",
     ]
     rows = []
     for tier, cfg in constants.GROUP_SHIELD_SHOP_TIERS.items():
-        rows.append([btn(f"سپر گروه {cfg['hours']} ساعته",
+        rows.append([btn(f"{gl} {constants._shield_duration_word(cfg['hours'])}",
                          emoji_key="btn_shield", style=SHOP, callback_data=f"gshield_buy:{tier}")])
     rows.append([back_btn("menu:shield_shop", "بازگشت")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
@@ -781,19 +797,19 @@ async def group_shield_buy_callback(update: Update, context: ContextTypes.DEFAUL
     tier = query.data.split(":")[1]
     cfg = constants.GROUP_SHIELD_SHOP_TIERS.get(tier)
     if not cfg:
-        await query.answer("این سپر پیدا نشد.", show_alert=True)
+        await query.answer(f"این {constants.GROUP_SHIELD_LABEL} پیدا نشد.", show_alert=True)
         return
     diamonds, _ = await run_db(_gshield_state_sync, update.effective_user)
     await query.answer()
     lines = [
-        f"{get_emoji('def')} <b>تأیید خرید سپر گروه</b>",
+        f"{get_emoji('def')} <b>تأیید خرید {constants.GROUP_SHIELD_LABEL}</b>",
         "━━━━━━━━━━━━━━━━━━━━",
-        f"<blockquote>نوع سپر: <b>{cfg['label']}</b>\n"
+        f"<blockquote>نوع: <b>{cfg['label']}</b>\n"
         f"⏱ مدت زمان: <code>{cfg['hours']} ساعت</code>\n"
         f"💰 هزینه: <code>{cfg['diamonds']:,} الماس</code>\n"
         f"💎 موجودی الماس: <code>{diamonds:,} الماس</code></blockquote>",
         "━━━━━━━━━━━━━━━━━━━━",
-        "آیا از خرید این سپر اطمینان داری؟",
+        "آیا از خرید این حفاظ اطمینان داری؟",
     ]
     keyboard = InlineKeyboardMarkup([
         [
@@ -812,12 +828,12 @@ async def group_shield_do_buy_callback(update: Update, context: ContextTypes.DEF
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
         return
-    await query.answer("🛡 سپر گروه فعال شد!")
+    await query.answer(f"{constants.GROUP_SHIELD_EMOJI} {constants.GROUP_SHIELD_LABEL} فعال شد!")
     text, keyboard = _gshield_render(diamonds, shield_secs)
     await safe_edit_message_text(
         query,
-        f"✅ <b>سپر گروه خریداری شد!</b>\n"
-        f"⏱ زمان محافظت فعال: <code>{_fmt_hours(shield_secs)}</code>\n\n"
+        f"✅ <b>{constants.GROUP_SHIELD_LABEL} خریداری شد!</b>\n"
+        f"⏱ زمان محافظت گروهی: <code>{_fmt_hours(shield_secs)}</code>\n\n"
         f"━━━━━━━━━━━━━━━━━━━━\n" + text,
         parse_mode="HTML", reply_markup=keyboard,
     )

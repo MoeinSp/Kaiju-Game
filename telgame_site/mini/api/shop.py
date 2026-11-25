@@ -290,6 +290,9 @@ def _store_payload(user) -> dict:
     shield = {
         "locked": gate["locked"], "req": gate["req"],
         "attack_cost_hours": constants.SHIELD_ATTACK_COST_HOURS,
+        "group_attack_cost_hours": constants.GROUP_SHIELD_ATTACK_COST_HOURS,
+        "arena_label": constants.ARENA_SHIELD_LABEL,
+        "group_label": constants.GROUP_SHIELD_LABEL,
         "arena": {"left": shield_remaining_seconds(user), "tiers": _shield_tiers(constants.SHIELD_SHOP_TIERS)},
         "group": {"left": group_shield_remaining_seconds(user), "tiers": _shield_tiers(constants.GROUP_SHIELD_SHOP_TIERS)},
     }

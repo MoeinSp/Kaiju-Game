@@ -31,6 +31,8 @@ from __future__ import annotations
 
 import re
 
+from game import constants
+
 # Concept pages live in game/guide.py — they describe the game, not the group's
 # vocabulary, and the DM shows the very same pages. Re-exported here because
 # every existing caller reaches them through this module.
@@ -182,7 +184,10 @@ KEYWORD_DEFS: dict[str, tuple[str, str, str, tuple[str, ...]]] = {
         (
             "حریف بر اساس 🏆 کاپ تو انتخاب می‌شه، پس هم‌سطح خودتن.",
             "بردن: کاپ می‌گیری و بخشی از طلای حریف رو غارت می‌کنی. باختن: فقط کاپ از دست می‌دی (طلات سالمه).",
-            "اگه ببازی ۸ ساعت 🛡 سپر می‌گیری و اگه دفاع را ببری ۴ ساعت. حمله کردن خودت از سپر کم می‌کند.",
+            f"اگه ببازی {constants.ARENA_SHIELD_HOURS} ساعت {constants.ARENA_SHIELD_EMOJI} {constants.ARENA_SHIELD_LABEL} می‌گیری "
+            f"و اگه دفاع را ببری {constants.ARENA_SHIELD_HOURS // 2} ساعت. "
+            f"هر حملهٔ خودت {constants.SHIELD_ATTACK_COST_HOURS} ساعت از {constants.ARENA_SHIELD_LABEL} کم می‌کند "
+            f"(جدا از {constants.GROUP_SHIELD_LABEL}).",
             "جدول کاپ دو هفته‌ایه و آخر هر فصل (هر دو هفته) به یه کف متناسب با رتبه‌ت ریست می‌شه.",
         ),
     ),

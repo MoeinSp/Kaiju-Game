@@ -53,7 +53,7 @@
       '<div class="xs muted center" style="margin-top:6px">انرژی: ' + K.n(c.energy) + " از " + K.n(c.max_energy) + "</div>";
   }
   function shieldNote(c) {
-    return c.shield > 0 ? '<div class="callout warn mt">' + K.ic("shield") + "<div>الان سپر داری (" + K.esc(K.dur(c.shield)) + " مونده). هر حمله " + K.n(c.shield_cost_hours) + " ساعت ازش کم می‌کنه.</div></div>" : "";
+    return c.shield > 0 ? '<div class="callout warn mt">' + K.ic("shield") + "<div>الان حفاظ آرنا داری (" + K.esc(K.dur(c.shield)) + " مونده). هر حمله " + K.n(c.shield_cost_hours) + " ساعت از حفاظ آرنا کم می‌کنه (حفاظ گروه جداست).</div></div>" : "";
   }
 
   /* POST an attack; asks first when the server says the attacker holds a shield. Resolves with the
@@ -62,8 +62,8 @@
     return K.api.post(path, body, btn).then(function (r) {
       if (!r.need_confirm) return r;
       return K.confirm({
-        title: "الان سپر داری", icon: "shield", danger: true, ok: "حمله کن", cancel: "سپر بمونه",
-        text: K.dur(r.shield) + " از سپرت مونده. اگه حمله کنی " + r.shield_cost_hours + " ساعت ازش کم می‌شه و ممکنه دوباره غارت بشی."
+        title: "حفاظ آرنا فعاله", icon: "shield", danger: true, ok: "حمله کن", cancel: "حفاظ بمونه",
+        text: K.dur(r.shield) + " از حفاظ آرنا مونده. اگه حمله کنی " + r.shield_cost_hours + " ساعت از حفاظ آرنا کم می‌شه (به حفاظ گروه کاری نداره) و ممکنه دوباره غارت بشی."
       }).then(function (yes) {
         if (!yes) return null;
         body.confirm = true;
@@ -207,8 +207,8 @@
           '<div class="panel pad mt ar-league"><div class="flex">' + medal(lg.key, "big") + '<div class="grow"><div class="b">لیگ ' + K.esc(lg.name) + '</div><div class="sm muted">پاداش هر برد: ' + K.amounts({ coins: lg.coins, dna: lg.dna }) + "</div></div></div>" +
           (nx ? '<div class="mt">' + K.bar((d.cup - lg.min_cup) / Math.max(1, nx.min_cup - lg.min_cup), "gold") + '<div class="xs muted" style="margin-top:5px">لیگ بعدی «' + K.esc(nx.name) + "» در کاپ " + K.n(nx.min_cup) + "</div></div>" : '<div class="xs t-gold mt">توی بالاترین لیگی!</div>') + "</div>" +
           (d.overcap ? '<div class="callout warn mt">' + K.ic("warn") + "<div>کاپت از قدرت هیولات جلو زده؛ تا قوی‌تر نشه بردها کاپ کمتری می‌دن.</div></div>" : "") +
-          (d.shield > 0 ? '<div class="callout good mt">' + K.ic("shieldcheck") + '<div>سپر: <span class="timer" data-left="' + d.shield + '" data-fmt="long" data-done="تموم شد"></span> مونده. هر حمله ' + K.n(d.shield_cost_hours) + " ساعت ازش کم می‌کنه.</div></div>"
-                        : '<div class="callout mt">' + K.ic("shield") + "<div>سپر نداری؛ ممکنه بهت حمله بشه.</div></div>") +
+          (d.shield > 0 ? '<div class="callout good mt">' + K.ic("shieldcheck") + '<div>حفاظ آرنا: <span class="timer" data-left="' + d.shield + '" data-fmt="long" data-done="تموم شد"></span> مونده. هر حمله ' + K.n(d.shield_cost_hours) + " ساعت از حفاظ آرنا کم می‌کنه.</div></div>"
+                        : '<div class="callout mt">' + K.ic("shield") + "<div>حفاظ آرنا نداری؛ ممکنه توی آرنا بهت حمله بشه.</div></div>") +
           '<button class="btn danger lg block mt" data-act="find">' + K.ic("search") + 'جستجوی حریف<span class="cost">' + K.ic("bolt", "f") + K.n(d.energy_cost) + "</span></button>" +
           '<div class="panel list mt">' +
           '<button data-act="chests" style="color:var(--gold)"><span class="ic">' + K.ic("chest") + '</span><span class="t">جعبه‌ها <span class="num muted">(' + ch.count + "/" + ch.max + ")</span><small>" + chestSub + '</small></span><span class="chev">' + K.ic("chevron") + "</span></button>" +
@@ -329,13 +329,13 @@
         function item(i, can) {
           var lost = K.amounts({ coins: i.coins, dna: i.dna });
           return '<div class="panel pad ar-rev"><div class="flex"><span class="ico-box" style="color:' + (i.won ? "var(--bad)" : "var(--good)") + '">' + K.ic(i.won ? "warn" : "shieldcheck") + '</span><div class="grow"><div class="b cut">' + K.esc(i.name) + '</div><div class="sm muted">' + (i.won ? "غارتت کرد" : "دفاع کردی") + (lost ? ' · <span class="faint">−</span> ' + lost : "") + '</div></div><span class="ar-pw">' + K.ic("power") + K.n(i.power) + "</span></div>" +
-            '<div class="flex between mt sm"><span class="muted">' + (can ? "مهلت انتقام" : "سپر داره") + '</span><span class="timer" data-left="' + (can ? i.left : i.shield) + '" data-fmt="long" data-done="' + (can ? "تموم شد" : "سپرش تموم شد") + '"></span></div>' +
+            '<div class="flex between mt sm"><span class="muted">' + (can ? "مهلت انتقام" : "حفاظ آرنا داره") + '</span><span class="timer" data-left="' + (can ? i.left : i.shield) + '" data-fmt="long" data-done="' + (can ? "تموم شد" : "حفاظش تموم شد") + '"></span></div>' +
             '<div class="btns mt">' + (can ? '<button class="btn danger" data-act="go" data-id="' + i.log_id + '">' + K.ic("revenge") + "انتقام</button>" : "") +
             '<button class="btn" data-act="details" data-id="' + i.attacker_id + '">' + K.ic("search") + "جزئیات</button></div></div>";
         }
         root.innerHTML = '<p class="lead">' + K.n(d.items.length) + " مورد · " + K.n(ready.length) + " آماده. هر انتقام " + K.n(d.energy_cost) + " انرژی می‌بره.</p>" +
           ready.map(function (i) { return item(i, true); }).join("") +
-          (shielded.length ? '<div class="h2">' + K.ic("shield") + 'سپر دارن</div><p class="lead">تا سپرشون تموم نشه نمی‌شه انتقام گرفت.</p>' + shielded.map(function (i) { return item(i, false); }).join("") : "");
+          (shielded.length ? '<div class="h2">' + K.ic("shield") + 'حفاظ آرنا دارن</div><p class="lead">تا حفاظ آرناشون تموم نشه نمی‌شه انتقام گرفت.</p>' + shielded.map(function (i) { return item(i, false); }).join("") : "");
         K.timers(root, function () { K.after(1500, ctx.reload); });
         K.on(root, "go", function (el) { K.go("ar_revenge", { id: +el.dataset.id }); });
         K.on(root, "details", function (el) { detailsSheet({ attacker_id: +el.dataset.id }, el); });
@@ -351,9 +351,9 @@
         '<div class="center" style="padding:0 12px 12px">' + adv.html + "</div></div>" +
         '<div class="panel pad mt">' + (taken ? '<div class="flex between"><span class="muted">' + K.ic("revenge") + " ازت برده بود</span><span>" + taken + "</span></div>" : "") +
         '<div class="sm muted" style="margin-top:' + (taken ? 6 : 0) + 'px">اگه ببری ۱۰٪ طلا و دی‌ان‌ای الانش رو می‌گیری.</div>' + swing(c.cup_win, c.cup_loss) + "</div>" +
-        (c.opp_shield > 0 ? '<div class="callout warn mt">' + K.ic("shield") + "<div>این بازیکن الان سپر داره (" + K.esc(K.dur(c.opp_shield)) + "). تا تموم نشه نمی‌شه بهش حمله کرد.</div></div>" : "") +
+        (c.opp_shield > 0 ? '<div class="callout warn mt">' + K.ic("shield") + "<div>این بازیکن الان حفاظ آرنا داره (" + K.esc(K.dur(c.opp_shield)) + "). تا تموم نشه نمی‌شه بهش حمله کرد.</div></div>" : "") +
         shieldNote(c) + (c.opp_shield > 0 ? "" : K.serumRow(c.serum)) +
-        '<div class="mt">' + (c.opp_shield > 0 ? '<button class="btn lg block" disabled>' + K.ic("shield") + "سپر داره</button>" : attackBtn("revenge", "شروع انتقام", c)) + "</div>" +
+        '<div class="mt">' + (c.opp_shield > 0 ? '<button class="btn lg block" disabled>' + K.ic("shield") + "حفاظ آرنا داره</button>" : attackBtn("revenge", "شروع انتقام", c)) + "</div>" +
         '<button class="btn ghost block mt" data-act="details">' + K.ic("search") + "جزئیات حریف</button>";
       K.on(root, "details", function (el) { detailsSheet({ attacker_id: o.id }, el); });
       K.on(root, "log", function () { showDetail(last && last.detail); });

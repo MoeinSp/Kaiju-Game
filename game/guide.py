@@ -14,6 +14,8 @@ those changes, change it here too.
 
 from __future__ import annotations
 
+from game import constants
+
 CONCEPTS: dict[str, tuple[str, str, str, tuple[tuple[str, str], ...]]] = {
     "beginner": (
         "book",
@@ -287,7 +289,8 @@ DM_SECTIONS: dict[str, tuple[str, str, str, tuple[tuple[str, str], ...]]] = {
             ("🛍 فروشگاه", "پیشنهادهای هر روز با طلا و الماس."),
             ("🏛 بازار سیاه", "حراجی روزانه تا ساعت ۲۲:۳۰ (سطح ۴ تالار مِهر)."),
             ("📦 باکس ژنتیکی و باکس الماسی", "باکس ژنتیکی با طلا هیولا یا تجهیزات می‌ده. باکس‌های الماسی (نایاب، حماسی، افسانه‌ای، اساطیری) همیشه هیولا می‌دن و از هر ۵ باکس حداقل یکی هم‌رده‌ی اسم باکس یا بهتره. باکس نایاب و حماسی هر روز یک بار رایگانن."),
-            ("🛡 سپر", "جلوگیری از حمله‌ی بقیه به آزمایشگاهت برای مدتی."),
+            (f"{constants.ARENA_SHIELD_EMOJI}/{constants.GROUP_SHIELD_EMOJI} حفاظ",
+             f"{constants.ARENA_SHIELD_LABEL} جلوی غارت آرنا؛ {constants.GROUP_SHIELD_LABEL} جلوی «اتک» گروهی — دو تایمر جدا."),
             ("💎 خرید و اشتراک VIP", "خرید الماس و طلا و تهیه‌ی اشتراک نقره‌ای یا طلایی."),
         ),
     ),

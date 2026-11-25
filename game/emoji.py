@@ -118,7 +118,7 @@ EMOJI_DEFS: dict[str, tuple[str, str, str]] = {
     "building": ("ساختمون", "🏗", "progress"),
     "speedup": ("کارت سرعت", "⏱", "progress"),
     "wheel": ("گردونه‌ی شانس", "🎡", "progress"),
-    "shield": ("سپر محافظ", "🛡", "progress"),
+    "shield": ("حفاظ آرنا / گروه", "🛡", "progress"),
     "casino": ("کازینو", "🎰", "progress"),
     "shop_item": ("آیتم ویژه فروشگاه", "🛍", "progress"),
     "ticket": ("بلیط ژنتیکی", "🎟", "progress"),

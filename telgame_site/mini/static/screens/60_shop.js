@@ -271,7 +271,7 @@
           '<span class="st-buycta-b"><small>' + K.ic("spark") + "بخش خرید</small><b>خرید طلا و الماس</b>" +
           '<span class="sm">پک ویژه · افر · VIP · پرداخت کارت‌به‌کارت</span></span>' +
           '<span class="st-buycta-go">' + K.ic("chevron") + "</span></button>";
-        html += seg([["daily", "روزانه", "cart"], ["packs", "بسته‌ها", "gift", d.items.length || ""], ["shield", "سپر", "shield"], ["gold", "طلا", "coin"]], tabs.shop, "tab");
+        html += seg([["daily", "روزانه", "cart"], ["packs", "بسته‌ها", "gift", d.items.length || ""], ["shield", "حفاظ", "shield"], ["gold", "طلا", "coin"]], tabs.shop, "tab");
         if (tabs.shop === "daily") html += daily(d);
         else if (tabs.shop === "packs") html += packs(d);
         else if (tabs.shop === "shield") html += shield(d);
@@ -345,13 +345,14 @@
         var s = d.shield;
         if (s.locked) return hallLocked(s.req);
         var kind = tabs.shield, cur = s[kind];
-        var html = banner(d.img_shield, "سپر محافظ", "با الماس؛ خریدها روی هم جمع می‌شن") +
-          seg([["arena", "سپر آرنا", "shield"], ["group", "سپر گروه", "users"]], kind, "shield") +
-          '<div class="panel pad ' + (cur.left > 0 ? "glow" : "") + '"><div class="flex"><span class="ico-box lg ' + (cur.left > 0 ? "t-good" : "faint") + '">' + K.ic(cur.left > 0 ? "shieldcheck" : "shield") + '</span><div class="grow"><div class="sm muted">وضعیت الان</div>' +
-          (cur.left > 0 ? '<span class="timer" data-fmt="long" data-until="' + scr.until(cur.left) + '" data-done="تموم شد"></span>' : '<div class="b">سپر فعالی نداری</div>') + "</div></div></div>" +
+        var aLab = s.arena_label || "حفاظ آرنا", gLab = s.group_label || "حفاظ گروه";
+        var html = banner(d.img_shield, "خرید حفاظت", "دو حفاظ جدا؛ با الماس؛ خریدها روی هم جمع می‌شن") +
+          seg([["arena", aLab, "shield"], ["group", gLab, "users"]], kind, "shield") +
+          '<div class="panel pad ' + (cur.left > 0 ? "glow" : "") + '"><div class="flex"><span class="ico-box lg ' + (cur.left > 0 ? "t-good" : "faint") + '">' + K.ic(cur.left > 0 ? "shieldcheck" : "shield") + '</span><div class="grow"><div class="sm muted">وضعیت ' + K.esc(kind === "arena" ? aLab : gLab) + '</div>' +
+          (cur.left > 0 ? '<span class="timer" data-fmt="long" data-until="' + scr.until(cur.left) + '" data-done="تموم شد"></span>' : '<div class="b">خاموش</div>') + "</div></div></div>" +
           '<div class="callout mt mb">' + K.ic("info") + "<div>" + (kind === "arena"
-            ? "تا وقتی سپر داری کسی نمی‌تونه توی آرنا بهت حمله کنه. هر حمله‌ای که خودت بزنی " + K.n(s.attack_cost_hours) + " ساعت از سپرت کم می‌کنه."
-            : "تا وقتی سپر گروه داری کسی نمی‌تونه توی گروه با «اتک» بهت حمله کنه. از سپر آرنا جداست و ارزون‌تره.") + "</div></div>" +
+            ? "تا وقتی «" + K.esc(aLab) + "» داری کسی نمی‌تونه توی آرنا بهت حمله کنه. هر حملهٔ آرنا " + K.n(s.attack_cost_hours) + " ساعت ازش کم می‌کنه. از «" + K.esc(gLab) + "» جداست."
+            : "تا وقتی «" + K.esc(gLab) + "» داری کسی نمی‌تونه توی گروه با «اتک» بهت حمله کنه. هر اتک " + K.n(s.group_attack_cost_hours || 12) + " ساعت ازش کم می‌کنه. از «" + K.esc(aLab) + "» جداست و ارزون‌تره.") + "</div></div>" +
           '<div class="panel list">' + cur.tiers.map(function (t) {
             return '<button data-act="shield" data-tier="' + K.esc(t.tier) + '"><span class="ic t-accent">' + K.ic("shield") + '</span><span class="t">' + K.esc(t.label) + "<small>" + K.n(t.hours) + " ساعت محافظت</small></span>" +
               '<span class="v">' + money("diamonds", t.diamonds) + "</span></button>";
@@ -479,13 +480,14 @@
       });
       K.on(root, "shield", function (el) {
         var kind = tabs.shield, t = scr.data.shield[kind].tiers.filter(function (x) { return x.tier === el.dataset.tier; })[0]; if (!t) return;
-        K.confirm({ title: kind === "arena" ? "خرید سپر آرنا" : "خرید سپر گروه", icon: "shield", ok: "تأیید و خرید",
-          html: kv([["نوع سپر", K.esc(t.label)], ["مدت", K.n(t.hours) + " ساعت"], ["هزینه", money("diamonds", t.diamonds)], ["الماس تو", money("diamonds", K.res ? K.res.diamonds : 0)]]) })
+        var lab = kind === "arena" ? (scr.data.shield.arena_label || "حفاظ آرنا") : (scr.data.shield.group_label || "حفاظ گروه");
+        K.confirm({ title: "خرید " + lab, icon: "shield", ok: "تأیید و خرید",
+          html: kv([["نوع", K.esc(t.label)], ["مدت", K.n(t.hours) + " ساعت"], ["هزینه", money("diamonds", t.diamonds)], ["الماس تو", money("diamonds", K.res ? K.res.diamonds : 0)]]) })
           .then(function (yes) {
             if (!yes || busy) return;
             busy = true;
             K.api.post("shop/store/shield/", { kind: kind, tier: t.tier }, el).then(function (r) {
-              busy = false; K.haptic("ok"); K.toast("سپر فعال شد. الان " + K.dur(r.left) + " محافظت داری.", "ok"); scr.set(r.store);
+              busy = false; K.haptic("ok"); K.toast(lab + " فعال شد. الان " + K.dur(r.left) + " مونده.", "ok"); scr.set(r.store);
             }, function () { busy = false; });
           });
       });
