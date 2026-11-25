@@ -303,12 +303,11 @@ KEYWORD_DEFS: dict[str, tuple[str, str, str, tuple[str, ...]]] = {
         "coin",
         "بانک طلا",
         (
-            "موجودی بانک، طلای آزاد و سقف برداشت امروز را نشان می‌دهد.",
-            "«واریز» یا «واریز ۵۰۰۰» طلای آزاد را داخل بانک می‌گذارد. «واریز همه» تا جایی که بانک جا دارد.",
-            "برداشت از بانک با «برداشت بانک»، «برداشت بانک ۵۰۰۰» یا «برداشت بانک همه» است.",
-            "کلمهٔ «برداشت» به‌تنهایی مال معدن‌هاست، نه بانک.",
-            "روزانه ۲٪ از مبلغ بانک به عنوان سود به موجودی شما اضافه می‌شود. دفعهٔ بعد که بانک را باز کنی، مقدارش نوشته می‌شود.",
-            "اگر عدد را جدا می‌فرستی، روی پیام ربات ریپلای کن.",
+            "با نوشتن «بانک» کارت ساختمون بانک باز می‌شود: موجودی، واریز/برداشت، و دکمهٔ ساخت یا ارتقا.",
+            "«واریز ۵۰۰۰» یا «واریز همه» طلای آزاد را داخل بانک می‌گذارد.",
+            "برداشت با «برداشت بانک ۵۰۰۰» یا «برداشت بانک همه» است («برداشت» خالی مال معدن است).",
+            "اگر بانک قفل باشد دکمهٔ ارتقای تالار مِهر می‌آید؛ اگر ساخته‌شده باشد دکمهٔ ارتقای خود بانک.",
+            "روزانه ۲٪ از مبلغ بانک سود می‌دهد.",
         ),
     ),
     # ── growing your creatures ──────────────────────────────────────────────
@@ -577,7 +576,8 @@ ALIASES: dict[str, str] = {
     "انتخاب هیولا": "select",
     "کایجو من": "select",
     # «صرافی» / «تبدیل» — the gold ↔ دی‌ان‌ای exchange; a direction («دی‌ان‌ای به طلا») opens that side
-    "بانک طلا": "bank",
+    # bare «بانک» / «بانک طلا» open the building card (upgrade + bank buttons) via
+    # building_type_for_word(); deposit/withdraw words stay in parse_group_bank.
     "صرافی": "exchange",
     "تبدیل": "exchange",
     "تبدیل ارز": "exchange",
@@ -622,10 +622,8 @@ ALIASES: dict[str, str] = {
     "معادنم": "mine",
     "ماینم": "mine",
     "بخش معدن": "mine",
-    "معدن طلا": "mine",
-    "معدن الماس": "mine",
-    "معدن dna": "mine",
-    "معدن دی ان ای": "mine",
+    # Specific mines open that building's card (building_type_for_word). Bare «معدن»
+    # still shows the collect overview.
     "ساختمون": "mine",
     "ساختمون ها": "mine",
     "ساختمون‌ها": "mine",
@@ -717,6 +715,47 @@ ALL_WORDS: tuple[str, ...] = tuple(word for word, _e, _s, _h in KEYWORD_DEFS.val
 SECTION_OF: dict[str, str] = {
     action: cat for cat, _e, _t, _b, actions in KEYWORD_SECTIONS for action in actions
 }
+
+
+# Whole-message words that open a single building's card in the group (upgrade /
+# build / hall-prereq buttons). Checked before other group parsers so «آهنگری»
+# means the building, not the forge UI, and «بانک» means the vault building.
+_BUILDING_WORDS: dict[str, str] = {
+    "تالار مهر": "main_hall",
+    "تالارمهر": "main_hall",
+    "تالار اصلی": "main_hall",
+    "تالاراصلی": "main_hall",
+    "تالار": "main_hall",
+    "معدن طلا": "gold_collector",
+    "جمع کننده طلا": "gold_collector",
+    "جمعکننده طلا": "gold_collector",
+    "معدن الماس": "diamond_collector",
+    "جمع کننده الماس": "diamond_collector",
+    "جمعکننده الماس": "diamond_collector",
+    "معدن دی ان ای": "dna_lab",
+    "معدن دیانای": "dna_lab",
+    "معدن dna": "dna_lab",
+    "آزمایشگاه دی ان ای": "dna_lab",
+    "آزمایشگاه دیانای": "dna_lab",
+    "آزمایشگاه dna": "dna_lab",
+    "آهنگری": "blacksmith",
+    "اهنگری": "blacksmith",
+    "تالار ادغام": "fusion_lab",
+    "ادغام": "fusion_lab",
+    "بانک": "trade_hall",
+    "بانک طلا": "trade_hall",
+    "آزمایشگاه": "research_lab",
+    "آزمایشگاه پژوهش": "research_lab",
+    "آزمایشگاه تحقیقات": "research_lab",
+    "پایگاه اعزام": "dispatch_hq",
+    "ساختمان اعزام": "dispatch_hq",
+    "آزمایشگاه سرم": "serum_lab",
+}
+
+
+def building_type_for_word(text: str) -> str | None:
+    """Building type for a whole group message, or None."""
+    return _BUILDING_WORDS.get(normalize(text))
 
 
 def match(text: str) -> str | None:

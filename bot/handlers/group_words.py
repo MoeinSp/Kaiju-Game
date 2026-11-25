@@ -1643,6 +1643,15 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     # «انتقال …» family: gold, kaiju/creature, or equipment — all reply-based
     norm = keywords.normalize(message.text)
 
+    # «تالار», «بانک», «آهنگری», «معدن طلا», … → one building card with build/upgrade
+    building_type = keywords.building_type_for_word(norm)
+    if building_type is not None:
+        from bot.handlers.buildings import group_building_card
+
+        await group_building_card(update, context, building_type)
+        _schedule_cleanup(context, message.chat_id, [message.message_id], "building")
+        return
+
     # «سرم» / «ساخت سرم غول ۲» / «تکمیل سرم» / «حذف سرم» — the sender's serum lab, right here
     from bot.handlers import serums as serum_handlers
 
@@ -1794,9 +1803,10 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     if action == "bank":
-        from bot.handlers.buildings import group_bank
+        from bot.handlers.buildings import group_building_card
 
-        await group_bank(update, context, "panel", None)
+        await group_building_card(update, context, "trade_hall")
+        _schedule_cleanup(context, message.chat_id, [message.message_id], "building")
         return
 
     if action == "friends":
@@ -2277,6 +2287,51 @@ async def group_action_callback(update: Update, context: ContextTypes.DEFAULT_TY
     arg = ":".join(parts[3:]) if len(parts) > 3 else ""
     if update.effective_user.id != int(owner_id):
         await query.answer("این کارت مال تو نیست — خودت کلمه‌ش رو بفرست.", show_alert=True)
+        return
+
+    # ── 🏗 single-building card: upgrade / collect / diamond-finish ───────────
+    if action in ("bldup", "bldcol", "bldfin"):
+        from bot.handlers.buildings import (
+            _collect_sync,
+            _edit_group_building,
+            _finish_with_diamonds_sync,
+            _start_upgrade_sync,
+        )
+
+        try:
+            building_id = int(arg)
+        except (TypeError, ValueError):
+            await query.answer("این ساختمون پیدا نشد.", show_alert=True)
+            return
+        try:
+            if action == "bldup":
+                view = await run_db(_start_upgrade_sync, update.effective_user, building_id)
+                verb = "ساخت شروع شد!" if view["building"].level == 0 else "ارتقا شروع شد!"
+                await query.answer(f"🏗 {verb}")
+                await _edit_group_building(query, view)
+            elif action == "bldcol":
+                view, amount, resource, _missions = await run_db(
+                    _collect_sync, update.effective_user, building_id
+                )
+                await query.answer(f"+{amount:,} جمع شد")
+                note = (
+                    f"{get_emoji(_RESOURCE_EMOJI.get(resource, 'coin'))} "
+                    f"<b>جمع‌آوری شد!</b> <code>+{amount:,}</code>\n\n"
+                )
+                await _edit_group_building(query, view, note)
+            else:
+                view, cost = await run_db(
+                    _finish_with_diamonds_sync, update.effective_user, building_id
+                )
+                await query.answer(f"💎 −{cost} — تموم شد!")
+                note = f"💎 <b>ارتقا تموم شد</b> (−<code>{cost}</code> الماس)\n\n"
+                await _edit_group_building(query, view, note)
+        except GameError as exc:
+            from bot.handlers.shop import show_gold_error
+
+            if action == "bldup" and await show_gold_error(query, exc):
+                return
+            await query.answer(alert_text(exc), show_alert=True)
         return
 
     # ── 🧪 capsule feeding (view + consume), box chooser sub-view ──────────────

@@ -165,6 +165,7 @@ def _detail_view(user, building: Building) -> dict:
     is_producer = produces(building.building_type) and building.level > 0
     active_upgrade(user)  # finish any due upgrades before we count/inspect
     workers = assigned_creatures(building)
+    hall = next((b for b in get_or_create_buildings(user) if b.building_type == constants.MAIN_BUILDING), None)
     view = {
         "building": building,
         "upgrade": upgrade_for_building(user, building),
@@ -180,6 +181,8 @@ def _detail_view(user, building: Building) -> dict:
         "worker_influence": _influence_map(workers, building),
         "unlocked": is_unlocked(user, building.building_type),
         "owner_id": user.id,
+        "hall_id": hall.id if hall is not None else None,
+        "hall_level": hall.level if hall is not None else 0,
         # rate/storage query the DB (worker_bonus) — resolve them HERE in sync context,
         # never inside the async text builder (that was the "mines won't open" crash)
         "rate": production_rate(building) if is_producer else 0.0,
@@ -192,6 +195,117 @@ def _detail_view(user, building: Building) -> dict:
         view["bank"] = snapshot(user, building.level)
         view["bank"]["notice"], view["bank"]["notice_days"] = take_interest_notice(user)
     return view
+
+
+def _detail_view_by_type(user, building_type: str) -> dict:
+    buildings = get_or_create_buildings(user)
+    building = next((b for b in buildings if b.building_type == building_type), None)
+    if building is None:
+        raise GameError("این ساختمون پیدا نشد.")
+    return _detail_view(user, building)
+
+
+def _grpa(action: str, owner_id: int, arg: str = "") -> str:
+    return f"grpa:{action}:{owner_id}" + (f":{arg}" if arg else "")
+
+
+def group_building_keyboard(view: dict, owner_id: int) -> InlineKeyboardMarkup:
+    """Owner-locked group buttons: bank ops + build/upgrade or hall prereq."""
+    building = view["building"]
+    upgrade = view["upgrade"]
+    cap = view["cap"]
+    unlocked = view["unlocked"]
+    busy = view["busy_count"] >= view["builder_slots"] and upgrade is None
+    rows = []
+    bank = view.get("bank")
+    if bank:
+        rows.extend(_bank_button_rows(bank, owner_id))
+    if produces(building.building_type) and building.level > 0 and view["pending"] > 0:
+        rows.append([btn(
+            "جمع‌آوری",
+            emoji_key="btn_collect",
+            style=BUILD,
+            callback_data=_grpa("bldcol", owner_id, str(building.id)),
+        )])
+    if upgrade is not None:
+        rows.append([btn(
+            "اتمام با الماس",
+            emoji_key="btn_instant",
+            style=SHOP,
+            callback_data=_grpa("bldfin", owner_id, str(building.id)),
+        )])
+    elif building.level == 0 and not unlocked:
+        hall_id = view.get("hall_id")
+        need = unlock_level_for(building.building_type)
+        if hall_id and view.get("hall_level", 0) < constants.BUILDING_MAX_LEVEL:
+            rows.append([btn(
+                f"ارتقای تالار مِهر (نیاز سطح {need})",
+                emoji_key="btn_bld_main_hall",
+                style=BUILD,
+                callback_data=_grpa("bldup", owner_id, str(hall_id)),
+            )])
+    elif building.level >= constants.BUILDING_MAX_LEVEL:
+        pass
+    elif building.level >= cap and building.building_type != constants.MAIN_BUILDING:
+        hall_id = view.get("hall_id")
+        if hall_id and view.get("hall_level", 0) < constants.BUILDING_MAX_LEVEL:
+            rows.append([btn(
+                "ارتقای تالار مِهر",
+                emoji_key="btn_bld_main_hall",
+                style=BUILD,
+                callback_data=_grpa("bldup", owner_id, str(hall_id)),
+            )])
+    elif not busy and building.level < min(cap, constants.BUILDING_MAX_LEVEL):
+        label = "شروع ساخت" if building.level == 0 else f"شروع ارتقا به {building.level + 1}"
+        rows.append([btn(
+            label,
+            emoji_key="btn_build",
+            style=BUILD,
+            callback_data=_grpa("bldup", owner_id, str(building.id)),
+        )])
+    return InlineKeyboardMarkup(rows) if rows else None
+
+
+def _group_building_card_sync(tg_user, building_type: str):
+    user, _ = get_or_create_user(tg_user)
+    return _detail_view_by_type(user, building_type)
+
+
+async def group_building_card(update: Update, context: ContextTypes.DEFAULT_TYPE, building_type: str) -> None:
+    """Reply in-group with one building's card + build/upgrade/hall-prereq buttons."""
+    from game.media import get_building_image_path
+
+    message = update.effective_message
+    user = update.effective_user
+    try:
+        view = await run_db(_group_building_card_sync, user, building_type)
+    except GameError as exc:
+        await message.reply_text(alert_text(exc))
+        return
+    building = view["building"]
+    photo = get_building_image_path(building.building_type, max(building.level, 1))
+    await send_screen(
+        update,
+        _building_detail_text(view),
+        photo=photo,
+        parse_mode="HTML",
+        reply_markup=group_building_keyboard(view, user.id),
+    )
+
+
+async def _edit_group_building(query, view: dict, note: str = "") -> None:
+    from game.media import get_building_image_path
+
+    building = view["building"]
+    photo = get_building_image_path(building.building_type, max(building.level, 1))
+    text = (note + _building_detail_text(view)) if note else _building_detail_text(view)
+    await safe_edit_message_text(
+        query,
+        text,
+        photo=photo,
+        parse_mode="HTML",
+        reply_markup=group_building_keyboard(view, query.from_user.id),
+    )
 
 
 def _pbar(current, total, width: int = 10) -> str:
@@ -1092,14 +1206,13 @@ async def bank_panel(update: Update, context: ContextTypes.DEFAULT_TYPE, note: s
 
 
 def parse_group_bank(norm: str):
-    """Group text → ("panel", None) or ("in"|"out", amount|"max"|None). None means not a bank word.
+    """Group text → ("in"|"out", amount|"max"|None). None means not a bank word.
 
+    Bare «بانک» opens the trade_hall building card (keywords.building_type_for_word).
     Bare «برداشت» stays the mine collect word. Bank withdraw always says بانک.
     """
     import re
 
-    if norm in ("بانک", "بانک طلا"):
-        return "panel", None
     if "خزانه" in norm:
         return None
     deposit = re.fullmatch(r"واریز(?:\s+به)?(?:\s+بانک)?(?:\s+(.+))?", norm)
