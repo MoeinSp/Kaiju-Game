@@ -1130,8 +1130,15 @@ async def group_bank(update, context, kind: str, amount) -> None:
     _remember(message.chat_id, message.message_id, user.id)
     if kind == "panel" or amount is None:
         if kind in ("in", "out"):
-            context.user_data["awaiting_player_input"] = {"action": "bank_in" if kind == "in" else "bank_out"}
-            await bank_panel(update, context, note="عدد را روی همین پیام ریپلای کن، یا حداکثر را بزن. مثلاً ۵۰۰۰۰")
+            # Groups: never arm free-text awaiting — a stuck «فقط یه عدد بفرست»
+            # reply-spams the chat. One-shot words (واریز ۵۰۰۰۰) + max button only.
+            context.user_data.pop("awaiting_player_input", None)
+            tip = (
+                "بنویس مثلاً «واریز ۵۰۰۰۰» یا «برداشت از بانک همه» — یا دکمه‌ی حداکثر را بزن."
+                if kind == "in"
+                else "بنویس مثلاً «برداشت از بانک ۵۰۰۰۰» یا «برداشت از بانک همه» — یا دکمه‌ی حداکثر را بزن."
+            )
+            await bank_panel(update, context, note=tip)
             return
         await bank_panel(update, context)
         return
@@ -1208,15 +1215,26 @@ def _max_sync(tg_user, direction: str) -> int:
 
 async def apply_bank_text(update, context, action: str, text: str) -> None:
     message = update.effective_message
+    chat = update.effective_chat
+    in_group = chat is not None and chat.type in ("group", "supergroup")
     amount = _parse_gold(text)
     if amount is None or amount <= 0:
-        context.user_data["awaiting_player_input"] = {"action": action}
+        if in_group:
+            # Don't nag the group — treat junk/chatter as cancel and stay quiet.
+            context.user_data.pop("awaiting_player_input", None)
+            return
+        import time
+
+        context.user_data["awaiting_player_input"] = {"action": action, "started_at": time.time()}
         await message.reply_text("⚠️ فقط یه عدد بفرست. مثلاً ۵۰۰۰۰")
         return
     direction = "in" if action == "bank_in" else "out"
     try:
         moved = await run_db(_move_sync, update.effective_user, direction, amount)
     except GameError as exc:
+        if in_group:
+            # One short error is enough; don't re-arm awaiting (avoids reply-spam).
+            context.user_data.pop("awaiting_player_input", None)
         await message.reply_text(f"⚠️ {exc}")
         return
     verb = "واریز شد" if direction == "in" else "به موجودی آزاد آمد"
@@ -1241,9 +1259,20 @@ async def bank_move_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     direction = query.data.split(":")[1]
     action = "bank_in" if direction == "in" else "bank_out"
-    context.user_data["awaiting_player_input"] = {"action": action}
     await query.answer()
-    hint = "عدد را روی همین پیام ریپلای کن، یا حداکثر را بزن." if _in_group(update) else "عدد را بفرست، یا حداکثر را بزن."
+    if _in_group(update):
+        # No free-text await in groups (see group_bank) — one-shot words + max.
+        context.user_data.pop("awaiting_player_input", None)
+        hint = (
+            "بنویس «واریز ۵۰۰۰۰» یا حداکثر را بزن."
+            if direction == "in"
+            else "بنویس «برداشت از بانک ۵۰۰۰۰» یا حداکثر را بزن."
+        )
+    else:
+        import time
+
+        context.user_data["awaiting_player_input"] = {"action": action, "started_at": time.time()}
+        hint = "عدد را بفرست، یا حداکثر را بزن."
     await bank_panel(update, context, note=hint)
 
 

@@ -1506,29 +1506,53 @@ def _reward_text(user, result: dict) -> str:
 # ── dispatch ────────────────────────────────────────────────────────────────
 
 
-_GROUP_AWAIT_KEYS = (
-    "awaiting_player_input",
+# Player free-text flows that are allowed to consume a reply-to-bot in a group.
+# Everything else (buy amount, alliance name, shop qty, …) is DM-only — capturing
+# those here used to spam «فقط یه عدد بفرست» into public chats.
+_GROUP_PLAYER_AWAIT_ACTIONS = frozenset({"bank_in", "bank_out"})
+_GROUP_AWAIT_OWNER_KEYS = (
     "awaiting_emoji_key",
     "awaiting_force_join",
     "awaiting_admin_input",
     "awaiting_button_emoji_key",
+    "awaiting_restore_file",
 )
+_GROUP_AWAIT_TTL_SEC = 5 * 60
 
 
 async def _maybe_capture_group_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """In a group, an 'awaiting a name/number' flow (alliance name, admin search, …)
-    is fed by REPLYING to the bot's prompt. Ordinary chatter is never captured — we
-    only act when the message replies to the bot AND that user has a pending flow."""
-    if not any(context.user_data.get(k) for k in _GROUP_AWAIT_KEYS):
-        return False
-    reply = update.effective_message.reply_to_message
+    """In a group, only a narrow set of 'awaiting' flows may consume a reply-to-bot.
+    Ordinary chatter and DM-only prompts never get a public nag reply."""
+    import time
+
+    from bot.handlers.private import AWAITING_PLAYER_KEY
+
+    reply = update.effective_message.reply_to_message if update.effective_message else None
     if reply is None or reply.from_user is None or reply.from_user.id != context.bot.id:
         return False
+
+    awaiting = context.user_data.get(AWAITING_PLAYER_KEY)
+    owner_pending = any(context.user_data.get(k) for k in _GROUP_AWAIT_OWNER_KEYS)
+
+    if awaiting is not None:
+        action = awaiting.get("action") if isinstance(awaiting, dict) else None
+        started = float(awaiting.get("started_at") or 0) if isinstance(awaiting, dict) else 0.0
+        expired = started > 0 and (time.time() - started) > _GROUP_AWAIT_TTL_SEC
+        if action not in _GROUP_PLAYER_AWAIT_ACTIONS or expired:
+            # Stale / DM-only prompt — drop it so it can't spam the group later.
+            context.user_data.pop(AWAITING_PLAYER_KEY, None)
+            awaiting = None
+
+    if awaiting is None and not owner_pending:
+        return False
+
     from bot.handlers.owner import capture_owner_text_reply
     from bot.handlers.private import capture_player_text_reply
 
-    await capture_player_text_reply(update, context)
-    await capture_owner_text_reply(update, context)
+    if awaiting is not None:
+        await capture_player_text_reply(update, context)
+    if owner_pending:
+        await capture_owner_text_reply(update, context)
     return True
 
 
