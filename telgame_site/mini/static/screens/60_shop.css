@@ -45,6 +45,21 @@
 
 /* ── shop ── */
 .shs-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+/* real-money store entry — sits above the daily-shop tabs */
+.st-buycta { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; padding: 0; overflow: hidden; border-radius: 18px;
+  border: 1px solid rgba(58,214,255,.45); background: #0a1520; color: inherit; text-align: start;
+  box-shadow: 0 8px 22px rgba(0,0,0,.35), inset 0 0 0 1px rgba(155,240,255,.08); }
+.st-buycta > img { width: 88px; height: 88px; object-fit: cover; flex: none; }
+.st-buycta-b { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 10px 0; }
+.st-buycta-b > b { font-family: var(--display); font-size: 18px; font-weight: 400; line-height: 1.2; }
+.st-buycta-b > small { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-weight: 700; font-size: 11px; }
+.st-buycta-b > small svg { width: 13px; height: 13px; }
+.st-buycta-b .sm { color: var(--muted); }
+.st-buycta-go { flex: none; width: 32px; height: 32px; margin-inline-end: 10px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(58,214,255,.18); color: var(--accent); }
+.st-buycta-go svg { width: 16px; height: 16px; }
+.st-buycta:active { transform: scale(.985); }
+
 .shs-card { display: flex; flex-direction: column; overflow: hidden; text-align: right; border-color: color-mix(in srgb, var(--tc) 26%, var(--line)); transition: transform .12s; }
 .shs-card:active { transform: scale(.97); }
 .shs-card.hot { border-color: rgba(255,107,61,.55); box-shadow: 0 6px 22px rgba(255,107,61,.14); }

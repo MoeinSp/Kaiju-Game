@@ -118,14 +118,14 @@
     var gold = kind === "gold", o = K.offers.top();
     var box = K.sheet('<div class="grab"></div><div class="of-need"><img class="of-nimg" src="' + K.asset(gold ? "img/gold_4.jpg" : "img/hub_energy.jpg") + '" alt="">' +
       '<div class="pad"><div class="ttl" style="font-size:21px">' + (gold ? "طلا کم داری" : "انرژیت تموم شد") + '</div><p class="lead" style="margin:6px 0 12px">' + K.esc(message || "") + "</p>" +
-      '<button class="btn primary lg block" data-go="' + (gold ? "gold" : "energy") + '">' + K.ic(gold ? "coin" : "bolt") + (gold ? "خرید طلا" : "شارژ انرژی") + "</button>" +
+      '<button class="btn primary lg block" data-go="' + (gold ? "buy" : "energy") + '">' + K.ic(gold ? "coin" : "bolt") + (gold ? "رفتن به خرید" : "شارژ انرژی") + "</button>" +
       (o ? '<button class="of-mini mt" data-offer>' + '<img src="' + K.asset(o.art) + '" alt=""><span class="grow"><small>پیشنهاد ویژه</small><b>' + K.esc(o.title) + "</b></span>" +
         '<span class="of-mprice">' + price(o, false) + "</span></button>" : "") + "</div></div>");
     box.addEventListener("click", function (ev) {
       var b = ev.target.closest("[data-go], [data-offer]"); if (!b) return;
       K.closeSheet();
       if (b.hasAttribute("data-offer")) K.offers.open(o);
-      else if (b.dataset.go === "gold") K.go("sh_shop", { tab: "gold" });
+      else if (b.dataset.go === "buy") K.go("sh_buy");
       else K.go("sh_energy");
     });
     return true;

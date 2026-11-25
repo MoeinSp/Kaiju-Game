@@ -99,7 +99,7 @@
             '<div class="panel list cp-enemies">' + d.enemies.map(function (e) {
               return '<div><img class="th" src="' + K.esc(e.img || "") + '" alt=""><span class="t"><span class="b cut">' +
                 K.esc(e.name) + "</span><small>" + K.elTag(e.element) + " · " + K.rarTag(e.rarity) +
-                "</small></span><span class="v t-accent">' + K.ic("power") + " " + K.n(e.power) + "</span></div>";
+                '</small></span><span class="v t-accent">' + K.ic("power") + " " + K.n(e.power) + "</span></div>";
             }).join("") + "</div>";
         }
         html += '<div class="panel pad mt"><div class="sm muted mb">' + K.ic("gift") + " پاداش فتح این مرحله</div>" +

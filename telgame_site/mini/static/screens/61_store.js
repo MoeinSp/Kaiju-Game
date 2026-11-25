@@ -8,7 +8,8 @@
   function toman(n) { return K.n(n) + " <small>تومان</small>"; }
   function pn(n) { return Number(n || 0).toLocaleString("en-US"); }
 
-  K.hub("more", { id: "buy", title: "خرید الماس و طلا", sub: "پک‌ها، اشتراک VIP، مقدار دلخواه", icon: "gem", color: "var(--diamond)", go: "sh_buy", order: 9 });
+  K.hub("more", { id: "buy", title: "خرید", sub: "پک ویژه، طلا، الماس، VIP", icon: "gem",
+                  color: "var(--diamond)", go: "sh_buy", order: 1, art: "buy" });
 
   function openBot(bot) {
     var url = "https://t.me/" + bot;
@@ -41,7 +42,7 @@
   K.paySheet = paySheet;
 
   K.screen("sh_buy", {
-    title: "خرید الماس و طلا", tab: "more",
+    title: "خرید", tab: "more",
     render: function (root, params, ctx) {
       var busy = false, tab = "diamonds", custom = { coins: 0, dna: 0, diamonds: 0 }, d;
 
@@ -50,6 +51,23 @@
           '<span class="st-art"><img src="' + K.asset(img) + '" alt="" loading="lazy"></span>' +
           '<span class="st-name">' + K.esc(name) + "</span>" + amount +
           '<span class="st-price">' + toman(price) + "</span></button>";
+      }
+      function offersHtml() {
+        var list = d.offers || [];
+        if (!list.length) return "";
+        if (K.offers) K.offers.set(list);
+        return '<div class="h2">' + K.ic("spark") + "افرای ویژه</div>" +
+          '<div class="st-offers">' + list.map(function (o) {
+            var left = o.max ? Math.max(0, o.max - (o.bought || 0)) : null;
+            return '<button class="st-offer" data-act="offer" data-id="' + o.id + '">' +
+              '<img src="' + K.asset(o.art) + '" alt="">' +
+              (o.discount ? '<span class="st-ribbon">-' + K.n(o.discount) + "٪</span>" : "") +
+              '<span class="st-obody"><small class="of-kick">' + K.ic("flame") + "پیشنهاد ویژه</small>" +
+              "<b>" + K.esc(o.title) + '</b><span class="sm muted cut">' + K.esc(o.gets || "") + "</span>" +
+              (o.ends_in != null ? '<span class="st-otime">' + K.ic("clock") + '<span class="num" data-oend="' + (Date.now() + o.ends_in * 1000) + '"></span></span>' : "") +
+              (left != null ? '<span class="sm muted">باقی‌مونده: ' + K.n(left) + "</span>" : "") +
+              '<span class="st-oprice">' + (K.offers ? K.offers.price(o, true) : toman(o.price_toman || 0)) + "</span></span></button>";
+          }).join("") + "</div>";
       }
       function packsHtml() {
         if (!d.packs.length) return "";
@@ -104,10 +122,11 @@
           '<button class="btn primary block" data-act="custom"' + (total > 0 && total >= (d.min || 0) ? "" : " disabled") + ">ثبت سفارش</button></div>";
       }
       function draw() {
-        var html = '<div class="banner mb st-ban" style="background-image:url(\'' + K.asset(d.banner) + '\')"><div><div class="ttl">خرید الماس و طلا</div>' +
-          '<div class="sm" style="color:#d6f6ff">پرداخت کارت‌به‌کارت · تأیید سریع پشتیبانی</div></div></div>';
+        var html = '<div class="banner mb st-ban" style="background-image:url(\'' + K.asset(d.banner) + '\')"><div><div class="ttl">خرید طلا و الماس</div>' +
+          '<div class="sm" style="color:#d6f6ff">افر ویژه · پک · VIP · پرداخت کارت‌به‌کارت</div></div></div>';
         if (d.pending) html += '<div class="callout gold mb">' + K.ic("hourglass") + '<div class="grow"><b>سفارش در انتظار رسید</b><div class="sm">' +
           K.esc(d.pending.summary) + " · " + toman(d.pending.price) + '</div></div><button class="btn sm gold" data-act="pay">ارسال رسید</button></div>';
+        html += offersHtml();
         if (!d.ready) {
           html += K.state("cart", "خرید درون‌برنامه‌ای فعلاً بسته‌ست", d.link ? "از درگاه رسمی خرید کن." : "به‌زودی راه می‌افته.",
             d.link ? '<button class="btn primary" data-act="link">' + K.esc(d.link.title || "ورود به درگاه خرید") + "</button>" : "");
@@ -132,6 +151,15 @@
       return K.api.get("shop/paid/").then(function (data) {
         d = data; draw();
         K.on(root, "tab", function (el) { tab = el.dataset.res; draw(); });
+        K.on(root, "offer", function (el) {
+          var o = (d.offers || []).filter(function (x) { return String(x.id) === el.dataset.id; })[0];
+          if (!o) return;
+          if (o.price_toman) {
+            order({ kind: "item", id: o.id }, el, o.title + " · " + pn(o.price_toman) + " تومان");
+            return;
+          }
+          if (K.offers) K.offers.open(o);
+        });
         K.on(root, "pack", function (el) {
           var p = d.packs.filter(function (x) { return String(x.id) === el.dataset.id; })[0]; if (!p) return;
           order({ kind: "pack", id: p.id }, el, p.title + " · " + pn(p.price) + " تومان");

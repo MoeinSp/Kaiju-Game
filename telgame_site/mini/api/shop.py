@@ -598,6 +598,7 @@ def paid(request, user):
         "link": {"url": link[0], "title": clean(link[1])} if link else None,
         "prices": prices, "steps": purchase.STEP, "max": purchase.MAX_UNITS,
         "packs": packs, "presets": presets, "vip": _vip_data(user),
+        "offers": offers_payload(user),
         "pending": {"summary": clean(purchase.request_summary(pending)), "price": pending.price_toman} if pending else None,
         "banner": "img/store_banner.jpg",
     }

@@ -1221,10 +1221,11 @@ _HUBS = {
         [("سفارش تاجر", "merchant", "s", "btn_merchant")],
     ]),
     "hub_shop": ("🛒 <b>فروشگاه</b>", [
+        # buy_open is pulled onto its own full-width first row in `_hub_keyboard`
+        [("خرید طلا و الماس", "buy_open", "s", "btn_buy")],
         [("فروشگاه", "shop", "s", "btn_shop"), ("بازار سیاه", "blackmarket", "s", "btn_blackmarket")],
         [("باکس ژنتیکی", "biocrate", "s", "btn_biocrate"), ("باکس الماسی", "diamond_box", "s", "btn_diamond_box")],
-        [("خرید الماس", "buy_open", "s", "btn_buy"), ("سپر", "shield_shop", "s", "btn_shield")],
-        [("اشتراک VIP", "subscription", "s", "btn_vip")],
+        [("سپر", "shield_shop", "s", "btn_shield"), ("اشتراک VIP", "subscription", "s", "btn_vip")],
     ]),
     "hub_city": ("🌐 <b>شهر</b>", [
         [("مأموریت‌ها", "missions", "s", "btn_missions"), ("گردونه", "wheel", "s", "btn_wheel")],
@@ -1322,7 +1323,11 @@ def _hub_keyboard(hub_key: str, locked=frozenset(), hide_locked: bool = False,
         if parent is None:
             hidden += len(moved)
         specs = [s for s in specs if s[1] not in locked]
-    rows = [[_mkbtn(s, locked) for s in specs[i:i + 2]] for i in range(0, len(specs), 2)]
+    # «خرید طلا و الماس» alone on the first row of the shop hub — it's the paid store, not a peer of biocrate
+    buy_specs = [s for s in specs if s[1] == "buy_open"]
+    specs = [s for s in specs if s[1] != "buy_open"]
+    rows = [[_mkbtn(s, locked)] for s in buy_specs]
+    rows += [[_mkbtn(s, locked) for s in specs[i:i + 2]] for i in range(0, len(specs), 2)]
     if parent is None:
         more_open = [s for s in _hub_specs(more_key) if s[1] not in locked]
         has_more = (bool(more_open) if hide_locked else (more_key in _HUBS or bool(moved)))
@@ -1390,6 +1395,8 @@ def creature_keyboard(quest: dict | None = None, is_owner: bool = False, locked=
         btn("پایگاه", emoji_key="btn_hub_base", style=CONFIRM, callback_data="menu:hub_base"),
         btn("فروشگاه", emoji_key="btn_hub_shop", style=SHOP, callback_data="menu:hub_shop"),
     ])
+    # Dedicated real-money store — alone so it reads as its own section, not a shop sub-item
+    rows.append([btn("💎 خرید طلا و الماس", emoji_key="btn_buy", style=SHOP, callback_data="menu:buy_open")])
     # Row 3: City — with «آزمایشگاه سرم» beside it once the player has built one (nothing otherwise)
     row3 = [btn("شهر", emoji_key="btn_hub_city", style=PRIMARY, callback_data="menu:hub_city")]
     if serum_lab or (today_state and today_state.get("serum_lab")):

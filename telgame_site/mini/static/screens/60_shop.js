@@ -80,7 +80,7 @@
   // ───────────────────────── hub tiles ─────────────────────────
   K.hub("more", { id: "boxes", title: "باکس‌ها", sub: "هیولا و تجهیزات شانسی", icon: "box", color: "var(--gold)", go: "sh_boxes", order: 10,
                   badge: function () { var h = K.dy && K.dy.last && K.dy.last(); return freeBoxes != null ? freeBoxes : (h && h.free_boxes) || 0; } });
-  K.hub("more", { id: "shop", title: "فروشگاه", sub: "آفر روزانه، سپر، طلا", icon: "cart", color: "var(--good)", go: "sh_shop", order: 11 });
+  K.hub("more", { id: "shop", title: "فروشگاه", sub: "آفر روزانه، سپر، طلا با الماس", icon: "cart", color: "var(--good)", go: "sh_shop", order: 11 });
   K.hub("more", { id: "exchange", title: "صرافی", sub: "طلا، DNA و بازیافت", icon: "swap", color: "var(--dna)", go: "sh_exchange", order: 13, hall: 2 });
   K.hub("more", { id: "energy", title: "شارژ انرژی", sub: "پر کردن انرژی با الماس", icon: "bolt", color: "var(--energy)", go: "sh_energy", order: 14 });
   K.hub("more", { id: "vip", title: "اشتراک VIP", sub: "نقره‌ای و طلایی", icon: "crown", color: "var(--legendary)", go: "sh_vip", order: 15 });
@@ -266,7 +266,12 @@
     render: function (root, params, ctx) {
       if (params.tab) { tabs.shop = params.tab; params.tab = null; }
       var scr = live(root, ctx, "shop/store/", function (d) {
-        var html = seg([["daily", "روزانه", "cart"], ["packs", "بسته‌ها", "gift", d.items.length || ""], ["shield", "سپر", "shield"], ["gold", "طلا", "coin"]], tabs.shop, "tab");
+        var html = '<button class="st-buycta mb" data-act="gotobuy">' +
+          '<img src="' + K.asset("img/store_banner.jpg") + '" alt="">' +
+          '<span class="st-buycta-b"><small>' + K.ic("spark") + "بخش خرید</small><b>خرید طلا و الماس</b>" +
+          '<span class="sm">پک ویژه · افر · VIP · پرداخت کارت‌به‌کارت</span></span>' +
+          '<span class="st-buycta-go">' + K.ic("chevron") + "</span></button>";
+        html += seg([["daily", "روزانه", "cart"], ["packs", "بسته‌ها", "gift", d.items.length || ""], ["shield", "سپر", "shield"], ["gold", "طلا", "coin"]], tabs.shop, "tab");
         if (tabs.shop === "daily") html += daily(d);
         else if (tabs.shop === "packs") html += packs(d);
         else if (tabs.shop === "shield") html += shield(d);
@@ -431,6 +436,7 @@
           html: kv([["آیتم", K.esc(o.title)], ["می‌گیری", K.esc(o.gets)], ["مبلغ", money("diamonds", o.price)], ["الماس تو", money("diamonds", K.res ? K.res.diamonds : 0)]]) })
           .then(function (yes) { if (yes) buyOffer(o, 1, el); });
       });
+      K.on(root, "gotobuy", function () { K.haptic(); K.go("sh_buy"); });
       K.on(root, "special", function (el) {
         var o = (scr.data && scr.data.special || []).filter(function (x) { return x.id === +el.dataset.id; })[0];
         if (o && K.offers) K.offers.open(K.offers.top() && K.offers.top().id === o.id ? K.offers.top() : o);

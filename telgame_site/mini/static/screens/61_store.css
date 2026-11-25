@@ -1,5 +1,16 @@
-/* 61_store.js: «خرید الماس و طلا» */
+/* 61_store.js: «خرید طلا و الماس» */
 .st-ban { min-height: 150px; }
+.st-offers { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.st-offer { position: relative; display: flex; gap: 12px; align-items: stretch; width: 100%; padding: 0; overflow: hidden; border-radius: 18px;
+  border: 1px solid rgba(255,120,80,.45); background: linear-gradient(135deg, rgba(255,120,80,.14), rgba(10,20,32,.95) 55%); color: inherit; text-align: start; }
+.st-offer > img { width: 96px; min-height: 96px; object-fit: cover; flex: none; }
+.st-obody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding: 10px 12px 10px 0; }
+.st-obody > b { font-family: var(--display); font-size: 17px; font-weight: 400; }
+.st-otime { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--accent); }
+.st-otime svg { width: 13px; height: 13px; }
+.st-oprice { margin-top: 4px; font-weight: 700; font-size: 15px; color: var(--good); }
+.st-oprice s { color: var(--muted); font-weight: 400; margin-inline-end: 6px; }
+.st-offer:active { transform: scale(.985); }
 .st-tabs { margin-bottom: 10px; }
 .st-tabs button svg { width: 15px; height: 15px; }
 .st-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }

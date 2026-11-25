@@ -406,8 +406,9 @@ window.K = (function () {
     if (shown !== resShown) {
       resShown = shown;
       var er = res.max_energy ? Math.max(0, Math.min(1, res.energy / res.max_energy)) : 0;
-      var items = [["coin", "coins", K.short(res.coins), "sh_shop", false], ["dna", "dna", K.short(res.dna), "", false],
-                   ["gem", "diamonds", K.short(res.diamonds), "sh_shop", true],
+      // gold / diamonds open the real-money «خرید» store (sh_buy), not the daily gold shop
+      var items = [["coin", "coins", K.short(res.coins), "sh_buy", true], ["dna", "dna", K.short(res.dna), "", false],
+                   ["gem", "diamonds", K.short(res.diamonds), "sh_buy", true],
                    ["energy", "energy", Number(res.energy) + "<small>/" + res.max_energy + "</small>", "sh_energy", true], ["cup", "cup", K.n(res.cup), "leaderboard", false]];
       hudIn.innerHTML = items.map(function (it) {
         var changed = prev && prev[it[1]] !== res[it[1]];
@@ -803,7 +804,7 @@ window.K = (function () {
   var HUB_ART = { tower: "mugen_tower", boss: "worldboss", chests: "arena_chests", forge: "blacksmith", boxes: "diamond_box", market: "blackmarket",
                   vip: "subscription", week: "events", pass: "battlepass", leaderboard: "rank", ranks: "rank", settings: "profile", fusion: "fusion",
                   cave: "cave", missions: "missions", wheel: "wheel", dispatch: "dispatch", hunt: "hunt", arena: "arena", tournament: "tournament",
-                  league: "league", shop: "shop", exchange: "exchange", festival: "festival", achievements: "achievements", alliance: "alliance",
+                  league: "league", shop: "shop", buy: "buy", exchange: "exchange", festival: "festival", achievements: "achievements", alliance: "alliance",
                   guide: "guide", profile: "profile", recycle: "equip_exchange", gold_shop: "gold_shop", shield: "shield_shop", items: "item_shop" };
   var HUB_STATIC = { buildings: "img/bg_base.jpg", research: "img/bg_research.jpg", energy: "img/bg_energy.jpg" };
   /* Section headings inside a hub: [first order, title, icon] — a tile belongs to the last group whose order it reaches. */

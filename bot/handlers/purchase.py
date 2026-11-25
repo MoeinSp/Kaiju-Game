@@ -54,7 +54,7 @@ def _amount_screen(context, is_sub: bool = True) -> tuple[str, InlineKeyboardMar
     amounts = _amounts(context)
     sellable = _sellable(prices)
     lines = [
-        "🛒 <b>خرید درون‌بازی</b>",
+        "💎 <b>خرید طلا و الماس</b>",
         _RULE,
         "مقدار مورد نظرت رو با دکمه‌های ➖ و➕ تنظیم کن:",
         "",
@@ -95,10 +95,10 @@ def _amount_screen(context, is_sub: bool = True) -> tuple[str, InlineKeyboardMar
 def _store_screen(packs: list[dict], custom_ok: bool) -> tuple[str, InlineKeyboardMarkup]:
     """The in-bot store home: owner-authored packs (one-tap buy) + a «مقدار دلخواه»
     option for the classic stepper flow."""
-    lines = ["🛒 <b>فروشگاه درون‌بازی</b>", _RULE]
+    lines = ["💎 <b>خرید طلا و الماس</b>", _RULE]
     rows = []
     if packs:
-        lines.append("یکی از پک‌های آماده رو انتخاب کن یا مقدار دلخواه بساز:")
+        lines.append("🎁 <b>پک‌های ویژه</b> — یکی رو انتخاب کن یا مقدار دلخواه بساز:")
         lines.append("")
         for p in packs:
             badge = f"  🔥 {p['discount']}٪ تخفیف" if p["discount"] > 0 else ""
@@ -110,6 +110,8 @@ def _store_screen(packs: list[dict], custom_ok: bool) -> tuple[str, InlineKeyboa
                 lines.append(f"┘ <b>{p['price']:,} تومان</b>")
             lines.append("")
             label = f"{p['emoji']} {p['title']}"
+            if p["discount"] > 0:
+                label = f"🔥 {p['discount']}% · {p['emoji']} {p['title']}"
             rows.append([btn(label, emoji_key="btn_shop", style=SHOP, callback_data=f"buy_pack:{p['id']}")])
     else:
         lines.append("مقدار مورد نظرت رو بساز و پرداخت کن:")
@@ -132,7 +134,7 @@ async def buy_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             await query.answer()
             await safe_edit_message_text(
                 query,
-                f"🛒 <b>خرید درون‌برنامه‌ای</b>\n\nجهت خرید بسته‌ها و الماس به درگاه رسمی زیر مراجعه کنید:\n\n{burl}",
+                f"💎 <b>خرید طلا و الماس</b>\n\nجهت خرید بسته‌ها و الماس به درگاه رسمی زیر مراجعه کنید:\n\n{burl}",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([
                     [btn(btitle or "ورود به درگاه خرید", emoji_key="btn_buy", style=PRIMARY, url=burl)],
@@ -140,7 +142,7 @@ async def buy_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 ]),
             )
             return
-        await query.answer("🛒 بخش خرید درون‌برنامه‌ای در حال راه‌اندازی است.", show_alert=True)
+        await query.answer("💎 بخش خرید طلا و الماس در حال راه‌اندازی است.", show_alert=True)
         return
     context.user_data[_AMOUNTS_KEY] = {"coins": 0, "dna": 0, "diamonds": 0}
     context.user_data.pop(_AWAIT_RECEIPT_KEY, None)
