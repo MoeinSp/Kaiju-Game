@@ -845,7 +845,7 @@ window.K = (function () {
   var HUB_HERO = { base: ["buildings", "research"] };
   /* «نبرد» is a map: rows of round medallions (one in the middle, or a pair) joined by glowing
      paths, like the world map of a mobile RPG. Tiles not placed here are added below in pairs. */
-  var HUB_MAP = { battle: { rows: [["hunt"], ["arena", "boss"], ["dungeon"], ["tower", "tournament"], ["chests", "dispatch"]], big: ["hunt", "dungeon"] } };
+  var HUB_MAP = { battle: { rows: [["hunt"], ["arena", "boss"], ["campaign", "dungeon"], ["tower", "tournament"], ["chests", "dispatch"]], big: ["hunt", "dungeon"] } };
   K.renderHub = function (root, hub, head) {
     var me = K.me || {}, items = (hubs[hub] || []).slice().sort(function (a, b) { return (a.order || 50) - (b.order || 50); });
     var groups = HUB_GROUPS[hub] || [], heroIds = HUB_HERO[hub] || [], html = "";

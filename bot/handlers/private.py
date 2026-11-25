@@ -3743,6 +3743,21 @@ def _alliance_create_sync(tg_user, name):
     return create_alliance(user, name)
 
 
+def _alliance_rename_check_sync(tg_user, name):
+    """Validate a rename WITHOUT charging — the bot confirms (and pays) in a second step."""
+    from game.alliance import rename_alliance
+
+    user, _ = get_or_create_user(tg_user)
+    return rename_alliance(user, name, dry=True)
+
+
+def _alliance_rename_sync(tg_user, name):
+    from game.alliance import rename_alliance
+
+    user, _ = get_or_create_user(tg_user)
+    return rename_alliance(user, name)
+
+
 async def alliance_create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     from game.alliance import ALLIANCE_CREATE_COST
 
@@ -3859,6 +3874,7 @@ def _alliance_info_sync(tg_user):
     info["flag_path"] = str(path) if path else None
     from game.alliance import _is_manager
     info["can_edit_flag"] = _is_manager(user, user.alliance)
+    info["is_leader"] = user.id == user.alliance.leader_id   # only the leader may rename
     return info
 
 
@@ -3909,7 +3925,8 @@ async def ally_raidtable_callback(update: Update, context: ContextTypes.DEFAULT_
                                  reply_markup=back_only_keyboard("menu:alliance_info", "بازگشت به اتحاد"))
 
 
-def _alliance_action_keyboard(in_alliance: bool, can_edit_flag: bool = False) -> InlineKeyboardMarkup:
+def _alliance_action_keyboard(in_alliance: bool, can_edit_flag: bool = False,
+                              is_leader: bool = False) -> InlineKeyboardMarkup:
     if in_alliance:
         rows = [
             [btn("اعضا و مدیریت", emoji_key="btn_members", style=NAV, callback_data="ally_members")],
@@ -3917,6 +3934,9 @@ def _alliance_action_keyboard(in_alliance: bool, can_edit_flag: bool = False) ->
         ]
         if can_edit_flag:
             rows.append([btn("پرچم اتحاد", emoji_key="btn_alliance", style=BUILD, callback_data="ally_flag")])
+        if is_leader:   # changing the name is leader-only (the deputy can't)
+            rows.append([btn("تغییر اسم اتحاد", emoji_key="btn_edit", style=PRIMARY,
+                             callback_data="ally_rename")])
         rows += [
             [btn("ساختمان‌های اتحاد", emoji_key="btn_buildings", style=PRIMARY, callback_data="ally_perks")],
             [btn("جدول رید اتحاد", emoji_key="btn_raid_table", style=NAV, callback_data="ally_raidtable")],
@@ -4030,7 +4050,8 @@ async def alliance_info_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
     await send_screen(update,
         _alliance_info_text(info), photo=photo, parse_mode="HTML",
-        reply_markup=_alliance_action_keyboard(in_alliance=True, can_edit_flag=bool(info.get("can_edit_flag"))),
+        reply_markup=_alliance_action_keyboard(in_alliance=True, can_edit_flag=bool(info.get("can_edit_flag")),
+                                               is_leader=bool(info.get("is_leader"))),
     )
 
 
@@ -4405,6 +4426,66 @@ async def alliance_deputy_start(update: Update, context: ContextTypes.DEFAULT_TY
         query, f"🎖 آیدیِ عضوی که قائم‌مقام بشه رو بفرست:{_reply_hint(update)}",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "انصراف")]]),
+    )
+
+
+async def alliance_rename_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Leader-only: ask for the new alliance name (price is confirmed on the next step)."""
+    from game.alliance import ALLIANCE_RENAME_COST
+
+    query = update.callback_query
+    context.user_data[AWAITING_PLAYER_KEY] = {"action": "alliance_rename"}
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        f"✏️ {get_emoji('alliance')} اسم جدید اتحاد رو بفرست:\n\n"
+        f"<i>عوض کردن اسم <code>{ALLIANCE_RENAME_COST:,}</code> {get_emoji('diamond')} الماس هزینه داره — "
+        f"آخرش تأیید می‌گیریم.</i>{_reply_hint(update)}",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "انصراف")]]),
+    )
+
+
+async def alliance_rename_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    name = context.user_data.pop("pending_alliance_rename", None)
+    if not name:
+        await query.answer("اسمی ذخیره نشده — دوباره «تغییر نام اتحاد» رو بزن.", show_alert=True)
+        return
+
+    def _do(tg_user, new_name):
+        from game.alliance import rename_alliance
+
+        user, _ = get_or_create_user(tg_user)
+        return rename_alliance(user, new_name)
+
+    try:
+        result = await run_db(_do, update.effective_user, name)
+    except GameError as exc:
+        await query.answer()
+        await safe_edit_message_text(
+            query, str(exc), parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "بازگشت")]]),
+        )
+        return
+    await query.answer("✅ اسم اتحاد عوض شد!")
+    await safe_edit_message_text(
+        query,
+        f"{get_emoji('alliance')} اسم اتحاد از <b>{result['old_name']}</b> به <b>{result['new_name']}</b> تغییر کرد.\n"
+        f"<i>(<code>{result['cost']:,}</code> {get_emoji('diamond')} الماس کم شد)</i>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "اتحاد من")]]),
+    )
+
+
+async def alliance_rename_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    context.user_data.pop("pending_alliance_rename", None)
+    context.user_data.pop(AWAITING_PLAYER_KEY, None)
+    await query.answer("لغو شد.")
+    await safe_edit_message_text(
+        query, "تغییر نام اتحاد لغو شد.",
+        reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "بازگشت")]]),
     )
 
 
@@ -5076,6 +5157,32 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
                 btn("تأیید و پرداخت", emoji_key="btn_confirm",
                     style=CONFIRM, callback_data="ally_create_confirm"),
                 btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data="ally_create_cancel"),
+            ]]),
+        )
+        return
+
+    if action == "alliance_rename":
+        from game.alliance import ALLIANCE_RENAME_COST
+
+        name = (text or "").strip()
+        try:
+            data = await run_db(_alliance_rename_check_sync, update.effective_user, name)
+        except GameError as exc:
+            context.user_data[AWAITING_PLAYER_KEY] = awaiting   # keep waiting for a valid name
+            await message.reply_text(str(exc), parse_mode="HTML")
+            return
+        # valid + affordable — stash the name and take a FINAL confirmation before charging
+        context.user_data["pending_alliance_rename"] = data["new_name"]
+        await message.reply_text(
+            f"{get_emoji('alliance')} اسم اتحاد از <b>{data['old_name']}</b> "
+            f"به <b>{data['new_name']}</b> عوض می‌شه.\n\n"
+            f"این تغییر <code>{ALLIANCE_RENAME_COST:,}</code> {get_emoji('diamond')} الماس از حسابت کم می‌کنه. "
+            "تأیید می‌کنی؟",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                btn("تأیید و پرداخت", emoji_key="btn_confirm",
+                    style=CONFIRM, callback_data="ally_rename_confirm"),
+                btn("لغو", emoji_key="btn_cancel", style=DANGER, callback_data="ally_rename_cancel"),
             ]]),
         )
         return
@@ -6481,6 +6588,9 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(alliance_create_callback, pattern=r"^ally_create$"))
     application.add_handler(CallbackQueryHandler(alliance_create_confirm_callback, pattern=r"^ally_create_confirm$"))
     application.add_handler(CallbackQueryHandler(alliance_create_cancel_callback, pattern=r"^ally_create_cancel$"))
+    application.add_handler(CallbackQueryHandler(alliance_rename_start, pattern=r"^ally_rename$"))
+    application.add_handler(CallbackQueryHandler(alliance_rename_confirm_callback, pattern=r"^ally_rename_confirm$"))
+    application.add_handler(CallbackQueryHandler(alliance_rename_cancel_callback, pattern=r"^ally_rename_cancel$"))
     application.add_handler(CallbackQueryHandler(alliance_join_callback, pattern=r"^ally_join$"))
     application.add_handler(CallbackQueryHandler(alliance_browse_callback, pattern=r"^ally_browse:\d+$"))
     application.add_handler(CallbackQueryHandler(alliance_browse_join_callback, pattern=r"^ally_browse_join:\d+$"))

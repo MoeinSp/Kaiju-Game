@@ -10,6 +10,7 @@ import math
 import random
 
 from django.db import transaction
+from django.utils import timezone
 
 from bio_lab.models import Creature, User
 from game import constants, lab
@@ -211,15 +212,23 @@ def get_mugen_status(user: User) -> dict:
 
 def top_climbers(limit: int) -> list[dict]:
     """Best climbers, `mugen_tower_floor` capped at 101 (finished) so the two who climbed past
-    100 before the cap don't outrank everyone else who finishes. Ties by id. Each row's
-    `mugen_tower_floor` is the SHOWN floor (<= 100) and `done` marks a finished climber."""
-    from django.db.models import Value
+    100 before the cap don't outrank everyone else who finishes.
+
+    Ties on a floor go to whoever GOT there first (owner, 2026-11-24) — before this they went
+    to the lower id, i.e. whoever registered first. `mugen_tower_cleared_at` is the moment of
+    the last floor win, so it is exactly the time that floor was reached. It is nullable: rows
+    from before the column existed (and anyone who never won a floor) have no time and rank
+    after the timed ones. The time itself is NEVER shown — only used to break a tie.
+
+    Each row's `mugen_tower_floor` is the SHOWN floor (<= 100) and `done` marks a finished
+    climber."""
+    from django.db.models import F, Value
     from django.db.models.functions import Least
 
     rows = list(
         User.objects.filter(mugen_tower_floor__gt=1)
         .annotate(_capped=Least("mugen_tower_floor", Value(TOWER_TOP_FLOOR + 1)))
-        .order_by("-_capped", "id")[:limit]
+        .order_by("-_capped", F("mugen_tower_cleared_at").asc(nulls_last=True), "id")[:limit]
         .values("id", "username", "first_name", "lab_name", "mugen_tower_floor")
     )
     for r in rows:
@@ -263,13 +272,15 @@ def fight_mugen_floor(user: User, player_creature: Creature) -> dict:
 
     if won:
         user.mugen_tower_floor = floor + 1
+        # the moment this floor was reached: the leaderboard's tie-break (top_climbers)
+        user.mugen_tower_cleared_at = timezone.now()
         user.coins += rew["coins"]
         user.dna_fragments += rew["dna"]
         if rew["diamonds"]:
             user.diamonds += rew["diamonds"]
         if rew["tickets"]:
             user.biocrate_tickets = (user.biocrate_tickets or 0) + rew["tickets"]
-        user_fields.extend(["mugen_tower_floor", "coins", "dna_fragments", "diamonds", "biocrate_tickets"])
+        user_fields.extend(["mugen_tower_floor", "mugen_tower_cleared_at", "coins", "dna_fragments", "diamonds", "biocrate_tickets"])
         user.save(update_fields=user_fields)
 
         record_gain(

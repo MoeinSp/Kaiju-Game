@@ -166,6 +166,9 @@ class User(models.Model):
     receipt_blocked = models.BooleanField(default=False)
     # ── Mugen Tower (برج موگن - سیاه‌چال بی‌پایان) ──
     mugen_tower_floor = models.IntegerField(default=1)
+    # when the last floor was won (game.mugen_tower.fight_mugen_floor). Only the leaderboard's
+    # tie-break reads it — a player who reached the same floor earlier ranks higher. Never shown.
+    mugen_tower_cleared_at = models.DateTimeField(null=True, blank=True)
 
     # ── Group Expeditions (اعزام کاروان گروهی) ──
     last_expedition_at = models.DateTimeField(null=True, blank=True)
@@ -740,6 +743,9 @@ class DungeonProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="dungeon")
     keys = models.IntegerField(default=0)
     keys_day = models.CharField(max_length=10, blank=True, default="")  # last daily refill (game day)
+    # how much of today's refill came from bonuses (the «کلید سایه» relic, the gold subscription),
+    # so a bonus that appears later the same day is still paid exactly once (game.dungeon.profile)
+    keys_extra = models.IntegerField(default=0)
     black_runes = models.IntegerField(default=0)
     shadow_cores = models.IntegerField(default=0)   # «هسته‌ی سایه», spent on the black form
     best_difficulty = models.IntegerField(default=0)  # 0 none · 1 normal · 2 hard · 3 nightmare cleared

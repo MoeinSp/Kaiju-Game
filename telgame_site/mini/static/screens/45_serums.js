@@ -188,14 +188,12 @@
      never spent unless the player picks it here; a second tap puts it back on the shelf. */
   K.serumRow = function (m) {
     if (!m) return "";
-    var tag = m.on && m.spent ? "div" : "button";
-    var act = m.on && m.spent ? "" : ' data-act="serum" data-kind="' + m.kind + '"';
-    var note = m.on ? (m.spent ? "تا آخر ضربه‌های این غول فعاله" : "دوباره بزن تا برگرده توی قفسه")
+    var note = m.on ? "دوباره بزن تا برگرده توی قفسه · فقط یه ضربه"
       : K.n(m.stock) + " عدد داری · فقط اگه انتخابش کنی خرج می‌شه";
-    return '<' + tag + ' class="panel sr-moment' + (m.on ? " on" : "") + '"' + act + '>' +
+    return '<button class="panel sr-moment' + (m.on ? " on" : "") + '" data-act="serum" data-kind="' + m.kind + '">' +
       '<img src="' + K.asset(m.img) + '" alt=""><span class="grow"><b>' + (m.on ? "سرم " + K.esc(m.label) + " انتخاب شد" : "استفاده از سرم " + K.esc(m.label)) + "</b>" +
       "<small>" + K.esc(m.effect) + " · " + note + "</small></span>" +
-      '<span class="sr-sw' + (m.on ? " on" : "") + '"><i></i></span></' + tag + '>';
+      '<span class="sr-sw' + (m.on ? " on" : "") + '"><i></i></span></button>';
   };
   /* Toggle it; resolves with the fresh {serum} (callers redraw their card). */
   K.serumToggle = function (el) {

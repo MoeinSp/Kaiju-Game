@@ -148,10 +148,18 @@
         (mystery ? '<p class="sm muted mt">پشت در مرموز: گنج، تله یا کمین.</p>' : "");
     }
     if (r.phase === "fight") {
-      var e = r.enemy;
-      var head = '<div class="panel dg-enemy ' + e.kind + '">' + (e.img ? '<img src="' + K.esc(e.img) + '" alt="">' : "") +
-        '<div class="grow"><div class="sm muted">' + (e.kind === "boss" ? "باس سیاه‌چال" : e.kind === "elite" ? "دشمن نخبه" : "دشمن") + '</div><div class="b">' + K.esc(e.name) + "</div>" +
-        '<div class="sm">' + K.elTag(e.element) + ' <span class="t-accent">' + K.ic("power") + " " + K.n(e.power) + "</span></div></div></div>";
+      // boss / enemy card MUST stay above the fold: team HP used to bury it on boss floors
+      // (endless floor 10/20/… and the final room), so name + power looked «missing»
+      var e = r.enemy || {};
+      var role = e.kind === "boss"
+        ? (r.endless ? "باس طبقه‌ی " + K.n(r.room) : "باس سیاه‌چال")
+        : e.kind === "elite" ? "دشمن نخبه" : "دشمن";
+      var head = '<div class="panel dg-enemy ' + (e.kind || "fight") + '">' + (e.img ? '<img src="' + K.esc(e.img) + '" alt="">' : "") +
+        '<div class="grow"><div class="sm muted">' + role + '</div><div class="b">' + K.esc(e.name || "—") + "</div>" +
+        '<div class="sm">' + (e.element ? K.elTag(e.element) : "") +
+        ' <span class="t-accent">' + K.ic("power") + " " + K.n(e.power || 0) + "</span></div>" +
+        '<div class="dg-hp" style="margin-top:6px">' + K.bar(1, e.kind === "boss" ? "gold" : "bad", "thick") +
+        '<span class="num sm t-accent">' + K.n(e.power || 0) + "</span></div></div></div>";
       return head + (r.first_strike ? '<div class="callout good mt">' + K.ic("spark") + "<div>«ضربه‌ی اول» فعاله: +۳۰٪ قدرت توی این نبرد.</div></div>" : "") +
         (r.ward ? '<div class="callout mt">' + K.ic("shield") + "<div>«سپر سایه» آماده‌ست: اگه ببازی، هیولات با ۲۰٪ جون سرپا می‌مونه.</div></div>" : "") +
         '<div class="h2">' + K.ic("swords") + 'کی بجنگه؟</div><div class="dg-picks">' + r.members.filter(function (m) { return m.hp > 0; }).map(function (m) {
@@ -178,16 +186,21 @@
   function runHtml(d, note) {
     var r = d.run;
     var got = loot(r.loot);
+    var fight = r.phase === "fight";
+    // on a fight the enemy card + who-fights-what come first; the full team HP list used to push
+    // the boss name/power below the fold on endless boss floors (and the final room)
     return '<div class="banner dg-banner sm-banner ' + r.difficulty + '"><div class="grow"><div class="sm" style="color:#c5cee2">سیاه‌چال · ' + K.esc(r.difficulty_label) + '</div><div class="ttl">' +
       (r.endless ? (r.boss ? "باس طبقه‌ی " : "طبقه‌ی ") + K.n(r.room) : r.boss ? "باس" : "اتاق " + K.n(r.room) + " از " + K.n(d.rooms)) + "</div></div></div>" +
       '<div class="panel dg-loot mt"><span class="muted sm">' + K.ic("box") + " غنیمت</span><span>" + (got || '<span class="faint sm">هنوز چیزی نیست</span>') + "</span></div>" +
       (note ? '<div class="callout mt"><div class="dg-note">' + note + "</div></div>" : "") +
-      teamHtml(r) +
+      (fight ? phaseHtml(r) : "") +
+      (fight ? "" : teamHtml(r)) +
       (r.runes.length || r.ready.length ? '<div class="panel pad dg-active mt"><div class="sm muted mb">' + K.ic("spark") + " رون‌های فعال</div>" +
         r.runes.map(function (x) { return '<div class="dg-arune"><b>' + K.esc(x.label) + '</b> <span class="sm muted">' + K.esc(x.desc) + "</span></div>"; }).join("") +
         r.ready.map(function (x) { return '<div class="dg-arune ready"><b>' + K.esc(x.label) + '</b> <span class="tag">آماده</span> <span class="sm muted">' + K.esc(x.desc) + "</span></div>"; }).join("") +
         "</div>" : "") +
-      phaseHtml(r) +
+      (fight ? "" : phaseHtml(r)) +
+      (fight ? teamHtml(r) : "") +
       (r.log.length ? '<div class="panel pad dg-log mt">' + r.log.map(function (x) { return "<div>" + K.esc(x) + "</div>"; }).join("") + "</div>" : "") +
       '<button class="btn ghost block mt" data-act="quit">' + K.ic("back") + "ترک سیاه‌چال</button>";
   }

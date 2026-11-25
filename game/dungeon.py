@@ -178,20 +178,38 @@ def unlocked(user: User) -> bool:
 
 
 def profile(user: User) -> DungeonProfile:
-    """The player's dungeon wallet, with today's free keys added (once per game day)."""
+    """The player's dungeon wallet, with today's free keys added (once per game day).
+
+    The relic / subscription bonus keys ride along with the same refill, but they are counted
+    apart (`keys_extra`): a «کلید سایه» that dropped AFTER today's refill used to pay nothing
+    until the next day, which players reported as «the relic doesn't work» (2026-11-24). Now
+    the bonus is topped up the moment it is held — at most once a day, never taking keys away.
+    """
     from game import relics
     from game.daily import today_str
 
     prof, _ = DungeonProfile.objects.get_or_create(user=user)
     today = today_str()
-    if prof.keys_day != today:
-        with transaction.atomic():
-            prof = DungeonProfile.objects.select_for_update().get(pk=prof.pk)
-            if prof.keys_day != today:
-                extra = relics.bonus(user, "shadow_key") + gold_vip_keys(user)
-                prof.keys = max(prof.keys, min(KEY_CAP + extra, prof.keys + DAILY_KEYS + extra))
-                prof.keys_day = today
-                prof.save(update_fields=["keys", "keys_day"])
+    extra = relics.bonus(user, "shadow_key") + gold_vip_keys(user)
+    new_day = prof.keys_day != today
+    if not (new_day or extra > prof.keys_extra):
+        return prof   # the common path: today's refill is done and nothing new is owed
+    with transaction.atomic():
+        prof = DungeonProfile.objects.select_for_update().get(pk=prof.pk)
+        fields = []
+        if prof.keys_day != today:
+            prof.keys = max(prof.keys, min(KEY_CAP + extra, prof.keys + DAILY_KEYS + extra))
+            prof.keys_day = today
+            prof.keys_extra = extra
+            fields += ["keys", "keys_day", "keys_extra"]
+        elif extra > prof.keys_extra:   # the relic (or the subscription) arrived mid-day
+            owed = extra - prof.keys_extra
+            prof.keys_extra = extra
+            if prof.keys < KEY_CAP + extra:   # below the cap it raises it; above, untouched
+                prof.keys = min(prof.keys + owed, KEY_CAP + extra)
+            fields += ["keys", "keys_extra"]
+        if fields:
+            prof.save(update_fields=fields)
     return prof
 
 

@@ -60,6 +60,22 @@ def _state(user: User) -> dict:
     rows = {c.id: c for c in Creature.objects.filter(id__in=[m["id"] for m in run["members"]])}
     imgs = {cid: creature_img(c) for cid, c in rows.items()}
     enemy = st.get("enemy")
+    # self-heal: a fight phase with no enemy (corrupt / mid-migrate run) used to blank the
+    # boss card on endless floors — rebuild it the same way _next_room does
+    if st.get("phase") == "fight" and not enemy:
+        kind = "boss" if ((st.get("endless") and st["room"] % D.ENDLESS_BOSS_EVERY == 0)
+                          or (not st.get("endless") and st["room"] > D.ROOMS)) else "fight"
+        enemy = D._enemy(st, kind)
+        st["enemy"] = enemy
+        run_row = v["run"]
+        # persist so the next tap still has the same foe (power/name stay stable for this fight)
+        from bio_lab.models import DungeonRun
+        DungeonRun.objects.filter(id=run_row["id"]).update(state=st)
+        # refresh vs numbers against the rebuilt enemy
+        for m in run["members"]:
+            if m["hp"] > 0:
+                mine, theirs = D.duel(st, m, enemy)
+                m.update(vs=mine, enemy_vs=theirs, wins=mine >= theirs)
     out["run"] = {
         "phase": st["phase"], "room": st["room"],
         "endless": bool(st.get("endless")),

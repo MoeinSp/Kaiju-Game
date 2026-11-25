@@ -1,0 +1,8 @@
+/* «دانجن» (cp_home) */
+.cp-banner { min-height: 110px; align-items: flex-end;
+  background: radial-gradient(420px 180px at 70% -30px, rgba(58,214,255,.28), transparent 70%), linear-gradient(160deg, #0a1622, #06070d);
+  border-color: rgba(58,214,255,.35); }
+.cp-banner.boss { border-color: rgba(255,200,87,.5);
+  background: radial-gradient(420px 180px at 70% -30px, rgba(255,180,60,.35), transparent 70%), linear-gradient(160deg, #1d1408, #06070d); }
+.cp-banner .pow { text-align: end; font-size: 13px; line-height: 1.8; }
+.cp-enemies .th { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; }

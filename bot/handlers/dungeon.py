@@ -121,9 +121,25 @@ def _run_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
         return _home_render(v)
     st = run["state"]
     tier = D._diff(st.get("difficulty"))["label"]
+    phase = st["phase"]
     lines = [f"{_E('dungeon_pit')} <b>سیاه‌چال · {tier}</b> · {_where(st, html_=True)}", _DIV]
     if note:
         lines += [note, _DIV]
+    # on a fight the enemy name/power come first — burying them under the team + runes made
+    # endless boss floors look like they had no boss at all (owner, 2026-11-24)
+    if phase == "fight":
+        e = st.get("enemy") or {}
+        kind = {"elite": " 💀 <b>نخبه</b>", "boss": " 👑 <b>باس</b>"}.get(e.get("kind"), "")
+        lines += [
+            f"👹 دشمن: <b>{html.escape(str(e.get('name') or '—'))}</b> · {_el(e.get('element') or 'fire')}{kind}",
+            f"💪 قدرت دشمن: <code>{int(e.get('power') or 0):,}</code>",
+            _DIV,
+        ]
+        if st.get("first_strike"):
+            lines.append("<i>«ضربه‌ی اول» فعاله: +۳۰٪ قدرت توی این نبرد.</i>")
+        if st.get("ward"):
+            lines.append("<i>«سپر سایه» آماده‌ست: اگه ببازی، هیولات با ۲۰٪ جون سرپا می‌مونه.</i>")
+        lines.append("⚔️ <b>کی بجنگه؟</b>")
     for m in run["members"]:
         if m["hp"] <= 0:
             lines.append(f"💀 <s>{html.escape(m['name'])}</s> <i>از پا افتاده</i>")
@@ -143,7 +159,6 @@ def _run_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     lines.append(_DIV)
 
     rows = []
-    phase = st["phase"]
     if phase == "doors":
         lines.append(f"{_E('dg_door')} <b>کدوم در رو باز می‌کنی؟</b>")
         if all(d in D.COMBAT_DOORS for d in st["doors"]):
@@ -153,20 +168,11 @@ def _run_render(v: dict, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
         rows.append([btn(f"{D.DOORS[d][0]} {D.DOORS[d][1]}", style=PRIMARY, callback_data=f"dg:d:{i}")
                      for i, d in enumerate(st["doors"])])
     elif phase == "fight":
-        e = st["enemy"]
-        kind = {"elite": " 💀 <b>نخبه</b>", "boss": " 👑 <b>باس</b>"}.get(e["kind"], "")
-        lines += [f"👹 دشمن: <b>{html.escape(e['name'])}</b> · {_el(e['element'])}{kind}",
-                  f"💪 قدرت دشمن: <code>{e['power']:,}</code>",
-                  "", "⚔️ <b>کی بجنگه؟</b>"]
         for m in run["members"]:
             if m["hp"] > 0:
                 mark = "✅" if m.get("wins") else "❌"
                 rows.append([btn(f"{mark} {m['name']} · {m['vs']:,}",
                                  style=CONFIRM if m.get("wins") else NAV, callback_data=f"dg:f:{m['id']}")])
-        if st.get("first_strike"):
-            lines.append("<i>«ضربه‌ی اول» فعاله: +۳۰٪ قدرت توی این نبرد.</i>")
-        if st.get("ward"):
-            lines.append("<i>«سپر سایه» آماده‌ست: اگه ببازی، هیولات با ۲۰٪ جون سرپا می‌مونه.</i>")
     elif phase == "rune":
         lines.append(f"{_E('black_rune')} <b>یه رون انتخاب کن</b> (رون‌ها تا آخر همین ورود می‌مونن؛ هر کدوم یه بار):")
         for i, r in enumerate(st["rune_offer"]):

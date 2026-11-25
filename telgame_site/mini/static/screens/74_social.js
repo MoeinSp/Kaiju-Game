@@ -64,6 +64,21 @@
           return '<div class="' + (c.me ? "so-me" : "") + '"><span class="so-rk num">' + (i + 1) + '</span><span class="t cut">' + K.esc(c.name) + '</span><span class="v t-accent">' + K.ic("power") + " " + K.n(c.power) + "</span></div>";
         }).join("") + "</div>";
       }
+      var ro = w.roster;
+      if (ro && ro.total) {
+        h += '<div class="h3 mt">' + K.ic("users") + 'کی شرکت کرد؟ <span class="faint sm">(' + K.n(ro.participants.length) + " از " + K.n(ro.total) + ")</span></div>";
+        h += ro.participants.length
+          ? '<div class="panel list">' + ro.participants.map(function (m) {
+              return '<div class="' + (m.me ? "so-me" : "") + '"><span class="so-rk t-good">' + K.ic("check") + '</span><span class="t cut">' + K.esc(m.name) + '</span><span class="v t-good">' + K.n(m.power) + "</span></div>";
+            }).join("") + "</div>"
+          : '<p class="note">هنوز کسی از اتحادت شرکت نکرده.</p>';
+        if (ro.non_participants.length) {
+          h += '<div class="h3 mt">' + K.ic("clock") + 'شرکت نکردن <span class="faint sm">(' + K.n(ro.non_participants.length) + ")</span></div>" +
+            '<div class="panel list">' + ro.non_participants.map(function (m) {
+              return '<div class="' + (m.me ? "so-me" : "") + '"><span class="so-rk muted">' + K.ic("minus") + '</span><span class="t cut muted">' + K.esc(m.name) + '</span></div>';
+            }).join("") + "</div>";
+        }
+      }
     } else h += '<div class="panel pad muted sm">الان جنگ فعالی نیست. رهبر یا قائم‌مقام می‌تونه از داخل ربات جنگ یک‌روزه رو شروع کنه.</div>';
     var cr = a.war_chest_rule;
     h += '<div class="panel kv mt"><div><span>جعبه‌ی برنده‌ها</span><span>' + K.esc(cr.win) + "</span></div><div><span>جعبه‌ی مساوی</span><span>" + K.esc(cr.draw) +
@@ -113,6 +128,38 @@
       });
     };
   }
+  // «تغییر اسم اتحاد» — 1,000 diamonds, leader-only. Two steps like the bot: a dry run validates the
+  // name and quotes the price (the sheet), then the real call carries back the price we showed.
+  var renaming = false;
+  function renameSheet(d, ctx, onDone) {
+    var a = d.alliance, cost = a.rename_cost, have = K.res ? K.res.diamonds : null;
+    var box = K.sheet('<div class="grab"></div><div class="pad"><div class="ttl" style="font-size:18px">تغییر اسم اتحاد</div>' +
+      '<p class="lead" style="margin:4px 0 12px">اسم فعلی: <b>' + K.esc(a.name) + "</b><br>هزینه: " + K.amounts({ diamonds: cost }) +
+      (have == null ? "" : " · الماس تو: " + K.n(have)) + "</p>" +
+      '<input class="input" id="so-allyname" maxlength="32" placeholder="اسم جدید اتحاد" autocomplete="off">' +
+      '<div class="callout warn" style="margin-top:10px">' + K.ic("warn") + "<div>اسم اتحاد باید یکتا و بین ۱ تا ۳۲ کاراکتر باشه. " + K.n(cost) + " الماس بابتش کم می‌شه.</div></div>" +
+      '<button class="btn primary block" id="so-allyren" style="margin-top:14px">' + K.ic("edit") + "تغییر اسم</button></div>");
+    var input = box.querySelector("#so-allyname");
+    K.after(60, function () { try { input.focus(); } catch (e) {} });
+    box.querySelector("#so-allyren").onclick = function () {
+      var name = String(input.value || "").trim();
+      if (!name) { K.toast("اسم جدید رو بنویس.", "err"); input.focus(); return; }
+      K.api.post("social/alliance/rename/", { name: name, dry: true }).then(function (chk) {
+        K.confirm({ title: "تغییر اسم اتحاد", icon: "edit", ok: "تأیید و پرداخت", cancel: "انصراف",
+          html: "<p>اسم اتحادت از «<b>" + K.esc(chk.old_name) + "</b>» می‌شه «<b>" + K.esc(chk.name) + "</b>».<br>هزینه: <b>" + K.n(chk.cost) + "</b> الماس</p>" }).then(function (yes) {
+            if (!yes) return;
+            if (renaming) return; renaming = true;
+            K.api.post("social/alliance/rename/", { name: name, cost: chk.cost }).then(function (r) {
+              renaming = false;
+              K.haptic("ok"); K.toast("اسم اتحاد شد «" + r.name + "»", "ok");
+              try { box.remove(); } catch (e) {}
+              if (onDone) onDone();
+              if (ctx.alive()) ctx.reload();          // the banner, flag card and treasury all carry the name
+            }, function () { renaming = false; });
+          });
+      }, function (err) { K.toast(err.message, "err"); });
+    };
+  }
   function leaveFlow(d, ctx, el) {
     var a = d.alliance, lv = a.leave;
     var note = lv.last_member ? "تو آخرین عضوی: با خروجت <b>اتحاد و خزانه‌ش (" + K.n(a.treasury) + " طلا) برای همیشه حذف می‌شه</b>."
@@ -144,6 +191,9 @@
           (a.joined_today ? '<div class="callout warn mt">' + K.ic("clock") + "<div>تازه عضو شدی؛ تا نیمه‌شب امشب نمی‌تونی توی رید و جنگ اتحاد شرکت کنی.</div></div>" : "") +
           '<div class="btns mt mb"><button class="btn gold" data-act="deposit">' + K.ic("bank") + 'واریز به خزانه</button><button class="btn" data-act="ranks">' + K.ic("podium") + "جدول اتحادها</button></div>" +
           (a.can_edit_flag ? '<button class="btn block mb" data-act="flag">' + K.ic("flag") + (a.flag_img ? "عوض کردن پرچم" : "ساختن پرچم") + "</button>" : "") +
+          // leader-only, like the bot's «تغییر اسم اتحاد» button (game.alliance.rename_alliance charges the diamonds)
+          (a.can_rename ? '<button class="btn block mb" data-act="rename">' + K.ic("edit") + "تغییر اسم اتحاد" +
+            (a.rename_cost ? ' <span class="faint sm">' + K.amounts({ diamonds: a.rename_cost }) + "</span>" : "") + "</button>" : "") +
           (a.role === "leader" || a.role === "deputy" ? '<button class="btn primary block mb" data-act="recruit">' + K.ic("users") + "جذب و دعوت (آگهی، دعوت، لینک)</button>" : "") +
           '<div id="so-aseg"></div><div id="so-abody"></div>' +
           '<div class="callout mt">' + K.ic("info") + "<div>" + BOT_NOTE + "</div></div>" +
@@ -177,6 +227,7 @@
         K.on(root, "deposit", function () { depositSheet(d, function () { if (ctx.alive()) stats(); }); });
         K.on(root, "ranks", function () { K.go("so_ranks"); });
         K.on(root, "flag", function () { K.go("so_flag"); });
+        K.on(root, "rename", function () { renameSheet(d, ctx, stats); });
         K.on(root, "leave", function (el) { leaveFlow(d, ctx, el); });
         K.on(root, "rally", function (el) {
           K.api.post("social/alliance/war/preview/", {}, el).then(function (p) {

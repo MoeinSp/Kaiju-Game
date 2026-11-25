@@ -272,6 +272,18 @@ def _war1d_render(data: dict) -> tuple[str, InlineKeyboardMarkup]:
         for i, c in enumerate(view["contributors"]):
             tag = medals[i] if i < 3 else "▫️"
             lines.append(f"{tag} {c['name']} — <b>{c['power']:,}</b> امتیاز")
+    roster = view.get("roster") or {}
+    if roster.get("total"):
+        went = roster["participants"]
+        sat = roster["non_participants"]
+        lines.append(f"\n👥 <b>شرکت‌کرده‌ها</b> ({len(went):,} از {roster['total']:,}):")
+        if went:
+            lines.append(" ┃ ".join(f"✅ {m['name']}" for m in went))
+        else:
+            lines.append("<i>هنوز کسی از اتحادت شرکت نکرده.</i>")
+        if sat:
+            lines.append(f"\n🚫 <b>شرکت نکردن</b> ({len(sat):,}):")
+            lines.append(" ┃ ".join(f"▫️ {m['name']}" for m in sat))
     rows = _chest_rows(data)
     if view["ended"]:
         lines.append("\n<i>جنگ تموم شده — نتیجه و پاداش‌ها به‌زودی اعلام می‌شه.</i>")

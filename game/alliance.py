@@ -69,6 +69,50 @@ def create_alliance(user: User, name: str) -> Alliance:
     return alliance
 
 
+ALLIANCE_RENAME_COST = 1000   # diamonds
+
+
+@transaction.atomic
+def rename_alliance(user: User, new_name: str, dry: bool = False) -> dict:
+    """Leader-only: change the alliance's name for ALLIANCE_RENAME_COST diamonds.
+
+    Validated exactly like a new alliance name (length, HTML control characters, taken) —
+    the name is printed raw inside HTML messages everywhere, so the rename must not be a
+    way around the founding checks. The diamonds are taken under a row lock so a double tap
+    can't pay twice, and the alliance row is locked so two leaders of two alliances can't
+    race for the same name."""
+    new_name = (new_name or "").strip()
+    if not new_name or len(new_name) > ALLIANCE_NAME_MAX_LEN:
+        raise GameError(f"اسم اتحاد باید بین ۱ تا {ALLIANCE_NAME_MAX_LEN} کاراکتر باشه.")
+    _assert_name_safe(new_name)
+    if user.alliance_id is None:
+        raise GameError("عضو هیچ اتحادی نیستی.")
+    alliance = Alliance.objects.select_for_update().get(id=user.alliance_id)
+    if alliance.leader_id != user.id:
+        raise GameError("فقط رهبر می‌تونه اسم اتحاد رو عوض کنه.")
+    if alliance.name == new_name:
+        raise GameError("این همون اسم فعلی اتحاده؛ یه اسم دیگه بفرست.")
+    if Alliance.objects.filter(name__iexact=new_name).exclude(id=alliance.id).exists():
+        raise GameError("این اسم قبلاً گرفته شده، یه اسم دیگه امتحان کن.")
+    locked = User.objects.select_for_update().get(id=user.id)
+    if locked.diamonds < ALLIANCE_RENAME_COST:
+        raise GameError(
+            f"عوض کردن اسم اتحاد <b>{ALLIANCE_RENAME_COST:,}</b> الماس هزینه داره "
+            f"(الان {locked.diamonds:,} داری)."
+        )
+    if dry:   # the bot's confirm step: everything checked, nothing charged
+        return {"dry": True, "alliance": alliance, "old_name": alliance.name,
+                "new_name": new_name, "cost": ALLIANCE_RENAME_COST}
+    locked.diamonds -= ALLIANCE_RENAME_COST
+    locked.save(update_fields=["diamonds"])
+    user.diamonds = locked.diamonds
+    old_name = alliance.name
+    alliance.name = new_name
+    alliance.save(update_fields=["name"])
+    return {"alliance": alliance, "old_name": old_name, "new_name": new_name,
+            "cost": ALLIANCE_RENAME_COST}
+
+
 def _join_stamp(user: User, alliance: Alliance) -> None:
     """Attach a user to an alliance and record WHEN they joined — a brand-new member is
     gated from raid attacks and war rallies until the next midnight."""
@@ -1255,6 +1299,39 @@ def war_contributors(war, alliance_id: int, limit: int = 5) -> list[dict]:
     return [{"name": _display(h.user), "power": h.power, "user_id": h.user_id} for h in hits]
 
 
+def war_roster(war, alliance_id: int) -> dict:
+    """Who fought and who sat out — the full roster of `alliance_id` split in two.
+
+    `war_contributors` only shows the top five (the score board); this answers the other
+    question a leader actually asks mid-war: «کی شرکت کرده و کی نکرده». A member is a
+    participant iff there is an AllianceWarHit for them in THIS war, so somebody who
+    rallied yesterday's war still counts as a non-participant today."""
+    from bio_lab.models import AllianceWarHit
+
+    users = list(
+        User.objects.filter(alliance_id=alliance_id)
+        .select_related("alliance")
+        .order_by("-cup", "id")
+    )
+    hits = {
+        h.user_id: h.power
+        for h in AllianceWarHit.objects.filter(war=war, user__alliance_id=alliance_id)
+    }
+    joined = []
+    waiting = []
+    for u in users:
+        row = {"id": u.id, "name": _display(u), "power": hits.get(u.id, 0), "user_id": u.id}
+        (joined if u.id in hits else waiting).append(row)
+    joined.sort(key=lambda r: -r["power"])
+    waiting.sort(key=lambda r: -r["power"])
+    return {
+        "participants": joined,
+        "non_participants": waiting,
+        "total": len(users),
+        "missing": len(waiting),
+    }
+
+
 def war_view(user: User) -> dict | None:
     """Current war state from `user`'s perspective, or None if not in a war."""
     from bio_lab.models import AllianceWarHit
@@ -1285,6 +1362,7 @@ def war_view(user: User) -> dict | None:
         "my_participants": AllianceWarHit.objects.filter(war=war, user__alliance_id=me.id).count(),
         "foe_participants": AllianceWarHit.objects.filter(war=war, user__alliance_id=foe.id).count(),
         "contributors": war_contributors(war, me.id),
+        "roster": war_roster(war, me.id),
         "is_leader": me.leader_id == user.id,
     }
 

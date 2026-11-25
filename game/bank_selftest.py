@@ -159,6 +159,8 @@ def check_young_and_loot():
 
 
 def check_sandbag():
+    from bio_lab.models import Building, CreatureAssignment
+
     owner = User.objects.get(id=SENDER)
     weak = Creature.objects.create(owner=owner, name="ضعیف", element="fire", rarity="common", is_active=True, base_atk=10, base_hp=50)
     strong = Creature.objects.create(owner=owner, name="قوی", element="water", rarity="mythic", is_active=False, base_atk=800, base_hp=800)
@@ -170,6 +172,31 @@ def check_sandbag():
     DefenseTeam.objects.filter(owner=owner).update(slot1=strong)
     chosen = group_fight_defender(owner, attacker, 20)
     assert chosen.id == strong.id
+
+    # bypass that players reported: put the mythic ON the defense team, then park it in a
+    # mine — the old 80% check still counted it, pick_defender skipped it, weak active fought
+    mine, _ = Building.objects.get_or_create(owner=owner, building_type="gold_collector",
+                                             defaults={"level": 1})
+    if mine.level < 1:
+        mine.level = 1
+        mine.save(update_fields=["level"])
+    CreatureAssignment.objects.filter(creature=strong).delete()
+    CreatureAssignment.objects.create(building=mine, creature=strong)
+    chosen = group_fight_defender(owner, attacker, 20)
+    assert chosen.id == strong.id, f"busy defense mythic must still fight, got {chosen and chosen.name}"
+
+    # same with a second strong in the cave while a weak one is the only free defender
+    from bio_lab.models import BreedingJob
+    strong2 = Creature.objects.create(owner=owner, name="قوی۲", element="fire", rarity="mythic",
+                                      is_active=False, base_atk=790, base_hp=790)
+    mate = Creature.objects.create(owner=owner, name="جفت", element="fire", rarity="common",
+                                   is_active=False, base_atk=10, base_hp=50)
+    BreedingJob.objects.filter(owner=owner).delete()
+    BreedingJob.objects.create(owner=owner, parent_a=strong2, parent_b=mate,
+                               finishes_at=timezone.now() + timezone.timedelta(hours=6))
+    DefenseTeam.objects.filter(owner=owner).update(slot1=strong, slot2=strong2)
+    chosen = group_fight_defender(owner, attacker, 20)
+    assert chosen.id in (strong.id, strong2.id), f"mine+cave sandbag got {chosen and chosen.name}"
 
 
 def main():

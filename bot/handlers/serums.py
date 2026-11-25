@@ -50,9 +50,8 @@ def moment_lines(m: dict | None) -> list[str]:
         return []
     icon = _ICON[m["kind"]]
     if m["on"]:
-        tail = "تا آخر ضربه‌های این غول فعاله." if m.get("spent") else "اگه نخوای، با دکمه‌ی سرم برش گردون توی قفسه."
         return [f"{icon} <b>سرم {m['label']} انتخاب شد</b> (سطح {m['level']})",
-                f"<i>{m['effect']} · {tail}</i>"]
+                f"<i>{m['effect']} · اگه نخوای، با دکمه‌ی سرم برش گردون توی قفسه.</i>"]
     return [f"{icon} سرم {m['label']} داری: <code>{m['stock']}</code> عدد (سطح {m['level']})",
             f"<i>{m['effect']} · فقط اگه خودت انتخابش کنی خرج می‌شه.</i>"]
 

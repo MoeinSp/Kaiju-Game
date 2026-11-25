@@ -87,6 +87,14 @@ def _alliance_dict(user, al: Alliance) -> dict:
             "my_participants": view["my_participants"], "foe_participants": view["foe_participants"],
             "contributors": [{"name": _text(c["name"]), "power": c["power"], "me": c["user_id"] == user.id}
                              for c in view["contributors"]],
+            "roster": {
+                "total": view["roster"]["total"],
+                "missing": view["roster"]["missing"],
+                "participants": [{"name": _text(r["name"]), "power": r["power"], "me": r["user_id"] == user.id}
+                                 for r in view["roster"]["participants"]],
+                "non_participants": [{"name": _text(r["name"]), "power": r["power"], "me": r["user_id"] == user.id}
+                                     for r in view["roster"]["non_participants"]],
+            },
         }
     boss = get_active_boss(al.id)
     others = len(members) - 1
@@ -121,6 +129,8 @@ def _alliance_dict(user, al: Alliance) -> dict:
         "flag": al.flag or None,
         "flag_img": _flag_img(al),
         "can_edit_flag": alliance_mod._is_manager(user, al),
+        "can_rename": al.leader_id == user.id,   # leader-only, like the bot's button
+        "rename_cost": alliance_mod.ALLIANCE_RENAME_COST,
         # what leaving does (same cases as the bot's confirm screen)
         "leave": {
             "last_member": others <= 0,
@@ -229,6 +239,30 @@ def alliance_leave(request, user, data):
 
     leave_alliance(user)
     return {"left": True}
+
+
+@endpoint("POST")
+def alliance_rename(request, user, data):
+    """«تغییر اسم اتحاد» — the bot's alliance_rename_start / _alliance_rename_check_sync
+    rules; the same game.alliance.rename_alliance charges the diamonds.
+
+    {name, dry: true} only validates and returns the cleaned name + the price (the confirm
+    sheet); {name, cost} performs it (`cost` = the price the player confirmed)."""
+    from game.alliance import ALLIANCE_RENAME_COST, rename_alliance
+
+    raw = data.get("name")
+    if not isinstance(raw, str):
+        raise GameError("اسم جدید رو بفرست.")
+    dry = data.get("dry") is True
+    if dry:
+        result = rename_alliance(user, raw, dry=True)
+        return {"dry": True, "name": result["new_name"], "old_name": result["old_name"],
+                "cost": result["cost"], "diamonds": user.diamonds}
+    if "cost" in data and data.get("cost") != ALLIANCE_RENAME_COST:
+        raise GameError("هزینه‌ی تغییر اسم عوض شده؛ دوباره امتحان کن.")
+    result = rename_alliance(user, raw)
+    return {"dry": False, "name": result["new_name"], "old_name": result["old_name"],
+            "cost": result["cost"], "diamonds": user.diamonds}
 
 
 # ── alliance rankings ─────────────────────────────────────────────────────────
@@ -494,6 +528,7 @@ routes = [
     ("alliance/flag/preview/", alliance_flag_preview),
     ("alliance/flag/", alliance_flag_save),
     ("alliance/deposit/", alliance_deposit),
+    ("alliance/rename/", alliance_rename),
     ("alliance/leave/", alliance_leave),
     ("alliance/war/preview/", alliance_war_preview),
     ("alliance/war/rally/", alliance_war_rally),

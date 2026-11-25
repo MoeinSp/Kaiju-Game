@@ -195,7 +195,14 @@ def _pick_defender(owner: User, attacker_creature: Creature | None, attacker_pow
 
 def group_fight_defender(owner: User, attacker_creature: Creature | None, attacker_power: int | None) -> Creature | None:
     """Group «اتک» defender. A defense team weaker than 80% of the account's two strongest
-    creatures does not fight: the better of those two does, and nobody is unassigned."""
+    creatures does not fight: the better of those two does, and nobody is unassigned
+    (they still fight even if they are in a mine / cave / dispatch).
+
+    The 80% check uses only members that can actually show up. Counting a busy mythic on
+    the roster inflated the sum, then `pick_defender` skipped it, so a weak active fought
+    and fake accounts farmed group gold (player reports, 2026-11-25)."""
+    from game.workers import busy_creature_ids
+
     creatures = list(Creature.objects.filter(owner=owner))
     if not creatures:
         return None
@@ -205,8 +212,9 @@ def group_fight_defender(owner: User, attacker_creature: Creature | None, attack
     top_sum = sum(powers[c.id] for c in top)
     ids = member_ids(owner)
     by_id = {c.id: c for c in creatures}
+    busy = busy_creature_ids(owner)   # mine + cave + dispatch (active is never in here)
     if ids:
-        team = [by_id[i] for i in ids if i in by_id]
+        team = [by_id[i] for i in ids if i in by_id and i not in busy]
     else:
         team = [c for c in creatures if c.is_active][:1]
     team_sum = sum(powers[c.id] for c in team)
