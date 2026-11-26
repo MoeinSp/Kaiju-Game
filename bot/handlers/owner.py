@@ -3704,8 +3704,8 @@ def _autogift_view() -> tuple[str, InlineKeyboardMarkup]:
     lines = [
         f"{get_emoji('gift')} <b>شارژ همگانی خودکار</b>",
         "━━━━━━━━━━━━━━━━━━━━",
-        "<blockquote>هر چند روز یک‌بار، به <b>همه‌ی کاربران</b> خودکار طلا و دی‌ان‌ای داده می‌شه و به بازیکن‌های "
-        "فعالِ ۷ روز اخیر یه پیام کوتاه می‌ره.</blockquote>",
+        "<blockquote>هر چند روز یک‌بار، به <b>همه‌ی کاربران</b> خودکار طلا و دی‌ان‌ای داده می‌شه "
+        "و به همه (با اعلان روشن و غیرمسدود) یه پیام کوتاه می‌ره.</blockquote>",
         f"وضعیت: <b>{'روشن ✅' if cfg.enabled else 'خاموش ❌'}</b>",
         f"⏱ هر <b>{cfg.interval_days}</b> روز",
         f"{get_emoji('coin')} طلا: <code>{cfg.coins:,}</code> · {get_emoji('dna')} دی‌ان‌ای: <code>{cfg.dna:,}</code>"
@@ -3858,14 +3858,248 @@ async def autogift_set_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
 
 
-async def gift_all_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    context.user_data[AWAITING_ADMIN_KEY] = {"action": "gift_all"}
-    await update.effective_message.reply_text(
+_GIFT_COIN_AMOUNTS = (1_000, 5_000, 10_000, 50_000, 100_000)
+_GIFT_DNA_AMOUNTS = (100, 500, 1_000, 5_000, 10_000)
+_GIFT_DIAMOND_AMOUNTS = (10, 50, 100, 250, 500)
+_GIFT_COMBO_PRESETS = (
+    (10_000, 100, 0),
+    (20_000, 200, 10),
+    (50_000, 500, 25),
+)
+
+
+def _gift_all_draft(context) -> dict:
+    return context.user_data.setdefault("gift_all_draft", {
+        "coins": 0, "dna": 0, "diamonds": 0, "note": "", "notify": True,
+    })
+
+
+def _gift_amount_label(coins: int, dna: int, diamonds: int) -> str:
+    parts = []
+    if coins:
+        parts.append(f"{coins:,} طلا")
+    if dna:
+        parts.append(f"{dna:,} DNA")
+    if diamonds:
+        parts.append(f"{diamonds:,} الماس")
+    return " + ".join(parts) or "بدون مقدار"
+
+
+def _gift_all_home_text(draft: dict) -> str:
+    return (
         f"{get_emoji('gift')} <b>هدیه به همه‌ی کاربران</b>\n"
-        "سه عدد با فاصله بفرست: <code>طلا دی‌ان‌ای الماس</code>\n"
-        "مثلاً <code>1000 50 10</code> (هرکدوم رو نخواستی، صفر بذار).",
-        parse_mode="HTML",
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"الان: <b>{_gift_amount_label(int(draft['coins']), int(draft['dna']), int(draft['diamonds']))}</b>\n"
+        "برای هر منبع یه دکمه بزن (جایگزین می‌شه)، یا «فور» برای تایپ دستی.\n"
+        "بعد «ادامه» تا صفحه‌ی تأیید و متن اعلان."
     )
+
+
+def _gift_all_home_kb(draft: dict) -> InlineKeyboardMarkup:
+    rows = []
+    rows.append([btn(
+        f"🪙 طلا: {int(draft['coins']):,}" if draft["coins"] else "🪙 طلا: —",
+        style=NAV, callback_data="gift_all:noop",
+    )])
+    rows.append([
+        btn(f"{n:,}", style=ADMIN, callback_data=f"gift_all:set:coins:{n}")
+        for n in _GIFT_COIN_AMOUNTS[:3]
+    ])
+    rows.append([
+        btn(f"{n:,}", style=ADMIN, callback_data=f"gift_all:set:coins:{n}")
+        for n in _GIFT_COIN_AMOUNTS[3:]
+    ] + [btn("۰", style=DANGER, callback_data="gift_all:set:coins:0")])
+    rows.append([btn(
+        f"🧬 DNA: {int(draft['dna']):,}" if draft["dna"] else "🧬 DNA: —",
+        style=NAV, callback_data="gift_all:noop",
+    )])
+    rows.append([
+        btn(f"{n:,}", style=ADMIN, callback_data=f"gift_all:set:dna:{n}")
+        for n in _GIFT_DNA_AMOUNTS[:3]
+    ])
+    rows.append([
+        btn(f"{n:,}", style=ADMIN, callback_data=f"gift_all:set:dna:{n}")
+        for n in _GIFT_DNA_AMOUNTS[3:]
+    ] + [btn("۰", style=DANGER, callback_data="gift_all:set:dna:0")])
+    rows.append([btn(
+        f"💎 الماس: {int(draft['diamonds']):,}" if draft["diamonds"] else "💎 الماس: —",
+        style=NAV, callback_data="gift_all:noop",
+    )])
+    rows.append([
+        btn(f"{n:,}", style=ADMIN, callback_data=f"gift_all:set:diamonds:{n}")
+        for n in _GIFT_DIAMOND_AMOUNTS[:3]
+    ])
+    rows.append([
+        btn(f"{n:,}", style=ADMIN, callback_data=f"gift_all:set:diamonds:{n}")
+        for n in _GIFT_DIAMOND_AMOUNTS[3:]
+    ] + [btn("۰", style=DANGER, callback_data="gift_all:set:diamonds:0")])
+    rows.append([btn("پک‌های آماده", style=NAV, callback_data="gift_all:noop")])
+    for coins, dna, diamonds in _GIFT_COMBO_PRESETS:
+        rows.append([btn(
+            _gift_amount_label(coins, dna, diamonds),
+            emoji_key="btn_gift", style=ADMIN,
+            callback_data=f"gift_all:amt:{coins}:{dna}:{diamonds}",
+        )])
+    rows.append([
+        btn("فور / تایپ دستی", emoji_key="btn_custom_amt", style=PRIMARY, callback_data="gift_all:custom"),
+        btn("ادامه ← تأیید", emoji_key="btn_confirm", style=CONFIRM, callback_data="gift_all:confirm"),
+    ])
+    rows.append([back_btn("admin_menu:admin_home", "بازگشت")])
+    return InlineKeyboardMarkup(rows)
+
+
+def _gift_all_confirm_text(draft: dict) -> str:
+    coins, dna, diamonds = int(draft["coins"]), int(draft["dna"]), int(draft["diamonds"])
+    note = (draft.get("note") or "").strip()
+    notify = bool(draft.get("notify", True))
+    lines = [
+        f"{get_emoji('gift')} <b>تأیید هدیه همگانی</b>",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"مقدار: <b>{_gift_amount_label(coins, dna, diamonds)}</b>",
+        f"اعلان به بازیکن‌ها: <b>{'بله ✅' if notify else 'نه (فقط شارژ)'}</b>",
+    ]
+    if note:
+        lines.append(f"متن اضافه:\n<blockquote>{html.escape(note)}</blockquote>")
+    lines.append("<i>به همه‌ی کاربران اضافه می‌شه. برگشت‌پذیر نیست.</i>")
+    return "\n".join(lines)
+
+
+def _gift_all_confirm_kb(draft: dict) -> InlineKeyboardMarkup:
+    notify = bool(draft.get("notify", True))
+    return InlineKeyboardMarkup([
+        [btn(
+            "اعلان: روشن" if notify else "اعلان: خاموش",
+            emoji_key="btn_settings", style=ADMIN if notify else NAV,
+            callback_data="gift_all:toggle_notify",
+        )],
+        [btn("متن اضافه / مناسبت", emoji_key="btn_broadcast", style=NAV, callback_data="gift_all:note")],
+        [btn("تأیید و اجرا", emoji_key="btn_confirm", style=CONFIRM, callback_data="gift_all:go")],
+        [btn("عوض کردن مقدار", emoji_key="btn_back", style=NAV, callback_data="gift_all:home")],
+        [back_btn("admin_menu:admin_home", "لغو")],
+    ])
+
+
+async def gift_all_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not _is_admin(update):
+        return
+    context.user_data.pop(AWAITING_ADMIN_KEY, None)
+    context.user_data.pop("gift_all_draft", None)
+    text = (
+        f"{get_emoji('gift')} <b>هدیه به همه‌ی کاربران</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "یه مقدار آماده انتخاب کن، یا مقدار دلخواه بفرست.\n"
+        "بعدش تأیید می‌کنی و اگه بخوای به همه پیام هم می‌ره."
+    )
+    kb = _gift_all_home_kb()
+    if update.callback_query:
+        await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=kb)
+    else:
+        await update.effective_message.reply_text(text, parse_mode="HTML", reply_markup=kb)
+
+
+async def gift_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Wizard: amount presets → confirm (notify / note) → credit + optional DM blast."""
+    query = update.callback_query
+    if not _is_admin(update):
+        await query.answer()
+        return
+    parts = query.data.split(":")
+    action = parts[1] if len(parts) > 1 else "home"
+
+    if action == "home":
+        await query.answer()
+        await gift_all_start(update, context)
+        return
+
+    if action == "custom":
+        await query.answer()
+        context.user_data[AWAITING_ADMIN_KEY] = {"action": "gift_all"}
+        await query.message.reply_text(
+            f"{get_emoji('gift')} سه عدد با فاصله بفرست: <code>طلا دی‌ان‌ای الماس</code>\n"
+            "مثلاً <code>1000 50 10</code> (هرکدوم رو نخواستی، صفر بذار).",
+            parse_mode="HTML",
+        )
+        return
+
+    if action == "amt" and len(parts) == 5:
+        await query.answer()
+        draft = _gift_all_draft(context)
+        draft["coins"], draft["dna"], draft["diamonds"] = int(parts[2]), int(parts[3]), int(parts[4])
+        await safe_edit_message_text(
+            query, _gift_all_confirm_text(draft), parse_mode="HTML",
+            reply_markup=_gift_all_confirm_kb(draft),
+        )
+        return
+
+    if action == "toggle_notify":
+        await query.answer()
+        draft = _gift_all_draft(context)
+        draft["notify"] = not bool(draft.get("notify", True))
+        await safe_edit_message_text(
+            query, _gift_all_confirm_text(draft), parse_mode="HTML",
+            reply_markup=_gift_all_confirm_kb(draft),
+        )
+        return
+
+    if action == "note":
+        await query.answer()
+        context.user_data[AWAITING_ADMIN_KEY] = {"action": "gift_all_note"}
+        await query.message.reply_text(
+            "متن مناسبت / توضیح رو بفرست (مثلاً «هدیه‌ی بلک فرایدی»).\n"
+            "یا <code>-</code> بفرست تا پاک بشه.",
+            parse_mode="HTML",
+        )
+        return
+
+    if action == "go":
+        draft = _gift_all_draft(context)
+        coins, dna, diamonds = int(draft["coins"]), int(draft["dna"]), int(draft["diamonds"])
+        note = (draft.get("note") or "").strip()
+        notify = bool(draft.get("notify", True))
+        if coins <= 0 and dna <= 0 and diamonds <= 0:
+            await query.answer("اول یه مقدار انتخاب کن.", show_alert=True)
+            return
+        await query.answer()
+        try:
+            affected = await run_db(gift_all, coins, dna, diamonds)
+        except GameError as exc:
+            await query.message.reply_text(alert_text(exc, 3500))
+            return
+        context.user_data.pop("gift_all_draft", None)
+        summary = (
+            f"🎁 به <b>{affected:,}</b> کاربر شارژ شد:\n"
+            f"<b>{_gift_amount_label(coins, dna, diamonds)}</b>"
+        )
+        if not notify:
+            await safe_edit_message_text(
+                query, summary + "\n\n<i>بدون اعلان (فقط شارژ).</i>",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([[back_btn("admin_menu:admin_home", "بازگشت")]]),
+            )
+            return
+        from game import autogift
+
+        body = await run_db(autogift.gift_message, coins, dna, diamonds, note)
+        recipients = await run_db(autogift.recipient_ids)
+        await safe_edit_message_text(
+            query,
+            summary + f"\n\n⏳ در حال ارسال اعلان به <code>{len(recipients):,}</code> نفر…",
+            parse_mode="HTML",
+        )
+        counts = {"sent": 0, "blocked": 0, "failed": 0}
+        for uid in recipients:
+            counts[await _broadcast_one(
+                lambda uid=uid: context.bot.send_message(chat_id=uid, text=body, parse_mode="HTML")
+            )] += 1
+            await asyncio.sleep(BROADCAST_DELAY_SECONDS)
+        await query.message.reply_text(
+            summary + "\n\n" + _broadcast_summary(counts),
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[back_btn("admin_menu:admin_home", "بازگشت")]]),
+        )
+        return
+
+    await query.answer()
 
 
 _STAT_ACTION_LABELS = {
@@ -5338,22 +5572,31 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     if action == "gift_all":
-        parts = text.split()
+        parts = text.translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789")).replace(",", "").split()
         if len(parts) != 3 or not all(p.lstrip("-").isdigit() for p in parts):
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
             await message.reply_text(f"{get_emoji('warning')} سه عدد با فاصله بفرست، مثلاً: <code>1000 50 10</code>", parse_mode="HTML")
             return
         coins, dna, diamonds = (int(p) for p in parts)
-        try:
-            affected = await run_db(gift_all, coins, dna, diamonds)
-        except GameError as exc:
+        if coins <= 0 and dna <= 0 and diamonds <= 0:
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text(alert_text(exc, 3500))
+            await message.reply_text(f"{get_emoji('warning')} حداقل یکی از مقدارها باید مثبت باشه.", parse_mode="HTML")
             return
+        draft = _gift_all_draft(context)
+        draft["coins"], draft["dna"], draft["diamonds"] = coins, dna, diamonds
         await message.reply_text(
-            f"🎁 به <b>{affected}</b> کاربر هدیه داده شد: "
-            f"{coins} طلا + {dna} دی‌ان‌ای + {diamonds} الماس.",
-            parse_mode="HTML",
+            _gift_all_confirm_text(draft), parse_mode="HTML",
+            reply_markup=_gift_all_confirm_kb(draft),
+        )
+        return
+
+    if action == "gift_all_note":
+        draft = _gift_all_draft(context)
+        note = "" if text.strip() in ("-", "—", "بدون", "خالی") else text.strip()
+        draft["note"] = note[:500]
+        await message.reply_text(
+            _gift_all_confirm_text(draft), parse_mode="HTML",
+            reply_markup=_gift_all_confirm_kb(draft),
         )
         return
 
@@ -6376,6 +6619,7 @@ def register(application) -> None:
     application.add_handler(
         CallbackQueryHandler(reset_user_confirm_callback, pattern=r"^admin_reset_(do|cancel):")
     )
+    application.add_handler(CallbackQueryHandler(gift_all_callback, pattern=r"^gift_all:"))
     application.add_handler(CallbackQueryHandler(admin_menu_callback, pattern=r"^admin_menu:"))
     application.add_handler(CallbackQueryHandler(global_stats_cmd, pattern=r"^adm_stats:\d{4}-\d{2}-\d{2}$"))
     from bot.handlers import admin_stats as _admin_stats

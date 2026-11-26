@@ -70,14 +70,16 @@
           '<span class="st-price">' + toman(price) + "</span></button>";
       }
       function dealCard(o, kick) {
-        var sold = o.sold_out;
+        var sold = o.sold_out, bought = o.purchased, waiting = o.waiting;
+        var status = bought ? "خریداری شده ✅" : (waiting ? "در انتظار تأیید ⏳" : (sold ? "سقف این دوره پر شد" : null));
         return '<button class="st-offer' + (sold ? " out" : "") + '" data-act="deal" data-id="' + o.id + '"' + (sold ? " disabled" : "") + ">" +
           '<img src="' + K.asset(o.art) + '" alt="">' +
-          (o.discount ? '<span class="st-ribbon">-' + K.n(o.discount) + "٪</span>" : "") +
+          (bought ? '<span class="st-ribbon">✅</span>' : (o.discount ? '<span class="st-ribbon">-' + K.n(o.discount) + "٪</span>" : "")) +
           '<span class="st-obody"><small class="of-kick">' + K.ic("flame") + K.esc(kick) + "</small>" +
           "<b>" + K.esc(o.title) + '</b><span class="sm muted cut">' + K.esc(o.gets || "") + "</span>" +
           (o.ends_in != null ? '<span class="st-otime">' + K.ic("clock") + '<span class="num" data-oend="' + (Date.now() + o.ends_in * 1000) + '"></span></span>' : "") +
-          (o.left != null ? '<span class="sm muted">' + (sold ? "سقف این دوره پر شد" : "باقی‌مونده: " + K.n(o.left)) + "</span>" : "") +
+          (status ? '<span class="sm muted">' + status + "</span>" :
+            (o.left != null ? '<span class="sm muted">باقی‌مونده: ' + K.n(o.left) + "</span>" : "")) +
           '<span class="st-oprice">' + (o.discount ? '<s class="muted">' + K.n(o.original) + "</s> " : "") + toman(o.price) +
           "</span></span></button>";
       }
@@ -225,7 +227,10 @@
         K.on(root, "deal", function (el) {
           var all = [].concat((d.deals && d.deals.weekly) || [], (d.deals && d.deals.daily) || []);
           var o = all.filter(function (x) { return String(x.id) === el.dataset.id; })[0];
-          if (!o || o.sold_out) return;
+          if (!o || o.sold_out || o.purchased) {
+            if (o && o.purchased) K.toast("این افر رو قبلاً خریدی ✅", "ok");
+            return;
+          }
           order({ kind: "item", id: o.id }, el, o.title + " · " + pn(o.price) + " تومان");
         });
         K.on(root, "offer", function (el) {

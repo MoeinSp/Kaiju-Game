@@ -2,7 +2,8 @@
 
 The admin sets an interval in days and an amount of gold / دی‌ان‌ای (/ diamonds) in the panel;
 tick() (called from the 5-minute notification job) pays everyone when the interval has
-passed, exactly once per period, and returns a short DM for the recently-active players.
+passed, exactly once per period, and queues a DM for every non-banned player with
+notifications still on (gift marker bypasses the daily broadcast cap).
 
 It reuses game.moderation.gift_all, so it is the same single UPDATE as the manual
 «هدیه به همه» button — every user row, banned or not, active or not.
@@ -19,7 +20,6 @@ from game.creature import GameError
 from game.emoji import get_emoji
 
 MAX_INTERVAL_DAYS = 60
-ANNOUNCE_ACTIVE_DAYS = 7
 SEND_HOURS = (10, 22)  # a due gift waits for these local hours, so nobody is DM'd at night
 
 
@@ -82,16 +82,34 @@ def tick() -> list[tuple]:
     cfg.runs += 1
     cfg.save(update_fields=["last_at", "runs"])
 
-    parts = []
-    if cfg.coins:
-        parts.append(f"{get_emoji('coin')} <code>+{cfg.coins:,}</code> طلا")
-    if cfg.dna:
-        parts.append(f"{get_emoji('dna')} <code>+{cfg.dna:,}</code> دی‌ان‌ای")
-    if cfg.diamonds:
-        parts.append(f"{get_emoji('diamond')} <code>+{cfg.diamonds:,}</code> الماس")
-    text = "🎁 <b>شارژ همگانی!</b>\n" + " ┃ ".join(parts) + "\n<i>به حسابت اضافه شد.</i>"
-    since = now - datetime.timedelta(days=ANNOUNCE_ACTIVE_DAYS)
+    text = gift_message(cfg.coins, cfg.dna, cfg.diamonds)
+    # Credit hits every row; DM everyone who can still receive bot messages and
+    # didn't mute reminders — not only the last-7-days active slice (that left
+    # most players thinking the gift never happened).
     recipients = User.objects.filter(
-        notifications_on=True, is_banned=False, energy_updated_at__gte=since
+        notifications_on=True, is_banned=False,
     ).values_list("id", flat=True)
     return [(uid, text, "gift") for uid in recipients]
+
+
+def gift_message(coins: int, dna: int, diamonds: int, note: str = "") -> str:
+    """Player-facing DM body for a mass gift (auto or manual)."""
+    parts = []
+    if coins:
+        parts.append(f"{get_emoji('coin')} <code>+{int(coins):,}</code> طلا")
+    if dna:
+        parts.append(f"{get_emoji('dna')} <code>+{int(dna):,}</code> دی‌ان‌ای")
+    if diamonds:
+        parts.append(f"{get_emoji('diamond')} <code>+{int(diamonds):,}</code> الماس")
+    lines = ["🎁 <b>شارژ همگانی!</b>", " ┃ ".join(parts), "<i>به حسابت اضافه شد.</i>"]
+    note = (note or "").strip()
+    if note:
+        lines.append(f"\n{note}")
+    return "\n".join(lines)
+
+
+def recipient_ids() -> list[int]:
+    """Who gets the gift DM (same filter as tick)."""
+    return list(
+        User.objects.filter(notifications_on=True, is_banned=False).values_list("id", flat=True)
+    )

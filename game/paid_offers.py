@@ -40,6 +40,16 @@ def period_key(cadence: str) -> str:
     raise ValueError(cadence)
 
 
+def period_start(cadence: str):
+    """Aware Tehran datetime when the current daily/weekly period began."""
+    now = timezone.localtime()
+    if cadence == CADENCE_DAILY:
+        return timezone.make_aware(datetime.combine(now.date(), time.min))
+    # ISO week starts Monday 00:00 Tehran
+    monday = now.date() - timedelta(days=now.weekday())
+    return timezone.make_aware(datetime.combine(monday, time.min))
+
+
 def seconds_left(cadence: str) -> int:
     """Seconds until the current Tehran day / week rolls over."""
     now = timezone.localtime()
@@ -92,10 +102,37 @@ def _bought_this_period(user: User, item: ShopItem) -> int:
     return int(row.count) if row else 0
 
 
+def _pending_review(user: User, item: ShopItem) -> int:
+    """Receipts under admin review that still count against THIS period's cap.
+
+    ``awaiting_receipt`` drafts do **not** — create_*_pending replaces them, and
+    counting them locked players out after opening the receipt screen.
+    Older pending rows from a previous day/week also must not block repurchase.
+    """
+    qs = PurchaseRequest.objects.filter(user=user, shop_item=item, status="pending")
+    cadence = (item.offer_cadence or "").strip()
+    if cadence in CADENCES:
+        qs = qs.filter(created_at__gte=period_start(cadence))
+    return qs.count()
+
+
 def _waiting(user: User, item: ShopItem) -> int:
-    return PurchaseRequest.objects.filter(
-        user=user, shop_item=item, status__in=("awaiting_receipt", "pending"),
-    ).count()
+    """Back-compat alias used by UI («در انتظار تأیید» = under review only)."""
+    return _pending_review(user, item)
+
+
+def cleanup_stale_awaiting(user: User) -> int:
+    """Drop abandoned «awaiting receipt» drafts from a previous cadence period."""
+    n = 0
+    for cadence in CADENCES:
+        deleted, _ = PurchaseRequest.objects.filter(
+            user=user,
+            status="awaiting_receipt",
+            shop_item__offer_cadence=cadence,
+            created_at__lt=period_start(cadence),
+        ).delete()
+        n += deleted
+    return n
 
 
 def _deal_dict(user: User, item: ShopItem) -> dict:
@@ -107,8 +144,9 @@ def _deal_dict(user: User, item: ShopItem) -> dict:
         contents = []
     limit = int(item.offer_period_limit or 1)
     bought = _bought_this_period(user, item)
-    waiting = _waiting(user, item)
+    waiting = _pending_review(user, item)
     left = max(0, limit - bought - waiting) if limit else None
+    purchased = bool(limit and bought >= limit)
     from game import globalsale
 
     # list_for_user warms the cache once; per-deal view then reads it.
@@ -130,8 +168,10 @@ def _deal_dict(user: User, item: ShopItem) -> dict:
         "ends_in": seconds_left(item.offer_cadence),
         "limit": limit,
         "bought": bought,
+        "waiting": waiting,
         "left": left,
         "art": f"img/{item.offer_art or 'hub_shop'}.jpg",
+        "purchased": purchased,
         "sold_out": left == 0,
     }
 
@@ -140,6 +180,7 @@ def list_for_user(user: User) -> dict:
     """``{"daily": [...], "weekly": [...]}`` for the buy store."""
     from game import globalsale
 
+    cleanup_stale_awaiting(user)
     globalsale.active_sync()
     return {
         CADENCE_DAILY: [_deal_dict(user, it) for it in live_items(CADENCE_DAILY)],
@@ -160,7 +201,10 @@ def assert_buyable(user: User, item: ShopItem) -> None:
     if not limit:
         return
     bought = _bought_this_period(user, item)
-    waiting = _waiting(user, item)
+    waiting = _pending_review(user, item)
+    if bought >= limit:
+        unit = "امروز" if cadence == CADENCE_DAILY else "این هفته"
+        raise GameError(f"این افر رو {unit} قبلاً خریدی ✅ — بعد از ریست دوباره میاد.")
     if bought + waiting >= limit:
         unit = "امروز" if cadence == CADENCE_DAILY else "این هفته"
         raise GameError(
@@ -170,12 +214,16 @@ def assert_buyable(user: User, item: ShopItem) -> None:
 
 
 @transaction.atomic
-def record_purchase(user: User, item: ShopItem) -> None:
-    """Bump the period claim after a receipt is approved."""
+def record_purchase(user: User, item: ShopItem, period_key_override: str | None = None) -> None:
+    """Bump the period claim after a receipt is approved.
+
+    ``period_key_override`` freezes the Tehran day/week from order time so a
+    receipt approved the next day still counts against the period of the buy.
+    """
     cadence = (item.offer_cadence or "").strip()
     if cadence not in CADENCES:
         return
-    pk = period_key(cadence)
+    pk = (period_key_override or "").strip() or period_key(cadence)
     row, _ = PaidOfferClaim.objects.select_for_update().get_or_create(
         user=user, item=item, period_key=pk, defaults={"count": 0},
     )

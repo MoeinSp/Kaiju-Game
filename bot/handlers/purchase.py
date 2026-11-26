@@ -133,15 +133,27 @@ def _store_screen(packs: list[dict], custom_ok: bool, deals: dict | None = None)
         lines.append("")
         for d in bucket:
             badge = f"  🔥 {d['discount']}٪" if d["discount"] else ""
-            sold = " — ❌ سقف پر" if d.get("sold_out") else ""
-            lines.append(f"{d['emoji']} <b>{html.escape(d['title'])}</b>{badge}{sold}")
+            if d.get("purchased"):
+                status = " — ✅ خریداری شده"
+            elif d.get("waiting"):
+                status = " — ⏳ در انتظار تأیید"
+            elif d.get("sold_out"):
+                status = " — ❌ سقف پر"
+            else:
+                status = ""
+            lines.append(f"{d['emoji']} <b>{html.escape(d['title'])}</b>{badge}{status}")
             lines.append(f"┘ {html.escape(d['gets'])}")
             if d["discount"]:
                 lines.append(f"┘ <s>{d['original']:,}</s> ← <b>{d['price']:,} تومان</b>")
             else:
                 lines.append(f"┘ <b>{d['price']:,} تومان</b>")
             lines.append("")
-            if not d.get("sold_out"):
+            if d.get("purchased"):
+                rows.append([btn(
+                    f"✅ خریداری شده · {d['emoji']} {d['title']}"[:64],
+                    emoji_key="btn_shop", style=NAV, callback_data=f"buy_deal_done:{d['id']}",
+                )])
+            elif not d.get("sold_out"):
                 label = f"{CADENCE_EMOJI[cadence]} {d['emoji']} {d['title']}"
                 if d["discount"]:
                     label = f"🔥{d['discount']}% · {d['emoji']} {d['title']}"
@@ -251,6 +263,13 @@ async def buy_deal_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await query.answer()
     text, kb = _receipt_screen(req)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+
+
+async def buy_deal_done_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Tapping an already-bought cadence deal — friendly status, no new order."""
+    await update.callback_query.answer(
+        "این افر رو قبلاً خریدی ✅ — بعد از ریست دوباره میاد.", show_alert=True,
+    )
 
 
 def _pack_detail_screen(p: dict) -> tuple[str, InlineKeyboardMarkup]:
@@ -857,6 +876,7 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(buy_pack_detail_callback, pattern=r"^buy_pack:\d+$"))
     application.add_handler(CallbackQueryHandler(buy_pack_go_callback, pattern=r"^buy_pack_go:\d+$"))
     application.add_handler(CallbackQueryHandler(buy_deal_callback, pattern=r"^buy_deal:\d+$"))
+    application.add_handler(CallbackQueryHandler(buy_deal_done_callback, pattern=r"^buy_deal_done:\d+$"))
     application.add_handler(CallbackQueryHandler(buy_noop_callback, pattern=r"^buy_noop$"))
     application.add_handler(CallbackQueryHandler(buy_adjust_callback, pattern=r"^buy_adj:(coins|dna|diamonds):[+-]$"))
     application.add_handler(CallbackQueryHandler(buy_custom_callback, pattern=r"^buy_custom:(coins|dna|diamonds)$"))

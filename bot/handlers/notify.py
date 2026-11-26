@@ -323,8 +323,10 @@ _MARKER_CATEGORY = {
     "timer": "timers", "cave": "timers", "buildings": "timers", "dispatch": "timers",
     "arena": "timers", "arena_chest_ready": "timers", "serum_ready": "timers",
     "worldboss": "events", "tournament": "events", "tournament_prize": "events", "festival": "events", "events": "events",
-    "free_box_reminder": "reminders", "missions": "reminders", "nudge": "reminders", "gift": "reminders",
+    "free_box_reminder": "reminders", "missions": "reminders", "nudge": "reminders",
     "newbie": "reminders",
+    # "gift" intentionally omitted — شارژ همگانی must always deliver (not capped /
+    # not muted with reminders); players thought the credit never landed.
 }
 # Broadcast-type DMs (events + reminders) a player gets per day at most. Timers and attack
 # reports answer something the player did, so they are never capped — only merged.
@@ -457,7 +459,7 @@ def _decorate(item) -> dict:
     else:
         reply_markup = _defense_details_button(payload)
     return {"user_id": user_id, "text": text, "markup": reply_markup, "photo": photo_path,
-            "category": _category(marker, payload)}
+            "category": _category(marker, payload), "marker": marker}
 
 
 def _merge(parts: list[dict]) -> dict:

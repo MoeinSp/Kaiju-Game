@@ -264,9 +264,14 @@ def create_item_pending(user: User, item_id: int) -> PurchaseRequest:
     item = ShopItem.objects.filter(id=item_id, is_active=True).first()
     if item is None or not item.price_toman:
         raise GameError("این بسته دیگه در دسترس نیست.")
-    if getattr(item, "offer_cadence", ""):
+    cadence = (getattr(item, "offer_cadence", "") or "").strip()
+    # Replace any previous draft first so a same-period awaiting_receipt cannot
+    # block re-entry into the same deal (assert used to run before this delete).
+    PurchaseRequest.objects.filter(user=user, status="awaiting_receipt").delete()
+    if cadence:
         from game import paid_offers
 
+        paid_offers.cleanup_stale_awaiting(user)
         paid_offers.assert_buyable(user, item)
     elif item.is_offer and item.offer_ends_at and item.offer_ends_at <= timezone.now():
         raise GameError("زمان این پیشنهاد ویژه تموم شده.")
@@ -277,8 +282,11 @@ def create_item_pending(user: User, item_id: int) -> PurchaseRequest:
             raise GameError(f"این بسته رو هر نفر حداکثر {item.max_per_user} بار می‌تونه بخره و تو سقفت رو زدی"
                             + (" (یکی هم در انتظار تأییده)." if waiting else "."))
     sale = globalsale.active_sync()
-    PurchaseRequest.objects.filter(user=user, status="awaiting_receipt").delete()
     snapshot = {"id": item.id, "title": item.title, "contents": json.loads(item.contents_json)}
+    if cadence:
+        from game import paid_offers
+
+        snapshot["period_key"] = paid_offers.period_key(cadence)
     return PurchaseRequest.objects.create(
         user=user, price_toman=globalsale.apply(item.price_toman, sale), status="awaiting_receipt",
         shop_item=item, item_json=json.dumps(snapshot, ensure_ascii=False),
@@ -349,7 +357,9 @@ def approve(req_id: int) -> dict:
             if item is not None and getattr(item, "offer_cadence", ""):
                 from game import paid_offers
 
-                paid_offers.record_purchase(user, item)
+                paid_offers.record_purchase(
+                    user, item, period_key_override=(snap or {}).get("period_key"),
+                )
     user.coins += req.coins
     user.dna_fragments += req.dna
     user.diamonds += req.diamonds
