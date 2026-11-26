@@ -300,12 +300,17 @@
         if (!items.length) return "";
         return '<div class="of-strip' + (items.length > 1 ? " many" : "") + '">' + items.map(function (o) {
           var dia = !!o.price_diamonds, n = o.price_diamonds || o.price_coins, w = dia ? o.was_diamonds : o.was_coins;
+          var sold = o.sold_out || (o.max && (o.bought || 0) >= o.max);
           var cost = o.price_toman ? K.offers.price(o, true)
             : (w > n ? '<s class="num">' + K.n(w) + "</s>" : "") + K.ic(dia ? "diamond" : "coin") + '<span class="num">' + K.n(n) + "</span>";
-          return '<button class="of-scard" data-act="special" data-id="' + o.id + '"><img src="' + K.asset(o.art) + '" alt="">' +
-            (o.discount ? '<span class="of-off num">-' + o.discount + "%</span>" : "") +
+          var endAt = o.ends_in != null ? (Date.now() + Math.max(0, +o.ends_in) * 1000) : null;
+          var h = Math.floor(Math.max(0, +(o.ends_in || 0)) / 3600), m = Math.floor(Math.max(0, +(o.ends_in || 0)) % 3600 / 60);
+          var clockTxt = (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
+          return '<button class="of-scard' + (sold ? " out" : "") + '" data-act="special" data-id="' + o.id + '"' + (sold ? " disabled" : "") + '><img src="' + K.asset(o.art) + '" alt="">' +
+            (sold ? '<span class="of-off num">✅</span>' : (o.discount ? '<span class="of-off num">-' + o.discount + "%</span>" : "")) +
             '<span class="of-sbody"><small class="of-kick">' + K.ic("spark") + "پیشنهاد ویژه</small><b>" + K.esc(o.title) + "</b>" +
-            (o.ends_in != null ? '<span class="of-stime">' + K.ic("clock") + '<span class="num" data-oend="' + (Date.now() + o.ends_in * 1000) + '"></span></span>' : "") +
+            (endAt ? '<span class="of-stime">' + K.ic("clock") + '<span class="num" data-oend="' + endAt + '">' + clockTxt + "</span></span>" : "") +
+            (sold ? '<span class="sm">خریداری شده</span>' : "") +
             '<span class="of-sprice">' + cost + "</span></span></button>";
         }).join("") + "</div>";
       }
@@ -313,14 +318,15 @@
         // a live countdown to the midnight turnover, like the «refresh in» clock of a game shop
         var clock = d.resets_in != null ? '<span class="shs-clock">' + K.ic("clock") + 'آفرهای تازه تا <span class="timer" data-until="' + scr.until(d.resets_in) + '" data-done="الان"></span></span>' : "";
         var html = special(d.special) + banner(d.img, "فروشگاه روزانه", clock || "آفرها هر روز عوض می‌شن");
-        if (d.gem) {
-          var g = d.gem;
-          html += '<div class="h2">' + K.ic("gem") + 'کایجوی الماسی امروز</div><div class="panel pad glow shs-gem' + (g.claimed ? "" : " live") + '">' +
+        function gemCard(g, act) {
+          if (!g) return "";
+          return '<div class="h2">' + K.ic("gem") + K.esc(g.title || "کایجوی الماسی") + '</div><div class="panel pad glow shs-gem' + (g.claimed ? "" : " live") + '">' +
             (g.claimed ? "" : '<span class="shs-ribbon">پیشنهاد امروز</span>') + '<div class="fighter ' + g.rarity + '">' + (g.img ? '<img src="' + g.img + '" alt="">' : "") +
-            '<div class="grow"><div class="nm cut">' + K.esc(g.name) + '</div><div class="shs-tags">' + K.rarTag(g.rarity) + K.elTag(g.element) + '</div><div class="sm muted">هم‌گونه و هم‌رده‌ی یکی از قوی‌ترین هیولاهات؛ روزی یه بار.</div></div></div>' +
+            '<div class="grow"><div class="nm cut">' + K.esc(g.name) + '</div><div class="shs-tags">' + K.rarTag(g.rarity) + K.elTag(g.element) + '</div><div class="sm muted">' + K.esc(g.blurb || "") + '</div></div></div>' +
             (g.claimed ? '<button class="btn block mt" disabled>' + K.ic("check") + "امروز خریدی</button>"
-                       : '<button class="btn primary block mt" data-act="gem"><span>خرید</span><span class="cost">' + K.ic("diamond") + " " + K.n(g.price) + "</span></button>") + "</div>";
+                       : '<button class="btn primary block mt" data-act="' + act + '"><span>خرید</span><span class="cost">' + K.ic("diamond") + " " + K.n(g.price) + "</span></button>") + "</div>";
         }
+        html += gemCard(d.gem, "gem") + gemCard(d.ancient, "ancient");
         var any = false;
         GROUPS.forEach(function (gr) {
           var list = d.offers.filter(function (o) { return o.group === gr[0]; });
@@ -328,7 +334,7 @@
           any = true;
           html += '<div class="h2">' + K.ic(gr[2]) + gr[1] + '</div><div class="shs-grid">' + list.map(offerRow).join("") + "</div>";
         });
-        if (!any && !d.gem) html += K.state("cart", "الان آفری موجود نیست", "بعداً سر بزن.");
+        if (!any && !d.gem && !d.ancient) html += K.empty("cart", "الان آفری موجود نیست", "بعداً سر بزن.");
         return html;
       }
       function packs(d) {
@@ -442,21 +448,24 @@
         var o = (scr.data && scr.data.special || []).filter(function (x) { return x.id === +el.dataset.id; })[0];
         if (o && K.offers) K.offers.open(K.offers.top() && K.offers.top().id === o.id ? K.offers.top() : o);
       });
-      K.on(root, "gem", function (el) {
-        var g = scr.data.gem;
-        K.confirm({ title: "خرید کایجوی الماسی", icon: "gem", ok: "تأیید و خرید",
+      function buyGem(kind, el) {
+        var g = kind === "ancient" ? scr.data.ancient : scr.data.gem;
+        if (!g || g.claimed) return;
+        K.confirm({ title: "خرید " + (g.title || "کایجوی الماسی"), icon: "gem", ok: "تأیید و خرید",
           html: kv([["هیولا", K.esc(g.name) + " (" + K.esc(K.rarLabel(g.rarity)) + ")"], ["قیمت", money("diamonds", g.price)], ["الماس تو", money("diamonds", K.res ? K.res.diamonds : 0)]]) })
           .then(function (yes) {
             if (!yes || busy) return;
             busy = true;
-            K.api.post("shop/store/gem/", {}, el).then(function (r) {
+            K.api.post("shop/store/gem/", { kind: kind }, el).then(function (r) {
               busy = false;
               K.invalidate("profile/creatures/");
               scr.set(r.store);
-              K.reward({ title: "کایجوی الماسی خریده شد", text: "به کلکسیونت اضافه شد؛ می‌تونی فعالش کنی یا برای ادغام استفاده‌ش کنی.", creatures: [r.creature], icon: "gem" });
+              K.reward({ title: (r.title || g.title || "کایجوی الماسی") + " خریده شد", text: "به کلکسیونت اضافه شد؛ می‌تونی فعالش کنی یا برای ادغام استفاده‌ش کنی.", creatures: [r.creature], icon: "gem" });
             }, function () { busy = false; scr.refresh(); });
           });
-      });
+      }
+      K.on(root, "gem", function (el) { buyGem("gem", el); });
+      K.on(root, "ancient", function (el) { buyGem("ancient", el); });
       K.on(root, "pack", function (el) {
         var it = scr.data.items.filter(function (x) { return x.id === +el.dataset.id; })[0]; if (!it) return;
         K.confirm({ title: "خرید بسته‌ی ویژه", icon: "gift", ok: it.price_toman ? "پرداخت" : "تأیید و خرید",

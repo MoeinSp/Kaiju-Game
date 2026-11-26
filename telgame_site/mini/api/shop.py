@@ -232,12 +232,17 @@ def offers_payload(user) -> list[dict]:
         except (ValueError, TypeError):
             contents = []
         art = it.offer_art or ("gold_5" if any(c.get("type") == "coins" for c in contents) else "hub_chests")
+        max_n = it.max_per_user or 0
+        bought_n = int(o["bought"] or 0)
+        left_n = max(0, max_n - bought_n) if max_n else None
         row = {
             "id": it.id, "title": clean(it.title), "gets": _summary(contents),
             "price_coins": it.price_coins, "price_diamonds": it.price_diamonds,
             "price_toman": it.price_toman, "was_toman": o["was_toman"],
             "was_coins": o["was_coins"], "was_diamonds": o["was_diamonds"], "discount": it.offer_discount,
-            "ends_in": o["ends_in"], "max": it.max_per_user or 0, "bought": o["bought"],
+            "ends_in": o["ends_in"], "max": max_n, "bought": bought_n,
+            "left": left_n, "purchased": bool(max_n and bought_n >= max_n),
+            "sold_out": left_n == 0 if left_n is not None else False,
             "art": f"img/{art}.jpg",
         }
         if it.price_toman:
@@ -295,6 +300,9 @@ def _store_payload(user) -> dict:
     gem = gemkaiju.gem_offer(user)
     if gem:
         gem = {**gem, "img": species_img(gem["name"], gem["element"], gem["rarity"])}
+    ancient = gemkaiju.ancient_offer(user)
+    if ancient:
+        ancient = {**ancient, "img": species_img(ancient["name"], ancient["element"], ancient["rarity"])}
 
     gate = hall_state(user, "shield_shop")
     shield = {
@@ -316,7 +324,7 @@ def _store_payload(user) -> dict:
     return {
         "resets_in": max(0, int((midnight - now).total_seconds())),
         "special": offers_payload(user),
-        "offers": offers, "items": items, "gem": gem, "shield": shield,
+        "offers": offers, "items": items, "gem": gem, "ancient": ancient, "shield": shield,
         "gold_packs": [{"idx": i, "gold": p["gold"], "diamonds": p["diamonds"]} for i, p in enumerate(shop.GOLD_PACKS)],
         "img": feature_img("shop"), "img_shield": feature_img("shield_shop"), "img_gold": feature_img("gold_shop"),
         "img_pack": feature_img("item_shop"),
@@ -363,8 +371,13 @@ def store_item(request, user, data):
 def store_gem(request, user, data):
     from game import gemkaiju
 
-    result = gemkaiju.buy_gem_kaiju(user)
+    kind = (data.get("kind") or "gem").strip() if isinstance(data, dict) else "gem"
+    if kind == "ancient":
+        result = gemkaiju.buy_ancient_kaiju(user)
+    else:
+        result = gemkaiju.buy_gem_kaiju(user)
     return {"creature": creature_list(user, [result["creature"]])[0], "price": result["price"],
+            "kind": kind, "title": (result.get("offer") or {}).get("title") or "",
             "store": _store_payload(_fresh(user))}
 
 

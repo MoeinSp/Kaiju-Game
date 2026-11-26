@@ -30,6 +30,8 @@ class User(models.Model):
     diamonds = models.IntegerField(default=100)  # premium currency: diamond collector, daily wheel, diamond boxes
     biocrate_tickets = models.IntegerField(default=0)  # earned by exchanging gear; opens genetic boxes free
     gem_kaiju_claimed_on = models.DateField(null=True, blank=True)  # last day the daily gem-kaiju was bought
+    # crystal/plasma twin of gem_kaiju — separate daily claim so the harder elements get a lane
+    ancient_kaiju_claimed_on = models.DateField(null=True, blank=True)
     # 🧪 XP capsules — a consumable fed to a creature for instant XP. {tier: count},
     # tiers keyed by game.constants.XP_CAPSULES (small/medium/large). Bought in the
     # daily shop; «تغذیه» spends them (feeding no longer costs gold).

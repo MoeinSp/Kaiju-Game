@@ -55,6 +55,8 @@
   var openEl = null;
   K.offers.open = function (o) {
     if (!o || openEl) return;
+    var left = o.max ? Math.max(0, o.max - (o.bought || 0)) : null;
+    var sold = left === 0;
     var el = openEl = document.createElement("div");
     el.className = "of-modal";
     el.innerHTML = '<div class="of-card" role="dialog" aria-modal="true">' +
@@ -63,9 +65,12 @@
       '<button class="of-x" aria-label="بستن">' + K.ic("close") + "</button>" +
       '<div class="of-body"><b class="of-title">' + K.esc(o.title) + '</b><p class="of-gets">' + K.esc(o.gets) + "</p>" +
       (o.endAt ? '<div class="of-time">' + K.ic("clock") + "تموم می‌شه تا " + clock(o) + "</div>" : "") +
-      (o.max ? '<div class="of-lim">فقط ' + K.n(Math.max(0, o.max - o.bought)) + " بار دیگه می‌تونی بخری</div>" : "") +
-      '<button class="of-buy">' + price(o, true) + "</button>" +
-      '<div class="of-hint">برای خرید دوباره بزن</div></div></div>';
+      (sold ? '<div class="of-lim">این پیشنهاد رو قبلاً خریدی ✅</div>' :
+        (o.max ? '<div class="of-lim">فقط ' + K.n(left) + " بار دیگه می‌تونی بخری</div>" : "")) +
+      (sold
+        ? '<button class="of-buy" disabled>خریداری شده</button>'
+        : '<button class="of-buy">' + price(o, true) + "</button>") +
+      (sold ? "" : '<div class="of-hint">برای خرید دوباره بزن</div>') + "</div></div>";
     document.body.appendChild(el);
     requestAnimationFrame(function () { el.classList.add("on"); });
     if (K.sfx) K.sfx("chest");
@@ -74,6 +79,7 @@
     el.querySelector(".of-x").onclick = close;
     el.addEventListener("click", function (ev) { if (ev.target === el && el.classList.contains("late")) close(); });
     var buy = el.querySelector(".of-buy"), armed = 0;
+    if (sold) return;
     buy.onclick = function () {
       // the first tap arms it (the price is right there on the key), the second one buys
       if (!armed || Date.now() - armed > 4000) { armed = Date.now(); el.classList.add("sure"); K.haptic(); return; }

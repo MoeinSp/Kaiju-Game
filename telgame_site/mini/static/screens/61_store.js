@@ -69,16 +69,23 @@
           '<span class="st-name">' + K.esc(name) + "</span>" + amount +
           '<span class="st-price">' + toman(price) + "</span></button>";
       }
+      function fmtLeft(sec) {
+        sec = Math.max(0, Math.round(+sec || 0));
+        var d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+        function p(n) { return (n < 10 ? "0" : "") + n; }
+        return d ? (d + " روز و " + p(h) + ":" + p(m)) : (p(h) + ":" + p(m) + ":" + p(s));
+      }
       function dealCard(o, kick) {
-        var sold = o.sold_out, bought = o.purchased, waiting = o.waiting;
+        var bought = !!o.purchased, waiting = +o.waiting > 0, sold = !!(o.sold_out || bought || waiting);
         var status = bought ? "خریداری شده ✅" : (waiting ? "در انتظار تأیید ⏳" : (sold ? "سقف این دوره پر شد" : null));
-        return '<button class="st-offer' + (sold ? " out" : "") + '" data-act="deal" data-id="' + o.id + '"' + (sold ? " disabled" : "") + ">" +
+        var endAt = o.ends_in != null ? (Date.now() + Math.max(0, +o.ends_in) * 1000) : null;
+        return '<button class="st-offer' + (sold ? " out" : "") + (bought ? " bought" : "") + '" data-act="deal" data-id="' + o.id + '"' + (sold ? " disabled" : "") + ">" +
           '<img src="' + K.asset(o.art) + '" alt="">' +
-          (bought ? '<span class="st-ribbon">✅</span>' : (o.discount ? '<span class="st-ribbon">-' + K.n(o.discount) + "٪</span>" : "")) +
+          (bought ? '<span class="st-ribbon ok">خریداری شده</span>' : (waiting ? '<span class="st-ribbon wait">در انتظار</span>' : (o.discount ? '<span class="st-ribbon">-' + K.n(o.discount) + "٪</span>" : ""))) +
           '<span class="st-obody"><small class="of-kick">' + K.ic("flame") + K.esc(kick) + "</small>" +
           "<b>" + K.esc(o.title) + '</b><span class="sm muted cut">' + K.esc(o.gets || "") + "</span>" +
-          (o.ends_in != null ? '<span class="st-otime">' + K.ic("clock") + '<span class="num" data-oend="' + (Date.now() + o.ends_in * 1000) + '"></span></span>' : "") +
-          (status ? '<span class="sm muted">' + status + "</span>" :
+          (endAt ? '<span class="st-otime">' + K.ic("clock") + "ریست تا <span class=\"num\" data-oend=\"" + endAt + "\">" + fmtLeft(o.ends_in) + "</span></span>" : "") +
+          (status ? '<span class="sm ' + (bought ? "t-good" : "muted") + '">' + status + "</span>" :
             (o.left != null ? '<span class="sm muted">باقی‌مونده: ' + K.n(o.left) + "</span>" : "")) +
           '<span class="st-oprice">' + (o.discount ? '<s class="muted">' + K.n(o.original) + "</s> " : "") + toman(o.price) +
           "</span></span></button>";
@@ -105,13 +112,15 @@
         return '<div class="h2">' + K.ic("spark") + "افرای ویژه</div>" +
           '<div class="st-offers">' + list.map(function (o) {
             var left = o.max ? Math.max(0, o.max - (o.bought || 0)) : null;
-            return '<button class="st-offer" data-act="offer" data-id="' + o.id + '">' +
+            var sold = left === 0;
+            var endAt = o.ends_in != null ? (Date.now() + Math.max(0, +o.ends_in) * 1000) : null;
+            return '<button class="st-offer' + (sold ? " out" : "") + '" data-act="offer" data-id="' + o.id + '"' + (sold ? " disabled" : "") + ">" +
               '<img src="' + K.asset(o.art) + '" alt="">' +
-              (o.discount ? '<span class="st-ribbon">-' + K.n(o.discount) + "٪</span>" : "") +
+              (sold ? '<span class="st-ribbon ok">خریداری شده</span>' : (o.discount ? '<span class="st-ribbon">-' + K.n(o.discount) + "٪</span>" : "")) +
               '<span class="st-obody"><small class="of-kick">' + K.ic("flame") + "پیشنهاد ویژه</small>" +
               "<b>" + K.esc(o.title) + '</b><span class="sm muted cut">' + K.esc(o.gets || "") + "</span>" +
-              (o.ends_in != null ? '<span class="st-otime">' + K.ic("clock") + '<span class="num" data-oend="' + (Date.now() + o.ends_in * 1000) + '"></span></span>' : "") +
-              (left != null ? '<span class="sm muted">باقی‌مونده: ' + K.n(left) + "</span>" : "") +
+              (endAt ? '<span class="st-otime">' + K.ic("clock") + "تموم تا <span class=\"num\" data-oend=\"" + endAt + "\">" + fmtLeft(o.ends_in) + "</span></span>" : "") +
+              (sold ? '<span class="sm t-good">سقفت پر شد ✅</span>' : (left != null ? '<span class="sm muted">باقی‌مونده: ' + K.n(left) + "</span>" : "")) +
               '<span class="st-oprice">' + (K.offers ? K.offers.price(o, true) : toman(o.price_toman || 0)) + "</span></span></button>";
           }).join("") + "</div>";
       }
@@ -227,8 +236,10 @@
         K.on(root, "deal", function (el) {
           var all = [].concat((d.deals && d.deals.weekly) || [], (d.deals && d.deals.daily) || []);
           var o = all.filter(function (x) { return String(x.id) === el.dataset.id; })[0];
-          if (!o || o.sold_out || o.purchased) {
+          if (!o || o.sold_out || o.purchased || +o.waiting > 0) {
             if (o && o.purchased) K.toast("این افر رو قبلاً خریدی ✅", "ok");
+            else if (o && +o.waiting > 0) K.toast("سفارشت در انتظار تأییده ⏳", "ok");
+            else if (o && o.sold_out) K.toast("سقف این افر پر شده.", "ok");
             return;
           }
           order({ kind: "item", id: o.id }, el, o.title + " · " + pn(o.price) + " تومان");
@@ -236,6 +247,10 @@
         K.on(root, "offer", function (el) {
           var o = (d.offers || []).filter(function (x) { return String(x.id) === el.dataset.id; })[0];
           if (!o) return;
+          if (o.max && (o.bought || 0) >= o.max) {
+            K.toast("این پیشنهاد رو قبلاً خریدی ✅", "ok");
+            return;
+          }
           if (o.price_toman) {
             order({ kind: "item", id: o.id }, el, o.title + " · " + pn(o.price_toman) + " تومان");
             return;

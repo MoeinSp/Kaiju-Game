@@ -166,8 +166,15 @@ def active_offers(user: User) -> list[dict]:
     from bio_lab.models import ShopItemPurchase
 
     now = timezone.now()
-    items = list(ShopItem.objects.filter(is_active=True, is_offer=True)
-                 .filter(Q(offer_ends_at__isnull=True) | Q(offer_ends_at__gt=now)).order_by("offer_ends_at", "sort_order", "id"))
+    # Cadence deals (daily/weekly) live in paid_offers.list_for_user — keeping them here
+    # duplicated the card without period-cap / purchased state, so players could tap a
+    # sold-out deal from «پیشنهاد ویژه» and get a bare GameError.
+    items = list(
+        ShopItem.objects.filter(is_active=True, is_offer=True)
+        .filter(Q(offer_cadence="") | Q(offer_cadence__isnull=True))
+        .filter(Q(offer_ends_at__isnull=True) | Q(offer_ends_at__gt=now))
+        .order_by("offer_ends_at", "sort_order", "id")
+    )
     bought = dict(ShopItemPurchase.objects.filter(user=user, item__in=items).values_list("item_id", "count")) if items else {}
     out = []
     for it in items:
