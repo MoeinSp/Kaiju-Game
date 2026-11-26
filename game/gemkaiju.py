@@ -1,10 +1,10 @@
 """💎 Daily gem-kaiju offers in the special-items shop.
 
 1) «کایجوی الماسی» — same species+rarity as one of the player's three strongest
-   epic+/legendary/mythic kaiju (a fusion partner). Price by rarity.
+   epic+/legendary/mythic kaiju (a fusion partner). Price by rarity (max 750).
 2) «کایجوی باستانی» — same species+rarity as one of the three strongest
-   crystal/plasma kaiju the player owns. Fixed 1000 diamonds. Crystal/plasma are
-   harder to grow, so they rarely win the regular gem roll; this is their lane.
+   crystal/plasma kaiju the player owns. Price by rarity (max 1000). Crystal/plasma
+   are harder to grow, so they rarely win the regular gem roll; this is their lane.
 """
 
 from __future__ import annotations
@@ -18,10 +18,18 @@ from bio_lab.models import Creature, User
 from game import constants
 from game.creature import GameError
 
-GEM_PRICE = {"mythic": 750, "legendary": 400, "epic": 200}
+# Regular gem: epic+ only. Same rarity ladder as ancient ×0.75 (mythic 1000 → 750).
+GEM_PRICE = {"mythic": 750, "legendary": 375, "epic": 185}
 _GEM_RARITIES = ("mythic", "legendary", "epic")
 
-ANCIENT_PRICE = 1000
+# Ancient: any rarity among crystal/plasma. Mythic 1000 → common 50.
+ANCIENT_PRICE = {
+    "mythic": 1000,
+    "legendary": 500,
+    "epic": 250,
+    "rare": 100,
+    "common": 50,
+}
 ANCIENT_ELEMENTS = constants.PREMIUM_ELEMENTS  # crystal, plasma
 ANCIENT_TITLE = "کایجوی باستانی"
 
@@ -71,7 +79,7 @@ def ancient_offer(user: User) -> dict | None:
         "name": chosen.name,
         "element": chosen.element,
         "rarity": chosen.rarity,
-        "price": ANCIENT_PRICE,
+        "price": ANCIENT_PRICE[chosen.rarity],
         "claimed": user.ancient_kaiju_claimed_on == _today(),
         "title": ANCIENT_TITLE,
     }
