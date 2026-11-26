@@ -322,7 +322,7 @@
           if (!g) return "";
           return '<div class="h2">' + K.ic("gem") + K.esc(g.title || "کایجوی الماسی") + '</div><div class="panel pad glow shs-gem' + (g.claimed ? "" : " live") + '">' +
             (g.claimed ? "" : '<span class="shs-ribbon">پیشنهاد امروز</span>') + '<div class="fighter ' + g.rarity + '">' + (g.img ? '<img src="' + g.img + '" alt="">' : "") +
-            '<div class="grow"><div class="nm cut">' + K.esc(g.name) + '</div><div class="shs-tags">' + K.rarTag(g.rarity) + K.elTag(g.element) + '</div><div class="sm muted">' + K.esc(g.blurb || "") + '</div></div></div>' +
+            '<div class="grow"><div class="nm cut">' + K.esc(g.name) + '</div><div class="shs-tags">' + K.rarTag(g.rarity) + K.elTag(g.element) + '</div></div></div>' +
             (g.claimed ? '<button class="btn block mt" disabled>' + K.ic("check") + "امروز خریدی</button>"
                        : '<button class="btn primary block mt" data-act="' + act + '"><span>خرید</span><span class="cost">' + K.ic("diamond") + " " + K.n(g.price) + "</span></button>") + "</div>";
         }

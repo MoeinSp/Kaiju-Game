@@ -54,7 +54,6 @@ def gem_offer(user: User) -> dict | None:
         "price": GEM_PRICE[chosen.rarity],
         "claimed": user.gem_kaiju_claimed_on == _today(),
         "title": "کایجوی الماسی",
-        "blurb": "هم‌گونه و هم‌رده‌ی یکی از قوی‌ترین هیولاهات؛ روزی یه بار.",
     }
 
 
@@ -75,7 +74,6 @@ def ancient_offer(user: User) -> dict | None:
         "price": ANCIENT_PRICE,
         "claimed": user.ancient_kaiju_claimed_on == _today(),
         "title": ANCIENT_TITLE,
-        "blurb": "از بین ۳ تا قوی‌ترین کریستال/پلاسماهات؛ برای گونهٔ سخت‌تر.",
     }
 
 
