@@ -435,6 +435,9 @@ def main() -> None:
     from bot.handlers import subdiscount
 
     subdiscount.register(application)
+    from bot.handlers import globalsale_admin
+
+    globalsale_admin.register(application)
     purchase.register(application)
     exchange.register(application)
     casino.register(application)

@@ -131,8 +131,10 @@
             return '<button class="' + (r === tab ? "on" : "") + '" data-act="tab" data-res="' + r + '">' + K.ic(RES[r][1]) + RES[r][0] + "</button>";
           }).join("") + "</div>" +
           '<div class="st-grid">' + d.presets.filter(function (x) { return x.res === tab; }).map(function (x) {
+            var strike = (x.discount && x.list_price > x.price)
+              ? '<s class="muted">' + K.n(x.list_price) + "</s> " : "";
             return card(x.img, x.name, '<span class="st-amt ' + RES[x.res][2] + '">' + K.ic(RES[x.res][1]) + " " + K.n(x.amount) + "</span>", x.price, "preset",
-              ' data-res="' + x.res + '" data-amount="' + x.amount + '"');
+              ' data-res="' + x.res + '" data-amount="' + x.amount + '"').replace('<span class="st-price">', '<span class="st-price">' + strike);
           }).join("") + "</div>";
       }
       function vipHtml() {
@@ -151,7 +153,9 @@
       function customHtml() {
         if (!d.custom) return "";
         var sellable = Object.keys(RES).filter(function (r) { return d.prices[r] > 0; });
-        var total = Math.round(sellable.reduce(function (s, r) { return s + custom[r] * d.prices[r]; }, 0));
+        var listTotal = Math.round(sellable.reduce(function (s, r) { return s + custom[r] * d.prices[r]; }, 0));
+        var pct = (d.sale && d.sale.percent) ? d.sale.percent : 0;
+        var total = pct ? Math.max(0, Math.round(listTotal * (100 - pct) / 100 / 1000) * 1000) : listTotal;
         return '<div class="h2">' + K.ic("sliders") + "مقدار دلخواه</div>" + '<div class="panel pad st-custom">' +
           sellable.map(function (r) {
             var step = d.steps[r];
@@ -161,13 +165,23 @@
               '<button class="btn sm" data-act="inc" data-res="' + r + '">' + K.ic("plus") + "</button></div>" +
               '<div class="sm muted st-rate">هر ' + K.n(step) + " " + RES[r][0] + " = " + K.n(Math.round(step * d.prices[r])) + " تومان</div>";
           }).join("") +
-          '<div class="st-total"><span class="muted">مبلغ</span><b>' + toman(total) + "</b></div>" +
+          '<div class="st-total"><span class="muted">مبلغ</span><b>' +
+          (pct && listTotal > total ? '<s class="muted">' + K.n(listTotal) + "</s> " : "") +
+          toman(total) + "</b></div>" +
           (d.min && total > 0 && total < d.min ? '<p class="note">حداقل خرید ' + K.n(d.min) + " تومانه؛ کمی بیشتر انتخاب کن.</p>" : "") +
           '<button class="btn primary block" data-act="custom"' + (total > 0 && total >= (d.min || 0) ? "" : " disabled") + ">ثبت سفارش</button></div>";
       }
+      function saleBanner() {
+        if (!d.sale || !d.sale.percent) return "";
+        var reason = d.sale.reason ? ("به مناسبت «" + K.esc(d.sale.reason) + "» · ") : "";
+        return '<div class="callout gold mb">' + K.ic("flame") + "<div><b>" + reason +
+          K.n(d.sale.percent) + "٪ تخفیف همگانی روی همهٔ خریدهای تومانی</b>" +
+          (d.sale.ends_in != null ? '<div class="sm muted">تا ' + K.n(Math.max(1, Math.round(d.sale.ends_in / 3600))) + " ساعت دیگه</div>" : "") +
+          "</div></div>";
+      }
       function draw() {
         var html = '<div class="banner mb st-ban" style="background-image:url(\'' + K.asset(d.banner) + '\')"><div><div class="ttl">خرید طلا و الماس</div>' +
-          '<div class="sm" style="color:#d6f6ff">افر ویژه · پک · VIP · پرداخت کارت‌به‌کارت</div></div></div>';
+          '<div class="sm" style="color:#d6f6ff">افر ویژه · پک · VIP · پرداخت کارت‌به‌کارت</div></div></div>' + saleBanner();
         if (d.pending) html += '<div class="callout gold mb">' + K.ic("hourglass") + '<div class="grow"><b>سفارش در انتظار رسید</b><div class="sm">' +
           K.esc(d.pending.summary) + " · " + toman(d.pending.price) + '</div></div><div class="col gap">' +
           '<button class="btn sm gold" data-act="pay">ارسال رسید</button>' +

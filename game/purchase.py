@@ -23,9 +23,13 @@ RES_LABEL = {"coins": "طلا", "dna": "دی‌ان‌ای", "diamonds": "الم
 RES_EMOJI = {"coins": "🪙", "dna": "🧬", "diamonds": "💎"}
 
 
-def price_for(coins: int, dna: int, diamonds: int) -> int:
+def price_for(coins: int, dna: int, diamonds: int, *, apply_sale: bool = True) -> int:
+    """Toman total for a custom basket. ``apply_sale=False`` returns the pre-sale list price."""
+    from game import globalsale
+
     p = botconfig.get_buy_prices()
-    return round(coins * p["coins"] + dna * p["dna"] + diamonds * p["diamonds"])
+    raw = round(coins * p["coins"] + dna * p["dna"] + diamonds * p["diamonds"])
+    return globalsale.apply(raw) if apply_sale else raw
 
 
 def create_pending(user: User, coins: int, dna: int, diamonds: int) -> PurchaseRequest:
@@ -38,6 +42,9 @@ def create_pending(user: User, coins: int, dna: int, diamonds: int) -> PurchaseR
     for res, amount in (("coins", coins), ("dna", dna), ("diamonds", diamonds)):
         if amount > 0 and prices[res] <= 0:
             raise GameError(f"{RES_LABEL[res]} الان برای فروش نیست — مقدارش رو صفر کن.")
+    from game import globalsale
+
+    globalsale.active_sync()
     price = price_for(coins, dna, diamonds)
     if price <= 0:
         raise GameError("اول مقدار چیزی که می‌خوای بخری رو انتخاب کن.")
@@ -96,7 +103,10 @@ def pack_original_price(price_toman: int, discount_percent: int) -> int:
     return round(int(price_toman) / (1 - d / 100))
 
 
-def _pack_to_dict(p) -> dict:
+def _pack_to_dict(p, sale=None) -> dict:
+    from game import globalsale
+
+    v = globalsale.view(p.price_toman, p.discount_percent, sale=sale)
     return {
         "id": p.id,
         "title": p.title,
@@ -104,9 +114,12 @@ def _pack_to_dict(p) -> dict:
         "coins": p.coins,
         "dna": p.dna,
         "diamonds": p.diamonds,
-        "price": p.price_toman,
-        "discount": p.discount_percent,
-        "original": pack_original_price(p.price_toman, p.discount_percent),
+        "price": v["price"],
+        "discount": v["discount"],
+        "original": v["original"],
+        "sale_percent": v["sale_percent"],
+        "sale_reason": v["sale_reason"],
+        "list_price": v["list_price"],
         "active": p.active,
         "sort_order": p.sort_order,
         "contents": pack_contents_summary(p),
@@ -126,22 +139,25 @@ def pack_contents_summary(p) -> str:
 def list_active_packs() -> list[dict]:
     """Active packs for the player-facing store, ordered by sort_order then id."""
     from bio_lab.models import PurchasePack
+    from game import globalsale
 
-    return [_pack_to_dict(p) for p in PurchasePack.objects.filter(active=True)]
+    sale = globalsale.active_sync()
+    return [_pack_to_dict(p, sale=sale) for p in PurchasePack.objects.filter(active=True)]
 
 
 def list_all_packs() -> list[dict]:
     """Every pack (active + inactive) for the admin manager."""
     from bio_lab.models import PurchasePack
 
-    return [_pack_to_dict(p) for p in PurchasePack.objects.all()]
+    return [_pack_to_dict(p, sale=False) for p in PurchasePack.objects.all()]
 
 
 def get_pack(pack_id: int) -> dict | None:
     from bio_lab.models import PurchasePack
+    from game import globalsale
 
     p = PurchasePack.objects.filter(id=pack_id).first()
-    return _pack_to_dict(p) if p else None
+    return _pack_to_dict(p, sale=globalsale.active_sync()) if p else None
 
 
 def create_pack(title, coins, dna, diamonds, price_toman, discount_percent, emoji="🎁"):
@@ -221,13 +237,16 @@ def create_pack_pending(user: User, pack_id: int) -> PurchaseRequest:
 
     if user.receipt_blocked:
         raise GameError("⛔ دسترسی تو به ثبت رسید خرید مسدود شده. با پشتیبانی در تماس باش.")
+    from game import globalsale
+
     p = PurchasePack.objects.filter(id=pack_id, active=True).first()
     if p is None:
         raise GameError("این پک دیگه در دسترس نیست.")
+    sale = globalsale.active_sync()
     PurchaseRequest.objects.filter(user=user, status="awaiting_receipt").delete()
     return PurchaseRequest.objects.create(
         user=user, coins=p.coins, dna=p.dna, diamonds=p.diamonds,
-        price_toman=p.price_toman, status="awaiting_receipt",
+        price_toman=globalsale.apply(p.price_toman, sale), status="awaiting_receipt",
     )
 
 
@@ -240,6 +259,8 @@ def create_item_pending(user: User, item_id: int) -> PurchaseRequest:
 
     if user.receipt_blocked:
         raise GameError("⛔ دسترسی تو به ثبت رسید خرید مسدود شده. با پشتیبانی در تماس باش.")
+    from game import globalsale
+
     item = ShopItem.objects.filter(id=item_id, is_active=True).first()
     if item is None or not item.price_toman:
         raise GameError("این بسته دیگه در دسترس نیست.")
@@ -255,10 +276,11 @@ def create_item_pending(user: User, item_id: int) -> PurchaseRequest:
         if bought + waiting >= item.max_per_user:
             raise GameError(f"این بسته رو هر نفر حداکثر {item.max_per_user} بار می‌تونه بخره و تو سقفت رو زدی"
                             + (" (یکی هم در انتظار تأییده)." if waiting else "."))
+    sale = globalsale.active_sync()
     PurchaseRequest.objects.filter(user=user, status="awaiting_receipt").delete()
     snapshot = {"id": item.id, "title": item.title, "contents": json.loads(item.contents_json)}
     return PurchaseRequest.objects.create(
-        user=user, price_toman=item.price_toman, status="awaiting_receipt",
+        user=user, price_toman=globalsale.apply(item.price_toman, sale), status="awaiting_receipt",
         shop_item=item, item_json=json.dumps(snapshot, ensure_ascii=False),
     )
 

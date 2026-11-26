@@ -428,7 +428,10 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             ],
             [btn("شارژ همگانی خودکار", emoji_key="btn_gift", style=ADMIN, callback_data="admin_menu:autogift")],
             [btn("خطاهای مینی‌اپ", emoji_key="btn_report", style=ADMIN, callback_data="admin_menu:app_errors")],
-            [btn("تخفیف اشتراک", emoji_key="btn_vip", style=ADMIN, callback_data="admin_menu:sub_discount")],
+            [
+                btn("تخفیف همگانی", emoji_key="btn_gift", style=ADMIN, callback_data="admin_menu:global_sale"),
+                btn("تخفیف اشتراک", emoji_key="btn_vip", style=ADMIN, callback_data="admin_menu:sub_discount"),
+            ],
             [btn("ریست استارت ربات", emoji_key="btn_reset", style=ADMIN, callback_data="admin_menu:gate_reset")],
             [btn("حذف موجود", emoji_key="btn_delete", style=DANGER, callback_data="admin_menu:del_creature_start")],
             [
@@ -3827,6 +3830,12 @@ async def _sub_discount_panel(update: Update, context: ContextTypes.DEFAULT_TYPE
     await discount_panel(update, context)
 
 
+async def _global_sale_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from bot.handlers.globalsale_admin import sale_panel
+
+    await sale_panel(update, context)
+
+
 async def app_errors_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _is_admin(update):
         return
@@ -5184,6 +5193,14 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
     action = awaiting["action"]
     text = (message.text or "").strip()
 
+    if action == "gsale_reason":
+        from bot.handlers.globalsale_admin import capture_reason
+
+        # re-stash was already popped — capture_reason only needs the text
+        context.user_data[AWAITING_ADMIN_KEY] = awaiting  # capture_reason clears it
+        await capture_reason(update, context, text)
+        return
+
     if action in ("user_info", "user_search"):
         # exact id/username → open directly; otherwise show matching candidates
         exact = None
@@ -6266,6 +6283,7 @@ _ADMIN_MENU_ACTIONS.update(
         "autogift": autogift_panel,
         "app_errors": app_errors_panel,
         "sub_discount": _sub_discount_panel,
+        "global_sale": _global_sale_panel,
         "autogift_toggle": autogift_toggle,
         "autogift_set": autogift_set_start,
         "gate_reset": gate_reset_panel,

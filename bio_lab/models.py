@@ -840,6 +840,20 @@ class SubscriptionDiscount(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
+class GlobalSale(models.Model):
+    """Store-wide % off every real-money (Toman) price: packs, custom buy, VIP,
+    paid offers / ShopItem.price_toman. Gold/diamond shop prices are untouched.
+    Set from the admin panel «تخفیف همگانی» (game/globalsale.py)."""
+
+    percent = models.PositiveSmallIntegerField()
+    reason = models.CharField(max_length=64, blank=True, default="")
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField(db_index=True)
+    broadcast = models.BooleanField(default=False)
+    cancelled = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class MiniAppError(models.Model):
     """A Mini App failure, kept so the owner can see it in the admin panel (container logs are
     wiped on every deploy). kind = "server" (an API view crashed) or "client" (a script error

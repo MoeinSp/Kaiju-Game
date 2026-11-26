@@ -50,12 +50,19 @@ _RES_UNIT_WORD = {"coins": "طلا", "dna": "عدد", "diamonds": "عدد"}
 
 
 def _amount_screen(context, is_sub: bool = True) -> tuple[str, InlineKeyboardMarkup]:
+    from game import globalsale
+
     prices = botconfig.get_buy_prices()
     amounts = _amounts(context)
     sellable = _sellable(prices)
     lines = [
         "💎 <b>خرید طلا و الماس</b>",
         _RULE,
+    ]
+    banner = globalsale.banner_text()
+    if banner:
+        lines += [banner, _RULE]
+    lines += [
         "مقدار مورد نظرت رو با دکمه‌های ➖ و➕ تنظیم کن:",
         "",
     ]
@@ -74,9 +81,15 @@ def _amount_screen(context, is_sub: bool = True) -> tuple[str, InlineKeyboardMar
             btn(f"➕ {step:,}", style=CONFIRM, callback_data=f"buy_adj:{res}:+"),
         ])
         rows.append([btn(f"عدد دلخواه ({purchase.RES_LABEL[res]})", emoji_key="btn_custom_amt", style=NAV, callback_data=f"buy_custom:{res}")])
+    list_total = purchase.price_for(
+        amounts["coins"], amounts["dna"], amounts["diamonds"], apply_sale=False,
+    )
     total = purchase.price_for(amounts["coins"], amounts["dna"], amounts["diamonds"])
     minimum = botconfig.get_buy_min()
-    lines += [_RULE, f"💳 <b>مبلغ قابل پرداخت: {total:,} تومان</b>"]
+    if list_total > total > 0:
+        lines += [_RULE, f"💳 <b>مبلغ قابل پرداخت: <s>{list_total:,}</s> ← {total:,} تومان</b>"]
+    else:
+        lines += [_RULE, f"💳 <b>مبلغ قابل پرداخت: {total:,} تومان</b>"]
     if minimum > 0:
         lines.append(f"<i>حداقل خرید: {minimum:,} تومان</i>")
     if total > 0 and total >= minimum:
@@ -102,9 +115,13 @@ def _fmt_ends(sec: int) -> str:
 
 def _store_screen(packs: list[dict], custom_ok: bool, deals: dict | None = None) -> tuple[str, InlineKeyboardMarkup]:
     """Buy-store home: daily/weekly deals, owner packs, optional custom amount."""
+    from game import globalsale
     from game.paid_offers import CADENCE_DAILY, CADENCE_EMOJI, CADENCE_LABEL, CADENCE_WEEKLY
 
     lines = ["💎 <b>خرید طلا و الماس</b>", _RULE]
+    banner = globalsale.banner_text()
+    if banner:
+        lines += [banner, _RULE]
     rows = []
     deals = deals or {}
     for cadence in (CADENCE_WEEKLY, CADENCE_DAILY):
@@ -155,9 +172,10 @@ def _store_screen(packs: list[dict], custom_ok: bool, deals: dict | None = None)
 
 
 def _store_state_for(tg_user):
-    from game import paid_offers
+    from game import globalsale, paid_offers
 
     user, _ = get_or_create_user(tg_user)
+    globalsale.active_sync()  # warm async-safe cache for the store banner
     return (
         purchase.list_active_packs(),
         botconfig.inbot_purchase_ready(),

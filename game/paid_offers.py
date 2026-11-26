@@ -109,6 +109,10 @@ def _deal_dict(user: User, item: ShopItem) -> dict:
     bought = _bought_this_period(user, item)
     waiting = _waiting(user, item)
     left = max(0, limit - bought - waiting) if limit else None
+    from game import globalsale
+
+    # list_for_user warms the cache once; per-deal view then reads it.
+    v = globalsale.view(int(item.price_toman), int(item.offer_discount or 0), sale=globalsale.active())
     return {
         "id": item.id,
         "title": item.title,
@@ -117,9 +121,12 @@ def _deal_dict(user: User, item: ShopItem) -> dict:
         "label": CADENCE_LABEL.get(item.offer_cadence, "افر"),
         "gets": itemshop.content_summary(contents),
         "contents": contents,
-        "price": int(item.price_toman),
-        "discount": int(item.offer_discount or 0),
-        "original": _was_price(item.price_toman, item.offer_discount),
+        "price": v["price"],
+        "discount": v["discount"],
+        "original": v["original"],
+        "sale_percent": v["sale_percent"],
+        "sale_reason": v["sale_reason"],
+        "list_price": v["list_price"],
         "ends_in": seconds_left(item.offer_cadence),
         "limit": limit,
         "bought": bought,
@@ -131,6 +138,9 @@ def _deal_dict(user: User, item: ShopItem) -> dict:
 
 def list_for_user(user: User) -> dict:
     """``{"daily": [...], "weekly": [...]}`` for the buy store."""
+    from game import globalsale
+
+    globalsale.active_sync()
     return {
         CADENCE_DAILY: [_deal_dict(user, it) for it in live_items(CADENCE_DAILY)],
         CADENCE_WEEKLY: [_deal_dict(user, it) for it in live_items(CADENCE_WEEKLY)],

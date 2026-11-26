@@ -194,10 +194,17 @@ def active_discount(tier: str):
 
 
 def effective_price(tier: str) -> tuple[int, int, object]:
-    """(price to pay now, list price, the discount row or None)."""
+    """(price to pay now, list price, the subscription-discount row or None).
+
+    A running «تخفیف همگانی» stacks on top of any subscription-only discount.
+    """
+    from game import globalsale
+
     base = SUBSCRIPTION_TIERS[tier]["price_toman"]
     d = active_discount(tier)
-    return (discounted(base, d.percent) if d else base), base, d
+    price = discounted(base, d.percent) if d else base
+    price = globalsale.apply(price, globalsale.active_sync())
+    return price, base, d
 
 
 def start_discount(tier: str, percent: int, hours: int, broadcast: bool) -> list:

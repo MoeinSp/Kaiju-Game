@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 
+from django.utils import timezone
+
 from game import constants
 from telgame_site.mini.core import (
     GameError, asset_img, clean, creature_list, endpoint, equipment_img, need_int, need_str,
@@ -220,7 +222,7 @@ _OFFER_ART = {"food": "drops/drop_capsule.jpg"}
 def offers_payload(user) -> list[dict]:
     """The «پیشنهاد ویژه» packs this player can buy now (game.itemshop.active_offers), as the
     Mini App shows them: the popup, the home-screen bubble and the top of the shop."""
-    from game import itemshop
+    from game import globalsale, itemshop
 
     out = []
     for o in itemshop.active_offers(user):
@@ -230,14 +232,22 @@ def offers_payload(user) -> list[dict]:
         except (ValueError, TypeError):
             contents = []
         art = it.offer_art or ("gold_5" if any(c.get("type") == "coins" for c in contents) else "hub_chests")
-        out.append({
+        row = {
             "id": it.id, "title": clean(it.title), "gets": _summary(contents),
             "price_coins": it.price_coins, "price_diamonds": it.price_diamonds,
             "price_toman": it.price_toman, "was_toman": o["was_toman"],
             "was_coins": o["was_coins"], "was_diamonds": o["was_diamonds"], "discount": it.offer_discount,
             "ends_in": o["ends_in"], "max": it.max_per_user or 0, "bought": o["bought"],
             "art": f"img/{art}.jpg",
-        })
+        }
+        if it.price_toman:
+            v = globalsale.view(it.price_toman, it.offer_discount)
+            row["price_toman"] = v["price"]
+            row["was_toman"] = v["original"]
+            row["discount"] = v["discount"]
+            row["sale_percent"] = v["sale_percent"]
+            row["sale_reason"] = v["sale_reason"]
+        out.append(row)
     return out
 
 
@@ -587,16 +597,22 @@ def paid(request, user):
     link = botconfig.get_buy_link()
     packs = [dict(p, contents=clean(p["contents"]), img=_pack_art(p)) for p in purchase.list_active_packs()] \
         if botconfig.packs_ready() else []
+    from game import globalsale, paid_offers
+
+    sale = globalsale.active_sync()
     presets = []
     if custom:
         for res, rows in PRESETS.items():
             for i, (amount, name) in enumerate(rows, 1):
-                price = round(amount * prices[res])
+                list_price = round(amount * prices[res])
+                price = globalsale.apply(list_price, sale)
                 if prices[res] > 0 and price >= minimum and amount <= purchase.MAX_UNITS[res]:
-                    presets.append({"res": res, "amount": amount, "name": name, "price": price,
-                                    "img": f"img/{PRESET_ART[res]}_{min(i, 5 if res != 'dna' else 4)}.jpg"})
-    from game import paid_offers
-
+                    presets.append({
+                        "res": res, "amount": amount, "name": name, "price": price,
+                        "list_price": list_price,
+                        "discount": sale.percent if sale and price < list_price else 0,
+                        "img": f"img/{PRESET_ART[res]}_{min(i, 5 if res != 'dna' else 4)}.jpg",
+                    })
     deals = paid_offers.list_for_user(user)
     for bucket in deals.values():
         for d in bucket:
@@ -604,6 +620,13 @@ def paid(request, user):
             d["title"] = clean(d["title"])
     pending = _pending(user)
     ready = botconfig.store_ready() or (bool(botconfig.get_buy_card()[0]) and paid_offers.any_live())
+    sale_info = None
+    if sale is not None:
+        sale_info = {
+            "percent": sale.percent,
+            "reason": (sale.reason or "").strip(),
+            "ends_in": max(0, int((sale.ends_at - timezone.now()).total_seconds())),
+        }
     return {
         "ready": ready, "custom": custom, "min": minimum,
         "link": {"url": link[0], "title": clean(link[1])} if link else None,
@@ -611,6 +634,7 @@ def paid(request, user):
         "packs": packs, "presets": presets, "vip": _vip_data(user),
         "offers": offers_payload(user),
         "deals": deals,
+        "sale": sale_info,
         "pending": {"summary": clean(purchase.request_summary(pending)), "price": pending.price_toman} if pending else None,
         "banner": "img/store_banner.jpg",
     }
