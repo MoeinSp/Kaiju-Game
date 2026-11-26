@@ -3984,13 +3984,9 @@ async def gift_all_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
     context.user_data.pop(AWAITING_ADMIN_KEY, None)
     context.user_data.pop("gift_all_draft", None)
-    text = (
-        f"{get_emoji('gift')} <b>هدیه به همه‌ی کاربران</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "یه مقدار آماده انتخاب کن، یا مقدار دلخواه بفرست.\n"
-        "بعدش تأیید می‌کنی و اگه بخوای به همه پیام هم می‌ره."
-    )
-    kb = _gift_all_home_kb()
+    draft = _gift_all_draft(context)
+    text = _gift_all_home_text(draft)
+    kb = _gift_all_home_kb(draft)
     if update.callback_query:
         await safe_edit_message_text(update.callback_query, text, parse_mode="HTML", reply_markup=kb)
     else:
@@ -3998,7 +3994,7 @@ async def gift_all_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def gift_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Wizard: amount presets → confirm (notify / note) → credit + optional DM blast."""
+    """Wizard: per-resource amounts / فور → confirm (notify / note) → credit + DM blast."""
     query = update.callback_query
     if not _is_admin(update):
         await query.answer()
@@ -4006,18 +4002,53 @@ async def gift_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     parts = query.data.split(":")
     action = parts[1] if len(parts) > 1 else "home"
 
+    if action == "noop":
+        await query.answer()
+        return
+
     if action == "home":
         await query.answer()
-        await gift_all_start(update, context)
+        draft = _gift_all_draft(context)
+        await safe_edit_message_text(
+            query, _gift_all_home_text(draft), parse_mode="HTML",
+            reply_markup=_gift_all_home_kb(draft),
+        )
+        return
+
+    if action == "set" and len(parts) == 4 and parts[2] in ("coins", "dna", "diamonds"):
+        await query.answer()
+        draft = _gift_all_draft(context)
+        try:
+            draft[parts[2]] = max(0, int(parts[3]))
+        except ValueError:
+            await query.answer("مقدار نامعتبر.", show_alert=True)
+            return
+        await safe_edit_message_text(
+            query, _gift_all_home_text(draft), parse_mode="HTML",
+            reply_markup=_gift_all_home_kb(draft),
+        )
         return
 
     if action == "custom":
         await query.answer()
         context.user_data[AWAITING_ADMIN_KEY] = {"action": "gift_all"}
         await query.message.reply_text(
-            f"{get_emoji('gift')} سه عدد با فاصله بفرست: <code>طلا دی‌ان‌ای الماس</code>\n"
+            f"{get_emoji('gift')} <b>فور — مقدار دستی</b>\n"
+            "سه عدد با فاصله بفرست: <code>طلا دی‌ان‌ای الماس</code>\n"
             "مثلاً <code>1000 50 10</code> (هرکدوم رو نخواستی، صفر بذار).",
             parse_mode="HTML",
+        )
+        return
+
+    if action == "confirm":
+        draft = _gift_all_draft(context)
+        if int(draft["coins"]) <= 0 and int(draft["dna"]) <= 0 and int(draft["diamonds"]) <= 0:
+            await query.answer("اول حداقل یه منبع رو مقدار بده.", show_alert=True)
+            return
+        await query.answer()
+        await safe_edit_message_text(
+            query, _gift_all_confirm_text(draft), parse_mode="HTML",
+            reply_markup=_gift_all_confirm_kb(draft),
         )
         return
 
