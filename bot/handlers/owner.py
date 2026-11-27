@@ -5500,6 +5500,12 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
                 return
             matches = await run_db(search_users, text)
             if not matches:
+                # if they typed a game word («موجودی», «ارتقا», …) leave search mode
+                # so the private keyword router can open that panel
+                from game import keywords as _kw
+
+                if _kw.match(text) is not None:
+                    return
                 context.user_data[AWAITING_ADMIN_KEY] = awaiting
                 await message.reply_text("کاربری پیدا نشد. یه آیدی، @یوزرنیم یا بخشی از اسم دیگه بفرست:")
                 return

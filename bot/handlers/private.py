@@ -132,12 +132,13 @@ def lab_level_line(user) -> str:
     )
 
 
-def wallet_line(user, energy: int | None = None) -> str:
+def wallet_line(user, energy: int | None = None, max_energy: int | None = None) -> str:
     """One compact resource strip, reused by every screen that needs it."""
-    energy = sync_energy(user) if energy is None else energy
     from game.energy import get_max_energy, minutes_until_next_point
 
-    max_energy = get_max_energy(user)
+    energy = sync_energy(user) if energy is None else energy
+    # prefer a value computed inside run_db — get_max_energy may touch alliance boosts
+    max_energy = get_max_energy(user) if max_energy is None else max_energy
     if energy >= max_energy:
         energy_note = "پر"
     else:
@@ -395,13 +396,16 @@ def _fine_bar(current: int, total: int, width: int = 10) -> str:
     return "█" * full + "░" * (width - full)
 
 
-def balance_text(user, kaiju_count: int = 0) -> str:
+def balance_text(user, kaiju_count: int = 0, *, energy: int | None = None, max_energy: int | None = None) -> str:
     """The «موجودی» / balance card — wallet + kaiju count + energy, in a compact
     English layout (per the owner's requested format)."""
     from game.energy import get_max_energy, seconds_until_next_point
 
-    energy = sync_energy(user)
-    max_energy = get_max_energy(user)
+    # prefer values computed inside run_db — get_max_energy may touch alliance boosts (ORM)
+    if energy is None:
+        energy = sync_energy(user)
+    if max_energy is None:
+        max_energy = get_max_energy(user)
     div = "━━━━━━━━━━━━━━━━━━━━"
     lines = [
         f"👤 <b>{lab_display(user)}</b>",
@@ -424,19 +428,24 @@ def balance_text(user, kaiju_count: int = 0) -> str:
 
 def _balance_sync(tg_user):
     from bio_lab.models import Creature
+    from game.energy import get_max_energy
 
     user, _ = get_or_create_user(tg_user)
-    return user, Creature.objects.filter(owner=user).count()
+    energy = sync_energy(user)
+    return user, Creature.objects.filter(owner=user).count(), energy, get_max_energy(user)
 
 
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user, kaiju_count = await run_db(_balance_sync, update.effective_user)
+    user, kaiju_count, energy, max_energy = await run_db(_balance_sync, update.effective_user)
     chat = update.effective_chat
     in_group = chat is not None and chat.type in ("group", "supergroup")
     # in a group the balance is a plain readout — no «بازگشت» button (it opened the
     # PV menu, which is broken in a group). Only the DM gets the back button.
     keyboard = None if in_group else back_only_keyboard("menu:me", "بازگشت به منو")
-    await send_screen(update, balance_text(user, kaiju_count), parse_mode="HTML", reply_markup=keyboard)
+    await send_screen(
+        update, balance_text(user, kaiju_count, energy=energy, max_energy=max_energy),
+        parse_mode="HTML", reply_markup=keyboard,
+    )
 
 
 def _slot_summary_lines(slots: list[dict]) -> list[str]:
@@ -652,6 +661,8 @@ def _power_caption_line(creature, equipped_items: list | None = None, label: str
 
 
 def _upgrade_list_sync(tg_user):
+    from game.energy import get_max_energy
+
     user, _ = get_or_create_user(tg_user)
     creatures = list_creatures(user)
     if not creatures:
@@ -667,7 +678,8 @@ def _upgrade_list_sync(tg_user):
         key=lambda pair: pair[1],
         reverse=True,
     )
-    return user, ranked
+    energy = sync_energy(user)
+    return user, ranked, energy, get_max_energy(user)
 
 
 UPGRADE_PAGE_SIZE = 8
@@ -683,7 +695,7 @@ def _upg_row_label(creature, power: int) -> str:
     return f"{name} · {creature.star_level}★ · سطح {creature.level} · {p}"
 
 
-def _upgrade_render(user, ranked, filt: str, page: int) -> tuple[str, InlineKeyboardMarkup]:
+def _upgrade_render(user, ranked, filt: str, page: int, *, energy: int | None = None, max_energy: int | None = None) -> tuple[str, InlineKeyboardMarkup]:
     """One page of the strongest-first creature picker, split by rarity with tabs
     (like the collection) and paginated. `ranked` is [(creature, power)] desc."""
     # rarity tabs from the whole roster (only rarities the player owns) + «همه»
@@ -729,7 +741,7 @@ def _upgrade_render(user, ranked, filt: str, page: int) -> tuple[str, InlineKeyb
         "<blockquote>⚪ معمولی · 🔵 نایاب · 🟣 حماسی · 🟡 افسانه‌ای · 🔴 اساطیری\n"
         "دکمه‌ی سبز = هیولای فعالت · قوی‌ترین‌ها اول\n"
         "تب‌های بالا فقط یه نایابی رو نشون می‌دن.</blockquote>\n\n"
-        f"{wallet_line(user)}"
+        f"{wallet_line(user, energy=energy, max_energy=max_energy)}"
     )
     return text, InlineKeyboardMarkup(rows)
 
@@ -738,11 +750,11 @@ async def upgrade_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     """Creature picker, strongest first — the player chooses who to invest in
     rather than the panel silently assuming the active creature."""
     try:
-        user, ranked = await run_db(_upgrade_list_sync, update.effective_user)
+        user, ranked, energy, max_energy = await run_db(_upgrade_list_sync, update.effective_user)
     except GameError as exc:
         await send_screen(update, str(exc), parse_mode=None, reply_markup=back_only_keyboard())
         return
-    text, keyboard = _upgrade_render(user, ranked, "all", 0)
+    text, keyboard = _upgrade_render(user, ranked, "all", 0, energy=energy, max_energy=max_energy)
     from game.media import get_feature_image_path
     photo = get_feature_image_path("upgrade")
     await send_screen(update, text, photo=photo, parse_mode="HTML", reply_markup=keyboard)
@@ -759,12 +771,12 @@ async def upgrade_page_callback(update: Update, context: ContextTypes.DEFAULT_TY
         filt, page = "all", int(parts[1])
     context.user_data["upg_loc"] = (filt, page)
     try:
-        user, ranked = await run_db(_upgrade_list_sync, update.effective_user)
+        user, ranked, energy, max_energy = await run_db(_upgrade_list_sync, update.effective_user)
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
         return
     await query.answer()
-    text, keyboard = _upgrade_render(user, ranked, filt, page)
+    text, keyboard = _upgrade_render(user, ranked, filt, page, energy=energy, max_energy=max_energy)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 
 

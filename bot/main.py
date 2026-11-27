@@ -92,11 +92,14 @@ async def _capture_private_text_reply(update: Update, context: ContextTypes.DEFA
     registering its own MessageHandler.
 
     When nothing is awaiting input, a plain private message is also given to the
-    keyword router, so simple words («نبرد», «کایجو», …) work in the DM too."""
-    pending = any(context.user_data.get(k) for k in _PRIVATE_AWAIT_KEYS)
+    keyword router, so simple words («نبرد», «کایجو», …) work in the DM too.
+
+    Pending is re-checked AFTER the captures: an admin user-search that rejects a
+    game keyword (e.g. «موجودی» / «ارتقا») clears its await so the keyword router
+    can open that panel instead of leaving the owner stuck in search mode."""
     await private.capture_player_text_reply(update, context)
     await owner.capture_owner_text_reply(update, context)
-    if not pending:
+    if not any(context.user_data.get(k) for k in _PRIVATE_AWAIT_KEYS):
         await private.route_private_keyword(update, context)
 
 

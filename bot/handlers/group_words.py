@@ -525,14 +525,14 @@ def _act(action: str, user_id: int, arg: str = "") -> str:
 _GRP_UPG_STEPS = (1, 5, 10)
 
 
-def _upgrade_card(user, creature, energy, step: int = 1) -> tuple[str, InlineKeyboardMarkup]:
+def _upgrade_card(user, creature, energy, step: int = 1, max_energy: int | None = None) -> tuple[str, InlineKeyboardMarkup]:
     """A compact but COMPLETE group upgrade panel: capsule feeding + the four body-part
     upgrades with a ×1/×5/×10 selector (each tap buys `step` levels at once), live levels
     and gold costs. Gear/fusion still live in the DM."""
     from game.creature import part_bulk_cost, total_capsules
     from game.energy import get_max_energy
 
-    max_energy = get_max_energy(user)
+    max_energy = get_max_energy(user) if max_energy is None else max_energy
     step = step if step in _GRP_UPG_STEPS else 1
     cap = constants.part_upgrade_cap(creature.rarity, creature.star_level, creature.element)
     max_level = constants.creature_max_level(creature.rarity, creature.star_level)
@@ -1270,8 +1270,11 @@ def _card_sync(tg_user, chat, action):
         data["creature_count"] = Creature.objects.filter(owner=user).count()
         data["energy"] = sync_energy(user)
     elif action == "upgrade":
+        from game.energy import get_max_energy as _max_en
+
         _require_creature(creature)
         data["energy"] = sync_energy(user)
+        data["max_energy"] = _max_en(user)
     elif action == "hunt":
         _require_creature(creature)
         from game.creature import creature_power
@@ -1386,7 +1389,10 @@ def _render(action: str, data: dict, page: int = 0) -> tuple[str, InlineKeyboard
     if action == "lab":
         return _profile_card(user, data.get("creature_count", 0), data.get("energy", 0))
     if action == "upgrade":
-        return _upgrade_card(user, data["creature"], data.get("energy", 0))
+        return _upgrade_card(
+            user, data["creature"], data.get("energy", 0),
+            max_energy=data.get("max_energy"),
+        )
     if action == "hunt":
         return _hunt_card(user, data.get("target"), data.get("energy", 0))
     if action == "arena":
@@ -1827,7 +1833,12 @@ async def handle_group_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
         # «موجودی» is a quick reference — leave both the command and the reply in place
         # (no auto-cleanup), so a player can scroll back to their balance.
-        await private_handlers.balance(update, context)
+        try:
+            await private_handlers.balance(update, context)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("group balance failed")
+            await message.reply_text("خطایی در نمایش موجودی رخ داد. لطفاً دوباره بزن.")
         return
 
 
