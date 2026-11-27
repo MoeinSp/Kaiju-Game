@@ -70,12 +70,16 @@ def _alliance_dict(user, al: Alliance) -> dict:
          "role": "leader" if r["is_leader"] else "deputy" if r["is_deputy"] else "member", "me": r["id"] == user.id}
         for r in alliance_mod.member_roster(al)
     ]
+    from game import alliance_boosts
+
     binfo = alliance_mod.buildings_info(al)
     buildings = [
         {"key": b["key"], "title": b["title"], "desc": b["desc"], "level": b["level"], "max_level": b["max_level"],
          "maxed": b["maxed"], "cost": b["cost"], "effect": b["effect"], "next_effect": b["next_effect"]}
         for b in binfo["buildings"]
     ]
+    boost_panel = alliance_boosts.panel(user) or {}
+    boosts = boost_panel.get("boosts", [])
     view = alliance_mod.war_view(user)
     war = None
     if view is not None:
@@ -111,6 +115,12 @@ def _alliance_dict(user, al: Alliance) -> dict:
         "members": members,
         "buildings": buildings,
         "vault_income": binfo["vault_income"],
+        "boosts": boosts,
+        "boost_cost": alliance_boosts.BOOST_COST,
+        "boost_hours": alliance_boosts.BOOST_HOURS,
+        "boost_eligible": bool(boost_panel.get("eligible", True)),
+        "boost_joined_today": bool(boost_panel.get("joined_today", False)),
+        "can_buy_boost": bool(boost_panel.get("is_manager", False)),
         "war": war,
         "war_points": alliance_mod.perks_info(al)["war_points"],
         "war_week_bonus": alliance_mod.WAR_WINNER_TREASURY_BONUS,
@@ -196,6 +206,23 @@ def alliance_deposit(request, user, data):
     amount = need_int(data, "amount", minimum=1, maximum=2_000_000_000)
     al = deposit_treasury(user, amount)
     return {"amount": amount, "treasury": al.treasury_gold, "name": al.name}
+
+
+@endpoint("POST")
+def alliance_boost_buy(request, user, data):
+    """Leader/deputy buys a 24h alliance boost from the treasury (bot: ally_boost_ok)."""
+    from game import alliance_boosts
+
+    key = need_str(data, "key", alliance_boosts.BOOSTS)
+    result = alliance_boosts.buy(user, key)
+    panel = alliance_boosts.panel(user) or {}
+    return {
+        "key": result["key"],
+        "title": result["title"],
+        "treasury": result["treasury"],
+        "seconds_left": alliance_boosts.BOOST_HOURS * 3600,
+        "boosts": panel.get("boosts", []),
+    }
 
 
 @endpoint("POST")
@@ -528,6 +555,7 @@ routes = [
     ("alliance/flag/preview/", alliance_flag_preview),
     ("alliance/flag/", alliance_flag_save),
     ("alliance/deposit/", alliance_deposit),
+    ("alliance/boost/", alliance_boost_buy),
     ("alliance/rename/", alliance_rename),
     ("alliance/leave/", alliance_leave),
     ("alliance/war/preview/", alliance_war_preview),

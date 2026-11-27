@@ -460,6 +460,9 @@ def resolve_hunt(user: User, player_creature: Creature, tier: str = "normal",
     from game import events
 
     loot_mult = loot_mult * events.hunt_loot_mult(player_creature.element)  # «هفته‌ی عنصر»
+    from game import alliance_boosts
+
+    loot_mult = loot_mult * alliance_boosts.mult(user, "loot")  # بوست اتحاد «غنیمت»
     research.attach_research(user, player_creature)
     wild = spawn_wild_creature(bench_for(user, seed, bench), tier, seed)   # the same wild the card showed
     winner, log_text = resolve_duel(player_creature, wild)

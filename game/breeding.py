@@ -72,17 +72,29 @@ def active_job(user: User) -> BreedingJob | None:
     return BreedingJob.objects.filter(owner=user).select_related("parent_a", "parent_b").first()
 
 
-def mating_minutes(parent_a: Creature, parent_b: Creature) -> int:
+def mating_minutes(parent_a: Creature, parent_b: Creature, user: User | None = None) -> int:
     """Phase-1 (mating) duration — the SERIAL gate, scaled by BOTH parents' rarity
     (mythic+mythic = 36h, down to 1h). Only one mating runs at a time, so this is the
     real bottleneck; the egg then incubates quickly (and several eggs can stack)."""
-    return constants.cave_mating_minutes(parent_a.rarity, parent_b.rarity)
+    from game import alliance_boosts
+
+    minutes = constants.cave_mating_minutes(parent_a.rarity, parent_b.rarity)
+    owner = user if user is not None else getattr(parent_a, "owner", None)
+    if owner is not None:
+        minutes = max(1, round(minutes * alliance_boosts.time_mult(owner, "cave")))
+    return minutes
 
 
-def hatch_minutes(parent_a: Creature, parent_b: Creature) -> int:
+def hatch_minutes(parent_a: Creature, parent_b: Creature, user: User | None = None) -> int:
     """Phase-2 (egg incubation) duration — keyed to BOTH parents' rarities, so a
     mythic+mythic pair waits much longer than a mythic+legendary one."""
-    return constants.egg_hatch_minutes(parent_a.rarity, parent_b.rarity)
+    from game import alliance_boosts
+
+    minutes = constants.egg_hatch_minutes(parent_a.rarity, parent_b.rarity)
+    owner = user if user is not None else getattr(parent_a, "owner", None)
+    if owner is not None:
+        minutes = max(1, round(minutes * alliance_boosts.time_mult(owner, "cave")))
+    return minutes
 
 
 def dna_cost(parent_a: Creature, parent_b: Creature) -> int:
@@ -117,8 +129,8 @@ def preview(user: User, parent_a: Creature, parent_b: Creature) -> dict:
     r = offspring_rarities(parent_a, parent_b)
     top, fallback, p_top = r["top"], r["fallback"], r["p_top"]
     return {
-        "mating_minutes": mating_minutes(parent_a, parent_b),
-        "hatch_minutes": hatch_minutes(parent_a, parent_b),
+        "mating_minutes": mating_minutes(parent_a, parent_b, user),
+        "hatch_minutes": hatch_minutes(parent_a, parent_b, user),
         "dna": dna_cost(parent_a, parent_b),
         "base_rarity": top,          # the top attainable rarity (never exceeded)
         "top_rarity": top,
@@ -159,7 +171,7 @@ def start(user: User, parent_a: Creature, parent_b: Creature) -> BreedingJob:
     user.dna_fragments -= cost
     user.save(update_fields=["dna_fragments"])
 
-    minutes = mating_minutes(parent_a, parent_b)
+    minutes = mating_minutes(parent_a, parent_b, user)
     return BreedingJob.objects.create(
         owner=user,
         parent_a=parent_a,
@@ -197,7 +209,9 @@ def _lay_egg_from(user: User, job: BreedingJob) -> Egg:
         # 1 and must be raised from scratch, like any fresh creature (only its species/
         # element and the bred rarity come from the parents, which IS the cave mechanic).
         inherit_level=1,
-        finishes_at=timezone.now() + datetime.timedelta(minutes=hatch_minutes(parent_a, parent_b)),
+        finishes_at=timezone.now() + datetime.timedelta(
+            minutes=hatch_minutes(parent_a, parent_b, user)
+        ),
     )
     job.delete()  # frees both parents — the cave is open again
     return egg

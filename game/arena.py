@@ -620,11 +620,11 @@ def attack(attacker: User, opponent: dict, award_cup: bool = True) -> dict:
             else:
                 loot, dna_win = constants.arena_loot_roll(attacker.cup)
 
-        # «پرچم جنگ» (dungeon relic): +10% on top for the attacker — the defender still
-        # loses only what was taken from them
-        from game import relics
+        # «پرچم جنگ» (dungeon relic) + بوست اتحاد «غنیمت»: +10% each on top for the
+        # attacker — the defender still loses only what was taken from them
+        from game import alliance_boosts, relics
 
-        banner = relics.mult(attacker, "war_banner")
+        banner = relics.mult(attacker, "war_banner") * alliance_boosts.mult(attacker, "loot")
         if banner > 1:
             loot, dna_win = round(loot * banner), round(dna_win * banner)
         attacker.coins += (loot + plundered_collector_gold)

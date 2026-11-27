@@ -304,6 +304,26 @@ class AllianceBonusLog(models.Model):
         indexes = [models.Index(fields=["alliance", "created_at"], name="allybonus_ally_time_idx")]
 
 
+class AllianceBoost(models.Model):
+    """A temporary alliance-wide buff bought from the treasury (game/alliance_boosts.py).
+
+    One row per (alliance, key). Buying while still active is rejected; after expiry the
+    same row is reused. Effects stop the moment `expires_at` passes — no cron needed.
+    """
+
+    alliance = models.ForeignKey(Alliance, on_delete=models.CASCADE, related_name="boosts")
+    key = models.CharField(max_length=24)
+    expires_at = models.DateTimeField()
+    bought_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    bought_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["alliance", "key"], name="uq_alliance_boost"),
+        ]
+        indexes = [models.Index(fields=["alliance", "expires_at"], name="allyboost_ally_exp_idx")]
+
+
 class Mail(models.Model):
     """«صندوق نامه»: a message to one player, shown in the bot and the Mini App. `kind` decides
     how it is drawn and which actions it has (an alliance invite: accept / decline); `data`

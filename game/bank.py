@@ -15,12 +15,22 @@ from game import constants
 from game.creature import GameError
 
 
-def capacity(level: int) -> int:
-    return constants.trade_hall_gold_cap(level)
+def capacity(level: int, user=None) -> int:
+    base = constants.trade_hall_gold_cap(level)
+    if user is not None and base > 0:
+        from game import alliance_boosts
+
+        return max(base, round(base * alliance_boosts.mult(user, "bank")))
+    return base
 
 
-def daily_budget(level: int) -> int:
-    return constants.bank_daily_withdraw(level)
+def daily_budget(level: int, user=None) -> int:
+    base = constants.bank_daily_withdraw(level)
+    if user is not None and base > 0:
+        from game import alliance_boosts
+
+        return max(base, round(base * alliance_boosts.mult(user, "bank")))
+    return base
 
 
 def _age_days(user) -> float:
@@ -46,12 +56,12 @@ def _add(user, action: str, amount: int) -> None:
 
 
 def withdraw_room(user, level: int) -> int:
-    return max(0, daily_budget(level) - _used(user, "bank_withdrawn"))
+    return max(0, daily_budget(level, user) - _used(user, "bank_withdrawn"))
 
 
 def receive_room(user, level: int) -> int:
     """How much more gold this bank can accept right now."""
-    room = max(0, capacity(level) - int(user.bank_gold or 0))
+    room = max(0, capacity(level, user) - int(user.bank_gold or 0))
     if is_young(user):
         room = min(room, max(0, constants.BANK_NEW_ACCOUNT_RECEIVE_CAP - _used(user, "bank_received")))
     return room
@@ -149,7 +159,7 @@ def deposit(user, amount: int, *, level: int, who: str | None = None) -> None:
     amount = int(amount)
     if amount <= 0:
         return
-    cap = capacity(level)
+    cap = capacity(level, user)
     bank_name = f"بانک {who}" if who else "بانک"
     if cap <= 0:
         if who:
@@ -180,7 +190,7 @@ def take_for_transfer(user, amount: int, *, level: int, who: str | None = None) 
     """Remove `amount` from the bank and count it against today's withdraw budget."""
     amount = int(amount)
     bank_name = f"بانک {who}" if who else "بانک"
-    if capacity(level) <= 0:
+    if capacity(level, user) <= 0:
         if who:
             raise GameError(
                 f"{who} هنوز «🏦 بانک طلا» نساخته؛ اول باید بانک بسازد تا بشود ازش طلا زد."
@@ -189,7 +199,7 @@ def take_for_transfer(user, amount: int, *, level: int, who: str | None = None) 
     room = withdraw_room(user, level)
     if amount > room:
         raise GameError(
-            f"سقف خروج طلا از {bank_name} امروز {daily_budget(level):,} است و {room:,} طلا از آن مانده."
+            f"سقف خروج طلا از {bank_name} امروز {daily_budget(level, user):,} است و {room:,} طلا از آن مانده."
         )
     if int(user.bank_gold or 0) < amount:
         raise GameError(f"داخل {bank_name} {int(user.bank_gold or 0):,} طلاست.")
@@ -215,7 +225,7 @@ def deposit_from_wallet(user, level: int, amount: int) -> int:
     if amount <= 0:
         raise GameError("مقدار باید بیشتر از صفر باشد.")
     sync_wallet(user)
-    cap = capacity(level)
+    cap = capacity(level, user)
     if cap <= 0:
         raise GameError("بانک ساخته نشده. از ساختمان‌ها «بانک طلا» را بساز.")
     room = cap - int(user.bank_gold or 0)
@@ -282,8 +292,8 @@ def _pending_mine_gold(user) -> int:
 def snapshot(user, level: int) -> dict:
     if int(getattr(user, "unearned_coins", 0) or 0) > 0:
         sync_wallet(user)
-    cap = capacity(level)
-    daily = daily_budget(level)
+    cap = capacity(level, user)
+    daily = daily_budget(level, user)
     used = _used(user, "bank_withdrawn") if cap else 0
     young = is_young(user)
     received = _used(user, "bank_received") if young else 0

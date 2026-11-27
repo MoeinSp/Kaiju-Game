@@ -25,7 +25,7 @@
     try { if (K.tg && K.tg.openTelegramLink) { K.tg.openTelegramLink(url); return; } } catch (e) {}
     window.open(url, "_blank");
   }
-  var BOT_NOTE = "ساخت اتحاد، اخراج و قائم‌مقام، ارتقای ساختمان‌ها، شبیخون، رید و شروع جنگ از داخل ربات انجام می‌شه. شرکت در جنگ یک‌روزه همین‌جاست.";
+  var BOT_NOTE = "ساخت اتحاد، اخراج و قائم‌مقام، ارتقای ساختمان‌ها، شبیخون، رید و شروع جنگ از داخل ربات انجام می‌شه. بوست‌ها و شرکت در جنگ یک‌روزه همین‌جاست.";
 
   // ───────────────────────── alliance ─────────────────────────
   var ROLE = { leader: ["رهبر", "crown", "var(--gold)"], deputy: ["قائم‌مقام", "shieldcheck", "var(--accent)"], member: ["عضو", "user", "var(--muted)"] };
@@ -46,6 +46,28 @@
         (b.maxed ? '<span class="tag" style="color:var(--good)">' + K.ic("check") + "کامل</span>" : '<span class="v sm t-coin">' + K.ic("coin") + " " + K.short(b.cost) + "</span>") + "</div>";
     }).join("") + "</div>" +
       '<p class="note">هزینه‌ی ارتقا از خزانه‌ی اتحاد کم می‌شه و فقط رهبر و قائم‌مقام می‌تونن از داخل ربات ارتقا بدن.' + (a.vault_income ? " درآمد روزانه‌ی خزانه: " + Number(a.vault_income).toLocaleString("en-US") + " طلا." : "") + "</p>";
+  }
+  function boostsHtml(a) {
+    var h = "";
+    if (a.boost_joined_today) {
+      h += '<div class="callout warn mb">' + K.ic("clock") +
+        "<div>شما تازه به اتحاد ملحق شدید؛ بوست‌ها فردا (بعد از ساعت ۱۲) برای شما فعال می‌شن.</div></div>";
+    }
+    h += '<div class="panel list">' + (a.boosts || []).map(function (b) {
+      var status = b.active
+        ? ('<span class="tag" style="color:var(--good)">' + K.ic("check") + "فعال" +
+          (b.seconds_left ? ' · <span class="timer" data-fmt="short" data-left="' + Number(b.seconds_left) + '"></span>' : "") + "</span>")
+        : '<span class="v sm t-coin">' + K.ic("coin") + " " + K.short(b.cost || a.boost_cost) + "</span>";
+      var note = b.active && !b.active_for_me ? "<small>برای اتحاد فعاله؛ برای تو از فردا</small>" : "";
+      var buy = (!b.active && a.can_buy_boost)
+        ? '<button class="btn sm gold" data-act="boost-buy" data-key="' + K.esc(b.key) + '">' + K.ic("spark") + "خرید</button>"
+        : "";
+      return '<div><span class="ic t-accent">' + K.ic("spark") + '</span><span class="t"><span class="b">' + K.esc(b.title) +
+        "</span><small>" + K.esc(b.desc) + "</small>" + note + "</span>" + status + buy + "</div>";
+    }).join("") + "</div>" +
+      '<p class="note">هر بوست ' + K.n(a.boost_hours || 24) + " ساعته و " + K.short(a.boost_cost) +
+      " طلا از خزانه کم می‌کنه. فقط رهبر و قائم‌مقام می‌خرن؛ تموم شدنش اثرش رو همون لحظه قطع می‌کنه.</p>";
+    return h;
   }
   function warHtml(a) {
     var w = a.war, h = '<div class="h2">' + K.ic("swords") + "جنگ یک‌روزه</div>";
@@ -204,23 +226,31 @@
             stat("bank", "t-coin", "خزانه", K.short(a.treasury)) + stat("flag", "t-cup", "امتیاز جنگ هفته", K.n(a.war_points));
         }
         stats();
-        segEl.innerHTML = seg([["members", "اعضا", "users"], ["buildings", "ساختمان‌ها", "building"], ["war", "جنگ و رید", "swords"]], allyTab, "atab");
+        segEl.innerHTML = seg([["members", "اعضا", "users"], ["buildings", "ساختمان‌ها", "building"], ["boosts", "بوست‌ها", "spark"], ["war", "جنگ و رید", "swords"]], allyTab, "atab");
         function draw() {
           Array.prototype.forEach.call(segEl.querySelectorAll("button"), function (b) { b.classList.toggle("on", b.dataset.atab === allyTab); });
-          body.innerHTML = allyTab === "buildings" ? buildingsHtml(a) : allyTab === "war" ? warHtml(a) : membersHtml(a);
+          body.innerHTML = allyTab === "buildings" ? buildingsHtml(a)
+            : allyTab === "boosts" ? boostsHtml(a)
+            : allyTab === "war" ? warHtml(a)
+            : membersHtml(a);
         }
-        // the war tab carries a live countdown; the tab is redrawn on every switch, so ONE interval
-        // (registered once) refreshes whichever timer element is currently on screen
+        // the war / boost tabs carry live countdowns; ONE interval refreshes whichever
+        // timer elements are currently on screen after a tab switch
         var until = Date.now() / 1000 + (a.war ? a.war.seconds_left : 0), fired = false;
         function tick() {
-          var el = a.war && !a.war.ended ? body.querySelector(".timer") : null; if (!el) return;
+          Array.prototype.forEach.call(body.querySelectorAll(".timer[data-left]"), function (el) {
+            var left = Number(el.dataset.left || 0) - (Date.now() / 1000 - (el._t0 || (el._t0 = Date.now() / 1000)));
+            if (left > 0) { el.innerHTML = '<span class="num">' + K.dur(left) + "</span>"; return; }
+            el.classList.add("done"); el.textContent = "تموم شد";
+          });
+          var el = a.war && !a.war.ended ? body.querySelector(".timer:not([data-left])") : null; if (!el) return;
           var s = until - Date.now() / 1000;
           if (s > 0) { el.innerHTML = K.ic("clock") + '<span class="num">' + K.dur(s) + "</span>"; return; }
           el.classList.add("done"); el.innerHTML = K.ic("check") + "تموم شد";
           if (!fired) { fired = true; K.after(1500, ctx.reload); }
         }
         function show() { draw(); tick(); }
-        if (a.war && !a.war.ended && a.war.seconds_left > 0) K.every(1000, tick);
+        if ((a.war && !a.war.ended && a.war.seconds_left > 0) || (a.boosts || []).some(function (b) { return b.active; })) K.every(1000, tick);
         show();
         segEl.addEventListener("click", function (ev) { var b = ev.target.closest("[data-atab]"); if (!b) return; K.haptic(); allyTab = b.dataset.atab; show(); });
         K.on(root, "recruit", function () { K.go("so_recruit"); });
@@ -229,6 +259,21 @@
         K.on(root, "flag", function () { K.go("so_flag"); });
         K.on(root, "rename", function () { renameSheet(d, ctx, stats); });
         K.on(root, "leave", function (el) { leaveFlow(d, ctx, el); });
+        K.on(root, "boost-buy", function (el) {
+          var key = el.dataset.key, b = (a.boosts || []).find(function (x) { return x.key === key; });
+          if (!b || !a.can_buy_boost) return;
+          K.confirm({
+            title: "خرید بوست " + b.title, icon: "spark", ok: "بخر از خزانه", cancel: "بی‌خیال",
+            html: "<p>" + K.esc(b.desc) + "<br>مدت: <b>" + K.n(a.boost_hours || 24) + " ساعت</b><br>هزینه از خزانه: <b>" +
+              K.n(b.cost || a.boost_cost) + "</b> طلا<br>خزانه‌ی فعلی: " + K.n(a.treasury) + "</p>"
+          }).then(function (yes) {
+            if (!yes) return;
+            K.api.post("social/alliance/boost/", { key: key }, el).then(function (r) {
+              K.haptic("ok"); K.toast("بوست «" + r.title + "» فعال شد!", "ok");
+              a.treasury = r.treasury; a.boosts = r.boosts; stats(); if (allyTab === "boosts") draw();
+            });
+          });
+        });
         K.on(root, "rally", function (el) {
           K.api.post("social/alliance/war/preview/", {}, el).then(function (p) {
             var html = p.cave

@@ -1,9 +1,10 @@
-"""«🏰 پرک‌های اتحاد» + «⚔️ جنگ هفتگی» — the alliance-depth screens.
+"""«🏰 پرک‌های اتحاد» + «⚔️ جنگ هفتگی» + «✨ بوست‌های اتحاد» — alliance-depth screens.
 
-Perks: the leader spends treasury gold on alliance-wide XP / Pass boosts that
-benefit every member. War: members' activity earns war points; the weekly
-leaderboard shows the standings, and the top alliance's treasury wins a bonus at
-week's end (settled by the notification job).
+Perks: the leader spends treasury gold on alliance-wide XP / Pass buildings that
+benefit every member. Boosts: temporary 24h buffs (energy / loot / cave / bank)
+also bought from the treasury by leader/deputy. War: members' activity earns war
+points; the weekly leaderboard shows the standings, and the top alliance's
+treasury wins a bonus at week's end (settled by the notification job).
 """
 
 from telegram import InlineKeyboardMarkup, Update
@@ -12,9 +13,9 @@ from telegram.ext import CallbackQueryHandler, ContextTypes
 from bot.utils import alert_text
 from bio_lab.models import Alliance
 from bio_lab.repository import creature_name, get_or_create_user
-from bot.buttons import BATTLE, BUILD, CONFIRM, DANGER, back_btn, btn
+from bot.buttons import BATTLE, BUILD, CONFIRM, DANGER, SHOP, back_btn, btn
 from bot.utils import run_db, safe_edit_message_text, send_screen
-from game import alliance
+from game import alliance, alliance_boosts
 from game.creature import GameError
 
 
@@ -435,6 +436,122 @@ async def war_rally_go_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await safe_edit_message_text(query, note + text, parse_mode="HTML", reply_markup=keyboard)
 
 
+# ── alliance boosts ──────────────────────────────────────────────────────────
+
+def _fmt_left(seconds: int) -> str:
+    seconds = max(0, int(seconds))
+    h, rem = divmod(seconds, 3600)
+    m = rem // 60
+    if h:
+        return f"{h}س و {m}د"
+    return f"{m}د"
+
+
+def _boosts_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    return alliance_boosts.panel(user)
+
+
+def _boosts_render(info: dict) -> tuple[str, InlineKeyboardMarkup]:
+    lines = [
+        f"✨ <b>بوست‌های اتحاد {info['name']}</b>",
+        f"<blockquote>💰 خزانه: <b>{info['treasury']:,}</b> طلا\n"
+        f"هر بوست <b>{info['cost']:,}</b> طلا از خزانه و <b>{info['hours']} ساعت</b> فعاله.\n"
+        "فقط رهبر و قائم‌مقام می‌خرن؛ اثرش برای همه‌ی اعضای واجد شرایطه.</blockquote>",
+    ]
+    if info["joined_today"]:
+        lines.append(
+            "\n⚠️ <b>شما تازه به اتحاد ملحق شدید.</b>\n"
+            "<i>بوست‌ها فردا (بعد از ساعت ۱۲) برای شما فعال می‌شن.</i>"
+        )
+    rows = []
+    for b in info["boosts"]:
+        if b["active"]:
+            status = f"✅ فعال · {_fmt_left(b['seconds_left'])} مونده"
+            if b["active"] and not b["active_for_me"]:
+                status += " (برای تو از فردا)"
+        else:
+            status = "خاموش"
+        lines.append(
+            f"\n{b['emoji']} <b>{b['title']}</b>\n"
+            f"   <i>{b['desc']}</i>\n"
+            f"   {status}"
+        )
+        if info["is_manager"] and not b["active"]:
+            rows.append([btn(
+                f"{b['emoji']} خرید {b['title']} · {b['cost']:,}",
+                style=SHOP, callback_data=f"ally_boost_buy:{b['key']}",
+            )])
+    if not info["is_manager"]:
+        lines.append("\n<i>فقط رهبر یا قائم‌مقام اتحاد می‌تونه بوست بخره.</i>")
+    rows.append([back_btn("menu:alliance_info")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+async def boosts_panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    info = await run_db(_boosts_sync, update.effective_user)
+    await query.answer()
+    if info is None:
+        await safe_edit_message_text(
+            query, "توی هیچ اتحادی نیستی.",
+            reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "بازگشت به اتحاد")]]),
+        )
+        return
+    text, keyboard = _boosts_render(info)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def boost_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    key = query.data.split(":")[1]
+    info = await run_db(_boosts_sync, update.effective_user)
+    b = next((x for x in (info or {}).get("boosts", []) if x["key"] == key), None)
+    if info is None or b is None:
+        await query.answer("این بوست الان در دسترس نیست.", show_alert=True)
+        return
+    if not info["is_manager"]:
+        await query.answer("فقط رهبر یا قائم‌مقام اتحاد می‌تونه بوست بخره.", show_alert=True)
+        return
+    if b["active"]:
+        await query.answer("این بوست هنوز فعاله.", show_alert=True)
+        return
+    await query.answer()
+    await safe_edit_message_text(
+        query,
+        f"{b['emoji']} <b>خرید بوست {b['title']}</b>\n\n"
+        f"<blockquote>{b['desc']}\n"
+        f"⏱ مدت: <b>{info['hours']} ساعت</b>\n"
+        f"💰 هزینه از خزانه: <code>{b['cost']:,}</code> طلا\n"
+        f"🏦 خزانه‌ی فعلی: <code>{info['treasury']:,}</code> طلا</blockquote>\n\n"
+        "تأیید می‌کنی؟",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[
+            btn("بله، بخر", emoji_key="btn_confirm", style=SHOP, callback_data=f"ally_boost_ok:{key}"),
+            back_btn("ally_boosts", "نه"),
+        ]]),
+    )
+
+
+def _boost_buy_sync(tg_user, key):
+    user, _ = get_or_create_user(tg_user)
+    alliance_boosts.buy(user, key)
+    return alliance_boosts.panel(user)
+
+
+async def boost_buy_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    key = query.data.split(":")[1]
+    try:
+        info = await run_db(_boost_buy_sync, update.effective_user, key)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    await query.answer("✅ بوست فعال شد!")
+    text, keyboard = _boosts_render(info)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
+
+
 def register(application) -> None:
     # in a group these panels are one shared message → only its owner may drive it
     from bot.gates import card_owner_only as own
@@ -443,6 +560,9 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(own(perk_buy_callback), pattern=r"^ally_perk_buy:"))
     application.add_handler(CallbackQueryHandler(own(perk_buy_confirm_callback), pattern=r"^ally_perk_ok:"))
     application.add_handler(CallbackQueryHandler(own(vault_collect_callback), pattern=r"^ally_vault_collect$"))
+    application.add_handler(CallbackQueryHandler(own(boosts_panel_callback), pattern=r"^ally_boosts$"))
+    application.add_handler(CallbackQueryHandler(own(boost_buy_callback), pattern=r"^ally_boost_buy:"))
+    application.add_handler(CallbackQueryHandler(own(boost_buy_confirm_callback), pattern=r"^ally_boost_ok:"))
     application.add_handler(CallbackQueryHandler(own(war_panel_callback), pattern=r"^ally_war$"))
     application.add_handler(CallbackQueryHandler(own(war1d_panel_callback), pattern=r"^ally_war1d$"))
     application.add_handler(CallbackQueryHandler(own(war_start_callback), pattern=r"^ally_war_start$"))

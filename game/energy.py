@@ -14,11 +14,12 @@ class EnergyError(GameError):
 
 def get_max_energy(user: User) -> int:
     """Subscribers get MAX_ENERGY_SUBSCRIBER; everyone else MAX_ENERGY."""
-    from game import relics
+    from game import alliance_boosts, relics
     from game.subscription import is_subscription_active
 
     base = constants.MAX_ENERGY_SUBSCRIBER if is_subscription_active(user) else constants.MAX_ENERGY
-    return base + relics.bonus(user, "heart_stone")  # «سنگ قلب» (dungeon relic)
+    # «سنگ قلب» (dungeon relic) + «سقف انرژی» alliance boost
+    return base + relics.bonus(user, "heart_stone") + alliance_boosts.bonus(user, "energy_cap")
 
 
 def get_energy_regen_interval_seconds(user: User) -> float:
@@ -26,16 +27,20 @@ def get_energy_regen_interval_seconds(user: User) -> float:
     Normal: base (constants.ENERGY_REGEN_MINUTES * 60)
     Silver: +25% faster regen (interval / 1.25)
     Gold: +50% faster regen (interval / 1.50)
+    Alliance boost «بازیابی انرژی»: another /1.10 on top.
     """
+    from game import alliance_boosts
     from game.subscription import get_subscription_tier
 
     base_sec = float(constants.ENERGY_REGEN_MINUTES * 60)
     tier = get_subscription_tier(user)
     if tier == "gold":
-        return base_sec / 1.50  # 50% faster regen rate
+        interval = base_sec / 1.50  # 50% faster regen rate
     elif tier == "silver":
-        return base_sec / 1.25  # 25% faster regen rate
-    return base_sec
+        interval = base_sec / 1.25  # 25% faster regen rate
+    else:
+        interval = base_sec
+    return interval / alliance_boosts.regen_divisor(user)
 
 
 def _synced_energy_and_anchor(user: User) -> tuple[int, datetime.datetime]:

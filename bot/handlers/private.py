@@ -3936,6 +3936,7 @@ def _alliance_action_keyboard(in_alliance: bool, can_edit_flag: bool = False,
                              callback_data="ally_rename")])
         rows += [
             [btn("ساختمان‌های اتحاد", emoji_key="btn_buildings", style=PRIMARY, callback_data="ally_perks")],
+            [btn("بوست‌های اتحاد", emoji_key="btn_shop", style=SHOP, callback_data="ally_boosts")],
             [btn("جدول رید اتحاد", emoji_key="btn_raid_table", style=NAV, callback_data="ally_raidtable")],
             [
                 btn("جنگ یک‌روزه", emoji_key="btn_war", style=BATTLE, callback_data="ally_war1d"),
@@ -3986,6 +3987,7 @@ def _group_alliance_keyboard(in_alliance: bool) -> InlineKeyboardMarkup:
     if in_alliance:
         rows = [
             [btn("ساختمان‌های اتحاد", emoji_key="btn_buildings", style=PRIMARY, callback_data="ally_perks")],
+            [btn("بوست‌های اتحاد", emoji_key="btn_shop", style=SHOP, callback_data="ally_boosts")],
             [
                 btn("جنگ یک‌روزه", emoji_key="btn_war", style=BATTLE, callback_data="ally_war1d"),
                 btn("جنگ هفتگی", emoji_key="btn_attack", style=BATTLE, callback_data="ally_war"),
@@ -5851,6 +5853,7 @@ async def alliance_war_panel(update: Update, context: ContextTypes.DEFAULT_TYPE)
         [btn("جنگ اتحاد", emoji_key="btn_war", style=BATTLE, callback_data="ally_war1d")],
         [btn("لیگ اتحادها", emoji_key="btn_war", style=BATTLE, callback_data="ally_war")],
         [btn("ساختمان‌های اتحاد", emoji_key="btn_buildings", style=BUILD, callback_data="ally_perks")],
+        [btn("بوست‌های اتحاد", emoji_key="btn_shop", style=SHOP, callback_data="ally_boosts")],
         [back_btn("menu:hub_battle", "بازگشت")],
     ]
     from game.media import get_feature_image_path
