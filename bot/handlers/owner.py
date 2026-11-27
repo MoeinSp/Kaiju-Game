@@ -1697,6 +1697,7 @@ def _user_info_text(data: dict) -> str:
     banned_txt = "🔴 مسدود" if user.is_banned else f"{get_emoji('poison')} فعال"
     joined_txt = timezone.localtime(user.created_at).strftime("%Y-%m-%d")
     creatures = data.get("creatures", [])
+    creature_count = int(data.get("creature_count") or len(creatures))
     active_c = next((c for c in creatures if c.is_active), None)
     active_txt = (
         f"<code>#{active_c.id}</code> {html.escape(active_c.name)} Lv{active_c.level} "
@@ -1720,8 +1721,9 @@ def _user_info_text(data: dict) -> str:
         f"{get_emoji('coin')} {user.coins:,}   {get_emoji('dna')} {user.dna_fragments:,}   "
         f"{get_emoji('diamond')} {user.diamonds:,}   {get_emoji('energy')} {user.energy}/{get_max_energy(user)}",
         f"🔥 استریک: <b>{user.login_streak}</b> روز   {get_emoji('alliance')} اتحاد: <b>{alliance_name}</b>",
-        f"🚫 وضعیت: <b>{banned_txt}</b>   📅 عضویت: <code>{joined_txt}</code>",
-        f"{get_emoji('creature')} کایجوی فعال: {active_txt} (مجموع موجودات: <b>{len(creatures)}</b>)",
+        # don't wrap get_emoji() inside <b> — nested <tg-emoji> has made Telegram drop the reply
+        f"🚫 وضعیت: {banned_txt}   📅 عضویت: <code>{joined_txt}</code>",
+        f"{get_emoji('creature')} کایجوی فعال: {active_txt} (مجموع موجودات: <b>{creature_count}</b>)",
         "",
         f"📊 <b>دریافتی امروز ({t_day}):</b>",
         f"  🪙 {c_today:,} طلا  ·  🧬 {dna_today:,} دی‌ان‌ای  ·  💎 {dia_today:,} الماس",
@@ -5467,30 +5469,40 @@ async def capture_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     if action in ("user_info", "user_search"):
-        # exact id/username → open directly; otherwise show matching candidates
-        exact = None
+        # exact id/username → open directly; otherwise show matching candidates.
+        # never stay silent: paste like «ر@Rytck» used to miss, and a bad HTML
+        # parse used to swallow the reply with no feedback.
         try:
-            exact = await run_db(user_info, text)
-        except GameError:
             exact = None
-        if exact is not None:
-            user = exact["user"]
+            try:
+                exact = await run_db(user_info, text)
+            except GameError:
+                exact = None
+            if exact is not None:
+                user = exact["user"]
+                body = _user_info_text(exact)
+                kb = _user_manage_keyboard(user.id, user.is_banned)
+                try:
+                    await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
+                except TelegramError:
+                    logger.exception("user_search exact reply failed for %r", text)
+                    await message.reply_text(alert_text(body, 3500), reply_markup=kb)
+                return
+            matches = await run_db(search_users, text)
+            if not matches:
+                context.user_data[AWAITING_ADMIN_KEY] = awaiting
+                await message.reply_text("کاربری پیدا نشد. یه آیدی، @یوزرنیم یا بخشی از اسم دیگه بفرست:")
+                return
+            rows = [[_user_row_button(m)] for m in matches]
+            rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
             await message.reply_text(
-                _user_info_text(exact), parse_mode="HTML",
-                reply_markup=_user_manage_keyboard(user.id, user.is_banned),
+                f"🔍 <b>{len(matches)} کاربر پیدا شد</b> — یکی رو انتخاب کن:",
+                parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows),
             )
-            return
-        matches = await run_db(search_users, text)
-        if not matches:
+        except Exception:
+            logger.exception("user_search failed for %r", text)
             context.user_data[AWAITING_ADMIN_KEY] = awaiting
-            await message.reply_text("کاربری پیدا نشد. یه آیدی، @یوزرنیم یا بخشی از اسم دیگه بفرست:")
-            return
-        rows = [[_user_row_button(m)] for m in matches]
-        rows.append([back_btn("admin_menu:admin_home", "بازگشت به پنل ادمین")])
-        await message.reply_text(
-            f"🔍 <b>{len(matches)} کاربر پیدا شد</b> — یکی رو انتخاب کن:",
-            parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows),
-        )
+            await message.reply_text("خطا در جستجو. دوباره آیدی یا @یوزرنیم رو بفرست:")
         return
 
     if action == "admin_c_transfer":

@@ -9,9 +9,12 @@ GRANT_RESOURCE_FIELDS = {"coins": "coins", "dna": "dna_fragments", "diamonds": "
 
 
 def find_user_or_raise(identifier: str) -> User:
+    from bio_lab.repository import normalize_player_query
+
     user = resolve_user(identifier)
     if user is None:
-        raise GameError(f"کاربری با شناسه/یوزرنیم «{identifier}» پیدا نشد.")
+        shown = normalize_player_query(identifier) or (identifier or "").strip() or "—"
+        raise GameError(f"کاربری با شناسه/یوزرنیم «{shown}» پیدا نشد.")
     return user
 
 
@@ -391,13 +394,22 @@ def search_users(query: str, limit: int = 10) -> list[dict]:
     """Partial match on lab name / first name / username (and exact id)."""
     from django.db.models import Q
 
-    q = (query or "").strip().lstrip("@")
+    from bio_lab.repository import normalize_player_query, resolve_user
+
+    q = normalize_player_query(query)
     if not q:
         return []
+    # exact hit first so a clean @username always surfaces even among many partials
+    exact = resolve_user(q)
     filt = Q(lab_name__icontains=q) | Q(first_name__icontains=q) | Q(username__icontains=q)
     if q.isdigit():
         filt = filt | Q(id=int(q))
-    return [_user_row(u) for u in User.objects.filter(filt).order_by("-created_at")[:limit]]
+    rows = list(User.objects.filter(filt).order_by("-created_at")[:limit])
+    if exact is not None and all(u.id != exact.id for u in rows):
+        rows = [exact, *rows][:limit]
+    elif exact is not None:
+        rows = [exact, *[u for u in rows if u.id != exact.id]][:limit]
+    return [_user_row(u) for u in rows]
 
 
 @transaction.atomic
@@ -531,14 +543,17 @@ def reset_user(identifier: str) -> User:
 
 def user_info(identifier: str) -> dict:
     user = find_user_or_raise(identifier)
-    creatures = list(Creature.objects.filter(owner=user).order_by("id"))
+    # only the active kaiju + a count — loading every creature (some players have 200+)
+    # made the admin search feel stuck / look like "nothing came"
+    creatures = list(Creature.objects.filter(owner=user, is_active=True).order_by("id")[:3])
+    creature_count = Creature.objects.filter(owner=user).count()
     # resolve the alliance name HERE (sync/ORM context) — the card is rendered on
     # the event loop, where a lazy user.alliance FK load would raise
     # SynchronousOnlyOperation (this crashed opening any user who's in an alliance)
     alliance_name = user.alliance.name if user.alliance_id else None
     return {
-        "user": user, "creatures": creatures, "alliance_name": alliance_name,
-        "gains": _recent_gains_safe(user),
+        "user": user, "creatures": creatures, "creature_count": creature_count,
+        "alliance_name": alliance_name, "gains": _recent_gains_safe(user),
     }
 
 

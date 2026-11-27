@@ -157,11 +157,28 @@ def group_member_creatures(group: Group) -> list[Creature]:
     return list(Creature.objects.filter(owner_id__in=member_ids, is_active=True).select_related("owner"))
 
 
+# Telegram / Persian keyboards often stick these into pasted @usernames (ZWNJ, RTL
+# marks, …). Leaving them in makes iexact miss a player that is clearly in the DB.
+_QUERY_INVISIBLE = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u200e\u200f\u2060\ufeff\u061c"))
+
+
+def normalize_player_query(identifier: str) -> str:
+    """Strip invisible marks and pull the username out of messy paste like «ر@Rytck»."""
+    q = (identifier or "").translate(_QUERY_INVISIBLE).strip()
+    if "@" in q:
+        # take the token after the last @ so a Persian letter before it can't poison the match
+        q = q.rsplit("@", 1)[-1]
+    q = q.strip().lstrip("@").strip(".,،؛:!?()[]{}<>\"'")
+    return q.strip()
+
+
 def resolve_user(identifier: str) -> User | None:
     """Looks a player up for owner-only moderation, by any of: numeric telegram id,
     @username, or lab name (case-insensitive). Lab names are unique (enforced when
     set — see bot.handlers.private), so they're a safe identifier."""
-    identifier = identifier.strip().lstrip("@")
+    identifier = normalize_player_query(identifier)
+    if not identifier:
+        return None
     if identifier.isdigit():
         return User.objects.filter(id=int(identifier)).first()
     # usernames aren't unique and can be stale → the most recently active match wins,

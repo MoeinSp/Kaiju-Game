@@ -227,21 +227,18 @@ def _sent_today(alliance: Alliance) -> int:
 
 # ══════════════════════════ invites ══════════════════════════
 def find_player(query: str) -> User | None:
-    q = (query or "").strip()
-    if not q:
-        return None
-    if q.lstrip("-").isdigit():
-        return User.objects.filter(id=int(q)).first()
-    if q.startswith("@"):
-        return User.objects.filter(username__iexact=q[1:]).first()
-    return (User.objects.filter(lab_name__iexact=q).first()
-            or User.objects.filter(username__iexact=q).first())
+    """Same identifiers as bio_lab.repository.resolve_user (id / @username / lab name)."""
+    from bio_lab.repository import resolve_user
+
+    return resolve_user(query)
 
 
 def invite(actor: User, query: str) -> AllianceInvite:
     target = find_player(query)
-    if target is None or not target.lab_name:
+    if target is None:
         raise GameError("همچین بازیکنی پیدا نشد. یوزرنیم (با @)، اسم آزمایشگاه یا آیدی عددیش رو بفرست.")
+    if not target.lab_name:
+        raise GameError("این بازیکن هنوز بازی رو شروع نکرده (اسم آزمایشگاه نداره).")
     return invite_user(actor, target)
 
 
