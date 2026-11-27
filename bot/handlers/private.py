@@ -4684,16 +4684,118 @@ async def alliance_search_callback(update: Update, context: ContextTypes.DEFAULT
     )
 
 
+ALLY_DEP_AMOUNT_KEY = "ally_dep_amount"
+_ALLY_DEP_STEPS = (1_000, 10_000, 100_000, 1_000_000)
+
+
+def _ally_dep_info_sync(tg_user):
+    user, _ = get_or_create_user(tg_user)
+    if user.alliance_id is None:
+        raise GameError("اول باید عضو یه اتحاد باشی.")
+    al = Alliance.objects.filter(id=user.alliance_id).first()
+    if al is None:
+        raise GameError("اتحاد پیدا نشد.")
+    return {"coins": int(user.coins or 0), "treasury": int(al.treasury_gold or 0), "name": al.name}
+
+
+def _ally_dep_clamp(amount: int, coins: int) -> int:
+    return max(0, min(int(amount or 0), max(0, int(coins or 0))))
+
+
+def _ally_dep_render(info: dict, amount: int) -> tuple[str, InlineKeyboardMarkup]:
+    coins = int(info["coins"])
+    amount = _ally_dep_clamp(amount, coins)
+    lines = [
+        f"💰 <b>واریز به خزانه‌ی {info['name']}</b>",
+        f"{get_emoji('coin')} طلای تو: <code>{coins:,}</code>",
+        f"🏦 خزانه: <code>{info['treasury']:,}</code>",
+        "",
+        f"مقدار انتخابی: <b><code>{amount:,}</code></b>",
+        "<i>طلای واریزشده به خزانه دیگه قابل برداشت نیست.</i>",
+    ]
+    rows: list[list] = []
+    step_btns = [
+        btn(f"+{step:,}", emoji_key="btn_deposit", style=BUILD, callback_data=f"ally_dep:add:{step}")
+        for step in _ALLY_DEP_STEPS
+        if coins >= step
+    ]
+    for i in range(0, len(step_btns), 2):
+        rows.append(step_btns[i:i + 2])
+    half = coins // 2
+    rows.append([
+        btn(f"نصف ({half:,})" if half else "نصف", emoji_key="btn_deposit", style=NAV,
+            callback_data="ally_dep:half"),
+        btn(f"حداکثر ({coins:,})", emoji_key="btn_deposit", style=CONFIRM,
+            callback_data="ally_dep:max"),
+    ])
+    rows.append([
+        btn("صفر کردن", emoji_key="btn_cancel", style=DANGER, callback_data="ally_dep:clear"),
+        btn("عدد دلخواه", emoji_key="btn_custom_amt", style=NAV, callback_data="ally_dep:custom"),
+    ])
+    if amount > 0:
+        rows.append([btn(
+            f"تأیید واریز {amount:,}",
+            emoji_key="btn_confirm", style=CONFIRM, callback_data=f"ally_dep_ok:{amount}",
+        )])
+    rows.append([back_btn("menu:alliance_info", "انصراف")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
 async def alliance_deposit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Open the deposit pad: quick +steps, half/max/clear, or type a custom amount."""
     query = update.callback_query
-    context.user_data[AWAITING_PLAYER_KEY] = {"action": "alliance_deposit"}
+    context.user_data.pop(AWAITING_PLAYER_KEY, None)
+    context.user_data[ALLY_DEP_AMOUNT_KEY] = 0
+    try:
+        info = await run_db(_ally_dep_info_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
     await query.answer()
-    await safe_edit_message_text(
-        query,
-        f"💰 چند {get_emoji('coin')} طلا می‌خوای به خزانه واریز کنی؟ یه عدد بفرست:{_reply_hint(update)}",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([[back_btn("menu:alliance_info", "انصراف")]]),
-    )
+    text, kb = _ally_dep_render(info, 0)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
+
+
+async def alliance_dep_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Pad actions: add / half / max / clear / custom."""
+    query = update.callback_query
+    parts = query.data.split(":")
+    action = parts[1]
+    try:
+        info = await run_db(_ally_dep_info_sync, update.effective_user)
+    except GameError as exc:
+        await query.answer(alert_text(exc), show_alert=True)
+        return
+    coins = info["coins"]
+    if action == "custom":
+        context.user_data[AWAITING_PLAYER_KEY] = {"action": "alliance_deposit"}
+        await query.answer()
+        await safe_edit_message_text(
+            query,
+            f"⌨️ <b>مقدار دلخواه</b>\n\n"
+            f"یه عدد بفرست (حداکثر <code>{coins:,}</code> طلا)."
+            f"{_reply_hint(update)}",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[back_btn("ally_deposit", "بازگشت")]]),
+        )
+        return
+    cur = int(context.user_data.get(ALLY_DEP_AMOUNT_KEY) or 0)
+    if action == "add":
+        cur = _ally_dep_clamp(cur + int(parts[2]), coins)
+    elif action == "half":
+        cur = coins // 2
+    elif action == "max":
+        cur = coins
+    elif action == "clear":
+        cur = 0
+    else:
+        await query.answer()
+        return
+    context.user_data[ALLY_DEP_AMOUNT_KEY] = cur
+    context.user_data.pop(AWAITING_PLAYER_KEY, None)
+    await query.answer()
+    text, kb = _ally_dep_render(info, cur)
+    await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=kb)
 
 
 async def alliance_top_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -4828,6 +4930,8 @@ async def alliance_deposit_confirm_callback(update: Update, context: ContextType
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
         return
+    context.user_data.pop(ALLY_DEP_AMOUNT_KEY, None)
+    context.user_data.pop(AWAITING_PLAYER_KEY, None)
     await query.answer()
     await safe_edit_message_text(
         query,
@@ -5276,15 +5380,24 @@ async def capture_player_text_reply(update: Update, context: ContextTypes.DEFAUL
             context.user_data[AWAITING_PLAYER_KEY] = awaiting
             await message.reply_text("⚠️ یه عدد مثبت بفرست.")
             return
-        await message.reply_text(
-            f"💰 <code>{int(text):,}</code> {get_emoji('coin')} طلا به خزانه‌ی اتحاد واریز بشه؟\n"
-            "<i>طلای واریزشده به خزانه دیگه قابل برداشت نیست.</i>",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([[
-                btn("بله، واریز کن", emoji_key="btn_confirm", style=CONFIRM, callback_data=f"ally_dep_ok:{int(text)}"),
-                btn("نه", emoji_key="btn_cancel", style=NAV, callback_data="menu:alliance_info"),
-            ]]),
-        )
+        try:
+            info = await run_db(_ally_dep_info_sync, update.effective_user)
+        except GameError as exc:
+            await message.reply_text(alert_text(exc))
+            return
+        amount = _ally_dep_clamp(int(text), info["coins"])
+        if amount <= 0:
+            context.user_data[AWAITING_PLAYER_KEY] = awaiting
+            await message.reply_text("⚠️ طلای آزاد نداری که واریز کنی.")
+            return
+        if amount != int(text):
+            await message.reply_text(
+                f"فقط <code>{info['coins']:,}</code> طلا داری؛ مقدار روی همون سقف تنظیم شد.",
+                parse_mode="HTML",
+            )
+        context.user_data[ALLY_DEP_AMOUNT_KEY] = amount
+        text_pad, kb = _ally_dep_render(info, amount)
+        await message.reply_text(text_pad, parse_mode="HTML", reply_markup=kb)
         return
 
 
@@ -6545,6 +6658,9 @@ def register(application) -> None:
     application.add_handler(CallbackQueryHandler(lab_name_confirm_callback, pattern=r"^labname_(ok|no)$"))
     application.add_handler(CallbackQueryHandler(alliance_kick_confirm_callback, pattern=r"^ally_kick_ok:\d+$"))
     application.add_handler(CallbackQueryHandler(alliance_deposit_confirm_callback, pattern=r"^ally_dep_ok:\d+$"))
+    application.add_handler(CallbackQueryHandler(
+        alliance_dep_edit_callback, pattern=r"^ally_dep:(add:\d+|half|max|clear|custom)$",
+    ))
     application.add_handler(CallbackQueryHandler(heist_confirm_callback, pattern=r"^heist_ok:\d+$"))
     application.add_handler(CallbackQueryHandler(missions_page_callback, pattern=r"^mission_(page|tab):"))
     application.add_handler(CallbackQueryHandler(mission_box_callback, pattern=r"^mission_box:\d+$"))
