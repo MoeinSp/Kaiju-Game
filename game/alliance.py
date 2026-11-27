@@ -521,15 +521,31 @@ def join_alliance_by_id(user: User, alliance_id: int) -> Alliance:
 
 
 def top_alliances(limit: int = 10) -> list[dict]:
-    ranked = sorted(
-        (
-            {"alliance": a, "power": _alliance_power(a), "member_count": a.members.count()}
-            for a in Alliance.objects.all()
-        ),
-        key=lambda r: r["power"],
-        reverse=True,
+    """Top alliances by summed active-creature base stats — one SQL annotate, not N+1."""
+    from django.db.models import Count, F, IntegerField, Q, Sum, Value
+    from django.db.models.functions import Coalesce
+
+    rows = (
+        Alliance.objects.annotate(
+            member_count=Count("members", distinct=True),
+            power=Coalesce(
+                Sum(
+                    F("members__creatures__base_hp")
+                    + F("members__creatures__base_atk")
+                    + F("members__creatures__base_def")
+                    + F("members__creatures__base_spd"),
+                    filter=Q(members__creatures__is_active=True),
+                    output_field=IntegerField(),
+                ),
+                Value(0),
+            ),
+        )
+        .order_by("-power", "id")[:limit]
     )
-    return ranked[:limit]
+    return [
+        {"alliance": a, "power": int(a.power or 0), "member_count": int(a.member_count or 0)}
+        for a in rows
+    ]
 
 
 # End-of-week league reward per MEMBER, by the alliance's power rank (top 10 only).

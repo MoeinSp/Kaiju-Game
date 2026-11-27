@@ -4800,8 +4800,8 @@ async def alliance_dep_edit_callback(update: Update, context: ContextTypes.DEFAU
 
 async def alliance_top_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    await query.answer()  # ack first — ranking + flag board can take a moment
     ranked, photo = await run_db(_alliance_board_sync)
-    await query.answer()
     keyboard = InlineKeyboardMarkup([[back_btn("menu:alliance_info")]])
     if not ranked:
         await safe_edit_message_text(query, "هنوز هیچ اتحادی ساخته نشده.", reply_markup=keyboard)

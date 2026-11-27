@@ -386,6 +386,9 @@ def _sea(draw, image, spec, hi, lo, metal, metal_lo):
     draw.polygon([(490, 820), (470, 860), (510, 860)], fill=metal)
 
 
+_THUMB_SIZE = (86, 118)
+
+
 def flag_file(alliance):
     """Rendered flag of an alliance, or None when its officers have not built one."""
     raw = alliance.flag if isinstance(getattr(alliance, "flag", None), dict) else None
@@ -394,21 +397,45 @@ def flag_file(alliance):
     return render_flag(normalize(raw, alliance.name))
 
 
+def _thumb_path(spec: dict):
+    folder = CACHE_DIR / "flags"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder / f"thumb_{spec_key(spec)}.jpg"
+
+
+def _warm_flag(alliance) -> None:
+    """Ensure the full flag JPEG exists (for thumb baking). Safe to call in a thread."""
+    try:
+        flag_file(alliance)
+    except OSError:
+        pass
+
+
 def render_board(ranked) -> str:
     """One picture of the top alliances, each with its own flag. The path changes
     when the ranking or a flag changes, so Telegram does not keep an old file."""
+    from concurrent.futures import ThreadPoolExecutor
+
     parts = []
+    alliances = []
     for row in ranked:
         alliance = row["alliance"]
+        alliances.append(alliance)
         raw = alliance.flag if isinstance(alliance.flag, dict) else {}
         parts.append(f"{alliance.id}|{alliance.name}|{row['power']}|{row['member_count']}|{raw}")
-    digest = hashlib.sha1((_RENDER + "\n".join(parts)).encode()).hexdigest()[:12]
+    digest = hashlib.sha1((_RENDER + "b2\n" + "\n".join(parts)).encode()).hexdigest()[:12]
     folder = CACHE_DIR / "flags"
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / f"board_{digest}.jpg"
     if path.exists() and path.stat().st_size > 2000:
         return str(path)
-    _draw_board(ranked).save(path, "JPEG", quality=90)
+    # Warm missing full-size flags in parallel — sequential PIL draws were the lag.
+    need = [a for a in alliances if isinstance(getattr(a, "flag", None), dict) and a.flag.get("style")]
+    if need:
+        workers = min(4, len(need))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            list(pool.map(_warm_flag, need))
+    _draw_board(ranked).save(path, "JPEG", quality=82, optimize=True)
     return str(path)
 
 
@@ -431,15 +458,37 @@ def _draw_board(ranked) -> Image.Image:
     return image
 
 
-def _thumb(alliance) -> Image.Image:
-    path = flag_file(alliance)
-    if path is not None:
-        with Image.open(path) as src:
-            return src.convert("RGB").resize((86, 118), Image.Resampling.LANCZOS)
-    empty = Image.new("RGB", (86, 118), (28, 30, 38))
+def _empty_thumb() -> Image.Image:
+    empty = Image.new("RGB", _THUMB_SIZE, (28, 30, 38))
     pen = ImageDraw.Draw(empty)
     pen.polygon([(8, 10), (78, 10), (78, 90), (43, 110), (8, 90)], outline=(90, 96, 110))
     return empty
+
+
+def _thumb(alliance) -> Image.Image:
+    """Board thumbnail: cached tiny JPEG so we never LANCZOS a 900×1500 flag per row."""
+    raw = alliance.flag if isinstance(getattr(alliance, "flag", None), dict) else None
+    if not raw or not raw.get("style"):
+        return _empty_thumb()
+    spec = normalize(raw, alliance.name)
+    thumb = _thumb_path(spec)
+    if thumb.exists() and thumb.stat().st_size > 200:
+        with Image.open(thumb) as src:
+            return src.convert("RGB")
+    full = render_path(spec)
+    if not (full.exists() and full.stat().st_size > 2000):
+        try:
+            render_flag(spec)
+        except OSError:
+            return _empty_thumb()
+    try:
+        with Image.open(full) as src:
+            # BILINEAR is enough at 86px and much cheaper than LANCZOS on a 900×1500 source
+            out = src.convert("RGB").resize(_THUMB_SIZE, Image.Resampling.BILINEAR)
+        out.save(thumb, "JPEG", quality=80, optimize=True)
+        return out
+    except OSError:
+        return _empty_thumb()
 
 
 def _right(draw, text, right, top, font, fill):
