@@ -59,14 +59,16 @@
           (b.seconds_left ? ' · <span class="timer" data-fmt="short" data-left="' + Number(b.seconds_left) + '"></span>' : "") + "</span>")
         : '<span class="v sm t-coin">' + K.ic("coin") + " " + K.short(b.cost || a.boost_cost) + "</span>";
       var note = b.active && !b.active_for_me ? "<small>برای اتحاد فعاله؛ برای تو از فردا</small>" : "";
-      var buy = (!b.active && a.can_buy_boost)
-        ? '<button class="btn sm gold" data-act="boost-buy" data-key="' + K.esc(b.key) + '">' + K.ic("spark") + "خرید</button>"
+      var buy = a.can_buy_boost
+        ? '<button class="btn sm gold" data-act="boost-buy" data-key="' + K.esc(b.key) + '">' + K.ic("spark") +
+          (b.active ? "تمدید" : "خرید") + "</button>"
         : "";
       return '<div><span class="ic t-accent">' + K.ic("spark") + '</span><span class="t"><span class="b">' + K.esc(b.title) +
         "</span><small>" + K.esc(b.desc) + "</small>" + note + "</span>" + status + buy + "</div>";
     }).join("") + "</div>" +
-      '<p class="note">هر بوست ' + K.n(a.boost_hours || 24) + " ساعته و " + K.short(a.boost_cost) +
-      " طلا از خزانه کم می‌کنه. فقط رهبر و قائم‌مقام می‌خرن؛ تموم شدنش اثرش رو همون لحظه قطع می‌کنه.</p>";
+      '<p class="note">هر خرید ' + K.short(a.boost_cost) + " طلا از خزانه و +" + K.n(a.boost_hours || 24) +
+      " ساعت به تایمر اضافه می‌کنه (حتی روی بوست فعال، تا سقف " + K.n(a.boost_max_days || 365) +
+      " روز). فقط رهبر و قائم‌مقام می‌خرن؛ تموم شدنش اثرش رو همون لحظه قطع می‌کنه.</p>";
     return h;
   }
   function warHtml(a) {
@@ -262,14 +264,20 @@
         K.on(root, "boost-buy", function (el) {
           var key = el.dataset.key, b = (a.boosts || []).find(function (x) { return x.key === key; });
           if (!b || !a.can_buy_boost) return;
+          var extend = !!b.active;
           K.confirm({
-            title: "خرید بوست " + b.title, icon: "spark", ok: "بخر از خزانه", cancel: "بی‌خیال",
-            html: "<p>" + K.esc(b.desc) + "<br>مدت: <b>" + K.n(a.boost_hours || 24) + " ساعت</b><br>هزینه از خزانه: <b>" +
-              K.n(b.cost || a.boost_cost) + "</b> طلا<br>خزانه‌ی فعلی: " + K.n(a.treasury) + "</p>"
+            title: (extend ? "تمدید بوست " : "خرید بوست ") + b.title,
+            icon: "spark", ok: extend ? "تمدید از خزانه" : "بخر از خزانه", cancel: "بی‌خیال",
+            html: "<p>" + K.esc(b.desc) + "<br>" +
+              (extend
+                ? ("الان حدود <b>" + K.dur(b.seconds_left || 0) + "</b> مونده؛ <b>+" + K.n(a.boost_hours || 24) + " ساعت</b> اضافه می‌شه.")
+                : ("مدت: <b>" + K.n(a.boost_hours || 24) + " ساعت</b>")) +
+              "<br>هزینه از خزانه: <b>" + K.n(b.cost || a.boost_cost) + "</b> طلا<br>خزانه‌ی فعلی: " + K.n(a.treasury) + "</p>"
           }).then(function (yes) {
             if (!yes) return;
             K.api.post("social/alliance/boost/", { key: key }, el).then(function (r) {
-              K.haptic("ok"); K.toast("بوست «" + r.title + "» فعال شد!", "ok");
+              K.haptic("ok");
+              K.toast(r.extended ? ("بوست «" + r.title + "» تمدید شد!") : ("بوست «" + r.title + "» فعال شد!"), "ok");
               a.treasury = r.treasury; a.boosts = r.boosts; stats(); if (allyTab === "boosts") draw();
             });
           });

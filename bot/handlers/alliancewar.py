@@ -453,10 +453,12 @@ def _boosts_sync(tg_user):
 
 
 def _boosts_render(info: dict) -> tuple[str, InlineKeyboardMarkup]:
+    max_days = info.get("max_days") or alliance_boosts.BOOST_MAX_DAYS
     lines = [
         f"✨ <b>بوست‌های اتحاد {info['name']}</b>",
         f"<blockquote>💰 خزانه: <b>{info['treasury']:,}</b> طلا\n"
-        f"هر بوست <b>{info['cost']:,}</b> طلا از خزانه و <b>{info['hours']} ساعت</b> فعاله.\n"
+        f"هر خرید <b>{info['cost']:,}</b> طلا از خزانه و <b>+{info['hours']} ساعت</b> به تایمر اضافه می‌کنه "
+        f"(حتی اگه فعاله؛ سقف باقی‌مانده {max_days} روز).\n"
         "فقط رهبر و قائم‌مقام می‌خرن؛ اثرش برای همه‌ی اعضای واجد شرایطه.</blockquote>",
     ]
     if info["joined_today"]:
@@ -477,11 +479,13 @@ def _boosts_render(info: dict) -> tuple[str, InlineKeyboardMarkup]:
             f"   <i>{b['desc']}</i>\n"
             f"   {status}"
         )
-        if info["is_manager"] and not b["active"]:
-            rows.append([btn(
-                f"{b['emoji']} خرید {b['title']} · {b['cost']:,}",
-                style=SHOP, callback_data=f"ally_boost_buy:{b['key']}",
-            )])
+        if info["is_manager"]:
+            label = (
+                f"{b['emoji']} تمدید {b['title']} · +{info['hours']}س · {b['cost']:,}"
+                if b["active"]
+                else f"{b['emoji']} خرید {b['title']} · {b['cost']:,}"
+            )
+            rows.append([btn(label, style=SHOP, callback_data=f"ally_boost_buy:{b['key']}")])
     if not info["is_manager"]:
         lines.append("\n<i>فقط رهبر یا قائم‌مقام اتحاد می‌تونه بوست بخره.</i>")
     rows.append([back_btn("menu:alliance_info")])
@@ -513,21 +517,29 @@ async def boost_buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not info["is_manager"]:
         await query.answer("فقط رهبر یا قائم‌مقام اتحاد می‌تونه بوست بخره.", show_alert=True)
         return
-    if b["active"]:
-        await query.answer("این بوست هنوز فعاله.", show_alert=True)
-        return
     await query.answer()
+    if b["active"]:
+        head = f"{b['emoji']} <b>تمدید بوست {b['title']}</b>"
+        time_line = (
+            f"⏱ الان حدود <b>{_fmt_left(b['seconds_left'])}</b> مونده؛ "
+            f"با این خرید <b>+{info['hours']} ساعت</b> اضافه می‌شه."
+        )
+        ok_label = "بله، تمدید کن"
+    else:
+        head = f"{b['emoji']} <b>خرید بوست {b['title']}</b>"
+        time_line = f"⏱ مدت: <b>{info['hours']} ساعت</b>"
+        ok_label = "بله، بخر"
     await safe_edit_message_text(
         query,
-        f"{b['emoji']} <b>خرید بوست {b['title']}</b>\n\n"
+        f"{head}\n\n"
         f"<blockquote>{b['desc']}\n"
-        f"⏱ مدت: <b>{info['hours']} ساعت</b>\n"
+        f"{time_line}\n"
         f"💰 هزینه از خزانه: <code>{b['cost']:,}</code> طلا\n"
         f"🏦 خزانه‌ی فعلی: <code>{info['treasury']:,}</code> طلا</blockquote>\n\n"
         "تأیید می‌کنی؟",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([[
-            btn("بله، بخر", emoji_key="btn_confirm", style=SHOP, callback_data=f"ally_boost_ok:{key}"),
+            btn(ok_label, emoji_key="btn_confirm", style=SHOP, callback_data=f"ally_boost_ok:{key}"),
             back_btn("ally_boosts", "نه"),
         ]]),
     )
@@ -547,7 +559,7 @@ async def boost_buy_confirm_callback(update: Update, context: ContextTypes.DEFAU
     except GameError as exc:
         await query.answer(alert_text(exc), show_alert=True)
         return
-    await query.answer("✅ بوست فعال شد!")
+    await query.answer("✅ بوست فعال / تمدید شد!")
     text, keyboard = _boosts_render(info)
     await safe_edit_message_text(query, text, parse_mode="HTML", reply_markup=keyboard)
 

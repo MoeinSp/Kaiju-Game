@@ -1,8 +1,9 @@
 """«بوست‌های اتحاد» — temporary alliance-wide buffs bought from the treasury.
 
-Five keys, each 1M gold / 24h. Leader or deputy buys; every eligible member gets the
-effect. Join mid-day → active after Tehran midnight. Expiry is checked live, so a
-boost that ends mid-day stops for everyone on the next read.
+Five keys, each 1M gold / +24h. Buying while active extends the timer (stackable up
+to BOOST_MAX_DAYS of remaining time). Leader or deputy buys; every eligible member
+gets the effect. Join mid-day → active after Tehran midnight. Expiry is checked live,
+so a boost that ends mid-day stops for everyone on the next read.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from game.creature import GameError
 
 BOOST_COST = 1_000_000
 BOOST_HOURS = 24
+BOOST_MAX_DAYS = 365  # remaining-time cap: 365 × +24h buys ≈ one year
 CACHE_SECONDS = 15
 
 # key → (emoji, title, short description). Effects live where each system reads them.
@@ -160,7 +162,7 @@ def regen_divisor(user) -> float:
 
 @transaction.atomic
 def buy(user, key: str) -> dict:
-    """Leader/deputy spends treasury gold to activate (or refresh after expiry) a boost."""
+    """Leader/deputy spends treasury gold to activate or extend a boost by +24h."""
     from bio_lab.models import Alliance, AllianceBoost
     from game import alliance as alliance_mod
 
@@ -177,24 +179,27 @@ def buy(user, key: str) -> dict:
             f"الان {al.treasury_gold:,} طلا توی خزانه‌ست."
         )
     now = timezone.now()
-    row = AllianceBoost.objects.filter(alliance=al, key=key).first()
-    if row is not None and row.expires_at > now:
-        left = max(1, int((row.expires_at - now).total_seconds()))
-        hours = left // 3600
-        mins = (left % 3600) // 60
+    row = (
+        AllianceBoost.objects.select_for_update()
+        .filter(alliance=al, key=key)
+        .first()
+    )
+    base = row.expires_at if (row is not None and row.expires_at > now) else now
+    extended = base + datetime.timedelta(hours=BOOST_HOURS)
+    max_expires = now + datetime.timedelta(days=BOOST_MAX_DAYS)
+    if extended > max_expires:
         raise GameError(
-            f"این بوست هنوز فعاله (حدود {hours}س و {mins}د مونده). "
-            "بعد از تموم شدنش دوباره بخر."
+            f"سقف تمدید این بوست {BOOST_MAX_DAYS} روزه. "
+            "اول صبر کن کمی از زمانش کم بشه، بعد دوباره بخر."
         )
     al.treasury_gold -= BOOST_COST
     al.save(update_fields=["treasury_gold"])
-    expires = now + datetime.timedelta(hours=BOOST_HOURS)
     if row is None:
         AllianceBoost.objects.create(
-            alliance=al, key=key, expires_at=expires, bought_by=user,
+            alliance=al, key=key, expires_at=extended, bought_by=user,
         )
     else:
-        row.expires_at = expires
+        row.expires_at = extended
         row.bought_by = user
         row.bought_at = now
         row.save(update_fields=["expires_at", "bought_by", "bought_at"])
@@ -206,9 +211,11 @@ def buy(user, key: str) -> dict:
         "desc": defn["desc"],
         "emoji": defn["emoji"],
         "cost": BOOST_COST,
-        "expires_at": expires,
+        "expires_at": extended,
         "treasury": al.treasury_gold,
         "hours": BOOST_HOURS,
+        "extended": base > now,
+        "seconds_left": max(0, int((extended - now).total_seconds())),
     }
 
 
@@ -245,6 +252,7 @@ def panel(user) -> dict | None:
         "treasury": al.treasury_gold,
         "cost": BOOST_COST,
         "hours": BOOST_HOURS,
+        "max_days": BOOST_MAX_DAYS,
         "is_manager": alliance_mod._is_manager(user, al),
         "eligible": eligible,
         "joined_today": not eligible,

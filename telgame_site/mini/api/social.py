@@ -118,6 +118,7 @@ def _alliance_dict(user, al: Alliance) -> dict:
         "boosts": boosts,
         "boost_cost": alliance_boosts.BOOST_COST,
         "boost_hours": alliance_boosts.BOOST_HOURS,
+        "boost_max_days": alliance_boosts.BOOST_MAX_DAYS,
         "boost_eligible": bool(boost_panel.get("eligible", True)),
         "boost_joined_today": bool(boost_panel.get("joined_today", False)),
         "can_buy_boost": bool(boost_panel.get("is_manager", False)),
@@ -220,7 +221,8 @@ def alliance_boost_buy(request, user, data):
         "key": result["key"],
         "title": result["title"],
         "treasury": result["treasury"],
-        "seconds_left": alliance_boosts.BOOST_HOURS * 3600,
+        "extended": bool(result.get("extended")),
+        "seconds_left": int(result.get("seconds_left") or alliance_boosts.BOOST_HOURS * 3600),
         "boosts": panel.get("boosts", []),
     }
 
