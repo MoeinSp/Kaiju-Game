@@ -25,30 +25,44 @@ from bot.buttons import CONFIRM, PRIMARY, btn
 from bot.utils import alert_text, run_db, send_screen
 from game.creature import GameError
 
-# (chat_id, message_id) of a word → who typed it; panels are replies to it. A few thousand
-# entries is days of groups; a restart forgets them (the panel just stops being locked).
+# (chat_id, message_id) of a word / panel → who typed it. A few thousand entries is days
+# of groups; a restart forgets them (personal panels then refuse until the word is resent).
 _PANELS: dict[tuple[int, int], int] = {}
-_LOCK_TEXT = "این پنل مال یه بازیکن دیگه‌ست — خودت دستورش رو توی گروه بفرست."
 
 
 def _remember(chat_id: int, message_id: int, user_id: int) -> None:
+    from bot.gates import remember_card_owner
+
     _PANELS[(chat_id, message_id)] = user_id
     while len(_PANELS) > 5000:
         _PANELS.pop(next(iter(_PANELS)))
+    remember_card_owner(chat_id, message_id, user_id)
 
 
 async def guard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Refuse a tap on someone else's group panel (opened by one of the words here)."""
+    """Refuse a tap on someone else's *personal* group panel (سیاه‌چال، پژوهش، …).
+
+    Fail-closed for personal callbacks (`dg:…`, `rsch:…`, …): if we don't know the
+    owner, the tap is refused so a stranger can never drive another player's run.
+    Shared multiplayer buttons (raid / duel / …) are not in that list and stay open.
+    """
+    from bot.gates import (
+        _EXPIRED_ALERT,
+        _LOCK_ALERT,
+        is_personal_callback,
+        resolve_card_owner,
+    )
+
     q, chat, user = update.callback_query, update.effective_chat, update.effective_user
     if q is None or q.message is None or chat is None or user is None or chat.type not in ("group", "supergroup"):
         return
-    keys = [(chat.id, q.message.message_id)]
-    rep = getattr(q.message, "reply_to_message", None)
-    if rep is not None:
-        keys.append((chat.id, rep.message_id))
-    owner = next((_PANELS[k] for k in keys if k in _PANELS), None)
+    data = q.data or ""
+    owner = resolve_card_owner(update)
     if owner is not None and owner != user.id:
-        await q.answer(_LOCK_TEXT, show_alert=True)
+        await q.answer(_LOCK_ALERT, show_alert=True)
+        raise ApplicationHandlerStop
+    if owner is None and is_personal_callback(data):
+        await q.answer(_EXPIRED_ALERT, show_alert=True)
         raise ApplicationHandlerStop
 
 
@@ -126,15 +140,18 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE, action: str
         sent = await _ACTIONS[action](update, context, arg)
     except GameError as exc:
         sent = await message.reply_text(alert_text(exc, 3500))
-    if sent is not None and getattr(sent, "message_id", None):
-        _remember(message.chat_id, sent.message_id, user.id)
+    mid = getattr(sent, "message_id", None)
+    if mid is None and update.callback_query and update.callback_query.message:
+        mid = update.callback_query.message.message_id
+    if mid is not None:
+        _remember(message.chat_id, mid, user.id)
 
 
 # ── one function per action; each returns the message it sent when it knows it ──
 async def _dungeon(update, context, _arg):
     from bot.handlers.dungeon import dungeon_home
 
-    await dungeon_home(update, context)
+    return await dungeon_home(update, context)
 
 
 async def _dungeon_start(update, context, diff):
@@ -177,7 +194,7 @@ async def _shadow(update, context, _arg):
 async def _today(update, context, _arg):
     from bot.handlers.today import today_panel
 
-    await today_panel(update, context)
+    return await today_panel(update, context)
 
 
 async def _today_all(update, context, _arg):
@@ -185,9 +202,8 @@ async def _today_all(update, context, _arg):
 
     res = await run_db(T._collect_all_sync, update.effective_user)
     if not res["sections"]:
-        await T.today_panel(update, context, note="<i>فعلاً چیزی برای دریافت نیست.</i>")
-        return None
-    await T.today_panel(update, context, note=T._result_note(res), photo=res["photo"])
+        return await T.today_panel(update, context, note="<i>فعلاً چیزی برای دریافت نیست.</i>")
+    return await T.today_panel(update, context, note=T._result_note(res), photo=res["photo"])
 
 
 def _collect_sync(tg_user):
@@ -258,13 +274,13 @@ async def collect_again(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def _buildings(update, context, _arg):
     from bot.handlers.buildings import buildings_panel
 
-    await buildings_panel(update, context)
+    return await buildings_panel(update, context)
 
 
 async def _research(update, context, _arg):
     from bot.handlers.research import research_panel
 
-    await research_panel(update, context)
+    return await research_panel(update, context)
 
 
 async def _research_start(update, context, key):
@@ -278,13 +294,13 @@ async def _research_start(update, context, key):
 async def _forge(update, context, _arg):
     from bot.handlers.inventory import blacksmith_panel
 
-    await blacksmith_panel(update, context)
+    return await blacksmith_panel(update, context)
 
 
 async def _chests(update, context, _arg):
     from bot.handlers.arena import arena_chests_panel
 
-    await arena_chests_panel(update, context)
+    return await arena_chests_panel(update, context)
 
 
 def _open_ready_sync(tg_user):
@@ -315,7 +331,7 @@ async def _chests_open(update, context, _arg):
 async def _dispatch(update, context, _arg):
     from bot.handlers.dispatch import dispatch_panel
 
-    await dispatch_panel(update, context)
+    return await dispatch_panel(update, context)
 
 
 async def _dispatch_all(update, context, _arg):
@@ -323,13 +339,13 @@ async def _dispatch_all(update, context, _arg):
 
     lines = await run_db(DSP._collect_all_sync, update.effective_user)
     note = ("🎉 <b>جایزه‌ی مأموریت‌ها:</b>\n" + "\n".join(lines)) if lines else "<i>هنوز هیچ مأموریتی تموم نشده.</i>"
-    await DSP._show_panel(update, note=note)
+    return await DSP._show_panel(update, note=note)
 
 
 async def _worldboss(update, context, _arg):
     from bot.handlers.worldboss import worldboss_panel
 
-    await worldboss_panel(update, context)
+    return await worldboss_panel(update, context)
 
 
 async def _worldboss_hit(update, context, _arg):
@@ -343,26 +359,26 @@ async def _worldboss_hit(update, context, _arg):
 async def _tournament(update, context, _arg):
     from bot.handlers.tournament import tournament_panel
 
-    await tournament_panel(update, context)
+    return await tournament_panel(update, context)
 
 
 async def _tournament_join(update, context, _arg):
     from bot.handlers import tournament as TR
 
     await run_db(TR._join_sync, update.effective_user)
-    await TR._refresh(update, "✅ <b>توی جام این هفته ثبت‌نام شدی.</b> جمعه ساعت ۱۹:۳۰ قرعه‌کشی می‌شه.")
+    return await TR._refresh(update, "✅ <b>توی جام این هفته ثبت‌نام شدی.</b> جمعه ساعت ۱۹:۳۰ قرعه‌کشی می‌شه.")
 
 
 async def _festival(update, context, _arg):
     from bot.handlers.festival import festival_panel
 
-    await festival_panel(update, context)
+    return await festival_panel(update, context)
 
 
 async def _merchant(update, context, _arg):
     from bot.handlers.merchant import merchant_board
 
-    await merchant_board(update, context)
+    return await merchant_board(update, context)
 
 
 def _energy_sync(tg_user):
@@ -393,7 +409,7 @@ async def _energy(update, context, _arg):
 async def _campaign(update, context, _arg):
     from bot.handlers.campaign import campaign_panel
 
-    await campaign_panel(update, context)
+    return await campaign_panel(update, context)
 
 
 _ANON_ADMIN_ID = 1087968824   # @GroupAnonymousBot — an anonymous admin's messages come from it

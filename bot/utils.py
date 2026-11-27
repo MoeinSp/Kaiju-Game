@@ -403,7 +403,7 @@ def safe_truncate_html(text: str, max_chars: int = 1000) -> str:
     return truncated
 
 
-async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode="HTML", **kwargs) -> None:
+async def _send_screen_impl(update, text, *, photo=None, reply_markup=None, parse_mode="HTML", **kwargs):
     """Render a screen the right way for however the player got here.
     Supports optional `photo` path. Uses Telegram file_id caching for instant CDN delivery.
     Handles transitions between photo and text messages smoothly and cleanly."""
@@ -769,7 +769,7 @@ async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode
     return None
 
 
-async def safe_edit_message_text(query, text, **kwargs):
+async def _safe_edit_message_text_impl(query, text, **kwargs):
     """query.edit_message_text(), but handles messages with existing photos (edits caption in-place),
     optional photo attachments, and swallows Telegram's 'Message is not modified' BadRequest."""
     photo = kwargs.pop("photo", None)
@@ -841,3 +841,60 @@ async def safe_edit_message_text(query, text, **kwargs):
                     pass
         raise
     return getattr(query, "message", None)
+
+
+def _lock_group_personal_panel(update, sent, reply_markup=None, callback_data=None) -> None:
+    """Lock a personal panel message to the acting user when posted/edited in a group."""
+    try:
+        from bot.gates import is_personal_callback, keyboard_is_personal, remember_card_owner
+    except Exception:
+        return
+    if update is None:
+        return
+    chat = getattr(update, "effective_chat", None)
+    q = getattr(update, "callback_query", None)
+    # send_screen is sometimes called with the CallbackQuery itself as `update`
+    if chat is None and hasattr(update, "message") and hasattr(update, "data"):
+        q = update
+        chat = getattr(getattr(update, "message", None), "chat", None)
+    if chat is None and q is not None:
+        chat = getattr(getattr(q, "message", None), "chat", None)
+    if chat is None or getattr(chat, "type", None) not in ("group", "supergroup"):
+        return
+    user = getattr(update, "effective_user", None) or getattr(update, "from_user", None)
+    if user is None and q is not None:
+        user = getattr(q, "from_user", None)
+    uid = getattr(user, "id", None)
+    mid = getattr(sent, "message_id", None) or getattr(getattr(q, "message", None), "message_id", None)
+    if not uid or not mid:
+        return
+    data = callback_data or getattr(q, "data", None)
+    if (reply_markup is not None and keyboard_is_personal(reply_markup)) or is_personal_callback(data):
+        remember_card_owner(chat.id, mid, uid)
+        try:
+            from bot.handlers.group_panels import _remember
+            _remember(chat.id, mid, uid)
+        except Exception:
+            pass
+
+
+async def send_screen(update, text, *, photo=None, reply_markup=None, parse_mode="HTML", **kwargs):
+    sent = await _send_screen_impl(
+        update, text, photo=photo, reply_markup=reply_markup, parse_mode=parse_mode, **kwargs
+    )
+    data = getattr(getattr(update, "callback_query", None), "data", None)
+    _lock_group_personal_panel(update, sent, reply_markup=reply_markup, callback_data=data)
+    return sent
+
+
+async def safe_edit_message_text(query, text, **kwargs):
+    reply_markup = kwargs.get("reply_markup")
+    sent = await _safe_edit_message_text_impl(query, text, **kwargs)
+    # fabricate a tiny update-like object so lock helpers can read chat/user/query
+    class _U:
+        callback_query = query
+        effective_chat = getattr(getattr(query, "message", None), "chat", None)
+        effective_user = getattr(query, "from_user", None) or getattr(getattr(query, "message", None), "from_user", None)
+    _lock_group_personal_panel(_U(), sent or getattr(query, "message", None),
+                               reply_markup=reply_markup, callback_data=getattr(query, "data", None))
+    return sent

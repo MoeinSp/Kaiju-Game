@@ -101,7 +101,7 @@ def _home_render(v: dict) -> tuple[str, InlineKeyboardMarkup]:
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
-async def dungeon_home(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def dungeon_home(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
         try:
             await update.callback_query.answer()
@@ -111,7 +111,7 @@ async def dungeon_home(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     v = await run_db(_home_sync, update.effective_user)
     text, kb = _home_render(v)
-    await send_screen(update, text, photo=get_feature_image_path("dungeon"), parse_mode="HTML", reply_markup=kb)
+    return await send_screen(update, text, photo=get_feature_image_path("dungeon"), parse_mode="HTML", reply_markup=kb)
 
 
 # ══════════════════════════ the run ══════════════════════════
