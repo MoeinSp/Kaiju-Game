@@ -114,18 +114,31 @@ def active_for_alliance(alliance_id: int | None) -> dict[str, datetime.datetime]
         # drop anything that expired since the cache filled
         now = timezone.now()
         return {k: exp for k, exp in hit[1].items() if exp > now}
-    return _load(aid)
+    try:
+        return _load(aid)
+    except Exception:  # noqa: BLE001 — async handlers call get_max_energy → bonus without run_db
+        # serve stale cache if any; otherwise "no boost" beats crashing the card
+        if hit:
+            now = timezone.now()
+            return {k: exp for k, exp in hit[1].items() if exp > now}
+        return {}
 
 
 def active_for_user(user) -> dict[str, datetime.datetime]:
     """Boosts this player actually receives right now (membership + join-day gate)."""
-    if not member_eligible(user):
+    try:
+        if not member_eligible(user):
+            return {}
+        return active_for_alliance(getattr(user, "alliance_id", None))
+    except Exception:  # noqa: BLE001 — same as relics.has: never break the screen that asked
         return {}
-    return active_for_alliance(getattr(user, "alliance_id", None))
 
 
 def has(user, key: str) -> bool:
-    return key in active_for_user(user)
+    try:
+        return key in active_for_user(user)
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def bonus(user, key: str) -> int:

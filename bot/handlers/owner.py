@@ -1708,18 +1708,28 @@ def _user_info_text(data: dict) -> str:
 
     gains = data.get("gains", {})
     from game.daily import today_str
-    from game.energy import get_max_energy
+    from game.energy import get_max_energy, sync_energy
 
     t_day = today_str()
     today_b = gains.get("per_day", {}).get(t_day, {})
     c_today = today_b.get("coins", 0)
     dna_today = today_b.get("dna", 0)
     dia_today = today_b.get("diamonds", 0)
+    # prefer values computed inside run_db(user_info); fall back safely for old callers
+    energy = data.get("energy")
+    max_energy = data.get("max_energy")
+    if energy is None or max_energy is None:
+        try:
+            energy = sync_energy(user) if energy is None else energy
+            max_energy = get_max_energy(user) if max_energy is None else max_energy
+        except Exception:  # noqa: BLE001 — never blank the admin card
+            energy = getattr(user, "energy", 0) if energy is None else energy
+            max_energy = energy if max_energy is None else max_energy
 
     lines = [
         f"{get_emoji('profile')} <b>{display_name(user)}</b>  (<code>{user.id}</code>)",
         f"{get_emoji('coin')} {user.coins:,}   {get_emoji('dna')} {user.dna_fragments:,}   "
-        f"{get_emoji('diamond')} {user.diamonds:,}   {get_emoji('energy')} {user.energy}/{get_max_energy(user)}",
+        f"{get_emoji('diamond')} {user.diamonds:,}   {get_emoji('energy')} {energy}/{max_energy}",
         f"🔥 استریک: <b>{user.login_streak}</b> روز   {get_emoji('alliance')} اتحاد: <b>{alliance_name}</b>",
         # don't wrap get_emoji() inside <b> — nested <tg-emoji> has made Telegram drop the reply
         f"🚫 وضعیت: {banned_txt}   📅 عضویت: <code>{joined_txt}</code>",

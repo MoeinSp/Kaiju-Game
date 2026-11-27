@@ -542,6 +542,8 @@ def reset_user(identifier: str) -> User:
 
 
 def user_info(identifier: str) -> dict:
+    from game.energy import get_max_energy, sync_energy
+
     user = find_user_or_raise(identifier)
     # only the active kaiju + a count — loading every creature (some players have 200+)
     # made the admin search feel stuck / look like "nothing came"
@@ -551,9 +553,13 @@ def user_info(identifier: str) -> dict:
     # the event loop, where a lazy user.alliance FK load would raise
     # SynchronousOnlyOperation (this crashed opening any user who's in an alliance)
     alliance_name = user.alliance.name if user.alliance_id else None
+    # energy/max must be computed here too — get_max_energy reads alliance boosts (ORM)
+    energy = sync_energy(user)
+    max_energy = get_max_energy(user)
     return {
         "user": user, "creatures": creatures, "creature_count": creature_count,
         "alliance_name": alliance_name, "gains": _recent_gains_safe(user),
+        "energy": energy, "max_energy": max_energy,
     }
 
 
